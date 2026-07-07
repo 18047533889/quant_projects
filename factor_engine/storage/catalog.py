@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS factor_registry (
     description TEXT,
     ast_hash    TEXT NOT NULL,
     expression  TEXT,
+    data_source_json TEXT,
     created_at  TEXT NOT NULL
 );
 
@@ -122,7 +123,18 @@ class FactorCatalog:
         # WAL 模式：大幅提升多进程并发读写能力
         self._conn.execute("PRAGMA journal_mode=WAL;")
         self._conn.executescript(_SCHEMA_SQL)
+        self._migrate_schema()
         self._conn.commit()
+
+    def _migrate_schema(self) -> None:
+        """向后兼容：为旧 catalog 补列。"""
+        cols = {
+            row[1] for row in self._conn.execute("PRAGMA table_info(factor_registry)")
+        }
+        if "data_source_json" not in cols:
+            self._conn.execute(
+                "ALTER TABLE factor_registry ADD COLUMN data_source_json TEXT"
+            )
 
     # ------------------------------------------------------------------
     # 上下文管理器
@@ -152,6 +164,7 @@ class FactorCatalog:
         *,
         description: str | None = None,
         expression: str | None = None,
+        data_source_config: dict | None = None,
     ) -> None:
         """注册因子。如 factor_id 已存在且 Hash 一致则静默跳过；不一致则报错。
 
@@ -161,6 +174,11 @@ class FactorCatalog:
             ``factor_id`` 已注册但 ``ast_hash`` 与既存记录不同。
         """
         existing = self.get_factor_info(factor_id)
+        ds_json = (
+            json.dumps(data_source_config, sort_keys=True, default=str, ensure_ascii=False)
+            if data_source_config
+            else None
+        )
         if existing is not None:
             if existing["ast_hash"] != ast_hash:
                 raise FactorHashMismatchError(
@@ -168,14 +186,21 @@ class FactorCatalog:
                     f"但当前公式 Hash 为 {ast_hash[:12]}…。"
                     f"请升级版本号（如改为 '{factor_id}_v2'）后重新落盘。"
                 )
+            if ds_json is not None:
+                self._conn.execute(
+                    "UPDATE factor_registry SET data_source_json = ? WHERE factor_id = ?",
+                    (ds_json, factor_id),
+                )
+                self._conn.commit()
             return  # Hash 一致 → 幂等，不做任何变更
 
         now = datetime.now(timezone.utc).isoformat()
         self._conn.execute(
             "INSERT INTO factor_registry "
-            "(factor_id, author, frequency, description, ast_hash, expression, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (factor_id, author, frequency, description, ast_hash, expression, now),
+            "(factor_id, author, frequency, description, ast_hash, expression, "
+            "data_source_json, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (factor_id, author, frequency, description, ast_hash, expression, ds_json, now),
         )
         self._conn.commit()
 

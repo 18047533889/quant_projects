@@ -72,3 +72,38 @@ def build_run_lineage(
 def hash_data_source_config(config: dict[str, Any]) -> str:
     payload = json.dumps(config, sort_keys=True, default=str, ensure_ascii=False)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def resolve_git_commit_hash(*, repo_root: str | None = None) -> str | None:
+    """尽力采集当前代码 git commit（用于 lineage 可复现）。"""
+    import subprocess
+    from pathlib import Path
+
+    candidates: list[Path] = []
+    if repo_root:
+        candidates.append(Path(repo_root))
+    try:
+        from workspace_paths import quant_projects_root
+
+        candidates.append(quant_projects_root())
+    except Exception:
+        pass
+
+    for root in candidates:
+        git_dir = root / ".git"
+        if not git_dir.exists():
+            continue
+        try:
+            proc = subprocess.run(
+                ["git", "-C", str(root), "rev-parse", "HEAD"],
+                capture_output=True,
+                text=True,
+                timeout=3,
+                check=False,
+            )
+        except Exception:
+            continue
+        if proc.returncode == 0:
+            commit = proc.stdout.strip()
+            return commit or None
+    return None

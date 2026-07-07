@@ -218,11 +218,18 @@ Phase 4（已完成）— 语义与血缘
 ├── 宽表 pivot API（factor_format + ResultStore.to_wide）✅
 └── 生产示例 YAML（plan_cache_dir + materialize）✅
 
-Phase 5 — 生产加固（待定）
-├── Analyzer 消费 OperatorPolicy.lookback_window
-├── data_source JSON 写入 factor_registry
-├── git commit hash 自动采集（lineage）
-└── DataSource 原生 date range prefetch 优化
+Phase 5 — 生产加固（已完成）
+├── Analyzer 消费 OperatorPolicy.lookback_window ✅
+├── data_source JSON 写入 factor_registry ✅
+├── git commit hash 自动采集（lineage）✅
+├── DataSource prefetch_columns 优化 ✅
+└── data_access instrument_filter/schema 守卫 ✅
+
+Phase 6 — 双市场深化（待定）
+├── 美股 instrument_column 与真实 parquet 契约测试
+├── factor_engine universe/成分股 composite preset
+├── cos_mirror 与 datasets.yaml 双向一致性
+└── scan_polars 路径 telemetry
 ```
 
 ---

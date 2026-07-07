@@ -129,6 +129,7 @@ class ParquetMaterializer:
         run_lineage: dict | None = None,
         write_metadata: bool = True,
         data_snapshot_id: str | None = None,
+        data_source_config: dict | None = None,
     ) -> dict:
         """将因子计算结果落盘为分区 Parquet。
 
@@ -213,6 +214,7 @@ class ParquetMaterializer:
             ast_hash=ast_hash,
             description=description,
             expression=expression,
+            data_source_config=data_source_config,
         )
 
         # --- 4. 按年分区 Upsert ---

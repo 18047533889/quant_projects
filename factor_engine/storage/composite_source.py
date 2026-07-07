@@ -273,3 +273,10 @@ class CompositeDataSource(DataSource):
         if source_name == self.anchor_source and self.allow_unqualified_anchor_columns:
             self._column_cache.setdefault(column_name, series)
         return series
+
+    def load_columns(self, names: list[str]) -> dict[str, Any]:
+        return {n: self.load_column(n) for n in names}
+
+    def prefetch_columns(self, names: list[str]) -> None:
+        for name in names:
+            self.load_column(name)

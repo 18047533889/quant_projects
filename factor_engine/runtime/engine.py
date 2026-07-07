@@ -206,13 +206,39 @@ class FactorEngine:
         )
 
     @staticmethod
+    def _lineage_extra(
+        *,
+        data_source_config: dict | None,
+        snapshot_id: str | None,
+        input_dq: dict | None = None,
+        **more: Any,
+    ) -> dict[str, Any]:
+        from runtime.lineage import resolve_git_commit_hash
+
+        extra: dict[str, Any] = {
+            "data_snapshot_id": snapshot_id,
+            "data_source_config": data_source_config,
+            "git_commit": resolve_git_commit_hash(),
+        }
+        if input_dq is not None:
+            extra["input_dq"] = input_dq
+        extra.update(more)
+        return extra
+
+    @staticmethod
     def _prefetch_columns(data_source: Any, columns: set[str]) -> None:
         if not columns:
             return
+        names = sorted(columns)
+        prefetch = getattr(data_source, "prefetch_columns", None)
+        if callable(prefetch):
+            prefetch(names)
+            logger.info("预加载数据列（prefetch）: %s", names)
+            return
         load_columns = getattr(data_source, "load_columns", None)
         if callable(load_columns):
-            load_columns(sorted(columns))
-            logger.info("预加载数据列: %s", sorted(columns))
+            load_columns(names)
+            logger.info("预加载数据列: %s", names)
 
     def run(
         self,
@@ -324,11 +350,11 @@ class FactorEngine:
             lookback=effective_lookback(getattr(analysis, "lookback", 0)),
             referenced_columns=analysis.referenced_columns,
             result=output["result"],
-            extra={
-                "data_snapshot_id": snapshot_id,
-                "data_source_config": data_source_config,
-                "input_dq": output.get("input_dq"),
-            },
+            extra=self._lineage_extra(
+                data_source_config=data_source_config,
+                snapshot_id=snapshot_id,
+                input_dq=output.get("input_dq"),
+            ),
         )
         materializer = ParquetMaterializer(lake_root=lake_root)
         summary = materializer.materialize(
@@ -344,6 +370,7 @@ class FactorEngine:
             run_lineage={**lineage.to_dict(), "factor_id": factor_id or factor.name},
             write_metadata=write_metadata,
             data_snapshot_id=snapshot_id,
+            data_source_config=data_source_config,
         )
         output["materialization"] = {
             **summary,
@@ -599,13 +626,13 @@ class FactorEngine:
             lookback=output["incremental"]["lookback_bars"],
             referenced_columns=analysis.referenced_columns,
             result=output["result"],
-            extra={
-                "mode": "incremental",
-                "incremental": output["incremental"],
-                "data_snapshot_id": snapshot_id,
-                "data_source_config": data_source_config,
-                "input_dq": output.get("input_dq"),
-            },
+            extra=self._lineage_extra(
+                data_source_config=data_source_config,
+                snapshot_id=snapshot_id,
+                input_dq=output.get("input_dq"),
+                mode="incremental",
+                incremental=output["incremental"],
+            ),
         )
 
         materializer = ParquetMaterializer(lake_root=lake_root)
@@ -622,6 +649,7 @@ class FactorEngine:
             run_lineage={**lineage.to_dict(), "factor_id": fid},
             write_metadata=write_metadata,
             data_snapshot_id=snapshot_id,
+            data_source_config=data_source_config,
         )
         output["materialization"] = {
             **summary,

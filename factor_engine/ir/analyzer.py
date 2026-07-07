@@ -127,6 +127,8 @@ class Analyzer:
                     policy = infer_operator_policy(op_impl, canonical=canon)
                     if policy.lag and policy.lag > 0:
                         lookback = _lb_max(lookback, int(policy.lag))
+                    if policy.lookback_window is not None and policy.lookback_window > 0:
+                        lookback = _lb_max(lookback, int(policy.lookback_window))
 
                 return IRNode(op=canon, inputs=inputs, attrs=attrs)
 

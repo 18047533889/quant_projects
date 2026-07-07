@@ -65,6 +65,21 @@ logger = logging.getLogger("data_access.store")
 _VALID_WRITE_MODES = {"overwrite", "append"}
 
 
+def _assert_instrument_filter_supported(
+    ds: Dataset,
+    instrument_filter: Sequence[str] | None,
+) -> None:
+    """schema 已声明但缺少 instrument 列时，禁止 instrument_filter。"""
+    if not instrument_filter:
+        return
+    schema = getattr(ds, "schema", None) or {}
+    if schema and ds.instrument_column not in schema:
+        raise ValidationError(
+            f"数据集 '{ds.name}' 的 instrument_column='{ds.instrument_column}' "
+            f"不在 schema 中，不支持 instrument_filter；请去掉 filter 或补 schema。"
+        )
+
+
 class DataAccessStore:
     """统一读取入口。进程内应只有一个实例（由 get_store() 管理）。"""
 
@@ -119,6 +134,7 @@ class DataAccessStore:
             ... )
         """
         ds = self._registry.get(dataset)
+        _assert_instrument_filter_supported(ds, instrument_filter)
         paths = self._prepare_dataset_read(ds, time_range=time_range, params=params)
         self._ensure_schema(ds, paths)
 
@@ -177,6 +193,7 @@ class DataAccessStore:
             ...     total += batch.num_rows
         """
         ds = self._registry.get(dataset)
+        _assert_instrument_filter_supported(ds, instrument_filter)
         paths = self._prepare_dataset_read(ds, time_range=time_range, params=params)
         self._ensure_schema(ds, paths)
         sql, sql_params = self._build_select_sql(
@@ -239,6 +256,7 @@ class DataAccessStore:
             ) from exc
 
         ds = self._registry.get(dataset)
+        _assert_instrument_filter_supported(ds, instrument_filter)
         paths = self._prepare_dataset_read(ds, time_range=time_range, params=params)
         # scan_polars 也走 schema 自检：发现声明漂移尽早报。
         # Polars 自己读 parquet 不经 DuckDB，但 DESCRIBE 用共享 engine 跑，一次性

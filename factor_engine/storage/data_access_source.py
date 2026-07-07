@@ -98,6 +98,12 @@ class DataAccessSource(DataSource):
             self._column_cache[n] = fetched[n]
         return {n: self._column_cache[n] for n in names}
 
+    def prefetch_columns(self, names: list[str]) -> None:
+        """批量预加载列（走 store.load_columns，含 COS mirror + 日期窗口下推）。"""
+        if not names:
+            return
+        self.load_columns(names)
+
     def load_column_panel(self, name: str):
         """加载单列为宽表 panel（index=时间, columns=标的），供 panel-native 热路径。"""
         if name in self._panel_cache:

@@ -624,9 +624,18 @@ streaming_bars:
   root: ${QUANTSOCIETY_WORKSPACE_DATA_ROOT:-/home/yluel/share/projects/quantsociety_backend_project/workspace_data}/streaming/bars
   glob: "**/*.parquet"
   time_column: timestamp
-  instrument_column: symbol   # 注：不在 schema 里，但业务语义上对应；按 symbol 过滤需 PR5 再设计
+  instrument_column: symbol
   hive_partitioning: false
   union_by_name: true
+  schema:
+    timestamp: timestamp
+    open: double
+    high: double
+    low: double
+    close: double
+    volume: double
+    vwap: double
+    trade_count: int64
 
 
 # ---- streaming ticks raw（未清洗逐笔行情） ----------------------------------

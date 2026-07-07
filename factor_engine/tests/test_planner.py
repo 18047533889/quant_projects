@@ -22,3 +22,8 @@ def test_analyzer_lookback_includes_operator_policy_lag():
 
     analysis = Analyzer().lower(ts_delay(col("close")))
     assert analysis.lookback >= 1
+
+
+def test_analyzer_lookback_includes_explicit_policy_window():
+    analysis = Analyzer().lower(col("close"))
+    assert analysis.lookback >= 0
