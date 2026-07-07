@@ -1,0 +1,242 @@
+data_sources:
+- enabled: true
+  name: tickers_all
+  type: rest_api
+  rest_api:
+    endpoint: /v3/reference/tickers
+  category: tickers
+  sub: all_tickers
+  p: all_tickers
+  mode: all
+  time_column: last_updated_utc
+
+- enabled: true
+  name: s3_trades
+  type: s3
+  s3:
+    prefix: us_stocks_sip/trades_v1/
+  category: market_data
+  sub: us_stocks_sip
+  p: trades_v1
+  mode: date
+  partition_freq: month
+  time_column: sip_timestamp
+
+- enabled: true
+  name: s3_quotes
+  type: s3
+  s3:
+    prefix: us_stocks_sip/quotes_v1/
+  category: market_data
+  sub: us_stocks_sip
+  p: quotes_v1
+  mode: date
+  partition_freq: month
+  time_column: sip_timestamp
+
+- enabled: true
+  name: tickers_types
+  type: rest_api
+  rest_api:
+    endpoint: /v3/reference/tickers/types
+  category: tickers
+  sub: ticker_types
+  p: ticker_types
+  mode: all
+
+- enabled: true
+  name: market_exchanges
+  type: rest_api
+  rest_api:
+    endpoint: /v3/reference/exchanges
+  category: market_operations
+  sub: exchanges
+  p: exchanges
+  mode: all
+
+- enabled: true
+  name: filing_sec_edgar_index
+  type: rest_api
+  rest_api:
+    endpoint: /stocks/filings/vX/index
+  category: filing
+  sub: sec_edgar_index
+  p: sec_edgar_index
+  mode: all
+  time_column: filing_date
+
+- enabled: true
+  name: filing_risk_categories
+  type: rest_api
+  rest_api:
+    endpoint: /stocks/taxonomies/vX/risk-factors
+  category: filing
+  sub: risk_categories
+  p: risk_categories
+  mode: all
+
+- enabled: true
+  name: filing_risk_factors
+  type: rest_api
+  rest_api:
+    endpoint: /stocks/filings/vX/risk-factors
+  category: filing
+  sub: risk_factors
+  p: risk_factors
+  mode: date
+  time_column: filing_date
+
+- enabled: true
+  name: short_volume
+  type: rest_api
+  rest_api:
+    endpoint: /stocks/v1/short-volume
+  category: fundamentals
+  sub: short_volume
+  p: short_volume
+  mode: date
+  time_column: date
+
+- enabled: true
+  name: short_interest
+  type: rest_api
+  rest_api:
+    endpoint: /stocks/v1/short-interest
+  category: fundamentals
+  sub: short_interest
+  p: short_interest
+  mode: date
+  time_column: settlement_date
+
+- enabled: true
+  name: aggs_daily_market_summary
+  type: rest_api
+  rest_api:
+    endpoint: /v2/aggs/grouped/locale/us/market/stocks/{date}
+  category: aggregate_bars
+  sub: daily_market_summary
+  p: daily_market_summary
+  mode: calendar_year
+  time_column: trade_date
+
+- enabled: true
+  name: corp_dividends
+  type: rest_api
+  rest_api:
+    endpoint: /stocks/v1/dividends
+  category: corporate_actions
+  sub: dividends
+  p: dividends
+  mode: date
+  time_column: ex_dividend_date
+
+- enabled: true
+  name: corp_splits
+  type: rest_api
+  rest_api:
+    endpoint: /stocks/v1/splits
+  category: corporate_actions
+  sub: splits
+  p: splits
+  mode: date
+  time_column: execution_date
+
+- enabled: true
+  name: corp_ipos
+  type: rest_api
+  rest_api:
+    endpoint: /vX/reference/ipos
+  category: corporate_actions
+  sub: ipos
+  p: ipos
+  mode: all
+
+- enabled: true
+  name: news_all
+  type: rest_api
+  rest_api:
+    endpoint: /v2/reference/news
+  category: news
+  sub: news
+  p: news
+  mode: all
+  time_column: published_utc
+
+- enabled: true
+  name: market_holidays
+  type: rest_api
+  rest_api:
+    endpoint: /v1/marketstatus/upcoming
+  category: market_operations
+  sub: market_holidays
+  p: market_holidays
+  mode: all
+  time_column: date
+
+- enabled: true
+  name: stocks_floats
+  type: rest_api
+  rest_api:
+    endpoint: /stocks/vX/float
+  category: fundamentals
+  sub: stocks_floats
+  p: stocks_floats
+  mode: all
+
+- enabled: true
+  name: market_condition_codes
+  type: rest_api
+  rest_api:
+    endpoint: /v3/reference/conditions
+  category: market_operations
+  sub: condition_codes
+  p: condition_codes
+  mode: all
+
+- enabled: true
+  name: balance_sheet
+  type: rest_or_sdk
+  sdk:
+    method: list_financials_balance_sheets
+  category: fundamentals
+  sub: balance_sheet
+  p: balance_sheet
+  mode: fiscal
+  time_column: period_end
+
+- enabled: true
+  name: income_statement
+  type: rest_or_sdk
+  sdk:
+    method: list_financials_income_statements
+  category: fundamentals
+  sub: income_statement
+  p: income_statement
+  mode: fiscal
+  time_column: period_end
+
+- enabled: true
+  name: cash_flow_statement
+  type: rest_or_sdk
+  sdk:
+    method: list_financials_cash_flow_statements
+  category: fundamentals
+  sub: cash_flow_statement
+  p: cash_flow_statement
+  mode: fiscal
+  time_column: period_end
+
+- enabled: true
+  name: financials_ratios
+  type: rest_or_sdk
+  sdk:
+    method: list_financials_ratios
+  category: fundamentals
+  sub: financials_ratios
+  p: financials_ratios
+  mode: all
+
+system:
+  name: 2026年5月增量数据更新试运行
+  version: 1.0.2
+  # 移除了不再需要的全局API和S3配置，因为它们现在是每个数据源的一部分

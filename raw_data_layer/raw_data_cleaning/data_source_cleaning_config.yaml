@@ -1,0 +1,392 @@
+version: 1
+description: Source-level cleaning and alignment metadata for raw Massive parquet datasets.
+
+defaults:
+  timezone: unknown
+  array_columns_to_explode: []
+  dedup_strategy: strict_primary_key
+  allow_null_ticker: false
+  allow_null_align_time: false
+
+sources:
+  - source: aggregate_bars/daily_market_summary
+    path_pattern: aggregate_bars/daily_market_summary/*.parquet
+    dataset_type: market_daily_snapshot
+    frequency: daily
+    ticker_column: T
+    align_time_column: trade_date
+    time_columns:
+      - trade_date
+      - t
+    time_format: iso_date
+    timezone: us_market_close
+    primary_key_columns:
+      - trade_date
+      - T
+    notes: trade_date is the alignment date; t is an auxiliary aggregate timestamp.
+
+  - source: corporate_actions/dividends
+    path_pattern: corporate_actions/dividends/*.parquet
+    dataset_type: corporate_action_event
+    frequency: event
+    ticker_column: ticker
+    align_time_column: ex_dividend_date
+    time_columns:
+      - record_date
+      - pay_date
+      - ex_dividend_date
+    time_format: iso_date
+    primary_key_columns:
+      - id
+    notes: declaration_date would be a better availability timestamp if it becomes available in raw data.
+
+  - source: corporate_actions/ipos
+    path_pattern: corporate_actions/ipos/*.parquet
+    dataset_type: corporate_action_event
+    frequency: event
+    ticker_column: ticker
+    align_time_column: announced_date
+    time_columns:
+      - last_updated
+      - announced_date
+      - listing_date
+    time_format: iso_date
+    primary_key_columns:
+      - ticker
+      - listing_date
+    dedup_strategy: keep_latest_by_align_time
+    notes: announced_date is the preferred market-availability timestamp.
+
+  - source: corporate_actions/splits
+    path_pattern: corporate_actions/splits/*.parquet
+    dataset_type: corporate_action_event
+    frequency: event
+    ticker_column: ticker
+    align_time_column: execution_date
+    time_columns:
+      - execution_date
+    time_format: iso_date
+    primary_key_columns:
+      - id
+    notes: raw data does not expose an earlier announcement timestamp, so execution_date is used.
+
+  - source: filing/risk_categories
+    path_pattern: filing/risk_categories/*.parquet
+    dataset_type: dictionary
+    frequency: static
+    ticker_column: null
+    align_time_column: null
+    time_columns: []
+    time_format: null
+    primary_key_columns:
+      - taxonomy
+      - primary_category
+      - secondary_category
+      - tertiary_category
+    allow_null_ticker: true
+    allow_null_align_time: true
+    notes: taxonomy dictionary table.
+
+  - source: filing/risk_factors
+    path_pattern: filing/risk_factors/*.parquet
+    dataset_type: filing_event
+    frequency: event
+    ticker_column: ticker
+    align_time_column: filing_date
+    time_columns:
+      - filing_date
+    time_format: iso_date
+    primary_key_columns:
+      - cik
+      - filing_date
+      - primary_category
+      - secondary_category
+      - tertiary_category
+    notes: filing_date is the closest market-availability timestamp for risk factor text.
+
+  - source: filing/sec_edgar_index
+    path_pattern: filing/sec_edgar_index/*.parquet
+    dataset_type: filing_index
+    frequency: event
+    ticker_column: ticker
+    align_time_column: filing_date
+    time_columns:
+      - filing_date
+    time_format: iso_date
+    primary_key_columns:
+      - accession_number
+    notes: accession_number is the stable filing identifier.
+
+  - source: fundamentals/balance_sheet
+    path_pattern: fundamentals/balance_sheet/*.parquet
+    dataset_type: financial_statement
+    frequency: quarterly_annual
+    ticker_column: tickers
+    align_time_column: filing_date
+    time_columns:
+      - filing_date
+      - period_end
+    time_format: iso_date
+    primary_key_columns:
+      - cik
+      - period_end
+      - timeframe
+      - filing_date
+    array_columns_to_explode:
+      - tickers
+    dedup_strategy: keep_latest_by_align_time
+    notes: use filing_date for alignment; period_end is accounting period end, not availability time.
+
+  - source: fundamentals/cash_flow_statement
+    path_pattern: fundamentals/cash_flow_statement/*.parquet
+    dataset_type: financial_statement
+    frequency: quarterly_annual_ttm
+    ticker_column: tickers
+    align_time_column: filing_date
+    time_columns:
+      - filing_date
+      - period_end
+    time_format: iso_date
+    primary_key_columns:
+      - cik
+      - period_end
+      - timeframe
+      - filing_date
+    array_columns_to_explode:
+      - tickers
+    dedup_strategy: keep_latest_by_align_time
+    notes: same alignment rule as other financial statements.
+
+  - source: fundamentals/financials_ratios
+    path_pattern: fundamentals/financials_ratios/*.parquet
+    dataset_type: daily_snapshot
+    frequency: daily
+    ticker_column: ticker
+    align_time_column: date
+    time_columns:
+      - date
+    time_format: iso_date
+    primary_key_columns:
+      - ticker
+      - date
+    notes: daily cross-sectional snapshot.
+
+  - source: fundamentals/income_statement
+    path_pattern: fundamentals/income_statement/*.parquet
+    dataset_type: financial_statement
+    frequency: quarterly_annual_ttm
+    ticker_column: tickers
+    align_time_column: filing_date
+    time_columns:
+      - filing_date
+      - period_end
+    time_format: iso_date
+    primary_key_columns:
+      - cik
+      - period_end
+      - timeframe
+      - filing_date
+    array_columns_to_explode:
+      - tickers
+    dedup_strategy: keep_latest_by_align_time
+    notes: use filing_date for point-in-time alignment.
+
+  - source: fundamentals/short_interest
+    path_pattern: fundamentals/short_interest/*.parquet
+    dataset_type: low_frequency_snapshot
+    frequency: semi_monthly_like
+    ticker_column: ticker
+    align_time_column: settlement_date
+    time_columns:
+      - settlement_date
+    time_format: iso_date
+    primary_key_columns:
+      - ticker
+      - settlement_date
+    notes: settlement_date is only a proxy for true public availability time.
+
+  - source: fundamentals/short_volume
+    path_pattern: fundamentals/short_volume/*.parquet
+    dataset_type: daily_snapshot
+    frequency: daily
+    ticker_column: ticker
+    align_time_column: date
+    time_columns:
+      - date
+    time_format: iso_date
+    primary_key_columns:
+      - ticker
+      - date
+    notes: daily short volume by ticker.
+
+  - source: fundamentals/stocks_floats
+    path_pattern: fundamentals/stocks_floats/*.parquet
+    dataset_type: low_frequency_snapshot
+    frequency: event_low_frequency
+    ticker_column: ticker
+    align_time_column: effective_date
+    time_columns:
+      - effective_date
+    time_format: iso_date
+    primary_key_columns:
+      - ticker
+      - effective_date
+    notes: effective_date is treated as the availability proxy.
+
+  - source: market_operations/condition_codes
+    path_pattern: market_operations/condition_codes/*.parquet
+    dataset_type: dictionary
+    frequency: static
+    ticker_column: null
+    align_time_column: null
+    time_columns: []
+    time_format: null
+    primary_key_columns:
+      - id
+    allow_null_ticker: true
+    allow_null_align_time: true
+    notes: reference table.
+
+  - source: market_operations/exchanges
+    path_pattern: market_operations/exchanges/*.parquet
+    dataset_type: dictionary
+    frequency: static
+    ticker_column: null
+    align_time_column: null
+    time_columns: []
+    time_format: null
+    primary_key_columns:
+      - id
+    allow_null_ticker: true
+    allow_null_align_time: true
+    notes: exchange metadata.
+
+  - source: market_operations/market_holidays
+    path_pattern: market_operations/market_holidays/*.parquet
+    dataset_type: calendar
+    frequency: yearly_calendar
+    ticker_column: null
+    align_time_column: date
+    time_columns:
+      - date
+    time_format: iso_date
+    primary_key_columns:
+      - date
+      - exchange
+    allow_null_ticker: true
+    notes: one calendar row per exchange-date.
+
+  - source: news/news
+    path_pattern: news/news/*.parquet
+    dataset_type: event_stream
+    frequency: event
+    ticker_column: tickers
+    align_time_column: published_utc
+    time_columns:
+      - published_utc
+    time_format: iso_datetime
+    timezone: utc
+    primary_key_columns:
+      - id
+    array_columns_to_explode:
+      - tickers
+    notes: published_utc is the event timestamp.
+
+  - source: tickers/all_tickers
+    path_pattern: tickers/all_tickers/*.parquet
+    dataset_type: security_master
+    frequency: metadata_snapshot
+    ticker_column: ticker
+    align_time_column: last_updated_utc
+    time_columns:
+      - last_updated_utc
+    time_format: iso_datetime
+    timezone: utc
+    primary_key_columns:
+      - ticker
+    dedup_strategy: keep_latest_by_align_time
+    notes: if retaining full history, extend uniqueness with last_updated_utc.
+
+  - source: tickers/ticker_types
+    path_pattern: tickers/ticker_types/*.parquet
+    dataset_type: dictionary
+    frequency: static
+    ticker_column: null
+    align_time_column: null
+    time_columns: []
+    time_format: null
+    primary_key_columns:
+      - code
+      - asset_class
+      - locale
+    allow_null_ticker: true
+    allow_null_align_time: true
+    notes: ticker type dictionary.
+
+  - source: us_stocks_sip/day_aggs_v1
+    path_pattern: us_stocks_sip/day_aggs_v1/**/*.parquet
+    dataset_type: market_bar
+    frequency: daily
+    ticker_column: ticker
+    align_time_column: window_start
+    time_columns:
+      - window_start
+    time_format: unix_ns
+    timezone: utc
+    primary_key_columns:
+      - ticker
+      - window_start
+    notes: day aggregate keyed by ticker and window start.
+
+  - source: us_stocks_sip/minute_aggs_v1
+    path_pattern: us_stocks_sip/minute_aggs_v1/**/*.parquet
+    dataset_type: market_bar
+    frequency: minute
+    ticker_column: ticker
+    align_time_column: window_start
+    time_columns:
+      - window_start
+    time_format: unix_ns
+    timezone: utc
+    primary_key_columns:
+      - ticker
+      - window_start
+    notes: minute aggregate keyed by ticker and window start.
+
+  - source: us_stocks_sip/quotes_v1
+    path_pattern: us_stocks_sip/quotes_v1/**/*.parquet
+    dataset_type: event_stream
+    frequency: tick
+    enabled: false
+    ticker_column: ticker
+    align_time_column: sip_timestamp
+    time_columns:
+      - participant_timestamp
+      - sip_timestamp
+      - trf_timestamp
+    time_format: unix_ns
+    timezone: utc
+    primary_key_columns:
+      - ticker
+      - sip_timestamp
+      - sequence_number
+    notes: disabled by default because the raw dataset is extremely large; process only when explicitly requested. sequence_number should be validated against actual schema before strict enforcement.
+
+  - source: us_stocks_sip/trades_v1
+    path_pattern: us_stocks_sip/trades_v1/**/*.parquet
+    dataset_type: event_stream
+    frequency: tick
+    enabled: false
+    ticker_column: ticker
+    align_time_column: sip_timestamp
+    time_columns:
+      - participant_timestamp
+      - sip_timestamp
+      - trf_timestamp
+    time_format: unix_ns
+    timezone: utc
+    primary_key_columns:
+      - ticker
+      - sip_timestamp
+      - sequence_number
+    notes: disabled by default because the raw dataset is extremely large; process only when explicitly requested. sequence_number should be validated against actual schema before strict enforcement.

@@ -1,0 +1,23 @@
+factor:
+  name: day_aggs_v1_pv_range_x_volume_rank_2016_2025_v1
+  expr: rank(((col("high") - col("low")) / (col("close") + 1e-9)) * col("volume"))
+  freq: 1d
+  universe: equities
+  description: 日线量价因子 - 振幅与成交量混合截面排名
+
+data_source:
+  type: cleaned_parquet
+  root: ~/quant_projects/data/us_stock/cleaned_massive_data/us_stocks_sip/day_aggs_v1
+  recursive: true
+  start_date: 2016-01-01
+  end_date: 2025-12-31 23:59:59
+
+backend:
+  type: pandas
+
+engine:
+  enable_cache: true
+
+materialization:
+  lake_root: ~/quant_projects/data/factors/lake
+  factor_id: day_aggs_v1_pv_range_x_volume_rank_2016_2025_v1

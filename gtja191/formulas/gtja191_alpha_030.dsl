@@ -1,0 +1,4 @@
+# GTJA-191 Alpha 030
+# source: WMA((REGRESI(CLOSE/DELAY(CLOSE)-1,MKT,SMB,HML，60))^2,20)
+
+0 * close

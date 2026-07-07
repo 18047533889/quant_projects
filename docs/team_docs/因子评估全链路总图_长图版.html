@@ -1,0 +1,2966 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>因子评估全链路总图（长图版）</title>
+  <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']]
+      }
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --border: #cbd5e1;
+      --text: #0f172a;
+      --muted: #475569;
+      --blue: #dbeafe;
+      --green: #dcfce7;
+      --amber: #fef3c7;
+      --red: #fee2e2;
+      --purple: #ede9fe;
+      --gray: #f1f5f9;
+      --blue-deep: #1d4ed8;
+      --green-deep: #166534;
+      --amber-deep: #b45309;
+      --red-deep: #b91c1c;
+      --purple-deep: #7c3aed;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+      background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+      color: var(--text);
+      line-height: 1.68;
+    }
+    /* Enhanced Header */
+    .header-container {
+      background: white;
+      padding: 30px 40px;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(15,23,42,.05);
+      margin-bottom: 24px;
+      border: 1px solid var(--border);
+    }
+    .header-container h1 {
+      font-size: 32px;
+      margin: 0 0 12px 0;
+      color: #1e293b;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .header-container .subtitle {
+      font-size: 16px;
+      color: #64748b;
+      margin: 0;
+      line-height: 1.6;
+    }
+    .badge {
+      background: var(--blue-deep);
+      color: white;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: bold;
+      vertical-align: middle;
+    }
+
+    /* Sidebar Layout */
+    .layout-container {
+      display: flex;
+      max-width: 1560px;
+      margin: 0 auto;
+      gap: 24px;
+    }
+    .sidebar {
+      flex: 0 0 260px;
+      position: sticky;
+      top: 24px;
+      height: calc(100vh - 48px);
+      overflow-y: auto;
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 1px 3px rgba(15,23,42,.05);
+    }
+
+    /* Sidebar Search */
+    .sidebar-search {
+      margin-bottom: 16px;
+      position: relative;
+    }
+    .sidebar-search input {
+      
+      padding: 8px 12px 8px 32px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 13px;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+    .sidebar-search input:focus {
+      border-color: var(--blue-deep);
+      box-shadow: 0 0 0 3px var(--blue);
+    }
+    .sidebar-search::before {
+      content: '🔍';
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 14px;
+      color: var(--muted);
+      pointer-events: none;
+    }
+
+    .sidebar-title {
+      font-weight: bold;
+      font-size: 16px;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-nav {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .sidebar-nav li {
+      margin-bottom: 8px;
+    }
+    .sidebar-nav a {
+      text-decoration: none;
+      color: var(--muted);
+      font-size: 13px;
+      display: block;
+      padding: 6px 10px;
+      border-radius: 6px;
+      transition: all 0.2s ease;
+      line-height: 1.4;
+    }
+    .sidebar-nav a:hover {
+      background: var(--blue);
+      color: var(--blue-deep);
+    }
+    .sidebar-nav a.active {
+      background: var(--blue-deep);
+      color: white;
+      font-weight: bold;
+    }
+    .main-content {
+      flex: 1;
+      min-width: 0;
+    }
+    
+
+    /* Back to Top Button */
+    #back-to-top {
+      position: fixed;
+      bottom: 30px;
+      right: 30px;
+      background: var(--blue-deep);
+      color: white;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      box-shadow: 0 4px 10px rgba(29, 78, 216, 0.3);
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.3s ease;
+      z-index: 1000;
+      font-size: 20px;
+    }
+    #back-to-top.show {
+      opacity: 1;
+      visibility: visible;
+    }
+    #back-to-top:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 6px 14px rgba(29, 78, 216, 0.4);
+    }
+    @media print {
+      #back-to-top, .sidebar { display: none !important; }
+      .layout-container { display: block !important; }
+    }
+
+    /* Interactive Cards */
+    .grid-card {
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .grid-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+    }
+    
+    /* Responsive */
+    @media (max-width: 1200px) {
+      .layout-container { flex-direction: column; }
+      .sidebar { 
+        position: static; 
+        height: auto; 
+        flex: auto;
+        max-height: 300px;
+      }
+    }
+    @media (max-width: 992px) {
+      .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .legend { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 600px) {
+      .grid-4, .grid-3, .two-col { grid-template-columns: 1fr; }
+      .legend { grid-template-columns: 1fr; }
+    }
+    
+    /* Category Subhead inside Stage 5 */
+    .micro-category-title {
+      grid-column: 1 / -1;
+      background: #f1f5f9;
+      padding: 8px 12px;
+      border-left: 4px solid #8e24aa;
+      border-radius: 4px;
+      font-weight: bold;
+      color: #334155;
+      margin-top: 10px;
+      margin-bottom: -5px;
+    }
+
+    h1 { margin: 0 0 10px 0; font-size: 34px; }
+    .subtitle { margin: 0 0 22px 0; color: var(--muted); font-size: 15px; }
+    .legend {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .legend-card {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: white;
+      font-size: 13px;
+      color: var(--muted);
+      box-shadow: 0 1px 2px rgba(15,23,42,.04);
+    }
+    .legend-card b { display:block; margin-bottom:4px; color: var(--text); }
+    .legend-blue { border-left: 8px solid var(--blue-deep); }
+    .legend-green { border-left: 8px solid var(--green-deep); }
+    .legend-amber { border-left: 8px solid var(--amber-deep); }
+    .legend-red { border-left: 8px solid var(--red-deep); }
+    .legend-purple { border-left: 8px solid var(--purple-deep); }
+    .note-band {
+      border: 1px solid var(--border);
+      background: white;
+      border-radius: 14px;
+      padding: 14px 16px;
+      margin-bottom: 18px;
+      box-shadow: 0 1px 2px rgba(15,23,42,.04);
+    }
+    .note-band h2 { margin: 0 0 8px 0; font-size: 18px; }
+    .note-band p { margin: 6px 0; }
+    .stage {
+      border: 1px solid var(--border);
+      background: var(--card);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 3px 10px rgba(15, 23, 42, 0.05);
+      margin-bottom: 18px;
+    }
+    .stage-header {
+      padding: 14px 18px;
+      font-weight: 800;
+      font-size: 19px;
+      border-bottom: 1px solid var(--border);
+    }
+    .blue .stage-header { background: var(--blue); }
+    .green .stage-header { background: var(--green); }
+    .amber .stage-header { background: var(--amber); }
+    .red .stage-header { background: var(--red); }
+    .purple .stage-header { background: var(--purple); }
+    .gray .stage-header { background: var(--gray); }
+    .stage-body { padding: 18px; font-size: 15px; }
+    .two-col {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 14px;
+    }
+    .three-col {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .block {
+      border: 1px solid var(--border);
+      background: #fff;
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+    }
+    .subhead {
+      font-weight: 800;
+      margin: 0 0 8px 0;
+      color: var(--text);
+      font-size: 15px;
+    }
+    .muted { color: var(--muted); }
+    ul { margin: 6px 0 0 20px; padding: 0; }
+    li { margin: 3px 0; }
+    code {
+      background: #eff6ff;
+      border: 1px solid #dbeafe;
+      padding: 1px 6px;
+      border-radius: 6px;
+      font-size: 0.95em;
+      white-space: nowrap;
+    }
+    .wrap-code code {
+      white-space: normal;
+      word-break: break-word;
+    }
+    .arrow {
+      text-align: center;
+      font-size: 28px;
+      color: #64748b;
+      margin: 8px 0 14px 0;
+      font-weight: 700;
+    }
+    .arrow small {
+      display: block;
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 2px;
+      font-weight: 500;
+    }
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .grid-5 {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .grid-card {
+      border: 1px solid var(--border);
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 1px 2px rgba(15,23,42,.04);
+    }
+    .grid-card .head {
+      padding: 10px 14px;
+      font-weight: 800;
+      background: var(--gray);
+      border-bottom: 1px solid var(--border);
+    }
+    .grid-card .body { padding: 14px; font-size: 14px; }
+    .example {
+      border: 1px dashed #94a3b8;
+      background: #f8fafc;
+      border-radius: 12px;
+      padding: 14px;
+      margin-top: 10px;
+    }
+    .footer-note {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 14px;
+    }
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .chip {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: #fff;
+      font-size: 13px;
+      color: var(--text);
+    }
+    .chip.blue { background: #eff6ff; border-color: #bfdbfe; }
+    .chip.amber { background: #fffbeb; border-color: #fde68a; }
+    .chip.purple { background: #f5f3ff; border-color: #ddd6fe; }
+    .highlight {
+      border-left: 6px solid var(--blue-deep);
+      background: #eff6ff;
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+    }
+    .flow-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-top: 10px;
+    }
+    .pipeline-strip {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .pipeline-step {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #fff;
+      padding: 10px 12px;
+      box-shadow: 0 1px 2px rgba(15,23,42,.04);
+      font-size: 13px;
+    }
+    .pipeline-step b {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--text);
+    }
+    .track-compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 14px;
+      margin-top: 12px;
+    }
+    .track-card {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #fff;
+      padding: 12px 14px;
+    }
+    .track-card.center {
+      background: #eff6ff;
+      border-color: #bfdbfe;
+    }
+    .case-flow {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin: 10px 0 12px 0;
+    }
+    .case-step {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #fff;
+      padding: 10px 12px;
+      font-size: 13px;
+    }
+    .case-step b {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--text);
+    }
+    .taxonomy-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 10px;
+    }
+    .danger {
+      border-left: 6px solid var(--red-deep);
+      background: #fff1f2;
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+    }
+    .success {
+      border-left: 6px solid var(--green-deep);
+      background: #f0fdf4;
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+    }
+    @media (max-width: 1150px) {
+      .legend { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .grid-4, .grid-5 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .two-col, .three-col, .flow-grid, .metric-grid, .taxonomy-grid, .pipeline-strip, .track-compare, .case-flow { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 700px) {
+      body { padding: 14px; }
+      .legend, .grid-4, .grid-5 { grid-template-columns: 1fr; }
+      h1 { font-size: 28px; }
+    }
+    @media print {
+      body {
+        background: none;
+        padding: 0;
+        margin: 0;
+      }
+      .page {
+        max-width: none;
+        margin: 0;
+      }
+      .stage, .grid-card {
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+      .connector {
+        display: none;
+      }
+      * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+    }
+  
+    
+    /* Mermaid specific styles */
+    .mermaid-container {
+      background: linear-gradient(to right, #ffffff, #f8fafc) !important;
+      border-left: 4px solid var(--blue-deep) !important;
+    }
+    .mermaid-container h2 {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    /* Layout details fix */
+    .stage-body {
+      padding-top: 16px;
+    }
+    .grid-card {
+      display: flex;
+      flex-direction: column;
+    }
+    .grid-card .body {
+      flex: 1;
+    }
+    
+    /* Active nav state pulse */
+    .sidebar-nav a.active {
+      box-shadow: inset 3px 0 0 white;
+    }
+
+    /* Interactive Enhancements */
+    .mermaid-container {
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .mermaid svg { transform: scale(2.0); transform-origin: top left; }
+.mermaid-container { overflow: auto; max-width: 100%; }
+.mermaid text { font-size: 14px !important; }
+    
+    .grid-card, .stat-card {
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+    }
+    .grid-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 24px rgba(15,23,42,0.08);
+      border-color: var(--blue);
+    }
+    .stat-card:hover {
+      transform: scale(1.02);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.05) !important;
+    }
+    
+    .stage {
+      transition: all 0.4s ease;
+    }
+    .stage:hover {
+      box-shadow: 0 10px 30px rgba(0,0,0,0.04);
+    }
+    
+    /* Add a subtle pulse to the "V2.0 终极交付版" badge */
+    @keyframes pulse-badge {
+      0% { box-shadow: 0 0 0 0 rgba(29, 78, 216, 0.4); }
+      70% { box-shadow: 0 0 0 6px rgba(29, 78, 216, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(29, 78, 216, 0); }
+    }
+    .header-container .badge {
+      animation: pulse-badge 2s infinite;
+    }
+    
+    /* Improve Sidebar Scrollbar */
+    .sidebar::-webkit-scrollbar {
+      width: 6px;
+    }
+    .sidebar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .sidebar::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 10px;
+    }
+    .sidebar::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+
+  </style>
+
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({startOnLoad:true});</script>
+</head>
+<body>
+  <div class="page">
+  <div class="layout-container">
+
+    
+    <div class="sidebar">
+      <div class="sidebar-title">全链路导航</div>
+      <div class="sidebar-search">
+        <input type="text" id="nav-search" placeholder="搜索微观领域 / 轨道..." />
+      </div>
+      <ul class="sidebar-nav">
+        <li><a href="#global-architecture">[全局基建] 湖仓一体与微服务技术栈选型 <br/><span style='font-size:11px; opacity:0.8'>(Enterprise Tech Stack)</span></a></li>
+        <li><a href="#stage-0">[2] 候选因子库封板与统一接管边界 <br/><span style='font-size:11px; opacity:0.8'>(Campaign Freeze)</span></a></li>
+        <li><a href="#stage-1">[3] 极速网关 <br/><span style='font-size:11px; opacity:0.8'>(Gateway)</span> 与静态拦截 <br/><span style='font-size:11px; opacity:0.8'>(Static Gatekeeping)</span></a></li>
+        <li><a href="#stage-2">[6] 预处理与截面纯化流水线 <br/><span style='font-size:11px; opacity:0.8'>(Preprocessing Pipelines)</span></a></li>
+        <li><a href="#stage-5">[7] 异构微观领域专属评估矩阵 <br/><span style='font-size:11px; opacity:0.8'>(Micro-Domain Heterogeneous Assessment)</span></a></li>
+        <li><a href="#stage-6">[8] 时序执行工程与摩擦成本数学模型 <br/><span style='font-size:11px; opacity:0.8'>(Execution & Friction Modeling)</span></a></li>
+        <li><a href="#stage-7">[9] 数据边界处理与防穿越机制 <br/><span style='font-size:11px; opacity:0.8'>(Computational Edge Cases & Anti-Leakage)</span></a></li>
+        <li><a href="#stage-8">[13] 影子模型在环审查 <br/><span style='font-size:11px; opacity:0.8'>(Model-in-the-Loop)</span></a></li>
+        <li><a href="#stage-10-combine">[14] 多因子组合与提纯 <br/><span style='font-size:11px; opacity:0.8'>(Multi-Factor Orthogonalization & Synthesis)</span></a></li>
+        <li><a href="#stage-11">[16] [工程图解] 微服务调度拓扑与算力资源池 <br/><span style='font-size:11px; opacity:0.8'>(Compute Orchestration & Data Flow)</span></a></li>
+        <li><a href="#stage-13">[19] 模型端装配与双剑合璧训练架构 <br/><span style='font-size:11px; opacity:0.8'>(SL+RL Assembly)</span></a></li>
+        <li><a href="#stage-16">[20] 持续监控与生命周期复评 <br/><span style='font-size:11px; opacity:0.8'>(Monitoring & Re-evaluation)</span></a></li>
+        <li><a href="#stage-17">[21] 闭环反馈与基因迭代 <br/><span style='font-size:11px; opacity:0.8'>(Sim2Real & Feedback Loop)</span></a></li>
+        <li style="margin: 10px 0; border-top: 1px solid var(--border); padding-top: 10px; font-weight:bold; font-size:12px; color:var(--muted)">附录 (Appendices)</li>
+        <li><a href="#stage-cases">附录 1：完整生命周期流转案例</a></li>
+        <li><a href="#stage-appendix-db">附录 2：核心对象数据字典 (Database Schema)</a></li>
+        <li><a href="#stage-appendix-math">附录 3：核心量化评估指标数学定义字典 (Math Dictionary)</a></li>
+        <li><a href="#stage-appendix-taxonomy">附录 4：因子语义标签与特征画像字典 (Taxonomy Dictionary)</a></li>
+        <li><a href="#stage-appendix-api">附录 5：微服务交互与 API 契约规范 (Microservices & API Contracts)</a></li>
+        <li><a href="#stage-appendix-monitor">附录 6：运维监控与容灾熔断机制 (SRE & Error Handling)</a></li>
+      </ul>
+    </div>
+
+
+    <div class="main-content">
+
+    
+    <div class="header-container">
+      <h1><span style="font-size: 36px">🚀</span> 企业级量化因子评估全链路总图 <span class="badge">V2.0 终极交付版</span></h1>
+      <p class="subtitle">
+        本长图展现了从 <b>因子挖掘生成</b> 到 <b>模型端特征装配</b> 的完整生命周期流水线。<br/>
+        涵盖横截面 (Cross-Sectional)、时序 (Time-Series)、微观事件 (Micro-Event) 等 <b>7 大评估轨</b> 与 <b>20 个全域微观领域专属约束</b>，全面实现无人值守的自动化路由与严苛的工程红线防御。
+      </p>
+    </div>
+
+
+    
+    <!-- 简版全局链路图 -->
+    <div class="mermaid-container" style="background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 24px; box-shadow: 0 2px 10px rgba(0,0,0,0.02);">
+      <h2 style="margin-top:0; font-size:18px; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 10px;">🌟 因子评估与资产化全生命周期总图 (Enterprise End-to-End Pipeline)</h2>
+      <div class="mermaid" style="text-align: center;">
+        graph TD
+classDef process fill:#e0f2fe,stroke:#0284c7,stroke-width:2px,color:#0f172a
+classDef check fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#0f172a
+classDef db fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#0f172a
+classDef fail fill:#fee2e2,stroke:#dc2626,stroke-width:2px,color:#0f172a
+classDef incubate fill:#f3e8ff,stroke:#7e22ce,stroke-width:2px,color:#0f172a
+classDef route fill:#ede9fe,stroke:#6d28d9,stroke-width:2px,color:#0f172a
+classDef highlight fill:#ffedd5,stroke:#ea580c,stroke-width:2px,color:#0f172a
+classDef core fill:#dbeafe,stroke:#1e88e5,stroke-width:3px,color:#0f172a
+classDef object fill:#f8fafc,stroke:#64748b,stroke-width:2px,color:#0f172a
+
+subgraph GlobalOverview["企业级因子评估与资产化全局总览 (Enterprise Factor Pipeline Overview)"]
+    direction TB
+    A_Infra["A. 基础设施与控制平面"]:::route
+    B_CoreProcess["B. 因子生成与评估核心流程"]:::process
+    C_Downstream["C. 下游消费与反馈治理"]:::core
+    A_Infra --> B_CoreProcess
+    B_CoreProcess --> C_Downstream
+end
+
+subgraph Infra_Detail["A. 基础设施与控制平面 (详细)"]
+    direction TB
+    I1["Lakehouse 数据面<br/>Iceberg / Hudi / ClickHouse"]:::db
+    I2["Kafka 状态总线<br/>candidate submitted / evaluated / admitted"]:::route
+    I3["MinIO 产物面<br/>reports / charts / immutable artifacts"]:::db
+    I4["Neo4j 血缘图谱<br/>DataFeed -> Operator -> Factor -> Model"]:::db
+    I5["Namespace 与协议字典<br/>template / routing policy / threshold"]:::route
+    I6["Lifecycle 状态机<br/>landing / evaluating / incubating / production / deprecated"]:::route
+    I7["Service Contract 层<br/>Gateway / Engine / Evaluation / Routing API"]:::route
+    I8["对象表与 Schema<br/>CandidateFactor / FactorAsset / EvaluationRun / AdmissionDecision"]:::object
+    I9["评估指标与算子白名单<br/>Metrics Formula Dictionary / Valid Operators"]:::object
+end
+
+subgraph CoreProcess_Detail["B. 因子生成与评估核心流程 (详细)"]
+    direction TB
+    subgraph AREA_1["【第一战区】候选生成、准入拦截与户籍登记 (Candidate & Admission)"]
+        direction TB
+        subgraph Z1["阶段 0: 挖掘期候选生成与封板 (Mining Phase)"]
+            direction TB
+            Z1_A["多方法上游来源<br/>GP / RL / LLM / 人工研究"]:::process
+            Z1_B["方法内快速试错<br/>生成 / 变异 / 交叉 / 局部保优淘汰"]:::process
+            Z1_C["方法内局部评估<br/>TCA 预惩罚 / 多样性审计 / 小样本 fitness"]:::check
+            Z1_D["大轮封板<br/>candidate_pool/{campaign_id}"]:::db
+            Z1_E["统一移交对象<br/>campaign_manifest / factor_candidates_raw"]:::object
+            Z1_A --> Z1_B --> Z1_C --> Z1_D --> Z1_E
+        end
+
+        subgraph Z2["阶段 1: 接管边界与极速网关 (Gateway and Admission Boundary)"]
+            direction TB
+            Z2_A["统一接管 API<br/>submit_candidate / raw candidate intake"]:::process
+            Z2_B{"流控与配额检查<br/>QPS / user quota / compute budget"}:::check
+            Z2_C{"静态合法性检查<br/>算子白名单 / AST 复杂度 / schema"}:::check
+            Z2_D{"高维语义去重<br/>embedding / LSH / cache hit"}:::check
+            Z2_E{"未来函数审计<br/>look ahead / leakage / forbidden join"}:::check
+            Z2_F{"动态数据质量预检<br/>NaN / Infinity / spread anomaly / flash crash"}:::check
+            Z2_G["通过后进入正式资产化接力"]:::process
+            Z2_H["缓存秒回支线<br/>直接返回历史评估报告 URI"]:::db
+            Z1_E --> Z2_A --> Z2_B --> Z2_C --> Z2_D --> Z2_E --> Z2_F --> Z2_G
+            Z2_D -.->|"duplicate or cache hit"| Z2_H
+            Z2_B -.->|"quota exceeded"| Z9_H
+            Z2_C -.->|"illegal operator or bad schema"| Z9_H
+            Z2_E -.->|"future leakage detected"| Z9_H
+            Z2_F -.->|"data quality meltdown"| Z9_H
+        end
+
+        subgraph Z3["阶段 2: 正式登记与对象建模 (Registration and Asset Identity)"]
+            direction TB
+            Z3_A["CandidateFactor 登记表<br/>保存原始表达式与提交元数据"]:::object
+            Z3_B["FactorAsset 正式户籍<br/>生成 factor_id / version / owner / lineage key"]:::process
+            Z3_C["EvaluationRun 运行对象<br/>记录单次评估上下文与参数快照"]:::object
+            Z3_D["AdmissionDecision 对象<br/>记录 tier / namespace / reason"]:::object
+            Z3_E["血缘图谱落库<br/>DataFeed / Operator / Factor / Model"]:::db
+            Z3_F["状态推进<br/>landing -> screening -> materializing -> evaluating"]:::route
+            Z2_G --> Z3_A --> Z3_B --> Z3_C --> Z3_D
+            Z3_B --> Z3_E
+            Z3_B --> Z3_F
+        end
+    end
+
+    subgraph AREA_2["【第二战区】特征物化、预处理纯化与多轨评估引擎 (Materialization & Evaluation)"]
+        direction TB
+        subgraph Z4["阶段 3: factor_engine 全量物化 (Materialization by factor_engine)"]
+            direction TB
+            Z4_A["DSL 到 AST 到 DAG<br/>公共子表达式消除 / 执行计划优化"]:::core
+            Z4_B["多后端执行<br/>Pandas / Modin / Polars / Rust JIT"]:::core
+            Z4_C["Point in Time 和 ASOF JOIN<br/>knowledge_ts <= decision_ts"]:::check
+            Z4_D["原始因子暴露全量计算<br/>全市场 / 全历史 / 正式物化"]:::core
+            Z4_E["Tier 0 staging<br/>原子落盘 / schema check / null audit"]:::db
+            Z4_F{"staging 验证<br/>schema consistency / null ratio / partition health"}:::check
+            Z3_B --> Z4_A --> Z4_B --> Z4_C --> Z4_D --> Z4_E --> Z4_F
+            Z4_F -.->|"validation failed"| Z9_H
+        end
+
+        subgraph Z5["阶段 4: 预处理与纯化总线 (Preprocessing and Purification Bus)"]
+            direction TB
+            Z5_A["截面纯化<br/>去极值(MAD) / 标准化(Z-score) / 行业与市值双重中性化"]:::process
+            Z5_B["时序预处理<br/>Savitzky-Golay平滑 / 状态保持(Ffill with Expiration) / 时钟对齐"]:::process
+            Z5_C["微观结构预处理<br/>LOB重采样 / 订单簿失衡(OBI) / 罗尔价差(Roll Spread) / Kyle's Lambda"]:::process
+            Z5_D["另类数据预处理<br/>FinBERT稠密词向量 / 实体消歧(Entity Disambiguation) / 情绪大盘正交化"]:::process
+            Z5_E["图谱与供应链预处理<br/>节点映射 / 边构图 / 中心性特征"]:::process
+            Z5_F["宏观状态预处理<br/>regime split / state probability / conditional slice"]:::process
+            Z5_G["期货加密期权专属预处理<br/>continuous contract / reflexivity / vol surface"]:::process
+            Z4_E --> Z5_A
+            Z4_E --> Z5_B
+            Z4_E --> Z5_C
+            Z4_E --> Z5_D
+            Z4_E --> Z5_E
+            Z4_E --> Z5_F
+            Z4_E --> Z5_G
+        end
+
+        subgraph Z6["阶段 5: 多轨路由与评估协议族 (Routing and Evaluation Protocols)"]
+            direction TB
+            Z6_A{"路由判定漏斗<br/>signal type / asset class / frequency / namespace"}:::route
+            Z6_B["通用前置层<br/>sample coverage / 换手率惩罚评估 / capacity / leakage recheck"]:::check
+            Z6_C1["A 轨 横截面协议<br/>RankIC / 多空分组单调性 / 纯净Alpha / HAC稳健标准误(Bootstrap)"]:::process
+            Z6_C2["B 轨 时序协议<br/>Net Sharpe / MaxDD / 平方根滑点冲击模型 / 步进优化(WFA) / Purged CV"]:::process
+            Z6_C3["C 轨 事件规则协议<br/>事件窗口CAR / 状态机与迟滞环(Hysteresis) / 非线性软截断 / 脉冲半衰期"]:::process
+            Z6_C4["D 轨 深度隐式特征协议<br/>互信息(MI)惩罚 / 表示坍缩度检查 / 分布漂移(Concept Drift)监控"]:::process
+            Z6_C5["E 轨 NLP 协议<br/>news / report / sentiment / topic drift"]:::process
+            Z6_C6["F 轨 图谱协议<br/>network propagation / supplier risk / graph factor validity"]:::process
+            Z6_C7["G 轨 宏观机制协议<br/>regime dependence / transition map / conditional survival"]:::process
+            Z6_C8["B Fut 轨<br/>期限结构 / 展期收益 / 主连连续性"]:::process
+            Z6_C9["B Cry 轨<br/>反射性 / funding / on chain crowding"]:::process
+            Z6_C10["B Opt 轨<br/>Greeks / skew / smile surface / term structure"]:::process
+            Z5_A --> Z6_A
+            Z5_B --> Z6_A
+            Z5_C --> Z6_A
+            Z5_D --> Z6_A
+            Z5_E --> Z6_A
+            Z5_F --> Z6_A
+            Z5_G --> Z6_A
+            Z6_A --> Z6_B
+            Z6_B --> Z6_C1
+            Z6_B --> Z6_C2
+            Z6_B --> Z6_C3
+            Z6_B --> Z6_C4
+            Z6_B --> Z6_C5
+            Z6_B --> Z6_C6
+            Z6_B --> Z6_C7
+            Z6_B --> Z6_C8
+            Z6_B --> Z6_C9
+            Z6_B --> Z6_C10
+        end
+
+        subgraph Z7["阶段 6: 模型在环与统一评估产物 (Model in the Loop and Unified Output)"]
+            direction TB
+            Z7_A{"影子模型与共线性审查<br/>XGBoost基准测试 / VIF共线性诊断 / 特征冗余度剔除"}:::check
+            Z7_A1{"可解释性与增益评估 (XAI)<br/>LOCO Sharpe Lift / 边际SHAP贡献 / Activation Maximization"}:::check
+            Z7_B["统一结论对象<br/>metrics package / conclusion json / verdict"]:::db
+            Z7_G["因子评估组交付契约<br/>纯净张量 / Factor Returns / 协方差矩阵 / 容量预估 / 特征重要性"]:::object
+            Z7_C["图表与详情页产物<br/>charts / markdown summary / factor detail page"]:::db
+            Z7_D["Tier 1 标准评估区<br/>run snapshot / reproducible artifacts"]:::db
+            Z7_E["Factor Center API<br/>供前端检索和下游消费"]:::db
+            Z7_F["评估复现指纹<br/>data snapshot / code version / config hash"]:::object
+            Z6_C1 --> Z7_A
+            Z6_C2 --> Z7_A
+            Z6_C3 --> Z7_A
+            Z6_C4 --> Z7_A
+            Z6_C5 --> Z7_A
+            Z6_C6 --> Z7_A
+            Z6_C7 --> Z7_A
+            Z6_C8 --> Z7_A
+            Z6_C9 --> Z7_A
+            Z6_C10 --> Z7_A
+            Z7_A --> Z7_A1 --> Z7_B
+            Z7_B --> Z7_G
+            Z7_G --> Z7_C
+            Z7_G --> Z7_D
+            Z7_G --> Z7_E
+            Z7_B --> Z7_F
+            Z7_F --> Z7_D
+        end
+    end
+end
+
+subgraph Downstream_Feedback_Detail["C. 下游消费与反馈治理 (详细)"]
+    direction TB
+    subgraph AREA_3["【第三战区】智能路由分发、模型端装配与实盘监控 (Routing & Downstream)"]
+        direction TB
+        subgraph Z8["阶段 7: 语义贴标与命名空间归属 (Tagging and Namespace Assignment)"]
+            direction TB
+            Z8_A["质量标签<br/>survive / fragile / crowding prone / cost sensitive"]:::process
+            Z8_B["风格与语义标签<br/>value / momentum / microstructure / NLP / macro"]:::process
+            Z8_C["风险与约束标签<br/>capacity / leverage / turnover / tail risk"]:::process
+            Z8_D["命名空间归属<br/>signal structure / asset class / frequency / domain root"]:::route
+            Z8_E["标签字典母版<br/>taxonomy dictionary / protocol key / template id"]:::route
+            Z7_D --> Z8_A
+            Z7_B --> Z8_B
+            Z7_B --> Z8_C
+            Z8_A --> Z8_D
+            Z8_B --> Z8_D
+            Z8_C --> Z8_D
+            Z8_E --> Z8_D
+        end
+
+        subgraph Z9["阶段 8: 智能路由与多层资产库 (Smart Admission and Tiered Stores)"]
+            direction TB
+            Z9_A{"准入决策引擎<br/>threshold / policy / namespace / business priority"}:::check
+            Z9_B["Tier 3A 核心生产库<br/>主力核心 alpha"]:::db
+            Z9_C["Tier 3B 卫星生产库<br/>长尾但稳定的专用因子"]:::db
+            Z9_D["Tier 3C 特征原料库<br/>供深度学习和模型装配"]:::db
+            Z9_E["Tier 2 孵化修复库<br/>平滑 / 降频 / 残差化后再评"]:::incubate
+            Z9_F["Tier 2X LLM 优化工厂<br/>结构改写 / 参数优化 / 算子替换"]:::highlight
+            Z9_G["Tier 3D 优化储备库<br/>候选变异体 / 竞品版本 / reserve alpha"]:::db
+            Z9_H["Tier 4 归档与负样本库<br/>拒绝对象 / 失败对象 / 退役对象"]:::fail
+            Z8_D --> Z9_A
+            Z7_B --> Z9_A
+            I5 --> Z9_A
+            Z9_A -- "强通过" --> Z9_B
+            Z9_A -- "稳定专用" --> Z9_C
+            Z9_A -- "高表达低可解释" --> Z9_D
+            Z9_A -- "可修复" --> Z9_E
+            Z9_A -- "可优化" --> Z9_F
+            Z9_A -- "拒绝或淘汰" --> Z9_H
+            Z9_E -.->|"修复后重评"| Z5_A
+            Z9_F -.->|"优化后重走主链"| Z2_B
+            Z9_F --> Z9_G
+            Z9_G -.->|"reserve alpha 重新挑战"| Z2_A
+            Z9_B -.->|"生产因子预防性升级"| Z9_F
+        end
+
+        subgraph Z10["阶段 9 到 12: 下游消费与实盘闭环 (Serving, Models, Execution)"]
+            direction TB
+            Z10_A["多因子组合与高级凸优化<br/>risk parity / covariance / exposure control"]:::process
+            Z10_B["模型端特征装配<br/>SL predictor / RL state feature / feature store publish"]:::process
+            Z10_C["线上和离线特征供给<br/>batch serving / online cache / factor center"]:::db
+            Z10_C1["Feature Store 输出<br/>供中游 Alpha Aggregator 与策略模型消费"]:::db
+            Z10_C2["Alpha Aggregator / Super Predictor<br/>feature crossing / regime gating / RMT denoise"]:::process
+            Z10_D{"极限压力测试<br/>black swan replay / tail dependence / reverse stress"}:::check
+            Z10_E{"拥挤度与容量预警<br/>crowding / capacity / hyperbolic decay"}:::check
+            Z10_F["智能订单执行<br/>OBI / lambda / dynamic routing / slicing"]:::process
+            Z10_F1{"高级 TCA 与滑点归因<br/>delay / spread crossing / impact / missed fills"}:::check
+            Z10_F2{"Sim2Real 校准层<br/>LOB replay / queue position / partial fill / ghost liquidity"}:::check
+            Z10_G{"持续监控与生命周期复评<br/>drift / decay / benchmark divergence"}:::check
+            Z10_H["退役与降级治理<br/>watchlist / deprecated / archived"]:::route
+            Z10_I["前端因子中心与详情页<br/>检索 / 对比 / 查看 charts 和 lineage"]:::db
+            Z10_J["组合与执行管理器<br/>risk constrained Kelly / NT Zone / lazy trading / OMS"]:::process
+            Z9_B --> Z10_A
+            Z9_C --> Z10_A
+            Z9_B --> Z10_B
+            Z9_D --> Z10_B
+            Z9_B --> Z10_C
+            Z9_C --> Z10_C
+            Z9_D --> Z10_C
+            Z7_E --> Z10_C
+            Z10_C --> Z10_C1
+            Z10_C1 --> Z10_C2
+            Z7_E --> Z10_I
+            Z7_C --> Z10_I
+            Z10_A --> Z10_D
+            Z10_B --> Z10_D
+            Z10_C2 --> Z10_A
+            Z10_C2 --> Z10_J
+            Z10_D --> Z10_E --> Z10_F --> Z10_F1 --> Z10_F2 --> Z10_G
+            Z10_A --> Z10_J
+            Z10_F --> Z10_J
+            Z10_G -.->|"轻微衰减"| Z9_E
+            Z10_G -.->|"需要重写"| Z9_F
+            Z10_G -.->|"彻底失效"| Z10_H
+            Z10_H --> Z9_H
+        end
+    end
+
+    subgraph Z11_DETAIL["反馈闭环与经验反哺 (Feedback Loop)"]
+        direction TB
+        Z11_A["失败因子反馈<br/>过拟合模式 / 脆弱算子 / 错误命名空间"]:::route
+        Z11_B["成功因子反馈<br/>稳定 alpha 结构 / 优势预处理 / 优秀路由策略"]:::route
+        Z11_C["返回上游挖掘器<br/>prompt 更新 / mutation bias / operator whitelist"]:::route
+        Z11_D["返回策略与模型端<br/>更新 feature selection / routing policy / execution rule"]:::route
+        Z9_H --> Z11_A
+        Z10_G -.->|"实盘优秀样本"| Z11_B
+        Z11_A --> Z11_C
+        Z11_B --> Z11_C
+        Z11_A --> Z11_D
+        Z11_B --> Z11_D
+        Z11_C -.->|"指导下一轮挖掘"| Z1_A
+    end
+
+    subgraph Z12_DETAIL["状态迁移与消息主题视图 (State and Message Flow)"]
+        direction TB
+        Z12_A["landing"]:::route
+        Z12_B["screening rejected"]:::fail
+        Z12_C["materializing"]:::route
+        Z12_D["evaluating"]:::route
+        Z12_E["incubating"]:::incubate
+        Z12_F["production core"]:::db
+        Z12_G["feature store ready"]:::db
+        Z12_H["watchlist"]:::check
+        Z12_I["deprecated"]:::fail
+        Z12_J["archived"]:::fail
+        Z12_K["topic: factor.candidate.submitted"]:::object
+        Z12_L["topic: factor.evaluation.completed"]:::object
+        Z12_M["topic: factor.admission.decided"]:::object
+        Z12_A --> Z12_C --> Z12_D
+        Z12_A --> Z12_B
+        Z12_D --> Z12_E
+        Z12_D --> Z12_F
+        Z12_D --> Z12_G
+        Z12_F --> Z12_H --> Z12_I --> Z12_J
+        Z12_K --> Z12_A
+        Z12_D --> Z12_L --> Z12_M
+    end
+end
+
+I1 -.->|"提供底层行情与基础数据"| Z4_B
+I2 -.->|"广播状态变更"| Z2_A
+I2 -.->|"广播评估结果"| Z7_D
+I3 -.->|"保存报表与图表产物"| Z7_C
+I4 -.->|"支持级联重算"| Z3_E
+I6 -.->|"驱动生命周期状态推进"| Z3_B
+I6 -.->|"状态定义映射"| Z12_A
+I7 -.->|"接口契约约束"| Z2_A
+I7 -.->|"接口契约约束"| Z4_A
+I7 -.->|"接口契约约束"| Z7_E
+I8 -.->|"表结构映射"| Z3_A
+I8 -.->|"表结构映射"| Z3_B
+I8 -.->|"表结构映射"| Z3_C
+I8 -.->|"表结构映射"| Z3_D
+I9 -.->|"指标公式约束"| Z6_B
+A_Infra --> Infra_Detail
+B_CoreProcess --> CoreProcess_Detail
+C_Downstream --> Downstream_Feedback_Detail
+      </div>
+    </div>
+
+    <div class="legend">
+      <div class="legend-card legend-blue"><b>蓝色：主业务主链</b>从候选生成、正式接管、factor_engine 物化、纯化、多轨评估，到组合和执行。</div>
+      <div class="legend-card legend-green"><b>绿色：数据资产与产物层</b>Tier 0、Tier 1、Tier 3A/B/C/D、详情页产物、API 与前端消费对象。</div>
+      <div class="legend-card legend-amber"><b>黄色：检查关卡与准入决策</b>网关审计、数据质量、影子模型、压力测试、容量告警、准入判定。</div>
+      <div class="legend-card legend-red"><b>红色：失败、退役与负样本</b>被拒绝、严重失效、退役归档的对象统一沉淀到 Tier 4。</div>
+      <div class="legend-card legend-purple"><b>紫色：路由、命名空间与反馈闭环</b>协议字典、路由引擎、生命周期状态机与 Sim2Real 回流。</div>
+    </div>
+
+    
+    <div class="dashboard-overview" style="display: flex; gap: 20px; margin-bottom: 24px;">
+      <div class="stat-card" style="flex: 1; background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 2px 10px rgba(0,0,0,0.02); text-align: center;">
+        <div style="font-size: 32px; font-weight: bold; color: var(--blue-deep);">20 个</div>
+        <div style="font-size: 14px; color: var(--muted); margin-top: 8px;">微观评估领域</div>
+      </div>
+      <div class="stat-card" style="flex: 1; background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 2px 10px rgba(0,0,0,0.02); text-align: center;">
+        <div style="font-size: 32px; font-weight: bold; color: var(--green-deep);">6 大</div>
+        <div style="font-size: 14px; color: var(--muted); margin-top: 8px;">多轨评估协议族</div>
+      </div>
+      <div class="stat-card" style="flex: 1; background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 2px 10px rgba(0,0,0,0.02); text-align: center;">
+        <div style="font-size: 32px; font-weight: bold; color: var(--amber-deep);">21 级</div>
+        <div style="font-size: 14px; color: var(--muted); margin-top: 8px;">端到端生命周期节点</div>
+      </div>
+      <div class="stat-card" style="flex: 1; background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 2px 10px rgba(0,0,0,0.02); text-align: center;">
+        <div style="font-size: 32px; font-weight: bold; color: var(--purple-deep);">100%</div>
+        <div style="font-size: 14px; color: var(--muted); margin-top: 8px;">防穿越与自动化路由</div>
+      </div>
+    </div>
+    
+    <section id="global-architecture" class="stage" style="border: 2px solid #374151; background: #f8fafc;">
+      <div class="stage-header" style="background: #374151; color: white;">[全局基建] 湖仓一体与微服务技术栈选型 (Enterprise Tech Stack)</div>
+      <div class="stage-body">
+        <div class="highlight wrap-code" style="background: #f1f5f9; border-color: #cbd5e1;">
+          <b>架构宣言：</b>系统严禁过度绑定单一语言！因子评估可能由 Python 编写，但下游微观脉冲执行引擎必须是 Rust/C++，路由与网关必须是 Go。各组件间强制采用高性能通信与读写分离存储。
+        </div>
+        <div class="grid-4 wrap-code">
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #0f172a;">计算引擎层 (Compute)</div>
+            <div class="body">
+              <b>【离线批处理】</b>: Python + Ray 分布式集群，执行长周期历史回测。<br/>
+              <b>【高频流式/订单簿】</b>: 强制采用 Rust/C++ 重写核心 <code>factor_engine</code>。<br/>
+              <b>【通信契约】</b>: 严禁 JSON 传大矩阵！必须通过 <b>Apache Arrow Flight</b> (零拷贝共享内存) 或 <b>gRPC Stream</b> 传输高频张量。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #0f172a;">湖仓数据面 (Lakehouse)</div>
+            <div class="body">
+              <b>【写密集/高频流】</b>: <b>Apache Hudi</b>，提供读时合并 (MoR) 支撑订单簿更新。<br/>
+              <b>【海量只读回测】</b>: <b>Apache Iceberg</b>，强依赖写时复制 (CoW) 与隐藏分区，完美支持 PIT 拼接防穿越。<br/>
+              <b>【指标查询加速】</b>: <b>ClickHouse</b>，PB级 OLAP 宽表。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #0f172a;">状态与消息面 (State & MQ)</div>
+            <div class="body">
+              <b>【消息总线】</b>: <b>Kafka</b>，负责 <code>factor.candidate.evaluated</code> 等状态流转的全局异步广播。<br/>
+              <b>【流式状态/特征缓存】</b>: <b>Redis / Aerospike</b>，持久化 <code>Rolling Window</code> 最新状态，彻底消除离线与在线计算漂移 (Online-Offline Skew)。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #0f172a;">产物与管控面 (Control)</div>
+            <div class="body">
+              <b>【产物防篡改】</b>: <b>MinIO</b> (对象存储)。所有 Artifacts (如 <code>eval_reports.json</code>) 落盘后强制锁定为 <b>不可变只读 (Immutable)</b> 并写入 SHA256 Checksum。<br/>
+              <b>【血缘图谱】</b>: <b>Neo4j</b> 支撑级联失效重算。<br/>
+              <b>【任务编排】</b>: Airflow / Prefect。
+            </div>
+          </div>
+        </div>
+        <div class="grid-card">
+          <div class="head">Order Book Imbalance (订单簿失衡度)</div>
+          <div class="body">
+            <b>【应用轨道】</b>: Track C3 (微观脉冲) / 高频扩展<br/>
+            <b>【数学公式】</b>: $\text{OBI}_t = \frac{\sum_{i=1}^k (V_{bid,i} - V_{ask,i})}{\sum_{i=1}^k (V_{bid,i} + V_{ask,i})}$<br/>
+            <b>【工程约束】</b>: 针对高频脉冲因子，必须计算信号发出瞬间的失衡度，以确认信号是否具备抢跑流动性耗尽的微观解释力。
+          </div>
+        </div>
+        <div class="grid-card">
+          <div class="head">Regime Shift Probabilities (状态转移概率)</div>
+          <div class="body">
+            <b>【应用轨道】</b>: Track G (宏观状态轨)<br/>
+            <b>【数学公式】</b>: $P(S_t = j | S_{t-1} = i)$，基于 HMM 等隐状态推断。<br/>
+            <b>【工程约束】</b>: 必须在时序评估中生成转移概率热力图，并测算因子在不同隐状态（如单边趋势、高波震荡）下的存活率。
+          </div>
+        </div>
+        <div class="grid-card">
+          <div class="head">Tail Dependence (尾部相依性)</div>
+          <div class="body">
+            <b>【应用轨道】</b>: 极值理论 / 压力测试<br/>
+            <b>【数学公式】</b>: $\lambda_U = \lim_{q \to 1} P(X > F_X^{-1}(q) | Y > F_Y^{-1}(q))$<br/>
+            <b>【工程约束】</b>: 评估策略时，必须测算资产因子与市场大盘崩盘期间的极值相关性，防范策略在极端黑天鹅下发生致命共振。
+          </div>
+        </div>
+        <div class="grid-card">
+          <div class="head">Value at Risk & Expected Shortfall (VaR & ES)</div>
+          <div class="body">
+            <b>【应用轨道】</b>: 全局风控 / 尾部测算<br/>
+            <b>【数学公式】</b>: $\text{ES}_\alpha = E[R | R \le -\text{VaR}_\alpha]$<br/>
+            <b>【工程约束】</b>: 必须测算并汇报 95% 和 99% 置信度下的 CVaR (条件风险价值)，防范黑天鹅事件导致的穿仓风险。
+          </div>
+        </div>
+        <div class="grid-card">
+          <div class="head">Roll's Spread (罗尔隐含价差)</div>
+          <div class="body">
+            <b>【应用轨道】</b>: Track C (微观轨) / 摩擦估算<br/>
+            <b>【数学公式】</b>: $S = 2 \sqrt{-\text{Cov}(\Delta P_t, \Delta P_{t-1})}$<br/>
+            <b>【工程约束】</b>: 在缺乏高频 Level-2 数据时，利用相邻两期价格的负自相关性推算隐性买卖价差，评估流动性枯竭时的真实交易成本。
+          </div>
+        </div>
+        <div class="grid-card">
+          <div class="head">Kyle's Lambda (市场深度流动性)</div>
+          <div class="body">
+            <b>【应用轨道】</b>: 冲击测算 / 高频做市<br/>
+            <b>【数学公式】</b>: $\Delta P_t = \lambda \cdot Q_t + \epsilon_t$<br/>
+            <b>【工程约束】</b>: 通过价格变动与净订单流回归计算 $\lambda$。高频策略入库前必须测算其订单在不同 $\lambda$ (市场深度) 下的冲击耐受度。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="note-band">
+      <h2>📚 核心目录导航 (21-Stage Enterprise Pipeline)</h2>
+      <div class="grid-4 wrap-code">
+        <div class="block">
+          <div class="subhead">第一阶段：前置治理与特征物化</div>
+          <a href="#stage-0" style="color: #1e88e5; text-decoration: none;">[0] 24h 持续挖掘与候选封板</a><br/>
+          <a href="#stage-1" style="color: #1e88e5; text-decoration: none;">[3] 极速网关 (静态检查/去重)</a><br/>
+          <a href="#stage-2" style="color: #1e88e5; text-decoration: none;">[4] 因子登记与 Neo4j 血缘图谱</a><br/>
+          <a href="#stage-3" style="color: #1e88e5; text-decoration: none;">[3] 特征物化与 ASOF JOIN</a><br/>
+          <a href="#stage-4" style="color: #1e88e5; text-decoration: none;">[4] 截面纯化与 6 大专属预处理</a><br/>
+          <a href="#stage-4-5" style="color: #8e24aa; text-decoration: none;">[4.5] 时序执行与摩擦成本模型</a><br/>
+          <a href="#stage-4-8" style="color: #d32f2f; font-weight: bold; text-decoration: none;">[4.8] 数据边界处理与防穿越机制</a>
+        </div>
+        <div class="block">
+          <div class="subhead">第二阶段：多轨分发与全域评估</div>
+          <a href="#stage-5" style="color: #e65100; font-weight: bold; text-decoration: none;">[5] 因子全域多轨路由判定漏斗</a><br/>
+          <a href="#stage-5-dispatch" style="color: #e65100; text-decoration: none;">[5.5] 路由后处理与参数分发</a><br/>
+          <a href="#stage-6" style="color: #1e88e5; font-weight: bold; text-decoration: none;">[6] 全维度评估引擎 (A-G轨协议)</a><br/>
+          <a href="#stage-6-5" style="color: #1e88e5; text-decoration: none;">[6.5] 影子模型在环审查 (SHAP)</a>
+        </div>
+        <div class="block">
+          <div class="subhead">第三阶段：资产化与在线供给</div>
+          <a href="#stage-7-combine" style="color: #1e88e5; text-decoration: none;">[7] 多因子组合与提纯</a><br/>
+          <a href="#stage-7" style="color: #1e88e5; text-decoration: none;">[8] 语义贴标引擎 (LLM Taxonomy)</a><br/>
+          <a href="#stage-8" style="color: #1e88e5; text-decoration: none;">[9] 准入决策与正式生产库路由</a><br/>
+          <a href="#stage-tier2" style="color: #f57f17; text-decoration: none;">[Tier 2X] 修复工厂与 LLM 变异</a><br/>
+          <a href="#stage-9" style="color: #2e7d32; font-weight: bold; text-decoration: none;">[10] 在线/离线特征供给服务</a>
+        </div>
+        <div class="block">
+          <div class="subhead">第四阶段：模型装配与实盘迭代</div>
+          <a href="#stage-10" style="color: #2e7d32; font-weight: bold; text-decoration: none;">[11] SL+RL 模型预处理与接力训练</a><br/>
+          <a href="#stage-11" style="color: #8e24aa; text-decoration: none;">[12] 拥挤度监控与双曲衰减</a><br/>
+          <a href="#stage-12" style="color: #8e24aa; text-decoration: none;">[13] Sim2Real 与挖掘闭环反哺</a><br/>
+          <a href="#stage-cases" style="color: #455a64; text-decoration: none;">[附录] API、Schema与数学字典</a>
+        </div>
+      </div>
+    </section>
+
+    
+    
+
+    <div class="part-divider" style="background: linear-gradient(90deg, #1e293b 0%, #334155 100%); color: white; padding: 16px 24px; border-radius: 12px; margin: 40px 0 20px 0; font-size: 20px; font-weight: bold; display: flex; align-items: center; gap: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+      ⚙️ 前置治理与特征物化 (Pre-Evaluation)
+      <span style="font-size: 14px; font-weight: normal; opacity: 0.8; margin-left: auto;">[对应 PRD 第二部分：阶段 0 - 阶段 4]</span>
+    </div>
+    
+    <section id="stage-0" class="stage blue">
+      <div class="stage-header">[1] 24h 持续挖掘层：多方法候选生成 (Candidate Generation) <span class="badge" style="background-color: #4caf50; color: white; padding: 2px 6px; border-radius: 4px; font-size: 14px; margin-left: 10px; font-weight: normal;">【基于 factor_agent 模块扩展】</span></div>
+      <div class="stage-body">
+        <div class="highlight wrap-code">
+          <b>阶段定义：</b>本阶段属于“挖矿”期，各种算法 (LLM/RL/GP) 在沙盒中疯狂搜索，产生海量潜在因子候选。
+        </div>
+        <div class="three-col">
+          <div class="block">
+            <div class="subhead">多引擎并行搜索</div>
+            <b>【入参 (Input)】</b>: 原始行情湖 (Data Lake)、挖掘指令 (Prompt/Goal)、算子白名单。<br/>
+            <b>【处理逻辑 (Process)】</b>: 启动 <code>AlphaProbe</code> (GP)、<code>QuantaAlpha</code> (LLM) 或 <code>AlphaSage</code> (RL)；执行<b>多目标进化</b>，将<b>换手率惩罚</b>内嵌至适应度函数 (Fitness Function)。<br/>
+            <b>【出参/效果 (Output)】</b>: 产出数以万计的原始因子表达式 (AST) 及其初步筛选报告，存储在临时候选池。
+          </div>
+          <div class="block">
+            <div class="subhead">方法内局部筛选</div>
+            <b>【入参 (Input)】</b>: 引擎生成的原始候选集、局部验证集数据。<br/>
+            <b>【处理逻辑 (Process)】</b>: 执行<b>多样性审计</b> (数值/语义/语法)；通过 <b>TCA (Transaction-Cost Aware)</b> 过滤掉明显由于高换手导致亏损的信号。<br/>
+            <b>【出参/效果 (Output)】</b>: 提升候选因子的“初始质量”，减少下游正式资产化链路的计算压力。
+          </div>
+          <div class="block">
+            <div class="subhead">候选封板与移交</div>
+            <b>【入参 (Input)】</b>: 一整轮挖掘结束后沉淀的所有存活因子。<br/>
+            <b>【处理逻辑 (Process)】</b>: 封装 <code>candidate_pool/{campaign_id}/</code>；记录每个因子的“出生证” (<code>generator_name</code>, <code>method_code</code>)。<br/>
+            <b>【出参/效果 (Output)】</b>: 形成正式封板的候选包，触发下游资产化系统 (Gateway) 的接管逻辑。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="arrow">↓<small>从这里开始，进入“一整轮结束后的因子评估与资产化阶段”</small></div>
+
+    <section id="stage-0-5" class="stage gray">
+      <div class="stage-header">[2] 候选因子库封板与统一接管边界 (Campaign Freeze)</div>
+      <div class="stage-body">
+        <div class="highlight wrap-code">
+          <b>逻辑说明：</b>这一步标志一整个 <code>campaign</code> 已经产出了一整批候选因子。上游方法层先停在这里，评估与入库系统 from <code>candidate_pool/{campaign_id}/</code> 开始接管。
+        </div>
+        <div class="two-col">
+          <div class="block">
+            <div class="subhead">统一接管网关</div>
+            <b>【入参 (Input)】</b>: 封板后的 <code>candidate_pool</code> 文件夹、<code>campaign_manifest.json</code>。<br/>
+            <b>【处理逻辑 (Process)】</b>: 调用 <code>FactorAdmissionGateway.submit_candidate</code> API 提交；将提交记录转换为 <code>factor_candidates_raw</code> 消息队列进行流式处理。<br/>
+            <b>【出参/效果 (Output)】</b>: 标志着因子从“挖掘阶段”正式进入<b>“评估主链”</b>，后续一切动作均由评估引擎无人值守接管。
+          </div>
+          <div class="block">
+            <div class="subhead">逐个处理机制</div>
+            <b>【入参 (Input)】</b>: 消息队列中的单个候选对象。<br/>
+            <b>【处理逻辑 (Process)】</b>: 按照 <code>candidate_001</code>、<code>002</code> ... 的顺序依次送入极速网关 (Gateway)；执行登记、物化、评估与路由流程。<br/>
+            <b>【出参/效果 (Output)】</b>: 实现海量候选因子的流水线化作业，确保每个因子都能得到标准化的公平测试。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="stage-1" class="stage blue">
+      <div class="stage-header">[3] 极速网关 (Gateway) 与静态拦截 (Static Gatekeeping)</div>
+      <div class="stage-body">
+        <div class="highlight wrap-code">
+          <b>核心目标：</b>发生在候选临时池进入正式评估主线之前。用最低的计算成本，将一整个大轮产出的候选里最差、最重复、带有未来函数的危险对象挡在门外，保护下游算力。
+        </div>
+        <div class="grid-5">
+          <div class="grid-card">
+            <div class="head">1.1 高并发流控 (Rate Limiting)</div>
+            <div class="body wrap-code">
+              <b>【入参】</b>: 高频并发提交的候选流。<br/>
+              <b>【逻辑】</b>: 基于 <b>Token Bucket</b> 与 <b>Redis Lua 脚本</b> 实现 <code>user_id</code> 与 <code>campaign_id</code> 双维度的 API QPS 限制。<br/>
+              <b>【出参】</b>: 削峰填谷，防止恶意挖掘脚本引发系统雪崩 (HTTP 429)。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head">1.2 静态与配额审查</div>
+            <div class="body wrap-code">
+              <b>【入参】</b>: 候选因子的 AST、复杂度声明。<br/>
+              <b>【逻辑】</b>: 拦截非法算子；检查 <code>resource_limits</code> (超额 GPU/内存需求)。执行<b>算力 Alpha 性价比 (Compute-to-Alpha Ratio)</b> 初筛。<br/>
+              <b>【出参】</b>: 抛出 <code>RESOURCE_QUOTA_EXCEEDED</code> 拒绝昂贵烂因子。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head">1.3 高维语义去重 (LSH)</div>
+            <div class="body wrap-code">
+              <b>【入参】</b>: 因子 AST 与自然语言 Rationale。<br/>
+              <b>【逻辑】</b>: 传统哈希无法识别等价逻辑。利用 <b>FinGPT</b> 将 AST 转为 128维稠密向量存入 Milvus。使用局部敏感哈希 (LSH) / HNSW 执行微秒级 <b>ANN 检索</b>。<br/>
+              <b>【出参】</b>: 识别等价物 (如双均线变体)，标记 <code>duplicate</code>。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head">1.4 Agent 未来函数审计</div>
+            <div class="body wrap-code">
+              <b>【入参】</b>: 数据流图 (Data Flow Graph)、时间边界。<br/>
+              <b>【逻辑】</b>: 部署多智能体 (Multi-Agent) 审计流水线。构造交互项回归 $Y_{t+1} = \beta_1 X_t + \beta_2 L_t + \beta_3(X_t \times L_t)$ 检验涉嫌泄露的前瞻变量 $L_t$。<br/>
+              <b>【出参】</b>: $\beta_3$ 异常显著则证明发生污染，直接阻断。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head">1.5 缓存秒回 (Cache Hit)</div>
+            <div class="body wrap-code">
+              <b>【入参】</b>: 当前因子 Hash、预处理模板 Hash。<br/>
+              <b>【逻辑】</b>: 强幂等性检查。若完全匹配历史记录，直接拦截后续所有计算请求。<br/>
+              <b>【出参】</b>: 标记 <code>cache_hit: true</code>，微秒级返回历史评估报告 URI。
+            </div>
+          </div>
+        </div>
+        <div class="danger">
+          <b>网关分流决策：</b> 
+          <span class="chip green">Passed</span> (进入计算主线) | 
+          <span class="chip amber">Duplicate</span> (返回缓存) | 
+          <span class="chip red">Rejected</span> (打入 Tier 4 负样本库)
+        </div>
+      </div>
+    </section>
+
+    <div class="arrow">↓ <small>网关放行后，进入数据质量强制检测环节</small></div>
+
+    <section id="stage-1-5" class="stage blue">
+      <div class="stage-header">[3.5] 数据质量预检防线 (Data Quality Pre-flight) <span class="badge" style="background-color: #f44336; color: white; padding: 2px 6px; border-radius: 4px; font-size: 14px; margin-left: 10px; font-weight: normal;">【严苛质量把控】</span></div>
+      <div class="stage-body">
+        <div class="highlight wrap-code">
+          <b>核心目标：</b>在消耗算力计算因子值之前，对底层依赖数据进行高标准健康度检查。避免“Garbage In, Garbage Out”。
+        </div>
+        <div class="two-col">
+          <div class="block wrap-code">
+            <div class="subhead">基础健康度断言 (Sanity Assertions)</div>
+            <b>【逻辑】</b>: 检验特征极值分布偏移 (Distribution Shift)、NaN/Infinity 爆炸率。确保序列长度满足回测窗口下限。<br/>
+            <b>【机制】</b>: 设定容忍阈值（如 NaN 比例 > 5% 则触发警告，> 15% 熔断）。
+          </div>
+          <div class="block wrap-code">
+            <div class="subhead">微观结构异象侦测 (Micro-Structure Anomalies)</div>
+            <b>【逻辑】</b>: 针对高频数据，检测“负买卖价差”(Negative Spread)、“跳空闪崩”(Flash Crash) 等数据污染。<br/>
+            <b>【防御】</b>: 若发现底层时序大面积包含微观错误，系统自动挂起该因子计算，并向数据工程团队发送 <code>DataQualityAlert</code>。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="arrow">↓ <small>根据路由指令，动态组装预处理管线与回测引擎上下文，这构成了多轨评估的“指挥塔”</small></div>
+
+    <section id="stage-2" class="stage blue">
+      <div class="stage-header">[4] 因子登记与血缘图谱创建 (Neo4j Graph & Lineage) <span class="badge" style="background-color: #ff9800; color: white; padding: 2px 6px; border-radius: 4px; font-size: 14px; margin-left: 10px; font-weight: normal;">【基于 factor_admission 扩展】</span></div>
+      <div class="stage-body">
+        <div class="two-col">
+          <div class="block wrap-code">
+            <div class="subhead">核心登记动作</div>
+            <b>【入参 (Input)】</b>: 通过 Gateway 审查的合法候选对象及元数据。<br/>
+            <b>【处理逻辑 (Process)】</b>: 为其分配全系统唯一的正式 <code>factor_id</code>，绑定固定的库坐标（如 <code>signal_structure / asset_class / frequency_bucket / domain_root</code>）。状态推进为 <code>landing -> screening -> materializing</code>。<br/>
+            <b>【出参/效果 (Output)】</b>: 生成正式 <code>FactorAsset</code> 对象，从此刻起系统追踪正式资产，而非临时公式。
+          </div>
+          <div class="block wrap-code">
+            <div class="subhead">Neo4j 数据血缘图谱定义 (Graph Schema)</div>
+            <b>【节点 (Nodes)】</b>: <code>(DataFeed)</code> -> <code>(Operator)</code> -> <code>(Factor)</code> -> <code>(Model)</code>。<br/>
+            <b>【关系 (Edges)】</b>: <code>[DERIVED_FROM]</code>, <code>[COMPUTED_BY]</code>, <code>[CONSUMED_BY]</code>。<br/>
+            <b>【工程意义】</b>: 当上游某个行情源 (如 <code>Binance_Tick</code>) 发生数据重刷时，通过 Neo4j 图谱一键触发所有依赖其的 <code>Factor</code> 和下游 <code>Model</code> 进行级联重算 (Cascading Recalculation)，保证全局数据一致性。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="arrow">↓ <small>预处理完毕，进入核心的评估与回测环节。现有 backtest_layer 将作为强劲底座支撑以下多轨并行计算</small></div>
+
+    <section id="stage-3" class="stage blue" style="border: 2px solid #1e88e5; background: #e3f2fd;">
+      <div class="stage-header" style="background: #1e88e5; color: white;">[5] 因子特征物化与核心计算引擎 (Factor Engine & Materialization) <span class="badge" style="background-color: #4caf50; color: white; padding: 2px 6px; border-radius: 4px; font-size: 14px; margin-left: 10px; font-weight: normal;">【现有基建复用】</span></div>
+      <div class="stage-body">
+        <div class="highlight wrap-code" style="background: #bbdefb; border-color: #64b5f6;">
+          <b>核心架构：</b>系统已有强大算子层，<b>严禁重复造轮子</b>！当前 <code>factor_engine</code> 已支持字符串 DSL 到 AST 转换、多后端执行 (Pandas/Modin/Polars) 及 <code>factor_lake_staging</code> 物化。未来演进方向为引入 Rust/C++ 的 JIT/SIMD 极速底层。
+        </div>
+        <div class="grid-4 wrap-code" style="margin-top: 15px;">
+          <div class="grid-card">
+            <div class="head">3.1 AST 解析与 DAG 算子树优化 <span style="color: #4caf50; font-size: 11px;">(已具备)</span></div>
+            <div class="body">
+              <b>【入参】</b>: 原始公式 <code>ts_mean(close, 5) / ts_mean(close, 10)</code>。<br/>
+              <b>【逻辑】</b>: 引擎将其解析为有向无环图 (DAG)，执行 <b>公共子表达式消除 (CSE)</b>。例如，<code>ts_mean(close, 5)</code> 如果在其它因子算过，直接复用内存指针。<br/>
+              <b>【出参】</b>: 极致压缩的物理执行计划。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head">3.2 向量化与 JIT 编译执行</div>
+            <div class="body">
+              <b>【入参】</b>: 优化后的 DAG 执行计划与底仓数据。<br/>
+              <b>【逻辑】</b>: 放弃逐行解释。通过 <b>LLVM JIT</b> 动态编译，或者调用 Rust 的 <b>SIMD (单指令多数据流)</b> 指令集，在 CPU 寄存器层面并发处理截面数组。<br/>
+              <b>【出参】</b>: 提升百倍的计算吞吐量。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head">3.3 严格双时态与 ASOF JOIN</div>
+            <div class="body">
+              <b>【入参】</b>: 交易流与 <code>knowledge_ts</code> (物理入库时间)。<br/>
+              <b>【逻辑】</b>: 严禁使用 <code>trade_date</code> 做普通 merge！强制使用 <b>ASOF JOIN (按时间就近向下匹配)</b>：<code>WHERE knowledge_ts <= decision_ts</code>。<br/>
+              <b>【出参】</b>: 彻底阻断基本面财报修订和高频事件抢跑的未来函数。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head">3.4 Staging 隔离与原子落盘</div>
+            <div class="body">
+              <b>【入参】</b>: 引擎计算出的多阶特征张量。<br/>
+              <b>【逻辑】</b>: 写入隔离沙盒 <code>factor_lake_staging</code>。待数据 Schema 校验、空值率审计全部通过后，才执行 <b>Atomic Move (原子重命名)</b> 进入正式生产湖。<br/>
+              <b>【出参】</b>: 保证线上读取永远不会读到“写了一半”的脏数据。
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="arrow">↓ <small>多轨评估完毕，产出海量指标，进入贴标画像与决策阶段</small></div>
+
+    <section id="stage-4" class="stage orange">
+      <div class="stage-header">[6] 数学纯化流水线 (Mathematical Purification Pipeline)</div>
+      <div class="stage-body">
+        <div class="highlight wrap-code">
+          <b>核心原则：</b>不同类型的因子具有截然不同的物理属性，严禁“一锅端”。必须满足严苛的风控红线，执行 MAD 稳健去极值与 WLS 加权正交化。
+        </div>
+        <div class="grid-4">
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #1e88e5;">A. 稳健去极值 (Robust Winsorization)</div>
+            <div class="body wrap-code">
+              <b>【入参】</b>: 包含极端黑天鹅的截面特征矩阵。<br/>
+              <b>【红线拦截】</b>: 严禁使用易受离群值扭曲的 3-Sigma 均值标准差法。<br/>
+              <b>【强制处理】</b>: 必须使用 <b>MAD (Median Absolute Deviation)</b>。公式：<br/> $M = \text{median}(X)$, $\text{MAD} = \text{median}(|X_i - M|)$。<br/> 截断边界：$[M - 3.148 \cdot \text{MAD}, M + 3.148 \cdot \text{MAD}]$。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #43a047;">B. 高阶风险正交化 (WLS Orthogonalization)</div>
+            <div class="body wrap-code">
+              <b>【入参】</b>: 暴露于市场 Beta 和行业风格的因子。<br/>
+              <b>【红线拦截】</b>: 严禁仅做简单的行业市值去均值。<br/>
+              <b>【强制处理】</b>: 针对结构化风险模型 (如 Barra)，必须采用 <b>加权最小二乘法 (WLS)</b> 回归：$f_{\text{raw}} = \beta \cdot \mathbf{X}_{\text{risk}} + \epsilon$。<br/>
+              权重使用市值的平方根。纯净因子即为残差 $\epsilon$。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #f4511e;">C. 动态缺失值填补 (Dynamic Imputation)</div>
+            <div class="body wrap-code">
+              <b>【入参】</b>: 包含停牌、无数据的非随机缺失 (MNAR) 序列。<br/>
+              <b>【红线拦截】</b>: 严禁使用全局均值或中位数粗暴填充。<br/>
+              <b>【强制处理】</b>: <br/>- 截面缺失：采用截面内<b>行业加权均值</b>填补。<br/>- 时序缺失：采用<b>带指数衰减的向前填充</b> (Forward-fill with decay)，超过最大容忍延迟则丢弃。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #8e24aa;">D. 对称正交与流形保护 (Symmetric & Manifold)</div>
+            <div class="body wrap-code">
+              <b>【入参】</b>: 深度学习输出的隐式高维张量 / 强共线性因子组。<br/>
+              <b>【红线拦截】</b>: 严禁破坏向量空间的几何拓扑结构。<br/>
+              <b>【处理】</b>: <br/>- 组内正交：计算协方差 $C$，利用 <b>Löwdin 对称正交</b> $F_{orth} = F \cdot C^{-1/2}$。<br/>- 张量处理：在流形空间执行 $L_2$ 范数归一化，严禁列级 Z-score。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #fbc02d;">E. Crypto 永续专线 (Perpetual)</div>
+            <div class="body wrap-code">
+              <b>【入参】</b>: 包含异常插针与资金费率的 7x24 盘口。<br/>
+              <b>【处理 1：费率对齐】</b>: 精确匹配 8 小时一次的 Funding Rate 扣减时间戳。<br/>
+              <b>【处理 2：聚合降噪】</b>: 针对跨交易所流动性，按成交量加权聚合 (Volume-Weighted Aggregation) 剔除单一所的 Spoofing 假单。<br/>
+              <b>【出参】</b>: 剥离虚假流动性噪音的链上特征。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #00acc1;">F. 期货连续主力专线 (Futures)</div>
+            <div class="body wrap-code">
+              <b>【入参】</b>: 换月时存在价差跳空的期货合约。<br/>
+              <b>【处理 1：价差缝合】</b>: 采用 <b>Panama Canal Stitching (巴拿马平移)</b> 累加展期跳空差额 $P_{adj} = P_{raw} + \sum \Delta_{roll}$。<br/>
+              <b>【处理 2：持仓缩放】</b>: 基于 <b>Time-to-Maturity (TTM)</b> 进行非线性缩放，降低临近交割日的噪音权重。<br/>
+              <b>【出参】</b>: 不受交割规则扭曲的无跳空期限特征。
+            </div>
+          </div>
+        </div>
+        <div class="danger">
+          <b>防泄露红线：</b>严禁全局统计泄露 (用全样本均值算Z-score)、严禁参数前视、严禁正交化泄露。一切统计量必须是 Rolling 的。
+        </div>
+      </div>
+    </section>
+
+<section id="stage-4-hf" class="stage orange" style="margin-top: 20px;">
+      <div class="stage-header">[6.5] 高频微观结构专属预处理 (High-Frequency Preprocessing)</div>
+      <div class="stage-body">
+        <div class="highlight wrap-code">
+          <b>核心原则：</b>高频量价与 LOB (订单簿) 数据的预处理逻辑与低频基本面截然不同。系统开辟了独立的高频数据管道，执行微观状态对齐与高频滤波。
+        </div>
+        <div class="grid-4">
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #00bcd4;">A. LOB 状态空间对齐 (Micro-State Alignment)</div>
+            <div class="body wrap-code">
+              <b>【入参】</b>: 不规则的 Tick-level 逐笔订单簿切片。<br/>
+              <b>【处理】</b>: 采用事件驱动 (Event-driven) 重采样技术。确保在极微小的时间戳内，不同深度档位 (Bid/Ask) 的量价状态完全一致，消除时钟抖动引发的特征错位。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #009688;">B. 高频去噪与滤波 (High-Freq Denoising)</div>
+            <div class="body wrap-code">
+              <b>【入参】</b>: 充满白噪音的高频特征序列。<br/>
+              <b>【处理】</b>: 避免使用移动平均 (MA) 导致信号严重滞后。引入 <b>Savitzky-Golay 滤波</b> 或 <b>卡尔曼滤波 (Kalman Filter)</b> 提取潜在动力学趋势，保留微观价格跳跃 (Jumps)。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #ff9800;">C. 非线性信号挤压 (Non-linear Squashing)</div>
+            <div class="body wrap-code">
+              <b>【入参】</b>: 存在瞬间暴增或无限放大的高频脉冲强度。<br/>
+              <b>【处理】</b>: 信号传入下游前，强制经过 <code>tanh</code> 或自定义 <code>Softplus</code> 函数执行软截断 (Soft Clipping)，压制极端脉冲对后续强化学习权重的破坏。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #9c27b0;">D. 迟滞环降噪 (Hysteresis Loop)</div>
+            <div class="body wrap-code">
+              <b>【入参】</b>: 频繁在阈值边缘跳动的触发规则信号。<br/>
+              <b>【处理】</b>: 设定双阈值边界 (如买入阈值 $T_{upper}$，平仓阈值 $T_{lower}$)。构建状态死区 (Deadzone)，强力阻断微观高频的“乒乓换手效应”。
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="stage-4-alt" class="stage orange" style="margin-top: 20px;">
+      <div class="stage-header">[6.8] 另类数据与非结构化预处理 (Alternative & Unstructured Pipeline)</div>
+      <div class="stage-body">
+        <div class="highlight wrap-code">
+          <b>核心原则：</b>为支持 NLP 文本与知识图谱等前沿数据源，系统开辟独立的非结构化特征工程基座，执行语义实体对齐与图谱补全。
+        </div>
+        <div class="grid-4">
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #607d8b;">A. 实体链接与消歧 (Entity Linking)</div>
+            <div class="body wrap-code">
+              <b>【入参】</b>: 包含模糊别名的新闻、社交媒体文本流。<br/>
+              <b>【处理】</b>: 提取文本前，强制执行实体消歧，将 "果链"、"A厂" 等模糊词汇映射到统一的 <code>Asset_ID</code>，消除交叉污染。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #3f51b5;">B. 稠密向量提取 (Dense Embeddings)</div>
+            <div class="body wrap-code">
+              <b>【入参】</b>: 清洗后的研报与新闻长文本。<br/>
+              <b>【处理】</b>: 经过 FinBERT 或专用金融 LLM 提取 768 维稠密特征向量。强制隔离未来词表。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #e91e63;">C. 情感极性衰减 (Sentiment Decay)</div>
+            <div class="body wrap-code">
+              <b>【入参】</b>: 离散且瞬间爆发的 NLP 情绪得分。<br/>
+              <b>【处理】</b>: 避免使用简单的算术平均。采用 <b>成交量加权的指数衰减滑动平均 (Volume-weighted EMA)</b>，捕捉突发热度的半衰期。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #795548;">D. 图谱拓扑提取 (Graph Topology)</div>
+            <div class="body wrap-code">
+              <b>【入参】</b>: 供应链网络、股权穿透网络。<br/>
+              <b>【处理】</b>: 使用 Node2Vec / GCN 提取节点特征。对孤立节点 (Isolated Nodes) 产生的空值使用图中心度 (Centrality) 动态补全。
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    
+    <div class="part-divider" style="background: linear-gradient(90deg, #1e293b 0%, #334155 100%); color: white; padding: 16px 24px; border-radius: 12px; margin: 40px 0 20px 0; font-size: 20px; font-weight: bold; display: flex; align-items: center; gap: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+      ⚖️ 多轨分发与全域评估 (Evaluation & Routing)
+      <span style="font-size: 14px; font-weight: normal; opacity: 0.8; margin-left: auto;">[对应 PRD 第二部分：阶段 5]</span>
+    </div>
+    
+    <section id="stage-5" class="stage purple" style="border: 2px solid #8e24aa; background: #f3e5f5; margin-bottom: 20px;">
+      <div class="stage-header" style="background: #8e24aa; color: white;">[7] 异构微观领域专属评估矩阵 (Micro-Domain Heterogeneous Assessment)</div>
+      <div class="stage-body">
+        <div class="highlight wrap-code" style="background: #e1bee7; border-color: #ce93d8; color: #4a148c;">
+          <b>核心洞察：</b>大类轨道（A-G）解决了计算框架的分流问题，但即使在同一框架内，不同微观场景的物理属性天差地别。系统在装配评估协议时，必须针对以下 <b>20 个全域量化细分领域</b> 注入专属的防坑红线与惩罚机制，这些共同构成了<b>全域评估方法论矩阵 (Global Evaluation Taxonomy)</b> 的基石。
+        </div>
+
+        <div class="subhead" style="margin-top: 15px; font-size: 1.05em; color: var(--blue-deep); border-bottom: 1px solid var(--border); padding-bottom: 5px;">A. 股票多因子与基本面量化 (Equity Multi-Factor)</div>
+        <div class="grid-4 wrap-code" style="margin-top: 10px; margin-bottom: 20px;">
+          <!-- Card 1 -->
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #1e88e5;">1. 财报跳空与盈余漂移 (PEAD)</div>
+            <div class="body">
+              <b>【评估轨】</b>: 横截面基本面轨<br/>
+              <b>【专属动作】</b>: 收益核算必须从 <b>T+1 开盘价 (Open_{t+1})</b> 算起。<br/>
+              <b>【红线】</b>: 财报往往在盘后发布。严禁将财报日当天的收盘价作为成本价，否则“隔夜跳空收益”实盘根本吃不到，引发严重穿越。
+            </div>
+          </div>
+          <!-- Card 2 -->
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #1e88e5;">2. 分析师预期修正 (Analyst Revision)</div>
+            <div class="body">
+              <b>【评估轨】</b>: 横截面基本面轨<br/>
+              <b>【专属动作】</b>: 启动 <b>僵尸预期剔除 (Stale Estimate Dropping)</b>。<br/>
+              <b>【红线】</b>: 分析师数据存在“聚团更新”。若超过 90 天未更新的数据不被强行剔除，会严重污染一致预期的均值和标准差分母。
+            </div>
+          </div>
+          <!-- Card 3 -->
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #1e88e5;">3. 财务造假识别 (Fraud Detection)</div>
+            <div class="body">
+              <b>【评估轨】</b>: 离散规则轨 (做空池)<br/>
+              <b>【专属动作】</b>: 提取 Beneish M-Score 等指标进行 <b>一票否决 (Veto)</b>。<br/>
+              <b>【红线】</b>: 这类因子通常不能产生稳定正收益，而是作为黑名单过滤器。必须测试其对现有多头组合“排雷”后的夏普增益。
+            </div>
+          </div>
+          <!-- Card 4 -->
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #1e88e5;">4. 风格漂移剥离 (Style Drift)</div>
+            <div class="body">
+              <b>【评估轨】</b>: 横截面纯化轨<br/>
+              <b>【专属动作】</b>: 强制进行 <b>市值与动量双重正交 (Size & Momentum Neutral)</b>。<br/>
+              <b>【红线】</b>: 很多所谓的“低波动”或“高质量”因子，其收益完全来自于隐含的小盘股或动量暴露。若不剥离 Beta，纯净 Alpha 为零。
+            </div>
+          </div>
+        </div>
+
+        <div class="subhead" style="margin-top: 15px; font-size: 1.05em; color: var(--green-deep); border-bottom: 1px solid var(--border); padding-bottom: 5px;">B. 高频量价与微观结构 (High-Frequency & Microstructure)</div>
+        <div class="grid-4 wrap-code" style="margin-top: 10px; margin-bottom: 20px;">
+          <!-- Card 5 -->
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #43a047;">5. 订单簿失衡压迫 (LOB Imbalance)</div>
+            <div class="body">
+              <b>【评估轨】</b>: 时序微观脉冲轨<br/>
+              <b>【专属动作】</b>: 强制注入 <b>排队位置耗时模型 (Queue Position Model)</b>。<br/>
+              <b>【红线】</b>: 严禁“触价即成交”假设。若订单挂在 Tail 端且撤单率极高，整个信号周期内根本无法成交，必须算作 Missed Fill。
+            </div>
+          </div>
+          <!-- Card 6 -->
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #43a047;">6. 大单资金流向 (Order Flow Toxicity)</div>
+            <div class="body">
+              <b>【评估轨】</b>: 时序/截面轨<br/>
+              <b>【专属动作】</b>: 必须注入 <b>3 倍市场冲击弹性 (Market Impact Multiplier)</b>。<br/>
+              <b>【红线】</b>: 资金流向极具“内生反身性”（大单自身推高了价格）。如果不加重滑点惩罚，回测必陷“买入即赚钱”的同向假象。
+            </div>
+          </div>
+          <!-- Card 7 -->
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #43a047;">7. 极短期均值回归 (Micro-Reversion)</div>
+            <div class="body">
+              <b>【评估轨】</b>: 时序微观脉冲轨<br/>
+              <b>【专属动作】</b>: 引入 <b>迟滞环 (Hysteresis Loop)</b> 双阈值截断。<br/>
+              <b>【红线】</b>: 信号在临界点反复横跳。若不设置死区 (Deadzone)，将产生海量的“乒乓换手”，手续费瞬间击穿所有利润。
+            </div>
+          </div>
+          <!-- Card 8 -->
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #43a047;">8. 暗池与大宗交易 (Dark Pool / Block)</div>
+            <div class="body">
+              <b>【评估轨】</b>: 微观结构轨<br/>
+              <b>【专属动作】</b>: 注入 <b>延迟印证延迟 (Delayed Tape Printing)</b> 调整。<br/>
+              <b>【红线】</b>: 暗池交易往往延迟 15 分钟甚至更久汇报。回测时绝对不能把“交易发生时间”当做“信号获取时间”。
+            </div>
+          </div>
+        </div>
+
+        <div class="subhead" style="margin-top: 15px; font-size: 1.05em; color: var(--amber-deep); border-bottom: 1px solid var(--border); padding-bottom: 5px;">C. 统计套利与特殊事件 (StatArb & Event Driven)</div>
+        <div class="grid-4 wrap-code" style="margin-top: 10px; margin-bottom: 20px;">
+          <!-- Card 9 -->
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #f57c00;">9. 统计配对套利 (Pairs Trading)</div>
+            <div class="body">
+              <b>【评估轨】</b>: 跨资产协整轨<br/>
+              <b>【专属动作】</b>: 必须进行 <b>Engle-Granger 协整性半衰期监测</b>。<br/>
+              <b>【红线】</b>: 严禁仅靠“相关性”做对冲。必须证明残差序列平稳。当价差发散超过最大容忍时间 (如 3 个半衰期) 时必须强制止损。
+            </div>
+          </div>
+          <!-- Card 10 -->
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #f57c00;">10. ETF 申赎与折溢价 (ETF Arbitrage)</div>
+            <div class="body">
+              <b>【评估轨】</b>: 公司行为套利轨<br/>
+              <b>【专属动作】</b>: 强制计算 <b>篮子同步冲击成本 (Basket Impact)</b>。<br/>
+              <b>【红线】</b>: 发现 ETF 溢价时不能假设无脑吃掉。必须测算底仓一篮子成分股同步建仓的流动性，若含停牌或跌停股，套利直接熔断。
+            </div>
+          </div>
+          <!-- Card 11 -->
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #f57c00;">11. 内部人与高管交易 (Insider Trades)</div>
+            <div class="body">
+              <b>【评估轨】</b>: 事件驱动轨<br/>
+              <b>【专属动作】</b>: 剥离 <b>10b5-1 预定计划 (Programmed Trades)</b>。<br/>
+              <b>【红线】</b>: 多数高管卖出是税务或期权到期的被动操作。必须剔除例行公事的卖出，仅保留“非计划内的簇状抛售”作为做空信号。
+            </div>
+          </div>
+          <!-- Card 12 -->
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #f57c00;">12. 并购重组套利 (M&A Arbitrage)</div>
+            <div class="body">
+              <b>【评估轨】</b>: 事件驱动轨<br/>
+              <b>【专属动作】</b>: 注入 <b>交易破裂概率折现 (Deal Break Probability)</b>。<br/>
+              <b>【红线】</b>: 严禁将收购公告价直接视为无风险套利空间。必须结合反垄断审查、融资环境和宏观周期测算失败风险。
+            </div>
+          </div>
+        </div>
+
+        <div class="subhead" style="margin-top: 15px; font-size: 1.05em; color: var(--purple-deep); border-bottom: 1px solid var(--border); padding-bottom: 5px;">D. 衍生品与跨品种机制 (Derivatives & Cross-Asset)</div>
+        <div class="grid-4 wrap-code" style="margin-top: 10px;">
+          <!-- Card 13 -->
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #8e24aa;">13. 期权隐含波动率曲面 (IV Surface)</div>
+            <div class="body">
+              <b>【评估轨】</b>: 期权特有轨 (B-Opt)<br/>
+              <b>【专属动作】</b>: 执行 <b>高阶希腊字母中性化 (Greeks-Neutrality)</b>。<br/>
+              <b>【红线】</b>: 严禁裸多空。因子必须在剥离 Delta 和 Vega 敞口后，证明其能提取纯粹的偏度偏斜 (Skew) 或跳跃风险溢价。
+            </div>
+          </div>
+          <!-- Card 14 -->
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #8e24aa;">14. 末日 Gamma 挤压 (0DTE Squeeze)</div>
+            <div class="body">
+              <b>【评估轨】</b>: 期权特有轨 (B-Opt)<br/>
+              <b>【专属动作】</b>: 估算 <b>做市商净 Gamma 敞口 (Net Dealer Gamma)</b>。<br/>
+              <b>【红线】</b>: 0DTE 期权临近收盘 Gamma 爆炸。若做市商处于 Short Gamma 状态，将引发剧烈顺势逼空，严禁在此区间使用逆势均值回归。
+            </div>
+          </div>
+          <!-- Card 15 -->
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #8e24aa;">15. 期货仓单与库存周期 (Inventory)</div>
+            <div class="body">
+              <b>【评估轨】</b>: 期货连续主力轨 (B-Fut)<br/>
+              <b>【专属动作】</b>: 强制调用 <b>季节性差分算子 (Seasonality Adjustment)</b>。<br/>
+              <b>【红线】</b>: 农产品/黑色系的仓单有极强自然周期。若不差分掉周期项，其 Alpha 完全是时间噪音。
+            </div>
+          </div>
+          <!-- Card 16 -->
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #8e24aa;">16. VIX 期限结构与展期 (VIX Term Structure)</div>
+            <div class="body">
+              <b>【评估轨】</b>: 期权特有轨 (B-Opt)<br/>
+              <b>【专属动作】</b>: 捕捉 <b>Contango/Backwardation 反转</b> 时的结构性利润。<br/>
+              <b>【红线】</b>: VIX 现货不可交易！测试 VIX 期限结构因子必须使用 VIX 期货或 VXX 等 ETP，并强制计入高昂的 Contango 展期损耗。
+            </div>
+          </div>
+        </div>
+
+        <div class="subhead" style="margin-top: 15px; font-size: 1.05em; color: var(--teal-deep); border-bottom: 1px solid var(--border); padding-bottom: 5px;">E. 另类数据与非结构化处理 (Alternative & NLP)</div>
+        <div class="grid-4 wrap-code" style="margin-top: 10px;">
+          <!-- Card 17 -->
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #00897b;">17. 财经新闻与 NLP 情感 (News Sentiment)</div>
+            <div class="body">
+              <b>【评估轨】</b>: 另类非结构化轨 (Track E-Alt)<br/>
+              <b>【专属动作】</b>: 强制执行 <b>实体消歧 (Entity Disambiguation)</b> 与 <b>大盘情绪正交</b>。<br/>
+              <b>【红线】</b>: 严禁将新闻“发生”时间等同于“发布或抓取”时间。必须扣除数据源爬取延迟与模型推理耗时。若不剔除全市场整体情绪 (Market Sentiment)，个股情绪分毫无 Alpha 价值。
+            </div>
+          </div>
+          <!-- Card 18 -->
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #00897b;">18. 社交媒体与散户羊群 (Retail Herd)</div>
+            <div class="body">
+              <b>【评估轨】</b>: 另类非结构化轨 (Track E-Alt)<br/>
+              <b>【专属动作】</b>: 引入 <b>水军过滤网关 (Bot Filtering)</b> 与 <b>逼空状态机</b>。<br/>
+              <b>【红线】</b>: 散户情绪平时是“反向指标”，但在极端抱团 (Meme 股) 时会引发毁灭性轧空。评估必须非线性化，在标的高空头仓位 (High Short Interest) 时严禁逆势做空。
+            </div>
+          </div>
+          <!-- Card 19 -->
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #00897b;">19. 央行纪要与宏观文本 (Macro NLP)</div>
+            <div class="body">
+              <b>【评估轨】</b>: 宏观另类数据轨 (Track G-Mac)<br/>
+              <b>【专属动作】</b>: 提取 <b>前瞻性指引增量偏移 (Forward Guidance Delta)</b>。<br/>
+              <b>【红线】</b>: 传统的“鹰/鸽”词袋模型早已失效。必须使用 FinBERT 等模型对比“本次纪要”与“上次纪要”的边际文本变化，且禁止日内高频交易，因为宏观文本发酵存在明显滞后。
+            </div>
+          </div>
+          <!-- Card 20 -->
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid #00897b;">20. 供应链与海运物流 (Supply Chain)</div>
+            <div class="body">
+              <b>【评估轨】</b>: 另类基本面轨 (Track E-Alt)<br/>
+              <b>【专属动作】</b>: 强制注入 <b>提单确认滞后项 (Bill of Lading Lag)</b>。<br/>
+              <b>【红线】</b>: 海关货运数据通常存在 2-4 周的修补与延迟发布。回测时绝对不能使用“统计涵盖期”的期末作为时间戳，必须严格对齐“官方/商业数据商的实际披露日”。
+            </div>
+          </div>
+        </div>
+
+
+      </div>
+    </section>
+
+    <div class="arrow">↓ <small>跨越微观数据域的层层陷阱，终于进入多轨评估引擎装配完毕，开始执行全维度的并行测算</small></div>
+
+    <section id="stage-6" class="stage purple">
+      <div class="stage-header">[8] 时序执行工程与摩擦成本数学模型 (Execution & Friction Modeling)</div>
+      <div class="stage-body">
+        <div class="highlight wrap-code">
+          <b>为什么这是生死线：</b>横截面日频的摩擦主要是调仓滑点，而高频时序的生死线直接落在买卖价差 (Bid-Ask Spread)、手续费和延迟。不带执行语义的时序回测全是“纸上富贵”。
+        </div>
+        <div class="three-col">
+          <div class="block wrap-code">
+            <div class="subhead">1. 平方根冲击成本模型 (Square-Root Impact)</div>
+            <b>【入参 (Input)】</b>: 订单量 $Q$、市场总成交量 $V$、资产日波动率 $\sigma$。<br/>
+            <b>【处理逻辑 (Process)】</b>: 使用公式 $Impact = Y \cdot \sigma \cdot \sqrt{\frac{Q}{V}}$ 测算非线性成本；实时获取当期真实的 $V$ 动态调整滑点。<br/>
+            <b>【出参/效果 (Output)】</b>: 产出更真实的执行成本估算，防止在大单成交时低估滑点导致容量测算失效。
+          </div>
+          <div class="block wrap-code">
+            <div class="subhead">2. 分数阶差分记忆保留 (Fractional Diff)</div>
+            <b>【入参 (Input)】</b>: 非平稳原始序列 $X_t$、差分阶数 $d \in (0, 1)$。<br/>
+            <b>【处理逻辑 (Process)】</b>: 执行 $(1 - B)^d X_t = \sum_{k=0}^{\infty} w_k X_{t-k}$；通过 ADF 检验寻找满足平稳性的最小 $d$ 值。<br/>
+            <b>【出参/效果 (Output)】</b>: 在满足平稳性的同时最大化保留序列的长程记忆 (Long-memory)，提升机器学习模型的预测力。
+          </div>
+          <div class="block wrap-code">
+            <div class="subhead">3. 成本感知的凸优化器 (Cost-Aware Convex Optimizer)</div>
+            <b>【入参 (Input)】</b>: 预期收益向量 $\mu$、当前持仓 $w_{t-1}$、L1 惩罚项 $\lambda$。<br/>
+            <b>【处理逻辑 (Process)】</b>: 求解 $\max [\mu^T w_t - \lambda ||w_t - w_{t-1}||_1]$；引入 L1 范数触发“惰性调仓 (Lazy Trading)”机制。<br/>
+            <b>【出参/效果 (Output)】</b>: 自动过滤微弱噪音导致的过度调仓，确保每一笔交易的预期收益都能覆盖交易摩擦。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="arrow">↓ <small>单体评估完成，进入在环审查计算群体边际增益</small></div>
+
+    
+    <div class="part-divider" style="background: linear-gradient(90deg, #1e293b 0%, #334155 100%); color: white; padding: 16px 24px; border-radius: 12px; margin: 40px 0 20px 0; font-size: 20px; font-weight: bold; display: flex; align-items: center; gap: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+      🏭 智能路由、存储与重加工生态 (Asset & Rework)
+      <span style="font-size: 14px; font-weight: normal; opacity: 0.8; margin-left: auto;">[对应 PRD 第四部分：资产架构与重加工]</span>
+    </div>
+    
+    <section id="stage-7" class="stage amber">
+      <div class="stage-header">[9] 数据边界处理与双时态防穿越机制 (Point-in-Time & Anti-Leakage)</div>
+      <div class="stage-body">
+        <div class="highlight wrap-code">
+          <b>逻辑说明：</b>本环节主要处理数据在内存、精度、时区和截面聚合时的极值边界，并针对历史回测中的常见数据穿越问题进行机制阻断，确保回测环境与实盘环境的严格物理一致性。
+        </div>
+        
+        <div class="subhead" style="margin-top: 20px; font-size: 1.1em; color: var(--text); border-bottom: 2px solid var(--border); padding-bottom: 5px;">I. 数据与内存边界处理 (Hardware & Precision Limits)</div>
+        <div class="grid-4 wrap-code" style="margin-top: 15px;">
+          <div class="block">
+            <div class="subhead">1. 大容量内存调度 (OOM 防范)</div>
+            <b>【入参 (Input)】</b>: 全市场高频历史数据 (Tick/1min)<br/>
+            <b>【处理逻辑 (Process)】</b>: 采用 <b>时序分块 (Time Chunking)</b> 与 <b>标的分桶 (Asset Bucketing)</b> 的双轴切分架构进行按需加载。<br/>
+            <b>【出参/效果 (Output)】</b>: 控制单次内存占用，支持超大规模回测计算。
+          </div>
+          <div class="block">
+            <div class="subhead">2. 微小价差精度保障</div>
+            <b>【入参 (Input)】</b>: 低价资产 (仙股/仙币) 价格数据<br/>
+            <b>【处理逻辑 (Process)】</b>: 升位计算，底层存储和高频中间态统一转换为 <code>Float64</code> 或 <code>Decimal</code> 类型。<br/>
+            <b>【出参/效果 (Output)】</b>: 防止计算微小价差或收益率时发生 Float32 精度下溢 (Underflow)。
+          </div>
+          <div class="block">
+            <div class="subhead">3. 跨时区与异步交易对齐</div>
+            <b>【入参 (Input)】</b>: 跨时区、不同开盘时间的多资产价格序列<br/>
+            <b>【处理逻辑 (Process)】</b>: 统一转换为 <b>UTC 时间戳</b>，采用 <b>ASOF JOIN (按时间就近匹配)</b> 进行截面拼接，休市资产使用前向填充 (ffill) 并设置最大容忍天数。<br/>
+            <b>【出参/效果 (Output)】</b>: 产出时间严格对齐、无前视信息的截面切片。
+          </div>
+          <div class="block">
+            <div class="subhead">4. NaN 与 Inf 极值清洗</div>
+            <b>【入参 (Input)】</b>: 包含除以零等运算产生的 Inf 或 NaN 的原始因子序列<br/>
+            <b>【处理逻辑 (Process)】</b>: 截面计算前，将 <code>np.inf</code> 统一转为 <code>NaN</code>，并开启聚合函数的 <code>skipna=True</code> 机制。<br/>
+            <b>【出参/效果 (Output)】</b>: 输出干净的截面序列，防止单一极值污染整体分布。
+          </div>
+        </div>
+
+        <div class="subhead" style="margin-top: 20px; font-size: 1.1em; color: var(--text); border-bottom: 2px solid var(--border); padding-bottom: 5px;">II. 回测穿越机制阻断与双时态架构 (Point-in-Time Architecture)</div>
+        <div class="grid-4 wrap-code" style="margin-top: 15px;">
+          <div class="block">
+            <div class="subhead">1. 强一致性 PIT 审计键 (knowledge_ts)</div>
+            <b>【入参 (Input)】</b>: 所有依赖宏观/财报等低频数据的高频特征<br/>
+            <b>【处理逻辑 (Process)】</b>: 强制区分 <code>Observation Time (业务发生时间)</code> 与 <code>Knowledge Time (系统获知时间)</code>，采用 <b>ASOF JOIN</b> 按照 <code>knowledge_ts</code> 进行拼接。<br/>
+            <b>【出参/效果 (Output)】</b>: 彻底杜绝因财报修正或宏观数据重述导致的“未来函数 (Look-ahead Bias)”。
+          </div>
+          <div class="block">
+            <div class="subhead">2. 退市资产结算机制</div>
+            <b>【入参 (Input)】</b>: 全市场历史存活与退市标的数据<br/>
+            <b>【处理逻辑 (Process)】</b>: 完整保留退市标的历史。在退市日当天，按退市清算价或设定比例 (如破产归零) 强制结算持仓。<br/>
+            <b>【出参/效果 (Output)】</b>: 产出包含真实破产损耗的组合收益，消除生存偏差 (Survivorship Bias)。
+          </div>
+          <div class="block">
+            <div class="subhead">3. 复权与未复权数据分离使用</div>
+            <b>【入参 (Input)】</b>: 历史未复权盘口价与前/后复权价<br/>
+            <b>【处理逻辑 (Process)】</b>: 计算截面收益与排序时采用前/后复权；但计算滑点、手续费与订单簿撮合时，采用未复权真实盘口价。<br/>
+            <b>【出参/效果 (Output)】</b>: 输出真实的模拟成交结果，避免因除权除息导致的虚假价差。
+          </div>
+          <div class="block">
+            <div class="subhead">4. 标签 (Label) 收益严格对齐</div>
+            <b>【入参 (Input)】</b>: T 日收盘生成的因子特征<br/>
+            <b>【处理逻辑 (Process)】</b>: T 日特征对应的预测目标对齐至 <code>T+1 到 T+2</code> 或 <code>T+1 开盘到收盘</code> 的真实可得收益。<br/>
+            <b>【出参/效果 (Output)】</b>: 生成干净、时间严格错开的特征-标签对 (Feature-Label Pair)。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="arrow">↓ <small>进入群体维度，开始多因子正交提纯与复合打分</small></div>
+
+    <section id="stage-8" class="stage orange">
+      <div class="stage-header">[10] 因子全域多轨路由与分发中枢 (Auto-Routing Dispatcher) <span class="badge" style="background-color: #f44336; color: white; padding: 2px 6px; border-radius: 4px; font-size: 14px; margin-left: 10px; font-weight: normal;">【首期需增量建设】</span></div>
+      <div class="stage-body">
+        <div class="highlight wrap-code">
+          <b>核心原则：</b>不同类型的因子必须送入不同的轨道！横截面看相对排序，时序看绝对盈亏，规则看事件胜率。严禁用一套均值方差指标强行衡量所有资产。当上游（如强化学习、LLM）海量挖掘出未知属性的新因子时，系统<b>绝对不能</b>依赖人工配置。路由引擎必须是一个满足 <b>MECE 原则</b> 的全集映射函数。
+        </div>
+        
+        <div class="subhead" style="margin-top: 15px; font-size: 1.1em; color: var(--text); border-bottom: 2px solid var(--border); padding-bottom: 5px;">4 层级联判定树 (Decision Funnel)</div>
+        <div class="grid-4 wrap-code" style="margin-top: 10px;">
+          <div class="grid-card">
+            <div class="head" style="background: #e1f5fe; border-top: 4px solid #0288d1;">层 1: 物理血缘推断 (Lineage)</div>
+            <div class="body">
+              <b>【逻辑】</b>: 检查因子所依赖的底层数据源。<br/>
+              <b>【动作】</b>:<br/>
+              - 拓扑/图谱数据 -> <b>分发至 Track F</b><br/>
+              - 文本/NLP -> <b>分发至 Track E</b><br/>
+              - 宏观/CPI -> <b>分发至 Track G</b><br/>
+              - 期权三维面 -> <b>分发至 Track B-Opt</b>
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head" style="background: #fff3e0; border-top: 4px solid #f57c00;">层 2: 算子形态解析 (AST)</div>
+            <div class="body">
+              <b>【逻辑】</b>: 若血缘普通，则解析抽象语法树 (AST)。<br/>
+              <b>【动作】</b>:<br/>
+              - 包含 <code>cross_over/trigger</code> (跳跃) -> <b>分发至 Track C (离散事件)</b><br/>
+              - 包含 <code>conv2d/lstm</code> (高维黑盒) -> <b>分发至 Track D (隐式特征)</b>
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head" style="background: #e8f5e9; border-top: 4px solid #388e3c;">层 3: 数学结构兜底 (Shape)</div>
+            <div class="body">
+              <b>【逻辑】</b>: 若上述均不满足，说明是最普通的连续量价。<br/>
+              <b>【动作】</b>:<br/>
+              - <code>signal_structure == 'cross_sectional'</code> -> <b>分发至 Track A</b><br/>
+              - <code>signal_structure == 'time_series'</code> -> <b>分发至 Track B</b>
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head" style="background: #f3e5f5; border-top: 4px solid #8e24aa;">层 4: LLM 语义兜底 (Fallback)</div>
+            <div class="body">
+              <b>【逻辑】</b>: 终极防线。遇到完全异构的复合因子。<br/>
+              <b>【动作】</b>: 调用本地大模型，分析其物理意义并强制映射至 A-G 轨。若无一匹配，则触发动态轨道注册机制 <code>register_dynamic_track()</code>，防止崩溃。
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="arrow">↓ <small>根据路由指令，动态组装预处理管线与回测引擎上下文，这构成了多轨评估的“指挥塔”</small></div>
+
+    <section id="stage-8-5" class="stage orange" style="border: 2px solid #fb8c00; background: #fff8e1;">
+      <div class="stage-header" style="background: #fb8c00; color: white;">[11] 路由后处理与参数配置流转 (Post-Routing Dispatch) <span class="badge" style="background-color: #f44336; color: white; padding: 2px 6px; border-radius: 4px; font-size: 14px; margin-left: 10px; font-weight: normal;">【首期需增量建设】</span></div>
+      <div class="stage-body">
+        <div class="highlight wrap-code" style="background: #fff3e0; border-color: #ffcc80;">
+          <b>自动路由如何驱动下游：</b>Stage 5 判定的 <code>Track_ID</code> 并非只是一个字符串标签，它将直接转化为一组强类型的配置参数，控制下游的预处理管道、回测引擎和指标收集器。特别地，系统还会根据 <b>微观数据域 (Domain)</b> 动态加载更细颗粒度的子协议模板 (Sub-protocol Template)。
+        </div>
+        <div class="flow-grid wrap-code" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 15px;">
+          <div class="block" style="border-top: 4px solid #0288d1;">
+            <div class="subhead">1. 动态绑定预处理管道</div>
+            <b>【路由结果】</b>: <code>Track_C</code> (事件轨)<br/>
+            <b>【子协议匹配】</b>: <code>pattern_recognition</code> (形态识别)<br/>
+            <b>【下发配置】</b>: <br/>
+            <code>preprocessing_type = "discrete_trigger"</code><br/>
+            <code>disable_zscore = true</code> (阻断报错)<br/>
+            <code>enable_hysteresis_band = true</code>
+          </div>
+          <div class="block" style="border-top: 4px solid #f57c00;">
+            <div class="subhead">2. 注入回测引擎上下文</div>
+            <b>【路由结果】</b>: <code>Track_B_Fut</code> (期货轨)<br/>
+            <b>【子协议匹配】</b>: <code>inventory_seasonality</code> (仓单库存)<br/>
+            <b>【下发配置】</b>: <br/>
+            <code>execution_engine = "lob_event_loop"</code><br/>
+            <code>apply_seasonality_adjustment = true</code> (开启季节性剥离)<br/>
+            <code>margin_requirement = 0.15</code> (注入保证金率)
+          </div>
+          <div class="block" style="border-top: 4px solid #388e3c;">
+            <div class="subhead">3. 装配指标收集器 (Metrics)</div>
+            <b>【路由结果】</b>: <code>Track_Base_B</code> (时序常规轨)<br/>
+            <b>【子协议匹配】</b>: <code>capital_flow_microstructure</code> (大单资金流向)<br/>
+            <b>【下发配置】</b>: <br/>
+            <code>market_impact_multiplier = 3.0</code> (施加极重滑点惩罚)<br/>
+            <code>collectors = ["capital_flow_impact_elasticity"]</code><br/>
+            <b>【效果】</b>: 防止内生反身性带来“买入即赚钱”的假象。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="arrow">↓ <small>所有计算结束，进入业务视角的画像提取与分流路由</small></div>
+
+    <section id="stage-9" class="stage blue">
+      <div class="stage-header">[12] 全维度评估引擎：多轨协议执行 (Multi-Track Evaluation Protocols) <span class="badge" style="background-color: #ff9800; color: white; padding: 2px 6px; border-radius: 4px; font-size: 14px; margin-left: 10px; font-weight: normal;">【基于 backtest_layer 扩展底座】</span></div>
+      <div class="stage-body">
+        <div class="highlight wrap-code" style="background: #e3f2fd; border-color: #90caf9;">
+          <b>全域评估指标体系族群总览 (Evaluation Metrics Taxonomy)：</b>任何因子的评估都必须覆盖五大维度：<b>[1] 预测能力族群</b> (Rank IC, AUC)、<b>[2] 结构稳定性族群</b> (单调性, Regime鲁棒性)、<b>[3] 收益风险与尾部族群</b> (Sharpe, Calmar)、<b>[4] 容量与微观摩擦族群</b> (Impact Cost, Turnover)、<b>[5] 独立性与增量价值族群</b> (Orthogonal IC, SHAP)。以下是具体到各轨道的执行红线矩阵。
+        </div>
+        
+        <div style="overflow-x: auto; margin-top: 15px;">
+          <table style=" border-collapse: collapse; font-size: 11px; text-align: left; background: #fff; table-layout: auto; word-wrap: break-word;">
+            <thead>
+              <tr style="background: #1e88e5; color: white;">
+                <th style=" padding: 4px 6px; border: 1px solid #90caf9;">轨道 (Track)</th>
+                <th style=" padding: 4px 6px; border: 1px solid #90caf9;">Stage 4 强制预处理 (Preprocessing)</th>
+                <th style=" padding: 4px 6px; border: 1px solid #90caf9;">核心评估指标 (Core Metrics)</th>
+                <th style=" padding: 4px 6px; border: 1px solid #90caf9;">入库与风控红线 (Admission Redlines)</th>
+                <th style=" padding: 4px 6px; border: 1px solid #90caf9;">Stage 10 模型消费约束 (Model Serving)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="padding: 4px 6px; border: 1px solid #e0e0e0; font-weight: bold; color: #1565c0;">A 轨 (横截面)</td>
+                <td style="padding: 4px 6px; border: 1px solid #e0e0e0;">市值/行业中性化正交；截面 Z-Score</td>
+                <td style="padding: 4px 6px; border: 1px solid #e0e0e0;">Rank IC (Spearman), 多空收益, ICIR</td>
+                <td style="padding: 4px 6px; border: 1px solid #e0e0e0;">拒绝偏度过大的 IC；多空收益必须单调</td>
+                <td style="padding: 4px 6px; border: 1px solid #e0e0e0;">作为截面 Alpha 暴露传入 Barra 优化器或截面 NN</td>
+              </tr>
+              <tr style="background: #f5f5f5;">
+                <td style="padding: 4px 6px; border: 1px solid #e0e0e0; font-weight: bold; color: #2e7d32;">B 轨 (时序量价)</td>
+                <td style="padding: 4px 6px; border: 1px solid #e0e0e0;">Savitzky-Golay 滤波；滚动缩放</td>
+                <td style="padding: 4px 6px; border: 1px solid #e0e0e0;">净夏普 (含平方根滑点), 周转率调整 IR</td>
+                <td style="padding: 4px 6px; border: 1px solid #e0e0e0;">换手率 > 50%/日 直接打回孵化厂降频</td>
+                <td style="padding: 4px 6px; border: 1px solid #e0e0e0;">时序序列打包 (Seq_Len=60) 传入 TCN/LSTM</td>
+              </tr>
+              <tr>
+                <td style="padding: 4px 6px; border: 1px solid #e0e0e0; font-weight: bold; color: #ef6c00;">C 轨 (离散事件)</td>
+                <td style="padding: 4px 6px; border: 1px solid #e0e0e0;"><b>严禁去极值！</b>迟滞环双阈值截断</td>
+                <td style="padding: 4px 6px; border: 1px solid #e0e0e0;">Event CAR, 胜率, SQN (系统质量指数)</td>
+                <td style="padding: 4px 6px; border: 1px solid #e0e0e0;">右边缘对齐检查；吸收半衰期过短则否决</td>
+                <td style="padding: 4px 6px; border: 1px solid #e0e0e0;">转化为事件哑变量 (Dummy) 或强弱权重矩阵</td>
+              </tr>
+              <tr style="background: #f5f5f5;">
+                <td style="padding: 4px 6px; border: 1px solid #e0e0e0; font-weight: bold; color: #6a1b9a;">D 轨 (隐式特征)</td>
+                <td style="padding: 4px 6px; border: 1px solid #e0e0e0;">张量 L2 范数归一化；GAF 图像化</td>
+                <td style="padding: 4px 6px; border: 1px solid #e0e0e0;">表示坍缩度, 下游 Lift (边际增益)</td>
+                <td style="padding: 4px 6px; border: 1px solid #e0e0e0;">张量退化为常数矩阵直接熔断废弃</td>
+                <td style="padding: 4px 6px; border: 1px solid #e0e0e0;">绝不进入线性回归；仅供 Transformer 融合</td>
+              </tr>
+              <tr>
+                <td style="padding: 4px 6px; border: 1px solid #e0e0e0; font-weight: bold; color: #00838f;">B-Fut (期货特供)</td>
+                <td style="padding: 4px 6px; border: 1px solid #e0e0e0;">Panama 平移去跳空；远期曲线拟合</td>
+                <td style="padding: 4px 6px; border: 1px solid #e0e0e0;">展期收益剥离, 保证金调整后 ROM</td>
+                <td style="padding: 4px 6px; border: 1px solid #e0e0e0;">极端跳空下破产概率 (PoR) 必须为 0</td>
+                <td style="padding: 4px 6px; border: 1px solid #e0e0e0;">基于持仓量 (OI) 与距交割日 (TTM) 缩放暴露</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="subhead" style="margin-top: 30px; font-size: 1.1em; color: var(--text); border-bottom: 2px solid var(--border); padding-bottom: 5px;">[6.1] A 轨: 横截面评估协议 (Cross-Sectional Protocol)</div>
+        <div class="highlight wrap-code" style="background: #f1f8e9; border-color: #a5d6a7; margin-bottom: 10px;">
+          <b>流水线操作链 (Pipeline):</b> 提取截面暴露 $\rightarrow$ MAD 去极值 $\rightarrow$ 行业/市值正交中性化 $\rightarrow$ 计算横截面 Rank IC $\rightarrow$ N等分构建多空组合 $\rightarrow$ 计算 Long-Short 收益 $\rightarrow$ Bootstrap/Jackknife 稳健标准误检验。
+        </div>
+        <div class="two-col wrap-code" style="margin-top: 10px;">
+          <div class="block">
+            <div class="subhead">宽横截面 (如股票)</div>
+            <b>【入参】</b>: 同一时点多标的特征矩阵。<br/>
+            <b>【核心逻辑】</b>: 强制执行行业/市值中性化；计算 <b>Rank IC (Spearman)</b> 而非 Pearson；执行分位数多空回测 (Top-Bottom)；采用 Jackknife 进行 HAC 稳健标准误检验。<br/>
+            <b>【出参】</b>: <code>rank_ic_ir</code>, <code>calmar</code>, 分组收益单调性。
+          </div>
+          <div class="block">
+            <div class="subhead">窄横截面 (如期货/期权)</div>
+            <b>【入参】</b>: 仅几十个活跃合约或三维曲面。<br/>
+            <b>【核心逻辑】</b>: 严禁全局 Rank，必须采用 <b>板块内相对排序 (Sector-Relative Ranking)</b>。期权因子必须进行 <b>希腊值中性化 (Greeks-Neutrality)</b> 剥离方向敞口。<br/>
+            <b>【出参】</b>: 曲线凸度 (Curve Convexity)、Delta-Neutral 超额。
+          </div>
+        </div>
+
+        <div class="subhead" style="margin-top: 20px; font-size: 1.1em; color: var(--text); border-bottom: 2px solid var(--border); padding-bottom: 5px;">[6.2] B 轨: 时序基座与摩擦成本协议 (Time-Series Protocol)</div>
+        <div class="highlight wrap-code" style="background: #fce4ec; border-color: #c5e1a5; margin-bottom: 10px;">
+          <b>流水线操作链 (Pipeline):</b> 提取时序序列 $\rightarrow$ Savitzky-Golay 平滑/降噪 $\rightarrow$ 信号生成与离散化 $\rightarrow$ Event-Loop LOB撮合 $\rightarrow$ 注入平方根滑点扣减 $\rightarrow$ 计算 Net Sharpe $\rightarrow$ Purged & Embargo 交叉验证。
+        </div>
+        <div class="three-col wrap-code" style="margin-top: 10px;">
+          <div class="block">
+            <div class="subhead">1. 事件驱动回测与 LOB 撮合</div>
+            <b>【防泄漏红线】</b>: 严禁 Pandas 向量化回测！必须采用心跳死循环 (Event-loop) 处理订单与撮合。结合 Tick 数据真实还原排队位置与部分成交 (Partial Fills)。
+          </div>
+          <div class="block">
+            <div class="subhead">2. 成本感知的指标体系</div>
+            <b>【核心指标】</b>: 计算 <b>条件信息系数 (CIC)</b> 剥离宏观 Beta。计算含滑点的 <b>Net Sharpe</b>。引入 <b>周转率调整 IR</b> 惩罚无意义换手。
+          </div>
+          <div class="block">
+            <div class="subhead">3. 步进式向前优化 (WFA)</div>
+            <b>【防过拟合】</b>: 执行 Purged & Embargo 交叉验证。监测参数三维聚类稳定性，若参数随时间剧烈跳变直接否决。
+          </div>
+        </div>
+
+        <div class="subhead" style="margin-top: 20px; font-size: 1.1em; color: var(--text); border-bottom: 2px solid var(--border); padding-bottom: 5px;">[6.3] C 轨: 离散事件与规则协议 (Discrete Event Protocol)</div>
+        <div class="grid-4 wrap-code" style="margin-top: 10px;">
+          <div class="grid-card">
+            <div class="head">C1-A: 纯离散状态轨</div>
+            <div class="body">
+              <b>【特征】</b>: 双均线金叉等纯状态 (-1,0,1)。<br/>
+              <b>【核心逻辑】</b>: 严禁计算 IC。采用状态机回测。计算 <b>系统质量指数 (SQN)</b> = $\sqrt{N} \cdot \frac{E(R)}{Std(R)}$。<br/>
+              <b>【出参】</b>: 胜率、最大有利偏移 (MFE)、SQN 评分。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head">C1-B: 强度加权规则轨</div>
+            <div class="body">
+              <b>【特征】</b>: 触发信号带有确信度大小。<br/>
+              <b>【核心逻辑】</b>: 引入 <b>Kelly Criterion (凯利公式)</b> $f^* = \frac{p}{a} - \frac{q}{b}$ 测算理论最优动态仓位。<br/>
+              <b>【出参】</b>: 资金利用率、强度-收益非线性映射曲线。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head">C2: 宏观/基本面事件轨</div>
+            <div class="body">
+              <b>【特征】</b>: 盈余跳跃、CPI 发布。<br/>
+              <b>【核心逻辑】</b>: 必须使用“实际公告日”。计算 <b>Event CAR (累计异常收益)</b>。<br/>
+              <b>【出参】</b>: 事件发生后 T+1 到 T+N 的漂移轨迹与吸收半衰期。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head">C4: 模式识别轨</div>
+            <div class="body">
+              <b>【特征】</b>: 头肩顶波形匹配。<br/>
+              <b>【核心逻辑】</b>: 强制实行 <b>右边缘对齐 (Right-Edge Alignment)</b>，严禁匹配窗口包含 T+1 数据泄露。<br/>
+              <b>【出参】</b>: 形态识别置信度与条件胜率。
+            </div>
+          </div>
+        </div>
+
+        <div class="subhead" style="margin-top: 20px; font-size: 1.1em; color: var(--text); border-bottom: 2px solid var(--border); padding-bottom: 5px;">[6.4] 特种资产与隐式前沿协议 (Advanced Alternative Protocols)</div>
+        <div class="grid-4 wrap-code" style="margin-top: 10px;">
+          <div class="grid-card">
+            <div class="head">D 轨: 深度隐式特征协议</div>
+            <div class="body">
+              <b>【对象】</b>: 神经网络输出的 64维 Embeddings。<br/>
+              <b>【红线校验】</b>: 检查 <b>表示坍缩度 (Representation Collapse)</b>，防止输出退化为常数。<br/>
+              <b>【核心逻辑】</b>: 不做单体多空回测，直接计算其对下游 Transformer 的 <b>边际增益 (Lift)</b>。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head">B-Fut: 期货连续协议</div>
+            <div class="body">
+              <b>【对象】</b>: 商品/股指期货多合约曲线。<br/>
+              <b>【红线校验】</b>: 使用 <b>Nelson-Siegel 模型</b> 拟合远期曲线凸度。<br/>
+              <b>【核心逻辑】</b>: 强制剥离 <b>展期收益 (Roll Yield)</b>，计算剔除保证金杠杆后的逐日盯市破产概率 (PoR)。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head">B-Cry: 加密反射性协议</div>
+            <div class="body">
+              <b>【对象】</b>: 加密货币 7x24 盘口。<br/>
+              <b>【红线校验】</b>: 执行资金费率 (Funding Rate) 扣减压测与 <b>Wash Trade 清洗</b>。<br/>
+              <b>【核心逻辑】</b>: 结合 <b>极值理论 (EVT)</b> 拟合厚尾分布，评估应对极端插针 (Flash Crash) 的脆弱性。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head">E/F/G: 图谱与宏观因果推断</div>
+            <div class="body">
+              <b>【对象】</b>: 供应链网络、CPI、文本情绪。<br/>
+              <b>【红线校验】</b>: 结合 <b>动态时间规整 (DTW)</b> 进行弹性序列对齐。<br/>
+              <b>【核心逻辑】</b>: 计算 <b>传递熵 (Transfer Entropy)</b> $T_{X \rightarrow Y} = H(Y_t | Y_{t-1}) - H(Y_t | Y_{t-1}, X_{t-1})$，消除混杂因果验证真正的超前预测力。
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="arrow">↓ <small>在图谱与湖仓双底层支持下，微服务调度引擎通过消息队列串联起所有评估动作，保障资源隔离</small></div>
+
+    <section id="stage-9-5" class="stage blue">
+      <div class="stage-header">[13] 影子模型在环审查 (Model-in-the-Loop)</div>
+      <div class="stage-body">
+        <div class="block wrap-code" style="margin-top: 10px;">
+          <b>【处理逻辑】</b>: 新因子入库前，不只看单体表现，还要放入“影子多因子模型”中打分。利用 <b>摊销模型 (Amortized Shapley)</b> 加速计算其对现有库的增量贡献。<br/>
+          <b>【出参/效果】</b>: 转化为 <code>JSON / Parquet</code> 结构化图表数据包，供前端渲染 <b>边际增益 (Marginal Gain)</b>。
+        </div>
+      </div>
+    </section>
+
+    <div class="arrow">↓ <small>画像与标签生成完毕，进入最终的准入裁决与资产入库</small></div>
+
+    
+    <div class="part-divider" style="background: linear-gradient(90deg, #1e293b 0%, #334155 100%); color: white; padding: 16px 24px; border-radius: 12px; margin: 40px 0 20px 0; font-size: 20px; font-weight: bold; display: flex; align-items: center; gap: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+      🧩 多因子组合与模型端装配 (Assembly & ML)
+      <span style="font-size: 14px; font-weight: normal; opacity: 0.8; margin-left: auto;">[对应 PRD 第三部分/延伸：组合与特征装配]</span>
+    </div>
+    
+    <section id="stage-10-combine" class="stage blue" style="border: 2px solid #1e88e5; background: #e3f2fd;">
+      <div class="stage-header" style="background: #1e88e5; color: white;">[14] 多因子组合与高级凸优化 (Portfolio Construction & Convex Optimization)</div>
+      <div class="stage-body">
+        <div class="highlight wrap-code" style="background: #bbdefb; border-color: #64b5f6;">
+          <b>阶段说明：</b>单因子的评估结束后，系统需要将因子群转化为实际的最优目标仓位权重 (Target Weights)。此阶段必须考虑协方差矩阵、微观摩擦损耗以及风险约束。
+        </div>
+        <div class="two-col wrap-code" style="margin-top: 15px;">
+          <div class="block">
+            <div class="subhead">成本感知的凸优化器 (Cost-Aware Convex Optimizer)</div>
+            <b>【核心痛点】</b>: 传统 Markowitz 均值方差模型会产生极高换手率，导致实盘净夏普崩塌。<br/>
+            <b>【L1 范数惩罚】</b>: 在目标函数中引入 $\lambda ||w_t - w_{t-1}||_1$。强制优化器进行惰性调仓 (Lazy Trading)，只有当预期 Alpha 超过边际交易成本时才允许换手。<br/>
+            <b>【非线性成本惩罚】</b>: 引入平方根冲击成本惩罚项 $c \cdot |w_t - w_{t-1}|^{1.5}$，防止大资金下单打穿订单簿。
+          </div>
+          <div class="block">
+            <div class="subhead">鲁棒组合优化变体 (Robust Optimization)</div>
+            <b>【风险平价 (Risk Parity)】</b>: 针对低频宏观因子，放弃收益预测，使各资产对组合的总风险贡献相等，实现极高抗脆弱性。<br/>
+            <b>【Black-Litterman 模型】</b>: 将量化挖掘出的历史均衡权重，与特定的事件驱动“主观观点 (Views)”进行贝叶斯融合。<br/>
+            <b>【重采样技术 (Resampled Efficiency)】</b>: 对预期收益和协方差矩阵进行蒙特卡洛扰动，降低参数估计误差 (Estimation Error) 导致的角点解 (Corner Solutions)。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="arrow">↓ <small>进行机器学习特征层面的可解释性分析与模型健壮性验证</small></div>
+
+    <section id="stage-10-xai" class="stage purple" style="border: 2px solid #8e24aa; background: #f3e5f5; margin-bottom: 20px;">
+      <div class="stage-header" style="background: #8e24aa; color: white;">[14.5] 机器学习特征评估与可解释性 (ML Feature Evaluation & XAI) <span class="badge" style="background-color: #f44336; color: white; padding: 2px 6px; border-radius: 4px; font-size: 14px; margin-left: 10px; font-weight: normal;">【高阶模型必过红线】</span></div>
+      <div class="stage-body">
+        <div class="highlight wrap-code" style="background: #e1bee7; border-color: #ce93d8; color: #4a148c;">
+          <b>核心目标：</b>在将因子喂给非线性模型（如 LightGBM、Transformer）之前，必须证明其具有真实的边际非线性增益，并且不是黑盒噪音。
+        </div>
+        <div class="two-col wrap-code" style="margin-top: 15px;">
+          <div class="block">
+            <div class="subhead">SHAP 归因与特征稳定性</div>
+            <b>【全局与局部 SHAP】</b>: 计算 Shapley Additive exPlanations，量化因子对模型输出的精确贡献度。<br/>
+            <b>【Feature Importance Stability】</b>: 追踪特征重要性在时间轴上的衰减（Feature Decay）。若某因子重要性在换月时剧烈震荡，直接判定为过拟合废弃。
+          </div>
+          <div class="block">
+            <div class="subhead">排列重要性与冗余度 (Permutation & Redundancy)</div>
+            <b>【Permutation Importance】</b>: 随机打乱该因子的时间序列，重新计算模型 OOS R2 的下降幅度。下降越多，说明该特征越具有不可替代性。<br/>
+            <b>【非线性冗余度剔除】</b>: 使用互信息 (Mutual Information) 扫描其与已有 5000 个特征库的冗余度，防止树模型因高度共线性特征发生分裂退化。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="arrow">↓ <small>在策略推向实盘前，强制执行最严苛的极限生存压测</small></div>
+
+    <section id="stage-10-stress" class="stage amber" style="border: 2px solid #ff8f00; background: #fff8e1;">
+      <div class="stage-header" style="background: #ff8f00; color: white;">[14.6] 极限压力测试与黑天鹅回放 (Extreme Stress Testing & Black Swan)</div>
+      <div class="stage-body">
+        <div class="highlight wrap-code" style="background: #ffe0b2; border-color: #ffb74d; color: #e65100;">
+          <b>核心目标：</b>拒绝“只看平均夏普”的盲目乐观。系统必须在最极端的灾难行情中测算最大损失边界（Max Pain），这是实盘资金分配的绝对底线。
+        </div>
+        <div class="two-col wrap-code" style="margin-top: 15px;">
+          <div class="block">
+            <div class="subhead">历史黑天鹅重播 (Historical Black Swan Replay)</div>
+            <b>【逻辑】</b>: 将优化后的组合目标仓位强制映射到特定历史崩盘切片（如 2008 次贷危机、2015 股灾、2020 疫情熔断、2021 原油负油价）。<br/>
+            <b>【出参】</b>: 测算在流动性完全枯竭（无买盘）状态下的 <b>条件在险价值 (Expected Shortfall, ES)</b>。若回撤穿透资金底线，强制熔断。
+          </div>
+          <div class="block">
+            <div class="subhead">微观仿真与反向压力测试 (Agent-based Sim & Reverse Stress)</div>
+            <b>【微观闪崩重构】</b>: 利用多智能体仿真器 (Agent-based Simulator) 模拟高频闪崩 (Flash Crash)，压测高频因子存活率。<br/>
+            <b>【反向推导 (Reverse Stress Testing)】</b>: 放弃预测未来，改为反向求解：<i>“需要多大的市场冲击才能让本组合爆仓？”</i> 从而划定策略的脆弱性边界 (Fragility Boundary)。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="arrow">↓ <small>在投入实盘之前，测算因子的容量上限与同业拥挤踩踏风险</small></div>
+
+    <section id="stage-10-crowding" class="stage red" style="border: 2px solid #e53935; background: #ffebee; margin-bottom: 20px;">
+      <div class="stage-header" style="background: #e53935; color: white;">[14.7] 因子拥挤度与容量预警 (Crowdedness & Capacity Warning) <span class="badge" style="background-color: #ffb300; color: white; padding: 2px 6px; border-radius: 4px; font-size: 14px; margin-left: 10px; font-weight: normal;">【百亿规模必过红线】</span></div>
+      <div class="stage-body">
+        <div class="highlight wrap-code" style="background: #ffcdd2; border-color: #ef9a9a; color: #b71c1c;">
+          <b>核心目标：</b>有效因子承载的资金量存在绝对天花板。一旦某一策略被大量同业资金追逐，不仅 Alpha 迅速衰减，更会在市场情绪逆转时触发流动性踩踏。
+        </div>
+        <div class="two-col wrap-code" style="margin-top: 15px;">
+          <div class="block">
+            <div class="subhead">融券成本与空头利用率 (Short Interest)</div>
+            <b>【逻辑】</b>: 监控因子多空组合在借券市场上的利用率差值。<br/>
+            <b>【防御】</b>: 若空头端借贷成本急剧飙升，意味大量对冲基金建立了高度重合的头寸。系统自动降低该因子分配权重。
+          </div>
+          <div class="block">
+            <div class="subhead">估值利差与横截面共移 (Valuation Spread & Pairwise Correlation)</div>
+            <b>【逻辑】</b>: 计算多空组合之间的估值比率及多头内部成分股的平均相关性。<br/>
+            <b>【防御】</b>: 估值利差极度收窄且成分股同涨同跌，代表因子处于高度拥挤泡沫边缘，触发预警退役机制。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="arrow">↓ <small>实盘上线后的交易成本监控与仿真环境动态校准</small></div>
+
+    <section id="stage-10-tca" class="stage cyan" style="border: 2px solid #00acc1; background: #e0f7fa; margin-bottom: 20px;">
+      <div class="stage-header" style="background: #00acc1; color: white;">[14.8] 高级 TCA 与 Sim2Real 仿真反馈闭环 (Advanced TCA & Sim2Real Feedback) <span class="badge" style="background-color: #f44336; color: white; padding: 2px 6px; border-radius: 4px; font-size: 14px; margin-left: 10px; font-weight: normal;">【实盘存活防线】</span></div>
+      <div class="stage-body">
+        <div class="highlight wrap-code" style="background: #b2ebf2; border-color: #80deea; color: #006064;">
+          <b>核心目标：</b>打破“纸上富贵”。通过比对回测仿真结果与真实柜台成交记录，动态校准冲击模型，并在出现严重的 Sim2Real 偏差时强制熔断。
+        </div>
+        <div class="two-col wrap-code" style="margin-top: 15px;">
+          <div class="block">
+            <div class="subhead">执行滑点归因拆解 (Slippage Attribution)</div>
+            <b>【逻辑】</b>: 将实盘未能跑赢纸面回测的“缺失 Alpha”拆解为三部分：<b>延迟成本 (Delay Cost)</b>、<b>价差跨越 (Spread Crossing)</b>、<b>市场冲击 (Market Impact)</b>。<br/>
+            <b>【闭环】</b>: 将归因结果反馈给上游因子评估层，动态上调同类因子的摩擦惩罚系数。
+          </div>
+          <div class="block">
+            <div class="subhead">仿真对抗与动态摩擦 (Adversarial Sim2Real)</div>
+            <b>【逻辑】</b>: 强化学习智能体在仿真器中寻找最优执行路径。若实盘表现跌出置信区间，外层网络自动调高模拟器内的“恶劣环境概率”（如增加幽灵挂单 Ghost Liquidity）。<br/>
+            <b>【闭环】</b>: 迫使执行算法内生学习 <b>无交易区间 (NT-Zone)</b> 法则，在追踪误差与执行摩擦间寻找帕累托最优。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="arrow">↓ <small>至此，离线评估期全部结束。进入生产环境的在线流式特征供给与模型消费阶段</small></div>
+
+    <section id="stage-11" class="stage blue">
+      <div class="stage-header">[15] 自动化贴标引擎：多维画像与语义对齐 (Semantic Tagging) <span class="badge" style="background-color: #f44336; color: white; padding: 2px 6px; border-radius: 4px; font-size: 14px; margin-left: 10px; font-weight: normal;">【首期需增量建设】</span></div>
+      <div class="stage-body">
+        <div class="highlight wrap-code">
+          <b>阶段定义：</b>评估结束后，系统不只是落盘一堆数字，而是为因子生成结构化的“身份证”。标签是决定因子去向（路由）和下游模型装配方式的唯一凭证。
+        </div>
+        <div class="grid-4 wrap-code">
+          <div class="grid-card">
+            <div class="head">6.1 规则标签引擎 (Rule-based)</div>
+            <div class="body">
+              <b>【入参】</b>: 评估指标包 (Metrics Package)。<br/>
+              <b>【逻辑】</b>: 确定性硬阈值映射。如 <code>Net_Sharpe > 1.5 & Turnover < 20%</code> 映射为 <code>gold_quality</code>。<br/>
+              <b>【出参】</b>: 状态标签 (<code>net_survive</code>, <code>taker_fail</code>)。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head">6.2 大模型语义画像 (LLM)</div>
+            <div class="body">
+              <b>【入参】</b>: 因子 AST 与挖掘 Rationale。<br/>
+              <b>【逻辑】</b>: 调用 <b>DeepSeek-V3 / FinGPT</b> 识别经济学逻辑意图，结合向量库防幻觉对齐。<br/>
+              <b>【出参】</b>: 经济学标签 (<code>liquidity_premium</code>, <code>inventory_risk</code>)。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head">6.3 分类与回退机制 (Taxonomy)</div>
+            <div class="body">
+              <b>【入参】</b>: 语义分析结果。<br/>
+              <b>【逻辑】</b>: 强制挂载到一级域 (如 <code>price_volume.momentum</code>)；若置信度低则回退到 <code>other</code>。<br/>
+              <b>【出参】</b>: 标准化的 Taxonomy 树节点。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head">6.4 抢救标签机制 (Salvage Tags)</div>
+            <div class="body">
+              <b>【入参】</b>: 独立指标未达标但带另类信息的因子。<br/>
+              <b>【逻辑】</b>: 识别高交互价值，打上 <code>retained_for_interaction</code> 标签。<br/>
+              <b>【出参】</b>: 防止高价值非线性特征被误杀。
+            </div>
+          </div>
+        </div>
+        <div class="chip-row" style="margin-top: 14px;">
+          <span class="chip blue">#high_ic</span>
+          <span class="chip blue">#taker_fail</span>
+          <span class="chip amber">#proxy_momentum</span>
+          <span class="chip amber">#session_sensitive</span>
+          <span class="chip purple">#production_core</span>
+          <span class="chip purple">#needs_smoothing</span>
+        </div>
+      </div>
+    <div class="arrow">↓</div>
+
+    <section id="stage-12-architecture-flow" class="stage" style="border: 2px solid #4f46e5; background: #e0e7ff; margin-bottom: 20px;">
+      <div class="stage-header" style="background: #4f46e5; color: white;">[16] [工程图解] 微服务调度拓扑与算力资源池 (Compute Orchestration & Data Flow)</div>
+      <div class="stage-body">
+        <div class="highlight wrap-code" style="background: #c7d2fe; border-color: #818cf8; color: #312e81;">
+          <b>K8s 算力调度与防死锁红线：</b>千万级因子并行回测是一个极度消耗内存的 DAG 计算流。系统强制实施 <b>T-Shirt 资源模型</b> 和 <b>异构算力路由</b>，防止集群雪崩。
+        </div>
+        
+        <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-top: 15px;">
+          <!-- Left: Microservices Flow -->
+          <div style="flex: 1; min-width: 300px; background: white; padding: 15px; border-radius: 8px; border: 1px solid #c7d2fe;">
+            <div class="subhead" style="color: #4f46e5; border-bottom: 1px solid #e0e7ff; padding-bottom: 5px; margin-bottom: 10px;">任务调度编排 DAG (Airflow/Prefect)</div>
+            <div style="font-family: monospace; font-size: 11px; line-height: 1.6; color: #333;">
+              <span style="color: #2563eb; font-weight: bold;">FactorAdmissionGateway</span> (接受因子提交，<code>factor_admission</code> 模块接入)<br/>
+              &nbsp;&nbsp;&nbsp;&nbsp;↓ <i>gRPC (Knowledge_ts)</i><br/>
+              <span style="color: #059669; font-weight: bold;">FactorLineageService</span> (基于 <code>catalog.py</code> 扩展 Neo4j，阻断环)<br/>
+              &nbsp;&nbsp;&nbsp;&nbsp;↓ <i>Kafka (Submit_Event)</i><br/>
+              <span style="color: #d97706; font-weight: bold;">FactorEngine (Python/Rust)</span> (复用 <code>factor_engine/runtime</code>, AST解析, 向量化物化)<br/>
+              &nbsp;&nbsp;&nbsp;&nbsp;↓ <i>Write Parquet to factor_lake_staging</i><br/>
+              <span style="color: #7c3aed; font-weight: bold;">FactorEvaluationService</span> (基于 <code>backtest_layer</code> 扩展多轨评估)<br/>
+              &nbsp;&nbsp;&nbsp;&nbsp;↓ <i>Metrics JSON & Chart Artifacts</i><br/>
+              <span style="color: #db2777; font-weight: bold;">FactorRoutingPolicy</span> (DSL 动态分流入库，全新建设)
+            </div>
+            <div style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e0e7ff; font-size: 11px;">
+              <b style="color: #ef4444;">级联失效重算 (Cascading)</b>: 若上游 <code>DataFeed</code> 发生修正，通过 Neo4j 触发所有下游节点重算。
+            </div>
+          </div>
+
+          <!-- Right: K8s T-Shirt Sizing -->
+          <div style="flex: 1.5; min-width: 400px; background: white; padding: 15px; border-radius: 8px; border: 1px solid #c7d2fe;">
+            <div class="subhead" style="color: #4f46e5; border-bottom: 1px solid #e0e7ff; padding-bottom: 5px; margin-bottom: 10px;">K8s T-Shirt 资源模型 (OOM 防治)</div>
+            <table style=" border-collapse: collapse; font-size: 11px; text-align: left;">
+              <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+                <th style="padding: 3px 5px;">档位</th>
+                <th style="padding: 3px 5px;">适用场景 (Target)</th>
+                <th style="padding: 3px 5px;">资源配额 (Requests)</th>
+                <th style="padding: 3px 5px;">OOM 重试机制</th>
+              </tr>
+              <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 3px 5px; font-weight: bold; color: #10b981;">Small</td>
+                <td style="padding: 3px 5px;">A轨(日频), 简单公式</td>
+                <td style="padding: 3px 5px;">CPU: 2c, Mem: 4G</td>
+                <td style="padding: 3px 5px;">升级至 M 档重试</td>
+              </tr>
+              <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 3px 5px; font-weight: bold; color: #f59e0b;">Medium</td>
+                <td style="padding: 3px 5px;">B轨(1H), 复杂排序聚合</td>
+                <td style="padding: 3px 5px;">CPU: 4c, Mem: 16G</td>
+                <td style="padding: 3px 5px;">升级至 L 档重试</td>
+              </tr>
+              <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 3px 5px; font-weight: bold; color: #ef4444;">Large</td>
+                <td style="padding: 3px 5px;">B轨(1min), 全市场协方差</td>
+                <td style="padding: 3px 5px;">CPU: 8c, Mem: 64G</td>
+                <td style="padding: 3px 5px;">失败熔断，报警</td>
+              </tr>
+              <tr>
+                <td style="padding: 3px 5px; font-weight: bold; color: #8b5cf6;">GPU(XL)</td>
+                <td style="padding: 3px 5px;">D轨(深度隐式), RL探索</td>
+                <td style="padding: 3px 5px;">CUDA Node, Mem: 128G</td>
+                <td style="padding: 3px 5px;">异构路由，严禁阻塞 CPU 池</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="stage-13" class="stage blue">
+      <div class="stage-header">[17] 准入决策与正式生产库路由 (Admission & Tier Routing) <span class="badge" style="background-color: #ff9800; color: white; padding: 2px 6px; border-radius: 4px; font-size: 14px; margin-left: 10px; font-weight: normal;">【基于已有规则雏形扩建】</span></div>
+      <div class="stage-body">
+        <div class="highlight wrap-code">
+          <b>核心逻辑：</b>严禁在代码中硬编码 (Hardcode) 阈值。通过声明式路由策略引擎 (Policy Engine DSL) 消费标签和指标，实现 100% 无人值守的分发，驱动物理 S3 迁移与元数据 Catalog 更新。
+        </div>
+        
+        
+        <div class="subhead" style="margin-top: 15px; font-size: 1.1em; color: var(--text); border-bottom: 2px solid var(--border); padding-bottom: 5px;">生产库 (Tier 3) 与储备库矩阵 (The Tier Matrix)</div>
+        <div class="grid-4 wrap-code" style="margin-top: 15px;">
+          <div class="grid-card">
+            <div class="head" style="background: #e8f5e9; border-top: 4px solid #43a047;">[Tier 3A] 核心生产库</div>
+            <div class="body"><b>定位</b>: 绝对主力和强 Alpha 信号。<br/><b>去向</b>: 直接输送给下游 Optimizer 或作为大模型的核心特征。</div>
+          </div>
+          <div class="grid-card">
+            <div class="head" style="background: #c8e6c9; border-top: 4px solid #388e3c;">[Tier 3B] 卫星生产库</div>
+            <div class="body"><b>定位</b>: 换手率高或容量有限的条件信号。<br/><b>去向</b>: 仅在特定微观状态 (Regime) 下被触发。</div>
+          </div>
+          <div class="grid-card">
+            <div class="head" style="background: #e3f2fd; border-top: 4px solid #1e88e5;">[Tier 3C] 特征原料库</div>
+            <div class="body"><b>定位</b>: 无法线性叠加的隐式向量 (D轨产物)。<br/><b>去向</b>: 仅供神经网络 (NN/Transformer) 作为底层特征消费。</div>
+          </div>
+          <div class="grid-card">
+            <div class="head" style="background: #f3e5f5; border-top: 4px solid #8e24aa;">[Tier 3D] 优化储备库</div>
+            <div class="body"><b>定位</b>: 经过 LLM 二次优化的备用军。<br/><b>去向</b>: 线上 3A 因子衰减时，立刻无缝替换顶上。</div>
+          </div>
+          <div class="grid-card">
+            <div class="head" style="background: #fff3e0; border-top: 4px solid #fb8c00;">[Tier 2] 孵化修复工厂</div>
+            <div class="body"><b>定位</b>: 高潜但有硬伤（如高换手）的因子。<br/><b>去向</b>: 挂载平滑算子、降频、正交化后重新评估。</div>
+          </div>
+          <div class="grid-card">
+            <div class="head" style="background: #ffecb3; border-top: 4px solid #fbc02d;">[Tier 2X] LLM 变异工厂</div>
+            <div class="body"><b>定位</b>: 逻辑优秀但过拟合的因子。<br/><b>去向</b>: 送给 DeepSeek 执行公式 AST 的近邻重写与变异寻优。</div>
+          </div>
+          <div class="grid-card">
+            <div class="head" style="background: #ffebee; border-top: 4px solid #e53935;">[Tier 4] 归档与负样本库</div>
+            <div class="body"><b>定位</b>: 彻底死亡的因子。<br/><b>去向</b>: 作为反面教材供上游 RL/GP 引擎训练避坑。</div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <div class="arrow">↓</div>
+
+    
+    <div class="part-divider" style="background: linear-gradient(90deg, #1e293b 0%, #334155 100%); color: white; padding: 16px 24px; border-radius: 12px; margin: 40px 0 20px 0; font-size: 20px; font-weight: bold; display: flex; align-items: center; gap: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+      📡 生产级持续供给与监控 (Production Serving)
+      <span style="font-size: 14px; font-weight: normal; opacity: 0.8; margin-left: auto;">[对应 PRD 第四部分：入库分发]</span>
+    </div>
+    
+    <section id="stage-14" class="stage green">
+      <div class="stage-header">[18] 在线/离线特征供给服务 (Feature Serving API) <span class="badge" style="background-color: #ff9800; color: white; padding: 2px 6px; border-radius: 4px; font-size: 14px; margin-left: 10px; font-weight: normal;">【基于现有数据访问层扩建】</span></div>
+      <div class="stage-body">
+        <div class="highlight wrap-code">
+          <b>核心原则：</b>入库并不代表直接可用。系统必须通过 <code>FactorPreprocessingService</code> 提供统一的数据出口，抹平实盘推理 (Online) 与历史回测 (Offline) 之间的数据获取鸿沟。
+        </div>
+        <div class="two-col wrap-code" style="margin-top: 10px;">
+          <div class="block">
+            <div class="subhead">多阶视图安全提取 (get_materialized_view)</div>
+            <b>【动作】</b>: 严禁直接暴露底层 Parquet。模型端必须通过 API 请求指定阶数的视图 (如 <code>raw</code>, <code>winsorized</code>, <code>residual</code>)。<br/>
+            <b>【防前视红线】</b>: API 强制校验 <code>knowledge_ts</code>，任何试图获取未来数据的 Query 直接抛出异常阻断。处于 <code>archived</code> 状态的因子拒绝供给。
+          </div>
+          <div class="block">
+            <div class="subhead">防在线/离线特征漂移 (Online-Offline Skew)</div>
+            <b>【动作】</b>: 对于带有 <code>Rolling Window</code> 的时序因子，在 Redis/Aerospike 中持久化其 <b>最新时间窗口的内部状态 (Online Feature Cache)</b>。<br/>
+            <b>【效果】</b>: 确保盘中流式推理时计算出的特征值，与离线回测算出的值严丝合缝，彻底消除 Skew 风险。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="arrow">↓</div>
+
+    <section id="stage-15" class="stage green">
+      <div class="stage-header">[19] 机器学习特征装配与专属评估 (ML Feature Assembly & Evaluation)</div>
+      <div class="stage-body">
+        <div class="highlight wrap-code">
+          <b>核心原则：</b>由于下游模型的数学特性天差地别，<b>绝对不能把“高度加工过”的同一份数据塞给所有模型</b>！同时，在进入黑盒模型前必须执行 SHAP 等特征维度归因。
+        </div>
+        
+        <div class="subhead" style="margin-top: 15px; font-size: 1.1em; color: var(--text); border-bottom: 2px solid var(--border); padding-bottom: 5px;">I. 模型专属装配规约 (Model-Specific Rules)</div>
+        <div class="three-col wrap-code" style="margin-top: 10px;">
+          <div class="grid-card">
+            <div class="head">10.1 面向树模型 (Tree/LGBM)</div>
+            <div class="body">
+              <b>【交付】</b>: 交付 <code>raw_exposure</code>。<br/>
+              <b>【红线】</b>: 严禁执行 Z-score 和提前行业中性化，必须保留原始特征值的非线性分叉边界。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head">10.2 面向神经网络 (NN/Transformer)</div>
+            <div class="body">
+              <b>【交付】</b>: 交付 <code>winsorized_exposure</code>。<br/>
+              <b>【红线】</b>: 必须在 Train 窗拟合 Scaler，并固化应用到 Valid/Test。严禁全局共用 Scaler 导致防前视泄露。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head">10.3 机器学习特征专项评估 (ML Metrics)</div>
+            <div class="body">
+              <b>【SHAP Value】</b>: 严禁把黑盒直接上盘。必须计算 SHAP 归因，剔除被共线性掩盖的高 IC 假因子。<br/>
+              <b>【IC Decay 半衰期】</b>: 必须测算预测力衰减速度。半衰期 < 15 分钟的特征禁止在高频以外的模型分配权重。
+            </div>
+          </div>
+        </div>
+
+        <div class="subhead" style="margin-top: 20px; font-size: 1.1em; color: var(--text); border-bottom: 2px solid var(--border); padding-bottom: 5px;">II. 消费层终极架构：SL 预测 + RL 决策双剑合璧</div>
+        <div class="block wrap-code" style="margin-top: 10px;">
+          <b>【混合堆叠架构 (Hybrid Stacking)】</b>: 在百亿级的高频与多因子博弈中，下游不应是单一的线性组合器。系统将 <b>监督学习 (SL)</b> 作为第一阶段，负责从高维特征中挤压出收益预测 $\hat{Y}$；将 <b>深度强化学习 (DRL, 如 PPO/DDPG)</b> 作为第二阶段，负责在非平稳的微观战场上，统筹考虑市场冲击、买卖价差与滑点，输出最终的调仓动作 (Action)。这种端到端架构能显著压低换手率，攫取更持久的 Alpha。
+        </div>
+      </div>
+    </section>
+
+    <div class="arrow">↓</div>
+
+    <section id="stage-15-5" class="stage red" style="border: 2px solid #b71c1c; background: #fce4ec;">
+      <div class="stage-header" style="background: #b71c1c; color: white;">[20] 极限压力测试与智能订单路由 (Stress Testing & Smart Execution)</div>
+      <div class="stage-body">
+        <div class="highlight wrap-code" style="background: #f8bbd0; border-color: #f48fb1; color: #880e4f;">
+          <b>红线原则：</b>策略上线实盘前，必须通过黑天鹅场景的极值压力测试；调仓时，避免使用粗暴的市价单砸盘，应引入高级执行算法。
+        </div>
+        <div class="two-col wrap-code" style="margin-top: 15px;">
+          <div class="block">
+            <div class="subhead">A. 极限场景压力测试 (Stress Testing)</div>
+            <b>【黑天鹅重播】</b>: 强制将策略投入历史崩盘切片（如 2008 次贷危机、2020 熔断），评估回撤是否穿透容忍度。<br/>
+            <b>【流动性枯竭模拟】</b>: 人为抽干订单簿深度（削减 90% 挂单），测试策略在极端缺乏对手盘时的平仓成本与存活性。<br/>
+            <b>【宏观震荡注入】</b>: 通过蒙特卡洛方法对 VIX、利率注入极端跳跃方差，观测组合的条件风险价值 (CVaR)。
+          </div>
+          <div class="block">
+            <div class="subhead">B. 智能订单执行算法 (Smart Execution)</div>
+            <b>【订单切割】</b>: 利用 <b>VWAP / TWAP</b> 将大额母单 (Parent Order) 切割为微小子单，并沿历史成交量廓线 (Volume Profile) 分布下单。<br/>
+            <b>【动态参与率 (Dynamic POV)】</b>: 实时感知市场冲击。若自身下单引发盘口向不利方向剧烈滑移，必须动态降低成交量占比阈值（如从 10% 降至 2%）。<br/>
+            <b>【暗池与多所路由】</b>: 在合规前提下，将订单路由至暗池或多交易所分散执行，隐藏交易意图并寻找最优流动性。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="arrow">↓</div>
+
+    <section id="stage-16" class="stage purple">
+      <div class="stage-header">[22] 持续监控与生命周期复评 (Monitoring & Re-evaluation)</div>
+      <div class="stage-body">
+        <div class="grid-4 wrap-code">
+          <div class="grid-card">
+            <div class="head">11.1 拥挤度监控 (Crowdedness)</div>
+            <div class="body">
+              <b>【逻辑】</b>: 监控融券费率、多空重合度。如果发现全市场都在交易该信号，启动<b>双曲衰减防御</b>。<br/>
+              <b>【效果】</b>: 避免在拥挤踩踏中遭受黑天鹅损失。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head">11.2 IC 漂移监控 (Drift)</div>
+            <div class="body">
+              <b>【逻辑】</b>: 计算 <b>条件 IC 平均运行长度 (ARL)</b>。若实时 IC 跌穿 Bootstrap 置信下限，触发熔断警报。<br/>
+              <b>【效果】</b>: 区分“正常的短期回撤”与“彻底的结构性失效”。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head">11.3 动态权重降级 (Demotion)</div>
+            <div class="body">
+              <b>【逻辑】</b>: 根据衰减情况自动降级 (<code>core -> satellite -> watchlist -> deprecated</code>)。<br/>
+              <b>【效果】</b>: 自动削减失效因子的组合敞口。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head">11.4 物理归档 (Archive)</div>
+            <div class="body">
+              <b>【逻辑】</b>: 彻底死亡的因子移出在线 Feature Store，打入 Tier 4 坟墓。<br/>
+              <b>【效果】</b>: 释放宝贵的线上内存与计算资源。
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="arrow">↓</div>
+
+    <section id="stage-17" class="stage purple">
+      <div class="stage-header">[23] 闭环反馈与延迟压测 (Sim2Real & Latency Stress)</div>
+      <div class="stage-body">
+        <div class="highlight wrap-code">
+          <b>系统进阶目标：</b>让系统从“只会筛选”升级为“越跑越准”。将实盘死因与硬件敏感度结构化，反哺给挖掘端与回测模拟器。
+        </div>
+        <div class="grid-4 wrap-code" style="margin-top: 15px;">
+          <div class="grid-card">
+            <div class="head">10.1 真实滑点与订单簿回放 (LOB Replay)</div>
+            <div class="body">
+              <b>【逻辑】</b>: 废弃粗糙的 K 线撮合，强制采用 Level-2 逐笔切片回放。模拟队列位置 (Queue Position) 与部分成交 (Partial Fills)。<br/>
+              <b>【效果】</b>: 动态更新 Stage 5 评估轨的<b>冲击成本与排队耗时参数</b>，彻底消灭纸面富贵。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head">10.2 人为延迟压测 (Latency Injection)</div>
+            <div class="body">
+              <b>【逻辑】</b>: 强制向发单信号注入 $5\text{ms} \sim 500\text{ms}$ 的人工延迟，测试硬件敏感度。<br/>
+              <b>【效果】</b>: 绘制收益-延迟敏感曲线。若 100ms 延迟导致收益腰斩，则直接打回至极速 C++ 团队，Python 引擎拒收。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head">10.3 基因重组与微调 (Mutation)</div>
+            <div class="body">
+              <b>【逻辑】</b>: 将高潜但有硬伤的因子 (Tier 2) 送回 RL/GP 或大模型工厂执行定向变异。<br/>
+              <b>【效果】</b>: 实现因子自我修复与优生优育。
+            </div>
+          </div>
+          <div class="grid-card">
+            <div class="head">10.4 挖掘指令重塑 (Prompt Shaping)</div>
+            <div class="body">
+              <b>【逻辑】</b>: 将死因与经验打包为 JSON 反馈给 Stage 0 的 LLM / RL 引擎。<br/>
+              <b>【效果】</b>: 自动更新 LLM 的负面提示词或 RL 的 Reward 函数，让挖掘引擎<b>免疫同类错误</b>。
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    
+        <div class="subhead" style="margin-top: 15px; font-size: 1.1em; color: var(--text); border-bottom: 2px solid var(--border); padding-bottom: 5px;">[核心子系统] Tier 2X: LLM 因子优化工厂 (LLM Optimization Factory)</div>
+        <div class="grid-3 wrap-code" style="margin-top: 15px;">
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid var(--purple-deep);">1. 结构近邻改写 (Structural Neighbor)</div>
+            <div class="body">将 `ts_mean(x, 5)` 替换为 `ts_ewma(x, span=5)` 或中位数，测试周边微小拓扑变异是否具有更强的抗噪性。</div>
+          </div>
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid var(--purple-deep);">2. 平滑降噪与交易友好化</div>
+            <div class="body">检测到 `#high_turnover` 时，LLM 自动在外层包裹 `ts_decay_linear` 或非线性 `sigmoid` 软截断，降低跳跃摩擦。</div>
+          </div>
+          <div class="grid-card">
+            <div class="head" style="border-top: 4px solid var(--purple-deep);">3. 边际信息提取 (Residual Extraction)</div>
+            <div class="body">检测到 `#high_correlation` 时，LLM 自动编写公式将新因子向高相关性的老因子群进行正交残差化，压榨最后一滴 Alpha。</div>
+          </div>
+        </div>
+
+    <section id="stage-cases" class="note-band">
+      <h2>附录 1：完整生命周期流转案例</h2>
+      <div class="example">
+        <div class="subhead">案例 A：美股日频横截面量价因子 (A 轨) - 从挖掘到核心生产库</div>
+        <p><b>【入参】</b>: <code>AlphaProbe</code> (GP 引擎) 生成的表达式 <code>rank(ts_delta(close, 5)) / rank(ts_sum(volume, 5))</code>，目标 S&P 500。</p>
+        <p><b>【处理逻辑】</b>: <br/>
+        1. <b>网关拦截</b>: 静态 AST 检查通过，语义去重相似度仅 12%，允许进入。<br/>
+        2. <b>特征物化</b>: 引擎计算产生 5 年暴露矩阵。<br/>
+        3. <b>预处理</b>: 执行 MAD 去极值，并针对 <code>Sector</code> 和 <code>LogMarketCap</code> 执行正交中性化。<br/>
+        4. <b>多轨评估</b>: 自动路由至 <b>Track A</b>。计算得 Rank IC = 0.042, ICIR = 0.85, 单调性良好。<br/>
+        5. <b>语义贴标</b>: LLM 识别为“短期动量反转”，贴上 <code>#reversion</code> <code>#high_ic</code>。<br/>
+        6. <b>决策路由</b>: 符合准入政策，分配 ID <code>F_USA_001234</code>，物理迁移至 <code>Tier 3A</code> 核心库。</p>
+      </div>
+
+      <div class="example">
+        <div class="subhead">案例 B：期货 1min 时序高频因子 (B-Fut 轨) - 失败修复与回流</div>
+        <p><b>【入参】</b>: <code>QuantaAlpha</code> (LLM 引擎) 搜索出的 1min 订单流压力公式。</p>
+        <p><b>【处理逻辑】</b>: <br/>
+        1. <b>多轨评估</b>: 路由至 <b>Track B-Fut</b>。回测毛夏普 3.5，但加入 <b>方根冲击模型 (Taker Slippage)</b> 后，净夏普骤降至 -0.2，换手率极高 (85%/day)。<br/>
+        2. <b>自动诊断</b>: 贴标识别为 <code>#taker_fail</code> <code>#high_turnover</code>。<br/>
+        3. <b>路由分发</b>: 打回 <code>Tier 2</code> (孵化修复工厂)。<br/>
+        4. <b>修复动作</b>: 自动挂载 <code>EMA(20)</code> 平滑算子并降频 (1min -> 5min)。<br/>
+        5. <b>二次评估</b>: 换手率降至 12%，净夏普回升至 1.8，回流 <code>Tier 3B</code> (卫星生产库)。</p>
+      </div>
+    </section>
+
+    <section id="stage-appendix-db" class="note-band">
+      <h2>附录 2：核心对象数据字典 (Database Schema)</h2>
+      <p class="muted">为确保下游工程团队能无歧义地落实数据库设计，核心领域模型必须严格遵循以下 Schema 约束 (PostgreSQL 兼容)。</p>
+      
+      <div class="two-col wrap-code" style="margin-top: 15px;">
+        <div class="block">
+          <div class="subhead">1. CandidateFactor (候选因子登记表)</div>
+          <ul>
+            <li><code>candidate_id</code> (UUID, PK): 候选唯一标识</li>
+            <li><code>factor_expression</code> (TEXT): 原始公式文本</li>
+            <li><code>formula_ast</code> (JSONB): 抽象语法树</li>
+            <li><code>method_code</code> (VARCHAR): 挖掘方法 (如 <code>llm_self_refine</code>)</li>
+            <li><code>signal_structure</code> (VARCHAR): <code>cross_sectional</code> 或 <code>time_series</code></li>
+            <li><code>asset_class</code> (VARCHAR): <code>equity</code>, <code>futures</code> 等</li>
+            <li><code>campaign_id</code> (VARCHAR): 大轮挖掘任务编号</li>
+            <li><code>complexity_profile</code> (JSONB): 算力消耗与深度画像</li>
+          </ul>
+        </div>
+        <div class="block">
+          <div class="subhead">2. FactorAsset (正式因子资产表)</div>
+          <ul>
+            <li><code>factor_id</code> (VARCHAR, PK): 正式资产编号 (如 <code>F_EQ_D_PV_001</code>)</li>
+            <li><code>current_tier</code> (VARCHAR): 当前所在库 <code>Tier3A</code> 等</li>
+            <li><code>ast_hash</code> (VARCHAR): 唯一 Hash，用于去重与缓存秒回</li>
+            <li><code>data_lineage_version</code> (VARCHAR): 依赖的上游数据快照版本号（防穿越核心）</li>
+            <li><code>cache_hit_status</code> (BOOLEAN): 是否基于历史 Manifest 秒回复用</li>
+            <li><code>owner</code> (VARCHAR): 归属团队</li>
+          </ul>
+        </div>
+      </div>
+      <div class="two-col wrap-code" style="margin-top: 10px;">
+        <div class="block">
+          <div class="subhead">3. EvaluationRun (评估运行记录表)</div>
+          <ul>
+            <li><code>eval_run_id</code> (UUID, PK): 评估批次号</li>
+            <li><code>evaluation_protocol_key</code> (VARCHAR): 执行协议 (如 <code>cs_equity_daily_v1</code>)</li>
+            <li><code>knowledge_ts</code> (TIMESTAMP): <b>强一致性 PIT 审计键</b>，物理可见时间</li>
+            <li><code>survival_view</code> (VARCHAR): <code>net_survive</code>, <code>failed</code> 等</li>
+            <li><code>metrics_package</code> (JSONB): 完整量化指标 (Sharpe, IC 等)</li>
+            <li><code>leakage_audit_ref</code> (VARCHAR): 防穿越安全审计日志路径</li>
+          </ul>
+        </div>
+        <div class="block">
+          <div class="subhead">4. AdmissionDecision (准入决策表)</div>
+          <ul>
+            <li><code>decision_id</code> (UUID, PK): 决策唯一标识</li>
+            <li><code>decision_type</code> (VARCHAR): <code>admit</code>, <code>reject</code>, <code>route_to_tier2</code></li>
+            <li><code>tier_target</code> (VARCHAR): 最终被分配的库</li>
+            <li><code>decision_reason_codes</code> (ARRAY): 如 <code>[LOW_CAPACITY, HIGH_CORR]</code></li>
+            <li><code>policy_snapshot</code> (JSONB): 当时生效的路由策略快照</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="stage-appendix-math" class="note-band">
+      <h2>附录 3：核心量化评估指标数学定义字典 (Math Dictionary)</h2>
+      <p class="muted">为防范实现歧义，下游 C++/Rust/Python 引擎在开发评估指标时，必须严格遵守以下数学定义与前提假设。</p>
+      
+      <div class="grid-4 wrap-code" style="margin-top: 15px;">
+        <div class="grid-card">
+          <div class="head">Deflated Sharpe Ratio (DSR)</div>
+          <div class="body">
+            <b>【应用轨道】</b>: 全局显著性红线<br/>
+            <b>【数学公式】</b>: $\text{DSR} = Z\left( \frac{(\widehat{SR} - SR_0)\sqrt{T-1}}{\sqrt{1 - \gamma_3 \widehat{SR} + \frac{\gamma_4 - 1}{4}\widehat{SR}^2}} \right)$<br/>
+            <b>【工程红线】</b>: 严禁仅汇报普通夏普！必须根据全局历史测试次数 (Multiple Testing) 计算期望夏普 $SR_0$，并使用偏度 $\gamma_3$ 和峰度 $\gamma_4$ 校正非正态惩罚。
+          </div>
+        </div>
+        <div class="grid-card">
+          <div class="head">Break-even IC (盈亏平衡 IC)</div>
+          <div class="body">
+            <b>【应用轨道】</b>: Track A, Track B<br/>
+            <b>【数学公式】</b>: $\text{IC}_{\text{BE}} = \frac{\text{Turnover} \cdot \text{Cost}}{\text{Volatility} \cdot \sqrt{M}}$<br/>
+            <b>【工程红线】</b>: 对于高换手因子，必须将实测 IC 与 BE-IC 比对。若实测 IC 小于此阈值，意味着策略预测能力连交易摩擦都无法覆盖，必须立即打回。
+          </div>
+        </div>
+        <div class="grid-card">
+          <div class="head">Non-linear Market Impact (非线性冲击)</div>
+          <div class="body">
+            <b>【应用轨道】</b>: 容量评估 / Sim2Real<br/>
+            <b>【数学公式】</b>: $\text{Cost} = \gamma \cdot \sigma \cdot \left( \frac{Q}{V} \right)^{0.5}$<br/>
+            <b>【工程红线】</b>: 严禁使用固定滑点！当单笔订单量 $Q$ 超过该 K 线均线成交量 $V$ 的特定阈值时，必须采用平方根法则模拟几何级增加的滑点成本，计算理论 AUM 上限。
+          </div>
+        </div>
+        <div class="grid-card">
+          <div class="head">Event CAR (事件累积异常收益)</div>
+          <div class="body">
+            <b>【应用轨道】</b>: Track C (离散事件轨)<br/>
+            <b>【数学公式】</b>: $CAR(t_1, t_2) = \sum_{t=t_1}^{t_2} (R_{i,t} - \hat{R}_{i,t})$<br/>
+            <b>【工程红线】</b>: 严禁将 $R_{i,t}$ 直接相加。必须通过 CAPM 或 Fama-French 模型计算出预期收益 $\hat{R}_{i,t}$ 并扣除，仅保留事件触发带来的“异常”增量收益。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="stage-appendix-taxonomy" class="note-band">
+      <h2>附录 4：因子语义标签与特征画像字典 (Taxonomy Dictionary)</h2>
+      <p class="muted">供 LLM 和规则引擎在 Stage 6 使用的全局枚举类标准，决定了因子的物理归属与模型装配方式。</p>
+      
+      <div class="three-col wrap-code" style="margin-top: 15px;">
+        <div class="block">
+          <div class="subhead">一级域：Price-Volume (量价特征)</div>
+          <ul>
+            <li><code>pv.momentum.time_series</code>: 时序动量 (绝对趋势)</li>
+            <li><code>pv.momentum.cross_sectional</code>: 截面动量 (强者恒强)</li>
+            <li><code>pv.reversion.short_term</code>: 短期微观反转 (均值回归)</li>
+            <li><code>pv.volatility.idiosyncratic</code>: 特质波动率风险</li>
+            <li><code>pv.liquidity.amihud</code>: 缺乏流动性补偿 (Amihud)</li>
+            <li><code>pv.microstructure.order_imbalance</code>: 盘口订单失衡压力</li>
+          </ul>
+        </div>
+        <div class="block">
+          <div class="subhead">一级域：Fundamental (基本面/另类)</div>
+          <ul>
+            <li><code>fundamental.value.earnings_yield</code>: 盈利估值比 (EP)</li>
+            <li><code>fundamental.quality.accruals</code>: 盈余质量 (应计利润)</li>
+            <li><code>fundamental.growth.sales_surprise</code>: 营收超预期跳跃</li>
+            <li><code>alternative.sentiment.news_polar</code>: 新闻媒体情绪两极化</li>
+            <li><code>alternative.supply_chain.bullwhip</code>: 供应链牛鞭效应传导</li>
+          </ul>
+        </div>
+        <div class="block">
+          <div class="subhead">状态域：Lifecycle & Routing (生命周期控制)</div>
+          <ul>
+            <li><span class="chip green">#tier3a_core</span>: 准入核心主线组合</li>
+            <li><span class="chip amber">#needs_smoothing</span>: 需要在 Tier2 降频平滑</li>
+            <li><span class="chip red">#taker_fail</span>: 纸面富贵，吃单滑点穿仓</li>
+            <li><span class="chip red">#look_ahead_risk</span>: 疑似引入未来函数</li>
+            <li><span class="chip purple">#crowded_trade</span>: 拥挤度超标，触发双曲衰减</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="stage-appendix-api" class="note-band">
+      <h2>附录 5：微服务交互与 API 契约规范 (Microservices & API Contracts)</h2>
+      <p class="muted">严格定义各组件间的通信协议与核心 Payload 结构，防止后端团队字段扯皮。</p>
+      
+      <div class="two-col wrap-code" style="margin-top: 15px;">
+        <div class="block">
+          <div class="subhead">网关提交契约 (REST/gRPC)</div>
+          <b>API</b>: <code>POST /api/v1/gateway/submit_candidate</code><br/>
+          <b>【Request Payload】</b>:
+          <pre style="background: #f8fafc; padding: 4px 6px; border-radius: 6px; font-size: 11px; margin-top: 6px;">
+{
+  "requested_by": "factor_agent_v2",
+  "input_payload": {
+    "candidate_id": "uuid-xxx",
+    "expression": "ts_mean(close, 5)",
+    "domain": "price_volume",
+    "signal_structure": "time_series",
+    "asset_class": "equity",
+    "frequency_bucket": "1min"
+  },
+  "params": {
+    "knowledge_ts": "2023-01-01T00:00:00Z", // 防穿越最后防线
+    "receptive_field_len": 60               // 序列 Padding 对齐要求
+  }
+}</pre>
+          <b>【Response】</b>: 异步接受，返回 <code>job_id</code> 与 <code>cache_hit</code> 状态。
+        </div>
+        <div class="block">
+          <div class="subhead">Kafka 状态流转契约 (Message Queue)</div>
+          <b>Topic</b>: <code>factor.candidate.evaluated</code><br/>
+          <b>【Event Payload】</b>:
+          <pre style="background: #f8fafc; padding: 4px 6px; border-radius: 6px; font-size: 11px; margin-top: 6px;">
+{
+  "event_id": "uuid-yyy",
+  "timestamp": "2023-01-01T00:05:00Z",
+  "candidate_id": "uuid-xxx",
+  "run_status": "success",
+  "payload": {
+    "evaluation_protocol": "Track_B_Fut",
+    "metrics_summary": {
+      "sharpe_net": 1.85,
+      "turnover_annual": 4.2
+    },
+    "artifact_manifest_uri": "s3://minio/eval/...",
+    "error_trace": null
+  }
+}</pre>
+          <b>【消费方】</b>: 路由引擎订阅此 Topic 执行 Tier 分发决策。
+        </div>
+      </div>
+    </section>
+
+    <section id="stage-appendix-monitor" class="note-band">
+      <h2>附录 6：运维监控与容灾熔断机制 (SRE & Error Handling)</h2>
+      <p class="muted">确保因子批量生产流水线在 7x24 小时无人值守环境下的高可用性与灾难恢复能力。</p>
+      
+      <div class="grid-4 wrap-code" style="margin-top: 15px;">
+        <div class="grid-card">
+          <div class="head">1. OOM 熔断与降级策略</div>
+          <div class="body">
+            <b>【场景】</b>: 全市场 1min 级因子物化导致内存溢出。<br/>
+            <b>【机制】</b>: 底层检测到 <code>RAM Usage > 90%</code> 时触发熔断，终止当前大批量操作。系统自动捕获并切换为 <b>时序分块 (Time Chunking)</b> 与 <b>标的分桶 (Asset Bucketing)</b> 双轴切分模式重试计算。
+          </div>
+        </div>
+        <div class="grid-card">
+          <div class="head">2. 静默拦截语义区分</div>
+          <div class="body">
+            <b>【场景】</b>: 因子夏普率太低被拒 vs. 底层 ClickHouse 宕机。<br/>
+            <b>【机制】</b>: 强制区分状态码！业务拒绝必须返回特定的 <code>BIZ_REJECTED</code>，调度器收到后直接完结任务并打入负样本库；而基础设施错误 (如 <code>DB_TIMEOUT</code>) 则进入指数退避 (Exponential Backoff) 的无限重试队列。
+          </div>
+        </div>
+        <div class="grid-card">
+          <div class="head">3. 级联失效重算 (Cascading)</div>
+          <div class="body">
+            <b>【场景】</b>: 上游行情源发现 Bug 并重刷历史数据。<br/>
+            <b>【机制】</b>: 运维触发 <code>Trigger_Data_Update</code>，系统查询 <b>Neo4j 血缘图谱</b>，找出所有依赖该 <code>data_lineage_version</code> 的因子和模型，自动使历史缓存失效 (Invalidate) 并生成重算 DAG 提交给 Airflow。
+          </div>
+        </div>
+        <div class="grid-card">
+          <div class="head">4. 产物 Checksum 防篡改校验</div>
+          <div class="body">
+            <b>【场景】</b>: 内部人员尝试篡改 Parquet/JSON 报告以粉饰夏普率。<br/>
+            <b>【机制】</b>: 下游加载任何 Artifact 时，必须重新计算 SHA256 并与中心数据库中的 Manifest 校验。若 Hash 不匹配，直接抛出 <code>FATAL_SECURITY_BREACH</code> 告警至安全中心。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    </div>
+  </div>
+  </div>
+
+  <a href="#" id="back-to-top" title="回到顶部">↑</a>
+  <script>
+    // Intersection Observer for Sidebar active state
+    const sections = document.querySelectorAll('section[id]');
+    const navLinks = document.querySelectorAll('.sidebar-nav a');
+    
+    const observerOptions = {
+      root: null,
+      rootMargin: '-20% 0px -60% 0px',
+      threshold: 0
+    };
+    
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          navLinks.forEach(link => {
+            link.classList.remove('active');
+            if (link.getAttribute('href') === '#' + entry.target.id) {
+              link.classList.add('active');
+              // Scroll sidebar to show active link
+              const sidebar = document.querySelector('.sidebar');
+              const linkOffset = link.offsetTop;
+              if (linkOffset > sidebar.scrollTop + sidebar.clientHeight || linkOffset < sidebar.scrollTop) {
+                sidebar.scrollTop = linkOffset - 100;
+              }
+            }
+          });
+        }
+      });
+    }, observerOptions);
+    
+    sections.forEach(sec => observer.observe(sec));
+    
+    
+    // Search functionality
+    const searchInput = document.getElementById('nav-search');
+    searchInput.addEventListener('input', (e) => {
+      const term = e.target.value.toLowerCase();
+      navLinks.forEach(link => {
+        const text = link.textContent.toLowerCase();
+        if (text.includes(term)) {
+          link.parentElement.style.display = '';
+        } else {
+          link.parentElement.style.display = 'none';
+        }
+      });
+    });
+
+    // Back to top functionality
+    const backToTop = document.getElementById('back-to-top');
+    window.addEventListener('scroll', () => {
+      if (window.scrollY > 500) {
+        backToTop.classList.add('show');
+      } else {
+        backToTop.classList.remove('show');
+      }
+    });
+    
+    backToTop.addEventListener('click', (e) => {
+      e.preventDefault();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  </script>
+
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // Smooth scrolling for sidebar links
+      document.querySelectorAll('.sidebar-nav a').forEach(anchor => {
+        anchor.addEventListener('click', function (e) {
+          const targetId = this.getAttribute('href');
+          if(targetId.startsWith('#')) {
+            e.preventDefault();
+            const targetElement = document.querySelector(targetId);
+            if (targetElement) {
+              targetElement.scrollIntoView({
+                behavior: 'smooth',
+                block: 'start'
+              });
+              // Highlight active link
+              document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
+              this.classList.add('active');
+            }
+          }
+        });
+      });
+
+      // Simple Search/Filter for sidebar
+      const searchInput = document.getElementById('nav-search');
+      if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+          const term = e.target.value.toLowerCase();
+          document.querySelectorAll('.sidebar-nav li').forEach(li => {
+            const text = li.textContent.toLowerCase();
+            // Skip the "附录" header which is not a link
+            if(li.querySelector('a')) {
+              li.style.display = text.includes(term) ? '' : 'none';
+            }
+          });
+        });
+      }
+
+      // Back to top button logic
+      const backToTopBtn = document.createElement('a');
+      backToTopBtn.id = 'back-to-top';
+      backToTopBtn.href = '#';
+      backToTopBtn.innerHTML = '↑';
+      backToTopBtn.title = '返回顶部';
+      document.body.appendChild(backToTopBtn);
+
+      window.addEventListener('scroll', () => {
+        if (window.scrollY > 500) {
+          backToTopBtn.classList.add('show');
+        } else {
+          backToTopBtn.classList.remove('show');
+        }
+      });
+
+      backToTopBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+      
+      // Initialize mermaid with interactive click events if possible
+      if (typeof mermaid !== 'undefined') {
+        mermaid.initialize({
+          startOnLoad: true,
+          theme: 'default',
+          securityLevel: 'loose',
+          flowchart: { htmlLabels: true, curve: 'basis' }
+        });
+      }
+    });
+  </script>
+
+</body>
+</html>

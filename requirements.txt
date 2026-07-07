@@ -1,0 +1,6 @@
+# quant_projects 运行时最小依赖
+PyYAML>=6.0
+pandas>=2.0
+pyarrow>=14.0
+duckdb>=0.10
+polars>=0.20

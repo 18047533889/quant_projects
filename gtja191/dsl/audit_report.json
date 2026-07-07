@@ -1,0 +1,12 @@
+{
+  "total": 191,
+  "clean": 191,
+  "blocking_issues": {},
+  "benchmark_pending": [
+    "gtja191_alpha_075",
+    "gtja191_alpha_149",
+    "gtja191_alpha_181",
+    "gtja191_alpha_182"
+  ],
+  "note": "独立包内审计；算子白名单见 dsl/fe_dsl_allowlist.json"
+}

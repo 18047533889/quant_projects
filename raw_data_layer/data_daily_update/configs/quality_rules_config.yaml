@@ -1,0 +1,36 @@
+# 质量规则配置
+blocking:
+  negative_values:
+    enabled: true
+    columns: ['open', 'high', 'low', 'close', 'volume']
+    description: '价格相关字段不允许负值'
+  
+  primary_key_uniqueness:
+    enabled: true
+    description: '主键必须100%唯一'
+  
+  file_integrity:
+    enabled: true
+    description: '文件完整性检查'
+
+warning:
+  missing_rate:
+    enabled: true
+    threshold: 0.01                    # 1%
+    columns: ['ticker', 'align_time']
+    description: '关键字段缺失率检查'
+  
+  volatility_anomaly:
+    enabled: true
+    threshold: 5.0                       # 5σ
+    columns: ['volume', 'close']
+    description: '数据波动异常检查'
+
+# 数据源特定的质量规则
+source_specific:
+  us_stocks_sip/day_aggs_v1:
+    volatility_anomaly:
+      threshold: 3.0                   # 高频数据更严格
+  fundamentals/balance_sheet:
+    missing_rate:
+      threshold: 0.05                  # 财务数据允许更高缺失率

@@ -1,0 +1,1 @@
+-1 * ema(divide(divide(ts_sum(if_else(close <= open, high - low, 0), 15), ts_sum(if_else(close <= open, 1, 0), 15)), divide(ts_sum(if_else(close > open, high - low, 0), 15), ts_sum(if_else(close > open, 1, 0), 15))) * median(volume, 10) / volume, 2)

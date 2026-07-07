@@ -1,0 +1,4 @@
+# GTJA-191 Alpha 162
+# source: (SMA(MAX(CLOSE-DELAY(CLOSE,1),0),12,1)/SMA(ABS(CLOSE-DELAY(CLOSE,1)),12,1)*100-MIN(SMA(MAX(CLOSE-DELAY(CLOSE,1),0),12,1)/SMA(ABS(CLOSE-DELAY(CLOSE,1)),12,1) *100,12))/(MAX(SMA(MAX(CLOSE-DELAY(CLOSE,1),0),12,1)/SMA(ABS(CLOSE-DELAY(CLOSE,1)),12,1)*100,12)-MIN(SMA(MAX(CLOSE-DELAY(CLOSE,1),0),12,1)/SMA(ABS(CLOSE-DELAY(CLOSE,1)),12,1)*100,12))
+
+(EMA(max(close - delay(close, 1), 0), 23) / (EMA(abs(close - delay(close, 1)), 23) + 1e-8) * 100 - ts_min(EMA(max(close - delay(close, 1), 0), 23) / (EMA(abs(close - delay(close, 1)), 23) + 1e-8) * 100, 12)) / (ts_max(EMA(max(close - delay(close, 1), 0), 23) / (EMA(abs(close - delay(close, 1)), 23) + 1e-8) * 100, 12) - ts_min(EMA(max(close - delay(close, 1), 0), 23) / (EMA(abs(close - delay(close, 1)), 23) + 1e-8) * 100, 12) + 1e-8)

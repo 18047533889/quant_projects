@@ -1,0 +1,235 @@
+# ============================================================================
+# data_access 禁用例外清单
+# ----------------------------------------------------------------------------
+# 团队规范：业务代码一律走 data_access.store，不得直接 import duckdb /
+# pd.read_parquet / pyarrow.parquet.read_table。
+#
+# 但是有一批文件必须豁免，要么是 data_access 自己的实现，要么是真有
+# 「按文件逐个读」的 pipeline 语义，走 data_access 会引入无谓的抽象开销。
+# 这份清单就是把这些例外显式登记下来；PR6 的静态检查（scripts/check_data_access_allowlist.py
+# + pre-commit hook）把「import duckdb」「pd.read_parquet」「pq.read_table」
+# 都列为禁用 API，豁免靠本文件。
+#
+# 新增豁免 = 提 PR，在本清单补一行 + 说明理由。评审人要把关，尽量不开口子。
+# 规划路径：
+#   - PR4 ✅：先把 streaming/raw 数据源登记到 datasets.yaml
+#   - PR5 ✅：登记 daily_market_summary / stocks_floats；能迁的（factor_evaluation/io.py、
+#            multiple_factor_composite/factor_reader.py、factor_panel.py）迁到 store；
+#            明确不能迁的（业务自定义路径、中间产物、NQ 期货、demo 自造数据）永久豁免
+#   - PR6 ✅：开启静态检查，拒绝清单外的直读 + per-operator 查询配额和慢查询告警
+#   - PR7+：factor_engine 下线 → data_access；Polars lazy；read_arrow_stream 迭代
+# ============================================================================
+
+
+# ============================================================================
+# A. data_access 自己的实现：不迁（自循环）
+# ============================================================================
+- path: data_access/engine.py
+  reason: "DuckDB 引擎封装本体，`import duckdb` + `duckdb.connect` 的唯一合法落点"
+- path: data_access/store.py
+  reason: "data_access 实现本体，内部 build SQL + 调 DuckDB"
+- path: data_access/publish.py
+  reason: "publish 流程要直读 parquet 做行数校验，不能递归自己调 read_arrow"
+- path: data_access/upsert.py
+  reason: "upsert 需要读已有 partition 做 merge，调 store.read_arrow 会绕一大圈"
+- path: data_access/sql_escape.py
+  reason: "有限 SQL 逃生口的实现本体"
+- path: data_access/__init__.py
+  reason: "docstring 里解释禁令本身"
+- path: data_access/tests/**
+  reason: "测试需要直接构造 parquet 作为 fixture"
+
+
+# ============================================================================
+# B. 流式写：各自原子协议（append-only/tmp+rename），不走 write_arrow
+# ============================================================================
+- path: streaming/persistence/bar_writer.py
+  reason: "BarWriter 自己的 tmp+rename + pd.read_parquet 做去重 merge"
+- path: streaming/persistence/factor_writer.py
+  reason: "FactorWriter 自己的 merge 协议，streaming 场景调度更严格"
+- path: streaming/data/tick_writer.py
+  reason: "TickWriter append + dedup，高频写路径"
+- path: streaming/data/massive_tick_writer.py
+  reason: "历史 tick 的镜像写入，按 massive_parquet 路径 1:1 对齐"
+- path: streaming/data/direct_tick_writer.py
+  reason: "最精简的写入器，给 backfill 用"
+- path: streaming/data/historical_data.py
+  reason: "回填时读原始 parquet，需要精细化按 symbol/日期读"
+- path: streaming/factors/factor_stream_manager.py
+  reason: "append-only 因子流落盘；读侧下游走 data_access.factor_values_stream"
+- path: streaming/core/backfill.py
+  reason: "回填过程中的直接读"
+
+
+# ============================================================================
+# C. raw 层清洗：per-file 遍历是设计，data_access 是 glob 聚合，不匹配
+# ============================================================================
+- path: raw_data_layer/raw_data_cleaning/massive_cleaning_framework.py
+  reason: "清洗框架逐文件 read→clean→write，data_access 的 glob 语义不适用"
+- path: raw_data_layer/raw_data_fetching/validate_parquet.py
+  reason: "校验单文件 schema/行数，必须能指定具体文件"
+- path: raw_data_layer/raw_data_fetching/download_all_history.py
+  reason: "下载工具的本地校验步骤"
+- path: raw_data_layer/raw_data_fetching/download_history.py
+  reason: "下载工具的本地校验步骤"
+- path: raw_data_layer/data_daily_update/**
+  reason: "日更 pipeline 直读直写 parquet，上游数据入口层"
+
+
+# ============================================================================
+# C2. factor_evaluation_alphapurify：历史评估模块，内部 DuckDB/Parquet IO
+# ============================================================================
+- path: factor_layer/factor_evaluation_alphapurify/**
+  reason: "AlphaPurify 评估栈本体，含 DuckDB 缓存与 parquet 物化"
+
+
+# ============================================================================
+# D. factor_engine 内部存储层：materializer / ParquetSource 是 data_access 的底层
+#    PR7+ 会把 factor_engine 整体改造成 store 的 thin wrapper，这批随之下线
+# ============================================================================
+- path: factor_layer/factor_engine/storage/materializer.py
+  reason: "因子物化的底层，PR3 起 upsert 已抽到 data_access.upsert，下一步移除"
+- path: factor_layer/factor_engine/storage/kline_parquet_source.py
+  reason: "PR1 之前的读取层，切到 store.read_arrow 后移除"
+- path: factor_layer/factor_engine/tests/**
+  reason: "测试 fixture 需要构造 parquet"
+# quant_projects 扁平布局（factor_engine 在仓库根下，非 factor_layer/ 内）
+- path: factor_engine/storage/materializer.py
+  reason: "因子物化底层；quant_projects 布局"
+- path: factor_engine/storage/kline_parquet_source.py
+  reason: "Parquet 读取层；quant_projects 布局"
+- path: factor_engine/storage/parquet_source.py
+  reason: "DuckDB 批量读 parquet；DataAccessSource 的底层实现之一"
+- path: factor_engine/storage/result_store.py
+  reason: "读因子 lake 落盘结果；物化输出非 registry dataset"
+- path: factor_engine/tests/**
+  reason: "测试 fixture 需要构造 parquet"
+- path: scripts/verify_gtja191_factor_lake.py
+  reason: "GTJA191 factor lake 结构审计 + 重算对比；按 factors/<id>/year=*/data.parquet 逐分区读，非 registry dataset"
+
+
+# ============================================================================
+# E. 业务方自定义路径 / 中间产物：用户传任意路径，不适合按 dataset 登记
+# ----------------------------------------------------------------------------
+# 这批文件的共同特点：调用方传 config.path / config.data_root（而不是 dataset 名），
+# 或读的是自身 pipeline 上一步产出的中间文件（signal、holdings、backtest 输出、
+# barra_model 中间产物）。这些东西**不是数据湖数据**，不应强行登记；
+# 保留任意文件路径 + pd.read_parquet 是正确的语义。
+# ============================================================================
+- path: strategy_layer/portfolio_alpha/transformer_demo/io_utils.py
+  reason: "KlineInputConfig.path 由用户传任意 K 线目录/文件，不是固定 dataset"
+- path: strategy_layer/portfolio_alpha/holdings_gen/pipeline.py
+  reason: "读上游 composite pipeline 产的 signal 中间产物"
+- path: strategy_layer/portfolio_alpha/holdings_gen/optimizer.py
+  reason: "读 barra_model 落盘的中间产物（factor_covariance/specific_risk/...）"
+- path: strategy_layer/portfolio_alpha/risk/barra_model/barra_data.py
+  reason: "CLI 驱动，读 factor/market/cap 任意 parquet 路径做 cleaning"
+- path: strategy_layer/portfolio_alpha/risk/barra_model/barra_risk.py
+  reason: "读上一步 barra_data 清洗后的中间产物做协方差/特异风险拟合"
+- path: strategy_layer/portfolio_alpha/risk/barra_model/benchmark_total_risk.py
+  reason: "benchmark 脚本，读 barra 中间产物（含硬编码 Windows 路径）"
+- path: strategy_layer/portfolio_alpha/risk/barra_model/Mock_generator/alpha_generate.py
+  reason: "mock 脚本，读 cleaned_factors 中间产物造 alpha_vector"
+- path: strategy_layer/portfolio_alpha/risk/barra_model/Mock_generator/factor_generate.py
+  reason: "mock 脚本，读 daily_market_summary 造 mock 因子"
+- path: strategy_layer/portfolio_alpha/risk/barra_model/Mock_generator/optimization.py
+  reason: "mock 脚本，读 barra 中间产物跑 cvxpy"
+- path: strategy_layer/portfolio_alpha/risk/barra_model/test/test_project_inputs.py
+  reason: "测试 fixture 需要 tmp_path 构造 parquet"
+- path: factor_layer/factor_evaluation/io.py
+  reason: "factor_lake 读已走 strategy_layer.data.load_factor_long（PR5 迁完）；market/universe 读用户任意路径（SourceConfig.market_data_path / universe_path）保留直读"
+- path: strategy_layer/portfolio_alpha/multiple_factor_composite/factor_reader.py
+  reason: "factor_lake 读已走 load_factor_long/build_factor_panel（PR5 迁完）；AuxiliaryParquetLoader 读用户任意路径（AuxiliarySourceConfig.path）保留直读"
+- path: strategy_layer/data/market_data.py
+  reason: "aggregate_bars 模式已走 get_shared_engine（PR5）；_read_table 支持用户任意 OHLCV 路径（source_path/data_root 模式，CSV 或 parquet），本地缓存也直写 parquet——保留直读/直写"
+- path: strategy_layer/portfolio_alpha/transformer_demo/dataset.py
+  reason: "Transformer demo 自造数据集中间产物（用户任意 dataset_path），非数据湖"
+- path: strategy_layer/portfolio_alpha/transformer_demo/workflow.py
+  reason: "Transformer demo 写 summary / leaderboard / 中间 parquet 到用户自选目录"
+- path: strategy_layer/single_asset_alpha/pipeline.py
+  reason: "单标的 alpha pipeline 中间产物落盘（用户自选路径，不是数据湖 dataset）"
+- path: strategy_layer/single_asset_alpha/mock_delivery.py
+  reason: "Mock 交付脚本，自造 parquet 用于下游 demo"
+- path: strategy_layer/single_asset_alpha/examples/**
+  reason: "single_asset_alpha 示例脚本：构造 factor_lake mock 目录给 demo 用"
+
+
+# ============================================================================
+# J. pipeline 中间产物输出：用户自选 output_dir，不是数据湖登记对象
+# ----------------------------------------------------------------------------
+# 这批和 E 性质类似，但主要是「写中间结果给下游读」。它们写出去的 parquet 不进
+# factor_lake，而是 pipeline 自己的 output 目录——用户自选路径，不登记为 dataset。
+# ============================================================================
+- path: factor_layer/factor_evaluation/pipeline.py
+  reason: "factor_evaluation pipeline 把 IC / 分位 / 回测 结果写到 output_dir（用户任意）"
+- path: strategy_layer/portfolio_alpha/multiple_factor_composite/pipeline.py
+  reason: "composite pipeline 写 signal 中间产物到用户自选目录"
+
+
+# ============================================================================
+# K. 测试夹具：所有 tests/ 下的文件构造 parquet fixture
+# ----------------------------------------------------------------------------
+# 业务代码层面的测试需要写 parquet 到 tmp_path 做 fixture。测试里直接用
+# `frame.to_parquet(...)` 是预期行为，不走 data_access。
+# 用 glob 一次覆盖，避免为每个测试文件单独登记。
+# ============================================================================
+- path: "**/tests/**"
+  reason: "所有测试目录：tmp_path fixture 构造 parquet，不走 data_access"
+- path: "**/test/**"
+  reason: "某些模块的测试目录叫 test（单数），同上"
+
+
+# ============================================================================
+# F. 期货/非主流数据源：datasets.yaml 未登记，业务方法未收敛
+# ============================================================================
+- path: factor_layer/factor_indicators_lysj/factor_evaluation_framework.py
+  reason: "本地实验：读同目录 NQ 期货分钟线 + factor_output，不属于数据湖登记对象"
+- path: factor_layer/factor_indicators_lysj/factor_vwap_reversion.py
+  reason: "本地实验：读 NQ 期货分钟线，未登记为标准 dataset"
+
+
+# ============================================================================
+# G. demo 脚本：自己造 mock 数据再读回来校验
+# ----------------------------------------------------------------------------
+# demo 的本质是 "造数据 → 跑 pipeline → 读回来看结果"。造的数据不进数据湖，
+# 读端也就只能拼路径读回来。这类脚本保持直读是合理的。
+# ============================================================================
+- path: demo/all_pipeline_demo/run_all_pipeline_demo.py
+  reason: "demo 自造 mock K 线 + 读 pipeline 中间产物"
+- path: demo/all_pipeline_single_asset_demo/run_single_asset_pipeline_demo.py
+  reason: "demo 自造 mock K 线 + 读 pipeline 中间产物"
+- path: demo/portfolio_demo/portfolio_end_to_end_demo.py
+  reason: "portfolio demo 自造 mock factor_lake + mock K 线"
+
+
+# ============================================================================
+# H. 尚未评估 / 待 PR7+ 迁移（短期保留直读，长期目标是迁 store）
+# ----------------------------------------------------------------------------
+# 这批属于「应该迁但迁移成本大于 PR5 预算」。PR7+ 规划里再集中处理。
+# ============================================================================
+- path: strategy_layer/single_asset_alpha/data_loader/fetcher.py
+  reason: "K线 + 因子读取混合；含 row-group pushdown 过滤，待 store 端支持按 symbol 精筛后再迁"
+- path: strategy_layer/portfolio_alpha/risk/barra_model/barra_model_run.py
+  reason: "编排器，自身无 IO；但依赖 project_inputs / barra_data 先迁完"
+- path: strategy_layer/portfolio_alpha/risk/barra_model/project_inputs.py
+  reason: "读 factor_lake + daily_market_summary + stocks_floats；PR5 登记了后两个 dataset，具体迁移留到 PR7"
+- path: backtest_layer/single_asset_backtest/io.py
+  reason: "读 target_position（任意路径）+ OHLCV（走 strategy_layer.data），待 strategy_layer.data 内部迁完"
+- path: backtest_layer/portfolio_backtest/config_runner.py
+  reason: "读 config.inputs 里 4 个 table（holdings/kline/tradable/benchmark），kline 可迁，其余是任意路径"
+
+
+# ============================================================================
+# I. PR5 已完成迁移：这些文件已切到 data_access.get_shared_engine()
+# ----------------------------------------------------------------------------
+# 此节只是元信息，便于 code review 追溯。静态检查（PR6）只识别 `- path: xxx`
+# 条目；下面的 pr5_migrated 是 list-of-strings，check 脚本会忽略。
+# 注：factor_evaluation/io.py 与 factor_reader.py 的 factor_lake 读已走 store，
+# 但两者还保留用户任意路径的 pd.read_parquet（market/universe/auxiliary），
+# 因此仍需在上面的 E 节登记豁免。这里记录的是「核心读路径已迁」这个事实。
+# ============================================================================
+# pr5_migrated:
+#   - factor_layer/factor_evaluation/io.py          # factor_lake → load_factor_long（走 shared engine）
+#   - strategy_layer/portfolio_alpha/multiple_factor_composite/factor_reader.py  # 同上
+#   - strategy_layer/data/factor_panel.py           # load_factor_long 本体 → get_shared_engine()
+#   - strategy_layer/data/market_data.py            # aggregate_bars_daily_summary → get_shared_engine()

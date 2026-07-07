@@ -1,0 +1,20 @@
+{
+  "timestamp": "2026-05-05T01:00:32",
+  "output_root": "D:\\基建组hyz\\alphapurify适配器\\quantsociety_backend\\factor_layer\\alphapurify\\examples\\sample_output\\sf1",
+  "year": 2025,
+  "selected_target_factors": [
+    "day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1"
+  ],
+  "selected_exposure_factors": [
+    "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1",
+    "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1",
+    "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1"
+  ],
+  "factors_total": 1,
+  "factors_success": 1,
+  "factors_partial_failed": 0,
+  "factors_failed": 0,
+  "json_files": [
+    "json\\day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1.json"
+  ]
+}

@@ -1,0 +1,21 @@
+factor:
+  name: short_volume_zscore_ratio
+  expr: zscore(col("short_volume_ratio"))
+  freq: 1d
+  universe: equities
+  description: 融券成交量 - 做空成交比例截面标准化，正值代表做空意愿高于均值
+
+data_source:
+  type: multi_parquet
+  root: ~/quant_projects/data/us_stock/cleaned_massive_data/fundamentals/short_volume
+  timestamp_col: date
+  instrument_col: ticker
+  max_files: 3
+  # start_date: "2024-01-01"   # 可选：限定时间范围左端（行级过滤）
+  # end_date:   "2024-12-31"   # 可选：限定时间范围右端（行级过滤）
+
+backend:
+  type: pandas
+
+engine:
+  enable_cache: true

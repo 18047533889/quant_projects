@@ -1,0 +1,624 @@
+{
+  "factor_name": "day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1",
+  "factor_dir": "D:\\基建组hyz\\alphapurify适配器\\quantsociety_backend\\0431-测试数据\\factors\\day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1",
+  "exposure_dirs": [
+    "D:\\基建组hyz\\alphapurify适配器\\quantsociety_backend\\0431-测试数据\\factors\\day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1",
+    "D:\\基建组hyz\\alphapurify适配器\\quantsociety_backend\\0431-测试数据\\factors\\day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1",
+    "D:\\基建组hyz\\alphapurify适配器\\quantsociety_backend\\0431-测试数据\\factors\\day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1"
+  ],
+  "timestamp": "2026-05-05T00:59:45",
+  "status": "success",
+  "database": {
+    "stocks_count": 1728,
+    "panel_df_summary": {
+      "shape": [
+        66365,
+        7
+      ],
+      "columns": [
+        "datetime",
+        "symbol",
+        "close",
+        "day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1",
+        "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1",
+        "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1",
+        "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1"
+      ],
+      "head": [
+        {
+          "datetime": "2025-10-10 04:00:00",
+          "symbol": "AAME",
+          "close": 2.88,
+          "day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1": 0.3555929958820343,
+          "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1": 0.9611111283302307,
+          "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1": 0.43051770329475403,
+          "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1": 0.5778546929359436
+        },
+        {
+          "datetime": "2025-10-13 04:00:00",
+          "symbol": "AAME",
+          "close": 2.83,
+          "day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1": 0.3545665442943573,
+          "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1": 0.9609872698783875,
+          "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1": 0.4287661910057068,
+          "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1": 0.5779975056648254
+        },
+        {
+          "datetime": "2025-10-14 04:00:00",
+          "symbol": "AAME",
+          "close": 2.93,
+          "day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1": 0.3571428656578064,
+          "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1": 0.9597792029380798,
+          "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1": 0.4310305714607239,
+          "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1": 0.5783756971359253
+        },
+        {
+          "datetime": "2025-10-15 04:00:00",
+          "symbol": "AAME",
+          "close": 2.96,
+          "day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1": 0.35627105832099915,
+          "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1": 0.9583333134651184,
+          "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1": 0.42967331409454346,
+          "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1": 0.5770086646080017
+        },
+        {
+          "datetime": "2025-10-16 04:00:00",
+          "symbol": "AAME",
+          "close": 3.08,
+          "day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1": 0.35648149251937866,
+          "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1": 0.9620742797851562,
+          "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1": 0.43015873432159424,
+          "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1": 0.577464759349823
+        }
+      ]
+    },
+    "db_get_summary": {
+      "shape": [
+        66369,
+        7
+      ],
+      "columns": [
+        "datetime",
+        "symbol",
+        "close",
+        "day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1",
+        "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1",
+        "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1",
+        "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1"
+      ],
+      "head": [
+        {
+          "datetime": "2025-05-15 04:00:00",
+          "symbol": "BHLB",
+          "close": 26.78,
+          "day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1": 0.8268297910690308,
+          "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1": 0.6301369667053223,
+          "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1": 0.7073004245758057,
+          "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1": 0.7049712538719177
+        },
+        {
+          "datetime": "2025-05-15 04:00:00",
+          "symbol": "CUB",
+          "close": 10.38,
+          "day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1": 0.6011390089988708,
+          "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1": 0.7945205569267273,
+          "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1": 0.48874232172966003,
+          "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1": 0.4866350293159485
+        },
+        {
+          "datetime": "2025-05-15 04:00:00",
+          "symbol": "EYEN",
+          "close": 1.13,
+          "day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1": 0.09934613108634949,
+          "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1": 0.6575342416763306,
+          "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1": 0.14919263124465942,
+          "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1": 0.001748688519001007
+        },
+        {
+          "datetime": "2025-05-15 04:00:00",
+          "symbol": "HONE",
+          "close": 11.74,
+          "day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1": 0.7306475639343262,
+          "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1": 0.698630154132843,
+          "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1": 0.4755515158176422,
+          "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1": 0.6050462126731873
+        },
+        {
+          "datetime": "2025-05-15 04:00:00",
+          "symbol": "JOE",
+          "close": 46.3,
+          "day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1": 0.534275472164154,
+          "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1": 0.8082191944122314,
+          "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1": 0.6752331256866455,
+          "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1": 0.8336247801780701
+        }
+      ]
+    }
+  },
+  "exposures": {
+    "portfolio": {
+      "result_df": {
+        "shape": [
+          158,
+          17
+        ],
+        "columns": [
+          "datetime",
+          "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_expo",
+          "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_expo",
+          "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_expo",
+          "intercept",
+          "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1",
+          "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1",
+          "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1",
+          "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_attr",
+          "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_attr",
+          "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_attr",
+          "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_cum_ret",
+          "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_cum_ret",
+          "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_cum_ret",
+          "intercept_cum_ret",
+          "portfolio_ret",
+          "portfolio_cum_ret"
+        ],
+        "head": [
+          {
+            "datetime": "2025-05-16 04:00:00",
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_expo": 0.26561751313721205,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_expo": 0.2724436950582528,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_expo": 0.3674986544015641,
+            "intercept": -0.004863988363352407,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1": -0.005448846804333211,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1": 4.498073973559311e-05,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1": 0.0051473822752809775,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_attr": -0.0014473091376326326,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_attr": 1.2254718940018563e-05,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_attr": 0.0018916560598562207,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_cum_ret": -0.0014473091376325797,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_cum_ret": 1.225471894006347e-05,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_cum_ret": 0.001891656059856306,
+            "intercept_cum_ret": -0.004863988363352445,
+            "portfolio_ret": -0.0044073867221888,
+            "portfolio_cum_ret": -0.004407386722188766
+          },
+          {
+            "datetime": "2025-05-19 04:00:00",
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_expo": 0.038668525221732086,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_expo": 0.7136302657722432,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_expo": 0.6386684663494303,
+            "intercept": 0.005634774518264919,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1": 0.008389426627304403,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1": -0.010061464659910833,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1": 0.009501481496498966,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_attr": 0.00032440675513379107,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_attr": -0.0071801656993102005,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_attr": 0.006068296615416485,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_cum_ret": -0.0011233718993598485,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_cum_ret": -0.00716799897128273,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_cum_ret": 0.007971431805338325,
+            "intercept_cum_ret": 0.0007433786772255147,
+            "portfolio_ret": 0.0048473121895049945,
+            "portfolio_cum_ret": 0.000418561487933955
+          },
+          {
+            "datetime": "2025-05-20 04:00:00",
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_expo": 0.038668525221732086,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_expo": 0.7131697151616032,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_expo": 0.6385316576691668,
+            "intercept": -0.022979385874356512,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1": 0.021413675824401537,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1": 0.0304886716235549,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1": 0.019814966152127397,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_attr": 0.0008280352637058655,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_attr": 0.021743597257426302,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_attr": 0.012652483183776337,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_cum_ret": -0.00029626682720096387,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_cum_ret": 0.014419740203370335,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_cum_ret": 0.020724773395982332,
+            "intercept_cum_ret": -0.022253089582605745,
+            "portfolio_ret": 0.012244729830551995,
+            "portfolio_cum_ret": 0.012668416490823065
+          },
+          {
+            "datetime": "2025-05-21 04:00:00",
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_expo": -0.232335044392629,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_expo": 0.8344129082404649,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_expo": 0.9129254127035337,
+            "intercept": 0.033183426478105627,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1": -0.014182366441383293,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1": -0.014316189212234692,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1": -0.006763480439241423,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_attr": 0.003295060736751319,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_attr": -0.011945613075501519,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_attr": -0.006174553171306754,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_cum_ret": 0.002997817692360405,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_cum_ret": 0.0023018744907501443,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_cum_ret": 0.014422254009378799,
+            "intercept_cum_ret": 0.010191903133424773,
+            "portfolio_ret": 0.018358320968048673,
+            "portfolio_cum_ret": 0.03125930831496726
+          },
+          {
+            "datetime": "2025-05-22 04:00:00",
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_expo": -0.5678119200308794,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_expo": 1.2992848039196137,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_expo": 0.9146157667247777,
+            "intercept": -0.026681154571539294,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1": -0.02469804805223815,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1": 0.002377518303241507,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1": 0.034667551646872005,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_attr": 0.014023846085556266,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_attr": 0.003089073402442434,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_attr": 0.03170748932997467,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_cum_ret": 0.01706370471182672,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_cum_ret": 0.005398058552457785,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_cum_ret": 0.04658703680447007,
+            "intercept_cum_ret": -0.01676118318099562,
+            "portfolio_ret": 0.02213925424643408,
+            "portfolio_cum_ret": 0.05409062033575407
+          }
+        ]
+      },
+      "success": true
+    },
+    "pure": {
+      "result_df": {
+        "shape": [
+          159,
+          17
+        ],
+        "columns": [
+          "datetime",
+          "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_expo",
+          "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_expo",
+          "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_expo",
+          "intercept",
+          "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1",
+          "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1",
+          "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1",
+          "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_attr",
+          "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_attr",
+          "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_attr",
+          "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_cum_ret",
+          "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_cum_ret",
+          "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_cum_ret",
+          "Alpha",
+          "portfolio_ret",
+          "day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1_cum_ret"
+        ],
+        "head": [
+          {
+            "datetime": "2025-05-15 04:00:00",
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_expo": 0.035614361411974695,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_expo": 0.793992124056647,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_expo": 0.7825856655914265,
+            "intercept": 0.0,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1": 0.0,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1": 0.0,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1": 0.0,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_attr": 0.0,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_attr": 0.0,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_attr": 0.0,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_cum_ret": 0.0,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_cum_ret": 0.0,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_cum_ret": 0.0,
+            "Alpha": 0.0,
+            "portfolio_ret": 0.0,
+            "day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1_cum_ret": 0.0
+          },
+          {
+            "datetime": "2025-05-16 04:00:00",
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_expo": -0.07334426966501058,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_expo": 0.8917809339980016,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_expo": 0.853093966467087,
+            "intercept": 0.0,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1": 0.0,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1": 0.0,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1": 0.0,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_attr": -0.0,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_attr": 0.0,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_attr": 0.0,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_cum_ret": 0.0,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_cum_ret": 0.0,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_cum_ret": 0.0,
+            "Alpha": 0.0,
+            "portfolio_ret": 0.0,
+            "day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1_cum_ret": 0.0
+          },
+          {
+            "datetime": "2025-05-19 04:00:00",
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_expo": -0.06453757278693965,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_expo": 0.9064328742260663,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_expo": 0.8682227451894022,
+            "intercept": 0.005634774518264919,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1": 0.008389426627304407,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1": -0.010061464659910828,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1": 0.00950148149649896,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_attr": -0.0005414332316003478,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_attr": -0.009120042330606964,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_attr": 0.008249402348256638,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_cum_ret": -0.0005414332316003856,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_cum_ret": -0.009120042330606926,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_cum_ret": 0.008249402348256663,
+            "Alpha": 0.0056347745182649955,
+            "portfolio_ret": 0.004222701304314246,
+            "day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1_cum_ret": 0.004222701304314347
+          },
+          {
+            "datetime": "2025-05-20 04:00:00",
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_expo": -0.06328445567568948,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_expo": 0.9068844903480034,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_expo": 0.8691860703580483,
+            "intercept": -0.02297938587435651,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1": 0.021413675824401544,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1": 0.030488671623554835,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1": 0.019814966152127435,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_attr": -0.0013551528185629228,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_attr": 0.02764970342671516,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_attr": 0.017222892564045383,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_cum_ret": -0.0018958523253934656,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_cum_ret": 0.018277494630427826,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_cum_ret": 0.02561437348266371,
+            "Alpha": -0.01747409501406172,
+            "portfolio_ret": 0.02053805729784111,
+            "day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1_cum_ret": 0.02484748468349518
+          },
+          {
+            "datetime": "2025-05-21 04:00:00",
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_expo": -0.1450822464915636,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_expo": 0.9579538702796351,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_expo": 0.818489728856956,
+            "intercept": 0.0,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1": 0.0,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1": 0.0,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1": 0.0,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_attr": -0.0,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_attr": 0.0,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_attr": 0.0,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1_cum_ret": -0.0018958523253934656,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1_cum_ret": 0.018277494630427826,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1_cum_ret": 0.02561437348266371,
+            "Alpha": -0.01747409501406172,
+            "portfolio_ret": 0.0,
+            "day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1_cum_ret": 0.02484748468349518
+          }
+        ]
+      },
+      "corr_df": {
+        "shape": [
+          159,
+          4
+        ],
+        "columns": [
+          "datetime",
+          "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1",
+          "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1",
+          "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1"
+        ],
+        "head": [
+          {
+            "datetime": "2025-05-15 04:00:00",
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1": 0.03181905693364402,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1": 0.7093790144929809,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1": 0.6991881045081664
+          },
+          {
+            "datetime": "2025-05-16 04:00:00",
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1": -0.06472907587771788,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1": 0.7870302070864643,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1": 0.7528875035293245
+          },
+          {
+            "datetime": "2025-05-19 04:00:00",
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1": -0.05687859700749638,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1": 0.7988622432029937,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1": 0.7651866889912513
+          },
+          {
+            "datetime": "2025-05-20 04:00:00",
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1": -0.055808145297714086,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1": 0.7997468077303387,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1": 0.7665020104443302
+          },
+          {
+            "datetime": "2025-05-21 04:00:00",
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1": -0.12650851347147948,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1": 0.8353146097057039,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1": 0.7137049597270259
+          }
+        ]
+      },
+      "corr_matrix": {
+        "shape": [
+          4,
+          5
+        ],
+        "columns": [
+          "index",
+          "day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1",
+          "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1",
+          "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1",
+          "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1"
+        ],
+        "head": [
+          {
+            "index": "day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1",
+            "day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1": 1.0,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1": -0.4636989551435117,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1": 0.7391421457674511,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1": 0.5803647713559541
+          },
+          {
+            "index": "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1",
+            "day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1": -0.4636989551435117,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1": 1.0,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1": -0.40176198999732826,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1": -0.2609459873565756
+          },
+          {
+            "index": "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1",
+            "day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1": 0.7391421457674511,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1": -0.40176198999732826,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1": 1.0,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1": 0.6146538141598988
+          },
+          {
+            "index": "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1",
+            "day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1": 0.5803647713559541,
+            "day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1": -0.2609459873565756,
+            "day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1": 0.6146538141598988,
+            "day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1": 1.0
+          }
+        ]
+      },
+      "success": true
+    }
+  },
+  "factor_analyzer": {
+    "ls_stats_panel": {
+      "shape": [
+        1,
+        11
+      ],
+      "columns": [
+        "period",
+        "Ann. Return",
+        "Ann. Std",
+        "Ann. Sharpe",
+        "Ann. Sortino",
+        "Ann. Calmar",
+        "Mean Turnover",
+        "Max Drawdown",
+        "WinRate",
+        "P/L",
+        "PnL"
+      ],
+      "head": [
+        {
+          "period": 1,
+          "Ann. Return": -0.9999999995773339,
+          "Ann. Std": 2.691864216582374,
+          "Ann. Sharpe": -0.37148976290005703,
+          "Ann. Sortino": -0.28537301571359996,
+          "Ann. Calmar": -1.0104709612704559,
+          "Mean Turnover": 0.04392930753805587,
+          "Max Drawdown": -0.9896375431907939,
+          "WinRate": 0.4810126582278481,
+          "P/L": 0.3728883743157618,
+          "PnL": -0.9873870087759653
+        }
+      ]
+    },
+    "l_stats_panel": {
+      "shape": [
+        1,
+        11
+      ],
+      "columns": [
+        "period",
+        "Ann. Return",
+        "Ann. Std",
+        "Ann. Sharpe",
+        "Ann. Sortino",
+        "Ann. Calmar",
+        "Mean Turnover",
+        "Max Drawdown",
+        "WinRate",
+        "P/L",
+        "PnL"
+      ],
+      "head": [
+        {
+          "period": 1,
+          "Ann. Return": 0.6937685208623097,
+          "Ann. Std": 0.2597024038314005,
+          "Ann. Sharpe": 2.671398148908572,
+          "Ann. Sortino": 4.380524426228497,
+          "Ann. Calmar": 9.891042094101524,
+          "Mean Turnover": 0.03933080822486882,
+          "Max Drawdown": -0.07014109476654995,
+          "WinRate": 0.5189873417721519,
+          "P/L": -0.11155315527645089,
+          "PnL": 0.11266916116844095
+        }
+      ]
+    },
+    "s_stats_panel": {
+      "shape": [
+        1,
+        11
+      ],
+      "columns": [
+        "period",
+        "Ann. Return",
+        "Ann. Std",
+        "Ann. Sharpe",
+        "Ann. Sortino",
+        "Ann. Calmar",
+        "Ann. Turnover",
+        "Max Drawdown",
+        "WinRate",
+        "P/L",
+        "PnL"
+      ],
+      "head": [
+        {
+          "period": 1,
+          "Ann. Return": -0.9999999997732573,
+          "Ann. Std": 2.702710100965945,
+          "Ann. Sharpe": -0.36999898709664,
+          "Ann. Sortino": 0.2923768990980914,
+          "Ann. Calmar": -1.0093688838152923,
+          "Ann. Turnover": 0.048272523634911725,
+          "Max Drawdown": -0.9907180772141282,
+          "WinRate": 0.44936708860759494,
+          "P/L": -0.39978289755692253,
+          "PnL": -0.9888821243624439
+        }
+      ]
+    },
+    "ic_stats_panel": {
+      "shape": [
+        1,
+        8
+      ],
+      "columns": [
+        "period",
+        "Mean Rank IC",
+        "Std",
+        "Skewness",
+        "Kurtosis",
+        "t-stat",
+        "p-Value",
+        "IR"
+      ],
+      "head": [
+        {
+          "period": 1,
+          "Mean Rank IC": 0.040429587694040196,
+          "Std": 0.15707638457245293,
+          "Skewness": -0.08895800475880347,
+          "Kurtosis": 0.007275544359727437,
+          "t-stat": 3.2353178904992617,
+          "p-Value": 0.0014818257229003904,
+          "IR": 0.25738807144107445
+        }
+      ]
+    },
+    "success": true
+  },
+  "images": [
+    "images\\day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1\\portfolio_exposures\\portfolio_exposures.png",
+    "images\\day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1\\portfolio_exposures\\portfolio_returns.png",
+    "images\\day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1\\portfolio_exposures\\portfolio_exposures_and_returns.png",
+    "images\\day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1\\pure_exposures\\pure_exposures.png",
+    "images\\day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1\\pure_exposures\\pure_returns.png",
+    "images\\day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1\\pure_exposures\\pure_exposures_and_returns.png",
+    "images\\day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1\\pure_exposures\\pure_correlations.png",
+    "images\\day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1\\factor_analyzer\\fa_ic_sheet.png",
+    "images\\day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1\\factor_analyzer\\fa_long_short_sheet.png",
+    "images\\day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1\\factor_analyzer\\fa_long_sheet.png",
+    "images\\day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1\\factor_analyzer\\fa_short_sheet.png"
+  ],
+  "errors": []
+}

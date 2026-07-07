@@ -1,0 +1,43 @@
+{
+  "audited_at": "2026-07-05",
+  "summary": "28/28 parse_expr 通过；7 条公式已按汇报修正；3 条为 DSL 能力近似",
+  "checks": [
+    {"id": "w2_001", "status": "ok", "note": "ΔC/C + ts_rank(V,6) + clip(±2.5) 与汇报一致"},
+    {"id": "w2_002", "status": "ok", "note": "ts_pct→close/delay(close,5)-1；rank_pct→ts_rank"},
+    {"id": "w2_003", "status": "fixed", "note": "汇报为 ΔC 非 ΔC/C，已改为 ts_delta(close,1)"},
+    {"id": "w2_004", "status": "ok", "note": "(H-L)*V/MA(V,20) 对应应激×放量"},
+    {"id": "w2_005", "status": "ok", "note": "ΔC/C + 量比 + z(range,10)"},
+    {"id": "w2_006", "status": "fixed", "note": "汇报为 ΔC 非 ΔC/C，z 窗口 10"},
+    {"id": "w2_007", "status": "ok", "note": "日内方向用 close/open-1（与汇报 glossary 一致）；Q→median；max(V,n)→ts_max"},
+    {"id": "w2_008", "status": "ok", "note": "(H-L)/(2C-H-L)*MA(C,5)/MA(H-L,5) + tanh"},
+    {"id": "w2_009", "status": "ok", "note": "close/open-1 × V/MA(V,20)"},
+    {"id": "w2_010", "status": "ok", "note": "反转核 × ts_mean(3)"},
+    {"id": "w2_011", "status": "ok", "note": "σ40/μ40→ts_std/ts_mean(40)；方向 clip ±2.5"},
+    {"id": "w2_012", "status": "ok", "note": "量比基线 25 日；clip ±2"},
+    {"id": "w2_013", "status": "ok", "note": "EMA3→ema(span=3)；三因子乘积"},
+    {"id": "w2_014", "status": "ok", "note": "sigmoid 量能混合；w=σ(5*(V-0.85*MA(V,25)))"},
+    {"id": "w2_015", "status": "ok", "note": "逆波动门控：1.5-0.5*ts_rank(ts_std(ΔC,20),20)"},
+    {"id": "w2_016", "status": "ok", "note": "ΔC/C × V/MA(V,20)；EMA(5)"},
+    {"id": "w2_017", "status": "fixed", "note": "波动缩放项改为 median(range)/range（汇报 Q/range）"},
+    {"id": "w2_018", "status": "ok", "note": "动量×ts_max(V,20)/V×(median/range-1)"},
+    {"id": "w2_019", "status": "ok", "note": "应激累积 clip ±3"},
+    {"id": "w2_020", "status": "fixed", "note": "代数化简为 close/(close-open)*median(V,10)/V"},
+    {"id": "w2_021", "status": "ok", "note": "简化羊群，无 stress range"},
+    {"id": "w2_022", "status": "approx", "note": "条件 median 用 masked ts_sum 均值近似"},
+    {"id": "w2_023", "status": "ok", "note": "订单失衡 (H-L)/(C-mid) × 量比"},
+    {"id": "w2_024", "status": "ok", "note": "ts_pct/ts_std 夏普型动量"},
+    {"id": "w2_025", "status": "ok", "note": "动量×量比×sign(C-mid)"},
+    {"id": "w2_026", "status": "ok", "note": "区间位置×量比 EMA(5)"},
+    {"id": "w2_027", "status": "approx", "note": "条件 median→masked mean，窗口 15"},
+    {"id": "w2_028", "status": "approx", "note": "条件 median→masked mean；量比 ema(V,5)"}
+  ],
+  "operator_substitutions": {
+    "rank_pct(V,n)": "ts_rank(volume, n)  # rolling pct rank",
+    "ts_pct(C,n)": "close / delay(close, n) - 1  # ts_pct 未在 parser 暴露",
+    "Q(x,n,50)": "median(x, n)",
+    "MA(x,n)": "ts_mean(x, n)",
+    "z(x,n)": "(x - ts_mean(x,n)) / ts_std(x,n)",
+    "max(V,n)": "ts_max(volume, n)",
+    "σ40/μ40": "ts_std(range,40) / ts_mean(range,40)"
+  }
+}

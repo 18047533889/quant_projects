@@ -1,0 +1,42 @@
+# A 股生产模板：data_access + 持久化 plan 子树缓存
+#
+# PYTHONPATH=. python run_pipeline.py config examples/config_ashare_pv_production_template.yaml --run-only
+#
+# plan_cache_dir 建议放在因子湖同级目录，按 operator_catalog_hash 自动分桶。
+
+factor:
+  name: ashare_pv_mom5_rank
+  expr: rank(ts_mean(close, 5))
+  freq: 1d
+  universe: ASHARE_ALL
+  description: A 股 5 日均线截面排名（生产模板）
+
+data_source:
+  type: data_access
+  dataset: ashare_stock_daily
+  start_date: "2016-01-04"
+  end_date: "2016-12-31"
+  fields:
+    open: Open
+    high: High
+    low: Low
+    close: Close
+    volume: Volume
+    vwap: Vwap
+    amount: Amount
+    ret: Return
+    preclose: PreClose
+
+backend:
+  type: pandas
+
+engine:
+  enable_cache: true
+  plan_cache_dir: ../data/factors/plan_cache
+
+materialization:
+  lake_root: ../data/factors/lake
+  factor_id: ashare_pv_mom5_rank_v1
+  author: factor_engine
+  frequency: 1d
+  expression: 'rank(ts_mean(close, 5))'

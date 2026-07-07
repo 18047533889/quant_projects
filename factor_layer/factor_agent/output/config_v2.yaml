@@ -1,0 +1,40 @@
+# 量化因子配置 - "量价淘金"选股因子系列研究（八）
+# 条件成交不平衡因子
+
+factor:
+  name: reversal_residual_non_isolated_order_imbalance
+  expr: >-
+    col(buy_volume_minus_sell) / col(buy_volume_plus_sell)
+  freq: 1d
+  description: >
+    反转残差非孤立成交不平衡因子。核心逻辑：
+    1. 统计每日逐笔成交中主动买入和主动卖出的成交单数
+    2. 计算（主买成交单数-主卖成交单数）/（主买成交单数+主卖成交单数）
+    3. 筛选非孤立成交单（成交时间点δ邻域内存在其他成交单的成交单）
+    4. 月底回看过去20个交易日计算均值
+    5. 对同期20日累计涨跌幅进行正交化处理得到反转残差
+    回测期2017/01/01-2024/08/31，在全体A股中：
+    - 月度IC均值：0.048
+    - 年化ICIR：2.71
+    - 月度RankIC均值：0.053
+    - 年化RankICIR：2.48
+    - 10分组多空对冲年化收益：21.54%
+    - 信息比率：2.71
+    - 月度胜率：81.11%
+    - 最大回撤：6.88%
+    纯净因子（剔除Barra风格和中信一级行业影响）：
+    - 年化ICIR：3.26
+    - 信息比率：3.05
+
+data_source:
+  type: parquet_kline
+  root: /data/level2_tick
+  timestamp_col: timestamp
+  instrument_col: instrument_code
+  max_files: 500
+
+backend:
+  type: pandas
+
+engine:
+  enable_cache: true

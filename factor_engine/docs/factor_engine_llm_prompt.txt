@@ -1,0 +1,496 @@
+================================================================================
+FACTOR ENGINE - LLM PROMPT GUIDE
+================================================================================
+
+You are an AI assistant helping to write factor definitions and configurations 
+for a quantitative factor engine. Below is the complete specification of the system.
+
+NOTE (第 31 版 — READ FIRST): Runtime is cleaned_operators only; api/operators/ deleted. DSL allowlist = build_dsl_allowlist() (~512 names). Export: docs/dsl_allowlist.json. Human index: docs/dsl_operators_reference.md. Many v10–19 names (pasteurize, bucket, ts_donchian, ts_sma, orthogonalize, …) are NOT in allowlist until migrated — do NOT generate them. Use SMA/EMA not ts_sma/ts_ema. STUB_IR_OPS is empty; *_stub and vec_* cannot parse. Polars backend delegates to Pandas.
+
+NOTE (第 10–16 版, historical): Old architecture had bucket/trade_when/ts_step/hump in Pandas kernels; only trade_when and hump_decay remain in allowlist today.
+
+NOTE (第 20 版, OBSOLETE): Huatai / QuantaAlpha PascalCase names are INVALID. Use only build_dsl_allowlist() snake_case (ts_mean, rank, …). See docs/dsl_operators_reference.md.
+
+NOTE (第 22 版): Huatai cross-refs are in operator/expr docstrings; standalone htsc_factor_factory_reference.py removed. New: exp, INTRADAY_STUB_OPS.
+
+================================================================================
+1. SYSTEM OVERVIEW
+================================================================================
+
+Factor Engine is a quantitative computing framework that:
+- Parses factor expressions written in Python-like DSL
+- Reads data from multiple sources (parquet files, in-memory)
+- Compiles factor expressions into execution plans
+- Executes using Pandas backend
+- Returns factor values as MultiIndex Series: (timestamp, instrument) → factor_value
+
+Output Format: Long table with columns:
+- timestamp: Time point
+- instrument: Security/ticker symbol
+- factor_value: Computed factor value (float, may contain NaN)
+
+================================================================================
+2. SUPPORTED DATA SOURCES
+================================================================================
+
+--- Data Source Types ---
+
+Type: parquet_kline
+Usage: K-line data (daily/minute bars)
+Key Features: 
+  - Fields: close, volume, transactions, price, size, bid_price, ask_price
+  - Timestamp unit: nanoseconds (ns)
+
+Type: multi_parquet
+Usage: Generic multi-file parquet (financial statements, short interest, etc.)
+Key Features:
+  - Flexible instrument/timestamp columns
+  - Can be partitioned across multiple files
+  - Supports date range filtering
+
+Type: parquet
+Usage: Single/simple directory parquet
+Key Features: Generic fallback
+
+--- Core Requirements for All Data Sources ---
+
+Data Shape: MultiIndex Series with (timestamp, instrument) index
+  - timestamp: date or datetime (normalized to midnight UTC)
+  - instrument: ticker symbol (string)
+- Value Index: Column values at each (timestamp, instrument) point
+- Missing Data: NaN values allowed (dropna occurs in result phase)
+
+================================================================================
+3. AVAILABLE DATASETS
+================================================================================
+
+FUNDAMENTALS (7 datasets)
+Located in: /massive_parquet/fundamentals/
+
+- fundamentals/balance_sheet: Balance sheet data (assets, liabilities, equity)
+- fundamentals/cash_flow_statement: Cash flow statement data
+- fundamentals/financials_ratios: Financial ratios (P/E, ROE, etc.)
+- fundamentals/income_statement: Income statement data (revenue, income)
+- fundamentals/short_interest: Short interest statistics
+- fundamentals/short_volume: Short volume tracking
+- fundamentals/stocks_floats: Free float and shares outstanding
+
+
+US STOCKS SIP (4 datasets)
+Located in: /massive_parquet/us_stocks_sip/
+
+--- us_stocks_sip/day_aggs_v1 ---
+Type: multi_parquet
+Timestamp Column: window_start
+Instrument Column: ticker
+Timestamp Unit: ns (nanoseconds)
+Time Range: 2003-2025+ (daily bars)
+
+Available Fields (8 total):
+- open: Opening price
+- close: Close price
+- high: High price
+- low: Low price
+- volume: Trading volume
+- transactions: Transaction count
+- vwap: Volume-weighted average price
+- window_start: Window start time
+
+Example Factors:
+  - rank(ts_mean(col("close"), 3)): 3-day momentum rank
+  - col("high") - col("low"): Intraday range
+
+--- us_stocks_sip/minute_aggs_v1 ---
+Type: multi_parquet
+Timestamp Column: window_start
+Instrument Column: ticker
+Timestamp Unit: ns
+Time Range: 2003-2025+ (minute bars)
+
+Available Fields: Same as day_aggs_v1 (minute granularity)
+
+Example Factor:
+  - rank(ts_mean(col("close"), 5)): 5-minute moving average rank
+
+--- us_stocks_sip/quotes_v1 ---
+Type: multi_parquet
+Timestamp Column: sip_timestamp
+Instrument Column: ticker
+Timestamp Unit: ns
+
+Available Fields (14 total):
+- bid_price: Bid price
+- ask_price: Ask price
+- bid_size: Bid size
+- ask_size: Ask size
+- sip_timestamp: Quote timestamp
+- (9 additional fields)
+
+Example Factors:
+  - col("ask_price") - col("bid_price"): Bid-ask spread (liquidity)
+  - rank((col("bid_price") + col("ask_price"))/2): Mid-price momentum
+
+--- us_stocks_sip/trades_v1 ---
+Type: multi_parquet
+Timestamp Column: sip_timestamp
+Instrument Column: ticker
+Timestamp Unit: ns
+
+Available Fields (13 total):
+- price: Trade price
+- size: Trade size
+- exchange: Trading exchange
+- sip_timestamp: Timestamp
+- (9 additional fields)
+
+Example Factors:
+  - rank(col("price")): Trade price rank
+  - zscore(col("size")): Volume intensity
+
+
+OTHER DATASETS (13 datasets)
+Additional datasets available:
+
+- aggregate_bars/daily_market_summary
+- corporate_actions/dividends
+- corporate_actions/ipos
+- corporate_actions/splits
+- filing/risk_categories
+- filing/risk_factors
+- filing/sec_edgar_index
+- market_operations/condition_codes
+- market_operations/exchanges
+- market_operations/market_holidays
+- news/news
+- tickers/all_tickers
+- tickers/ticker_types
+
+================================================================================
+4. CONFIGURATION FILE FORMAT (YAML)
+================================================================================
+
+All factor definitions must follow this YAML structure:
+
+factor:
+  name: <factor_identifier>
+    Unique factor name (snake_case, e.g., "rank_earnings_per_share")
+  expr: <dsl_expression>
+    DSL expression (see section 5 for syntax)
+  freq: <frequency>
+    Time frequency (e.g., "1d", "1min", "1h")
+  universe: <universe_name>
+    Optional: "equities", "etf", etc.
+  description: <description>
+    Brief description in English or Chinese
+
+data_source:
+  type: <source_type>
+    "parquet_kline", "multi_parquet", or "parquet"
+  root: <root_path>
+    Path to data directory
+  timestamp_col: <timestamp_column>
+    Column name for timestamp (e.g., "period_end", "window_start", "sip_timestamp")
+  instrument_col: <instrument_column>
+    Column name for ticker/security (e.g., "ticker", "tickers")
+  max_files: <max_file_count>
+    Max number of files to load per column (e.g., 3)
+  timestamp_unit: "ns"
+    Optional: Timestamp unit "ns" for nanoseconds (default: infer from data)
+  # start_date: "YYYY-MM-DD"
+    Optional: Row-level filter (only load data >= this date)
+  # end_date: "YYYY-MM-DD"
+    Optional: Row-level filter (only load data <= this date)
+
+backend:
+  type: pandas
+    Currently only "pandas" supported
+
+engine:
+  enable_cache: true
+    Enable column-level caching
+
+
+--- Configuration Example 1: K-line Momentum Factor ---
+
+factor:
+  name: day_aggs_rank_ts_mean_close_3
+  expr: rank(ts_mean(col("close"), 3))
+  freq: 1d
+  description: Daily close price 3-period momentum rank
+
+data_source:
+  type: multi_parquet
+  root: /massive_parquet/us_stocks_sip/day_aggs_v1
+  timestamp_col: window_start
+  instrument_col: ticker
+  max_files: 3
+  timestamp_unit: "ns"
+
+backend:
+  type: pandas
+
+engine:
+  enable_cache: true
+
+
+--- Configuration Example 2: Bid-Ask Spread Factor ---
+
+factor:
+  name: quotes_bid_ask_spread
+  expr: col("ask_price") - col("bid_price")
+  freq: 1min
+  description: Bid-ask spread indicating liquidity
+
+data_source:
+  type: multi_parquet
+  root: /massive_parquet/us_stocks_sip/quotes_v1
+  timestamp_col: sip_timestamp
+  instrument_col: ticker
+  max_files: 3
+  timestamp_unit: "ns"
+
+backend:
+  type: pandas
+
+engine:
+  enable_cache: true
+
+
+--- Configuration Example 3: Trade Price Momentum ---
+
+factor:
+  name: trades_rank_price
+  expr: rank(col("price"))
+  freq: 1min
+  description: Trade price cross-sectional rank
+
+data_source:
+  type: multi_parquet
+  root: /massive_parquet/us_stocks_sip/trades_v1
+  timestamp_col: sip_timestamp
+  instrument_col: ticker
+  max_files: 3
+  timestamp_unit: "ns"
+
+backend:
+  type: pandas
+
+engine:
+  enable_cache: true
+
+================================================================================
+5. OPERATORS DICTIONARY
+================================================================================
+
+All available operators for building factor expressions. 
+Can be combined with Python arithmetic (+, -, *, /).
+
+--- Data Access ---
+
+col(name: str) -> Expr
+  Purpose: Reference a column from the data source
+  Examples:
+    col("close")
+    col("total_assets")
+
+
+--- Cross-sectional (Panel) Operators ---
+
+At each timestamp, compute statistic across all instruments.
+
+rank(x: Expr) -> Expr
+  Purpose: Cross-sectional percentile rank [0, 1] at each timestamp
+  Algorithm: At each timestep, rank(column) = percentile rank in [0, 1]
+  Examples:
+    rank(col("close")): Rank all closes at each date
+    rank(col("price")): Price rank (0=lowest, 1=highest)
+
+
+zscore(x: Expr) -> Expr
+  Purpose: Cross-sectional standardization (mean 0, std 1) at each timestamp
+  Algorithm: (x - mean) / std computed across instruments at each date
+  Examples:
+    zscore(col("volume")): Volume standardized within each period
+    zscore(col("bid_price") - col("ask_price")): Spread standardization
+
+
+--- Time-series (Temporal) Operators ---
+
+At each (timestamp, instrument), compute statistic across time.
+
+ts_mean(x: Expr, window: int, min_periods: int = None) -> Expr
+  Purpose: Rolling window mean along time dimension per instrument
+  Parameters:
+    - x: Input expression
+    - window: Window size (e.g., 3, 5, 20)
+    - min_periods: Minimum observations required (default: window)
+  Examples:
+    ts_mean(col("close"), 3): 3-period rolling average
+    ts_mean(col("volume"), 20): 20-day average volume
+
+
+ts_std(x: Expr, window: int, min_periods: int = None) -> Expr
+  Purpose: Rolling window standard deviation per instrument
+  Parameters: Same as ts_mean
+  Examples:
+    ts_std(col("close"), 20): 20-day rolling volatility
+    zscore(ts_std(col("volume"), 10)): Volatility cross-section
+
+
+delay(x: Expr, periods: int) -> Expr
+  Purpose: Time lag (shift periods backward in time)
+  Parameters:
+    - x: Input expression
+    - periods: Number of periods to lag (positive = backward in time)
+  Examples:
+    col("close") - delay(col("close"), 1): Price change (today vs yesterday)
+    col("price") / delay(col("price"), 5): 5-period price momentum
+
+
+--- Group, Cleaning, Technical, Context (implemented on Pandas) ---
+
+Within each (timestamp, group_label), or technical indicators per instrument:
+
+group_rank(x, g), group_neutralize(x, g), group_zscore(x, g), group_scale(x, g),
+  group_mean(x, weight, g), group_backfill(x, g, d, std=4.0)
+  Note: group_neutralize is the usual industry-demeaning pattern (cf. indneutralize).
+
+pasteurize(x, fill_value=None), tail(x, lower, upper),
+  protected_div(x, y, ...), protected_log(x), protected_sqrt(x)
+
+ts_sma(x, d), ts_ema(x, d), ts_rsi(x, d),
+  ts_bbands(x, d, nbdev=2, band="middle"|"upper"|"lower")
+  ts_macd, ts_ppo, ts_apo, ts_atr(h,l,c,d), ts_adx, ts_aroon, ts_ultosc, ts_donchian(h,l,d,band), ts_keltner,
+  ts_cci, ts_stoch, ts_willr, ts_roc, ts_obv, ts_ad, ts_adosc, ts_sar, ts_mfi(h,l,c,volume,d),
+  ts_dema, ts_wma, ts_kama, ts_tema, ts_trima, ts_t3, ts_cmo, ts_stochrsi, ts_mom, ts_rocr, ts_rocr100, ts_trix,
+  ts_linearreg_slope, ts_linearreg_angle, ts_bop, ts_stochf, ts_dx, ts_adxr, ts_skew, ts_kurt, ...
+  Optional TA-Lib for speed; pandas/numpy fallback for most (see operators_semantics.md).
+
+neutralize(x, y)   # OLS residual x - (alpha + beta*y) per timestamp
+orthogonalize(x, y)  # cross-section Gram-Schmidt per timestamp
+change_instrument(x, "benchmark_column")  # NOT in allowlist — do not use until migrated
+
+bucket(x, buckets="N" or range="0.2,0.4,...")
+trade_when(trigger, alpha, exit_)   # see adr_trade_when.md
+ts_step(d, anchor)   # NOT in allowlist — do not use
+hump(x, hump=0.01)
+
+--- Arithmetic Operators ---
+
+Supported: +, -, *, /
+
+Broadcast Behavior:
+- Series + Series: element-wise on matching index
+- Numeric constant: broadcasts automatically
+
+Examples:
+  col("high") - col("low"): Intraday range
+  col("net_income") / col("revenue"): Profit margin
+  (col("bid_price") + col("ask_price")) / 2: Mid-price
+  col("volume") / (ts_mean(col("volume"), 20) + 1e-9): Relative volume (safe div)
+
+================================================================================
+6. COMPLETE EXPRESSION EXAMPLES
+================================================================================
+
+Example 1: K-line Momentum
+  rank(ts_mean(col("close"), 3))
+  3-day close moving average rank
+
+Example 2: Bid-Ask Spread Standardized
+  zscore(col("ask_price") - col("bid_price"))
+  Liquidity spread across instruments
+
+Example 3: Price Lag Momentum
+  col("price") / delay(col("price"), 5)
+  5-period price momentum
+
+Example 4: Volume Intensity
+  zscore(col("volume") / ts_mean(col("volume"), 20))
+  Relative volume standardized across market
+
+Example 5: Mid-Price Movement
+  rank((col("bid_price") + col("ask_price")) / 2)
+  Mid-price rank signal
+
+Example 6: High-Low Range
+  col("high") - col("low")
+  Intraday volatility proxy
+
+Example 7: Composite Signal
+  rank(col("close")) + zscore(col("volume"))
+  Combined momentum + volume signal
+
+================================================================================
+7. KEY CONSTRAINTS & NOTES
+================================================================================
+
+Expression Type:
+  All expressions must evaluate to Expr objects. Literals are auto-converted.
+
+Index Assumptions:
+  - All data must be loadable as MultiIndex Series: (timestamp, instrument) → value
+  - Timestamp is normalized to midnight UTC
+  - Instrument is a string (ticker symbol)
+
+Missing Data:
+  - NaN values in intermediate results are preserved
+  - In cross-sectional ops (rank, zscore), NaN rows are skipped
+  - In time-series ops (ts_mean, ts_std), NaN handling follows Pandas defaults
+
+Time Window Requirements:
+  - Window-based operators implicitly set "lookback" requirement
+  - ts_mean(..., window=3): requires >= 3 periods of history
+  - First valid value appears at period window
+
+Performance:
+  - max_files parameter limits I/O (e.g., max_files=3 loads only first 3 files)
+  - enable_cache=true: PandasBackend caches identical sub-expression results (structural key);
+    columns are still loaded via DataSource.load_column
+
+================================================================================
+8. EXECUTION OUTPUT FORMAT
+================================================================================
+
+After running a factor configuration:
+
+result = engine.run(factor)
+
+Returns:
+{
+    "factor": Factor object,
+    "analysis": {lookback, has_ts_op, has_cs_op, referenced_columns},
+    "plan": Compiled execution plan,
+    "result": pd.Series (MultiIndex: (timestamp, instrument) → factor_value)
+}
+
+Example DataFrame View:
+  timestamp   instrument  factor_value
+  2024-01-01  AAPL        0.523
+  2024-01-01  MSFT        0.891
+  2024-01-02  AAPL        0.345
+  2024-01-02  MSFT        0.712
+  ...
+
+================================================================================
+9. QUICK REFERENCE
+================================================================================
+
+Task                          Example
+---                          -------
+Load a field                  col("close")
+Rank across instruments       rank(col("close"))
+Standardize across insts      zscore(col("volume"))
+Rolling average (5 periods)   ts_mean(col("price"), 5)
+Rolling volatility (20 pd)    ts_std(col("close"), 20)
+Lag by 1 period               delay(col("price"), 1)
+Price momentum                col("close") / delay(col("close"), 5)
+Bid-ask spread                col("ask_price") - col("bid_price")
+Volume intensity rank         rank(col("volume"))
+Spread standardized           zscore(col("ask_price") - col("bid_price"))
+
+================================================================================
+Version: 1.0
+Last Updated: 2026-03-26
+Status: Production
+================================================================================

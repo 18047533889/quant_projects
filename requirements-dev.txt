@@ -1,0 +1,14 @@
+# quant_projects 开发 / 测试依赖
+# 安装：pip install -r requirements-dev.txt
+#
+# factor_engine 可选 extras：
+#   pip install -e "./factor_engine[pandas,polars]"
+
+pytest>=8.0
+PyYAML>=6.0
+pandas>=2.0
+pyarrow>=14.0
+duckdb>=0.10
+polars>=0.20
+tqdm>=4.0
+pre-commit>=3.0

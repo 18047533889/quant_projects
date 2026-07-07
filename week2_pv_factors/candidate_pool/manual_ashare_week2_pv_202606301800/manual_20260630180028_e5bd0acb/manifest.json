@@ -1,0 +1,36 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "manual_20260630180028_e5bd0acb",
+  "campaign_id": "manual_ashare_week2_pv_202606301800",
+  "formula": "-1 * ema(divide(divide(ts_sum(if_else(close <= open, high - low, 0), 20), ts_sum(if_else(close <= open, 1, 0), 20)), divide(ts_sum(if_else(close > open, high - low, 0), 20), ts_sum(if_else(close > open, 1, 0), 20))) * ema(volume, 5) / volume, 2)",
+  "expression_type": "dsl",
+  "generator_name": "manual",
+  "generator_version": "1.0.0",
+  "mined_by": "sunhaiwei",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "signal_structure": "cross_sectional",
+  "asset_class": "equity",
+  "born_timestamp": "2026-06-30T18:00:28Z",
+  "metrics": {
+    "train": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    },
+    "valid": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    },
+    "test": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    }
+  },
+  "description": "A股价量因子 w2_028 不对称 vol 6日 EMA5（order_imbalance，qualified，来源 Week2汇报.pdf，Rank IC 3.28%）。条件均值比 + 量比基线 ema(volume,5)"
+}

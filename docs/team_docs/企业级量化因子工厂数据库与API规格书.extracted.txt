@@ -1,0 +1,338 @@
+企业级量化因子工厂数据库与 API 规格书
+面向工程组、数据工程组与平台组的字段约束、索引、Schema、接口与错误码规范
+本规格书用于把主文档和工程实施附录中的工程对象落到数据库表、索引策略、Schema 协议和 API 合约层面。设计目标是保证字段命名统一、读写边界清晰、结果可复现、服务可幂等、对象可审计，并为未来扩展到基本面、另类数据和超级 Alpha 场景预留足够空间。
+第一章 规格书原则
+规格原则
+原则
+说明
+强约束输入
+上游方法自由演进，但进入因子工厂时必须满足统一 Schema
+弱耦合服务
+对象模型统一，但注册、评估、标签、路由和特征服务相互解耦
+先审计后优化
+先保证可回放、可解释、可追责，再做性能极致优化
+PIT 优先
+所有可能存在历史修订的数据都为 Point-in-Time 查询预留字段
+生产隔离
+实验态写入和生产态写入必须有物理或逻辑隔离
+第二章 PostgreSQL 控制面表设计
+表 1 `factor_registry`
+字段
+类型
+约束
+说明
+factor_id
+UUID
+PK
+因子唯一主键
+factor_name
+VARCHAR(255)
+NOT NULL
+业务名称
+domain_code
+VARCHAR(64)
+INDEX
+price_volume/fundamental 等
+method_code
+VARCHAR(64)
+INDEX
+llm/rl/gp/manual/aggregator 等
+campaign_id
+VARCHAR(128)
+INDEX
+某方法某大轮活动编号
+batch_id
+VARCHAR(128)
+INDEX
+具体批次号
+current_tier
+VARCHAR(64)
+INDEX
+当前所在层级
+current_state
+VARCHAR(64)
+INDEX
+当前状态机状态
+max_compute_ms
+INT
+预检查阶段资源预算
+owner
+VARCHAR(128)
+责任人或责任组
+active_flag
+BOOLEAN
+DEFAULT TRUE
+是否活跃
+created_at
+TIMESTAMP
+NOT NULL
+创建时间
+updated_at
+TIMESTAMP
+NOT NULL
+更新时间
+表 2 `factor_expression_store`
+字段
+类型
+约束
+说明
+factor_id
+UUID
+PK/FK
+关联 factor_registry
+formula_text
+TEXT
+NOT NULL
+原始公式文本
+formula_ast
+JSONB
+AST 结构
+ast_hash
+VARCHAR(128)
+INDEX
+结构哈希
+semantic_hash
+VARCHAR(128)
+INDEX
+语义哈希
+operator_profile
+JSONB
+算子统计与复杂度摘要
+表 3 `factor_lineage`、`factor_tags`、`experiment_registry`
+表
+核心字段
+说明
+factor_lineage
+child_factor_id、parent_factor_id、relation_type、relation_detail、created_at
+血缘、变异、平滑、正交、聚合关系
+factor_tags
+factor_id、tags_jsonb、tag_rule_version、updated_at
+标签集合与标签规则版本
+experiment_registry
+experiment_id、batch_id、generator_info、effective_trial_count、dataset_version、config_version
+多重检验治理与回放基础
+表 4 控制面索引建议
+表
+建议索引
+用途
+factor_registry
+(domain_code, current_tier, current_state)
+主列表页与状态筛选
+factor_registry
+(method_code, campaign_id, batch_id)
+按方法和大轮次追踪
+factor_expression_store
+ast_hash / semantic_hash
+去重与重复发现聚类
+factor_tags
+GIN(tags_jsonb)
+标签查询与路由筛选
+routing_history
+(factor_id, created_at DESC)
+查看迁移历史
+第三章 ClickHouse 数据面表设计
+表 5 `factor_exposures_daily`
+字段
+类型
+说明
+trade_date
+Date
+交易日分区键
+knowledge_ts
+DateTime64
+PIT 防穿越时间戳
+ticker
+String
+股票代码
+factor_id
+UUID
+因子主键
+raw_value
+Float64
+原始因子暴露
+z_score
+Float64
+标准化暴露
+neutralized_value
+Float64
+中性化后暴露
+valid_flag
+UInt8
+是否有效
+建议 `factor_exposures_daily` 按 `trade_date` 分区，并以 `(factor_id, ticker, trade_date)` 作为排序键，兼顾按因子回放和按交易日横截面查询。若未来加入盘中或多时点特征，可额外加入 `bar_ts` 或 `snapshot_ts`。首期即便只做日频，也建议保留 `knowledge_ts`。
+表 6 `factor_metrics_wide` 与 `factor_metrics_history`
+表
+字段示例
+用途
+factor_metrics_wide
+rank_ic_ir、net_sharpe、fitness、dsr、break_even_aum、ssr_impact_score
+前台筛选、列表查询、排序和报表
+factor_metrics_history
+metric_code、metric_value、window_spec、eval_run_id
+完整历史明细与调试回放
+表 7 `factor_backtest_timeseries`、`factor_quantile_panel`、`feature_store_online_cache`
+表
+关键字段
+用途
+factor_backtest_timeseries
+trade_date、factor_id、long_pnl、short_pnl、net_pnl、drawdown
+净值曲线与回撤
+factor_quantile_panel
+trade_date、factor_id、quantile_id、forward_return、hit_ratio
+分组收益与单调性
+feature_store_online_cache
+trade_ts、factor_id、ticker、online_value、ttl
+面向实时推理和盘前加载的缓存层
+表 8 数据面分区与 TTL 建议
+对象
+建议策略
+factor_exposures_daily
+按 trade_date 月分区，长期保留
+factor_metrics_history
+按 eval_date 月分区，长期保留
+feature_store_online_cache
+按 trade_ts 天分区，配置 TTL 自动清理
+临时中间表
+按 run_id 分区并设置短 TTL，防止存储膨胀
+第四章 MinIO 产物面对象规范
+对象目录规范
+对象类型
+建议路径
+标准报告
+artifacts/reports/{eval_run_id}/summary.json
+图表数据包
+artifacts/charts/{factor_id}/{eval_run_id}/timeseries.parquet
+日志
+artifacts/logs/{eval_run_id}/worker.log
+调试快照
+artifacts/debug/{factor_id}/{eval_run_id}/context.json
+建议前端展示尽量依赖 JSON/Parquet 数据包，而不是只依赖静态图片。因为静态图片适合阅读，不适合诊断。工程上应优先保存可交互数据，再在需要时生成截图或 PDF。
+第五章 Candidate Submission JSON Schema
+关键字段
+字段
+类型
+是否必填
+说明
+factor_expression
+string
+是
+公式文本或 DSL 表达式
+formula_ast
+object
+建议
+AST 结构
+method_code
+string
+是
+来源方法类型
+campaign_id
+string
+是
+活动编号
+batch_id
+string
+是
+批次编号
+parent_factor_ids
+array[string]
+建议
+父因子列表
+complexity_profile
+object
+是
+复杂度估计
+rationale_summary
+string
+建议
+逻辑说明
+resource_hint
+object
+建议
+资源预算建议
+建议服务端对提交体做三层校验：字段合法性校验、复杂度预算校验和重复发现校验。只有全部通过后才允许写入 `factor_registry`。对于明显越界的候选，直接返回可机器解释的错误码，而不是只返回自由文本错误信息。
+第六章 评估结果与路由结果 JSON Schema
+Schema 列表
+对象
+关键字段
+MetricsPackage
+factor_id、eval_run_id、metric_values、warnings、artifact_refs、runtime_stats
+TagPackage
+factor_id、tag_rule_version、performance_tags、style_tags、action_tags、source_tags
+RoutingDecision
+factor_id、decision_type、target_tier、reason_codes、required_actions、decision_version
+FeedbackPayload
+formula_ast、failure_reason、contribution_signal、stat_tags、rewrite_instruction、search_hint
+第七章 API 规格
+核心 API 一览
+接口
+方法
+请求体
+返回体
+/factors/submit
+POST
+CandidateSubmission
+factor_id、status、precheck_result
+/evaluations/run
+POST
+factor_ids 或 batch_id
+eval_run_id、queued_count
+/evaluations/{eval_run_id}
+GET
+-
+MetricsPackage
+/routing/execute
+POST
+eval_run_id 或 factor_id
+RoutingDecision
+/feedback/build
+POST
+factor_id 或 batch_id
+FeedbackPayload 列表
+/system/kill-switch
+POST
+scope、reason
+switch_status、locked_queues
+所有写接口建议强制要求 `idempotency_key`、`trace_id` 和 `caller`。所有读接口建议返回 `schema_version` 与 `generated_at`。对 `/system/kill-switch` 建议采用双重认证和二次确认，且自动写入高优先级审计日志。
+第八章 请求与响应示例
+提交候选示例（伪格式）：`{"factor_expression":"rank(ts_mean(close,5)-ts_mean(close,20))","method_code":"llm","campaign_id":"camp_202605","batch_id":"batch_018","complexity_profile":{"ast_depth":6,"operator_count":12,"estimated_compute_ms":120}}`
+路由响应示例（伪格式）：`{"factor_id":"...","decision_type":"incubate","target_tier":"tier2_incubator","reason_codes":["high_turnover","needs_smoothing"],"required_actions":["smooth","reevaluate"]}`
+第九章 错误码、重试与幂等策略
+错误码与处理
+错误码
+可重试
+默认处理
+EVAL_TIMEOUT
+是
+有限次重试后失败
+FACTOR_INVALID_EXPR
+否
+直接拒绝
+FACTOR_COMPUTE_TOXIC
+否
+打标签并归档
+DATA_VERSION_MISSING
+否
+阻断任务并报警
+QUEUE_LOCKED
+否
+提示 Kill-Switch 已开启
+ARTIFACT_WRITE_FAIL
+是
+重试并人工排查对象存储
+建议把幂等键作用到所有写接口、所有路由动作和所有状态迁移。对于同一个 `factor_id + eval_config_version + dataset_version`，重复提交不应生成多个语义相同的评估结果，而应返回已存在结果或明确说明重复原因。
+第十章 性能、容量与数据库运维建议
+运维建议
+对象
+建议
+PostgreSQL
+启用 JSONB + GIN、定期 Vacuum、冷热表拆分
+ClickHouse
+控制宽表列数、避免无界 Join、重任务分批执行
+MinIO
+统一目录规范、对象版本控制、生命周期策略
+Redis
+用于在线特征缓存与短 TTL 状态对象，不存长期真相数据
+第十一章 迁移策略与版本升级规则
+建议所有数据库表和 API Schema 都有显式版本。字段新增尽量后向兼容；字段删除必须经过双版本过渡期；任何影响历史重放的结构性变更都必须伴随迁移脚本、回滚方案和历史数据验证计划。
+结语
+数据库与 API 是因子工厂的骨骼系统。若骨骼不稳，再优秀的上游挖掘方法和下游评估逻辑都无法长期稳定运行。建议团队在正式开工前，先以本规格书为基础完成一次字段审查、索引审查、接口审查和回放审查，再进入编码阶段。

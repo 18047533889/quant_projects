@@ -1,0 +1,32 @@
+# .pre-commit-config.yaml
+#
+# data_access 团队静态检查：PR6 引入。
+#
+# 启用方式：
+#   pip install pre-commit
+#   pre-commit install            # 把 hook 装到 .git/hooks/pre-commit
+#   pre-commit run --all-files    # 首次对全仓运行
+#
+# 之后每次 `git commit` 会自动对 staged 的 .py 文件跑下面列出的 hook。
+# CI 也可以用 `pre-commit run --all-files --show-diff-on-failure` 跑一遍同样的检查。
+#
+# 只收 data_access 一个 hook，原则是：本配置只承担「团队新增的」静态规则，
+# 格式化 / 代码风格交给业务侧自己的 ruff / black 配置（别在这里集中化）。
+
+repos:
+  - repo: local
+    hooks:
+      - id: data-access-allowlist
+        name: data_access 禁用 API 检查
+        description: >
+          扫描业务代码里的 `import duckdb` / `pd.read_parquet` /
+          `pq.read_table` / `.to_parquet` 等直读直写调用。
+          豁免在 .data_access_allowlist.yaml 登记。
+        # pre-commit 会把匹配文件作为参数传给脚本；脚本支持「只扫传进来的文件」语义。
+        entry: python scripts/check_data_access_allowlist.py
+        language: system
+        types: [python]
+        # 不过滤目录：让 allowlist 自己决定哪些豁免。
+        # 但一定排除 venv / workspace 这类不在仓库的大目录（虽然 types: python 已经筛过了）。
+        exclude: ^(workspace_data/|\.venv/|venv/|build/|dist/)
+        pass_filenames: true

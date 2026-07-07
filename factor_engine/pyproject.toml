@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "factor-engine"
+version = "0.1.0"
+description = "Quantitative factor engine: DSL, IR compilation, cleaned operators, and config-driven execution"
+requires-python = ">=3.10"
+dependencies = ["PyYAML>=6.0"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = [
+    "api*",
+    "backend*",
+    "cleaned_operators*",
+    "expr*",
+    "ir*",
+    "planner*",
+    "runtime*",
+    "storage*",
+]
+
+[project.optional-dependencies]
+pandas = ["pandas>=2.0", "pyarrow>=14.0", "scipy>=1.10"]
+# 可选加速 / 技术指标（Deep Research 阶段 A；TA-Lib 需系统库或预编译 wheel）
+accel = ["bottleneck>=1.3", "numba>=0.58"]
+talib = ["TA-Lib>=0.4.28"]
+polars = ["polars>=0.20"]
+# Modin 并行 pandas API（依赖 Ray 或 Dask；与 factor-engine 同进程时设 FACTOR_ENGINE_USE_MODIN=1 或 backend.type=pandas_modin）
+modin = ["modin>=0.28"]
+parallel = ["joblib>=1.3"]
+backtest = ["backtrader>=1.9.78.123"]
+dev = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "modin: 需要安装 modin，默认 CI 不跑",
+    "integration: 需本地 parquet 或 RUN_* 环境变量",
+]

@@ -1,0 +1,36 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "manual_20260630180031_8797ed6f",
+  "campaign_id": "manual_ashare_week2_pv_202606301800",
+  "formula": "ema(close / (high - low), 10) * ema(volume / ts_mean(volume, 25), 15) * ema((close - open) / close, 3)",
+  "expression_type": "dsl",
+  "generator_name": "manual",
+  "generator_version": "1.0.0",
+  "mined_by": "sunhaiwei",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "signal_structure": "cross_sectional",
+  "asset_class": "equity",
+  "born_timestamp": "2026-06-30T18:00:31Z",
+  "metrics": {
+    "train": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    },
+    "valid": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    },
+    "test": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    }
+  },
+  "description": "A股价量因子 a_003 方向性波动×量能(25日基准)（dir_vol_volume，elite，来源 A.pdf，IC 2.97% / Rank IC 4.32% / ICIR 0.31 / Rank ICIR 0.36）。C/(H-L) × V/MA(V,25) × (C-O)/C 三分量独立 EMA"
+}

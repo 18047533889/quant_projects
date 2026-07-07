@@ -1,0 +1,467 @@
+企业级量化因子工厂工程实施附录
+字段级数据模型、接口协议、任务流、配置模板、错误码与实施排期 | v1.0
+本附录是主文档《美股日频横截面量价因子工厂与评估入库系统需求文档》的工程化落地补充。主文档用于统一业务目标、架构边界和治理规则；本附录则面向工程组、平台组和评估组，强调对象定义、字段级建模、API 协议、任务编排、错误处理、环境部署和交付排期，目标是让团队可以基于附录直接进入建库、建表、建服务与拆任务阶段。
+第一章 使用说明与交付边界
+本附录不替代主文档，而是对主文档中的关键工程对象进行下钻。阅读建议是：管理层与研究负责人优先阅读主文档，工程总监与核心后端优先阅读本附录；所有影响字段、对象、接口、权限和环境的变更，都应先修改附录，再回写主文档摘要，保持业务总纲与工程落地的一致性。
+附表 1 主文档与附录的分工
+文档
+主要用途
+典型读者
+主文档
+系统定位、总架构、指标体系、库拓扑、治理策略
+研究负责人、风控负责人、工程总监
+工程附录
+表结构、Schema、API、DAG、错误码、权限、排期
+平台工程组、评估组、数据工程组
+第二章 服务划分与仓库边界
+建议系统按服务边界拆分，而不是按照团队临时分工拆分。服务边界决定未来系统能否稳定扩展。首期实现可以是单仓多模块，但逻辑上仍应保持模块边界清晰，以便未来演进到微服务或独立任务节点。
+附表 2 推荐的服务边界
+服务
+核心职责
+主要依赖
+registry-service
+因子户籍、批次、血缘、状态、标签元数据管理
+PostgreSQL
+evaluation-service
+指标计算、回测、分组测试、压力测试
+ClickHouse、计算集群
+tagging-service
+标签规则计算与标签写回
+PostgreSQL、规则配置
+routing-service
+执行 Tier 路由、升降级、保留与归档
+registry-service、tagging-service
+transformation-service
+平滑、正交、降频、重组等修复动作
+evaluation-service、ClickHouse
+feature-store-service
+在线/离线特征读取、PIT 查询、缓存同步
+ClickHouse、Redis
+artifact-service
+报告、图表数据包、日志与审计产物写入
+MinIO
+orchestrator-service
+编排 DAG、任务队列、重试、告警和 Kill-Switch
+Airflow/Prefect、Kafka/RabbitMQ
+第三章 统一对象模型与枚举规范
+工程落地时最容易出问题的地方，不是模型本身，而是对象命名不一致、状态码漂移和字段含义不统一。因此建议在代码仓库中维护一套统一的枚举规范与对象模型定义，并将其作为公共依赖被所有服务引用。
+附表 3 推荐的核心枚举
+枚举
+建议取值
+domain_code
+price_volume、fundamental、alternative、aggregated
+method_code
+llm、rl、gp、manual、mcts、multi_agent、aggregator
+tier_code
+tier0_raw、tier1_eval、tier2_incubator、tier3a_core、tier3b_satellite、tier3c_feature、tier4_archive
+state_code
+landing、screening、evaluating、incubating、production_candidate、production_core、production_satellite、feature_store_ready、watchlist、deprecated、archived
+relation_type
+mutation、crossover、orthogonalized、smoothed、downsampled、aggregated
+decision_type
+hard_reject、soft_hold、incubate、accept_core、accept_satellite、accept_feature_store
+第四章 控制面字段级数据字典
+控制面存储的是因子的身份、规则、状态和审计轨迹。这里的设计优先级是可追溯性、灵活扩展和强约束。建议所有控制面表都使用标准主键、创建时间、更新时间、操作者和版本字段，避免未来审计时只能看到当前值而看不到修改历史。
+附表 4 `factor_registry` 字段建议
+字段
+类型
+说明
+factor_id
+UUID
+因子唯一主键
+factor_name
+VARCHAR
+业务可读名称
+domain_code
+VARCHAR
+所属总库域
+method_code
+VARCHAR
+来源方法类型
+campaign_id
+VARCHAR
+某方法某大轮产物归属
+batch_id
+VARCHAR
+具体运行批次
+creation_ts
+TIMESTAMP
+生成时间
+current_tier
+VARCHAR
+当前 Tier
+current_state
+VARCHAR
+当前状态机状态
+max_compute_ms
+INT
+单次截面最大计算预算
+owner
+VARCHAR
+责任团队或责任人
+active_flag
+BOOLEAN
+是否处于活动状态
+附表 5 `factor_expression_store` 与 `factor_lineage` 字段建议
+表
+关键字段
+说明
+factor_expression_store
+factor_id、formula_text、formula_ast、ast_hash、semantic_hash、operator_profile
+表达式与结构摘要
+factor_lineage
+child_factor_id、parent_factor_id、relation_type、relation_detail、created_ts
+记录变异、平滑、正交化和聚合来源
+附表 6 `factor_tags` 与 `experiment_registry` 字段建议
+表
+关键字段
+说明
+factor_tags
+factor_id、tags_jsonb、tag_rule_version、updated_ts
+标签集合与版本
+experiment_registry
+experiment_id、batch_id、generator_info、effective_trial_count、dataset_version、config_version
+多重检验治理与回放依据
+第五章 数据面字段级数据字典
+数据面是计算成本最高的一层。这里的核心原则是分离宽表和长表、分离原始暴露与派生暴露、分离历史明细与高频查询入口。对于美股日频量价场景，建议所有大表默认按交易日分区，并按因子或股票代码设置合适排序键，以兼顾批量回测和横向查询性能。
+附表 7 `factor_exposures_daily` 字段建议
+字段
+类型
+说明
+trade_date
+DATE
+交易日
+knowledge_ts
+TIMESTAMP
+系统知晓时间，用于 PIT 防穿越
+ticker
+VARCHAR
+证券代码
+factor_id
+UUID
+因子主键
+raw_value
+FLOAT64
+原始暴露值
+z_score
+FLOAT64
+标准化后暴露值
+neutralized_value
+FLOAT64
+中性化或残差化后暴露值
+valid_flag
+BOOLEAN
+该条暴露是否可用于评估
+附表 8 `factor_metrics_wide` 字段建议
+字段分组
+典型字段
+预测力
+rank_ic_mean、rank_ic_ir、delay1_retention、half_life
+收益风险
+net_sharpe、net_ir、omega、burke_ratio、max_drawdown
+单调性
+monotonicity_score、pt_pvalue、long_short_asymmetry
+执行容量
+turnover、fitness、impact_cost、break_even_aum
+独立性
+incremental_ir、library_corr_max、cluster_id
+鲁棒性
+haircut_sharpe、dsr、pfs_gaussian、pfs_tdist
+美股专属
+o2o_sharpe、vwap_sharpe、overnight_ic、borrow_fee_penalty、ssr_impact_score
+附表 9 在线特征缓存与产物对象
+对象
+关键字段
+说明
+feature_store_online_cache
+trade_ts、factor_id、ticker、online_value、ttl
+盘前或盘中高速读取缓存
+factor_backtest_timeseries
+trade_date、long_pnl、short_pnl、net_pnl、drawdown
+净值与回撤时序
+factor_quantile_panel
+trade_date、quantile_id、forward_return、hit_ratio
+分组收益明细
+artifact_manifest
+factor_id、artifact_type、path、version、created_ts
+产物索引表
+第六章 Candidate Submission Schema
+为了兼容 QuantaAlpha、TradingAgents、AlphaProbe、AlphaSage、CogAlpha 以及内部自研的 RL、GP、MCTS 类系统，平台必须定义统一的候选提交协议。上游方法可以自由演进，但提交到因子工厂时必须说同一种语言。
+附表 10 Candidate Submission Schema
+字段
+是否必填
+说明
+factor_expression
+是
+公式文本或可执行表达式
+formula_ast
+建议
+结构化 AST 或等价表达
+method_code
+是
+来源方法类型
+campaign_id
+是
+大轮次或实验活动编号
+batch_id
+是
+具体批次
+parent_factor_ids
+建议
+父因子关系
+complexity_profile
+是
+算子数、AST 深度、估计耗时等
+creation_ts
+是
+生成时间
+rationale_summary
+建议
+上游方法给出的简短逻辑说明
+recommended_frequency
+建议
+上游建议的执行频率
+resource_hint
+建议
+上游估计的算力预算或预期复杂度
+第七章 评估结果 Schema 与标签 Schema
+工程上建议把评估结果与标签结果拆成两个主对象：`MetricsPackage` 和 `TagPackage`。前者强调数值真实性和复现性，后者强调规则解释与路由可用性。这样未来即使标签规则变化，也不需要重算底层所有指标。
+附表 11 `MetricsPackage` 结构建议
+字段
+说明
+factor_id
+因子主键
+eval_run_id
+本次评估运行编号
+metric_values
+全部指标值的键值映射
+metric_versions
+指标定义与计算版本
+warnings
+异常、缺失、边界情况说明
+artifact_refs
+关联图表、JSON、日志路径
+runtime_stats
+耗时、资源使用、缓存命中等
+附表 12 `TagPackage` 结构建议
+字段
+说明
+factor_id
+因子主键
+tag_rule_version
+标签规则版本
+performance_tags
+表现标签列表
+style_tags
+风格与拥挤标签列表
+action_tags
+动作与修复标签列表
+source_tags
+来源方法特定标签
+trigger_details
+每个标签的触发指标与阈值细节
+第八章 RoutingDecision、FeedbackPayload 与错误码 Schema
+路由结果、上游反馈和错误码必须结构化，否则系统会在跨服务协同时充满歧义。建议由共享库统一维护这些 Schema，并为每个字段提供机器可读描述和示例值。
+附表 13 `RoutingDecision` 字段建议
+字段
+说明
+factor_id
+因子主键
+decision_type
+hard_reject、incubate、accept_core 等
+target_tier
+目标 Tier 或目标子库
+reason_codes
+触发该决策的原因码列表
+required_actions
+是否需要平滑、正交化、降频等
+decision_version
+本次决策模板版本
+附表 14 `FeedbackPayload` 字段建议
+字段
+说明
+target_method_code
+反馈给哪类上游方法
+formula_ast
+候选公式 AST
+failure_reason
+失败原因或失效模式
+contribution_signal
+若来自聚合器，则可包含 SHAP 或贡献度信息
+stat_tags
+统计标签与风险标签
+rewrite_instruction
+建议改写或约束指令
+search_hint
+推荐继续探索的方向
+附表 15 错误码字典建议
+错误码
+含义
+默认处理
+EVAL_TIMEOUT
+评估超时
+标记失败并可有限次重试
+FACTOR_INVALID_EXPR
+表达式非法或未来函数
+直接归档
+FACTOR_COMPUTE_TOXIC
+计算复杂度或资源占用超限
+打 computationally_toxic 标签
+DATA_VERSION_MISSING
+缺少数据版本或 PIT 条件
+阻断任务
+ARTIFACT_WRITE_FAIL
+产物写入失败
+重试并报警
+QUEUE_LOCKED
+全局 Kill-Switch 已触发
+阻止新任务入队
+第九章 API 设计草案
+首期可以采用内部 RPC 或 HTTP API，不必过早追求外部化网关，但接口语义应尽早定型。建议所有接口都支持幂等键、调用链 trace_id、调用者身份和版本字段，便于后续审计与跨服务排障。
+附表 16 核心 API 草案
+接口
+方法
+用途
+/factors/submit
+POST
+提交候选因子
+/evaluations/run
+POST
+触发单个或批量评估
+/evaluations/{eval_run_id}
+GET
+查询评估结果
+/tags/refresh
+POST
+重算标签
+/routing/execute
+POST
+执行路由决策
+/factors/{factor_id}/artifacts
+GET
+列出评估产物
+/feature-store/point-in-time
+POST
+按 PIT 规则拉取特征
+/system/kill-switch
+POST
+触发全局紧急刹车
+建议将 `/system/kill-switch` 设计为最高优先级管理接口，触发后至少要完成三件事：暂停上游候选写入、阻断评估队列新任务、冻结生产库 Tier 3 的路由变更。恢复也应采用显式的二次确认流程，不应自动解除。
+第十章 DAG 与任务编排细则
+任务编排建议按 DAG 而不是按 cron 脚本管理。因为系统中存在依赖链、重试、补跑、灰度、条件分支和手动审批节点，仅靠单层脚本难以治理。首期 DAG 不必极多，但要保证主链路清晰。
+附表 17 关键 DAG 建议
+DAG
+节点
+说明
+candidate_ingest_dag
+submit -> registry -> dedup -> precheck
+接入、去重、熔断主链路
+evaluation_dag
+data_prep -> predictive -> risk -> robustness -> execution
+标准评估主链路
+tag_routing_dag
+tagging -> scorecard -> decision -> routing
+贴标与路由主链路
+incubation_dag
+smoothing/orthogonalization -> reevaluation -> rerouting
+因子医院加工流
+production_review_dag
+drift_check -> alert -> demote/archive
+生产复评与降级
+feedback_dag
+collect_failures -> build_payload -> dispatch_to_miners
+结构化反馈主链路
+第十一章 配置文件模板与环境变量清单
+建议所有关键规则都通过配置文件和环境变量注入，而不是散落在代码中。配置文件负责业务规则，环境变量负责基础设施地址、密钥和环境差异。生产环境必须严禁研究员在脚本内临时覆盖关键配置而不留痕。
+附表 18 推荐配置文件
+配置文件
+用途
+metric_dictionary.yaml
+指标编码、定义、依赖与显示方式
+veto_template.yaml
+硬否决规则
+scorecard_template.yaml
+评分卡权重与标准化方式
+tag_rules.yaml
+标签触发器与动作映射
+cost_model.yaml
+手续费、冲击、Borrow Fee、SSR 处理口径
+routing_rules.yaml
+Tier 路由与状态机迁移规则
+附表 19 关键环境变量建议
+变量
+说明
+PG_DSN
+PostgreSQL 连接串
+CLICKHOUSE_DSN
+ClickHouse 连接串
+MINIO_ENDPOINT
+MinIO 访问地址
+QUEUE_BROKER_URL
+Kafka 或 RabbitMQ 地址
+REDIS_URL
+在线特征缓存地址
+KILL_SWITCH_SECRET
+全局刹车接口凭证
+第十二章 权限模型、审计日志与合规留痕
+权限与审计不是上线之后再补的功能，而是建系统时就必须考虑的底层约束。任何可以改变生产库内容、删除对象、修改标签规则、调整评分卡或触发全局 Kill-Switch 的动作，都必须具备强身份校验和完整留痕。
+附表 20 审计事件建议
+事件类型
+必须记录的字段
+任务触发
+caller、trace_id、config_versions、start_ts
+配置变更
+before、after、operator、approval_ref
+状态迁移
+factor_id、from_state、to_state、reason_codes
+高权限操作
+operator、role、target_object、approval_ref
+Kill-Switch
+triggered_by、scope、reason、recovery_ticket
+第十三章 上游挖掘方法适配指南
+针对 QuantaAlpha、TradingAgents、AlphaProbe、AlphaSage、CogAlpha 以及内部自研方法，附录建议明确一条原则：平台不需要知道这些方法内部每一步怎么思考，但必须要求它们提交统一元数据，并接受统一配额、统一去重和统一反馈协议。
+附表 21 上游方法接入重点
+方法分型
+额外关注点
+QuantaAlpha / 演化轨迹类
+记录 trajectory_id、轨迹重组来源、复杂度约束与语义一致性检查
+TradingAgents / 多智能体类
+记录角色分工、讨论 ID、反思重试次数和共识度
+AlphaProbe / AlphaSage / CogAlpha 类
+记录假设、探针结果、验证结果和重写指令
+RL / GP / MCTS 类
+记录奖励函数版本、探索预算、世代编号和算力消耗
+对于这类上游方法，最常见的工程风险不是“接不上”，而是“接入后无法治理”。因此建议把资源预算、公式复杂度、重复发现率、失败率和单位算力产出都纳入上游方法的统一对账口径，用于评估不同方法本身的研发性价比。
+第十四章 实施里程碑、人员配置与验收口径
+实施里程碑应和人员结构匹配。工程量较大时，最忌讳所有人同时从不同方向开工，最后对象、表结构和配置体系全部对不上。建议优先把公共对象、控制面表和评估主链路打通，再向标签、路由、特征池和反馈闭环扩展。
+附表 22 人员配置建议
+角色
+建议投入
+首期重点任务
+后端工程师
+2-3 人
+服务骨架、API、权限、审计、配置中心
+数据工程师
+1-2 人
+ClickHouse、PIT 查询、对象存储、缓存同步
+量化评估工程师
+1-2 人
+指标计算、标签规则、回测口径统一
+平台/运维
+1 人
+部署、监控、告警、容灾与队列治理
+附表 23 Phase 1 最小可交付验收口径
+模块
+最低验收标准
+Registry
+支持候选接入、去重、批次与血缘写入
+Evaluation
+能完成核心指标、标准报告与基础路由决策
+Storage
+控制面、数据面、产物面全链路可写可读
+Audit
+关键操作有日志，结果可回放
+Ops
+支持告警、重试和基础 Kill-Switch
+结语
+主文档定义了因子工厂的战略骨架，本附录则把这些原则压到工程实施层。真正的企业级优势，不只来自模型会不会挖因子，更来自系统是否能够稳健地接住候选、审查候选、存储候选、解释候选、修复候选、生产化候选，并在因子失效时优雅地降级和归档。只有当这些工程细节都被提前定义清楚，因子工厂才能从“概念架构”变成长期可运转的生产系统。

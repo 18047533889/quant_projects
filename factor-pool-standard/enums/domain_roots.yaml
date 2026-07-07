@@ -1,0 +1,10 @@
+# 分域挖掘：一场 campaign 只选一个 domain_root
+domain_roots:
+  price_volume:
+    description: 价量日线/分钟线主信号
+  fundamental:
+    description: 财报、估值、资本结构
+  alternative:
+    description: 另类数据
+  microstructure:
+    description: 微观结构、逐笔

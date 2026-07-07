@@ -1,0 +1,36 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "manual_20260630180019_9beb5419",
+  "campaign_id": "manual_ashare_week2_pv_202606301800",
+  "formula": "ema(max(0, (high - low - ts_mean(high - low, 40)) / ts_std(high - low, 40)) * min(2, volume / ts_mean(volume, 20)) * clip((high - low) / (close - open), -3, 3), 15)",
+  "expression_type": "dsl",
+  "generator_name": "manual",
+  "generator_version": "1.0.0",
+  "mined_by": "sunhaiwei",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "signal_structure": "cross_sectional",
+  "asset_class": "equity",
+  "born_timestamp": "2026-06-30T18:00:19Z",
+  "metrics": {
+    "train": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    },
+    "valid": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    },
+    "test": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    }
+  },
+  "description": "A股价量因子 w2_019 应激累积 × 量权 × 方向（herd_stress，elite，来源 Week2汇报.pdf，Rank IC 3.45%）。应激累积 × 量比 × 方向 clip ±3"
+}

@@ -1,0 +1,4 @@
+# GTJA-191 Alpha 040
+# source: SUM((CLOSE>DELAY(CLOSE,1)?VOLUME:0),26)/SUM((CLOSE<=DELAY(CLOSE,1)?VOLUME:0),26)*100
+
+ts_sum(if_else(close > delay(close, 1), volume, 0), 26) / (ts_sum(if_else(close <= delay(close, 1), volume, 0), 26) + 1e-8) * 100

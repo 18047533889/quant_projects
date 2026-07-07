@@ -1,0 +1,27 @@
+# 逐笔成交融合因子配置
+# 基于资金流特征与事件驱动特征的融合逻辑
+# 核心：主动买入占比 + 大单成交占比 + 事件驱动信号
+
+factor:
+  name: tick_fusion_capital_event
+  expr: >
+    0.5 * zscore(rank(zscore(ts_mean(rank(col(active_buy_volume) / col(total_volume)) + rank(col(large_order_volume) / col(total_volume)), 5))))
+    + 0.5 * zscore(rank(zscore(ts_mean(rank(col(event_volume_ratio)) + rank(col(active_buy_ratio)), 5))))
+  freq: "1d"
+  description: >
+    逐笔成交融合因子：融合资金流特征（主动买入占比、大单成交占比）
+    与事件驱动特征（事件成交量占比、主动买入比率）。通过rank和zscore截面标准化，
+    ts_mean滚动平均平滑噪声，最终等权合成稳健的融合因子。
+
+data_source:
+  type: "parquet"
+  root: "/data/tick_data"
+  timestamp_col: "trade_time"
+  instrument_col: "instrument"
+  max_files: 5000
+
+backend:
+  type: "pandas"
+
+engine:
+  enable_cache: true

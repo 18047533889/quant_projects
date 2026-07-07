@@ -1,0 +1,21 @@
+# KeyPeriod 因子配置 - 基于海量Level2数据因子挖掘系列(六)
+# 研报：安宁宁、陈原文，广发证券
+
+factor:
+  name: keyperiod_amount_top30pct
+  expr: "col('amount_top30pct')"
+  freq: "1d"
+  description: "大成交金额时段因子，20日换仓RankIC均值11.23%，胜率84.8%。基于Level2逐笔订单数据识别日内成交金额最大的前30%分钟时段，统计这些重点时段的成交金额占比。"
+
+data_source:
+  type: "parquet"
+  root: "data/level2_order"
+  timestamp_col: "datetime"
+  instrument_col: "code"
+  max_files: 1000
+
+backend:
+  type: "pandas"
+
+engine:
+  enable_cache: true

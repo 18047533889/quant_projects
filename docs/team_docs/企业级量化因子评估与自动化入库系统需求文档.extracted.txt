@@ -1,0 +1,950 @@
+美股日频横截面量价因子工厂与评估入库系统需求文档
+面向企业级私募的因子资产管理、评估、路由、存储与生命周期治理方案 | v2.0
+文档定位：本文档用于指导企业级量化私募建设一套完整的美股日频横截面量价因子工厂。它不是单纯的评估指标说明书，也不是只面向研究员的回测报告模板，而是面向因子评估组、平台工程组、研究负责人、风控与未来组合层共同使用的系统级需求文档。
+本文档覆盖因子从生成、接入、登记、去重、评估、贴标、路由、入库、孵化、聚合、监控到退役的全生命周期。设计的基本原则是：代码库能力边界必须大于默认入库模板边界；系统既要能服务当前美股日频量价总库，也必须为未来基本面总库、另类数据总库以及跨市场扩展预留统一骨架。
+第一章 系统定位与设计原则
+公司当前面向的是一个持续 24 小时运行的自动化因子研发场景。来自不同方法与不同轮次的候选因子会不断涌入系统，传统手工式“看回测、挑公式、人工分类”的做法无法支撑企业级规模。系统必须像工业生产线一样具备输入、筛选、加工、分级、存储、运输、复检和退役机制。
+因子是资产，不只是公式。系统必须记录其身份、血缘、版本、状态、标签、评估结果和去向。
+评估是流水线，不是单个报表。系统必须分阶段产出结构化结果，并支撑后续路由和复评。
+入库不是终点，治理才是终点。所有进入生产环境的因子都必须持续监控、降级、修复或退役。
+全量能力与默认模板要分离。代码库尽可能支持全量指标与功能，默认入库标准只是一套可配置模板。
+系统首期聚焦美股日频横截面量价因子，但架构上必须支持多库、多域、多方法、多轮次共存。
+表 1 顶层设计原则
+原则
+落地含义
+资产化
+因子必须具备身份、血缘、标签、状态和可追溯记录
+流水线化
+各环节标准化、可并行、可回放、可审计
+路由化
+不是所有失败因子都直接淘汰，系统需支持保留、送医、孵化和归档
+模板化
+阈值、标签触发器、评分卡和路由规则均应配置化
+可扩展
+首期聚焦量价总库，后续可平移扩展至基本面、另类和跨市场总库
+第二章 首期范围与扩展边界
+首期目标是把美股日频横截面量价因子的全流程做深做透。这里的“做透”不是只把指标列全，而是把因子工厂所需的评估、存储、标签、路由、孵化和生产化能力一次性设计完整。文档中所有涉及未来多库和聚合的设计，均以首期量价总库为中心，但会保留清晰的横向扩展接口。
+表 2 首期范围与后续扩展
+层面
+首期范围
+后续扩展方向
+市场
+美股
+港股、A 股、期货、加密资产等
+频率
+日频
+中频、盘中、日内、分钟级
+因子类型
+量价横截面因子
+基本面、另类数据、组合级特征
+生产对象
+单因子与可聚合的特征原料
+超级 Alpha、跨域组合特征
+治理对象
+量价总库
+多域总库与统一特征中心
+第三章 因子资产对象定义与命名规范
+企业级系统的最小实体不是一个回测截图，而是一个因子资产对象。该对象必须能在系统中唯一识别、稳定复现、支持血缘回溯，并能承载不同阶段的评估结果与治理状态。建议从一开始就定义统一的对象模型、命名规则与指纹体系，避免后期海量因子堆积后无法治理。
+表 3 因子资产主键与身份字段建议
+字段
+说明
+factor_id
+全局唯一 UUID，因子资产的主键
+factor_name
+业务可读名称，便于研究员检索
+domain_code
+所属总库，如 price_volume、fundamental、alternative
+method_code
+挖掘来源，如 llm、rl、gp、manual、aggregator
+campaign_id
+某一种方法某一大轮的生产批次标识
+batch_id
+更细粒度的实验或运行批次标识
+ast_hash
+抽象语法树或表达式结构哈希
+semantic_hash
+语义去重哈希，用于识别数学等价变体
+numeric_fingerprint
+基于历史暴露序列的数值指纹
+parent_factor_ids
+父因子列表，支持变异、正交化和平滑后衍生版本
+creation_ts
+因子生成时间，精确到毫秒
+current_tier
+当前所在库层级或子库
+命名建议采用多维命名，而不是扁平文件名。例如：domain_method_campaign_shortname_version 的方式，用于让工程系统在不读取正文的情况下也能大致识别来源、批次与用途。表达式、Python 代码片段、AST 与算子依赖建议拆开存，不要把所有内容塞进单一文本字段。
+第四章 因子工厂全链路架构
+本系统的核心不是“存因子”，而是“让因子在不同工位之间被正确地流转”。从业务上看，系统至少要覆盖八类工位：降落、登记、去重、评估、贴标、路由、加工与生产化治理。从工程上看，这意味着任何候选因子都必须经过统一的工厂主线，而不是由各团队各自维护孤立脚本。
+表 4 因子工厂全链路
+阶段
+核心动作
+主要输出
+生成与降落
+候选因子从不同自动化方法流入系统
+Raw Candidate、Batch Metadata
+接入与户籍登记
+创建 factor_id、记录批次与来源
+Factor Registry Entry
+预检查与去重
+语法校验、未来函数校验、语义去重、早停
+Valid Candidate、Dedup Result
+标准化评估
+完成数据治理、预测、收益、单调性、容量等全量评估
+Metrics Package
+自动贴标
+基于规则引擎生成性能、风格、动作、生命周期标签
+Tag Package
+路由分发
+决定进入总库、孵化库、生产库或归档库
+Routing Decision
+加工与再评估
+平滑、正交、降频、重组、再次评分
+Derived Factor Versions
+生产与治理
+进入核心库、卫星库、特征池，接受持续复评
+Production Record、Drift Monitoring
+需要特别补充的一点是：聚合器、排序模型或更高层非线性引擎输出的 Master Score，也必须被当成一个新的因子资产重新登记、重新贴标、重新路由。系统中不存在“模型输出高于单因子”的法外层。无论它来自单因子表达式、轨迹演化系统还是超级 Alpha 聚合引擎，都必须接受同一套换手、滑点、容量、鲁棒性和审计规则。
+第五章 因子库拓扑与多维命名空间
+因子库绝不能设计成单一扁平仓库。对于 24 小时持续挖掘场景，最优做法不是只按“通过/不通过”分两类，而是建立一个兼具漏斗结构与网格坐标系的立体拓扑。漏斗决定因子从混沌走向生产；网格决定因子可以按资产域、方法、轮次、标签和状态被快速检索与调用。
+表 5 推荐的 5 级立体库拓扑
+Tier
+名称
+定位
+典型对象
+Tier 0
+原始降落区 / Raw Pool
+所有新候选因子的第一落点
+尚未评估、可能大量重复或非法的公式
+Tier 1
+标准化评估清洗库 / Staging & Evaluation Pool
+算力主战场
+完成预处理、指标计算、初次贴标的因子
+Tier 2
+因子医院与孵化库 / Incubator & Hospital Pool
+保留高潜但有硬伤的因子
+高 IC 高换手、相关性过高、需平滑或正交的因子
+Tier 3
+生产级武装库 / Production Vault
+可直接面向组合与特征池
+核心因子、卫星因子、超级 Alpha 原料
+Tier 4
+归档与负样本库 / Archive & Graveyard
+沉淀失效、退役和研究失败资产
+彻底否决因子、退役因子、负样本资产
+Tier 设计之外，还应叠加三层命名空间：第一层是 Domain，例如量价总库、基本面总库、另类总库；第二层是 Method/Campaign，例如某种方法某一大轮；第三层是 Lifecycle，例如 incubating、production、archived。这样一来，一个因子的位置不是一个简单文件夹，而是一个多维坐标。
+表 6 Tier 3 生产库内部再分层建议
+子层级
+定位
+典型用途
+Tier 3A
+核心基石库 / Core Alpha
+直接作为组合优化器的高优先级输入
+Tier 3B
+卫星正交库 / Satellite Alpha
+容量或稳定性略弱，但具备增量价值
+Tier 3C
+特征原料库 / Feature Store Ready
+适合作为超级 Alpha 聚合输入，不一定单因子直接上生产
+第六章 状态机、自动路由与保留机制
+大量因子并不适合简单的一票否决。对企业级系统而言，更重要的是识别因子当前处于什么状态，以及下一步应该去哪里。系统必须内建状态机与规则路由，而不是依赖人工拖拽文件夹或手工改表。
+表 7 建议的状态机
+状态
+含义
+典型去向
+landing
+刚进入系统的原始候选
+等待预检查
+screening
+正在做语法校验、去重和合法性检查
+进入评估或直接清理
+evaluating
+正在执行全量指标计算
+进入打标签阶段
+incubating
+具备潜力但需加工
+平滑、正交、降频或重组
+production_candidate
+已达入库讨论门槛
+进入核心、卫星或特征池
+production_core
+核心生产服役
+持续监控
+production_satellite
+低权重生产服役
+持续监控
+feature_store_ready
+供超级 Alpha 聚合使用
+进入特征池
+watchlist
+表现边缘化但暂不退役
+观察与复评
+deprecated
+不再建议继续使用
+准备归档或退役
+archived
+完成生命周期，保留研究记录
+归档与负样本资产
+表 8 自动路由矩阵
+条件
+默认路由
+说明
+语法非法、未来函数、计算超时
+Tier 4
+不占用后续算力，直接归档并记录失败原因
+预测力弱且多项指标同时失效
+Tier 4
+进入负样本池
+预测力强但换手过高或相关性过高
+Tier 2
+进入因子医院进行平滑或正交化
+通过硬门槛且适合单因子使用
+Tier 3A 或 3B
+进入核心或卫星生产库
+单因子一般但对非线性聚合有价值
+Tier 3C
+进入特征原料库
+生产中持续衰退但仍有研究价值
+watchlist 或 Tier 2
+观察、修复或低权重保留
+第七章 标准化评估流水线
+评估流水线是整个工厂的核心加工段。与原始因子挖掘相比，评估更强调口径统一、结构化产出和可比性。流水线应支持单因子调试模式和批量因子生产模式，并在每个阶段输出标准对象，而不是只生成可视化报表。
+表 9 评估流水线 Stage
+Stage
+名称
+关键动作
+输出对象
+0
+接入与登记
+创建户籍、批次、血缘和版本
+FactorSpec、ExperimentRecord
+0A
+资源与复杂度预检查
+复杂度上限、算力配额、超时预算、未来函数和死循环熔断
+Precheck Report
+1
+数据治理
+复权校验、异常剔除、去极值、标准化、中性化
+Clean Exposure
+2
+预测能力
+IC、ICIR、衰减、半衰期、多空预测拆解
+Predictive Metrics
+3
+收益风险
+构建模拟组合并计算净值指标
+Return & Risk Metrics
+4
+结构鲁棒性
+单调性、PFS、Regime Stability
+Structure & Robustness Metrics
+5
+独立性与冗余
+残差 Alpha、Incremental IR、库内相关性、簇归属
+Orthogonalization Metrics
+6
+交易与容量
+换手、冲击、容量、融券费率、执行偏移
+Execution Metrics
+7
+决策与路由
+硬否决、软保留、贴标、评分卡、路由
+Admission Decision、Tag Package
+8
+超级 Alpha 回流评估
+聚合器输出登记为新因子并重跑完整流程
+Recursive Evaluation Record
+Stage 0A 是企业级环境中非常容易被忽略、但非常关键的一层。自动化挖掘方法，尤其是遗传规划、强化学习和 LLM 生成式表达式，常常会产出语法上合法但计算上极其昂贵的候选。如果没有在进入大规模回测前对 AST 深度、算子数量、单次截面耗时、内存占用和异常循环进行熔断，少量劣质候选就足以拖垮整条评估流水线。
+第八章 指标体系总览
+代码库应支持的是评估指标的“企业级超集”。这意味着即便当前默认入库标准只用到一部分指标，系统也要具备计算和存储其余指标的能力，以便后续策略升级、不同产品定制和多市场迁移。建议将指标分为八大族群，并统一纳入 Metric Dictionary 管理。
+表 10 指标族群总览
+族群
+目标
+代表指标
+数据质量与预处理
+确保输入可信、暴露可比较
+Coverage、Missing Ratio、MAD、Z-score、Neutralization Residual
+预测能力
+衡量截面排序与未来收益关系
+IC、Rank IC、ICIR、Half-Life、Hit Ratio
+收益与尾部风险
+衡量多空组合真实收益质量
+Net Sharpe、IR、Omega、Burke、Max Drawdown
+单调性与结构稳定性
+确认因子排序是连续而非偶然的
+Monotonicity Score、PT 检验、Long/Short Asymmetry
+交易摩擦与容量
+评估实盘可执行性
+Turnover、Fitness、Square-Root Impact、Break-even AUM
+独立性与增量价值
+控制冗余和同质化风险
+Residual Alpha、Incremental IR、Library Correlation
+过拟合与鲁棒性
+识别数据挖掘伪发现
+Haircut Sharpe、DSR、PFS、Regime Stability
+美股专属微观结构
+纳入市场制度与执行现实
+O2O/VWAP、HTB Fee、Overnight IC、Earnings-Neutral IC
+8.1 数据质量与预处理指标
+底层数据治理是评估体系的第一道闸门。量价因子极易被复权错误、成交量异常、拆股分红和个股停牌扭曲，因此系统必须在正式计算预测力之前，完成覆盖率、异常值、缺失值和中性化残差的统一检查。建议这些指标既用于否决，也用于形成后续标签。
+Coverage、Missing Ratio、Outlier Ratio、Cross-sectional Dispersion。
+Data Sanity Flags：价格跳变、量能异常、复权失败、停牌缺失、异常成交。
+Pre- and Post-normalization Diagnostics：去极值前后分布、标准化后分布。
+Industry/Size/Style Neutralization Residual：中性化后残余暴露。
+8.2 预测能力指标
+预测能力指标不直接说明能否实盘，但它们是因子作为截面信号存在的根基。日频量价因子建议以 Rank IC 为主，而不是依赖更脆弱的线性 IC。除均值外，更重要的是稳定性、衰减速度以及多空两端是否对称。
+IC、Rank IC、ICIR、Rank ICIR、Breadth、Hit Ratio。
+Long-only IC、Short-only IC、Long/Short IC Asymmetry。
+IC Decay、Half-Life、Signal Autocorrelation、Delay Sensitivity。
+Top Bucket Hit Rate、Cross-sectional Coverage on Effective Universe。
+8.3 收益与尾部风险指标
+收益指标必须同时提供毛口径和净口径。尤其是在美股日频量价中，毛收益经常被交易成本、冲击成本和融券成本大幅侵蚀。如果文档不明确区分 Gross 和 Net，工程实现几乎一定会出现误解。
+Annualized Return、Annualized Volatility、Sharpe Ratio、Information Ratio。
+Sortino、Calmar、Omega、Kappa 3、Sterling、Burke。
+Maximum Drawdown、Drawdown Duration、Recovery Time、Gain-to-Loss Ratio。
+Gross vs Net：必须明确是否扣除手续费、冲击成本、Borrow Fee 和其他执行成本。
+8.4 单调性与结构稳定性指标
+对横截面因子而言，首尾组利差只是最粗糙的起点。企业级评估必须更关注全分组的连续性与中间分位是否稳定。否则一个只靠极端组偶发爆发的因子，很容易在实盘优化器中失真。
+Top-minus-Bottom Spread、Quantile Return Curve、Quantile Hit Ratio。
+Monotonicity Score、Patton-Timmermann Monotonicity Test。
+U 型、倒 U 型、极端组驱动、收益塌陷区识别。
+Long/Short Contribution Split 与多空不对称。
+8.5 交易摩擦与容量指标
+容量与摩擦是工业化和学术研究的分水岭。对于美股日频量价因子，很多样本内优秀因子在考虑换手、冲击和流动性参与率后会迅速失去价值，因此这部分指标必须是第一层级公民，而不是附录。
+Turnover、Holding Period、Signal Refresh Frequency。
+Fitness、Margin、Cents-per-share、Bid-Ask Spread Buffer。
+Square-Root Market Impact、Participation Rate、Liquidity Consumption。
+Break-even AUM、Capacity Under Multiple AUM Scenarios、Crowding Penalty。
+8.6 独立性、冗余与增量价值指标
+企业级总库不能靠堆数量提升质量。新因子必须能说明自己到底贡献了什么。如果只是已有动量、反转或波动率代理的轻微变体，则即使单因子回测漂亮，也不应被高分对待。
+Residual Alpha：剥离 Barra/Axioma 或自建风险模型后的残差表现。
+Incremental IR、Marginal Sharpe Lift：加入现有组合后的边际价值。
+Library Correlation、Cluster Correlation、Orthogonalization Distance Loss。
+Factor Family Similarity：与动量、价值、反转、波动率、流动性等因子簇的相似度。
+8.7 过拟合与鲁棒性指标
+在自动化高吞吐挖掘环境下，多重检验偏差和黑盒脆弱性会持续扩大。系统必须把 Haircut Sharpe、DSR、PFS 和不同市场状态下的稳定性检查纳入标准流程，并支持批次级别的独立试验次数管理。
+t-statistic、Haircut Sharpe Ratio、Deflated Sharpe Ratio。
+Effective Independent Trials、Duplicate Ratio、Survival Ratio。
+Perturbation Fidelity Score：高斯噪声与厚尾噪声双口径。
+Regime Stability：高波动、低波动、牛熊市和流动性紧张时期的表现稳定性。
+Expression Complexity：AST 深度、算子数、嵌套深度、硬编码参数规模。
+8.8 美股日频量价专属微观结构指标
+要把这套体系真正落到美股日频横截面量价上，必须补充市场制度相关的专属指标。否则大量依赖收盘噪音、隔夜跳空、财报事件和难融券股票的因子会在样本内显得很好，到了真实交易却快速失效。
+表 11 美股专属指标族
+指标或测试
+业务含义
+必须纳入的原因
+O2O / VWAP 执行偏移收益
+比较 C2C、O2O、VWAP 口径差异
+识别依赖收盘价噪音或不现实成交假设的因子
+Overnight IC / Intraday IC 拆解
+拆分隔夜与日内收益来源
+识别是否被隔夜跳空主导
+HTB Borrow Fee 扣减
+对空头端按真实融券费率扣减
+美股做空成本不可忽略
+SSR Trigger Impact
+模拟 SSR 触发后的空头报单限制、滑点抬升与部分成交
+避免依赖暴跌空头的伪 Alpha
+Short Squeeze Stress Test
+逼空风险与高做空比例检测
+避免空头端爆仓型风险
+Earnings-Neutral IC
+剔除财报前后窗口重新计算因子表现
+识别伪装成量价因子的财报事件因子
+Quad-Witching / Rebalance Stress Test
+特殊交易日单独切片评估
+避免被被动资金流和交割日异动污染
+建议把上述美股专属指标直接纳入标准计算流程，而不是作为可选附加项。这样系统才能真正筛掉依赖隔夜缺口、依赖收盘竞价噪音、依赖难融券股票和依赖财报事件的伪强因子。
+表 11A 指标字典覆盖扩展建议
+指标大类
+建议至少覆盖的指标或测试
+预测能力
+IC、Rank IC、ICIR、Rank ICIR、Hit Ratio、Breadth、Long-only IC、Short-only IC、Delay Decay、Half-Life
+收益风险
+Gross Return、Net Return、Sharpe、IR、Sortino、Calmar、Omega、Kappa、Sterling、Burke、Max DD、Recovery Time
+结构单调性
+Top-minus-Bottom、Quantile Curve、Monotonicity Score、PT 检验、多空贡献占比、U 型识别
+执行容量
+Turnover、Holding Period、Fitness、Margin、CPS、Spread Buffer、Impact、Participation Rate、Break-even AUM
+独立性
+Residual Alpha、Incremental IR、Library Correlation、Cluster Correlation、Orthogonalization Loss
+防过拟合
+t-stat、Haircut Sharpe、DSR、PFS、Regime Stability、AST Complexity、Duplicate Ratio
+美股专属
+O2O、VWAP、Overnight IC、Intraday IC、Borrow Fee、Short Squeeze、Earnings-Neutral IC、Witching Stress
+工程上建议把每一个指标都实现为标准化组件，并强制输出统一结构：指标编码、计算窗口、原始值、标准化值、是否缺失、是否通过、依赖数据版本、异常警告。这样后续无论做标签引擎、前端页面、报告模板还是复评审计，都不会反复重做解释层。
+第九章 一票否决、保留、孵化与默认入库决策
+默认入库决策不应只有“通过/否决”两种结果。企业级系统更合理的做法是把因子分成直接拒绝、保留待优、卫星准入、核心准入、特征池准入等多种路径。这样既能保证生产质量，也不会浪费高潜资产。
+表 12 默认决策分层
+决策类型
+适用条件
+默认去向
+Hard Reject
+多项核心指标失效或出现致命工程问题
+Tier 4 归档与负样本
+Soft Reject / Hold
+边界较差但未彻底失去研究价值
+watchlist 或 Tier 4
+Incubate
+预测强但存在换手、拥挤或结构瑕疵
+Tier 2 因子医院
+Accept as Satellite
+通过底线但容量、稳定性或可解释性略弱
+Tier 3B
+Accept as Core
+多维表现均衡且实盘价值强
+Tier 3A
+Accept for Feature Store
+单因子未必最强，但适合进入超级 Alpha 聚合
+Tier 3C
+表 13 推荐硬否决项
+类别
+建议默认逻辑
+原因
+数据与合法性
+未来函数、复权错误、异常值污染严重、数值计算不稳定
+避免脏数据驱动的伪因子
+预测能力
+Rank ICIR 过低，或 Delay-1 预测力近乎消失
+无稳定信号不应继续消耗资源
+结构稳定性
+单调性明显破裂，或 PT 检验不通过
+难以进入标准优化器和稳定生产
+收益质量
+净口径 Sharpe 过低，回撤过深且修复期过长
+纸面优异但实际不可承受
+交易执行
+换手灾难、Fitness 过低、冲击后净收益转负
+实盘不可落地
+过拟合
+DSR 不通过、Haircut Sharpe 失真严重、PFS 极低
+高概率是伪发现
+容量
+Break-even AUM 无法满足产品最低吸纳要求
+不具备机构价值
+第十章 标签字典与自动贴标引擎
+标签系统是整个因子工厂的神经中枢。它的价值不只在于给研究员展示摘要，更在于把冷冰冰的数值指标转化为可驱动自动路由、生产约束、组合惩罚和后续聚合选择的机器语言。标签必须可配置、可扩展、可检索，并且与评估引擎解耦。
+表 14 标签族群设计
+标签族群
+目标
+典型标签
+收益与尾部风险
+刻画因子收益画像与风险性格
+alpha_core、fat_tail_left、regime_bull_only
+执行与容量
+表达交易成本与流动性约束
+high_turnover、capacity_micro、slippage_sensitive
+风格与拥挤度
+揭示伪装风格和同质化风险
+proxy_momentum、proxy_volatility、cluster_reversal
+鲁棒性与过拟合
+识别脆弱和伪发现资产
+noise_fragile、dsr_warning、mono_broken
+动作与生命周期
+驱动路由和持续治理
+needs_smoothing、needs_orthogonalization、state_production
+表 15 示例标签与触发规则
+标签
+默认触发条件
+默认动作
+computationally_toxic
+单次截面计算耗时、内存占用或 AST 复杂度超预算
+在预检查阶段直接熔断并归档
+high_turnover
+单边或双边日均换手率超过配置阈值
+触发执行惩罚并考虑送入平滑流程
+alpha_decay_fast
+Half-Life 过短或 Delay-1 保留率过低
+降低入库优先级或路由至更短周期策略组
+tail_risk_prone
+偏度显著为负或特定压力期回撤异常
+大幅扣减风险评分
+proxy_momentum
+对动量风格暴露显著
+建议残差化或降低新颖性得分
+needs_smoothing
+IC 强但换手过高，自相关过低
+进入 Tier 2 进行平滑处理
+needs_orthogonalization
+收益尚可但与库内主力相关性过高
+进入正交化流程
+ready_for_production
+通过关键门槛且无重大瑕疵标签
+进入 Tier 3A 或 3B
+negative_sample
+彻底失效或不具可修复价值
+进入 Tier 4 保留为负样本
+实现上建议采用规则引擎驱动的自动贴标服务：评估模块只输出原始指标；贴标引擎读取指标包和阈值配置，生成 JSONB 标签集合；路由引擎再根据标签和评分进行库间流转。这样可以保证评估计算、标签生成和路由动作三者独立演化。
+对于高吞吐自动化挖掘场景，标签引擎还应支持方法特定标签。例如，对轨迹演化类系统可记录 trajectory_recombined、trajectory_refined；对 GP 可记录 crossover_heavy、mutation_dense；对多智能体框架可记录 debate_consensus_high、reflection_retry 等来源标签。它们不一定直接决定入库，但对后续定位候选来源质量、反馈上游系统和做资源配额非常有帮助。
+第十一章 存储架构与技术选型
+存储架构必须围绕控制面、数据面和产物面进行拆分。单体关系型数据库很难同时承受高并发元数据写入、海量横截面数值读写以及大批量评估产物存取。推荐使用开源的企业级铁三角：PostgreSQL 管控制面，ClickHouse 管数值面，MinIO 管产物面。
+表 16 三层存储架构
+层面
+推荐技术
+主要职责
+控制面 / Control Plane
+PostgreSQL
+存储因子身份、血缘、标签、状态、路由与配置
+数据面 / Data Plane
+ClickHouse
+存储因子暴露矩阵、评估指标宽表、历史回测序列
+产物面 / Artifact Plane
+MinIO
+存储评估快照、交互图表数据包、日志、审计文件
+这里最关键的设计点是：后端不以 PNG/JPG 作为图表主存储格式，而应把曲线、回撤和分组表现存成 JSON 或 Parquet 数据包，让前端使用 ECharts 或 TradingView Lightweight Charts 做交互式渲染。这样图表可以无限放大、拖动和查看任意日期的具体值，不会出现拉伸模糊问题。
+第十二章 数据模型与表结构建议
+要让系统真正可落地，必须把“存什么”和“怎么查”写清楚。下面给出的表结构不是唯一方案，但足以作为工程组建模的起点。原则是：元数据要高可追踪，数值矩阵要高吞吐，产物文件要可直接被前端或审计系统消费。
+表 17 控制面核心表
+表名
+关键字段
+用途
+factor_registry
+factor_id、factor_name、domain_code、method_code、campaign_id、creation_ts、current_tier、max_compute_ms
+因子户籍总表，并为算力预算预留字段
+factor_expression_store
+factor_id、formula_text、formula_ast、ast_hash、semantic_hash
+表达式与 AST 存储
+factor_lineage
+child_factor_id、parent_factor_id、relation_type、created_ts
+血缘关系追踪
+factor_tags
+factor_id、tags_jsonb、tag_version、updated_ts
+标签集合与版本管理
+experiment_registry
+experiment_id、batch_id、generator_info、effective_trial_count
+实验登记与多重检验治理
+routing_history
+factor_id、from_tier、to_tier、reason_code、ts
+路由和升降级记录
+表 18 数据面核心表
+表名
+关键字段
+用途
+factor_exposures_daily
+trade_date、knowledge_ts、ticker、factor_id、raw_value、z_score、neutralized_value
+日度横截面暴露矩阵，并预留 PIT 防穿越字段
+factor_metrics_history
+eval_date、factor_id、metric_code、metric_value、window_spec
+历史指标明细
+factor_metrics_wide
+factor_id、eval_run_id、rank_ic_ir、net_sharpe、fitness、break_even_aum 等
+评估宽表，便于报表和筛选
+factor_backtest_timeseries
+trade_date、factor_id、long_pnl、short_pnl、net_pnl、drawdown
+回测时间序列
+factor_quantile_panel
+trade_date、factor_id、quantile_id、forward_return、hit_ratio
+分组测试结果
+factor_borrow_fee_panel
+trade_date、ticker、borrow_fee、short_interest_flag
+融券与做空约束相关数据
+feature_store_online_cache
+trade_ts、factor_id、ticker、online_value、ttl
+在线推理或盘前推理所需的高速缓存层
+这里建议明确保留 `knowledge_ts`。即便当前首期主要处理量价因子，看起来只有 `trade_date` 就足够，但企业级底座不应只为当前一类数据设计。一旦未来扩展至基本面、另类数据或任何存在历史修订的数据源，`knowledge_ts` 将成为底层 PIT 防穿越能力的关键字段，提前预留可以避免未来大规模返工。
+表 19 产物面对象设计
+对象路径
+内容
+前端或审计用途
+artifacts/{factor_id}/equity_curve.parquet
+资金曲线、回撤、基准比较
+交互式净值图渲染
+artifacts/{factor_id}/scorecard_{ts}.json
+评分卡明细和中间变量
+研究审计与复盘
+artifacts/{factor_id}/quantile_panel.parquet
+分组收益曲线与单调性数据
+前端分组图和下载
+artifacts/{factor_id}/stress_tests.json
+财报期、四巫日、O2O/VWAP 等压力测试
+专项复核
+artifacts/{factor_id}/execution_logs.txt
+评估失败日志和 Traceback
+排障与回溯
+第十三章 异步调度中枢与任务编排
+面向 24 小时多方法持续挖掘的场景，评估系统必须与挖掘系统解耦。推荐采用消息队列与调度编排的架构，让候选因子的产生、评估、贴标、路由和复评各自作为独立任务节点。这样既有利于扩容，也便于失败重试和阶段性缓存。
+从上游方法论看，当前常见框架虽然名字各异，但大体可归纳为几类：一类类似 QuantaAlpha，强调 LLM 与演化式轨迹搜索；一类类似 TradingAgents 或多智能体系统，强调角色协作、反思与验证；一类偏 AlphaProbe、AlphaSage、CogAlpha 这种 hypothesis-probe-validate 或 planner-executor-reflector 管线；还有一类以 RL、GP、MCTS 为主的搜索器，更关注表达式空间或轨迹空间的高效探索。主文档不必逐个描述产品细节，但必须为这些上游方法预留统一接入协议和差异化控制位。
+表 20 调度与任务编排建议
+组件
+推荐技术
+职责
+消息队列
+Kafka 或 RabbitMQ
+接收候选因子、派发评估任务、广播状态变化
+DAG 调度
+Airflow 或 Prefect
+编排评估、贴标、路由、复评流程
+并行计算
+Ray、Spark 或自建分布式任务池
+大规模批量评估与特征计算
+去重引擎
+SymPy + 数值指纹比对
+识别数学等价或高度相似候选
+守护进程
+定时服务或事件驱动 Worker
+执行周度复评、降级、垃圾回收
+表 20A 上游挖掘方法接入分型
+方法分型
+代表特征
+系统应记录的关键元数据
+LLM + Evolution
+研究方向规划、轨迹变异、结构化代码约束
+trajectory_id、plan_version、reflection_log、constraint_profile
+Multi-Agent
+角色分工、候选辩论、共识与反思
+agent_roles、discussion_id、consensus_score、review_trace
+RL / Search
+奖励驱动、动作探索、环境交互
+env_version、reward_version、policy_id、budget_used
+Genetic Programming
+种群进化、交叉、变异
+generation_id、parent_ids、mutation_type、crossover_type
+Probe / Sage / Cog 类管线
+假设生成、探针验证、重写修正
+hypothesis_id、probe_result、rewrite_instruction、validator_result
+为了统一接入，建议定义 Candidate Submission Schema。每个候选至少提交：表达式或代码、来源方法、批次、父子关系、复杂度特征、生成时间、推荐频率、解释摘要和资源预算建议。这样评估引擎对上游方法保持开放，对输入协议保持强约束。
+第十四章 特征池、超级 Alpha 与递归重评机制
+单因子不是终点。企业级量化工厂最终会把一批低相关、高信息量的因子送入更高层的聚合引擎，形成超级 Alpha。关键点不在于模型多先进，而在于：哪些因子能进入特征池、如何防止在线离线偏移、超级 Alpha 产出后如何重新回到评估流水线。
+表 21 特征池与超级 Alpha 架构
+层面
+建议设计
+目的
+Offline Feature Store
+ClickHouse + Parquet + PIT 查询约束
+支持训练阶段高吞吐拉取
+Online Feature Store
+Redis 或同类高速 KV
+盘前或盘中极速读取最新有效因子
+Pre-filtering
+按标签与聚类结果进行拥挤度去重和抽样
+防止同质化特征过拟合
+Aggregator Model Zoo
+LightGBM、XGBoost、TabNet、Cross-sectional Transformer
+支持异构聚合方式并行验证
+Recursive Evaluation
+聚合后的 Master Score 重新走完整评估流程
+保证超级 Alpha 也接受相同的工业标准
+需要明确的是：超级 Alpha 的输出不应天然视为生产级信号。无论模型多复杂，它在系统中依旧只是一个新的因子对象，必须重新接受换手、冲击、单调性、容量和鲁棒性的完整审查。这种递归重评，是防止“聚合器层面回测好看、实盘落地失真”的关键防线。
+第十五章 工程模块、服务边界与接口对象
+为了避免系统早期走向 notebook 化或脚本堆积式开发，建议从一开始就按模块和对象设计。模块决定工程拆分方式，对象决定上下游如何交换数据。只要对象定义清晰，未来是函数库、微服务还是平台化界面，都能顺滑演进。
+表 22 核心工程模块
+模块
+职责
+Registry Service
+负责因子身份、版本、批次、血缘与路由元数据
+Evaluation Engine
+执行全量指标计算、回测、分组测试和压力测试
+Tagging Engine
+根据指标和规则配置打标签
+Routing Engine
+根据标签、得分和规则执行库间路由
+Transformation Engine
+平滑、正交、降频、重组等加工逻辑
+Storage Access Layer
+统一读写 PostgreSQL、ClickHouse、MinIO
+Feature Store Service
+向聚合模型提供 PIT 安全特征读取
+Reporting Service
+生成标准化报告、图表、下载物料和 DOCX/PDF
+Monitoring & Governance Service
+负责复评、漂移监控、告警和降级
+表 23 核心接口对象
+对象
+关键字段
+说明
+FactorSpec
+factor_id、expression、ast_hash、domain_code、method_code
+候选因子定义
+DatasetSpec
+universe、date_range、adjustment_rule、borrow_fee_source
+数据集定义
+EvaluationConfig
+metric_set、cost_model、execution_assumption、veto_template
+评估配置
+MetricsPackage
+metrics_dict、warnings、plots_ref、runtime_stats
+评估结果主对象
+TagPackage
+tags_json、tag_version、trigger_details
+自动贴标结果
+RoutingDecision
+decision_type、target_tier、reason_codes、required_actions
+路由决策结果
+LifecycleRecord
+current_state、review_date、drift_metrics、owner
+生命周期治理对象
+第十六章 生命周期治理与生产监控
+入库后的治理能力与入库前的评估能力同样重要。一个在历史上表现优秀的因子，未来可能因为拥挤、市场制度变化、容量恶化或风格失效而迅速退化。因此系统必须支持从日度监控、周度复评到月度审议的分层治理节奏，并允许标签、状态和去向动态变化。
+表 24 生产监控维度
+监控维度
+建议内容
+典型动作
+预测漂移
+近期 Rank IC、ICIR 与历史均值偏离度
+降权、预警、转入观察名单
+执行漂移
+换手、滑点、冲击成本、Borrow Fee 抬升
+降低资金分配、触发再评估
+容量漂移
+Break-even AUM 变化、参与率挤压
+限制规模或退出核心库
+相关性漂移
+与库内主力或某簇因子重叠度上升
+降级为卫星或送去正交化
+状态敏感性漂移
+财报期、VIX 升高、四巫日等窗口下表现劣化
+增加情景约束或进入观察名单
+第十七章 配置化规则、参数管理与版本治理
+百亿私募级系统最忌讳的一件事，就是把关键阈值、标签触发器、成本模型和路由逻辑硬编码进多个脚本。一旦 AUM 上升、产品线扩展、市场切换或成本假设变化，硬编码系统会迅速失控。正确做法是将配置分层管理，并明确哪些配置属于全局级、市场级、策略级、产品级和实验级。
+表 25 配置分层建议
+配置层
+典型内容
+变更频率
+Global
+通用对象模型、状态码、标签枚举、日志规范
+极低
+Market
+美股复权规则、交易日历、HTB 数据源、特殊交易日清单
+低
+Domain
+量价总库的默认指标集、默认中性化方案、默认分组数
+中
+Strategy/Product
+容量要求、换手容忍度、风险偏好、目标执行口径
+中高
+Experiment
+某一轮实验的特定窗口、样本过滤、临时阈值
+高
+表 26 配置版本治理要求
+对象
+必须记录的版本字段
+说明
+Metric Dictionary
+metric_dict_version
+指标定义变化必须可回溯
+Tag Rules
+tag_rule_version
+避免同一标签跨时间口径漂移
+Scorecard Template
+scorecard_version
+支持回放当时的评分逻辑
+Veto Template
+veto_version
+保证历史决策可解释
+Cost Model
+cost_model_version
+交易成本假设是结果差异的重要来源
+Dataset Snapshot
+dataset_version
+保证结果复现与审计一致性
+建议为所有正式跑批任务强制落盘一份运行清单，至少包含：数据版本、配置版本、代码 commit、任务发起人、运行时间、机器环境和输出物路径。只有这样，后续当研究员或风控追问某个因子为什么在两个月前是 Core、现在却只剩 Satellite 时，系统才能给出可审计答案。
+第十八章 非功能性要求、权限控制与审计机制
+工程实施时最容易被忽略的，往往不是指标公式，而是非功能性约束。对于企业级私募系统，性能、稳定性、权限、审计、回放和容灾与算法本身同等重要。若缺少这些基础设施，系统即使研究侧看起来强大，也无法在真实生产环境长期稳定运行。
+表 27 非功能性要求
+类别
+建议要求
+原因
+性能
+支持批量评估、并行计算、缓存和增量重算
+满足 24h 持续挖掘带来的吞吐需求
+稳定性
+任务失败可重试、阶段结果可恢复、关键对象幂等写入
+避免长流程中断导致数据污染
+复现性
+所有评估结果可按版本与时间回放
+便于审计、复盘和争议处理
+可观测性
+必须有运行日志、指标监控、任务耗时与异常告警
+便于运维与排障
+可扩展性
+支持新指标、新标签、新总库平滑接入
+避免首期设计锁死未来扩展
+安全性
+按角色控制读取、写入、上线、删除和路由权限
+因子资产本身属于核心知识产权
+Emergency Control
+提供全局 Kill-Switch，可暂停挖掘、清空评估队列并锁定生产库
+确保异常时具备物理刹车能力
+表 28 权限与审计建议
+角色
+典型权限
+审计要求
+研究员
+提交候选、查看评估、发起诊断
+记录提交与查看行为
+因子评估组
+维护指标配置、执行评估、标记问题
+记录配置变更与任务触发
+平台工程组
+管理服务、数据库、任务调度与恢复
+记录系统级运维操作
+风控负责人
+查看生产因子、调整产品级模板、审批关键降级
+记录审批与模板变更
+管理员
+执行高权限迁移、归档、回滚、数据恢复
+所有高权限动作必须留痕
+审计层面建议至少保留四类日志：任务运行日志、配置变更日志、状态流转日志和人工审批日志。任何影响生产库内容的动作都不应只有结果，没有过程。对核心生产因子，建议保留最近若干次完整评估快照，避免只留下最终结论而丢失中间证据。
+第十九章 测试、验收、灰度上线与运行手册要求
+一份真正能落地的企业级文档，必须告诉工程组如何验收系统，而不只是告诉他们要实现什么。建议在正式开发前就定义测试矩阵、验收基准、灰度上线流程和运行手册要求。否则系统极容易陷入“功能看似完成，但没有人敢正式接生产”的状态。
+表 29 测试矩阵建议
+测试类型
+建议范围
+目标
+单元测试
+指标计算、标签触发、路由逻辑、版本写入
+保证核心组件正确性
+集成测试
+从候选因子接入到报告生成的完整链路
+保证对象之间正确交互
+回放测试
+用固定数据版本重放历史任务
+保证复现一致性
+压力测试
+批量评估、并发读取、对象存储吞吐、前端加载
+确认系统容量边界
+容错测试
+模拟缺失数据、任务失败、数据库重连、对象存储不可用
+确认恢复能力
+灰度测试
+先在非生产库和卫星库试运行
+降低直接影响核心生产的风险
+表 30 验收与上线检查项
+检查项
+建议标准
+数据一致性
+同一任务重复运行结果可控且差异可解释
+配置回放
+历史任务可以按旧版本配置重新回放
+报告完整性
+评估报告、标签、路由、快照和日志齐全
+权限有效性
+不同角色只见其应见、只做其应做
+生产隔离
+实验库与生产库的写入边界明确，避免误污染
+回滚能力
+关键配置、状态和路由动作可撤回或恢复
+运行手册方面，建议工程组交付的不只是代码，还包括部署文档、数据源说明、常见异常处理手册、失败重试指南、容量扩容建议、前端图表数据格式说明和灾备恢复步骤。对企业级系统来说，运行手册不是附属品，而是生产稳定性的组成部分。
+表 30A 因子医院的常见修复动作
+修复动作
+适用问题
+输出版本
+时间平滑
+IC 强但换手过高、信号跳跃严重
+生成平滑版因子，重跑全量评估
+残差化/正交化
+与库内主力或风格因子重叠度过高
+生成残差版因子并保留父子血缘
+降频处理
+日频执行压力过大但中频仍有效
+生成低频版本，单独记录策略适用频率
+空头约束化
+空头端依赖 HTB、SSR 或逼空风险股票
+生成 long-only 或受约束空头版本
+样本过滤
+财报期、特殊交易日、微盘股驱动过强
+生成场景过滤版因子，用于诊断与对比
+表达式简化
+AST 过深、解释性差、计算成本过高
+生成可解释化版本，便于长期维护
+Tier 2 的核心价值不是给失败因子续命，而是为高潜因子提供标准化修复车间。所有修复动作都必须生成新版本，并完整记录父版本、修复类型、参数、修复时间和修复前后关键指标对比，防止研究员在多个版本间失去可追溯性。
+第二十章 默认入库模板与推荐阈值
+以下模板用于首期默认入库标准，而不是限制系统能力边界。默认模板必须保持足够保守，以保证第一版生产环境的可执行性与可解释性；与此同时，它也必须预留参数化空间，便于未来按产品规模、市场、策略风格调整。
+表 31 推荐的默认关键阈值模板
+指标
+建议阈值
+说明
+Rank ICIR
+>= 0.50
+基础预测力门槛
+Delay-1 Rank IC 保留率
+>= 30%
+防止极速衰减
+Net Sharpe（Delay-1）
+>= 1.50 进入候选；>= 2.00 可列为核心优先
+首期采取保守而可执行的企业级基线
+t-stat
+>= 3.0
+基础显著性门槛
+Haircut Sharpe
+需显著为正，且不低于候选基线
+多重检验惩罚后仍有效
+DSR
+>= 95%
+控制伪发现
+Monotonicity Score
+绝对值 >= 0.75
+要求全分组结构连续
+Patton-Timmermann p-value
+< 0.05
+严格单调性检验
+Turnover
+默认控制在 1% 至 70% 区间
+过高需进入孵化或直接拒绝
+Fitness
+>= 1.0
+收益与换手的综合门槛
+Library Correlation
+< 0.70
+控制库内冗余
+PFS
+高斯噪声 >= 0.85；厚尾噪声 >= 0.80
+抗噪稳健性要求
+Break-even AUM
+不低于当前产品最低容量需求
+产品级约束，而非全局固定值
+表 32 默认入库分级模板
+等级
+建议条件
+建议动作
+Core Alpha
+通过关键门槛，评分卡 >= 85，容量与独立性均强
+进入 Tier 3A，赋予高优先级
+Satellite Alpha
+通过关键门槛，评分卡 75-84，存在轻微瑕疵
+进入 Tier 3B，低权重使用
+Feature Store Candidate
+单因子不一定最强，但适合作为聚合输入
+进入 Tier 3C
+Incubation Candidate
+高潜但有硬伤，如高换手或高相关
+进入 Tier 2 做加工再评估
+Archive
+未通过硬门槛或长期失效
+进入 Tier 4，保留为负样本或历史资产
+第二十一章 实施路线图与交付物
+虽然系统目标是建设完整的企业级因子工厂，但实施时仍建议分阶段落地。正确的策略不是一口气把所有功能都做到极致，而是先搭出对业务最关键的主骨架，再逐步补齐高级治理与聚合能力。这样既能尽快投入使用，也不会牺牲长期上限。
+表 33 分阶段实施路线图
+阶段
+主要建设内容
+交付物
+Phase 1
+户籍登记、基础评估、评分卡、默认入库模板、标准报告，并预埋降噪与抗噪机制
+评估引擎 v1、报告模板、基础库结构、样本降权与特征洗牌基建
+Phase 2
+标签系统、路由引擎、因子医院、存储三层拆分
+Tagging Engine、Routing Engine、Tier 架构
+Phase 3
+美股专属指标、Borrow Fee、特殊交易日测试、PFS/DSR 完整治理
+高级评估模块与风险专用面板
+Phase 4
+Feature Store、超级 Alpha 递归重评、生产监控与自动降级
+聚合前置能力与治理闭环
+Phase 1 中提前考虑降噪基建非常重要。对美股日频量价场景而言，样本端的极端噪声和特征端的偶然性冗余都可能导致早期误杀优质因子。可以在此阶段预埋两类轻量机制：一类是样本降权或异常样本识别，另一类是零成本特征洗牌或特征替换诊断，为后续更系统的 DoubleEnsemble 式抗噪升级留出接口。
+表 34 推荐交付物清单
+类别
+交付物
+代码
+评估引擎、标签引擎、路由引擎、Transformation Engine
+配置
+Metric Dictionary、Tag Rules、Veto Template、Scorecard Template
+数据
+控制面表结构、数值面表结构、产物面对象目录规范
+报告
+单因子评估报告、批量评估报告、路由审计报告、复评报告
+治理
+状态机规则、升降级规则、告警机制、归档策略、Prompt/Gene Feedback Generator Service
+如果系统需要把失败因子或高贡献因子的经验回馈给上游方法，建议独立交付一个 Feedback Generator Service。该服务输出不应是随意拼接文本，而应是结构化 JSON payload，至少包含：公式 AST、失败原因或贡献归因、统计标签、约束改写指令、推荐搜索方向。这样无论上游接的是 LLM、RL、GP 还是多智能体系统，都能稳定消费反馈。
+结语
+最完整的企业级方案，并不是把所有学术指标堆得越多越好，而是把因子真正当成企业资产去管理。对一家自动化量化私募而言，因子工厂的护城河来自三件事：第一，能够稳定、高吞吐地承接候选因子；第二，能够用统一口径评估、贴标、路由并持续治理这些因子；第三，能够把单因子沉淀为更高维度的特征资产和生产能力。
+围绕美股日频横截面量价因子的这套方案，已经将两份参考文档中的核心内容统一收束为一份完整的主文档：既保留了全维度评估体系，也补足了因子库拓扑、标签系统、物理存储、状态机流转、特征池和超级 Alpha 的关键骨架。对于工程组，它是建库、建表、建服务和拆任务的需求底稿；对于研究负责人，它是未来几年因子工厂演进的总蓝图。

@@ -1,0 +1,1 @@
+-1 * (2 * close - high - low) / (high - low) * ts_mean(high - low, 5) / ts_mean(close, 5)

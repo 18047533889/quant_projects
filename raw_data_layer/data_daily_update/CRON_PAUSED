@@ -1,0 +1,20 @@
+TASK-ENG-004 — 日更/分钟 cron 已熔断（P0）
+
+原因：
+  1. 增量链路曾写入 user_workspace/lfl_workspace，非主库 massive_parquet/raw_massive_data
+  2. async_universal_fetcher 默认 max_pages=10 → REST 约 1 万行封顶
+  3. minute_update_scheduler 依赖的 incremental_update_master.py 不存在
+  4. P0 全量补数（TASK-DATA-002/003）完成前禁止增量覆盖
+
+解除条件（全部满足后再删本文件）：
+  - TASK-DATA-002/003 验收 PASS（无 2000/10000 截断）
+  - TASK-ENG-001/002 落地（.ok 门禁 + max_pages=None）
+  - FEAT-008：SIP 日更改 download_history.py，输出指向主库
+  - 团队评审通过
+
+临时手动跑（仅调试，非生产）：
+  export MASSIVE_CRON_ENABLED=1
+  rm -f raw_data_layer/data_daily_update/CRON_PAUSED
+  # 跑完务必恢复 CRON_PAUSED
+
+文档：docs/team_docs/Massive数据治理与改进行动清单.html §4 TASK-ENG-004

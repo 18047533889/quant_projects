@@ -1,0 +1,36 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "manual_20260630180035_f4f6d350",
+  "campaign_id": "manual_ashare_week2_pv_202606301800",
+  "formula": "ema(close / (high - low), 8) * ema((close - open) / close, 10) * ema(volume / ts_mean(volume, 25), 15)",
+  "expression_type": "dsl",
+  "generator_name": "manual",
+  "generator_version": "1.0.0",
+  "mined_by": "sunhaiwei",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "signal_structure": "cross_sectional",
+  "asset_class": "equity",
+  "born_timestamp": "2026-06-30T18:00:35Z",
+  "metrics": {
+    "train": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    },
+    "valid": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    },
+    "test": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    }
+  },
+  "description": "A股价量因子 a_007 自适应方向波动交叉（dir_vol_volume，elite，来源 A.pdf，IC 2.42% / Rank IC 3.75% / ICIR 0.27 / Rank ICIR 0.34）。波动×方向×自适应量能三分量交叉（汇报未展开公式，按逻辑簇还原）"
+}

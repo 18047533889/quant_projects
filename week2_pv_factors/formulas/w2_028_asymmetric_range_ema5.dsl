@@ -1,0 +1,1 @@
+-1 * ema(divide(divide(ts_sum(if_else(close <= open, high - low, 0), 20), ts_sum(if_else(close <= open, 1, 0), 20)), divide(ts_sum(if_else(close > open, high - low, 0), 20), ts_sum(if_else(close > open, 1, 0), 20))) * ema(volume, 5) / volume, 2)

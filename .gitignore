@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+
+# 测试 / 工具缓存
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# 数据与运行时产物（分发包不含大文件）
+data/**/*.parquet
+data/a_share/lqtp_data/**
+data/us_stock/**
+data/factors/lake/**/*.parquet
+data/factors/lake/_runs/**
+data/factors/lake/*.sqlite*
+data/cache/**
+logs/**
+output/**
+*.nohup
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# 敏感信息
+.env
+*.pem
+*_token*
+
+# 文档构建产物
+docs/team_docs/node_modules/

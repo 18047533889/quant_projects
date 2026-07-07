@@ -1,0 +1,23 @@
+# alphapurify 配置示例
+
+data_root: D:/基建组hyz/alphapurify适配器/quantsociety_backend/0431-测试数据
+output_root: D:/基建组hyz/alphapurify适配器/quantsociety_backend/workspace_data/alphapurify/outputs_exposures_factoranalyzer
+
+# 可选，不填时自动检测（优先 2025）
+year: 2025
+
+# 可选，默认 10
+min_symbols_per_day: 10
+
+target_factors:
+  - day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1
+  - day_aggs_v1_fundamental_book_strength_rank_2016_2025_v1
+  - day_aggs_v1_fundamental_cash_reinvestment_rank_2016_2025_v1
+
+exposure_factors:
+  - day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1
+  - day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1
+  - day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1
+
+# 是否保存配置快照到 output_root/config_snapshot.yaml
+save_config_snapshot: true

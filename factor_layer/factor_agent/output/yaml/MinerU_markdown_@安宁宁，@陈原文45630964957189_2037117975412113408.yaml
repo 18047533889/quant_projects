@@ -1,0 +1,26 @@
+# 用逐笔订单数据改进分钟频因子 - KeyPeriod因子配置
+# 海量Level 2数据因子挖掘系列（六）
+
+factor:
+  name: keyperiod_amount_top30pct
+  expr: >-
+    rank(col("keyperiod_amount_top30pct"))
+  freq: "1d"
+  description: >-
+    基于Level 2逐笔订单数据构建的日内重点时段因子。
+    统计大成交金额时段（成交金额排名前30%）内的订单特征。
+    20日换仓RankIC均值11.23%，胜率84.8%。
+    属于成交金额类因子，与Barra风格因子、深度学习因子相关性较低（均<37%）。
+
+data_source:
+  type: "multi_parquet"
+  root: "data/level2_keyperiod"
+  timestamp_col: "datetime"
+  instrument_col: "instrument"
+  max_files: 500
+
+backend:
+  type: "pandas"
+
+engine:
+  enable_cache: true

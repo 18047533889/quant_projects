@@ -1,0 +1,1 @@
+pandaspolarsduckdbplotlynumpyscipypyarrowjoblibscikit-learntqdm

@@ -1,0 +1,751 @@
+# ============================================================================
+# data_access 数据集登记表
+# ----------------------------------------------------------------------------
+# 本文件是团队读数据的"单一事实来源"。
+# 加数据集 / 改路径 / 改分区规则，全在这里改，业务代码不动。
+#
+# 字段说明（详见 data_access/config/README.md）：
+#   kind            : static | parametric
+#   access_mode     : published（全员只读）| namespaced（个人隔离）| staging（发布前暂存）
+#   layout          : plain（普通目录树）| hive（year=YYYY/ 这类 hive 分区）
+#   time_column     : 该数据集在业务约定里的「时间列」
+#   instrument_column: 该数据集在业务约定里的「标的列」
+#   hive_partitioning: 传给 DuckDB read_parquet(hive_partitioning=)
+#   union_by_name   : 传给 DuckDB read_parquet(union_by_name=)，schema 演进安全
+#   root / glob              : static 用
+#   root_template / glob_template / params_schema : parametric 用
+#
+# 环境变量展开：支持 ${VAR} 和 ~，在 registry 加载时展开一次
+#   - MASSIVE_PARQUET_ROOT: 默认指向 /home/yluel/share/projects/massive_parquet
+#   - FACTOR_LAKE_ROOT:     默认指向 $QUANTSOCIETY_WORKSPACE_DATA_ROOT/factors/lake
+#                          （不设时 workspace_paths.py 会兜底到仓库内 workspace_data）
+#   - RUN_NAMESPACE:       namespaced/staging 路径会自动替换为当前运行的 namespace
+#   - ASHARE_PARQUET_ROOT: A 股 lqtp 本地 COS 镜像根（默认 quant_projects/data/a_share/lqtp_data）
+#   - ASHARE_LQTP_COS_PREFIX: COS 真源前缀（默认 cos://qs-cold/clean_data/ashare/lqtp_data）
+#   - US_MASSIVE_ROOT:       美股 massive_data 本地镜像根
+#   - US_CLEAN_ROOT:         美股 clean_data 衍生层本地镜像根
+# ============================================================================
+
+
+# ============================================================================
+# A 股 lqtp 全量数据集（COS: clean_data/ashare/lqtp_data/*，本地镜像按需 sync）
+# ----------------------------------------------------------------------------
+# 命名：ashare_{语义}；root 均落在 ${ASHARE_PARQUET_ROOT}/{TableName}
+# 读前缺文件时 data_access.cos_mirror 会按 time_range 从 COS 增量拉取。
+# ============================================================================
+
+_ashare_lqtp_defaults: &ashare_lqtp_defaults
+  kind: static
+  access_mode: published
+  layout: plain
+  hive_partitioning: false
+  union_by_name: true
+
+ashare_stock_daily:
+  <<: *ashare_lqtp_defaults
+  root: ${ASHARE_PARQUET_ROOT:-/home/shw/quant_projects/data/a_share/lqtp_data}/StockDailyBar
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+  schema:
+    TradeDate: date
+    Symbol: string
+    Open: double
+    High: double
+    Low: double
+    Close: double
+    PreClose: double
+    Volume: int
+    Amount: double
+    Return: double
+    Vwap: double
+
+ashare_stock_minute:
+  <<: *ashare_lqtp_defaults
+  root: ${ASHARE_PARQUET_ROOT:-/home/shw/quant_projects/data/a_share/lqtp_data}/StockMinuteBar
+  glob: "**/*.parquet"
+  time_column: QuoteTime
+  instrument_column: Symbol
+  schema:
+    TradeDate: date
+    QuoteTime: timestamp
+    Symbol: string
+    Open: double
+    High: double
+    Low: double
+    Close: double
+    Volume: int
+    Amount: double
+    Vwap: double
+
+ashare_stock_valuation_daily:
+  <<: *ashare_lqtp_defaults
+  root: ${ASHARE_PARQUET_ROOT:-/home/shw/quant_projects/data/a_share/lqtp_data}/StockValuationDaily
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+  schema:
+    TradeDate: date
+    Symbol: string
+    MarketCap: double
+    CirculatingMarketCap: double
+    PeRatio: double
+    PbRatio: double
+    TurnoverRatio: double
+
+ashare_stock_capital_daily:
+  <<: *ashare_lqtp_defaults
+  root: ${ASHARE_PARQUET_ROOT:-/home/shw/quant_projects/data/a_share/lqtp_data}/StockCapitalDaily
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+  schema:
+    TradeDate: date
+    Symbol: string
+    TotalCapital: double
+    CirculatingCapital: double
+
+ashare_stock_indicator:
+  <<: *ashare_lqtp_defaults
+  root: ${ASHARE_PARQUET_ROOT:-/home/shw/quant_projects/data/a_share/lqtp_data}/StockIndicator
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+  schema:
+    TradeDate: date
+    Symbol: string
+    Eps: double
+    Roe: double
+    ReportPeriodEndDate: date
+
+ashare_stock_balance:
+  <<: *ashare_lqtp_defaults
+  root: ${ASHARE_PARQUET_ROOT:-/home/shw/quant_projects/data/a_share/lqtp_data}/StockBalance
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+  schema:
+    TradeDate: date
+    Symbol: string
+    ReportPeriodEndDate: date
+
+ashare_stock_income:
+  <<: *ashare_lqtp_defaults
+  root: ${ASHARE_PARQUET_ROOT:-/home/shw/quant_projects/data/a_share/lqtp_data}/StockIncome
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+  schema:
+    TradeDate: date
+    Symbol: string
+    TotalOperatingRevenue: double
+    OperatingRevenue: double
+
+ashare_stock_cashflow:
+  <<: *ashare_lqtp_defaults
+  root: ${ASHARE_PARQUET_ROOT:-/home/shw/quant_projects/data/a_share/lqtp_data}/StockCashFlow
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+  schema:
+    TradeDate: date
+    Symbol: string
+
+ashare_stock_dividend:
+  <<: *ashare_lqtp_defaults
+  root: ${ASHARE_PARQUET_ROOT:-/home/shw/quant_projects/data/a_share/lqtp_data}/StockDividend
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+  schema:
+    TradeDate: date
+    Symbol: string
+    CashDividend: double
+
+ashare_index_daily:
+  <<: *ashare_lqtp_defaults
+  root: ${ASHARE_PARQUET_ROOT:-/home/shw/quant_projects/data/a_share/lqtp_data}/IndexDailyBar
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+  schema:
+    TradeDate: date
+    Symbol: string
+    Open: double
+    High: double
+    Low: double
+    Close: double
+    Volume: int
+    Return: double
+
+ashare_index_constituent:
+  <<: *ashare_lqtp_defaults
+  root: ${ASHARE_PARQUET_ROOT:-/home/shw/quant_projects/data/a_share/lqtp_data}/IndexConstituent
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+  schema:
+    TradeDate: date
+    IndexSymbol: string
+    Symbol: string
+    Weight: double
+
+ashare_etf_daily:
+  <<: *ashare_lqtp_defaults
+  root: ${ASHARE_PARQUET_ROOT:-/home/shw/quant_projects/data/a_share/lqtp_data}/ETFDailyBar
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+  schema:
+    TradeDate: date
+    Symbol: string
+    Close: double
+    Volume: int
+
+ashare_calendar:
+  <<: *ashare_lqtp_defaults
+  root: ${ASHARE_PARQUET_ROOT:-/home/shw/quant_projects/data/a_share/lqtp_data}/Calendar
+  glob: "*.parquet"
+  time_column: TradeDate
+  instrument_column: TradeDate
+  schema:
+    TradeDate: date
+    IsTradeDay: bool
+
+ashare_stock_list:
+  <<: *ashare_lqtp_defaults
+  root: ${ASHARE_PARQUET_ROOT:-/home/shw/quant_projects/data/a_share/lqtp_data}/StockList
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+  schema:
+    TradeDate: date
+    Symbol: string
+    Name: string
+
+ashare_etf_list:
+  <<: *ashare_lqtp_defaults
+  root: ${ASHARE_PARQUET_ROOT:-/home/shw/quant_projects/data/a_share/lqtp_data}/ETFList
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+
+ashare_index_list:
+  <<: *ashare_lqtp_defaults
+  root: ${ASHARE_PARQUET_ROOT:-/home/shw/quant_projects/data/a_share/lqtp_data}/IndexList
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+
+ashare_stock_industry:
+  <<: *ashare_lqtp_defaults
+  root: ${ASHARE_PARQUET_ROOT:-/home/shw/quant_projects/data/a_share/lqtp_data}/StockIndustry
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+  schema:
+    TradeDate: date
+    Symbol: string
+    IndustryCode: string
+    IndustryName: string
+
+ashare_stock_status:
+  <<: *ashare_lqtp_defaults
+  root: ${ASHARE_PARQUET_ROOT:-/home/shw/quant_projects/data/a_share/lqtp_data}/StockStatus
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+
+ashare_stock_topten_shareholder:
+  <<: *ashare_lqtp_defaults
+  root: ${ASHARE_PARQUET_ROOT:-/home/shw/quant_projects/data/a_share/lqtp_data}/StockTopTenShareholder
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+
+ashare_stock_topten_float_shareholder:
+  <<: *ashare_lqtp_defaults
+  root: ${ASHARE_PARQUET_ROOT:-/home/shw/quant_projects/data/a_share/lqtp_data}/StockTopTenFloatShareholder
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+
+
+# ============================================================================
+# 美股 massive_data 全量（COS: clean_data/us_stock/massive_data/*）
+# ============================================================================
+
+_us_massive_defaults: &us_massive_defaults
+  kind: static
+  access_mode: published
+  layout: plain
+  hive_partitioning: false
+  union_by_name: true
+
+_us_hive_defaults: &us_hive_defaults
+  kind: static
+  access_mode: published
+  layout: hive
+  hive_partitioning: true
+  union_by_name: true
+
+us_stock_daily:
+  <<: *us_massive_defaults
+  root: ${US_MASSIVE_ROOT:-/home/shw/quant_projects/data/us_stock/massive_data}/StockDailyBar
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: Ticker
+  schema:
+    TradeDate: timestamp
+    Ticker: string
+    Open: double
+    High: double
+    Low: double
+    Close: double
+    PreClose: double
+    Volume: double
+    Amount: double
+    AdjFactor: double
+    VWAP: double
+    Ret: double
+    Ret_Intra: double
+    Ret_Overnight: double
+
+us_stock_valuation_daily:
+  <<: *us_massive_defaults
+  root: ${US_MASSIVE_ROOT:-/home/shw/quant_projects/data/us_stock/massive_data}/StockValuationDaily
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: Ticker
+  schema:
+    TradeDate: date
+    Ticker: string
+    MarketCap: double
+    CirculatingMarketCap: double
+    PeRatio: double
+    PbRatio: double
+    TurnoverRatio: double
+
+us_stock_indicator:
+  <<: *us_massive_defaults
+  root: ${US_MASSIVE_ROOT:-/home/shw/quant_projects/data/us_stock/massive_data}/StockIndicator
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: ticker
+
+us_stock_balance:
+  <<: *us_massive_defaults
+  root: ${US_MASSIVE_ROOT:-/home/shw/quant_projects/data/us_stock/massive_data}/StockBalance
+  glob: "**/*.parquet"
+  time_column: filing_date
+  instrument_column: ticker
+
+us_stock_income:
+  <<: *us_massive_defaults
+  root: ${US_MASSIVE_ROOT:-/home/shw/quant_projects/data/us_stock/massive_data}/StockIncome
+  glob: "**/*.parquet"
+  time_column: filing_date
+  instrument_column: ticker
+
+us_stock_cashflow:
+  <<: *us_massive_defaults
+  root: ${US_MASSIVE_ROOT:-/home/shw/quant_projects/data/us_stock/massive_data}/StockCashFlow
+  glob: "**/*.parquet"
+  time_column: filing_date
+  instrument_column: ticker
+
+us_stock_capital_daily:
+  <<: *us_massive_defaults
+  root: ${US_MASSIVE_ROOT:-/home/shw/quant_projects/data/us_stock/massive_data}/StockCapitalDaily
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: ticker
+
+us_stock_dividend:
+  <<: *us_massive_defaults
+  root: ${US_MASSIVE_ROOT:-/home/shw/quant_projects/data/us_stock/massive_data}/StockDividend
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: ticker
+
+us_stock_list:
+  <<: *us_massive_defaults
+  root: ${US_MASSIVE_ROOT:-/home/shw/quant_projects/data/us_stock/massive_data}/StockList
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+
+us_stock_industry:
+  <<: *us_massive_defaults
+  root: ${US_MASSIVE_ROOT:-/home/shw/quant_projects/data/us_stock/massive_data}/StockIndustry
+  glob: "*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+
+us_stock_status:
+  <<: *us_massive_defaults
+  root: ${US_MASSIVE_ROOT:-/home/shw/quant_projects/data/us_stock/massive_data}/StockStatus
+  glob: "*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+
+us_stock_indices_components:
+  <<: *us_massive_defaults
+  root: ${US_MASSIVE_ROOT:-/home/shw/quant_projects/data/us_stock/massive_data}/StockIndicesComponents
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+
+us_etf_daily:
+  <<: *us_massive_defaults
+  root: ${US_MASSIVE_ROOT:-/home/shw/quant_projects/data/us_stock/massive_data}/ETFDailyBar
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: Ticker
+
+us_etf_list:
+  <<: *us_massive_defaults
+  root: ${US_MASSIVE_ROOT:-/home/shw/quant_projects/data/us_stock/massive_data}/ETFList
+  glob: "*.parquet"
+  time_column: TradeDate
+  instrument_column: ticker
+
+us_calendar:
+  <<: *us_massive_defaults
+  root: ${US_MASSIVE_ROOT:-/home/shw/quant_projects/data/us_stock/massive_data}/Calendar
+  glob: "*.parquet"
+  time_column: trade_date
+  instrument_column: trade_date
+  schema:
+    trade_date: date
+    is_trading_day: bool
+
+us_security_master:
+  <<: *us_massive_defaults
+  root: ${US_MASSIVE_ROOT:-/home/shw/quant_projects/data/us_stock/massive_data}/SecurityMaster
+  glob: "*.parquet"
+  time_column: start_date
+  instrument_column: ticker
+
+us_ticker_map:
+  <<: *us_massive_defaults
+  root: ${US_MASSIVE_ROOT:-/home/shw/quant_projects/data/us_stock/massive_data}/TickerMap
+  glob: "*.parquet"
+  time_column: effective_date
+  instrument_column: ticker
+
+us_ticker_alias:
+  <<: *us_massive_defaults
+  root: ${US_MASSIVE_ROOT:-/home/shw/quant_projects/data/us_stock/massive_data}/TickerAlias
+  glob: "*.parquet"
+  time_column: ticker
+  instrument_column: ticker
+
+# ---- 美股 clean_data 衍生层（hive 分区）--------------------------------------
+us_universe_daily:
+  <<: *us_hive_defaults
+  root: ${US_CLEAN_ROOT:-/home/shw/quant_projects/data/us_stock/clean_data}/universe_daily
+  glob: "year=*/data.parquet"
+  time_column: trade_date
+  instrument_column: ticker
+  schema:
+    trade_date: date
+    ticker: string
+
+us_adj_factor:
+  <<: *us_hive_defaults
+  root: ${US_CLEAN_ROOT:-/home/shw/quant_projects/data/us_stock/clean_data}/adj_factor
+  glob: "date=*/data.parquet"
+  time_column: date
+  instrument_column: ticker
+  schema:
+    ticker: string
+    adj_factor: double
+
+us_adj_factor_clamped:
+  <<: *us_hive_defaults
+  root: ${US_CLEAN_ROOT:-/home/shw/quant_projects/data/us_stock/clean_data}/is_adj_factor_clamped
+  glob: "date=*/data.parquet"
+  time_column: date
+  instrument_column: ticker
+
+us_is_early_close:
+  <<: *us_massive_defaults
+  root: ${US_CLEAN_ROOT:-/home/shw/quant_projects/data/us_stock/clean_data}/is_early_close
+  glob: "data.parquet"
+  time_column: date
+  instrument_column: date
+  schema:
+    date: date
+    is_early_close: bool
+
+us_is_ticker_halt_minute:
+  <<: *us_hive_defaults
+  root: ${US_CLEAN_ROOT:-/home/shw/quant_projects/data/us_stock/clean_data}/is_ticker_halt/minute
+  glob: "date=*/data.parquet"
+  time_column: timestamp
+  instrument_column: ticker
+
+
+# ---- 正式行情库（全员只读） ---------------------------------------------------
+# 来源：cleaned_massive_data，已清洗过的 US 股票日线
+# 文件布局：{root}/{YYYY}/{MM}/{YYYY-MM-DD}.parquet（非 hive）
+# 常用列：ticker, align_time (tz-aware), open/high/low/close/volume, window_start
+us_stocks_sip_day_aggs:
+  kind: static
+  access_mode: published
+  layout: plain
+  root: ${MASSIVE_PARQUET_ROOT:-/home/yluel/share/projects/massive_parquet}/cleaned_massive_data/us_stocks_sip/day_aggs_v1
+  glob: "**/*.parquet"
+  time_column: align_time
+  instrument_column: ticker
+  hive_partitioning: false
+  union_by_name: true        # 保险起见开启，未来加列不破坏老代码
+  # PR8 schema 自检：首访时检查列齐全 + 类型兼容
+  schema:
+    align_time: timestamp
+    ticker: string
+    close: double
+    volume: int
+    window_start: int
+
+
+# ---- 因子湖（参数化：每个 factor_id 一棵树） ---------------------------------
+# 文件布局：{lake_root}/factors/{factor_id}/year=YYYY/data.parquet
+# 常用列：datetime (ns), asset, value
+# 为什么是 parametric：factor_id 是路径的一段，静态 VIEW 搞不定
+factor_lake:
+  kind: parametric
+  access_mode: published
+  layout: hive
+  root_template: ${FACTOR_LAKE_ROOT:-/home/shw/quant_projects/data/factors/lake}/factors/{factor_id}
+  glob_template: "year=*/data.parquet"
+  params_schema:
+    factor_id: str
+  time_column: datetime
+  instrument_column: asset
+  hive_partitioning: true    # year=YYYY 交给 DuckDB 做分区剪枝
+  union_by_name: true        # 允许不同年份的 schema 有列差异
+  schema:
+    datetime: timestamp
+    asset: string
+    value: double
+    # year 是 hive 分区列，不在 parquet header 里，不声明
+
+
+# ---- 个人单标的回测结果（每人隔离） -----------------------------------------
+# 路径自动带 ${RUN_NAMESPACE}，多人/多终端并发跑不会撞路径
+# 需要在 shell 里 export QUANT_RUN_NAMESPACE=你的名字，否则兜底成 anon__<branch>__<pid>
+# （兜底的目的是别让人忘 export 就崩；实验期别依赖它做审计）
+single_asset_backtest_runs:
+  kind: parametric
+  access_mode: namespaced
+  layout: plain
+  root_template: ${QUANTSOCIETY_WORKSPACE_DATA_ROOT:-/home/yluel/share/projects/quantsociety_backend_project/workspace_data}/users/${RUN_NAMESPACE}/backtests/single_asset/{strategy_id}_{version}
+  glob_template: "**/*.parquet"
+  params_schema:
+    strategy_id: str
+    version: str
+  time_column: timestamp
+  instrument_column: symbol
+  hive_partitioning: false
+  union_by_name: true
+
+
+# ---- 因子湖 staging（发布候选区） -------------------------------------------
+# PR2 引入：新算出来的因子先写到这里（namespace 隔离 + 审计日志），
+# 经 PR3 的 publish 流程校验后才会晋升到上面的 factor_lake。
+# 布局与 factor_lake 一致：{staging_root}/factors/{factor_id}/year=YYYY/data.parquet
+factor_lake_staging:
+  kind: parametric
+  access_mode: staging
+  layout: hive
+  root_template: ${QUANTSOCIETY_WORKSPACE_DATA_ROOT:-/home/yluel/share/projects/quantsociety_backend_project/workspace_data}/staging/${RUN_NAMESPACE}/factor_lake/factors/{factor_id}
+  # 注意：write_arrow 用 pyarrow.dataset 写分区，生成 year=YYYY/part-xxxx-0.parquet
+  # glob 用 *.parquet 兼容。PR3 迁移 materializer 时再看要不要统一成 data.parquet
+  glob_template: "year=*/*.parquet"
+  params_schema:
+    factor_id: str
+  time_column: datetime
+  instrument_column: asset
+  hive_partitioning: true
+  union_by_name: true
+
+
+# ============================================================================
+# PR4 新增：streaming / raw 原始数据层登记
+# ----------------------------------------------------------------------------
+# 这几个数据集以前 streaming/ 和 raw_data_layer/ 里各自拼路径、各自读 parquet；
+# 迁到 data_access 后，读侧统一走 store.read_arrow，路径 / schema / 审计全收敛。
+#
+# 写侧是否经 data_access 写：视数据集而定——
+#   - streaming_*：由 streaming 服务自己的 BarWriter/TickWriter 落盘（原子性更紧），
+#                 不经 write_arrow，仅让 data_access 负责读端
+#   - massive_*/*_raw：外部数据源导入，只读，不走 data_access 写
+# 这是 PR4 的边界：data_access 读端收紧，写端暂不动已有 writer。
+# ============================================================================
+
+
+# ---- streaming factor values（当日/即时因子数据流） -------------------------
+# 写入：streaming/factors/factor_stream_manager.py 每 flush 落一个
+#       factor_values_<ts>_<id>.parquet，单目录扁平（不分日期子目录）
+# 列：factor_id, symbol, timestamp_ns (int64 ns), value, freq, receive_ns
+# time_column 用 timestamp_ns；DuckDB 对 int64 做范围过滤一样高效
+# instrument_column = symbol
+factor_values_stream:
+  kind: static
+  access_mode: published
+  layout: plain
+  root: ${QUANTSOCIETY_WORKSPACE_DATA_ROOT:-/home/yluel/share/projects/quantsociety_backend_project/workspace_data}/streaming/factor_stream
+  glob: "factor_values_*.parquet"
+  time_column: timestamp_ns
+  instrument_column: symbol
+  hive_partitioning: false
+  union_by_name: true
+  schema:
+    factor_id: string
+    symbol: string
+    timestamp_ns: int
+    value: double
+    freq: string
+    receive_ns: int
+
+
+# ---- streaming bars（实时 K 线） --------------------------------------------
+# 写入：streaming/persistence/bar_writer.py，布局 {freq}/{YYYY-MM-DD}/{symbol}.parquet
+# symbol 是文件名不是列——read 时按 time_column + 目录结构过滤；若要按 symbol 筛，
+# 调用方目前只能传 time_range 后在结果上二次过滤（或 load_columns 后按 filename）。
+# 如果以后有大量按 symbol 读的需求，再改成 parametric 带 {symbol} / {freq}。
+# 列：timestamp (pa.timestamp ns), open/high/low/close/volume/vwap/trade_count
+streaming_bars:
+  kind: static
+  access_mode: published
+  layout: plain
+  root: ${QUANTSOCIETY_WORKSPACE_DATA_ROOT:-/home/yluel/share/projects/quantsociety_backend_project/workspace_data}/streaming/bars
+  glob: "**/*.parquet"
+  time_column: timestamp
+  instrument_column: symbol   # 注：不在 schema 里，但业务语义上对应；按 symbol 过滤需 PR5 再设计
+  hive_partitioning: false
+  union_by_name: true
+
+
+# ---- streaming ticks raw（未清洗逐笔行情） ----------------------------------
+# 写入：streaming/data/tick_writer.py，布局 {symbol}/{YYYY-MM-DD}/{trades|quotes}.parquet
+# trades / quotes 两种 schema 不一样，用 union_by_name=true 合并读出来最宽的列集
+# 列（trades）：timestamp_ns (int64), symbol, price, size, exchange, conditions...
+# 列（quotes）：timestamp_ns (int64), symbol, bid_price, ask_price, bid_size, ask_size...
+streaming_ticks_raw:
+  kind: static
+  access_mode: published
+  layout: plain
+  root: ${QUANTSOCIETY_WORKSPACE_DATA_ROOT:-/home/yluel/share/projects/quantsociety_backend_project/workspace_data}/streaming/ticks
+  glob: "**/*.parquet"
+  time_column: timestamp_ns
+  instrument_column: symbol
+  hive_partitioning: false
+  union_by_name: true
+
+
+# ---- massive ticks（raw_massive_data 里的历史逐笔） -------------------------
+# 参数化：{kind} ∈ {trades_v1, quotes_v1}，两棵树 schema 不同，分开读更安全
+# 布局：{root}/{kind}/{YYYY}/{MM}/{YYYY-MM-DD}.parquet（非 hive）
+# 列：sip_timestamp (int64 ns UTC), ticker, price/size/... 或 bid_/ask_...
+massive_ticks:
+  kind: parametric
+  access_mode: published
+  layout: plain
+  root_template: ${MASSIVE_PARQUET_ROOT:-/home/yluel/share/projects/massive_parquet}/raw_massive_data/us_stocks_sip/{kind}
+  glob_template: "**/*.parquet"
+  params_schema:
+    kind: str     # 取值：trades_v1 | quotes_v1
+  time_column: sip_timestamp
+  instrument_column: ticker
+  hive_partitioning: false
+  union_by_name: true
+
+
+# ---- us_stocks_sip raw（未清洗日线，clean 前的原始版本） --------------------
+# 和已有的 us_stocks_sip_day_aggs 是一对：raw 在 raw_massive_data/，cleaned 在 cleaned_massive_data/
+# 布局：{root}/{YYYY}/{MM}/{YYYY-MM-DD}.parquet（非 hive）
+# 列：window_start (int64 ns UTC), ticker, open/high/low/close/volume
+# 用途：数据溯源、对齐前原始比对；生产读逻辑请用 cleaned 版本
+us_stocks_sip_raw:
+  kind: static
+  access_mode: published
+  layout: plain
+  root: ${MASSIVE_PARQUET_ROOT:-/home/yluel/share/projects/massive_parquet}/raw_massive_data/us_stocks_sip/day_aggs_v1
+  glob: "**/*.parquet"
+  time_column: window_start
+  instrument_column: ticker
+  hive_partitioning: false
+  union_by_name: true
+  schema:
+    window_start: int
+    ticker: string
+    open: double
+    high: double
+    low: double
+    close: double
+    volume: double
+
+
+# ============================================================================
+# PR5 新增：业务读端迁移需要的 dataset
+# ----------------------------------------------------------------------------
+# PR5 把 strategy_layer / factor_layer / backtest_layer 的直读 parquet 迁到
+# store.read_arrow。过程中发现一批 "业务方读了但 PR4 还没登记" 的 dataset，
+# 补在这里。每个登记的理由在注释里写清楚。
+# ============================================================================
+
+
+# ---- daily_market_summary（每年一个 parquet 的聚合日线，字段是 Polygon 原始缩写） ----
+# 布局：{root}/daily_market_summary_{YYYY}.parquet（扁平，文件名带年份）
+# 列：T (ticker), v (volume), vw (vwap), o/c/h/l (OHLC), t_1 (ns), n (trade_count),
+#     trade_date (VARCHAR YYYY-MM-DD)
+# 为什么用 trade_date 作为 time_column：t_1 是 ns ts 但 DuckDB 对字符串 "YYYY-MM-DD"
+# 做范围过滤一样快（字典序 == 时间序），且业务方（strategy_layer.data market_data.py
+# aggregate_bars_daily_summary 模式、barra project_inputs）都是按交易日切片。
+# 和 us_stocks_sip_day_aggs 的区别：这个是 raw 缩写字段 + 年粒度文件；
+# day_aggs 是 cleaned 标准字段 + 日粒度文件。两者都保留，不合并。
+daily_market_summary:
+  kind: static
+  access_mode: published
+  layout: plain
+  root: ${MASSIVE_PARQUET_ROOT:-/home/yluel/share/projects/massive_parquet}/raw_massive_data/aggregate_bars/daily_market_summary
+  glob: "daily_market_summary_*.parquet"
+  time_column: trade_date
+  instrument_column: T
+  hive_partitioning: false
+  union_by_name: true
+  schema:
+    T: string            # ticker 缩写，polygon 原始字段
+    trade_date: string   # VARCHAR YYYY-MM-DD
+    v: double            # volume
+    vw: double           # vwap
+    o: double
+    c: double
+    h: double
+    l: double
+    t_1: int             # ns 时间戳
+
+
+# ---- stocks_floats（流通股 / 自由流通比例，单文件全市场快照） ----------------
+# 布局：{root}/stocks_floats_all.parquet（单文件）
+# 列：ticker, free_float (BIGINT), effective_date (VARCHAR), free_float_percent (DOUBLE)
+# 时间列用 effective_date（"YYYY-MM-DD" 字符串，同 daily_market_summary 理由）
+# 用途：barra_model/project_inputs 里做因子项目级 mcap weighting
+stocks_floats:
+  kind: static
+  access_mode: published
+  layout: plain
+  root: ${MASSIVE_PARQUET_ROOT:-/home/yluel/share/projects/massive_parquet}/raw_massive_data/fundamentals/stocks_floats
+  glob: "stocks_floats_all.parquet"
+  time_column: effective_date
+  instrument_column: ticker
+  hive_partitioning: false
+  union_by_name: true
+  schema:
+    ticker: string
+    effective_date: string       # VARCHAR YYYY-MM-DD
+    free_float: int
+    free_float_percent: double

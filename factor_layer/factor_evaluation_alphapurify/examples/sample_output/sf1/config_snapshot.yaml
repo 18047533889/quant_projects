@@ -1,0 +1,17 @@
+# 单因子示例配置（用于生成 examples/sample_output 下的完整示例产物）
+
+data_root: D:/基建组hyz/alphapurify适配器/quantsociety_backend/0431-测试数据
+output_root: D:/基建组hyz/alphapurify适配器/quantsociety_backend/factor_layer/alphapurify/examples/sample_output/sf1
+
+year: 2025
+min_symbols_per_day: 10
+
+target_factors:
+  - day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1
+
+exposure_factors:
+  - day_aggs_v1_fundamental_float_tightness_rank_2016_2025_v1
+  - day_aggs_v1_fundamental_operating_cashflow_rank_2016_2025_v1
+  - day_aggs_v1_fundamental_operating_margin_proxy_rank_2016_2025_v1
+
+save_config_snapshot: true
