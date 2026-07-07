@@ -104,6 +104,8 @@
   reason: "读因子 lake 落盘结果；物化输出非 registry dataset"
 - path: factor_engine/tests/**
   reason: "测试 fixture 需要构造 parquet"
+- path: factor_engine/storage/cache.py
+  reason: "PersistentPlanCache 磁盘层读写 plan 子树 parquet；执行期缓存非 registry dataset"
 - path: scripts/verify_gtja191_factor_lake.py
   reason: "GTJA191 factor lake 结构审计 + 重算对比；按 factors/<id>/year=*/data.parquet 逐分区读，非 registry dataset"
 
