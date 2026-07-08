@@ -17,6 +17,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
+
 from api.dsl_parser import parse_factor
 from api.factor import Factor
 from backend.context import ExecutionContext
@@ -29,6 +31,7 @@ from planner.logical_plan import PlanNode
 from planner.lowerer import Lowerer
 from planner.optimizer import Optimizer
 from runtime.config import FactorEngineConfig, load_config
+from runtime.env_bootstrap import bootstrap_runtime_env
 from runtime.perf_config import PerfConfig
 from storage.cache import CacheManager, PersistentPlanCache
 from storage.data_scope import compute_data_scope
@@ -42,6 +45,7 @@ class FactorEngine:
     """因子引擎：注入后端与数据源，对 :class:`api.factor.Factor` 做编译与执行。"""
 
     def __init__(self, backend, data_source, cache=None) -> None:
+        bootstrap_runtime_env()
         self.backend = backend  # PandasBackend / PolarsBackend / …，由 build_backend 构造
         self.data_source = data_source  # 从 parquet 等拉 MultiIndex 面板的统一入口
         self.cache = cache  # 列级缓存；无则每次 execute 全量算
@@ -49,11 +53,19 @@ class FactorEngine:
         self.lowerer = Lowerer()  # IR → 逻辑计划树
         self.optimizer = Optimizer()  # 计划级优化（常折叠等）
 
-    def compile(self, factor: Factor):
+    def compile(self, factor: Factor, *, pit_enforce: bool = False, pit_forbid_forward_fill: bool = False):
         """Expr → Analyzer → Lowerer → Optimizer，返回 (plan, analysis)。"""
         started_at = time.perf_counter()
         logger.info("开始编译因子 '%s'", factor.name)
         analysis = self.analyzer.lower(factor.expr)
+        if pit_enforce:
+            from runtime.pit_audit import assert_pit_safe
+
+            assert_pit_safe(
+                analysis.ir,
+                enforce=True,
+                forbid_forward_fill=pit_forbid_forward_fill,
+            )
         logical_plan = self.lowerer.to_logical_plan(analysis.ir)
         optimized_plan = self.optimizer.optimize(logical_plan)
         logger.info(
@@ -153,7 +165,20 @@ class FactorEngine:
         """一键从配置文件跑因子，结果里附带 config 对象。"""
         logger.info("开始从配置执行因子: %s", config_path)
         engine, factor, config = cls.from_config(config_path)
-        result = engine.run(factor)
+        from runtime.config_runtime import resolve_run_kwargs
+
+        opts = resolve_run_kwargs(config)
+        result = engine.run(
+            factor,
+            auto_warmup=opts.auto_warmup,
+            trim_warmup=opts.trim_warmup,
+            market=opts.market,
+            input_dq_check=opts.input_dq_check,
+            input_dq_strict=opts.input_dq_strict,
+            input_dq_thresholds=opts.input_dq_thresholds,
+            pit_enforce=opts.pit_enforce,
+            pit_forbid_forward_fill=opts.pit_forbid_forward_fill,
+        )
         result["config"] = config
         logger.info("完成从配置执行因子: %s", factor.name)
         return result
@@ -173,22 +198,119 @@ class FactorEngine:
         """一键从配置文件执行因子并落盘到因子湖（Parquet）。"""
         logger.info("开始从配置物化因子: %s", config_path)
         engine, factor, config = cls.from_config(config_path)
-        materialization = config.materialization
+        from runtime.config_runtime import resolve_materialize_kwargs
+
+        opts = resolve_materialize_kwargs(
+            config,
+            lake_root_override=str(lake_root) if lake_root is not None else None,
+            factor_id_override=factor_id,
+            author_override=author,
+            frequency_override=frequency,
+            description_override=description,
+            expression_override=expression,
+        )
         result = engine.materialize(
             factor,
-            lake_root=lake_root or (materialization.lake_root if materialization else None),
-            factor_id=factor_id or (materialization.factor_id if materialization else None),
-            author=author or (materialization.author if materialization else None),
-            frequency=frequency or (materialization.frequency if materialization else None),
-            description=description or (materialization.description if materialization else None),
-            expression=(
-                expression
-                or (materialization.expression if materialization else None)
-                or config.factor.expr
-            ),
+            lake_root=opts.lake_root,
+            factor_id=opts.factor_id,
+            author=opts.author,
+            frequency=opts.frequency,
+            description=opts.description,
+            expression=opts.expression,
+            auto_warmup=opts.auto_warmup,
+            trim_warmup=opts.trim_warmup,
+            market=opts.market,
+            dq_check=opts.dq_check,
+            dq_strict=opts.dq_strict,
+            dq_thresholds=opts.dq_thresholds,
+            input_dq_check=opts.input_dq_check,
+            input_dq_strict=opts.input_dq_strict,
+            input_dq_thresholds=opts.input_dq_thresholds,
+            preserve_invalid_rows=opts.preserve_invalid_rows,
+            value_dtype=opts.value_dtype,
+            write_target=opts.write_target,
+            data_source_config=opts.data_source_config,
+            pit_enforce=opts.pit_enforce,
+            pit_forbid_forward_fill=opts.pit_forbid_forward_fill,
+            clickhouse_table=opts.clickhouse_table,
+            ch_host=opts.clickhouse_host,
+            ch_port=opts.clickhouse_port,
+            ch_database=opts.clickhouse_database,
+            ch_username=opts.clickhouse_username,
+            ch_password=opts.clickhouse_password,
+            ch_secure=opts.clickhouse_secure,
+            ch_ensure_table=opts.ch_ensure_table,
         )
         result["config"] = config
         logger.info("完成从配置物化因子: %s", factor.name)
+        return result
+
+    @classmethod
+    def materialize_incremental_from_config(
+        cls,
+        config_path: str | Path,
+        *,
+        lake_root: str | Path | None = None,
+        factor_id: str | None = None,
+        since: str | None = None,
+        end_date: str | None = None,
+        lookback_extra: int | None = None,
+        recompute_tail_bars: int | None = None,
+    ):
+        """从 YAML 配置执行增量物化（watermark + lookback + upsert）。"""
+        logger.info("开始从配置增量物化因子: %s", config_path)
+        engine, factor, config = cls.from_config(config_path)
+        from runtime.config_runtime import resolve_materialize_kwargs
+
+        opts = resolve_materialize_kwargs(
+            config,
+            lake_root_override=str(lake_root) if lake_root is not None else None,
+            factor_id_override=factor_id,
+            since_override=since,
+            end_date_override=end_date,
+            lookback_extra_override=lookback_extra,
+            recompute_tail_bars_override=recompute_tail_bars,
+        )
+        result = engine.materialize_incremental(
+            factor,
+            lake_root=opts.lake_root,
+            factor_id=opts.factor_id,
+            since=opts.since,
+            end_date=opts.end_date,
+            lookback_extra=opts.lookback_extra,
+            recompute_tail_bars=opts.recompute_tail_bars,
+            author=opts.author,
+            frequency=opts.frequency,
+            description=opts.description,
+            expression=opts.expression,
+            input_dq_check=opts.input_dq_check,
+            input_dq_strict=opts.input_dq_strict,
+            input_dq_thresholds=opts.input_dq_thresholds,
+            auto_warmup=opts.auto_warmup,
+            trim_warmup=opts.trim_warmup,
+            market=opts.market,
+            dq_check=opts.dq_check,
+            dq_strict=opts.dq_strict,
+            dq_thresholds=opts.dq_thresholds,
+            preserve_invalid_rows=opts.preserve_invalid_rows,
+            value_dtype=opts.value_dtype,
+            write_target=opts.write_target,
+            data_source_config=opts.data_source_config,
+            pit_enforce=opts.pit_enforce,
+            pit_forbid_forward_fill=opts.pit_forbid_forward_fill,
+            isolate_partition_failures=opts.isolate_partition_failures,
+            resume_materialize=opts.resume_materialize,
+            clickhouse_table=opts.clickhouse_table,
+            ch_host=opts.clickhouse_host,
+            ch_port=opts.clickhouse_port,
+            ch_database=opts.clickhouse_database,
+            ch_username=opts.clickhouse_username,
+            ch_password=opts.clickhouse_password,
+            ch_secure=opts.clickhouse_secure,
+            ch_ensure_table=opts.ch_ensure_table,
+        )
+        result["config"] = config
+        logger.info("完成从配置增量物化因子: %s", factor.name)
         return result
 
     def _make_context(
@@ -231,6 +353,159 @@ class FactorEngine:
         return extra
 
     @staticmethod
+    def _resolve_parquet_write_target(write_target: str) -> str:
+        """多目标物化时 ParquetMaterializer 使用的 write_target。"""
+        target = str(write_target or "local").lower()
+        if target == "staging_clickhouse":
+            return "staging"
+        if target == "clickhouse":
+            return "clickhouse"
+        return target
+
+    @staticmethod
+    def _needs_clickhouse_write(write_target: str) -> bool:
+        return str(write_target or "local").lower() in ("clickhouse", "staging_clickhouse")
+
+    @staticmethod
+    def _append_clickhouse_to_summary(
+        summary: dict[str, Any],
+        *,
+        factor_id: str,
+        result: pd.Series,
+        ast_hash: str,
+        write_target: str,
+        data_snapshot_id: str | None = None,
+        clickhouse_table: str | None = None,
+        preserve_invalid_rows: bool = False,
+        value_dtype: str = "float32",
+        write_metadata: bool = True,
+        ensure_table: bool = True,
+        dq_check: bool = False,
+        dq_strict: bool = True,
+        dq_thresholds=None,
+        ch_host: str | None = None,
+        ch_port: int | None = None,
+        ch_database: str | None = None,
+        ch_username: str | None = None,
+        ch_password: str | None = None,
+        ch_secure: bool | None = None,
+    ) -> dict[str, Any]:
+        """在 Parquet/staging 落盘后追加 ClickHouse 写入，返回更新后的 summary。"""
+        from storage.clickhouse_materializer import ClickHouseMaterializer
+        from storage.exceptions import DualWriteError
+
+        ch_mat = ClickHouseMaterializer(
+            table=clickhouse_table or "factor_values",
+            host=ch_host,
+            port=ch_port,
+            database=ch_database,
+            username=ch_username,
+            password=ch_password,
+            secure=ch_secure,
+        )
+        partial = dict(summary)
+        partial["write_target"] = str(write_target).lower()
+        partial["primary_write_completed"] = True
+        try:
+            ch_summary = ch_mat.materialize(
+                factor_id=factor_id,
+                result=result,
+                factor_version=ast_hash[:16],
+                data_snapshot_id=data_snapshot_id,
+                ensure_table=ensure_table,
+                dq_check=dq_check,
+                dq_strict=dq_strict,
+                dq_thresholds=dq_thresholds,
+                preserve_invalid_rows=preserve_invalid_rows,
+                value_dtype=value_dtype,
+                write_metadata=write_metadata,
+            )
+        except Exception as exc:
+            partial["partial_write"] = True
+            partial["clickhouse_error"] = str(exc)
+            raise DualWriteError(
+                f"ClickHouse 写入失败（主存储可能已成功）: factor_id={factor_id}, error={exc}",
+                summary=partial,
+                cause=exc,
+            ) from exc
+
+        merged = dict(partial)
+        merged["clickhouse"] = {
+            "factor_id": ch_summary.factor_id,
+            "table": ch_summary.table,
+            "rows_written": ch_summary.rows_written,
+            "database": ch_summary.database,
+        }
+        if ch_summary.dq_report is not None:
+            merged["clickhouse_dq_report"] = ch_summary.dq_report
+        merged["partial_write"] = False
+        return merged
+
+    def _dual_write_clickhouse(
+        self,
+        materializer: ParquetMaterializer,
+        summary: dict[str, Any],
+        *,
+        factor_id: str,
+        result: pd.Series,
+        ast_hash: str,
+        write_target: str,
+        data_snapshot_id: str | None = None,
+        clickhouse_table: str | None = None,
+        preserve_invalid_rows: bool = False,
+        value_dtype: str = "float32",
+        write_metadata: bool = True,
+        ensure_table: bool = True,
+        dq_check: bool = False,
+        dq_strict: bool = True,
+        dq_thresholds=None,
+        ch_host: str | None = None,
+        ch_port: int | None = None,
+        ch_database: str | None = None,
+        ch_username: str | None = None,
+        ch_password: str | None = None,
+        ch_secure: bool | None = None,
+    ) -> dict[str, Any]:
+        """ClickHouse 双写；若主存储延迟水位线，成功后再 commit、失败则 abort。"""
+        from storage.exceptions import DualWriteError
+
+        deferred = bool(summary.get("watermark_deferred"))
+        try:
+            merged = self._append_clickhouse_to_summary(
+                summary,
+                factor_id=factor_id,
+                result=result,
+                ast_hash=ast_hash,
+                write_target=write_target,
+                data_snapshot_id=data_snapshot_id,
+                clickhouse_table=clickhouse_table,
+                preserve_invalid_rows=preserve_invalid_rows,
+                value_dtype=value_dtype,
+                write_metadata=write_metadata,
+                ensure_table=ensure_table,
+                dq_check=dq_check,
+                dq_strict=dq_strict,
+                dq_thresholds=dq_thresholds,
+                ch_host=ch_host,
+                ch_port=ch_port,
+                ch_database=ch_database,
+                ch_username=ch_username,
+                ch_password=ch_password,
+                ch_secure=ch_secure,
+            )
+        except DualWriteError as exc:
+            partial = exc.summary or summary
+            if deferred:
+                materializer.abort_deferred_materialization(
+                    partial,
+                    error=str(exc.cause or exc),
+                )
+            raise
+        if deferred:
+            return materializer.commit_deferred_materialization(merged)
+        return merged
+
+    @staticmethod
     def _prefetch_columns(data_source: Any, columns: set[str]) -> None:
         if not columns:
             return
@@ -258,36 +533,125 @@ class FactorEngine:
         analysis=None,
         input_dq_check: bool = False,
         input_dq_strict: bool = True,
+        input_dq_thresholds=None,
+        auto_warmup: bool = False,
+        trim_warmup: bool = True,
+        market: str | None = None,
+        pit_enforce: bool = False,
+        pit_forbid_forward_fill: bool = False,
     ):
-        """编译后调用 ``backend.execute``，返回 factor、analysis、plan、result。"""
+        """编译后调用 ``backend.execute``，返回 factor、analysis、plan、result。
+
+        ``auto_warmup=True`` 时根据 lookback 向前扩展数据源加载窗口，计算后
+        ``trim_warmup`` 为真则裁剪回用户请求的 start_date。
+        """
         started_at = time.perf_counter()
         logger.info("开始执行因子 '%s'", factor.name)
         if plan is None or analysis is None:
-            plan, analysis = self.compile(factor)
-        from cleaned_operators.operator_policy import effective_lookback
+            plan, analysis = self.compile(
+                factor,
+                pit_enforce=pit_enforce,
+                pit_forbid_forward_fill=pit_forbid_forward_fill,
+            )
+        from cleaned_operators.operator_policy import (
+            bars_per_day,
+            effective_lookback,
+            infer_source_bar_freq,
+        )
 
-        history_buffer = effective_lookback(getattr(analysis, "lookback", 0))
-        if history_buffer > 0:
+        source_bar_freq = infer_source_bar_freq(
+            self.data_source,
+            fallback=getattr(factor, "freq", None),
+        )
+        history_buffer = effective_lookback(
+            getattr(analysis, "lookback", 0),
+            factor_freq=getattr(factor, "freq", None),
+            source_bar_freq=source_bar_freq,
+        )
+        s_bpd = bars_per_day(source_bar_freq)
+        warmup_calendar_bars = history_buffer
+        if s_bpd > 1:
+            warmup_calendar_bars = max(1, (history_buffer + s_bpd - 1) // s_bpd)
+        run_window = None
+        engine_to_use = self
+
+        if auto_warmup and history_buffer > 0:
+            from runtime.run_window import build_full_run_window, extract_source_date_bounds
+            from storage.time_window import narrow_data_source_for_window, slice_series_time_window
+            from storage.trading_calendar import get_trading_calendar, infer_market
+
+            req_start, req_end = extract_source_date_bounds(self.data_source)
+            dataset = getattr(self.data_source, "dataset", None)
+            resolved_market = market or infer_market(
+                universe=getattr(factor, "universe", None),
+                dataset=str(dataset) if dataset else None,
+            )
+            cal = get_trading_calendar(resolved_market)
+            run_window = build_full_run_window(
+                requested_start=req_start,
+                requested_end=req_end,
+                lookback_bars=warmup_calendar_bars,
+                trim_output=trim_warmup,
+                calendar=cal,
+            )
+            if (
+                run_window.actual_load_start is not None
+                and run_window.actual_load_start != req_start
+            ):
+                narrowed = narrow_data_source_for_window(
+                    self.data_source,
+                    start_date=run_window.actual_load_start,
+                    end_date=run_window.actual_load_end,
+                )
+                use_fresh = not isinstance(self.cache, PersistentPlanCache)
+                engine_to_use = self.with_data_source(narrowed, fresh_cache=use_fresh)
+                logger.info(
+                    "因子 '%s' auto_warmup: load_start %s → %s（warmup_bars=%d）",
+                    factor.name,
+                    req_start,
+                    run_window.actual_load_start,
+                    run_window.warmup_bars,
+                )
+        elif history_buffer > 0:
             logger.info(
-                "因子 '%s' 建议历史缓冲 >= %d bars（lookback=%s）",
+                "因子 '%s' 建议历史缓冲 >= %d bars（lookback=%s）；可设 auto_warmup=True",
                 factor.name,
                 history_buffer,
                 getattr(analysis, "lookback", 0),
             )
+
         if input_dq_check and analysis.referenced_columns:
             from runtime.input_dq import assert_input_dq
 
             input_report = assert_input_dq(
-                self.data_source,
+                engine_to_use.data_source,
                 analysis.referenced_columns,
                 raise_on_fail=input_dq_strict,
+                thresholds=input_dq_thresholds,
             )
             logger.info("因子 '%s' 输入 DQ 通过", factor.name)
         else:
             input_report = None
-        self._prefetch_columns(self.data_source, analysis.referenced_columns)
-        ctx = self._make_context()
-        result = self.backend.execute(plan, ctx)
+        engine_to_use._prefetch_columns(engine_to_use.data_source, analysis.referenced_columns)
+        ctx = engine_to_use._make_context()
+        result = engine_to_use.backend.execute(plan, ctx)
+
+        if run_window is not None and run_window.trim_output and run_window.requested_start:
+            from storage.time_window import slice_series_time_window
+
+            trim_start = pd.Timestamp(run_window.requested_start)
+            trim_end = (
+                pd.Timestamp(run_window.requested_end) if run_window.requested_end else None
+            )
+            # 日内源保留 timestamp 精度（不按 normalize 截断）
+            if s_bpd > 1:
+                trim_start = pd.Timestamp(run_window.requested_start)
+            result = slice_series_time_window(
+                result,
+                start=trim_start,
+                end=trim_end,
+            )
+
         non_null_count = int(result.notna().sum()) if hasattr(result, "notna") else None
         logger.info(
             "完成执行因子 '%s'，结果行数=%s，非空=%s，耗时 %.2fs",
@@ -304,6 +668,8 @@ class FactorEngine:
         }
         if input_report is not None:
             out["input_dq"] = input_report.to_dict()
+        if run_window is not None:
+            out["run_window"] = run_window.to_dict()
         return out
 
     @staticmethod
@@ -326,19 +692,44 @@ class FactorEngine:
         expression: str | None = None,
         dq_check: bool = False,
         dq_strict: bool = True,
+        dq_thresholds=None,
         input_dq_check: bool = False,
         input_dq_strict: bool = True,
+        input_dq_thresholds=None,
         data_source_config: dict | None = None,
         write_metadata: bool = True,
         resume_materialize: bool = False,
         isolate_partition_failures: bool = True,
+        auto_warmup: bool = False,
+        trim_warmup: bool = True,
+        market: str | None = None,
+        preserve_invalid_rows: bool = False,
+        value_dtype: str = "float32",
+        write_target: str = "local",
+        pit_enforce: bool = False,
+        pit_forbid_forward_fill: bool = False,
+        ch_host: str | None = None,
+        ch_port: int | None = None,
+        ch_database: str | None = None,
+        ch_username: str | None = None,
+        ch_password: str | None = None,
+        ch_secure: bool | None = None,
+        clickhouse_table: str | None = None,
+        ch_ensure_table: bool = True,
     ):
-        """执行单因子并将结果落盘到 factor lake（Parquet）。"""
-        logger.info("开始落盘因子 '%s'", factor.name)
+        """执行单因子并落盘（Parquet / staging / ClickHouse 或多目标组合）。"""
+        target = str(write_target or "local").lower()
+        logger.info("开始落盘因子 '%s'，write_target=%s", factor.name, target)
         output = self.run(
             factor,
             input_dq_check=input_dq_check,
             input_dq_strict=input_dq_strict,
+            input_dq_thresholds=input_dq_thresholds,
+            auto_warmup=auto_warmup,
+            trim_warmup=trim_warmup,
+            market=market,
+            pit_enforce=pit_enforce,
+            pit_forbid_forward_fill=pit_forbid_forward_fill,
         )
         from backend.cleaned_bridge import ensure_cleaned_loaded
         from cleaned_operators.operator_policy import (
@@ -366,9 +757,13 @@ class FactorEngine:
                 data_source_config=data_source_config,
                 snapshot_id=snapshot_id,
                 input_dq=output.get("input_dq"),
+                run_window=output.get("run_window"),
             ),
         )
         materializer = ParquetMaterializer(lake_root=lake_root)
+        ast_hash = compute_ir_hash(analysis.ir)
+        parquet_target = self._resolve_parquet_write_target(target)
+
         summary = materializer.materialize(
             factor_id=factor_id or factor.name,
             result=output["result"],
@@ -379,13 +774,41 @@ class FactorEngine:
             expression=expression,
             dq_check=dq_check,
             dq_strict=dq_strict,
+            dq_thresholds=dq_thresholds,
             run_lineage={**lineage.to_dict(), "factor_id": factor_id or factor.name},
             write_metadata=write_metadata,
             data_snapshot_id=snapshot_id,
             data_source_config=data_source_config,
             resume=resume_materialize,
             isolate_partition_failures=isolate_partition_failures,
+            preserve_invalid_rows=preserve_invalid_rows,
+            value_dtype=value_dtype,
+            write_target=parquet_target,
+            defer_watermark=self._needs_clickhouse_write(target),
         )
+
+        if self._needs_clickhouse_write(target):
+            summary = self._dual_write_clickhouse(
+                materializer,
+                summary,
+                factor_id=factor_id or factor.name,
+                result=output["result"],
+                ast_hash=ast_hash,
+                write_target=target,
+                data_snapshot_id=snapshot_id,
+                clickhouse_table=clickhouse_table,
+                preserve_invalid_rows=preserve_invalid_rows,
+                value_dtype=value_dtype,
+                write_metadata=write_metadata,
+                ensure_table=ch_ensure_table,
+                ch_host=ch_host,
+                ch_port=ch_port,
+                ch_database=ch_database,
+                ch_username=ch_username,
+                ch_password=ch_password,
+                ch_secure=ch_secure,
+            )
+
         output["materialization"] = {
             **summary,
             "lake_root": str(materializer.lake_root),
@@ -403,13 +826,28 @@ class FactorEngine:
         factor: Factor,
         *,
         factor_id: str | None = None,
-        table: str = "factor_values",
+        table: str | None = None,
         timestamp_column: str = "trade_date",
         instrument_column: str = "instrument",
         factor_version: str = "",
+        author: str | None = None,
+        frequency: str | None = None,
+        description: str | None = None,
+        expression: str | None = None,
         data_source_config: dict | None = None,
         input_dq_check: bool = False,
         input_dq_strict: bool = True,
+        input_dq_thresholds=None,
+        auto_warmup: bool = False,
+        trim_warmup: bool = True,
+        market: str | None = None,
+        dq_check: bool = False,
+        dq_strict: bool = True,
+        dq_thresholds=None,
+        preserve_invalid_rows: bool = False,
+        value_dtype: str = "float32",
+        pit_enforce: bool = False,
+        pit_forbid_forward_fill: bool = False,
         ch_host: str | None = None,
         ch_port: int | None = None,
         ch_database: str | None = None,
@@ -417,47 +855,92 @@ class FactorEngine:
         ch_password: str | None = None,
         ch_secure: bool | None = None,
         ensure_table: bool = True,
+        lake_root: str | Path | None = None,
     ):
-        """执行因子并将结果写入 ClickHouse（ReplacingMergeTree 长表）。"""
-        from storage.clickhouse_materializer import ClickHouseMaterializer
-
-        logger.info("开始 ClickHouse 落盘因子 '%s'", factor.name)
-        output = self.run(
+        """执行因子并写入 ClickHouse（catalog + watermark + CH，与 materialize 同构）。"""
+        if timestamp_column != "trade_date" or instrument_column != "instrument":
+            logger.warning(
+                "materialize_clickhouse 列名映射请改用 ClickHouseMaterializer；"
+                "当前委托 materialize(write_target=clickhouse)"
+            )
+        output = self.materialize(
             factor,
+            factor_id=factor_id,
+            lake_root=lake_root,
+            author=author,
+            frequency=frequency,
+            description=description,
+            expression=expression,
+            data_source_config=data_source_config,
             input_dq_check=input_dq_check,
             input_dq_strict=input_dq_strict,
+            input_dq_thresholds=input_dq_thresholds,
+            auto_warmup=auto_warmup,
+            trim_warmup=trim_warmup,
+            market=market,
+            dq_check=dq_check,
+            dq_strict=dq_strict,
+            dq_thresholds=dq_thresholds,
+            preserve_invalid_rows=preserve_invalid_rows,
+            value_dtype=value_dtype,
+            pit_enforce=pit_enforce,
+            pit_forbid_forward_fill=pit_forbid_forward_fill,
+            write_target="clickhouse",
+            clickhouse_table=table,
+            ch_host=ch_host,
+            ch_port=ch_port,
+            ch_database=ch_database,
+            ch_username=ch_username,
+            ch_password=ch_password,
+            ch_secure=ch_secure,
+            ch_ensure_table=ensure_table,
         )
-        snapshot_id = self._data_snapshot_id_from_config(data_source_config)
-        mat = ClickHouseMaterializer(
-            table=table,
-            timestamp_column=timestamp_column,
-            instrument_column=instrument_column,
-            host=ch_host,
-            port=ch_port,
-            database=ch_database,
-            username=ch_username,
-            password=ch_password,
-            secure=ch_secure,
-        )
-        summary = mat.materialize(
-            factor_id=factor_id or factor.name,
-            result=output["result"],
-            factor_version=factor_version,
-            data_snapshot_id=snapshot_id,
-            ensure_table=ensure_table,
-        )
+        mat = output.get("materialization") or {}
+        ch = mat.get("clickhouse") or {}
         output["clickhouse_materialization"] = {
-            "factor_id": summary.factor_id,
-            "table": summary.table,
-            "rows_written": summary.rows_written,
-            "database": summary.database,
+            "factor_id": ch.get("factor_id") or mat.get("factor_id"),
+            "table": ch.get("table"),
+            "rows_written": ch.get("rows_written", mat.get("rows_written", 0)),
+            "database": ch.get("database"),
+            "write_target": "clickhouse",
+            "dq_report": mat.get("clickhouse_dq_report") or mat.get("dq_report"),
+            "run_id": (mat.get("run_lineage") or {}).get("run_id"),
         }
-        logger.info(
-            "完成 ClickHouse 落盘因子 '%s'，rows_written=%s",
-            factor.name,
-            summary.rows_written,
-        )
         return output
+
+    @classmethod
+    def materialize_clickhouse_from_config(cls, config_path: str | Path):
+        """从 YAML 配置执行因子并写入 ClickHouse。"""
+        engine, factor, config = cls.from_config(config_path)
+        from runtime.config_runtime import resolve_materialize_kwargs
+
+        opts = resolve_materialize_kwargs(config)
+        return engine.materialize_clickhouse(
+            factor,
+            factor_id=opts.factor_id,
+            table=opts.clickhouse_table,
+            expression=opts.expression,
+            data_source_config=opts.data_source_config,
+            auto_warmup=opts.auto_warmup,
+            trim_warmup=opts.trim_warmup,
+            market=opts.market,
+            dq_check=opts.dq_check,
+            dq_strict=opts.dq_strict,
+            dq_thresholds=opts.dq_thresholds,
+            input_dq_check=opts.input_dq_check,
+            input_dq_strict=opts.input_dq_strict,
+            input_dq_thresholds=opts.input_dq_thresholds,
+            preserve_invalid_rows=opts.preserve_invalid_rows,
+            value_dtype=opts.value_dtype,
+            pit_enforce=opts.pit_enforce,
+            pit_forbid_forward_fill=opts.pit_forbid_forward_fill,
+            ch_host=opts.clickhouse_host,
+            ch_port=opts.clickhouse_port,
+            ch_database=opts.clickhouse_database,
+            ch_username=opts.clickhouse_username,
+            ch_password=opts.clickhouse_password,
+            ch_secure=opts.clickhouse_secure,
+        )
 
     def run_many(
         self,
@@ -568,16 +1051,22 @@ class FactorEngine:
         lake_root: str | Path | None = None,
         input_dq_check: bool = False,
         input_dq_strict: bool = True,
+        input_dq_thresholds=None,
         market: str | None = None,
+        pit_enforce: bool = False,
+        pit_forbid_forward_fill: bool = False,
+        auto_warmup: bool = False,
+        trim_warmup: bool = True,
     ):
         """增量执行：按 watermark 加载 lookback 窗口，仅输出/落盘 tail 区间。"""
+        from cleaned_operators.operator_policy import infer_source_bar_freq
         from runtime.incremental import (
             build_incremental_plan,
             slice_factor_result_for_incremental,
         )
         from storage.materializer import ParquetMaterializer
         from storage.time_window import narrow_data_source_for_window
-        from storage.trading_calendar import infer_market
+        from storage.trading_calendar import get_trading_calendar, infer_market
 
         fid = factor_id or factor.name
         materializer = ParquetMaterializer(lake_root=lake_root)
@@ -588,8 +1077,18 @@ class FactorEngine:
             universe=getattr(factor, "universe", None),
             dataset=str(dataset) if dataset else None,
         )
+        source_bar_freq = infer_source_bar_freq(
+            self.data_source,
+            fallback=getattr(factor, "freq", None),
+        )
+        factor_freq = getattr(factor, "freq", None)
 
-        plan, analysis = self.compile(factor)
+        plan, analysis = self.compile(
+            factor,
+            pit_enforce=pit_enforce,
+            pit_forbid_forward_fill=pit_forbid_forward_fill,
+        )
+        cal = get_trading_calendar(resolved_market)
         inc = build_incremental_plan(
             factor_id=fid,
             analysis_lookback=getattr(analysis, "lookback", 0),
@@ -599,6 +1098,9 @@ class FactorEngine:
             lookback_extra=lookback_extra,
             recompute_tail_bars=recompute_tail_bars,
             market=resolved_market,
+            calendar=cal,
+            factor_freq=factor_freq,
+            source_bar_freq=source_bar_freq,
         )
 
         if inc.is_full_run:
@@ -608,13 +1110,14 @@ class FactorEngine:
                 self.data_source,
                 start_date=inc.load_start,
                 end_date=inc.load_end,
+                bar_freq=source_bar_freq,
             )
             # 持久化缓存按 data_scope 隔离；内存缓存需 fresh_cache 避免跨窗口命中
             use_fresh = not isinstance(self.cache, PersistentPlanCache)
             scoped = self.with_data_source(narrowed, fresh_cache=use_fresh)
 
         logger.info(
-            "增量因子 '%s' plan: full=%s load=[%s,%s] output=[%s,%s] lookback=%d",
+            "增量因子 '%s' plan: full=%s load=[%s,%s] output=[%s,%s] lookback=%d freq=%s/%s",
             factor.name,
             inc.is_full_run,
             inc.load_start,
@@ -622,6 +1125,8 @@ class FactorEngine:
             inc.output_start,
             inc.output_end,
             inc.lookback_bars,
+            factor_freq,
+            source_bar_freq,
         )
 
         output = scoped.run(
@@ -630,6 +1135,12 @@ class FactorEngine:
             analysis=analysis,
             input_dq_check=input_dq_check,
             input_dq_strict=input_dq_strict,
+            input_dq_thresholds=input_dq_thresholds,
+            auto_warmup=auto_warmup and inc.is_full_run,
+            trim_warmup=trim_warmup,
+            market=resolved_market,
+            pit_enforce=False,
+            pit_forbid_forward_fill=False,
         )
         sliced = slice_factor_result_for_incremental(output["result"], inc)
         output["result"] = sliced
@@ -656,17 +1167,36 @@ class FactorEngine:
         expression: str | None = None,
         input_dq_check: bool = False,
         input_dq_strict: bool = True,
+        input_dq_thresholds=None,
         data_source_config: dict | None = None,
         write_metadata: bool = True,
         resume_materialize: bool = False,
         isolate_partition_failures: bool = True,
+        market: str | None = None,
+        preserve_invalid_rows: bool = False,
+        value_dtype: str = "float32",
+        write_target: str = "local",
+        dq_thresholds=None,
+        pit_enforce: bool = False,
+        pit_forbid_forward_fill: bool = False,
+        auto_warmup: bool = False,
+        trim_warmup: bool = True,
+        clickhouse_table: str | None = None,
+        ch_host: str | None = None,
+        ch_port: int | None = None,
+        ch_database: str | None = None,
+        ch_username: str | None = None,
+        ch_password: str | None = None,
+        ch_secure: bool | None = None,
+        ch_ensure_table: bool = True,
     ):
-        """增量执行 + 落盘 upsert + lineage。"""
+        """增量执行 + 落盘 upsert + lineage（支持 staging_clickhouse / clickhouse 双写）。"""
         from backend.cleaned_bridge import ensure_cleaned_loaded
         from cleaned_operators.operator_policy import compute_operator_catalog_hash
         from runtime.lineage import build_run_lineage
         from storage.catalog import compute_ir_hash
 
+        target = str(write_target or "local").lower()
         output = self.run_incremental(
             factor,
             factor_id=factor_id,
@@ -677,6 +1207,12 @@ class FactorEngine:
             lake_root=lake_root,
             input_dq_check=input_dq_check,
             input_dq_strict=input_dq_strict,
+            input_dq_thresholds=input_dq_thresholds,
+            market=market,
+            pit_enforce=pit_enforce,
+            pit_forbid_forward_fill=pit_forbid_forward_fill,
+            auto_warmup=auto_warmup,
+            trim_warmup=trim_warmup,
         )
 
         if output["result"] is None or len(output["result"]) == 0:
@@ -713,6 +1249,8 @@ class FactorEngine:
         )
 
         materializer = ParquetMaterializer(lake_root=lake_root)
+        ast_hash = compute_ir_hash(analysis.ir)
+        parquet_target = self._resolve_parquet_write_target(target)
         summary = materializer.materialize(
             factor_id=fid,
             result=output["result"],
@@ -723,13 +1261,42 @@ class FactorEngine:
             expression=expression,
             dq_check=dq_check,
             dq_strict=dq_strict,
+            dq_thresholds=dq_thresholds,
             run_lineage={**lineage.to_dict(), "factor_id": fid},
             write_metadata=write_metadata,
             data_snapshot_id=snapshot_id,
             data_source_config=data_source_config,
             resume=resume_materialize,
             isolate_partition_failures=isolate_partition_failures,
+            preserve_invalid_rows=preserve_invalid_rows,
+            value_dtype=value_dtype,
+            write_target=parquet_target,
+            defer_watermark=self._needs_clickhouse_write(target),
         )
+        if self._needs_clickhouse_write(target):
+            summary = self._dual_write_clickhouse(
+                materializer,
+                summary,
+                factor_id=fid,
+                result=output["result"],
+                ast_hash=ast_hash,
+                write_target=target,
+                data_snapshot_id=snapshot_id,
+                clickhouse_table=clickhouse_table,
+                preserve_invalid_rows=preserve_invalid_rows,
+                value_dtype=value_dtype,
+                write_metadata=write_metadata,
+                ensure_table=ch_ensure_table,
+                dq_check=dq_check,
+                dq_strict=dq_strict,
+                dq_thresholds=dq_thresholds,
+                ch_host=ch_host,
+                ch_port=ch_port,
+                ch_database=ch_database,
+                ch_username=ch_username,
+                ch_password=ch_password,
+                ch_secure=ch_secure,
+            )
         output["materialization"] = {
             **summary,
             "lake_root": str(materializer.lake_root),

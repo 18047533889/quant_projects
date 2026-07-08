@@ -9,7 +9,10 @@ from typing import Any
 import pandas as pd
 
 from cleaned_operators.operator_policy import effective_lookback
-from storage.time_window import resolve_incremental_window, slice_series_time_window
+from storage.time_window import (
+    resolve_incremental_window_for_bar_freq,
+    slice_series_time_window,
+)
 
 
 @dataclass(frozen=True)
@@ -24,6 +27,9 @@ class IncrementalPlan:
     output_end: pd.Timestamp | None
     watermark_end: str | None
     is_full_run: bool
+    factor_freq: str | None = None
+    source_bar_freq: str | None = None
+    window_mode: str = "daily"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -35,6 +41,9 @@ class IncrementalPlan:
             "output_end": None if self.output_end is None else self.output_end.isoformat(),
             "watermark_end": self.watermark_end,
             "is_full_run": self.is_full_run,
+            "factor_freq": self.factor_freq,
+            "source_bar_freq": self.source_bar_freq,
+            "window_mode": self.window_mode,
         }
 
 
@@ -49,7 +58,10 @@ def build_incremental_plan(
     recompute_tail_bars: int | None = None,
     market: str | None = None,
     calendar=None,
+    factor_freq: str | None = None,
+    source_bar_freq: str | None = None,
 ) -> IncrementalPlan:
+    """构建增量计划；日内源按 ``bars_to_calendar_trading_days`` 换算窗口。"""
     from storage.trading_calendar import get_trading_calendar
 
     wm_end: str | None = None
@@ -60,22 +72,30 @@ def build_incremental_plan(
         if raw:
             wm_end = str(raw)
 
-    load_lookback = effective_lookback(analysis_lookback, extra=lookback_extra)
+    load_lookback = effective_lookback(
+        analysis_lookback,
+        factor_freq=factor_freq,
+        source_bar_freq=source_bar_freq,
+        extra=lookback_extra,
+    )
     if recompute_tail_bars is None:
         # 输出 tail 只需覆盖因子 IR lookback + 1 bar lag，不必重算整个 load 缓冲
         tail_bars = max(1, int(analysis_lookback) + 1)
     else:
         tail_bars = max(0, int(recompute_tail_bars))
 
+    # resolve_incremental_window 使用交易日偏移；日内 bar 用 bar_freq 近似 + 安全日缓冲
     cal = calendar if calendar is not None else get_trading_calendar(market)
-    window = resolve_incremental_window(
+    window = resolve_incremental_window_for_bar_freq(
         watermark_end=wm_end,
         lookback_bars=load_lookback,
         since=None,
         end_date=end_date,
         recompute_tail_bars=tail_bars,
         calendar=cal,
+        bar_freq=source_bar_freq,
     )
+    window_mode = str(window.get("window_mode") or "daily")
 
     is_full = wm_end is None
     return IncrementalPlan(
@@ -87,6 +107,9 @@ def build_incremental_plan(
         output_end=window["output_end"],
         watermark_end=wm_end,
         is_full_run=is_full,
+        factor_freq=factor_freq,
+        source_bar_freq=source_bar_freq,
+        window_mode=window_mode,
     )
 
 

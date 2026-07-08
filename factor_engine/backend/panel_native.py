@@ -11,8 +11,7 @@ from .context import ExecutionContext
 
 
 def panel_native_enabled(ctx: ExecutionContext) -> bool:
-    if getattr(ctx, "prefer_long_table", False):
-        return False
+    # long_table 仅约束数据源形态；算子链仍用 panel-native 避免逐节点 stack/unstack。
     if os.environ.get("FACTOR_ENGINE_DISABLE_PANEL_NATIVE", "").lower() in (
         "1",
         "true",

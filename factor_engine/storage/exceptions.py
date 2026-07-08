@@ -15,3 +15,23 @@ class FactorNotFoundError(Exception):
 
 class MaterializePartitionError(Exception):
     """分区落盘部分失败：已成功分区已写入，失败分区记录在 checkpoint。"""
+
+
+class ClickHouseWriteError(Exception):
+    """ClickHouse 写入失败：主存储（staging/local）可能已成功，需人工对账或补偿。
+
+    ``summary`` 携带 ``materialize()`` 返回的部分 summary，便于运维定位。
+    """
+
+    def __init__(self, message: str, *, summary: dict | None = None):
+        super().__init__(message)
+        self.summary = summary or {}
+
+
+class DualWriteError(Exception):
+    """多目标物化部分成功：例如 staging 已 upsert 但 ClickHouse 失败。"""
+
+    def __init__(self, message: str, *, summary: dict | None = None, cause: Exception | None = None):
+        super().__init__(message)
+        self.summary = summary or {}
+        self.cause = cause

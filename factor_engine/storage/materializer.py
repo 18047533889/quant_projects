@@ -2,8 +2,8 @@
 
 设计要点
 --------
-1. **Schema 强转**：所有因子值一律降级为 ``Float32``，资产列强转为 ``string``。
-2. **数据清洗**：``±inf → NaN``，``dropna(subset=["value"])``。
+1. **Schema 强转**：因子值默认 ``float32``（可配置 ``value_dtype``），资产列强转为 ``string``。
+2. **数据清洗**：``±inf → NaN``；默认 ``dropna``；``preserve_invalid_rows=True`` 时保留行并写 ``is_valid=0``、``invalid_reason``。
 3. **幂等 Upsert**：按年分区，旧数据与新数据 Concat 后按 ``[datetime, asset]``
    去重（保留最新），排序后整体覆盖。
 4. **原子写入**：先写 ``.data.parquet.tmp``，``os.replace()`` 覆盖正式文件。
@@ -44,7 +44,13 @@ from logging_utils import ProgressLogger, get_logger
 
 logger = get_logger("storage.materializer")
 
-METADATA_COLUMNS = ("calc_time", "factor_version", "data_snapshot_id", "is_valid")
+METADATA_COLUMNS = (
+    "calc_time",
+    "factor_version",
+    "data_snapshot_id",
+    "is_valid",
+    "invalid_reason",
+)
 
 
 @dataclass(frozen=True)
@@ -55,6 +61,7 @@ class MaterializeMetadata:
     factor_version: str
     data_snapshot_id: str | None = None
     is_valid: int = 1
+    invalid_reason: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -132,6 +139,10 @@ class ParquetMaterializer:
         data_source_config: dict | None = None,
         isolate_partition_failures: bool = True,
         resume: bool = False,
+        preserve_invalid_rows: bool = False,
+        value_dtype: str = "float32",
+        write_target: str = "local",
+        defer_watermark: bool = False,
     ) -> dict:
         """将因子计算结果落盘为分区 Parquet。
 
@@ -183,7 +194,10 @@ class ParquetMaterializer:
             from runtime.dq_gates import assert_factor_dq
 
             dq_report = assert_factor_dq(
-                result, thresholds=dq_thresholds, raise_on_fail=dq_strict
+                result,
+                thresholds=dq_thresholds,
+                raise_on_fail=dq_strict,
+                preserve_invalid_rows=preserve_invalid_rows,
             )
 
         # --- 1. 转长表 + 强制 Schema ---
@@ -194,10 +208,10 @@ class ParquetMaterializer:
                 factor_version=ast_hash[:16],
                 data_snapshot_id=data_snapshot_id,
             )
-        df = self._normalize_to_long_table(result, metadata=meta)
+        df = self._normalize_to_long_table(result, metadata=meta, value_dtype=value_dtype)
 
         # --- 2. 数据清洗 ---
-        df = self._clean(df)
+        df = self._clean(df, preserve_invalid_rows=preserve_invalid_rows)
 
         if df.empty:
             logger.warning("因子 '%s' 清洗后无有效数据，跳过落盘。", factor_id)
@@ -206,7 +220,15 @@ class ParquetMaterializer:
                 "rows_written": 0,
                 "partitions": [],
                 "watermark": None,
+                "write_target": write_target,
             }
+
+        target = str(write_target or "local").lower()
+        write_local = target in ("local", "both")
+        write_staging = target in ("staging", "both", "staging_clickhouse")
+        # clickhouse / staging_clickhouse：写 catalog + watermark，不落本地分区
+        if target in ("clickhouse", "staging_clickhouse"):
+            write_local = False
 
         # --- 3. 注册 / Hash 校验（可能抛 FactorHashMismatchError）---
         self._catalog.register(
@@ -219,19 +241,14 @@ class ParquetMaterializer:
             data_source_config=data_source_config,
         )
 
-        # --- 4. 按年分区 Upsert（支持失败隔离 + 断点续跑）---
-        factor_dir = self._lake_root / "factors" / factor_id
-        df["_year"] = df["datetime"].dt.year
+        staging_result = None
+        if write_staging:
+            # staging 优先：失败则不写本地分区、不更新水位线
+            staging_result = self._upsert_to_data_access_staging(factor_id, df)
+
         partitions_written: list[int] = []
         partitions_failed: list[int] = []
         partitions_skipped: list[int] = []
-        partition_years = sorted(int(year) for year in df["_year"].unique())
-        progress = ProgressLogger(
-            logger,
-            desc=f"落盘因子 {factor_id}",
-            total=len(partition_years),
-            unit="partition",
-        )
 
         from runtime.lineage import new_run_id
 
@@ -241,62 +258,77 @@ class ParquetMaterializer:
             else new_run_id()
         )
 
-        for year in partition_years:
-            if resume:
-                checkpoint = self._catalog.get_partition_checkpoint(factor_id, year)
-                if checkpoint and checkpoint["status"] == "success":
-                    partitions_skipped.append(int(year))
-                    progress.advance(detail=f"year={year}, resume_skip")
-                    continue
+        factor_dir = self._lake_root / "factors" / factor_id
+        work_df = df.copy()
+        work_df["_year"] = work_df["datetime"].dt.year
 
-            partition_df = df.loc[df["_year"] == year].drop(columns=["_year"])
-            try:
-                self._upsert_partition(factor_dir, int(year), partition_df)
-                self._catalog.record_partition_checkpoint(
-                    factor_id=factor_id,
-                    partition_year=int(year),
-                    run_id=checkpoint_run_id,
-                    status="success",
-                )
-                partitions_written.append(int(year))
-                progress.advance(detail=f"year={year}, rows={len(partition_df)}")
-            except Exception as exc:
-                self._catalog.record_partition_checkpoint(
-                    factor_id=factor_id,
-                    partition_year=int(year),
-                    run_id=checkpoint_run_id,
-                    status="failed",
-                    error_message=str(exc),
-                )
-                partitions_failed.append(int(year))
-                progress.advance(detail=f"year={year}, failed")
-                logger.error(
-                    "分区落盘失败 factor_id=%s year=%s error=%s",
-                    factor_id,
-                    year,
-                    exc,
-                )
-                if not isolate_partition_failures:
-                    raise
+        if write_local:
+            partition_years = sorted(int(year) for year in work_df["_year"].unique())
+            progress = ProgressLogger(
+                logger,
+                desc=f"落盘因子 {factor_id}",
+                total=len(partition_years),
+                unit="partition",
+            )
+            for year in partition_years:
+                if resume:
+                    checkpoint = self._catalog.get_partition_checkpoint(factor_id, year)
+                    if checkpoint and checkpoint["status"] == "success":
+                        partitions_skipped.append(int(year))
+                        progress.advance(detail=f"year={year}, resume_skip")
+                        continue
 
-        if not partitions_written and not partitions_skipped:
-            return {
-                "factor_id": factor_id,
-                "rows_written": 0,
-                "partitions": [],
-                "partitions_failed": partitions_failed,
-                "partitions_skipped": partitions_skipped,
-                "watermark": self._catalog.get_watermark(factor_id),
-                "checkpoint_run_id": checkpoint_run_id,
-            }
+                partition_df = work_df.loc[work_df["_year"] == year].drop(columns=["_year"])
+                try:
+                    self._upsert_partition(factor_dir, int(year), partition_df)
+                    self._catalog.record_partition_checkpoint(
+                        factor_id=factor_id,
+                        partition_year=int(year),
+                        run_id=checkpoint_run_id,
+                        status="success",
+                    )
+                    partitions_written.append(int(year))
+                    progress.advance(detail=f"year={year}, rows={len(partition_df)}")
+                except Exception as exc:
+                    self._catalog.record_partition_checkpoint(
+                        factor_id=factor_id,
+                        partition_year=int(year),
+                        run_id=checkpoint_run_id,
+                        status="failed",
+                        error_message=str(exc),
+                    )
+                    partitions_failed.append(int(year))
+                    progress.advance(detail=f"year={year}, failed")
+                    logger.error(
+                        "分区落盘失败 factor_id=%s year=%s error=%s",
+                        factor_id,
+                        year,
+                        exc,
+                    )
+                    if not isolate_partition_failures:
+                        raise
 
-        # --- 5. 更新水位线（仅基于本次成功写入的分区）---
-        active_years = set(partitions_written) | set(partitions_skipped)
-        active_df = df.loc[df["_year"].isin(active_years)].drop(columns=["_year"])
+            if not partitions_written and not partitions_skipped:
+                return {
+                    "factor_id": factor_id,
+                    "rows_written": 0,
+                    "partitions": [],
+                    "partitions_failed": partitions_failed,
+                    "partitions_skipped": partitions_skipped,
+                    "watermark": self._catalog.get_watermark(factor_id),
+                    "checkpoint_run_id": checkpoint_run_id,
+                    "write_target": write_target,
+                }
+
+        # --- 5. 更新水位线 ---
+        if write_local and (partitions_written or partitions_skipped):
+            active_years = set(partitions_written) | set(partitions_skipped)
+            active_df = work_df.loc[work_df["_year"].isin(active_years)].drop(columns=["_year"])
+        else:
+            active_df = work_df.drop(columns=["_year"])
+
         start_date = active_df["datetime"].min().isoformat()
         end_date = active_df["datetime"].max().isoformat()
-
-        # 水位线需合并旧区间
         existing_wm = self._catalog.get_watermark(factor_id)
         if existing_wm is not None:
             if existing_wm["start_date"] < start_date:
@@ -304,18 +336,36 @@ class ParquetMaterializer:
             if existing_wm["end_date"] > end_date:
                 end_date = existing_wm["end_date"]
 
-        total_rows = self._count_total_rows(factor_dir)
-        self._catalog.update_watermark(
-            factor_id=factor_id,
-            start_date=start_date,
-            end_date=end_date,
-            row_count=total_rows,
-        )
+        if write_local:
+            total_rows = self._count_total_rows(factor_dir)
+        else:
+            total_rows = len(active_df)
 
-        watermark = self._catalog.get_watermark(factor_id)
+        pending_watermark = {
+            "start_date": start_date,
+            "end_date": end_date,
+            "row_count": total_rows,
+        }
+        watermark_deferred = bool(defer_watermark)
+        pending_lineage = None
+
+        if watermark_deferred:
+            watermark = self._catalog.get_watermark(factor_id)
+            if run_lineage is not None:
+                pending_lineage = dict(run_lineage)
+                if dq_report is not None:
+                    pending_lineage["dq_passed"] = dq_report.passed
+        else:
+            self._catalog.update_watermark(
+                factor_id=factor_id,
+                start_date=start_date,
+                end_date=end_date,
+                row_count=total_rows,
+            )
+            watermark = self._catalog.get_watermark(factor_id)
 
         if partitions_failed:
-            if run_lineage is not None:
+            if run_lineage is not None and not watermark_deferred:
                 lineage_payload = dict(run_lineage)
                 if dq_report is not None:
                     lineage_payload["dq_passed"] = dq_report.passed
@@ -327,24 +377,26 @@ class ParquetMaterializer:
                 f"因子 '{factor_id}' 分区落盘部分失败: {partitions_failed}"
             )
 
-        if run_lineage is not None:
+        if run_lineage is not None and not watermark_deferred:
             lineage_payload = dict(run_lineage)
             if dq_report is not None:
                 lineage_payload["dq_passed"] = dq_report.passed
             self._catalog.record_run(lineage_payload)
-            self._catalog.clear_partition_checkpoints(factor_id)
+            if write_local:
+                self._catalog.clear_partition_checkpoints(factor_id)
 
         logger.info(
-            "因子 '%s' 落盘完成：%d 行，分区 %s，跳过 %s，水位线 [%s → %s]",
+            "因子 '%s' 落盘完成：%d 行，target=%s，分区 %s，跳过 %s，水位线 [%s → %s]",
             factor_id,
             len(df),
+            target,
             partitions_written,
             partitions_skipped,
             start_date,
             end_date,
         )
 
-        return {
+        summary = {
             "factor_id": factor_id,
             "rows_written": len(df),
             "partitions": partitions_written,
@@ -354,7 +406,80 @@ class ParquetMaterializer:
             "dq_report": dq_report.to_dict() if dq_report is not None else None,
             "run_id": run_lineage.get("run_id") if run_lineage else None,
             "checkpoint_run_id": checkpoint_run_id,
+            "write_target": write_target,
+            "preserve_invalid_rows": preserve_invalid_rows,
+            "watermark_deferred": watermark_deferred,
         }
+        if pending_watermark is not None and watermark_deferred:
+            summary["pending_watermark"] = pending_watermark
+        if pending_lineage is not None:
+            summary["pending_lineage"] = pending_lineage
+        if staging_result is not None:
+            summary["staging"] = staging_result
+        return summary
+
+    def commit_deferred_materialization(self, summary: dict) -> dict:
+        """双写成功：提交延迟的水位线与 lineage。"""
+        if not summary.get("watermark_deferred"):
+            return summary
+        factor_id = summary["factor_id"]
+        pending = summary.get("pending_watermark") or {}
+        self._catalog.update_watermark(
+            factor_id=factor_id,
+            start_date=pending["start_date"],
+            end_date=pending["end_date"],
+            row_count=pending.get("row_count"),
+        )
+        pending_lineage = summary.get("pending_lineage")
+        if pending_lineage is not None:
+            self._catalog.record_run(pending_lineage)
+        partitions = summary.get("partitions") or []
+        if partitions:
+            self._catalog.clear_partition_checkpoints(factor_id)
+        merged = dict(summary)
+        merged["watermark"] = self._catalog.get_watermark(factor_id)
+        merged["watermark_deferred"] = False
+        merged.pop("pending_watermark", None)
+        merged.pop("pending_lineage", None)
+        merged["dual_write_committed"] = True
+        logger.info("因子 '%s' 延迟水位线已提交", factor_id)
+        return merged
+
+    def abort_deferred_materialization(
+        self,
+        summary: dict,
+        *,
+        error: str,
+        downstream: str = "clickhouse",
+    ) -> dict:
+        """双写失败：记录失败 run，不更新水位线。"""
+        if not summary.get("watermark_deferred"):
+            return summary
+        factor_id = summary["factor_id"]
+        pending_lineage = dict(summary.get("pending_lineage") or {})
+        extra = dict(pending_lineage.get("extra") or {})
+        extra.update(
+            {
+                "dual_write_failed": True,
+                "dual_write_downstream": downstream,
+                "dual_write_error": error,
+                "staging_written": summary.get("staging") is not None,
+            }
+        )
+        pending_lineage["extra"] = extra
+        pending_lineage["dq_passed"] = False
+        if pending_lineage.get("run_id"):
+            self._catalog.record_run(pending_lineage)
+        merged = dict(summary)
+        merged["dual_write_committed"] = False
+        merged["dual_write_aborted"] = True
+        logger.error(
+            "因子 '%s' 双写中止（%s 失败），水位线未更新: %s",
+            factor_id,
+            downstream,
+            error,
+        )
+        return merged
 
     # ------------------------------------------------------------------
     # 内部：数据规范化
@@ -365,6 +490,7 @@ class ParquetMaterializer:
         result: pd.Series,
         *,
         metadata: MaterializeMetadata | None = None,
+        value_dtype: str = "float32",
     ) -> pd.DataFrame:
         """MultiIndex Series → 长表 DataFrame[datetime, asset, value(float32)]。
 
@@ -393,20 +519,55 @@ class ParquetMaterializer:
 
         # 强制类型——剥夺 Pandas 的自动推断权
         df["asset"] = df["asset"].astype("string")
-        df["value"] = df["value"].astype("float32")
+        df["value"] = df["value"].astype(str(value_dtype or "float32"))
         if metadata is not None:
             df["calc_time"] = metadata.calc_time
             df["factor_version"] = metadata.factor_version
             df["data_snapshot_id"] = metadata.data_snapshot_id or ""
             df["is_valid"] = int(metadata.is_valid)
+            df["invalid_reason"] = metadata.invalid_reason or ""
         return df
 
     @staticmethod
-    def _clean(df: pd.DataFrame) -> pd.DataFrame:
-        """清洗：inf → NaN，dropna(value)。"""
+    def _clean(df: pd.DataFrame, *, preserve_invalid_rows: bool = False) -> pd.DataFrame:
+        """清洗：inf → NaN；生产模式可保留无效行并标注 invalid_reason。"""
+        df = df.copy()
         df["value"] = df["value"].replace([np.inf, -np.inf], np.nan)
+        if preserve_invalid_rows:
+            if "is_valid" not in df.columns:
+                df["is_valid"] = 1
+            if "invalid_reason" not in df.columns:
+                df["invalid_reason"] = ""
+            invalid = df["value"].isna()
+            df.loc[invalid, "is_valid"] = 0
+            df.loc[invalid, "invalid_reason"] = "inf_or_nan"
+            return df.reset_index(drop=True)
         df = df.dropna(subset=["value"]).reset_index(drop=True)
         return df
+
+    def _upsert_to_data_access_staging(self, factor_id: str, df: pd.DataFrame) -> dict:
+        """经 data_access 幂等 upsert 到 factor_lake_staging（生产发布前暂存区）。"""
+        import pyarrow as pa
+
+        from data_access import get_store
+
+        out = df.copy()
+        out["year"] = pd.to_datetime(out["datetime"]).dt.year.astype("int32")
+        table = pa.Table.from_pandas(out, preserve_index=False)
+        store = get_store()
+        result = store.upsert(
+            "factor_lake_staging",
+            table,
+            upsert_on=["datetime", "asset"],
+            partition_by=["year"],
+            factor_id=factor_id,
+        )
+        logger.info(
+            "因子 '%s' 已 upsert 到 factor_lake_staging: %s",
+            factor_id,
+            result,
+        )
+        return {"dataset": "factor_lake_staging", "factor_id": factor_id, **result}
 
     # ------------------------------------------------------------------
     # 内部：分区 Upsert + 原子写入
@@ -433,6 +594,8 @@ class ParquetMaterializer:
                 if col not in existing_df.columns:
                     if col == "is_valid":
                         existing_df[col] = 1
+                    elif col == "invalid_reason":
+                        existing_df[col] = ""
                     else:
                         existing_df[col] = None
             existing_rows = len(existing_df)

@@ -1,4 +1,19 @@
-# staging profile：中等日期窗 + staging 因子湖
+# staging profile：中等严格 + staging 因子湖（预生产验证）
+run:
+  mode: production
+  auto_warmup: true
+  trim_warmup: true
+  calendar: us
+
+dq:
+  profile: us_equity_daily_prod
+  strict: true
+  input_strict: true
+
+pit:
+  enforce: false
+  forbid_forward_fill: false
+
 data_source:
   start_date: "2023-01-01"
   end_date: "2023-12-31"
@@ -9,3 +24,8 @@ engine:
 
 materialization:
   lake_root: ../data/factors/lake_staging
+  target: staging
+  preserve_invalid_rows: true
+  value_dtype: float32
+  incremental:
+    lookback_extra: 5

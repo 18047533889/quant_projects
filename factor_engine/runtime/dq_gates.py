@@ -68,8 +68,13 @@ def evaluate_factor_dq(
     result: pd.Series,
     *,
     thresholds: DQThresholds | None = None,
+    preserve_invalid_rows: bool = False,
 ) -> FactorDQReport:
-    """对 MultiIndex(timestamp, instrument) Series 做产出质量检查。"""
+    """对 MultiIndex(timestamp, instrument) Series 做产出质量检查。
+
+    ``preserve_invalid_rows=True`` 时：inf 不参与 inf_ratio 门禁（将在落盘时
+    转为 ``is_valid=0``）；覆盖率/缺失率仅统计有限值。
+    """
     th = thresholds or DQThresholds()
     checks: list[DQCheckResult] = []
 
@@ -115,17 +120,28 @@ def evaluate_factor_dq(
 
     inf_count = int(np.isinf(vals).sum())
     inf_ratio = inf_count / n
-    checks.append(
-        DQCheckResult(
-            "inf_ratio",
-            inf_ratio <= th.max_inf_ratio,
-            f"inf 比例 {inf_ratio:.4f}",
-            round(inf_ratio, 6),
+    if preserve_invalid_rows:
+        checks.append(
+            DQCheckResult(
+                "inf_ratio",
+                True,
+                f"inf 比例 {inf_ratio:.4f}（preserve_invalid_rows 模式跳过门禁）",
+                round(inf_ratio, 6),
+            )
         )
-    )
+    else:
+        checks.append(
+            DQCheckResult(
+                "inf_ratio",
+                inf_ratio <= th.max_inf_ratio,
+                f"inf 比例 {inf_ratio:.4f}",
+                round(inf_ratio, 6),
+            )
+        )
 
     if non_null > 0:
-        abs_max = float(np.nanmax(np.abs(vals)))
+        finite_vals = vals[finite]
+        abs_max = float(np.nanmax(np.abs(finite_vals))) if len(finite_vals) else 0.0
         checks.append(
             DQCheckResult(
                 "abs_max",
@@ -167,8 +183,13 @@ def assert_factor_dq(
     *,
     thresholds: DQThresholds | None = None,
     raise_on_fail: bool = True,
+    preserve_invalid_rows: bool = False,
 ) -> FactorDQReport:
-    report = evaluate_factor_dq(result, thresholds=thresholds)
+    report = evaluate_factor_dq(
+        result,
+        thresholds=thresholds,
+        preserve_invalid_rows=preserve_invalid_rows,
+    )
     if raise_on_fail and not report.passed:
         raise FactorDQError(report)
     return report

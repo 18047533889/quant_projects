@@ -43,12 +43,22 @@ def ensure_cleaned_loaded() -> None:
     _CLEANED_LOADED = True
 
 
+def _series_panel_cache_key(s: pd.Series) -> tuple[Any, ...]:
+    """稳定 cache key：Series 身份 + index 身份 + 列名 + 长度。"""
+    name = getattr(s, "name", None)
+    return (id(s), id(s.index), str(name) if name is not None else "", len(s))
+
+
 def series_to_panel(s: pd.Series, ctx: ExecutionContext) -> pd.DataFrame:
     """``(timestamp, instrument)`` MultiIndex Series → 宽表（列=标的）。"""
     if not isinstance(s.index, pd.MultiIndex):
         raise TypeError("cleaned_bridge expects MultiIndex (timestamp, instrument) Series")
     cache = ctx.panel_cache
+    cache_key = _series_panel_cache_key(s)
     if cache is not None:
+        hit = cache.get(cache_key)
+        if hit is not None:
+            return hit
         hit = cache.get(id(s))
         if hit is not None:
             return hit
@@ -59,6 +69,7 @@ def series_to_panel(s: pd.Series, ctx: ExecutionContext) -> pd.DataFrame:
         s.index = s.index.set_names([tcol, icol])
     panel = s.unstack(level=icol).sort_index()
     if cache is not None:
+        cache[cache_key] = panel
         cache[id(s)] = panel
     return panel
 

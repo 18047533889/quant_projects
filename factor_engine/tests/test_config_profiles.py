@@ -13,6 +13,36 @@ def test_load_profile_prod_exists():
     payload = load_profile("prod")
     assert "materialization" in payload
     assert "lake_root" in payload["materialization"]
+    assert payload["run"]["auto_warmup"] is True
+    assert payload["dq"]["profile"] == "us_equity_daily_prod"
+    assert payload["materialization"]["target"] == "staging"
+    assert payload["materialization"]["preserve_invalid_rows"] is True
+
+
+def test_load_config_prod_profile_fields(tmp_path):
+    config = tmp_path / "factor.yaml"
+    config.write_text(
+        """
+profile: prod
+factor:
+  name: prod_smoke
+  expr: rank(close)
+data_source:
+  type: data_access
+  dataset: ashare_stock_daily
+  end_date: "2024-02-29"
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    loaded = load_config(config)
+    assert loaded.run.mode == "production"
+    assert loaded.run.auto_warmup is True
+    assert loaded.dq.profile == "us_equity_daily_prod"
+    assert loaded.dq.strict is True
+    assert loaded.materialization is not None
+    assert loaded.materialization.target == "staging"
+    assert loaded.materialization.preserve_invalid_rows is True
 
 
 def test_config_merges_profile_overrides(tmp_path):

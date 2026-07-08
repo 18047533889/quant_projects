@@ -255,6 +255,61 @@ class TestParquetMaterializer:
         # 只有 1 行有效数据
         assert result["rows_written"] == 1
 
+    def test_preserve_invalid_rows_keeps_inf_as_invalid(self, tmp_path):
+        """生产模式：inf/NaN 保留行并标注 invalid_reason。"""
+        mat = ParquetMaterializer(lake_root=tmp_path)
+        series = _make_series(
+            dates=["2024-01-15"],
+            assets=["000001.SZ", "000002.SZ", "000003.SZ"],
+            values=[1.0, float("inf"), float("nan")],
+        )
+        result = mat.materialize(
+            factor_id="invalid_preserve_test",
+            result=series,
+            ast_hash="h1",
+            preserve_invalid_rows=True,
+        )
+        assert result["rows_written"] == 3
+        assert result["preserve_invalid_rows"] is True
+        pq_path = tmp_path / "factors" / "invalid_preserve_test" / "year=2024" / "data.parquet"
+        df = pd.read_parquet(pq_path)
+        assert len(df) == 3
+        assert set(df["is_valid"].tolist()) == {0, 1}
+        invalid = df.loc[df["is_valid"] == 0]
+        assert len(invalid) == 2
+        assert (invalid["invalid_reason"] == "inf_or_nan").all()
+
+    def test_staging_write_target_skips_local_partitions(self, tmp_path, monkeypatch):
+        """write_target=staging 时仅 upsert staging，不写本地 year= 分区。"""
+        mat = ParquetMaterializer(lake_root=tmp_path)
+        series = _make_series(
+            dates=["2024-01-15"],
+            assets=["000001.SZ"],
+            values=[1.0],
+        )
+        calls = []
+
+        class _FakeStore:
+            def upsert(self, dataset, table, **kwargs):
+                calls.append({"dataset": dataset, "rows": table.num_rows, **kwargs})
+                return {"rows_upserted": table.num_rows}
+
+        monkeypatch.setattr(
+            "data_access.get_store",
+            lambda: _FakeStore(),
+        )
+        result = mat.materialize(
+            factor_id="staging_only_test",
+            result=series,
+            ast_hash="h1",
+            write_target="staging",
+        )
+        assert result["write_target"] == "staging"
+        assert result["staging"]["dataset"] == "factor_lake_staging"
+        assert len(calls) == 1
+        assert not (tmp_path / "factors" / "staging_only_test" / "year=2024").exists()
+        assert result["watermark"] is not None
+
     def test_nan_dropped(self, tmp_path):
         """NaN 值行被 dropna 清除。"""
         mat = ParquetMaterializer(lake_root=tmp_path)

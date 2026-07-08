@@ -15,5 +15,5 @@ fi
 BRANCH="${1:-$(git branch --show-current)}"
 REMOTE_URL="https://${GITHUB_TOKEN}@github.com/18047533889/quant_projects.git"
 
-echo "Pushing ${BRANCH} -> origin (${REMOTE_URL%%@*}@github.com/...)"
+echo "Pushing ${BRANCH} -> origin (github.com/18047533889/quant_projects.git)"
 GIT_TERMINAL_PROMPT=0 git push "$REMOTE_URL" "$BRANCH"

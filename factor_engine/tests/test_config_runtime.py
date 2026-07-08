@@ -1,92 +1,111 @@
+# -*- coding: utf-8
+"""config_runtime 与 pipeline 配置贯通测试。"""
+
+from __future__ import annotations
+
 from pathlib import Path
 
 import pytest
 
-pd = pytest.importorskip("pandas")
-yaml = pytest.importorskip("yaml")
-
 from runtime.config import load_config
-from runtime.engine import FactorEngine
+from runtime.config_runtime import resolve_materialize_kwargs, resolve_run_kwargs
 
 
-def test_run_from_config_with_kline_parquet_source(tmp_path: Path):
-    root = tmp_path / 'day_aggs_v1' / '2024' / '01'
-    root.mkdir(parents=True)
-
-    for day, rows in {
-        '2024-01-01': [('AAA', 10.0), ('BBB', 20.0)],
-        '2024-01-02': [('AAA', 11.0), ('BBB', 19.0)],
-        '2024-01-03': [('AAA', 12.0), ('BBB', 18.0)],
-    }.items():
-        frame = pd.DataFrame(
-            {
-                'ticker': [ticker for ticker, _ in rows],
-                'window_start': [pd.Timestamp(day, tz='UTC').value for _ in rows],
-                'close': [close for _, close in rows],
-                'open': [close for _, close in rows],
-                'high': [close + 1 for _, close in rows],
-                'low': [close - 1 for _, close in rows],
-                'volume': [1000.0 for _ in rows],
-                'transactions': [10.0 for _ in rows],
-            }
-        )
-        frame.to_parquet(root / f'{day}.parquet', index=False)
-
-    config_path = tmp_path / 'factor.yaml'
-    config_path.write_text(
-        yaml.safe_dump(
-            {
-                'factor': {
-                    'name': 'mom_2_rank',
-                    'expr': 'rank(ts_mean(col("close"), 2))',
-                },
-                'data_source': {
-                    'type': 'parquet_kline',
-                    'root': str(tmp_path / 'day_aggs_v1'),
-                    'instrument_column': 'ticker',
-                    'timestamp_column': 'window_start',
-                    'fields': {'close': 'close'},
-                },
-                'backend': {'type': 'pandas'},
-                'engine': {'enable_cache': True},
-            }
-        )
+def test_resolve_run_kwargs_production_enables_input_dq(tmp_path):
+    config = tmp_path / "factor.yaml"
+    config.write_text(
+        """
+profile: prod
+factor:
+  name: x
+  expr: rank(close)
+data_source:
+  type: parquet
+  root: /tmp
+""".strip()
+        + "\n",
+        encoding="utf-8",
     )
-
-    out = FactorEngine.run_from_config(config_path)
-    result = out['result']
-
-    assert out['factor'].name == 'mom_2_rank'
-    assert out['analysis'].lookback == 2
-    assert result.loc[(pd.Timestamp('2024-01-03'), 'AAA')] == 0.5
-    assert result.loc[(pd.Timestamp('2024-01-03'), 'BBB')] == 1.0
+    loaded = load_config(config)
+    opts = resolve_run_kwargs(loaded)
+    assert opts.auto_warmup is True
+    assert opts.input_dq_check is True
+    assert opts.pit_enforce is True
 
 
-def test_load_config_defaults_materialization_lake_root_to_workspace_data(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-):
-    workspace_root = tmp_path / "workspace_data"
-    monkeypatch.setenv("QUANTSOCIETY_WORKSPACE_DATA_ROOT", str(workspace_root))
-
-    config_path = tmp_path / 'factor_with_materialization.yaml'
-    config_path.write_text(
-        yaml.safe_dump(
-            {
-                'factor': {
-                    'name': 'demo_factor',
-                    'expr': 'col("close")',
-                },
-                'data_source': {
-                    'type': 'parquet_kline',
-                    'root': str(tmp_path / 'day_aggs_v1'),
-                },
-                'materialization': {},
-            }
-        )
+def test_resolve_materialize_kwargs_staging_target(tmp_path):
+    config = tmp_path / "factor.yaml"
+    config.write_text(
+        """
+profile: prod
+factor:
+  name: x
+  expr: rank(close)
+data_source:
+  type: parquet
+  root: /tmp
+materialization:
+  factor_id: prod_factor_v1
+""".strip()
+        + "\n",
+        encoding="utf-8",
     )
+    loaded = load_config(config)
+    opts = resolve_materialize_kwargs(loaded)
+    assert opts.write_target == "staging"
+    assert opts.preserve_invalid_rows is True
+    assert opts.dq_check is True
+    assert opts.dq_thresholds is not None
+    assert opts.dq_thresholds.min_coverage == pytest.approx(0.85)
 
-    config = load_config(config_path)
 
-    assert config.materialization is not None
-    assert config.materialization.lake_root == str(workspace_root / 'factors' / 'lake')
+def test_resolve_materialize_kwargs_incremental_section(tmp_path):
+    config = tmp_path / "factor.yaml"
+    config.write_text(
+        """
+profile: prod
+factor:
+  name: x
+  expr: rank(close)
+data_source:
+  type: parquet
+  root: /tmp
+materialization:
+  incremental:
+    since: "2024-01-01"
+    lookback_extra: 10
+    recompute_tail_bars: 3
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    loaded = load_config(config)
+    opts = resolve_materialize_kwargs(loaded)
+    assert opts.since == "2024-01-01"
+    assert opts.lookback_extra == 10
+    assert opts.recompute_tail_bars == 3
+    assert opts.ch_ensure_table is True
+
+
+def test_cli_override_beats_config(tmp_path):
+    config = tmp_path / "factor.yaml"
+    config.write_text(
+        """
+run:
+  mode: research
+  auto_warmup: false
+dq:
+  strict: false
+factor:
+  name: x
+  expr: close
+data_source:
+  type: parquet
+  root: /tmp
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    loaded = load_config(config)
+    opts = resolve_materialize_kwargs(loaded, cli_dq_check=True)
+    assert opts.dq_check is True

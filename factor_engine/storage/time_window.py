@@ -68,6 +68,49 @@ def resolve_incremental_window(
     }
 
 
+def resolve_incremental_window_for_bar_freq(
+    *,
+    watermark_end: str | None,
+    lookback_bars: int,
+    since: str | None = None,
+    end_date: str | None = None,
+    recompute_tail_bars: int | None = None,
+    calendar: TradingCalendar | None = None,
+    bar_freq: str | None = None,
+) -> dict[str, pd.Timestamp | None | str]:
+    """按 bar 频率解析增量窗口；日内源用 calendar 近似 + 1 日安全缓冲。"""
+    from cleaned_operators.operator_policy import bars_per_day, bars_to_calendar_trading_days
+
+    bpd = bars_per_day(bar_freq)
+    if bpd <= 1:
+        out = resolve_incremental_window(
+            watermark_end=watermark_end,
+            lookback_bars=lookback_bars,
+            since=since,
+            end_date=end_date,
+            recompute_tail_bars=recompute_tail_bars,
+            calendar=calendar,
+        )
+        out["window_mode"] = "daily"
+        return out
+
+    lb = max(0, int(lookback_bars))
+    tail = max(0, int(recompute_tail_bars)) if recompute_tail_bars is not None else lb
+    lb_days = bars_to_calendar_trading_days(lb, bar_freq) + 1
+    tail_days = bars_to_calendar_trading_days(tail, bar_freq) + 1
+    out = resolve_incremental_window(
+        watermark_end=watermark_end,
+        lookback_bars=lb_days,
+        since=since,
+        end_date=end_date,
+        recompute_tail_bars=tail_days,
+        calendar=calendar,
+    )
+    out["window_mode"] = "intraday_calendar_approx"
+    out["source_bar_freq"] = str(bar_freq)
+    return out
+
+
 def _to_date_str(value: str | pd.Timestamp | None) -> str | None:
     if value is None:
         return None
@@ -201,12 +244,23 @@ def narrow_data_source_for_window(
     *,
     start_date: str | pd.Timestamp | None = None,
     end_date: str | pd.Timestamp | None = None,
+    bar_freq: str | None = None,
 ) -> DataSource:
     """尽可能在数据源层裁剪（DuckDB/parquet 谓词下推），否则内存切片。"""
     start_s = _to_date_str(start_date)
     end_s = _to_date_str(end_date)
     if start_s is None and end_s is None:
         return source
+
+    resolved_bar_freq = bar_freq or getattr(source, "bar_freq", None)
+    if resolved_bar_freq is None:
+        inner = getattr(source, "inner", None) or getattr(source, "_inner", None)
+        if inner is not None:
+            resolved_bar_freq = getattr(inner, "bar_freq", None)
+
+    from cleaned_operators.operator_policy import bars_per_day
+
+    _ = bars_per_day(resolved_bar_freq)  # 保留供后续 bar 级精确扩窗使用
 
     from .composite_source import CompositeDataSource
     from .data_access_source import DataAccessSource

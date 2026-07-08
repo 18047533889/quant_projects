@@ -254,6 +254,40 @@ Phase 10 — 生产规模化（待定）
 ├── 多队列编排（Redis/对象存储任务中心）
 ├── 因子湖跨 region 复制与灾备演练
 └── 统一观测平面（Grafana + Loki + Tempo）
+
+Phase 11 — 生产地基（已完成）
+├── RunWindow + 全量 auto_warmup/trim（`runtime/run_window.py` + `engine.run`）✅
+├── 配置 run/dq/pit/materialization（`runtime/config.py` + `examples/profiles/prod.yaml`）✅
+├── config_runtime 统一 pipeline / materialize_from_config 语义 ✅
+├── DQ Profile YAML（`runtime/dq_profiles.yaml` + research/prod 阈值）✅
+├── materializer：invalid_reason + staging 单写（staging 优先 upsert）✅
+├── PIT enforce（`runtime/pit_audit.py` + compile 门禁）✅
+├── CI 门禁（`.github/workflows/ci.yml` + enterprise_readiness）✅
+
+Phase 12 — 算子语义与 intraday（进行中 → 核心已落地）
+├── OperatorSpec Tier-1 显式 policy（55+ canonical + CI 门禁）✅
+├── IntradayAggregator + intraday_daily 数据源 ✅
+├── Analyzer 消费 min_periods → lookback ✅
+├── effective_lookback 频率换算修正 + bar_freq 接线 ✅
+├── micro 算子 7 个（realized_vol/spread/amihud/mid_return/bipower/jump）✅
+├── write_target: staging_clickhouse 多目标物化 ✅
+├── materialize_incremental + clickhouse/staging_clickhouse 双写 ✅
+├── materialize_incremental_from_config + incremental CLI/config ✅
+├── DualWriteError：CH 失败时携带 partial summary ✅
+├── factor_frame 共享 Parquet/CH 清洗路径 ✅
+├── incremental 日内频率换算（bars_to_calendar_trading_days）✅
+├── run_incremental 全量路径 auto_warmup ✅
+├── defer_watermark 两阶段提交（CH 成功后再更新 watermark）✅
+├── sync_local_factor_to_staging 原子目录替换 ✅
+├── micro_trade_imbalance / micro_vpin 算子（pandas + polars）✅
+├── ClickHouse docker-compose 本地集成模板 ✅
+├── dual_write_reconcile + catalog.list_dual_write_failures ✅
+├── 日内增量 window_mode（intraday_calendar_approx）✅
+├── prod_clickhouse profile ✅
+├── ClickHouse + config_runtime 对齐 ✅
+├── DQ + preserve_invalid_rows 语义一致 ✅
+├── pipeline CLI：--write-target / --preserve-invalid-rows ✅
+└── 其余 micro_* stub / bar 精确 tick 级扩窗（待做）
 ```
 
 ---

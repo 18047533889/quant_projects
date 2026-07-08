@@ -54,6 +54,17 @@ def _wrap_long_table(source: Any, *, long_table: bool) -> Any:
     return LongTableDataSource(source)
 
 
+def _normalize_path(value: Any) -> str:
+    return str(resolve_path(str(value)))
+
+
+def _attach_bar_freq(source: Any, bar_freq: str) -> Any:
+    """为 DataSource 挂载 bar 频率（供 warmup / lookback 换算）。"""
+    if bar_freq and not getattr(source, "bar_freq", None):
+        source.bar_freq = bar_freq
+    return source
+
+
 def build_data_source(config: Any):
     """根据运行时配置构造单数据源或组合数据源实例。"""
 
@@ -91,6 +102,7 @@ def build_data_source(config: Any):
     start_date = _pop_option(options, "start_date", default=None)
     end_date = _pop_option(options, "end_date", default=None)
     fields = _pop_option(options, "fields", "field_mapping", default=None)
+    bar_freq = str(_pop_option(options, "bar_freq", default="1d"))
     long_table = bool(_pop_option(options, "long_table", default=False))
 
     if source_type == "long_table":
@@ -114,7 +126,7 @@ def build_data_source(config: Any):
             timestamp_unit=timestamp_unit,
         )
         _ensure_no_extra_options(source_type, options)
-        return _wrap_long_table(source, long_table=long_table)
+        return _wrap_long_table(_attach_bar_freq(source, bar_freq), long_table=long_table)
 
     if source_type == "clickhouse":
         table = _pop_option(options, "table", required=True)
@@ -143,7 +155,7 @@ def build_data_source(config: Any):
             secure=_pop_option(options, "secure", default=None),
         )
         _ensure_no_extra_options(source_type, options)
-        return _wrap_long_table(source, long_table=long_table)
+        return _wrap_long_table(_attach_bar_freq(source, bar_freq), long_table=long_table)
 
     root = _normalize_path(_pop_option(options, "root", required=True))
     recursive = bool(_pop_option(options, "recursive", default=True))
@@ -163,6 +175,7 @@ def build_data_source(config: Any):
             timestamp_unit=_pop_option(options, "timestamp_unit", default="ns"),
             start_date=start_date,
             end_date=end_date,
+            bar_freq=bar_freq,
         )
     elif source_type in {"multi_parquet", "parquet"}:
         source = ParquetSource(
@@ -180,6 +193,23 @@ def build_data_source(config: Any):
             end_date=end_date,
             recursive=recursive,
         )
+    elif source_type == "intraday_daily":
+        inner_cfg = _pop_option(options, "source", required=True)
+        if not isinstance(inner_cfg, dict) or "type" not in inner_cfg:
+            raise ValueError("intraday_daily 需要嵌套 source: {type: ..., ...}")
+        raw_features = _pop_option(
+            options,
+            "features",
+            default=("last_close", "sum_volume", "vwap"),
+        )
+        features = tuple(str(x) for x in raw_features)
+        inner = build_data_source(inner_cfg)
+        from runtime.intraday_aggregator import IntradayAggregatedDataSource
+
+        source = IntradayAggregatedDataSource(inner=inner, features=features)
+        _ensure_no_extra_options(source_type, options)
+        return _attach_bar_freq(source, bar_freq)
+
     elif source_type == "cleaned_parquet":
         source = CleanedParquetSource(
             root=root,
@@ -196,4 +226,4 @@ def build_data_source(config: Any):
         raise ValueError(f"Unsupported data_source.type: {source_type}")
 
     _ensure_no_extra_options(source_type, options)
-    return _wrap_long_table(source, long_table=long_table)
+    return _wrap_long_table(_attach_bar_freq(source, bar_freq), long_table=long_table)

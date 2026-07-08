@@ -73,7 +73,8 @@ def ensure_factor_table(
         calc_time DateTime DEFAULT now(),
         factor_version String DEFAULT '',
         data_snapshot_id String DEFAULT '',
-        is_valid UInt8 DEFAULT 1
+        is_valid UInt8 DEFAULT 1,
+        invalid_reason String DEFAULT ''
     ) ENGINE = ReplacingMergeTree(calc_time)
     PARTITION BY toYYYYMM({ts})
     ORDER BY ({fid}, {ts}, {inst})
@@ -155,6 +156,53 @@ def _series_to_long_table(
     out[asset_col] = out[asset_col].astype("string")
     out[value_col] = out[value_col].astype("float32")
     return out
+
+
+def insert_factor_dataframe(
+    *,
+    config: ClickHouseConfig,
+    table: str = DEFAULT_FACTOR_TABLE,
+    frame,
+    timestamp_column: str = "trade_date",
+    instrument_column: str = "instrument",
+    factor_id_column: str = "factor_id",
+    ensure_table: bool = True,
+) -> int:
+    """长表 DataFrame 写入 ClickHouse（含 is_valid / invalid_reason 列）。"""
+    import pandas as pd
+
+    if frame is None or len(frame) == 0:
+        return 0
+    if ensure_table:
+        ensure_factor_table(
+            config=config,
+            table=table,
+            timestamp_column=timestamp_column,
+            instrument_column=instrument_column,
+            factor_id_column=factor_id_column,
+        )
+    work = frame.copy()
+    work[timestamp_column] = pd.to_datetime(work[timestamp_column]).dt.date
+    work[instrument_column] = work[instrument_column].astype(str)
+    if "is_valid" not in work.columns:
+        work["is_valid"] = 1
+    if "invalid_reason" not in work.columns:
+        work["invalid_reason"] = ""
+    if "calc_time" not in work.columns:
+        work["calc_time"] = pd.Timestamp.utcnow().tz_localize(None)
+    cols = [
+        timestamp_column,
+        instrument_column,
+        factor_id_column,
+        "value",
+        "calc_time",
+        "factor_version",
+        "data_snapshot_id",
+        "is_valid",
+        "invalid_reason",
+    ]
+    cols = [c for c in cols if c in work.columns]
+    return insert_dataframe(config=config, table=table, frame=work, column_order=cols)
 
 
 def insert_factor_series(

@@ -12,6 +12,7 @@ from typing import Any
 import yaml
 
 from runtime.config import FactorEngineConfig, load_config
+from runtime.config_runtime import resolve_materialize_kwargs, resolve_run_kwargs
 from runtime.engine import FactorEngine
 from runtime.metrics_export import (
     enrich_pipeline_summary,
@@ -155,6 +156,12 @@ def _execute_config_with_retries(
     input_dq_strict: bool = True,
     max_retries: int = 0,
     resume_materialize: bool = False,
+    write_target: str | None = None,
+    preserve_invalid_rows: bool | None = None,
+    since: str | None = None,
+    end_date: str | None = None,
+    lookback_extra: int | None = None,
+    recompute_tail_bars: int | None = None,
 ) -> dict[str, Any]:
     attempts = max(0, int(max_retries)) + 1
     last_exc: Exception | None = None
@@ -171,6 +178,12 @@ def _execute_config_with_retries(
                 input_dq_check=input_dq_check,
                 input_dq_strict=input_dq_strict,
                 resume_materialize=resume_materialize,
+                write_target=write_target,
+                preserve_invalid_rows=preserve_invalid_rows,
+                since=since,
+                end_date=end_date,
+                lookback_extra=lookback_extra,
+                recompute_tail_bars=recompute_tail_bars,
             )
         except Exception as exc:
             last_exc = exc
@@ -199,9 +212,14 @@ def _execute_config(
     input_dq_check: bool = False,
     input_dq_strict: bool = True,
     resume_materialize: bool = False,
+    write_target: str | None = None,
+    preserve_invalid_rows: bool | None = None,
+    since: str | None = None,
+    end_date: str | None = None,
+    lookback_extra: int | None = None,
+    recompute_tail_bars: int | None = None,
 ) -> dict[str, Any]:
     engine, factor = FactorEngine.from_loaded_config(config)
-    ds_config = {"type": config.data_source.type, **config.data_source.options}
     should_materialize = config.materialization is not None if materialize is None else materialize
     if incremental and not should_materialize:
         logger.warning(
@@ -216,33 +234,125 @@ def _execute_config(
     else:
         mode = "run"
 
+    run_opts = resolve_run_kwargs(
+        config,
+        cli_input_dq_check=True if input_dq_check else None,
+        cli_input_dq_strict=input_dq_strict if input_dq_check else None,
+    )
+
     if should_materialize:
-        materialization = config.materialization
-        mat_kwargs = dict(
-            lake_root=materialization.lake_root if materialization is not None else None,
-            factor_id=materialization.factor_id if materialization is not None else None,
-            author=materialization.author if materialization is not None else None,
-            frequency=materialization.frequency if materialization is not None else None,
-            description=materialization.description if materialization is not None else None,
-            expression=(
-                materialization.expression if materialization is not None else config.factor.expr
-            ),
-            dq_check=dq_check,
-            dq_strict=dq_strict,
-            input_dq_check=input_dq_check,
-            input_dq_strict=input_dq_strict,
-            data_source_config=ds_config,
-            resume_materialize=resume_materialize,
+        mat_opts = resolve_materialize_kwargs(
+            config,
+            cli_dq_check=True if dq_check else None,
+            cli_dq_strict=dq_strict if dq_check else None,
+            cli_input_dq_check=True if input_dq_check else None,
+            cli_input_dq_strict=input_dq_strict if input_dq_check else None,
+            write_target_override=write_target,
+            preserve_invalid_rows_override=preserve_invalid_rows,
+            since_override=since,
+            end_date_override=end_date,
+            lookback_extra_override=lookback_extra,
+            recompute_tail_bars_override=recompute_tail_bars,
+            resume_materialize_override=resume_materialize,
         )
+        common_kwargs = dict(
+            factor_id=mat_opts.factor_id,
+            author=mat_opts.author,
+            frequency=mat_opts.frequency,
+            description=mat_opts.description,
+            expression=mat_opts.expression,
+            auto_warmup=mat_opts.auto_warmup,
+            trim_warmup=mat_opts.trim_warmup,
+            market=mat_opts.market,
+            dq_check=mat_opts.dq_check,
+            dq_strict=mat_opts.dq_strict,
+            dq_thresholds=mat_opts.dq_thresholds,
+            input_dq_check=mat_opts.input_dq_check,
+            input_dq_strict=mat_opts.input_dq_strict,
+            input_dq_thresholds=mat_opts.input_dq_thresholds,
+            preserve_invalid_rows=mat_opts.preserve_invalid_rows,
+            value_dtype=mat_opts.value_dtype,
+            data_source_config=mat_opts.data_source_config,
+            pit_enforce=mat_opts.pit_enforce,
+            pit_forbid_forward_fill=mat_opts.pit_forbid_forward_fill,
+        )
+        target = str(mat_opts.write_target).lower()
         if incremental:
+            mat_kwargs = {
+                **common_kwargs,
+                "lake_root": mat_opts.lake_root,
+                "write_target": mat_opts.write_target,
+                "resume_materialize": mat_opts.resume_materialize,
+                "isolate_partition_failures": mat_opts.isolate_partition_failures,
+                "since": mat_opts.since,
+                "end_date": mat_opts.end_date,
+                "lookback_extra": mat_opts.lookback_extra,
+                "recompute_tail_bars": mat_opts.recompute_tail_bars,
+                "ch_ensure_table": mat_opts.ch_ensure_table,
+            }
+            if target in ("clickhouse", "staging_clickhouse"):
+                mat_kwargs.update(
+                    {
+                        "clickhouse_table": mat_opts.clickhouse_table,
+                        "ch_host": mat_opts.clickhouse_host,
+                        "ch_port": mat_opts.clickhouse_port,
+                        "ch_database": mat_opts.clickhouse_database,
+                        "ch_username": mat_opts.clickhouse_username,
+                        "ch_password": mat_opts.clickhouse_password,
+                        "ch_secure": mat_opts.clickhouse_secure,
+                    }
+                )
             output = engine.materialize_incremental(factor, **mat_kwargs)
+        elif target == "clickhouse":
+            output = engine.materialize(
+                factor,
+                **common_kwargs,
+                lake_root=mat_opts.lake_root,
+                write_target="clickhouse",
+                isolate_partition_failures=mat_opts.isolate_partition_failures,
+                clickhouse_table=mat_opts.clickhouse_table,
+                ch_host=mat_opts.clickhouse_host,
+                ch_port=mat_opts.clickhouse_port,
+                ch_database=mat_opts.clickhouse_database,
+                ch_username=mat_opts.clickhouse_username,
+                ch_password=mat_opts.clickhouse_password,
+                ch_secure=mat_opts.clickhouse_secure,
+            )
+        elif target == "staging_clickhouse":
+            output = engine.materialize(
+                factor,
+                **common_kwargs,
+                lake_root=mat_opts.lake_root,
+                write_target="staging_clickhouse",
+                isolate_partition_failures=mat_opts.isolate_partition_failures,
+                clickhouse_table=mat_opts.clickhouse_table,
+                ch_host=mat_opts.clickhouse_host,
+                ch_port=mat_opts.clickhouse_port,
+                ch_database=mat_opts.clickhouse_database,
+                ch_username=mat_opts.clickhouse_username,
+                ch_password=mat_opts.clickhouse_password,
+                ch_secure=mat_opts.clickhouse_secure,
+            )
         else:
-            output = engine.materialize(factor, **mat_kwargs)
+            output = engine.materialize(
+                factor,
+                **common_kwargs,
+                lake_root=mat_opts.lake_root,
+                write_target=mat_opts.write_target,
+                resume_materialize=mat_opts.resume_materialize,
+                isolate_partition_failures=mat_opts.isolate_partition_failures,
+            )
     else:
         output = engine.run(
             factor,
-            input_dq_check=input_dq_check,
-            input_dq_strict=input_dq_strict,
+            auto_warmup=run_opts.auto_warmup,
+            trim_warmup=run_opts.trim_warmup,
+            market=run_opts.market,
+            input_dq_check=run_opts.input_dq_check,
+            input_dq_strict=run_opts.input_dq_strict,
+            input_dq_thresholds=run_opts.input_dq_thresholds,
+            pit_enforce=run_opts.pit_enforce,
+            pit_forbid_forward_fill=run_opts.pit_forbid_forward_fill,
         )
 
     item: dict[str, Any] = {
@@ -331,6 +441,12 @@ def run_pipeline(
     input_dq_strict: bool = True,
     max_retries: int = 0,
     resume_materialize: bool = False,
+    write_target: str | None = None,
+    preserve_invalid_rows: bool | None = None,
+    since: str | None = None,
+    end_date: str | None = None,
+    lookback_extra: int | None = None,
+    recompute_tail_bars: int | None = None,
 ) -> dict[str, Any]:
     root, results_root, _ = _prepare_output_root(output_root, config.factor.name)
     config_name = Path(config_path).stem if config_path is not None else config.factor.name
@@ -348,6 +464,12 @@ def run_pipeline(
             input_dq_strict=input_dq_strict,
             max_retries=max_retries,
             resume_materialize=resume_materialize,
+            write_target=write_target,
+            preserve_invalid_rows=preserve_invalid_rows,
+            since=since,
+            end_date=end_date,
+            lookback_extra=lookback_extra,
+            recompute_tail_bars=recompute_tail_bars,
         )
     except Exception as exc:
         mode = "materialize" if (materialize or (materialize is None and config.materialization is not None)) else "run"
@@ -392,6 +514,12 @@ def run(
     input_dq_strict: bool = True,
     max_retries: int = 0,
     resume_materialize: bool = False,
+    write_target: str | None = None,
+    preserve_invalid_rows: bool | None = None,
+    since: str | None = None,
+    end_date: str | None = None,
+    lookback_extra: int | None = None,
+    recompute_tail_bars: int | None = None,
 ) -> dict[str, Any]:
     return run_pipeline(
         config,
@@ -406,6 +534,12 @@ def run(
         input_dq_strict=input_dq_strict,
         max_retries=max_retries,
         resume_materialize=resume_materialize,
+        write_target=write_target,
+        preserve_invalid_rows=preserve_invalid_rows,
+        since=since,
+        end_date=end_date,
+        lookback_extra=lookback_extra,
+        recompute_tail_bars=recompute_tail_bars,
     )
 
 
@@ -423,6 +557,12 @@ def run_from_config(
     max_retries: int = 0,
     resume_materialize: bool = False,
     profile: str | None = None,
+    write_target: str | None = None,
+    preserve_invalid_rows: bool | None = None,
+    since: str | None = None,
+    end_date: str | None = None,
+    lookback_extra: int | None = None,
+    recompute_tail_bars: int | None = None,
 ) -> dict[str, Any]:
     config_path = Path(config_path)
     root, results_root, _ = _prepare_output_root(output_root, config_path.stem)
@@ -461,6 +601,12 @@ def run_from_config(
         input_dq_strict=input_dq_strict,
         max_retries=max_retries,
         resume_materialize=resume_materialize,
+        write_target=write_target,
+        preserve_invalid_rows=preserve_invalid_rows,
+        since=since,
+        end_date=end_date,
+        lookback_extra=lookback_extra,
+        recompute_tail_bars=recompute_tail_bars,
     )
 
 
@@ -477,6 +623,12 @@ def _run_single_config_file(
     input_dq_strict: bool,
     max_retries: int,
     resume_materialize: bool,
+    write_target: str | None = None,
+    preserve_invalid_rows: bool | None = None,
+    since: str | None = None,
+    end_date: str | None = None,
+    lookback_extra: int | None = None,
+    recompute_tail_bars: int | None = None,
 ) -> tuple[str, dict[str, Any]]:
     config_name = config_path.stem
     try:
@@ -493,6 +645,12 @@ def _run_single_config_file(
             input_dq_strict=input_dq_strict,
             max_retries=max_retries,
             resume_materialize=resume_materialize,
+            write_target=write_target,
+            preserve_invalid_rows=preserve_invalid_rows,
+            since=since,
+            end_date=end_date,
+            lookback_extra=lookback_extra,
+            recompute_tail_bars=recompute_tail_bars,
         )
     except Exception as exc:
         mode = "materialize" if materialize else "run"
@@ -520,6 +678,12 @@ def run_config_directory(
     shard_index: int | None = None,
     shard_count: int = 1,
     otlp_endpoint: str | None = None,
+    write_target: str | None = None,
+    preserve_invalid_rows: bool | None = None,
+    since: str | None = None,
+    end_date: str | None = None,
+    lookback_extra: int | None = None,
+    recompute_tail_bars: int | None = None,
 ) -> dict[str, Any]:
     config_dir = Path(config_dir)
     all_config_paths = sorted(path for path in config_dir.glob(pattern) if path.is_file())
@@ -553,6 +717,12 @@ def run_config_directory(
         input_dq_strict=input_dq_strict,
         max_retries=max_retries,
         resume_materialize=resume_materialize,
+        write_target=write_target,
+        preserve_invalid_rows=preserve_invalid_rows,
+        since=since,
+        end_date=end_date,
+        lookback_extra=lookback_extra,
+        recompute_tail_bars=recompute_tail_bars,
     )
 
     if workers > 1:

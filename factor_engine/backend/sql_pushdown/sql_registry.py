@@ -38,6 +38,17 @@ SQL_CAPABLE_CANONICALS: frozenset[str] = frozenset(
         "cs_demean",
         "group_neutralize",
         "where",
+        "if_else",
+        "ts_median",
+        "ts_var",
+        "group_rank",
+        "group_mean",
+        "group_zscore",
+        "winsorize",
+        "group_winsorize",
+        "ts_beta",
+        "ts_mad",
+        "ts_ema",
     }
 )
 

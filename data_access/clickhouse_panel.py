@@ -12,9 +12,29 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Sequence
 
 from .exceptions import ValidationError
+
+_ENV_BOOTSTRAPPED = False
+
+
+def _bootstrap_env() -> None:
+    global _ENV_BOOTSTRAPPED
+    if _ENV_BOOTSTRAPPED:
+        return
+    env_path = Path(__file__).resolve().parents[1] / ".env"
+    if env_path.is_file():
+        for raw in env_path.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            key = key.strip()
+            if key and key not in os.environ:
+                os.environ[key] = val.strip().strip('"').strip("'")
+    _ENV_BOOTSTRAPPED = True
 
 
 @dataclass(frozen=True)
@@ -28,6 +48,8 @@ class ClickHouseConfig:
 
     @classmethod
     def from_env(cls, **overrides: Any) -> "ClickHouseConfig":
+        _bootstrap_env()
+
         def _field(name: str, env_key: str, default: str) -> str:
             if name in overrides and overrides[name] is not None:
                 return str(overrides[name])

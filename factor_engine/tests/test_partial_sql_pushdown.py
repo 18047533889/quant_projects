@@ -106,7 +106,7 @@ def test_partial_sql_hybrid_matches_pandas(tmp_path, monkeypatch):
 
     source = build_data_source({"type": "data_access", "dataset": "test_daily", "long_table": True})
     eng_pd = FactorEngine(backend=build_backend("pandas"), data_source=source)
-    eng_h = FactorEngine(backend=build_backend("auto"), data_source=source)
+    eng_h = FactorEngine(backend=build_backend("duckdb_sql"), data_source=source)
 
     a = eng_pd.run(factor)["result"]
     b = eng_h.run(factor)["result"]

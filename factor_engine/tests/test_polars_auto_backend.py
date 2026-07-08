@@ -40,7 +40,7 @@ def test_auto_prefers_polars_for_ts_mean():
 
 def test_pandas_only_ops_fallback():
     load_all()
-    op, backend = OperatorRegistry.get_preferred("MACD", prefer="auto")
+    op, backend = OperatorRegistry.get_preferred("bartlett_test", prefer="auto")
     assert backend == "pandas_numpy"
     assert op is not None
 

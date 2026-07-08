@@ -25,6 +25,17 @@ from typing import Any
 from .exceptions import FactorHashMismatchError, FactorNotFoundError
 
 
+def _parse_json_field(raw: Any) -> dict[str, Any]:
+    if raw is None:
+        return {}
+    if isinstance(raw, dict):
+        return raw
+    try:
+        return json.loads(str(raw))
+    except json.JSONDecodeError:
+        return {}
+
+
 # ---------------------------------------------------------------------------
 # IR Hash 工具
 # ---------------------------------------------------------------------------
@@ -329,6 +340,27 @@ class FactorCatalog:
             (factor_id, limit),
         ).fetchall()
         return [dict(r) for r in rows]
+
+    def list_dual_write_failures(
+        self,
+        *,
+        factor_id: str | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """列出 extra_json 中 ``dual_write_failed=true`` 的物化 run。"""
+        if factor_id:
+            rows = self.list_runs(factor_id, limit=max(limit * 10, 100))
+        else:
+            rows = self.list_recent_runs(limit=max(limit * 10, 200))
+        failures: list[dict] = []
+        for row in rows:
+            extra = _parse_json_field(row.get("extra_json"))
+            if not extra.get("dual_write_failed"):
+                continue
+            failures.append({**row, "extra": extra})
+            if len(failures) >= limit:
+                break
+        return failures
 
     def list_recent_runs(self, *, limit: int = 200) -> list[dict]:
         rows = self._conn.execute(

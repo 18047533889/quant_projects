@@ -39,6 +39,39 @@ class EngineConfig:
 
 
 @dataclass(frozen=True)
+class RunConfig:
+    """运行模式：research 宽松 / production 严格（warmup、DQ 等）。"""
+
+    mode: str = "research"
+    auto_warmup: bool = False
+    trim_warmup: bool = True
+    calendar: str | None = None
+
+
+@dataclass(frozen=True)
+class DQConfig:
+    profile: str | None = None
+    strict: bool = False
+    input_strict: bool = True
+
+
+@dataclass(frozen=True)
+class PITConfig:
+    enforce: bool = False
+    forbid_forward_fill: bool = False
+
+
+@dataclass(frozen=True)
+class IncrementalConfig:
+    """增量物化参数（与 ``materialize_incremental`` 对齐）。"""
+
+    since: str | None = None
+    end_date: str | None = None
+    lookback_extra: int = 5
+    recompute_tail_bars: int | None = None
+
+
+@dataclass(frozen=True)
 class MaterializationConfig:
     """因子物化到数据湖的元信息（与 ``FactorEngine.materialize*`` 配套）。"""
 
@@ -48,6 +81,21 @@ class MaterializationConfig:
     frequency: str | None = None
     description: str | None = None
     expression: str | None = None
+    # local | staging | both | clickhouse | staging_clickhouse
+    target: str = "local"
+    preserve_invalid_rows: bool = False
+    value_dtype: str = "float32"
+    isolate_partition_failures: bool = True
+    resume_materialize: bool = False
+    ch_ensure_table: bool = True
+    incremental: IncrementalConfig | None = None
+    clickhouse_table: str | None = None
+    clickhouse_host: str | None = None
+    clickhouse_port: int | None = None
+    clickhouse_database: str | None = None
+    clickhouse_username: str | None = None
+    clickhouse_password: str | None = None
+    clickhouse_secure: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -57,6 +105,9 @@ class FactorEngineConfig:
     backend: BackendConfig = field(default_factory=BackendConfig)
     engine: EngineConfig = field(default_factory=EngineConfig)
     materialization: MaterializationConfig | None = None
+    run: RunConfig = field(default_factory=RunConfig)
+    dq: DQConfig = field(default_factory=DQConfig)
+    pit: PITConfig = field(default_factory=PITConfig)
 
 
 def _resolve_optional_path(value: Any, *, base_dir: Path) -> str | None:
@@ -113,6 +164,9 @@ def load_config(path: str | Path, *, profile: str | None = None) -> FactorEngine
     data_source_payload = payload.get("data_source", {})
     backend_payload = payload.get("backend", {})
     engine_payload = payload.get("engine", {})
+    run_payload = payload.get("run", {})
+    dq_payload = payload.get("dq", {})
+    pit_payload = payload.get("pit", {})
     materialization_payload = payload.get("materialization", payload.get("materialize"))
 
     if "name" not in factor_payload or "expr" not in factor_payload:
@@ -149,7 +203,48 @@ def load_config(path: str | Path, *, profile: str | None = None) -> FactorEngine
             frequency=materialization_payload.get("frequency"),
             description=materialization_payload.get("description"),
             expression=materialization_payload.get("expression"),
+            target=str(materialization_payload.get("target", "local")),
+            preserve_invalid_rows=bool(materialization_payload.get("preserve_invalid_rows", False)),
+            value_dtype=str(materialization_payload.get("value_dtype", "float32")),
+            isolate_partition_failures=bool(
+                materialization_payload.get("isolate_partition_failures", True)
+            ),
+            resume_materialize=bool(materialization_payload.get("resume_materialize", False)),
+            ch_ensure_table=bool(materialization_payload.get("ch_ensure_table", True)),
+            incremental=(
+                IncrementalConfig(
+                    since=inc_payload.get("since"),
+                    end_date=inc_payload.get("end_date"),
+                    lookback_extra=int(inc_payload.get("lookback_extra", 5)),
+                    recompute_tail_bars=inc_payload.get("recompute_tail_bars"),
+                )
+                if isinstance(inc_payload := materialization_payload.get("incremental"), dict)
+                else None
+            ),
+            clickhouse_table=materialization_payload.get("clickhouse_table"),
+            clickhouse_host=materialization_payload.get("clickhouse_host"),
+            clickhouse_port=materialization_payload.get("clickhouse_port"),
+            clickhouse_database=materialization_payload.get("clickhouse_database"),
+            clickhouse_username=materialization_payload.get("clickhouse_username"),
+            clickhouse_password=materialization_payload.get("clickhouse_password"),
+            clickhouse_secure=materialization_payload.get("clickhouse_secure"),
         )
+
+    run_config = RunConfig(
+        mode=str(run_payload.get("mode", "research")),
+        auto_warmup=bool(run_payload.get("auto_warmup", False)),
+        trim_warmup=bool(run_payload.get("trim_warmup", True)),
+        calendar=run_payload.get("calendar"),
+    )
+    dq_config = DQConfig(
+        profile=dq_payload.get("profile"),
+        strict=bool(dq_payload.get("strict", False)),
+        input_strict=bool(dq_payload.get("input_strict", True)),
+    )
+    pit_config = PITConfig(
+        enforce=bool(pit_payload.get("enforce", False)),
+        forbid_forward_fill=bool(pit_payload.get("forbid_forward_fill", False)),
+    )
 
     return FactorEngineConfig(
         factor=factor_config,
@@ -157,4 +252,7 @@ def load_config(path: str | Path, *, profile: str | None = None) -> FactorEngine
         backend=backend_config,
         engine=engine_config,
         materialization=materialization_config,
+        run=run_config,
+        dq=dq_config,
+        pit=pit_config,
     )

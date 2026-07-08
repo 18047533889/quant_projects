@@ -13,7 +13,7 @@ from .context import ExecutionContext
 from .panel_native import finalize_panel_result
 from .pandas_backend import PandasBackend
 from .polars_backend import PolarsBackend
-from .sql_pushdown.executor import try_execute_sql_pushdown
+from .sql_pushdown.executor import try_execute_sql_pushdown, try_execute_sql_pushdown_batch
 from .sql_pushdown.sql_registry import is_sql_capable
 
 
@@ -34,7 +34,18 @@ class SqlBackend(Backend):
                 return finalize_panel_result(pushed, ctx)
 
         mat_cache = dict(getattr(ctx, "materialized_series", None) or {})
-        for sid, sub in physical.sql_subtrees.items():
+        pending = {
+            sid: sub
+            for sid, sub in physical.sql_subtrees.items()
+            if sid not in mat_cache
+        }
+        if len(pending) > 1:
+            batch = try_execute_sql_pushdown_batch(pending, ctx)
+            if batch:
+                mat_cache.update(batch)
+                pending = {sid: sub for sid, sub in pending.items() if sid not in mat_cache}
+
+        for sid, sub in pending.items():
             if sid in mat_cache:
                 continue
             pushed = try_execute_sql_pushdown(sub, ctx)

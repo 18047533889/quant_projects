@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -54,16 +55,30 @@ def sync_local_factor_to_staging(
     factor_id: str,
     lake_root: str | Path,
 ) -> dict[str, Any]:
-    """将 materializer 本地湖目录复制到 factor_lake_staging。"""
+    """将 materializer 本地湖目录复制到 factor_lake_staging（原子目录替换）。"""
     source = Path(lake_root) / "factors" / factor_id
     if not source.exists():
         raise FileNotFoundError(f"本地因子目录不存在: {source}")
 
     staging_dir = _resolve_staging_factor_dir(factor_id)
     staging_dir.parent.mkdir(parents=True, exist_ok=True)
-    if staging_dir.exists():
-        shutil.rmtree(staging_dir)
-    shutil.copytree(source, staging_dir)
+    tmp_dir = staging_dir.parent / f".{factor_id}.staging_tmp_{uuid.uuid4().hex[:8]}"
+    backup_dir = staging_dir.parent / f".{factor_id}.staging_bak_{uuid.uuid4().hex[:8]}"
+    try:
+        if tmp_dir.exists():
+            shutil.rmtree(tmp_dir)
+        shutil.copytree(source, tmp_dir)
+        if staging_dir.exists():
+            os.replace(staging_dir, backup_dir)
+        os.replace(tmp_dir, staging_dir)
+        if backup_dir.exists():
+            shutil.rmtree(backup_dir, ignore_errors=True)
+    except Exception:
+        if tmp_dir.exists():
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+        if backup_dir.exists() and not staging_dir.exists():
+            os.replace(backup_dir, staging_dir)
+        raise
 
     return {
         "factor_id": factor_id,
@@ -71,6 +86,12 @@ def sync_local_factor_to_staging(
         "staging_dir": str(staging_dir),
         "rows": _count_parquet_rows(staging_dir),
     }
+
+
+def staging_has_data(factor_id: str) -> bool:
+    """检查 factor_lake_staging 是否已有该因子数据（direct upsert 路径）。"""
+    staging_dir = _resolve_staging_factor_dir(factor_id)
+    return _count_parquet_rows(staging_dir) > 0
 
 
 def publish_factor_lake(
@@ -109,10 +130,17 @@ def publish_factor_lake(
 
     sync_summary = None
     if sync_from_local:
-        sync_summary = sync_local_factor_to_staging(
-            factor_id=factor_id,
-            lake_root=root,
-        )
+        if staging_has_data(factor_id):
+            sync_summary = {
+                "factor_id": factor_id,
+                "skipped": True,
+                "reason": "staging already populated (direct upsert path)",
+            }
+        else:
+            sync_summary = sync_local_factor_to_staging(
+                factor_id=factor_id,
+                lake_root=root,
+            )
 
     from data_access import get_store
 

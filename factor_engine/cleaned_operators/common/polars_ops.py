@@ -1,5 +1,17 @@
 # -*- coding: utf-8 -*-
-"""高频元素级算子的 Polars 实现（auto 路径优先选用）。"""
+"""高频元素级与时序算子的 Polars 实现（auto / hybrid 路径优先选用）。
+
+数据约定
+--------
+- 输入/输出均为 **宽表 panel**：行 = 时间，列 = 标的（另有 ``date`` / ``stock_code`` 元数据列时跳过）。
+- 二元算子要求 x/y 列名对齐，逐列独立计算。
+
+实现策略
+--------
+- **四则运算**（``add/subtract/multiply/divide``）：与 SQL 下推节点对称，hybrid 在 SQL 不可编译时可回退 Polars。
+- **Top-N / 秩相关**：复用 ``_rolling_fast`` / ``_numpy_kernels``，保证与 pandas backend 数值一致。
+- Polars 无原生 API 或语义复杂时，走 **pandas 桥接**（转宽表 → 计算 → 写回 Polars）。
+"""
 from __future__ import annotations
 
 import numpy as np
@@ -15,11 +27,70 @@ from cleaned_operators.base_polars import (
     register_operator,
 )
 
-_SKIP = frozenset({"date", "stock_code"})
+_SKIP = frozenset({"date", "stock_code"})  # 宽表元数据列，不参与因子计算
 
 
 def _numeric_cols(df: pl.DataFrame) -> list[str]:
+    """返回 panel 中各标的列名（排除 date/stock_code）。"""
     return [c for c in df.columns if c not in _SKIP]
+
+
+def _align_cols(*dfs: pl.DataFrame) -> list[str]:
+    """多输入宽表按列名取交集，避免 x/y 列数不一致。"""
+    cols = _numeric_cols(dfs[0])
+    for df in dfs[1:]:
+        cols = [c for c in cols if c in df.columns]
+    return cols
+
+
+def _binary_colwise(combine):
+    """工厂：生成「逐列二元运算」的 ``_calculate_series`` 方法。"""
+    def calc(self, x: pl.DataFrame, y: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        cols = _align_cols(x, y)
+        return x.with_columns([combine(pl.col(c), y[c]).alias(c) for c in cols])
+
+    return calc
+
+
+# ---------------------------------------------------------------------------
+# SQL 下推四则：与 ``backend/sql_pushdown`` 白名单对称，供 hybrid 降级使用
+# ---------------------------------------------------------------------------
+
+
+@register_operator(name="add", category="elementwise_math", business_category="elementwise_math", canonical="add", source="factor_dsl_polars")
+class AddPolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="add", category="elementwise_math", description="逐元素加法",
+        param_names=["x", "y"], return_type="series", tags=["elementwise", "polars"],
+    )
+    _calculate_series = _binary_colwise(lambda a, b: a + b)
+
+
+@register_operator(name="subtract", category="elementwise_math", business_category="elementwise_math", canonical="subtract", source="factor_dsl_polars")
+class SubtractPolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="subtract", category="elementwise_math", description="逐元素减法",
+        param_names=["x", "y"], return_type="series", tags=["elementwise", "polars"],
+    )
+    _calculate_series = _binary_colwise(lambda a, b: a - b)
+
+
+@register_operator(name="multiply", category="elementwise_math", business_category="elementwise_math", canonical="multiply", source="factor_dsl_polars")
+class MultiplyPolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="multiply", category="elementwise_math", description="逐元素乘法",
+        param_names=["x", "y"], return_type="series", tags=["elementwise", "polars"],
+    )
+    _calculate_series = _binary_colwise(lambda a, b: a * b)
+
+
+@register_operator(name="divide", category="elementwise_math", business_category="elementwise_math", canonical="divide", source="factor_dsl_polars")
+class DividePolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="divide", category="elementwise_math", description="逐元素除法",
+        param_names=["x", "y"], return_type="series", tags=["elementwise", "polars"],
+    )
+    _calculate_series = _binary_colwise(lambda a, b: a / b)
 
 
 def _unary(expr_fn):
@@ -241,3 +312,116 @@ class TSQuantilePolars(SeriesOperator):
             pl.col(c).rolling_quantile(quantile=quantile, window_size=window, min_samples=1).alias(c)
             for c in cols
         ])
+
+
+# ---------------------------------------------------------------------------
+# 时序 Top-N / 秩相关（pandas 内核桥接，保证与 pandas_numpy backend 一致）
+# ---------------------------------------------------------------------------
+
+
+@register_operator(name="rank_corr", category="time_series", business_category="time_series", canonical="rank_corr", source="factor_dsl_polars")
+class RankCorrPolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="rank_corr", category="time_series", description="秩相关系数",
+        examples=["rank_corr(close, volume, 20)"], param_names=["x", "y", "d"],
+        return_type="series", tags=["time_series", "polars"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, y: pl.DataFrame, d: int = 20, **kwargs) -> pl.DataFrame:
+        from cleaned_operators._numpy_kernels import rank_corr_
+
+        window = int(kwargs.get("window", d))
+        cols = _align_cols(x, y)
+        out: dict[str, np.ndarray] = {}
+        for c in cols:
+            out[c] = rank_corr_(x[c].to_numpy(), y[c].to_numpy(), d=window)
+        result = pl.DataFrame(out)
+        if "date" in x.columns:
+            result = result.with_columns(x["date"])
+        return result
+
+
+@register_operator(name="m_top_n_avg", category="time_series", business_category="time_series", canonical="ts_top_n_avg", source="factor_dsl_polars")
+class TSTopNAvgPolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="m_top_n_avg", category="time_series", description="滚动前 N 大均值",
+        param_names=["x", "n"], return_type="series", tags=["time_series", "polars"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, n: int = 5, **kwargs) -> pl.DataFrame:
+        from cleaned_operators._rolling_fast import rolling_top_n_mean
+
+        top_n = int(kwargs.get("d", n))
+        cols = _numeric_cols(x)
+        pdf = x.select(cols).to_pandas()
+        out = rolling_top_n_mean(pdf, top_n)
+        return x.with_columns([pl.Series(name=c, values=out[c].to_numpy()) for c in cols])
+
+
+@register_operator(name="m_top_n_std", category="time_series", business_category="time_series", canonical="ts_top_n_std", source="factor_dsl_polars")
+class TSTopNStdPolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="m_top_n_std", category="time_series", description="滚动前 N 大标准差",
+        param_names=["x", "n"], return_type="series", tags=["time_series", "polars"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, n: int = 5, **kwargs) -> pl.DataFrame:
+        from cleaned_operators._rolling_fast import rolling_top_n_std
+
+        top_n = int(kwargs.get("d", n))
+        cols = _numeric_cols(x)
+        pdf = x.select(cols).to_pandas()
+        out = rolling_top_n_std(pdf, top_n)
+        return x.with_columns([pl.Series(name=c, values=out[c].to_numpy()) for c in cols])
+
+
+@register_operator(name="ts_topk_sum", category="time_series", business_category="time_series", canonical="ts_topk_sum", source="factor_dsl_polars")
+class TSTopKSumPolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="ts_topk_sum", category="time_series", description="滚动 Top-K 求和",
+        param_names=["x", "d", "k"], return_type="series", tags=["time_series", "polars"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, d: int = 20, k: int | None = None, **kwargs) -> pl.DataFrame:
+        from cleaned_operators._rolling_fast import rolling_top_n_sum_window
+
+        window = int(kwargs.get("window", d))
+        top_k = int(k if k is not None else kwargs.get("n", window))
+        cols = _numeric_cols(x)
+        pdf = x.select(cols).to_pandas()
+        out = rolling_top_n_sum_window(pdf, window, top_k)
+        return x.with_columns([pl.Series(name=c, values=out[c].to_numpy()) for c in cols])
+
+
+@register_operator(name="cum_top_n_avg", category="time_series", business_category="time_series", canonical="cum_top_n_avg", source="factor_dsl_polars")
+class CumTopNAvgPolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="cum_top_n_avg", category="time_series", description="累积前 N 大均值",
+        param_names=["x", "n"], return_type="series", tags=["time_series", "polars"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, n: int = 5, **kwargs) -> pl.DataFrame:
+        from cleaned_operators._rolling_fast import cum_top_n_mean
+
+        top_n = int(kwargs.get("d", n))
+        cols = _numeric_cols(x)
+        pdf = x.select(cols).to_pandas()
+        out = cum_top_n_mean(pdf, top_n)
+        return x.with_columns([pl.Series(name=c, values=out[c].to_numpy()) for c in cols])
+
+
+@register_operator(name="cum_top_n_sum", category="time_series", business_category="time_series", canonical="cum_top_n_sum", source="factor_dsl_polars")
+class CumTopNSumPolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="cum_top_n_sum", category="time_series", description="累积前 N 大求和",
+        param_names=["x", "n"], return_type="series", tags=["time_series", "polars"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, n: int = 5, **kwargs) -> pl.DataFrame:
+        from cleaned_operators._rolling_fast import cum_top_n_sum
+
+        top_n = int(kwargs.get("d", n))
+        cols = _numeric_cols(x)
+        pdf = x.select(cols).to_pandas()
+        out = cum_top_n_sum(pdf, top_n)
+        return x.with_columns([pl.Series(name=c, values=out[c].to_numpy()) for c in cols])

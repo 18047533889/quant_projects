@@ -48,8 +48,14 @@ def _window_int(node: PlanNode, default: int = 20) -> int:
     for key in ("d", "window", "n", "periods"):
         if key in attrs and attrs[key] is not None:
             return max(int(attrs[key]), 1)
-    if node.inputs and node.inputs[0].op == "literal":
-        return max(int(node.inputs[0].attrs.get("value", default)), 1)
+    for child in node.inputs:
+        if child.op == "literal":
+            val = child.attrs.get("value")
+            if val is not None:
+                try:
+                    return max(int(val), 1)
+                except (TypeError, ValueError):
+                    pass
     return default
 
 
@@ -414,7 +420,7 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
             has_inst_window=True,
         )
 
-    if op == "where":
+    if op == "where" or op == "if_else":
         if len(node.inputs) != 3:
             return None
         cond = _compile_layer(node.inputs[0], dialect=dialect)
@@ -430,6 +436,185 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
             f"INNER JOIN ({b.sql}) b USING (ts, inst)",
             has_inst_window=cond.has_inst_window or a.has_inst_window or b.has_inst_window,
             has_ts_partition=cond.has_ts_partition or a.has_ts_partition or b.has_ts_partition,
+        )
+
+    if op in {"group_rank", "group_mean", "group_zscore"}:
+        if not node.inputs:
+            return None
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        std = _dialect_fn(dialect, "stddev")
+        nf = _dialect_fn(dialect, "nullif")
+        if len(node.inputs) >= 2:
+            grp = _compile_layer(node.inputs[1], dialect=dialect)
+            if grp is None:
+                return None
+            part = "PARTITION BY x.ts, g._v"
+            join = (
+                f"FROM ({inner.sql}) x INNER JOIN ({grp.sql}) g USING (ts, inst)"
+            )
+        else:
+            part = "PARTITION BY x.ts"
+            join = f"FROM ({inner.sql}) x"
+        if op == "group_mean":
+            expr = f"AVG(x._v) OVER ({part})"
+        elif op == "group_zscore":
+            expr = f"(x._v - AVG(x._v) OVER ({part})) / {nf}({std}(x._v) OVER ({part}), 0)"
+        else:
+            expr = (
+                f"(RANK() OVER ({part} ORDER BY x._v) * 1.0 "
+                f"/ COUNT(*) OVER ({part}))"
+            )
+        return _Layer(
+            f"SELECT x.ts, x.inst, {expr} AS _v {join}",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=True,
+        )
+
+    if op == "ts_median":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        w = _window_int(node)
+        med = "median" if dialect == SqlDialect.DUCKDB else "median"
+        return _Layer(
+            _inst_window(dialect, w, med, inner.sql),
+            has_inst_window=True,
+        )
+
+    if op == "ts_var":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        w = _window_int(node)
+        var_fn = "VAR_SAMP" if dialect == SqlDialect.DUCKDB else "varSamp"
+        return _Layer(
+            _inst_window(dialect, w, var_fn, inner.sql),
+            has_inst_window=True,
+        )
+
+    if op == "winsorize":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        a = _float_attr(node, "a", "p", default=0.05)
+        lo = a
+        hi = 1.0 - a
+        g = _dialect_fn(dialect, "greatest")
+        l = _dialect_fn(dialect, "least")
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"{g}(quantile_cont(_v, {lo}) OVER (PARTITION BY ts), "
+            f"{l}(quantile_cont(_v, {hi}) OVER (PARTITION BY ts), _v)) AS _v "
+            f"FROM ({inner.sql}) t",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=True,
+        )
+
+    if op == "group_winsorize":
+        if not node.inputs:
+            return None
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        a = _float_attr(node, "a", "p", default=0.05)
+        lo = a
+        hi = 1.0 - a
+        g = _dialect_fn(dialect, "greatest")
+        l = _dialect_fn(dialect, "least")
+        if len(node.inputs) >= 2:
+            grp = _compile_layer(node.inputs[1], dialect=dialect)
+            if grp is None:
+                return None
+            part = "PARTITION BY x.ts, g._v"
+            join = f"FROM ({inner.sql}) x INNER JOIN ({grp.sql}) g USING (ts, inst)"
+        else:
+            part = "PARTITION BY x.ts"
+            join = f"FROM ({inner.sql}) x"
+        return _Layer(
+            f"SELECT x.ts, x.inst, "
+            f"{g}(quantile_cont(x._v, {lo}) OVER ({part}), "
+            f"{l}(quantile_cont(x._v, {hi}) OVER ({part}), x._v)) AS _v "
+            f"{join}",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=True,
+        )
+
+    if op == "ts_beta":
+        if len(node.inputs) != 2:
+            return None
+        left = _compile_layer(node.inputs[0], dialect=dialect)
+        right = _compile_layer(node.inputs[1], dialect=dialect)
+        if left is None or right is None:
+            return None
+        w = _window_int(node)
+        over = (
+            f"PARTITION BY l.inst ORDER BY l.ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+        )
+        if dialect == SqlDialect.DUCKDB:
+            cov_fn = "covar_samp"
+            var_fn = "var_samp"
+        else:
+            cov_fn = "covarSamp"
+            var_fn = "varSamp"
+        nf = _dialect_fn(dialect, "nullif")
+        return _Layer(
+            f"SELECT l.ts, l.inst, "
+            f"({cov_fn}(l._v, r._v) OVER ({over})) / "
+            f"{nf}({var_fn}(r._v) OVER ({over}), 0) AS _v "
+            f"FROM ({left.sql}) l INNER JOIN ({right.sql}) r USING (ts, inst)",
+            has_inst_window=True,
+        )
+
+    if op == "ts_mad":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        w = _window_int(node)
+        med = "median" if dialect == SqlDialect.DUCKDB else "median"
+        over = (
+            f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+        )
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"AVG(ABS(_v - med)) OVER ({over}) AS _v "
+            f"FROM ("
+            f"SELECT ts, inst, _v, {med}(_v) OVER ({over}) AS med "
+            f"FROM ({inner.sql}) t0"
+            f") t",
+            has_inst_window=True,
+        )
+
+    if op == "ts_ema":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        w = _window_int(node)
+        alpha = 2.0 / (float(w) + 1.0)
+        over = (
+            f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+        )
+        if dialect == SqlDialect.CLICKHOUSE:
+            return _Layer(
+                f"SELECT ts, inst, "
+                f"exponentialMovingAverage(_v, {alpha}) OVER (PARTITION BY inst ORDER BY ts) AS _v "
+                f"FROM ({inner.sql}) t",
+                has_inst_window=True,
+            )
+        decay = 1.0 - alpha
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"SUM(_v * POW({decay}, rn)) OVER ({over}) / "
+            f"NULLIF(SUM(POW({decay}, rn)) OVER ({over}), 0) AS _v "
+            f"FROM ("
+            f"SELECT ts, inst, _v, "
+            f"(COUNT(*) OVER ({over}) - 1 - "
+            f"(ROW_NUMBER() OVER (PARTITION BY inst ORDER BY ts) - "
+            f"MIN(ROW_NUMBER() OVER (PARTITION BY inst ORDER BY ts)) OVER ({over}))) AS rn "
+            f"FROM ({inner.sql}) t0"
+            f") t",
+            has_inst_window=True,
         )
 
     return None
@@ -541,6 +726,120 @@ def compile_plan_to_sql(
         query=query,
         read_datasets=read_datasets,
         referenced_columns=frozenset(cols),
+        dialect=dialect,
+        table=table if dialect == SqlDialect.CLICKHOUSE else None,
+    )
+
+
+@dataclass(frozen=True)
+class BatchCompiledSql:
+    """多子树单条 SQL（WITH CSE 批执行）。"""
+
+    query: str
+    read_datasets: tuple[str, ...]
+    referenced_columns: frozenset[str]
+    column_aliases: tuple[tuple[str, str], ...]  # (sid, sql_alias)
+    dialect: SqlDialect = SqlDialect.DUCKDB
+    table: str | None = None
+
+
+def compile_plans_batch_to_sql(
+    plans: dict[str, PlanNode],
+    *,
+    dataset: str | None = None,
+    table: str | None = None,
+    time_column: str,
+    instrument_column: str,
+    filt: SqlPushdownFilter | None = None,
+    dialect: SqlDialect = SqlDialect.DUCKDB,
+) -> BatchCompiledSql | None:
+    """将多个 SQL 可编译子树合并为一条 WITH 查询（共享 base CTE）。"""
+    if not plans:
+        return None
+    if len(plans) == 1:
+        sid, plan = next(iter(plans.items()))
+        single = compile_plan_to_sql(
+            plan,
+            dataset=dataset,
+            table=table,
+            time_column=time_column,
+            instrument_column=instrument_column,
+            filt=filt,
+            dialect=dialect,
+        )
+        if single is None:
+            return None
+        return BatchCompiledSql(
+            query=single.query,
+            read_datasets=single.read_datasets,
+            referenced_columns=single.referenced_columns,
+            column_aliases=((sid, "value"),),
+            dialect=single.dialect,
+            table=single.table,
+        )
+
+    cols: set[str] = set()
+    layers: list[tuple[str, str, _Layer]] = []
+    for sid, plan in plans.items():
+        if not plan_is_sql_capable(plan):
+            return None
+        layer = _compile_layer(plan, dialect=dialect)
+        if layer is None:
+            return None
+        _collect_columns(plan, cols)
+        alias = f"v_{len(layers)}"
+        layers.append((sid, alias, layer))
+
+    if not cols:
+        return None
+
+    source_from = table if dialect == SqlDialect.CLICKHOUSE else (dataset or table)
+    if not source_from:
+        return None
+
+    push_filter = filt or SqlPushdownFilter(
+        time_column=time_column,
+        instrument_column=instrument_column,
+    )
+    base = _build_base_cte(
+        source_from=source_from,
+        time_column=time_column,
+        instrument_column=instrument_column,
+        columns=sorted(cols),
+        filt=push_filter,
+        dialect=dialect,
+    )
+
+    sub_ctes: list[str] = []
+    alias_map: list[tuple[str, str]] = []
+    for sid, col_alias, layer in layers:
+        sub_name = f"sub_{col_alias}"
+        sub_ctes.append(
+            f"{sub_name} AS (SELECT ts, inst, _v AS {col_alias} FROM ({layer.sql}) t)"
+        )
+        alias_map.append((sid, col_alias))
+
+    first = f"sub_v_0"
+    join_from = first
+    select_cols = [f"{first}.ts", f"{first}.inst"]
+    for _sid, col_alias in alias_map:
+        sub_name = f"sub_{col_alias}"
+        select_cols.append(f"{sub_name}.{col_alias}")
+        if sub_name != first:
+            join_from += f" INNER JOIN {sub_name} USING (ts, inst)"
+
+    with_body = ", ".join([base] + sub_ctes)
+    query = (
+        f"WITH {with_body} "
+        f"SELECT {', '.join(select_cols)} FROM {join_from} "
+        f"ORDER BY {first}.ts, {first}.inst"
+    )
+    read_datasets = (dataset,) if dataset and dialect == SqlDialect.DUCKDB else tuple()
+    return BatchCompiledSql(
+        query=query,
+        read_datasets=read_datasets,
+        referenced_columns=frozenset(cols),
+        column_aliases=tuple(alias_map),
         dialect=dialect,
         table=table if dialect == SqlDialect.CLICKHOUSE else None,
     )

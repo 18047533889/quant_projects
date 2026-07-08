@@ -70,7 +70,7 @@ class TestOperatorPolicy:
         op = OperatorRegistry.get("Lead")
         p = infer_operator_policy(op, canonical="Lead")
         assert p.lag == -1
-        assert p.pit_safe
+        assert not p.pit_safe  # 负 lag = 未来函数，PIT 审计应拦截
 
     def test_rank_is_cross_section(self):
         op = OperatorRegistry.get("rank")

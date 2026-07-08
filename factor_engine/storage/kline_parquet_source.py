@@ -34,6 +34,7 @@ class KlineParquetSource(DataSource):
     timestamp_utc: bool = True
     normalize_timestamp: bool = True
     sort_index: bool = True
+    bar_freq: str = "1d"
     _column_cache: dict[str, object] = field(default_factory=dict, init=False, repr=False)
     _file_cache: list[Path] | None = field(default=None, init=False, repr=False)
 

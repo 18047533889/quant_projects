@@ -11,7 +11,15 @@ from backend.pandas_compat import pd
 from planner.logical_plan import PlanNode
 from workspace_paths import quant_projects_root
 
-from .emitter import CompiledSql, SqlDialect, SqlPushdownFilter, compile_plan_to_sql
+from .emitter import (
+    BatchCompiledSql,
+    CompiledSql,
+    SqlDialect,
+    SqlPushdownFilter,
+    compile_plan_to_sql,
+    compile_plans_batch_to_sql,
+)
+from .source_resolver import resolve_pushdown_source
 
 
 def _ensure_data_access() -> None:
@@ -32,13 +40,13 @@ class PushdownContext:
 
 
 def extract_pushdown_context(ctx: ExecutionContext) -> PushdownContext | None:
-    """从 DataAccessSource / ClickHouseSource 提取 SQL 下推上下文。"""
-    ds = ctx.data_source
+    """从 DataAccess / ClickHouse / Composite / LongTable 提取 SQL 下推上下文。"""
+    ds = resolve_pushdown_source(ctx.data_source)
+    if ds is None:
+        return None
 
     dataset = getattr(ds, "dataset", None)
     table = getattr(ds, "table", None)
-    if not dataset and not table:
-        return None
 
     if dataset:
         axis_fn = getattr(ds, "dataset_axis_columns", None)
@@ -103,24 +111,72 @@ def execute_compiled_sql(compiled: CompiledSql, ctx: PushdownContext) -> pd.Seri
     return _execute_duckdb(compiled)
 
 
-def _execute_duckdb(compiled: CompiledSql) -> pd.Series:
+def _series_from_batch_table(
+    table,
+    *,
+    timestamp_col: str,
+    instrument_col: str,
+    value_column: str,
+) -> pd.Series:
+    from data_access.adapters import arrow_to_multiindex_series
+
+    return arrow_to_multiindex_series(
+        table,
+        timestamp_column=timestamp_col,
+        instrument_column=instrument_col,
+        value_column=value_column,
+        output_name=value_column,
+    )
+
+
+def execute_batch_compiled_sql(
+    compiled: BatchCompiledSql,
+    ctx: PushdownContext,
+) -> dict[str, pd.Series]:
+    if compiled.dialect == SqlDialect.CLICKHOUSE:
+        table = _execute_clickhouse_table(compiled, ctx)
+    else:
+        table = _execute_duckdb_table(compiled)
+
+    out: dict[str, pd.Series] = {}
+    col_names = list(getattr(table, "column_names", []) or getattr(table, "schema", {}).names or [])
+    for sid, alias in compiled.column_aliases:
+        if alias in col_names:
+            out[sid] = _series_from_batch_table(
+                table,
+                timestamp_col="ts",
+                instrument_col="inst",
+                value_column=alias,
+            )
+    return out
+
+
+def _execute_duckdb_table(compiled: CompiledSql | BatchCompiledSql):
     _ensure_data_access()
     from data_access import get_store
 
     store = get_store()
-    table = store.sql(
+    return store.sql(
         compiled.query,
         read_datasets=list(compiled.read_datasets),
     )
-    return _series_from_sql_table(table, timestamp_col="ts", instrument_col="inst")
 
 
-def _execute_clickhouse(compiled: CompiledSql, ctx: PushdownContext) -> pd.Series:
+def _execute_clickhouse_table(compiled: CompiledSql | BatchCompiledSql, ctx: PushdownContext):
     _ensure_data_access()
     from data_access.clickhouse_panel import ClickHouseConfig, execute_query
 
     config = ClickHouseConfig.from_env(**(ctx.ch_config or {}))
-    table = execute_query(config=config, sql=compiled.query)
+    return execute_query(config=config, sql=compiled.query)
+
+
+def _execute_duckdb(compiled: CompiledSql) -> pd.Series:
+    table = _execute_duckdb_table(compiled)
+    return _series_from_sql_table(table, timestamp_col="ts", instrument_col="inst")
+
+
+def _execute_clickhouse(compiled: CompiledSql, ctx: PushdownContext) -> pd.Series:
+    table = _execute_clickhouse_table(compiled, ctx)
     return _series_from_sql_table(table, timestamp_col="ts", instrument_col="inst")
 
 
@@ -146,3 +202,29 @@ def try_execute_sql_pushdown(
         return None
 
     return execute_compiled_sql(compiled, pctx)
+
+
+def try_execute_sql_pushdown_batch(
+    plans: dict[str, PlanNode],
+    ctx: ExecutionContext,
+) -> dict[str, pd.Series] | None:
+    """批量 SQL 下推：共享 base CTE，一次 round-trip。"""
+    if not plans:
+        return {}
+    pctx = extract_pushdown_context(ctx)
+    if pctx is None:
+        return None
+
+    compiled = compile_plans_batch_to_sql(
+        plans,
+        dataset=pctx.dataset,
+        table=pctx.table,
+        time_column=pctx.time_column,
+        instrument_column=pctx.instrument_column,
+        filt=pctx.filt,
+        dialect=pctx.dialect,
+    )
+    if compiled is None:
+        return None
+
+    return execute_batch_compiled_sql(compiled, pctx)

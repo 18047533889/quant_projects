@@ -34,7 +34,7 @@ def test_materializer_delegates_to_insert():
     mock_cfg = MagicMock()
 
     with patch("data_access.clickhouse_panel.ClickHouseConfig.from_env", return_value=mock_cfg):
-        with patch("data_access.clickhouse_write.insert_factor_series", mock_insert):
+        with patch("data_access.clickhouse_write.insert_factor_dataframe", mock_insert):
             mat = ClickHouseMaterializer(table="fv")
             summary = mat.materialize("fid", series, ensure_table=False)
 

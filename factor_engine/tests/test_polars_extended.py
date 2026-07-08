@@ -1,5 +1,5 @@
 # -*- coding: utf-8
-"""扩展 Polars 算子：分组 / TA / 扩展窗口。"""
+"""扩展 Polars 算子数值对齐。"""
 from __future__ import annotations
 
 import pytest
@@ -7,12 +7,11 @@ import pytest
 pd = pytest.importorskip("pandas")
 pytest.importorskip("polars")
 
-from api import MACD, RSI, rank, ts_mean
+from api import rank, ts_mean, ts_var, zscore
 from api.columns import col
 from api.factor import Factor
 from backend.factory import build_backend
 from cleaned_operators import load_all
-from cleaned_operators.registry import OperatorRegistry
 from runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
@@ -24,31 +23,29 @@ def panel_source():
         names=["timestamp", "instrument"],
     )
     close = pd.Series(range(10, 10 + len(idx)), index=idx, dtype=float)
-    industry = pd.Series([1, 1, 2] * (len(idx) // 3), index=idx, dtype=float)
-    return InMemorySeriesSource(data={"close": close, "industry": industry})
+    return InMemorySeriesSource(data={"close": close})
 
 
-def test_polars_backends_registered():
+def test_ts_var_polars_matches_pandas(panel_source):
     load_all()
-    for name in (
-        "group_rank",
-        "group_mean",
-        "group_zscore",
-        "ts_ema",
-        "WMA",
-        "RSI",
-        "MACD",
-        "prev",
-        "expanding_mean",
-    ):
-        assert "polars" in OperatorRegistry.backends_for(name), name
+    expr = ts_var(col("close"), 3)
+    eng_pd = FactorEngine(backend=build_backend("pandas"), data_source=panel_source)
+    eng_pl = FactorEngine(backend=build_backend("polars"), data_source=panel_source)
+    pd.testing.assert_series_equal(
+        eng_pd.run(Factor(name="t", expr=expr))["result"],
+        eng_pl.run(Factor(name="t", expr=expr))["result"],
+        check_names=False,
+        rtol=1e-4,
+        atol=1e-4,
+    )
 
 
-def test_group_rank_polars_matches_pandas(panel_source):
+def test_if_else_polars_matches_pandas(panel_source):
+    load_all()
     from api.cleaned_ops import make_cleaned_call_factory
 
-    group_rank = make_cleaned_call_factory("group_rank")
-    expr = group_rank(col("close"), col("industry"))
+    if_else = make_cleaned_call_factory("if_else")
+    expr = if_else(rank(col("close")), col("close"), col("close") * 0.5)
     eng_pd = FactorEngine(backend=build_backend("pandas"), data_source=panel_source)
     eng_pl = FactorEngine(backend=build_backend("polars"), data_source=panel_source)
     pd.testing.assert_series_equal(
@@ -57,30 +54,4 @@ def test_group_rank_polars_matches_pandas(panel_source):
         check_names=False,
         rtol=1e-5,
         atol=1e-5,
-    )
-
-
-def test_rsi_polars_matches_pandas(panel_source):
-    expr = RSI(col("close"), 5)
-    eng_pd = FactorEngine(backend=build_backend("pandas"), data_source=panel_source)
-    eng_pl = FactorEngine(backend=build_backend("polars"), data_source=panel_source)
-    pd.testing.assert_series_equal(
-        eng_pd.run(Factor(name="t", expr=expr))["result"],
-        eng_pl.run(Factor(name="t", expr=expr))["result"],
-        check_names=False,
-        rtol=1e-4,
-        atol=1e-4,
-    )
-
-
-def test_macd_polars_matches_pandas(panel_source):
-    expr = MACD(col("close"))
-    eng_pd = FactorEngine(backend=build_backend("pandas"), data_source=panel_source)
-    eng_pl = FactorEngine(backend=build_backend("polars"), data_source=panel_source)
-    pd.testing.assert_series_equal(
-        eng_pd.run(Factor(name="t", expr=expr))["result"],
-        eng_pl.run(Factor(name="t", expr=expr))["result"],
-        check_names=False,
-        rtol=1e-4,
-        atol=1e-4,
     )

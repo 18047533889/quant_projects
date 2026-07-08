@@ -19,6 +19,32 @@ def quant_projects_root() -> Path:
     return repo_root().parent
 
 
+_ENV_LOADED = False
+
+
+def load_env_file(path: Path | None = None, *, override: bool = False) -> None:
+    """从 ``.env`` 加载 ``KEY=VALUE`` 到 ``os.environ``（进程内只执行一次）。"""
+    global _ENV_LOADED
+    if _ENV_LOADED and not override:
+        return
+    env_path = path or (quant_projects_root() / ".env")
+    if not env_path.is_file():
+        _ENV_LOADED = True
+        return
+    for raw in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        key = key.strip()
+        if not key:
+            continue
+        val = val.strip().strip('"').strip("'")
+        if override or key not in os.environ:
+            os.environ[key] = val
+    _ENV_LOADED = True
+
+
 def resolve_path(value: str | Path, *, base_dir: Path | None = None) -> Path:
     """展开 ``~`` / 环境变量；相对路径基于 ``base_dir`` 或 ``quant_projects_root()``。"""
     text = os.path.expandvars(str(value).strip())

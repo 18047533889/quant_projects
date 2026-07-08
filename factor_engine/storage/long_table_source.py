@@ -8,10 +8,11 @@ from .datasource import DataSource
 
 
 class LongTableDataSource(DataSource):
-    """包装现有数据源，禁用 panel 宽表路径（SQL 下推 / 长表算子热路径）。"""
+    """包装现有数据源：列读取走 MultiIndex Series；panel 按需 lazy unstack 并缓存。"""
 
     def __init__(self, inner: DataSource) -> None:
         self._inner = inner
+        self._panel_cache: dict[str, Any] = {}
         for attr in (
             "dataset",
             "table",
@@ -44,9 +45,23 @@ class LongTableDataSource(DataSource):
         self.prefetch_columns(names)
 
     def load_column_panel(self, name: str):
-        raise NotImplementedError(
-            "LongTableDataSource 不支持宽表 panel；请使用 load_column() 或 SQL 下推。"
+        """按需 unstack 一次并缓存（panel-native / 宽表算子热路径）。"""
+        if name in self._panel_cache:
+            return self._panel_cache[name]
+        series = self.load_column(name)
+        from backend.cleaned_bridge import series_to_panel
+        from backend.context import ExecutionContext
+
+        ctx = ExecutionContext(
+            data_source=self,
+            panel_cache={},
+            timestamp_col=getattr(self, "timestamp_column", "timestamp"),
+            instrument_col=getattr(self, "instrument_column", "instrument"),
+            prefer_long_table=True,
         )
+        panel = series_to_panel(series, ctx)
+        self._panel_cache[name] = panel
+        return panel
 
     def dataset_axis_columns(self) -> tuple[str, str]:
         fn = getattr(self._inner, "dataset_axis_columns", None)

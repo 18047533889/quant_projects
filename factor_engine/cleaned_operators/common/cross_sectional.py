@@ -1090,3 +1090,82 @@ class ZscorePolars(CrossSectionalZscore):
 # aliases: CS_ZSCORE, ZSCORE, c_zscore, cs_zscore
 
 
+# ---------------------------------------------------------------------------
+# 截面回归 Polars：按 **行**（每个 timestamp）做 OLS，复用 _numpy_kernels 保证数值一致
+# mode: 0=残差, 1=beta, 2=拟合值（见 cs_regression_）
+# ---------------------------------------------------------------------------
+
+
+def _cs_regression_rowwise(y_arr: np.ndarray, x_arr: np.ndarray, mode: int) -> np.ndarray:
+    """对每个交易日截面行调用 ``cs_regression_``。"""
+    from cleaned_operators._numpy_kernels import cs_regression_
+
+    out = np.full_like(y_arr, np.nan)
+    for i in range(len(y_arr)):
+        out[i] = cs_regression_(y_arr[i], x_arr[i], mode=int(mode))
+    return out
+
+
+@register_operator(
+    name="cs_resid",
+    category="cross_sectional",
+    business_category="cross_sectional",
+    canonical="cs_resid",
+    source="factor_dsl_polars",
+)
+class CSResidPolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="cs_resid",
+        category="cross_sectional",
+        description="截面线性回归残差 y - (α + βx)",
+        examples=["cs_resid(factor, size)"],
+        param_names=["y", "x"],
+        return_type="series",
+        tags=["cross_sectional", "regression", "residual"],
+    )
+
+    def _calculate_series(self, y: pl.DataFrame, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        from cleaned_operators._numpy_kernels import cs_resid_
+
+        numeric_cols = [c for c in y.columns if c not in ("date", "stock_code")]
+        y_arr = y.select(numeric_cols).to_numpy()
+        x_arr = x.select(numeric_cols).to_numpy()
+        out = np.full_like(y_arr, np.nan)
+        for i in range(len(y_arr)):
+            out[i] = cs_resid_(y_arr[i], x_arr[i])
+        result_df = pl.DataFrame(out, schema=numeric_cols)
+        if "date" in y.columns:
+            result_df = result_df.with_columns([y["date"]])
+        return result_df
+
+
+@register_operator(
+    name="cs_regression",
+    category="cross_sectional",
+    business_category="cross_sectional",
+    canonical="cs_regression",
+    source="factor_dsl_polars",
+)
+class CSRegressionPolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="cs_regression",
+        category="cross_sectional",
+        description="截面回归: mode=0 残差, 1 beta, 2 拟合值",
+        examples=["cs_regression(factor, size, 0)"],
+        param_names=["y", "x", "mode"],
+        return_type="series",
+        tags=["cross_sectional", "regression"],
+    )
+
+    def _calculate_series(
+        self, y: pl.DataFrame, x: pl.DataFrame, mode: int = 0, **kwargs
+    ) -> pl.DataFrame:
+        numeric_cols = [c for c in y.columns if c not in ("date", "stock_code")]
+        y_arr = y.select(numeric_cols).to_numpy()
+        x_arr = x.select(numeric_cols).to_numpy()
+        out = _cs_regression_rowwise(y_arr, x_arr, int(mode))
+        result_df = pl.DataFrame(out, schema=numeric_cols)
+        if "date" in y.columns:
+            result_df = result_df.with_columns([y["date"]])
+        return result_df
+

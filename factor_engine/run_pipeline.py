@@ -38,6 +38,28 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
         help="Incremental materialize: read watermark, load lookback window, upsert tail",
     )
     parser.add_argument(
+        "--since",
+        default=None,
+        help="Incremental lower bound (override watermark / config incremental.since)",
+    )
+    parser.add_argument(
+        "--end-date",
+        default=None,
+        help="Incremental upper bound (override config incremental.end_date)",
+    )
+    parser.add_argument(
+        "--lookback-extra",
+        type=int,
+        default=None,
+        help="Extra lookback bars beyond IR analysis lookback (default from config or 5)",
+    )
+    parser.add_argument(
+        "--recompute-tail-bars",
+        type=int,
+        default=None,
+        help="Bars to recompute from watermark backward (default: analysis lookback + 1)",
+    )
+    parser.add_argument(
         "--strict-dq",
         action="store_true",
         help="Enable data quality gates; fail the run on DQ violations",
@@ -93,6 +115,25 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
         help="With --strict-dq: log DQ violations instead of failing the run",
     )
     parser.set_defaults(dq_strict=True)
+    parser.add_argument(
+        "--write-target",
+        default=None,
+        choices=["local", "staging", "both", "clickhouse", "staging_clickhouse"],
+        help="Override materialization.target from config/profile",
+    )
+    parser.add_argument(
+        "--preserve-invalid-rows",
+        dest="preserve_invalid_rows",
+        action="store_true",
+        help="Keep inf/NaN rows with is_valid=0 in factor lake output",
+    )
+    parser.add_argument(
+        "--no-preserve-invalid-rows",
+        dest="preserve_invalid_rows",
+        action="store_false",
+        help="Drop invalid rows during materialize (overrides config)",
+    )
+    parser.set_defaults(preserve_invalid_rows=None)
     parser.add_argument("--log-level", default="INFO", help="Log level for factor_engine logs")
     parser.add_argument("--log-file", type=Path, default=None, help="Optional file path for logs")
 
@@ -139,6 +180,12 @@ def main() -> None:
             max_retries=args.max_retries,
             profile=args.profile,
             resume_materialize=args.resume_materialize,
+            write_target=args.write_target,
+            preserve_invalid_rows=args.preserve_invalid_rows,
+            since=args.since,
+            end_date=args.end_date,
+            lookback_extra=args.lookback_extra,
+            recompute_tail_bars=args.recompute_tail_bars,
         )
         payload = {
             "mode": "config",
@@ -168,6 +215,12 @@ def main() -> None:
             shard_index=args.shard_index,
             shard_count=args.shard_count,
             otlp_endpoint=args.push_otlp_endpoint,
+            write_target=args.write_target,
+            preserve_invalid_rows=args.preserve_invalid_rows,
+            since=args.since,
+            end_date=args.end_date,
+            lookback_extra=args.lookback_extra,
+            recompute_tail_bars=args.recompute_tail_bars,
         )
         payload = {
             "mode": "config-dir",

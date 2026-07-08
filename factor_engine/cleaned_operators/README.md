@@ -55,21 +55,26 @@ cleaned_operators/
 
 根目录仍保留 **兼容 shim**（如 `elementwise_math.py` → `common/elementwise.py`），旧 import 路径可继续使用。
 
-| 位置 | 内容 |
-|------|------|
-| [`registry.py`](registry.py) | `OperatorRegistry`：register / get / catalog / 别名 |
-| [`common/`](common/) | 元素数学、时序、截面、分组、清洗、统计 |
-| [`price_volume/`](price_volume/) | 量价衍生 |
-| [`technical/`](technical/) | 技术指标与信号 |
-| [`fundamental/`](fundamental/) | 财报衍生 |
-| [`microstructure/`](microstructure/) | 微观结构 |
-| [`docs/`](docs/README.md) | 算子全览、catalog、语义公式 |
+### 2.1 企业级运行时（Phase 11–12）
 
-加载入口：[`__init__.py`](__init__.py) 的 `load_all()`（import 全部模块并应用 `_aliases` + `_dedupe`）。
+| 能力 | 入口 |
+|------|------|
+| auto_warmup / RunWindow | `runtime/run_window.py`、`engine.run(auto_warmup=True)` |
+| DQ Profile | `runtime/dq_profiles.yaml`、`config.dq.profile` |
+| PIT enforce | `runtime/pit_audit.py`、`config.pit.enforce` |
+| 物化 target | `local` / `staging` / `both` / `clickhouse` / `staging_clickhouse` |
+| 双写对账 | `runtime.dual_write_reconcile.reconcile_dual_write_state()` |
+| 生产 profile | `examples/profiles/prod.yaml`（staging）、`prod_clickhouse.yaml`（staging_clickhouse） |
+| Intraday 日频聚合 | `runtime/intraday_aggregator.py`、`data_source.type: intraday_daily` |
+| 微观算子（已实现） | `real_turnover_rate`、`micro_realized_vol`、`micro_spread`、`micro_amihud_hf`、`micro_mid_return`、`micro_bipower_var`、`micro_jump_indicator`、`micro_trade_imbalance`、`micro_vpin` |
+
+> `microstructure/ops.py` 底部 `*_stub` 函数为 **catalog 占位**，未 `@register_operator`；与已实现算子同名 stub 已移除。
+
+测试门禁：`tests/test_enterprise_readiness.py`、`test_run_window.py`、`test_enterprise_materialize_paths.py`、`test_microstructure_ops.py`。
 
 ---
 
-## 2.1 命名规范（canonical vs 别名）
+## 2.2 命名规范（canonical vs 别名）
 
 | 类型 | canonical 示例 | 常见别名（仍可计算） |
 |------|----------------|----------------------|
@@ -88,15 +93,29 @@ cleaned_operators/
 
 | backend | 说明 |
 |---------|------|
-| `auto` / `hybrid` | **推荐**：SQL 下推 → Polars 算子 → Pandas |
-| `duckdb_sql` | DuckDB 内算可 SQL 化因子，其余 Python |
-| `polars` | 算子层 auto 优先 polars |
+| `auto` / `hybrid` | **推荐**：部分 SQL 子树 → Polars → Pandas |
+| `sql` / `duckdb_sql` | SqlBackend：maximal SQL 子树 + Python fallback |
+| `polars` | 算子层 auto 优先 polars（**220+ canonical**） |
 | `pandas` | 默认全 Python |
+
+**混合执行（中期架构）**：
+- `planner/sql_lowerer.py` 将 PlanNode 切分为 SQL 可编译子树 + Python 段
+- SQL 子树预计算为 `materialized_series`，不可编译部分走 pandas/polars
+- `OperatorRegistry` 支持 `backend="sql"` 元数据（与 emitter 同步）
+- `LongTableDataSource` / `long_table: true`：数据源保持长表；**panel-native 仍启用**，算子链内宽表中间态、根节点一次 stack
+
+Polars 新增覆盖：`ADX/AROON/KAMA`、`Slope/ts_regression`、`sharpe_ratio`、信号算子（`signed_log/signed_power/is_finite/saturate/hump_decay/vpmacd`）、`group_*` 全簇（含 `group_decay_linear`）、`ts_var/median/mad`、`RSI/MACD/ATR/CCI`、`ewm_*`（含 pandas 对齐的 `ewm_corr/cov`）、`cs_regression/cs_resid`、CAPM 簇（`idio_vol/idio_skew/residual_momentum_capm/coskewness_to_market`）、`cum_prod/cum_count/cum_last`、`real_turnover_rate` 等。
+
+SQL 白名单 **40** 个算子（含 `ts_ema`、`group_winsorize`、`ts_beta`、`ts_mad`）；多子树 **WITH CSE 批执行**。
+
+**企业级门禁**：`tests/test_enterprise_readiness.py`（覆盖阈值、dedupe 契约、P0 双 backend、env bootstrap）。
+
+**ClickHouse 环境变量**：见 monorepo 根目录 [`.env.example`](../../.env.example)（`CLICKHOUSE_*`）；`FactorEngine` 启动时自动加载 `.env`（不覆盖已有环境变量）。
 
 - **`FACTOR_ENGINE_OPERATOR_BACKEND=auto`**：Polars 路径下算子 auto 选择
 - **`data_source.type: clickhouse`**：ClickHouse 长表只读 + SQL 下推（需 `clickhouse-connect`）
 - **`data_source.type: data_access`**：DuckDB 读 parquet + 可选 `duckdb_sql`/`auto` 算因子
-- **ClickHouse 写入**：`FactorEngine.materialize_clickhouse()` 或 `data_access.clickhouse_write.insert_factor_series`
+- **ClickHouse 写入**：`FactorEngine.materialize(write_target="clickhouse"|"staging_clickhouse")`（推荐）；兼容入口 `materialize_clickhouse()` 委托同一实现
 - **Parquet → CH ETL**：`load_parquet_to_panel_table()`
 
 SQL 已支持（MVP）：`ts_mean/std/sum/max/min/delay/delta/pct/zscore`、`ts_corr`、`rank/zscore/scale/cs_demean/group_neutralize`、`where`、四则、`abs/log/exp/sqrt/clip`。
@@ -106,7 +125,8 @@ SQL 已支持（MVP）：`ts_mean/std/sum/max/min/delay/delta/pct/zscore`、`ts_
 ## 3. 数据形态约定
 
 - factor_engine 中间结果为 **`(timestamp, instrument)` MultiIndex Series**。  
-- `cleaned_bridge` 会 **unstack** 成宽表再调用 `calculate()`，结果 **stack** 回 MultiIndex。  
+- `cleaned_bridge` 在 **panel-native** 模式下中间结果保持宽表，仅在根节点 stack；否则逐算子 unstack/stack。  
+- `long_table: true` 时列读取走 Series，`load_column_panel()` 按需 unstack 并缓存。  
 - 时序 rolling 在 **列方向**（每个 instrument 一列）上滚动；与旧版 per-groupby MultiIndex kernel 在边界上可能略有差异。
 
 ---

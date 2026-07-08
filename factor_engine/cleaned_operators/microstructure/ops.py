@@ -38,7 +38,237 @@ class LqtpRealturnoverrateOp(SeriesOperator):
             return args[0].apply(lambda s: real_turnover_rate_(s.values, **kwargs) if kwargs else real_turnover_rate_(s.values))
         return real_turnover_rate_(*args, **kwargs)
 
-# api stub placeholders
+@register_operator(
+    name="micro_realized_vol",
+    category="intraday_microstructure",
+    business_category="intraday_microstructure",
+    canonical="micro_realized_vol",
+    source="factor_dsl_np",
+)
+class MicroRealizedVolOp(SeriesOperator):
+    """滚动已实现波动率：sqrt(sum(r^2, window))，r 为逐 bar 收益。"""
+
+    metadata = OperatorMetadata(
+        name="micro_realized_vol",
+        category="intraday_microstructure",
+        description="已实现波动率 sqrt rolling sum of squared returns",
+        param_names=["close"],
+        return_type="series",
+        tags=["microstructure"],
+    )
+
+    def _calculate_series(self, close, window: int = 20, **kwargs):
+        if hasattr(close, "apply"):
+            return close.apply(
+                lambda s: pd.Series(s)
+                .pct_change()
+                .pow(2)
+                .rolling(int(window), min_periods=1)
+                .sum()
+                .pow(0.5)
+                .values
+            )
+        ret = pd.Series(close).pct_change()
+        return ret.pow(2).rolling(int(window), min_periods=1).sum().pow(0.5).values
+
+
+@register_operator(
+    name="micro_spread",
+    category="intraday_microstructure",
+    business_category="intraday_microstructure",
+    canonical="micro_spread",
+    source="factor_dsl_np",
+)
+class MicroSpreadOp(SeriesOperator):
+    """相对价差代理：(high - low) / close。"""
+
+    metadata = OperatorMetadata(
+        name="micro_spread",
+        category="intraday_microstructure",
+        description="相对价差 (high-low)/close",
+        param_names=["high", "low", "close"],
+        return_type="series",
+        tags=["microstructure"],
+    )
+
+    def _calculate_series(self, high, low, close, **kwargs):
+        spread = (high - low) / close.replace(0, np.nan)
+        if hasattr(spread, "apply"):
+            return spread
+        return spread
+
+
+@register_operator(
+    name="micro_amihud_hf",
+    category="intraday_microstructure",
+    business_category="intraday_microstructure",
+    canonical="micro_amihud_hf",
+    source="factor_dsl_np",
+)
+class MicroAmihudHfOp(SeriesOperator):
+    """Amihud 非流动性：|r| / (close × volume)。"""
+
+    metadata = OperatorMetadata(
+        name="micro_amihud_hf",
+        category="intraday_microstructure",
+        description="Amihud illiquidity |return|/(close*volume)",
+        param_names=["close", "volume"],
+        return_type="series",
+        tags=["microstructure"],
+    )
+
+    def _calculate_series(self, close, volume, **kwargs):
+        ret = close.pct_change().abs() if hasattr(close, "pct_change") else pd.Series(close).pct_change().abs()
+        denom = close * volume
+        out = ret / denom.replace(0, np.nan)
+        return out
+
+
+@register_operator(
+    name="micro_mid_return",
+    category="intraday_microstructure",
+    business_category="intraday_microstructure",
+    canonical="micro_mid_return",
+    source="factor_dsl_np",
+)
+class MicroMidReturnOp(SeriesOperator):
+    """中间价收益：mid=(high+low)/2 的 pct_change。"""
+
+    metadata = OperatorMetadata(
+        name="micro_mid_return",
+        category="intraday_microstructure",
+        description="Mid-price return from (high+low)/2",
+        param_names=["high", "low"],
+        return_type="series",
+        tags=["microstructure"],
+    )
+
+    def _calculate_series(self, high, low, **kwargs):
+        mid = (high + low) / 2.0
+        return mid.pct_change() if hasattr(mid, "pct_change") else pd.Series(mid).pct_change()
+
+
+@register_operator(
+    name="micro_bipower_var",
+    category="intraday_microstructure",
+    business_category="intraday_microstructure",
+    canonical="micro_bipower_var",
+    source="factor_dsl_np",
+)
+class MicroBipowerVarOp(SeriesOperator):
+    """Bipower variation：(pi/2) * rolling_mean(|r_t|*|r_{t-1}|)。"""
+
+    metadata = OperatorMetadata(
+        name="micro_bipower_var",
+        category="intraday_microstructure",
+        description="Bipower variation estimator",
+        param_names=["close"],
+        return_type="series",
+        tags=["microstructure"],
+    )
+
+    def _calculate_series(self, close, window: int = 20, **kwargs):
+        w = int(window)
+
+        def _bv(s):
+            r = pd.Series(s).pct_change()
+            prod = r.abs() * r.abs().shift(1)
+            return (np.pi / 2.0) * prod.rolling(w, min_periods=1).mean()
+
+        if hasattr(close, "apply"):
+            return close.apply(_bv)
+        return _bv(close)
+
+
+@register_operator(
+    name="micro_jump_indicator",
+    category="intraday_microstructure",
+    business_category="intraday_microstructure",
+    canonical="micro_jump_indicator",
+    source="factor_dsl_np",
+)
+class MicroJumpIndicatorOp(SeriesOperator):
+    """跳跃指示：max(RV - BV, 0)，RV=rolling sum(r^2)。"""
+
+    metadata = OperatorMetadata(
+        name="micro_jump_indicator",
+        category="intraday_microstructure",
+        description="Jump indicator max(RV-BV,0)",
+        param_names=["close"],
+        return_type="series",
+        tags=["microstructure"],
+    )
+
+    def _calculate_series(self, close, window: int = 20, **kwargs):
+        w = int(window)
+
+        def _jump(s):
+            r = pd.Series(s).pct_change()
+            rv = r.pow(2).rolling(w, min_periods=1).sum()
+            bv = (np.pi / 2.0) * (r.abs() * r.abs().shift(1)).rolling(w, min_periods=1).sum()
+            return (rv - bv).clip(lower=0.0)
+
+        if hasattr(close, "apply"):
+            return close.apply(_jump)
+        return _jump(close)
+
+
+@register_operator(
+    name="micro_trade_imbalance",
+    category="intraday_microstructure",
+    business_category="intraday_microstructure",
+    canonical="micro_trade_imbalance",
+    source="factor_dsl_np",
+)
+class MicroTradeImbalanceOp(SeriesOperator):
+    """成交不平衡代理：rolling sum(volume * sign(r)) / rolling sum(volume)。"""
+
+    metadata = OperatorMetadata(
+        name="micro_trade_imbalance",
+        category="intraday_microstructure",
+        description="Volume-weighted return sign imbalance",
+        param_names=["close", "volume"],
+        return_type="series",
+        tags=["microstructure"],
+    )
+
+    def _calculate_series(self, close, volume, window: int = 20, **kwargs):
+        w = max(1, int(window))
+        ret = close.pct_change() if hasattr(close, "pct_change") else pd.Series(close).pct_change()
+        signed = np.sign(ret) * volume
+        num = signed.rolling(w, min_periods=1).sum()
+        den = volume.rolling(w, min_periods=1).sum().replace(0, np.nan)
+        return num / den
+
+
+@register_operator(
+    name="micro_vpin",
+    category="intraday_microstructure",
+    business_category="intraday_microstructure",
+    canonical="micro_vpin",
+    source="factor_dsl_np",
+)
+class MicroVpinOp(SeriesOperator):
+    """VPIN 代理：rolling sum(|r| * volume) / rolling sum(volume)。"""
+
+    metadata = OperatorMetadata(
+        name="micro_vpin",
+        category="intraday_microstructure",
+        description="Volume-synchronized |return| intensity proxy",
+        param_names=["close", "volume"],
+        return_type="series",
+        tags=["microstructure"],
+    )
+
+    def _calculate_series(self, close, volume, window: int = 20, **kwargs):
+        w = max(1, int(window))
+        ret = close.pct_change().abs() if hasattr(close, "pct_change") else pd.Series(close).pct_change().abs()
+        weighted = ret * volume
+        return weighted.rolling(w, min_periods=1).sum() / volume.rolling(w, min_periods=1).sum().replace(
+            0, np.nan
+        )
+
+# api stub placeholders — 未注册算子，仅供 catalog 占位；勿与 @register_operator 实现混用
 
 def _make_stub(*args, **kwargs):
     raise NotImplementedError("stub: _make_stub")
@@ -214,14 +444,8 @@ def institutional_ownership_chg_stub(*args, **kwargs):
 def lob_ofi_stub(*args, **kwargs):
     raise NotImplementedError("stub: lob_ofi_stub")
 
-def micro_amihud_hf_stub(*args, **kwargs):
-    raise NotImplementedError("stub: micro_amihud_hf_stub")
-
 def micro_avg_trade_size_stub(*args, **kwargs):
     raise NotImplementedError("stub: micro_avg_trade_size_stub")
-
-def micro_bipower_var_stub(*args, **kwargs):
-    raise NotImplementedError("stub: micro_bipower_var_stub")
 
 def micro_book_slope_stub(*args, **kwargs):
     raise NotImplementedError("stub: micro_book_slope_stub")
@@ -235,26 +459,14 @@ def micro_depth_imbalance_stub(*args, **kwargs):
 def micro_effective_spread_stub(*args, **kwargs):
     raise NotImplementedError("stub: micro_effective_spread_stub")
 
-def micro_jump_indicator_stub(*args, **kwargs):
-    raise NotImplementedError("stub: micro_jump_indicator_stub")
-
 def micro_kyle_lambda_stub(*args, **kwargs):
     raise NotImplementedError("stub: micro_kyle_lambda_stub")
 
 def micro_large_trade_ratio_stub(*args, **kwargs):
     raise NotImplementedError("stub: micro_large_trade_ratio_stub")
 
-def micro_mid_return_stub(*args, **kwargs):
-    raise NotImplementedError("stub: micro_mid_return_stub")
-
 def micro_quote_update_rate_stub(*args, **kwargs):
     raise NotImplementedError("stub: micro_quote_update_rate_stub")
-
-def micro_realized_vol_stub(*args, **kwargs):
-    raise NotImplementedError("stub: micro_realized_vol_stub")
-
-def micro_spread_stub(*args, **kwargs):
-    raise NotImplementedError("stub: micro_spread_stub")
 
 def micro_tick_rule_agreement_stub(*args, **kwargs):
     raise NotImplementedError("stub: micro_tick_rule_agreement_stub")
