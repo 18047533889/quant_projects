@@ -20,9 +20,13 @@ def build_backend(backend_type: str):
         return PolarsBackend()
     if normalized == "polars_lazy":
         return PolarsBackend(use_lazy=True)  # LazyFrame 延迟计算再 collect
-    if normalized in {"duckdb_sql", "sql_pushdown", "duckdb_pushdown"}:
+    if normalized in {"duckdb_sql", "sql_pushdown", "duckdb_pushdown", "sql"}:
         from .duckdb_pushdown_backend import DuckDBPushdownBackend
 
         return DuckDBPushdownBackend()
+    if normalized in {"auto", "hybrid"}:
+        from .hybrid_backend import HybridBackend
+
+        return HybridBackend()
 
     raise ValueError(f"Unsupported backend type: {backend_type}")

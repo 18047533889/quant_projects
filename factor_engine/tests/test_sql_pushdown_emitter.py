@@ -62,10 +62,28 @@ def test_macd_not_sql_capable():
     assert not plan_is_sql_capable(plan)
 
 
-def test_add_columns_sql():
+def test_zscore_sql():
+    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+
+    plan = PlanNode(op="zscore", inputs=[_col("close")])
+    compiled = compile_plan_to_sql(
+        plan,
+        dataset="d",
+        time_column="t",
+        instrument_column="i",
+        dialect=SqlDialect.DUCKDB,
+    )
+    assert compiled is not None
+    assert "STDDEV" in compiled.query or "stddev" in compiled.query.lower()
+
+
+def test_ts_corr_sql():
+    from backend.sql_pushdown.emitter import compile_plan_to_sql
+
     plan = PlanNode(
-        op="add",
-        inputs=[_col("close"), _col("open")],
+        op="ts_corr",
+        inputs=[_col("close"), _col("volume")],
+        attrs={"d": 3},
     )
     compiled = compile_plan_to_sql(
         plan,
@@ -74,4 +92,41 @@ def test_add_columns_sql():
         instrument_column="i",
     )
     assert compiled is not None
-    assert '"close"' in compiled.query and '"open"' in compiled.query
+    assert "corr" in compiled.query.lower()
+    assert '"close"' in compiled.query and '"volume"' in compiled.query
+
+
+def test_group_neutralize_sql():
+    from backend.sql_pushdown.emitter import compile_plan_to_sql
+
+    plan = PlanNode(
+        op="group_neutralize",
+        inputs=[_col("close"), _col("industry")],
+    )
+    compiled = compile_plan_to_sql(
+        plan,
+        dataset="d",
+        time_column="t",
+        instrument_column="i",
+    )
+    assert compiled is not None
+    assert "PARTITION BY x.ts, g._v" in compiled.query
+
+
+def test_where_sql():
+    from backend.sql_pushdown.emitter import compile_plan_to_sql
+
+    plan = PlanNode(
+        op="where",
+        inputs=[_col("flag"), _col("a"), _col("b")],
+    )
+    compiled = compile_plan_to_sql(
+        plan,
+        dataset="d",
+        time_column="t",
+        instrument_column="i",
+    )
+    assert compiled is not None
+    assert "CASE WHEN" in compiled.query
+
+

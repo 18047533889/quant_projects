@@ -47,8 +47,11 @@ _LOAD_MODULES = (
     "cleaned_operators.common.data_cleaning",
     "cleaned_operators.common.statistics",
     "cleaned_operators.common.polars_ops",
+    "cleaned_operators.common.group_polars",
+    "cleaned_operators.common.shift_polars",
     "cleaned_operators.price_volume.ops",
     "cleaned_operators.technical.signal",
+    "cleaned_operators.technical.polars_signal",
     "cleaned_operators.fundamental.ops",
     "cleaned_operators.microstructure.ops",
 )

@@ -197,11 +197,16 @@ class FactorEngine:
         shared_result_cache: dict[str, Any] | None = None,
         perf: PerfConfig | None = None,
     ) -> ExecutionContext:
+        from storage.long_table_source import LongTableDataSource
+
+        prefer_long = isinstance(self.data_source, LongTableDataSource)
         return ExecutionContext(
             data_source=self.data_source,
             cache=self.cache,
             shared_result_cache=shared_result_cache,
             panel_cache={},
+            materialized_series={},
+            prefer_long_table=prefer_long,
             perf=perf,
         )
 
@@ -390,6 +395,67 @@ class FactorEngine:
             factor.name,
             summary["factor_id"],
             summary["rows_written"],
+        )
+        return output
+
+    def materialize_clickhouse(
+        self,
+        factor: Factor,
+        *,
+        factor_id: str | None = None,
+        table: str = "factor_values",
+        timestamp_column: str = "trade_date",
+        instrument_column: str = "instrument",
+        factor_version: str = "",
+        data_source_config: dict | None = None,
+        input_dq_check: bool = False,
+        input_dq_strict: bool = True,
+        ch_host: str | None = None,
+        ch_port: int | None = None,
+        ch_database: str | None = None,
+        ch_username: str | None = None,
+        ch_password: str | None = None,
+        ch_secure: bool | None = None,
+        ensure_table: bool = True,
+    ):
+        """执行因子并将结果写入 ClickHouse（ReplacingMergeTree 长表）。"""
+        from storage.clickhouse_materializer import ClickHouseMaterializer
+
+        logger.info("开始 ClickHouse 落盘因子 '%s'", factor.name)
+        output = self.run(
+            factor,
+            input_dq_check=input_dq_check,
+            input_dq_strict=input_dq_strict,
+        )
+        snapshot_id = self._data_snapshot_id_from_config(data_source_config)
+        mat = ClickHouseMaterializer(
+            table=table,
+            timestamp_column=timestamp_column,
+            instrument_column=instrument_column,
+            host=ch_host,
+            port=ch_port,
+            database=ch_database,
+            username=ch_username,
+            password=ch_password,
+            secure=ch_secure,
+        )
+        summary = mat.materialize(
+            factor_id=factor_id or factor.name,
+            result=output["result"],
+            factor_version=factor_version,
+            data_snapshot_id=snapshot_id,
+            ensure_table=ensure_table,
+        )
+        output["clickhouse_materialization"] = {
+            "factor_id": summary.factor_id,
+            "table": summary.table,
+            "rows_written": summary.rows_written,
+            "database": summary.database,
+        }
+        logger.info(
+            "完成 ClickHouse 落盘因子 '%s'，rows_written=%s",
+            factor.name,
+            summary.rows_written,
         )
         return output
 

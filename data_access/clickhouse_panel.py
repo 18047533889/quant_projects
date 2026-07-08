@@ -138,3 +138,10 @@ def read_columns(
         value_columns=physical,
         output_names=output_names,
     )
+
+
+def execute_query(*, config: ClickHouseConfig, sql: str):
+    """执行只读 SELECT，返回 Arrow Table（因子 SQL 下推用）。"""
+    from .clickhouse_write import execute_select
+
+    return execute_select(config=config, sql=sql)

@@ -148,6 +148,10 @@ class OperatorRegistry:
             if op is not None:
                 return op, "polars"
             return backends.get("pandas_numpy"), "pandas_numpy"
+        if prefer == "sql":
+            if "sql" in backends:
+                return backends["sql"], "sql"
+            return cls.get_preferred(name, prefer="auto")
         # auto：有 polars 则用 polars
         if "polars" in backends:
             return backends["polars"], "polars"

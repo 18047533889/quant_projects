@@ -57,6 +57,13 @@ class PandasBackend(Backend):
                 raise KeyError(f"missing shared subplan result for sid prefix={sid[:64]!r}...")
             return sc[sid]
 
+        if node.op == "materialized_series":
+            sid = str(node.attrs["sid"])
+            mat = getattr(ctx, "materialized_series", None) or {}
+            if sid not in mat:
+                raise KeyError(f"missing SQL materialized_series for sid={sid[:64]!r}...")
+            return mat[sid]
+
         cache = getattr(ctx, "cache", None)
         cache_key: str | None = None
         if cache is not None:

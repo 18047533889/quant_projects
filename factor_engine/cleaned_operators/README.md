@@ -86,11 +86,20 @@ cleaned_operators/
 
 ## 2.2 执行 backend（哪个快用哪个）
 
-- 默认 **`FACTOR_ENGINE_OPERATOR_BACKEND=auto`**：某算子有 polars 实现则走 polars，否则回退 pandas。
-- **`build_backend("duckdb_sql")`**：可 SQL 化的因子在 DuckDB 内执行（`store.sql`），其余回退 Python。
-- **`data_source.type: clickhouse`**：从 ClickHouse 长表只读（需 `clickhouse-connect`）。
-- 强制 pandas：``FACTOR_ENGINE_OPERATOR_BACKEND=pandas_numpy``
-- 使用 ``build_backend("polars")`` 的 ``FactorEngine`` 与 pandas 路径数值对齐。
+| backend | 说明 |
+|---------|------|
+| `auto` / `hybrid` | **推荐**：SQL 下推 → Polars 算子 → Pandas |
+| `duckdb_sql` | DuckDB 内算可 SQL 化因子，其余 Python |
+| `polars` | 算子层 auto 优先 polars |
+| `pandas` | 默认全 Python |
+
+- **`FACTOR_ENGINE_OPERATOR_BACKEND=auto`**：Polars 路径下算子 auto 选择
+- **`data_source.type: clickhouse`**：ClickHouse 长表只读 + SQL 下推（需 `clickhouse-connect`）
+- **`data_source.type: data_access`**：DuckDB 读 parquet + 可选 `duckdb_sql`/`auto` 算因子
+- **ClickHouse 写入**：`FactorEngine.materialize_clickhouse()` 或 `data_access.clickhouse_write.insert_factor_series`
+- **Parquet → CH ETL**：`load_parquet_to_panel_table()`
+
+SQL 已支持（MVP）：`ts_mean/std/sum/max/min/delay/delta/pct/zscore`、`ts_corr`、`rank/zscore/scale/cs_demean/group_neutralize`、`where`、四则、`abs/log/exp/sqrt/clip`。
 
 ---
 

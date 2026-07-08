@@ -46,8 +46,12 @@ def _ensure_no_extra_options(source_type: str, options: dict[str, Any]) -> None:
     raise ValueError(f"Unsupported options for data source '{source_type}': {unexpected}")
 
 
-def _normalize_path(value: Any) -> str:
-    return str(resolve_path(str(value)))
+def _wrap_long_table(source: Any, *, long_table: bool) -> Any:
+    if not long_table:
+        return source
+    from .long_table_source import LongTableDataSource
+
+    return LongTableDataSource(source)
 
 
 def build_data_source(config: Any):
@@ -87,6 +91,12 @@ def build_data_source(config: Any):
     start_date = _pop_option(options, "start_date", default=None)
     end_date = _pop_option(options, "end_date", default=None)
     fields = _pop_option(options, "fields", "field_mapping", default=None)
+    long_table = bool(_pop_option(options, "long_table", default=False))
+
+    if source_type == "long_table":
+        inner = _pop_option(options, "inner", "source", required=True)
+        _ensure_no_extra_options(source_type, options)
+        return _wrap_long_table(build_data_source(inner), long_table=True)
 
     if source_type == "data_access":
         dataset = _pop_option(options, "dataset", required=True)
@@ -104,7 +114,7 @@ def build_data_source(config: Any):
             timestamp_unit=timestamp_unit,
         )
         _ensure_no_extra_options(source_type, options)
-        return source
+        return _wrap_long_table(source, long_table=long_table)
 
     if source_type == "clickhouse":
         table = _pop_option(options, "table", required=True)
@@ -133,7 +143,7 @@ def build_data_source(config: Any):
             secure=_pop_option(options, "secure", default=None),
         )
         _ensure_no_extra_options(source_type, options)
-        return source
+        return _wrap_long_table(source, long_table=long_table)
 
     root = _normalize_path(_pop_option(options, "root", required=True))
     recursive = bool(_pop_option(options, "recursive", default=True))
@@ -186,4 +196,4 @@ def build_data_source(config: Any):
         raise ValueError(f"Unsupported data_source.type: {source_type}")
 
     _ensure_no_extra_options(source_type, options)
-    return source
+    return _wrap_long_table(source, long_table=long_table)

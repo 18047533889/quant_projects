@@ -1,16 +1,40 @@
 # -*- coding: utf-8
-"""SQL 下推：DuckDB 内执行可编译子集，其余回退 Python。"""
+"""SQL 下推：编译 + DuckDB/ClickHouse 执行 + registry 对齐。"""
 
 from backend.sql_pushdown.emitter import (
-    SQL_CAPABLE_OPS,
+    CompiledSql,
+    SqlDialect,
+    SqlPushdownFilter,
     compile_plan_to_sql,
     plan_is_sql_capable,
 )
-from backend.sql_pushdown.executor import try_execute_sql_pushdown
+from backend.sql_pushdown.executor import (
+    PushdownContext,
+    execute_compiled_sql,
+    extract_pushdown_context,
+    try_execute_sql_pushdown,
+)
+from backend.sql_pushdown.sql_registry import (
+    SQL_CAPABLE_CANONICALS,
+    is_sql_capable,
+    register_sql_backends,
+    sql_backends_for,
+)
+
+register_sql_backends()
 
 __all__ = [
-    "SQL_CAPABLE_OPS",
+    "SQL_CAPABLE_CANONICALS",
+    "CompiledSql",
+    "SqlDialect",
+    "SqlPushdownFilter",
+    "PushdownContext",
     "compile_plan_to_sql",
     "plan_is_sql_capable",
+    "is_sql_capable",
+    "register_sql_backends",
+    "sql_backends_for",
+    "execute_compiled_sql",
+    "extract_pushdown_context",
     "try_execute_sql_pushdown",
 ]

@@ -21,5 +21,9 @@ class ExecutionContext:
     panel_cache: dict[int, Any] | None = None
     #: panel-native 模式下，最终 stack 对齐用的 MultiIndex Series 模板
     template_series: Any | None = None
+    #: SQL 预计算的子树结果 ``sid -> Series``（partial pushdown）
+    materialized_series: dict[str, Any] | None = None
+    #: 长表模式：优先保持 MultiIndex Series，减少 unstack/stack
+    prefer_long_table: bool = False
     #: 可选性能提示（分块、内存上限等），见 :mod:`runtime.perf_config`
     perf: Any | None = None

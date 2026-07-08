@@ -11,6 +11,8 @@ from .context import ExecutionContext
 
 
 def panel_native_enabled(ctx: ExecutionContext) -> bool:
+    if getattr(ctx, "prefer_long_table", False):
+        return False
     if os.environ.get("FACTOR_ENGINE_DISABLE_PANEL_NATIVE", "").lower() in (
         "1",
         "true",
