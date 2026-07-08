@@ -248,6 +248,94 @@ def default_us_pv_valuation_data_source_config(
     }
 
 
+def default_ashare_pv_universe_data_source_config(
+    *,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> dict[str, Any]:
+    """A 股日线 + 停牌状态 + 指数成分复合数据源（PiT 生产模板）。
+
+    - ``status``：``ashare_stock_status``，asof 对齐停牌/上市状态
+    - ``constituent``：``ashare_index_constituent``，asof 对齐成分股权重
+    """
+    pv = default_ashare_pv_data_source_config(
+        start_date=start_date,
+        end_date=end_date,
+    )
+    status: dict[str, Any] = {
+        "type": "data_access",
+        "dataset": "ashare_stock_status",
+        "fields": {
+            "listed_state": "ListedState",
+        },
+    }
+    constituent: dict[str, Any] = {
+        "type": "data_access",
+        "dataset": "ashare_index_constituent",
+        "fields": {
+            "index_symbol": "IndexSymbol",
+            "weight": "Weight",
+        },
+    }
+    if start_date is not None:
+        status["start_date"] = start_date
+        constituent["start_date"] = start_date
+    if end_date is not None:
+        status["end_date"] = end_date
+        constituent["end_date"] = end_date
+
+    return {
+        "type": "composite",
+        "anchor": "pv",
+        "anchor_column": "close",
+        "sources": {
+            "pv": pv,
+            "status": status,
+            "constituent": constituent,
+        },
+        "joins": {
+            "status": "asof_backward",
+            "constituent": "asof_backward",
+        },
+    }
+
+
+def default_us_pv_universe_data_source_config(
+    *,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> dict[str, Any]:
+    """美股日线 + 日度 universe 复合数据源（锚点日线，universe exact 对齐）。"""
+    pv = default_us_pv_data_source_config(
+        start_date=start_date,
+        end_date=end_date,
+    )
+    universe: dict[str, Any] = {
+        "type": "data_access",
+        "dataset": "us_universe_daily",
+        "fields": {
+            "universe_ticker": "ticker",
+        },
+    }
+    if start_date is not None:
+        universe["start_date"] = start_date
+    if end_date is not None:
+        universe["end_date"] = end_date
+
+    return {
+        "type": "composite",
+        "anchor": "pv",
+        "anchor_column": "close",
+        "sources": {
+            "pv": pv,
+            "universe": universe,
+        },
+        "joins": {
+            "universe": "exact",
+        },
+    }
+
+
 def validate_manifest_for_execution(
     *,
     market: str,

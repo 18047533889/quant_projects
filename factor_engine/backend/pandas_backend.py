@@ -11,10 +11,13 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from planner.logical_plan import PlanNode
 from planner.plan_hash import plan_cache_key
+
+from runtime.perf_config import PerfConfig
 
 from .base import Backend
 from .cleaned_bridge import list_cleaned_ops_for_backend, make_cleaned_kernel
@@ -31,7 +34,15 @@ class PandasBackend(Backend):
         self._register_kernels()
 
     def execute(self, plan: PlanNode, ctx: ExecutionContext) -> Any:
+        ctx = self._with_pandas_perf(ctx)
         return finalize_panel_result(self._eval(plan, ctx), ctx)
+
+    @staticmethod
+    def _with_pandas_perf(ctx: ExecutionContext) -> ExecutionContext:
+        perf = ctx.perf if ctx.perf is not None else PerfConfig.from_env()
+        if getattr(perf, "operator_backend", "auto") == "auto":
+            perf = replace(perf, operator_backend="pandas_numpy")
+        return replace(ctx, perf=perf)
 
     def _eval(self, node: PlanNode, ctx: ExecutionContext) -> Any:
         if node.op == "plan_ref":

@@ -225,11 +225,35 @@ Phase 5 — 生产加固（已完成）
 ├── DataSource prefetch_columns 优化 ✅
 └── data_access instrument_filter/schema 守卫 ✅
 
-Phase 6 — 双市场深化（待定）
-├── 美股 instrument_column 与真实 parquet 契约测试
-├── factor_engine universe/成分股 composite preset
-├── cos_mirror 与 datasets.yaml 双向一致性
-└── scan_polars 路径 telemetry
+Phase 6 — 双市场深化（已完成）
+├── 美股 instrument_column 与真实 parquet 契约测试 ✅
+├── factor_engine universe/成分股 composite preset ✅
+├── cos_mirror 与 datasets.yaml 双向一致性 ✅
+└── scan_polars 路径 telemetry ✅
+
+Phase 7 — 运维与可观测（已完成）
+├── factor_run / audit 与 telemetry 指标导出 ✅
+├── 生产 YAML 多环境 profile（dev/staging/prod）✅
+├── 增量 materialize 断点续跑与失败分区隔离 ✅
+└── 双市场 golden 数据集 CI 门禁 ✅
+
+Phase 8 — 平台扩展（已完成）
+├── factor_run 指标 Prometheus / OTLP 导出 ✅
+├── pipeline 多 config 并行调度 ✅
+├── 因子湖跨环境 publish 审批流 ✅
+└── 全链路 data_snapshot_id 对账工具 ✅
+
+Phase 9 — 生态集成（已完成）
+├── OTLP gRPC 推送与 Grafana 仪表盘模板 ✅
+├── pipeline 分布式任务队列（多机）✅
+├── 因子湖版本 diff 与自动回滚 ✅
+└── data_access audit ↔ factor_run 关联查询 ✅
+
+Phase 10 — 生产规模化（待定）
+├── OTLP gRPC SDK 原生推送与 SLO 告警规则
+├── 多队列编排（Redis/对象存储任务中心）
+├── 因子湖跨 region 复制与灾备演练
+└── 统一观测平面（Grafana + Loki + Tempo）
 ```
 
 ---

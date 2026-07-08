@@ -2,15 +2,18 @@
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 
 from data_access.cos_mirror import (
     ASHARE_DATASET_TABLE_MAP,
     DATASET_MIRROR_REGISTRY,
     US_DATASET_TABLE_MAP,
     _iter_dates,
+    datasets_requiring_cos_mirror,
     mirror_spec_for_dataset,
     table_for_dataset,
 )
+from data_access.registry import load_registry
 
 
 def test_mirror_registry_covers_markets():
@@ -47,3 +50,13 @@ def test_table_for_dataset():
 def test_iter_dates():
     days = _iter_dates(date(2024, 1, 1), date(2024, 1, 3))
     assert days == [date(2024, 1, 1), date(2024, 1, 2), date(2024, 1, 3)]
+
+
+def test_datasets_requiring_cos_mirror_excludes_sip_and_factor_lake():
+    config_path = Path(__file__).resolve().parents[2] / "config" / "datasets.yaml"
+    reg = load_registry(config_path)
+    eligible = datasets_requiring_cos_mirror(reg)
+    assert "ashare_stock_daily" in eligible
+    assert "us_universe_daily" in eligible
+    assert "us_stocks_sip_day_aggs" not in eligible
+    assert "factor_lake" not in eligible

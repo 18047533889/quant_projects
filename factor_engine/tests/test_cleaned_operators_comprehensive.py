@@ -121,11 +121,36 @@ class TestApiLayer:
         ):
             assert name in allow, f"missing {name!r} in allowlist"
 
-    def test_polars_only_ops_not_in_allowlist(self):
-        """仅 polars backend 的算子不应进入 pandas DSL 白名单。"""
+    def test_deduplicated_aliases_resolve(self):
+        """重复算子注销后，旧名仍可通过别名解析到保留实现。"""
+        from cleaned_operators.registry import OperatorRegistry
+
+        pairs = [
+            ("SMA", "ts_mean"),
+            ("clamp", "clip"),
+            ("deltas", "ts_delta"),
+            ("neutralize", "group_neutralize"),
+            ("pct_change", "ts_pct"),
+            ("returns", "ts_pct"),
+            ("if_else", "where"),
+            ("cap", "clip"),
+            ("group_demean", "group_neutralize"),
+            ("decay_linear", "ts_decay_linear"),
+            ("m_var", "ts_var"),
+            ("percentile", "ts_quantile"),
+            ("running_std", "ts_std"),
+            ("cum_standardize", "expanding_zscore"),
+        ]
+        for alias, canon in pairs:
+            assert OperatorRegistry.get(alias) is OperatorRegistry.get(canon)
+        for removed in ("Sum", "clamp", "industry_neutralize", "ts_decay", "Percentile", "running_std", "returns"):
+            assert removed not in OperatorRegistry._operators
+
+    def test_named_ops_in_allowlist(self):
+        """常用规范名应在 pandas DSL 白名单内。"""
         allow = build_dsl_allowlist()
-        for name in ("ts_argmax", "cs_regression", "rank_corr"):
-            assert name not in allow
+        for name in ("ts_argmax", "cs_regression", "rank_corr", "ts_pct", "ts_quantile", "clip", "cap"):
+            assert name in allow, f"missing {name!r} in allowlist"
 
     def test_allowlist_factory_returns_cleaned_call(self):
         allow = build_dsl_allowlist()
@@ -479,7 +504,8 @@ class TestExecutionEngineFeatures:
         r2 = eng.run(factor)["result"]
         pd.testing.assert_series_equal(r1, r2, check_names=False)
 
-    def test_polars_backend_delegates_to_pandas(self, panel_source):
+    def test_polars_backend_matches_pandas(self, panel_source):
+        """PolarsBackend 走 auto 优先 polars，结果与 PandasBackend 对齐。"""
         expr = rank(ts_mean(col("close"), 2))
         eng_pd = FactorEngine(
             backend=build_backend("pandas"), data_source=panel_source

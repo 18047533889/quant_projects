@@ -57,6 +57,7 @@ from .registry import (
     StaticDataset,
     load_registry,
 )
+from .telemetry import record_polars_scan
 
 
 logger = logging.getLogger("data_access.store")
@@ -232,8 +233,8 @@ class DataAccessStore:
             我们做：解析 registry 路径 + PathAuthorizer + 传 hive_partitioning
                     给 Polars；把 time_range / instrument_filter 转成 lazy
                     `.filter(...)` 附在 LazyFrame 上，供下游 pushdown 使用。
-            我们不做：不替 Polars 做执行计划（LazyFrame 还没 .collect() 前不读数据）；
-                    不记录遥测（Polars 走自己的 I/O，不经过 DuckDB）。
+            我们不做：不替 Polars 做执行计划（LazyFrame 还没 .collect() 前不读数据）。
+            遥测：记录 scan 建图 + schema 自检耗时（不含下游 .collect()）。
 
         参数：
             columns: 传给 pl.scan_parquet 的 n_rows / columns 优化；
@@ -255,6 +256,7 @@ class DataAccessStore:
                 "scan_polars 需要 polars。pip install polars 后重试。"
             ) from exc
 
+        scan_start = time.perf_counter()
         ds = self._registry.get(dataset)
         _assert_instrument_filter_supported(ds, instrument_filter)
         paths = self._prepare_dataset_read(ds, time_range=time_range, params=params)
@@ -317,6 +319,11 @@ class DataAccessStore:
         if columns and needed_cols != list(columns):
             lf = lf.select([pl_mod.col(c) for c in columns])
 
+        record_polars_scan(
+            dataset=dataset,
+            elapsed_ms=(time.perf_counter() - scan_start) * 1000,
+            paths_count=len(paths),
+        )
         return lf
 
     def read_frame(
@@ -608,6 +615,18 @@ class DataAccessStore:
             partition_by=partition_by,
             params=params,
         )
+
+    def resolve_dataset_path(self, dataset: str, **params: Any) -> Path:
+        """解析已登记数据集在当前 params 下的物理目录。"""
+        from .publish import _resolve_dataset_dir
+
+        ds = self._registry.get(dataset)
+        return _resolve_dataset_dir(ds, params)
+
+    def dataset_axis_columns(self, dataset: str) -> tuple[str, str]:
+        """返回数据集的时间列与标的列名（供 factor_engine SQL 下推使用）。"""
+        ds = self._registry.get(dataset)
+        return ds.time_column, ds.instrument_column
 
     def publish_from_staging(
         self,

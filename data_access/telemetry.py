@@ -86,13 +86,27 @@ _counters_lock = threading.Lock()
 _counters: dict[str, OperatorCounters] = defaultdict(OperatorCounters)
 
 
+def record_polars_scan(
+    *,
+    dataset: str,
+    elapsed_ms: float,
+    paths_count: int = 0,
+) -> None:
+    """scan_polars 惰性扫描建图完成时调一下（不含下游 .collect() 耗时）。"""
+    record_query(
+        elapsed_ms=elapsed_ms,
+        sql=f"polars_scan dataset={dataset} paths={paths_count}",
+        op="polars_scan",
+    )
+
+
 def record_query(
     *,
     elapsed_ms: float,
     sql: str,
     op: str = "query",
 ) -> None:
-    """execute_arrow / execute_df 每次调用时调一下。
+    """execute_arrow / execute_df / scan_polars 每次调用时调一下。
 
     线程安全，不抛异常（telemetry 失败不能影响主路径）。
     """

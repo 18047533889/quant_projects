@@ -127,4 +127,4 @@ PYTHONPATH=. python scripts/export_dsl_allowlist.py   # 刷新 docs/dsl_allowlis
 |------|------|
 | [`miner_delivery_spec.md`](miner_delivery_spec.md) §4.1 | 美股公式与字段契约 |
 | [`算子与导入教程.md`](算子与导入教程.md) | 挖掘组 import / 校验 |
-| [`../cleaned_operators/operators_catalog.md`](../cleaned_operators/operators_catalog.md) | 全量审计（含历史 `api_expr_only` 标注） |
+| [`../cleaned_operators/docs/operators_catalog.md`](../cleaned_operators/docs/operators_catalog.md) | 全量审计（含历史 `api_expr_only` 标注） |

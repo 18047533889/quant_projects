@@ -104,6 +104,22 @@ class DataAccessSource(DataSource):
             return
         self.load_columns(names)
 
+    def prefetch_panels(self, names: list[str]) -> None:
+        """一次 SQL 批量读列并 unstack 为宽表 panel（panel-native 热路径）。"""
+        needed = [n for n in names if n not in self._panel_cache]
+        if not needed:
+            return
+        batch = self.load_columns(needed)
+        for name, series in batch.items():
+            if name not in self._panel_cache:
+                level = series.index.names[-1] if series.index.names[-1] is not None else "instrument"
+                self._panel_cache[name] = series.unstack(level=level)
+
+    def dataset_axis_columns(self) -> tuple[str, str]:
+        """registry 中该数据集的时间列 / 标的列（SQL 下推用）。"""
+        store = _get_store()
+        return store.dataset_axis_columns(self.dataset)
+
     def load_column_panel(self, name: str):
         """加载单列为宽表 panel（index=时间, columns=标的），供 panel-native 热路径。"""
         if name in self._panel_cache:

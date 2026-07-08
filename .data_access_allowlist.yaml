@@ -106,6 +106,12 @@
   reason: "测试 fixture 需要构造 parquet"
 - path: factor_engine/storage/cache.py
   reason: "PersistentPlanCache 磁盘层读写 plan 子树 parquet；执行期缓存非 registry dataset"
+- path: factor_engine/runtime/snapshot_reconcile.py
+  reason: "data_snapshot_id 对账读 materializer 本地 lake 分区 parquet；物化输出非 registry dataset"
+- path: factor_engine/storage/lake_version.py
+  reason: "因子湖版本 diff/回滚读本地 factors/<id>/year=*/data.parquet；与 materializer 落盘路径一致"
+- path: factor_engine/storage/lake_publish.py
+  reason: "发布前同步本地 materializer 目录到 staging；读 parquet footer 统计行数"
 - path: scripts/verify_gtja191_factor_lake.py
   reason: "GTJA191 factor lake 结构审计 + 重算对比；按 factors/<id>/year=*/data.parquet 逐分区读，非 registry dataset"
 

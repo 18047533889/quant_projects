@@ -2,7 +2,7 @@
 
 > 对照基准：LQTP-backtest 因子服务用户手册（2026-06-18 更新）  
 > factor_engine：`cleaned_operators` DSL 白名单 **512** 名 / **378** 规范算子  
-> 生成方式：`PYTHONPATH=. python3 scripts/generate_lqtp_comparison.py`
+> 重新生成：`cd factor_engine && PYTHONPATH=. python3 scripts/generate_lqtp_comparison.py`
 
 ## 图例
 
@@ -10,11 +10,9 @@
 |------|------|
 | ✓ | 该侧手册/白名单明确列出或可直接使用 |
 | — | 该侧未列出 / 无等价实现 |
-| ✅ | **factor_engine 有，LQTP 手册未列**（本节重点标记） |
+| ✅ | **factor_engine 有，LQTP 手册未列** |
 
 ## 一、LQTP 手册算子 → factor_engine 覆盖情况
-
-下表逐条对照用户手册中的算子；**FE** 列表示 factor_engine 是否有同名或等价实现。
 
 | 分类 | LQTP 手册算子 | LQTP | FE | 备注 |
 |------|---------------|:----:|:--:|------|
@@ -58,14 +56,14 @@
 | 时序 | ts_kurt | ✓ | ✓ |  |
 | 时序 | ts_moment | ✓ | — |  |
 | 时序 | ts_topk_sum | ✓ | ✓ |  |
-| 时序 | rank_corr / rankcorr | ✓ | — |  |
+| 时序 | ts_rank_corr / rankcorr | ✓ | — |  |
 | 时序 | ts_poly2_coeff | ✓ | — |  |
 | 时序 | ts_poly2_resid | ✓ | — |  |
 | 时序 | digital_count | ✓ | — |  |
 | 时序 | ts_max_buildup | ✓ | — |  |
 | 时序 | ts_argmax | ✓ | ✓ |  |
 | 时序 | ts_argmin | ✓ | ✓ |  |
-| 市场 | benchmark_index(index) | ✓ | — | FE 无内置数据源/聚合入口，需自行用分钟或 L2 字段拼装 |
+| 市场 | benchmark_index(index) | ✓ | — | FE 无内置数据源/聚合入口 |
 | 市场 | rolling_beta_to_market | ✓ | ✓ |  |
 | 市场 | fp_beta | ✓ | ✓ |  |
 | 市场 | downside_beta | ✓ | ✓ |  |
@@ -81,12 +79,12 @@
 | 中性化 | industry_neutralize 及别名 | ✓ | ✓ |  |
 | 中性化 | size_neutralize 及别名 | ✓ | ✓ |  |
 | 中性化 | neutralize 组合 | ✓ | ✓ |  |
-| 分钟/L2 | minute_bar | ✓ | — | FE 无内置数据源/聚合入口，需自行用分钟或 L2 字段拼装 |
-| 分钟/L2 | l2_sum / l2_sum_if | ✓ | — | FE 无内置数据源/聚合入口，需自行用分钟或 L2 字段拼装 |
-| 分钟/L2 | l2_count / l2_count_if | ✓ | — | FE 无内置数据源/聚合入口，需自行用分钟或 L2 字段拼装 |
+| 分钟/L2 | minute_bar | ✓ | — | FE 无内置数据源/聚合入口 |
+| 分钟/L2 | l2_sum / l2_sum_if | ✓ | — | FE 无内置数据源/聚合入口 |
+| 分钟/L2 | l2_count / l2_count_if | ✓ | — | FE 无内置数据源/聚合入口 |
 | 分钟/L2 | real_turnover_rate | ✓ | ✓ |  |
 | YAML模板 | safe_div | ✓ | ✓ |  |
-| YAML模板 | nullif_zero | ✓ | — | LQTP 在 functions.yaml 预置模板；FE 需手写展开公式 |
+| YAML模板 | nullif_zero | ✓ | — | LQTP functions.yaml 预置；FE 需手写 |
 | YAML模板 | safe_log | ✓ | ✓ |  |
 | YAML模板 | clean | ✓ | ✓ |  |
 | YAML模板 | ma / sum_n / std_n / delta / pct_change | ✓ | ✓ |  |
@@ -94,29 +92,16 @@
 | YAML模板 | momentum / reversal 等 | ✓ | ✓ |  |
 | YAML模板 | atr / realized_vol / downside_vol | ✓ | ✓ |  |
 | YAML模板 | volume_ma / volume_ratio 等 | ✓ | ✓ |  |
-| YAML模板 | vwap_gap / illiquidity / 量价相关模板 | ✓ | — | LQTP 在 functions.yaml 预置模板；FE 需手写展开公式 |
+| YAML模板 | vwap_gap / illiquidity / 量价相关模板 | ✓ | — | LQTP functions.yaml 预置；FE 需手写 |
 | YAML模板 | return_rank / volume_rank 等 | ✓ | ✓ |  |
-| YAML模板 | quality_mask / neutral_return 等 | ✓ | — | LQTP 在 functions.yaml 预置模板；FE 需手写展开公式 |
-| YAML模板 | L2 成交模板 | ✓ | — | LQTP 在 functions.yaml 预置模板；FE 需手写展开公式 |
+| YAML模板 | quality_mask / neutral_return 等 | ✓ | — | LQTP functions.yaml 预置；FE 需手写 |
+| YAML模板 | L2 成交模板 | ✓ | — | LQTP functions.yaml 预置；FE 需手写 |
 
-**小结**：LQTP 手册列出的算子/模板 **80** 条；factor_engine 可直接覆盖 **63** 条，**17** 条需补配置或手写等价公式。
-
-### LQTP 有而 factor_engine 明显缺失的能力
-
-| 能力 | 说明 |
-|------|------|
-| `benchmark_index(index)` | 参数化指数基准数据源；FE 需自备基准收益列 |
-| `minute_bar(field, period, index)` | 日频公式内引用分钟聚合 bar |
-| `l2_sum` / `l2_sum_if` / `l2_count` / `l2_count_if` | L2 逐笔聚合算子 |
-| `functions.yaml` 预置模板 | 如 `daily_return`、`vwap_gap`、`quality_mask` 等一键别名 |
+**小结**：LQTP 手册 **80** 条；FE 覆盖 **63** 条，缺口 **17** 条。
 
 ## 二、factor_engine 有而 LQTP 手册未列的算子（✅）
 
-以下按 factor_engine 分类汇总；**✅** 表示该算子族在 LQTP 用户手册中**没有**对应条目（不含 functions.yaml 字段别名）。
-
-**合计约 299 个 DSL 名**（含别名；去重后规范算子约 **299** 个）。
-
-### 分类汇总
+**合计 301 个 DSL 名**（含别名）。
 
 | factor_engine 分类 | FE独有算子（节选） | 数量 |
 |-------------------|-------------------|:----:|
@@ -129,11 +114,8 @@
 | 数据清洗 | ✅ `bfill`, `dropna`, `ewm`, `ewm_corr`, `ewm_cov`, `ewm_mean` …（+17） | 23 |
 | 滞后 / 差分 / 累计 | ✅ `cum_avg`, `cum_count`, `cum_delta`, `cum_first`, `cum_last`, `cum_max` …（+10） | 16 |
 | 元素级数学 | ✅ `acos`, `add`, `and_`, `arg`, `asin`, `atan` …（+100） | 106 |
-| 未分类 | ✅ `col` | 1 |
 
-### 分类明细
-
-#### 技术信号（30）
+### 技术信号（30）
 
 | 算子 | FE独有 |
 |------|:------:|
@@ -168,7 +150,7 @@
 | `vpmacd` | ✅ |
 | `vpmacd_signal` | ✅ |
 
-#### 时序滚动（19）
+### 时序滚动（19）
 
 | 算子 | FE独有 |
 |------|:------:|
@@ -192,7 +174,7 @@
 | `ts_zscore` | ✅ |
 | `WMA` | ✅ |
 
-#### 统计与回归（67）
+### 统计与回归（67）
 
 | 算子 | FE独有 |
 |------|:------:|
@@ -264,7 +246,7 @@
 | `wavg` | ✅ |
 | `wsum` | ✅ |
 
-#### 截面变换（18）
+### 截面变换（18）
 
 | 算子 | FE独有 |
 |------|:------:|
@@ -287,7 +269,7 @@
 | `row_sum` | ✅ |
 | `row_var` | ✅ |
 
-#### 分组中性化（16）
+### 分组中性化（16）
 
 | 算子 | FE独有 |
 |------|:------:|
@@ -308,7 +290,7 @@
 | `panel_zscore` | ✅ |
 | `ratios` | ✅ |
 
-#### 价量衍生（3）
+### 价量衍生（3）
 
 | 算子 | FE独有 |
 |------|:------:|
@@ -316,7 +298,7 @@
 | `sharpe_ratio` | ✅ |
 | `vwap` | ✅ |
 
-#### 数据清洗（23）
+### 数据清洗（23）
 
 | 算子 | FE独有 |
 |------|:------:|
@@ -344,7 +326,7 @@
 | `window_std` | ✅ |
 | `window_sum` | ✅ |
 
-#### 滞后 / 差分 / 累计（16）
+### 滞后 / 差分 / 累计（16）
 
 | 算子 | FE独有 |
 |------|:------:|
@@ -365,7 +347,7 @@
 | `next` | ✅ |
 | `prev` | ✅ |
 
-#### 元素级数学（106）
+### 元素级数学（106）
 
 | 算子 | FE独有 |
 |------|:------:|
@@ -476,27 +458,3 @@
 | `weighted_mean` | ✅ |
 | `winsorize_mean` | ✅ |
 
-#### 未分类（1）
-
-| 算子 | FE独有 |
-|------|:------:|
-| `col` | ✅ |
-
-## 三、能力维度速查
-
-| 维度 | LQTP 手册 | factor_engine |
-|------|-----------|---------------|
-| 截面 rank/zscore/回归残差 | ✓ | ✓ |
-| 行业/市值中性化 | ✓ | ✓ |
-| 财报 ttm/quarter/yoy/avg2 | ✓ | ✓ |
-| 市场风险 Beta/CAPM 族 | ✓（含默认指数简写） | ✓（需自备基准列） |
-| 真实换手率 | ✓ | ✓ |
-| 分钟 bar 内嵌聚合 | ✓ | — |
-| L2 逐笔聚合 | ✓ | — |
-| 技术分析指标 MACD/RSI/ADX… | — | ✅ |
-| 假设检验 / 分布 CDF-PDF | — | ✅ |
-| 分组截面 group_rank / panel_rank | — | ✅ |
-| 矩阵 / FFT / 小波 / 滤波 | — | ✅ |
-| 累计序列 cum_* / expanding_* | — | ✅ |
-| EWM 指数加权族 | — | ✅ |
-| 夏普 / 最大回撤 / 累计收益 | — | ✅ |

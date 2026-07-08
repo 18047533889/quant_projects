@@ -1,0 +1,7 @@
+# prod profile：生产级缓存与因子湖路径
+engine:
+  enable_cache: true
+  plan_cache_dir: ../data/factors/plan_cache
+
+materialization:
+  lake_root: ../data/factors/lake

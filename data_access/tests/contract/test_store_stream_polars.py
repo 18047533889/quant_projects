@@ -315,3 +315,20 @@ def test_scan_polars_missing_raises_importerror(streaming_store, monkeypatch):
 
     with pytest.raises(ImportError, match="polars"):
         store.scan_polars("big_factor", factor_id="mom_big")
+
+
+def test_scan_polars_records_telemetry(streaming_store, monkeypatch):
+    from data_access.telemetry import get_counters_snapshot, reset_counters
+
+    monkeypatch.setenv("QUANT_OPERATOR", "polars_test_op")
+    reset_counters()
+    store, _ = streaming_store
+    store.scan_polars(
+        "big_factor",
+        factor_id="mom_big",
+        columns=["asset", "value"],
+    )
+    snapshot = get_counters_snapshot()
+    assert "polars_test_op" in snapshot
+    assert snapshot["polars_test_op"].total_queries == 1
+    assert snapshot["polars_test_op"].total_elapsed_ms >= 0

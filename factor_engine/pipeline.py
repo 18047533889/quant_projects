@@ -13,6 +13,14 @@ import yaml
 
 from runtime.config import FactorEngineConfig, load_config
 from runtime.engine import FactorEngine
+from runtime.metrics_export import (
+    enrich_pipeline_summary,
+    push_otlp_http,
+    write_otlp_metrics_file,
+    write_pipeline_metrics_file,
+    write_prometheus_metrics_file,
+)
+from runtime.task_queue import shard_config_paths
 from logging_utils import get_logger
 from workspace_paths import workspace_data_root
 
@@ -146,6 +154,7 @@ def _execute_config_with_retries(
     input_dq_check: bool = False,
     input_dq_strict: bool = True,
     max_retries: int = 0,
+    resume_materialize: bool = False,
 ) -> dict[str, Any]:
     attempts = max(0, int(max_retries)) + 1
     last_exc: Exception | None = None
@@ -161,6 +170,7 @@ def _execute_config_with_retries(
                 dq_strict=dq_strict,
                 input_dq_check=input_dq_check,
                 input_dq_strict=input_dq_strict,
+                resume_materialize=resume_materialize,
             )
         except Exception as exc:
             last_exc = exc
@@ -188,6 +198,7 @@ def _execute_config(
     dq_strict: bool = True,
     input_dq_check: bool = False,
     input_dq_strict: bool = True,
+    resume_materialize: bool = False,
 ) -> dict[str, Any]:
     engine, factor = FactorEngine.from_loaded_config(config)
     ds_config = {"type": config.data_source.type, **config.data_source.options}
@@ -221,6 +232,7 @@ def _execute_config(
             input_dq_check=input_dq_check,
             input_dq_strict=input_dq_strict,
             data_source_config=ds_config,
+            resume_materialize=resume_materialize,
         )
         if incremental:
             output = engine.materialize_incremental(factor, **mat_kwargs)
@@ -261,6 +273,35 @@ def _write_result_json(results_root: Path, name: str, item: dict[str, Any]) -> s
     return str(relative_path)
 
 
+def _finalize_run_summary(
+    *,
+    output_root: Path,
+    results: list[dict[str, Any]],
+    config_source: str | None,
+    extra: dict[str, Any] | None = None,
+    otlp_endpoint: str | None = None,
+) -> dict[str, Any]:
+    summary = _build_summary(
+        output_root=output_root,
+        results=results,
+        config_source=config_source,
+    )
+    if extra:
+        summary.update(extra)
+    summary = enrich_pipeline_summary(summary, results)
+    run_summary_path = output_root / "run_summary.json"
+    run_summary_path.write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2, default=str),
+        encoding="utf-8",
+    )
+    write_pipeline_metrics_file(summary, output_root / "metrics.json")
+    write_prometheus_metrics_file(summary, output_root / "metrics.prom")
+    write_otlp_metrics_file(summary, output_root / "metrics.otlp.json")
+    if otlp_endpoint:
+        summary["otlp_push"] = push_otlp_http(summary, otlp_endpoint)
+    return summary
+
+
 def _build_summary(*, output_root: Path, results: list[dict[str, Any]], config_source: str | None = None) -> dict[str, Any]:
     return {
         "timestamp": datetime.now().isoformat(timespec="seconds"),
@@ -289,6 +330,7 @@ def run_pipeline(
     input_dq_check: bool = False,
     input_dq_strict: bool = True,
     max_retries: int = 0,
+    resume_materialize: bool = False,
 ) -> dict[str, Any]:
     root, results_root, _ = _prepare_output_root(output_root, config.factor.name)
     config_name = Path(config_path).stem if config_path is not None else config.factor.name
@@ -305,6 +347,7 @@ def run_pipeline(
             input_dq_check=input_dq_check,
             input_dq_strict=input_dq_strict,
             max_retries=max_retries,
+            resume_materialize=resume_materialize,
         )
     except Exception as exc:
         mode = "materialize" if (materialize or (materialize is None and config.materialization is not None)) else "run"
@@ -318,15 +361,19 @@ def run_pipeline(
     else:
         config_snapshot = _write_yaml_snapshot(config, snapshot_path)
 
-    summary = _build_summary(output_root=root, results=[item], config_source=None if config_path is None else str(config_path))
+    summary = _finalize_run_summary(
+        output_root=root,
+        results=[item],
+        config_source=None if config_path is None else str(config_path),
+    )
     run_summary_path = root / "run_summary.json"
-    run_summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
 
     return {
         "summary": summary,
         "results": [item],
         "output_root": str(root),
         "run_summary_path": str(run_summary_path),
+        "metrics_path": str(root / "metrics.json"),
         "config_snapshot": config_snapshot,
     }
 
@@ -344,6 +391,7 @@ def run(
     input_dq_check: bool = False,
     input_dq_strict: bool = True,
     max_retries: int = 0,
+    resume_materialize: bool = False,
 ) -> dict[str, Any]:
     return run_pipeline(
         config,
@@ -357,6 +405,7 @@ def run(
         input_dq_check=input_dq_check,
         input_dq_strict=input_dq_strict,
         max_retries=max_retries,
+        resume_materialize=resume_materialize,
     )
 
 
@@ -372,24 +421,30 @@ def run_from_config(
     input_dq_check: bool = False,
     input_dq_strict: bool = True,
     max_retries: int = 0,
+    resume_materialize: bool = False,
+    profile: str | None = None,
 ) -> dict[str, Any]:
     config_path = Path(config_path)
     root, results_root, _ = _prepare_output_root(output_root, config_path.stem)
 
     try:
-        config = load_config(config_path)
+        config = load_config(config_path, profile=profile)
     except Exception as exc:
         item = _failed_result(config_name=config_path.stem, factor_name=None, mode="run", exc=exc)
         _write_result_json(results_root, config_path.stem, item)
         config_snapshot = _copy_snapshot(config_path, root / "config_snapshot.yaml")
-        summary = _build_summary(output_root=root, results=[item], config_source=str(config_path))
+        summary = _finalize_run_summary(
+            output_root=root,
+            results=[item],
+            config_source=str(config_path),
+        )
         run_summary_path = root / "run_summary.json"
-        run_summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
         return {
             "summary": summary,
             "results": [item],
             "output_root": str(root),
             "run_summary_path": str(run_summary_path),
+            "metrics_path": str(root / "metrics.json"),
             "config_snapshot": config_snapshot,
         }
 
@@ -405,7 +460,44 @@ def run_from_config(
         input_dq_check=input_dq_check,
         input_dq_strict=input_dq_strict,
         max_retries=max_retries,
+        resume_materialize=resume_materialize,
     )
+
+
+def _run_single_config_file(
+    config_path: Path,
+    *,
+    profile: str | None,
+    materialize: bool | None,
+    preview_rows: int,
+    incremental: bool,
+    dq_check: bool,
+    dq_strict: bool,
+    input_dq_check: bool,
+    input_dq_strict: bool,
+    max_retries: int,
+    resume_materialize: bool,
+) -> tuple[str, dict[str, Any]]:
+    config_name = config_path.stem
+    try:
+        config = load_config(config_path, profile=profile)
+        item = _execute_config_with_retries(
+            config,
+            config_name=config_name,
+            materialize=materialize,
+            preview_rows=preview_rows,
+            incremental=incremental,
+            dq_check=dq_check,
+            dq_strict=dq_strict,
+            input_dq_check=input_dq_check,
+            input_dq_strict=input_dq_strict,
+            max_retries=max_retries,
+            resume_materialize=resume_materialize,
+        )
+    except Exception as exc:
+        mode = "materialize" if materialize else "run"
+        item = _failed_result(config_name=config_name, factor_name=None, mode=mode, exc=exc)
+    return config_name, item
 
 
 def run_config_directory(
@@ -422,55 +514,102 @@ def run_config_directory(
     input_dq_check: bool = False,
     input_dq_strict: bool = True,
     max_retries: int = 0,
+    resume_materialize: bool = False,
+    profile: str | None = None,
+    n_jobs: int = 1,
+    shard_index: int | None = None,
+    shard_count: int = 1,
+    otlp_endpoint: str | None = None,
 ) -> dict[str, Any]:
     config_dir = Path(config_dir)
-    config_paths = sorted(path for path in config_dir.glob(pattern) if path.is_file())
-    if not config_paths:
+    all_config_paths = sorted(path for path in config_dir.glob(pattern) if path.is_file())
+    if not all_config_paths:
         raise FileNotFoundError(f"No config files matched under {config_dir} with pattern {pattern!r}")
 
+    if shard_index is not None:
+        config_paths = shard_config_paths(
+            all_config_paths,
+            shard_index=int(shard_index),
+            shard_count=int(shard_count),
+        )
+    else:
+        config_paths = all_config_paths
+
     root, results_root, snapshots_root = _prepare_output_root(output_root, config_dir.name)
-    results: list[dict[str, Any]] = []
 
     for config_path in config_paths:
-        config_name = config_path.stem
-        snapshot_target = snapshots_root / f"{_safe_name(config_name)}.yaml"
+        snapshot_target = snapshots_root / f"{_safe_name(config_path.stem)}.yaml"
         _copy_snapshot(config_path, snapshot_target)
 
-        try:
-            config = load_config(config_path)
-            item = _execute_config_with_retries(
-                config,
-                config_name=config_name,
-                materialize=materialize,
-                preview_rows=preview_rows,
-                incremental=incremental,
-                dq_check=dq_check,
-                dq_strict=dq_strict,
-                input_dq_check=input_dq_check,
-                input_dq_strict=input_dq_strict,
-                max_retries=max_retries,
-            )
-        except Exception as exc:
-            mode = "materialize" if materialize else "run"
-            item = _failed_result(config_name=config_name, factor_name=None, mode=mode, exc=exc)
-            if stop_on_error:
-                _write_result_json(results_root, config_name, item)
-                results.append(item)
-                break
+    workers = max(1, int(n_jobs))
+    run_kwargs = dict(
+        profile=profile,
+        materialize=materialize,
+        preview_rows=preview_rows,
+        incremental=incremental,
+        dq_check=dq_check,
+        dq_strict=dq_strict,
+        input_dq_check=input_dq_check,
+        input_dq_strict=input_dq_strict,
+        max_retries=max_retries,
+        resume_materialize=resume_materialize,
+    )
 
+    if workers > 1:
+        try:
+            from joblib import Parallel, delayed
+
+            pairs = Parallel(n_jobs=workers, backend="threading")(
+                delayed(_run_single_config_file)(config_path, **run_kwargs)
+                for config_path in config_paths
+            )
+        except ImportError:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+
+            pairs = []
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = {
+                    pool.submit(_run_single_config_file, config_path, **run_kwargs): config_path
+                    for config_path in config_paths
+                }
+                for future in as_completed(futures):
+                    pairs.append(future.result())
+            pairs.sort(key=lambda item: item[0])
+    else:
+        pairs = [_run_single_config_file(config_path, **run_kwargs) for config_path in config_paths]
+
+    results: list[dict[str, Any]] = []
+    for config_name, item in pairs:
+        if stop_on_error and item.get("status") == "failed":
+            _write_result_json(results_root, config_name, item)
+            results.append(item)
+            break
         _write_result_json(results_root, config_name, item)
         results.append(item)
 
-    summary = _build_summary(output_root=root, results=results, config_source=str(config_dir))
-    summary["pattern"] = pattern
+    summary = _finalize_run_summary(
+        output_root=root,
+        results=results,
+        config_source=str(config_dir),
+        extra={
+            "pattern": pattern,
+            "shard_index": shard_index,
+            "shard_count": shard_count,
+            "configs_selected": len(config_paths),
+            "configs_total_in_dir": len(all_config_paths),
+        },
+        otlp_endpoint=otlp_endpoint,
+    )
     run_summary_path = root / "run_summary.json"
-    run_summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
 
     return {
         "summary": summary,
         "results": results,
         "output_root": str(root),
         "run_summary_path": str(run_summary_path),
+        "metrics_path": str(root / "metrics.json"),
+        "prometheus_metrics_path": str(root / "metrics.prom"),
+        "otlp_metrics_path": str(root / "metrics.otlp.json"),
         "config_snapshot_root": str(snapshots_root),
     }
 

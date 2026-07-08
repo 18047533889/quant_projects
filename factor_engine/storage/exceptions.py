@@ -11,3 +11,7 @@ class FactorHashMismatchError(Exception):
 
 class FactorNotFoundError(Exception):
     """因子未在 Catalog 中注册，无法执行读取或水位线查询。"""
+
+
+class MaterializePartitionError(Exception):
+    """分区落盘部分失败：已成功分区已写入，失败分区记录在 checkpoint。"""

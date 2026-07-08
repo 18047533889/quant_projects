@@ -32,7 +32,7 @@
 | [`operators_semantics.md`](operators_semantics.md) | 参数、列依赖、DSL 限制 |
 | [`factor_engine_llm_prompt.md`](factor_engine_llm_prompt.md) | 给模型的算子摘要 |
 | [`factor_engine_llm_prompt.txt`](factor_engine_llm_prompt.txt) | 同上（纯文本） |
-| [`cleaned_operators/operators_catalog.md`](../cleaned_operators/operators_catalog.md) | 全量审计（含 stub） |
+| [`cleaned_operators/operators_catalog.md`](../cleaned_operators/docs/operators_catalog.md) | 全量审计（含 stub） |
 
 ---
 

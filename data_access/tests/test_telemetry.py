@@ -103,3 +103,13 @@ def test_record_query_swallows_errors(monkeypatch):
     monkeypatch.setattr(tele, "resolve_operator", boom)
     # 不抛异常就算通过
     record_query(elapsed_ms=1.0, sql="SELECT 1")
+
+
+def test_record_polars_scan_counts(monkeypatch):
+    from data_access.telemetry import record_polars_scan
+
+    monkeypatch.setenv("QUANT_OPERATOR", "test_operator")
+    record_polars_scan(dataset="us_stock_daily", elapsed_ms=12.5, paths_count=3)
+    snapshot = get_counters_snapshot()["test_operator"]
+    assert snapshot.total_queries == 1
+    assert snapshot.total_elapsed_ms == pytest.approx(12.5)

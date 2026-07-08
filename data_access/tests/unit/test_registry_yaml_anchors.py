@@ -26,3 +26,14 @@ def test_mirror_registry_datasets_are_registered():
     reg = load_registry(config_path)
     missing = sorted(set(DATASET_MIRROR_REGISTRY) - set(reg._datasets))
     assert missing == [], f"cos_mirror 已配置但未在 datasets.yaml 登记: {missing}"
+
+
+def test_cos_eligible_datasets_have_mirror_specs():
+    """反向：落在 COS 镜像根下的静态数据集都应在 DATASET_MIRROR_REGISTRY 登记。"""
+    from data_access.cos_mirror import datasets_requiring_cos_mirror
+
+    config_path = Path(__file__).resolve().parents[2] / "config" / "datasets.yaml"
+    reg = load_registry(config_path)
+    eligible = datasets_requiring_cos_mirror(reg)
+    missing = sorted(eligible - set(DATASET_MIRROR_REGISTRY))
+    assert missing == [], f"datasets.yaml 应镜像但未在 cos_mirror 登记: {missing}"

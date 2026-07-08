@@ -1,0 +1,10 @@
+# dev profile：短日期窗 + 独立因子湖，适合本地 smoke
+data_source:
+  start_date: "2024-01-02"
+  end_date: "2024-03-31"
+
+engine:
+  enable_cache: true
+
+materialization:
+  lake_root: ../data/factors/lake_dev

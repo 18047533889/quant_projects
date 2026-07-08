@@ -109,33 +109,96 @@ def _call_cleaned_operator(operator, call_args: list[Any], kw: dict[str, Any]) -
             raise exc from None
 
 
+def _operator_backend_preference(ctx: ExecutionContext) -> str:
+    perf = getattr(ctx, "perf", None)
+    if perf is not None and getattr(perf, "operator_backend", None):
+        return str(perf.operator_backend)
+    return "auto"
+
+
+def _resolve_operator(canonical: str, ctx: ExecutionContext):
+    from cleaned_operators.registry import OperatorRegistry
+
+    prefer = _operator_backend_preference(ctx)
+    operator, backend = OperatorRegistry.get_preferred(canonical, prefer=prefer)
+    return operator, backend
+
+
+def _prepare_call_args(
+    evaluated: list[Any],
+    ctx: ExecutionContext,
+    *,
+    backend: str,
+) -> tuple[list[Any], pd.Series | None, pd.DataFrame | None]:
+    call_args: list[Any] = []
+    template: pd.Series | None = None
+    template_panel: pd.DataFrame | None = None
+
+    for val in evaluated:
+        if isinstance(val, (pd.Series, pd.DataFrame)):
+            panel = to_panel(val, ctx)
+            if template_panel is None:
+                template_panel = panel
+            if backend == "polars":
+                from .panel_polars import panel_to_polars
+
+                call_args.append(panel_to_polars(panel))
+            else:
+                call_args.append(panel)
+            if template is None and isinstance(val, pd.Series):
+                template = val
+            elif template is None and getattr(ctx, "template_series", None) is not None:
+                template = ctx.template_series
+        else:
+            call_args.append(val)
+
+    return call_args, template, template_panel
+
+
+def _normalize_operator_result(
+    result: Any,
+    *,
+    backend: str,
+    template: pd.Series,
+    template_panel: pd.DataFrame | None,
+    ctx: ExecutionContext,
+) -> Any:
+    if backend == "polars":
+        from .panel_polars import is_polars_frame, polars_to_panel
+
+        if is_polars_frame(result):
+            if template_panel is None:
+                raise ValueError("polars operator requires a DataFrame template panel")
+            result = polars_to_panel(result, template=template_panel)
+
+    if isinstance(result, pd.DataFrame):
+        if panel_native_enabled(ctx):
+            return result
+        return panel_to_series(result, ctx, template=template)
+    if isinstance(result, pd.Series):
+        if isinstance(result.index, pd.MultiIndex):
+            return result.reindex(template.index)
+        return pd.Series(result.values, index=template.index)
+    return pd.Series(result, index=template.index)
+
+
 def make_cleaned_kernel(eval_fn: Callable[[PlanNode, ExecutionContext], Any], op: str):
     """为逻辑计划算子名 ``op`` 生成 PandasBackend 用的 kernel 闭包。"""
 
     def _kernel(node: PlanNode, ctx: ExecutionContext) -> pd.Series:
         ensure_cleaned_loaded()
-        from cleaned_operators.registry import OperatorRegistry
 
         canonical = _resolve_canonical(op)
-        operator = OperatorRegistry.get(canonical)
+        operator, backend = _resolve_operator(canonical, ctx)
         if operator is None:
             raise NotImplementedError(f"cleaned operator not implemented: {op!r}")
 
         evaluated: list[Any] = [eval_fn(child, ctx) for child in node.inputs]
         kw = dict(node.attrs)
 
-        call_args: list[Any] = []
-        template: pd.Series | None = None
-        for val in evaluated:
-            if isinstance(val, (pd.Series, pd.DataFrame)):
-                panel = to_panel(val, ctx)
-                call_args.append(panel)
-                if template is None and isinstance(val, pd.Series):
-                    template = val
-                elif template is None and getattr(ctx, "template_series", None) is not None:
-                    template = ctx.template_series
-            else:
-                call_args.append(val)
+        call_args, template, template_panel = _prepare_call_args(
+            evaluated, ctx, backend=backend
+        )
 
         result = _call_cleaned_operator(operator, call_args, kw)
 
@@ -144,15 +207,13 @@ def make_cleaned_kernel(eval_fn: Callable[[PlanNode, ExecutionContext], Any], op
         if template is None:
             raise ValueError(f"cleaned op {op!r} requires at least one Series input")
 
-        if isinstance(result, pd.DataFrame):
-            if panel_native_enabled(ctx):
-                return result
-            return panel_to_series(result, ctx, template=template)
-        if isinstance(result, pd.Series):
-            if isinstance(result.index, pd.MultiIndex):
-                return result.reindex(template.index)
-            return pd.Series(result.values, index=template.index)
-        return pd.Series(result, index=template.index)
+        return _normalize_operator_result(
+            result,
+            backend=backend,
+            template=template,
+            template_panel=template_panel,
+            ctx=ctx,
+        )
 
     return _kernel
 

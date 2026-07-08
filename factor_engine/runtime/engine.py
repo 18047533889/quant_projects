@@ -230,6 +230,11 @@ class FactorEngine:
         if not columns:
             return
         names = sorted(columns)
+        prefetch_panels = getattr(data_source, "prefetch_panels", None)
+        if callable(prefetch_panels):
+            prefetch_panels(names)
+            logger.info("预加载宽表 panel（prefetch_panels）: %s", names)
+            return
         prefetch = getattr(data_source, "prefetch_columns", None)
         if callable(prefetch):
             prefetch(names)
@@ -320,6 +325,8 @@ class FactorEngine:
         input_dq_strict: bool = True,
         data_source_config: dict | None = None,
         write_metadata: bool = True,
+        resume_materialize: bool = False,
+        isolate_partition_failures: bool = True,
     ):
         """执行单因子并将结果落盘到 factor lake（Parquet）。"""
         logger.info("开始落盘因子 '%s'", factor.name)
@@ -371,6 +378,8 @@ class FactorEngine:
             write_metadata=write_metadata,
             data_snapshot_id=snapshot_id,
             data_source_config=data_source_config,
+            resume=resume_materialize,
+            isolate_partition_failures=isolate_partition_failures,
         )
         output["materialization"] = {
             **summary,
@@ -583,6 +592,8 @@ class FactorEngine:
         input_dq_strict: bool = True,
         data_source_config: dict | None = None,
         write_metadata: bool = True,
+        resume_materialize: bool = False,
+        isolate_partition_failures: bool = True,
     ):
         """增量执行 + 落盘 upsert + lineage。"""
         from backend.cleaned_bridge import ensure_cleaned_loaded
@@ -650,6 +661,8 @@ class FactorEngine:
             write_metadata=write_metadata,
             data_snapshot_id=snapshot_id,
             data_source_config=data_source_config,
+            resume=resume_materialize,
+            isolate_partition_failures=isolate_partition_failures,
         )
         output["materialization"] = {
             **summary,

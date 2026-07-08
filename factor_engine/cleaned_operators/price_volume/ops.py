@@ -67,8 +67,8 @@ class MaxDrawdown(SeriesOperator):
 
 
 
-# canonical=returns backend=pandas_numpy selected=returns source=financial/__init__.py
-@register_operator(name="returns", category="financial", business_category="price_volume", canonical="returns", source="factor_dsl_np")
+# 重复实现：见 ts_pct(x,1)；dedupe 注销，别名 returns
+# @register_operator(name="returns", category="financial", business_category="price_volume", canonical="returns", source="factor_dsl_np")
 class Returns(SeriesOperator):
     """收益率"""
     metadata = OperatorMetadata(
@@ -84,8 +84,25 @@ class Returns(SeriesOperator):
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
         return x.pct_change()
 
-# aliases: log_returns
 
+# canonical=log_returns backend=pandas_numpy selected=log_returns source=financial/__init__.py
+@register_operator(name="log_returns", category="financial", business_category="price_volume", canonical="log_returns", source="factor_dsl_np")
+class LogReturns(SeriesOperator):
+    """对数收益率 ln(P_t / P_{t-1})"""
+    metadata = OperatorMetadata(
+        name="log_returns",
+        category="financial",
+        description="对数收益率 ln(P_t / P_{t-1})",
+        examples=["log_returns(close)"],
+        param_names=["x"],
+        return_type="series",
+        tags=["financial", "returns", "log"]
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
+        prev = x.shift(1)
+        ratio = x / prev.replace(0, np.nan)
+        return np.log(ratio.replace([np.inf, -np.inf], np.nan))
 
 
 # canonical=sharpe_ratio backend=pandas_numpy selected=sharpe_ratio source=financial/__init__.py
@@ -145,126 +162,126 @@ class VWAP(SeriesOperator):
         return pv.rolling(window=window, min_periods=1).sum() / volume.rolling(window=window, min_periods=1).sum()
 
 
-@register_operator(name="rolling_beta_to_market", category="price_volume", business_category="price_volume", canonical="rolling_beta_to_market", source="lqtp_numpy")
+@register_operator(name="rolling_beta_to_market", category="price_volume", business_category="price_volume", canonical="rolling_beta_to_market", source="factor_dsl_np")
 class LqtpRollingbetatomarketOp(SeriesOperator):
     metadata = OperatorMetadata(
         name="rolling_beta_to_market",
         category="price_volume",
-        description="LQTP numpy implementation",
+        description="滚动市场 Beta：Cov(r_i, r_m) / Var(r_m)",
         param_names=[],
         return_type="series",
     )
 
     def _calculate_series(self, *args, **kwargs):
-        from cleaned_operators._lqtp_numpy import rolling_beta_to_market_
+        from cleaned_operators._numpy_kernels import rolling_beta_to_market_
         # 兼容 DataFrame 输入：逐列应用 numpy 函数
         if len(args) == 1 and hasattr(args[0], "apply"):
             return args[0].apply(lambda s: rolling_beta_to_market_(s.values, **kwargs) if kwargs else rolling_beta_to_market_(s.values))
         return rolling_beta_to_market_(*args, **kwargs)
 
 
-@register_operator(name="downside_beta", category="price_volume", business_category="price_volume", canonical="downside_beta", source="lqtp_numpy")
+@register_operator(name="downside_beta", category="price_volume", business_category="price_volume", canonical="downside_beta", source="factor_dsl_np")
 class LqtpDownsidebetaOp(SeriesOperator):
     metadata = OperatorMetadata(
         name="downside_beta",
         category="price_volume",
-        description="LQTP numpy implementation",
+        description="下行 Beta：仅在 r_m < 0 子样本上估计",
         param_names=[],
         return_type="series",
     )
 
     def _calculate_series(self, *args, **kwargs):
-        from cleaned_operators._lqtp_numpy import downside_beta_
+        from cleaned_operators._numpy_kernels import downside_beta_
         # 兼容 DataFrame 输入：逐列应用 numpy 函数
         if len(args) == 1 and hasattr(args[0], "apply"):
             return args[0].apply(lambda s: downside_beta_(s.values, **kwargs) if kwargs else downside_beta_(s.values))
         return downside_beta_(*args, **kwargs)
 
 
-@register_operator(name="tail_beta", category="price_volume", business_category="price_volume", canonical="tail_beta", source="lqtp_numpy")
+@register_operator(name="tail_beta", category="price_volume", business_category="price_volume", canonical="tail_beta", source="factor_dsl_np")
 class LqtpTailbetaOp(SeriesOperator):
     metadata = OperatorMetadata(
         name="tail_beta",
         category="price_volume",
-        description="LQTP numpy implementation",
+        description="尾部 Beta：在市场收益最低 q 分位子样本上估计",
         param_names=[],
         return_type="series",
     )
 
     def _calculate_series(self, *args, **kwargs):
-        from cleaned_operators._lqtp_numpy import tail_beta_
+        from cleaned_operators._numpy_kernels import tail_beta_
         # 兼容 DataFrame 输入：逐列应用 numpy 函数
         if len(args) == 1 and hasattr(args[0], "apply"):
             return args[0].apply(lambda s: tail_beta_(s.values, **kwargs) if kwargs else tail_beta_(s.values))
         return tail_beta_(*args, **kwargs)
 
 
-@register_operator(name="residual_momentum_capm", category="price_volume", business_category="price_volume", canonical="residual_momentum_capm", source="lqtp_numpy")
+@register_operator(name="residual_momentum_capm", category="price_volume", business_category="price_volume", canonical="residual_momentum_capm", source="factor_dsl_np")
 class LqtpResidualmomentumcapmOp(SeriesOperator):
     metadata = OperatorMetadata(
         name="residual_momentum_capm",
         category="price_volume",
-        description="LQTP numpy implementation",
+        description="CAPM 残差动量：窗口内回归残差之和",
         param_names=[],
         return_type="series",
     )
 
     def _calculate_series(self, *args, **kwargs):
-        from cleaned_operators._lqtp_numpy import residual_momentum_capm_
+        from cleaned_operators._numpy_kernels import residual_momentum_capm_
         # 兼容 DataFrame 输入：逐列应用 numpy 函数
         if len(args) == 1 and hasattr(args[0], "apply"):
             return args[0].apply(lambda s: residual_momentum_capm_(s.values, **kwargs) if kwargs else residual_momentum_capm_(s.values))
         return residual_momentum_capm_(*args, **kwargs)
 
 
-@register_operator(name="coskewness_to_market", category="price_volume", business_category="price_volume", canonical="coskewness_to_market", source="lqtp_numpy")
+@register_operator(name="coskewness_to_market", category="price_volume", business_category="price_volume", canonical="coskewness_to_market", source="factor_dsl_np")
 class LqtpCoskewnesstomarketOp(SeriesOperator):
     metadata = OperatorMetadata(
         name="coskewness_to_market",
         category="price_volume",
-        description="LQTP numpy implementation",
+        description="相对市场的协偏度",
         param_names=[],
         return_type="series",
     )
 
     def _calculate_series(self, *args, **kwargs):
-        from cleaned_operators._lqtp_numpy import coskewness_to_market_
+        from cleaned_operators._numpy_kernels import coskewness_to_market_
         # 兼容 DataFrame 输入：逐列应用 numpy 函数
         if len(args) == 1 and hasattr(args[0], "apply"):
             return args[0].apply(lambda s: coskewness_to_market_(s.values, **kwargs) if kwargs else coskewness_to_market_(s.values))
         return coskewness_to_market_(*args, **kwargs)
 
 
-@register_operator(name="idio_vol", category="price_volume", business_category="price_volume", canonical="idio_vol", source="lqtp_numpy")
+@register_operator(name="idio_vol", category="price_volume", business_category="price_volume", canonical="idio_vol", source="factor_dsl_np")
 class LqtpIdiovolOp(SeriesOperator):
     metadata = OperatorMetadata(
         name="idio_vol",
         category="price_volume",
-        description="LQTP numpy implementation",
+        description="特质波动率：CAPM 残差标准差",
         param_names=[],
         return_type="series",
     )
 
     def _calculate_series(self, *args, **kwargs):
-        from cleaned_operators._lqtp_numpy import idio_vol_
+        from cleaned_operators._numpy_kernels import idio_vol_
         # 兼容 DataFrame 输入：逐列应用 numpy 函数
         if len(args) == 1 and hasattr(args[0], "apply"):
             return args[0].apply(lambda s: idio_vol_(s.values, **kwargs) if kwargs else idio_vol_(s.values))
         return idio_vol_(*args, **kwargs)
 
 
-@register_operator(name="idio_skew", category="price_volume", business_category="price_volume", canonical="idio_skew", source="lqtp_numpy")
+@register_operator(name="idio_skew", category="price_volume", business_category="price_volume", canonical="idio_skew", source="factor_dsl_np")
 class LqtpIdioskewOp(SeriesOperator):
     metadata = OperatorMetadata(
         name="idio_skew",
         category="price_volume",
-        description="LQTP numpy implementation",
+        description="特质偏度：CAPM 残差偏度",
         param_names=[],
         return_type="series",
     )
 
     def _calculate_series(self, *args, **kwargs):
-        from cleaned_operators._lqtp_numpy import idio_skew_
+        from cleaned_operators._numpy_kernels import idio_skew_
         # 兼容 DataFrame 输入：逐列应用 numpy 函数
         if len(args) == 1 and hasattr(args[0], "apply"):
             return args[0].apply(lambda s: idio_skew_(s.values, **kwargs) if kwargs else idio_skew_(s.values))

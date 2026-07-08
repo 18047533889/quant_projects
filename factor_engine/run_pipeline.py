@@ -54,6 +54,39 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
         help="Retry failed config runs up to N times (default 0)",
     )
     parser.add_argument(
+        "--profile",
+        default=None,
+        help="Merge examples/profiles/{profile}.yaml before config (dev/staging/prod)",
+    )
+    parser.add_argument(
+        "--resume-materialize",
+        action="store_true",
+        help="Resume materialize from partition checkpoints (skip successful years)",
+    )
+    parser.add_argument(
+        "--n-jobs",
+        type=int,
+        default=1,
+        help="Parallel workers for config-dir mode (default 1 = serial)",
+    )
+    parser.add_argument(
+        "--shard-index",
+        type=int,
+        default=None,
+        help="Shard index for multi-host config-dir dispatch (0-based)",
+    )
+    parser.add_argument(
+        "--shard-count",
+        type=int,
+        default=1,
+        help="Total shard count when using --shard-index",
+    )
+    parser.add_argument(
+        "--push-otlp-endpoint",
+        default=None,
+        help="Optional OTLP/HTTP endpoint, e.g. http://127.0.0.1:4318",
+    )
+    parser.add_argument(
         "--no-strict-dq",
         dest="dq_strict",
         action="store_false",
@@ -104,11 +137,14 @@ def main() -> None:
             input_dq_check=args.input_dq,
             input_dq_strict=args.dq_strict,
             max_retries=args.max_retries,
+            profile=args.profile,
+            resume_materialize=args.resume_materialize,
         )
         payload = {
             "mode": "config",
             "output_root": output["output_root"],
             "run_summary_path": output["run_summary_path"],
+            "metrics_path": output.get("metrics_path"),
             "config_snapshot": output.get("config_snapshot"),
             "summary": output["summary"],
         }
@@ -126,11 +162,20 @@ def main() -> None:
             input_dq_check=args.input_dq,
             input_dq_strict=args.dq_strict,
             max_retries=args.max_retries,
+            profile=args.profile,
+            resume_materialize=args.resume_materialize,
+            n_jobs=args.n_jobs,
+            shard_index=args.shard_index,
+            shard_count=args.shard_count,
+            otlp_endpoint=args.push_otlp_endpoint,
         )
         payload = {
             "mode": "config-dir",
             "output_root": output["output_root"],
             "run_summary_path": output["run_summary_path"],
+            "metrics_path": output.get("metrics_path"),
+            "prometheus_metrics_path": output.get("prometheus_metrics_path"),
+            "otlp_metrics_path": output.get("otlp_metrics_path"),
             "config_snapshots": output.get("config_snapshots", []),
             "summary": output["summary"],
         }

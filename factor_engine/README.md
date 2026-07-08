@@ -146,10 +146,10 @@ backend:
 | 层级 | 说明 |
 |------|------|
 | **已实现** | 算术 / 逻辑 / 时序 / 截面 / 分组 / 清洗 / 技术指标 / 上下文 / transformational 等 — 经 `cleaned_bridge` 在 `PandasBackend` 执行 |
-| **catalog-only / stub** | 在 [`cleaned_operators/operators_catalog.md`](cleaned_operators/operators_catalog.md) 标注为 `stub` 或 `api_expr_only` 的名字 **不在 DSL 白名单**，投递勿用 |
+| **catalog-only / stub** | 在 [`cleaned_operators/docs/operators_catalog.md`](cleaned_operators/docs/operators_catalog.md) 标注为 `stub` 或 `api_expr_only` 的名字 **不在 DSL 白名单**，投递勿用 |
 | **PolarsBackend** | 当前 **委托** `PandasBackend`（同一 cleaned 路径） |
 
-权威清单与状态：**[`cleaned_operators/operators_catalog.md`](cleaned_operators/operators_catalog.md)**；语义细节：**[`docs/operators_semantics.md`](docs/operators_semantics.md)**。本地枚举白名单：
+权威清单与状态：**[`cleaned_operators/docs/operators_catalog.md`](cleaned_operators/docs/operators_catalog.md)**；语义细节：**[`docs/operators_semantics.md`](docs/operators_semantics.md)**。本地枚举白名单：
 
 ```python
 from api.operator_registry import build_dsl_allowlist

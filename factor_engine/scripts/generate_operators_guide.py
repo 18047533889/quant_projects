@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""从 cleaned_operators 注册表生成《算子全览.md》。"""
+"""从 cleaned_operators 注册表生成 docs/算子全览.md。"""
 from __future__ import annotations
 
 import re
@@ -8,7 +8,7 @@ from datetime import date
 from pathlib import Path
 
 FE_ROOT = Path(__file__).resolve().parents[1]
-OUT_PATH = FE_ROOT / "cleaned_operators" / "算子全览.md"
+OUT_PATH = FE_ROOT / "cleaned_operators" / "docs" / "算子全览.md"
 
 CATEGORY_ZH = {
     "elementwise_math": "元素级数学",
@@ -107,7 +107,16 @@ def _collect_canonical_entries(OperatorRegistry, allowlist: dict) -> dict[str, d
     return entries
 
 
+_PLACEHOLDER_DESCRIPTIONS = frozenset({
+    "（暂无描述）",
+    "Basic runtime operator",
+    "LQTP numpy implementation",
+})
+
+
 def _render(entries: dict[str, dict], allowlist_count: int) -> str:
+    from cleaned_operators.docs.operator_doc_semantics import get_operator_doc
+
     by_cat: dict[str, list[dict]] = defaultdict(list)
     for e in entries.values():
         by_cat[e["category"]].append(e)
@@ -115,8 +124,9 @@ def _render(entries: dict[str, dict], allowlist_count: int) -> str:
         by_cat[cat].sort(key=lambda x: x["canonical"].lower())
 
     lines: list[str] = [
-        "# factor_engine 算子全览（cleaned_operators）",
+        "# factor_engine 算子全览",
         "",
+        f"> 文档路径：`cleaned_operators/docs/算子全览.md`  ",
         f"> 自动生成日期：{date.today().isoformat()}  ",
         f"> DSL 白名单：**{allowlist_count}** 个名字（含别名）；下文按 **{len(entries)}** 个规范算子分组。  ",
         "> 重新生成：`cd factor_engine && PYTHONPATH=. python3 scripts/generate_operators_guide.py`",
@@ -128,6 +138,7 @@ def _render(entries: dict[str, dict], allowlist_count: int) -> str:
         "| 写 manifest 公式 | 用下文 **DSL 可用名** 之一；须能通过 `parse_expr` |",
         "| 查能不能投递 | `PYTHONPATH=. python3 scripts/validate_delivery_formula.py \"你的公式\"` |",
         "| 查别名 | 每个算子下的 **DSL 可用名** 列表 |",
+        "| 查公式 | 每个算子下的 **含义 / 计算方式 / 公式**（LaTeX） |",
         "| 字段引用 | `close` / `open` / `high` / `low` / `volume` 等，或 `col(\"close\")`（Python API） |",
         "",
         "### 特殊：字段引用 `col`",
@@ -142,6 +153,16 @@ def _render(entries: dict[str, dict], allowlist_count: int) -> str:
         "| 时序 | `ts_mean(x, 20)` | 每只股票自己的时间轴上滚 20 根 bar |",
         "| 截面 | `rank(x)` | 每个交易日全市场横截面排名 |",
         "| 分组 | `group_rank(x, sector)` | 每个交易日、每个行业组内排名 |",
+        "",
+        "### 符号约定（公式中常用）",
+        "",
+        "| 符号 | 含义 |",
+        "|------|------|",
+        "| $X_{i,t}$ / $x_t$ | 标的 $i$ 在时刻 $t$ 的观测值 |",
+        "| $d$ / $w$ / `window` | 滚动窗口长度（bar 根数，非日历日） |",
+        "| $\\bar{X}_{\\cdot,t}$ | 时刻 $t$ 的**截面**均值（全市场） |",
+        "| $\\bar{X}_{i,t}^{(d)}$ | 标的 $i$ 在长度 $d$ 窗口内的**时序**均值 |",
+        "| $N_t$ | 时刻 $t$ 有效标的个数 |",
         "",
         "---",
         "",
@@ -168,12 +189,30 @@ def _render(entries: dict[str, dict], allowlist_count: int) -> str:
 
         for e in by_cat[cat]:
             canon = e["canonical"]
+            doc = get_operator_doc(
+                canon,
+                description=e["description"],
+                category=e["category"],
+            )
             lines.append(f"### `{canon}`")
             lines.append("")
             lines.append(f"- **DSL 可用名**：`{'` · `'.join(e['dsl_names'])}`")
             if e["params"]:
                 lines.append(f"- **参数**：`{', '.join(e['params'])}`")
-            lines.append(f"- **说明**：{e['description']}")
+            lines.append(f"- **含义**：{doc.meaning}")
+            lines.append(f"- **计算方式**：{doc.compute}")
+            lines.append("- **公式**：")
+            lines.append("")
+            lines.append("$$")
+            lines.append(doc.latex)
+            lines.append("$$")
+            lines.append("")
+            if (
+                e["description"]
+                and e["description"] not in _PLACEHOLDER_DESCRIPTIONS
+                and e["description"] not in (doc.meaning, doc.meaning.rstrip("。"))
+            ):
+                lines.append(f"- **备注**：{e['description']}")
             if e["examples"]:
                 lines.append(f"- **示例**：`{e['examples'][0]}`")
             lines.append("")
@@ -182,10 +221,11 @@ def _render(entries: dict[str, dict], allowlist_count: int) -> str:
     lines.append("")
     lines.append("## 延伸阅读")
     lines.append("")
-    lines.append("- [`operators_catalog.md`](../cleaned_operators/operators_catalog.md) — 含 stub / 未实现条目")
-    lines.append("- [`dsl_operators_reference.md`](dsl_operators_reference.md) — 投递白名单速查")
-    lines.append("- [`算子与导入教程.md`](算子与导入教程.md) — 写公式与 import 教程")
-    lines.append("- [`operators_semantics.md`](operators_semantics.md) — 语义细节")
+    lines.append("- [`operators_catalog.md`](operators_catalog.md) — 含 stub / 未实现条目")
+    lines.append("- [`README.md`](README.md) — 本目录说明")
+    lines.append("- [`../../docs/dsl_operators_reference.md`](../../docs/dsl_operators_reference.md) — 投递白名单速查")
+    lines.append("- [`../../docs/算子与导入教程.md`](../../docs/算子与导入教程.md) — 写公式与 import 教程")
+    lines.append("- [`../../docs/operators_semantics.md`](../../docs/operators_semantics.md) — 语义与约定")
     lines.append("")
     return "\n".join(lines)
 

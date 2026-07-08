@@ -729,7 +729,7 @@ trade_when(volume > ts_mean(volume, 20), rank(close - open), 0)
 | 资源                                                                                    | 用途                                                              |
 | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
 | `build_dsl_allowlist()`                                                               | Gateway / 本地校验用的**完整可解析名**（`col` + ~512 名） |
-| [`../cleaned_operators/operators_catalog.md`](../cleaned_operators/operators_catalog.md) | 分类、别名、实现状态                                              |
+| [`../cleaned_operators/docs/operators_catalog.md`](../cleaned_operators/docs/operators_catalog.md) | 分类、别名、实现状态                                              |
 | [`dsl_operators_reference.md`](dsl_operators_reference.md)                               | **白名单分类 + 待迁移算子清单**                             |
 | [`dsl_allowlist.json`](dsl_allowlist.json)                                               | 机器可读白名单                                                    |
 | [`operators_semantics.md`](operators_semantics.md)                                       | 参数语义、列依赖、DSL 限制                                        |

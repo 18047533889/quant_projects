@@ -1,6 +1,18 @@
 # -*- coding: utf-8 -*-
 """算子注册中心：canonical 名、别名、元数据与 runtime 实例的唯一索引。
 
+命名约定（canonical）
+--------------------
+- **时序滚动** ``ts_*``：``ts_mean``、``ts_std``、``ts_pct``、``ts_decay_linear`` 等
+- **截面** 无前缀或 ``cs_*``：``rank``、``zscore``、``cs_demean``、``cs_regression``
+- **分组** ``group_*``：``group_neutralize``、``group_rank``、``group_mean``
+- **扩展窗口** ``expanding_*``：``expanding_mean``、``expanding_zscore``
+- **技术指标** 大写 TA-Lib 风格：``MACD``、``RSI``、``WMA``（DSL 可用 ``ts_rsi`` 等别名）
+- **元素级** 小写 numpy 风格：``clip``、``log``、``where``、``abs``
+
+旧名 / 方言名（``SMA``、``m_var``、``returns``、``cap`` 等）通过 ``_aliases.py`` 与
+``_dedupe.py`` 映射到 canonical，**仍可计算**，不会进入重复 canonical 列表。
+
 生命周期
 --------
 1. 各 ``cleaned_operators/*.py`` 在 import 时用 ``@register_operator`` 注册实现类；
@@ -16,7 +28,7 @@
 白名单与 runtime 一致性：仅 ``get(canon) is not None`` 的算子会进入 ``build_dsl_allowlist()``。
 """
 from __future__ import annotations
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class OperatorRegistry:
@@ -86,6 +98,60 @@ class OperatorRegistry:
         }
         for alias in aliases or []:
             cls._aliases[alias] = canonical
+
+    @classmethod
+    def unregister(cls, canonical: str) -> None:
+        """移除重复 canonical（保留别名指向其他实现时使用）。"""
+        cls._operators.pop(canonical, None)
+        cls._catalog.pop(canonical, None)
+
+    @classmethod
+    def rename_canonical(cls, old: str, new: str) -> None:
+        """将已注册 canonical 重命名为业界标准名（保留 runtime 与 backend）。"""
+        if old == new or old not in cls._operators:
+            return
+        if new in cls._operators:
+            cls.unregister(old)
+            return
+        cls._operators[new] = cls._operators.pop(old)
+        meta = cls._catalog.pop(old, {})
+        meta["canonical"] = new
+        cls._catalog[new] = meta
+        for op in cls._operators[new].values():
+            if hasattr(op, "metadata"):
+                op.metadata.name = new
+        for alias, canon in list(cls._aliases.items()):
+            if canon == old:
+                cls._aliases[alias] = new
+
+    @classmethod
+    def backends_for(cls, name: str) -> List[str]:
+        """返回 canonical 已注册的 backend 列表。"""
+        canonical = cls._aliases.get(name, name)
+        return sorted(cls._operators.get(canonical, {}).keys())
+
+    @classmethod
+    def get_preferred(
+        cls,
+        name: str,
+        *,
+        prefer: str = "auto",
+    ) -> Tuple[Any | None, str]:
+        """按策略选取最快可用 backend：``auto`` 优先 polars，否则 pandas。"""
+        canonical = cls._aliases.get(name, name)
+        backends = cls._operators.get(canonical, {})
+        if prefer == "pandas_numpy":
+            op = backends.get("pandas_numpy")
+            return op, "pandas_numpy"
+        if prefer == "polars":
+            op = backends.get("polars")
+            if op is not None:
+                return op, "polars"
+            return backends.get("pandas_numpy"), "pandas_numpy"
+        # auto：有 polars 则用 polars
+        if "polars" in backends:
+            return backends["polars"], "polars"
+        return backends.get("pandas_numpy"), "pandas_numpy"
 
     @classmethod
     def get(cls, name: str, backend: str = "pandas_numpy") -> Any:

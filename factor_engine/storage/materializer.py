@@ -39,7 +39,7 @@ import pandas as pd
 from workspace_paths import default_factor_lake_root
 
 from .catalog import FactorCatalog, compute_ir_hash
-from .exceptions import FactorNotFoundError
+from .exceptions import FactorNotFoundError, MaterializePartitionError
 from logging_utils import ProgressLogger, get_logger
 
 logger = get_logger("storage.materializer")
@@ -130,6 +130,8 @@ class ParquetMaterializer:
         write_metadata: bool = True,
         data_snapshot_id: str | None = None,
         data_source_config: dict | None = None,
+        isolate_partition_failures: bool = True,
+        resume: bool = False,
     ) -> dict:
         """将因子计算结果落盘为分区 Parquet。
 
@@ -217,10 +219,12 @@ class ParquetMaterializer:
             data_source_config=data_source_config,
         )
 
-        # --- 4. 按年分区 Upsert ---
+        # --- 4. 按年分区 Upsert（支持失败隔离 + 断点续跑）---
         factor_dir = self._lake_root / "factors" / factor_id
         df["_year"] = df["datetime"].dt.year
         partitions_written: list[int] = []
+        partitions_failed: list[int] = []
+        partitions_skipped: list[int] = []
         partition_years = sorted(int(year) for year in df["_year"].unique())
         progress = ProgressLogger(
             logger,
@@ -229,15 +233,68 @@ class ParquetMaterializer:
             unit="partition",
         )
 
-        for year in partition_years:
-            partition_df = df.loc[df["_year"] == year].drop(columns=["_year"])
-            self._upsert_partition(factor_dir, int(year), partition_df)
-            partitions_written.append(int(year))
-            progress.advance(detail=f"year={year}, rows={len(partition_df)}")
+        from runtime.lineage import new_run_id
 
-        # --- 5. 更新水位线 ---
-        start_date = df["datetime"].min().isoformat()
-        end_date = df["datetime"].max().isoformat()
+        checkpoint_run_id = (
+            str(run_lineage.get("run_id"))
+            if run_lineage and run_lineage.get("run_id")
+            else new_run_id()
+        )
+
+        for year in partition_years:
+            if resume:
+                checkpoint = self._catalog.get_partition_checkpoint(factor_id, year)
+                if checkpoint and checkpoint["status"] == "success":
+                    partitions_skipped.append(int(year))
+                    progress.advance(detail=f"year={year}, resume_skip")
+                    continue
+
+            partition_df = df.loc[df["_year"] == year].drop(columns=["_year"])
+            try:
+                self._upsert_partition(factor_dir, int(year), partition_df)
+                self._catalog.record_partition_checkpoint(
+                    factor_id=factor_id,
+                    partition_year=int(year),
+                    run_id=checkpoint_run_id,
+                    status="success",
+                )
+                partitions_written.append(int(year))
+                progress.advance(detail=f"year={year}, rows={len(partition_df)}")
+            except Exception as exc:
+                self._catalog.record_partition_checkpoint(
+                    factor_id=factor_id,
+                    partition_year=int(year),
+                    run_id=checkpoint_run_id,
+                    status="failed",
+                    error_message=str(exc),
+                )
+                partitions_failed.append(int(year))
+                progress.advance(detail=f"year={year}, failed")
+                logger.error(
+                    "分区落盘失败 factor_id=%s year=%s error=%s",
+                    factor_id,
+                    year,
+                    exc,
+                )
+                if not isolate_partition_failures:
+                    raise
+
+        if not partitions_written and not partitions_skipped:
+            return {
+                "factor_id": factor_id,
+                "rows_written": 0,
+                "partitions": [],
+                "partitions_failed": partitions_failed,
+                "partitions_skipped": partitions_skipped,
+                "watermark": self._catalog.get_watermark(factor_id),
+                "checkpoint_run_id": checkpoint_run_id,
+            }
+
+        # --- 5. 更新水位线（仅基于本次成功写入的分区）---
+        active_years = set(partitions_written) | set(partitions_skipped)
+        active_df = df.loc[df["_year"].isin(active_years)].drop(columns=["_year"])
+        start_date = active_df["datetime"].min().isoformat()
+        end_date = active_df["datetime"].max().isoformat()
 
         # 水位线需合并旧区间
         existing_wm = self._catalog.get_watermark(factor_id)
@@ -257,17 +314,32 @@ class ParquetMaterializer:
 
         watermark = self._catalog.get_watermark(factor_id)
 
+        if partitions_failed:
+            if run_lineage is not None:
+                lineage_payload = dict(run_lineage)
+                if dq_report is not None:
+                    lineage_payload["dq_passed"] = dq_report.passed
+                lineage_payload.setdefault("extra", {})
+                if isinstance(lineage_payload["extra"], dict):
+                    lineage_payload["extra"]["partitions_failed"] = partitions_failed
+                self._catalog.record_run(lineage_payload)
+            raise MaterializePartitionError(
+                f"因子 '{factor_id}' 分区落盘部分失败: {partitions_failed}"
+            )
+
         if run_lineage is not None:
             lineage_payload = dict(run_lineage)
             if dq_report is not None:
                 lineage_payload["dq_passed"] = dq_report.passed
             self._catalog.record_run(lineage_payload)
+            self._catalog.clear_partition_checkpoints(factor_id)
 
         logger.info(
-            "因子 '%s' 落盘完成：%d 行，分区 %s，水位线 [%s → %s]",
+            "因子 '%s' 落盘完成：%d 行，分区 %s，跳过 %s，水位线 [%s → %s]",
             factor_id,
             len(df),
             partitions_written,
+            partitions_skipped,
             start_date,
             end_date,
         )
@@ -276,9 +348,12 @@ class ParquetMaterializer:
             "factor_id": factor_id,
             "rows_written": len(df),
             "partitions": partitions_written,
+            "partitions_failed": partitions_failed,
+            "partitions_skipped": partitions_skipped,
             "watermark": watermark,
             "dq_report": dq_report.to_dict() if dq_report is not None else None,
             "run_id": run_lineage.get("run_id") if run_lineage else None,
+            "checkpoint_run_id": checkpoint_run_id,
         }
 
     # ------------------------------------------------------------------

@@ -1,0 +1,171 @@
+"""Pipeline 多机分片与文件任务队列。"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import uuid
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Iterable
+
+
+def _stable_bucket(key: str, shard_count: int) -> int:
+    digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
+    return int(digest[:8], 16) % max(1, int(shard_count))
+
+
+def shard_config_paths(
+    config_paths: Iterable[Path],
+    *,
+    shard_index: int,
+    shard_count: int,
+) -> list[Path]:
+    """按 config 路径稳定哈希分片，供多机并行消费同一目录。"""
+    if shard_count <= 1:
+        return list(config_paths)
+    index = int(shard_index)
+    count = int(shard_count)
+    if index < 0 or index >= count:
+        raise ValueError(f"shard_index={index} 必须在 [0, {count}) 内")
+    selected: list[Path] = []
+    for path in config_paths:
+        if _stable_bucket(str(path.resolve()), count) == index:
+            selected.append(path)
+    return selected
+
+
+@dataclass(frozen=True)
+class QueueJob:
+    job_id: str
+    config_path: str
+    payload: dict[str, Any]
+    status: str
+    created_at: str
+    updated_at: str
+
+
+class FileTaskQueue:
+    """基于目录的文件任务队列（pending/running/done/failed）。"""
+
+    def __init__(self, root: str | Path) -> None:
+        self.root = Path(root)
+        for name in ("pending", "running", "done", "failed"):
+            (self.root / name).mkdir(parents=True, exist_ok=True)
+
+    def enqueue(self, config_path: str | Path, **payload: Any) -> QueueJob:
+        now = datetime.now(timezone.utc).isoformat()
+        job_id = uuid.uuid4().hex
+        job = QueueJob(
+            job_id=job_id,
+            config_path=str(config_path),
+            payload=payload,
+            status="pending",
+            created_at=now,
+            updated_at=now,
+        )
+        path = self.root / "pending" / f"{job_id}.json"
+        path.write_text(json.dumps(job.__dict__, ensure_ascii=False, indent=2), encoding="utf-8")
+        return job
+
+    def _read_job(self, path: Path) -> QueueJob:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return QueueJob(**data)
+
+    def claim(self) -> QueueJob | None:
+        pending_dir = self.root / "pending"
+        for path in sorted(pending_dir.glob("*.json")):
+            running_path = self.root / "running" / path.name
+            try:
+                os.rename(path, running_path)
+            except FileNotFoundError:
+                continue
+            job = self._read_job(running_path)
+            updated = QueueJob(
+                job_id=job.job_id,
+                config_path=job.config_path,
+                payload=job.payload,
+                status="running",
+                created_at=job.created_at,
+                updated_at=datetime.now(timezone.utc).isoformat(),
+            )
+            running_path.write_text(
+                json.dumps(updated.__dict__, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            return updated
+        return None
+
+    def complete(self, job_id: str, *, result: dict[str, Any] | None = None) -> None:
+        self._finalize(job_id, bucket="done", result=result)
+
+    def fail(self, job_id: str, *, error: str) -> None:
+        self._finalize(job_id, bucket="failed", result={"error": error})
+
+    def _finalize(self, job_id: str, *, bucket: str, result: dict[str, Any] | None) -> None:
+        running_path = self.root / "running" / f"{job_id}.json"
+        if not running_path.exists():
+            raise FileNotFoundError(f"running job not found: {job_id}")
+        job = self._read_job(running_path)
+        payload = dict(job.payload)
+        if result is not None:
+            payload["result"] = result
+        final = QueueJob(
+            job_id=job.job_id,
+            config_path=job.config_path,
+            payload=payload,
+            status=bucket,
+            created_at=job.created_at,
+            updated_at=datetime.now(timezone.utc).isoformat(),
+        )
+        target = self.root / bucket / f"{job_id}.json"
+        target.write_text(json.dumps(final.__dict__, ensure_ascii=False, indent=2), encoding="utf-8")
+        running_path.unlink(missing_ok=True)
+
+    def stats(self) -> dict[str, int]:
+        """各状态任务数量。"""
+        return {
+            bucket: len(list((self.root / bucket).glob("*.json")))
+            for bucket in ("pending", "running", "done", "failed")
+        }
+
+    def requeue_stale_running(self, *, max_age_seconds: float | None = None) -> int:
+        """将 running 任务移回 pending（worker 崩溃恢复）。"""
+        moved = 0
+        now = datetime.now(timezone.utc)
+        for path in sorted((self.root / "running").glob("*.json")):
+            job = self._read_job(path)
+            if max_age_seconds is not None:
+                updated = _parse_ts(job.updated_at)
+                if updated is not None:
+                    age = (now - updated).total_seconds()
+                    if age < max_age_seconds:
+                        continue
+            pending_path = self.root / "pending" / path.name
+            restored = QueueJob(
+                job_id=job.job_id,
+                config_path=job.config_path,
+                payload=job.payload,
+                status="pending",
+                created_at=job.created_at,
+                updated_at=now.isoformat(),
+            )
+            pending_path.write_text(
+                json.dumps(restored.__dict__, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            path.unlink(missing_ok=True)
+            moved += 1
+        return moved
+
+
+def _parse_ts(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    text = str(value).strip()
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None

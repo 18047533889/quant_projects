@@ -1,0 +1,11 @@
+# staging profile：中等日期窗 + staging 因子湖
+data_source:
+  start_date: "2023-01-01"
+  end_date: "2023-12-31"
+
+engine:
+  enable_cache: true
+  plan_cache_dir: ../data/factors/plan_cache_staging
+
+materialization:
+  lake_root: ../data/factors/lake_staging

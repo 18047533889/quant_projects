@@ -9,7 +9,7 @@
 
 1. **你能得到什么**：`col()`、`Factor`、`parse_expr` / `parse_factor`、**`from api import rank, ts_mean, …`**（500+ 算子名）。  
 2. **本目录不负责**：pandas 求值（`backend/`）、读 parquet（`storage/`）、一键运行（`runtime/FactorEngine`）。  
-3. **算子能否投递**：[`docs/dsl_operators_reference.md`](../docs/dsl_operators_reference.md)；参数语义 [`docs/operators_semantics.md`](../docs/operators_semantics.md)；catalog 审计 [`cleaned_operators/operators_catalog.md`](../cleaned_operators/operators_catalog.md)。
+3. **算子能否投递**：[`docs/dsl_operators_reference.md`](../docs/dsl_operators_reference.md)；参数语义 [`docs/operators_semantics.md`](../docs/operators_semantics.md)；catalog 审计 [`cleaned_operators/docs/operators_catalog.md`](../cleaned_operators/docs/operators_catalog.md)。
 
 ---
 

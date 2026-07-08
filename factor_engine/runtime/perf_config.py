@@ -7,6 +7,9 @@ from dataclasses import dataclass
 from typing import Literal
 
 
+OperatorBackend = Literal["auto", "polars", "pandas_numpy"]
+
+
 BacktestExecutionEngine = Literal["python", "numpy", "numba", "auto"]
 
 
@@ -64,6 +67,8 @@ class PerfConfig:
     use_numba_rolling: bool = False
     #: 回测多资产执行内核（python/numpy/numba/auto）
     backtest_execution_engine: BacktestExecutionEngine = "python"
+    #: 算子 runtime 选择：auto=有 polars 则用 polars，否则 pandas
+    operator_backend: OperatorBackend = "auto"
 
     @classmethod
     def from_env(cls) -> "PerfConfig":
@@ -78,6 +83,7 @@ class PerfConfig:
         - ``FACTOR_BACKTEST_EXECUTION_ENGINE``：``python``/``numpy``/``numba``/``auto``，多资产回测执行内核选择
         - ``FACTOR_ENGINE_USE_MODIN``：``1``/``true`` 使 ``PandasBackend`` 使用 ``modin.pandas``（亦可用 ``build_backend(\"pandas_modin\")``）
         - ``FACTOR_ENGINE_POLARS_LAZY``：``1``/``true`` 使 ``PolarsBackend`` 使用 LazyFrame 再 ``collect``
+        - ``FACTOR_ENGINE_OPERATOR_BACKEND``：``auto`` / ``polars`` / ``pandas_numpy``
         """
         disable_cse = os.environ.get("FACTOR_ENGINE_DISABLE_CSE", "").lower() in (
             "1",
@@ -94,6 +100,9 @@ class PerfConfig:
             "true",
             "yes",
         )
+        op_backend = _env_str("FACTOR_ENGINE_OPERATOR_BACKEND", "auto").lower()
+        if op_backend not in {"auto", "polars", "pandas_numpy"}:
+            op_backend = "auto"
         return cls(
             max_workers=_env_int("FACTOR_ENGINE_MAX_WORKERS", None),
             instrument_chunk_size=_env_int("FACTOR_ENGINE_INSTRUMENT_CHUNK", None),
@@ -102,4 +111,5 @@ class PerfConfig:
             panel_native=not disable_panel,
             use_numba_rolling=use_numba,
             backtest_execution_engine=_env_backtest_engine("FACTOR_BACKTEST_EXECUTION_ENGINE", "python"),
+            operator_backend=op_backend,  # type: ignore[arg-type]
         )

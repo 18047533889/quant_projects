@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-基本面与财报衍生算子（LQTP / 财报字段）。
+基本面与财报衍生算子。
 
 语义
 ----
@@ -25,72 +25,72 @@ from cleaned_operators.base import (
 )
 
 
-@register_operator(name="ttm", category="fundamental", business_category="fundamental", canonical="ttm", source="lqtp_numpy")
+@register_operator(name="ttm", category="fundamental", business_category="fundamental", canonical="ttm", source="factor_dsl_np")
 class LqtpTtmOp(SeriesOperator):
     metadata = OperatorMetadata(
         name="ttm",
         category="fundamental",
-        description="LQTP numpy implementation",
+        description="滚动十二个月（TTM）累加",
         param_names=[],
         return_type="series",
     )
 
     def _calculate_series(self, *args, **kwargs):
-        from cleaned_operators._lqtp_numpy import ttm_
+        from cleaned_operators._numpy_kernels import ttm_
         # 兼容 DataFrame 输入：逐列应用 numpy 函数
         if len(args) == 1 and hasattr(args[0], "apply"):
             return args[0].apply(lambda s: ttm_(s.values, **kwargs) if kwargs else ttm_(s.values))
         return ttm_(*args, **kwargs)
 
 
-@register_operator(name="quarter", category="fundamental", business_category="fundamental", canonical="quarter", source="lqtp_numpy")
+@register_operator(name="quarter", category="fundamental", business_category="fundamental", canonical="quarter", source="factor_dsl_np")
 class LqtpQuarterOp(SeriesOperator):
     metadata = OperatorMetadata(
         name="quarter",
         category="fundamental",
-        description="LQTP numpy implementation",
+        description="累计值转单季度",
         param_names=[],
         return_type="series",
     )
 
     def _calculate_series(self, *args, **kwargs):
-        from cleaned_operators._lqtp_numpy import quarter_
+        from cleaned_operators._numpy_kernels import quarter_
         # 兼容 DataFrame 输入：逐列应用 numpy 函数
         if len(args) == 1 and hasattr(args[0], "apply"):
             return args[0].apply(lambda s: quarter_(s.values, **kwargs) if kwargs else quarter_(s.values))
         return quarter_(*args, **kwargs)
 
 
-@register_operator(name="yoy", category="fundamental", business_category="fundamental", canonical="yoy", source="lqtp_numpy")
+@register_operator(name="yoy", category="fundamental", business_category="fundamental", canonical="yoy", source="factor_dsl_np")
 class LqtpYoyOp(SeriesOperator):
     metadata = OperatorMetadata(
         name="yoy",
         category="fundamental",
-        description="LQTP numpy implementation",
+        description="同比增速",
         param_names=[],
         return_type="series",
     )
 
     def _calculate_series(self, *args, **kwargs):
-        from cleaned_operators._lqtp_numpy import yoy_
+        from cleaned_operators._numpy_kernels import yoy_
         # 兼容 DataFrame 输入：逐列应用 numpy 函数
         if len(args) == 1 and hasattr(args[0], "apply"):
             return args[0].apply(lambda s: yoy_(s.values, **kwargs) if kwargs else yoy_(s.values))
         return yoy_(*args, **kwargs)
 
 
-@register_operator(name="avg2", category="fundamental", business_category="fundamental", canonical="avg2", source="lqtp_numpy")
+@register_operator(name="avg2", category="fundamental", business_category="fundamental", canonical="avg2", source="factor_dsl_np")
 class LqtpAvg2Op(SeriesOperator):
     metadata = OperatorMetadata(
         name="avg2",
         category="fundamental",
-        description="LQTP numpy implementation",
+        description="当期与上期均值",
         param_names=[],
         return_type="series",
     )
 
     def _calculate_series(self, *args, **kwargs):
-        from cleaned_operators._lqtp_numpy import avg2_
+        from cleaned_operators._numpy_kernels import avg2_
         # 兼容 DataFrame 输入：逐列应用 numpy 函数
         if len(args) == 1 and hasattr(args[0], "apply"):
             return args[0].apply(lambda s: avg2_(s.values, **kwargs) if kwargs else avg2_(s.values))

@@ -11,7 +11,7 @@ from cleaned_operators.registry import OperatorRegistry
 from api.operator_registry import build_dsl_allowlist
 
 ROOT = Path(__file__).resolve().parents[1]
-GUIDE = ROOT / "cleaned_operators" / "算子全览.md"
+GUIDE = ROOT / "cleaned_operators" / "docs" / "算子全览.md"
 OUT = ROOT / "docs" / "lqtp_vs_factor_engine_operators.md"
 
 LQTP_ROWS: list[tuple[str, str, set[str]]] = [

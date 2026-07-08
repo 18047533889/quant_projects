@@ -88,6 +88,46 @@ us_stock_valuation_daily:
     TradeDate: date
     Ticker: string
     PeRatio: double
+
+ashare_stock_status:
+  <<: *ashare_defaults
+  root: {ashare_root}/StockStatus
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+  schema:
+    TradeDate: date
+    Symbol: string
+    ListedState: string
+
+ashare_index_constituent:
+  <<: *ashare_defaults
+  root: {ashare_root}/IndexConstituent
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+  schema:
+    TradeDate: date
+    Symbol: string
+    IndexSymbol: string
+    Weight: double
+
+_us_hive: &us_hive
+  kind: static
+  access_mode: published
+  layout: hive
+  hive_partitioning: true
+  union_by_name: true
+
+us_universe_daily:
+  <<: *us_hive
+  root: {us_root}/universe_daily
+  glob: "year=*/data.parquet"
+  time_column: trade_date
+  instrument_column: ticker
+  schema:
+    trade_date: date
+    ticker: string
 """
     path = tmp_path / "datasets.yaml"
     path.write_text(content.strip() + "\n", encoding="utf-8")
@@ -134,6 +174,36 @@ def _seed_market_data(ashare_root: Path, us_root: Path) -> None:
             "PeRatio": [25.0, 30.0],
         }
     ).to_parquet(us_val / "2024-01-01.parquet")
+
+    ash_status = ashare_root / "StockStatus"
+    ash_status.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "TradeDate": pd.to_datetime(["2024-01-01", "2024-01-01"]).date,
+            "Symbol": ["000001.SZ", "000002.SZ"],
+            "ListedState": ["Listed", "Listed"],
+        }
+    ).to_parquet(ash_status / "2024-01-01.parquet")
+
+    ash_idx = ashare_root / "IndexConstituent"
+    ash_idx.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "TradeDate": pd.to_datetime(["2024-01-01", "2024-01-01"]).date,
+            "Symbol": ["000001.SZ", "000002.SZ"],
+            "IndexSymbol": ["000300.SH", "000300.SH"],
+            "Weight": [0.6, 0.4],
+        }
+    ).to_parquet(ash_idx / "2024-01-01.parquet")
+
+    us_uni = us_root / "universe_daily" / "year=2024"
+    us_uni.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "trade_date": pd.to_datetime(["2024-01-02", "2024-01-02"]).date,
+            "ticker": ["AAPL", "MSFT"],
+        }
+    ).to_parquet(us_uni / "data.parquet")
 
 
 @pytest.fixture
@@ -184,6 +254,25 @@ def test_composite_us_valuation_asof(market_env):
     source = build_data_source(default_us_pv_valuation_data_source_config())
     pe = source.load_column("valuation.pe")
     assert pe.loc[(pd.Timestamp("2024-01-02"), "AAPL")] == pytest.approx(25.0)
+
+
+def test_composite_ashare_universe_asof(market_env):
+    from api.mining_integration import default_ashare_pv_universe_data_source_config
+
+    source = build_data_source(default_ashare_pv_universe_data_source_config())
+    weight = source.load_column("constituent.weight")
+    assert weight.loc[(pd.Timestamp("2024-01-02"), "000001.SZ")] == pytest.approx(0.6)
+    listed = source.load_column("status.listed_state")
+    assert listed.loc[(pd.Timestamp("2024-01-02"), "000001.SZ")] == "Listed"
+
+
+def test_composite_us_universe_exact(market_env):
+    from api.mining_integration import default_us_pv_universe_data_source_config
+
+    source = build_data_source(default_us_pv_universe_data_source_config())
+    uni = source.load_column("universe.universe_ticker")
+    assert uni.loc[(pd.Timestamp("2024-01-02"), "AAPL")] == "AAPL"
+    assert uni.loc[(pd.Timestamp("2024-01-02"), "MSFT")] == "MSFT"
 
 
 def test_local_ashare_parquet_smoke_if_present():

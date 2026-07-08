@@ -102,6 +102,16 @@ CREATE TABLE IF NOT EXISTS factor_run (
     extra_json              TEXT,
     FOREIGN KEY (factor_id) REFERENCES factor_registry(factor_id)
 );
+
+CREATE TABLE IF NOT EXISTS factor_materialize_checkpoint (
+    factor_id       TEXT NOT NULL,
+    partition_year  INTEGER NOT NULL,
+    run_id          TEXT NOT NULL,
+    status          TEXT NOT NULL,
+    error_message   TEXT,
+    updated_at      TEXT NOT NULL,
+    PRIMARY KEY (factor_id, partition_year)
+);
 """
 
 
@@ -272,6 +282,9 @@ class FactorCatalog:
             "DELETE FROM factor_run WHERE factor_id = ?", (factor_id,)
         )
         self._conn.execute(
+            "DELETE FROM factor_materialize_checkpoint WHERE factor_id = ?", (factor_id,)
+        )
+        self._conn.execute(
             "DELETE FROM factor_watermark WHERE factor_id = ?", (factor_id,)
         )
         self._conn.execute(
@@ -316,3 +329,74 @@ class FactorCatalog:
             (factor_id, limit),
         ).fetchall()
         return [dict(r) for r in rows]
+
+    def list_recent_runs(self, *, limit: int = 200) -> list[dict]:
+        rows = self._conn.execute(
+            "SELECT * FROM factor_run ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # ------------------------------------------------------------------
+    # 分区落盘 checkpoint（断点续跑）
+    # ------------------------------------------------------------------
+
+    def record_partition_checkpoint(
+        self,
+        *,
+        factor_id: str,
+        partition_year: int,
+        run_id: str,
+        status: str,
+        error_message: str | None = None,
+    ) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        self._conn.execute(
+            "INSERT INTO factor_materialize_checkpoint "
+            "(factor_id, partition_year, run_id, status, error_message, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(factor_id, partition_year) DO UPDATE SET "
+            "run_id=excluded.run_id, status=excluded.status, "
+            "error_message=excluded.error_message, updated_at=excluded.updated_at",
+            (factor_id, int(partition_year), run_id, status, error_message, now),
+        )
+        self._conn.commit()
+
+    def get_partition_checkpoint(
+        self,
+        factor_id: str,
+        partition_year: int,
+    ) -> dict | None:
+        row = self._conn.execute(
+            "SELECT * FROM factor_materialize_checkpoint "
+            "WHERE factor_id = ? AND partition_year = ?",
+            (factor_id, int(partition_year)),
+        ).fetchone()
+        return dict(row) if row else None
+
+    def list_partition_checkpoints(
+        self,
+        factor_id: str,
+        *,
+        status: str | None = None,
+    ) -> list[dict]:
+        if status is None:
+            rows = self._conn.execute(
+                "SELECT * FROM factor_materialize_checkpoint "
+                "WHERE factor_id = ? ORDER BY partition_year",
+                (factor_id,),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT * FROM factor_materialize_checkpoint "
+                "WHERE factor_id = ? AND status = ? ORDER BY partition_year",
+                (factor_id, status),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def clear_partition_checkpoints(self, factor_id: str) -> None:
+        self._conn.execute(
+            "DELETE FROM factor_materialize_checkpoint WHERE factor_id = ?",
+            (factor_id,),
+        )
+        self._conn.commit()

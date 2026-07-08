@@ -106,6 +106,35 @@ def build_data_source(config: Any):
         _ensure_no_extra_options(source_type, options)
         return source
 
+    if source_type == "clickhouse":
+        table = _pop_option(options, "table", required=True)
+        timestamp_column = _pop_option(
+            options, "timestamp_col", "timestamp_column", default="trade_date"
+        )
+        instrument_column = _pop_option(
+            options, "instrument_col", "instrument_column", default="instrument"
+        )
+        instrument_filter = _pop_option(options, "instrument_filter", default=None)
+        from .clickhouse_source import ClickHouseSource
+
+        source = ClickHouseSource(
+            table=str(table),
+            timestamp_column=str(timestamp_column),
+            instrument_column=str(instrument_column),
+            fields=fields,
+            start_date=start_date,
+            end_date=end_date,
+            instrument_filter=instrument_filter,
+            host=_pop_option(options, "host", default=None),
+            port=_pop_option(options, "port", default=None),
+            database=_pop_option(options, "database", default=None),
+            username=_pop_option(options, "username", default=None),
+            password=_pop_option(options, "password", default=None),
+            secure=_pop_option(options, "secure", default=None),
+        )
+        _ensure_no_extra_options(source_type, options)
+        return source
+
     root = _normalize_path(_pop_option(options, "root", required=True))
     recursive = bool(_pop_option(options, "recursive", default=True))
 

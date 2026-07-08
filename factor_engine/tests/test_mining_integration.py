@@ -98,3 +98,23 @@ def test_default_ashare_pv_data_source():
     assert cfg["fields"]["vwap"] == "Vwap"
     assert cfg["max_files"] == 5
     assert cfg["start_date"] == "2019-01-01"
+
+
+def test_default_ashare_pv_universe_composite():
+    from api.mining_integration import default_ashare_pv_universe_data_source_config
+
+    cfg = default_ashare_pv_universe_data_source_config()
+    assert cfg["type"] == "composite"
+    assert cfg["joins"]["status"] == "asof_backward"
+    assert cfg["joins"]["constituent"] == "asof_backward"
+    assert cfg["sources"]["constituent"]["dataset"] == "ashare_index_constituent"
+    assert cfg["sources"]["status"]["dataset"] == "ashare_stock_status"
+
+
+def test_default_us_pv_universe_composite():
+    from api.mining_integration import default_us_pv_universe_data_source_config
+
+    cfg = default_us_pv_universe_data_source_config()
+    assert cfg["type"] == "composite"
+    assert cfg["joins"]["universe"] == "exact"
+    assert cfg["sources"]["universe"]["dataset"] == "us_universe_daily"

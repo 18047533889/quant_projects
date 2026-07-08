@@ -6,7 +6,7 @@
 >
 > **第 10 版更改-shw**（历史）：`bucket` / `trade_when` / `ts_step` / `hump` 曾在旧 `api/operators` 路径实装；**第 31 版** 起以 [`dsl_operators_reference.md`](dsl_operators_reference.md) 白名单为准（其中 `trade_when` ✅，`bucket`/`hump`/`ts_step` 待迁回 cleaned）。
 >
-> **第 31 版更改-shw**：**cleaned_operators 全量接入** — `STUB_IR_OPS` 恒为空；未在 cleaned 实现的算子 **不在 DSL 白名单**。占位与 catalog-only 名字见 [`../cleaned_operators/operators_catalog.md`](../cleaned_operators/operators_catalog.md) 中 `status=stub` 条目（约 79 个），**不可用于投递**。
+> **第 31 版更改-shw**：**cleaned_operators 全量接入** — `STUB_IR_OPS` 恒为空；未在 cleaned 实现的算子 **不在 DSL 白名单**。占位与 catalog-only 名字见 [`../cleaned_operators/docs/operators_catalog.md`](../cleaned_operators/docs/operators_catalog.md) 中 `status=stub` 条目（约 79 个），**不可用于投递**。
 >
 > **第 19 版更改-shw**：技术指标 **第三批**（`ts_bop`/`ts_mom`/`ts_stochf`/`ts_trix`/`ts_adxr`/`ts_dx`/`ts_rocr`/`ts_rocr100`/`ts_linearreg_slope`/`ts_linearreg_angle`）；详见 `changelog_shw.md`「第 19 版」。
 
@@ -83,7 +83,7 @@ TA-Lib 可选加速；无库时部分算子有 pandas 退化（见上文「依�
 - **`api.operator_registry.STUB_IR_OPS`** 为 **空集**（兼容旧 Gateway 引用）。  
 - 名称带 `*_stub`、`vec_avg`、`vec_sum` 等 **catalog 标注为 stub** 的算子：**不在白名单**，parse 会直接失败；若强行调用 runtime 则 `NotImplementedError`。
 
-**权威列表**：[`cleaned_operators/operators_catalog.md`](../cleaned_operators/operators_catalog.md) — 筛选 `status` 列：
+**权威列表**：[`cleaned_operators/operators_catalog.md`](../cleaned_operators/docs/operators_catalog.md) — 筛选 `status` 列：
 
 | status | 含义 |
 |--------|------|

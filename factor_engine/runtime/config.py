@@ -9,6 +9,8 @@ import yaml
 
 from workspace_paths import default_factor_lake_root, resolve_path
 
+_PROFILES_DIR = Path(__file__).resolve().parent.parent / "examples" / "profiles"
+
 
 @dataclass(frozen=True)
 class FactorDefinitionConfig:
@@ -66,9 +68,45 @@ def _resolve_optional_path(value: Any, *, base_dir: Path) -> str | None:
     return str(resolve_path(text, base_dir=base_dir))
 
 
-def load_config(path: str | Path) -> FactorEngineConfig:
+def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(base)
+    for key, value in override.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _resolve_profile_path(profile: str) -> Path:
+    name = str(profile).strip()
+    if not name:
+        raise ValueError("profile name must be non-empty")
+    path = _PROFILES_DIR / f"{name}.yaml"
+    if not path.is_file():
+        raise FileNotFoundError(f"Unknown profile '{name}': {path}")
+    return path
+
+
+def load_profile(profile: str) -> dict[str, Any]:
+    path = _resolve_profile_path(profile)
+    payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(payload, dict):
+        raise ValueError(f"Profile file must be a mapping: {path}")
+    return payload
+
+
+def load_config(path: str | Path, *, profile: str | None = None) -> FactorEngineConfig:
     config_path = Path(path)
-    payload = yaml.safe_load(config_path.read_text()) or {}
+    payload = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    if not isinstance(payload, dict):
+        raise ValueError(f"Config must be a mapping: {config_path}")
+
+    profile_name = profile or payload.get("profile")
+    if profile_name:
+        profile_payload = load_profile(str(profile_name))
+        payload = _deep_merge(profile_payload, payload)
+
     base_dir = config_path.parent.resolve()
 
     factor_payload = payload.get("factor", {})

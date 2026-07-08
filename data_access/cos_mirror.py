@@ -199,6 +199,38 @@ def skip_cos_mirror() -> bool:
     )
 
 
+def known_cos_mirror_local_roots() -> tuple[Path, ...]:
+    """COS 镜像覆盖的本地根目录（A 股 lqtp / 美股 massive / clean）。"""
+    return (
+        ASHARE_LOCAL_ROOT.resolve(),
+        US_MASSIVE_LOCAL_ROOT.resolve(),
+        US_CLEAN_LOCAL_ROOT.resolve(),
+    )
+
+
+def dataset_root_requires_cos_mirror(ds: "StaticDataset") -> bool:
+    """静态数据集 root 落在已知 COS 镜像根下时需登记 mirror spec。"""
+    root = Path(ds.root).resolve()
+    for mirror_root in known_cos_mirror_local_roots():
+        try:
+            root.relative_to(mirror_root)
+            return True
+        except ValueError:
+            continue
+    return False
+
+
+def datasets_requiring_cos_mirror(registry: Any) -> set[str]:
+    """从 registry 推断应配置 COS 镜像的数据集名集合。"""
+    from .registry import StaticDataset
+
+    out: set[str] = set()
+    for name, ds in registry._datasets.items():
+        if isinstance(ds, StaticDataset) and dataset_root_requires_cos_mirror(ds):
+            out.add(name)
+    return out
+
+
 def mirror_spec_for_dataset(dataset_name: str) -> MirrorSpec | None:
     return DATASET_MIRROR_REGISTRY.get(dataset_name)
 
