@@ -15,6 +15,15 @@ def test_long_table_resolves():
     assert resolved.dataset == "test_ds"
 
 
+def test_clickhouse_source_resolves():
+    from storage.clickhouse_source import ClickHouseSource
+
+    ch = ClickHouseSource(table="panel_daily")
+    resolved = resolve_pushdown_source(ch)
+    assert resolved is ch
+    assert resolved.table == "panel_daily"
+
+
 def test_composite_unwraps_anchor():
     from storage.composite_source import CompositeDataSource
 

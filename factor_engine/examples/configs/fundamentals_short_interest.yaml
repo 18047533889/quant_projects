@@ -6,13 +6,12 @@ factor:
   description: 融券兴趣 - 空头回补天数截面排名，越高代表做空压力越大
 
 data_source:
-  type: multi_parquet
-  root: ~/quant_projects/data/us_stock/cleaned_massive_data/fundamentals/short_interest
-  timestamp_col: settlement_date
-  instrument_col: ticker
-  max_files: 3
-  # start_date: "2017-01-01"   # 可选：限定时间范围左端（行级过滤）
-  # end_date:   "2018-06-30"   # 可选：限定时间范围右端（行级过滤）
+  type: data_access
+  dataset: fundamentals_short_interest
+  fields:
+    days_to_cover: days_to_cover
+  start_date: "2024-01-01"
+  end_date: "2024-12-31"
 
 backend:
   type: pandas

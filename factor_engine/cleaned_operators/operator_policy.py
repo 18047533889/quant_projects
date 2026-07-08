@@ -35,6 +35,52 @@ TIER1_CANONICALS: frozenset[str] = frozenset({
     "col", "corr_test",
 })
 
+# 不做 Polars 移植且通常非 PIT 安全（FFT/矩阵/随机/CDF-PDF 等）
+INTENTIONALLY_PANDAS_ONLY: frozenset[str] = frozenset(
+    {
+        "constant",
+        "shuffle",
+        "fft",
+        "ifft",
+        "convolve",
+        "filter_bandpass",
+        "filter_highpass",
+        "filter_lowpass",
+        "filter_notch",
+        "wavelet",
+        "wavelet_denoise",
+        "mat_add",
+        "mat_subtract",
+        "mat_multiply",
+        "mat_transpose",
+        "mat_inverse",
+        "mat_determinant",
+        "mat_rank",
+        "eig",
+        "svd",
+        "pca",
+        "qr_decompose",
+        "lu_decompose",
+        "rand_exp",
+        "rand_lognormal",
+        "rand_normal",
+        "rand_poisson",
+        "rand_uniform",
+        "cdf_chi2",
+        "cdf_f",
+        "cdf_normal",
+        "cdf_t",
+        "pdf_chi2",
+        "pdf_f",
+        "pdf_normal",
+        "pdf_t",
+    }
+)
+
+PIT_UNSAFE_CANONICALS: frozenset[str] = INTENTIONALLY_PANDAS_ONLY | frozenset(
+    {"Lead", "next", "bfill", "fillna_interpolate", "shuffle"}
+)
+
 # 显式声明的核心算子策略（Tier-1 + 特殊语义；其余由 infer_operator_policy 推断）
 _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
     "ts_delay": {"scope": "ts", "lag": 1, "pit_safe": True},
@@ -160,7 +206,9 @@ def infer_operator_policy(op: Any, *, canonical: str | None = None) -> OperatorP
         scope = "elementwise"
 
     pit_safe = "future" not in tags
-    if name in ("lead", "next"):
+    if canon in PIT_UNSAFE_CANONICALS:
+        pit_safe = False
+    elif name in ("lead", "next"):
         pit_safe = False
     elif name == "shuffle":
         pit_safe = False

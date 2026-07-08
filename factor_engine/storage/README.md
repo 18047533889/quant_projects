@@ -6,7 +6,7 @@
 
 ### 协作者速览（约 5 分钟）
 
-1. **本目录在干什么**：**`DataSource`** 实现类（Parquet K 线、通用 parquet、multi_parquet 等）+ **`factory.build_data_source`**；**`CacheManager`** 给 **`ExecutionContext`** 做列级缓存。
+1. **本目录在干什么**：**`DataSource`** 实现类 + **`factory.build_data_source`**；**推荐** 经 **`DataAccessSource`** 读 `datasets.yaml` 登记数据集；legacy parquet 类保留兼容。
 2. **和 YAML 的关系**：`data_source.type` + 其余键 → **`DataSourceConfig.options`** → **工厂** 选类并实例化（与 **`examples/configs/`** 模板一一对应）。
 3. **读代码顺序**：**`datasource.py`**（接口）→ **`factory.py`** → 具体 **`*_source.py`**。
 4. **边界**：**不负责** 因子编译与 **`PlanNode` 执行**（那是 **`backend`**）。
@@ -19,24 +19,30 @@
 
 - **`DataSource`** 基类：定义 **`load`/`get_series`** 等接口（以源码为准）；**执行上下文** 通过 **`ExecutionContext`** 传入 `backend`。
 
-### [`kline_parquet_source.py`](kline_parquet_source.py)
+### [`data_access_source.py`](data_access_source.py)
 
-- **`KlineParquetSource`**：适用于 **日/分钟 K 线** 规范目录（如 `window_start`、**`instrument_column`**：`ticker`）。  
-- 构造函数参数与 YAML 中 **`parquet_kline`** 的字段一一对应（见 `examples/configs/us_stocks_sip_*.yaml`）。
-
-### [`parquet_source.py`](parquet_source.py)
-
-- **`ParquetSource`**：单文件或简单目录的 **通用 parquet**；`type: parquet`。
+- **`DataAccessSource`**：**企业级默认读通道**，经 `data_access.get_store()` 读 `datasets.yaml` 登记数据集；支持 `params`/`kind`（参数化数据集）、`normalize_timestamp`、`instrument_filter`。
 
 ### [`factory.py`](factory.py)
 
 | `data_source.type` | 类 |
 |--------------------|-----|
+| **`data_access`** | **`DataAccessSource(**options)`** |
+| `composite` | `CompositeDataSource` |
+| `clickhouse` | `ClickHouseSource` |
 | `parquet` | `ParquetSource(**options)` |
 | `parquet_kline` | `KlineParquetSource(**options)` |
-| `multi_parquet` | **`MultiParquetSeriesSource`**（定义在 `runtime/real_data_factor_smoke.py`，多文件基本面等） |
+| `multi_parquet` / `cleaned_parquet` | legacy parquet 源 |
 
 - **`options`**：`YAML` 里除 **`type`** 外的全部键值。
+
+### [`kline_parquet_source.py`](kline_parquet_source.py)（legacy）
+
+- **`KlineParquetSource`**：直连 K 线 parquet 目录；新配置请优先 **`data_access`** + `us_stocks_sip_day_aggs`。
+
+### [`parquet_source.py`](parquet_source.py)（legacy）
+
+- **`ParquetSource`**：单文件或简单目录的 **通用 parquet**；`type: parquet` / `multi_parquet`。
 
 ---
 
@@ -57,9 +63,10 @@
 
 根目录 [`README.md`](../README.md)「配置驱动运行」中的 **`data_source`** 示例：
 
-- **`parquet_kline`**：`root`、`instrument_column`、`timestamp_column`、`fields`、`max_files` 等。  
-- **`multi_parquet`**：`root`、`timestamp_col`、`instrument_col`、`max_files` 等。  
-- 字段语义见 [`docs/massive_parquet_data_dictionary.md`](../docs/massive_parquet_data_dictionary.md)。
+- **`data_access`**：`dataset`、`fields`、`start_date`/`end_date`、`params`/`kind`（参数化数据集）  
+- **`composite`**：`anchor`、`sources`、`joins`（非 anchor 源默认 `asof_backward`）  
+- **legacy**：`parquet_kline` / `multi_parquet` — 仅调试或无 registry 时使用  
+- 字段语义见 [`docs/massive_parquet_data_dictionary.md`](../docs/massive_parquet_data_dictionary.md) 与 [`data_access/config/datasets.yaml`](../../data_access/config/datasets.yaml)
 
 ---
 

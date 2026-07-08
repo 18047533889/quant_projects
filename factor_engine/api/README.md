@@ -124,7 +124,37 @@ from api.dsl_parser import parse_factor
 factor = parse_factor('rank(ts_mean(col("close"), 5))', name="m")
 ```
 
-**禁止**：在 `api` 层直接读 parquet；须 **`FactorEngine` + `DataSource`**。
+**禁止**：在 `api` 层直接读 parquet；须 **`FactorEngine` + `DataSource`**（推荐 **`type: data_access`**，见 [`mining_integration.py`](mining_integration.py)）。
+
+---
+
+## 5.1 挖掘默认数据源（`mining_integration`）
+
+Campaign / 回测配置中的 **`data_source`** 应优先使用 preset，避免手写路径：
+
+```python
+from api.mining_integration import (
+    default_mining_data_source_presets,
+    default_us_sip_day_ratios_composite_config,
+    default_us_stocks_sip_day_aggs_data_source_config,
+)
+
+# 单表 SIP 日 K
+cfg = default_us_stocks_sip_day_aggs_data_source_config(
+    start_date="2024-01-01",
+    end_date="2024-12-31",
+)
+
+# 价量 + 财务比率 asof（PiT 安全）
+composite = default_us_sip_day_ratios_composite_config()
+
+# 全部 preset（契约 CI / 文档）
+all_presets = default_mining_data_source_presets()
+```
+
+- 机器可读快照：[`docs/mining_data_source_presets.json`](../docs/mining_data_source_presets.json)  
+- Registry 契约：[`scripts/validate_datasets_mining_alignment.py`](../scripts/validate_datasets_mining_alignment.py)  
+- 数据集 schema：[`data_access/config/datasets.yaml`](../../data_access/config/datasets.yaml)
 
 ---
 
@@ -154,7 +184,8 @@ factor = parse_factor('rank(ts_mean(col("close"), 5))', name="m")
 | 文档 | 内容 |
 |------|------|
 | [`docs/算子与导入教程.md`](../docs/算子与导入教程.md) | **挖掘侧主教程** |
-| [`docs/算子与导入教程.md`](../docs/算子与导入教程.md) | 挖掘侧 import / DSL |
+| [`docs/mining_data_source_presets.json`](../docs/mining_data_source_presets.json) | mining preset 快照 |
+| [`mining_integration.py`](mining_integration.py) | 默认 data_source / composite |
 | [`cleaned_operators/README.md`](../cleaned_operators/README.md) | 算子实现库 |
 | [`expr/README.md`](../expr/README.md) | `CleanedCall` AST |
 | [`runtime/README.md`](../runtime/README.md) | `FactorEngine` |

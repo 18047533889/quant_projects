@@ -13,20 +13,17 @@ data_source:
     operating_cf: cash_flow.net_cash_from_operating_activities
   sources:
     price:
-      type: cleaned_parquet
-      root: ~/quant_projects/data/us_stock/cleaned_massive_data/us_stocks_sip/day_aggs_v1
-      recursive: true
+      type: data_access
+      dataset: us_stocks_sip_day_aggs
       start_date: 2016-01-01
       end_date: 2025-12-31 23:59:59
     cash_flow:
-      type: cleaned_parquet
-      root: ~/quant_projects/data/us_stock/cleaned_massive_data/fundamentals/cash_flow_statement
-      recursive: true
+      type: data_access
+      dataset: fundamentals_cash_flow_statement
       start_date: 2016-01-01
       end_date: 2025-12-31 23:59:59
   joins:
-    cash_flow:
-      method: asof_backward
+    cash_flow: asof_backward
 
 backend:
   type: pandas

@@ -473,6 +473,21 @@ hash8 = hashlib.sha256(payload.encode()).hexdigest()[:8]
 
 仅 campaign `config.json`；AFV **不读**。`local` 相对仓库根目录。
 
+**factor_engine 执行层（与上表并行，不冲突）**：因子 YAML / manifest 侧应使用 **`data_access`** + `datasets.yaml` 登记名，或 **`mining_integration.default_*_data_source_config()`** preset。示例见 `factor_engine/examples/profiles/` 与 [`mining_data_source_presets.json`](../factor_engine/docs/mining_data_source_presets.json)。Campaign 的 `local`/`cos` 路径 **不能** 替代 factor_engine 内 `data_source.type`。
+
+```yaml
+# factor_engine 因子配置（推荐）
+data_source:
+  type: data_access
+  dataset: us_stocks_sip_day_aggs
+  fields:
+    close: close
+  start_date: "2024-01-01"
+  end_date: "2024-12-31"
+```
+
+Legacy 直连 parquet 仅本地调试；生产投递勿用 `multi_parquet` / `parquet_kline`。
+
 ### 2.9 `mining_run_stats`（建议投递前填写）
 
 只写在 campaign `config.json`；AFV **不读**。记录 LLM 型号、Token、时长（便于对比成本）。

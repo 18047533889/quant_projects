@@ -509,6 +509,9 @@ us_stocks_sip_day_aggs:
   schema:
     align_time: timestamp
     ticker: string
+    open: double
+    high: double
+    low: double
     close: double
     volume: int
     window_start: int
@@ -675,6 +678,13 @@ massive_ticks:
   instrument_column: ticker
   hive_partitioning: false
   union_by_name: true
+  schema:
+    ticker: string
+    sip_timestamp: int
+    bid_price: double
+    ask_price: double
+    price: double
+    size: double
 
 
 # ---- us_stocks_sip raw（未清洗日线，clean 前的原始版本） --------------------
@@ -762,3 +772,136 @@ stocks_floats:
     effective_date: string       # VARCHAR YYYY-MM-DD
     free_float: int
     free_float_percent: double
+
+
+# ============================================================================
+# PR6 新增：cleaned massive 基本面 + SIP 分钟线（factor_engine 示例迁移）
+# ============================================================================
+
+_massive_cleaned_defaults: &massive_cleaned_defaults
+  kind: static
+  access_mode: published
+  layout: plain
+  hive_partitioning: false
+  union_by_name: true
+
+financials_ratios:
+  <<: *massive_cleaned_defaults
+  root: ${MASSIVE_PARQUET_ROOT:-/home/yluel/share/projects/massive_parquet}/cleaned_massive_data/fundamentals/financials_ratios
+  glob: "**/*.parquet"
+  time_column: date
+  instrument_column: ticker
+  schema:
+    ticker: string
+    date: string
+    price_to_earnings: double
+    return_on_equity: double
+    debt_to_equity: double
+    price_to_book: double
+    price_to_sales: double
+    free_cash_flow: double
+    market_cap: double
+    enterprise_value: double
+    earnings_per_share: double
+
+us_stocks_sip_minute_aggs:
+  <<: *massive_cleaned_defaults
+  root: ${MASSIVE_PARQUET_ROOT:-/home/yluel/share/projects/massive_parquet}/cleaned_massive_data/us_stocks_sip/minute_aggs_v1
+  glob: "**/*.parquet"
+  time_column: window_start
+  instrument_column: ticker
+  schema:
+    ticker: string
+    window_start: int
+    open: double
+    high: double
+    low: double
+    close: double
+    volume: double
+    transactions: double
+
+fundamentals_balance_sheet:
+  <<: *massive_cleaned_defaults
+  root: ${MASSIVE_PARQUET_ROOT:-/home/yluel/share/projects/massive_parquet}/cleaned_massive_data/fundamentals/balance_sheet
+  glob: "**/*.parquet"
+  time_column: period_end
+  instrument_column: tickers
+  schema:
+    tickers: string
+    period_end: string
+    total_assets: double
+    total_equity: double
+    total_liabilities: double
+
+fundamentals_income_statement:
+  <<: *massive_cleaned_defaults
+  root: ${MASSIVE_PARQUET_ROOT:-/home/yluel/share/projects/massive_parquet}/cleaned_massive_data/fundamentals/income_statement
+  glob: "**/*.parquet"
+  time_column: period_end
+  instrument_column: tickers
+  schema:
+    tickers: string
+    period_end: string
+    revenue: double
+    net_income: double
+    operating_income: double
+
+fundamentals_cash_flow_statement:
+  <<: *massive_cleaned_defaults
+  root: ${MASSIVE_PARQUET_ROOT:-/home/yluel/share/projects/massive_parquet}/cleaned_massive_data/fundamentals/cash_flow_statement
+  glob: "**/*.parquet"
+  time_column: period_end
+  instrument_column: tickers
+  schema:
+    tickers: string
+    period_end: string
+    net_cash_from_operating_activities: double
+    net_cash_from_investing_activities: double
+
+fundamentals_short_interest:
+  <<: *massive_cleaned_defaults
+  root: ${MASSIVE_PARQUET_ROOT:-/home/yluel/share/projects/massive_parquet}/cleaned_massive_data/fundamentals/short_interest
+  glob: "**/*.parquet"
+  time_column: settlement_date
+  instrument_column: ticker
+  schema:
+    ticker: string
+    settlement_date: string
+    days_to_cover: double
+
+fundamentals_short_volume:
+  <<: *massive_cleaned_defaults
+  root: ${MASSIVE_PARQUET_ROOT:-/home/yluel/share/projects/massive_parquet}/cleaned_massive_data/fundamentals/short_volume
+  glob: "**/*.parquet"
+  time_column: date
+  instrument_column: ticker
+  schema:
+    ticker: string
+    date: string
+    short_volume_ratio: double
+
+us_stocks_sip_quotes:
+  <<: *massive_cleaned_defaults
+  root: ${MASSIVE_PARQUET_ROOT:-/home/yluel/share/projects/massive_parquet}/cleaned_massive_data/us_stocks_sip/quotes_v1
+  glob: "**/*.parquet"
+  time_column: sip_timestamp
+  instrument_column: ticker
+  schema:
+    ticker: string
+    sip_timestamp: int
+    bid_price: double
+    ask_price: double
+    bid_size: double
+    ask_size: double
+
+us_stocks_sip_trades:
+  <<: *massive_cleaned_defaults
+  root: ${MASSIVE_PARQUET_ROOT:-/home/yluel/share/projects/massive_parquet}/cleaned_massive_data/us_stocks_sip/trades_v1
+  glob: "**/*.parquet"
+  time_column: sip_timestamp
+  instrument_column: ticker
+  schema:
+    ticker: string
+    sip_timestamp: int
+    price: double
+    size: double

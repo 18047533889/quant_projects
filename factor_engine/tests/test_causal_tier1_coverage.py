@@ -86,3 +86,45 @@ def test_tier1_prefix_invariant_or_pit_marked(canonical: str):
         return op.calculate(df, **kwargs)
 
     _assert_prefix_invariant(calc, x)
+
+
+_TIER1_BIVARIATE = frozenset(
+    {
+        "add",
+        "subtract",
+        "multiply",
+        "divide",
+        "ts_corr",
+        "ewm_corr",
+    }
+)
+
+
+def _assert_prefix_invariant_on_result(calc, x: pd.DataFrame) -> None:
+    full = calc(x)
+    out_col = full.columns[0]
+    for t in range(len(x)):
+        part = calc(x.iloc[: t + 1])
+        got = full.iloc[t][out_col]
+        exp = part.iloc[t][out_col]
+        if pd.isna(got) and pd.isna(exp):
+            continue
+        assert got == pytest.approx(exp, rel=1e-9, abs=1e-9), f"t={t}"
+
+
+@pytest.mark.parametrize("canonical", sorted(_TIER1_BIVARIATE & TIER1_CANONICALS))
+def test_tier1_bivariate_prefix_invariant(canonical: str):
+    if not OperatorRegistry.backends_for(canonical):
+        pytest.skip(f"{canonical} 未实现")
+    op = OperatorRegistry.get(canonical)
+    policy = infer_operator_policy(op, canonical=canonical)
+    if not policy.pit_safe:
+        pytest.skip(f"{canonical} pit_safe=False")
+
+    x = _panel(8, cols=("A", "B"))
+
+    def calc(df):
+        kwargs = {"window": 3}
+        return op.calculate(df[["A"]], df[["B"]], **kwargs)
+
+    _assert_prefix_invariant_on_result(calc, x)

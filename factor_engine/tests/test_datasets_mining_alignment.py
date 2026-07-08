@@ -17,6 +17,8 @@ def test_mining_presets_reference_registered_datasets():
     assert "us_stock_daily" in report["datasets_checked"]
     assert "daily_market_summary" in report["datasets_checked"]
     assert "stocks_floats" in report["datasets_checked"]
+    assert "us_stocks_sip_day_aggs" in report["datasets_checked"]
+    assert "financials_ratios" in report["datasets_checked"]
 
 
 def test_prod_profile_staging_clickhouse_requires_lake_datasets():
@@ -69,6 +71,65 @@ def test_us_polygon_daily_profile_loads():
     loaded = load_config(cfg)
     assert loaded.data_source.options["dataset"] == "daily_market_summary"
     assert loaded.factor.name == "us_polygon_momentum"
+
+
+def test_us_polygon_floats_profile_loads():
+    from runtime.config import load_config
+
+    root = Path(__file__).resolve().parent.parent
+    loaded = load_config(root / "examples" / "profiles" / "us_polygon_floats.yaml")
+    assert loaded.factor.name == "us_liquidity_mom"
+    assert loaded.data_source.type == "composite"
+    assert loaded.data_source.options["aliases"]["free_float_percent"] == "floats.free_float_percent"
+
+
+def test_us_sip_day_aggs_profile_loads():
+    from runtime.config import load_config
+
+    root = Path(__file__).resolve().parent.parent
+    loaded = load_config(root / "examples" / "profiles" / "us_sip_day_aggs.yaml")
+    assert loaded.factor.name == "us_sip_momentum"
+    assert loaded.data_source.type == "data_access"
+    assert loaded.data_source.options["dataset"] == "us_stocks_sip_day_aggs"
+
+
+def test_pr5_datasets_have_schema():
+    from api.datasets_contract import audit_pr5_datasets_contract
+
+    report = audit_pr5_datasets_contract()
+    assert report["ok"], report["violations"]
+    assert "financials_ratios" in report["datasets"]
+    assert "us_stocks_sip_minute_aggs" in report["datasets"]
+
+
+def test_us_sip_fundamental_profile_loads():
+    from runtime.config import load_config
+
+    root = Path(__file__).resolve().parent.parent
+    loaded = load_config(root / "examples" / "profiles" / "us_sip_fundamental.yaml")
+    assert loaded.factor.name == "us_sip_pe_rank"
+    assert loaded.data_source.type == "composite"
+    assert loaded.data_source.options["aliases"]["pe"] == "ratios.price_to_earnings"
+
+
+def test_mining_presets_json_synced():
+    import subprocess
+    import sys
+
+    root = Path(__file__).resolve().parent.parent
+    env = {**dict(__import__("os").environ), "PYTHONPATH": f"{root.parent}:{root}"}
+    for script in (
+        "export_mining_data_source_presets.py",
+        "sync_factor_engine_llm_prompt_txt.py",
+    ):
+        proc = subprocess.run(
+            [sys.executable, str(root / "scripts" / script), "--check"],
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=str(root),
+        )
+        assert proc.returncode == 0, f"{script}: {proc.stderr or proc.stdout}"
 
 
 def test_full_contract_script_entrypoint():

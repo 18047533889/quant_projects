@@ -6,13 +6,12 @@ factor:
   description: 利润表 - 营业收入截面标准化，衡量相对营收规模
 
 data_source:
-  type: multi_parquet
-  root: ~/quant_projects/data/us_stock/cleaned_massive_data/fundamentals/income_statement
-  timestamp_col: period_end
-  instrument_col: tickers
-  max_files: 3
-  # start_date: "2010-01-01"   # 可选：限定时间范围左端（行级过滤）
-  # end_date:   "2011-12-31"   # 可选：限定时间范围右端（行级过滤）
+  type: data_access
+  dataset: fundamentals_income_statement
+  fields:
+    revenue: revenue
+  start_date: "2010-01-01"
+  end_date: "2011-12-31"
 
 backend:
   type: pandas

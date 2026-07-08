@@ -13,20 +13,17 @@ data_source:
     free_float_percent: floats.free_float_percent
   sources:
     price:
-      type: cleaned_parquet
-      root: ~/quant_projects/data/us_stock/cleaned_massive_data/us_stocks_sip/day_aggs_v1
-      recursive: true
+      type: data_access
+      dataset: us_stocks_sip_day_aggs
       start_date: 2016-01-01
       end_date: 2025-12-31 23:59:59
     floats:
-      type: cleaned_parquet
-      root: ~/quant_projects/data/us_stock/cleaned_massive_data/fundamentals/stocks_floats
-      recursive: true
+      type: data_access
+      dataset: stocks_floats
       start_date: 2016-01-01
       end_date: 2025-12-31 23:59:59
   joins:
-    floats:
-      method: asof_backward
+    floats: asof_backward
 
 backend:
   type: pandas

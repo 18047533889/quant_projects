@@ -6,13 +6,14 @@ factor:
   description: 流通股 - 自由流通比例截面标准化，负值代表流通受限（潜在低流动性）
 
 data_source:
-  type: multi_parquet
-  root: ~/quant_projects/data/us_stock/cleaned_massive_data/fundamentals/stocks_floats
-  timestamp_col: effective_date
-  instrument_col: ticker
-  max_files: 3
-  # start_date: "2025-01-01"   # 可选：限定时间范围左端（行级过滤）
-  # end_date:   "2026-12-31"   # 可选：限定时间范围右端（行级过滤）
+  type: data_access
+  dataset: stocks_floats
+  fields:
+    free_float: free_float
+    free_float_percent: free_float_percent
+    ticker: ticker
+  start_date: "2024-01-01"
+  end_date: "2024-12-31"
 
 backend:
   type: pandas

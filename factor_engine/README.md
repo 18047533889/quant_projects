@@ -61,15 +61,25 @@ from api import col, rank, ts_mean
 from api.factor import Factor
 from backend.pandas_backend import PandasBackend
 from runtime.engine import FactorEngine
-from storage.kline_parquet_source import KlineParquetSource
+from storage.factory import build_data_source
 
-source = KlineParquetSource(root="/data/us_stocks_sip/day_aggs_v1", max_files=5)
+source = build_data_source(
+    {
+        "type": "data_access",
+        "dataset": "us_stocks_sip_day_aggs",
+        "fields": {"close": "close"},
+        "start_date": "2024-01-01",
+        "end_date": "2024-01-31",
+    }
+)
 engine = FactorEngine(backend=PandasBackend(), data_source=source)
 
 factor = Factor(name="mom3_rank", expr=rank(ts_mean(col("close"), 3)))
 result = engine.run(factor)
 print(result["result"].head())
 ```
+
+或配置驱动：`FactorEngine.run_from_config("examples/config_driven_factor.yaml")`
 
 ---
 
@@ -81,15 +91,18 @@ print(result["result"].head())
 1. 编写包含 `factor`、`data_source`、`backend`、`engine` 四个字段的 YAML 文件。
 2. 调用 `FactorEngine.run_from_config(path)` 或 `FactorEngine.from_config(path)` 获取引擎实例。
 
-**支持的数据源类型：**
+**推荐的数据源类型（企业级默认）：**
 
 | 类型 | 说明 |
 |---|---|
-| `parquet_kline` | K线格式 parquet，适用于 `us_stocks_sip` |
-| `multi_parquet` | 通用多文件 parquet，适用于各类 fundamentals |
-| `parquet` | 单文件或简单目录 parquet |
+| **`data_access`** | **推荐**：经 `datasets.yaml` 登记的数据集，支持 `start_date`/`end_date`、`instrument_filter`、参数化 `kind` |
+| `composite` | 多表 asof 对齐（价量 anchor + 基本面 / universe） |
+| `clickhouse` | ClickHouse 长表 + 可选 `clickhouse_sql` 下推 |
+| `parquet_kline` | legacy：直连 K 线 parquet 目录 |
+| `multi_parquet` | legacy：通用多文件 parquet |
+| `parquet` | legacy：单文件 parquet |
 
-**配置示例（日K线动量因子）：**
+**配置示例（日K线动量因子，`data_access`）：**
 
 ```yaml
 factor:
@@ -100,13 +113,12 @@ factor:
   description: 日K线 - 3日收盘价均线截面排名，动量方向因子
 
 data_source:
-  type: parquet_kline
-  root: /data/us_stocks_sip/day_aggs_v1
-  instrument_column: ticker
-  timestamp_column: window_start
+  type: data_access
+  dataset: us_stocks_sip_day_aggs
   fields:
     close: close
-  max_files: 5
+  start_date: 2024-01-01
+  end_date: 2024-12-31
 
 backend:
   type: pandas
@@ -115,7 +127,7 @@ engine:
   enable_cache: true
 ```
 
-**配置示例（fundamentals 基本面因子）：**
+**配置示例（fundamentals 复合因子）：**
 
 ```yaml
 factor:
@@ -125,17 +137,39 @@ factor:
   description: 资产负债表 - 总资产截面排名，越高代表规模越大
 
 data_source:
-  type: multi_parquet
-  root: /data/fundamentals/balance_sheet
-  timestamp_col: period_end
-  instrument_col: tickers
-  max_files: 3
+  type: composite
+  anchor: price
+  anchor_column: close
+  aliases:
+    total_assets: balance_sheet.total_assets
+  sources:
+    price:
+      type: data_access
+      dataset: us_stocks_sip_day_aggs
+    balance_sheet:
+      type: data_access
+      dataset: fundamentals_balance_sheet
+  joins:
+    balance_sheet: asof_backward
 
 backend:
   type: pandas
 ```
 
-`examples/configs/` 目录下收录了覆盖全部 11 个数据集的配置文件（见下文[数据集列表](#数据集列表)）。
+**Legacy 直连 parquet 示例（仅调试 / 无 registry 时）：**
+
+```yaml
+data_source:
+  type: parquet_kline
+  root: /data/us_stocks_sip/day_aggs_v1
+  instrument_column: ticker
+  timestamp_column: window_start
+  fields:
+    close: close
+  max_files: 5
+```
+
+`examples/configs/` 目录下收录了覆盖全部数据集的 **`data_access`** 配置（见下文[数据集列表](#数据集列表)）。
 
 ---
 

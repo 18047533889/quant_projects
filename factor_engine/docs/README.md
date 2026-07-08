@@ -22,6 +22,9 @@
 | [`dsl_allowlist.json`](dsl_allowlist.json) | 机器可读白名单（`export_dsl_allowlist.py` 生成） |
 | [`canonical_data_fields.md`](canonical_data_fields.md) | manifest 字段 ↔ parquet 列 |
 | [`../api/mining_integration.py`](../api/mining_integration.py) | 投递校验 API、默认 data_source |
+| [`../data_access/config/datasets.yaml`](../../data_access/config/datasets.yaml) | 登记数据集 schema（读端契约） |
+| [`mining_data_source_presets.json`](mining_data_source_presets.json) | mining preset 机器可读快照 |
+| [`enterprise_factor_engine_roadmap.md`](enterprise_factor_engine_roadmap.md) | 企业级路线图与验收表 |
 
 ---
 
@@ -31,7 +34,7 @@
 |------|------|
 | [`operators_semantics.md`](operators_semantics.md) | 参数、列依赖、DSL 限制 |
 | [`factor_engine_llm_prompt.md`](factor_engine_llm_prompt.md) | 给模型的算子摘要 |
-| [`factor_engine_llm_prompt.txt`](factor_engine_llm_prompt.txt) | 同上（纯文本） |
+| [`factor_engine_llm_prompt.txt`](factor_engine_llm_prompt.txt) | 同上（由 `sync_factor_engine_llm_prompt_txt.py` 从 md 生成） |
 | [`cleaned_operators/operators_catalog.md`](../cleaned_operators/docs/operators_catalog.md) | 全量审计（含 stub） |
 
 ---

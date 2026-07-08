@@ -14,20 +14,17 @@ data_source:
     total_liabilities: balance_sheet.total_liabilities
   sources:
     price:
-      type: cleaned_parquet
-      root: ~/quant_projects/data/us_stock/cleaned_massive_data/us_stocks_sip/day_aggs_v1
-      recursive: true
+      type: data_access
+      dataset: us_stocks_sip_day_aggs
       start_date: 2016-01-01
       end_date: 2025-12-31 23:59:59
     balance_sheet:
-      type: cleaned_parquet
-      root: ~/quant_projects/data/us_stock/cleaned_massive_data/fundamentals/balance_sheet
-      recursive: true
+      type: data_access
+      dataset: fundamentals_balance_sheet
       start_date: 2016-01-01
       end_date: 2025-12-31 23:59:59
   joins:
-    balance_sheet:
-      method: asof_backward
+    balance_sheet: asof_backward
 
 backend:
   type: pandas

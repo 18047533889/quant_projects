@@ -22,6 +22,15 @@ from typing import Any
 from api.dsl_parser import DSLParseError, parse_expr
 from api.operator_registry import build_dsl_allowlist
 
+# composite 估值源：允许 DSL 使用 col("pe") 等无前缀简写
+_VALUATION_FIELD_ALIASES: dict[str, str] = {
+    "pe": "valuation.pe",
+    "pb": "valuation.pb",
+    "turnover_ratio": "valuation.turnover_ratio",
+    "market_cap": "valuation.market_cap",
+    "circulating_market_cap": "valuation.circulating_market_cap",
+}
+
 
 def validate_factor_engine_dsl(formula: str) -> tuple[bool, str]:
     """校验 factor_engine DSL 语法与白名单（A 股 / 美股同一套 ``parse_expr``）。"""
@@ -146,6 +155,7 @@ def default_ashare_pv_valuation_data_source_config(
         "joins": {
             "valuation": "asof_backward",
         },
+        "aliases": dict(_VALUATION_FIELD_ALIASES),
     }
 
 
@@ -245,6 +255,7 @@ def default_us_pv_valuation_data_source_config(
         "joins": {
             "valuation": "asof_backward",
         },
+        "aliases": dict(_VALUATION_FIELD_ALIASES),
     }
 
 
@@ -384,6 +395,420 @@ def default_us_stocks_floats_data_source_config(
     return cfg
 
 
+def default_us_stocks_sip_day_aggs_data_source_config(
+    *,
+    max_files: int | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> dict[str, Any]:
+    """Massive cleaned SIP 日 K（``us_stocks_sip_day_aggs``，align_time + ticker）。"""
+    fields = {
+        "open": "open",
+        "high": "high",
+        "low": "low",
+        "close": "close",
+        "volume": "volume",
+        "window_start": "window_start",
+    }
+    cfg: dict[str, Any] = {
+        "type": "data_access",
+        "dataset": "us_stocks_sip_day_aggs",
+        "fields": fields,
+    }
+    if max_files is not None and start_date is None:
+        start_date = "2024-01-01"
+        end_date = end_date or "2024-01-31"
+    if start_date is not None:
+        cfg["start_date"] = start_date
+    if end_date is not None:
+        cfg["end_date"] = end_date
+    return cfg
+
+
+def default_financials_ratios_data_source_config(
+    *,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> dict[str, Any]:
+    """Massive cleaned 财务比率（``financials_ratios``，date + ticker）。"""
+    cfg: dict[str, Any] = {
+        "type": "data_access",
+        "dataset": "financials_ratios",
+        "fields": {
+            "pe": "price_to_earnings",
+            "price_to_earnings": "price_to_earnings",
+            "return_on_equity": "return_on_equity",
+            "roe": "return_on_equity",
+            "debt_to_equity": "debt_to_equity",
+            "price_to_book": "price_to_book",
+            "free_cash_flow": "free_cash_flow",
+            "market_cap": "market_cap",
+            "price_to_sales": "price_to_sales",
+            "enterprise_value": "enterprise_value",
+            "earnings_per_share": "earnings_per_share",
+        },
+    }
+    if start_date is not None:
+        cfg["start_date"] = start_date
+    if end_date is not None:
+        cfg["end_date"] = end_date
+    return cfg
+
+
+def default_us_stocks_sip_minute_aggs_data_source_config(
+    *,
+    max_files: int | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> dict[str, Any]:
+    """Massive cleaned SIP 分钟 K（``us_stocks_sip_minute_aggs``，window_start ns）。"""
+    fields = {
+        "open": "open",
+        "high": "high",
+        "low": "low",
+        "close": "close",
+        "volume": "volume",
+        "transactions": "transactions",
+        "window_start": "window_start",
+    }
+    cfg: dict[str, Any] = {
+        "type": "data_access",
+        "dataset": "us_stocks_sip_minute_aggs",
+        "fields": fields,
+        "normalize_timestamp": True,
+        "timestamp_unit": "ns",
+    }
+    if max_files is not None and start_date is None:
+        start_date = "2024-01-01"
+        end_date = end_date or "2024-01-07"
+    if start_date is not None:
+        cfg["start_date"] = start_date
+    if end_date is not None:
+        cfg["end_date"] = end_date
+    return cfg
+
+
+def default_us_stocks_sip_quotes_data_source_config(
+    *,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> dict[str, Any]:
+    """Massive cleaned SIP 报价（``us_stocks_sip_quotes``，sip_timestamp ns）。"""
+    cfg: dict[str, Any] = {
+        "type": "data_access",
+        "dataset": "us_stocks_sip_quotes",
+        "fields": {
+            "bid_price": "bid_price",
+            "ask_price": "ask_price",
+            "bid_size": "bid_size",
+            "ask_size": "ask_size",
+        },
+        "normalize_timestamp": True,
+        "timestamp_unit": "ns",
+    }
+    if start_date is not None:
+        cfg["start_date"] = start_date
+    if end_date is not None:
+        cfg["end_date"] = end_date
+    return cfg
+
+
+def default_us_stocks_sip_trades_data_source_config(
+    *,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> dict[str, Any]:
+    """Massive cleaned SIP 逐笔成交（``us_stocks_sip_trades``，sip_timestamp ns）。"""
+    cfg: dict[str, Any] = {
+        "type": "data_access",
+        "dataset": "us_stocks_sip_trades",
+        "fields": {
+            "price": "price",
+            "size": "size",
+        },
+        "normalize_timestamp": True,
+        "timestamp_unit": "ns",
+    }
+    if start_date is not None:
+        cfg["start_date"] = start_date
+    if end_date is not None:
+        cfg["end_date"] = end_date
+    return cfg
+
+
+def default_massive_ticks_data_source_config(
+    *,
+    kind: str = "trades_v1",
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> dict[str, Any]:
+    """原始 massive ticks（``massive_ticks`` 参数化，``kind=quotes_v1|trades_v1``）。"""
+    fields = (
+        {
+            "bid_price": "bid_price",
+            "ask_price": "ask_price",
+        }
+        if kind == "quotes_v1"
+        else {
+            "price": "price",
+            "size": "size",
+        }
+    )
+    cfg: dict[str, Any] = {
+        "type": "data_access",
+        "dataset": "massive_ticks",
+        "kind": kind,
+        "fields": fields,
+        "normalize_timestamp": True,
+        "timestamp_unit": "ns",
+    }
+    if start_date is not None:
+        cfg["start_date"] = start_date
+    if end_date is not None:
+        cfg["end_date"] = end_date
+    return cfg
+
+
+def default_fundamentals_balance_sheet_data_source_config(
+    *,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> dict[str, Any]:
+    """Massive cleaned 资产负债表（``fundamentals_balance_sheet``）。"""
+    cfg: dict[str, Any] = {
+        "type": "data_access",
+        "dataset": "fundamentals_balance_sheet",
+        "fields": {
+            "total_assets": "total_assets",
+            "total_equity": "total_equity",
+            "total_liabilities": "total_liabilities",
+        },
+    }
+    if start_date is not None:
+        cfg["start_date"] = start_date
+    if end_date is not None:
+        cfg["end_date"] = end_date
+    return cfg
+
+
+def default_fundamentals_cash_flow_statement_data_source_config(
+    *,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> dict[str, Any]:
+    """Massive cleaned 现金流量表（``fundamentals_cash_flow_statement``）。"""
+    cfg: dict[str, Any] = {
+        "type": "data_access",
+        "dataset": "fundamentals_cash_flow_statement",
+        "fields": {
+            "operating_cf": "net_cash_from_operating_activities",
+            "investing_cf": "net_cash_from_investing_activities",
+            "net_cash_from_operating_activities": "net_cash_from_operating_activities",
+            "net_cash_from_investing_activities": "net_cash_from_investing_activities",
+        },
+    }
+    if start_date is not None:
+        cfg["start_date"] = start_date
+    if end_date is not None:
+        cfg["end_date"] = end_date
+    return cfg
+
+
+def default_fundamentals_income_statement_data_source_config(
+    *,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> dict[str, Any]:
+    """Massive cleaned 利润表（``fundamentals_income_statement``）。"""
+    cfg: dict[str, Any] = {
+        "type": "data_access",
+        "dataset": "fundamentals_income_statement",
+        "fields": {
+            "revenue": "revenue",
+            "operating_income": "operating_income",
+            "net_income": "net_income",
+        },
+    }
+    if start_date is not None:
+        cfg["start_date"] = start_date
+    if end_date is not None:
+        cfg["end_date"] = end_date
+    return cfg
+
+
+def default_us_sip_day_ratios_composite_config(
+    *,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> dict[str, Any]:
+    """SIP 日 K + 财务比率 asof 复合源（价量 anchor）。"""
+    price = default_us_stocks_sip_day_aggs_data_source_config(
+        start_date=start_date,
+        end_date=end_date,
+    )
+    ratios = default_financials_ratios_data_source_config(
+        start_date=start_date,
+        end_date=end_date,
+    )
+    return {
+        "type": "composite",
+        "anchor": "price",
+        "anchor_column": "close",
+        "sources": {"price": price, "ratios": ratios},
+        "joins": {"ratios": "asof_backward"},
+        "aliases": {
+            "pe": "ratios.price_to_earnings",
+            "price_to_earnings": "ratios.price_to_earnings",
+            "roe": "ratios.return_on_equity",
+        },
+    }
+
+
+def default_us_sip_balance_sheet_composite_config(
+    *,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> dict[str, Any]:
+    """SIP 日 K + 资产负债表 asof 复合源。"""
+    price = default_us_stocks_sip_day_aggs_data_source_config(
+        start_date=start_date,
+        end_date=end_date,
+    )
+    balance_sheet = default_fundamentals_balance_sheet_data_source_config(
+        start_date=start_date,
+        end_date=end_date,
+    )
+    return {
+        "type": "composite",
+        "anchor": "price",
+        "anchor_column": "close",
+        "sources": {"price": price, "balance_sheet": balance_sheet},
+        "joins": {"balance_sheet": "asof_backward"},
+        "aliases": {
+            "total_assets": "balance_sheet.total_assets",
+            "total_equity": "balance_sheet.total_equity",
+            "total_liabilities": "balance_sheet.total_liabilities",
+        },
+    }
+
+
+def default_us_sip_cash_flow_composite_config(
+    *,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> dict[str, Any]:
+    """SIP 日 K + 现金流量表 asof 复合源。"""
+    price = default_us_stocks_sip_day_aggs_data_source_config(
+        start_date=start_date,
+        end_date=end_date,
+    )
+    cash_flow = default_fundamentals_cash_flow_statement_data_source_config(
+        start_date=start_date,
+        end_date=end_date,
+    )
+    return {
+        "type": "composite",
+        "anchor": "price",
+        "anchor_column": "close",
+        "sources": {"price": price, "cash_flow": cash_flow},
+        "joins": {"cash_flow": "asof_backward"},
+        "aliases": {
+            "operating_cf": "cash_flow.net_cash_from_operating_activities",
+            "investing_cf": "cash_flow.net_cash_from_investing_activities",
+        },
+    }
+
+
+def default_us_sip_income_statement_composite_config(
+    *,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> dict[str, Any]:
+    """SIP 日 K + 利润表 asof 复合源。"""
+    price = default_us_stocks_sip_day_aggs_data_source_config(
+        start_date=start_date,
+        end_date=end_date,
+    )
+    income_statement = default_fundamentals_income_statement_data_source_config(
+        start_date=start_date,
+        end_date=end_date,
+    )
+    return {
+        "type": "composite",
+        "anchor": "price",
+        "anchor_column": "close",
+        "sources": {"price": price, "income_statement": income_statement},
+        "joins": {"income_statement": "asof_backward"},
+        "aliases": {
+            "revenue": "income_statement.revenue",
+            "operating_income": "income_statement.operating_income",
+            "net_income": "income_statement.net_income",
+        },
+    }
+
+
+def default_us_sip_floats_composite_config(
+    *,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> dict[str, Any]:
+    """SIP 日 K + 流通股快照 asof 复合源。"""
+    price = default_us_stocks_sip_day_aggs_data_source_config(
+        start_date=start_date,
+        end_date=end_date,
+    )
+    floats = default_us_stocks_floats_data_source_config(
+        start_date=start_date,
+        end_date=end_date,
+    )
+    return {
+        "type": "composite",
+        "anchor": "price",
+        "anchor_column": "close",
+        "sources": {"price": price, "floats": floats},
+        "joins": {"floats": "asof_backward"},
+        "aliases": {
+            "free_float": "floats.free_float",
+            "free_float_percent": "floats.free_float_percent",
+        },
+    }
+
+
+def default_us_polygon_floats_composite_config(
+    *,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> dict[str, Any]:
+    """美股 Polygon 日线 + 流通股快照复合源（价量 anchor，floats asof）。"""
+    pv = default_us_daily_market_summary_data_source_config(
+        start_date=start_date,
+        end_date=end_date,
+    )
+    floats: dict[str, Any] = {
+        "type": "data_access",
+        "dataset": "stocks_floats",
+        "fields": {
+            "free_float": "free_float",
+            "free_float_percent": "free_float_percent",
+        },
+    }
+    if start_date is not None:
+        floats["start_date"] = start_date
+    if end_date is not None:
+        floats["end_date"] = end_date
+    return {
+        "type": "composite",
+        "anchor": "pv",
+        "anchor_column": "close",
+        "sources": {"pv": pv, "floats": floats},
+        "joins": {"floats": "asof_backward"},
+        "aliases": {
+            "free_float": "floats.free_float",
+            "free_float_percent": "floats.free_float_percent",
+        },
+    }
+
+
 def validate_manifest_for_execution(
     *,
     market: str,
@@ -459,13 +884,54 @@ def audit_composite_join_policies(config: dict[str, Any]) -> list[str]:
 
 def audit_default_data_source_configs() -> dict[str, list[str]]:
     """审计所有默认 mining 数据源 preset 的 join 策略。"""
-    presets = {
-        "ashare_pv_valuation": default_ashare_pv_valuation_data_source_config(),
-        "us_pv_valuation": default_us_pv_valuation_data_source_config(),
-        "ashare_pv_universe": default_ashare_pv_universe_data_source_config(),
-        "us_pv_universe": default_us_pv_universe_data_source_config(),
+    presets = default_mining_data_source_presets()
+    composite_names = {
+        "ashare_pv_valuation",
+        "us_pv_valuation",
+        "ashare_pv_universe",
+        "us_pv_universe",
+        "us_polygon_floats",
+        "us_sip_day_ratios",
+        "us_sip_balance_sheet",
+        "us_sip_cash_flow",
+        "us_sip_income_statement",
+        "us_sip_floats",
     }
-    return {name: audit_composite_join_policies(cfg) for name, cfg in presets.items()}
+    return {
+        name: audit_composite_join_policies(presets[name])
+        for name in composite_names
+        if name in presets
+    }
+
+
+def default_mining_data_source_presets() -> dict[str, dict[str, Any]]:
+    """全部 mining 默认 ``data_source`` preset（契约审计 / CI 单点注册）。"""
+    return {
+        "ashare_pv": default_ashare_pv_data_source_config(),
+        "ashare_pv_valuation": default_ashare_pv_valuation_data_source_config(),
+        "ashare_pv_universe": default_ashare_pv_universe_data_source_config(),
+        "us_pv": default_us_pv_data_source_config(),
+        "us_pv_valuation": default_us_pv_valuation_data_source_config(),
+        "us_pv_universe": default_us_pv_universe_data_source_config(),
+        "us_daily_market_summary": default_us_daily_market_summary_data_source_config(),
+        "us_stocks_floats": default_us_stocks_floats_data_source_config(),
+        "us_stocks_sip_day_aggs": default_us_stocks_sip_day_aggs_data_source_config(),
+        "financials_ratios": default_financials_ratios_data_source_config(),
+        "us_sip_day_ratios": default_us_sip_day_ratios_composite_config(),
+        "us_sip_balance_sheet": default_us_sip_balance_sheet_composite_config(),
+        "us_sip_cash_flow": default_us_sip_cash_flow_composite_config(),
+        "us_sip_income_statement": default_us_sip_income_statement_composite_config(),
+        "us_sip_floats": default_us_sip_floats_composite_config(),
+        "us_stocks_sip_minute_aggs": default_us_stocks_sip_minute_aggs_data_source_config(),
+        "us_polygon_floats": default_us_polygon_floats_composite_config(),
+        "us_stocks_sip_quotes": default_us_stocks_sip_quotes_data_source_config(),
+        "us_stocks_sip_trades": default_us_stocks_sip_trades_data_source_config(),
+        "massive_ticks_quotes": default_massive_ticks_data_source_config(kind="quotes_v1"),
+        "massive_ticks_trades": default_massive_ticks_data_source_config(kind="trades_v1"),
+        "fundamentals_balance_sheet": default_fundamentals_balance_sheet_data_source_config(),
+        "fundamentals_cash_flow_statement": default_fundamentals_cash_flow_statement_data_source_config(),
+        "fundamentals_income_statement": default_fundamentals_income_statement_data_source_config(),
+    }
 
 
 def audit_mining_datasets_contract() -> dict[str, Any]:

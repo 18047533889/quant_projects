@@ -83,27 +83,9 @@ def validate_dataset_field_bindings(
 
 def audit_mining_dataset_contract(*, registry=None) -> dict[str, Any]:
     """审计 mining 默认 preset 引用的全部 ``data_access`` 数据集。"""
-    from api.mining_integration import (
-        default_ashare_pv_data_source_config,
-        default_ashare_pv_universe_data_source_config,
-        default_ashare_pv_valuation_data_source_config,
-        default_us_pv_data_source_config,
-        default_us_pv_universe_data_source_config,
-        default_us_pv_valuation_data_source_config,
-        default_us_daily_market_summary_data_source_config,
-        default_us_stocks_floats_data_source_config,
-    )
+    from api.mining_integration import default_mining_data_source_presets
 
-    presets = {
-        "ashare_pv": default_ashare_pv_data_source_config(),
-        "ashare_pv_valuation": default_ashare_pv_valuation_data_source_config(),
-        "ashare_pv_universe": default_ashare_pv_universe_data_source_config(),
-        "us_pv": default_us_pv_data_source_config(),
-        "us_pv_valuation": default_us_pv_valuation_data_source_config(),
-        "us_pv_universe": default_us_pv_universe_data_source_config(),
-        "us_daily_market_summary": default_us_daily_market_summary_data_source_config(),
-        "us_stocks_floats": default_us_stocks_floats_data_source_config(),
-    }
+    presets = default_mining_data_source_presets()
     all_bindings: dict[str, dict[str, str]] = {}
     by_preset: dict[str, list[str]] = {}
     for name, cfg in presets.items():
@@ -165,10 +147,19 @@ def audit_prod_profile_contract(*, profile_name: str = "prod") -> dict[str, Any]
     }
 
 
-# PR5 data_access 登记数据集（读端迁移；schema 契约门禁）
+# PR5/PR6 data_access 登记数据集（读端迁移；schema 契约门禁）
 PR5_DATASETS: tuple[str, ...] = (
     "daily_market_summary",
     "stocks_floats",
+    "financials_ratios",
+    "us_stocks_sip_minute_aggs",
+    "fundamentals_balance_sheet",
+    "fundamentals_income_statement",
+    "fundamentals_cash_flow_statement",
+    "fundamentals_short_interest",
+    "fundamentals_short_volume",
+    "us_stocks_sip_quotes",
+    "us_stocks_sip_trades",
 )
 
 

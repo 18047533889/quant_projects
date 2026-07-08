@@ -24,17 +24,29 @@
 
 | YAML 文件 | 典型 `data_source.type` | 内容说明 |
 |-----------|-------------------------|----------|
-| `us_stocks_sip_day_aggs_v1.yaml` | `parquet_kline` | 日 K 线 |
-| `us_stocks_sip_minute_aggs_v1.yaml` | `parquet_kline` | 分钟 K 线 |
-| `us_stocks_sip_quotes_v1.yaml` | `parquet_kline` 或扩展 | 报价 |
-| `us_stocks_sip_trades_v1.yaml` | 同上 | 逐笔成交 |
-| `fundamentals_balance_sheet.yaml` | `multi_parquet` | 资产负债表 |
-| `fundamentals_cash_flow_statement.yaml` | `multi_parquet` | 现金流量表 |
-| `fundamentals_income_statement.yaml` | `multi_parquet` | 利润表 |
-| `fundamentals_financials_ratios.yaml` | `multi_parquet` | 财务比率 |
-| `fundamentals_short_interest.yaml` | `multi_parquet` | 融券兴趣 |
-| `fundamentals_short_volume.yaml` | `multi_parquet` | 融券成交量 |
-| `fundamentals_stocks_floats.yaml` | `multi_parquet` | 流通股 |
+| `us_stocks_sip_day_aggs_v1.yaml` | `data_access` | 日 K 线（``us_stocks_sip_day_aggs``） |
+| `day_aggs_v1_price_volume/*.yaml` | `data_access` | SIP 日 K 量价因子 |
+| `day_aggs_v1_fundamental/*.yaml` | `composite` + `data_access` | SIP 日 K + 基本面 asof（balance_sheet / cash_flow / ratios 等） |
+
+**Mining preset 对照**（Python：`default_mining_data_source_presets()`）：
+
+| Preset 名 | 用途 |
+|-----------|------|
+| `us_stocks_sip_day_aggs` | SIP 日 K 单表 |
+| `us_sip_day_ratios` | 日 K + 财务比率 composite |
+| `us_sip_balance_sheet` / `us_sip_cash_flow` / `us_sip_income_statement` / `us_sip_floats` | 日 K + 各基本面 composite |
+| `us_stocks_sip_quotes` / `us_stocks_sip_trades` | SIP tick |
+| `us_polygon_floats` | Polygon 日线 + 流通股 |
+
+完整 JSON：[`docs/mining_data_source_presets.json`](../docs/mining_data_source_presets.json)
+| `fundamentals_*.yaml`（6 个） | `data_access` | cleaned massive 基本面 |
+| `us_stocks_sip_minute_aggs_v1.yaml` | `data_access` | SIP 分钟 K（``us_stocks_sip_minute_aggs``） |
+| `fundamentals_stocks_floats.yaml` | `data_access` | 流通股（``stocks_floats``） |
+| `clickhouse_panel_rank.yaml` | `clickhouse` + `clickhouse_sql` | ClickHouse 长表 + SQL 因子下推 |
+| `us_stocks_sip_quotes_v1.yaml` | `data_access` | SIP 报价（``us_stocks_sip_quotes``） |
+| `us_stocks_sip_trades_v1.yaml` | `data_access` | SIP 逐笔成交（``us_stocks_sip_trades``） |
+
+根目录 **`config_driven_factor.yaml`** / **`notebook_config_smoke.yaml`** 等 smoke 配置也已迁移至 ``data_access`` + ``us_stocks_sip_day_aggs``。
 
 **字段含义** 见 [`docs/massive_parquet_data_dictionary.md`](../../docs/massive_parquet_data_dictionary.md)。
 
@@ -51,7 +63,9 @@
 
 | 键 | 说明 |
 |----|------|
-| `root` | 数据根路径 |
+| `dataset` | ``data_access`` 数据集名（见 ``datasets.yaml`` / ``docs/mining_data_source_presets.json``） |
+| `start_date` / `end_date` | 行级时间过滤（``data_access`` 推荐） |
+| `root` | 直连 parquet 根路径（legacy） |
 | `max_files` | 限制扫描文件数（调试） |
 | `instrument_column` / `timestamp_column` | K 线源列名映射 |
 | `fields` | 逻辑名 → 文件列名 |

@@ -95,6 +95,23 @@ SQL_REQUIRED = frozenset(
         "ts_ema",
         "ts_rank",
         "ewm_mean",
+        "sign",
+        "ffill",
+        "bfill",
+        "fillna_const",
+        "ts_decay_linear",
+        "coalesce",
+        "protected_div",
+        "protected_log",
+        "protected_sqrt",
+        "nan_to_num",
+        "fillna",
+        "is_nan",
+        "is_finite",
+        "normalize",
+        "group_normalize",
+        "group_percentile",
+        "group_decay_linear",
     }
 )
 
@@ -133,4 +150,4 @@ def test_coverage_counts():
     polars_n = sum(1 for c in canon if "polars" in OperatorRegistry.backends_for(c))
     sql_n = sum(1 for c in canon if "sql" in OperatorRegistry.backends_for(c))
     assert polars_n >= 320, f"polars 覆盖过低: {polars_n}"
-    assert sql_n >= 39, f"sql 覆盖过低: {sql_n}"
+    assert sql_n >= 60, f"sql 覆盖过低: {sql_n}"

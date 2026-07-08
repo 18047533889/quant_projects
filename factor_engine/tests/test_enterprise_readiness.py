@@ -6,12 +6,16 @@
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from cleaned_operators import load_all
 from cleaned_operators.registry import OperatorRegistry
 from backend.sql_pushdown.sql_registry import register_sql_backends, SQL_CAPABLE_CANONICALS
 from runtime.env_bootstrap import bootstrap_runtime_env
+
+FE_ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -30,13 +34,21 @@ def test_polars_coverage_threshold():
 def test_sql_coverage_threshold():
     canon = [c for c in OperatorRegistry.list_canonical() if OperatorRegistry.backends_for(c)]
     sql_n = sum(1 for c in canon if "sql" in OperatorRegistry.backends_for(c))
-    assert sql_n >= 39, f"sql 覆盖 {sql_n} 低于企业门禁 39"
+    assert sql_n >= 60, f"sql 覆盖 {sql_n} 低于企业门禁 60"
 
 
 def test_sql_registry_synced_with_emitter_whitelist():
     assert "ts_ema" in SQL_CAPABLE_CANONICALS
-    for name in ("ts_mean", "group_winsorize", "ts_beta"):
+    for name in ("ts_mean", "group_winsorize", "ts_beta", "group_decay_linear"):
         assert name in SQL_CAPABLE_CANONICALS
+
+
+def test_sql_pushdown_coverage_doc():
+    doc = FE_ROOT / "docs" / "sql_pushdown_coverage.md"
+    assert doc.is_file(), "运行 report_backend_coverage.py --write-doc 生成清单"
+    text = doc.read_text(encoding="utf-8")
+    assert "group_decay_linear" in text
+    assert "normalize" in text
 
 
 def test_dedupe_removed_names_not_primary_keys():
@@ -117,3 +129,38 @@ def test_tier1_operators_have_explicit_policy():
     missing = sorted(c for c in TIER1_CANONICALS if c not in _EXPLICIT_POLICIES)
     assert not missing, f"Tier-1 缺少显式 OperatorPolicy: {missing}"
     assert len(TIER1_CANONICALS) >= 50, f"Tier-1 数量 {len(TIER1_CANONICALS)} 低于 50"
+
+
+def test_examples_yaml_no_legacy_data_source_types():
+    """examples/ 下配置不得再使用 legacy parquet 源（企业读端统一门禁）。"""
+    from pathlib import Path
+
+    import yaml
+
+    root = Path(__file__).resolve().parent.parent / "examples"
+    legacy = frozenset({"cleaned_parquet", "multi_parquet", "parquet_kline"})
+    violations: list[str] = []
+
+    def _walk(node: object) -> set[str]:
+        found: set[str] = set()
+        if isinstance(node, dict):
+            if "type" in node:
+                found.add(str(node["type"]).lower())
+            for v in node.values():
+                found |= _walk(v)
+        elif isinstance(node, list):
+            for item in node:
+                found |= _walk(item)
+        return found
+
+    for path in sorted(root.rglob("*.yaml")):
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            continue
+        ds = raw.get("data_source")
+        if not isinstance(ds, dict):
+            continue
+        bad = _walk(ds) & legacy
+        if bad:
+            violations.append(f"{path.relative_to(root)}: {sorted(bad)}")
+    assert not violations, violations

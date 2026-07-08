@@ -14,7 +14,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--min-polars", type=int, default=320)
-    parser.add_argument("--min-sql", type=int, default=39)
+    parser.add_argument("--min-sql", type=int, default=60)
+    parser.add_argument(
+        "--write-doc",
+        type=Path,
+        default=None,
+        help="写入 SQL 下推 canonical 清单 Markdown",
+    )
     args = parser.parse_args()
 
     root = str(FE_ROOT.parent)
@@ -42,8 +48,27 @@ def main() -> int:
         "sql_registry": len(SQL_CAPABLE_CANONICALS),
         "sql_backends": sql_n,
         "pandas_only": len(pandas_only),
+        "sql_canonicals": sorted(SQL_CAPABLE_CANONICALS - {"column", "literal"}),
         "ok": polars_n >= args.min_polars and sql_n >= args.min_sql,
     }
+    if args.write_doc:
+        lines = [
+            "# SQL 下推覆盖清单",
+            "",
+            f"> 自动生成：`python scripts/report_backend_coverage.py --write-doc`",
+            "",
+            f"- canonical implemented: **{len(canon)}**",
+            f"- SQL 白名单: **{len(SQL_CAPABLE_CANONICALS)}**",
+            f"- Registry sql backend: **{sql_n}**",
+            "",
+            "## Canonical 列表",
+            "",
+        ]
+        for name in report["sql_canonicals"]:
+            lines.append(f"- `{name}`")
+        lines.append("")
+        args.write_doc.parent.mkdir(parents=True, exist_ok=True)
+        args.write_doc.write_text("\n".join(lines), encoding="utf-8")
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:

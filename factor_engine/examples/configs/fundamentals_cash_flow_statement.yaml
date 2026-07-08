@@ -6,13 +6,12 @@ factor:
   description: 现金流量表 - 经营活动现金流截面标准化，正值代表现金流强劲
 
 data_source:
-  type: multi_parquet
-  root: ~/quant_projects/data/us_stock/cleaned_massive_data/fundamentals/cash_flow_statement
-  timestamp_col: period_end
-  instrument_col: tickers
-  max_files: 3
-  # start_date: "2010-01-01"   # 可选：限定时间范围左端（行级过滤）
-  # end_date:   "2011-12-31"   # 可选：限定时间范围右端（行级过滤）
+  type: data_access
+  dataset: fundamentals_cash_flow_statement
+  fields:
+    net_cash_from_operating_activities: net_cash_from_operating_activities
+  start_date: "2010-01-01"
+  end_date: "2011-12-31"
 
 backend:
   type: pandas

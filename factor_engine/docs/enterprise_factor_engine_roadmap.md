@@ -9,9 +9,9 @@
 
 | 能力 | 现状 | 评级 |
 |------|------|------|
-| 算子数量 | 441 implemented + DSL 白名单 ~512 | ✅ |
+| 算子数量 | **361** canonical implemented · DSL 白名单 **~560** | ✅ |
 | 算子层因果 | `_causal.py` + Tier-1 自动扫测 + `test_causal_operators.py` | ✅ |
-| 数据层 PIT | Composite `asof_backward` + mining preset 审计 | ✅ |
+| 数据层 PIT | Composite `asof_backward` + mining preset 审计 + **examples 全量 `data_access`** | ✅ |
 | lookback 分析 | `Analyzer` + `OperatorPolicy` + `WindowedDataSource` 日内精度 | ✅ |
 | 增量计算 | tick 精确扩窗 + watermark + 交易日历 | ✅ |
 | 血缘/版本 | `factor_run` + `RunLineage` + catalog hash | ✅ |
@@ -257,6 +257,13 @@ Phase 10 — 生产规模化（已完成）
 ├── CI 门禁（`.github/workflows/ci.yml` + enterprise_readiness）✅
 
 Phase 12 — 算子语义与 intraday（已完成）
+├── SQL 截面/分组：normalize · group_normalize · group_percentile · group_decay_linear（60 canonical）✅
+├── SQL 覆盖清单：`docs/sql_pushdown_coverage.md` CI 自动生成 ✅
+├── SQL 条件链路：where/if_else 浮点真值 + is_finite→where→rank 集成测 ✅
+├── SQL clip：positional 边界 + NaN 保持 NULL ✅
+├── SQL winsorize/group_winsorize：NaN 保持 NULL ✅
+├── SQL 截面/分组语义：rank NaN 跳过 · group_rank/group_zscore 对齐 pandas ✅
+├── Polars bfill 对齐因果语义（与 pandas/SQL 一致）✅
 ├── OperatorSpec Tier-1 显式 policy（55+ canonical + CI 门禁）✅
 ├── IntradayAggregator + intraday_daily 数据源 ✅
 ├── Analyzer 消费 min_periods → lookback ✅
@@ -270,6 +277,13 @@ Phase 12 — 算子语义与 intraday（已完成）
 ├── quantile/normalize Polars ✅
 ├── prod.yaml 默认 staging_clickhouse ✅
 └── PIT 标签层 api/label_pit.py ✅
+
+Phase 13 — 读端统一（已完成）
+├── examples/configs 全量迁移 `data_access`（0 legacy type）✅
+├── `us_stocks_sip_quotes/trades` + `massive_ticks` 参数化 `kind` ✅
+├── fundamentals composite preset（balance_sheet/cash_flow/income_statement/floats）✅
+├── `default_mining_data_source_presets()` 单点注册 ✅
+└── CI：`test_example_yaml_migration` + datasets 契约门禁 ✅
 
 Phase 11 — 生产地基（已完成）
 ```

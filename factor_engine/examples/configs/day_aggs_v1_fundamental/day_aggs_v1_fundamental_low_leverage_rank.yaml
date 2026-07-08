@@ -13,20 +13,17 @@ data_source:
     debt_to_equity: ratios.debt_to_equity
   sources:
     price:
-      type: cleaned_parquet
-      root: ~/quant_projects/data/us_stock/cleaned_massive_data/us_stocks_sip/day_aggs_v1
-      recursive: true
+      type: data_access
+      dataset: us_stocks_sip_day_aggs
       start_date: 2016-01-01
       end_date: 2025-12-31 23:59:59
     ratios:
-      type: cleaned_parquet
-      root: ~/quant_projects/data/us_stock/cleaned_massive_data/fundamentals/financials_ratios
-      recursive: true
+      type: data_access
+      dataset: financials_ratios
       start_date: 2016-01-01
       end_date: 2025-12-31 23:59:59
   joins:
-    ratios:
-      method: asof_backward
+    ratios: asof_backward
 
 backend:
   type: pandas

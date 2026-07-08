@@ -6,13 +6,12 @@ factor:
   description: 融券成交量 - 做空成交比例截面标准化，正值代表做空意愿高于均值
 
 data_source:
-  type: multi_parquet
-  root: ~/quant_projects/data/us_stock/cleaned_massive_data/fundamentals/short_volume
-  timestamp_col: date
-  instrument_col: ticker
-  max_files: 3
-  # start_date: "2024-01-01"   # 可选：限定时间范围左端（行级过滤）
-  # end_date:   "2024-12-31"   # 可选：限定时间范围右端（行级过滤）
+  type: data_access
+  dataset: fundamentals_short_volume
+  fields:
+    short_volume_ratio: short_volume_ratio
+  start_date: "2024-01-01"
+  end_date: "2024-12-31"
 
 backend:
   type: pandas

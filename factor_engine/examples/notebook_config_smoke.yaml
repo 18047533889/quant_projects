@@ -5,13 +5,12 @@ factor:
   universe: equities
   description: Notebook config-driven smoke test.
 data_source:
-  type: parquet_kline
-  root: ~/quant_projects/data/us_stock/cleaned_massive_data/us_stocks_sip/day_aggs_v1
-  instrument_column: ticker
-  timestamp_column: window_start
+  type: data_access
+  dataset: us_stocks_sip_day_aggs
   fields:
     close: close
-  max_files: 20
+  start_date: 2024-01-01
+  end_date: 2024-03-31
 backend:
   type: pandas
 engine:

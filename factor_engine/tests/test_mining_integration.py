@@ -70,6 +70,28 @@ def test_default_us_pv_valuation_composite():
     assert cfg["joins"]["valuation"] == "asof_backward"
     assert cfg["sources"]["valuation"]["dataset"] == "us_stock_valuation_daily"
     assert cfg["sources"]["pv"]["dataset"] == "us_stock_daily"
+    assert cfg["aliases"]["pe"] == "valuation.pe"
+
+
+def test_default_us_stocks_sip_day_aggs_uses_data_access():
+    from api.mining_integration import default_us_stocks_sip_day_aggs_data_source_config
+
+    cfg = default_us_stocks_sip_day_aggs_data_source_config()
+    assert cfg["type"] == "data_access"
+    assert cfg["dataset"] == "us_stocks_sip_day_aggs"
+    assert cfg["fields"]["close"] == "close"
+
+    smoke = default_us_stocks_sip_day_aggs_data_source_config(max_files=3)
+    assert smoke["type"] == "data_access"
+    assert smoke["dataset"] == "us_stocks_sip_day_aggs"
+    assert smoke["start_date"] == "2024-01-01"
+
+
+def test_default_ashare_pv_valuation_has_pe_alias():
+    from api.mining_integration import default_ashare_pv_valuation_data_source_config
+
+    cfg = default_ashare_pv_valuation_data_source_config()
+    assert cfg["aliases"]["pe"] == "valuation.pe"
 
 
 def test_default_us_pv_data_source_uses_data_access():
@@ -111,6 +133,34 @@ def test_default_ashare_pv_universe_composite():
     assert cfg["sources"]["status"]["dataset"] == "ashare_stock_status"
 
 
+def test_default_us_sip_day_ratios_composite():
+    from api.mining_integration import default_us_sip_day_ratios_composite_config
+
+    cfg = default_us_sip_day_ratios_composite_config()
+    assert cfg["type"] == "composite"
+    assert cfg["joins"]["ratios"] == "asof_backward"
+    assert cfg["sources"]["price"]["dataset"] == "us_stocks_sip_day_aggs"
+    assert cfg["sources"]["ratios"]["dataset"] == "financials_ratios"
+    assert cfg["aliases"]["pe"] == "ratios.price_to_earnings"
+
+
+def test_default_us_sip_cash_flow_composite():
+    from api.mining_integration import default_us_sip_cash_flow_composite_config
+
+    cfg = default_us_sip_cash_flow_composite_config()
+    assert cfg["joins"]["cash_flow"] == "asof_backward"
+    assert cfg["aliases"]["operating_cf"] == "cash_flow.net_cash_from_operating_activities"
+
+
+def test_default_financials_ratios_uses_data_access():
+    from api.mining_integration import default_financials_ratios_data_source_config
+
+    cfg = default_financials_ratios_data_source_config()
+    assert cfg["type"] == "data_access"
+    assert cfg["dataset"] == "financials_ratios"
+    assert cfg["fields"]["pe"] == "price_to_earnings"
+
+
 def test_default_us_pv_universe_composite():
     from api.mining_integration import default_us_pv_universe_data_source_config
 
@@ -118,3 +168,22 @@ def test_default_us_pv_universe_composite():
     assert cfg["type"] == "composite"
     assert cfg["joins"]["universe"] == "exact"
     assert cfg["sources"]["universe"]["dataset"] == "us_universe_daily"
+
+
+def test_default_us_stocks_sip_quotes_uses_data_access():
+    from api.mining_integration import default_us_stocks_sip_quotes_data_source_config
+
+    cfg = default_us_stocks_sip_quotes_data_source_config()
+    assert cfg["type"] == "data_access"
+    assert cfg["dataset"] == "us_stocks_sip_quotes"
+    assert cfg["normalize_timestamp"] is True
+    assert cfg["timestamp_unit"] == "ns"
+
+
+def test_default_massive_ticks_parametric_kind():
+    from api.mining_integration import default_massive_ticks_data_source_config
+
+    cfg = default_massive_ticks_data_source_config(kind="quotes_v1")
+    assert cfg["dataset"] == "massive_ticks"
+    assert cfg["kind"] == "quotes_v1"
+    assert "bid_price" in cfg["fields"]

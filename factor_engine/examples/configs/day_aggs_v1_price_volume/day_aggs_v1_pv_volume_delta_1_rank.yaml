@@ -6,9 +6,8 @@ factor:
   description: 日线量价因子 - 成交量单日变化截面排名
 
 data_source:
-  type: cleaned_parquet
-  root: ~/quant_projects/data/us_stock/cleaned_massive_data/us_stocks_sip/day_aggs_v1
-  recursive: true
+  type: data_access
+  dataset: us_stocks_sip_day_aggs
   start_date: 2016-01-01
   end_date: 2025-12-31 23:59:59
 

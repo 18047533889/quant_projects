@@ -44,11 +44,13 @@
 
 | data_source.type | 用途 |
 |---|---|
-| `parquet_kline` | K 线 parquet |
-| `parquet` | 通用 parquet |
-| `multi_parquet` | 多文件 parquet |
-| `cleaned_parquet` | cleaned parquet |
-| `composite` | 组合数据源，支持 anchor + joins |
+| **`data_access`** | **推荐**：`datasets.yaml` 登记数据集（含 `composite` 子源） |
+| `composite` | 多源 asof/exact 对齐 |
+| `clickhouse` | ClickHouse 长表 |
+| `parquet_kline` | legacy K 线 parquet |
+| `parquet` | legacy 通用 parquet |
+| `multi_parquet` | legacy 多文件 parquet |
+| `cleaned_parquet` | legacy cleaned parquet（`max_files` 调试） |
 
 当前已支持的后端类型：
 
@@ -268,7 +270,21 @@ factor:
 
 ### B. 数据源配置
 
-最小示例：
+**推荐**（`data_access` + 登记数据集）：
+
+```yaml
+data_source:
+  type: data_access
+  dataset: us_stocks_sip_day_aggs
+  fields:
+    close: close
+  start_date: 2024-01-01
+  end_date: 2024-01-31
+```
+
+Composite 示例（价量 anchor + 基本面 asof）见 `examples/profiles/us_sip_fundamental.yaml`。
+
+Legacy 直连 parquet（仅调试）：
 
 ```yaml
 data_source:

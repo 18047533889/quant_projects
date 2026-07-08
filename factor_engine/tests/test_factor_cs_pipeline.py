@@ -23,3 +23,5 @@ def test_pr5_datasets_registered_with_schema():
 
     report = audit_pr5_datasets_contract()
     assert report["ok"], report["violations"]
+    assert "us_stocks_sip_quotes" in report["datasets"]
+    assert "us_stocks_sip_trades" in report["datasets"]

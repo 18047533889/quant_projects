@@ -66,6 +66,64 @@ def _float_attr(node: PlanNode, *keys: str, default: float) -> float:
     return default
 
 
+def _literal_positional(node: PlanNode, index: int, *, default: float | None = None) -> float | None:
+    """读取 positional literal 参数（``clip(x, lo, hi)`` 等）。"""
+    pos = index + 1
+    if pos >= len(node.inputs):
+        return default
+    child = node.inputs[pos]
+    if child.op != "literal":
+        return default
+    val = child.attrs.get("value")
+    if val is None:
+        return default
+    if val == "zero":
+        return 0.0
+    if isinstance(val, (int, float)) and not isinstance(val, bool):
+        return float(val)
+    return default
+
+
+def _clip_bounds(node: PlanNode, *, default_lo: float = -3.0, default_hi: float = 3.0) -> tuple[float, float]:
+    lo = _float_attr(node, "lo", "min", default=default_lo)
+    hi = _float_attr(node, "max", "hi", default=default_hi)
+    pos_lo = _literal_positional(node, 0)
+    pos_hi = _literal_positional(node, 1)
+    if pos_lo is not None:
+        lo = pos_lo
+    if pos_hi is not None:
+        hi = pos_hi
+    return lo, hi
+
+
+def _truthy_sql(value_col: str) -> str:
+    """浮点条件真值（对齐 pandas ``bool(0.0)==False``）。"""
+    return f"({value_col} IS NOT NULL AND {value_col} <> 0)"
+
+
+def _const_fill_value(node: PlanNode, *, default: float | None = None) -> float | None:
+    """解析常量填充值（``fillna_const`` / ``nan_to_num`` / ``fillna(..., 0)``）。"""
+    if "num" in node.attrs and node.attrs["num"] is not None:
+        return float(node.attrs["num"])
+    for key in ("value", "fill_value", "const", "c", "method"):
+        if key in node.attrs and node.attrs[key] is not None:
+            raw = node.attrs[key]
+            if raw == "zero":
+                return 0.0
+            if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+                return float(raw)
+    pos = _literal_positional(node, 0)
+    if pos is not None:
+        return pos
+    if len(node.inputs) >= 2 and node.inputs[1].op == "literal":
+        raw = node.inputs[1].attrs.get("value")
+        if raw == "zero":
+            return 0.0
+        if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+            return float(raw)
+    return default
+
+
 def _quote_ident(name: str) -> str:
     safe = name.replace('"', '""')
     return f'"{safe}"'
@@ -82,6 +140,18 @@ def _sql_literal(val: Any) -> str:
     return f"'{s}'"
 
 
+def _quantile_over(
+    dialect: SqlDialect,
+    col: str,
+    p: float,
+    partition: str,
+) -> str:
+    """窗口分位数：DuckDB ``quantile_cont`` / ClickHouse ``quantileExact``。"""
+    if dialect == SqlDialect.CLICKHOUSE:
+        return f"quantileExact({p})({col}) OVER ({partition})"
+    return f"quantile_cont({col}, {p}) OVER ({partition})"
+
+
 def _dialect_fn(dialect: SqlDialect, name: str) -> str:
     if dialect == SqlDialect.CLICKHOUSE:
         mapping = {
@@ -91,6 +161,7 @@ def _dialect_fn(dialect: SqlDialect, name: str) -> str:
             "least": "least",
             "nullif": "nullIf",
             "abs": "abs",
+            "sign": "sign",
             "exp": "exp",
             "sqrt": "sqrt",
         }
@@ -102,6 +173,7 @@ def _dialect_fn(dialect: SqlDialect, name: str) -> str:
         "least": "LEAST",
         "nullif": "NULLIF",
         "abs": "abs",
+        "sign": "sign",
         "exp": "exp",
         "sqrt": "sqrt",
     }
@@ -122,6 +194,126 @@ def _inst_window(dialect: SqlDialect, w: int, agg: str, inner_sql: str) -> str:
         f"ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW) AS _v "
         f"FROM ({inner_sql}) t"
     )
+
+
+def _ffill_over_inst(inner_sql: str, *, dialect: SqlDialect) -> str:
+    if dialect == SqlDialect.CLICKHOUSE:
+        return (
+            f"SELECT ts, inst, "
+            f"anyLast(if(isNotNull(_v), _v, NULL)) OVER ("
+            f"PARTITION BY inst ORDER BY ts "
+            f"ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS _v "
+            f"FROM ({inner_sql}) t"
+        )
+    return (
+        f"SELECT ts, inst, "
+        f"LAST_VALUE(_v IGNORE NULLS) OVER ("
+        f"PARTITION BY inst ORDER BY ts "
+        f"ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS _v "
+        f"FROM ({inner_sql}) t"
+    )
+
+
+def _bfill_over_inst(inner_sql: str, *, dialect: SqlDialect) -> str:
+    """bfill 在因子链路中为因果算子（不引用未来值），SQL 层透传 inner。"""
+    return inner_sql
+
+
+def _pct_rank_frac(*, value_col: str, partition: str, dialect: SqlDialect) -> str:
+    """百分位 rank 分数（0-1）；不处理 NULL。"""
+    cnt = f"COUNT({value_col}) OVER ({partition})"
+    if dialect == SqlDialect.CLICKHOUSE:
+        return (
+            f"toFloat64(RANK() OVER ({partition} ORDER BY {value_col})) "
+            f"/ nullIf({cnt}, 0)"
+        )
+    return (
+        f"(RANK() OVER ({partition} ORDER BY {value_col} NULLS LAST) * 1.0 "
+        f"/ NULLIF({cnt}, 0))"
+    )
+
+
+def _pct_rank_expr(*, value_col: str, partition: str, dialect: SqlDialect) -> str:
+    """百分位 rank 表达式；NaN/NULL 保持缺失，分母仅计非空。"""
+    frac = _pct_rank_frac(value_col=value_col, partition=partition, dialect=dialect)
+    if dialect == SqlDialect.CLICKHOUSE:
+        return f"if(isNull({value_col}), NULL, {frac})"
+    return f"CASE WHEN {value_col} IS NULL THEN NULL ELSE {frac} END"
+
+
+def _cs_pct_rank_sql(inner_sql: str, *, partition: str, dialect: SqlDialect) -> str:
+    """截面百分位 rank；NaN 保持 NULL（对齐 pandas ``rank(pct=True)`` 跳过缺失）。"""
+    expr = _pct_rank_expr(value_col="_v", partition=partition, dialect=dialect)
+    return f"SELECT ts, inst, {expr} AS _v FROM ({inner_sql}) t"
+
+
+def _group_zscore_expr(*, value_col: str, partition: str, dialect: SqlDialect) -> str:
+    """组内 zscore；零/缺失标准差时输出 0（对齐 pandas group_zscore）。"""
+    std_fn = _dialect_fn(dialect, "stddev")
+    nf = _dialect_fn(dialect, "nullif")
+    avg = f"AVG({value_col}) OVER ({partition})"
+    stdv = f"{std_fn}({value_col}) OVER ({partition})"
+    return (
+        f"CASE WHEN {value_col} IS NULL THEN NULL "
+        f"WHEN {stdv} IS NULL OR {stdv} = 0 THEN 0 "
+        f"ELSE ({value_col} - {avg}) / {nf}({stdv}, 0) END"
+    )
+
+
+def _group_decay_linear_expr(*, value_col: str, partition: str, dialect: SqlDialect) -> str:
+    """组内按排名线性衰减权重 × 原值（对齐 pandas group_decay_linear）。"""
+    nf = _dialect_fn(dialect, "nullif")
+    cnt = f"COUNT({value_col}) OVER ({partition})"
+    denom = f"{nf}({cnt} * ({cnt} + 1.0) / 2.0, 0)"
+    if dialect == SqlDialect.CLICKHOUSE:
+        rank = f"toFloat64(RANK() OVER ({partition} ORDER BY {value_col}))"
+    else:
+        rank = f"RANK() OVER ({partition} ORDER BY {value_col} NULLS LAST)"
+    return (
+        f"CASE WHEN {value_col} IS NULL THEN NULL "
+        f"ELSE {value_col} * ({rank} * 1.0 / {denom}) END"
+    )
+
+
+def _group_minmax_expr(*, value_col: str, partition: str, dialect: SqlDialect) -> str:
+    """组内 [0,1] min-max；零区间输出 0.5（对齐 pandas group_normalize）。"""
+    nf = _dialect_fn(dialect, "nullif")
+    lo = f"MIN({value_col}) OVER ({partition})"
+    hi = f"MAX({value_col}) OVER ({partition})"
+    span = f"{nf}({hi} - {lo}, 0)"
+    return (
+        f"CASE WHEN {value_col} IS NULL THEN NULL "
+        f"WHEN {span} IS NULL THEN 0.5 "
+        f"ELSE ({value_col} - {lo}) / {span} END"
+    )
+
+
+def _linear_decay_over_inst(w: int, inner_sql: str, *, dialect: SqlDialect) -> str:
+    """线性衰减加权均值：最近观测权重 ``w``，最早为 ``1``（对齐 ``ts_decay_linear``）。"""
+    num_parts: list[str] = []
+    den_parts: list[str] = []
+    for lag in range(w):
+        weight = w - lag
+        if lag == 0:
+            v = "_v"
+        else:
+            v = f"LAG(_v, {lag}) OVER (PARTITION BY inst ORDER BY ts)"
+        num_parts.append(f"CASE WHEN {v} IS NOT NULL THEN {weight}.0 * {v} ELSE 0 END")
+        den_parts.append(f"CASE WHEN {v} IS NOT NULL THEN {weight}.0 ELSE 0 END")
+    num = " + ".join(num_parts)
+    den = f"{_dialect_fn(dialect, 'nullif')}(" + " + ".join(den_parts) + ", 0)"
+    return f"SELECT ts, inst, ({num}) / {den} AS _v FROM ({inner_sql}) t"
+
+
+def _scalar_from_plan(node: PlanNode, *, default: float | None = None) -> float | None:
+    for key in ("value", "fill_value", "const", "c"):
+        if key in node.attrs and node.attrs[key] is not None:
+            return float(node.attrs[key])
+    if len(node.inputs) >= 2 and node.inputs[1].op == "literal":
+        val = node.inputs[1].attrs.get("value")
+        if val is not None:
+            return float(val)
+    return default
 
 
 def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
@@ -159,6 +351,55 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
             has_ts_partition=left.has_ts_partition or right.has_ts_partition,
         )
 
+    if op == "protected_div":
+        if len(node.inputs) != 2:
+            return None
+        left = _compile_layer(node.inputs[0], dialect=dialect)
+        right = _compile_layer(node.inputs[1], dialect=dialect)
+        if left is None or right is None:
+            return None
+        eps = _float_attr(node, "epsilon", default=1e-12)
+        default = _float_attr(node, "default", default=0.0)
+        abs_fn = _dialect_fn(dialect, "abs")
+        coalesce_fn = "coalesce" if dialect == SqlDialect.CLICKHOUSE else "COALESCE"
+        lit = _sql_literal(default)
+        return _Layer(
+            f"SELECT l.ts, l.inst, "
+            f"{coalesce_fn}(CASE WHEN l._v IS NULL OR r._v IS NULL THEN NULL "
+            f"WHEN {abs_fn}(r._v) <= {eps} THEN NULL "
+            f"ELSE l._v / r._v END, {lit}) AS _v "
+            f"FROM ({left.sql}) l INNER JOIN ({right.sql}) r USING (ts, inst)",
+            has_inst_window=left.has_inst_window or right.has_inst_window,
+            has_ts_partition=left.has_ts_partition or right.has_ts_partition,
+        )
+
+    if op == "protected_log":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        eps = _float_attr(node, "epsilon", default=1e-12)
+        lit = _sql_literal(eps)
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"{ln}(CASE WHEN _v IS NULL OR _v <= {lit} THEN {lit} ELSE _v END) AS _v "
+            f"FROM ({inner.sql}) t",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=inner.has_ts_partition,
+        )
+
+    if op == "protected_sqrt":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        fn = _dialect_fn(dialect, "sqrt")
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"CASE WHEN _v IS NULL THEN NULL ELSE {fn}({g}(_v, 0)) END AS _v "
+            f"FROM ({inner.sql}) t",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=inner.has_ts_partition,
+        )
+
     if op == "neg":
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
@@ -174,6 +415,17 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
         if inner is None:
             return None
         fn = _dialect_fn(dialect, "abs")
+        return _Layer(
+            f"SELECT ts, inst, {fn}(_v) AS _v FROM ({inner.sql}) t",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=inner.has_ts_partition,
+        )
+
+    if op == "sign":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        fn = _dialect_fn(dialect, "sign")
         return _Layer(
             f"SELECT ts, inst, {fn}(_v) AS _v FROM ({inner.sql}) t",
             has_inst_window=inner.has_inst_window,
@@ -216,10 +468,39 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        lo = _float_attr(node, "lo", "min", default=-3.0)
-        hi = _float_attr(node, "max", "hi", default=3.0)
+        lo, hi = _clip_bounds(node)
+        clip = f"{g}({lo}, {l}({hi}, _v))"
         return _Layer(
-            f"SELECT ts, inst, {g}({lo}, {l}({hi}, _v)) AS _v FROM ({inner.sql}) t",
+            f"SELECT ts, inst, CASE WHEN _v IS NULL THEN NULL ELSE {clip} END AS _v "
+            f"FROM ({inner.sql}) t",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=inner.has_ts_partition,
+        )
+
+    if op == "is_nan":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        if dialect == SqlDialect.CLICKHOUSE:
+            pred = "isNaN(_v) OR _v IS NULL"
+        else:
+            pred = "_v IS NULL OR isnan(_v)"
+        return _Layer(
+            f"SELECT ts, inst, CASE WHEN {pred} THEN 1.0 ELSE 0.0 END AS _v "
+            f"FROM ({inner.sql}) t",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=inner.has_ts_partition,
+        )
+
+    if op == "is_finite":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        finite_fn = "isFinite" if dialect == SqlDialect.CLICKHOUSE else "isfinite"
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"CASE WHEN _v IS NOT NULL AND {finite_fn}(_v) THEN 1.0 ELSE 0.0 END AS _v "
+            f"FROM ({inner.sql}) t",
             has_inst_window=inner.has_inst_window,
             has_ts_partition=inner.has_ts_partition,
         )
@@ -329,12 +610,8 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        # 对齐 pandas DataFrame.rank(pct=True, axis=1)：rank / count
         return _Layer(
-            f"SELECT ts, inst, "
-            f"(RANK() OVER (PARTITION BY ts ORDER BY _v) * 1.0 "
-            f"/ COUNT(*) OVER (PARTITION BY ts)) AS _v "
-            f"FROM ({inner.sql}) t",
+            _cs_pct_rank_sql(inner.sql, partition="PARTITION BY ts", dialect=dialect),
             has_inst_window=inner.has_inst_window,
             has_ts_partition=True,
         )
@@ -347,6 +624,22 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
             f"SELECT ts, inst, "
             f"(_v - AVG(_v) OVER (PARTITION BY ts)) "
             f"/ {nf}({std}(_v) OVER (PARTITION BY ts), 0) AS _v "
+            f"FROM ({inner.sql}) t",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=True,
+        )
+
+    if op == "normalize":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        part = "PARTITION BY ts"
+        lo = f"MIN(_v) OVER ({part})"
+        hi = f"MAX(_v) OVER ({part})"
+        span = f"{nf}({hi} - {lo}, 0)"
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"CASE WHEN _v IS NULL THEN NULL ELSE (_v - {lo}) / {span} END AS _v "
             f"FROM ({inner.sql}) t",
             has_inst_window=inner.has_inst_window,
             has_ts_partition=True,
@@ -430,7 +723,7 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
             return None
         return _Layer(
             f"SELECT c.ts, c.inst, "
-            f"CASE WHEN c._v THEN a._v ELSE b._v END AS _v "
+            f"CASE WHEN {_truthy_sql('c._v')} THEN a._v ELSE b._v END AS _v "
             f"FROM ({cond.sql}) c "
             f"INNER JOIN ({a.sql}) a USING (ts, inst) "
             f"INNER JOIN ({b.sql}) b USING (ts, inst)",
@@ -438,14 +731,12 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
             has_ts_partition=cond.has_ts_partition or a.has_ts_partition or b.has_ts_partition,
         )
 
-    if op in {"group_rank", "group_mean", "group_zscore"}:
+    if op in {"group_rank", "group_mean", "group_zscore", "group_normalize"}:
         if not node.inputs:
             return None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        std = _dialect_fn(dialect, "stddev")
-        nf = _dialect_fn(dialect, "nullif")
         if len(node.inputs) >= 2:
             grp = _compile_layer(node.inputs[1], dialect=dialect)
             if grp is None:
@@ -460,12 +751,63 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
         if op == "group_mean":
             expr = f"AVG(x._v) OVER ({part})"
         elif op == "group_zscore":
-            expr = f"(x._v - AVG(x._v) OVER ({part})) / {nf}({std}(x._v) OVER ({part}), 0)"
+            expr = _group_zscore_expr(value_col="x._v", partition=part, dialect=dialect)
+        elif op == "group_normalize":
+            expr = _group_minmax_expr(value_col="x._v", partition=part, dialect=dialect)
         else:
-            expr = (
-                f"(RANK() OVER ({part} ORDER BY x._v) * 1.0 "
-                f"/ COUNT(*) OVER ({part}))"
-            )
+            expr = _pct_rank_expr(value_col="x._v", partition=part, dialect=dialect)
+        return _Layer(
+            f"SELECT x.ts, x.inst, {expr} AS _v {join}",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=True,
+        )
+
+    if op == "group_percentile":
+        if not node.inputs:
+            return None
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        p = _float_attr(node, "p", default=0.5)
+        pos_p = _literal_positional(node, 1)
+        if pos_p is not None:
+            p = pos_p
+        if len(node.inputs) >= 2:
+            grp = _compile_layer(node.inputs[1], dialect=dialect)
+            if grp is None:
+                return None
+            part = "PARTITION BY x.ts, g._v"
+            join = f"FROM ({inner.sql}) x INNER JOIN ({grp.sql}) g USING (ts, inst)"
+        else:
+            part = "PARTITION BY x.ts"
+            join = f"FROM ({inner.sql}) x"
+        rank_frac = _pct_rank_frac(value_col="x._v", partition=part, dialect=dialect)
+        expr = (
+            f"CASE WHEN x._v IS NULL THEN 0.0 "
+            f"WHEN ({rank_frac}) <= {p} THEN 1.0 ELSE 0.0 END"
+        )
+        return _Layer(
+            f"SELECT x.ts, x.inst, {expr} AS _v {join}",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=True,
+        )
+
+    if op == "group_decay_linear":
+        if not node.inputs:
+            return None
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        if len(node.inputs) >= 2:
+            grp = _compile_layer(node.inputs[1], dialect=dialect)
+            if grp is None:
+                return None
+            part = "PARTITION BY x.ts, g._v"
+            join = f"FROM ({inner.sql}) x INNER JOIN ({grp.sql}) g USING (ts, inst)"
+        else:
+            part = "PARTITION BY x.ts"
+            join = f"FROM ({inner.sql}) x"
+        expr = _group_decay_linear_expr(value_col="x._v", partition=part, dialect=dialect)
         return _Layer(
             f"SELECT x.ts, x.inst, {expr} AS _v {join}",
             has_inst_window=inner.has_inst_window,
@@ -503,10 +845,11 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
         hi = 1.0 - a
         g = _dialect_fn(dialect, "greatest")
         l = _dialect_fn(dialect, "least")
+        q_lo = _quantile_over(dialect, "_v", lo, "PARTITION BY ts")
+        q_hi = _quantile_over(dialect, "_v", hi, "PARTITION BY ts")
+        clip = f"{g}({q_lo}, {l}({q_hi}, _v))"
         return _Layer(
-            f"SELECT ts, inst, "
-            f"{g}(quantile_cont(_v, {lo}) OVER (PARTITION BY ts), "
-            f"{l}(quantile_cont(_v, {hi}) OVER (PARTITION BY ts), _v)) AS _v "
+            f"SELECT ts, inst, CASE WHEN _v IS NULL THEN NULL ELSE {clip} END AS _v "
             f"FROM ({inner.sql}) t",
             has_inst_window=inner.has_inst_window,
             has_ts_partition=True,
@@ -532,10 +875,12 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
         else:
             part = "PARTITION BY x.ts"
             join = f"FROM ({inner.sql}) x"
+        q_lo = _quantile_over(dialect, "x._v", lo, part)
+        q_hi = _quantile_over(dialect, "x._v", hi, part)
+        clip = f"{g}({q_lo}, {l}({q_hi}, x._v))"
         return _Layer(
             f"SELECT x.ts, x.inst, "
-            f"{g}(quantile_cont(x._v, {lo}) OVER ({part}), "
-            f"{l}(quantile_cont(x._v, {hi}) OVER ({part}), x._v)) AS _v "
+            f"CASE WHEN x._v IS NULL THEN NULL ELSE {clip} END AS _v "
             f"{join}",
             has_inst_window=inner.has_inst_window,
             has_ts_partition=True,
@@ -635,10 +980,81 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
             f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
         )
         return _Layer(
-            f"SELECT ts, inst, "
-            f"(RANK() OVER ({over} ORDER BY _v) * 1.0 "
-            f"/ COUNT(*) OVER ({over})) AS _v "
-            f"FROM ({inner.sql}) t",
+            _cs_pct_rank_sql(inner.sql, partition=over, dialect=dialect),
+            has_inst_window=True,
+        )
+
+    if op == "ffill":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        return _Layer(
+            _ffill_over_inst(inner.sql, dialect=dialect),
+            has_inst_window=True,
+        )
+
+    if op == "bfill":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        return _Layer(
+            _bfill_over_inst(inner.sql, dialect=dialect),
+            has_inst_window=inner.has_inst_window,
+        )
+
+    if op in {"fillna_const", "nan_to_num", "fillna"}:
+        if not node.inputs:
+            return None
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        if op == "nan_to_num":
+            const = _const_fill_value(node, default=0.0)
+        elif op == "fillna":
+            const = _const_fill_value(node, default=None)
+            if const is None:
+                return None
+        else:
+            const = _const_fill_value(node)
+            if const is None:
+                const = _scalar_from_plan(node, default=0.0)
+        lit = _sql_literal(const)
+        coalesce = "coalesce" if dialect == SqlDialect.CLICKHOUSE else "COALESCE"
+        return _Layer(
+            f"SELECT ts, inst, {coalesce}(_v, {lit}) AS _v FROM ({inner.sql}) t",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=inner.has_ts_partition,
+        )
+
+    if op == "coalesce":
+        if len(node.inputs) < 2:
+            return None
+        layers: list[_Layer] = []
+        for inp in node.inputs:
+            layer = _compile_layer(inp, dialect=dialect)
+            if layer is None:
+                return None
+            layers.append(layer)
+        aliases = [f"t{i}" for i in range(len(layers))]
+        coalesce_fn = "coalesce" if dialect == SqlDialect.CLICKHOUSE else "COALESCE"
+        cols = ", ".join(f"{alias}._v" for alias in aliases)
+        join = f"FROM ({layers[0].sql}) {aliases[0]}"
+        for alias, layer in zip(aliases[1:], layers[1:], strict=True):
+            join += f" INNER JOIN ({layer.sql}) {alias} USING (ts, inst)"
+        return _Layer(
+            f"SELECT {aliases[0]}.ts, {aliases[0]}.inst, "
+            f"{coalesce_fn}({cols}) AS _v {join}",
+            has_inst_window=any(layer.has_inst_window for layer in layers),
+            has_ts_partition=any(layer.has_ts_partition for layer in layers),
+        )
+
+    if op == "ts_decay_linear":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        w = _window_int(node)
+        return _Layer(
+            _linear_decay_over_inst(w, inner.sql, dialect=dialect),
             has_inst_window=True,
         )
 

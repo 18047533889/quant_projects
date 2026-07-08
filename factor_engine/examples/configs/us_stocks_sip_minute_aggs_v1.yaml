@@ -6,14 +6,12 @@ factor:
   description: 分钟K线 - 5分钟收盘价均线截面排名，短周期动量因子
 
 data_source:
-  type: multi_parquet
-  root: ~/quant_projects/data/us_stock/cleaned_massive_data/us_stocks_sip/minute_aggs_v1
-  timestamp_col: window_start
-  instrument_col: ticker
-  max_files: 2
-  timestamp_unit: "ns"
-  # start_date: "2003-01-01"   # 可选：限定时间范围左端（行级过滤）
-  # end_date:   "2003-12-31"   # 可选：限定时间范围右端（行级过滤）
+  type: data_access
+  dataset: us_stocks_sip_minute_aggs
+  normalize_timestamp: true
+  timestamp_unit: ns
+  start_date: "2003-01-01"
+  end_date: "2003-12-31"
 
 backend:
   type: pandas

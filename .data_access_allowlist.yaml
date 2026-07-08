@@ -112,6 +112,10 @@
   reason: "因子湖版本 diff/回滚读本地 factors/<id>/year=*/data.parquet；与 materializer 落盘路径一致"
 - path: factor_engine/storage/lake_publish.py
   reason: "发布前同步本地 materializer 目录到 staging；读 parquet footer 统计行数"
+- path: factor_engine/storage/staging_loader.py
+  reason: "staging 行级补偿删除：按 materializer 落盘分区读改写 parquet；非 registry dataset"
+- path: data_access/clickhouse_write.py
+  reason: "Parquet→ClickHouse ETL（load_parquet_to_panel_table）读用户指定单文件；写 CH 专用路径"
 - path: scripts/verify_gtja191_factor_lake.py
   reason: "GTJA191 factor lake 结构审计 + 重算对比；按 factors/<id>/year=*/data.parquet 逐分区读，非 registry dataset"
 

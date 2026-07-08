@@ -24,6 +24,11 @@ def build_backend(backend_type: str):
         from .duckdb_pushdown_backend import DuckDBPushdownBackend
 
         return DuckDBPushdownBackend()
+    if normalized in {"clickhouse_sql", "ch_sql", "clickhouse_pushdown"}:
+        from .duckdb_pushdown_backend import DuckDBPushdownBackend
+
+        # SqlBackend 按 data_source 自动选 DuckDB / ClickHouse 方言
+        return DuckDBPushdownBackend()
     if normalized in {"auto", "hybrid"}:
         from .hybrid_backend import HybridBackend
 

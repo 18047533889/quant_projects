@@ -48,7 +48,7 @@ FactorEngine(backend=..., data_source=..., cache=None)
 | 数据类 | YAML 键 | 说明 |
 |--------|---------|------|
 | **`FactorDefinitionConfig`** | `factor` | **`name`**、**`expr`**（字符串）、`freq`、`universe`、`description` |
-| **`DataSourceConfig`** | `data_source` | **`type`**（`parquet` / `parquet_kline` / `multi_parquet`）+ 其余进 **`options`** |
+| **`DataSourceConfig`** | `data_source` | **`type`**（**`data_access`** / `composite` / legacy parquet）+ 其余进 **`options`** |
 | **`BackendConfig`** | `backend` | **`type`**：默认 `pandas`，见 `backend/factory.py` |
 | **`EngineConfig`** | `engine` | **`enable_cache`**：默认 True |
 | **`FactorEngineConfig`** | 根 | 上述四块组合 |

@@ -329,7 +329,9 @@ class FillNA(SeriesOperator):
         tags=["data_handling", "missing", "fill"]
     )
 
-    def _calculate_series(self, x: pd.DataFrame, method: str = 'zero', **kwargs) -> pd.DataFrame:
+    def _calculate_series(self, x: pd.DataFrame, method='zero', **kwargs) -> pd.DataFrame:
+        if isinstance(method, (int, float)) and not isinstance(method, bool):
+            return x.fillna(method)
         if method == 'mean':
             return x.fillna(x.mean(axis=1), axis=0)
         elif method == 'median':

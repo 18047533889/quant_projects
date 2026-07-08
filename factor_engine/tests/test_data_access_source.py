@@ -248,11 +248,27 @@ def test_composite_ashare_valuation_asof(market_env):
     assert pe.loc[(pd.Timestamp("2024-01-02"), "000001.SZ")] == pytest.approx(8.0)
 
 
+def test_composite_ashare_valuation_pe_alias(market_env):
+    from api.mining_integration import default_ashare_pv_valuation_data_source_config
+
+    source = build_data_source(default_ashare_pv_valuation_data_source_config())
+    pe = source.load_column("pe")
+    assert pe.loc[(pd.Timestamp("2024-01-02"), "000001.SZ")] == pytest.approx(8.0)
+
+
 def test_composite_us_valuation_asof(market_env):
     from api.mining_integration import default_us_pv_valuation_data_source_config
 
     source = build_data_source(default_us_pv_valuation_data_source_config())
     pe = source.load_column("valuation.pe")
+    assert pe.loc[(pd.Timestamp("2024-01-02"), "AAPL")] == pytest.approx(25.0)
+
+
+def test_composite_us_valuation_pe_alias(market_env):
+    from api.mining_integration import default_us_pv_valuation_data_source_config
+
+    source = build_data_source(default_us_pv_valuation_data_source_config())
+    pe = source.load_column("pe")
     assert pe.loc[(pd.Timestamp("2024-01-02"), "AAPL")] == pytest.approx(25.0)
 
 
@@ -304,3 +320,53 @@ def test_local_us_parquet_smoke_if_present():
     source = build_data_source(cfg)
     close = source.load_column("close")
     assert len(close) > 0
+
+
+def test_data_access_source_forwards_params_to_store(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class _FakeStore:
+        def load_columns(self, dataset, *, columns, **kwargs):
+            captured["dataset"] = dataset
+            captured["kwargs"] = kwargs
+            import pandas as pd
+
+            idx = pd.MultiIndex.from_tuples(
+                [(pd.Timestamp("2024-01-02"), "AAPL")],
+                names=["timestamp", "instrument"],
+            )
+            return {"price": pd.Series([100.0], index=idx, name="price")}
+
+    monkeypatch.setattr(
+        "storage.data_access_source._get_store",
+        lambda: _FakeStore(),
+    )
+    from storage.data_access_source import DataAccessSource
+
+    src = DataAccessSource(
+        dataset="massive_ticks",
+        fields={"price": "price"},
+        params={"kind": "trades_v1"},
+        normalize_timestamp=True,
+        timestamp_unit="ns",
+    )
+    series = src.load_column("price")
+    assert series.iloc[0] == pytest.approx(100.0)
+    assert captured["dataset"] == "massive_ticks"
+    assert captured["kwargs"]["kind"] == "trades_v1"
+
+
+def test_factory_data_access_kind_shorthand():
+    from storage.data_access_source import DataAccessSource
+
+    src = build_data_source(
+        {
+            "type": "data_access",
+            "dataset": "massive_ticks",
+            "kind": "quotes_v1",
+            "fields": {"bid_price": "bid_price"},
+        }
+    )
+    assert isinstance(src, DataAccessSource)
+    assert src.dataset == "massive_ticks"
+    assert src.params == {"kind": "quotes_v1"}

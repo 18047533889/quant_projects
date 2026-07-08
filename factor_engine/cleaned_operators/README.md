@@ -94,7 +94,8 @@ cleaned_operators/
 | backend | 说明 |
 |---------|------|
 | `auto` / `hybrid` | **推荐**：部分 SQL 子树 → Polars → Pandas |
-| `sql` / `duckdb_sql` | SqlBackend：maximal SQL 子树 + Python fallback |
+| `sql` / `duckdb_sql` | SqlBackend + **data_access**（DuckDB 读 parquet） |
+| `clickhouse_sql` / `ch_sql` | SqlBackend + **clickhouse** 数据源（自动 ClickHouse 方言） |
 | `polars` | 算子层 auto 优先 polars（**320+ canonical**） |
 | `pandas` | 默认全 Python |
 
@@ -104,9 +105,9 @@ cleaned_operators/
 - `OperatorRegistry` 支持 `backend="sql"` 元数据（与 emitter 同步）
 - `LongTableDataSource` / `long_table: true`：数据源保持长表；**panel-native 仍启用**，算子链内宽表中间态、根节点一次 stack
 
-Polars 新增覆盖：`ADX/AROON/KAMA`、`Slope/ts_regression`、`sharpe_ratio`、信号算子、`group_*` 全簇、`ewm_*`、`cs_regression/cs_resid`、CAPM 簇等；**2026-07**：`polars_batch_mirror` 桥接至 **325** canonical。企业门禁 Polars ≥ **320** / SQL ≥ **39**；剩余 **36** intentional pandas-only（FFT/矩阵/随机/CDF-PDF）。
+Polars 新增覆盖：`ADX/AROON/KAMA`、`Slope/ts_regression`、`sharpe_ratio`、信号算子、`group_*` 全簇、`ewm_*`、`cs_regression/cs_resid`、CAPM 簇等；**2026-07**：`polars_batch_mirror` 桥接至 **325** canonical。企业门禁 Polars ≥ **320** / SQL ≥ **43**；剩余 **36** intentional pandas-only（FFT/矩阵/随机/CDF-PDF）。
 
-SQL 白名单 **42** 个算子（含 `ts_ema`、`group_winsorize`、`ts_beta`、`ts_mad`、`ts_rank`、`ewm_mean`）；多子树 **WITH CSE 批执行**。
+SQL 白名单 **43** 个算子（含 `ts_ema`、`group_winsorize`、`ts_beta`、`ts_mad`、`ts_rank`、`ewm_mean`、`sign`）；多子树 **WITH CSE 批执行**。
 
 **企业级门禁**：`tests/test_enterprise_readiness.py`（覆盖阈值、dedupe 契约、P0 双 backend、env bootstrap）。
 

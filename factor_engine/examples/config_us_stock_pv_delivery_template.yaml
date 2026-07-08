@@ -12,17 +12,16 @@ factor:
   description: 5 日收盘均线截面排名（投递前本地 smoke）
 
 data_source:
-  type: parquet
-  root: ~/quant_projects/data/us_stock/massive_data/StockDailyBar
-  timestamp_col: TradeDate
-  instrument_col: Ticker
+  type: data_access
+  dataset: us_stock_daily
   fields:
     open: Open
     high: High
     low: Low
     close: Close
     volume: Volume
-  max_files: 10
+  start_date: "2024-01-02"
+  end_date: "2024-06-30"
 
 backend:
   type: pandas

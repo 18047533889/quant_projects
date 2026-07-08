@@ -23,10 +23,16 @@ def test_default_presets_use_asof_backward_except_universe_exact():
     from api.mining_integration import audit_default_data_source_configs
 
     report = audit_default_data_source_configs()
-    # 估值 / 状态 / 成分股：必须 asof_backward
+    # 估值 / 状态 / 成分股 / 基本面 composite：必须 asof_backward
     assert report["ashare_pv_valuation"] == []
     assert report["us_pv_valuation"] == []
     assert report["ashare_pv_universe"] == []
+    assert report["us_polygon_floats"] == []
+    assert report["us_sip_day_ratios"] == []
+    assert report["us_sip_balance_sheet"] == []
+    assert report["us_sip_cash_flow"] == []
+    assert report["us_sip_income_statement"] == []
+    assert report["us_sip_floats"] == []
     # 美股 universe 允许 exact（日对齐 universe 表）
     us_uni = report["us_pv_universe"]
     assert all("universe" in v for v in us_uni) or us_uni == []

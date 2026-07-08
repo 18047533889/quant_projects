@@ -14,20 +14,17 @@ data_source:
     revenue: income_statement.revenue
   sources:
     price:
-      type: cleaned_parquet
-      root: ~/quant_projects/data/us_stock/cleaned_massive_data/us_stocks_sip/day_aggs_v1
-      recursive: true
+      type: data_access
+      dataset: us_stocks_sip_day_aggs
       start_date: 2016-01-01
       end_date: 2025-12-31 23:59:59
     income_statement:
-      type: cleaned_parquet
-      root: ~/quant_projects/data/us_stock/cleaned_massive_data/fundamentals/income_statement
-      recursive: true
+      type: data_access
+      dataset: fundamentals_income_statement
       start_date: 2016-01-01
       end_date: 2025-12-31 23:59:59
   joins:
-    income_statement:
-      method: asof_backward
+    income_statement: asof_backward
 
 backend:
   type: pandas

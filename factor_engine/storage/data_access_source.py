@@ -39,6 +39,7 @@ class DataAccessSource(DataSource):
         instrument_filter: list[str] | None = None,
         normalize_timestamp: bool | None = None,
         timestamp_unit: str | None = None,
+        params: dict[str, Any] | None = None,
     ) -> None:
         self.dataset = dataset
         self.fields = dict(fields or {})
@@ -47,6 +48,7 @@ class DataAccessSource(DataSource):
         self.instrument_filter = list(instrument_filter) if instrument_filter else None
         self.normalize_timestamp = normalize_timestamp
         self.timestamp_unit = timestamp_unit
+        self.params = dict(params or {})
         self._column_cache: dict[str, Any] = {}
         self._panel_cache: dict[str, Any] = {}
 
@@ -93,6 +95,7 @@ class DataAccessSource(DataSource):
             instrument_filter=self.instrument_filter,
             normalize_timestamp=self.normalize_timestamp,
             timestamp_unit=self.timestamp_unit,
+            **self.params,
         )
         for n in needed:
             self._column_cache[n] = fetched[n]

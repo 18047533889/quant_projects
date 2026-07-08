@@ -2,7 +2,7 @@
 
 > **第 5 版更改-shw**：因子引擎已扩展 WorldQuant BRAIN 风格算子分类；DSL 中逻辑函数须用 `and_` / `or_` / `not_`；算子语义与占位说明见同目录 [`operators_semantics.md`](operators_semantics.md)，按版本变更见 [`changelog_shw.md`](changelog_shw.md)。本 Prompt 若与上述文档冲突，以 `operators_semantics.md` 与当前 `api/operator_registry` 为准，并建议逐步同步下文「Supported Operators」列表。
 >
-> **第 31 版更改-shw**：**cleaned_operators 全量接入** — 白名单 = `build_dsl_allowlist()`；runtime 在 `cleaned_operators/`。以 [`operators_semantics.md`](operators_semantics.md) 与 [`算子与导入教程.md`](算子与导入教程.md) 为准。
+> **第 32 版更改-shw**：**读端统一 `data_access`** — 示例 YAML / mining preset 均经 `datasets.yaml` 登记数据集；`composite` 用于价量 anchor + 基本面 asof；legacy `parquet_kline` / `multi_parquet` 仅调试。Registry 见 `data_access/config/datasets.yaml`；契约 CI：`scripts/validate_datasets_mining_alignment.py`。
 
 You are an AI assistant helping to write factor definitions and configurations for a quantitative factor engine. Below is the complete specification of the system.
 
@@ -26,32 +26,56 @@ You are an AI assistant helping to write factor definitions and configurations f
 
 ## 2. Supported Data Sources
 
-### Data Source Types
+### Data Source Types (enterprise default)
 
-| Type | Usage | Key Features |
+| Type | Usage | Key fields |
 |---|---|---|
-| `parquet_kline` | K-line data (日K线、分钟线等) | Fields: `close, volume, transactions, price, size, bid_price, ask_price` Timestamp unit: nanoseconds (ns) |
-| `multi_parquet` | Generic multi-file parquet (财务数据、融券数据等) | Flexible instrument/timestamp columns Can be partitioned across multiple files Supports date range filtering |
-| `parquet` | Single/simple directory parquet | Generic fallback |
+| **`data_access`** | **Recommended** — registered dataset in `datasets.yaml` | `dataset`, `fields`, `start_date`/`end_date`, optional `params`/`kind` |
+| **`composite`** | Multi-table PiT join (price anchor + fundamentals/universe) | `anchor`, `anchor_column`, `sources`, `joins` (`asof_backward`), `aliases` |
+| `clickhouse` | ClickHouse long table + optional SQL pushdown | `table`, `fields`, `timestamp_col`, `instrument_col` |
+| `parquet_kline` | Legacy direct K-line parquet | `root`, `timestamp_column`, `instrument_column`, `fields` |
+| `multi_parquet` | Legacy generic multi-file parquet | `root`, `timestamp_col`, `instrument_col` |
 
 ### Core Requirements for All Data Sources
 
 - **Data Shape**: MultiIndex Series with `(timestamp, instrument)` index
-  - timestamp: date or datetime (normalized to midnight UTC via `dt.normalize()`)
+  - timestamp: date or datetime (tick datasets: set `normalize_timestamp: true`, `timestamp_unit: ns`)
   - instrument: ticker symbol (string)
 - **Value Index**: Column values at each (timestamp, instrument) point
 - **Missing Data**: NaN values allowed (dropna occurs in result phase)
+- **PiT**: Non-anchor sources in `composite` must use `joins: {source: asof_backward}`
+
+### Registry mapping (Massive cleaned → `dataset` name)
+
+| Path under `cleaned_massive_data/` | `dataset` |
+|---|---|
+| `fundamentals/balance_sheet` | `fundamentals_balance_sheet` |
+| `fundamentals/cash_flow_statement` | `fundamentals_cash_flow_statement` |
+| `fundamentals/financials_ratios` | `financials_ratios` |
+| `fundamentals/income_statement` | `fundamentals_income_statement` |
+| `fundamentals/short_interest` | `fundamentals_short_interest` |
+| `fundamentals/short_volume` | `fundamentals_short_volume` |
+| `fundamentals/stocks_floats` | `stocks_floats` |
+| `us_stocks_sip/day_aggs_v1` | `us_stocks_sip_day_aggs` |
+| `us_stocks_sip/minute_aggs_v1` | `us_stocks_sip_minute_aggs` |
+| `us_stocks_sip/quotes_v1` | `us_stocks_sip_quotes` |
+| `us_stocks_sip/trades_v1` | `us_stocks_sip_trades` |
+| raw ticks parametric | `massive_ticks` + `kind: quotes_v1\|trades_v1` |
+
+Mining presets: `api.mining_integration.default_mining_data_source_presets()`.
 
 ---
 
 ## 3. Available Datasets (24 Total)
 
+> **Read path**: use `type: data_access` + **`dataset`** from the table in §2 (schema in `data_access/config/datasets.yaml`). Field lists below describe parquet columns; only schema-declared columns are validated in CI.
+
 ### **Fundamentals (7 datasets)**
 
-All located in `/massive_parquet/fundamentals/`
+All registered under `fundamentals_*` / `financials_ratios` / `stocks_floats` in `datasets.yaml`.
 
 #### 3.1 `fundamentals/balance_sheet`
-**Type**: `multi_parquet`
+**Dataset**: `fundamentals_balance_sheet` · **Read via**: `data_access`
 **Timestamp Column**: `period_end`
 **Instrument Column**: `tickers` (list format)
 **Available Fields** (38 total):
@@ -93,7 +117,7 @@ col("long_term_debt_and_capital_lease_obligations") / col("total_assets")
 ---
 
 #### 3.2 `fundamentals/cash_flow_statement`
-**Type**: `multi_parquet`
+**Dataset**: `fundamentals_cash_flow_statement` · **Read via**: `data_access`
 **Timestamp Column**: `period_end`
 **Instrument Column**: `tickers`
 **Sample Fields** (32 total):
@@ -113,7 +137,7 @@ zscore(col("net_cash_from_operating_activities"))
 ---
 
 #### 3.3 `fundamentals/financials_ratios`
-**Type**: `multi_parquet`
+**Dataset**: `financials_ratios` · **Read via**: `data_access`
 **Timestamp Column**: `date`
 **Instrument Column**: `ticker`
 **Sample Fields** (23 total):
@@ -142,7 +166,7 @@ ts_mean(col("return_on_equity"), 3)
 ---
 
 #### 3.4 `fundamentals/income_statement`
-**Type**: `multi_parquet`
+**Dataset**: `fundamentals_income_statement` · **Read via**: `data_access`
 **Timestamp Column**: `period_end`
 **Instrument Column**: `tickers`
 **Sample Fields** (34 total):
@@ -169,7 +193,7 @@ col("net_income") / col("revenue")
 ---
 
 #### 3.5 `fundamentals/short_interest`
-**Type**: `multi_parquet`
+**Dataset**: `fundamentals_short_interest` · **Read via**: `data_access`
 **Timestamp Column**: `settlement_date`
 **Instrument Column**: `ticker`
 **Sample Fields** (5 total):
@@ -191,7 +215,7 @@ zscore(col("short_volume_ratio"))
 ---
 
 #### 3.6 `fundamentals/short_volume`
-**Type**: `multi_parquet`
+**Dataset**: `fundamentals_short_volume` · **Read via**: `data_access`
 **Timestamp Column**: `date`
 **Instrument Column**: `ticker`
 **Sample Fields** (15 total):
@@ -210,7 +234,7 @@ col("short_volume_ratio")
 ---
 
 #### 3.7 `fundamentals/stocks_floats`
-**Type**: `multi_parquet`
+**Dataset**: `stocks_floats` · **Read via**: `data_access`
 **Timestamp Column**: `effective_date`
 **Instrument Column**: `ticker`
 **Sample Fields** (4 total):
@@ -232,7 +256,7 @@ zscore(col("free_float_percent"))
 All located in `/massive_parquet/us_stocks_sip/`
 
 #### 3.8 `us_stocks_sip/day_aggs_v1`
-**Type**: `multi_parquet`
+**Dataset**: `us_stocks_sip_day_aggs` · **Read via**: `data_access`
 **Timestamp Column**: `window_start`
 **Instrument Column**: `ticker`
 **Timestamp Unit**: `ns` (nanoseconds)
@@ -260,7 +284,7 @@ col("high") - col("low")
 ---
 
 #### 3.9 `us_stocks_sip/minute_aggs_v1`
-**Type**: `multi_parquet`
+**Dataset**: `us_stocks_sip_minute_aggs` · **Read via**: `data_access` (`normalize_timestamp: true`, `timestamp_unit: ns`)
 **Timestamp Column**: `window_start`
 **Instrument Column**: `ticker`
 **Timestamp Unit**: `ns`
@@ -277,7 +301,7 @@ rank(ts_mean(col("close"), 5))
 ---
 
 #### 3.10 `us_stocks_sip/quotes_v1`
-**Type**: `multi_parquet`
+**Dataset**: `us_stocks_sip_quotes` · **Read via**: `data_access` (`normalize_timestamp: true`, `timestamp_unit: ns`)
 **Timestamp Column**: `sip_timestamp`
 **Instrument Column**: `ticker`
 **Timestamp Unit**: `ns`
@@ -301,7 +325,7 @@ rank((col("bid_price") + col("ask_price")) / 2)
 ---
 
 #### 3.11 `us_stocks_sip/trades_v1`
-**Type**: `multi_parquet`
+**Dataset**: `us_stocks_sip_trades` · **Read via**: `data_access` (`normalize_timestamp: true`, `timestamp_unit: ns`)
 **Timestamp Column**: `sip_timestamp`
 **Instrument Column**: `ticker`
 **Timestamp Unit**: `ns`
@@ -355,17 +379,25 @@ factor:
   description: <description>               # Brief description in English or Chinese
 
 data_source:
-  type: <source_type>                      # "parquet_kline", "multi_parquet", or "parquet"
-  root: <root_path>                        # Path to data directory
-  timestamp_col: <timestamp_column>        # Column name for timestamp (e.g., "period_end", "window_start", "sip_timestamp")
-  instrument_col: <instrument_column>      # Column name for ticker/security (e.g., "ticker", "tickers")
-  max_files: <max_file_count>              # Max number of files to load per column (e.g., 3)
-  timestamp_unit: "ns"                     # (Optional) Timestamp unit: "ns" for nanoseconds (default: infer from data)
-  # start_date: "YYYY-MM-DD"                # (Optional) Row-level filter: only load data >= this date
-  # end_date:   "YYYY-MM-DD"                # (Optional) Row-level filter: only load data <= this date
+  type: <source_type>                      # Prefer "data_access" or "composite"
+  dataset: <registry_name>                 # data_access: e.g. us_stocks_sip_day_aggs
+  fields:                                  # logical_name: physical_column
+    close: close
+  start_date: "YYYY-MM-DD"                 # Row-level filter (recommended for smoke)
+  end_date: "YYYY-MM-DD"
+  # composite-only:
+  # anchor: price
+  # anchor_column: close
+  # sources: { price: {...}, ratios: {...} }
+  # joins: { ratios: asof_backward }
+  # aliases: { pe: ratios.price_to_earnings }
+  # tick datasets:
+  # normalize_timestamp: true
+  # timestamp_unit: ns
+  # parametric ticks: dataset: massive_ticks, kind: trades_v1
 
 backend:
-  type: pandas                             # Currently only "pandas" supported
+  type: pandas                             # pandas | clickhouse_sql | auto
 
 engine:
   enable_cache: true                       # Enable column-level caching
@@ -373,7 +405,7 @@ engine:
 
 ### Configuration Examples
 
-**Example 1: K-line Momentum Factor**
+**Example 1: K-line Momentum Factor (`data_access`)**
 ```yaml
 factor:
   name: day_aggs_rank_ts_mean_close_3
@@ -382,14 +414,12 @@ factor:
   description: Daily close price 3-period momentum rank
 
 data_source:
-  type: multi_parquet
-  root: /massive_parquet/us_stocks_sip/day_aggs_v1
-  timestamp_col: window_start
-  instrument_col: ticker
-  max_files: 3
-  timestamp_unit: "ns"
-  # start_date: "2024-01-01"
-  # end_date:   "2024-12-31"
+  type: data_access
+  dataset: us_stocks_sip_day_aggs
+  fields:
+    close: close
+  start_date: "2024-01-01"
+  end_date: "2024-12-31"
 
 backend:
   type: pandas
@@ -398,7 +428,7 @@ engine:
   enable_cache: true
 ```
 
-**Example 2: Fundamentals Value Factor**
+**Example 2: Fundamentals Value Factor (`data_access`)**
 ```yaml
 factor:
   name: financials_ratios_rank_pe
@@ -407,11 +437,12 @@ factor:
   description: Price-to-earnings cross-sectional rank (value signal)
 
 data_source:
-  type: multi_parquet
-  root: /massive_parquet/fundamentals/financials_ratios
-  timestamp_col: date
-  instrument_col: ticker
-  max_files: 3
+  type: data_access
+  dataset: financials_ratios
+  fields:
+    price_to_earnings: price_to_earnings
+  start_date: "2016-01-01"
+  end_date: "2024-12-31"
 
 backend:
   type: pandas
@@ -420,26 +451,46 @@ engine:
   enable_cache: true
 ```
 
-**Example 3: Balance Sheet Quality Factor**
+**Example 3: Composite — SIP day + balance sheet (PiT asof)**
 ```yaml
 factor:
-  name: balance_sheet_leverage_ratio
-  expr: col("long_term_debt_and_capital_lease_obligations") / col("total_assets")
+  name: balance_sheet_leverage_rank
+  expr: rank(col("total_equity") / (1 + col("total_liabilities")))
   freq: 1d
-  description: Long-term debt intensity - lower is better
+  description: Equity vs liabilities strength
 
 data_source:
-  type: multi_parquet
-  root: /massive_parquet/fundamentals/balance_sheet
-  timestamp_col: period_end
-  instrument_col: tickers
-  max_files: 3
+  type: composite
+  anchor: price
+  anchor_column: close
+  aliases:
+    total_equity: balance_sheet.total_equity
+    total_liabilities: balance_sheet.total_liabilities
+  sources:
+    price:
+      type: data_access
+      dataset: us_stocks_sip_day_aggs
+    balance_sheet:
+      type: data_access
+      dataset: fundamentals_balance_sheet
+  joins:
+    balance_sheet: asof_backward
 
 backend:
   type: pandas
 
 engine:
   enable_cache: true
+```
+
+**Legacy Example (debug only — direct parquet)**
+```yaml
+data_source:
+  type: multi_parquet
+  root: /massive_parquet/fundamentals/balance_sheet
+  timestamp_col: period_end
+  instrument_col: tickers
+  max_files: 3
 ```
 
 ---

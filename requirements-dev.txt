@@ -12,6 +12,9 @@ duckdb>=0.10
 polars>=0.20
 tqdm>=4.0
 pre-commit>=3.0
+scipy>=1.10
+statsmodels>=0.14
+clickhouse-connect>=0.7
 
 # Phase 10 可选（Redis 队列 / OTLP gRPC 原生推送 / S3 对象存储队列）
 redis>=5.0; python_version >= "3.8"

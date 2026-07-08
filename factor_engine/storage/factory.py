@@ -65,6 +65,34 @@ def _attach_bar_freq(source: Any, bar_freq: str) -> Any:
     return source
 
 
+def _apply_date_range_to_source_config(
+    config: Any,
+    *,
+    start_date: str | None,
+    end_date: str | None,
+) -> Any:
+    """将 composite 顶层的 ``start_date``/``end_date`` 下发到各子源（子源已显式设置则不覆盖）。"""
+    if not isinstance(config, dict) or (start_date is None and end_date is None):
+        return config
+    cfg = dict(config)
+    if start_date is not None and cfg.get("start_date") is None:
+        cfg["start_date"] = start_date
+    if end_date is not None and cfg.get("end_date") is None:
+        cfg["end_date"] = end_date
+    if str(cfg.get("type", "")).lower() == "composite":
+        subs = cfg.get("sources")
+        if isinstance(subs, dict):
+            cfg["sources"] = {
+                str(name): _apply_date_range_to_source_config(
+                    sub,
+                    start_date=start_date,
+                    end_date=end_date,
+                )
+                for name, sub in subs.items()
+            }
+    return cfg
+
+
 def build_data_source(config: Any):
     """根据运行时配置构造单数据源或组合数据源实例。"""
 
@@ -79,12 +107,20 @@ def build_data_source(config: Any):
         allow_unqualified_anchor_columns = bool(
             _pop_option(options, "allow_unqualified_anchor_columns", default=True)
         )
+        start_date = _pop_option(options, "start_date", default=None)
+        end_date = _pop_option(options, "end_date", default=None)
 
         if not isinstance(raw_sources, dict) or not raw_sources:
             raise ValueError("Composite data source requires a non-empty 'sources' mapping")
 
         built_sources = {
-            str(name): build_data_source(source_config)
+            str(name): build_data_source(
+                _apply_date_range_to_source_config(
+                    source_config,
+                    start_date=start_date,
+                    end_date=end_date,
+                )
+            )
             for name, source_config in raw_sources.items()
         }
         source = CompositeDataSource(
@@ -115,6 +151,12 @@ def build_data_source(config: Any):
         instrument_filter = _pop_option(options, "instrument_filter", default=None)
         normalize_timestamp = _pop_option(options, "normalize_timestamp", default=None)
         timestamp_unit = _pop_option(options, "timestamp_unit", default=None)
+        params = _pop_option(options, "params", default=None)
+        kind = _pop_option(options, "kind", default=None)
+        if kind is not None:
+            merged = dict(params or {})
+            merged["kind"] = str(kind)
+            params = merged
         _pop_option(options, "root", default=None)  # 忽略旧配置残留
         source = DataAccessSource(
             dataset=str(dataset),
@@ -124,6 +166,7 @@ def build_data_source(config: Any):
             instrument_filter=instrument_filter,
             normalize_timestamp=normalize_timestamp,
             timestamp_unit=timestamp_unit,
+            params=params,
         )
         _ensure_no_extra_options(source_type, options)
         return _wrap_long_table(_attach_bar_freq(source, bar_freq), long_table=long_table)
