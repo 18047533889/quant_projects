@@ -15,6 +15,74 @@ from pipeline import run_config_directory, run_from_config
 logger = get_logger("run_pipeline")
 
 
+def _run_reconcile(args: argparse.Namespace) -> dict:
+    if args.reconcile_command == "dual-write":
+        from runtime.dual_write_reconcile import (
+            list_open_dual_write_failures,
+            reconcile_all_dual_write_states,
+            reconcile_dual_write_state,
+            repair_dual_write_clickhouse,
+        )
+
+        lake = args.lake_root
+        compensate_staging = not args.no_compensate_staging
+        if args.factor_id:
+            if args.repair:
+                return repair_dual_write_clickhouse(
+                    factor_id=args.factor_id,
+                    lake_root=lake,
+                    clickhouse_table=args.clickhouse_table,
+                    prefer_source=args.prefer_source,
+                    compensate_staging=compensate_staging,
+                    compensate_after=args.compensate_after,
+                )
+            return reconcile_dual_write_state(factor_id=args.factor_id, lake_root=lake)
+
+        failures = list_open_dual_write_failures(
+            lake_root=lake,
+            limit=args.limit,
+        )
+        if args.repair:
+            results = []
+            ok = True
+            for row in failures:
+                fid = row["factor_id"]
+                if not fid:
+                    continue
+                out = repair_dual_write_clickhouse(
+                    factor_id=str(fid),
+                    lake_root=lake,
+                    clickhouse_table=args.clickhouse_table,
+                    prefer_source=args.prefer_source,
+                    compensate_staging=compensate_staging,
+                    compensate_after=args.compensate_after,
+                )
+                results.append(out)
+                ok = ok and out.get("ok", False)
+            return {"ok": ok, "mode": "repair_batch", "results": results}
+
+        if failures:
+            return reconcile_all_dual_write_states(lake_root=lake, limit=args.limit)
+        return {"ok": True, "lake_root": str(lake), "factors_with_failures": 0, "reports": []}
+
+    if args.reconcile_command == "snapshot":
+        from runtime.config import load_config
+        from runtime.config_runtime import build_data_source_config
+        from runtime.snapshot_reconcile import reconcile_data_snapshot
+
+        data_source_config = None
+        if args.config is not None:
+            cfg = load_config(args.config)
+            data_source_config = build_data_source_config(cfg)
+        return reconcile_data_snapshot(
+            factor_id=args.factor_id,
+            lake_root=args.lake_root,
+            data_source_config=data_source_config,
+        )
+
+    raise SystemExit(f"Unknown reconcile subcommand: {args.reconcile_command}")
+
+
 def _add_common_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--output-root", type=Path, default=None, help="Override pipeline output root")
     mode_group = parser.add_mutually_exclusive_group()
@@ -156,12 +224,150 @@ def parse_args() -> argparse.Namespace:
     )
     _add_common_options(config_dir_parser)
 
+    reconcile_parser = subparsers.add_parser("reconcile", help="对账与双写修复")
+    reconcile_sub = reconcile_parser.add_subparsers(dest="reconcile_command", required=True)
+
+    dw_parser = reconcile_sub.add_parser("dual-write", help="检查 staging+ClickHouse 双写失败")
+    dw_parser.add_argument("--lake-root", type=Path, required=True, help="因子湖根目录")
+    dw_parser.add_argument("--factor-id", default=None, help="单个因子 ID；省略则扫描全部失败")
+    dw_parser.add_argument("--repair", action="store_true", help="从 local/staging 补写 ClickHouse")
+    dw_parser.add_argument(
+        "--no-compensate-staging",
+        action="store_true",
+        help="repair 时不删除 staging 中 watermark 之后的脏行（默认会补偿删除）",
+    )
+    dw_parser.add_argument(
+        "--compensate-after",
+        default=None,
+        help="staging 行级删除下界（默认 watermark end_date）",
+    )
+    dw_parser.add_argument(
+        "--prefer-source",
+        choices=["local", "staging"],
+        default=None,
+        help="repair 时优先数据源（默认 local → staging 回退）",
+    )
+    dw_parser.add_argument("--clickhouse-table", default="factor_values")
+    dw_parser.add_argument("--limit", type=int, default=50)
+
+    snap_parser = reconcile_sub.add_parser("snapshot", help="data_snapshot_id 对账")
+    snap_parser.add_argument("--lake-root", type=Path, required=True)
+    snap_parser.add_argument("--factor-id", required=True)
+    snap_parser.add_argument("--config", type=Path, default=None, help="可选 YAML 以比对 config hash")
+
+    queue_parser = subparsers.add_parser("queue", help="分布式任务队列 worker")
+    queue_sub = queue_parser.add_subparsers(dest="queue_command", required=True)
+    worker_parser = queue_sub.add_parser("worker", help="消费 file/redis 任务队列")
+    worker_parser.add_argument(
+        "--backend",
+        choices=["file", "redis", "object_store"],
+        default="file",
+        help="队列 backend（file / redis / object_store；queue-root 为 s3:// 时自动 object_store）",
+    )
+    worker_parser.add_argument("--queue-root", type=Path, default=None, help="file 队列根目录")
+    worker_parser.add_argument("--redis-url", default=None, help="Redis URL（backend=redis）")
+    worker_parser.add_argument("--max-jobs", type=int, default=0, help="最多处理 N 个任务；0=无限")
+    _add_common_options(worker_parser)
+
+    enqueue_parser = queue_sub.add_parser("enqueue", help="将 config 目录批量入队")
+    enqueue_parser.add_argument("config_dir", type=Path, help="YAML 配置目录")
+    enqueue_parser.add_argument("--pattern", default="*.yaml")
+    enqueue_parser.add_argument(
+        "--backend",
+        choices=["file", "redis", "object_store"],
+        default="file",
+    )
+    enqueue_parser.add_argument("--queue-root", type=Path, default=None)
+    enqueue_parser.add_argument("--redis-url", default=None)
+
+    for p in (reconcile_parser, dw_parser, snap_parser):
+        p.add_argument("--log-level", default="INFO")
+        p.add_argument("--log-file", type=Path, default=None)
+    queue_parser.add_argument("--log-level", default="INFO")
+    queue_parser.add_argument("--log-file", type=Path, default=None)
+
     return parser.parse_args()
+
+
+def _build_queue_from_args(args: argparse.Namespace):
+    from runtime.task_queue import build_task_queue
+
+    if args.backend == "redis":
+        return build_task_queue(
+            backend="redis",
+            redis_url=args.redis_url or "redis://127.0.0.1:6379/0",
+        )
+    if args.backend == "object_store" or (
+        args.queue_root is not None and "://" in str(args.queue_root)
+    ):
+        if args.queue_root is None:
+            raise SystemExit("object_store backend 需要 --queue-root（如 s3://bucket/prefix/queue）")
+        return build_task_queue(backend="object_store", root=args.queue_root)
+    if args.queue_root is None:
+        raise SystemExit("--queue-root required for file backend")
+    return build_task_queue(backend="file", root=args.queue_root)
+
+
+def _run_queue_enqueue(args: argparse.Namespace) -> dict:
+    from runtime.task_queue import enqueue_config_directory
+
+    queue = _build_queue_from_args(args)
+    jobs = enqueue_config_directory(queue, args.config_dir, pattern=args.pattern)
+    return {"ok": True, "enqueued": len(jobs), "jobs": [j.job_id for j in jobs]}
+
+
+def _run_queue_worker(args: argparse.Namespace) -> dict:
+    queue = _build_queue_from_args(args)
+
+    processed = 0
+    results: list[dict] = []
+    while True:
+        if args.max_jobs and processed >= args.max_jobs:
+            break
+        job = queue.claim()
+        if job is None:
+            break
+        try:
+            out = run_from_config(
+                Path(job.config_path),
+                materialize=True,
+                profile=args.profile,
+                dq_check=args.strict_dq,
+                dq_strict=args.dq_strict,
+                incremental=args.incremental,
+            )
+            queue.complete(job.job_id, result={"ok": True, "summary": out})
+            results.append({"job_id": job.job_id, "ok": True})
+        except Exception as exc:
+            queue.fail(job.job_id, error=str(exc))
+            results.append({"job_id": job.job_id, "ok": False, "error": str(exc)})
+        processed += 1
+
+    return {"ok": all(r.get("ok") for r in results), "processed": processed, "results": results}
 
 
 def main() -> None:
     args = parse_args()
     configure_logging(args.log_level, log_file=args.log_file)
+
+    if args.command == "reconcile":
+        payload = _run_reconcile(args)
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        if not payload.get("ok", True):
+            raise SystemExit(1)
+        return
+
+    if args.command == "queue":
+        if args.queue_command == "enqueue":
+            payload = _run_queue_enqueue(args)
+        elif args.queue_command == "worker":
+            payload = _run_queue_worker(args)
+        else:
+            raise SystemExit("unknown queue subcommand")
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        if not payload.get("ok", True):
+            raise SystemExit(1)
+        return
 
     if args.incremental and args.materialize is False:
         raise SystemExit("--incremental requires materialize mode (omit --run-only)")

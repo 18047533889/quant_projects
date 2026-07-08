@@ -161,6 +161,156 @@ class FileTaskQueue:
         return moved
 
 
+class ObjectStoreTaskQueue:
+    """对象存储任务队列（S3 等）；本地路径无 ``://`` 时委托 ``FileTaskQueue``。"""
+
+    def __init__(self, root: str | Path) -> None:
+        text = str(root).strip()
+        if "://" not in text:
+            self._delegate: FileTaskQueue | None = FileTaskQueue(text)
+            self._fs = None
+            self._base = ""
+            return
+        try:
+            import fsspec
+        except ImportError as exc:
+            raise ImportError(
+                "ObjectStoreTaskQueue 需要 fsspec：pip install fsspec s3fs"
+            ) from exc
+        protocol = text.split("://", 1)[0]
+        self._delegate = None
+        self._fs = fsspec.filesystem(protocol)
+        self._base = text.split("://", 1)[1].rstrip("/")
+        for bucket in ("pending", "running", "done", "failed"):
+            path = self._path(bucket)
+            if not self._fs.exists(path):
+                self._fs.mkdirs(path, exist_ok=True)
+
+    def _path(self, *parts: str) -> str:
+        return "/".join(p for p in (self._base, *parts) if p)
+
+    def _write_json(self, path: str, payload: dict[str, Any]) -> None:
+        assert self._fs is not None
+        with self._fs.open(path, "w") as fh:
+            fh.write(json.dumps(payload, ensure_ascii=False, indent=2))
+
+    def _read_json(self, path: str) -> dict[str, Any]:
+        assert self._fs is not None
+        with self._fs.open(path, "r") as fh:
+            return json.loads(fh.read())
+
+    def enqueue(self, config_path: str | Path, **payload: Any) -> QueueJob:
+        if self._delegate is not None:
+            return self._delegate.enqueue(config_path, **payload)
+        now = datetime.now(timezone.utc).isoformat()
+        job_id = uuid.uuid4().hex
+        job = QueueJob(
+            job_id=job_id,
+            config_path=str(config_path),
+            payload=payload,
+            status="pending",
+            created_at=now,
+            updated_at=now,
+        )
+        self._write_json(self._path("pending", f"{job_id}.json"), job.__dict__)
+        return job
+
+    def claim(self) -> QueueJob | None:
+        if self._delegate is not None:
+            return self._delegate.claim()
+        assert self._fs is not None
+        pending = sorted(self._fs.glob(self._path("pending", "*.json")))
+        for path in pending:
+            name = path.rsplit("/", 1)[-1]
+            running = self._path("running", name)
+            try:
+                self._fs.mv(path, running)
+            except Exception:
+                continue
+            data = self._read_json(running)
+            job = QueueJob(**data)
+            updated = QueueJob(
+                job_id=job.job_id,
+                config_path=job.config_path,
+                payload=job.payload,
+                status="running",
+                created_at=job.created_at,
+                updated_at=datetime.now(timezone.utc).isoformat(),
+            )
+            self._write_json(running, updated.__dict__)
+            return updated
+        return None
+
+    def complete(self, job_id: str, *, result: dict[str, Any] | None = None) -> None:
+        if self._delegate is not None:
+            return self._delegate.complete(job_id, result=result)
+        self._finalize(job_id, bucket="done", result=result)
+
+    def fail(self, job_id: str, *, error: str) -> None:
+        if self._delegate is not None:
+            return self._delegate.fail(job_id, error=error)
+        self._finalize(job_id, bucket="failed", result={"error": error})
+
+    def _finalize(self, job_id: str, *, bucket: str, result: dict[str, Any] | None) -> None:
+        assert self._fs is not None
+        running = self._path("running", f"{job_id}.json")
+        if not self._fs.exists(running):
+            raise FileNotFoundError(f"running job not found: {job_id}")
+        job = QueueJob(**self._read_json(running))
+        payload = dict(job.payload)
+        if result is not None:
+            payload["result"] = result
+        final = QueueJob(
+            job_id=job.job_id,
+            config_path=job.config_path,
+            payload=payload,
+            status=bucket,
+            created_at=job.created_at,
+            updated_at=datetime.now(timezone.utc).isoformat(),
+        )
+        target = self._path(bucket, f"{job_id}.json")
+        self._write_json(target, final.__dict__)
+        self._fs.rm(running, missing_ok=True)
+
+    def stats(self) -> dict[str, int]:
+        if self._delegate is not None:
+            return self._delegate.stats()
+        assert self._fs is not None
+        return {
+            bucket: len(self._fs.glob(self._path(bucket, "*.json")))
+            for bucket in ("pending", "running", "done", "failed")
+        }
+
+    def requeue_stale_running(self, *, max_age_seconds: float | None = None) -> int:
+        if self._delegate is not None:
+            return self._delegate.requeue_stale_running(max_age_seconds=max_age_seconds)
+        assert self._fs is not None
+        moved = 0
+        now = datetime.now(timezone.utc)
+        for path in sorted(self._fs.glob(self._path("running", "*.json"))):
+            job = QueueJob(**self._read_json(path))
+            if max_age_seconds is not None:
+                updated = _parse_ts(job.updated_at)
+                if updated is not None:
+                    age = (now - updated).total_seconds()
+                    if age < max_age_seconds:
+                        continue
+            name = path.rsplit("/", 1)[-1]
+            pending = self._path("pending", name)
+            restored = QueueJob(
+                job_id=job.job_id,
+                config_path=job.config_path,
+                payload=job.payload,
+                status="pending",
+                created_at=job.created_at,
+                updated_at=now.isoformat(),
+            )
+            self._write_json(pending, restored.__dict__)
+            self._fs.rm(path, missing_ok=True)
+            moved += 1
+        return moved
+
+
 def _parse_ts(value: str | None) -> datetime | None:
     if not value:
         return None
@@ -169,3 +319,126 @@ def _parse_ts(value: str | None) -> datetime | None:
         return datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError:
         return None
+
+
+class RedisTaskQueue:
+    """Redis 任务队列 backend（Phase 10）；未安装 redis 时 raise ImportError。"""
+
+    def __init__(self, redis_url: str, *, prefix: str = "factor_engine:queue") -> None:
+        try:
+            import redis
+        except ImportError as exc:
+            raise ImportError(
+                "RedisTaskQueue 需要 redis 包：pip install redis"
+            ) from exc
+
+        self._redis = redis.from_url(redis_url, decode_responses=True)
+        self._prefix = prefix.rstrip(":")
+        for bucket in ("pending", "running", "done", "failed"):
+            self._redis.delete(f"{self._prefix}:{bucket}")
+
+    def _key(self, bucket: str) -> str:
+        return f"{self._prefix}:{bucket}"
+
+    def enqueue(self, config_path: str | Path, **payload: Any) -> QueueJob:
+        now = datetime.now(timezone.utc).isoformat()
+        job_id = uuid.uuid4().hex
+        job = QueueJob(
+            job_id=job_id,
+            config_path=str(config_path),
+            payload=payload,
+            status="pending",
+            created_at=now,
+            updated_at=now,
+        )
+        self._redis.hset(self._key("pending"), job_id, json.dumps(job.__dict__, ensure_ascii=False))
+        return job
+
+    def claim(self) -> QueueJob | None:
+        pending_key = self._key("pending")
+        for job_id, raw in self._redis.hgetall(pending_key).items():
+            if self._redis.hdel(pending_key, job_id) == 0:
+                continue
+            data = json.loads(raw)
+            job = QueueJob(**data)
+            updated = QueueJob(
+                job_id=job.job_id,
+                config_path=job.config_path,
+                payload=job.payload,
+                status="running",
+                created_at=job.created_at,
+                updated_at=datetime.now(timezone.utc).isoformat(),
+            )
+            self._redis.hset(self._key("running"), job_id, json.dumps(updated.__dict__, ensure_ascii=False))
+            return updated
+        return None
+
+    def complete(self, job_id: str, *, result: dict[str, Any] | None = None) -> None:
+        self._finalize(job_id, bucket="done", result=result)
+
+    def fail(self, job_id: str, *, error: str) -> None:
+        self._finalize(job_id, bucket="failed", result={"error": error})
+
+    def _finalize(self, job_id: str, *, bucket: str, result: dict[str, Any] | None) -> None:
+        running_key = self._key("running")
+        raw = self._redis.hget(running_key, job_id)
+        if raw is None:
+            raise FileNotFoundError(f"running job not found: {job_id}")
+        self._redis.hdel(running_key, job_id)
+        data = json.loads(raw)
+        job = QueueJob(**data)
+        payload = dict(job.payload)
+        if result is not None:
+            payload["result"] = result
+        final = QueueJob(
+            job_id=job.job_id,
+            config_path=job.config_path,
+            payload=payload,
+            status=bucket,
+            created_at=job.created_at,
+            updated_at=datetime.now(timezone.utc).isoformat(),
+        )
+        self._redis.hset(self._key(bucket), job_id, json.dumps(final.__dict__, ensure_ascii=False))
+
+    def stats(self) -> dict[str, int]:
+        return {
+            bucket: self._redis.hlen(self._key(bucket))
+            for bucket in ("pending", "running", "done", "failed")
+        }
+
+
+def build_task_queue(
+    *,
+    backend: str = "file",
+    root: str | Path | None = None,
+    redis_url: str | None = None,
+) -> FileTaskQueue | RedisTaskQueue | ObjectStoreTaskQueue:
+    """工厂：file / object_store（S3 等）/ redis 队列。"""
+    normalized = backend.strip().lower()
+    root_text = str(root).strip() if root is not None else ""
+    if normalized in {"object_store", "s3"} or (root_text and "://" in root_text):
+        if not root_text:
+            raise ValueError("object_store backend 需要 root（如 s3://bucket/prefix/queue）")
+        return ObjectStoreTaskQueue(root_text)
+    if normalized == "redis":
+        if not redis_url:
+            raise ValueError("redis backend 需要 redis_url")
+        return RedisTaskQueue(redis_url)
+    if root is None:
+        raise ValueError("file backend 需要 root")
+    return FileTaskQueue(root)
+
+
+def enqueue_config_directory(
+    queue: FileTaskQueue | RedisTaskQueue | ObjectStoreTaskQueue,
+    config_dir: str | Path,
+    *,
+    pattern: str = "*.yaml",
+) -> list[QueueJob]:
+    """将目录内 YAML config 批量入队。"""
+    root = Path(config_dir)
+    jobs: list[QueueJob] = []
+    for path in sorted(root.glob(pattern)):
+        if path.is_file():
+            jobs.append(queue.enqueue(path))
+    return jobs

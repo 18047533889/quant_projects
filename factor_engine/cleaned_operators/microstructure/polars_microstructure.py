@@ -285,3 +285,35 @@ class MicroVpinPolars(SeriesOperator):
                 ((ret * volume[vcol]).rolling_sum(w) / volume[vcol].rolling_sum(w)).alias(c)
             )
         return close.with_columns(out_exprs)
+
+
+@register_operator(
+    name="micro_kyle_lambda",
+    category="intraday_microstructure",
+    business_category="intraday_microstructure",
+    canonical="micro_kyle_lambda",
+    source="factor_dsl_polars",
+)
+class MicroKyleLambdaPolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="micro_kyle_lambda",
+        category="intraday_microstructure",
+        description="Kyle lambda proxy",
+        param_names=["close", "volume", "window"],
+        return_type="series",
+        tags=["microstructure", "polars"],
+    )
+
+    def _calculate_series(
+        self, close: pl.DataFrame, volume: pl.DataFrame, window: int = 20, **kwargs
+    ) -> pl.DataFrame:
+        w = max(2, int(window))
+        vol_cols = _numeric_cols(volume)
+        out_exprs = []
+        for c in _numeric_cols(close):
+            vcol = c if c in vol_cols else vol_cols[0]
+            ret = (close[c] / close[c].shift(1) - 1.0).abs()
+            cov = ret.rolling_cov(volume[vcol], window_size=w)
+            var = volume[vcol].rolling_var(w)
+            out_exprs.append((cov / var).alias(c))
+        return close.with_columns(out_exprs)

@@ -278,5 +278,7 @@ class CompositeDataSource(DataSource):
         return {n: self.load_column(n) for n in names}
 
     def prefetch_columns(self, names: list[str]) -> None:
-        for name in names:
-            self.load_column(name)
+        self.load_columns(names)
+
+    def prefetch_panels(self, names: list[str]) -> None:
+        self.prefetch_columns(names)

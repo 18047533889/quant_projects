@@ -12,3 +12,10 @@ duckdb>=0.10
 polars>=0.20
 tqdm>=4.0
 pre-commit>=3.0
+
+# Phase 10 可选（Redis 队列 / OTLP gRPC 原生推送 / S3 对象存储队列）
+redis>=5.0; python_version >= "3.8"
+fsspec>=2024.2.0
+s3fs>=2024.2.0
+opentelemetry-sdk>=1.24
+opentelemetry-exporter-otlp-proto-grpc>=1.24

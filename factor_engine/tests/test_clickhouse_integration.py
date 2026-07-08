@@ -28,7 +28,7 @@ def _ch_available() -> bool:
 
 pytestmark = pytest.mark.skipif(
     not _ch_available(),
-    reason="ClickHouse 不可达（见 examples/infra/clickhouse-compose.yaml）",
+    reason="ClickHouse 不可达（见 examples/infrastructure/docker-compose.clickhouse.yml）",
 )
 
 

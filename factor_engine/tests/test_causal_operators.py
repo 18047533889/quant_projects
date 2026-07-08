@@ -326,3 +326,35 @@ class TestEngineCausalIntegration:
             "result"
         ]
         assert out.isna().all()
+
+
+class TestTier1CrossSectionalCausal:
+    """Tier-1 截面算子 prefix-invariant / 行内语义。"""
+
+    def test_normalize_prefix_invariant(self):
+        x = pd.DataFrame(
+            {"A": [1.0, 2.0, 3.0], "B": [2.0, 4.0, 6.0]},
+            index=_dates(3),
+        )
+        assert_prefix_invariant(_op("normalize").calculate, x)
+
+    def test_quantile_prefix_invariant(self):
+        x = pd.DataFrame(
+            {"A": [1.0, 2.0, 3.0, 4.0], "B": [4.0, 3.0, 2.0, 1.0]},
+            index=_dates(4),
+        )
+        assert_prefix_invariant(lambda df: _op("quantile").calculate(df, bins=2), x)
+
+    def test_rank_cs_truncation_stable(self):
+        x = pd.DataFrame({"A": [1.0, 3.0], "B": [2.0, 4.0]}, index=_dates(2))
+        full = _op("rank").calculate(x)
+        trunc = _op("rank").calculate(x.iloc[:1])
+        assert full.iloc[0]["A"] == pytest.approx(trunc.iloc[0]["A"])
+
+    def test_ts_mean_prefix_invariant(self):
+        x = _panel([1.0, 2.0, 3.0, 4.0, 5.0])
+        assert_prefix_invariant(lambda df: _op("ts_mean").calculate(df, d=3), x)
+
+    def test_ewm_mean_prefix_invariant(self):
+        x = _panel([1.0, 2.0, 3.0, 4.0])
+        assert_prefix_invariant(lambda df: _op("ewm_mean").calculate(df, span=3), x)

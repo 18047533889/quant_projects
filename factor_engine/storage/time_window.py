@@ -77,9 +77,18 @@ def resolve_incremental_window_for_bar_freq(
     recompute_tail_bars: int | None = None,
     calendar: TradingCalendar | None = None,
     bar_freq: str | None = None,
+    use_tick_precise: bool = True,
 ) -> dict[str, pd.Timestamp | None | str]:
-    """按 bar 频率解析增量窗口；日内源用 calendar 近似 + 1 日安全缓冲。"""
-    from cleaned_operators.operator_policy import bars_per_day, bars_to_calendar_trading_days
+    """按 bar 频率解析增量窗口。
+
+    日内源默认 ``intraday_tick_precise``：按 bar 时长精确扩窗；
+    ``use_tick_precise=False`` 时回退 ``intraday_calendar_approx``（+1 日缓冲）。
+    """
+    from cleaned_operators.operator_policy import (
+        bar_freq_to_timedelta,
+        bars_per_day,
+        bars_to_calendar_trading_days,
+    )
 
     bpd = bars_per_day(bar_freq)
     if bpd <= 1:
@@ -96,8 +105,9 @@ def resolve_incremental_window_for_bar_freq(
 
     lb = max(0, int(lookback_bars))
     tail = max(0, int(recompute_tail_bars)) if recompute_tail_bars is not None else lb
-    lb_days = bars_to_calendar_trading_days(lb, bar_freq) + 1
-    tail_days = bars_to_calendar_trading_days(tail, bar_freq) + 1
+    cal_buffer = 0 if use_tick_precise else 1
+    lb_days = bars_to_calendar_trading_days(lb, bar_freq) + cal_buffer
+    tail_days = bars_to_calendar_trading_days(tail, bar_freq) + cal_buffer
     out = resolve_incremental_window(
         watermark_end=watermark_end,
         lookback_bars=lb_days,
@@ -106,7 +116,25 @@ def resolve_incremental_window_for_bar_freq(
         recompute_tail_bars=tail_days,
         calendar=calendar,
     )
-    out["window_mode"] = "intraday_calendar_approx"
+
+    if use_tick_precise:
+        bar_td = bar_freq_to_timedelta(bar_freq)
+        wm_raw = since or watermark_end
+        wm = pd.Timestamp(wm_raw).normalize() if wm_raw else None
+        if wm is not None:
+            end_anchor = wm + bar_td * bpd
+            out["load_start"] = end_anchor - bar_td * lb
+            if tail > 0:
+                output_precise = end_anchor - bar_td * tail
+                cal_out = out.get("output_start")
+                if cal_out is None:
+                    out["output_start"] = output_precise
+                else:
+                    out["output_start"] = min(pd.Timestamp(cal_out), output_precise)
+        out["window_mode"] = "intraday_tick_precise"
+    else:
+        out["window_mode"] = "intraday_calendar_approx"
+
     out["source_bar_freq"] = str(bar_freq)
     return out
 
@@ -115,6 +143,48 @@ def _to_date_str(value: str | pd.Timestamp | None) -> str | None:
     if value is None:
         return None
     return pd.Timestamp(value).strftime("%Y-%m-%d")
+
+
+def _bound_for_io(
+    value: str | pd.Timestamp | None,
+    bar_freq: str | None = None,
+) -> str | None:
+    """IO 下推边界：日内保留 timestamp 精度，日频仅 date。"""
+    if value is None:
+        return None
+    ts = pd.Timestamp(value)
+    from cleaned_operators.operator_policy import bars_per_day
+
+    if bars_per_day(bar_freq) > 1 or ts.hour or ts.minute or ts.second:
+        return ts.isoformat()
+    return ts.strftime("%Y-%m-%d")
+
+
+def _merge_timestamp_bound_for_freq(
+    existing: str | None,
+    new: str | None,
+    *,
+    kind: str,
+    bar_freq: str | None = None,
+) -> str | None:
+    """合并时间边界（日频返回 YYYY-MM-DD，日内返回 ISO timestamp）。"""
+    if new is None:
+        return existing
+    if existing is None:
+        return new
+    ex = pd.Timestamp(existing)
+    nv = pd.Timestamp(new)
+    if kind == "start":
+        chosen = max(ex, nv)
+    else:
+        chosen = min(ex, nv)
+    from cleaned_operators.operator_policy import bars_per_day
+
+    if bars_per_day(bar_freq) <= 1 and not (
+        chosen.hour or chosen.minute or chosen.second or chosen.microsecond
+    ):
+        return chosen.strftime("%Y-%m-%d")
+    return chosen.isoformat()
 
 
 def _merge_date_bound(
@@ -140,7 +210,10 @@ def _normalize_bound_for_index(
     """对齐 index 时区后再比较，避免 naive/aware 混比。"""
     if bound is None:
         return None
-    ts = pd.Timestamp(bound).normalize()
+    ts = pd.Timestamp(bound)
+    has_time = bool(ts.hour or ts.minute or ts.second or ts.microsecond)
+    if not has_time:
+        ts = ts.normalize()
     if index_tz is not None:
         if ts.tz is None:
             ts = ts.tz_localize(index_tz)
@@ -213,11 +286,21 @@ class WindowedDataSource(DataSource):
         *,
         start_date: str | pd.Timestamp | None = None,
         end_date: str | pd.Timestamp | None = None,
+        intraday: bool = False,
     ) -> None:
         self._inner = inner
-        self._start = pd.Timestamp(start_date).normalize() if start_date else None
-        self._end = pd.Timestamp(end_date).normalize() if end_date else None
+        self._intraday = intraday
+        self._start = self._coerce_bound(start_date)
+        self._end = self._coerce_bound(end_date)
         self._column_cache: dict[str, Any] = {}
+
+    def _coerce_bound(self, value: str | pd.Timestamp | None) -> pd.Timestamp | None:
+        if value is None:
+            return None
+        ts = pd.Timestamp(value)
+        if self._intraday or ts.hour or ts.minute or ts.second or ts.microsecond:
+            return ts
+        return ts.normalize()
 
     def load_column(self, name: str):
         if name in self._column_cache:
@@ -247,10 +330,7 @@ def narrow_data_source_for_window(
     bar_freq: str | None = None,
 ) -> DataSource:
     """尽可能在数据源层裁剪（DuckDB/parquet 谓词下推），否则内存切片。"""
-    start_s = _to_date_str(start_date)
-    end_s = _to_date_str(end_date)
-    if start_s is None and end_s is None:
-        return source
+    from cleaned_operators.operator_policy import bars_per_day
 
     resolved_bar_freq = bar_freq or getattr(source, "bar_freq", None)
     if resolved_bar_freq is None:
@@ -258,9 +338,11 @@ def narrow_data_source_for_window(
         if inner is not None:
             resolved_bar_freq = getattr(inner, "bar_freq", None)
 
-    from cleaned_operators.operator_policy import bars_per_day
-
-    _ = bars_per_day(resolved_bar_freq)  # 保留供后续 bar 级精确扩窗使用
+    intraday = bars_per_day(resolved_bar_freq) > 1
+    start_s = _bound_for_io(start_date, resolved_bar_freq)
+    end_s = _bound_for_io(end_date, resolved_bar_freq)
+    if start_s is None and end_s is None:
+        return source
 
     from .composite_source import CompositeDataSource
     from .data_access_source import DataAccessSource
@@ -270,15 +352,23 @@ def narrow_data_source_for_window(
     if isinstance(source, KlineParquetSource):
         return replace(
             source,
-            start_date=_merge_date_bound(source.start_date, start_s, kind="start"),
-            end_date=_merge_date_bound(source.end_date, end_s, kind="end"),
+            start_date=_merge_timestamp_bound_for_freq(
+                source.start_date, start_s, kind="start", bar_freq=resolved_bar_freq
+            ),
+            end_date=_merge_timestamp_bound_for_freq(
+                source.end_date, end_s, kind="end", bar_freq=resolved_bar_freq
+            ),
         )
     if isinstance(source, DataAccessSource):
         return DataAccessSource(
             dataset=source.dataset,
             fields=source.fields,
-            start_date=_merge_date_bound(source.start_date, start_s, kind="start"),
-            end_date=_merge_date_bound(source.end_date, end_s, kind="end"),
+            start_date=_merge_timestamp_bound_for_freq(
+                source.start_date, start_s, kind="start", bar_freq=resolved_bar_freq
+            ),
+            end_date=_merge_timestamp_bound_for_freq(
+                source.end_date, end_s, kind="end", bar_freq=resolved_bar_freq
+            ),
             instrument_filter=source.instrument_filter,
             normalize_timestamp=source.normalize_timestamp,
             timestamp_unit=source.timestamp_unit,
@@ -292,8 +382,12 @@ def narrow_data_source_for_window(
             fields=source.fields,
             max_files=source.max_files,
             timestamp_unit=source.timestamp_unit,
-            start_date=_merge_date_bound(source.start_date, start_s, kind="start"),
-            end_date=_merge_date_bound(source.end_date, end_s, kind="end"),
+            start_date=_merge_timestamp_bound_for_freq(
+                source.start_date, start_s, kind="start", bar_freq=resolved_bar_freq
+            ),
+            end_date=_merge_timestamp_bound_for_freq(
+                source.end_date, end_s, kind="end", bar_freq=resolved_bar_freq
+            ),
             recursive=source.recursive,
         )
     if isinstance(source, CompositeDataSource):
@@ -305,6 +399,7 @@ def narrow_data_source_for_window(
                     sub,
                     start_date=start_date,
                     end_date=end_date,
+                    bar_freq=resolved_bar_freq,
                 )
                 for name, sub in source.sources.items()
             },
@@ -312,4 +407,9 @@ def narrow_data_source_for_window(
             aliases=source.aliases,
             allow_unqualified_anchor_columns=source.allow_unqualified_anchor_columns,
         )
-    return WindowedDataSource(source, start_date=start_date, end_date=end_date)
+    return WindowedDataSource(
+        source,
+        start_date=start_date,
+        end_date=end_date,
+        intraday=intraday,
+    )

@@ -268,6 +268,33 @@ class MicroVpinOp(SeriesOperator):
             0, np.nan
         )
 
+
+@register_operator(
+    name="micro_kyle_lambda",
+    category="intraday_microstructure",
+    business_category="intraday_microstructure",
+    canonical="micro_kyle_lambda",
+    source="factor_dsl_np",
+)
+class MicroKyleLambdaOp(SeriesOperator):
+    """Kyle lambda 代理：rolling Cov(|r|, volume) / Var(volume)。"""
+
+    metadata = OperatorMetadata(
+        name="micro_kyle_lambda",
+        category="intraday_microstructure",
+        description="Kyle lambda proxy Cov(|ret|,vol)/Var(vol)",
+        param_names=["close", "volume"],
+        return_type="series",
+        tags=["microstructure"],
+    )
+
+    def _calculate_series(self, close, volume, window: int = 20, **kwargs):
+        w = max(2, int(window))
+        ret = close.pct_change().abs() if hasattr(close, "pct_change") else pd.Series(close).pct_change().abs()
+        cov = ret.rolling(w, min_periods=2).cov(volume)
+        var = volume.rolling(w, min_periods=2).var().replace(0, np.nan)
+        return cov / var
+
 # api stub placeholders — 未注册算子，仅供 catalog 占位；勿与 @register_operator 实现混用
 
 def _make_stub(*args, **kwargs):

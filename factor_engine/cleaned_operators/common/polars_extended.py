@@ -497,3 +497,133 @@ class RowBetaPolars(SeriesOperator):
         if "date" in y.columns:
             result = result.with_columns(y["date"])
         return result
+
+
+@register_operator(
+    name="normalize",
+    category="math",
+    business_category="elementwise_math",
+    canonical="normalize",
+    source="factor_dsl_polars",
+)
+class NormalizePolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="normalize",
+        category="math",
+        description="归一化到[0, 1]（按行 min-max）",
+        param_names=["x"],
+        return_type="series",
+        tags=["math", "utility", "normalize", "polars"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        cols = _numeric_cols(x)
+        arr = x.select(cols).to_numpy()
+        lo = np.nanmin(arr, axis=1, keepdims=True)
+        hi = np.nanmax(arr, axis=1, keepdims=True)
+        rng = hi - lo
+        rng = np.where(rng == 0, np.nan, rng)
+        out = (arr - lo) / rng
+        result = pl.DataFrame(out, schema=cols)
+        if "date" in x.columns:
+            result = result.with_columns(x["date"])
+        return result
+
+
+@register_operator(
+    name="quantile",
+    category="statistics",
+    business_category="statistics_regression",
+    canonical="quantile",
+    source="factor_dsl_polars",
+)
+class QuantilePolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="quantile",
+        category="statistics",
+        description="截面分箱/离散化（按行 qcut）",
+        param_names=["x", "bins"],
+        return_type="series",
+        tags=["statistics", "quantile", "discretization", "polars"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, bins: int = 10, **kwargs) -> pl.DataFrame:
+        import pandas as pd
+
+        n_bins = int(kwargs.get("bins", bins))
+        cols = _numeric_cols(x)
+        arr = x.select(cols).to_numpy()
+        out = np.full_like(arr, np.nan, dtype=float)
+        for i in range(arr.shape[0]):
+            row = arr[i]
+            valid_mask = ~np.isnan(row)
+            valid = row[valid_mask]
+            if len(valid) < 2:
+                continue
+            try:
+                labels = pd.qcut(valid, q=n_bins, labels=False, duplicates="drop")
+                out[i, valid_mask] = labels.astype(float)
+            except (ValueError, TypeError):
+                continue
+        result = pl.DataFrame(out, schema=cols)
+        if "date" in x.columns:
+            result = result.with_columns(x["date"])
+        return result
+
+
+def _broadcast_row_stat(x: pl.DataFrame, stat_fn) -> pl.DataFrame:
+    cols = _numeric_cols(x)
+    arr = x.select(cols).to_numpy()
+    stats = np.array([stat_fn(row) for row in arr], dtype=float)
+    out = np.repeat(stats[:, None], len(cols), axis=1)
+    result = pl.DataFrame(out, schema=cols)
+    if "date" in x.columns:
+        result = result.with_columns(x["date"])
+    return result
+
+
+@register_operator(name="row_prod", category="cross_sectional", business_category="cross_sectional", canonical="row_prod", source="factor_dsl_polars")
+class RowProdPolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="row_prod", category="cross_sectional", description="行连乘",
+        param_names=["x"], return_type="series", tags=["cross_sectional", "polars"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        return _broadcast_row_stat(x, lambda row: float(np.nanprod(row)))
+
+
+@register_operator(name="row_skew", category="cross_sectional", business_category="cross_sectional", canonical="row_skew", source="factor_dsl_polars")
+class RowSkewPolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="row_skew", category="cross_sectional", description="行偏度",
+        param_names=["x"], return_type="series", tags=["cross_sectional", "polars"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        from scipy import stats as scipy_stats
+
+        return _broadcast_row_stat(
+            x,
+            lambda row: float(scipy_stats.skew(row[~np.isnan(row)], bias=False))
+            if np.sum(~np.isnan(row)) > 2
+            else np.nan,
+        )
+
+
+@register_operator(name="row_kurt", category="cross_sectional", business_category="cross_sectional", canonical="row_kurt", source="factor_dsl_polars")
+class RowKurtPolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="row_kurt", category="cross_sectional", description="行峰度",
+        param_names=["x"], return_type="series", tags=["cross_sectional", "polars"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        from scipy import stats as scipy_stats
+
+        return _broadcast_row_stat(
+            x,
+            lambda row: float(scipy_stats.kurtosis(row[~np.isnan(row)], bias=False))
+            if np.sum(~np.isnan(row)) > 3
+            else np.nan,
+        )

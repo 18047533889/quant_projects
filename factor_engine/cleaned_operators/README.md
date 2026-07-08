@@ -63,10 +63,10 @@ cleaned_operators/
 | DQ Profile | `runtime/dq_profiles.yaml`、`config.dq.profile` |
 | PIT enforce | `runtime/pit_audit.py`、`config.pit.enforce` |
 | 物化 target | `local` / `staging` / `both` / `clickhouse` / `staging_clickhouse` |
-| 双写对账 | `runtime.dual_write_reconcile.reconcile_dual_write_state()` |
+| 双写对账/修复 | `run_pipeline.py reconcile dual-write [--repair] [--prefer-source staging]` |
 | 生产 profile | `examples/profiles/prod.yaml`（staging）、`prod_clickhouse.yaml`（staging_clickhouse） |
 | Intraday 日频聚合 | `runtime/intraday_aggregator.py`、`data_source.type: intraday_daily` |
-| 微观算子（已实现） | `real_turnover_rate`、`micro_realized_vol`、`micro_spread`、`micro_amihud_hf`、`micro_mid_return`、`micro_bipower_var`、`micro_jump_indicator`、`micro_trade_imbalance`、`micro_vpin` |
+| 微观算子（已实现） | `real_turnover_rate`、`micro_realized_vol`、`micro_spread`、`micro_amihud_hf`、`micro_mid_return`、`micro_bipower_var`、`micro_jump_indicator`、`micro_trade_imbalance`、`micro_vpin`、`micro_kyle_lambda` |
 
 > `microstructure/ops.py` 底部 `*_stub` 函数为 **catalog 占位**，未 `@register_operator`；与已实现算子同名 stub 已移除。
 
@@ -95,7 +95,7 @@ cleaned_operators/
 |---------|------|
 | `auto` / `hybrid` | **推荐**：部分 SQL 子树 → Polars → Pandas |
 | `sql` / `duckdb_sql` | SqlBackend：maximal SQL 子树 + Python fallback |
-| `polars` | 算子层 auto 优先 polars（**220+ canonical**） |
+| `polars` | 算子层 auto 优先 polars（**320+ canonical**） |
 | `pandas` | 默认全 Python |
 
 **混合执行（中期架构）**：
@@ -104,9 +104,9 @@ cleaned_operators/
 - `OperatorRegistry` 支持 `backend="sql"` 元数据（与 emitter 同步）
 - `LongTableDataSource` / `long_table: true`：数据源保持长表；**panel-native 仍启用**，算子链内宽表中间态、根节点一次 stack
 
-Polars 新增覆盖：`ADX/AROON/KAMA`、`Slope/ts_regression`、`sharpe_ratio`、信号算子（`signed_log/signed_power/is_finite/saturate/hump_decay/vpmacd`）、`group_*` 全簇（含 `group_decay_linear`）、`ts_var/median/mad`、`RSI/MACD/ATR/CCI`、`ewm_*`（含 pandas 对齐的 `ewm_corr/cov`）、`cs_regression/cs_resid`、CAPM 簇（`idio_vol/idio_skew/residual_momentum_capm/coskewness_to_market`）、`cum_prod/cum_count/cum_last`、`real_turnover_rate` 等。
+Polars 新增覆盖：`ADX/AROON/KAMA`、`Slope/ts_regression`、`sharpe_ratio`、信号算子、`group_*` 全簇、`ewm_*`、`cs_regression/cs_resid`、CAPM 簇等；**2026-07**：`polars_batch_mirror` 桥接至 **325** canonical。企业门禁 Polars ≥ **320** / SQL ≥ **39**；剩余 **36** intentional pandas-only（FFT/矩阵/随机/CDF-PDF）。
 
-SQL 白名单 **40** 个算子（含 `ts_ema`、`group_winsorize`、`ts_beta`、`ts_mad`）；多子树 **WITH CSE 批执行**。
+SQL 白名单 **42** 个算子（含 `ts_ema`、`group_winsorize`、`ts_beta`、`ts_mad`、`ts_rank`、`ewm_mean`）；多子树 **WITH CSE 批执行**。
 
 **企业级门禁**：`tests/test_enterprise_readiness.py`（覆盖阈值、dedupe 契约、P0 双 backend、env bootstrap）。
 
@@ -127,7 +127,9 @@ SQL 已支持（MVP）：`ts_mean/std/sum/max/min/delay/delta/pct/zscore`、`ts_
 - factor_engine 中间结果为 **`(timestamp, instrument)` MultiIndex Series**。  
 - `cleaned_bridge` 在 **panel-native** 模式下中间结果保持宽表，仅在根节点 stack；否则逐算子 unstack/stack。  
 - `long_table: true` 时列读取走 Series，`load_column_panel()` 按需 unstack 并缓存。  
-- 时序 rolling 在 **列方向**（每个 instrument 一列）上滚动；与旧版 per-groupby MultiIndex kernel 在边界上可能略有差异。
+- **SQL 下推**：`ts_rank` / `ewm_mean` 已加入白名单与 emitter（Tier-1 生产常用）
+- **不走 SQL 下推**：多输入量价结构算子（如 `vp_weighted_price`、`vpmacd`）与全部 `micro_*` 簇——由 Polars/Pandas 路径执行
+- **`ts_std`**：样本标准差 `ddof=1`（与 pandas 默认一致）
 
 ---
 

@@ -13,6 +13,8 @@ import json
 from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
+import pandas as pd
+
 Scope = Literal["ts", "cs", "elementwise", "aggregate", "hypothesis", "unknown"]
 NanPolicy = Literal["propagate", "ignore", "zero", "ffill_only"]
 
@@ -29,7 +31,7 @@ TIER1_CANONICALS: frozenset[str] = frozenset({
     "expanding_rank", "rank_corr", "add", "subtract", "multiply", "divide",
     "ts_topk_sum", "vp_weighted_price", "real_turnover_rate", "micro_realized_vol",
     "micro_spread", "micro_amihud_hf", "micro_mid_return", "micro_bipower_var",
-    "micro_jump_indicator", "micro_trade_imbalance", "micro_vpin", "hump_decay",
+    "micro_jump_indicator", "micro_trade_imbalance", "micro_vpin", "micro_kyle_lambda", "hump_decay",
     "col", "corr_test",
 })
 
@@ -98,6 +100,7 @@ _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
     "micro_jump_indicator": {"scope": "ts", "pit_safe": True, "min_periods": 2},
     "micro_trade_imbalance": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "micro_vpin": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "micro_kyle_lambda": {"scope": "ts", "pit_safe": True, "min_periods": 2},
     "shuffle": {"scope": "unknown", "pit_safe": False},
     "avg": {"scope": "aggregate", "pit_safe": True},
     "corr_test": {"scope": "hypothesis", "pit_safe": True},
@@ -279,3 +282,27 @@ def bars_per_day(freq: str | None) -> int:
     if lowered.endswith("d"):
         return 1
     return 1
+
+
+def bar_freq_to_timedelta(freq: str | None) -> pd.Timedelta:
+    """将 bar 频率字符串转为 Timedelta（用于日内 tick 级扩窗）。"""
+    if not freq:
+        return pd.Timedelta(days=1)
+    text = str(freq).strip().lower()
+    mapping = {
+        "1m": pd.Timedelta(minutes=1),
+        "5m": pd.Timedelta(minutes=5),
+        "15m": pd.Timedelta(minutes=15),
+        "30m": pd.Timedelta(minutes=30),
+        "1h": pd.Timedelta(hours=1),
+        "60m": pd.Timedelta(hours=1),
+        "1d": pd.Timedelta(days=1),
+        "d": pd.Timedelta(days=1),
+    }
+    if text in mapping:
+        return mapping[text]
+    if text.endswith("m") and text[:-1].isdigit():
+        return pd.Timedelta(minutes=int(text[:-1]))
+    if text.endswith("h") and text[:-1].isdigit():
+        return pd.Timedelta(hours=int(text[:-1]))
+    return pd.Timedelta(days=1)

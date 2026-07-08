@@ -58,11 +58,46 @@ class KlineParquetSource(DataSource):
             )
             df = self._duckdb_read_per_file(selected_files, read_columns)
 
+        series = self._frame_to_series(df, source_name, name)
+        self._column_cache[name] = series
+        return series
+
+    def prefetch_columns(self, names: list[str]) -> None:
+        """批量预取列，单次 DuckDB 读多列以减少 IO。"""
+        missing = [n for n in names if n not in self._column_cache]
+        if not missing:
+            return
+
+        selected_files = self._selected_files()
+        if not selected_files:
+            raise FileNotFoundError(f"No parquet files found under {self.root}")
+
+        source_names = [self.fields.get(n, n) for n in missing]
+        read_columns = list(dict.fromkeys(
+            [self.instrument_column, self.timestamp_column, *source_names]
+        ))
+        try:
+            df = self._duckdb_read_batch(selected_files, read_columns)
+        except Exception as exc:
+            logger.warning("K 线 prefetch 批量读失败（%s），逐列降级", exc)
+            for col in missing:
+                self.load_column(col)
+            return
+
+        for logical, physical in zip(missing, source_names):
+            if logical in self._column_cache:
+                continue
+            self._column_cache[logical] = self._frame_to_series(df, physical, logical)
+
+    def prefetch_panels(self, names: list[str]) -> None:
+        self.prefetch_columns(names)
+
+    def _frame_to_series(self, df, source_name: str, logical_name: str):
         df = df.rename(
             columns={
                 self.instrument_column: "instrument",
                 self.timestamp_column: "timestamp",
-                source_name: name,
+                source_name: logical_name,
             }
         )
         df["timestamp"] = self._convert_timestamp(df["timestamp"])
@@ -70,12 +105,10 @@ class KlineParquetSource(DataSource):
             df = df[df["timestamp"] >= self.start_date]
         if self.end_date:
             df = df[df["timestamp"] <= self.end_date]
-        series = df.set_index(["timestamp", "instrument"])[name]
+        series = df.set_index(["timestamp", "instrument"])[logical_name]
 
         if self.sort_index:
             series = series.sort_index()
-
-        self._column_cache[name] = series
         return series
 
     # ---- 内部：DuckDB 读 ----

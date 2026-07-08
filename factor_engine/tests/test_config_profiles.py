@@ -15,7 +15,7 @@ def test_load_profile_prod_exists():
     assert "lake_root" in payload["materialization"]
     assert payload["run"]["auto_warmup"] is True
     assert payload["dq"]["profile"] == "us_equity_daily_prod"
-    assert payload["materialization"]["target"] == "staging"
+    assert payload["materialization"]["target"] == "staging_clickhouse"
     assert payload["materialization"]["preserve_invalid_rows"] is True
 
 
@@ -41,7 +41,7 @@ data_source:
     assert loaded.dq.profile == "us_equity_daily_prod"
     assert loaded.dq.strict is True
     assert loaded.materialization is not None
-    assert loaded.materialization.target == "staging"
+    assert loaded.materialization.target == "staging_clickhouse"
     assert loaded.materialization.preserve_invalid_rows is True
 
 

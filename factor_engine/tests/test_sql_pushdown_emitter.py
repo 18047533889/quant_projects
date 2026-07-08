@@ -62,6 +62,33 @@ def test_macd_not_sql_capable():
     assert not plan_is_sql_capable(plan)
 
 
+def test_ts_rank_sql():
+    plan = PlanNode(op="ts_rank", inputs=[_col("close")], attrs={"d": 5})
+    assert plan_is_sql_capable(plan)
+    compiled = compile_plan_to_sql(
+        plan,
+        dataset="panel",
+        time_column="ts",
+        instrument_column="inst",
+    )
+    assert compiled is not None
+    assert "RANK()" in compiled.query
+    assert "ROWS BETWEEN 4 PRECEDING" in compiled.query
+
+
+def test_ewm_mean_sql():
+    plan = PlanNode(op="ewm_mean", inputs=[_col("close")], attrs={"span": 10})
+    assert plan_is_sql_capable(plan)
+    compiled = compile_plan_to_sql(
+        plan,
+        dataset="panel",
+        time_column="ts",
+        instrument_column="inst",
+    )
+    assert compiled is not None
+    assert "POW" in compiled.query or "exponentialMovingAverage" in compiled.query
+
+
 def test_zscore_sql():
     from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 

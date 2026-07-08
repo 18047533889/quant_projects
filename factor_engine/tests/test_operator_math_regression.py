@@ -36,6 +36,13 @@ class TestMathRegression:
         for i, exp in enumerate(expected):
             assert out.iloc[i]["A"] == pytest.approx(exp)
 
+    def test_ts_std_uses_sample_ddof(self):
+        x = _panel([1.0, 2.0, 3.0, 4.0, 5.0])
+        out = _op("ts_std").calculate(x, window=3)
+        manual = x["A"].rolling(3, min_periods=1).std(ddof=1)
+        for i in range(len(x)):
+            assert out.iloc[i]["A"] == pytest.approx(manual.iloc[i], rel=1e-9, nan_ok=True)
+
     def test_ts_delay_1(self):
         x = _panel([10.0, 20.0, 30.0, 40.0])
         out = _op("ts_delay").calculate(x, 1)

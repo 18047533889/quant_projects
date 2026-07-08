@@ -173,6 +173,14 @@ class ParquetSource(DataSource):
         series_map.update(cached)
         return series_map
 
+    def prefetch_columns(self, names: list[str]) -> None:
+        """批量预取列（委托 load_columns）。"""
+        self.load_columns(names)
+
+    def prefetch_panels(self, names: list[str]) -> None:
+        for name in names:
+            self.load_column_panel(name)
+
     def load_column_panel(self, name: str):
         """加载单列为宽表 panel（index=时间, columns=标的）。"""
         if name in self._panel_cache:

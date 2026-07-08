@@ -425,3 +425,112 @@ class CumTopNSumPolars(SeriesOperator):
         pdf = x.select(cols).to_pandas()
         out = cum_top_n_sum(pdf, top_n)
         return x.with_columns([pl.Series(name=c, values=out[c].to_numpy()) for c in cols])
+
+
+def _flex_compare(
+    x: pl.DataFrame,
+    y_or_window,
+    *,
+    compare_fn,
+    rolling_fn,
+) -> pl.DataFrame:
+    """flex_max / flex_min：逐点比较或滚动窗口（与 pandas_numpy 语义对齐）。"""
+    cols = _numeric_cols(x)
+    if isinstance(y_or_window, pl.DataFrame):
+        aligned = _align_cols(x, y_or_window)
+        return x.with_columns(
+            [compare_fn(pl.col(c), y_or_window[c]).alias(c) for c in aligned]
+        )
+    if isinstance(y_or_window, (int, float)) and not isinstance(y_or_window, bool):
+        scalar = float(y_or_window)
+        if isinstance(y_or_window, float) and scalar != int(scalar):
+            return x.with_columns(
+                [compare_fn(pl.col(c), pl.lit(scalar)).alias(c) for c in cols]
+            )
+        window = int(y_or_window)
+        if window <= 0:
+            return x.with_columns(
+                [compare_fn(pl.col(c), pl.lit(scalar)).alias(c) for c in cols]
+            )
+        return x.with_columns(
+            [rolling_fn(pl.col(c), window).alias(c) for c in cols]
+        )
+    raise TypeError(f"flex op expects series or scalar/window, got {type(y_or_window)}")
+
+
+@register_operator(name="flex_max", category="math", business_category="elementwise_math", canonical="flex_max", source="factor_dsl_polars")
+class FlexMaxPolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="flex_max", category="math", description="max(x,y) 或 rolling max",
+        param_names=["x", "y_or_window"], return_type="series", tags=["math", "polars"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, y_or_window, **kwargs) -> pl.DataFrame:
+        return _flex_compare(
+            x,
+            y_or_window,
+            compare_fn=lambda a, b: pl.max_horizontal(a, b),
+            rolling_fn=lambda c, w: c.rolling_max(window_size=w, min_samples=1),
+        )
+
+
+@register_operator(name="flex_min", category="math", business_category="elementwise_math", canonical="flex_min", source="factor_dsl_polars")
+class FlexMinPolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="flex_min", category="math", description="min(x,y) 或 rolling min",
+        param_names=["x", "y_or_window"], return_type="series", tags=["math", "polars"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, y_or_window, **kwargs) -> pl.DataFrame:
+        return _flex_compare(
+            x,
+            y_or_window,
+            compare_fn=lambda a, b: pl.min_horizontal(a, b),
+            rolling_fn=lambda c, w: c.rolling_min(window_size=w, min_samples=1),
+        )
+
+
+def _expanding_pandas_bridge(x: pl.DataFrame, fn) -> pl.DataFrame:
+    cols = _numeric_cols(x)
+    pdf = x.select(cols).to_pandas()
+    out = fn(pdf)
+    return x.with_columns([pl.Series(name=c, values=out[c].to_numpy()) for c in cols])
+
+
+@register_operator(name="geometric_mean", category="math", business_category="elementwise_math", canonical="geometric_mean", source="factor_dsl_polars")
+class GeometricMeanPolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="geometric_mean", category="math", description="扩展几何平均",
+        param_names=["x"], return_type="series", tags=["math", "polars"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        from cleaned_operators._causal import expanding_geometric_mean
+
+        return _expanding_pandas_bridge(x, expanding_geometric_mean)
+
+
+@register_operator(name="harmonic_mean", category="math", business_category="elementwise_math", canonical="harmonic_mean", source="factor_dsl_polars")
+class HarmonicMeanPolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="harmonic_mean", category="math", description="扩展调和平均",
+        param_names=["x"], return_type="series", tags=["math", "polars"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        from cleaned_operators._causal import expanding_harmonic_mean
+
+        return _expanding_pandas_bridge(x, expanding_harmonic_mean)
+
+
+@register_operator(name="first_not_null", category="statistics", business_category="statistics_regression", canonical="first_not_null", source="factor_dsl_polars")
+class FirstNotNullPolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="first_not_null", category="statistics", description="扩展首个非空",
+        param_names=["x"], return_type="series", tags=["statistics", "polars"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        from cleaned_operators._causal import expanding_first_not_null
+
+        return _expanding_pandas_bridge(x, expanding_first_not_null)

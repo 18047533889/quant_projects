@@ -93,6 +93,8 @@ SQL_REQUIRED = frozenset(
         "if_else",
         "winsorize",
         "ts_ema",
+        "ts_rank",
+        "ewm_mean",
     }
 )
 
@@ -130,5 +132,5 @@ def test_coverage_counts():
     canon = [c for c in OperatorRegistry.list_canonical() if OperatorRegistry.backends_for(c)]
     polars_n = sum(1 for c in canon if "polars" in OperatorRegistry.backends_for(c))
     sql_n = sum(1 for c in canon if "sql" in OperatorRegistry.backends_for(c))
-    assert polars_n >= 220, f"polars 覆盖过低: {polars_n}"
-    assert sql_n >= 37, f"sql 覆盖过低: {sql_n}"
+    assert polars_n >= 320, f"polars 覆盖过低: {polars_n}"
+    assert sql_n >= 39, f"sql 覆盖过低: {sql_n}"

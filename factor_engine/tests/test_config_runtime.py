@@ -52,7 +52,7 @@ materialization:
     )
     loaded = load_config(config)
     opts = resolve_materialize_kwargs(loaded)
-    assert opts.write_target == "staging"
+    assert opts.write_target == "staging_clickhouse"
     assert opts.preserve_invalid_rows is True
     assert opts.dq_check is True
     assert opts.dq_thresholds is not None

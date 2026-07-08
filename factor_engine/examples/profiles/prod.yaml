@@ -1,5 +1,6 @@
-# prod profile：生产级缓存、因子湖、warmup 与 DQ 门禁
+# prod profile：生产级缓存、因子湖、warmup、DQ 门禁与 ClickHouse 双写
 # preserve_invalid_rows=true 时 inf 行保留为 is_valid=0，DQ 跳过 inf_ratio 检查
+# ClickHouse 连接优先读 quant_projects/.env 中 CLICKHOUSE_*
 run:
   mode: production
   auto_warmup: true
@@ -21,21 +22,10 @@ engine:
 
 materialization:
   lake_root: ../data/factors/lake
-  # 生产默认 staging；双写 ClickHouse 时用 profile: prod_clickhouse 或改为 staging_clickhouse
-  target: staging
+  target: staging_clickhouse
   preserve_invalid_rows: true
   value_dtype: float32
   isolate_partition_failures: true
-
-# 增量物化默认参数（pipeline --incremental 时可被 CLI 覆盖）
+  clickhouse_table: factor_values
   incremental:
     lookback_extra: 5
-    # since: "2024-01-01"
-    # end_date: "2024-12-31"
-    # recompute_tail_bars: 21
-
-# 启用 staging_clickhouse 或 clickhouse 时取消注释（连接也可走 .env / CLICKHOUSE_*）
-# clickhouse_table: factor_values
-# clickhouse_host: localhost
-# clickhouse_port: 8123
-# clickhouse_database: quant

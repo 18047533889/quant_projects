@@ -24,13 +24,13 @@ def _boot():
 def test_polars_coverage_threshold():
     canon = [c for c in OperatorRegistry.list_canonical() if OperatorRegistry.backends_for(c)]
     polars_n = sum(1 for c in canon if "polars" in OperatorRegistry.backends_for(c))
-    assert polars_n >= 220, f"polars 覆盖 {polars_n} 低于企业门禁 220"
+    assert polars_n >= 320, f"polars 覆盖 {polars_n} 低于企业门禁 320"
 
 
 def test_sql_coverage_threshold():
     canon = [c for c in OperatorRegistry.list_canonical() if OperatorRegistry.backends_for(c)]
     sql_n = sum(1 for c in canon if "sql" in OperatorRegistry.backends_for(c))
-    assert sql_n >= 37, f"sql 覆盖 {sql_n} 低于企业门禁 37"
+    assert sql_n >= 39, f"sql 覆盖 {sql_n} 低于企业门禁 39"
 
 
 def test_sql_registry_synced_with_emitter_whitelist():

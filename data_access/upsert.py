@@ -293,3 +293,86 @@ def _upsert_lock(partition_dir: Path) -> Iterator[None]:
             pass
         except OSError as exc:
             logger.warning("删除 upsert 锁文件 %s 失败：%s", lock_path, exc)
+
+
+def delete_rows_from_dataset(
+    *,
+    ds: Dataset,
+    authorizer: PathAuthorizer,
+    target_dir: Path,
+    time_column: str,
+    start: Any | None = None,
+    end: Any | None = None,
+    after: Any | None = None,
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """从 staging/namespaced hive 分区删除指定时间范围内的行。"""
+    import pandas as pd
+
+    start_ts = pd.Timestamp(start) if start is not None else None
+    end_ts = pd.Timestamp(end) if end is not None else None
+    after_ts = pd.Timestamp(after) if after is not None else None
+
+    authorizer.resolve_and_authorize(str(target_dir))
+    if not target_dir.exists():
+        return {"rows_deleted": 0, "partitions": [], "elapsed_ms": 0.0}
+
+    rows_deleted = 0
+    partitions: list[str] = []
+    t0 = time.perf_counter()
+
+    for parquet_path in sorted(target_dir.rglob("*.parquet")):
+        try:
+            df = pq.read_table(str(parquet_path), partitioning=None).to_pandas()
+        except Exception as exc:
+            logger.warning("delete_rows 跳过 %s: %s", parquet_path, exc)
+            continue
+        if df.empty or time_column not in df.columns:
+            continue
+
+        dt = pd.to_datetime(df[time_column])
+        if after_ts is not None and start_ts is None and end_ts is None:
+            delete_mask = dt > after_ts
+        else:
+            delete_mask = pd.Series(True, index=df.index)
+            if start_ts is not None:
+                delete_mask &= dt >= start_ts
+            if end_ts is not None:
+                delete_mask &= dt <= end_ts
+            if after_ts is not None:
+                delete_mask &= dt > after_ts
+
+        removed = int(delete_mask.sum())
+        if removed <= 0:
+            continue
+
+        kept = df.loc[~delete_mask]
+        rows_deleted += removed
+        partitions.append(str(parquet_path.parent))
+
+        if kept.empty:
+            parquet_path.unlink(missing_ok=True)
+            continue
+
+        with _upsert_lock(parquet_path.parent):
+            tmp_path = parquet_path.parent / f".delete.tmp.{uuid.uuid4().hex[:8]}.parquet"
+            pq.write_table(pa.Table.from_pandas(kept, preserve_index=False), str(tmp_path))
+            os.replace(str(tmp_path), str(parquet_path))
+
+    elapsed_ms = (time.perf_counter() - t0) * 1000
+    audit.record(
+        op="delete_rows",
+        dataset=ds.name,
+        ok=True,
+        mode="delete",
+        rows=rows_deleted,
+        paths=partitions[:20],
+        params=params or None,
+        elapsed_ms=elapsed_ms,
+        extra={"time_column": time_column},
+    )
+    return {
+        "rows_deleted": rows_deleted,
+        "partitions": partitions,
+        "elapsed_ms": elapsed_ms,
+    }

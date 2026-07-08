@@ -21,6 +21,7 @@ from runtime.metrics_export import (
     write_pipeline_metrics_file,
     write_prometheus_metrics_file,
 )
+from runtime.slo_rules import evaluate_slo_rules
 from runtime.task_queue import shard_config_paths
 from logging_utils import get_logger
 from workspace_paths import workspace_data_root
@@ -399,6 +400,15 @@ def _finalize_run_summary(
     if extra:
         summary.update(extra)
     summary = enrich_pipeline_summary(summary, results)
+    metrics = summary.get("metrics") or {}
+    if metrics:
+        success = summary.get("configs_success", 0)
+        total = max(summary.get("configs_total", 0), 1)
+        metrics.setdefault("pipeline_success_ratio", success / total)
+        metrics.setdefault("dq_passed_ratio", metrics.get("dq_passed_ratio", success / total))
+        metrics.setdefault("dual_write_open_failures", metrics.get("dual_write_open_failures", 0))
+        summary["metrics"] = metrics
+        summary["slo"] = evaluate_slo_rules(metrics)
     run_summary_path = output_root / "run_summary.json"
     run_summary_path.write_text(
         json.dumps(summary, ensure_ascii=False, indent=2, default=str),

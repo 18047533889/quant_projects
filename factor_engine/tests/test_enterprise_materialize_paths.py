@@ -163,8 +163,13 @@ def test_incremental_plan_scales_intraday_source_to_calendar_days():
     assert plan.lookback_bars >= 20 * 78
     assert plan.source_bar_freq == "5m"
     assert plan.load_start is not None
-    # 5m 源 20 日 lookback 应向前扩展多个交易日，而非仅 20 个 calendar day 的日频窗口
-    assert (pd.Timestamp("2024-06-01") - plan.load_start).days >= 20
+    assert plan.window_mode == "intraday_tick_precise"
+    from cleaned_operators.operator_policy import bar_freq_to_timedelta, bars_per_day
+
+    bpd = bars_per_day("5m")
+    bar_td = bar_freq_to_timedelta("5m")
+    end_anchor = pd.Timestamp("2024-06-01") + bar_td * bpd
+    assert end_anchor - plan.load_start >= bar_td * plan.lookback_bars - bar_td
 
 
 def test_dual_write_clickhouse_failure_raises_with_partial_summary(tmp_path, monkeypatch):

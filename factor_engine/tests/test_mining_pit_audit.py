@@ -1,0 +1,44 @@
+# -*- coding: utf-8 -*-
+"""Mining 默认数据源 PiT join 策略审计。"""
+
+from __future__ import annotations
+
+
+def test_mining_datasets_contract_ok():
+    from api.mining_integration import audit_mining_datasets_contract
+
+    report = audit_mining_datasets_contract()
+    assert report["ok"], report.get("violations")
+
+
+def test_us_daily_market_summary_preset_registered():
+    from api.datasets_contract import audit_mining_dataset_contract
+
+    report = audit_mining_dataset_contract()
+    assert "daily_market_summary" in report["datasets_checked"]
+    assert report["ok"], report.get("violations")
+
+
+def test_default_presets_use_asof_backward_except_universe_exact():
+    from api.mining_integration import audit_default_data_source_configs
+
+    report = audit_default_data_source_configs()
+    # 估值 / 状态 / 成分股：必须 asof_backward
+    assert report["ashare_pv_valuation"] == []
+    assert report["us_pv_valuation"] == []
+    assert report["ashare_pv_universe"] == []
+    # 美股 universe 允许 exact（日对齐 universe 表）
+    us_uni = report["us_pv_universe"]
+    assert all("universe" in v for v in us_uni) or us_uni == []
+
+
+def test_audit_flags_exact_valuation_join():
+    from api.mining_integration import audit_composite_join_policies
+
+    cfg = {
+        "type": "composite",
+        "anchor": "pv",
+        "sources": {"pv": {}, "valuation": {}},
+        "joins": {"valuation": "exact"},
+    }
+    assert audit_composite_join_policies(cfg) == ["valuation: join='exact' (expected asof_backward)"]

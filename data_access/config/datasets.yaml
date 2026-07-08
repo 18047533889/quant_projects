@@ -255,6 +255,10 @@ ashare_stock_status:
   glob: "**/*.parquet"
   time_column: TradeDate
   instrument_column: Symbol
+  schema:
+    TradeDate: date
+    Symbol: string
+    ListedState: string
 
 ashare_stock_topten_shareholder:
   <<: *ashare_lqtp_defaults

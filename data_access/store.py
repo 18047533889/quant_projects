@@ -616,6 +616,37 @@ class DataAccessStore:
             params=params,
         )
 
+    def delete_rows(
+        self,
+        dataset: str,
+        *,
+        start: Any | None = None,
+        end: Any | None = None,
+        after: Any | None = None,
+        time_column: str | None = None,
+        **params: Any,
+    ) -> dict[str, Any]:
+        """从 namespaced/staging 数据集删除时间范围内的行（行级补偿删除）。"""
+        ds = self._registry.get(dataset)
+        if ds.access_mode not in {"namespaced", "staging"}:
+            raise ValidationError(
+                f"数据集 '{dataset}' access_mode={ds.access_mode!r} 不支持 delete_rows"
+            )
+        tc = time_column or ds.time_column
+        target_dir = self._resolve_write_dir(ds, params)
+        from . import upsert as upsert_mod
+
+        return upsert_mod.delete_rows_from_dataset(
+            ds=ds,
+            authorizer=self._authorizer,
+            target_dir=target_dir,
+            time_column=tc,
+            start=start,
+            end=end,
+            after=after,
+            params=params,
+        )
+
     def resolve_dataset_path(self, dataset: str, **params: Any) -> Path:
         """解析已登记数据集在当前 params 下的物理目录。"""
         from .publish import _resolve_dataset_dir

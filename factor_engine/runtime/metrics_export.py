@@ -296,10 +296,33 @@ def push_otlp_grpc(
     *,
     timeout_sec: float = 10.0,
 ) -> dict[str, Any]:
-    """OTLP/gRPC 推送：当前统一回退到同 host 的 OTLP/HTTP（:4317 → :4318）。"""
-    http_endpoint = endpoint.replace(":4317", ":4318")
-    if "://" not in http_endpoint:
-        http_endpoint = f"http://{http_endpoint}"
-    result = push_otlp_http(summary, http_endpoint, timeout_sec=timeout_sec)
-    result["transport"] = "http_fallback_from_grpc"
-    return result
+    """OTLP/gRPC 推送；若安装 opentelemetry SDK 则走原生 gRPC，否则 HTTP 回退。"""
+    try:
+        from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
+            OTLPMetricExporter,
+        )
+        from opentelemetry.sdk.metrics import MeterProvider
+        from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+        from opentelemetry.sdk.resources import Resource
+
+        host = endpoint.replace("http://", "").replace("https://", "")
+        if ":" not in host:
+            host = f"{host}:4317"
+        exporter = OTLPMetricExporter(endpoint=host, insecure=True)
+        reader = PeriodicExportingMetricReader(exporter, export_interval_millis=1000)
+        provider = MeterProvider(resource=Resource.create({"service.name": "factor_engine"}), metric_readers=[reader])
+        meter = provider.get_meter("factor_engine")
+        metrics = summary.get("metrics") or {}
+        for key, value in metrics.items():
+            if isinstance(value, (int, float)):
+                meter.create_counter(key).add(float(value))
+        provider.force_flush(timeout_millis=int(timeout_sec * 1000))
+        provider.shutdown()
+        return {"ok": True, "endpoint": host, "transport": "grpc_native"}
+    except ImportError:
+        http_endpoint = endpoint.replace(":4317", ":4318")
+        if "://" not in http_endpoint:
+            http_endpoint = f"http://{http_endpoint}"
+        result = push_otlp_http(summary, http_endpoint, timeout_sec=timeout_sec)
+        result["transport"] = "http_fallback_from_grpc"
+        return result

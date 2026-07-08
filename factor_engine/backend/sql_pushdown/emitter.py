@@ -617,6 +617,31 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
             has_inst_window=True,
         )
 
+    if op == "ewm_mean":
+        span = _window_int(node, default=20)
+        ema_node = PlanNode(
+            op="ts_ema",
+            inputs=list(node.inputs),
+            attrs={**node.attrs, "d": span, "window": span, "span": span},
+        )
+        return _compile_layer(ema_node, dialect=dialect)
+
+    if op == "ts_rank":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        w = _window_int(node)
+        over = (
+            f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+        )
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"(RANK() OVER ({over} ORDER BY _v) * 1.0 "
+            f"/ COUNT(*) OVER ({over})) AS _v "
+            f"FROM ({inner.sql}) t",
+            has_inst_window=True,
+        )
+
     return None
 
 
