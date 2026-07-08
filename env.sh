@@ -1,6 +1,13 @@
 # quant_projects 环境变量（使用前 source 本文件）
 #   source ~/quant_projects/env.sh
 
+_QUANT_ENV_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${_QUANT_ENV_ROOT}/.env" ]]; then
+  # shellcheck source=/dev/null
+  source "${_QUANT_ENV_ROOT}/.env"
+fi
+unset _QUANT_ENV_ROOT
+
 export QUANT_PROJECTS_ROOT="${QUANT_PROJECTS_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 export QUANTSOCIETY_WORKSPACE_DATA_ROOT="${QUANTSOCIETY_WORKSPACE_DATA_ROOT:-${QUANT_PROJECTS_ROOT}/data}"
 # FACTOR_LAKE_ROOT 默认由 workspace_paths 从 QUANTSOCIETY_WORKSPACE_DATA_ROOT 推导；显式覆盖时才 export
