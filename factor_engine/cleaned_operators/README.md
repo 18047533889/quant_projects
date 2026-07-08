@@ -87,9 +87,10 @@ cleaned_operators/
 ## 2.2 执行 backend（哪个快用哪个）
 
 - 默认 **`FACTOR_ENGINE_OPERATOR_BACKEND=auto`**：某算子有 polars 实现则走 polars，否则回退 pandas。
+- **`build_backend("duckdb_sql")`**：可 SQL 化的因子在 DuckDB 内执行（`store.sql`），其余回退 Python。
+- **`data_source.type: clickhouse`**：从 ClickHouse 长表只读（需 `clickhouse-connect`）。
 - 强制 pandas：``FACTOR_ENGINE_OPERATOR_BACKEND=pandas_numpy``
-- 强制 polars（无实现则回退）：``FACTOR_ENGINE_OPERATOR_BACKEND=polars``
-- 使用 ``build_backend("polars")`` 的 ``FactorEngine`` 与 pandas 路径数值对齐；polars 实现见 ``common/time_series.py``、``common/cross_sectional.py``、``common/polars_ops.py``。
+- 使用 ``build_backend("polars")`` 的 ``FactorEngine`` 与 pandas 路径数值对齐。
 
 ---
 
