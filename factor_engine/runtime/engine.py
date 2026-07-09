@@ -1142,6 +1142,28 @@ class FactorEngine:
             out["input_dq"] = input_report.to_dict()
         if run_window is not None:
             out["run_window"] = run_window.to_dict()
+        from runtime.production_policy import (
+            format_pandas_fallback_report,
+            is_production_mode,
+            summarize_pandas_fallbacks,
+        )
+
+        fallbacks = summarize_pandas_fallbacks(ctx)
+        if fallbacks:
+            out["production_pandas_fallbacks"] = fallbacks
+            if is_production_mode(self.run_mode):
+                report = format_pandas_fallback_report(fallbacks)
+                if report:
+                    logger.info("因子 '%s' %s", factor.name, report.replace("\n", " | "))
+        runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+        if runtime.get("polars_expr"):
+            out["polars_expr"] = True
+        if runtime.get("polars_expr_fallback"):
+            out["polars_expr_fallback"] = True
+        if runtime.get("used_polars_long_native"):
+            out["used_polars_long_native"] = True
+        if runtime.get("polars_long_fallback_reason"):
+            out["polars_long_fallback_reason"] = runtime["polars_long_fallback_reason"]
         return out
 
     def materialize(

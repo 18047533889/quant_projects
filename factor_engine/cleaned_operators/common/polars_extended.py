@@ -64,18 +64,15 @@ class TSMadPolars(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
+        from cleaned_operators.base_polars import panel_pandas_bridge
+
         w = int(kwargs.get("d", window))
-        cols = _numeric_cols(x)
 
-        def _mad(arr: np.ndarray) -> float:
-            if len(arr) == 0:
-                return np.nan
-            med = np.nanmedian(arr)
-            return float(np.nanmean(np.abs(arr - med)))
+        def _mad(pdf):
+            median = pdf.rolling(window=w, min_periods=1).median()
+            return (pdf - median).abs().rolling(window=w, min_periods=1).mean()
 
-        return x.with_columns([
-            pl.col(c).rolling_map(_mad, window_size=w, min_samples=1).alias(c) for c in cols
-        ])
+        return panel_pandas_bridge(x, _mad)
 
 
 @register_operator(name="power", category="math", business_category="elementwise_math", canonical="power", source="factor_dsl_polars")

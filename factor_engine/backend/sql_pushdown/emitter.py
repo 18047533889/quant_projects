@@ -414,6 +414,32 @@ def _inst_cum_agg(dialect: SqlDialect, agg: str, inner_sql: str) -> str:
     )
 
 
+def _cs_broadcast_agg(agg: str, inner_sql: str) -> str:
+    return (
+        f"SELECT ts, inst, "
+        f"{agg}(_v) OVER (PARTITION BY ts) AS _v "
+        f"FROM ({inner_sql}) t"
+    )
+
+
+def _cum_delta_sql(inner_sql: str, *, dialect: SqlDialect) -> str:
+    over = "PARTITION BY inst ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"
+    first_v = f"FIRST_VALUE(_v IGNORE NULLS) OVER ({over})"
+    if dialect == SqlDialect.CLICKHOUSE:
+        first_v = f"first_value(_v) IGNORE NULLS OVER ({over})"
+        return (
+            f"SELECT ts, inst, "
+            f"if(isNull(_v) OR isNull({first_v}), NULL, _v - {first_v}) AS _v "
+            f"FROM ({inner_sql}) t"
+        )
+    return (
+        f"SELECT ts, inst, "
+        f"CASE WHEN _v IS NULL OR {first_v} IS NULL THEN NULL "
+        f"ELSE _v - {first_v} END AS _v "
+        f"FROM ({inner_sql}) t"
+    )
+
+
 def _ewm_weighted_moment_sql(
     inner_sql: str,
     w: int,
@@ -553,16 +579,30 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
         lit = _sql_literal(val)
         return _Layer(f"SELECT ts, inst, {lit} AS _v FROM base")
 
-    if op in {"add", "subtract", "multiply", "divide"}:
+    if op in {"add", "subtract", "multiply", "divide", "maximum", "minimum"}:
         if len(node.inputs) != 2:
             return None
         left = _compile_layer(node.inputs[0], dialect=dialect)
         right = _compile_layer(node.inputs[1], dialect=dialect)
         if left is None or right is None:
             return None
-        sym = {"add": "+", "subtract": "-", "multiply": "*", "divide": "/"}[op]
+        if op == "maximum":
+            fn = _dialect_fn(dialect, "greatest")
+            expr = (
+                f"CASE WHEN l._v IS NULL OR r._v IS NULL THEN NULL "
+                f"ELSE {fn}(l._v, r._v) END"
+            )
+        elif op == "minimum":
+            fn = _dialect_fn(dialect, "least")
+            expr = (
+                f"CASE WHEN l._v IS NULL OR r._v IS NULL THEN NULL "
+                f"ELSE {fn}(l._v, r._v) END"
+            )
+        else:
+            sym = {"add": "+", "subtract": "-", "multiply": "*", "divide": "/"}[op]
+            expr = f"(l._v {sym} r._v)"
         return _Layer(
-            f"SELECT l.ts, l.inst, (l._v {sym} r._v) AS _v "
+            f"SELECT l.ts, l.inst, {expr} AS _v "
             f"FROM ({left.sql}) l INNER JOIN ({right.sql}) r USING (ts, inst)",
             has_inst_window=left.has_inst_window or right.has_inst_window,
             has_ts_partition=left.has_ts_partition or right.has_ts_partition,
@@ -854,6 +894,78 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
             has_ts_partition=True,
         )
 
+    if op in {"rank_pct", "cs_pct_rank"}:
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        return _Layer(
+            _cs_pct_rank_sql(inner.sql, partition="PARTITION BY ts", dialect=dialect),
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=True,
+        )
+
+    if op in {"cs_quantile", "c_percentile"}:
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        p = _float_attr(node, "p", default=0.5)
+        pos_p = _literal_positional(node, 1)
+        if pos_p is not None:
+            p = pos_p
+        qexpr = _quantile_over(dialect, "_v", p, "PARTITION BY ts")
+        return _Layer(
+            f"SELECT ts, inst, {qexpr} AS _v FROM ({inner.sql}) t",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=True,
+        )
+
+    if op == "log_returns":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        lag = f"LAG(_v) OVER (PARTITION BY inst ORDER BY ts)"
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"CASE WHEN _v IS NULL OR {lag} IS NULL OR {lag} = 0 THEN NULL "
+            f"ELSE {ln}(_v / {lag}) END AS _v "
+            f"FROM ({inner.sql}) t",
+            has_inst_window=True,
+        )
+
+    if op == "volatility":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        w = _window_int(node, default=20)
+        sqrt_fn = _dialect_fn(dialect, "sqrt")
+        scale = f"{sqrt_fn}(252)"
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"{std}(_v) OVER (PARTITION BY inst ORDER BY ts "
+            f"ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW) * {scale} AS _v "
+            f"FROM ({inner.sql}) t",
+            has_inst_window=True,
+        )
+
+    if op == "vwap":
+        if len(node.inputs) < 2:
+            return None
+        price = _compile_layer(node.inputs[0], dialect=dialect)
+        vol = _compile_layer(node.inputs[1], dialect=dialect)
+        if price is None or vol is None:
+            return None
+        w = _window_int(node, default=20)
+        over = (
+            f"PARTITION BY p.inst ORDER BY p.ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+        )
+        return _Layer(
+            f"SELECT p.ts, p.inst, "
+            f"SUM(p._v * v._v) OVER ({over}) / "
+            f"{nf}(SUM(v._v) OVER ({over}), 0) AS _v "
+            f"FROM ({price.sql}) p INNER JOIN ({vol.sql}) v USING (ts, inst)",
+            has_inst_window=True,
+        )
+
     if op == "zscore":
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
@@ -891,6 +1003,47 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
             f"SELECT ts, inst, "
             f"(_v - AVG(_v) OVER (PARTITION BY ts)) AS _v "
             f"FROM ({inner.sql}) t",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=True,
+        )
+
+    if op == "c_mean":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        return _Layer(
+            _cs_broadcast_agg("AVG", inner.sql),
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=True,
+        )
+
+    if op == "c_sum":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        return _Layer(
+            _cs_broadcast_agg("SUM", inner.sql),
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=True,
+        )
+
+    if op == "c_count":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        return _Layer(
+            _cs_broadcast_agg("COUNT", inner.sql),
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=True,
+        )
+
+    if op == "c_std":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        std_fn = _dialect_fn(dialect, "stddev")
+        return _Layer(
+            _cs_broadcast_agg(std_fn, inner.sql),
             has_inst_window=inner.has_inst_window,
             has_ts_partition=True,
         )
@@ -1549,6 +1702,43 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
             has_inst_window=True,
         )
 
+    if op == "cum_prod":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        prod_fn = "product"
+        return _Layer(
+            _inst_cum_agg(dialect, prod_fn, inner.sql),
+            has_inst_window=True,
+        )
+
+    if op == "cum_delta":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        return _Layer(
+            _cum_delta_sql(inner.sql, dialect=dialect),
+            has_inst_window=True,
+        )
+
+    if op == "expanding_mean":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        return _Layer(
+            _inst_cum_agg(dialect, "AVG", inner.sql),
+            has_inst_window=True,
+        )
+
+    if op == "expanding_sum":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        return _Layer(
+            _inst_cum_agg(dialect, "SUM", inner.sql),
+            has_inst_window=True,
+        )
+
     if op in {"cum_std", "expanding_std"}:
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
@@ -1597,6 +1787,53 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
         return _Layer(
             f"SELECT ts, inst, "
             f"CASE WHEN _v IS NULL OR _v = 0 THEN NULL ELSE (1.0 / _v) END AS _v "
+            f"FROM ({inner.sql}) t",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=inner.has_ts_partition,
+        )
+
+    if op == "log_abs":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        abs_fn = _dialect_fn(dialect, "abs")
+        ln_fn = _dialect_fn(dialect, "ln")
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"CASE WHEN _v IS NULL THEN NULL ELSE {ln_fn}({abs_fn}(_v)) END AS _v "
+            f"FROM ({inner.sql}) t",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=inner.has_ts_partition,
+        )
+
+    if op == "signed_log":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        abs_fn = _dialect_fn(dialect, "abs")
+        ln_fn = _dialect_fn(dialect, "ln")
+        sign_fn = _dialect_fn(dialect, "sign")
+        eps = 1e-10
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"CASE WHEN _v IS NULL THEN NULL "
+            f"ELSE {sign_fn}(_v) * {ln_fn}({abs_fn}(_v) + {eps}) END AS _v "
+            f"FROM ({inner.sql}) t",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=inner.has_ts_partition,
+        )
+
+    if op == "signed_sqrt":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        abs_fn = _dialect_fn(dialect, "abs")
+        sqrt_fn = _dialect_fn(dialect, "sqrt")
+        sign_fn = _dialect_fn(dialect, "sign")
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"CASE WHEN _v IS NULL THEN NULL "
+            f"ELSE {sign_fn}(_v) * {sqrt_fn}({abs_fn}(_v)) END AS _v "
             f"FROM ({inner.sql}) t",
             has_inst_window=inner.has_inst_window,
             has_ts_partition=inner.has_ts_partition,

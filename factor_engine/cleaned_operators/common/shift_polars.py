@@ -83,8 +83,13 @@ class ExpandingStdPolars(SeriesOperator):
             cnt = pl.col(c).is_not_null().cast(pl.Float64).cum_sum()
             mu = pl.col(c).cum_sum() / cnt
             mean_sq = (pl.col(c).pow(2).cum_sum()) / cnt
-            var = mean_sq - mu.pow(2)
-            exprs.append(var.sqrt().alias(c))
+            var_pop = mean_sq - mu.pow(2)
+            var_sample = (
+                pl.when(cnt <= 1)
+                .then(None)
+                .otherwise(var_pop * cnt / (cnt - 1))
+            )
+            exprs.append(var_sample.sqrt().alias(c))
         return x.with_columns(exprs)
 
 

@@ -166,3 +166,100 @@ def scan_dataset_columns(
             for src in physical_columns
         }
     return fetched
+
+
+def build_scan_polars_long(
+    store: Any,
+    dataset: str,
+    *,
+    logical_columns: list[str],
+    physical_columns: list[str],
+    output_names: dict[str, str],
+    time_column: str,
+    instrument_column: str,
+    time_range: tuple[Any, Any] | None,
+    instrument_filter: list[str] | None,
+    params: dict[str, Any] | None = None,
+) -> Any:
+    """``store.scan_polars`` → long LazyFrame（``ts / inst / <logical cols>``），无 pandas 往返。"""
+    all_cols = list(dict.fromkeys([time_column, instrument_column, *physical_columns]))
+    read_kwargs: dict[str, Any] = {
+        "columns": all_cols,
+        "time_range": time_range,
+        "instrument_filter": instrument_filter,
+    }
+    if params:
+        read_kwargs.update(params)
+    lf = store.scan_polars(dataset, **read_kwargs)
+    rename: dict[str, str] = {time_column: "ts", instrument_column: "inst"}
+    for phys in physical_columns:
+        logical = output_names.get(phys, phys)
+        if phys != logical:
+            rename[phys] = logical
+    if rename:
+        lf = lf.rename(rename)
+    return lf
+
+
+def build_clickhouse_scan_sql(
+    table: str,
+    *,
+    timestamp_column: str,
+    instrument_column: str,
+    physical_columns: list[str],
+    time_range: tuple[Any, Any] | None = None,
+    instrument_filter: list[str] | None = None,
+) -> str:
+    """构造 ClickHouse long-table scan SQL。"""
+    cols = [timestamp_column, instrument_column, *physical_columns]
+    quoted = ", ".join(f"`{c}`" for c in cols)
+    sql = f"SELECT {quoted} FROM `{table}`"
+    clauses: list[str] = []
+    if time_range is not None:
+        start, end = time_range
+        if start is not None:
+            clauses.append(f"`{timestamp_column}` >= '{start}'")
+        if end is not None:
+            clauses.append(f"`{timestamp_column}` <= '{end}'")
+    if instrument_filter:
+        insts = ", ".join(f"'{s}'" for s in instrument_filter)
+        clauses.append(f"`{instrument_column}` IN ({insts})")
+    if clauses:
+        sql += " WHERE " + " AND ".join(clauses)
+    return sql
+
+
+def scan_clickhouse_long(
+    config: Any,
+    *,
+    table: str,
+    timestamp_column: str,
+    instrument_column: str,
+    physical_columns: list[str],
+    output_names: dict[str, str],
+    time_range: tuple[Any, Any] | None = None,
+    instrument_filter: list[str] | None = None,
+) -> Any:
+    """ClickHouse SQL → Polars LazyFrame（``ts / inst / logical cols``）。"""
+    import polars as pl
+
+    from data_access.clickhouse_panel import execute_query
+
+    sql = build_clickhouse_scan_sql(
+        table,
+        timestamp_column=timestamp_column,
+        instrument_column=instrument_column,
+        physical_columns=physical_columns,
+        time_range=time_range,
+        instrument_filter=instrument_filter,
+    )
+    table_arrow = execute_query(config, sql)
+    lf = pl.from_arrow(table_arrow)
+    rename: dict[str, str] = {timestamp_column: "ts", instrument_column: "inst"}
+    for phys in physical_columns:
+        logical = output_names.get(phys, phys)
+        if phys != logical:
+            rename[phys] = logical
+    if rename:
+        lf = lf.rename(rename)
+    return lf.lazy()

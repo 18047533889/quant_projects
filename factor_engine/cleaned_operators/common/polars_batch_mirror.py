@@ -74,16 +74,15 @@ def _register_colwise(
             tags=["polars", "colwise"],
         )
 
-        def _calculate_series(self, x: pl.DataFrame, d: int = 20, **kwargs) -> pl.DataFrame:
+        def _calculate_series(self, x: pl.DataFrame, d: int = 20, k: int = 3, **kwargs) -> pl.DataFrame:
             import cleaned_operators._numpy_kernels as kernels
 
             kernel = getattr(kernels, kernel_name)
-            extra = {k: v for k, v in kwargs.items() if k not in {"d", "window"}}
             window = int(kwargs.get("d", kwargs.get("window", d)))
+            k_val = int(kwargs.get("k", kwargs.get("order", k)))
             if canonical == "ts_moment":
-                return colwise_numpy_kernel(
-                    x, kernel, d=window, k=int(kwargs.get("k", kwargs.get("order", 3)))
-                )
+                return colwise_numpy_kernel(x, kernel, d=window, k=k_val)
+            extra = {key: val for key, val in kwargs.items() if key not in {"d", "window", "k", "order"}}
             return colwise_numpy_kernel(x, kernel, d=window, **extra)
 
     _ColwiseOp.__name__ = f"{canonical.title().replace('_', '')}PolarsColwise"
@@ -107,7 +106,6 @@ for _canon in (
     "product",
     "nan_to_num",
     "protected_log",
-    "protected_sqrt",
     "signed_sqrt",
     "sqr",
     "sqrt_abs",
@@ -197,3 +195,30 @@ for _canon in (
     "ttest_two_samples",
 ):
     _register_bridge(_canon, category="statistics", business_category="statistics_regression")
+
+
+# ts_moment：覆盖 Colwise 注册，支持第三参数 k
+@register_operator(
+    name="ts_moment",
+    category="time_series",
+    business_category="time_series",
+    canonical="ts_moment",
+    source="factor_dsl_polars_bridge",
+    backend="polars",
+)
+class TSMomentPolarsBridge(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="ts_moment",
+        category="time_series",
+        description="窗口 k 阶中心矩（pandas 核 parity）",
+        param_names=["x", "d", "k"],
+        return_type="series",
+        tags=["time_series", "polars"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, d: int = 20, k: int = 3, **kwargs) -> pl.DataFrame:
+        from cleaned_operators._numpy_kernels import ts_moment_
+
+        window = int(kwargs.get("d", kwargs.get("window", d)))
+        k_val = int(kwargs.get("k", kwargs.get("order", k)))
+        return colwise_numpy_kernel(x, ts_moment_, d=window, k=k_val)

@@ -252,6 +252,21 @@ class TestDeliveryPackage(unittest.TestCase):
             ok, msg = check_formula(m["formula"])
             self.assertTrue(ok, f"{path}: {msg}")
 
+    def test_smoke_uses_auto_backend(self) -> None:
+        from lib.engine_config import build_fastest_engine
+        from lib.paths import resolve_factor_engine_root
+
+        fe = resolve_factor_engine_root()
+        if fe is None:
+            self.skipTest("factor_engine not available")
+        import sys
+
+        if str(fe) not in sys.path:
+            sys.path.insert(0, str(fe))
+
+        engine = build_fastest_engine(data_source=None)
+        self.assertEqual(type(engine.backend).__name__, "HybridBackend")
+
     def test_campaign_data_source_uses_data_access(self) -> None:
         config_path = self.campaign_dir / "config.json"
         self.assertTrue(config_path.exists())

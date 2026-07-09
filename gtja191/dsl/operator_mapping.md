@@ -40,8 +40,8 @@
 | `SELF`（递归） | Alpha 143 改为有限窗口收益 |
 | `BANCHMARKINDEX*` | 保留 `index_close` / `index_open` 字段名；数据源 `ashare_index_daily` composite 待接 |
 | `DTM/DBM/TR`（ADX） | Alpha 069 用价量近似；172 简化；186 内联 TR/LD/HD |
-| `FILTER` | 译为 `if_else(cond, x, 0)` |
-| `SEQUENCE` | 回归类因子用 `ts_regression` + `delay` 近似 |
+| `FILTER` | 译为 `where(cond, x, 0)` |
+| `SEQUENCE` | 回归类因子用 `ts_regression` + `ts_delay` 近似 |
 
 ## 暂不投递 / 需数据后启用
 

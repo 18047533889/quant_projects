@@ -116,7 +116,13 @@ TIER1_ALIASES: dict[str, str] = {
 }
 
 # production ``auto`` backend 下允许走 Polars 的 canonical 白名单
-# 保守核心 + parity CI 验证通过后逐步并入（见 tests/operators/test_polars_parity_tier1.py）
+#
+# 三层覆盖（与 registry / SQL emitter 分离）：
+#   1. runtime 实现：OperatorRegistry 有 pandas_numpy / polars / sql
+#   2. POLARS_PARITY_VERIFIED：parity CI 通过（Tier-1…9，见 tests/operators/test_polars_parity_tier*.py）
+#   3. POLARS_PRODUCTION_SAFE：production auto 默认走 Polars（= CORE + PARITY_VERIFIED）
+#
+# 晋级路径：有 Polars 实现 → parity test → 并入 POLARS_PARITY_VERIFIED → 自动进入 PRODUCTION_SAFE
 POLARS_PRODUCTION_SAFE_CORE: frozenset[str] = frozenset({
     "ts_mean",
     "ts_sum",
@@ -163,25 +169,181 @@ POLARS_PARITY_VERIFIED_TIER2: frozenset[str] = frozenset({
     "vwap",
 })
 
-# Tier-3：EMA / fillna / group 统计（见 tests/operators/test_polars_parity_tier3.py）
-# ts_decay_linear / group_zscore 仍有语义差，见 test_polars_parity_tier3_gaps.py
+# Tier-3：EMA / decay / fillna / group 统计（见 tests/operators/test_polars_parity_tier3.py）
 POLARS_PARITY_VERIFIED_TIER3: frozenset[str] = frozenset({
     "ts_ema",
+    "ts_decay_linear",
     "fillna_const",
     "fillna",
+    "group_zscore",
     "group_mean",
     "group_neutralize",
     "ts_var",
     "ts_median",
 })
 
+# Tier-4：Sharpe / 自相关（见 tests/operators/test_polars_parity_tier4_candidates.py）
+POLARS_PARITY_VERIFIED_TIER4: frozenset[str] = frozenset({
+    "ts_sharpe",
+    "ts_autocorr",
+})
+
+# Tier-5：Core 缺口 — ts_zscore / protected_sqrt（见 tests/operators/test_polars_parity_tier5.py）
+POLARS_PARITY_VERIFIED_TIER5: frozenset[str] = frozenset({
+    "ts_zscore",
+    "protected_sqrt",
+})
+
+# Tier-6：双序列回归 / Beta（见 tests/operators/test_polars_parity_tier6.py）
+POLARS_PARITY_VERIFIED_TIER6: frozenset[str] = frozenset({
+    "ts_beta",
+    "cs_resid",
+    "cs_regression",
+})
+
+# Tier-7：PRODUCTION_CORE TA Wilder（见 tests/operators/test_polars_parity_tier7.py）
+POLARS_PARITY_VERIFIED_TIER7: frozenset[str] = frozenset({
+    "RSI_WILDER",
+    "ATR_WILDER",
+})
+
+# Tier-8：截面聚合 / EWM·WMA / 清洗·group 扩展（见 tests/operators/test_polars_parity_tier8.py）
+POLARS_PARITY_VERIFIED_TIER8: frozenset[str] = frozenset({
+    "c_mean",
+    "c_std",
+    "c_sum",
+    "c_count",
+    "ewm_mean",
+    "WMA",
+    "nan_to_num",
+    "is_finite",
+    "group_std",
+    "group_normalize",
+    "ts_cov",
+})
+
+# Tier-9：扩展 ts / group / cum / EWM / 比较逻辑 / 数学（见 tests/operators/test_polars_parity_tier9.py）
+POLARS_PARITY_VERIFIED_TIER9: frozenset[str] = frozenset({
+    # 时序扩展
+    "ts_mad",
+    "ts_skew",
+    "ts_kurt",
+    "ts_quantile",
+    "ts_product",
+    "ts_argmax",
+    "ts_argmin",
+    "ts_regression",
+    "ts_ratio",
+    "ts_max_buildup",
+    "ts_moment",
+    "ts_ratio",
+    "Slope",
+    # 截面 / 分组
+    "c_percentile",
+    "cs_mad",
+    "cs_mad_zscore",
+    "quantile",
+    "group_percentile",
+    "group_decay_linear",
+    "group_winsorize",
+    # EWM 矩
+    "ewm_std",
+    "ewm_var",
+    "ewm_corr",
+    "ewm_cov",
+    # 累计 / 扩展
+    "cum_sum",
+    "cum_max",
+    "cum_min",
+    "cum_prod",
+    "cum_delta",
+    "expanding_std",
+    "expanding_rank",
+    "expanding_mean",
+    "expanding_sum",
+    "count",
+    # 元素 / 比较 / 逻辑
+    "power",
+    "floor",
+    "ceil",
+    "inverse",
+    "minimum",
+    "maximum",
+    "signed_sqrt",
+    "signed_log",
+    "log_abs",
+    "is_nan",
+    "gt",
+    "lt",
+    "ge",
+    "le",
+    "eq",
+    "ne",
+    "and_",
+    "or_",
+    "not_",
+    # 清洗 research
+    "fillna_interpolate",
+})
+
+# Tier-10：价量 / 截面百分位（见 tests/operators/test_polars_parity_tier10.py）
+POLARS_PARITY_VERIFIED_TIER10: frozenset[str] = frozenset({
+    "log_returns",
+    "volatility",
+    "rank_pct",
+    "cs_pct_rank",
+    "cs_quantile",
+})
+
 POLARS_PARITY_VERIFIED: frozenset[str] = (
     POLARS_PARITY_VERIFIED_TIER1
     | POLARS_PARITY_VERIFIED_TIER2
     | POLARS_PARITY_VERIFIED_TIER3
+    | POLARS_PARITY_VERIFIED_TIER4
+    | POLARS_PARITY_VERIFIED_TIER5
+    | POLARS_PARITY_VERIFIED_TIER6
+    | POLARS_PARITY_VERIFIED_TIER7
+    | POLARS_PARITY_VERIFIED_TIER8
+    | POLARS_PARITY_VERIFIED_TIER9
+    | POLARS_PARITY_VERIFIED_TIER10
 )
 
 POLARS_PRODUCTION_SAFE: frozenset[str] = POLARS_PRODUCTION_SAFE_CORE | POLARS_PARITY_VERIFIED
+
+
+def polars_implemented_canonicals() -> frozenset[str]:
+    """Registry 中已有 ``polars`` backend 的 canonical（动态，非 production 白名单）。"""
+    from cleaned_operators.registry import OperatorRegistry
+
+    return frozenset(
+        c
+        for c in OperatorRegistry.list_canonical()
+        if "polars" in OperatorRegistry.backends_for(c)
+    )
+
+
+def check_polars_production_gate() -> list[str]:
+    """POLARS 准入：parity 并集 = safe 扩展层；PRODUCTION_CORE 须全覆盖。"""
+    from cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS
+
+    errors: list[str] = []
+    if POLARS_PRODUCTION_SAFE != POLARS_PRODUCTION_SAFE_CORE | POLARS_PARITY_VERIFIED:
+        errors.append("POLARS_PRODUCTION_SAFE 须等于 CORE | PARITY_VERIFIED")
+    if not POLARS_PARITY_VERIFIED <= POLARS_PRODUCTION_SAFE:
+        errors.append("POLARS_PARITY_VERIFIED 必须是 POLARS_PRODUCTION_SAFE 子集")
+    missing_core = sorted(PRODUCTION_CORE_CANONICALS - POLARS_PRODUCTION_SAFE)
+    if missing_core:
+        errors.append(
+            f"PRODUCTION_CORE 未全部进入 POLARS_PRODUCTION_SAFE: {missing_core}"
+        )
+    unverified = sorted(
+        POLARS_PRODUCTION_SAFE - POLARS_PRODUCTION_SAFE_CORE - POLARS_PARITY_VERIFIED
+    )
+    if unverified:
+        errors.append(
+            f"POLARS_PRODUCTION_SAFE 含未在 CORE|PARITY 中的算子: {unverified}"
+        )
+    return errors
 
 
 def resolve_tier1_canonical(name: str) -> str:

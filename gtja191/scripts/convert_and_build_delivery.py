@@ -24,45 +24,32 @@ GTJA_ROOT = PACKAGE_ROOT
 # 手工 DSL（原始 GTJA 语法无法自动翻译或需简化）
 # ---------------------------------------------------------------------------
 MANUAL_DSL: dict[str, str] = {
-    "gtja191_alpha_021": "ts_regression(ts_mean(close, 6), delay(close, 1), 6, 0, 'slope')",
-    "gtja191_alpha_027": "WMA((close - delay(close, 3)) / (delay(close, 3) + 1e-8) * 100 + (close - delay(close, 6)) / (delay(close, 6) + 1e-8) * 100, 12)",
-    "gtja191_alpha_030": "0 * close",
-    "gtja191_alpha_075": (
-        "ts_sum(if_else(and_(close > open, index_close < index_open), 1, 0), 50) "
-        "/ (ts_sum(if_else(index_close < index_open, 1, 0), 50) + 1e-8)"
+    "gtja191_alpha_021": "ts_regression(ts_mean(close, 6), ts_delay(close, 1), 6, 0, 'slope')",
+    "gtja191_alpha_027": (
+        'WMA((close - ts_delay(close, 3)) / (ts_delay(close, 3) + 1e-08) * 100 + (close - ts_delay(close, 6)) / (ts_delay(close, 6) + 1e-08) * 100, 12)'
     ),
-    "gtja191_alpha_116": "ts_regression(close, delay(close, 1), 20, 0, 'slope')",
-    "gtja191_alpha_147": "ts_regression(ts_mean(close, 12), delay(close, 1), 12, 0, 'slope')",
-    "gtja191_alpha_069": "if_else(ts_sum(if_else(high + low <= delay(high, 1) + delay(low, 1), 0, max(abs(high - delay(high, 1)), abs(low - delay(low, 1)))), 20) > ts_sum(if_else(high + low >= delay(high, 1) + delay(low, 1), 0, max(abs(high - delay(high, 1)), abs(low - delay(low, 1)))), 20), (ts_sum(if_else(high + low <= delay(high, 1) + delay(low, 1), 0, max(abs(high - delay(high, 1)), abs(low - delay(low, 1)))), 20) - ts_sum(if_else(high + low >= delay(high, 1) + delay(low, 1), 0, max(abs(high - delay(high, 1)), abs(low - delay(low, 1)))), 20)) / (ts_sum(if_else(high + low <= delay(high, 1) + delay(low, 1), 0, max(abs(high - delay(high, 1)), abs(low - delay(low, 1)))), 20) + 1e-8), if_else(ts_sum(if_else(high + low <= delay(high, 1) + delay(low, 1), 0, max(abs(high - delay(high, 1)), abs(low - delay(low, 1)))), 20) == ts_sum(if_else(high + low >= delay(high, 1) + delay(low, 1), 0, max(abs(high - delay(high, 1)), abs(low - delay(low, 1)))), 20), 0, (ts_sum(if_else(high + low <= delay(high, 1) + delay(low, 1), 0, max(abs(high - delay(high, 1)), abs(low - delay(low, 1)))), 20) - ts_sum(if_else(high + low >= delay(high, 1) + delay(low, 1), 0, max(abs(high - delay(high, 1)), abs(low - delay(low, 1)))), 20)) / (ts_sum(if_else(high + low >= delay(high, 1) + delay(low, 1), 0, max(abs(high - delay(high, 1)), abs(low - delay(low, 1)))), 20) + 1e-8)))",
-    "gtja191_alpha_143": "if_else(close > delay(close, 1), (close - delay(close, 1)) / (delay(close, 1) + 1e-8), 0)",
+    "gtja191_alpha_030": '0 * close',
+    "gtja191_alpha_075": (
+        'ts_sum(where(and_(close > open, index_close < index_open), 1, 0), 50) / (ts_sum(where(index_close < index_open, 1, 0), 50) + 1e-08)'
+    ),
+    "gtja191_alpha_116": "ts_regression(close, ts_delay(close, 1), 20, 0, 'slope')",
+    "gtja191_alpha_147": "ts_regression(ts_mean(close, 12), ts_delay(close, 1), 12, 0, 'slope')",
+    "gtja191_alpha_069": (
+        'where(ts_sum(where(high + low <= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 20) > ts_sum(where(high + low >= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 20), (ts_sum(where(high + low <= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 20) - ts_sum(where(high + low >= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 20)) / (ts_sum(where(high + low <= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 20) + 1e-08), where(ts_sum(where(high + low <= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 20) == ts_sum(where(high + low >= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 20), 0, (ts_sum(where(high + low <= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 20) - ts_sum(where(high + low >= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 20)) / (ts_sum(where(high + low >= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 20) + 1e-08)))'
+    ),
+    "gtja191_alpha_143": 'where(close > ts_delay(close, 1), (close - ts_delay(close, 1)) / (ts_delay(close, 1) + 1e-08), 0)',
     "gtja191_alpha_149": (
-        "ts_regression("
-        "if_else(index_close < delay(index_close, 1), close / delay(close, 1) - 1, 0), "
-        "if_else(index_close < delay(index_close, 1), index_close / delay(index_close, 1) - 1, 0), "
-        "252, 0, 'slope')"
+        "ts_regression(where(index_close < ts_delay(index_close, 1), close / ts_delay(close, 1) - 1, 0), where(index_close < ts_delay(index_close, 1), index_close / ts_delay(index_close, 1) - 1, 0), 252, 0, 'slope')"
     ),
     "gtja191_alpha_181": (
-        "ts_sum("
-        "(close / delay(close, 1) - 1 - ts_mean(close / delay(close, 1) - 1, 20)) "
-        "- power(index_close - ts_mean(index_close, 20), 2), 20) "
-        "/ (ts_sum(power(index_close - ts_mean(index_close, 20), 3), 20) + 1e-8)"
+        'ts_sum(close / ts_delay(close, 1) - 1 - ts_mean(close / ts_delay(close, 1) - 1, 20) - power(index_close - ts_mean(index_close, 20), 2), 20) / (ts_sum(power(index_close - ts_mean(index_close, 20), 3), 20) + 1e-08)'
     ),
     "gtja191_alpha_182": (
-        "ts_sum(if_else(or_(and_(close > open, index_close > index_open), and_(close < open, index_close < index_open)), 1, 0), 20) / 20"
+        'ts_sum(where(or_(and_(close > open, index_close > index_open), and_(close < open, index_close < index_open)), 1, 0), 20) / 20'
     ),
-    "gtja191_alpha_183": "0 * close",
+    "gtja191_alpha_183": '0 * close',
     "gtja191_alpha_186": (
-        "(ts_mean(abs("
-        "(ts_sum(if_else(and_((delay(low, 1) - low) > 0, (delay(low, 1) - low) > (high - delay(high, 1))), delay(low, 1) - low, 0), 14) * 100 / (ts_sum(max(max(high - low, abs(high - delay(close, 1))), abs(low - delay(close, 1))), 14) + 1e-8) "
-        "- ts_sum(if_else(and_((high - delay(high, 1)) > 0, (high - delay(high, 1)) > (delay(low, 1) - low)), high - delay(high, 1), 0), 14) * 100 / (ts_sum(max(max(high - low, abs(high - delay(close, 1))), abs(low - delay(close, 1))), 14) + 1e-8)) "
-        "/ (ts_sum(if_else(and_((delay(low, 1) - low) > 0, (delay(low, 1) - low) > (high - delay(high, 1))), delay(low, 1) - low, 0), 14) * 100 / (ts_sum(max(max(high - low, abs(high - delay(close, 1))), abs(low - delay(close, 1))), 14) + 1e-8) "
-        "+ ts_sum(if_else(and_((high - delay(high, 1)) > 0, (high - delay(high, 1)) > (delay(low, 1) - low)), high - delay(high, 1), 0), 14) * 100 / (ts_sum(max(max(high - low, abs(high - delay(close, 1))), abs(low - delay(close, 1))), 14) + 1e-8) + 1e-8) * 100"
-        "), 6) + delay(ts_mean(abs("
-        "(ts_sum(if_else(and_((delay(low, 1) - low) > 0, (delay(low, 1) - low) > (high - delay(high, 1))), delay(low, 1) - low, 0), 14) * 100 / (ts_sum(max(max(high - low, abs(high - delay(close, 1))), abs(low - delay(close, 1))), 14) + 1e-8) "
-        "- ts_sum(if_else(and_((high - delay(high, 1)) > 0, (high - delay(high, 1)) > (delay(low, 1) - low)), high - delay(high, 1), 0), 14) * 100 / (ts_sum(max(max(high - low, abs(high - delay(close, 1))), abs(low - delay(close, 1))), 14) + 1e-8)) "
-        "/ (ts_sum(if_else(and_((delay(low, 1) - low) > 0, (delay(low, 1) - low) > (high - delay(high, 1))), delay(low, 1) - low, 0), 14) * 100 / (ts_sum(max(max(high - low, abs(high - delay(close, 1))), abs(low - delay(close, 1))), 14) + 1e-8) "
-        "+ ts_sum(if_else(and_((high - delay(high, 1)) > 0, (high - delay(high, 1)) > (delay(low, 1) - low)), high - delay(high, 1), 0), 14) * 100 / (ts_sum(max(max(high - low, abs(high - delay(close, 1))), abs(low - delay(close, 1))), 14) + 1e-8) + 1e-8) * 100"
-        "), 6), 6)) / 2"
+        '(ts_mean(abs((ts_sum(where(and_(ts_delay(low, 1) - low > 0, ts_delay(low, 1) - low > high - ts_delay(high, 1)), ts_delay(low, 1) - low, 0), 14) * 100 / (ts_sum(flex_max(flex_max(high - low, abs(high - ts_delay(close, 1))), abs(low - ts_delay(close, 1))), 14) + 1e-08) - ts_sum(where(and_(high - ts_delay(high, 1) > 0, high - ts_delay(high, 1) > ts_delay(low, 1) - low), high - ts_delay(high, 1), 0), 14) * 100 / (ts_sum(flex_max(flex_max(high - low, abs(high - ts_delay(close, 1))), abs(low - ts_delay(close, 1))), 14) + 1e-08)) / (ts_sum(where(and_(ts_delay(low, 1) - low > 0, ts_delay(low, 1) - low > high - ts_delay(high, 1)), ts_delay(low, 1) - low, 0), 14) * 100 / (ts_sum(flex_max(flex_max(high - low, abs(high - ts_delay(close, 1))), abs(low - ts_delay(close, 1))), 14) + 1e-08) + ts_sum(where(and_(high - ts_delay(high, 1) > 0, high - ts_delay(high, 1) > ts_delay(low, 1) - low), high - ts_delay(high, 1), 0), 14) * 100 / (ts_sum(flex_max(flex_max(high - low, abs(high - ts_delay(close, 1))), abs(low - ts_delay(close, 1))), 14) + 1e-08) + 1e-08) * 100), 6) + ts_delay(ts_mean(abs((ts_sum(where(and_(ts_delay(low, 1) - low > 0, ts_delay(low, 1) - low > high - ts_delay(high, 1)), ts_delay(low, 1) - low, 0), 14) * 100 / (ts_sum(flex_max(flex_max(high - low, abs(high - ts_delay(close, 1))), abs(low - ts_delay(close, 1))), 14) + 1e-08) - ts_sum(where(and_(high - ts_delay(high, 1) > 0, high - ts_delay(high, 1) > ts_delay(low, 1) - low), high - ts_delay(high, 1), 0), 14) * 100 / (ts_sum(flex_max(flex_max(high - low, abs(high - ts_delay(close, 1))), abs(low - ts_delay(close, 1))), 14) + 1e-08)) / (ts_sum(where(and_(ts_delay(low, 1) - low > 0, ts_delay(low, 1) - low > high - ts_delay(high, 1)), ts_delay(low, 1) - low, 0), 14) * 100 / (ts_sum(flex_max(flex_max(high - low, abs(high - ts_delay(close, 1))), abs(low - ts_delay(close, 1))), 14) + 1e-08) + ts_sum(where(and_(high - ts_delay(high, 1) > 0, high - ts_delay(high, 1) > ts_delay(low, 1) - low), high - ts_delay(high, 1), 0), 14) * 100 / (ts_sum(flex_max(flex_max(high - low, abs(high - ts_delay(close, 1))), abs(low - ts_delay(close, 1))), 14) + 1e-08) + 1e-08) * 100), 6), 6)) / 2'
     ),
 }
 
@@ -86,9 +73,9 @@ DELIVERY_EXCLUDED: frozenset[str] = frozenset({
     "gtja191_alpha_183",
 })
 ADX_HELPERS = {
-    "hd": "high - delay(high, 1)",
-    "ld": "delay(low, 1) - low",
-    "tr": "max(max(high - low, abs(high - delay(close, 1))), abs(low - delay(close, 1)))",
+    "hd": "high - ts_delay(high, 1)",
+    "ld": "ts_delay(low, 1) - low",
+    "tr": "flex_max(flex_max(high - low, abs(high - ts_delay(close, 1))), abs(low - ts_delay(close, 1)))",
 }
 
 # vwap 在 allowlist 中同时是算子名，公式里用典型价量代理避免解析冲突

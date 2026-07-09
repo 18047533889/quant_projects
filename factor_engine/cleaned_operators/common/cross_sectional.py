@@ -17,7 +17,7 @@
 """
 from __future__ import annotations
 
-from cleaned_operators.common.cs_broadcast import broadcast_row_stat, cs_rank_01
+from cleaned_operators.common.cs_broadcast import broadcast_row_stat, cs_rank_01, cs_rank_pct
 from cleaned_operators.base import (
     Operator,
     OperatorMetadata,
@@ -847,7 +847,7 @@ class CrossSectionalCountPolars(SeriesOperator):
         count_expr = sum(pl.col(c).is_not_null().cast(pl.Int32) for c in numeric_cols)
 
         return x.with_columns([
-            count_expr.alias(c) for c in numeric_cols
+            count_expr.cast(pl.Float64).alias(c) for c in numeric_cols
         ])
 
 
@@ -922,7 +922,7 @@ class CrossSectionalStdPolars(SeriesOperator):
 
         # 计算每行标准差
         arr = x.select(numeric_cols).to_numpy()
-        stds = np.nanstd(arr, axis=1, keepdims=True)
+        stds = np.nanstd(arr, axis=1, ddof=1, keepdims=True)
 
         # 转换回 Polars
         result_df = pl.DataFrame(np.repeat(stds, len(numeric_cols), axis=1), schema=numeric_cols)
@@ -931,6 +931,58 @@ class CrossSectionalStdPolars(SeriesOperator):
             result_df = result_df.with_columns([x['date']])
 
         return result_df
+
+
+
+# canonical=cs_mad backend=polars selected=cs_mad source=cross_sectional/c_ops_polars.py
+@register_operator(name="cs_mad", category="cross_sectional", business_category="cross_sectional", canonical="cs_mad", source="factor_dsl_np", backend="polars")
+class CrossSectionalMadPolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="cs_mad",
+        category="cross_sectional",
+        description="截面中位绝对偏差（MAD，广播到各列）",
+        examples=["cs_mad(PE)"],
+        param_names=["x"],
+        return_type="series",
+        tags=["cross_sectional", "mad", "pit_safe"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        numeric_cols = [c for c in x.columns if c not in ["date", "stock_code"]]
+        arr = x.select(numeric_cols).to_numpy()
+        med = np.nanmedian(arr, axis=1, keepdims=True)
+        mad = np.nanmedian(np.abs(arr - med), axis=1, keepdims=True)
+        out = np.repeat(mad, len(numeric_cols), axis=1)
+        result = pl.DataFrame(out, schema=numeric_cols)
+        if "date" in x.columns:
+            result = result.with_columns([x["date"]])
+        return result
+
+
+# canonical=cs_mad_zscore backend=polars selected=cs_mad_zscore source=cross_sectional/c_ops_polars.py
+@register_operator(name="cs_mad_zscore", category="cross_sectional", business_category="cross_sectional", canonical="cs_mad_zscore", source="factor_dsl_np", backend="polars")
+class CrossSectionalMadZscorePolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="cs_mad_zscore",
+        category="cross_sectional",
+        description="MAD 稳健 Z-Score：(x - median) / MAD",
+        examples=["cs_mad_zscore(PE)"],
+        param_names=["x"],
+        return_type="series",
+        tags=["cross_sectional", "mad", "zscore", "pit_safe"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        numeric_cols = [c for c in x.columns if c not in ["date", "stock_code"]]
+        arr = x.select(numeric_cols).to_numpy()
+        med = np.nanmedian(arr, axis=1, keepdims=True)
+        mad = np.nanmedian(np.abs(arr - med), axis=1, keepdims=True)
+        mad = np.where(mad == 0, np.nan, mad)
+        z = (arr - med) / mad
+        result = pl.DataFrame(z, schema=numeric_cols)
+        if "date" in x.columns:
+            result = result.with_columns([x["date"]])
+        return result
 
 
 
@@ -1095,6 +1147,80 @@ class RankPolars(SeriesOperator):
             pl.Series(name=c, values=ranked[c].to_numpy()) for c in numeric_cols
         ])
 
+
+@register_operator(
+    name="rank_pct",
+    category="cross_sectional",
+    business_category="cross_sectional",
+    canonical="rank_pct",
+    source="factor_dsl_polars",
+)
+class RankPctPolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="rank_pct",
+        category="cross_sectional",
+        description="截面 pandas 百分位排名 rank/count",
+        examples=["rank_pct(close)"],
+        param_names=["x"],
+        return_type="series",
+        tags=["cross_sectional", "rank", "pit_safe", "polars"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        numeric_cols = [c for c in x.columns if c not in {"date", "stock_code"}]
+        pdf = x.select(numeric_cols).to_pandas()
+        ranked = cs_rank_pct(pdf)
+        return x.with_columns([
+            pl.Series(name=c, values=ranked[c].to_numpy()) for c in numeric_cols
+        ])
+
+
+@register_operator(
+    name="cs_pct_rank",
+    category="cross_sectional",
+    business_category="cross_sectional",
+    canonical="cs_pct_rank",
+    source="factor_dsl_polars",
+)
+class CsPctRankPolars(RankPctPolars):
+    metadata = OperatorMetadata(
+        name="cs_pct_rank",
+        category="cross_sectional",
+        description="截面百分位排名（同 rank_pct）",
+        examples=["cs_pct_rank(close)"],
+        param_names=["x"],
+        return_type="series",
+        tags=["cross_sectional", "rank", "pit_safe", "polars"],
+    )
+
+
+@register_operator(
+    name="cs_quantile",
+    category="cross_sectional",
+    business_category="cross_sectional",
+    canonical="cs_quantile",
+    source="factor_dsl_polars",
+)
+class CsQuantilePolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="cs_quantile",
+        category="cross_sectional",
+        description="截面 p 分位数值（广播到各列）",
+        examples=["cs_quantile(PE, 0.5)"],
+        param_names=["x", "p"],
+        return_type="series",
+        tags=["cross_sectional", "quantile", "pit_safe", "polars"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, p: float = 0.5, **kwargs) -> pl.DataFrame:
+        numeric_cols = [c for c in x.columns if c not in {"date", "stock_code"}]
+        pdf = x.select(numeric_cols).to_pandas()
+        q = pdf.quantile(float(p), axis=1)
+        broadcast = broadcast_row_stat(pdf, q)
+        return x.with_columns([
+            pl.Series(name=c, values=broadcast[c].to_numpy()) for c in numeric_cols
+        ])
+
 # aliases: CS_RANK, RANK, c_rank, cs_rank
 
 
@@ -1248,6 +1374,7 @@ def _cs_regression_rowwise(y_arr: np.ndarray, x_arr: np.ndarray, mode: int) -> n
     business_category="cross_sectional",
     canonical="cs_resid",
     source="factor_dsl_polars",
+    backend="polars",
 )
 class CSResidPolars(SeriesOperator):
     metadata = OperatorMetadata(
@@ -1281,6 +1408,7 @@ class CSResidPolars(SeriesOperator):
     business_category="cross_sectional",
     canonical="cs_regression",
     source="factor_dsl_polars",
+    backend="polars",
 )
 class CSRegressionPolars(SeriesOperator):
     metadata = OperatorMetadata(

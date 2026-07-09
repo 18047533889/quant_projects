@@ -32,15 +32,6 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, List, Optional, Tuple
 
-from cleaned_operators.operator_policy import POLARS_PRODUCTION_SAFE
-
-
-def _operator_backend_auto_aggressive() -> bool:
-    return os.environ.get("FACTOR_ENGINE_OPERATOR_BACKEND", "").strip().lower() in {
-        "auto_aggressive",
-        "aggressive",
-    }
-
 
 def _merge_param_names(existing: list[str] | None, new: list[str] | None) -> list[str]:
     """多 backend 注册时保留更完整的 param_names（避免 polars bridge 覆盖）。"""
@@ -195,11 +186,10 @@ class OperatorRegistry:
             if "sql" in backends:
                 return backends["sql"], "sql"
             return cls.get_preferred(name, prefer="auto")
-        # auto：production 仅白名单走 polars；research 可 FACTOR_ENGINE_OPERATOR_BACKEND=auto_aggressive
-        if "polars" in backends:
-            if canonical in POLARS_PRODUCTION_SAFE or _operator_backend_auto_aggressive():
-                return backends["polars"], "polars"
-        return backends.get("pandas_numpy"), "pandas_numpy"
+        # auto：Hybrid 路由 — SQL 在 plan 层；此处 Polars safe vs Pandas fallback
+        from backend.operator_capability import get_best_backend
+
+        return get_best_backend(name, prefer="auto")
 
     @classmethod
     def get(cls, name: str, backend: str = "pandas_numpy") -> Any:

@@ -35,10 +35,10 @@ def _wma(x: pl.DataFrame, window: int) -> pl.DataFrame:
         if len(arr) == 0:
             return np.nan
         weights = w[-len(arr):]
-        return float(np.dot(arr, weights))
+        return float(np.dot(arr, weights) / weights.sum())
 
     return x.with_columns([
-        pl.col(c).rolling_map(_apply, window_size=int(window), min_periods=1).alias(c)
+        pl.col(c).rolling_map(_apply, window_size=int(window), min_samples=1).alias(c)
         for c in cols
     ])
 
@@ -96,6 +96,7 @@ class RSIPolars(SeriesOperator):
     business_category="technical_signal",
     canonical="RSI_WILDER",
     source="factor_dsl_polars",
+    backend="polars",
 )
 class RSIWilderPolars(SeriesOperator):
     metadata = OperatorMetadata(
@@ -108,29 +109,13 @@ class RSIWilderPolars(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, window: int = 14, **kwargs) -> pl.DataFrame:
+        from cleaned_operators.technical.signal import _compute_rsi_wilder
+
         w = max(2, int(kwargs.get("d", window)))
-        alpha = 1.0 / w
         cols = _numeric_cols(x)
-        exprs = []
-        for c in cols:
-            delta = pl.col(c).diff()
-            gain = pl.when(delta > 0).then(delta).otherwise(0.0)
-            loss = pl.when(delta < 0).then(-delta).otherwise(0.0)
-            avg_gain = gain.ewm_mean(alpha=alpha, adjust=False, min_samples=w)
-            avg_loss = loss.ewm_mean(alpha=alpha, adjust=False, min_samples=w)
-            rs = avg_gain / avg_loss
-            rsi = 100.0 - (100.0 / (1.0 + rs))
-            rsi = (
-                pl.when((avg_loss == 0) & (avg_gain > 0))
-                .then(100.0)
-                .when((avg_gain == 0) & (avg_loss > 0))
-                .then(0.0)
-                .when((avg_gain == 0) & (avg_loss == 0))
-                .then(50.0)
-                .otherwise(rsi)
-            )
-            exprs.append(rsi.alias(c))
-        return x.with_columns(exprs)
+        pdf = x.select(cols).to_pandas()
+        out = _compute_rsi_wilder(pdf, w)
+        return x.with_columns([pl.Series(name=c, values=out[c].to_numpy()) for c in cols])
 
 
 @register_operator(name="MACD", category="financial", business_category="technical_signal", canonical="MACD", source="factor_dsl_polars")
@@ -225,6 +210,7 @@ class ATRPolars(SeriesOperator):
     business_category="technical_signal",
     canonical="ATR_WILDER",
     source="factor_dsl_polars",
+    backend="polars",
 )
 class ATRWilderPolars(SeriesOperator):
     metadata = OperatorMetadata(
@@ -244,19 +230,15 @@ class ATRWilderPolars(SeriesOperator):
         window: int = 14,
         **kwargs,
     ) -> pl.DataFrame:
+        from cleaned_operators.technical.signal import _compute_atr_wilder
+
         w = max(2, int(kwargs.get("d", window)))
-        alpha = 1.0 / w
         cols = [c for c in _numeric_cols(close) if c in high.columns and c in low.columns]
-        exprs = []
-        for c in cols:
-            prev_close = close[c].shift(1)
-            tr = pl.max_horizontal(
-                high[c] - low[c],
-                (high[c] - prev_close).abs(),
-                (low[c] - prev_close).abs(),
-            )
-            exprs.append(tr.ewm_mean(alpha=alpha, adjust=False, min_samples=w).alias(c))
-        return close.with_columns(exprs)
+        h = high.select(cols).to_pandas()
+        lo = low.select(cols).to_pandas()
+        cl = close.select(cols).to_pandas()
+        out = _compute_atr_wilder(h, lo, cl, w)
+        return close.with_columns([pl.Series(name=c, values=out[c].to_numpy()) for c in cols])
 
 
 def _rolling_mean(x: pl.DataFrame, window: int) -> pl.DataFrame:

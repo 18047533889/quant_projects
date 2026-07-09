@@ -204,8 +204,14 @@ REMOVED_CANONICALS: tuple[str, ...] = (
 )
 
 
+_DEDUPE_APPLIED = False
+
+
 def apply_operator_deduplication() -> None:
-    """在全部算子注册与基础别名加载后调用。"""
+    """在全部算子注册与基础别名加载后调用（``load_all()`` 末尾）。"""
+    global _DEDUPE_APPLIED
+    if _DEDUPE_APPLIED:
+        return
     for old, new in CANONICAL_RENAMES.items():
         OperatorRegistry.rename_canonical(old, new)
 
@@ -216,3 +222,4 @@ def apply_operator_deduplication() -> None:
 
     for name in REMOVED_CANONICALS:
         OperatorRegistry.unregister(name)
+    _DEDUPE_APPLIED = True

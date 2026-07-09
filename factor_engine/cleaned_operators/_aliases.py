@@ -160,6 +160,4 @@ OperatorRegistry.register_alias("ZSCORE", "zscore")
 OperatorRegistry.register_alias("c_zscore", "zscore")
 OperatorRegistry.register_alias("cs_zscore", "zscore")
 
-from cleaned_operators._dedupe import apply_operator_deduplication
-
-apply_operator_deduplication()
+# dedupe 在 load_all() 全部模块加载后执行，见 cleaned_operators.__init__.load_all

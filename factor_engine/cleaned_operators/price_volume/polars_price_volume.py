@@ -57,12 +57,25 @@ class VolatilityPolars(SeriesOperator):
         param_names=["x", "window"], return_type="series", tags=["financial", "polars"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
+    def _calculate_series(
+        self,
+        x: pl.DataFrame,
+        window: int = 20,
+        min_periods: int | None = None,
+        **kwargs,
+    ) -> pl.DataFrame:
         w = int(kwargs.get("d", window))
+        mp = kwargs.get("min_periods", min_periods)
+        if mp is None:
+            mp = max(2, w // 2)
+        mp = max(2, int(mp))
         cols = _numeric_cols(x)
         scale = float(np.sqrt(252))
         return x.with_columns([
-            (pl.col(c).rolling_std(window_size=w, min_samples=1) * scale).alias(c) for c in cols
+            (
+                pl.col(c).rolling_std(window_size=w, min_samples=mp, ddof=1) * scale
+            ).alias(c)
+            for c in cols
         ])
 
 
@@ -87,7 +100,14 @@ class VWAPPolars(SeriesOperator):
         return price.with_columns(exprs)
 
 
-@register_operator(name="m_beta", category="time_series", business_category="time_series", canonical="ts_beta", source="factor_dsl_polars")
+@register_operator(
+    name="m_beta",
+    category="time_series",
+    business_category="time_series",
+    canonical="ts_beta",
+    source="factor_dsl_polars",
+    backend="polars",
+)
 class TSBetaPolars(SeriesOperator):
     metadata = OperatorMetadata(
         name="m_beta", category="time_series", description="滚动 Beta",
@@ -95,14 +115,21 @@ class TSBetaPolars(SeriesOperator):
     )
 
     def _calculate_series(self, y: pl.DataFrame, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        w = int(kwargs.get("d", window))
+        w = max(1, int(kwargs.get("d", window)))
         cols = _align_cols(y, x)
+        merged = y
+        x_cols: list[str] = []
+        for c in cols:
+            xname = f"__x_{c}"
+            x_cols.append(xname)
+            merged = merged.with_columns(x.select(pl.col(c).alias(xname)))
         exprs = []
         for c in cols:
-            cov = pl.rolling_cov(y[c], x[c], window_size=w, min_samples=1)
-            var = x[c].rolling_var(window_size=w, min_samples=1)
+            xn = f"__x_{c}"
+            cov = pl.rolling_cov(pl.col(c), pl.col(xn), window_size=w, min_samples=1, ddof=1)
+            var = pl.col(xn).rolling_var(window_size=w, min_samples=1, ddof=1)
             exprs.append((cov / var).alias(c))
-        return y.with_columns(exprs)
+        return merged.with_columns(exprs).drop(x_cols)
 
 
 @register_operator(name="sharpe_ratio", category="financial", business_category="price_volume", canonical="sharpe_ratio", source="factor_dsl_polars")

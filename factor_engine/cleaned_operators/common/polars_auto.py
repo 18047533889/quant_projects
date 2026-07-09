@@ -352,6 +352,33 @@ if not _has_polars("fillna"):
         canonical="fillna", source="factor_dsl_polars_auto",
     )(FillNaPolarsAuto)
 
+def _register_compare(canon: str, name: str, op_fn) -> None:
+    """注册比较算子；始终覆盖以修复旧版 for-loop 闭包 late-binding。"""
+
+    class _ComparePolars(SeriesOperator):
+        metadata = OperatorMetadata(
+            name=name,
+            category="elementwise_math",
+            description=f"Polars {canon}",
+            param_names=["x", "y"],
+            return_type="series",
+            tags=["elementwise", "polars", "auto"],
+        )
+
+        def _calculate_series(self, x: pl.DataFrame, y: pl.DataFrame, **kwargs) -> pl.DataFrame:
+            cols = [c for c in _numeric_cols(x) if c in y.columns]
+            return x.with_columns([op_fn(pl.col(c), y[c]).alias(c) for c in cols])
+
+    _ComparePolars.__name__ = f"{canon.upper()}PolarsAuto"
+    register_operator(
+        name=name,
+        category="elementwise_math",
+        business_category="elementwise_math",
+        canonical=canon,
+        source="factor_dsl_polars_auto",
+    )(_ComparePolars)
+
+
 for _canon, _name, _op in (
     ("eq", "eq", lambda a, b: (a == b).cast(pl.Float64)),
     ("ne", "ne", lambda a, b: (a != b).cast(pl.Float64)),
@@ -360,31 +387,7 @@ for _canon, _name, _op in (
     ("lt", "lt", lambda a, b: (a < b).cast(pl.Float64)),
     ("le", "le", lambda a, b: (a <= b).cast(pl.Float64)),
 ):
-    if _has_polars(_canon):
-        continue
-
-    class _ComparePolars(SeriesOperator):
-        metadata = OperatorMetadata(
-            name=_name,
-            category="elementwise_math",
-            description=f"Polars {_canon}",
-            param_names=["x", "y"],
-            return_type="series",
-            tags=["elementwise", "polars", "auto"],
-        )
-
-        def _calculate_series(self, x: pl.DataFrame, y: pl.DataFrame, **kwargs) -> pl.DataFrame:
-            cols = [c for c in _numeric_cols(x) if c in y.columns]
-            return x.with_columns([_op(pl.col(c), y[c]).alias(c) for c in cols])
-
-    _ComparePolars.__name__ = f"{_canon.upper()}PolarsAuto"
-    register_operator(
-        name=_name,
-        category="elementwise_math",
-        business_category="elementwise_math",
-        canonical=_canon,
-        source="factor_dsl_polars_auto",
-    )(_ComparePolars)
+    _register_compare(_canon, _name, _op)
 
 if not _has_polars("atan2"):
 

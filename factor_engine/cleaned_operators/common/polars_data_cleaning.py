@@ -78,11 +78,10 @@ class EWMStdPolars(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, span: int = 20, **kwargs) -> pl.DataFrame:
-        alpha = _ewm_alpha(int(kwargs.get("d", span)))
-        cols = _numeric_cols(x)
-        return x.with_columns([
-            pl.col(c).ewm_std(alpha=alpha, adjust=False).alias(c) for c in cols
-        ])
+        from cleaned_operators.base_polars import panel_pandas_bridge
+
+        span_i = int(kwargs.get("d", span))
+        return panel_pandas_bridge(x, lambda pdf: pdf.ewm(span=span_i, adjust=False).std())
 
 
 @register_operator(name="ewm_var", category="data_handling", business_category="data_cleaning", canonical="ewm_var", source="factor_dsl_polars")
@@ -93,11 +92,10 @@ class EWMVarPolars(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, span: int = 20, **kwargs) -> pl.DataFrame:
-        alpha = _ewm_alpha(int(kwargs.get("d", span)))
-        cols = _numeric_cols(x)
-        return x.with_columns([
-            pl.col(c).ewm_var(alpha=alpha, adjust=False).alias(c) for c in cols
-        ])
+        from cleaned_operators.base_polars import panel_pandas_bridge
+
+        span_i = int(kwargs.get("d", span))
+        return panel_pandas_bridge(x, lambda pdf: pdf.ewm(span=span_i, adjust=False).var())
 
 
 @register_operator(name="ewm_corr", category="data_handling", business_category="data_cleaning", canonical="ewm_corr", source="factor_dsl_polars")
@@ -244,3 +242,30 @@ class IsInfPolars(SeriesOperator):
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
         cols = _numeric_cols(x)
         return x.with_columns([pl.col(c).is_infinite().cast(pl.Float64).alias(c) for c in cols])
+
+
+@register_operator(
+    name="protected_sqrt",
+    category="data_cleaning",
+    business_category="data_cleaning",
+    canonical="protected_sqrt",
+    source="factor_dsl_polars",
+    backend="polars",
+)
+class ProtectedSqrtPolars(SeriesOperator):
+    """安全平方根：``sqrt(max(x, 0))``，与 pandas ``ProtectedSqrtOp`` 对齐。"""
+
+    metadata = OperatorMetadata(
+        name="protected_sqrt",
+        category="data_cleaning",
+        description="安全平方根：sqrt(max(x, 0))",
+        param_names=["x"],
+        return_type="series",
+        tags=["data_cleaning", "pit_safe", "polars"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        cols = _numeric_cols(x)
+        return x.with_columns([
+            pl.when(pl.col(c) > 0).then(pl.col(c).sqrt()).otherwise(0.0).alias(c) for c in cols
+        ])

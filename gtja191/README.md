@@ -87,7 +87,7 @@ python3 validate_manifests.py
 python3 export_allowlist.py    # 刷新 fe_dsl_allowlist.json（需旁边有 factor_engine）
 ```
 
-## 执行 smoke（factor_engine + data_access）
+## 执行 smoke（最快引擎：read_auto + auto）
 
 ```bash
 cd gtja191/scripts
@@ -95,10 +95,15 @@ python3 run_smoke.py --factor gtja191_alpha_001
 
 # 或在 factor_engine 根目录
 cd ../factor_engine
-PYTHONPATH=. python run_pipeline.py config ../gtja191/examples/gtja191_smoke.yaml --run-only
+PYTHONPATH=. python3 run_pipeline.py config ../gtja191/examples/gtja191_smoke.yaml --run-only
 ```
 
-需本机已配置 `data_access`（`ASHARE_PARQUET_ROOT` 或 COS 镜像）。
+执行栈：
+- **读数据**：`data_access` + `read_auto`（Arrow 零拷贝 collect）
+- **算子**：`backend: auto` → SQL 可下推子树 + **Polars** 算子；SQL 编译/执行失败时自动降级 Polars/Pandas
+- **算子 runtime**：`operator_backend: auto`（优先 Polars）
+
+见 `lib/engine_config.py`。
 
 ## 重新生成（可选）
 

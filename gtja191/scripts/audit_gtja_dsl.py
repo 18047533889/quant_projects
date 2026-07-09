@@ -11,6 +11,7 @@ PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 if str(PACKAGE_ROOT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_ROOT))
 
+from lib.dsl_legacy_ops import find_legacy_operators  # noqa: E402
 from lib.dsl_validate import ALLOW, DSLParseError, parse_expr  # noqa: E402
 
 GTJA_ROOT = PACKAGE_ROOT
@@ -30,6 +31,10 @@ def _audit_formula(name: str, formula: str) -> list[str]:
     if formula.count("(") != formula.count(")"):
         issues.append("paren_mismatch")
 
+    legacy = find_legacy_operators(formula)
+    if legacy:
+        issues.append(f"legacy_ops: {','.join(legacy)}")
+
     try:
         parse_expr(formula)
     except DSLParseError as exc:
@@ -47,7 +52,7 @@ def _audit_formula(name: str, formula: str) -> list[str]:
                 op = node.func.id
                 if op not in ALLOW:
                     issues.append(f"unknown_op: {op}")
-                if op in ("EMA", "SMA", "WMA") and len(node.args) != 2:
+                if op in ("ts_ema", "EMA", "SMA", "WMA") and len(node.args) != 2:
                     issues.append(f"bad_arity: {op} expects 2 args, got {len(node.args)}")
                 if op in ("max", "min") and len(node.args) == 2:
                     n = _is_int_const(node.args[1])
@@ -91,7 +96,7 @@ def main() -> int:
         "clean": len(catalog) - len(blocking),
         "blocking_issues": blocking,
         "benchmark_pending": [k for k, v in report.items() if "needs_benchmark_field" in v],
-        "note": "独立包内审计；算子白名单见 dsl/fe_dsl_allowlist.json",
+        "note": "独立包内审计；canonical 算子名见 lib/dsl_legacy_ops.py",
     }
     out.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(

@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
-"""用 factor_engine + data_access 跑 GTJA-191 因子 smoke。"""
+"""用 factor_engine 最快路径（auto + read_auto）跑 GTJA-191 smoke。"""
 from __future__ import annotations
 
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 if str(PACKAGE_ROOT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_ROOT))
 
-from lib.data_source import smoke_data_source  # noqa: E402
+from lib.engine_config import build_fastest_engine, enable_fastest_read, fastest_data_source  # noqa: E402
 from lib.paths import resolve_factor_engine_root  # noqa: E402
 
 
@@ -47,21 +48,26 @@ def run_smoke(
 
     from api.factor import Factor  # noqa: WPS433
     from api.dsl_parser import parse_expr  # noqa: WPS433
-    from backend.pandas_backend import PandasBackend  # noqa: WPS433
-    from runtime.engine import FactorEngine  # noqa: WPS433
     from storage.factory import build_data_source  # noqa: WPS433
 
     formula = _load_formula(factor_name)
     expr = parse_expr(formula)
     factor = Factor(name=factor_name, expr=expr, freq="1d")
-    source_cfg = smoke_data_source(start_date=start_date, end_date=end_date)
+    source_cfg = fastest_data_source(start_date=start_date, end_date=end_date)
     source = build_data_source(source_cfg)
-    engine = FactorEngine(backend=PandasBackend(), data_source=source)
+    enable_fastest_read(source)
+    engine = build_fastest_engine(source)
+
+    t0 = time.perf_counter()
     out = engine.run(factor)
+    elapsed = time.perf_counter() - t0
     series = out["result"]
+    backend_name = type(engine.backend).__name__
     return {
         "factor": factor_name,
         "formula": formula,
+        "backend": backend_name,
+        "elapsed_seconds": round(elapsed, 3),
         "rows": int(series.shape[0]),
         "non_nan_ratio": float(series.notna().mean()) if len(series) else 0.0,
         "lookback": int(out["analysis"].lookback),
@@ -69,7 +75,9 @@ def run_smoke(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run GTJA-191 factor smoke via data_access")
+    parser = argparse.ArgumentParser(
+        description="Run GTJA-191 factor smoke via fastest engine (auto + read_auto)"
+    )
     parser.add_argument("--factor", default="gtja191_alpha_001")
     parser.add_argument("--start-date", default="2016-01-04")
     parser.add_argument("--end-date", default="2016-01-10")

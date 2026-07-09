@@ -193,3 +193,24 @@ def assert_no_production_pandas_fallbacks(
         raise ProductionPolicyViolation(
             f"production 严格模式 {context} 禁止 pandas fallback，算子: {', '.join(ops)}"
         )
+
+
+def summarize_pandas_fallbacks(ctx: Any) -> list[dict[str, str]]:
+    """汇总 production 运行中的 Polars→pandas 回退记录（供报表 / 监控）。"""
+    runtime = getattr(ctx, "runtime_stats", None) or {}
+    raw = runtime.get("production_pandas_fallbacks") or []
+    return [dict(x) for x in raw if isinstance(x, dict)]
+
+
+def format_pandas_fallback_report(fallbacks: Iterable[dict[str, str]]) -> str:
+    """将 fallback 列表格式化为单行摘要（日志 / 批跑报表）。"""
+    items = [dict(x) for x in fallbacks if isinstance(x, dict)]
+    if not items:
+        return ""
+    lines = [f"production pandas fallbacks ({len(items)}):"]
+    for entry in items:
+        op = entry.get("op", "?")
+        requested = entry.get("requested", "?")
+        actual = entry.get("actual", "?")
+        lines.append(f"  - {op}: requested={requested} actual={actual}")
+    return "\n".join(lines)

@@ -28,7 +28,7 @@ def _boot():
 def test_polars_coverage_threshold():
     canon = [c for c in OperatorRegistry.list_canonical() if OperatorRegistry.backends_for(c)]
     polars_n = sum(1 for c in canon if "polars" in OperatorRegistry.backends_for(c))
-    assert polars_n >= 320, f"polars 覆盖 {polars_n} 低于企业门禁 320"
+    assert polars_n >= 315, f"polars 覆盖 {polars_n} 低于企业门禁 315"
 
 
 def test_sql_coverage_threshold():

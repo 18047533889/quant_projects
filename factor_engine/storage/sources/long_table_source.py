@@ -44,6 +44,35 @@ class LongTableDataSource(DataSource):
         """长表模式：批量预加载列但不 unstack。"""
         self.prefetch_columns(names)
 
+    def scan_polars_long(self, columns: list[str]):
+        """优先 inner.scan_polars_long；否则从 Series 拼 long LazyFrame。"""
+        inner_scan = getattr(self._inner, "scan_polars_long", None)
+        if callable(inner_scan):
+            return inner_scan(columns)
+        import polars as pl
+
+        from storage.factor_format import series_to_long_table
+
+        ts, inst = self.dataset_axis_columns()
+        merged: Any = None
+        for name in sorted(columns):
+            series = self.load_column(name)
+            part = series_to_long_table(
+                series,
+                timestamp_col=ts,
+                asset_col=inst,
+                value_col=name,
+            )
+            if merged is None:
+                merged = part
+            else:
+                merged = merged.merge(part, on=[ts, inst], how="outer")
+            merged[name] = merged[name].astype("float64")
+        if merged is None:
+            raise ValueError("scan_polars_long: no columns")
+        renamed = merged.rename(columns={ts: "ts", inst: "inst"})
+        return pl.from_pandas(renamed).lazy()
+
     def load_column_panel(self, name: str):
         """按需 unstack 一次并缓存（panel-native / 宽表算子热路径）。"""
         if name in self._panel_cache:

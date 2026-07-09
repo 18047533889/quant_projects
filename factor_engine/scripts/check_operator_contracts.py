@@ -94,6 +94,9 @@ def check_operator_contracts(*, strict_tier1_cost: bool = True) -> list[str]:
     from cleaned_operators.fundamental.field_contract import check_fundamental_ratio_field_contracts
 
     errors.extend(check_fundamental_ratio_field_contracts())
+    from cleaned_operators.operator_policy import check_polars_production_gate
+
+    errors.extend(check_polars_production_gate())
 
     return errors
 

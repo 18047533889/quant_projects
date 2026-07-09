@@ -109,6 +109,28 @@ SQL_CAPABLE_CANONICALS: frozenset[str] = frozenset(
         "ts_sharpe",
         "ts_autocorr",
         "rolling_beta",
+        # Tier 6 — 价量 / 截面百分位（2026-07）
+        "rank_pct",
+        "cs_pct_rank",
+        "cs_quantile",
+        "c_percentile",
+        "log_returns",
+        "volatility",
+        "vwap",
+        # Tier 7 — 二元最值 / cum·expanding / 截面广播 / 符号数学（2026-07）
+        "maximum",
+        "minimum",
+        "cum_prod",
+        "cum_delta",
+        "expanding_mean",
+        "expanding_sum",
+        "log_abs",
+        "signed_log",
+        "signed_sqrt",
+        "c_mean",
+        "c_std",
+        "c_sum",
+        "c_count",
     }
 )
 

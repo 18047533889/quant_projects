@@ -53,3 +53,9 @@ def test_data_access_template_uses_auto():
     path = ROOT / "examples" / "config_us_stock_pv_data_access_template.yaml"
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert raw["backend"]["type"] == "auto"
+
+
+def test_backend_config_dataclass_default_is_auto():
+    from runtime.config import BackendConfig
+
+    assert BackendConfig().type == "auto"

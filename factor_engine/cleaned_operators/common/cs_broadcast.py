@@ -21,3 +21,8 @@ def cs_rank_01(x: pd.DataFrame) -> pd.DataFrame:
     denom = (n - 1).replace(0, np.nan)
     out = r.sub(1, axis=0).div(denom, axis=0)
     return out.where(n.gt(1), 0.5)
+
+
+def cs_rank_pct(x: pd.DataFrame) -> pd.DataFrame:
+    """截面 pandas 百分位排名（``rank_pct`` / ``cs_pct_rank``）。"""
+    return x.rank(pct=True, axis=1)

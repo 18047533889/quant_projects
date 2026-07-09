@@ -143,3 +143,25 @@ class ClickHouseSource(DataSource):
         panel = series.unstack(level=inst_level)
         self._panel_cache[name] = panel
         return panel
+
+    def scan_polars_long(self, columns: list[str]):
+        """ClickHouse 直查 long LazyFrame（无 unstack / 无宽表 panel）。"""
+        physical, output_names = self._resolve_columns(columns)
+        _ensure_data_access_importable()
+        from data_access.clickhouse_panel import ClickHouseConfig
+        from backend.polars_lazy import scan_clickhouse_long
+
+        config = ClickHouseConfig.from_env(**self._ch_overrides)
+        return scan_clickhouse_long(
+            config,
+            table=self.table,
+            timestamp_column=self.timestamp_column,
+            instrument_column=self.instrument_column,
+            physical_columns=physical,
+            output_names=output_names,
+            time_range=self._time_range(),
+            instrument_filter=self.instrument_filter,
+        )
+
+    def dataset_axis_columns(self) -> tuple[str, str]:
+        return self.timestamp_column, self.instrument_column

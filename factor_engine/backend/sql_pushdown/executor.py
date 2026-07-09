@@ -241,7 +241,7 @@ def try_execute_sql_pushdown(
     plan: PlanNode,
     ctx: ExecutionContext,
 ) -> pd.Series | None:
-    """若计划可 SQL 化则在 DuckDB/ClickHouse 内执行。"""
+    """若计划可 SQL 化则在 DuckDB/ClickHouse 内执行；执行失败时返回 None 以触发 Python/Polars fallback。"""
     pctx = extract_pushdown_context(ctx)
     if pctx is None:
         return None
@@ -258,9 +258,12 @@ def try_execute_sql_pushdown(
     if compiled is None:
         return None
 
-    return execute_compiled_sql(
-        compiled, pctx, ctx.data_source, query_budget=getattr(ctx, "query_budget", None)
-    )
+    try:
+        return execute_compiled_sql(
+            compiled, pctx, ctx.data_source, query_budget=getattr(ctx, "query_budget", None)
+        )
+    except Exception:
+        return None
 
 
 def try_execute_sql_pushdown_batch(
@@ -286,9 +289,12 @@ def try_execute_sql_pushdown_batch(
     if compiled is None:
         return None
 
-    return execute_batch_compiled_sql(
-        compiled,
-        pctx,
-        ctx.data_source,
-        query_budget=getattr(ctx, "query_budget", None),
-    )
+    try:
+        return execute_batch_compiled_sql(
+            compiled,
+            pctx,
+            ctx.data_source,
+            query_budget=getattr(ctx, "query_budget", None),
+        )
+    except Exception:
+        return None

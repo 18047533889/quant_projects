@@ -290,3 +290,23 @@ class DataAccessSource(DataSource):
         panel = series.unstack(level=level)
         self._panel_cache[name] = panel
         return panel
+
+    def scan_polars_long(self, columns: list[str]):
+        """Parquet/DuckDB scan → ``ts / inst / <cols>`` LazyFrame（PolarsLongBackend 用）。"""
+        physical, output_names = self._resolve_columns(columns)
+        store = _get_store()
+        ds = store._registry.get(self.dataset)
+        from backend.polars_lazy import build_scan_polars_long
+
+        return build_scan_polars_long(
+            store,
+            self.dataset,
+            logical_columns=columns,
+            physical_columns=physical,
+            output_names=output_names,
+            time_column=ds.time_column,
+            instrument_column=ds.instrument_column,
+            time_range=self._time_range(),
+            instrument_filter=self.instrument_filter,
+            params=dict(self.params),
+        )

@@ -8,5 +8,5 @@
     "gtja191_alpha_181",
     "gtja191_alpha_182"
   ],
-  "note": "独立包内审计；算子白名单见 dsl/fe_dsl_allowlist.json"
+  "note": "独立包内审计；canonical 算子名见 lib/dsl_legacy_ops.py"
 }

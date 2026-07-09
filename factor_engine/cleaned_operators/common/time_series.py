@@ -1158,7 +1158,14 @@ register_operator = register_polars_operator
 
 
 # canonical=decay_linear backend=polars selected=ts_decay_linear source=time_series/ts_ops_polars.py
-@register_operator(name="ts_decay_linear", category="time_series", business_category="time_series", canonical="ts_decay_linear", source="factor_dsl_np")
+@register_operator(
+    name="ts_decay_linear",
+    category="time_series",
+    business_category="time_series",
+    canonical="ts_decay_linear",
+    source="factor_dsl_np",
+    backend="polars",
+)
 class TSDecayLinearPolars(SeriesOperator):
     metadata = OperatorMetadata(
         name="ts_decay_linear", category="time_series",
@@ -1169,17 +1176,20 @@ class TSDecayLinearPolars(SeriesOperator):
     )
     def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
         numeric_cols = [c for c in x.columns if c not in ['date', 'stock_code']]
-        weights = np.arange(1, window + 1, dtype=float)
-        weights = weights / weights.sum()
+        wlen = max(1, int(window))
+        weights = np.arange(1, wlen + 1, dtype=float)
 
         def linear_decay(s):
-            if len(s) == 0:
+            arr = np.asarray(s, dtype=float)
+            valid = np.isfinite(arr)
+            if not np.any(valid):
                 return None
-            w = weights[:len(s)]
-            return np.dot(s, w) / w.sum()
+            seg = arr[valid]
+            ww = weights[-len(seg):]
+            return float(np.dot(seg, ww) / ww.sum())
 
         return x.with_columns([
-            pl.col(c).rolling_map(linear_decay, window_size=window).alias(c)
+            pl.col(c).rolling_map(linear_decay, window_size=wlen, min_samples=1).alias(c)
             for c in numeric_cols
         ])
 
@@ -1365,11 +1375,10 @@ class TSKurtosisPolars(SeriesOperator):
         tags=["time_series", "ts_", "kurtosis"]
     )
     def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        numeric_cols = [c for c in x.columns if c not in ['date', 'stock_code']]
-        return x.with_columns([
-            pl.col(c).rolling_map(lambda s: s.kurtosis() if len(s) > 3 else None, window_size=window).alias(c)
-            for c in numeric_cols
-        ])
+        from cleaned_operators.base_polars import panel_pandas_bridge
+
+        w = int(kwargs.get("d", window))
+        return panel_pandas_bridge(x, lambda pdf: pdf.rolling(window=w, min_periods=1).kurt())
 
 # aliases: TS_KURT
 
@@ -1446,17 +1455,15 @@ class TSProductPolars(SeriesOperator):
         tags=["time_series", "ts_", "product"]
     )
     def _calculate_series(self, x: pl.DataFrame, window: int = 5, **kwargs) -> pl.DataFrame:
-        numeric_cols = [c for c in x.columns if c not in ['date', 'stock_code']]
+        from cleaned_operators.base_polars import panel_pandas_bridge
 
-        def rolling_prod(s):
-            if len(s) == 0:
-                return None
-            return np.prod(s)
-
-        return x.with_columns([
-            pl.col(c).rolling_map(rolling_prod, window_size=window).alias(c)
-            for c in numeric_cols
-        ])
+        w = int(kwargs.get("d", window))
+        return panel_pandas_bridge(
+            x,
+            lambda pdf: pdf.rolling(window=w, min_periods=1).apply(
+                lambda arr: float(np.nanprod(arr)), raw=True
+            ),
+        )
 
 
 
@@ -1499,12 +1506,10 @@ class TSSkewnessPolars(SeriesOperator):
         tags=["time_series", "ts_", "skewness"]
     )
     def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        numeric_cols = [c for c in x.columns if c not in ['date', 'stock_code']]
-        # 使用 Polars 的 rolling_skew（如果可用）或手动计算
-        return x.with_columns([
-            pl.col(c).rolling_map(lambda s: s.skew() if len(s) > 2 else None, window_size=window).alias(c)
-            for c in numeric_cols
-        ])
+        from cleaned_operators.base_polars import panel_pandas_bridge
+
+        w = int(kwargs.get("d", window))
+        return panel_pandas_bridge(x, lambda pdf: pdf.rolling(window=w, min_periods=1).skew())
 
 # aliases: TS_SKEW
 
@@ -1590,7 +1595,14 @@ class TSSumDecayPolars(SeriesOperator):
 
 
 # canonical=ts_zscore backend=polars selected=ts_zscore source=time_series/ts_ops_polars.py
-@register_operator(name="ts_zscore", category="time_series", business_category="time_series", canonical="ts_zscore", source="factor_dsl_np")
+@register_operator(
+    name="ts_zscore",
+    category="time_series",
+    business_category="time_series",
+    canonical="ts_zscore",
+    source="factor_dsl_np",
+    backend="polars",
+)
 class TSZScorePolars(SeriesOperator):
     metadata = OperatorMetadata(
         name="ts_zscore", category="time_series",
@@ -1601,12 +1613,12 @@ class TSZScorePolars(SeriesOperator):
     )
     def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
         numeric_cols = [c for c in x.columns if c not in ['date', 'stock_code']]
-        # 使用 Polars 的 rolling_mean 和 rolling_std
+        w = max(1, int(window))
         return x.with_columns([
-            ((pl.col(c) - pl.col(c).rolling_mean(window_size=window, min_periods=1)) /
-             pl.when(pl.col(c).rolling_std(window_size=window, min_periods=1) == 0)
+            ((pl.col(c) - pl.col(c).rolling_mean(window_size=w, min_samples=1)) /
+             pl.when(pl.col(c).rolling_std(window_size=w, min_samples=1, ddof=1) == 0)
              .then(1)
-             .otherwise(pl.col(c).rolling_std(window_size=window, min_periods=1))
+             .otherwise(pl.col(c).rolling_std(window_size=w, min_samples=1, ddof=1))
             ).alias(c)
             for c in numeric_cols
         ])
@@ -1620,6 +1632,7 @@ class TSZScorePolars(SeriesOperator):
     business_category="time_series",
     canonical="ts_sharpe",
     source="factor_dsl_np",
+    backend="polars",
 )
 class TSSharpePolars(SeriesOperator):
     metadata = OperatorMetadata(
@@ -1671,6 +1684,7 @@ class TSSharpePolars(SeriesOperator):
     business_category="time_series",
     canonical="ts_autocorr",
     source="factor_dsl_np",
+    backend="polars",
 )
 class TSAutocorrPolars(SeriesOperator):
     metadata = OperatorMetadata(

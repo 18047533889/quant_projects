@@ -1,5 +1,5 @@
 # -*- coding: utf-8
-"""Tier-3 parity 已知语义差：未纳入 POLARS_PARITY_VERIFIED，修复后应升级 tier3。"""
+"""Tier-3 历史 parity gap 回归：修复后应持续与 pandas 对齐。"""
 
 from __future__ import annotations
 
@@ -55,27 +55,11 @@ def _run_pair(source, expr):
     return a, b
 
 
-def _series_equal(a, b) -> bool:
-    try:
-        pd.testing.assert_series_equal(a, b, check_names=False, rtol=1e-10, atol=1e-10)
-        return True
-    except AssertionError:
-        return False
-
-
-def test_ts_decay_linear_first_bar_min_periods_gap(source):
-    """pandas 窗口首 bar 有值；polars 首 bar 为 NaN（min_periods 语义差）。"""
+def test_ts_decay_linear_parity_regression(source):
     a, b = _run_pair(source, ts_decay_linear(col("x"), 2))
-    if _series_equal(a, b):
-        pytest.skip("ts_decay_linear parity 已对齐，可移入 POLARS_PARITY_VERIFIED_TIER3")
-    assert pd.notna(a.iloc[0])
-    assert pd.isna(b.iloc[0])
+    pd.testing.assert_series_equal(a, b, check_names=False, rtol=1e-10, atol=1e-10)
 
 
-def test_group_zscore_polars_passthrough_gap(source):
-    """polars 路径未做分组 zscore 时，输出应与 pandas 不同。"""
+def test_group_zscore_parity_regression(source):
     a, b = _run_pair(source, group_zscore(col("x"), col("grp")))
-    if _series_equal(a, b):
-        pytest.skip("group_zscore parity 已对齐，可移入 POLARS_PARITY_VERIFIED_TIER3")
-    assert (a.to_numpy() == 0.0).all()
-    pd.testing.assert_series_equal(b, source.data["x"], check_names=False)
+    pd.testing.assert_series_equal(a, b, check_names=False, rtol=1e-10, atol=1e-10)

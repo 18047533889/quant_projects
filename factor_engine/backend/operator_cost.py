@@ -1,4 +1,4 @@
-"""算子代价模型：复杂度 / 内存 / 执行 Tier 路由。"""
+"""算子代价模型：复杂度 / 内存 / 执行 Tier 路由 + backend-aware 成本。"""
 
 from __future__ import annotations
 
@@ -114,6 +114,12 @@ _COSTS: dict[str, OperatorCost] = {
     "protected_log": OperatorCost("O(N)", "low", True, 2, True, False),
     "protected_sqrt": OperatorCost("O(N)", "low", True, 2, True, False),
     "ts_zscore": OperatorCost("O(NW)", "medium", True, 1, True, True),
+    "log_returns": OperatorCost("O(N)", "low", True, 2, True, False),
+    "volatility": OperatorCost("O(NW)", "medium", True, 1, True, True),
+    "rank_pct": OperatorCost("O(N log N)", "medium", False, 2, True, False),
+    "cs_pct_rank": OperatorCost("O(N log N)", "medium", False, 2, True, False),
+    "cs_quantile": OperatorCost("O(N log N)", "medium", False, 2, True, False),
+    "vwap": OperatorCost("O(NW)", "medium", True, 1, True, True),
     "quarter": OperatorCost("O(N)", "low", True, 2, False, False),
     "quarter_from_cumulative": OperatorCost("O(N)", "low", True, 2, False, False),
     "ttm": OperatorCost("O(N)", "low", True, 2, False, False),
@@ -133,6 +139,86 @@ _COSTS: dict[str, OperatorCost] = {
     "ts_poly2_coeff": OperatorCost("O(NW)", "high", False, 1, False, False),
     "ts_poly2_resid": OperatorCost("O(NW)", "high", False, 1, False, False),
 }
+
+
+@dataclass(frozen=True)
+class BackendCost:
+    """单算子 × backend 的运行成本估计（毫秒量级相对值）。"""
+
+    backend: str
+    fixed_overhead_ms: float
+    per_million_rows_ms: float
+    memory_factor: float
+    requires_conversion: bool
+
+
+_DEFAULT_BACKEND_COST = BackendCost("pandas_numpy", 1.0, 80.0, 1.0, False)
+
+_BACKEND_COST_TABLE: dict[str, dict[str, BackendCost]] = {
+    "ts_mean": {
+        "pandas_numpy": BackendCost("pandas_numpy", 1.0, 80.0, 1.0, False),
+        "polars": BackendCost("polars", 3.0, 25.0, 0.8, True),
+        "duckdb_sql": BackendCost("duckdb_sql", 10.0, 18.0, 0.5, False),
+        "clickhouse_sql": BackendCost("clickhouse_sql", 20.0, 8.0, 0.3, False),
+    },
+    "rank": {
+        "pandas_numpy": BackendCost("pandas_numpy", 1.0, 120.0, 1.0, False),
+        "polars": BackendCost("polars", 3.0, 40.0, 0.9, True),
+        "duckdb_sql": BackendCost("duckdb_sql", 12.0, 22.0, 0.5, False),
+        "clickhouse_sql": BackendCost("clickhouse_sql", 22.0, 10.0, 0.35, False),
+    },
+    "log_returns": {
+        "pandas_numpy": BackendCost("pandas_numpy", 1.0, 60.0, 1.0, False),
+        "polars": BackendCost("polars", 2.0, 18.0, 0.8, True),
+    },
+    "volatility": {
+        "pandas_numpy": BackendCost("pandas_numpy", 1.0, 90.0, 1.0, False),
+        "polars": BackendCost("polars", 3.0, 28.0, 0.85, True),
+    },
+    "rank_pct": {
+        "pandas_numpy": BackendCost("pandas_numpy", 1.0, 120.0, 1.0, False),
+        "polars": BackendCost("polars", 3.0, 45.0, 0.9, True),
+    },
+}
+
+
+def get_backend_cost(canon: str, backend: str) -> BackendCost:
+    canon = str(canon)
+    table = _BACKEND_COST_TABLE.get(canon, {})
+    return table.get(backend, _DEFAULT_BACKEND_COST)
+
+
+def default_backend_speedup(
+    canon: str,
+    backend: str,
+    status: str,
+) -> float:
+    """相对 pandas 的粗粒度加速比（用于 capability 导出）。"""
+    if status == "unsupported":
+        return 1.0
+    base = get_backend_cost(canon, "pandas_numpy")
+    other = get_backend_cost(canon, backend)
+    if other.per_million_rows_ms <= 0:
+        return 1.0
+    return max(1.0, base.per_million_rows_ms / other.per_million_rows_ms)
+
+
+def estimate_backend_cost(
+    canon: str,
+    backend: str,
+    *,
+    row_count_estimate: int | None = None,
+    requires_conversion: bool | None = None,
+) -> float:
+    """估算相对成本（越小越快）。"""
+    bc = get_backend_cost(canon, backend)
+    conv = bc.requires_conversion if requires_conversion is None else requires_conversion
+    rows = row_count_estimate or 500_000
+    millions = max(rows / 1_000_000.0, 0.001)
+    cost = bc.fixed_overhead_ms + bc.per_million_rows_ms * millions
+    if conv:
+        cost += 2.0 + 0.05 * millions
+    return cost * bc.memory_factor
 
 
 def tier1_has_explicit_cost(canon: str) -> bool:

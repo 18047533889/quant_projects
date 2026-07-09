@@ -24,6 +24,7 @@ except ImportError:
 from cleaned_operators.base_polars import (
     OperatorMetadata,
     SeriesOperator,
+    panel_pandas_bridge,
     register_operator,
 )
 
@@ -46,11 +47,19 @@ def _align_cols(*dfs: pl.DataFrame) -> list[str]:
 def _binary_colwise(combine):
     """工厂：生成「逐列二元运算」的 ``_calculate_series`` 方法。"""
 
-    def calc(self, x: pl.DataFrame, y, **kwargs) -> pl.DataFrame:
+    def calc(self, x, y, **kwargs) -> pl.DataFrame:
+        if isinstance(x, (int, float)) and isinstance(y, pl.DataFrame):
+            cols = _numeric_cols(y)
+            lit = float(x)
+            return y.with_columns([combine(lit, pl.col(c)).alias(c) for c in cols])
         if isinstance(y, (int, float)):
+            if not isinstance(x, pl.DataFrame):
+                raise TypeError(f"expected polars DataFrame or scalar, got {type(x)!r}")
             cols = _numeric_cols(x)
             lit = float(y)
             return x.with_columns([combine(pl.col(c), lit).alias(c) for c in cols])
+        if not isinstance(x, pl.DataFrame):
+            raise TypeError(f"expected polars DataFrame or scalar, got {type(x)!r}")
         if not isinstance(y, pl.DataFrame):
             raise TypeError(f"expected polars DataFrame or scalar, got {type(y)!r}")
         cols = _align_cols(x, y)
@@ -265,19 +274,10 @@ class TSArgmaxPolars(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, d: int = 20, **kwargs) -> pl.DataFrame:
+        from cleaned_operators._rolling_fast import rolling_argmax
+
         window = int(kwargs.get("window", d))
-
-        def argmax_offset(arr: np.ndarray) -> float:
-            if len(arr) == 0:
-                return np.nan
-            idx = int(np.nanargmax(arr))
-            return float(len(arr) - 1 - idx)
-
-        cols = _numeric_cols(x)
-        return x.with_columns([
-            pl.col(c).rolling_map(argmax_offset, window_size=window, min_periods=1).alias(c)
-            for c in cols
-        ])
+        return panel_pandas_bridge(x, lambda pdf: rolling_argmax(pdf, window))
 
 
 @register_operator(name="ts_argmin", category="time_series", business_category="time_series", canonical="ts_argmin", source="factor_dsl_polars")
@@ -288,19 +288,10 @@ class TSArgminPolars(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, d: int = 20, **kwargs) -> pl.DataFrame:
+        from cleaned_operators._rolling_fast import rolling_argmin
+
         window = int(kwargs.get("window", d))
-
-        def argmin_offset(arr: np.ndarray) -> float:
-            if len(arr) == 0:
-                return np.nan
-            idx = int(np.nanargmin(arr))
-            return float(len(arr) - 1 - idx)
-
-        cols = _numeric_cols(x)
-        return x.with_columns([
-            pl.col(c).rolling_map(argmin_offset, window_size=window, min_periods=1).alias(c)
-            for c in cols
-        ])
+        return panel_pandas_bridge(x, lambda pdf: rolling_argmin(pdf, window))
 
 
 @register_operator(name="ts_quantile", category="time_series", business_category="time_series", canonical="ts_quantile", source="factor_dsl_polars")
@@ -314,11 +305,10 @@ class TSQuantilePolars(SeriesOperator):
     def _calculate_series(self, x: pl.DataFrame, d: int = 20, q: float = 0.5, **kwargs) -> pl.DataFrame:
         window = int(kwargs.get("window", d))
         quantile = float(kwargs.get("p", q))
-        cols = _numeric_cols(x)
-        return x.with_columns([
-            pl.col(c).rolling_quantile(quantile=quantile, window_size=window, min_samples=1).alias(c)
-            for c in cols
-        ])
+        return panel_pandas_bridge(
+            x,
+            lambda pdf: pdf.rolling(window=window, min_periods=1).quantile(quantile),
+        )
 
 
 # ---------------------------------------------------------------------------

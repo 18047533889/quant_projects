@@ -1,5 +1,5 @@
 # -*- coding: utf-8
-"""Tier-4 parity 候选：已通过 pandas/polars 对齐，尚未并入 POLARS_PRODUCTION_SAFE。"""
+"""Tier-4 parity：Sharpe / 自相关（已并入 POLARS_PRODUCTION_SAFE）。"""
 
 from __future__ import annotations
 
@@ -15,14 +15,15 @@ from api.columns import col
 from api.factor import Factor
 from backend.factory import build_backend
 from cleaned_operators import load_all
-from cleaned_operators.operator_policy import POLARS_PRODUCTION_SAFE
+from cleaned_operators.operator_policy import (
+    POLARS_PARITY_VERIFIED_TIER4,
+    POLARS_PRODUCTION_SAFE,
+)
 from runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 ts_sharpe = make_cleaned_call_factory("ts_sharpe")
 ts_autocorr = make_cleaned_call_factory("ts_autocorr")
-
-TIER4_PARITY_CANDIDATES: frozenset[str] = frozenset({"ts_sharpe", "ts_autocorr"})
 
 
 @pytest.fixture(scope="module")
@@ -65,12 +66,12 @@ def _parity_exprs():
     }
 
 
-def test_tier4_candidates_not_yet_in_production_safe():
-    assert TIER4_PARITY_CANDIDATES.isdisjoint(POLARS_PRODUCTION_SAFE)
+def test_parity_tier4_subset_of_production_safe():
+    assert POLARS_PARITY_VERIFIED_TIER4 <= POLARS_PRODUCTION_SAFE
 
 
-@pytest.mark.parametrize("canonical", sorted(TIER4_PARITY_CANDIDATES))
-def test_polars_parity_tier4_candidates(source, canonical):
+@pytest.mark.parametrize("canonical", sorted(POLARS_PARITY_VERIFIED_TIER4))
+def test_polars_parity_verified_tier4(source, canonical):
     exprs = _parity_exprs()
     a, b = _run_pair(source, exprs[canonical])
     pd.testing.assert_series_equal(a, b, check_names=False, rtol=1e-8, atol=1e-8)

@@ -418,3 +418,18 @@ def apply_numba_rank(df: pl.DataFrame, axis: int = 1) -> pl.DataFrame:
         result_df = result_df.with_columns([df['date']])
 
     return result_df
+
+
+_SKIP_PANEL = frozenset({"date", "stock_code"})
+
+
+def panel_pandas_bridge(x: "pl.DataFrame", fn, *args, **kwargs) -> "pl.DataFrame":
+    """Polars 宽表 ↔ pandas 桥接（parity 与 pandas_numpy 对齐）。"""
+    cols = [c for c in x.columns if c not in _SKIP_PANEL]
+    if not cols:
+        return x
+    pdf = x.select(cols).to_pandas()
+    out = fn(pdf, *args, **kwargs)
+    return x.with_columns([
+        pl.Series(name=c, values=np.asarray(out[c], dtype=np.float64)) for c in cols
+    ])

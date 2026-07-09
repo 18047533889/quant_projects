@@ -38,6 +38,7 @@ class PolarsBackend(PandasBackend):
         )
 
     def execute(self, plan: PlanNode, ctx: ExecutionContext) -> Any:
+        root_ctx = ctx
         ctx = self._with_polars_perf(ctx)
         if self._use_lazy and ctx.data_source is not None:
             enable = getattr(ctx.data_source, "enable_lazy_scan", None)
@@ -52,6 +53,28 @@ class PolarsBackend(PandasBackend):
         if self._use_lazy:
             runtime["lazy_scan"] = True
         ctx = replace(ctx, runtime_stats=runtime, prefer_polars_panel=True)
+
+        if _env_flag("FACTOR_ENGINE_POLARS_EXPR") and ctx.data_source is not None:
+            from .polars_expr_backend import execute_polars_expr_plan, plan_is_polars_expr_capable
+
+            if plan_is_polars_expr_capable(plan):
+                try:
+                    result = execute_polars_expr_plan(plan, ctx)
+                    runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+                    runtime["polars_expr"] = True
+                    ctx.runtime_stats = runtime  # type: ignore[attr-defined]
+                    root_ctx.runtime_stats = runtime  # type: ignore[attr-defined]
+                    result = finalize_panel_result(result, ctx)
+                    from runtime.production_policy import assert_no_production_pandas_fallbacks
+
+                    assert_no_production_pandas_fallbacks(ctx, context="polars_execute")
+                    return result
+                except Exception:
+                    runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+                    runtime["polars_expr_fallback"] = True
+                    ctx.runtime_stats = runtime  # type: ignore[attr-defined]
+                    root_ctx.runtime_stats = runtime  # type: ignore[attr-defined]
+
         result = finalize_panel_result(self._eval(plan, ctx), ctx)
         from runtime.production_policy import assert_no_production_pandas_fallbacks
 

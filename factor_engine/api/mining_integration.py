@@ -8,7 +8,8 @@
 
 执行策略（A 股 / 美股统一）
 ----------------------------
-**A 股与美股均走 factor_engine runtime**（``cleaned_operators`` + ``PandasBackend``）；
+**A 股与美股均走 factor_engine runtime**（``cleaned_operators`` + 混合后端）；
+默认 ``backend.type=auto`` / hybrid：**SQL 子树下推 → Polars auto（``POLARS_PRODUCTION_SAFE``）→ Pandas fallback**。
 仅数据源与 canonical 字段不同（A 股 parquet 常在 ``data/a_share/lqtp_data/``）。
 ``lqtp_dsl`` / ``platforms.lqtp`` 为历史 LQTP 平台路径，**新 campaign 不再依赖**。
 """

@@ -70,6 +70,7 @@ def execute_run_many(
     if use_per_factor_run:
         out: dict[str, Any] = {}
         analyses: dict[str, AnalysisResult] = {}
+        all_fallbacks: list[dict[str, str]] = []
         for factor in factors:
             one = engine.run(
                 factor,
@@ -84,8 +85,14 @@ def execute_run_many(
             )
             out[factor.name] = one["result"]
             analyses[factor.name] = one["analysis"]
+            fb = one.get("production_pandas_fallbacks")
+            if fb:
+                all_fallbacks.extend(dict(x) for x in fb if isinstance(x, dict))
         dag, _ = engine._dag_from_factors(factors, enable_cse=enable_cse, perf=perf)
-        return {"results": out, "dag": dag, "analyses": analyses}
+        batch_out: dict[str, Any] = {"results": out, "dag": dag, "analyses": analyses}
+        if all_fallbacks:
+            batch_out["production_pandas_fallbacks"] = all_fallbacks
+        return batch_out
 
     dag, analyses = engine._dag_from_factors(
         factors, enable_cse=enable_cse, perf=perf
@@ -147,6 +154,11 @@ def execute_run_many(
         batch_out["scheduling_hints"] = derive_scheduling_hints(
             batch_out["cost_summary"]
         )
+    from runtime.production_policy import summarize_pandas_fallbacks
+
+    fallbacks = summarize_pandas_fallbacks(ctx)
+    if fallbacks:
+        batch_out["production_pandas_fallbacks"] = fallbacks
     return batch_out
 
 
@@ -251,4 +263,9 @@ def execute_run_many_parallel(
         parallel_out["input_dq"] = input_report.to_dict()
     if len(factors) > 1:
         parallel_out["batch_graph"] = batch_graph.to_dict()
+    from runtime.production_policy import summarize_pandas_fallbacks
+
+    fallbacks = summarize_pandas_fallbacks(ctx)
+    if fallbacks:
+        parallel_out["production_pandas_fallbacks"] = fallbacks
     return parallel_out

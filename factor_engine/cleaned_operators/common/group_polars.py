@@ -84,17 +84,44 @@ def _std_row(row_x, row_g):
         return out
     for g in np.unique(row_g[~np.isnan(row_g)]):
         gm = (row_g == g) & mask
-        if np.sum(gm) > 1:
-            out[gm] = np.nanstd(row_x[gm], ddof=1)
+        n = int(np.sum(gm))
+        if n == 1:
+            out[gm] = 0.0
+        elif n > 1:
+            std = np.nanstd(row_x[gm], ddof=1)
+            out[gm] = 0.0 if std != std else std
     return out
 
 
 def _zscore_row(row_x, row_g):
-    out = row_x.copy()
-    mu = _mean_row(row_x, row_g)
-    sd = _std_row(row_x, row_g)
-    valid = ~np.isnan(row_x) & (sd > 0)
-    out[valid] = (row_x[valid] - mu[valid]) / sd[valid]
+    """对齐 pandas ``group_zscore``：零/缺失标准差或单元素组 → 0。"""
+    out = np.full_like(row_x, np.nan)
+    mask = ~np.isnan(row_x)
+    if not np.any(mask):
+        return out
+
+    def _apply(indices: np.ndarray) -> None:
+        vals = row_x[indices]
+        if len(vals) == 0:
+            return
+        if len(vals) == 1:
+            out[indices] = 0.0
+            return
+        mean = np.nanmean(vals)
+        std = np.nanstd(vals, ddof=1)
+        if std != 0 and not np.isnan(std):
+            out[indices] = (vals - mean) / std
+        else:
+            out[indices] = 0.0
+
+    if row_g is None or np.all(np.isnan(row_g)):
+        _apply(np.where(mask)[0])
+        return out
+
+    for g in np.unique(row_g[~np.isnan(row_g)]):
+        gm = (row_g == g) & mask
+        if np.any(gm):
+            _apply(np.where(gm)[0])
     return out
 
 
@@ -142,7 +169,14 @@ class GroupStdPolars(SeriesOperator):
         return _group_rowwise(x, group, _std_row)
 
 
-@register_operator(name="group_zscore", category="cross_sectional", business_category="group_neutralization", canonical="group_zscore", source="factor_dsl_polars")
+@register_operator(
+    name="group_zscore",
+    category="cross_sectional",
+    business_category="group_neutralization",
+    canonical="group_zscore",
+    source="factor_dsl_polars",
+    backend="polars",
+)
 class GroupZscorePolars(SeriesOperator):
     metadata = OperatorMetadata(
         name="group_zscore", category="cross_sectional", description="组内 zscore",
@@ -245,13 +279,21 @@ class GroupPercentilePolars(SeriesOperator):
             mask = ~np.isnan(row_x)
             if not np.any(mask):
                 return out
+
+            def _indicator(vals: np.ndarray) -> np.ndarray:
+                if len(vals) == 0:
+                    return np.array([], dtype=float)
+                ranks = np.argsort(np.argsort(vals, kind="mergesort"), kind="mergesort") + 1.0
+                pct = ranks / len(vals)
+                return (pct <= q).astype(float)
+
             if row_g is None or np.all(np.isnan(row_g)):
-                out[mask] = np.nanquantile(row_x[mask], q)
+                out[mask] = _indicator(row_x[mask])
                 return out
             for g in np.unique(row_g[~np.isnan(row_g)]):
                 gm = (row_g == g) & mask
                 if np.any(gm):
-                    out[gm] = np.nanquantile(row_x[gm], q)
+                    out[gm] = _indicator(row_x[gm])
             return out
 
         return _group_rowwise(x, group, _pct)

@@ -109,3 +109,57 @@ def test_cs_resid_clickhouse_dialect():
     assert "covarSamp" in q
     assert "varSamp" in q
     assert "< 3" in q
+
+
+def test_tier6_clickhouse_dialect():
+    from backend.sql_pushdown.plan_fixtures import minimal_plan
+
+    for op in (
+        "rank_pct",
+        "cs_pct_rank",
+        "cs_quantile",
+        "log_returns",
+        "volatility",
+        "vwap",
+    ):
+        plan = minimal_plan(op)
+        q = _ch_sql(plan)
+        assert "PARTITION BY" in q or "OVER (" in q, op
+        if op in {"rank_pct", "cs_pct_rank"}:
+            assert "toFloat64(RANK()" in q or "RANK()" in q
+        if op == "cs_quantile":
+            assert "quantileExact" in q
+        if op == "log_returns":
+            assert "log(" in q.lower()
+        if op == "volatility":
+            assert "stddevSamp" in q
+        if op == "vwap":
+            assert "SUM(" in q
+
+
+def test_tier7_clickhouse_dialect():
+    from backend.sql_pushdown.plan_fixtures import minimal_plan
+
+    for op in (
+        "maximum",
+        "minimum",
+        "cum_prod",
+        "expanding_mean",
+        "log_abs",
+        "signed_log",
+        "c_mean",
+        "c_std",
+    ):
+        plan = minimal_plan(op)
+        q = _ch_sql(plan)
+        if op in {"maximum", "minimum"}:
+            assert "greatest" in q or "least" in q
+            assert "isNull" in q or "IS NULL" in q
+        elif op in {"log_abs", "signed_log", "signed_sqrt"}:
+            assert "log(" in q or "sqrt(" in q
+        else:
+            assert "OVER (" in q or "PARTITION BY" in q, op
+        if op == "cum_prod":
+            assert "product" in q
+        if op == "c_std":
+            assert "stddevSamp" in q

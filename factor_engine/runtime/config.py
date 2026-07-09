@@ -29,7 +29,9 @@ class DataSourceConfig:
 
 @dataclass(frozen=True)
 class BackendConfig:
-    type: str = "pandas"
+    """执行后端：与 ``load_config()`` 默认一致，推荐 ``auto``（Hybrid = SQL + Polars + Pandas）。"""
+
+    type: str = "auto"
 
 
 @dataclass(frozen=True)

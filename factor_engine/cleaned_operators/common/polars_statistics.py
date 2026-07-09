@@ -83,32 +83,18 @@ class TSRegressionPolars(SeriesOperator):
         retval: str = "slope",
         **kwargs,
     ) -> pl.DataFrame:
+        from cleaned_operators._rolling_fast import rolling_regression
+
         w = max(int(kwargs.get("d", window)), 3)
         lag_i = int(kwargs.get("lag", lag))
         ret = str(kwargs.get("retval", retval))
         cols = _align_cols(y, x)
-        exprs = []
-        for c in cols:
-            xc = x[c].shift(lag_i) if lag_i > 0 else x[c]
-            yc = y[c]
-            cov = pl.rolling_cov(yc, xc, window_size=w, min_samples=3)
-            var_x = xc.rolling_var(window_size=w, min_samples=3)
-            mean_y = yc.rolling_mean(window_size=w, min_samples=3)
-            mean_x = xc.rolling_mean(window_size=w, min_samples=3)
-            slope = cov / var_x
-            if ret == "slope":
-                exprs.append(slope.alias(c))
-            elif ret == "intercept":
-                exprs.append((mean_y - slope * mean_x).alias(c))
-            elif ret == "r_squared":
-                corr = pl.rolling_corr(yc, xc, window_size=w, min_samples=3)
-                exprs.append((corr * corr).alias(c))
-            elif ret == "residual":
-                resid = yc - (slope * xc + (mean_y - slope * mean_x))
-                exprs.append(resid.rolling_mean(window_size=w, min_samples=3).alias(c))
-            else:
-                exprs.append(slope.alias(c))
-        return y.with_columns(exprs)
+        py = y.select(cols).to_pandas()
+        px = x.select(cols).to_pandas()
+        out = rolling_regression(py, px, window=w, min_periods=3, lag=lag_i, retval=ret)
+        return y.with_columns([
+            pl.Series(name=c, values=np.asarray(out[c], dtype=np.float64)) for c in cols
+        ])
 
 
 def _rolling_unary(x: pl.DataFrame, window: int, expr_fn) -> pl.DataFrame:

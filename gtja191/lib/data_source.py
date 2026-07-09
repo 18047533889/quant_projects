@@ -53,7 +53,7 @@ def smoke_data_source(
     start_date: str = "2016-01-04",
     end_date: str = "2016-01-10",
 ) -> dict[str, Any]:
-    """本地 smoke 用小窗口。"""
+    """本地 smoke：read_auto 读数加速。"""
     return default_ashare_pv_data_source(
         start_date=start_date,
         end_date=end_date,

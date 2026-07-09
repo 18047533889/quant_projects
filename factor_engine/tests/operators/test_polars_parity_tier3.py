@@ -23,8 +23,10 @@ from runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 ts_ema = make_cleaned_call_factory("ts_ema")
+ts_decay_linear = make_cleaned_call_factory("ts_decay_linear")
 fillna_const = make_cleaned_call_factory("fillna_const")
 fillna = make_cleaned_call_factory("fillna")
+group_zscore = make_cleaned_call_factory("group_zscore")
 group_mean = make_cleaned_call_factory("group_mean")
 group_neutralize = make_cleaned_call_factory("group_neutralize")
 ts_var = make_cleaned_call_factory("ts_var")
@@ -69,8 +71,10 @@ def _parity_exprs():
     x, y = col("x"), col("y")
     return {
         "ts_ema": ts_ema(x, 2),
+        "ts_decay_linear": ts_decay_linear(x, 2),
         "fillna_const": fillna_const(x, 0),
         "fillna": fillna(x, 0),
+        "group_zscore": group_zscore(x, col("grp")),
         "group_mean": group_mean(x, col("grp")),
         "group_neutralize": group_neutralize(x, col("grp")),
         "ts_var": ts_var(x, 2),

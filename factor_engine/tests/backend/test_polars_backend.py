@@ -50,6 +50,7 @@ def _run(engine: FactorEngine, expr):
         rank(col("x")),
         ts_mean(col("x"), 2),
         col("x") + 1.0,
+        -1 * col("x"),
         sin(col("x")),
         cos(col("x")),
         exp(col("x")),

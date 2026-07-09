@@ -18,6 +18,14 @@ def build_backend(backend_type: str):
         return PandasBackend()  # 与 pandas 同类，经 pandas_compat 走 modin.pandas
     if normalized == "polars":
         return PolarsBackend()
+    if normalized in {"polars_long", "polars_native", "long_polars"}:
+        from .polars_long_backend import PolarsLongBackend
+
+        return PolarsLongBackend()
+    if normalized in {"auto_long", "hybrid_long"}:
+        from .hybrid_long_backend import HybridLongBackend
+
+        return HybridLongBackend()
     if normalized == "polars_lazy":
         return PolarsBackend(use_lazy=True)  # LazyFrame 延迟计算再 collect
     if normalized in {"duckdb_sql", "sql_pushdown", "duckdb_pushdown", "sql"}:
