@@ -233,6 +233,14 @@ def quote_ch_ident(name: str) -> str:
     return f"`{name}`"
 
 
+def quote_ch_literal(val: Any) -> str:
+    """ClickHouse SQL 字面量（字符串 / 日期等）。"""
+    if val is None:
+        return "NULL"
+    s = str(val).replace("'", "''")
+    return f"'{s}'"
+
+
 def build_clickhouse_scan_sql(
     table: str,
     *,
@@ -250,11 +258,11 @@ def build_clickhouse_scan_sql(
     if time_range is not None:
         start, end = time_range
         if start is not None:
-            clauses.append(f"{quote_ch_ident(timestamp_column)} >= '{start}'")
+            clauses.append(f"{quote_ch_ident(timestamp_column)} >= {quote_ch_literal(start)}")
         if end is not None:
-            clauses.append(f"{quote_ch_ident(timestamp_column)} <= '{end}'")
+            clauses.append(f"{quote_ch_ident(timestamp_column)} <= {quote_ch_literal(end)}")
     if instrument_filter:
-        insts = ", ".join(f"'{str(s).replace(chr(39), chr(39)+chr(39))}'" for s in instrument_filter)
+        insts = ", ".join(quote_ch_literal(str(s)) for s in instrument_filter)
         clauses.append(f"{quote_ch_ident(instrument_column)} IN ({insts})")
     if clauses:
         sql += " WHERE " + " AND ".join(clauses)

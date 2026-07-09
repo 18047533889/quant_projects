@@ -1118,7 +1118,7 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
         )
 
     if op == "ts_corr":
-        if len(node.inputs) != 2:
+        if len(node.inputs) < 2:
             return None
         left = _compile_layer(node.inputs[0], dialect=dialect)
         right = _compile_layer(node.inputs[1], dialect=dialect)
@@ -1332,7 +1332,7 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
         )
 
     if op == "ts_beta":
-        if len(node.inputs) != 2:
+        if len(node.inputs) < 2:
             return None
         left = _compile_layer(node.inputs[0], dialect=dialect)
         right = _compile_layer(node.inputs[1], dialect=dialect)
@@ -1576,7 +1576,7 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
         )
 
     if op == "ts_cov":
-        if len(node.inputs) != 2:
+        if len(node.inputs) < 2:
             return None
         left = _compile_layer(node.inputs[0], dialect=dialect)
         right = _compile_layer(node.inputs[1], dialect=dialect)
@@ -1890,7 +1890,7 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
         )
 
     if op in {"ewm_cov", "ewm_corr"}:
-        if len(node.inputs) != 2:
+        if len(node.inputs) < 2:
             return None
         left = _compile_layer(node.inputs[0], dialect=dialect)
         right = _compile_layer(node.inputs[1], dialect=dialect)

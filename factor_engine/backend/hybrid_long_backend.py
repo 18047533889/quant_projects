@@ -2,6 +2,7 @@
 """混合 long-table 后端：SQL 下推 → PolarsLong → Pandas fallback。"""
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from planner.logical_plan import PlanNode
@@ -15,10 +16,24 @@ class HybridLongBackend(SqlBackend):
     """``build_backend('auto_long')`` / ``hybrid_long``：SQL 子树 + Polars long native。"""
 
     prefers_native_scan = True
+    supports_lazy_shared = True
 
     def __init__(self) -> None:
         super().__init__(operator_backend="auto")
         self._polars_long = PolarsLongBackend()
+
+    def compile_lazy_shared(
+        self,
+        plan: PlanNode,
+        ctx: ExecutionContext,
+        *,
+        sid: str,
+    ) -> bool:
+        return self._polars_long.compile_lazy_shared(plan, ctx, sid=sid)
+
+    def execute(self, plan: PlanNode, ctx: ExecutionContext) -> Any:
+        ctx = replace(ctx, materialize_sql_as_long_lazy=True)
+        return super().execute(plan, ctx)
 
     def _eval_hybrid(self, plan: PlanNode, ctx: ExecutionContext) -> Any:
         if self._operator_backend == "pandas_numpy":

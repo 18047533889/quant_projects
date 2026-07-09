@@ -446,6 +446,30 @@ def _column_ref_name(node: PlanNode) -> str | None:
     return str(name) if name else None
 
 
+def _protected_div_expr(numer: pl.Expr, denom: pl.Expr, node: PlanNode) -> pl.Expr:
+    """与 SQL / Pandas 一致：|denom| <= epsilon → default。"""
+    eps = _float_attr(node, "epsilon", "eps", default=1e-12)
+    default = _float_attr(node, "default", default=0.0)
+    return (
+        pl.when(numer.is_null() | denom.is_null())
+        .then(default)
+        .when(denom.abs() <= eps)
+        .then(default)
+        .otherwise(numer / denom)
+    )
+
+
+def _protected_log_expr(val: pl.Expr, node: PlanNode) -> pl.Expr:
+    """与 SQL / Pandas 一致：x <= epsilon → log(epsilon)。"""
+    eps = _float_attr(node, "epsilon", "eps", default=1e-12)
+    log_eps = pl.lit(eps).log()
+    return pl.when(val.is_null() | (val <= eps)).then(log_eps).otherwise(val.log())
+
+
+def _truthy_expr(expr: pl.Expr) -> pl.Expr:
+    return expr.is_not_null() & (expr != 0)
+
+
 def _try_binary_from_base_columns(
     node: PlanNode,
     base: pl.LazyFrame,
@@ -474,12 +498,121 @@ def _try_binary_from_base_columns(
     elif op == "minimum":
         expr = pl.min_horizontal(lcol, rcol)
     elif op == "protected_div":
-        expr = pl.when(rcol.is_null() | (rcol == 0)).then(0.0).otherwise(lcol / rcol)
+        expr = _protected_div_expr(lcol, rcol, node)
     elif op == "divide":
         expr = lcol / rcol
+    elif op == "power":
+        expr = lcol.pow(rcol)
+    elif op == "gt":
+        expr = pl.when(lcol > rcol).then(1.0).otherwise(0.0)
+    elif op == "lt":
+        expr = pl.when(lcol < rcol).then(1.0).otherwise(0.0)
+    elif op == "eq":
+        expr = pl.when(lcol == rcol).then(1.0).otherwise(0.0)
+    elif op == "ge":
+        expr = pl.when(lcol >= rcol).then(1.0).otherwise(0.0)
+    elif op == "le":
+        expr = pl.when(lcol <= rcol).then(1.0).otherwise(0.0)
+    elif op == "ne":
+        expr = pl.when(lcol != rcol).then(1.0).otherwise(0.0)
+    elif op == "and_":
+        expr = pl.when(_truthy_expr(lcol) & _truthy_expr(rcol)).then(1.0).otherwise(0.0)
+    elif op == "or_":
+        expr = pl.when(_truthy_expr(lcol) | _truthy_expr(rcol)).then(1.0).otherwise(0.0)
     else:
         return None
     return base.select(pl.col(_TS), pl.col(_INST), expr.alias(_VAL))
+
+
+def _try_coalesce_from_base_columns(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
+    if len(node.inputs) != 2:
+        return None
+    left_name = _column_ref_name(node.inputs[0])
+    right_name = _column_ref_name(node.inputs[1])
+    if not left_name or not right_name:
+        return None
+    schema = set(base.collect_schema().names())
+    if left_name not in schema or right_name not in schema:
+        return None
+    expr = pl.coalesce(pl.col(left_name), pl.col(right_name))
+    return base.select(pl.col(_TS), pl.col(_INST), expr.alias(_VAL))
+
+
+def _try_where_from_base_columns(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
+    if len(node.inputs) != 3:
+        return None
+    cond_name = _column_ref_name(node.inputs[0])
+    a_name = _column_ref_name(node.inputs[1])
+    b_name = _column_ref_name(node.inputs[2])
+    if not cond_name or not a_name or not b_name:
+        return None
+    schema = set(base.collect_schema().names())
+    if cond_name not in schema or a_name not in schema or b_name not in schema:
+        return None
+    cond = pl.col(cond_name)
+    expr = pl.when(_truthy_expr(cond)).then(pl.col(a_name)).otherwise(pl.col(b_name))
+    return base.select(pl.col(_TS), pl.col(_INST), expr.alias(_VAL))
+
+
+def _try_ts_pair_from_base_columns(
+    node: PlanNode,
+    base: pl.LazyFrame,
+    op: str,
+) -> pl.LazyFrame | None:
+    """两列 base 时序/价量算子融合，避免 binary join。"""
+    if len(node.inputs) != 2:
+        return None
+    left_name = _column_ref_name(node.inputs[0])
+    right_name = _column_ref_name(node.inputs[1])
+    if not left_name or not right_name:
+        return None
+    schema = set(base.collect_schema().names())
+    if left_name not in schema or right_name not in schema:
+        return None
+    lcol = pl.col(left_name)
+    rcol = pl.col(right_name)
+    if op == "ts_corr":
+        w = max(_window_int(node), 2)
+        expr = pl.rolling_corr(lcol, rcol, window_size=w, min_samples=2).over(_INST, order_by=_TS)
+    elif op == "ts_cov":
+        w = max(_window_int(node), 2)
+        expr = pl.rolling_cov(lcol, rcol, window_size=w, min_samples=2, ddof=1).over(_INST, order_by=_TS)
+    elif op == "ts_beta":
+        w = max(_window_int(node), 2)
+        cov = pl.rolling_cov(lcol, rcol, window_size=w, min_samples=2, ddof=1).over(_INST, order_by=_TS)
+        var = rcol.rolling_var(window_size=w, min_samples=2, ddof=1).over(_INST, order_by=_TS)
+        expr = pl.when(var.is_null() | (var == 0)).then(None).otherwise(cov / var)
+    elif op == "vwap":
+        w = _window_int(node, default=20)
+        pv = lcol * rcol
+        sum_pv = pv.rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+        sum_v = rcol.rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+        expr = pl.when(sum_v.is_null() | (sum_v == 0)).then(None).otherwise(sum_pv / sum_v)
+    else:
+        return None
+    return base.select(pl.col(_TS), pl.col(_INST), expr.alias(_VAL))
+
+
+_BINARY_FUSION_OPS = frozenset(
+    {
+        "add",
+        "subtract",
+        "multiply",
+        "divide",
+        "protected_div",
+        "maximum",
+        "minimum",
+        "power",
+        "gt",
+        "lt",
+        "eq",
+        "ge",
+        "le",
+        "ne",
+        "and_",
+        "or_",
+    }
+)
 
 
 def _truthy(col: str) -> pl.Expr:
@@ -580,7 +713,7 @@ def _compile_polars_impl(
         val = node.attrs.get("value")
         return base.select(pl.col(_TS), pl.col(_INST), pl.lit(val).alias(_VAL))
 
-    if op in {"add", "subtract", "multiply", "divide", "protected_div", "maximum", "minimum"}:
+    if op in _BINARY_FUSION_OPS:
         if len(node.inputs) != 2:
             return None
         fused = _try_binary_from_base_columns(node, base, op)
@@ -602,13 +735,27 @@ def _compile_polars_impl(
         elif op == "minimum":
             expr = pl.min_horizontal(pl.col(_VAL), pl.col("_y"))
         elif op == "protected_div":
-            expr = (
-                pl.when(pl.col("_y").is_null() | (pl.col("_y") == 0))
-                .then(0.0)
-                .otherwise(pl.col(_VAL) / pl.col("_y"))
-            )
-        else:
+            expr = _protected_div_expr(pl.col(_VAL), pl.col("_y"), node)
+        elif op == "divide":
             expr = pl.col(_VAL) / pl.col("_y")
+        elif op == "power":
+            expr = pl.col(_VAL).pow(pl.col("_y"))
+        elif op in {"gt", "lt", "eq", "ge", "le", "ne"}:
+            cmp_map = {
+                "gt": pl.col(_VAL) > pl.col("_y"),
+                "lt": pl.col(_VAL) < pl.col("_y"),
+                "eq": pl.col(_VAL) == pl.col("_y"),
+                "ge": pl.col(_VAL) >= pl.col("_y"),
+                "le": pl.col(_VAL) <= pl.col("_y"),
+                "ne": pl.col(_VAL) != pl.col("_y"),
+            }
+            expr = pl.when(cmp_map[op]).then(1.0).otherwise(0.0)
+        elif op == "and_":
+            expr = pl.when(_truthy(_VAL) & _truthy("_y")).then(1.0).otherwise(0.0)
+        elif op == "or_":
+            expr = pl.when(_truthy(_VAL) | _truthy("_y")).then(1.0).otherwise(0.0)
+        else:
+            return None
         return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
 
     if op == "inverse":
@@ -673,6 +820,9 @@ def _compile_polars_impl(
     if op == "power":
         if len(node.inputs) != 2:
             return None
+        fused = _try_binary_from_base_columns(node, base, op)
+        if fused is not None:
+            return fused
         left = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         right = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
         if left is None or right is None:
@@ -684,13 +834,7 @@ def _compile_polars_impl(
         inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        eps = _float_attr(node, "eps", default=1e-12)
-        return inner.with_columns(
-            pl.when(pl.col(_VAL).is_null() | (pl.col(_VAL) <= eps))
-            .then(0.0)
-            .otherwise(pl.col(_VAL).log())
-            .alias(_VAL)
-        )
+        return inner.with_columns(_protected_log_expr(pl.col(_VAL), node).alias(_VAL))
 
     if op == "protected_sqrt":
         inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
@@ -750,6 +894,9 @@ def _compile_polars_impl(
     if op == "ts_corr":
         if len(node.inputs) < 2:
             return None
+        fused = _try_ts_pair_from_base_columns(node, base, op)
+        if fused is not None:
+            return fused
         left = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         right = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
         if left is None or right is None:
@@ -767,6 +914,9 @@ def _compile_polars_impl(
     if op == "ts_cov":
         if len(node.inputs) < 2:
             return None
+        fused = _try_ts_pair_from_base_columns(node, base, op)
+        if fused is not None:
+            return fused
         left = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         right = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
         if left is None or right is None:
@@ -785,6 +935,9 @@ def _compile_polars_impl(
     if op == "ts_beta":
         if len(node.inputs) < 2:
             return None
+        fused = _try_ts_pair_from_base_columns(node, base, op)
+        if fused is not None:
+            return fused
         left = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         right = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
         if left is None or right is None:
@@ -806,6 +959,9 @@ def _compile_polars_impl(
     if op == "vwap":
         if len(node.inputs) < 2:
             return None
+        fused = _try_ts_pair_from_base_columns(node, base, op)
+        if fused is not None:
+            return fused
         price = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         vol = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
         if price is None or vol is None:
@@ -881,6 +1037,9 @@ def _compile_polars_impl(
     if op in {"coalesce"}:
         if len(node.inputs) != 2:
             return None
+        fused = _try_coalesce_from_base_columns(node, base)
+        if fused is not None:
+            return fused
         left = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         right = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
         if left is None or right is None:
@@ -891,6 +1050,9 @@ def _compile_polars_impl(
     if op in {"where", "if_else"}:
         if len(node.inputs) != 3:
             return None
+        fused = _try_where_from_base_columns(node, base)
+        if fused is not None:
+            return fused
         cond = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         a = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
         b = _compile_polars(node.inputs[2], base, ctx=ctx, memo=memo)
@@ -904,6 +1066,9 @@ def _compile_polars_impl(
     if op in {"gt", "lt", "eq", "ge", "le", "ne"}:
         if len(node.inputs) != 2:
             return None
+        fused = _try_binary_from_base_columns(node, base, op)
+        if fused is not None:
+            return fused
         left = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         right = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
         if left is None or right is None:
@@ -924,6 +1089,9 @@ def _compile_polars_impl(
     if op == "and_":
         if len(node.inputs) != 2:
             return None
+        fused = _try_binary_from_base_columns(node, base, op)
+        if fused is not None:
+            return fused
         left = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         right = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
         if left is None or right is None:
@@ -936,6 +1104,9 @@ def _compile_polars_impl(
     if op == "or_":
         if len(node.inputs) != 2:
             return None
+        fused = _try_binary_from_base_columns(node, base, op)
+        if fused is not None:
+            return fused
         left = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         right = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
         if left is None or right is None:
@@ -1100,10 +1271,16 @@ def _compile_polars_impl(
         elif op in {"group_zscore", "group_neutralize"}:
             mean = pl.col(_VAL).mean().over(*over_keys, order_by=_INST)
             if op == "group_neutralize":
-                expr = pl.col(_VAL) - mean
+                expr = pl.when(pl.col(_VAL).is_null()).then(None).otherwise(pl.col(_VAL) - mean)
             else:
                 std = pl.col(_VAL).std(ddof=1).over(*over_keys, order_by=_INST)
-                expr = pl.when(std.is_null() | (std == 0)).then(0.0).otherwise((pl.col(_VAL) - mean) / std)
+                expr = (
+                    pl.when(pl.col(_VAL).is_null())
+                    .then(None)
+                    .when(std.is_null() | (std == 0))
+                    .then(0.0)
+                    .otherwise((pl.col(_VAL) - mean) / std)
+                )
         elif op == "group_normalize":
             lo = pl.col(_VAL).min().over(*over_keys, order_by=_INST)
             hi = pl.col(_VAL).max().over(*over_keys, order_by=_INST)
@@ -1202,7 +1379,11 @@ def _compile_polars_impl(
         mean = pl.col(_VAL).mean().over(_TS, order_by=_INST)
         std = pl.col(_VAL).std(ddof=1).over(_TS, order_by=_INST)
         return inner.with_columns(
-            pl.when(std.is_null() | (std == 0))
+            pl.when(pl.col(_VAL).is_null())
+            .then(None)
+            .when(std.is_null())
+            .then(None)
+            .when(std == 0)
             .then(0.0)
             .otherwise((pl.col(_VAL) - mean) / std)
             .alias(_VAL)
@@ -1770,14 +1951,14 @@ def compile_plan_to_polars(
     )
 
 
-def execute_polars_long_plan(
+def compile_polars_long_lazy(
     plan: PlanNode,
     ctx: Any,
     *,
     base_lf: pl.LazyFrame | None = None,
     lazy_cache_key: str | None = None,
-) -> pd.Series:
-    """编译并执行 long-table 计划；仅最终 collect 一次。"""
+) -> LongFrameResult:
+    """编译 long-table 计划为 LazyFrame（不 collect）。"""
     if base_lf is None:
         scan = getattr(ctx.data_source, "scan_polars_long", None)
         if callable(scan):
@@ -1794,6 +1975,20 @@ def execute_polars_long_plan(
         cache = getattr(ctx, "shared_long_lazy_cache", None)
         if cache is not None:
             cache[lazy_cache_key] = compiled.frame
+    return compiled
+
+
+def execute_polars_long_plan(
+    plan: PlanNode,
+    ctx: Any,
+    *,
+    base_lf: pl.LazyFrame | None = None,
+    lazy_cache_key: str | None = None,
+) -> pd.Series:
+    """编译并执行 long-table 计划；仅最终 collect 一次。"""
+    compiled = compile_polars_long_lazy(
+        plan, ctx, base_lf=base_lf, lazy_cache_key=lazy_cache_key
+    )
     frame = (
         compiled.frame.sort([compiled.ts_col, compiled.inst_col])
         .select(

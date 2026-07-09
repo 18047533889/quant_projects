@@ -105,6 +105,24 @@ def _series_from_sql_table(table, *, timestamp_col: str, instrument_col: str) ->
     )
 
 
+def _lazy_from_sql_table(table) -> Any:
+    """Arrow/SQL 结果 → long-table LazyFrame（``ts, inst, _v``），无 pandas 往返。"""
+    import polars as pl
+
+    if hasattr(table, "to_pandas"):
+        df = pl.from_arrow(table)
+    else:
+        df = pl.DataFrame(table)
+    rename: dict[str, str] = {}
+    if "value" in df.columns and "_v" not in df.columns:
+        rename["value"] = "_v"
+    if rename:
+        df = df.rename(rename)
+    if "_v" not in df.columns:
+        raise ValueError("SQL result missing value column")
+    return df.select(["ts", "inst", "_v"]).lazy()
+
+
 def execute_compiled_sql(
     compiled: CompiledSql,
     ctx: PushdownContext,
@@ -235,6 +253,83 @@ def _execute_duckdb(
 def _execute_clickhouse(compiled: CompiledSql, ctx: PushdownContext) -> pd.Series:
     table = _execute_clickhouse_table(compiled, ctx)
     return _series_from_sql_table(table, timestamp_col="ts", instrument_col="inst")
+
+
+def try_execute_sql_pushdown_long(
+    plan: PlanNode,
+    ctx: ExecutionContext,
+) -> Any | None:
+    """SQL 子树 → long-table LazyFrame（``ts, inst, _v``）；失败返回 None。"""
+    pctx = extract_pushdown_context(ctx)
+    if pctx is None:
+        return None
+
+    compiled = compile_plan_to_sql(
+        plan,
+        dataset=pctx.dataset,
+        table=pctx.table,
+        time_column=pctx.time_column,
+        instrument_column=pctx.instrument_column,
+        filt=pctx.filt,
+        dialect=pctx.dialect,
+    )
+    if compiled is None:
+        return None
+
+    try:
+        if compiled.dialect == SqlDialect.CLICKHOUSE:
+            table = _execute_clickhouse_table(compiled, pctx)
+        else:
+            table = _execute_duckdb_table(
+                compiled, pctx, ctx.data_source, query_budget=getattr(ctx, "query_budget", None)
+            )
+        return _lazy_from_sql_table(table)
+    except Exception:
+        return None
+
+
+def try_execute_sql_pushdown_batch_long(
+    plans: dict[str, PlanNode],
+    ctx: ExecutionContext,
+) -> dict[str, Any] | None:
+    """批量 SQL → ``sid -> LazyFrame``。"""
+    if not plans:
+        return {}
+    pctx = extract_pushdown_context(ctx)
+    if pctx is None:
+        return None
+
+    compiled = compile_plans_batch_to_sql(
+        plans,
+        dataset=pctx.dataset,
+        table=pctx.table,
+        time_column=pctx.time_column,
+        instrument_column=pctx.instrument_column,
+        filt=pctx.filt,
+        dialect=pctx.dialect,
+    )
+    if compiled is None:
+        return None
+
+    try:
+        if compiled.dialect == SqlDialect.CLICKHOUSE:
+            table = _execute_clickhouse_table(compiled, pctx)
+        else:
+            table = _execute_duckdb_table(
+                compiled, pctx, ctx.data_source, query_budget=getattr(ctx, "query_budget", None)
+            )
+        import polars as pl
+
+        df = pl.from_arrow(table) if hasattr(table, "to_pandas") else pl.DataFrame(table)
+        out: dict[str, Any] = {}
+        for sid, alias in compiled.column_aliases:
+            if alias not in df.columns:
+                continue
+            part = df.select(["ts", "inst", pl.col(alias).alias("_v")]).lazy()
+            out[sid] = part
+        return out
+    except Exception:
+        return None
 
 
 def try_execute_sql_pushdown(

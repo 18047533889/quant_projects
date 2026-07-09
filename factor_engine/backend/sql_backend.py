@@ -13,7 +13,12 @@ from .context import ExecutionContext
 from .panel_native import finalize_panel_result
 from .pandas_backend import PandasBackend
 from .polars_backend import PolarsBackend
-from .sql_pushdown.executor import try_execute_sql_pushdown, try_execute_sql_pushdown_batch
+from .sql_pushdown.executor import (
+    try_execute_sql_pushdown,
+    try_execute_sql_pushdown_batch,
+    try_execute_sql_pushdown_batch_long,
+    try_execute_sql_pushdown_long,
+)
 from .sql_pushdown.sql_registry import is_sql_capable
 
 
@@ -34,27 +39,40 @@ class SqlBackend(Backend):
                 return finalize_panel_result(pushed, ctx)
 
         mat_cache = dict(getattr(ctx, "materialized_series", None) or {})
+        mat_lazy = dict(getattr(ctx, "materialized_long_lazy", None) or {})
+        prefer_long = bool(getattr(ctx, "materialize_sql_as_long_lazy", False))
         pending = {
             sid: sub
             for sid, sub in physical.sql_subtrees.items()
-            if sid not in mat_cache
+            if sid not in mat_cache and sid not in mat_lazy
         }
         if len(pending) > 1:
-            batch = try_execute_sql_pushdown_batch(pending, ctx)
-            if batch:
-                mat_cache.update(batch)
-                pending = {sid: sub for sid, sub in pending.items() if sid not in mat_cache}
+            if prefer_long:
+                batch_long = try_execute_sql_pushdown_batch_long(pending, ctx)
+                if batch_long:
+                    mat_lazy.update(batch_long)
+                    pending = {sid: sub for sid, sub in pending.items() if sid not in mat_lazy}
+            if pending:
+                batch = try_execute_sql_pushdown_batch(pending, ctx)
+                if batch:
+                    mat_cache.update(batch)
+                    pending = {sid: sub for sid, sub in pending.items() if sid not in mat_cache}
 
         for sid, sub in pending.items():
-            if sid in mat_cache:
+            if sid in mat_cache or sid in mat_lazy:
                 continue
+            if prefer_long:
+                pushed_long = try_execute_sql_pushdown_long(sub, ctx)
+                if pushed_long is not None:
+                    mat_lazy[sid] = pushed_long
+                    continue
             pushed = try_execute_sql_pushdown(sub, ctx)
             if pushed is not None:
                 mat_cache[sid] = pushed
             else:
                 mat_cache[sid] = self._eval_python(sub, ctx)
 
-        ctx = replace(ctx, materialized_series=mat_cache)
+        ctx = replace(ctx, materialized_series=mat_cache, materialized_long_lazy=mat_lazy)
         return self._eval_hybrid(physical.root, ctx)
 
     def _eval_hybrid(self, plan: PlanNode, ctx: ExecutionContext) -> Any:

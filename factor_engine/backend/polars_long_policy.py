@@ -49,7 +49,6 @@ POLARS_LONG_NATIVE: frozenset[str] = frozenset(
         "ts_corr",
         "ts_cov",
         "ts_beta",
-        "ts_rank",
         "ts_ema",
         "rank",
         "rank_pct",
@@ -93,12 +92,6 @@ POLARS_LONG_NATIVE: frozenset[str] = frozenset(
         "c_std",
         "c_sum",
         "c_count",
-    }
-)
-
-# map_groups / rolling_map(pandas) / 截面 Python 分箱等
-POLARS_LONG_MAP_GROUPS: frozenset[str] = frozenset(
-    {
         "group_rank",
         "group_mean",
         "group_zscore",
@@ -106,10 +99,16 @@ POLARS_LONG_MAP_GROUPS: frozenset[str] = frozenset(
         "group_std",
         "group_normalize",
         "group_percentile",
-        "group_winsorize",
-        "group_decay_linear",
         "cs_mad",
         "cs_mad_zscore",
+    }
+)
+
+# map_groups / rolling_map(pandas) / 截面 Python 分箱等
+POLARS_LONG_MAP_GROUPS: frozenset[str] = frozenset(
+    {
+        "group_winsorize",
+        "group_decay_linear",
         "cs_resid",
         "cs_regression",
         "log_abs",
@@ -126,6 +125,7 @@ POLARS_LONG_MAP_GROUPS: frozenset[str] = frozenset(
         "ts_regression",
         "Slope",
         "rolling_beta",
+        "ts_rank",
         "ts_sharpe",
         "ts_autocorr",
         "cum_delta",
@@ -289,3 +289,33 @@ def strict_polars_long_fallback(ctx=None) -> bool:
 
 class PolarsLongStrictError(RuntimeError):
     """Strict 模式下 long native 失败，禁止 fallback。"""
+
+
+class PolarsLongNativeRequiredError(PolarsLongStrictError):
+    """``FACTOR_ENGINE_POLARS_LONG_REQUIRE_NATIVE=1`` 时 plan 含非 native 算子。"""
+
+
+def require_polars_long_native_only(ctx=None) -> bool:
+    """仅允许 ``POLARS_LONG_NATIVE`` + meta；禁止 map_groups / registry / passthrough。"""
+    raw = os.environ.get("FACTOR_ENGINE_POLARS_LONG_REQUIRE_NATIVE", "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def assert_native_only_plan(op_stats: dict[str, list[str]], ctx=None) -> None:
+    """REQUIRE_NATIVE 模式下，plan 不得含 map_groups / registry / passthrough。"""
+    if not require_polars_long_native_only(ctx):
+        return
+    blocked: list[str] = []
+    for key, label in (
+        ("polars_long_map_group_ops", "map_groups"),
+        ("polars_long_registry_ops", "registry"),
+        ("polars_long_passthrough_ops", "passthrough"),
+        ("polars_long_other_ops", "other"),
+    ):
+        ops = op_stats.get(key) or []
+        if ops:
+            blocked.append(f"{label}: {','.join(ops)}")
+    if blocked:
+        raise PolarsLongNativeRequiredError(
+            "polars_long require_native: plan uses non-native ops — " + "; ".join(blocked)
+        )

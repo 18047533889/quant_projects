@@ -13,6 +13,47 @@ if TYPE_CHECKING:
     from runtime.engine import FactorEngine
 
 
+def _materialize_shared_subplan(
+    backend: Any,
+    sub: Any,
+    ctx: Any,
+    sid: str,
+) -> None:
+    """CSE 共享子树：优先 lazy-only 编译，否则 eager execute 写入 ``shared_result_cache``。"""
+    runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+    runtime["polars_long_shared_sid"] = sid
+    ctx.runtime_stats = runtime  # type: ignore[attr-defined]
+    if getattr(backend, "supports_lazy_shared", False):
+        compile_lazy = getattr(backend, "compile_lazy_shared", None)
+        if callable(compile_lazy) and compile_lazy(sub, ctx, sid=str(sid)):
+            return
+    if ctx.shared_result_cache is not None:
+        ctx.shared_result_cache[sid] = backend.execute(sub, ctx)
+
+
+def _clear_polars_long_shared_sid(ctx: Any) -> None:
+    runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+    runtime.pop("polars_long_shared_sid", None)
+    ctx.runtime_stats = runtime  # type: ignore[attr-defined]
+
+
+def _execute_root_with_path(backend: Any, plan: Any, ctx: Any) -> tuple[Any, dict[str, Any]]:
+    from backend.path_summary import snapshot_backend_path
+
+    result = backend.execute(plan, ctx)
+    path = snapshot_backend_path(getattr(ctx, "runtime_stats", None))
+    return result, path
+
+
+def _attach_batch_backend_paths(batch_out: dict[str, Any], paths: dict[str, dict[str, Any]]) -> None:
+    if not paths:
+        return
+    from backend.path_summary import summarize_batch_backend_paths
+
+    batch_out["backend_paths"] = paths
+    batch_out["backend_path_summary"] = summarize_batch_backend_paths(paths)
+
+
 def _maybe_prepare_batch_data(
     engine: "FactorEngine",
     dag: Any,
@@ -73,6 +114,9 @@ def execute_run_many(
         out: dict[str, Any] = {}
         analyses: dict[str, AnalysisResult] = {}
         all_fallbacks: list[dict[str, str]] = []
+        backend_paths: dict[str, dict[str, Any]] = {}
+        from backend.path_summary import snapshot_from_run_output
+
         for factor in factors:
             one = engine.run(
                 factor,
@@ -87,11 +131,13 @@ def execute_run_many(
             )
             out[factor.name] = one["result"]
             analyses[factor.name] = one["analysis"]
+            backend_paths[factor.name] = snapshot_from_run_output(one)
             fb = one.get("production_pandas_fallbacks")
             if fb:
                 all_fallbacks.extend(dict(x) for x in fb if isinstance(x, dict))
         dag, _ = engine._dag_from_factors(factors, enable_cse=enable_cse, perf=perf)
         batch_out: dict[str, Any] = {"results": out, "dag": dag, "analyses": analyses}
+        _attach_batch_backend_paths(batch_out, backend_paths)
         if all_fallbacks:
             batch_out["production_pandas_fallbacks"] = all_fallbacks
         return batch_out
@@ -117,24 +163,28 @@ def execute_run_many(
     with routing_execution_scope(perf):
         if ctx.shared_result_cache is not None:
             for sid, sub in dag.shared_nodes.items():
-                runtime = dict(getattr(ctx, "runtime_stats", None) or {})
-                runtime["polars_long_shared_sid"] = sid
-                ctx.runtime_stats = runtime  # type: ignore[attr-defined]
-                ctx.shared_result_cache[sid] = engine.backend.execute(sub, ctx)
+                _materialize_shared_subplan(engine.backend, sub, ctx, sid)
+            _clear_polars_long_shared_sid(ctx)
         out: dict[str, Any] = {}
+        backend_paths: dict[str, dict[str, Any]] = {}
         for layer in batch_graph.parallel_layers:
             for name in layer:
                 fp = root_by_name.get(name)
                 if fp is not None:
-                    out[name] = engine.backend.execute(fp.root, ctx)
+                    result, path = _execute_root_with_path(engine.backend, fp.root, ctx)
+                    out[name] = result
+                    backend_paths[name] = path
         for fp in dag.roots:
             if fp.factor_name not in out:
-                out[fp.factor_name] = engine.backend.execute(fp.root, ctx)
+                result, path = _execute_root_with_path(engine.backend, fp.root, ctx)
+                out[fp.factor_name] = result
+                backend_paths[fp.factor_name] = path
     batch_out: dict[str, Any] = {
         "results": out,
         "dag": dag,
         "analyses": analyses,
     }
+    _attach_batch_backend_paths(batch_out, backend_paths)
     if input_report is not None:
         batch_out["input_dq"] = input_report.to_dict()
     if len(factors) > 1:
@@ -237,36 +287,42 @@ def execute_run_many_parallel(
     root_by_name = {fp.factor_name: fp for fp in dag.roots}
 
     def _one(fp):
-        res = engine.backend.execute(fp.root, ctx)
-        return fp.factor_name, res
+        result, path = _execute_root_with_path(engine.backend, fp.root, ctx)
+        return fp.factor_name, result, path
 
     with routing_execution_scope(perf):
         if ctx.shared_result_cache is not None:
             for sid, sub in dag.shared_nodes.items():
-                runtime = dict(getattr(ctx, "runtime_stats", None) or {})
-                runtime["polars_long_shared_sid"] = sid
-                ctx.runtime_stats = runtime  # type: ignore[attr-defined]
-                ctx.shared_result_cache[sid] = engine.backend.execute(sub, ctx)
+                _materialize_shared_subplan(engine.backend, sub, ctx, sid)
+            _clear_polars_long_shared_sid(ctx)
 
         results: dict[str, Any] = {}
+        backend_paths: dict[str, dict[str, Any]] = {}
         for layer in batch_graph.parallel_layers:
             fps = [root_by_name[n] for n in layer if n in root_by_name]
             if len(fps) <= 1:
                 for fp in fps:
-                    results[fp.factor_name] = engine.backend.execute(fp.root, ctx)
+                    result, path = _execute_root_with_path(engine.backend, fp.root, ctx)
+                    results[fp.factor_name] = result
+                    backend_paths[fp.factor_name] = path
             else:
                 raw = Parallel(n_jobs=workers, backend="threading")(
                     delayed(_one)(fp) for fp in fps
                 )
-                results.update(dict(raw))
+                for name, result, path in raw:
+                    results[name] = result
+                    backend_paths[name] = path
         for fp in dag.roots:
             if fp.factor_name not in results:
-                results[fp.factor_name] = engine.backend.execute(fp.root, ctx)
+                result, path = _execute_root_with_path(engine.backend, fp.root, ctx)
+                results[fp.factor_name] = result
+                backend_paths[fp.factor_name] = path
     parallel_out: dict[str, Any] = {
         "results": results,
         "dag": dag,
         "analyses": analyses,
     }
+    _attach_batch_backend_paths(parallel_out, backend_paths)
     if input_report is not None:
         parallel_out["input_dq"] = input_report.to_dict()
     if len(factors) > 1:

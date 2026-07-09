@@ -123,6 +123,25 @@ def test_ts_corr_sql():
     assert '"close"' in compiled.query and '"volume"' in compiled.query
 
 
+def test_ts_corr_sql_with_literal_window_input():
+    """窗口参数在 literal 子节点时也应可编译（DSL 常见形态）。"""
+    from backend.sql_pushdown.emitter import compile_plan_to_sql
+
+    plan = PlanNode(
+        op="ts_corr",
+        inputs=[_col("close"), _col("volume"), PlanNode(op="literal", attrs={"value": 3}, inputs=[])],
+        attrs={},
+    )
+    compiled = compile_plan_to_sql(
+        plan,
+        dataset="d",
+        time_column="t",
+        instrument_column="i",
+    )
+    assert compiled is not None
+    assert "corr" in compiled.query.lower()
+
+
 def test_group_neutralize_sql():
     from backend.sql_pushdown.emitter import compile_plan_to_sql
 

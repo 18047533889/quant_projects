@@ -13,7 +13,19 @@ class Backend(ABC):
 
     #: 为 True 时 ``FactorEngine.run`` 跳过列 prefetch（由 ``scan_polars_long`` 等原生读）
     prefers_native_scan: bool = False
+    #: 为 True 时 ``run_many`` 共享子树可仅编译 LazyFrame，defer collect
+    supports_lazy_shared: bool = False
 
     @abstractmethod
     def execute(self, plan: PlanNode, ctx: ExecutionContext) -> Any:
         raise NotImplementedError
+
+    def compile_lazy_shared(
+        self,
+        plan: PlanNode,
+        ctx: ExecutionContext,
+        *,
+        sid: str,
+    ) -> bool:
+        """CSE 共享子树：仅编译 long LazyFrame 写入 ``shared_long_lazy_cache``。"""
+        return False

@@ -16,6 +16,7 @@ from .panel_native import finalize_panel_result
 from .polars_backend import PolarsBackend
 from .polars_long_policy import (
     PolarsLongStrictError,
+    assert_native_only_plan,
     collect_plan_op_stats,
     long_path_telemetry_flags,
     strict_polars_long_fallback,
@@ -77,17 +78,69 @@ def _fallback_or_raise(
     return backend.execute(plan, ctx)
 
 
+def _fresh_long_runtime(runtime: dict[str, Any]) -> dict[str, Any]:
+    """每次 ``execute`` 开始时清除上一轮 long-path 标记，避免 batch 污染。"""
+    out = dict(runtime)
+    for key in (
+        "used_polars_long_path",
+        "used_polars_long_native",
+        "used_polars_long_map_groups",
+        "used_polars_long_registry",
+        "used_polars_long_passthrough",
+        "polars_long_columns",
+        "polars_long_native_ops",
+        "polars_long_map_group_ops",
+        "polars_long_registry_ops",
+        "polars_long_passthrough_ops",
+        "polars_long_other_ops",
+        "polars_long_fallback_reason",
+        "polars_long_fallback_plan_op",
+        "polars_long_fallback_exception_type",
+    ):
+        out.pop(key, None)
+    return out
+
+
 class PolarsLongBackend(Backend):
     """Long-table native Polars：``scan_polars_long`` → expr emitter → 一次 collect。"""
 
     prefers_native_scan = True
+    supports_lazy_shared = True
 
     def __init__(self) -> None:
         self._fallback = PolarsBackend()
 
+    def compile_lazy_shared(
+        self,
+        plan: PlanNode,
+        ctx: ExecutionContext,
+        *,
+        sid: str,
+    ) -> bool:
+        """CSE 共享子树：编译 LazyFrame 写入 ``shared_long_lazy_cache``，不 collect。"""
+        scan_fn = getattr(ctx.data_source, "scan_polars_long", None) if ctx.data_source else None
+        if not callable(scan_fn):
+            return False
+
+        from .polars_expr_emitter import (
+            compile_polars_long_lazy,
+            plan_is_polars_long_capable,
+            resolve_base_lazy_for_plan,
+        )
+
+        if not plan_is_polars_long_capable(plan):
+            return False
+
+        try:
+            base_lf = resolve_base_lazy_for_plan(plan, ctx, scan_fn)
+            compile_polars_long_lazy(plan, ctx, base_lf=base_lf, lazy_cache_key=str(sid))
+            return True
+        except Exception:
+            return False
+
     def execute(self, plan: PlanNode, ctx: ExecutionContext) -> Any:
         root_ctx = ctx
-        runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+        runtime = _fresh_long_runtime(dict(getattr(ctx, "runtime_stats", None) or {}))
         runtime["backend"] = "polars_long"
         ctx = replace(ctx, runtime_stats=runtime)
 
@@ -130,6 +183,7 @@ class PolarsLongBackend(Backend):
                 lazy_cache_key=lazy_key,
             )
             op_stats = collect_plan_op_stats(plan)
+            assert_native_only_plan(op_stats, ctx)
             telemetry = long_path_telemetry_flags(op_stats)
             _record_long_stats(
                 ctx,

@@ -21,6 +21,8 @@ class ExecutionContext:
     shared_long_lazy_cache: dict[str, Any] | None = None
     #: SQL partial pushdown 物化列的 long-table LazyFrame ``sid -> LazyFrame``
     materialized_long_lazy: dict[str, Any] | None = None
+    #: HybridLongBackend：SQL 子树优先物化为 long LazyFrame
+    materialize_sql_as_long_lazy: bool = False
     #: Series id → 宽表 panel，避免同一子树重复 unstack
     panel_cache: dict[int, Any] | None = None
     #: panel-native 模式下，最终 stack 对齐用的 MultiIndex Series 模板

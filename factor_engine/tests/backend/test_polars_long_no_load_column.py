@@ -1,5 +1,5 @@
 # -*- coding: utf-8
-"""polars_long 不得在最后偷偷 ``load_column``。"""
+"""polars_long 不得调用 load_column / load_columns / prefetch_columns。"""
 from __future__ import annotations
 
 import pandas as pd
@@ -15,16 +15,20 @@ from cleaned_operators import load_all
 from runtime.engine import FactorEngine
 
 
-class _ScanOnlySource:
-    """仅提供 ``scan_polars_long``；``load_column`` 一调用即失败。"""
+class NoLoadColumnSource:
+    """仅 ``scan_polars_long``；任何列读取/prefetch 一调用即失败。"""
 
     def __init__(self, data: dict[str, pd.Series]) -> None:
         self._data = data
-        self.load_column_calls = 0
 
     def load_column(self, name: str):
-        self.load_column_calls += 1
-        raise AssertionError(f"polars_long must not call load_column({name!r})")
+        raise AssertionError(f"load_column must not be called: {name!r}")
+
+    def load_columns(self, names: list[str]):
+        raise AssertionError(f"load_columns must not be called: {names!r}")
+
+    def prefetch_columns(self, names: list[str]):
+        raise AssertionError(f"prefetch_columns must not be called: {names!r}")
 
     def scan_polars_long(self, columns: list[str]):
         import polars as pl
@@ -49,6 +53,9 @@ class _ScanOnlySource:
         renamed = merged.rename(columns={tcol: "ts", icol: "inst"})
         return pl.from_pandas(renamed).lazy()
 
+    def scan_index_long(self):
+        return self.scan_polars_long(sorted(self._data.keys())).select(["ts", "inst"]).unique()
+
 
 @pytest.fixture(scope="module")
 def source():
@@ -57,32 +64,38 @@ def source():
         [
             (pd.Timestamp("2024-01-01"), "A"),
             (pd.Timestamp("2024-01-02"), "A"),
+            (pd.Timestamp("2024-01-03"), "A"),
             (pd.Timestamp("2024-01-01"), "B"),
             (pd.Timestamp("2024-01-02"), "B"),
+            (pd.Timestamp("2024-01-03"), "B"),
         ],
         names=["timestamp", "instrument"],
     )
-    close = pd.Series([10.0, 11.0, 20.0, 21.0], index=idx)
-    return _ScanOnlySource(data={"close": close})
+    close = pd.Series([10.0, 11.0, 10.5, 20.0, 21.0, 20.5], index=idx)
+    volume = pd.Series([100.0, 110.0, 105.0, 200.0, 210.0, 205.0], index=idx)
+    return NoLoadColumnSource(data={"close": close, "volume": volume})
 
 
-def test_polars_long_does_not_load_column(source):
-    expr = make_cleaned_call_factory("ts_mean")(col("close"), 2)
+@pytest.mark.parametrize(
+    "factory_name,expr_builder",
+    [
+        ("ts_mean", lambda: make_cleaned_call_factory("ts_mean")(col("close"), 5)),
+        (
+            "protected_div",
+            lambda: make_cleaned_call_factory("protected_div")(col("close"), col("volume")),
+        ),
+        (
+            "add_combo",
+            lambda: make_cleaned_call_factory("add")(
+                make_cleaned_call_factory("ts_mean")(col("close"), 2),
+                make_cleaned_call_factory("ts_delta")(col("close"), 1),
+            ),
+        ),
+    ],
+)
+def test_polars_long_never_loads_columns(source, factory_name, expr_builder):
     eng = FactorEngine(backend=build_backend("polars_long"), data_source=source)
-    out = eng.run(Factor(name="t", expr=expr))
+    out = eng.run(Factor(name="t", expr=expr_builder()))
     assert out.get("used_polars_long_path") is True
-    assert out.get("used_polars_long_native") is True
-    assert source.load_column_calls == 0
-    assert len(out["result"]) == 4
-
-
-def test_polars_long_prefetch_skipped(source):
-    from planner.sql_io import should_skip_column_prefetch
-    from api.factor import Factor
-    from api.cleaned_ops import make_cleaned_call_factory
-    from api.columns import col
-
-    factor = Factor(name="t", expr=make_cleaned_call_factory("ts_mean")(col("close"), 2))
-    eng = FactorEngine(backend=build_backend("polars_long"), data_source=source)
-    plan, _ = eng.compile(factor)
-    assert should_skip_column_prefetch([plan], input_dq_check=False, backend=eng.backend)
+    assert not out.get("polars_long_fallback_reason")
+    assert len(out["result"]) == 6

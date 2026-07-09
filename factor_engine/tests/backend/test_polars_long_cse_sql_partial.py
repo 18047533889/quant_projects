@@ -103,6 +103,58 @@ def test_plan_ref_reuses_lazy_cache_no_pandas_roundtrip(source, monkeypatch):
     assert calls["count"] == 0
 
 
+def test_run_many_shared_lazy_only_defers_collect(source, monkeypatch):
+    """CSE 共享子树应 compile-only，不在 shared 阶段 collect。"""
+    import polars as pl
+
+    collect_count = {"n": 0}
+    orig_collect = pl.LazyFrame.collect
+
+    def counting_collect(self, *args, **kwargs):
+        collect_count["n"] += 1
+        return orig_collect(self, *args, **kwargs)
+
+    monkeypatch.setattr(pl.LazyFrame, "collect", counting_collect)
+
+    sub = ts_mean(col("close"), 2)
+    f1 = Factor(name="a", expr=sub)
+    f2 = Factor(name="b", expr=rank(sub))
+    eng = FactorEngine(backend=build_backend("polars_long"), data_source=source)
+    out = eng.run_many([f1, f2])
+    assert len(out["dag"].shared_nodes) >= 1
+    assert not out.get("production_pandas_fallbacks")
+    # shared compile-only + 两个 root 各 collect 一次
+    assert collect_count["n"] == 2
+
+
+def test_run_many_shared_lazy_only_skips_series_cache(source):
+    """lazy-only 共享子树不应写入 ``shared_result_cache``。"""
+    captured: dict[str, ExecutionContext] = {}
+
+    sub = ts_mean(col("close"), 2)
+    f1 = Factor(name="a", expr=sub)
+    f2 = Factor(name="b", expr=rank(sub))
+    eng = FactorEngine(backend=build_backend("polars_long"), data_source=source)
+    orig_make = eng._make_context
+
+    def hook(**kwargs):
+        ctx = orig_make(**kwargs)
+        captured["ctx"] = ctx
+        return ctx
+
+    eng._make_context = hook  # type: ignore[method-assign]
+    out = eng.run_many([f1, f2])
+    assert len(out["dag"].shared_nodes) >= 1
+    ctx = captured["ctx"]
+    ts_shared_sids = [
+        sid for sid, sub in out["dag"].shared_nodes.items() if sub.op == "ts_mean"
+    ]
+    assert ts_shared_sids
+    for sid in ts_shared_sids:
+        assert sid not in (ctx.shared_result_cache or {})
+        assert sid in (ctx.shared_long_lazy_cache or {})
+
+
 def test_binary_column_fusion_from_wide_base(source):
     """两列二元 op 应直接宽表 expr，结果与 pandas 一致。"""
     close = source.data["close"]

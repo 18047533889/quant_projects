@@ -102,3 +102,36 @@ def test_polars_long_data_access_scan_end_to_end(tmp_path, monkeypatch):
         rtol=1e-6,
         atol=1e-6,
     )
+
+
+def test_scan_index_long_align_without_load_column(tmp_path, monkeypatch):
+    """``FACTOR_ENGINE_POLARS_LONG_ALIGN_UNIVERSE=1`` 时按 scan_index_long 对齐，不 load_column。"""
+    import os
+
+    monkeypatch.setenv("DATA_ACCESS_CONFIG", str(_registry(tmp_path, tmp_path / "data")))
+    _seed(tmp_path / "data")
+    os.environ["FACTOR_ENGINE_POLARS_LONG_ALIGN_UNIVERSE"] = "1"
+
+    load_calls: list[str] = []
+
+    source = build_data_source({"type": "data_access", "dataset": "test_daily", "long_table": True})
+    orig_load = source.load_column
+
+    def _track_load(name: str):
+        load_calls.append(name)
+        return orig_load(name)
+
+    source.load_column = _track_load  # type: ignore[method-assign]
+
+    try:
+        expr = make_cleaned_call_factory("ts_mean")(col("Close"), 3)
+        long_out = FactorEngine(backend=build_backend("polars_long"), data_source=source).run(
+            Factor(name="t", expr=expr)
+        )
+        assert long_out.get("used_polars_long_path") is True
+        assert load_calls == []
+        idx = long_out["result"].sort_index().index
+        assert len(idx) == 10
+    finally:
+        os.environ.pop("FACTOR_ENGINE_POLARS_LONG_ALIGN_UNIVERSE", None)
+
