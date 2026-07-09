@@ -113,7 +113,15 @@ class TwoVarOperator(Operator):
         return self._calculate_series(x, y, **kwargs)
 
 
-def register_operator(name: str = None, category: str = "general", business_category: str = "", canonical: str = "", source: str = ""):
+def register_operator(
+    name: str = None,
+    category: str = "general",
+    business_category: str = "",
+    canonical: str = "",
+    source: str = "",
+    backend: str = "polars",
+    status: str = "implemented",
+):
     """操作符装饰器"""
     def decorator(cls):
         instance = cls()
@@ -126,7 +134,14 @@ def register_operator(name: str = None, category: str = "general", business_cate
         canon = canonical or (name if name else cls.__name__)
         from cleaned_operators.registry import OperatorRegistry
         name_aliases = [name] if name and name != canon else None
-        OperatorRegistry.register(instance, canonical=canon, backend="polars", source=source or "factor_dsl_np", aliases=name_aliases)
+        OperatorRegistry.register(
+            instance,
+            canonical=canon,
+            backend=backend,
+            source=source or "factor_dsl_np",
+            aliases=name_aliases,
+            status=status,
+        )
         return cls
     return decorator
 

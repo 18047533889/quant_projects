@@ -10,6 +10,9 @@ run:
   trim_warmup: true
   calendar: us
 
+pipeline:
+  batched_engine: true
+
 dq:
   profile: us_equity_daily_prod
   strict: true

@@ -124,6 +124,52 @@ class SharpeRatio(SeriesOperator):
         return (mean / std.replace(0, np.nan)) * np.sqrt(252)
 
 
+@register_operator(
+    name="open_gap",
+    category="price_volume",
+    business_category="price_volume",
+    canonical="open_gap",
+    source="factor_dsl_np",
+)
+class OpenGap(SeriesOperator):
+    """开盘缺口：open / prev_close - 1。"""
+
+    metadata = OperatorMetadata(
+        name="open_gap",
+        category="price_volume",
+        description="开盘缺口收益率：open / delay(close, 1) - 1",
+        param_names=["open", "close"],
+        return_type="series",
+        tags=["price_volume", "gap", "pit_safe"],
+    )
+
+    def _calculate_series(self, open_: pd.DataFrame, close: pd.DataFrame, **kwargs) -> pd.DataFrame:
+        prev_close = close.shift(1)
+        return open_ / prev_close.replace(0, np.nan) - 1.0
+
+
+@register_operator(
+    name="close_gap",
+    category="price_volume",
+    business_category="price_volume",
+    canonical="close_gap",
+    source="factor_dsl_np",
+)
+class CloseGap(SeriesOperator):
+    """日内缺口：close / open - 1。"""
+
+    metadata = OperatorMetadata(
+        name="close_gap",
+        category="price_volume",
+        description="日内收益率：close / open - 1",
+        param_names=["close", "open"],
+        return_type="series",
+        tags=["price_volume", "gap", "pit_safe"],
+    )
+
+    def _calculate_series(self, close: pd.DataFrame, open_: pd.DataFrame, **kwargs) -> pd.DataFrame:
+        return close / open_.replace(0, np.nan) - 1.0
+
 
 # canonical=volatility backend=pandas_numpy selected=volatility source=financial/__init__.py
 @register_operator(name="volatility", category="financial", business_category="price_volume", canonical="volatility", source="factor_dsl_np")
@@ -139,8 +185,11 @@ class Volatility(SeriesOperator):
         tags=["financial", "volatility", "std"]
     )
 
-    def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
-        return x.rolling(window=window, min_periods=1).std() * np.sqrt(252)
+    def _calculate_series(self, x: pd.DataFrame, window: int = 20, min_periods: int | None = None, **kwargs) -> pd.DataFrame:
+        w = int(window)
+        mp = int(min_periods) if min_periods is not None else max(2, w // 2)
+        mp = max(2, mp)
+        return x.rolling(window=w, min_periods=mp).std() * np.sqrt(252)
 
 
 
@@ -159,130 +208,210 @@ class VWAP(SeriesOperator):
 
     def _calculate_series(self, price: pd.DataFrame, volume: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
         pv = price * volume
-        return pv.rolling(window=window, min_periods=1).sum() / volume.rolling(window=window, min_periods=1).sum()
+        den = volume.rolling(window=window, min_periods=1).sum().replace(0, np.nan)
+        return pv.rolling(window=window, min_periods=1).sum() / den
 
 
-@register_operator(name="rolling_beta_to_market", category="price_volume", business_category="price_volume", canonical="rolling_beta_to_market", source="factor_dsl_np")
+@register_operator(
+    name="rolling_beta",
+    category="price_volume",
+    business_category="price_volume",
+    canonical="rolling_beta",
+    source="factor_dsl_np",
+)
+class RollingBetaOp(SeriesOperator):
+    """滚动 Beta：Cov(ret, benchmark_ret) / Var(benchmark_ret)。"""
+
+    metadata = OperatorMetadata(
+        name="rolling_beta",
+        category="price_volume",
+        description="滚动 Beta：Cov(ret, benchmark_ret) / Var(benchmark_ret)",
+        param_names=["ret", "benchmark_ret", "window"],
+        return_type="series",
+        tags=["price_volume", "beta", "pit_safe"],
+    )
+
+    def _calculate_series(
+        self,
+        ret: pd.DataFrame,
+        benchmark_ret: pd.DataFrame,
+        window: int = 60,
+        min_periods: int | None = None,
+        **kwargs,
+    ) -> pd.DataFrame:
+        from cleaned_operators.price_volume.beta_helpers import compute_rolling_beta
+
+        return compute_rolling_beta(ret, benchmark_ret, window, min_periods=min_periods)
+
+
+@register_operator(
+    name="rolling_beta_to_market",
+    category="price_volume",
+    business_category="price_volume",
+    canonical="rolling_beta_to_market",
+    source="factor_dsl_np",
+    status="experimental",
+)
 class LqtpRollingbetatomarketOp(SeriesOperator):
     metadata = OperatorMetadata(
         name="rolling_beta_to_market",
         category="price_volume",
-        description="滚动市场 Beta：Cov(r_i, r_m) / Var(r_m)",
-        param_names=[],
+        description="[experimental] 滚动市场 Beta；请优先使用 rolling_beta(ret, benchmark, window)",
+        param_names=["ret", "benchmark_ret", "window"],
         return_type="series",
     )
 
-    def _calculate_series(self, *args, **kwargs):
-        from cleaned_operators._numpy_kernels import rolling_beta_to_market_
-        # 兼容 DataFrame 输入：逐列应用 numpy 函数
-        if len(args) == 1 and hasattr(args[0], "apply"):
-            return args[0].apply(lambda s: rolling_beta_to_market_(s.values, **kwargs) if kwargs else rolling_beta_to_market_(s.values))
-        return rolling_beta_to_market_(*args, **kwargs)
+    def _calculate_series(self, ret, benchmark_ret=None, window: int = 60, **kwargs):
+        from cleaned_operators.price_volume.beta_helpers import compute_rolling_beta
+
+        if benchmark_ret is None:
+            raise ValueError(
+                "rolling_beta_to_market 需要 (ret, benchmark_ret, window)；"
+                "请改用 rolling_beta(ret, benchmark_ret, window)"
+            )
+        return compute_rolling_beta(ret, benchmark_ret, window)
 
 
-@register_operator(name="downside_beta", category="price_volume", business_category="price_volume", canonical="downside_beta", source="factor_dsl_np")
+@register_operator(name="downside_beta", category="price_volume", business_category="price_volume", canonical="downside_beta", source="factor_dsl_np", status="experimental")
 class LqtpDownsidebetaOp(SeriesOperator):
     metadata = OperatorMetadata(
         name="downside_beta",
         category="price_volume",
-        description="下行 Beta：仅在 r_m < 0 子样本上估计",
-        param_names=[],
+        description="下行 Beta：仅在 benchmark_ret < 0 子样本上估计",
+        param_names=["ret", "benchmark_ret", "window"],
         return_type="series",
+        tags=["price_volume", "capm", "pit_safe"],
     )
 
-    def _calculate_series(self, *args, **kwargs):
+    def _calculate_series(
+        self,
+        ret: pd.DataFrame,
+        benchmark_ret: pd.DataFrame | None = None,
+        window: int = 60,
+        **kwargs,
+    ) -> pd.DataFrame:
         from cleaned_operators._numpy_kernels import downside_beta_
-        # 兼容 DataFrame 输入：逐列应用 numpy 函数
-        if len(args) == 1 and hasattr(args[0], "apply"):
-            return args[0].apply(lambda s: downside_beta_(s.values, **kwargs) if kwargs else downside_beta_(s.values))
-        return downside_beta_(*args, **kwargs)
+        from cleaned_operators.price_volume.capm_helpers import apply_capm_kernel_panel
+
+        return apply_capm_kernel_panel(ret, benchmark_ret, window, downside_beta_)
 
 
-@register_operator(name="tail_beta", category="price_volume", business_category="price_volume", canonical="tail_beta", source="factor_dsl_np")
+@register_operator(name="tail_beta", category="price_volume", business_category="price_volume", canonical="tail_beta", source="factor_dsl_np", status="experimental")
 class LqtpTailbetaOp(SeriesOperator):
     metadata = OperatorMetadata(
         name="tail_beta",
         category="price_volume",
-        description="尾部 Beta：在市场收益最低 q 分位子样本上估计",
-        param_names=[],
+        description="尾部 Beta：在 benchmark_ret 最低 q 分位子样本上估计",
+        param_names=["ret", "benchmark_ret", "window", "q"],
         return_type="series",
+        tags=["price_volume", "capm", "pit_safe"],
     )
 
-    def _calculate_series(self, *args, **kwargs):
+    def _calculate_series(
+        self,
+        ret: pd.DataFrame,
+        benchmark_ret: pd.DataFrame | None = None,
+        window: int = 60,
+        q: float = 0.05,
+        **kwargs,
+    ) -> pd.DataFrame:
         from cleaned_operators._numpy_kernels import tail_beta_
-        # 兼容 DataFrame 输入：逐列应用 numpy 函数
-        if len(args) == 1 and hasattr(args[0], "apply"):
-            return args[0].apply(lambda s: tail_beta_(s.values, **kwargs) if kwargs else tail_beta_(s.values))
-        return tail_beta_(*args, **kwargs)
+        from cleaned_operators.price_volume.capm_helpers import apply_capm_kernel_panel
+
+        return apply_capm_kernel_panel(ret, benchmark_ret, window, tail_beta_, q=float(q))
 
 
-@register_operator(name="residual_momentum_capm", category="price_volume", business_category="price_volume", canonical="residual_momentum_capm", source="factor_dsl_np")
+@register_operator(name="residual_momentum_capm", category="price_volume", business_category="price_volume", canonical="residual_momentum_capm", source="factor_dsl_np", status="experimental")
 class LqtpResidualmomentumcapmOp(SeriesOperator):
     metadata = OperatorMetadata(
         name="residual_momentum_capm",
         category="price_volume",
         description="CAPM 残差动量：窗口内回归残差之和",
-        param_names=[],
+        param_names=["ret", "benchmark_ret", "window"],
         return_type="series",
+        tags=["price_volume", "capm", "pit_safe"],
     )
 
-    def _calculate_series(self, *args, **kwargs):
+    def _calculate_series(
+        self,
+        ret: pd.DataFrame,
+        benchmark_ret: pd.DataFrame | None = None,
+        window: int = 60,
+        **kwargs,
+    ) -> pd.DataFrame:
         from cleaned_operators._numpy_kernels import residual_momentum_capm_
-        # 兼容 DataFrame 输入：逐列应用 numpy 函数
-        if len(args) == 1 and hasattr(args[0], "apply"):
-            return args[0].apply(lambda s: residual_momentum_capm_(s.values, **kwargs) if kwargs else residual_momentum_capm_(s.values))
-        return residual_momentum_capm_(*args, **kwargs)
+        from cleaned_operators.price_volume.capm_helpers import apply_capm_kernel_panel
+
+        return apply_capm_kernel_panel(ret, benchmark_ret, window, residual_momentum_capm_)
 
 
-@register_operator(name="coskewness_to_market", category="price_volume", business_category="price_volume", canonical="coskewness_to_market", source="factor_dsl_np")
+@register_operator(name="coskewness_to_market", category="price_volume", business_category="price_volume", canonical="coskewness_to_market", source="factor_dsl_np", status="experimental")
 class LqtpCoskewnesstomarketOp(SeriesOperator):
     metadata = OperatorMetadata(
         name="coskewness_to_market",
         category="price_volume",
         description="相对市场的协偏度",
-        param_names=[],
+        param_names=["ret", "benchmark_ret", "window"],
         return_type="series",
+        tags=["price_volume", "capm", "pit_safe"],
     )
 
-    def _calculate_series(self, *args, **kwargs):
+    def _calculate_series(
+        self,
+        ret: pd.DataFrame,
+        benchmark_ret: pd.DataFrame | None = None,
+        window: int = 60,
+        **kwargs,
+    ) -> pd.DataFrame:
         from cleaned_operators._numpy_kernels import coskewness_to_market_
-        # 兼容 DataFrame 输入：逐列应用 numpy 函数
-        if len(args) == 1 and hasattr(args[0], "apply"):
-            return args[0].apply(lambda s: coskewness_to_market_(s.values, **kwargs) if kwargs else coskewness_to_market_(s.values))
-        return coskewness_to_market_(*args, **kwargs)
+        from cleaned_operators.price_volume.capm_helpers import apply_capm_kernel_panel
+
+        return apply_capm_kernel_panel(ret, benchmark_ret, window, coskewness_to_market_)
 
 
-@register_operator(name="idio_vol", category="price_volume", business_category="price_volume", canonical="idio_vol", source="factor_dsl_np")
+@register_operator(name="idio_vol", category="price_volume", business_category="price_volume", canonical="idio_vol", source="factor_dsl_np", status="experimental")
 class LqtpIdiovolOp(SeriesOperator):
     metadata = OperatorMetadata(
         name="idio_vol",
         category="price_volume",
-        description="特质波动率：CAPM 残差标准差",
-        param_names=[],
+        description="特质波动率：CAPM 残差滚动标准差",
+        param_names=["ret", "benchmark_ret", "window"],
         return_type="series",
+        tags=["price_volume", "capm", "pit_safe"],
     )
 
-    def _calculate_series(self, *args, **kwargs):
+    def _calculate_series(
+        self,
+        ret: pd.DataFrame,
+        benchmark_ret: pd.DataFrame | None = None,
+        window: int = 60,
+        **kwargs,
+    ) -> pd.DataFrame:
         from cleaned_operators._numpy_kernels import idio_vol_
-        # 兼容 DataFrame 输入：逐列应用 numpy 函数
-        if len(args) == 1 and hasattr(args[0], "apply"):
-            return args[0].apply(lambda s: idio_vol_(s.values, **kwargs) if kwargs else idio_vol_(s.values))
-        return idio_vol_(*args, **kwargs)
+        from cleaned_operators.price_volume.capm_helpers import apply_capm_kernel_panel
+
+        return apply_capm_kernel_panel(ret, benchmark_ret, window, idio_vol_)
 
 
-@register_operator(name="idio_skew", category="price_volume", business_category="price_volume", canonical="idio_skew", source="factor_dsl_np")
+@register_operator(name="idio_skew", category="price_volume", business_category="price_volume", canonical="idio_skew", source="factor_dsl_np", status="experimental")
 class LqtpIdioskewOp(SeriesOperator):
     metadata = OperatorMetadata(
         name="idio_skew",
         category="price_volume",
-        description="特质偏度：CAPM 残差偏度",
-        param_names=[],
+        description="特质偏度：CAPM 残差滚动偏度",
+        param_names=["ret", "benchmark_ret", "window"],
         return_type="series",
+        tags=["price_volume", "capm", "pit_safe"],
     )
 
-    def _calculate_series(self, *args, **kwargs):
+    def _calculate_series(
+        self,
+        ret: pd.DataFrame,
+        benchmark_ret: pd.DataFrame | None = None,
+        window: int = 60,
+        **kwargs,
+    ) -> pd.DataFrame:
         from cleaned_operators._numpy_kernels import idio_skew_
-        # 兼容 DataFrame 输入：逐列应用 numpy 函数
-        if len(args) == 1 and hasattr(args[0], "apply"):
-            return args[0].apply(lambda s: idio_skew_(s.values, **kwargs) if kwargs else idio_skew_(s.values))
-        return idio_skew_(*args, **kwargs)
+        from cleaned_operators.price_volume.capm_helpers import apply_capm_kernel_panel
+
+        return apply_capm_kernel_panel(ret, benchmark_ret, window, idio_skew_)

@@ -51,7 +51,7 @@ class FillBackward(SeriesOperator):
 
 
 # canonical=dropna backend=pandas_numpy selected=dropna source=data_handling/missing_values.py
-@register_operator(name="dropna", category="data_handling", business_category="data_cleaning", canonical="dropna", source="factor_dsl_np")
+@register_operator(name="dropna", category="data_handling", business_category="data_cleaning", canonical="dropna", source="factor_dsl_np", status="research")
 class DropNA(SeriesOperator):
     """删除缺失值"""
 
@@ -556,9 +556,10 @@ class ProtectedDivOp(TwoVarOperator):
     metadata = OperatorMetadata(
         name="protected_div",
         category="data_cleaning",
-        description="Basic runtime operator",
-        param_names=[],
+        description="安全除法：|y|<=epsilon 时返回 default",
+        param_names=["x", "y", "epsilon", "default"],
         return_type="series",
+        tags=["data_cleaning", "pit_safe"],
     )
 
     def _calculate_series(self, x, y, epsilon=1e-12, default=0.0, **kwargs):
@@ -573,9 +574,10 @@ class ProtectedLogOp(SeriesOperator):
     metadata = OperatorMetadata(
         name="protected_log",
         category="data_cleaning",
-        description="Basic runtime operator",
-        param_names=[],
+        description="安全对数：log(max(x, epsilon))",
+        param_names=["x", "epsilon"],
         return_type="series",
+        tags=["data_cleaning", "pit_safe"],
     )
 
     def _calculate_series(self, x, epsilon=1e-12, **kwargs):
@@ -589,9 +591,10 @@ class ProtectedSqrtOp(SeriesOperator):
     metadata = OperatorMetadata(
         name="protected_sqrt",
         category="data_cleaning",
-        description="Basic runtime operator",
-        param_names=[],
+        description="安全平方根：sqrt(max(x, 0))",
+        param_names=["x"],
         return_type="series",
+        tags=["data_cleaning", "pit_safe"],
     )
 
     def _calculate_series(self, x, **kwargs):

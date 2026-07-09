@@ -39,12 +39,33 @@ class PolarsBackend(PandasBackend):
 
     def execute(self, plan: PlanNode, ctx: ExecutionContext) -> Any:
         ctx = self._with_polars_perf(ctx)
+        if self._use_lazy and ctx.data_source is not None:
+            enable = getattr(ctx.data_source, "enable_lazy_scan", None)
+            if callable(enable):
+                enable(True)
+            elif hasattr(ctx.data_source, "read_auto"):
+                ctx.data_source.read_auto = True
         if ctx.panel_cache is None:
             ctx = replace(ctx, panel_cache={})
         runtime = dict(getattr(ctx, "runtime_stats", None) or {})
         runtime["backend"] = "polars"
-        ctx = replace(ctx, runtime_stats=runtime)
-        return finalize_panel_result(self._eval(plan, ctx), ctx)
+        if self._use_lazy:
+            runtime["lazy_scan"] = True
+        ctx = replace(ctx, runtime_stats=runtime, prefer_polars_panel=True)
+        result = finalize_panel_result(self._eval(plan, ctx), ctx)
+        from runtime.production_policy import assert_no_production_pandas_fallbacks
+
+        assert_no_production_pandas_fallbacks(ctx, context="polars_execute")
+        return result
+
+    def execute_lazy(self, plan: PlanNode, ctx: ExecutionContext) -> Any:
+        """显式 lazy scan 入口（等价于 ``use_lazy=True`` 的 ``execute``）。"""
+        prev = self._use_lazy
+        self._use_lazy = True
+        try:
+            return self.execute(plan, ctx)
+        finally:
+            self._use_lazy = prev
 
     @staticmethod
     def _with_polars_perf(ctx: ExecutionContext) -> ExecutionContext:

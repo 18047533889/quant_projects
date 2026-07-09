@@ -353,8 +353,8 @@ Phase 20 — 编排与性能门禁（已完成）
 ├── `task_queue.shard_config_paths` 委托分片模块 ✅
 ├── `tests/perf/test_regression_gate.py`：compile/run_many smoke 门禁 ✅
 ├── `tests/test_dependency_graph_shard.py` ✅
-├── 增量 by data event ⏳
-└── 分布式物化 worker 编排 ⏳
+├── 增量 by data event ✅
+└── 分布式物化 worker 编排（queue worker + systemd/K8s）✅
 
 Phase 21 — 减少重复 + 宽矩阵 + 分片物化（已完成）
 ├── `cache/column_cache.py` + `cache/cache_policy.py`：列缓存 scope key ✅
@@ -384,6 +384,60 @@ Phase 23 — 事件驱动执行 + 算子代价（已完成）
 ├── `run_many` 返回 `plan_costs` 摘要 ✅
 ├── 分钟数据集 `layout_policy.bucket`（ashare / us_sip minute）✅
 └── `tests/test_phase23_platform.py` ✅
+
+Phase 24 — 事件 CLI + read_auto + Numba（已完成）
+├── `pipeline_event.run_data_event`：编排入口 + 摘要落盘 ✅
+├── `run_pipeline.py event` 子命令 ✅
+├── `DataAccessSource.read_auto` + factory YAML 透传 ✅
+├── `PolarsBackend` lazy 模式自动启用 read_auto ✅
+├── `backend/numba_kernels.py`：`ts_rank` / `ts_corr` 可选加速 ✅
+├── `data_access/scripts/plan_bucket_migration.py`：bucket ETL 规划 ✅
+└── `tests/test_phase24_platform.py` ✅
+
+Phase A — 减少无效重复（已完成）
+├── `pipeline.batched_engine` + prod profile 默认开启 ✅
+├── production `engine.run()` → `run_many` 快路径委托 ✅
+├── `_execute_config` / `run_from_config` 走 batch ✅
+├── `planner/rolling_cse.py`：rolling 语义 CSE（别名 + column op）✅
+├── `cache/panel_cache.py` + `cache/expression_cache.py` ✅
+├── `FACTOR_ENGINE_RUN_MODE=production` → data_access `require_columns` ✅
+├── `PerfConfig.build_query_budget()` 统一走 `resolve_query_budget` ✅
+└── `tests/runtime/test_phase_a_platform.py` ✅
+
+Phase B — 数据布局 + 读路径（已完成）
+├── `ResultStore.load_matrix` + factor_matrix 读标准化 ✅
+├── stats `column_null_ratio` + input_dq 动态阈值 ✅
+├── `execute_bucket_migration.py` + `validate_bucket_migration.py` ✅
+├── `run_many` parallel_layers 调度 ✅
+├── 事件队列 `enqueue-event` + worker 分发 ✅
+└── `tests/runtime/test_phase_b_platform.py` ✅
+
+Phase C — Polars / Numba / 分片扩展（已完成）
+├── Numba `ts_mean` / `ts_std` / `ts_rank` + routing ✅
+├── Polars lazy scan 读路径 + `execute_lazy` ✅
+├── `materialize_sharded`：factor_id / asset_bucket / time_month ✅
+├── `store.params.bucket_values` 剪枝 ✅
+└── `tests/runtime/test_phase_c_platform.py` ✅
+
+Phase D — 依赖 Catalog + Perf CI（已完成）
+├── `runtime/dependency_catalog.py` + `run_pipeline deps` ✅
+├── 队列 `retry_or_fail` + worker poll/recover ✅
+├── `tests/performance/thresholds.yaml` + nightly smoke/slow ✅
+└── `tests/runtime/test_phase_d_platform.py` ✅
+
+Phase E — Bucket Playbook + 灰度切读（已完成）
+├── `run_bucket_migration.py` 一键 playbook ✅
+├── `DATA_ACCESS_READ_ROOT_*` 灰度切读 ✅
+├── Polars panel 路径 + `prefer_polars_panel` ✅
+├── `examples/ops/` systemd + README ✅
+└── `tests/runtime/test_phase_e_platform.py` ✅
+
+Phase F — 生产硬化（已完成）
+├── production pandas fallback 记录/告警 + 严格模式 ✅
+├── `planner/cost_summary.py` + run_many `cost_summary` ✅
+├── `emit_bucket_cutover_patch.py` YAML 补丁生成 ✅
+├── `examples/ops/fe-queue-worker-job.yaml` K8s Job ✅
+└── `tests/runtime/test_phase_f_platform.py` ✅
 
 Phase 11 — 生产地基（已完成）
 ```

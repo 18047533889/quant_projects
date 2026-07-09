@@ -98,7 +98,7 @@ DEDUPE_ALIASES: dict[str, str] = {
     "panel_rank": "rank",
     "panel_zscore": "zscore",
     "panel_standardize": "zscore",
-    "c_percentile": "rank",
+
     "industry_neutralize": "group_neutralize",
     "neutralize": "group_neutralize",
     "c_neutralize": "group_neutralize",
@@ -186,7 +186,6 @@ REMOVED_CANONICALS: tuple[str, ...] = (
     "panel_rank",
     "panel_zscore",
     "panel_standardize",
-    "c_percentile",
     "industry_neutralize",
     "neutralize",
     "panel_neutralize",

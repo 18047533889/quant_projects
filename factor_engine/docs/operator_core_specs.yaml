@@ -1,0 +1,891 @@
+- name: ATR_WILDER
+  scope: time_series
+  frequency: any
+  input_fields:
+  - high
+  - low
+  - close
+  - window
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: 2
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  description: Wilder 平均真实波幅
+- name: ts_corr
+  scope: time_series
+  frequency: any
+  input_fields:
+  - x
+  - y
+  - window
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: 1
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 滚动相关系数 (ts_correlation的别名)
+- name: ts_median
+  scope: time_series
+  frequency: any
+  input_fields:
+  - x
+  - window
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: 1
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 计算n期移动中位数
+- name: RSI_WILDER
+  scope: time_series
+  frequency: any
+  input_fields:
+  - x
+  - window
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: 2
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  description: Wilder 相对强弱指数
+- name: ts_var
+  scope: time_series
+  frequency: any
+  input_fields:
+  - x
+  - window
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: 1
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 计算n期移动方差
+- name: abs
+  scope: elementwise
+  frequency: any
+  input_fields:
+  - x
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 计算绝对值
+- name: add
+  scope: elementwise
+  frequency: any
+  input_fields: []
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: Basic runtime operator
+- name: clip
+  scope: elementwise
+  frequency: any
+  input_fields:
+  - x
+  - lo
+  - hi
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 裁剪到 [lo, hi] 区间
+- name: coalesce
+  scope: elementwise
+  frequency: any
+  input_fields:
+  - x
+  - y
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 返回第一个非 NaN 值
+- name: cs_demean
+  scope: cross_sectional
+  frequency: any
+  input_fields:
+  - x
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 截面数据减去均值
+- name: cs_regression
+  scope: cross_sectional
+  frequency: any
+  input_fields:
+  - y
+  - x
+  - mode
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: '截面回归: mode=0 残差, 1 beta, 2 拟合值'
+- name: cs_resid
+  scope: cross_sectional
+  frequency: any
+  input_fields:
+  - y
+  - x
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 截面线性回归残差 y - (α + βx)
+- name: ffill
+  scope: elementwise
+  frequency: any
+  input_fields:
+  - x
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: ffill_only
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 前向填充（用前值填充NaN）
+- name: divide
+  scope: elementwise
+  frequency: any
+  input_fields: []
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: Basic runtime operator
+- name: exp
+  scope: elementwise
+  frequency: any
+  input_fields:
+  - x
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 计算e的x次方
+- name: fillna_const
+  scope: elementwise
+  frequency: any
+  input_fields:
+  - x
+  - value
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 常量填充
+- name: group_mean
+  scope: cross_sectional
+  frequency: any
+  input_fields:
+  - x
+  - group
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 计算组内均值
+- name: group_neutralize
+  scope: cross_sectional
+  frequency: any
+  input_fields:
+  - x
+  - group
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 在指定分组内进行去均值处理 (x - group_mean)
+- name: group_rank
+  scope: cross_sectional
+  frequency: any
+  input_fields:
+  - x
+  - group
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 在指定分组内对股票进行排名，返回归一化排名(0-1)
+- name: group_zscore
+  scope: cross_sectional
+  frequency: any
+  input_fields:
+  - x
+  - group
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 在指定分组内进行Z-Score标准化 (x-mean)/std
+- name: where
+  scope: elementwise
+  frequency: any
+  input_fields:
+  - condition
+  - v1
+  - v2
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 条件选择（与if_else相同）
+- name: log
+  scope: elementwise
+  frequency: any
+  input_fields:
+  - x
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 计算自然对数（底数为e）
+- name: multiply
+  scope: elementwise
+  frequency: any
+  input_fields: []
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: Basic runtime operator
+- name: normalize
+  scope: cross_sectional
+  frequency: any
+  input_fields:
+  - x
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 归一化到[0, 1]
+- name: protected_div
+  scope: elementwise
+  frequency: any
+  input_fields:
+  - x
+  - y
+  - epsilon
+  - default
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 安全除法：|y|<=epsilon 时返回 default
+- name: protected_log
+  scope: elementwise
+  frequency: any
+  input_fields:
+  - x
+  - epsilon
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 安全对数：log(max(x, epsilon))
+- name: protected_sqrt
+  scope: elementwise
+  frequency: any
+  input_fields:
+  - x
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 安全平方根：sqrt(max(x, 0))
+- name: rank
+  scope: cross_sectional
+  frequency: any
+  input_fields:
+  - x
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 截面 0-1 排名（单有效值 → 0.5）；pandas 百分位排名见 rank_pct
+- name: rolling_beta
+  scope: time_series
+  frequency: any
+  input_fields:
+  - ret
+  - benchmark_ret
+  - window
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: 2
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  description: 滚动 Beta：Cov(ret, benchmark_ret) / Var(benchmark_ret)
+- name: scale
+  scope: cross_sectional
+  frequency: any
+  input_fields:
+  - x
+  - to
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 缩放数据使sum(abs(x))=指定值（与c_scale相同）
+- name: sign
+  scope: elementwise
+  frequency: any
+  input_fields:
+  - x
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 返回符号：正数返回1，负数返回-1，零返回0
+- name: sqrt
+  scope: elementwise
+  frequency: any
+  input_fields:
+  - x
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 计算平方根
+- name: subtract
+  scope: elementwise
+  frequency: any
+  input_fields: []
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: Basic runtime operator
+- name: ts_autocorr
+  scope: time_series
+  frequency: any
+  input_fields:
+  - x
+  - window
+  - lag
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: 3
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 滚动自相关 corr(x_t, x_{t-lag}) within window
+- name: ts_beta
+  scope: time_series
+  frequency: any
+  input_fields:
+  - y
+  - x
+  - window
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: 2
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 计算两变量的n期移动Beta
+- name: ts_decay_linear
+  scope: time_series
+  frequency: any
+  input_fields:
+  - x
+  - window
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: 1
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 线性加权滚动平均
+- name: ts_delay
+  scope: time_series
+  frequency: any
+  input_fields:
+  - x
+  - n
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: n期滞后 (与Ref相同)
+- name: ts_delta
+  scope: time_series
+  frequency: any
+  input_fields:
+  - x
+  - n
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: n期差分 (与Delta相同)
+- name: ts_ema
+  scope: time_series
+  frequency: any
+  input_fields:
+  - x
+  - span
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: 1
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 计算n期指数移动平均
+- name: ts_max
+  scope: time_series
+  frequency: any
+  input_fields:
+  - x
+  - window
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: 1
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 滚动最大值 (与m_max相同)
+- name: ts_mean
+  scope: time_series
+  frequency: any
+  input_fields:
+  - x
+  - window
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: 1
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 滚动均值 (与m_avg相同)
+- name: ts_min
+  scope: time_series
+  frequency: any
+  input_fields:
+  - x
+  - window
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: 1
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 滚动最小值 (与m_min相同)
+- name: ts_pct
+  scope: time_series
+  frequency: any
+  input_fields:
+  - x
+  - d
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: d 期变化率
+- name: ts_rank
+  scope: time_series
+  frequency: any
+  input_fields:
+  - x
+  - window
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: 1
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 滚动排名 (与m_rank相同)
+- name: ts_sharpe
+  scope: time_series
+  frequency: any
+  input_fields:
+  - x
+  - window
+  - ann_factor
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: 2
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 滚动夏普：mean/std * sqrt(ann_factor)
+- name: ts_std
+  scope: time_series
+  frequency: any
+  input_fields:
+  - x
+  - window
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: 1
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 滚动标准差 (ts_std_dev的别名)
+- name: ts_sum
+  scope: time_series
+  frequency: any
+  input_fields:
+  - x
+  - window
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: 1
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 滚动求和 (与m_sum相同)
+- name: ts_zscore
+  scope: time_series
+  frequency: any
+  input_fields:
+  - x
+  - window
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: 1
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 滚动Z-Score (与m_zscore相同)
+- name: winsorize
+  scope: cross_sectional
+  frequency: any
+  input_fields:
+  - x
+  - lower
+  - upper
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 缩尾处理
+- name: zscore
+  scope: cross_sectional
+  frequency: any
+  input_fields:
+  - x
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 对截面数据进行Z-Score标准化（与c_zscore相同）

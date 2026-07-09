@@ -75,17 +75,18 @@ class PerfConfig:
     query_max_result_bytes: int | None = None
 
     def build_query_budget(self) -> Any | None:
-        """构造 ``data_access.QueryBudget``；无显式限制时返回 ``None``。"""
-        if self.query_max_rows is None and self.query_max_result_bytes is None:
-            return None
+        """构造 ``data_access.QueryBudget``；production 强制显式 columns。"""
         try:
-            from data_access.query_budget import QueryBudget
+            from data_access.query_budget import QueryBudget, resolve_query_budget
         except ImportError:
             return None
-        return QueryBudget(
-            max_rows=self.query_max_rows,
-            max_result_bytes=self.query_max_result_bytes,
-        )
+        explicit: QueryBudget | None = None
+        if self.query_max_rows is not None or self.query_max_result_bytes is not None:
+            explicit = QueryBudget(
+                max_rows=self.query_max_rows,
+                max_result_bytes=self.query_max_result_bytes,
+            )
+        return resolve_query_budget(explicit)
 
     @classmethod
     def from_env(cls) -> "PerfConfig":

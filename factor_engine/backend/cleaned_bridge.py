@@ -28,6 +28,7 @@ from planner.logical_plan import PlanNode
 
 from .context import ExecutionContext
 from .panel_native import panel_native_enabled, to_panel
+from cache.panel_cache import series_panel_cache_key
 
 _CLEANED_LOADED = False
 
@@ -43,18 +44,13 @@ def ensure_cleaned_loaded() -> None:
     _CLEANED_LOADED = True
 
 
-def _series_panel_cache_key(s: pd.Series) -> tuple[Any, ...]:
-    """稳定 cache key：Series 身份 + index 身份 + 列名 + 长度。"""
-    name = getattr(s, "name", None)
-    return (id(s), id(s.index), str(name) if name is not None else "", len(s))
-
 
 def series_to_panel(s: pd.Series, ctx: ExecutionContext) -> pd.DataFrame:
     """``(timestamp, instrument)`` MultiIndex Series → 宽表（列=标的）。"""
     if not isinstance(s.index, pd.MultiIndex):
         raise TypeError("cleaned_bridge expects MultiIndex (timestamp, instrument) Series")
     cache = ctx.panel_cache
-    cache_key = _series_panel_cache_key(s)
+    cache_key = series_panel_cache_key(s)
     if cache is not None:
         hit = cache.get(cache_key)
         if hit is not None:
@@ -152,21 +148,28 @@ def _prepare_call_args(
     *,
     backend: str,
 ) -> tuple[list[Any], pd.Series | None, pd.DataFrame | None]:
+    from .panel_polars import is_polars_frame
+
     call_args: list[Any] = []
     template: pd.Series | None = None
     template_panel: pd.DataFrame | None = None
 
     for val in evaluated:
-        if isinstance(val, (pd.Series, pd.DataFrame)):
-            panel = to_panel(val, ctx)
-            if template_panel is None:
-                template_panel = panel
-            if backend == "polars":
-                from .panel_polars import panel_to_polars
-
-                call_args.append(panel_to_polars(panel))
-            else:
+        if isinstance(val, (pd.Series, pd.DataFrame)) or is_polars_frame(val):
+            panel = to_panel(val, ctx) if isinstance(val, pd.Series) else val
+            if is_polars_frame(panel):
+                if template_panel is None and isinstance(val, pd.Series):
+                    template_panel = val.unstack(level=ctx.instrument_col)
                 call_args.append(panel)
+            else:
+                if template_panel is None:
+                    template_panel = panel
+                if backend == "polars":
+                    from .panel_polars import panel_to_polars
+
+                    call_args.append(panel_to_polars(panel))
+                else:
+                    call_args.append(panel)
             if template is None and isinstance(val, pd.Series):
                 template = val
             elif template is None and getattr(ctx, "template_series", None) is not None:
@@ -214,6 +217,17 @@ def make_cleaned_kernel(eval_fn: Callable[[PlanNode, ExecutionContext], Any], op
         operator, backend = _resolve_operator(canonical, ctx)
         if operator is None:
             raise NotImplementedError(f"cleaned operator not implemented: {op!r}")
+
+        from backend.polars_hot_ops import is_polars_backend_ctx
+        from runtime.production_policy import record_production_pandas_fallback
+
+        if is_polars_backend_ctx(ctx) and backend == "pandas_numpy":
+            record_production_pandas_fallback(
+                ctx,
+                op=canonical,
+                requested_backend="polars",
+                actual_backend=backend,
+            )
 
         if backend == "polars":
             _record_polars_op(ctx, op)
@@ -285,6 +299,22 @@ def build_cleaned_dsl_allowlist(skip: set[str] | None = None) -> dict[str, Any]:
         if OperatorRegistry.get(canon) is None:
             continue
         out[alias] = make_cleaned_call_factory(canon)
+    return out
+
+
+def build_production_dsl_allowlist(skip: set[str] | None = None) -> dict[str, Any]:
+    """production 投递白名单：仅 ``OperatorSpec.allow_in_production`` 为真的算子。"""
+    from cleaned_operators.operator_spec import build_operator_spec
+
+    full = build_cleaned_dsl_allowlist(skip)
+    from cleaned_operators.registry import OperatorRegistry
+
+    out: dict[str, Any] = {}
+    for name, factory in full.items():
+        canon = OperatorRegistry._aliases.get(name, name)
+        spec = build_operator_spec(canon)
+        if spec is not None and spec.allow_in_production:
+            out[name] = factory
     return out
 
 

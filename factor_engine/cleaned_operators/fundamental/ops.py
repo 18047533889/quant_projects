@@ -25,58 +25,55 @@ from cleaned_operators.base import (
 )
 
 
-@register_operator(name="ttm", category="fundamental", business_category="fundamental", canonical="ttm", source="factor_dsl_np")
+@register_operator(name="ttm", category="fundamental", business_category="fundamental", canonical="ttm", source="factor_dsl_np", status="experimental")
 class LqtpTtmOp(SeriesOperator):
     metadata = OperatorMetadata(
         name="ttm",
         category="fundamental",
-        description="滚动十二个月（TTM）累加",
-        param_names=[],
+        description="滚动十二个月（TTM）累加；可选 fiscal_quarter(1-4) 对齐报告期",
+        param_names=["x", "fiscal_quarter"],
         return_type="series",
+        tags=["fundamental", "pit_safe"],
     )
 
-    def _calculate_series(self, *args, **kwargs):
-        from cleaned_operators._numpy_kernels import ttm_
-        # 兼容 DataFrame 输入：逐列应用 numpy 函数
-        if len(args) == 1 and hasattr(args[0], "apply"):
-            return args[0].apply(lambda s: ttm_(s.values, **kwargs) if kwargs else ttm_(s.values))
-        return ttm_(*args, **kwargs)
+    def _calculate_series(self, x: pd.DataFrame, fiscal_quarter: pd.DataFrame | None = None, **kwargs):
+        from cleaned_operators.fundamental.period_helpers import compute_ttm
+
+        return compute_ttm(x, fiscal_quarter)
 
 
-@register_operator(name="quarter", category="fundamental", business_category="fundamental", canonical="quarter", source="factor_dsl_np")
+@register_operator(name="quarter", category="fundamental", business_category="fundamental", canonical="quarter", source="factor_dsl_np", status="experimental")
 class LqtpQuarterOp(SeriesOperator):
     metadata = OperatorMetadata(
         name="quarter",
         category="fundamental",
-        description="累计值转单季度",
-        param_names=[],
+        description="累计值转单季度；Q1/跨年用当期值，其余期用差分；可选 fiscal_quarter",
+        param_names=["x", "fiscal_quarter"],
         return_type="series",
+        tags=["fundamental", "pit_safe"],
     )
 
-    def _calculate_series(self, *args, **kwargs):
-        from cleaned_operators._numpy_kernels import quarter_
-        # 兼容 DataFrame 输入：逐列应用 numpy 函数
-        if len(args) == 1 and hasattr(args[0], "apply"):
-            return args[0].apply(lambda s: quarter_(s.values, **kwargs) if kwargs else quarter_(s.values))
-        return quarter_(*args, **kwargs)
+    def _calculate_series(self, x: pd.DataFrame, fiscal_quarter: pd.DataFrame | None = None, **kwargs):
+        from cleaned_operators.fundamental.period_helpers import compute_quarter
+
+        return compute_quarter(x, fiscal_quarter)
 
 
-@register_operator(name="yoy", category="fundamental", business_category="fundamental", canonical="yoy", source="factor_dsl_np")
+@register_operator(name="yoy", category="fundamental", business_category="fundamental", canonical="yoy", source="factor_dsl_np", status="experimental")
 class LqtpYoyOp(SeriesOperator):
     metadata = OperatorMetadata(
         name="yoy",
         category="fundamental",
-        description="同比增速",
-        param_names=[],
+        description="同比增速；默认 lag=4，可选 fiscal_quarter 找同季度去年同期",
+        param_names=["x", "fiscal_quarter"],
         return_type="series",
+        tags=["fundamental", "pit_safe"],
     )
 
-    def _calculate_series(self, *args, **kwargs):
-        from cleaned_operators._numpy_kernels import yoy_
-        # 兼容 DataFrame 输入：逐列应用 numpy 函数
-        if len(args) == 1 and hasattr(args[0], "apply"):
-            return args[0].apply(lambda s: yoy_(s.values, **kwargs) if kwargs else yoy_(s.values))
-        return yoy_(*args, **kwargs)
+    def _calculate_series(self, x: pd.DataFrame, fiscal_quarter: pd.DataFrame | None = None, **kwargs):
+        from cleaned_operators.fundamental.period_helpers import compute_yoy
+
+        return compute_yoy(x, fiscal_quarter)
 
 
 @register_operator(name="avg2", category="fundamental", business_category="fundamental", canonical="avg2", source="factor_dsl_np")
@@ -84,14 +81,128 @@ class LqtpAvg2Op(SeriesOperator):
     metadata = OperatorMetadata(
         name="avg2",
         category="fundamental",
-        description="当期与上期均值",
-        param_names=[],
+        description="当期与上期均值；可选 fiscal_quarter 限制连续报告期",
+        param_names=["x", "fiscal_quarter"],
         return_type="series",
+        tags=["fundamental", "pit_safe"],
     )
 
-    def _calculate_series(self, *args, **kwargs):
-        from cleaned_operators._numpy_kernels import avg2_
-        # 兼容 DataFrame 输入：逐列应用 numpy 函数
-        if len(args) == 1 and hasattr(args[0], "apply"):
-            return args[0].apply(lambda s: avg2_(s.values, **kwargs) if kwargs else avg2_(s.values))
-        return avg2_(*args, **kwargs)
+    def _calculate_series(self, x: pd.DataFrame, fiscal_quarter: pd.DataFrame | None = None, **kwargs):
+        from cleaned_operators.fundamental.period_helpers import compute_avg2
+
+        return compute_avg2(x, fiscal_quarter)
+
+
+@register_operator(
+    name="operating_margin",
+    category="fundamental",
+    business_category="fundamental",
+    canonical="operating_margin",
+    source="factor_dsl_np",
+    status="experimental",
+)
+class OperatingMarginOp(TwoVarOperator):
+    metadata = OperatorMetadata(
+        name="operating_margin",
+        category="fundamental",
+        description="营业利润率：operating_income / revenue（分母为 0 时 NaN）",
+        param_names=["operating_income", "revenue"],
+        return_type="series",
+        tags=["fundamental", "ratio", "pit_safe"],
+    )
+
+    def _calculate_series(self, operating_income: pd.DataFrame, revenue: pd.DataFrame, **kwargs) -> pd.DataFrame:
+        den = revenue.replace(0, np.nan) if hasattr(revenue, "replace") else revenue
+        out = operating_income / den
+        return out.replace([np.inf, -np.inf], np.nan)
+
+
+@register_operator(
+    name="current_ratio",
+    category="fundamental",
+    business_category="fundamental",
+    canonical="current_ratio",
+    source="factor_dsl_np",
+    status="experimental",
+)
+class CurrentRatioOp(TwoVarOperator):
+    metadata = OperatorMetadata(
+        name="current_ratio",
+        category="fundamental",
+        description="流动比率：current_assets / current_liabilities（分母为 0 时 NaN）",
+        param_names=["current_assets", "current_liabilities"],
+        return_type="series",
+        tags=["fundamental", "ratio", "pit_safe"],
+    )
+
+    def _calculate_series(
+        self, current_assets: pd.DataFrame, current_liabilities: pd.DataFrame, **kwargs
+    ) -> pd.DataFrame:
+        den = (
+            current_liabilities.replace(0, np.nan)
+            if hasattr(current_liabilities, "replace")
+            else current_liabilities
+        )
+        out = current_assets / den
+        return out.replace([np.inf, -np.inf], np.nan)
+
+
+@register_operator(
+    name="quick_ratio",
+    category="fundamental",
+    business_category="fundamental",
+    canonical="quick_ratio",
+    source="factor_dsl_np",
+    status="experimental",
+)
+class QuickRatioOp(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="quick_ratio",
+        category="fundamental",
+        description="速动比率：(current_assets - inventory) / current_liabilities",
+        param_names=["current_assets", "inventory", "current_liabilities"],
+        return_type="series",
+        tags=["fundamental", "ratio", "pit_safe"],
+    )
+
+    def _calculate_series(
+        self,
+        current_assets: pd.DataFrame,
+        inventory: pd.DataFrame,
+        current_liabilities: pd.DataFrame,
+        **kwargs,
+    ) -> pd.DataFrame:
+        num = current_assets - inventory
+        den = (
+            current_liabilities.replace(0, np.nan)
+            if hasattr(current_liabilities, "replace")
+            else current_liabilities
+        )
+        out = num / den
+        return out.replace([np.inf, -np.inf], np.nan)
+
+
+@register_operator(
+    name="debt_to_equity",
+    category="fundamental",
+    business_category="fundamental",
+    canonical="debt_to_equity",
+    source="factor_dsl_np",
+    status="experimental",
+)
+class DebtToEquityOp(TwoVarOperator):
+    metadata = OperatorMetadata(
+        name="debt_to_equity",
+        category="fundamental",
+        description="负债权益比：total_debt / total_equity（分母为 0 时 NaN）",
+        param_names=["total_debt", "total_equity"],
+        return_type="series",
+        tags=["fundamental", "ratio", "pit_safe"],
+    )
+
+    def _calculate_series(
+        self, total_debt: pd.DataFrame, total_equity: pd.DataFrame, **kwargs
+    ) -> pd.DataFrame:
+        den = total_equity.replace(0, np.nan) if hasattr(total_equity, "replace") else total_equity
+        out = total_debt / den
+        return out.replace([np.inf, -np.inf], np.nan)

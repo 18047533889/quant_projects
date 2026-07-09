@@ -5,7 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Any
 
+from cache.expression_cache import ExpressionCache
 from cache.layers import CacheHitStats, CacheLayer
+from cache.panel_cache import PanelCache
 from storage.cache import CacheManager, PersistentPlanCache
 
 
@@ -26,8 +28,20 @@ class ExecutionCacheSession:
     def __post_init__(self) -> None:
         if self.panel_cache is None:
             self.panel_cache = {}
+        if self.shared_result_cache is None:
+            self.shared_result_cache = {}
         if self.stats is None:
             self.stats = CacheHitStats()
+        self._expression_cache = ExpressionCache(self.shared_result_cache, stats=self.stats)
+        self._panel_cache = PanelCache(self.panel_cache)
+
+    @property
+    def expression_cache(self) -> ExpressionCache:
+        return self._expression_cache
+
+    @property
+    def panel_cache_store(self) -> PanelCache:
+        return self._panel_cache
 
     def wrap_context(self, ctx: Any) -> Any:
         """把分层缓存挂到 ``ExecutionContext``。"""
@@ -44,22 +58,13 @@ class ExecutionCacheSession:
         )
 
     def get_shared(self, sid: str) -> Any | None:
-        cache = self.shared_result_cache or {}
-        if sid in cache:
-            if self.stats:
-                self.stats.record_hit(CacheLayer.L0_CSE)
-            return cache[sid]
-        if self.stats:
-            self.stats.record_miss(CacheLayer.L0_CSE)
-        return None
+        return self._expression_cache.get(sid)
 
     def set_shared(self, sid: str, value: Any) -> None:
-        if self.shared_result_cache is not None:
-            self.shared_result_cache[sid] = value
+        self._expression_cache.set(sid, value)
 
     def get_panel(self, key: Any) -> Any | None:
-        cache = self.panel_cache or {}
-        hit = cache.get(key)
+        hit = self._panel_cache.get(key)
         if hit is not None and self.stats:
             self.stats.record_hit(CacheLayer.L1_PANEL)
         elif self.stats:
@@ -67,8 +72,7 @@ class ExecutionCacheSession:
         return hit
 
     def set_panel(self, key: Any, panel: Any) -> None:
-        if self.panel_cache is not None:
-            self.panel_cache[key] = panel
+        self._panel_cache.set(key, panel)
 
     def get_subplan(self, key: str) -> Any | None:
         if self.plan_cache is None:

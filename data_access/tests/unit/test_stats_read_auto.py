@@ -95,7 +95,7 @@ test_small:
     assert tbl.num_rows == 10
 
 
-def test_read_auto_large_dataset_uses_stream(tmp_path: Path, monkeypatch):
+def test_read_auto_large_dataset_falls_back_to_arrow(tmp_path: Path, monkeypatch):
     root = tmp_path / "big"
     _write_fixture(root, 50)
     yaml = f"""
@@ -122,3 +122,83 @@ test_big:
         mode="auto",
     )
     assert tbl.num_rows == 50
+
+
+def test_read_auto_stream_yields_batches_without_full_materialize(tmp_path: Path, monkeypatch):
+    root = tmp_path / "stream_ds"
+    _write_fixture(root, 25)
+    yaml = f"""
+test_stream:
+  kind: static
+  access_mode: published
+  root: "{root.as_posix()}"
+  glob: "year=*/*.parquet"
+  layout: hive
+  time_column: align_time
+  instrument_column: ticker
+  hive_partitioning: true
+"""
+    store = _store(tmp_path, yaml)
+    batches = list(
+        store.read_auto_stream(
+            "test_stream",
+            columns=["align_time", "ticker", "close"],
+            batch_size=10,
+        )
+    )
+    assert batches
+    assert sum(b.num_rows for b in batches) == 25
+
+
+def test_read_auto_stream_polars_route_falls_back_to_arrow_stream(
+    tmp_path: Path, monkeypatch
+):
+    root = tmp_path / "poly"
+    _write_fixture(root, 40)
+    yaml = f"""
+test_poly:
+  kind: static
+  access_mode: published
+  root: "{root.as_posix()}"
+  glob: "year=*/*.parquet"
+  layout: hive
+  time_column: align_time
+  instrument_column: ticker
+  hive_partitioning: true
+"""
+    store = _store(tmp_path, yaml)
+    monkeypatch.setenv("DATA_ACCESS_READ_AUTO_ARROW_MAX_ROWS", "5")
+    monkeypatch.setenv("DATA_ACCESS_READ_AUTO_STREAM_MIN_ROWS", "10")
+    stats = store.dataset_read_stats("test_poly", prefer_polars=True)
+    assert stats.suggested_mode == "polars"
+    batches = list(
+        store.read_auto_stream(
+            "test_poly",
+            columns=["align_time", "ticker", "close"],
+            prefer_polars=True,
+        )
+    )
+    assert sum(b.num_rows for b in batches) == 40
+
+
+def test_read_auto_explicit_stream_mode_materializes_batches(tmp_path: Path, monkeypatch):
+    root = tmp_path / "big2"
+    _write_fixture(root, 30)
+    yaml = f"""
+test_big2:
+  kind: static
+  access_mode: published
+  root: "{root.as_posix()}"
+  glob: "year=*/*.parquet"
+  layout: hive
+  time_column: align_time
+  instrument_column: ticker
+  hive_partitioning: true
+"""
+    store = _store(tmp_path, yaml)
+    tbl = store.read_auto(
+        "test_big2",
+        columns=["align_time", "ticker", "close"],
+        mode="stream",
+    )
+    assert tbl.num_rows == 30

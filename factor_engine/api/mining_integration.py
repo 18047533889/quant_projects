@@ -32,6 +32,19 @@ _VALUATION_FIELD_ALIASES: dict[str, str] = {
 }
 
 
+def validate_production_dsl(formula: str) -> tuple[bool, str]:
+    """production 模式公式校验：语法 + 算子 production 允许。"""
+    from cleaned_operators.operator_spec import check_production_formula_ops
+
+    ok, msg = validate_factor_engine_dsl(formula)
+    if not ok:
+        return False, msg
+    violations = check_production_formula_ops(formula)
+    if violations:
+        return False, "; ".join(violations)
+    return True, "OK"
+
+
 def validate_factor_engine_dsl(formula: str) -> tuple[bool, str]:
     """校验 factor_engine DSL 语法与白名单（A 股 / 美股同一套 ``parse_expr``）。"""
     text = str(formula or "").strip()

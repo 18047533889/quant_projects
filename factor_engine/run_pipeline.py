@@ -255,6 +255,35 @@ def parse_args() -> argparse.Namespace:
     snap_parser.add_argument("--factor-id", required=True)
     snap_parser.add_argument("--config", type=Path, default=None, help="可选 YAML 以比对 config hash")
 
+    event_parser = subparsers.add_parser(
+        "event",
+        help="数据列更新事件 → 受影响因子增量物化",
+    )
+    event_parser.add_argument("--dataset", required=True, help="源数据集名（catalog source_dataset）")
+    event_parser.add_argument("--column", required=True, help="更新的列名")
+    event_parser.add_argument("--updated-date", required=True, help="更新日期 YYYY-MM-DD")
+    event_parser.add_argument("--lake-root", type=Path, default=None, help="因子湖根目录")
+    event_parser.add_argument("--config", type=Path, default=None, help="可选 YAML（data_source / materialize 默认）")
+    event_parser.add_argument("--output-root", type=Path, default=None, help="事件运行摘要输出目录")
+    event_parser.add_argument("--end-date", default=None, help="增量上界")
+    event_parser.add_argument("--lookback-extra", type=int, default=5)
+    event_parser.add_argument("--market", default=None)
+    event_parser.add_argument("--dry-run", action="store_true", help="仅计划，不执行物化")
+    event_parser.add_argument("--profile", default=None, help="合并 examples/profiles/{profile}.yaml")
+    event_parser.add_argument(
+        "--write-target",
+        default=None,
+        choices=["local", "staging", "both", "clickhouse", "staging_clickhouse"],
+    )
+
+    deps_parser = subparsers.add_parser("deps", help="因子依赖 catalog 查询")
+    deps_parser.add_argument("--lake-root", type=Path, required=True, help="因子湖根目录")
+    deps_parser.add_argument("--column", default=None, help="按列名查询受影响因子")
+    deps_parser.add_argument("--dataset", default=None, help="过滤 source_dataset")
+    deps_parser.add_argument("--reverse-index", action="store_true", help="输出列→因子反向索引")
+    deps_parser.add_argument("--log-level", default="INFO")
+    deps_parser.add_argument("--log-file", type=Path, default=None)
+
     queue_parser = subparsers.add_parser("queue", help="分布式任务队列 worker")
     queue_sub = queue_parser.add_subparsers(dest="queue_command", required=True)
     worker_parser = queue_sub.add_parser("worker", help="消费 file/redis 任务队列")
@@ -267,6 +296,23 @@ def parse_args() -> argparse.Namespace:
     worker_parser.add_argument("--queue-root", type=Path, default=None, help="file 队列根目录")
     worker_parser.add_argument("--redis-url", default=None, help="Redis URL（backend=redis）")
     worker_parser.add_argument("--max-jobs", type=int, default=0, help="最多处理 N 个任务；0=无限")
+    worker_parser.add_argument(
+        "--queue-max-retries",
+        type=int,
+        default=0,
+        help="队列任务失败自动重试次数（file backend）",
+    )
+    worker_parser.add_argument(
+        "--poll-interval",
+        type=float,
+        default=0.0,
+        help="无任务时轮询间隔秒数；0=立即退出",
+    )
+    worker_parser.add_argument(
+        "--recover-stale",
+        action="store_true",
+        help="启动时将 running 任务移回 pending",
+    )
     _add_common_options(worker_parser)
 
     enqueue_parser = queue_sub.add_parser("enqueue", help="将 config 目录批量入队")
@@ -280,7 +326,26 @@ def parse_args() -> argparse.Namespace:
     enqueue_parser.add_argument("--queue-root", type=Path, default=None)
     enqueue_parser.add_argument("--redis-url", default=None)
 
-    for p in (reconcile_parser, dw_parser, snap_parser):
+    event_enqueue_parser = queue_sub.add_parser(
+        "enqueue-event",
+        help="将数据更新事件入队（worker 自动增量物化）",
+    )
+    event_enqueue_parser.add_argument("--dataset", required=True)
+    event_enqueue_parser.add_argument("--column", required=True)
+    event_enqueue_parser.add_argument("--updated-date", required=True)
+    event_enqueue_parser.add_argument("--config", type=Path, default=None)
+    event_enqueue_parser.add_argument("--lake-root", type=Path, default=None)
+    event_enqueue_parser.add_argument("--dry-run", action="store_true")
+    event_enqueue_parser.add_argument("--profile", default=None)
+    event_enqueue_parser.add_argument(
+        "--backend",
+        choices=["file", "redis", "object_store"],
+        default="file",
+    )
+    event_enqueue_parser.add_argument("--queue-root", type=Path, default=None)
+    event_enqueue_parser.add_argument("--redis-url", default=None)
+
+    for p in (reconcile_parser, dw_parser, snap_parser, event_parser):
         p.add_argument("--log-level", default="INFO")
         p.add_argument("--log-file", type=Path, default=None)
     queue_parser.add_argument("--log-level", default="INFO")
@@ -316,34 +381,165 @@ def _run_queue_enqueue(args: argparse.Namespace) -> dict:
     return {"ok": True, "enqueued": len(jobs), "jobs": [j.job_id for j in jobs]}
 
 
-def _run_queue_worker(args: argparse.Namespace) -> dict:
+def _run_queue_enqueue_event(args: argparse.Namespace) -> dict:
+    from runtime.task_queue import enqueue_data_event
+
     queue = _build_queue_from_args(args)
+    payload: dict = {}
+    if args.lake_root is not None:
+        payload["lake_root"] = str(args.lake_root)
+    if args.dry_run:
+        payload["dry_run"] = True
+    if args.profile:
+        payload["profile"] = args.profile
+    job = enqueue_data_event(
+        queue,
+        dataset=args.dataset,
+        column=args.column,
+        updated_date=args.updated_date,
+        config_path=args.config,
+        **payload,
+    )
+    return {"ok": True, "enqueued": 1, "job_id": job.job_id}
+
+
+def _dispatch_queue_job(job, *, profile=None, strict_dq=False, dq_strict=True, incremental=False):
+    from pathlib import Path
+
+    from runtime.task_queue import JOB_TYPE_DATA_EVENT
+
+    job_type = job.payload.get("job_type", JOB_TYPE_CONFIG)
+    if job_type == JOB_TYPE_DATA_EVENT:
+        from pipeline_event import run_data_event
+
+        cfg = job.payload.get("config_path") or job.config_path
+        config_path = None
+        if cfg and not str(cfg).startswith("event:"):
+            config_path = Path(cfg)
+        return run_data_event(
+            dataset=str(job.payload["dataset"]),
+            column=str(job.payload["column"]),
+            updated_date=str(job.payload["updated_date"]),
+            lake_root=job.payload.get("lake_root"),
+            dry_run=bool(job.payload.get("dry_run", False)),
+            profile=job.payload.get("profile") or profile,
+            config_path=config_path,
+            end_date=job.payload.get("end_date"),
+            lookback_extra=int(job.payload.get("lookback_extra", 5)),
+            market=job.payload.get("market"),
+            output_root=job.payload.get("output_root"),
+            write_target=job.payload.get("write_target"),
+        )
+
+    return run_from_config(
+        Path(job.config_path),
+        materialize=True,
+        profile=profile,
+        dq_check=strict_dq,
+        dq_strict=dq_strict,
+        incremental=incremental,
+    )
+
+
+def _run_queue_worker(args: argparse.Namespace) -> dict:
+    import time
+
+    queue = _build_queue_from_args(args)
+
+    if getattr(args, "recover_stale", False) and hasattr(queue, "requeue_stale_running"):
+        recovered = queue.requeue_stale_running()
+        if recovered:
+            logger.info("恢复 stale running 任务: %d", recovered)
 
     processed = 0
     results: list[dict] = []
+    max_retries = int(getattr(args, "queue_max_retries", 0) or 0)
+    poll_interval = float(getattr(args, "poll_interval", 0.0) or 0.0)
+
     while True:
         if args.max_jobs and processed >= args.max_jobs:
             break
         job = queue.claim()
         if job is None:
+            if poll_interval > 0 and (not args.max_jobs or processed < args.max_jobs):
+                time.sleep(poll_interval)
+                continue
             break
         try:
-            out = run_from_config(
-                Path(job.config_path),
-                materialize=True,
+            out = _dispatch_queue_job(
+                job,
                 profile=args.profile,
-                dq_check=args.strict_dq,
+                strict_dq=args.strict_dq,
                 dq_strict=args.dq_strict,
                 incremental=args.incremental,
             )
             queue.complete(job.job_id, result={"ok": True, "summary": out})
             results.append({"job_id": job.job_id, "ok": True})
         except Exception as exc:
-            queue.fail(job.job_id, error=str(exc))
-            results.append({"job_id": job.job_id, "ok": False, "error": str(exc)})
+            if hasattr(queue, "retry_or_fail"):
+                status = queue.retry_or_fail(
+                    job.job_id,
+                    error=str(exc),
+                    max_retries=max_retries,
+                )
+                results.append(
+                    {
+                        "job_id": job.job_id,
+                        "ok": False,
+                        "error": str(exc),
+                        "retry_status": status,
+                    }
+                )
+            else:
+                queue.fail(job.job_id, error=str(exc))
+                results.append({"job_id": job.job_id, "ok": False, "error": str(exc)})
         processed += 1
 
     return {"ok": all(r.get("ok") for r in results), "processed": processed, "results": results}
+
+
+def _run_data_event(args: argparse.Namespace) -> dict:
+    from pipeline_event import run_data_event
+
+    out = run_data_event(
+        dataset=args.dataset,
+        column=args.column,
+        updated_date=args.updated_date,
+        lake_root=args.lake_root,
+        end_date=args.end_date,
+        lookback_extra=args.lookback_extra,
+        market=args.market,
+        dry_run=args.dry_run,
+        profile=args.profile,
+        config_path=args.config,
+        output_root=args.output_root,
+        write_target=args.write_target,
+    )
+    return {"ok": True, **out}
+
+
+def _run_deps(args: argparse.Namespace) -> dict:
+    from runtime.dependency_catalog import DependencyCatalog
+
+    dep = DependencyCatalog.from_lake(args.lake_root)
+    if args.reverse_index:
+        summaries = dep.reverse_index()
+        payload = {"reverse_index": [s.to_dict() for s in summaries]}
+    elif args.column:
+        rows = dep.factors_for_column(args.column, dataset=args.dataset)
+        payload = {
+            "column": args.column,
+            "dataset": args.dataset,
+            "factors": rows,
+            "count": len(rows),
+        }
+    elif args.dataset:
+        rows = dep.factors_for_dataset(args.dataset)
+        payload = {"dataset": args.dataset, "factors": rows, "count": len(rows)}
+    else:
+        cols = dep.catalog.list_dependency_columns()
+        payload = {"columns": cols, "count": len(cols)}
+    return {"ok": True, **payload}
 
 
 def main() -> None:
@@ -357,9 +553,24 @@ def main() -> None:
             raise SystemExit(1)
         return
 
+    if args.command == "event":
+        payload = _run_data_event(args)
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+        summary = payload.get("summary", {})
+        if summary.get("failed", 0):
+            raise SystemExit(1)
+        return
+
+    if args.command == "deps":
+        payload = _run_deps(args)
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+        return
+
     if args.command == "queue":
         if args.queue_command == "enqueue":
             payload = _run_queue_enqueue(args)
+        elif args.queue_command == "enqueue-event":
+            payload = _run_queue_enqueue_event(args)
         elif args.queue_command == "worker":
             payload = _run_queue_worker(args)
         else:

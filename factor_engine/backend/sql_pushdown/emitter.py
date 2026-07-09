@@ -1639,6 +1639,11 @@ def _build_filter_clause(
     return " WHERE " + " AND ".join(parts)
 
 
+def _duckdb_dataset_ref(dataset: str) -> str:
+    """DuckDB sql() 要求 ``{{dataset}}`` 占位符。"""
+    return f"{{{{{dataset}}}}}"
+
+
 def _build_base_cte(
     *,
     source_from: str,
@@ -1681,6 +1686,8 @@ def compile_plan_to_sql(
         return None
 
     source_from = table if dialect == SqlDialect.CLICKHOUSE else (dataset or table)
+    if source_from and dialect == SqlDialect.DUCKDB and dataset:
+        source_from = _duckdb_dataset_ref(dataset)
     if not source_from:
         return None
 
@@ -1774,6 +1781,8 @@ def compile_plans_batch_to_sql(
         return None
 
     source_from = table if dialect == SqlDialect.CLICKHOUSE else (dataset or table)
+    if source_from and dialect == SqlDialect.DUCKDB and dataset:
+        source_from = _duckdb_dataset_ref(dataset)
     if not source_from:
         return None
 

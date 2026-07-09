@@ -35,6 +35,7 @@ def _build_intraday_run_window(
     lookback_bars: int,
     bar_freq: str,
     trim_output: bool,
+    market: str | None = None,
 ) -> RunWindow:
     from runtime.run_window import _to_date_str
 
@@ -50,7 +51,9 @@ def _build_intraday_run_window(
             warmup_bars=0,
             trim_output=trim_output,
         )
-    cal = SessionBarCalendar(bar_freq)
+    from cleaned_operators.operator_policy import normalize_bars_market
+
+    cal = SessionBarCalendar(bar_freq, market=normalize_bars_market(market))
     load_start = cal.warmup_load_start(req_start, lookback_bars=lb)
     return RunWindow(
         requested_start=req_start,
@@ -76,12 +79,20 @@ def prepare_run_warmup(
         engine.data_source,
         fallback=getattr(factor, "freq", None),
     )
+    from cleaned_operators.operator_policy import bars_per_day, normalize_bars_market
+    from storage.trading_calendar import infer_market
+
     history_buffer = effective_lookback(
         getattr(analysis, "lookback", 0),
         factor_freq=getattr(factor, "freq", None),
         source_bar_freq=source_bar_freq,
     )
-    s_bpd = bars_per_day(source_bar_freq)
+    resolved_market = market or infer_market(
+        universe=getattr(factor, "universe", None),
+        dataset=str(getattr(engine.data_source, "dataset", None) or ""),
+    )
+    bars_market = normalize_bars_market(resolved_market)
+    s_bpd = bars_per_day(source_bar_freq, market=bars_market)
     warmup_calendar_bars = history_buffer
     if s_bpd > 1:
         warmup_calendar_bars = max(1, (history_buffer + s_bpd - 1) // s_bpd)
@@ -95,10 +106,11 @@ def prepare_run_warmup(
 
         req_start, req_end = extract_source_date_bounds(engine.data_source)
         dataset = getattr(engine.data_source, "dataset", None)
-        resolved_market = market or infer_market(
-            universe=getattr(factor, "universe", None),
-            dataset=str(dataset) if dataset else None,
-        )
+        if resolved_market is None:
+            resolved_market = infer_market(
+                universe=getattr(factor, "universe", None),
+                dataset=str(dataset) if dataset else None,
+            )
         if s_bpd > 1:
             run_window = _build_intraday_run_window(
                 requested_start=req_start,
@@ -106,6 +118,7 @@ def prepare_run_warmup(
                 lookback_bars=history_buffer,
                 bar_freq=source_bar_freq,
                 trim_output=trim_warmup,
+                market=resolved_market,
             )
         else:
             cal = get_trading_calendar(resolved_market)

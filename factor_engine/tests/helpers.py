@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
 from storage.datasource import DataSource
+
+FE_ROOT = Path(__file__).resolve().parents[1]
+QUANT_ROOT = FE_ROOT.parent
 
 
 @dataclass

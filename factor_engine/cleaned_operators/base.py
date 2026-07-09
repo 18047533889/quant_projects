@@ -115,11 +115,14 @@ def register_operator(
     business_category: str = "",
     canonical: str = "",
     source: str = "",
+    backend: str | None = None,
+    status: str = "implemented",
 ):
     """类装饰器：实例化并注册到 ``OperatorRegistry``。
 
     - ``name``：DSL 注册名（可与 ``canonical`` 不同，如 ``ts_decay_linear`` → ``decay_linear``）；
     - ``canonical``：registry 主键，默认取 ``name`` 或类名；
+    - ``backend``：显式 ``pandas_numpy`` / ``polars``；未指定时按模块约定推断。
     - ``source``：溯源标记（``factor_dsl_np``、``lqtp`` 等），写入 catalog。
     """
     def decorator(cls):
@@ -130,16 +133,22 @@ def register_operator(
             instance.metadata.category = category
         if business_category:
             instance.metadata.business_category = business_category
-        backend = "polars" if "Polars" in cls.__name__ else "pandas_numpy"
+        if backend is not None:
+            effective_backend = backend
+        elif "Polars" in cls.__name__:
+            effective_backend = "polars"
+        else:
+            effective_backend = "pandas_numpy"
         canon = canonical or (name if name else cls.__name__)
         from cleaned_operators.registry import OperatorRegistry
         name_aliases = [name] if name and name != canon else None
         OperatorRegistry.register(
             instance,
             canonical=canon,
-            backend=backend,
+            backend=effective_backend,
             source=source or "factor_dsl_np",
             aliases=name_aliases,
+            status=status,
         )
         return cls
     return decorator

@@ -17,8 +17,7 @@
 """
 from __future__ import annotations
 
-import numpy as np
-import pandas as pd
+from cleaned_operators.common.cs_broadcast import broadcast_row_stat, cs_rank_01
 from cleaned_operators.base import (
     Operator,
     OperatorMetadata,
@@ -55,7 +54,7 @@ class CrossSectionalCount(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        return x.count(axis=1).to_frame().reindex(columns=x.columns, fill_value=0)
+        return broadcast_row_stat(x, x.count(axis=1))
 
 
 
@@ -75,7 +74,7 @@ class CrossSectionalMean(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        return x.mean(axis=1).to_frame().reindex(columns=x.columns, fill_value=0)
+        return broadcast_row_stat(x, x.mean(axis=1))
 
 
 
@@ -87,15 +86,16 @@ class CrossSectionalPercentile(SeriesOperator):
     metadata = OperatorMetadata(
         name="c_percentile",
         category="cross_sectional",
-        description="返回截面分位数(0-1)",
+        description="截面 p 分位数值（广播到各列，非百分位排名）",
         examples=["c_percentile(PE, 0.5)"],
         param_names=["x", "p"],
         return_type="series",
-        tags=["cross_sectional", "percentile"]
+        tags=["cross_sectional", "percentile", "pit_safe"],
     )
 
     def _calculate_series(self, x: pd.DataFrame, p: float = 0.5, **kwargs) -> pd.DataFrame:
-        return x.rank(pct=True, axis=1)
+        q = x.quantile(float(p), axis=1)
+        return broadcast_row_stat(x, q)
 
 
 
@@ -115,8 +115,43 @@ class CrossSectionalStd(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        return x.std(axis=1).to_frame().reindex(columns=x.columns, fill_value=0)
+        return broadcast_row_stat(x, x.std(axis=1))
 
+
+@register_operator(name="cs_mad", category="cross_sectional", business_category="cross_sectional", canonical="cs_mad", source="factor_dsl_np")
+class CrossSectionalMad(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="cs_mad",
+        category="cross_sectional",
+        description="截面中位绝对偏差（MAD，广播到各列）",
+        examples=["cs_mad(PE)"],
+        param_names=["x"],
+        return_type="series",
+        tags=["cross_sectional", "mad", "pit_safe"],
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
+        med = x.median(axis=1)
+        mad = x.sub(med, axis=0).abs().median(axis=1)
+        return broadcast_row_stat(x, mad)
+
+
+@register_operator(name="cs_mad_zscore", category="cross_sectional", business_category="cross_sectional", canonical="cs_mad_zscore", source="factor_dsl_np")
+class CrossSectionalMadZscore(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="cs_mad_zscore",
+        category="cross_sectional",
+        description="MAD 稳健 Z-Score：(x - median) / MAD",
+        examples=["cs_mad_zscore(PE)"],
+        param_names=["x"],
+        return_type="series",
+        tags=["cross_sectional", "mad", "zscore", "pit_safe"],
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
+        med = x.median(axis=1)
+        mad = x.sub(med, axis=0).abs().median(axis=1).replace(0, np.nan)
+        return x.sub(med, axis=0).div(mad, axis=0)
 
 
 # canonical=c_sum backend=pandas_numpy selected=c_sum source=cross_sectional/c_ops.py
@@ -135,7 +170,7 @@ class CrossSectionalSum(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        return x.sum(axis=1).to_frame().reindex(columns=x.columns, fill_value=0)
+        return broadcast_row_stat(x, x.sum(axis=1))
 
 
 
@@ -209,29 +244,111 @@ class CrossSectionalRank(SeriesOperator):
     metadata = OperatorMetadata(
         name="c_rank",
         category="cross_sectional",
-        description="在同一时间点对所有股票进行排名，返回归一化排名(0-1)",
+        description="截面 pandas 百分位排名 rank/count（最小值 1/n，非 0-1）",
         examples=["c_rank(PE)", "c_rank(volume)"],
         param_names=["x"],
         return_type="series",
-        tags=["cross_sectional", "rank"]
+        tags=["cross_sectional", "rank", "pit_safe"],
     )
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
         return x.rank(pct=True, axis=1)
 
 @register_operator(name="rank", category="cross_sectional", business_category="cross_sectional", canonical="rank", source="factor_dsl_np")
-class Rank(CrossSectionalRank):
-    """截面排名（rank的别名）"""
+class Rank(SeriesOperator):
+    """截面 0-1 排名。"""
 
     metadata = OperatorMetadata(
         name="rank",
         category="cross_sectional",
-        description="在同一时间点对所有股票进行排名（与c_rank相同）",
+        description="截面 0-1 排名（单有效值 → 0.5）；pandas 百分位排名见 rank_pct",
         examples=["rank(close)"],
         param_names=["x"],
         return_type="series",
-        tags=["cross_sectional", "rank"]
+        tags=["cross_sectional", "rank", "pit_safe"],
     )
+
+    def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
+        return cs_rank_01(x)
+
+
+@register_operator(
+    name="rank_pct",
+    category="cross_sectional",
+    business_category="cross_sectional",
+    canonical="rank_pct",
+    source="factor_dsl_np",
+)
+class RankPct(CrossSectionalRank):
+    metadata = OperatorMetadata(
+        name="rank_pct",
+        category="cross_sectional",
+        description="截面 pandas 百分位排名 rank/count",
+        examples=["rank_pct(close)"],
+        param_names=["x"],
+        return_type="series",
+        tags=["cross_sectional", "rank", "pit_safe"],
+    )
+
+
+@register_operator(
+    name="cs_quantile",
+    category="cross_sectional",
+    business_category="cross_sectional",
+    canonical="cs_quantile",
+    source="factor_dsl_np",
+)
+class CsQuantile(CrossSectionalPercentile):
+    metadata = OperatorMetadata(
+        name="cs_quantile",
+        category="cross_sectional",
+        description="截面 p 分位数值（广播到各列；百分位排名见 cs_pct_rank）",
+        examples=["cs_quantile(PE, 0.5)"],
+        param_names=["x", "p"],
+        return_type="series",
+        tags=["cross_sectional", "quantile", "pit_safe"],
+    )
+
+
+@register_operator(
+    name="cs_pct_rank",
+    category="cross_sectional",
+    business_category="cross_sectional",
+    canonical="cs_pct_rank",
+    source="factor_dsl_np",
+)
+class CsPctRank(CrossSectionalRank):
+    metadata = OperatorMetadata(
+        name="cs_pct_rank",
+        category="cross_sectional",
+        description="截面百分位排名（同 rank_pct）",
+        examples=["cs_pct_rank(close)"],
+        param_names=["x"],
+        return_type="series",
+        tags=["cross_sectional", "rank", "pit_safe"],
+    )
+
+
+@register_operator(
+    name="cs_rank_01",
+    category="cross_sectional",
+    business_category="cross_sectional",
+    canonical="cs_rank_01",
+    source="factor_dsl_np",
+)
+class CsRank01(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="cs_rank_01",
+        category="cross_sectional",
+        description="截面 0-1 排名（同 rank）",
+        examples=["cs_rank_01(close)"],
+        param_names=["x"],
+        return_type="series",
+        tags=["cross_sectional", "rank", "pit_safe"],
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
+        return cs_rank_01(x)
 
 # aliases: CS_RANK, RANK, c_rank, cs_rank
 
@@ -777,9 +894,10 @@ class CrossSectionalPercentilePolars(SeriesOperator):
     def _calculate_series(self, x: pl.DataFrame, p: float = 0.5, **kwargs) -> pl.DataFrame:
         numeric_cols = [c for c in x.columns if c not in ['date', 'stock_code']]
         pdf = x.select(numeric_cols).to_pandas()
-        ranked = pdf.rank(pct=True, axis=1)
+        q = pdf.quantile(float(p), axis=1)
+        broadcast = broadcast_row_stat(pdf, q)
         return x.with_columns([
-            pl.Series(name=c, values=ranked[c].to_numpy()) for c in numeric_cols
+            pl.Series(name=c, values=broadcast[c].to_numpy()) for c in numeric_cols
         ])
 
 
@@ -948,22 +1066,34 @@ class CrossSectionalRank(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        # 使用 Numba 加速的截面排名（按行）
-        return apply_numba_rank(x, axis=1)
+        numeric_cols = [c for c in x.columns if c not in {"date", "stock_code"}]
+        pdf = x.select(numeric_cols).to_pandas()
+        ranked = cs_rank_01(pdf)
+        return x.with_columns([
+            pl.Series(name=c, values=ranked[c].to_numpy()) for c in numeric_cols
+        ])
 
 @register_operator(name="rank", category="cross_sectional", business_category="cross_sectional", canonical="rank", source="factor_dsl_np")
-class RankPolars(CrossSectionalRank):
-    """截面排名（rank的别名）"""
+class RankPolars(SeriesOperator):
+    """截面 0-1 排名（Polars）。"""
 
     metadata = OperatorMetadata(
         name="rank",
         category="cross_sectional",
-        description="在同一时间点对所有股票进行排名（与c_rank相同）",
+        description="截面 0-1 排名；pandas 百分位排名见 rank_pct",
         examples=["rank(close)"],
         param_names=["x"],
         return_type="series",
-        tags=["cross_sectional", "rank"]
+        tags=["cross_sectional", "rank", "pit_safe"],
     )
+
+    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        numeric_cols = [c for c in x.columns if c not in {"date", "stock_code"}]
+        pdf = x.select(numeric_cols).to_pandas()
+        ranked = cs_rank_01(pdf)
+        return x.with_columns([
+            pl.Series(name=c, values=ranked[c].to_numpy()) for c in numeric_cols
+        ])
 
 # aliases: CS_RANK, RANK, c_rank, cs_rank
 
@@ -1070,8 +1200,14 @@ class CrossSectionalZscore(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        # 使用 Numba 加速的截面 Z-Score（按行）
-        return apply_numba_zscore(x, axis=1)
+        numeric_cols = [c for c in x.columns if c not in {"date", "stock_code"}]
+        pdf = x.select(numeric_cols).to_pandas()
+        mean = pdf.mean(axis=1)
+        std = pdf.std(axis=1).replace(0, 1)
+        z = pdf.sub(mean, axis=0).div(std, axis=0)
+        return x.with_columns([
+            pl.Series(name=c, values=z[c].to_numpy()) for c in numeric_cols
+        ])
 
 @register_operator(name="zscore", category="cross_sectional", business_category="cross_sectional", canonical="zscore", source="factor_dsl_np")
 class ZscorePolars(CrossSectionalZscore):

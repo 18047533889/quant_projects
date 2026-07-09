@@ -18,6 +18,22 @@ from data_access.query_budget import (
 )
 
 
+def test_research_default_budget_has_no_row_cap(monkeypatch):
+    monkeypatch.delenv("QUANT_PRODUCTION_MODE", raising=False)
+    monkeypatch.delenv("DATA_ACCESS_STRICT_READ", raising=False)
+    monkeypatch.delenv("DATA_ACCESS_DEFAULT_MAX_ROWS", raising=False)
+    budget = resolve_query_budget()
+    assert budget.max_rows is None
+    assert budget.require_columns is False
+
+
+def test_research_budget_respects_default_max_rows_env(monkeypatch):
+    monkeypatch.delenv("QUANT_PRODUCTION_MODE", raising=False)
+    monkeypatch.setenv("DATA_ACCESS_DEFAULT_MAX_ROWS", "1000000")
+    budget = resolve_query_budget()
+    assert budget.max_rows == 1_000_000
+
+
 def test_production_mode_requires_columns(monkeypatch):
     monkeypatch.setenv("QUANT_PRODUCTION_MODE", "1")
     budget = resolve_query_budget()

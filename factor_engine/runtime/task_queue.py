@@ -12,6 +12,9 @@ from typing import Any, Iterable
 
 from runtime.shard_materialize import shard_by_hash
 
+JOB_TYPE_CONFIG = "config"
+JOB_TYPE_DATA_EVENT = "data_event"
+
 
 def shard_config_paths(
     config_paths: Iterable[Path],
@@ -94,6 +97,52 @@ class FileTaskQueue:
 
     def fail(self, job_id: str, *, error: str) -> None:
         self._finalize(job_id, bucket="failed", result={"error": error})
+
+    def retry_or_fail(
+        self,
+        job_id: str,
+        *,
+        error: str,
+        max_retries: int = 0,
+    ) -> str:
+        """失败时若未超重试上限则回到 pending，否则进入 failed。返回 ``requeued`` / ``failed``。"""
+        running_path = self.root / "running" / f"{job_id}.json"
+        if not running_path.exists():
+            raise FileNotFoundError(f"running job not found: {job_id}")
+        job = self._read_job(running_path)
+        payload = dict(job.payload)
+        attempts = int(payload.get("attempts", 0)) + 1
+        payload["attempts"] = attempts
+        payload["last_error"] = error
+        if max_retries > 0 and attempts <= max_retries:
+            restored = QueueJob(
+                job_id=job.job_id,
+                config_path=job.config_path,
+                payload=payload,
+                status="pending",
+                created_at=job.created_at,
+                updated_at=datetime.now(timezone.utc).isoformat(),
+            )
+            pending_path = self.root / "pending" / f"{job_id}.json"
+            pending_path.write_text(
+                json.dumps(restored.__dict__, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            running_path.unlink(missing_ok=True)
+            return "requeued"
+        payload["result"] = {"error": error, "attempts": attempts}
+        final = QueueJob(
+            job_id=job.job_id,
+            config_path=job.config_path,
+            payload=payload,
+            status="failed",
+            created_at=job.created_at,
+            updated_at=datetime.now(timezone.utc).isoformat(),
+        )
+        target = self.root / "failed" / f"{job_id}.json"
+        target.write_text(json.dumps(final.__dict__, ensure_ascii=False, indent=2), encoding="utf-8")
+        running_path.unlink(missing_ok=True)
+        return "failed"
 
     def _finalize(self, job_id: str, *, bucket: str, result: dict[str, Any] | None) -> None:
         running_path = self.root / "running" / f"{job_id}.json"
@@ -433,3 +482,24 @@ def enqueue_config_directory(
         if path.is_file():
             jobs.append(queue.enqueue(path))
     return jobs
+
+
+def enqueue_data_event(
+    queue: FileTaskQueue | RedisTaskQueue | ObjectStoreTaskQueue,
+    *,
+    dataset: str,
+    column: str,
+    updated_date: str,
+    config_path: str | Path | None = None,
+    **payload: Any,
+) -> QueueJob:
+    """将 ``DataEvent`` 入队供 worker 消费。"""
+    ref = str(config_path) if config_path is not None else f"event:{dataset}:{column}"
+    return queue.enqueue(
+        ref,
+        job_type=JOB_TYPE_DATA_EVENT,
+        dataset=dataset,
+        column=column,
+        updated_date=updated_date,
+        **payload,
+    )

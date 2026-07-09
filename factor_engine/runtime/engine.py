@@ -52,9 +52,23 @@ class FactorEngine:
         self.data_source = data_source  # 从 parquet 等拉 MultiIndex 面板的统一入口
         self.cache = cache  # 列级缓存；无则每次 execute 全量算
         self.run_mode = resolve_run_mode(run_mode)
+        FactorEngine._sync_production_env(self.run_mode)
         self.analyzer = Analyzer()  # Expr → IR + 依赖列分析
         self.lowerer = Lowerer()  # IR → 逻辑计划树
         self.optimizer = Optimizer()  # 计划级优化（常折叠等）
+
+    @staticmethod
+    def _sync_production_env(run_mode: str | None = None) -> None:
+        """production 模式同步 data_access 读路径硬策略。"""
+        import os
+
+        from runtime.production_policy import PRODUCTION_MODE, is_production_mode
+
+        if is_production_mode(run_mode):
+            os.environ["FACTOR_ENGINE_RUN_MODE"] = PRODUCTION_MODE
+            os.environ["QUANT_PRODUCTION_MODE"] = "1"
+        else:
+            os.environ["FACTOR_ENGINE_RUN_MODE"] = "research"
 
     def compile(self, factor: Factor, *, pit_enforce: bool = False, pit_forbid_forward_fill: bool = False):
         """Expr → Analyzer → Lowerer → Optimizer，返回 (plan, analysis)。"""
@@ -71,6 +85,13 @@ class FactorEngine:
             )
         logical_plan = self.lowerer.to_logical_plan(analysis.ir)
         optimized_plan = self.optimizer.optimize(logical_plan)
+        from runtime.production_policy import assert_production_plan_ops
+
+        assert_production_plan_ops(
+            optimized_plan,
+            mode=self.run_mode,
+            context=f"compile:{factor.name}",
+        )
         logger.info(
             "完成编译因子 '%s'，lookback=%s，耗时 %.2fs",
             factor.name,
@@ -99,7 +120,10 @@ class FactorEngine:
             names.append(factor.name)
             analyses[factor.name] = analysis
         if enable_cse and len(plans) > 0:
-            new_plans, shared = apply_cse(plans)  # shared：子树 ID → 可复用 PlanNode
+            new_plans, shared = apply_cse(plans)
+            from planner.rolling_cse import apply_rolling_cse
+
+            new_plans, shared = apply_rolling_cse(new_plans, existing_shared=shared)
         else:
             new_plans, shared = plans, {}
         roots = [
@@ -196,8 +220,22 @@ class FactorEngine:
         from runtime.config_runtime import resolve_run_kwargs
 
         opts = resolve_run_kwargs(config)
-        result = engine.run(factor, **opts.to_run_kwargs())
-        result["config"] = config
+        run_kwargs = opts.to_run_kwargs()
+        if config.pipeline.batched_engine or config.run.mode == "production":
+            batch = engine.run_many([factor], **run_kwargs)
+            fp = next(r for r in batch["dag"].roots if r.factor_name == factor.name)
+            result = {
+                "factor": factor,
+                "analysis": batch["analyses"][factor.name],
+                "plan": fp.root,
+                "result": batch["results"][factor.name],
+                "config": config,
+            }
+            if batch.get("input_dq") is not None:
+                result["input_dq"] = batch["input_dq"]
+        else:
+            result = engine.run(factor, **run_kwargs)
+            result["config"] = config
         logger.info("完成从配置执行因子: %s", factor.name)
         return result
 
@@ -512,38 +550,113 @@ class FactorEngine:
         run_many_batch: bool = True,
         **materialize_kwargs: Any,
     ) -> dict[str, Any]:
-        """分片物化：按 ``factor_id`` 哈希选取本 shard 负责的因子子集。"""
-        if shard_by != "factor_id":
-            raise ValueError(f"暂不支持 shard_by={shard_by!r}，当前仅 factor_id")
+        """分片物化。
+
+        - ``factor_id``：按因子 ID 哈希选取子集（默认）
+        - ``asset_bucket``：按 bucket 编号取模，缩小读范围（全量因子）
+        - ``time_month``：按 ``YYYY-MM`` 哈希，缩小时间窗口（全量因子）
+        """
+        allowed = {"factor_id", "asset_bucket", "time_month"}
+        if shard_by not in allowed:
+            raise ValueError(f"不支持的 shard_by={shard_by!r}，可选 {sorted(allowed)}")
+
         ids = list(factor_ids) if factor_ids is not None else [f.name for f in factors]
         if len(ids) != len(factors):
             raise ValueError("factor_ids 长度必须与 factors 一致")
-        from runtime.shard_materialize import shard_factor_ids
 
-        selected_ids = set(
-            shard_factor_ids(
-                ids,
-                shard_index=shard_index,
-                shard_count=shard_count,
-            )
-        )
-        selected_pairs = [
-            (f, fid)
-            for f, fid in zip(factors, ids)
-            if fid in selected_ids
-        ]
-        if not selected_pairs:
-            return {
-                "shard_index": shard_index,
-                "shard_count": shard_count,
-                "materializations": {},
-                "factor_ids": [],
-            }
-
-        sel_factors = [p[0] for p in selected_pairs]
-        sel_ids = [p[1] for p in selected_pairs]
-        outputs: dict[str, Any] = {}
         mat = dict(materialize_kwargs)
+        shard_meta: dict[str, Any] = {"shard_by": shard_by}
+        engine = self
+
+        if shard_by == "factor_id":
+            from runtime.shard_materialize import shard_factor_ids
+
+            selected_ids = set(
+                shard_factor_ids(
+                    ids,
+                    shard_index=shard_index,
+                    shard_count=shard_count,
+                )
+            )
+            selected_pairs = [
+                (f, fid)
+                for f, fid in zip(factors, ids)
+                if fid in selected_ids
+            ]
+            if not selected_pairs:
+                return {
+                    "shard_index": shard_index,
+                    "shard_count": shard_count,
+                    "shard_by": shard_by,
+                    "materializations": {},
+                    "factor_ids": [],
+                }
+            sel_factors = [p[0] for p in selected_pairs]
+            sel_ids = [p[1] for p in selected_pairs]
+        else:
+            sel_factors = list(factors)
+            sel_ids = list(ids)
+            ds = self.data_source
+            if shard_by == "asset_bucket":
+                from runtime.shard_materialize import shard_bucket_values
+
+                bucket_count = int(mat.pop("bucket_count", 64))
+                buckets = shard_bucket_values(
+                    bucket_count,
+                    shard_index=shard_index,
+                    shard_count=shard_count,
+                )
+                shard_meta["bucket_values"] = buckets
+                if buckets and ds is not None and hasattr(ds, "params"):
+                    import copy
+
+                    scoped = copy.copy(ds)
+                    scoped.params = {**getattr(ds, "params", {}), "bucket_values": buckets}
+                    scoped._column_cache = {}
+                    scoped._panel_cache = {}
+                    engine = self.with_data_source(scoped, fresh_cache=True)
+            elif shard_by == "time_month":
+                from runtime.shard_materialize import (
+                    month_date_bounds,
+                    month_keys_between,
+                    shard_time_months,
+                )
+
+                months = mat.get("time_months")
+                if months is None:
+                    months = month_keys_between(
+                        mat.get("since"),
+                        mat.get("end_date"),
+                    )
+                selected_months = shard_time_months(
+                    months,
+                    shard_index=shard_index,
+                    shard_count=shard_count,
+                )
+                shard_meta["time_months"] = selected_months
+                if not selected_months:
+                    return {
+                        "shard_index": shard_index,
+                        "shard_count": shard_count,
+                        "shard_by": shard_by,
+                        "materializations": {},
+                        "factor_ids": [],
+                        **shard_meta,
+                    }
+                start, end = month_date_bounds(selected_months)
+                if ds is not None:
+                    import copy
+
+                    scoped = copy.copy(ds)
+                    scoped.start_date = start
+                    scoped.end_date = end
+                    if hasattr(scoped, "_column_cache"):
+                        scoped._column_cache = {}
+                    if hasattr(scoped, "_panel_cache"):
+                        scoped._panel_cache = {}
+                    engine = self.with_data_source(scoped, fresh_cache=True)
+
+        outputs: dict[str, Any] = {}
         run_kw = {
             "input_dq_check": mat.pop("input_dq_check", False),
             "input_dq_strict": mat.pop("input_dq_strict", True),
@@ -555,7 +668,7 @@ class FactorEngine:
             "pit_forbid_forward_fill": mat.pop("pit_forbid_forward_fill", False),
         }
         if run_many_batch and len(sel_factors) > 1:
-            run_out = self.run_many(sel_factors, **run_kw)
+            run_out = engine.run_many(sel_factors, **run_kw)
             from runtime.materialize_service import execute_materialize
 
             for factor, fid in zip(sel_factors, sel_ids):
@@ -565,7 +678,7 @@ class FactorEngine:
                     "result": run_out["results"][factor.name],
                 }
                 out = execute_materialize(
-                    self,
+                    engine,
                     factor,
                     output,
                     target=str(mat.get("write_target", "local")),
@@ -601,20 +714,26 @@ class FactorEngine:
                 out["batched_run"] = True
                 out["shard_index"] = shard_index
                 out["shard_count"] = shard_count
+                out["shard_by"] = shard_by
                 outputs[factor.name] = out.get("materialization", out)
         else:
             for factor, fid in zip(sel_factors, sel_ids):
                 mk = {**run_kw, **mat, "factor_id": fid}
-                out = self.materialize(factor, **mk)
+                for key in ("time_months", "bucket_count"):
+                    mk.pop(key, None)
+                out = engine.materialize(factor, **mk)
                 out["shard_index"] = shard_index
                 out["shard_count"] = shard_count
+                out["shard_by"] = shard_by
                 outputs[factor.name] = out
 
         return {
             "shard_index": shard_index,
             "shard_count": shard_count,
+            "shard_by": shard_by,
             "factor_ids": sel_ids,
             "materializations": outputs,
+            **shard_meta,
         }
 
     def materialize_matrix(
@@ -630,33 +749,19 @@ class FactorEngine:
         **run_kwargs: Any,
     ) -> dict[str, Any]:
         """批量计算多因子并写入 factor_matrix 宽表（训练/回测加速格式）。"""
-        ids = list(factor_ids) if factor_ids is not None else [f.name for f in factors]
-        if len(ids) != len(factors):
-            raise ValueError("factor_ids 长度必须与 factors 一致")
-        run_out = self.run_many(factors, **run_kwargs)
-        results = {
-            fid: run_out["results"][factor.name]
-            for factor, fid in zip(factors, ids)
-        }
-        from storage.factor_matrix_materializer import FactorMatrixMaterializer
+        from runtime.matrix_service import execute_materialize_matrix
 
-        materializer = FactorMatrixMaterializer(matrix_root=matrix_root)
-        summary = materializer.materialize(
-            results,
+        return execute_materialize_matrix(
+            self,
+            factors,
+            factor_ids=factor_ids,
             universe=universe,
             frequency=frequency,
+            matrix_root=matrix_root,
             partition_columns=partition_columns,
             value_dtype=value_dtype,
+            **run_kwargs,
         )
-        summary["run_many"] = {
-            "factor_names": [f.name for f in factors],
-            "shared_nodes": len(run_out.get("dag").shared_nodes)
-            if run_out.get("dag")
-            else 0,
-        }
-        if "rolling_cache" in run_out:
-            summary["rolling_cache"] = run_out["rolling_cache"]
-        return summary
 
     def plan_incremental_from_event(
         self,
@@ -668,35 +773,15 @@ class FactorEngine:
         market: str | None = None,
     ) -> dict[str, Any]:
         """数据列更新事件 → 受影响因子增量重算计划。"""
-        from runtime.incremental_scheduler import (
-            DataEvent,
-            plan_updates_from_data_event,
-        )
-        from storage.materializer import ParquetMaterializer
+        from runtime.incremental_event_service import plan_incremental_from_event
 
-        if not isinstance(event, DataEvent):
-            event = DataEvent(
-                dataset=str(event["dataset"]),
-                column=str(event["column"]),
-                updated_date=str(event["updated_date"]),
-            )
-        catalog = ParquetMaterializer(lake_root=lake_root).catalog
-        plans = plan_updates_from_data_event(
-            catalog,
+        return plan_incremental_from_event(
             event,
+            lake_root=lake_root,
             end_date=end_date,
             lookback_extra=lookback_extra,
             market=market,
         )
-        return {
-            "event": {
-                "dataset": event.dataset,
-                "column": event.column,
-                "updated_date": event.updated_date,
-            },
-            "plans": [p.to_dict() for p in plans],
-            "factor_count": len(plans),
-        }
 
     def materialize_incremental_from_event(
         self,
@@ -710,17 +795,17 @@ class FactorEngine:
         **materialize_kwargs: Any,
     ) -> dict[str, Any]:
         """数据列更新事件 → 受影响因子自动增量物化。"""
-        from runtime.incremental_scheduler import execute_incremental_updates_from_event
+        from runtime.incremental_event_service import materialize_incremental_from_event
 
-        return execute_incremental_updates_from_event(
+        return materialize_incremental_from_event(
             self,
             event,
-            lake_root=str(lake_root) if lake_root is not None else None,
+            lake_root=lake_root,
             end_date=end_date,
             lookback_extra=lookback_extra,
             market=market,
             dry_run=dry_run,
-            materialize_kwargs=materialize_kwargs,
+            **materialize_kwargs,
         )
 
     @classmethod
@@ -732,23 +817,16 @@ class FactorEngine:
         pipeline_overrides: Any | None = None,
     ) -> dict[str, Any]:
         """多 YAML 批量增量物化；逐配置 resolve + materialize_incremental。"""
-        from runtime.config_runtime import resolve_materialize_kwargs_for_pipeline
+        from runtime.incremental_event_service import (
+            materialize_incremental_many_from_config,
+        )
 
-        loaded: list[tuple[FactorEngine, Factor, FactorEngineConfig, str | Path]] = []
-        for path in config_paths:
-            engine, factor, config = cls.from_config(path, profile=profile)
-            loaded.append((engine, factor, config, path))
-        outputs: dict[str, Any] = {}
-        for engine, factor, config, path in loaded:
-            opts = resolve_materialize_kwargs_for_pipeline(config, pipeline_overrides)
-            out = engine.materialize_incremental(
-                factor,
-                **opts.to_incremental_materialize_kwargs(),
-            )
-            out["config"] = config
-            out["config_path"] = str(path)
-            outputs[factor.name] = out
-        return {"materializations": outputs}
+        return materialize_incremental_many_from_config(
+            cls,
+            config_paths,
+            profile=profile,
+            pipeline_overrides=pipeline_overrides,
+        )
 
     @classmethod
     def materialize_from_config(
@@ -972,17 +1050,19 @@ class FactorEngine:
         """
         started_at = time.perf_counter()
         logger.info("开始执行因子 '%s'", factor.name)
+        from runtime.production_policy import (
+            assert_no_stub_operators,
+            assert_production_factors,
+            assert_production_run_flags,
+        )
+
+        assert_production_factors([factor], mode=self.run_mode, context="run")
         if plan is None or analysis is None:
             plan, analysis = self.compile(
                 factor,
                 pit_enforce=pit_enforce,
                 pit_forbid_forward_fill=pit_forbid_forward_fill,
             )
-        from runtime.production_policy import (
-            assert_no_stub_operators,
-            assert_production_run_flags,
-        )
-
         assert_production_run_flags(
             mode=self.run_mode,
             input_dq_check=input_dq_check,
@@ -1292,93 +1372,22 @@ class FactorEngine:
         ``auto_warmup`` / ``pit_enforce`` 需按因子逐个 ``run()``（lookback / PIT 编译差异）。
         ``input_dq_check`` 在快路径上合并全量依赖列后批量校验，仍保留 CSE。
         """
-        from runtime.production_policy import (
-            ProductionPolicyViolation,
-            assert_production_run_flags,
-            is_production_mode,
-        )
+        from runtime.batch_service import execute_run_many
 
-        use_per_factor_run = auto_warmup or pit_enforce
-        if use_per_factor_run:
-            assert_production_run_flags(
-                mode=self.run_mode,
-                input_dq_check=input_dq_check,
-                auto_warmup=auto_warmup,
-                pit_enforce=pit_enforce,
-                context="run_many",
-            )
-        elif is_production_mode(self.run_mode) and not input_dq_check:
-            raise ProductionPolicyViolation(
-                "production 模式 run_many 快路径必须开启 input_dq_check"
-            )
-        if use_per_factor_run:
-            out: dict[str, Any] = {}
-            analyses: dict[str, AnalysisResult] = {}
-            for factor in factors:
-                one = self.run(
-                    factor,
-                    auto_warmup=auto_warmup,
-                    trim_warmup=trim_warmup,
-                    market=market,
-                    input_dq_check=input_dq_check,
-                    input_dq_strict=input_dq_strict,
-                    input_dq_thresholds=input_dq_thresholds,
-                    pit_enforce=pit_enforce,
-                    pit_forbid_forward_fill=pit_forbid_forward_fill,
-                )
-                out[factor.name] = one["result"]
-                analyses[factor.name] = one["analysis"]
-            dag, _ = self._dag_from_factors(
-                factors, enable_cse=enable_cse, perf=perf
-            )
-            return {"results": out, "dag": dag, "analyses": analyses}
-
-        dag, analyses = self._dag_from_factors(
-            factors, enable_cse=enable_cse, perf=perf
-        )
-        perf = perf or PerfConfig.from_env()
-        all_cols: set[str] = set()
-        for analysis in analyses.values():
-            all_cols |= analysis.referenced_columns
-        input_report = self._prepare_batch_data(
-            self.data_source,
-            all_cols,
+        return execute_run_many(
+            self,
+            factors,
+            perf=perf,
+            enable_cse=enable_cse,
+            auto_warmup=auto_warmup,
+            trim_warmup=trim_warmup,
+            market=market,
             input_dq_check=input_dq_check,
             input_dq_strict=input_dq_strict,
             input_dq_thresholds=input_dq_thresholds,
+            pit_enforce=pit_enforce,
+            pit_forbid_forward_fill=pit_forbid_forward_fill,
         )
-        ctx = self._make_context(shared_result_cache={}, perf=perf)
-        # 先算共享子式，再算各因子根，避免重复执行相同子树
-        if ctx.shared_result_cache is not None:
-            for sid, sub in dag.shared_nodes.items():
-                ctx.shared_result_cache[sid] = self.backend.execute(sub, ctx)
-        out: dict[str, Any] = {}
-        for fp in dag.roots:
-            out[fp.factor_name] = self.backend.execute(fp.root, ctx)
-        batch_out: dict[str, Any] = {
-            "results": out,
-            "dag": dag,
-            "analyses": analyses,
-        }
-        if input_report is not None:
-            batch_out["input_dq"] = input_report.to_dict()
-        if len(factors) > 1:
-            from planner.dependency_graph import build_factor_batch_graph
-
-            batch_out["batch_graph"] = build_factor_batch_graph(
-                factors, analyses
-            ).to_dict()
-        if dag.shared_nodes:
-            from planner.rolling_cache import summarize_rolling_cache
-
-            batch_out["rolling_cache"] = summarize_rolling_cache(dag.shared_nodes)
-        if dag.roots:
-            from backend.operator_cost import estimate_plan_cost
-
-            batch_out["plan_costs"] = {
-                fp.factor_name: estimate_plan_cost(fp.root) for fp in dag.roots
-            }
-        return batch_out
 
     def run_many_parallel(
         self,
@@ -1397,60 +1406,23 @@ class FactorEngine:
         pit_forbid_forward_fill: bool = False,
     ) -> dict[str, Any]:
         """在 ``run_many`` 基础上对**各因子根**并行求值（共享子式仍先串行算完）。"""
-        if auto_warmup or pit_enforce:
-            return self.run_many(
-                factors,
-                perf=perf,
-                enable_cse=enable_cse,
-                auto_warmup=auto_warmup,
-                trim_warmup=trim_warmup,
-                market=market,
-                input_dq_check=input_dq_check,
-                input_dq_strict=input_dq_strict,
-                input_dq_thresholds=input_dq_thresholds,
-                pit_enforce=pit_enforce,
-                pit_forbid_forward_fill=pit_forbid_forward_fill,
-            )
-        try:
-            from joblib import Parallel, delayed
-        except ImportError as exc:  # pragma: no cover
-            raise ImportError(
-                "run_many_parallel 需要 joblib：pip install 'factor-engine[parallel]'"
-            ) from exc
+        from runtime.batch_service import execute_run_many_parallel
 
-        dag, analyses = self._dag_from_factors(
-            factors, enable_cse=enable_cse, perf=perf
-        )
-        perf = perf or PerfConfig.from_env()
-        workers = n_jobs if n_jobs is not None else perf.max_workers
-        all_cols: set[str] = set()
-        for analysis in analyses.values():
-            all_cols |= analysis.referenced_columns
-        input_report = self._prepare_batch_data(
-            self.data_source,
-            all_cols,
+        return execute_run_many_parallel(
+            self,
+            factors,
+            n_jobs=n_jobs,
+            perf=perf,
+            enable_cse=enable_cse,
+            auto_warmup=auto_warmup,
+            trim_warmup=trim_warmup,
+            market=market,
             input_dq_check=input_dq_check,
             input_dq_strict=input_dq_strict,
             input_dq_thresholds=input_dq_thresholds,
+            pit_enforce=pit_enforce,
+            pit_forbid_forward_fill=pit_forbid_forward_fill,
         )
-        ctx = self._make_context(shared_result_cache={}, perf=perf)
-        if ctx.shared_result_cache is not None:
-            for sid, sub in dag.shared_nodes.items():
-                ctx.shared_result_cache[sid] = self.backend.execute(sub, ctx)
-
-        def _one(fp: FactorPlan):
-            res = self.backend.execute(fp.root, ctx)
-            return fp.factor_name, res
-
-        # 默认 threading：与 DataFrame 共享内存，避免多进程序列化大面板；CPU 极重时仍可改策略
-        raw = Parallel(n_jobs=workers, backend="threading")(
-            delayed(_one)(fp) for fp in dag.roots
-        )
-        results = dict(raw)
-        parallel_out: dict[str, Any] = {"results": results, "dag": dag, "analyses": analyses}
-        if input_report is not None:
-            parallel_out["input_dq"] = input_report.to_dict()
-        return parallel_out
 
     def with_data_source(self, data_source, *, fresh_cache: bool = False) -> FactorEngine:
         """返回共享 backend 的新引擎实例（用于增量时间窗口）。

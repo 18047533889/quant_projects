@@ -59,9 +59,11 @@ class DatasetStatsSnapshot:
     min_time: str | None = None
     max_time: str | None = None
     instruments: int | None = None
+    #: 列名 → 非空率（0~1）；由采样 parquet 估算
+    column_null_ratio: dict[str, float] | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "dataset": self.dataset,
             "num_rows": self.num_rows,
             "num_files": self.num_files,
@@ -70,9 +72,16 @@ class DatasetStatsSnapshot:
             "max_time": self.max_time,
             "instruments": self.instruments,
         }
+        if self.column_null_ratio:
+            payload["column_null_ratio"] = dict(self.column_null_ratio)
+        return payload
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "DatasetStatsSnapshot":
+        raw_ratios = payload.get("column_null_ratio")
+        ratios: dict[str, float] | None = None
+        if isinstance(raw_ratios, dict) and raw_ratios:
+            ratios = {str(k): float(v) for k, v in raw_ratios.items()}
         return cls(
             dataset=str(payload.get("dataset", "")),
             num_rows=int(payload.get("num_rows", 0)),
@@ -81,6 +90,7 @@ class DatasetStatsSnapshot:
             min_time=payload.get("min_time"),
             max_time=payload.get("max_time"),
             instruments=payload.get("instruments"),
+            column_null_ratio=ratios,
         )
 
 
@@ -182,11 +192,43 @@ def load_stats_sidecar(root: Path) -> DatasetStatsSnapshot | None:
     return DatasetStatsSnapshot.from_dict(payload)
 
 
+def estimate_column_null_ratios(
+    paths: list[Path],
+    columns: list[str] | None = None,
+    *,
+    sample_files: int = 3,
+) -> dict[str, float]:
+    """采样若干 parquet 文件估算各列非空率（0~1）。"""
+    if not paths:
+        return {}
+    sample = paths[: max(1, int(sample_files))]
+    null_counts: dict[str, int] = {}
+    row_counts: dict[str, int] = {}
+    for path in sample:
+        if path.name.startswith("."):
+            continue
+        table = pq.read_table(str(path), columns=columns if columns else None)
+        for name in table.column_names:
+            col = table.column(name)
+            null_counts[name] = null_counts.get(name, 0) + col.null_count
+            row_counts[name] = row_counts.get(name, 0) + len(col)
+    ratios: dict[str, float] = {}
+    for name, total in row_counts.items():
+        if total <= 0:
+            ratios[name] = 0.0
+            continue
+        non_null = total - null_counts.get(name, 0)
+        ratios[name] = non_null / total
+    return ratios
+
+
 def build_dataset_stats_snapshot(
     store: "DataAccessStore",
     dataset: str,
     *,
     time_range: tuple[Any, Any] | None = None,
+    with_null_ratio: bool = False,
+    null_ratio_sample_files: int = 3,
     **params: Any,
 ) -> DatasetStatsSnapshot:
     """扫描 parquet footer 构建 sidecar 统计。"""
@@ -195,6 +237,14 @@ def build_dataset_stats_snapshot(
     parquet_files = expand_parquet_paths(paths)
     num_rows = estimate_parquet_rows(parquet_files)
     min_time, max_time = infer_time_bounds_from_paths(parquet_files)
+    column_null_ratio: dict[str, float] | None = None
+    if with_null_ratio and parquet_files:
+        schema_cols = sorted(getattr(ds, "schema", {}) or {})
+        column_null_ratio = estimate_column_null_ratios(
+            parquet_files,
+            schema_cols or None,
+            sample_files=null_ratio_sample_files,
+        )
     return DatasetStatsSnapshot(
         dataset=dataset,
         num_rows=num_rows,
@@ -202,6 +252,7 @@ def build_dataset_stats_snapshot(
         partition_columns=tuple(getattr(ds, "partition_columns", ("year",))),
         min_time=min_time,
         max_time=max_time,
+        column_null_ratio=column_null_ratio,
     )
 
 

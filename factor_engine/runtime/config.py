@@ -102,6 +102,13 @@ class MaterializationConfig:
 
 
 @dataclass(frozen=True)
+class PipelineConfig:
+    """Pipeline 编排开关。"""
+
+    batched_engine: bool = False
+
+
+@dataclass(frozen=True)
 class FactorEngineConfig:
     factor: FactorDefinitionConfig
     data_source: DataSourceConfig
@@ -111,6 +118,7 @@ class FactorEngineConfig:
     run: RunConfig = field(default_factory=RunConfig)
     dq: DQConfig = field(default_factory=DQConfig)
     pit: PITConfig = field(default_factory=PITConfig)
+    pipeline: PipelineConfig = field(default_factory=PipelineConfig)
 
 
 def _parse_partition_columns(raw: Any) -> tuple[str, ...] | None:
@@ -181,6 +189,7 @@ def load_config(path: str | Path, *, profile: str | None = None) -> FactorEngine
     run_payload = payload.get("run", {})
     dq_payload = payload.get("dq", {})
     pit_payload = payload.get("pit", {})
+    pipeline_payload = payload.get("pipeline", {})
     materialization_payload = payload.get("materialization", payload.get("materialize"))
 
     if "name" not in factor_payload or "expr" not in factor_payload:
@@ -266,6 +275,9 @@ def load_config(path: str | Path, *, profile: str | None = None) -> FactorEngine
         enforce=bool(pit_payload.get("enforce", False)),
         forbid_forward_fill=bool(pit_payload.get("forbid_forward_fill", False)),
     )
+    pipeline_config = PipelineConfig(
+        batched_engine=bool(pipeline_payload.get("batched_engine", False)),
+    )
 
     return FactorEngineConfig(
         factor=factor_config,
@@ -276,4 +288,5 @@ def load_config(path: str | Path, *, profile: str | None = None) -> FactorEngine
         run=run_config,
         dq=dq_config,
         pit=pit_config,
+        pipeline=pipeline_config,
     )

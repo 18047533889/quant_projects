@@ -31,3 +31,5 @@ class ExecutionContext:
     query_budget: Any | None = None
     #: 运行时统计（``ExecutionCacheSession.stats``、Polars 热路径计数等）
     runtime_stats: dict[str, Any] | None = None
+    #: PolarsBackend：宽表尽量保持 polars.DataFrame
+    prefer_polars_panel: bool = False

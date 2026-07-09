@@ -81,19 +81,24 @@ def _build_view_map(read_datasets: Sequence[str], scope_id: str) -> dict[str, st
 
 
 def _rewrite_query_tables(query: str, view_map: dict[str, str]) -> str:
-    """把用户 SQL 里的 dataset 表名替换成 scope 唯一 view 名。
-
-    支持 ``FROM factors`` 与 ``FROM {{factors}}`` 两种写法。
-    """
+    """只替换 ``{{dataset}}`` 占位符，避免误改字符串字面量、注释、列别名。"""
     rewritten = query
-    for dataset_name in sorted(view_map.keys(), key=len, reverse=True):
-        view_name = view_map[dataset_name]
-        rewritten = rewritten.replace(f"{{{{{dataset_name}}}}}", view_name)
-        rewritten = re.sub(
-            rf"\b{re.escape(dataset_name)}\b",
-            view_name,
-            rewritten,
+    missing: list[str] = []
+
+    for dataset_name, view_name in view_map.items():
+        token = f"{{{{{dataset_name}}}}}"
+        if token in rewritten:
+            rewritten = rewritten.replace(token, view_name)
+        else:
+            missing.append(dataset_name)
+
+    if missing:
+        raise ValidationError(
+            "sql() 现在要求用 {{dataset}} 引用 read_datasets，避免裸表名重写误伤。"
+            f"缺少占位符: {missing}. "
+            "示例: SELECT * FROM {{factor_lake}} WHERE datetime >= ?"
         )
+
     return rewritten
 
 
@@ -292,13 +297,12 @@ def run_sql_stream(
     def _iter_batches() -> Iterator[pa.RecordBatch]:
         nonlocal total_rows, total_bytes, ok, err_msg
         try:
-            _conn, batch_iter = engine.execute_scoped_sql_stream(
+            batch_iter = engine.execute_scoped_sql_stream(
                 register_specs,
                 bounded_query,
                 params,
                 batch_size=batch_size,
             )
-            del _conn  # conn 由 batch_iter finally 关闭
             for batch in batch_iter:
                 if batch.num_rows == 0:
                     continue

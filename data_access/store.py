@@ -492,40 +492,24 @@ class DataAccessStore:
 
         ``mode="auto"`` 时用 parquet footer 估算行数；``arrow`` / ``stream`` /
         ``polars`` 可强制指定路径。最终统一 materialize 为 Arrow Table。
+
+        大结果且需保持低内存峰值时，优先 ``read_auto_stream()``。
         """
-        from .stats import dataset_read_stats, load_stats_sidecar
+        from .read_auto_router import resolve_read_auto_mode
 
         ds = self._registry.get(dataset)
         budget = self._resolve_read_budget(ds, query_budget)
-        resolved_mode = str(mode or "auto").lower()
-        if resolved_mode == "auto":
-            sidecar = None
-            if isinstance(ds, StaticDataset):
-                sidecar = load_stats_sidecar(ds.root)
-            stats = dataset_read_stats(
-                self,
-                dataset,
-                columns=list(columns) if columns else None,
-                time_range=time_range,
-                prefer_polars=prefer_polars,
-                sidecar=sidecar,
-                **params,
-            )
-            resolved_mode = stats.suggested_mode
-            if (
-                budget.max_rows is not None
-                and stats.estimated_rows > budget.max_rows
-                and resolved_mode == "arrow"
-            ):
-                resolved_mode = "stream"
-            logger.info(
-                "read_auto dataset=%s mode=%s estimated_rows=%d files=%d budget_max_rows=%s",
-                dataset,
-                resolved_mode,
-                stats.estimated_rows,
-                stats.parquet_files,
-                budget.max_rows,
-            )
+        resolved_mode, _stats = resolve_read_auto_mode(
+            self,
+            dataset,
+            columns=list(columns) if columns else None,
+            time_range=time_range,
+            query_budget=query_budget,
+            mode=mode,
+            prefer_polars=prefer_polars,
+            budget=budget,
+            **params,
+        )
         validate_query_request(
             budget, columns=list(columns) if columns else None, time_range=time_range
         )
@@ -538,24 +522,97 @@ class DataAccessStore:
             **params,
         )
         if resolved_mode == "polars":
+            from .query_budget import collect_polars_with_budget
+
             lf = self.scan_polars(dataset, **read_kwargs)
-            table = lf.collect().to_arrow()
+            table = collect_polars_with_budget(lf, query_budget=budget)
             if limit is not None and table.num_rows > limit:
                 table = table.slice(0, limit)
             return table
         if resolved_mode == "stream":
-            batches = list(
-                self.read_arrow_stream(
-                    dataset,
-                    batch_size=batch_size,
-                    limit=limit,
-                    **read_kwargs,
+            if mode == "auto":
+                logger.warning(
+                    "read_auto(auto) estimated stream-sized result but API requires "
+                    "Arrow Table; falling back to read_arrow with budget enforcement. "
+                    "Use read_auto_stream/read_arrow_stream/sql_stream for true streaming."
                 )
-            )
-            if not batches:
-                return pa.table({})
-            return pa.Table.from_batches(batches)
+                resolved_mode = "arrow"
+            else:
+                batches = list(
+                    self.read_arrow_stream(
+                        dataset,
+                        batch_size=batch_size,
+                        limit=limit,
+                        **read_kwargs,
+                    )
+                )
+                if not batches:
+                    return pa.table({})
+                return pa.Table.from_batches(batches)
         return self.read_arrow(dataset, limit=limit, **read_kwargs)
+
+    def read_auto_stream(
+        self,
+        dataset: str,
+        *,
+        columns: Sequence[str] | None = None,
+        time_range: tuple[Any, Any] | None = None,
+        instrument_filter: Sequence[str] | None = None,
+        limit: int | None = None,
+        query_budget: QueryBudget | None = None,
+        mode: str = "auto",
+        prefer_polars: bool = False,
+        batch_size: int = 100_000,
+        **params: Any,
+    ) -> Iterator[pa.RecordBatch]:
+        """按规模自动路由，**始终**以 RecordBatch 流式返回（不物化全表）。
+
+        ``mode="auto"`` 仅影响路由日志；polars 路由会 fallback 到
+        ``read_arrow_stream`` 并打 warning。需要 LazyFrame 时用 ``scan_polars``。
+        """
+        from .read_auto_router import resolve_read_auto_mode
+
+        ds = self._registry.get(dataset)
+        budget = self._resolve_read_budget(ds, query_budget)
+        resolved_mode, _stats = resolve_read_auto_mode(
+            self,
+            dataset,
+            columns=list(columns) if columns else None,
+            time_range=time_range,
+            query_budget=query_budget,
+            mode=mode,
+            prefer_polars=prefer_polars,
+            budget=budget,
+            **params,
+        )
+        validate_query_request(
+            budget, columns=list(columns) if columns else None, time_range=time_range
+        )
+        if resolved_mode == "polars":
+            logger.warning(
+                "read_auto_stream dataset=%s resolved_mode=polars; "
+                "fallback to read_arrow_stream for true batch streaming",
+                dataset,
+            )
+        logger.info(
+            "read_auto_stream dataset=%s resolved_mode=%s batch_size=%d",
+            dataset,
+            resolved_mode,
+            batch_size,
+        )
+        read_kwargs = dict(
+            columns=columns,
+            time_range=time_range,
+            instrument_filter=instrument_filter,
+            query_budget=query_budget,
+            **params,
+        )
+        yield from self.read_arrow_stream(
+            dataset,
+            batch_size=batch_size,
+            limit=limit,
+            **read_kwargs,
+        )
 
     def dataset_read_stats(
         self,
@@ -963,7 +1020,7 @@ class DataAccessStore:
 
         示例：
             >>> tbl = store.sql(
-            ...     "SELECT asset, AVG(value) FROM factor_lake "
+            ...     "SELECT asset, AVG(value) FROM {{factor_lake}} "
             ...     "WHERE datetime >= ? GROUP BY asset",
             ...     read_datasets=["factor_lake"],
             ...     read_params={"factor_lake": {"factor_id": "mom_3d"}},
@@ -1043,10 +1100,13 @@ class DataAccessStore:
     def _bucket_hive_filters(
         ds: Dataset,
         instrument_filter: Sequence[str] | None,
+        bucket_values: Sequence[int] | None = None,
     ) -> dict[str, list[Any]] | None:
         from .layout_policy import bucket_values_for_instruments
 
         layout_policy = getattr(ds, "layout_policy", None)
+        if bucket_values is not None and layout_policy is not None and layout_policy.bucket is not None:
+            return {layout_policy.bucket.column: sorted(int(b) for b in bucket_values)}
         buckets = bucket_values_for_instruments(
             instrument_filter,
             layout_policy,
@@ -1100,10 +1160,29 @@ class DataAccessStore:
         instrument_filter: Sequence[str] | None = None,
     ) -> list[str]:
         """把 dataset + params 解析成传给 DuckDB 的 path glob 列表，并做白名单校验。"""
-        from .layout_policy import prune_glob_paths_for_buckets
+        import os
 
-        glob_paths = ds.resolve_paths(**params)
-        hive_filters = self._bucket_hive_filters(ds, instrument_filter)
+        from .layout_policy import prune_glob_paths_for_buckets
+        from .registry import StaticDataset
+
+        read_params = dict(params)
+        explicit_buckets = read_params.pop("bucket_values", None)
+        read_root = read_params.pop("read_root", None) or read_params.pop("_read_root", None)
+        if read_root is None:
+            env_key = f"DATA_ACCESS_READ_ROOT_{ds.name.upper().replace('-', '_')}"
+            read_root = os.environ.get(env_key)
+
+        if isinstance(ds, StaticDataset):
+            root = Path(read_root) if read_root else ds.root
+            glob_paths = [str(root / ds.glob)]
+        else:
+            glob_paths = ds.resolve_paths(**read_params)
+
+        hive_filters = self._bucket_hive_filters(
+            ds,
+            instrument_filter,
+            bucket_values=explicit_buckets,
+        )
         if hive_filters:
             bucket_col = next(iter(hive_filters))
             glob_paths = prune_glob_paths_for_buckets(

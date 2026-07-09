@@ -293,8 +293,8 @@ class DuckDBEngine:
         params: Sequence[Any] | None = None,
         *,
         batch_size: int = 100_000,
-    ) -> tuple[Any, Iterator[pa.RecordBatch]]:
-        """独立连接流式 scoped sql；返回 (conn, batch_iter)，迭代完须 close conn。"""
+    ) -> Iterator[pa.RecordBatch]:
+        """独立连接流式 scoped sql；返回 batch iterator，迭代完自动关闭连接。"""
         conn = duckdb.connect(":memory:")
         try:
             apply_pragmas(conn, self._config)
@@ -315,7 +315,7 @@ class DuckDBEngine:
                 finally:
                     conn.close()
 
-            return conn, _iter()
+            return _iter()
         except duckdb.Error as exc:
             conn.close()
             raise EngineError(

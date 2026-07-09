@@ -152,6 +152,7 @@ def build_data_source(config: Any):
         normalize_timestamp = _pop_option(options, "normalize_timestamp", default=None)
         timestamp_unit = _pop_option(options, "timestamp_unit", default=None)
         params = _pop_option(options, "params", default=None)
+        read_auto = _pop_option(options, "read_auto", default=None)
         kind = _pop_option(options, "kind", default=None)
         if kind is not None:
             merged = dict(params or {})
@@ -166,6 +167,7 @@ def build_data_source(config: Any):
             instrument_filter=instrument_filter,
             normalize_timestamp=normalize_timestamp,
             timestamp_unit=timestamp_unit,
+            read_auto=read_auto,
             params=params,
         )
         _ensure_no_extra_options(source_type, options)

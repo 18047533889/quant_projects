@@ -140,8 +140,13 @@ _register_bridge(
     business_category="statistics_regression",
     param_names=["x", "w"],
 )
-for _f in ("quarter", "ttm", "yoy"):
-    _register_bridge(_f, category="fundamental", business_category="fundamental")
+for _f in ("quarter", "ttm", "yoy", "avg2"):
+    _register_bridge(
+        _f,
+        category="fundamental",
+        business_category="fundamental",
+        param_names=["x", "fiscal_quarter"],
+    )
 
 # ---- colwise 单序列核 --------------------------------------------------------
 _register_colwise("price_spread_deviation", "price_spread_deviation_")

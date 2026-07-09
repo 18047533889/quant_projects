@@ -268,9 +268,24 @@ _EXPLICIT: dict[str, OpDoc] = {
         r"R_t^{\mathrm{cum}} = \prod_{s\le t}(1+r_s) - 1",
     ),
     "rolling_beta_to_market": OpDoc(
-        "滚动市场 Beta。",
-        "窗口内 Cov(r_i, r_m) / Var(r_m)。",
+        "滚动市场 Beta（experimental）。",
+        "窗口内 Cov(r_i, r_m) / Var(r_m)；请优先使用 production 算子 rolling_beta。",
         r"\beta_{i,t} = \frac{\mathrm{Cov}(r_i,r_m)}{\mathrm{Var}(r_m)}",
+    ),
+    "rolling_beta": OpDoc(
+        "滚动 Beta（双输入 production）。",
+        "Cov(ret, benchmark_ret) / Var(benchmark_ret)；benchmark 可单列广播。",
+        r"\beta_{i,t} = \frac{\mathrm{Cov}(r_i,r_b)}{\mathrm{Var}(r_b)}",
+    ),
+    "RSI_WILDER": OpDoc(
+        "Wilder 相对强弱指数。",
+        "gain/loss 用 alpha=1/window 的 EWM 平滑，min_periods=window。",
+        r"RSI = 100 - \frac{100}{1 + \frac{EMA(gain)}{EMA(loss)}}",
+    ),
+    "ATR_WILDER": OpDoc(
+        "Wilder 平均真实波幅。",
+        "TR 用 alpha=1/window 的 EWM 平滑。",
+        r"ATR_t = EWM_\alpha(TR),\quad \alpha = 1/w",
     ),
     "downside_beta": OpDoc(
         "下行 Beta。",

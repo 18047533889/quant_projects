@@ -5,7 +5,7 @@ from __future__ import annotations
 import duckdb
 import pytest
 
-from data_access.duckdb_config import DuckDBConfig, apply_pragmas, resolve_duckdb_config
+from data_access.duckdb_config import DuckDBConfig, _sql_string, apply_pragmas, resolve_duckdb_config
 from data_access.engine import DuckDBEngine
 
 
@@ -27,6 +27,27 @@ def test_apply_pragmas_sets_threads():
         apply_pragmas(conn, DuckDBConfig(threads=3, memory_limit="512MB"))
         rows = conn.execute("SELECT current_setting('threads')").fetchall()
         assert int(rows[0][0]) == 3
+    finally:
+        conn.close()
+
+
+def test_sql_string_escapes_single_quotes():
+    assert _sql_string("512'MB") == "'512''MB'"
+    assert _sql_string("/tmp/duck's_spill") == "'/tmp/duck''s_spill'"
+
+
+def test_apply_pragmas_escapes_single_quotes_in_temp_directory():
+    conn = duckdb.connect(":memory:")
+    try:
+        apply_pragmas(
+            conn,
+            DuckDBConfig(
+                threads=1,
+                temp_directory="/tmp/duck's_spill",
+            ),
+        )
+        rows = conn.execute("SELECT current_setting('temp_directory')").fetchall()
+        assert rows[0][0] == "/tmp/duck's_spill"
     finally:
         conn.close()
 

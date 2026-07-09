@@ -10,21 +10,21 @@
 
 | # | 能力 | 现状 | 评级 | 主要 Gap |
 |---|------|------|------|----------|
-| 1 | run_many 批处理 / CSE | `run_many` + CSE + batch input_dq 快路径 | 🟡 | 生产默认仍常走单因子；rolling 子表达式未跨算子类型 dedupe |
-| 2 | 分层 Column/Panel Cache | `cache/` L0–L3 骨架 + `ExecutionCacheSession` | 🟡 | 未模块化 `column_cache.py`；cache key 缺 snapshot/time_range |
-| 3 | Parquet 物理分区 | registry `partition_columns`；物化 year/month | 🟡 | **读路径**未 bucket；分钟数据集未改 layout |
-| 4 | Factor Lake 双格式 | long ✅ + 单因子 wide panel | 🟡 | **无** multi-factor wide matrix 物化 |
-| 5 | 依赖图 + 增量 by event | `dependency_graph` + `analyze_batch` | 🔴 | 无持久化 catalog；无 data event → 因子触发 |
-| 6 | Rolling 算子分级 | Bottleneck 部分；Polars ts_* | 🟡 | 无 Tier 0–3 路由；无 numba rolling rank |
-| 7 | 真 PolarsBackend | 继承 Pandas；ts→Polars / cs→pandas | 🟡 | 无 LazyFrame 端到端；无 Expr lowering |
-| 8 | input_dq/prefetch 去重 | batch input_dq + `_column_cache` | 🟢 | `DataSourceReadSession` 已有，未强制全路径 |
-| 9 | Dataset Statistics | `stats.py` footer 行数估算 | 🟡 | 无 min/max/null_ratio；无持久化 stats 表 |
-| 10 | read_auto 路由 | `store.read_auto` arrow/stream/polars | 🟡 | 未接 query budget 预估；无 join 路由 |
-| 11 | Research vs Production 硬策略 | `RunConfig.mode` + resolve kwargs | 🟡 | 未禁 large job pandas fallback；未禁 stub |
-| 12 | Operator cost model | `OperatorPolicy` | 🔴 | 无 complexity/memory/incremental 字段 |
-| 13 | 分片物化 | `shard_config_paths` + `shard_factor_ids` | 🟡 | 无 `materialize_sharded` API |
-| 14 | Perf regression | `tests/perf/test_regression_gate.py` | 🟡 | 无 1M/10M 基准；无 nightly 门禁 |
-| 15 | 四阶段路线 | Phase 19–20 部分完成 | 🟡 | 见下文分阶段任务 |
+| 1 | run_many 批处理 / CSE | prod 默认 `batched_engine` + rolling CSE | 🟢 | 极个别 pandas-only 算子仍无 CSE |
+| 2 | 分层 Column/Panel Cache | `cache/panel_cache` + `expression_cache` + ReadSession | 🟢 | snapshot key 可再细化 |
+| 3 | Parquet 物理分区 | bucket ETL 脚本 + `bucket_values` 剪枝 | 🟡 | 生产数据集未全量切 bucket layout |
+| 4 | Factor Lake 双格式 | long + `materialize_matrix` + `ResultStore.load_matrix` | 🟢 | 训练路径 adoption |
+| 5 | 依赖图 + 增量 by event | `DependencyCatalog` + event queue + incremental | 🟢 | 长期 worker 运维 playbook |
+| 6 | Rolling 算子分级 | `OperatorCost` + Numba ts_mean/std/rank/corr | 🟡 | 更多 ts_* numba 覆盖 |
+| 7 | 真 PolarsBackend | lazy scan 读路径 + Polars ts_* | 🟡 | 算子层 LazyFrame 端到端 |
+| 8 | input_dq/prefetch 去重 | ReadSession + stats 动态阈值 | 🟢 | — |
+| 9 | Dataset Statistics | sidecar + `column_null_ratio` | 🟢 | instruments 精确计数可选 |
+| 10 | read_auto 路由 | read_auto + query budget production gate | 🟢 | join 路由 |
+| 11 | Research vs Production 硬策略 | `production_policy` + SELECT * 禁 | 🟢 | large job pandas fallback 告警 |
+| 12 | Operator cost model | `OperatorCost` + routing + plan_costs | 🟡 | Optimizer 读 cost 调度 |
+| 13 | 分片物化 | `materialize_sharded` factor_id/asset_bucket/time_month | 🟢 | CLI 批量 shard 编排 |
+| 14 | Perf regression | thresholds.yaml + nightly smoke/slow | 🟡 | 真实 parquet 1M/10M fixture |
+| 15 | 四阶段路线 | Phase A–D 大部分落地 | 🟢 | 文档与生产 adoption |
 
 图例：🟢 可用 · 🟡 有骨架需深化 · 🔴 未开始
 
@@ -229,17 +229,7 @@ ashare_stock_minute:
 
 ### 6. Rolling 算子分级
 
-**待做**：
-```python
-@dataclass
-class OperatorCost:
-    complexity: str       # O(N), O(NW), O(NWlogW)
-    memory: str
-    supports_incremental: bool
-    tier: int             # 0=bottleneck, 1=numba, 2=polars, 3=pandas
-```
-- `backend/routing.py`：`resolve_tier(op, panel_shape)`
-- 优先：`ts_mean/std/sum`, `ts_rank`, `ts_corr`, `neutralize`
+**已完成**：`OperatorCost` + `routing.py` + Numba ts_mean/std/rank/corr；production pandas fallback 告警。
 
 ---
 
@@ -247,86 +237,51 @@ class OperatorCost:
 
 | 阶段 | 算子 | 状态 |
 |------|------|------|
-| 1 | col, 四则, rank, zscore, ts_mean/std/sum/delta | 🟡 ts 已走 Polars |
-| 2 | ts_corr, ts_rank, group_rank, neutralize | 🔴 |
-| 3 | scan_polars → LazyFrame → collect | 🔴 |
-
-**Phase 3 关键路径**：
-```
-DataAccessSource.scan_polars(lazy=True)
-  → PolarsBackend.execute_lazy(plan)
-  → lower PlanNode to pl.Expr
-  → collect → MultiIndex Series
-```
+| 1 | col, 四则, rank, zscore, ts_mean/std/sum/delta | 🟢 |
+| 2 | ts_corr, ts_rank | 🟡 group_rank/neutralize 仍 pandas |
+| 3 | scan_polars 读 + execute_lazy | 🟡 算子层边界 collect |
 
 ---
 
 ### 8. input_dq / prefetch / execute 去重
 
-**已完成**：batch input_dq + prefetch 单次 `load_columns`（测试已有）。
-
-**待做**：全路径强制 `ReadSession`；`backend.execute` 禁止 bypass cache 直读 store。
+**已完成**：ReadSession + batch input_dq + stats 动态阈值。
 
 ---
 
 ### 9. Dataset Statistics
 
-**已完成**：footer 行数、`dataset_read_stats`。
-
-**待做**：
-- sidecar：`{dataset_root}/.stats.json`
-- 字段：min_time, max_time, num_rows, num_files, null_ratio per column
-- CLI：`python -m data_access.stats refresh --dataset X`
+**已完成**：`.data_access_stats.json` + `column_null_ratio` + `refresh_dataset_stats.py --with-null-ratio`。
 
 ---
 
 ### 10. read_auto
 
-**已完成**：arrow / stream / polars 路由。
+**已完成**：arrow/stream/polars + sidecar + query_budget production gate。
 
-**待做**：接 stats 行数估计 + `QueryBudget`；`expected_output` 参数；多 dataset join → `sql_stream`。
+**待做**：多 dataset join → `sql_stream`。
 
 ---
 
 ### 11. Research vs Production 硬策略
 
-**待做** `runtime/production_policy.py`：
-
-| 策略 | research | production |
-|------|----------|------------|
-| SELECT * | 允许 warn | ValidationError |
-| auto_warmup | 可选 | 强制 |
-| input_dq | 可选 | 强制 |
-| query_budget | 可选 | 强制 |
-| stub operator | 允许 | 禁止 |
-| pandas fallback (大 panel) | 允许 | 禁止或告警 |
-
-接入点：`FactorEngine.run` 入口、`store.read_*`、`build_backend`.
+**已完成** `runtime/production_policy.py`（SELECT * 禁、input_dq/auto_warmup/pit、stub 禁、pandas fallback 告警；`FACTOR_ENGINE_PRODUCTION_STRICT_POLARS=1` 可升级 fail）。
 
 ---
 
 ### 12. Operator cost model
 
-扩展 `OperatorPolicy` 或并行 `OperatorCost` registry；`Optimizer` 读取 cost 决定 cache/spill/shard。
+**已完成**：`OperatorCost` + `plan_costs` + `planner/cost_summary.py` tier 直方图。
+
+**待做**：Optimizer 读 cost 自动 cache/spill/shard。
 
 ---
 
 ### 13. 分片物化
 
-**已完成**：`shard_factor_ids`, `shard_config_paths`.
+**已完成**：`materialize_sharded`（factor_id / asset_bucket / time_month）+ CLI worker 分片。
 
-**待做**：
-```python
-def materialize_sharded(
-    self,
-    factors,
-    *,
-    shard_by: Literal["factor_id", "asset_bucket", "time_month"],
-    num_shards: int,
-    shard_index: int,
-    date_range: tuple[str, str],
-): ...
-```
+**待做**：K8s CronJob 批量 shard 编排模板（见 `examples/ops/`）。
 
 ---
 

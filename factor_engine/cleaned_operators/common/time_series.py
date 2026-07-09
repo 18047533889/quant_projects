@@ -19,6 +19,8 @@ DSL 常用 ``ts_*`` 前缀：``ts_mean``、``ts_std``、``ts_corr``、``ts_rank`
 """
 from __future__ import annotations
 
+import os
+
 import numpy as np
 import pandas as pd
 from cleaned_operators._causal import causal_lag
@@ -354,13 +356,108 @@ class TSPctChange(SeriesOperator):
         examples=["ts_pct(close, 1)"],
         param_names=["x", "d"],
         return_type="series",
-        tags=["time_series", "pct_change"]
+        tags=["time_series", "pct_change", "pit_safe"]
     )
 
     def _calculate_series(self, x: pd.DataFrame, d: int = 1, **kwargs) -> pd.DataFrame:
         periods = int(kwargs.get("periods", d))
         return x.pct_change(periods)
 
+
+
+# canonical=ts_log_return backend=pandas_numpy selected=ts_log_return source=time_series/m_ops.py
+@register_operator(name="ts_log_return", category="time_series", business_category="time_series", canonical="ts_log_return", source="factor_dsl_np")
+class TSLogReturn(SeriesOperator):
+    """d 期对数收益: ln(x_t / x_{t-d})"""
+
+    metadata = OperatorMetadata(
+        name="ts_log_return",
+        category="time_series",
+        description="d 期对数收益率 ln(x_t / x_{t-d})",
+        examples=["ts_log_return(close, 1)"],
+        param_names=["x", "d"],
+        return_type="series",
+        tags=["time_series", "returns", "log", "pit_safe"],
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, d: int = 1, **kwargs) -> pd.DataFrame:
+        n = max(1, int(kwargs.get("periods", d)))
+        prev = x.shift(n)
+        ratio = x / prev.replace(0, np.nan)
+        return np.log(ratio.replace([np.inf, -np.inf], np.nan))
+
+
+
+# canonical=ts_sharpe backend=pandas_numpy selected=ts_sharpe source=time_series/m_ops.py
+@register_operator(name="ts_sharpe", category="time_series", business_category="time_series", canonical="ts_sharpe", source="factor_dsl_np")
+class TSSharpe(SeriesOperator):
+    """滚动夏普比率（年化）。"""
+
+    metadata = OperatorMetadata(
+        name="ts_sharpe",
+        category="time_series",
+        description="滚动夏普：mean/std * sqrt(ann_factor)",
+        examples=["ts_sharpe(returns, 60)"],
+        param_names=["x", "window", "ann_factor"],
+        return_type="series",
+        tags=["time_series", "sharpe", "pit_safe"],
+    )
+
+    def _calculate_series(
+        self,
+        x: pd.DataFrame,
+        window: int = 60,
+        ann_factor: float = 252.0,
+        min_periods: int | None = None,
+        **kwargs,
+    ) -> pd.DataFrame:
+        w = max(2, int(window))
+        mp = max(2, int(min_periods)) if min_periods is not None else max(2, w // 3)
+        mean = x.rolling(window=w, min_periods=mp).mean()
+        std = x.rolling(window=w, min_periods=mp).std(ddof=1)
+        zero_vol = std.eq(0) | std.isna()
+        sharpe = mean / std.replace(0, np.nan)
+        sharpe = sharpe.mask(zero_vol & mean.gt(0), np.inf)
+        sharpe = sharpe.mask(zero_vol & mean.le(0), 0.0)
+        return sharpe * np.sqrt(float(ann_factor))
+
+
+# canonical=ts_autocorr backend=pandas_numpy selected=ts_autocorr source=time_series/m_ops.py
+@register_operator(
+    name="ts_autocorr",
+    category="time_series",
+    business_category="time_series",
+    canonical="ts_autocorr",
+    source="factor_dsl_np",
+)
+class TSAutocorr(SeriesOperator):
+    """滚动自相关系数：窗口内 corr(x, x.shift(lag))。"""
+
+    metadata = OperatorMetadata(
+        name="ts_autocorr",
+        category="time_series",
+        description="滚动自相关 corr(x_t, x_{t-lag}) within window",
+        examples=["ts_autocorr(returns, 20, 1)"],
+        param_names=["x", "window", "lag"],
+        return_type="series",
+        tags=["time_series", "autocorrelation", "pit_safe"],
+    )
+
+    def _calculate_series(
+        self,
+        x: pd.DataFrame,
+        window: int = 20,
+        lag: int = 1,
+        min_periods: int | None = None,
+        **kwargs,
+    ) -> pd.DataFrame:
+        k = max(1, int(lag))
+        w = max(k + 2, int(window))
+        mp = max(k + 2, int(min_periods)) if min_periods is not None else max(2, w // 3)
+        if int(lag) < 1:
+            return pd.DataFrame(np.nan, index=x.index, columns=x.columns)
+        y = x.shift(k)
+        return x.rolling(window=w, min_periods=mp).corr(y)
 
 
 # canonical=ts_quantile backend=pandas_numpy selected=ts_quantile source=time_series/m_ops.py
@@ -518,6 +615,25 @@ class TSCorrelation(SeriesOperator):
         tags=["time_series", "ts_", "correlation"]
     )
     def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
+        use_numba = os.environ.get("FACTOR_ENGINE_USE_NUMBA", "").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        if use_numba:
+            try:
+                from backend.numba_kernels import rolling_corr_panel
+
+                fast = rolling_corr_panel(
+                    x.to_numpy(dtype=float),
+                    y.to_numpy(dtype=float),
+                    int(window),
+                    min_count=2,
+                )
+                if fast is not None:
+                    return pd.DataFrame(fast, index=x.index, columns=x.columns)
+            except Exception:
+                pass
         return x.rolling(window=window, min_periods=2).corr(y)
 
 @register_operator(name="ts_corr", category="time_series", business_category="time_series", canonical="ts_corr", source="factor_dsl_np")
@@ -670,6 +786,17 @@ class TSMean(SeriesOperator):
         tags=["time_series", "ts_", "mean"]
     )
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
+        from backend.routing import numba_enabled_for_op
+
+        if numba_enabled_for_op("ts_mean", window=int(window)):
+            try:
+                from backend.numba_kernels import rolling_mean_panel
+
+                fast = rolling_mean_panel(x.to_numpy(dtype=float), int(window), min_count=1)
+                if fast is not None:
+                    return pd.DataFrame(fast, index=x.index, columns=x.columns)
+            except Exception:
+                pass
         return x.rolling(window=window, min_periods=1).mean()
 
 # aliases: Mean, TS_MEAN, m_avg, mean
@@ -720,6 +847,17 @@ class TSRank(SeriesOperator):
         tags=["time_series", "ts_", "rank"]
     )
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
+        from backend.routing import numba_enabled_for_op
+
+        if numba_enabled_for_op("ts_rank", window=int(window)):
+            try:
+                from backend.numba_kernels import rolling_rank_pct_panel
+
+                fast = rolling_rank_pct_panel(x.to_numpy(dtype=float), int(window), min_count=1)
+                if fast is not None:
+                    return pd.DataFrame(fast, index=x.index, columns=x.columns)
+            except Exception:
+                pass
         return x.rolling(window=window, min_periods=1).rank(pct=True)
 
 # aliases: TS_RANK, m_rank
@@ -780,6 +918,17 @@ class TSStdDev(SeriesOperator):
         tags=["time_series", "ts_", "std"]
     )
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
+        from backend.routing import numba_enabled_for_op
+
+        if numba_enabled_for_op("ts_std", window=int(window)):
+            try:
+                from backend.numba_kernels import rolling_std_panel
+
+                fast = rolling_std_panel(x.to_numpy(dtype=float), int(window), min_count=1)
+                if fast is not None:
+                    return pd.DataFrame(fast, index=x.index, columns=x.columns)
+            except Exception:
+                pass
         return x.rolling(window=window, min_periods=1).std()
 
 @register_operator(name="ts_std", category="time_series", business_category="time_series", canonical="ts_std", source="factor_dsl_np")
@@ -1450,4 +1599,99 @@ class TSZScorePolars(SeriesOperator):
             for c in numeric_cols
         ])
 
+
+
+# canonical=ts_sharpe backend=polars selected=ts_sharpe source=time_series/ts_ops_polars.py
+@register_operator(
+    name="ts_sharpe",
+    category="time_series",
+    business_category="time_series",
+    canonical="ts_sharpe",
+    source="factor_dsl_np",
+)
+class TSSharpePolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="ts_sharpe",
+        category="time_series",
+        description="滚动夏普：mean/std * sqrt(ann_factor)",
+        examples=["ts_sharpe(returns, 60)"],
+        param_names=["x", "window", "ann_factor"],
+        return_type="series",
+        tags=["time_series", "sharpe", "pit_safe"],
+    )
+
+    def _calculate_series(
+        self,
+        x: pl.DataFrame,
+        window: int = 60,
+        ann_factor: float = 252.0,
+        min_periods: int | None = None,
+        **kwargs,
+    ) -> pl.DataFrame:
+        w = max(2, int(window))
+        mp = max(2, int(min_periods)) if min_periods is not None else max(2, w // 3)
+        cols = [c for c in x.columns if c not in ["date", "stock_code"]]
+        sqrt_af = float(np.sqrt(float(ann_factor)))
+        return x.with_columns(
+            [
+                pl.when(
+                    (pl.col(c).rolling_std(window_size=w, min_samples=mp, ddof=1) == 0)
+                    & (pl.col(c).rolling_mean(window_size=w, min_samples=mp) > 0)
+                )
+                .then(float("inf"))
+                .when(pl.col(c).rolling_std(window_size=w, min_samples=mp, ddof=1) == 0)
+                .then(0.0)
+                .otherwise(
+                    pl.col(c).rolling_mean(window_size=w, min_samples=mp)
+                    / pl.col(c).rolling_std(window_size=w, min_samples=mp, ddof=1)
+                )
+                .mul(sqrt_af)
+                .alias(c)
+                for c in cols
+            ]
+        )
+
+
+# canonical=ts_autocorr backend=polars selected=ts_autocorr source=time_series/ts_ops_polars.py
+@register_operator(
+    name="ts_autocorr",
+    category="time_series",
+    business_category="time_series",
+    canonical="ts_autocorr",
+    source="factor_dsl_np",
+)
+class TSAutocorrPolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="ts_autocorr",
+        category="time_series",
+        description="滚动自相关 corr(x_t, x_{t-lag}) within window",
+        examples=["ts_autocorr(returns, 20, 1)"],
+        param_names=["x", "window", "lag"],
+        return_type="series",
+        tags=["time_series", "autocorrelation", "pit_safe"],
+    )
+
+    def _calculate_series(
+        self,
+        x: pl.DataFrame,
+        window: int = 20,
+        lag: int = 1,
+        min_periods: int | None = None,
+        **kwargs,
+    ) -> pl.DataFrame:
+        if int(lag) < 1:
+            cols = [c for c in x.columns if c not in ["date", "stock_code"]]
+            return x.with_columns([pl.lit(None).cast(pl.Float64).alias(c) for c in cols])
+        k = max(1, int(lag))
+        w = max(k + 2, int(window))
+        mp = max(k + 2, int(min_periods)) if min_periods is not None else max(2, w // 3)
+        cols = [c for c in x.columns if c not in ["date", "stock_code"]]
+        return x.with_columns(
+            [
+                pl.col(c)
+                .rolling_corr(pl.col(c).shift(k), window_size=w, min_periods=mp)
+                .alias(c)
+                for c in cols
+            ]
+        )
 

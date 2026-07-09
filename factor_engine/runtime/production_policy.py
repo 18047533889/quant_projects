@@ -12,10 +12,21 @@ class ProductionPolicyViolation(ValueError):
     """production 模式下违反硬策略。"""
 
 
+def _truthy_env(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def resolve_run_mode(mode: str | None = None) -> str:
     if mode is not None and str(mode).strip():
         return str(mode).lower()
-    return str(os.environ.get("FACTOR_ENGINE_RUN_MODE", "research")).lower()
+    fe = os.environ.get("FACTOR_ENGINE_RUN_MODE", "").strip().lower()
+    if fe == "research":
+        return "research"
+    if fe == PRODUCTION_MODE:
+        return PRODUCTION_MODE
+    if _truthy_env("QUANT_PRODUCTION_MODE"):
+        return PRODUCTION_MODE
+    return "research"
 
 
 def is_production_mode(mode: str | None = None) -> bool:
@@ -84,4 +95,101 @@ def assert_no_stub_operators(plan: Any, *, mode: str | None = None) -> None:
         unique = sorted(set(stub_ops))
         raise ProductionPolicyViolation(
             f"production 模式禁止 stub 算子: {', '.join(unique)}"
+        )
+
+
+def record_production_pandas_fallback(
+    ctx: Any,
+    *,
+    op: str,
+    requested_backend: str,
+    actual_backend: str,
+    mode: str | None = None,
+) -> None:
+    """production 下 Polars 热路径回退 pandas 时记录/告警。"""
+    if not is_production_mode(mode):
+        return
+    if actual_backend != "pandas_numpy" or requested_backend == actual_backend:
+        return
+    runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+    fallbacks = list(runtime.get("production_pandas_fallbacks", []))
+    entry = {"op": op, "requested": requested_backend, "actual": actual_backend}
+    if entry not in fallbacks:
+        fallbacks.append(entry)
+    runtime["production_pandas_fallbacks"] = fallbacks
+    ctx.runtime_stats = runtime  # type: ignore[attr-defined]
+    import logging
+
+    logging.getLogger("runtime.production_policy").warning(
+        "production pandas fallback: op=%s requested=%s actual=%s",
+        op,
+        requested_backend,
+        actual_backend,
+    )
+
+
+def assert_production_plan_ops(
+    plan: Any,
+    *,
+    mode: str | None = None,
+    context: str = "compile",
+) -> None:
+    """production 模式：逻辑计划中的算子须 ``allow_in_production``。"""
+    if not is_production_mode(mode):
+        return
+    from cleaned_operators.operator_spec import check_production_plan_ops
+
+    violations = check_production_plan_ops(plan)
+    if violations:
+        raise ProductionPolicyViolation(
+            f"production 模式 {context} 含非 production 算子: {'; '.join(violations)}"
+        )
+
+
+def assert_production_factors(
+    factors: Iterable[Any],
+    *,
+    mode: str | None = None,
+    context: str = "run",
+) -> None:
+    """production 模式：因子 DSL / source_expr 须通过 production 校验。"""
+    if not is_production_mode(mode):
+        return
+    from api.mining_integration import validate_production_dsl
+
+    violations: list[str] = []
+    for factor in factors:
+        src = getattr(factor, "source_expr", None)
+        if src:
+            ok, msg = validate_production_dsl(str(src))
+            if not ok:
+                violations.append(f"{getattr(factor, 'name', '?')}: {msg}")
+    if violations:
+        raise ProductionPolicyViolation(
+            f"production 模式 {context} DSL 校验失败: {'; '.join(violations)}"
+        )
+
+
+def assert_no_production_pandas_fallbacks(
+    ctx: Any,
+    *,
+    mode: str | None = None,
+    context: str = "execute",
+) -> None:
+    """production 严格模式：禁止 Polars 热路径回退 pandas。"""
+    if not is_production_mode(mode):
+        return
+    strict = os.environ.get("FACTOR_ENGINE_PRODUCTION_STRICT_POLARS", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    if not strict:
+        return
+    runtime = getattr(ctx, "runtime_stats", None) or {}
+    fallbacks = runtime.get("production_pandas_fallbacks") or []
+    if fallbacks:
+        ops = sorted({str(x.get("op", "")) for x in fallbacks if x.get("op")})
+        raise ProductionPolicyViolation(
+            f"production 严格模式 {context} 禁止 pandas fallback，算子: {', '.join(ops)}"
         )

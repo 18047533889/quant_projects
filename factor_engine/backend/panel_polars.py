@@ -18,6 +18,8 @@ def panel_to_polars(panel: pd.DataFrame) -> Any:
     """pandas 宽表 → polars（保留列名，不依赖 date/stock_code 列）。"""
     if pl is None:
         raise ImportError("polars is required for polars operator backend")
+    if is_polars_frame(panel):
+        return panel
     if not isinstance(panel, pd.DataFrame):
         raise TypeError(f"expected DataFrame panel, got {type(panel)!r}")
     return pl.DataFrame({str(c): panel[c].to_numpy() for c in panel.columns})

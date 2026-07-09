@@ -86,3 +86,12 @@ def _assert_cwd_not_in_repo_during_test():
             f"请改用 monkeypatch.chdir(tmp_path) 或其他 fixture 隔离。"
         )
     yield
+
+
+@pytest.fixture(autouse=True)
+def _reset_production_env_leaks():
+    """清理跨模块测试遗留的生产环境变量。"""
+    yield
+    os.environ.pop("QUANT_PRODUCTION_MODE", None)
+    if os.environ.get("FACTOR_ENGINE_RUN_MODE") == "production":
+        os.environ.pop("FACTOR_ENGINE_RUN_MODE", None)

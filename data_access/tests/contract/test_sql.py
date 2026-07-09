@@ -96,7 +96,7 @@ def sql_store(tmp_path, monkeypatch):
 def test_sql_basic_select(sql_store):
     store, _, _ = sql_store
     tbl = store.sql(
-        "SELECT asset, value FROM factors WHERE value > 1.5",
+        "SELECT asset, value FROM {{factors}} WHERE value > 1.5",
         read_datasets=["factors"],
         read_params={"factors": {"factor_id": "mom_3d"}},
     )
@@ -108,7 +108,7 @@ def test_sql_group_by(sql_store):
     store, _, _ = sql_store
     tbl = store.sql(
         "SELECT asset, COUNT(*) AS n, AVG(value) AS mean_val "
-        "FROM factors GROUP BY asset ORDER BY asset",
+        "FROM {{factors}} GROUP BY asset ORDER BY asset",
         read_datasets=["factors"],
         read_params={"factors": {"factor_id": "mom_3d"}},
     )
@@ -123,8 +123,8 @@ def test_sql_join_two_datasets(sql_store):
     tbl = store.sql(
         dedent("""
             SELECT f.asset, f.datetime, f.value, p.close
-            FROM factors f
-            JOIN prices p USING (datetime, asset)
+            FROM {{factors}} f
+            JOIN {{prices}} p USING (datetime, asset)
             ORDER BY f.asset, f.datetime
         """).strip(),
         read_datasets=["factors", "prices"],
@@ -138,7 +138,7 @@ def test_sql_user_params_binding(sql_store):
     """用户 SQL 里的 ? 绑定参数。"""
     store, _, _ = sql_store
     tbl = store.sql(
-        "SELECT COUNT(*) AS n FROM factors WHERE value > ? AND asset = ?",
+        "SELECT COUNT(*) AS n FROM {{factors}} WHERE value > ? AND asset = ?",
         read_datasets=["factors"],
         read_params={"factors": {"factor_id": "mom_3d"}},
         params=[1.5, "AAPL"],
@@ -199,7 +199,7 @@ def test_sql_rejects_missing_params(sql_store):
     store, _, _ = sql_store
     with pytest.raises(ValidationError):
         store.sql(
-            "SELECT * FROM factors LIMIT 1",
+            "SELECT * FROM {{factors}} LIMIT 1",
             read_datasets=["factors"],
             # 缺 factor_id
         )
@@ -209,7 +209,7 @@ def test_sql_sql_syntax_error_raises_engine_error(sql_store):
     store, _, _ = sql_store
     with pytest.raises(EngineError, match="失败"):
         store.sql(
-            "SELECT FROM FROM FROM factors",  # 语法错
+            "SELECT FROM FROM FROM {{factors}}",  # 语法错
             read_datasets=["factors"],
             read_params={"factors": {"factor_id": "mom_3d"}},
         )
@@ -221,7 +221,7 @@ def test_sql_cleans_up_views_after_success(sql_store):
     """成功执行后 DuckDB catalog 里不能留下 scoped TEMP VIEW。"""
     store, _, engine = sql_store
     store.sql(
-        "SELECT asset FROM factors",
+        "SELECT asset FROM {{factors}}",
         read_datasets=["factors"],
         read_params={"factors": {"factor_id": "mom_3d"}},
     )
@@ -236,7 +236,7 @@ def test_sql_cleans_up_views_after_failure(sql_store):
     store, _, engine = sql_store
     with pytest.raises(EngineError):
         store.sql(
-            "SELECT * FROM factors WHERE no_such_col = 1",  # 列不存在 → duckdb raise
+            "SELECT * FROM {{factors}} WHERE no_such_col = 1",  # 列不存在 → duckdb raise
             read_datasets=["factors"],
             read_params={"factors": {"factor_id": "mom_3d"}},
         )
@@ -247,7 +247,7 @@ def test_sql_cleans_up_views_after_failure(sql_store):
 
     # 失败后还能再跑一次成功查询（证明 view 清干净了）
     tbl = store.sql(
-        "SELECT COUNT(*) AS n FROM factors",
+        "SELECT COUNT(*) AS n FROM {{factors}}",
         read_datasets=["factors"],
         read_params={"factors": {"factor_id": "mom_3d"}},
     )
@@ -260,7 +260,7 @@ def test_sql_records_audit_on_success(sql_store, tmp_path):
     store, root, _ = sql_store
     audit_path = root / "audit.jsonl"
     store.sql(
-        "SELECT asset FROM factors",
+        "SELECT asset FROM {{factors}}",
         read_datasets=["factors"],
         read_params={"factors": {"factor_id": "mom_3d"}},
     )
@@ -279,7 +279,7 @@ def test_sql_records_audit_on_failure(sql_store, tmp_path):
     audit_path = root / "audit.jsonl"
     with pytest.raises(EngineError):
         store.sql(
-            "SELECT * FROM factors WHERE no_such_col = 1",
+            "SELECT * FROM {{factors}} WHERE no_such_col = 1",
             read_datasets=["factors"],
             read_params={"factors": {"factor_id": "mom_3d"}},
         )
@@ -311,13 +311,13 @@ def test_sql_cannot_bypass_path_authorizer(sql_store, tmp_path):
 def test_sql_stream_matches_sql(sql_store):
     store, _, _ = sql_store
     full = store.sql(
-        "SELECT asset, value FROM factors ORDER BY datetime",
+        "SELECT asset, value FROM {{factors}} ORDER BY datetime",
         read_datasets=["factors"],
         read_params={"factors": {"factor_id": "mom_3d"}},
     )
     batches = list(
         store.sql_stream(
-            "SELECT asset, value FROM factors ORDER BY datetime",
+            "SELECT asset, value FROM {{factors}} ORDER BY datetime",
             read_datasets=["factors"],
             read_params={"factors": {"factor_id": "mom_3d"}},
             batch_size=2,
@@ -335,7 +335,7 @@ def test_sql_requires_view_columns_in_production_mode(sql_store, monkeypatch):
     monkeypatch.setenv("QUANT_PRODUCTION_MODE", "1")
     with pytest.raises(ValidationError, match="view_columns"):
         store.sql(
-            "SELECT asset FROM factors",
+            "SELECT asset FROM {{factors}}",
             read_datasets=["factors"],
             read_params={"factors": {"factor_id": "mom_3d"}},
         )
@@ -345,7 +345,7 @@ def test_sql_with_view_columns_in_production_mode(sql_store, monkeypatch):
     store, _, _ = sql_store
     monkeypatch.setenv("QUANT_PRODUCTION_MODE", "1")
     tbl = store.sql(
-        "SELECT asset, value FROM factors WHERE value > 1.5",
+        "SELECT asset, value FROM {{factors}} WHERE value > 1.5",
         read_datasets=["factors"],
         read_params={"factors": {"factor_id": "mom_3d"}},
         view_columns={"factors": ["datetime", "asset", "value"]},
@@ -359,7 +359,7 @@ def test_parallel_sql_queries(sql_store):
 
     def run_one():
         tbl = store.sql(
-            "SELECT COUNT(*) AS n FROM factors WHERE asset = ?",
+            "SELECT COUNT(*) AS n FROM {{factors}} WHERE asset = ?",
             read_datasets=["factors"],
             read_params={"factors": {"factor_id": "mom_3d"}},
             params=["AAPL"],

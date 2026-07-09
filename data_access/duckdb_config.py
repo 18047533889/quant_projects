@@ -8,6 +8,11 @@ from dataclasses import dataclass
 import duckdb
 
 
+def _sql_string(value: str) -> str:
+    """DuckDB PRAGMA 字符串字面量转义。"""
+    return "'" + value.replace("'", "''") + "'"
+
+
 @dataclass(frozen=True)
 class DuckDBConfig:
     """DuckDB 进程/连接级性能与 spill 配置。"""
@@ -54,7 +59,7 @@ def apply_pragmas(conn: duckdb.DuckDBPyConnection, cfg: DuckDBConfig) -> None:
     """对连接应用 PRAGMA；调用方负责在需要时加 catalog 写锁。"""
     conn.execute(f"PRAGMA threads={cfg.threads}")
     if cfg.memory_limit:
-        conn.execute(f"PRAGMA memory_limit='{cfg.memory_limit}'")
+        conn.execute(f"PRAGMA memory_limit={_sql_string(cfg.memory_limit)}")
     if cfg.enable_object_cache:
         conn.execute("PRAGMA enable_object_cache=true")
     conn.execute(
@@ -62,8 +67,9 @@ def apply_pragmas(conn: duckdb.DuckDBPyConnection, cfg: DuckDBConfig) -> None:
         f"{'true' if cfg.preserve_insertion_order else 'false'}"
     )
     if cfg.temp_directory:
-        conn.execute(f"PRAGMA temp_directory='{cfg.temp_directory}'")
+        conn.execute(f"PRAGMA temp_directory={_sql_string(cfg.temp_directory)}")
     if cfg.max_temp_directory_size:
         conn.execute(
-            f"PRAGMA max_temp_directory_size='{cfg.max_temp_directory_size}'"
+            "PRAGMA max_temp_directory_size="
+            f"{_sql_string(cfg.max_temp_directory_size)}"
         )

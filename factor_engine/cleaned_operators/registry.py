@@ -28,7 +28,37 @@
 白名单与 runtime 一致性：仅 ``get(canon) is not None`` 的算子会进入 ``build_dsl_allowlist()``。
 """
 from __future__ import annotations
+
+import os
 from typing import Any, Dict, List, Optional, Tuple
+
+from cleaned_operators.operator_policy import POLARS_PRODUCTION_SAFE
+
+
+def _operator_backend_auto_aggressive() -> bool:
+    return os.environ.get("FACTOR_ENGINE_OPERATOR_BACKEND", "").strip().lower() in {
+        "auto_aggressive",
+        "aggressive",
+    }
+
+
+def _merge_param_names(existing: list[str] | None, new: list[str] | None) -> list[str]:
+    """多 backend 注册时保留更完整的 param_names（避免 polars bridge 覆盖）。"""
+    old = list(existing or [])
+    cur = list(new or [])
+    if not old:
+        return cur
+    if not cur:
+        return old
+    # 同长度时优先含 benchmark_ret/ret 的契约（CAPM 类算子）
+    if len(cur) == len(old):
+        if "benchmark_ret" in cur and "benchmark_ret" not in old:
+            return cur
+        if "benchmark_ret" in old:
+            return old
+    if len(cur) >= len(old):
+        return cur
+    return old
 
 
 class OperatorRegistry:
@@ -52,13 +82,21 @@ class OperatorRegistry:
         """注册一个已实现算子；``canonical`` 为内部主键，``aliases`` 为可选 DSL 别名。"""
         canonical = canonical or operator.metadata.name
         cls._operators.setdefault(canonical, {})[backend] = operator
+        existing = cls._catalog.get(canonical, {})
+        if existing and status == "implemented":
+            prev_status = str(existing.get("status", "implemented") or "implemented")
+            if prev_status not in ("implemented", "production"):
+                status = prev_status
         cls._catalog[canonical] = {
             "canonical": canonical,
             "backends": sorted(cls._operators[canonical].keys()),
             "selected_source": source,
             "status": status,
             "description": getattr(operator.metadata, "description", ""),
-            "param_names": getattr(operator.metadata, "param_names", []),
+            "param_names": _merge_param_names(
+                existing.get("param_names"),
+                getattr(operator.metadata, "param_names", []),
+            ),
             "aliases": sorted(set((aliases or []) + cls._catalog.get(canonical, {}).get("aliases", []))),
         }
         for alias in aliases or []:
@@ -152,9 +190,10 @@ class OperatorRegistry:
             if "sql" in backends:
                 return backends["sql"], "sql"
             return cls.get_preferred(name, prefer="auto")
-        # auto：有 polars 则用 polars
+        # auto：production 仅白名单走 polars；research 可 FACTOR_ENGINE_OPERATOR_BACKEND=auto_aggressive
         if "polars" in backends:
-            return backends["polars"], "polars"
+            if canonical in POLARS_PRODUCTION_SAFE or _operator_backend_auto_aggressive():
+                return backends["polars"], "polars"
         return backends.get("pandas_numpy"), "pandas_numpy"
 
     @classmethod

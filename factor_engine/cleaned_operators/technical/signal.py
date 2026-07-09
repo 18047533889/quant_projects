@@ -54,9 +54,38 @@ from cleaned_operators.base import (
 )
 
 
-def _wilder_smooth(series: pd.Series, window: int) -> pd.Series:
+def _wilder_smooth(series: pd.Series, window: int, *, min_periods: int = 1) -> pd.Series:
     """Wilder 平滑（等价于 alpha=1/window 的 EWM）。"""
-    return series.ewm(alpha=1.0 / window, adjust=False, min_periods=1).mean()
+    return series.ewm(alpha=1.0 / window, adjust=False, min_periods=min_periods).mean()
+
+
+def _compute_rsi_wilder(close: pd.DataFrame, window: int) -> pd.DataFrame:
+    w = max(2, int(window))
+    delta = close.diff()
+    gain = delta.clip(lower=0)
+    loss = (-delta.clip(upper=0))
+    avg_gain = gain.ewm(alpha=1.0 / w, adjust=False, min_periods=w).mean()
+    avg_loss = loss.ewm(alpha=1.0 / w, adjust=False, min_periods=w).mean()
+    rs = avg_gain / avg_loss.replace(0, np.nan)
+    rsi = 100 - (100 / (1 + rs))
+    rsi = rsi.mask((avg_loss == 0) & (avg_gain > 0), 100.0)
+    rsi = rsi.mask((avg_gain == 0) & (avg_loss > 0), 0.0)
+    rsi = rsi.mask((avg_gain == 0) & (avg_loss == 0), 50.0)
+    return rsi
+
+
+def _compute_atr_wilder(
+    high: pd.DataFrame,
+    low: pd.DataFrame,
+    close: pd.DataFrame,
+    window: int,
+) -> pd.DataFrame:
+    w = max(2, int(window))
+    tr1 = high - low
+    tr2 = (high - close.shift(1)).abs()
+    tr3 = (low - close.shift(1)).abs()
+    tr = np.maximum(np.maximum(tr1, tr2), tr3)
+    return tr.ewm(alpha=1.0 / w, adjust=False, min_periods=w).mean()
 
 
 def _compute_dmi_adx(
@@ -116,10 +145,12 @@ class ADXR(SeriesOperator):
     )
 
     def _calculate_series(self, high: pd.DataFrame, low: pd.DataFrame, close: pd.DataFrame, window: int = 14, **kwargs) -> pd.DataFrame:
+        w = max(2, int(window))
         result = pd.DataFrame(np.nan, index=high.index, columns=high.columns)
         for col in high.columns:
-            adx = _compute_dmi_adx(high[col], low[col], close[col], window)
-            result[col] = (adx + adx.shift(window)) / 2
+            adx = _compute_dmi_adx(high[col], low[col], close[col], w)
+            adxr = (adx + adx.shift(w)) / 2.0
+            result[col] = adxr.mask(adx.isna() | adx.shift(w).isna())
         return result
 
 
@@ -138,8 +169,10 @@ class Aroon(SeriesOperator):
     )
 
     def _calculate_series(self, close: pd.DataFrame, window: int = 25, **kwargs) -> pd.DataFrame:
-        aroon_up = 100 * close.rolling(window=window + 1, min_periods=1).apply(lambda x: np.argmax(x), raw=True) / window
-        aroon_down = 100 * close.rolling(window=window + 1, min_periods=1).apply(lambda x: np.argmin(x), raw=True) / window
+        w = max(1, int(window))
+        roll = close.rolling(window=w + 1, min_periods=w + 1)
+        aroon_up = 100 * roll.apply(lambda x: np.argmax(x), raw=True) / w
+        aroon_down = 100 * roll.apply(lambda x: np.argmin(x), raw=True) / w
         return aroon_up - aroon_down
 
 
@@ -158,7 +191,8 @@ class AroonDown(SeriesOperator):
     )
 
     def _calculate_series(self, close: pd.DataFrame, window: int = 25, **kwargs) -> pd.DataFrame:
-        return 100 * close.rolling(window=window + 1, min_periods=1).apply(lambda x: np.argmin(x), raw=True) / window
+        w = max(1, int(window))
+        return 100 * close.rolling(window=w + 1, min_periods=w + 1).apply(lambda x: np.argmin(x), raw=True) / w
 
 
 
@@ -176,7 +210,8 @@ class AroonUp(SeriesOperator):
     )
 
     def _calculate_series(self, close: pd.DataFrame, window: int = 25, **kwargs) -> pd.DataFrame:
-        return 100 * close.rolling(window=window + 1, min_periods=1).apply(lambda x: np.argmax(x), raw=True) / window
+        w = max(1, int(window))
+        return 100 * close.rolling(window=w + 1, min_periods=w + 1).apply(lambda x: np.argmax(x), raw=True) / w
 
 
 
@@ -187,7 +222,7 @@ class ATR(SeriesOperator):
     metadata = OperatorMetadata(
         name="ATR",
         category="financial",
-        description="平均真实波幅",
+        description="平均真实波幅（SMA 平滑；Wilder 版见 ATR_WILDER）",
         examples=["ATR(high, low, close, 14)"],
         param_names=["high", "low", "close", "window"],
         return_type="series",
@@ -200,6 +235,28 @@ class ATR(SeriesOperator):
         tr3 = (low - close.shift(1)).abs()
         tr = np.maximum(np.maximum(tr1, tr2), tr3)
         return tr.rolling(window=window, min_periods=1).mean()
+
+
+@register_operator(
+    name="ATR_WILDER",
+    category="financial",
+    business_category="technical_signal",
+    canonical="ATR_WILDER",
+    source="factor_dsl_np",
+)
+class ATRWilder(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="ATR_WILDER",
+        category="financial",
+        description="Wilder 平均真实波幅",
+        examples=["ATR_WILDER(high, low, close, 14)"],
+        param_names=["high", "low", "close", "window"],
+        return_type="series",
+        tags=["financial", "technical", "ATR", "pit_safe"],
+    )
+
+    def _calculate_series(self, high: pd.DataFrame, low: pd.DataFrame, close: pd.DataFrame, window: int = 14, **kwargs) -> pd.DataFrame:
+        return _compute_atr_wilder(high, low, close, window)
 
 
 
@@ -459,7 +516,7 @@ class OBV(SeriesOperator):
     )
 
     def _calculate_series(self, price: pd.DataFrame, volume: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        direction = np.sign(price.diff())
+        direction = np.sign(price.diff()).fillna(0)
         return (direction * volume).cumsum()
 
 
@@ -489,7 +546,7 @@ class RSI(SeriesOperator):
     metadata = OperatorMetadata(
         name="RSI",
         category="financial",
-        description="相对强弱指数",
+        description="相对强弱指数（SMA 平滑；Wilder 版见 RSI_WILDER）",
         examples=["RSI(close, 14)"],
         param_names=["x", "window"],
         return_type="series",
@@ -500,12 +557,34 @@ class RSI(SeriesOperator):
         delta = x.diff()
         gain = delta.clip(lower=0).rolling(window=window, min_periods=1).mean()
         loss = (-delta.clip(upper=0)).rolling(window=window, min_periods=1).mean()
-        rs = gain / loss
+        rs = gain / loss.replace(0, np.nan)
         rsi = 100 - (100 / (1 + rs))
         rsi = rsi.mask((loss == 0) & (gain > 0), 100.0)
         rsi = rsi.mask((gain == 0) & (loss > 0), 0.0)
         rsi = rsi.mask((gain == 0) & (loss == 0), 50.0)
         return rsi
+
+
+@register_operator(
+    name="RSI_WILDER",
+    category="financial",
+    business_category="technical_signal",
+    canonical="RSI_WILDER",
+    source="factor_dsl_np",
+)
+class RSIWilder(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="RSI_WILDER",
+        category="financial",
+        description="Wilder 相对强弱指数",
+        examples=["RSI_WILDER(close, 14)"],
+        param_names=["x", "window"],
+        return_type="series",
+        tags=["financial", "technical", "RSI", "pit_safe"],
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, window: int = 14, **kwargs) -> pd.DataFrame:
+        return _compute_rsi_wilder(x, window)
 
 # aliases: ts_rsi
 

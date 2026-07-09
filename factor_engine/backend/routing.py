@@ -30,3 +30,17 @@ def select_operator_backend(cost: OperatorCost, *, tier: int | None = None) -> s
     if effective == 2 and cost.supports_polars:
         return "polars"
     return "pandas"
+
+
+def numba_enabled_for_op(op: str, *, window: int = 0, panel_rows: int = 0) -> bool:
+    """``FACTOR_ENGINE_USE_NUMBA`` 且算子声明 ``supports_numba`` 时启用。"""
+    import os
+
+    if os.environ.get("FACTOR_ENGINE_USE_NUMBA", "").lower() not in ("1", "true", "yes"):
+        return False
+    cost = get_operator_cost(op)
+    if not cost.supports_numba:
+        return False
+    tier = resolve_execution_tier(op, panel_rows=panel_rows, window=window)
+    backend = select_operator_backend(cost, tier=tier)
+    return backend == "numba" or (backend == "bottleneck" and cost.supports_numba)

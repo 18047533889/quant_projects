@@ -168,16 +168,16 @@ def _conditional_beta(ret: np.ndarray, mkt: np.ndarray, window: int, *, mode: st
 class DownsideBetaPolars(SeriesOperator):
     metadata = OperatorMetadata(
         name="downside_beta", category="price_volume", description="下行 Beta",
-        param_names=["ret", "index_ret", "window"], return_type="series", tags=["price_volume", "polars"],
+        param_names=["ret", "benchmark_ret", "window"], return_type="series", tags=["price_volume", "polars"],
     )
 
-    def _calculate_series(self, ret: pl.DataFrame, index_ret: pl.DataFrame, window: int = 60, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, ret: pl.DataFrame, benchmark_ret: pl.DataFrame, window: int = 60, **kwargs) -> pl.DataFrame:
         w = int(kwargs.get("d", window))
-        cols = _align_cols(ret, index_ret)
+        cols = _align_cols(ret, benchmark_ret)
         out: dict[str, np.ndarray] = {}
         for c in cols:
             out[c] = _conditional_beta(
-                ret[c].to_numpy(), index_ret[c].to_numpy(), w, mode="downside"
+                ret[c].to_numpy(), benchmark_ret[c].to_numpy(), w, mode="downside"
             )
         result = pl.DataFrame(out)
         if "date" in ret.columns:
@@ -189,17 +189,17 @@ class DownsideBetaPolars(SeriesOperator):
 class TailBetaPolars(SeriesOperator):
     metadata = OperatorMetadata(
         name="tail_beta", category="price_volume", description="尾部 Beta",
-        param_names=["ret", "index_ret", "window"], return_type="series", tags=["price_volume", "polars"],
+        param_names=["ret", "benchmark_ret", "window", "q"], return_type="series", tags=["price_volume", "polars"],
     )
 
-    def _calculate_series(self, ret: pl.DataFrame, index_ret: pl.DataFrame, window: int = 60, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, ret: pl.DataFrame, benchmark_ret: pl.DataFrame, window: int = 60, q: float = 0.05, **kwargs) -> pl.DataFrame:
         w = int(kwargs.get("d", window))
-        q = float(kwargs.get("q", 0.05))
-        cols = _align_cols(ret, index_ret)
+        q = float(kwargs.get("q", q))
+        cols = _align_cols(ret, benchmark_ret)
         out: dict[str, np.ndarray] = {}
         for c in cols:
             out[c] = _conditional_beta(
-                ret[c].to_numpy(), index_ret[c].to_numpy(), w, mode="tail", q=q
+                ret[c].to_numpy(), benchmark_ret[c].to_numpy(), w, mode="tail", q=q
             )
         result = pl.DataFrame(out)
         if "date" in ret.columns:
@@ -239,26 +239,26 @@ class IdioVolPolars(SeriesOperator):
         name="idio_vol",
         category="price_volume",
         description="特质波动率",
-        param_names=["y", "x", "window"],
+        param_names=["ret", "benchmark_ret", "window"],
         return_type="series",
         tags=["price_volume", "polars"],
     )
 
-    def _calculate_series(self, y: pl.DataFrame, x: pl.DataFrame, window: int = 60, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, ret: pl.DataFrame, benchmark_ret: pl.DataFrame, window: int = 60, **kwargs) -> pl.DataFrame:
         w = max(int(kwargs.get("d", window)), 3)
-        cols = _align_cols(y, x)
+        cols = _align_cols(ret, benchmark_ret)
         scale = float(np.sqrt(252))
         exprs = []
         for c in cols:
-            cov = pl.rolling_cov(y[c], x[c], window_size=w, min_samples=3)
-            var_x = x[c].rolling_var(window_size=w, min_samples=3)
+            cov = pl.rolling_cov(ret[c], benchmark_ret[c], window_size=w, min_samples=3)
+            var_x = benchmark_ret[c].rolling_var(window_size=w, min_samples=3)
             slope = cov / var_x
-            mean_y = y[c].rolling_mean(window_size=w, min_samples=3)
-            mean_x = x[c].rolling_mean(window_size=w, min_samples=3)
+            mean_y = ret[c].rolling_mean(window_size=w, min_samples=3)
+            mean_x = benchmark_ret[c].rolling_mean(window_size=w, min_samples=3)
             intercept = mean_y - slope * mean_x
-            resid = y[c] - (slope * x[c] + intercept)
+            resid = ret[c] - (slope * benchmark_ret[c] + intercept)
             exprs.append((resid.rolling_std(window_size=w, min_samples=3) * scale).alias(c))
-        return y.with_columns(exprs)
+        return ret.with_columns(exprs)
 
 
 def _apply_numpy_kernel_2d(
@@ -291,18 +291,18 @@ class ResidualMomentumCapmPolars(SeriesOperator):
         name="residual_momentum_capm",
         category="price_volume",
         description="CAPM 残差动量",
-        param_names=["ret", "index_ret", "window"],
+        param_names=["ret", "benchmark_ret", "window"],
         return_type="series",
         tags=["price_volume", "polars"],
     )
 
     def _calculate_series(
-        self, ret: pl.DataFrame, index_ret: pl.DataFrame, window: int = 60, **kwargs
+        self, ret: pl.DataFrame, benchmark_ret: pl.DataFrame, window: int = 60, **kwargs
     ) -> pl.DataFrame:
         from cleaned_operators._numpy_kernels import residual_momentum_capm_
 
         w = int(kwargs.get("d", window))
-        return _apply_numpy_kernel_2d(ret, index_ret, w, residual_momentum_capm_)
+        return _apply_numpy_kernel_2d(ret, benchmark_ret, w, residual_momentum_capm_)
 
 
 @register_operator(
@@ -317,18 +317,18 @@ class CoskewnessToMarketPolars(SeriesOperator):
         name="coskewness_to_market",
         category="price_volume",
         description="相对市场的余偏度",
-        param_names=["ret", "index_ret", "window"],
+        param_names=["ret", "benchmark_ret", "window"],
         return_type="series",
         tags=["price_volume", "polars"],
     )
 
     def _calculate_series(
-        self, ret: pl.DataFrame, index_ret: pl.DataFrame, window: int = 60, **kwargs
+        self, ret: pl.DataFrame, benchmark_ret: pl.DataFrame, window: int = 60, **kwargs
     ) -> pl.DataFrame:
         from cleaned_operators._numpy_kernels import coskewness_to_market_
 
         w = int(kwargs.get("d", window))
-        return _apply_numpy_kernel_2d(ret, index_ret, w, coskewness_to_market_)
+        return _apply_numpy_kernel_2d(ret, benchmark_ret, w, coskewness_to_market_)
 
 
 @register_operator(
@@ -343,15 +343,15 @@ class IdioSkewPolars(SeriesOperator):
         name="idio_skew",
         category="price_volume",
         description="CAPM 残差偏度",
-        param_names=["ret", "index_ret", "window"],
+        param_names=["ret", "benchmark_ret", "window"],
         return_type="series",
         tags=["price_volume", "polars"],
     )
 
     def _calculate_series(
-        self, ret: pl.DataFrame, index_ret: pl.DataFrame, window: int = 60, **kwargs
+        self, ret: pl.DataFrame, benchmark_ret: pl.DataFrame, window: int = 60, **kwargs
     ) -> pl.DataFrame:
         from cleaned_operators._numpy_kernels import idio_skew_
 
         w = int(kwargs.get("d", window))
-        return _apply_numpy_kernel_2d(ret, index_ret, w, idio_skew_)
+        return _apply_numpy_kernel_2d(ret, benchmark_ret, w, idio_skew_)

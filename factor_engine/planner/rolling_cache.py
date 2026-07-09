@@ -11,6 +11,7 @@ ROLLING_OPS = frozenset(
     {
         "ts_mean",
         "ts_std",
+        "ts_std",
         "ts_std_dev",
         "ts_sum",
         "ts_min",
@@ -45,7 +46,7 @@ class RollingCacheEntry:
 
 
 def _first_col_ref(node: PlanNode) -> str | None:
-    if node.op == "col":
+    if node.op in {"col", "column"}:
         return str(node.attrs.get("name") or node.attrs.get("column") or "")
     for child in node.inputs:
         found = _first_col_ref(child)

@@ -559,3 +559,23 @@ class FactorCatalog:
             )
             out.append(item)
         return out
+
+    def list_factors_for_dataset(self, dataset: str) -> list[dict]:
+        rows = self._conn.execute(
+            "SELECT * FROM factor_dependency WHERE source_dataset = ? ORDER BY factor_id",
+            (str(dataset),),
+        ).fetchall()
+        out: list[dict] = []
+        for row in rows:
+            item = dict(row)
+            item["referenced_columns"] = json.loads(
+                item.pop("referenced_columns_json", "[]")
+            )
+            out.append(item)
+        return out
+
+    def list_dependency_columns(self) -> list[str]:
+        rows = self._conn.execute(
+            "SELECT DISTINCT column_name FROM factor_column_dep ORDER BY column_name"
+        ).fetchall()
+        return [str(r[0]) for r in rows]

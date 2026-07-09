@@ -37,7 +37,7 @@ data_access —— 团队统一数据读写入口（PR1：读；PR2：写；PR3�
 
 临时分析（PR3，有限 SQL 逃生口；只允许 SELECT + 预声明数据集）：
     tbl = store.sql(
-        "SELECT asset, AVG(value) FROM factor_lake GROUP BY asset",
+        "SELECT asset, AVG(value) FROM {{factor_lake}} GROUP BY asset",
         read_datasets=["factor_lake"],
         read_params={"factor_lake": {"factor_id": "mom_3d"}},
     )

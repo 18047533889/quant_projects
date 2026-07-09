@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -153,6 +154,38 @@ class PandasResultStore:
         end: str | None = None,
     ) -> pd.DataFrame:
         return self.load_factors(factor_ids, start=start, end=end)
+
+    def load_matrix(
+        self,
+        factor_ids: list[str],
+        *,
+        universe: str,
+        frequency: str = "1d",
+        matrix_root: str | Path | None = None,
+        start: str | None = None,
+        end: str | None = None,
+    ) -> pd.DataFrame:
+        """读取 factor_matrix 宽表（``FactorMatrixMaterializer`` 布局）。"""
+        from storage.materialize.factor_matrix_materializer import FactorMatrixMaterializer
+
+        root = matrix_root
+        if root is None:
+            root = os.environ.get("FACTOR_MATRIX_ROOT")
+        if root is None:
+            root = self.lake_root.parent / "factor_matrix"
+        frame = FactorMatrixMaterializer.load_matrix(
+            root,
+            universe=universe,
+            frequency=frequency,
+            factor_ids=factor_ids,
+        )
+        if "datetime" in frame.columns:
+            frame["datetime"] = pd.to_datetime(frame["datetime"])
+            if start is not None:
+                frame = frame[frame["datetime"] >= pd.Timestamp(start)]
+            if end is not None:
+                frame = frame[frame["datetime"] <= pd.Timestamp(end)]
+        return frame.sort_values(["datetime", "asset"]).reset_index(drop=True)
 
     def _partition_files(
         self,

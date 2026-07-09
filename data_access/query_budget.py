@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 from .exceptions import ValidationError
 
@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 class QueryBudget:
     """单次 read/sql 扫描预算。"""
 
-    max_rows: int | None = 50_000_000
+    max_rows: int | None = None
     max_result_bytes: int | None = None
     max_elapsed_ms: float | None = None
     require_columns: bool = False
@@ -126,6 +126,9 @@ def merge_dataset_policies(
 
 
 def _production_mode() -> bool:
+    fe = os.environ.get("FACTOR_ENGINE_RUN_MODE", "").strip().lower()
+    if fe == "production":
+        return True
     return os.environ.get("QUANT_PRODUCTION_MODE", "").lower() in {"1", "true", "yes"}
 
 
@@ -143,6 +146,15 @@ def resolve_query_budget(budget: QueryBudget | None = None) -> QueryBudget:
             require_columns=True,
             require_time_range=False,
         )
+    default_max_rows = os.environ.get("DATA_ACCESS_DEFAULT_MAX_ROWS")
+    if default_max_rows is not None and str(default_max_rows).strip():
+        try:
+            max_rows = int(default_max_rows)
+        except ValueError as exc:
+            raise ValidationError(
+                "DATA_ACCESS_DEFAULT_MAX_ROWS 必须是整数"
+            ) from exc
+        return QueryBudget(max_rows=max_rows)
     return QueryBudget()
 
 
@@ -236,8 +248,27 @@ def enforce_arrow_budget(
         )
 
 
+def collect_polars_with_budget(
+    lf: Any,
+    *,
+    query_budget: QueryBudget | None = None,
+) -> pa.Table:
+    """Polars LazyFrame collect 后强制读后预算。"""
+    import time
+
+    budget = resolve_query_budget(query_budget)
+    start = time.perf_counter()
+    table = lf.collect().to_arrow()
+    enforce_arrow_budget(
+        budget,
+        table,
+        elapsed_ms=(time.perf_counter() - start) * 1000,
+    )
+    return table
+
+
 def apply_sql_row_limit(query: str, max_rows: int | None) -> str:
-    """若 query 无 LIMIT，子查询包装并追加 LIMIT；已有 LIMIT 则取 min。"""
+    """对用户 SQL 外层追加最大行数限制；仅对简单末尾 ``LIMIT N`` 做 min 合并。"""
     if max_rows is None or max_rows <= 0:
         return query.strip().rstrip(";")
     stripped = query.strip().rstrip(";")

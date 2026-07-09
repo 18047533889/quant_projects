@@ -21,22 +21,66 @@ from cleaned_operators.base import (
 )
 
 
-@register_operator(name="real_turnover_rate", category="intraday_microstructure", business_category="intraday_microstructure", canonical="real_turnover_rate", source="factor_dsl_np")
-class LqtpRealturnoverrateOp(SeriesOperator):
+@register_operator(
+    name="real_turnover_rate",
+    category="intraday_microstructure",
+    business_category="intraday_microstructure",
+    canonical="real_turnover_rate",
+    source="factor_dsl_np",
+    backend="pandas_numpy",
+    status="experimental",
+)
+class LqtpRealturnoverrateOp(TwoVarOperator):
     metadata = OperatorMetadata(
         name="real_turnover_rate",
         category="intraday_microstructure",
-        description="真实流通盘换手率：volume / float",
-        param_names=[],
+        description="真实流通盘换手率：volume / float_shares",
+        param_names=["volume", "float_shares"],
         return_type="series",
+        tags=["microstructure", "pit_safe"],
     )
 
-    def _calculate_series(self, *args, **kwargs):
-        from cleaned_operators._numpy_kernels import real_turnover_rate_
-        # 兼容 DataFrame 输入：逐列应用 numpy 函数
-        if len(args) == 1 and hasattr(args[0], "apply"):
-            return args[0].apply(lambda s: real_turnover_rate_(s.values, **kwargs) if kwargs else real_turnover_rate_(s.values))
-        return real_turnover_rate_(*args, **kwargs)
+    def _calculate_series(self, volume, float_shares, **kwargs):
+        denom = float_shares.replace(0, np.nan) if hasattr(float_shares, "replace") else float_shares
+        return volume / denom
+
+
+@register_operator(
+    name="intraday_vwap_deviation",
+    category="intraday_microstructure",
+    business_category="intraday_microstructure",
+    canonical="intraday_vwap_deviation",
+    source="factor_dsl_np",
+    backend="pandas_numpy",
+    status="experimental",
+)
+class IntradayVwapDeviationOp(SeriesOperator):
+    """收盘价相对 session 内累计 VWAP 的偏差。"""
+
+    metadata = OperatorMetadata(
+        name="intraday_vwap_deviation",
+        category="intraday_microstructure",
+        description="close / session_cum_vwap(price, volume) - 1（按日 reset）",
+        param_names=["close", "price", "volume"],
+        return_type="series",
+        tags=["microstructure", "pit_safe", "session_aware"],
+    )
+
+    def _calculate_series(self, close, price, volume, **kwargs):
+        from cleaned_operators.microstructure.session import session_vwap_deviation
+
+        def _one(col: str) -> pd.Series:
+            return session_vwap_deviation(close[col], price[col], volume[col])
+
+        if hasattr(close, "columns"):
+            out = pd.DataFrame(index=close.index, columns=close.columns, dtype=float)
+            for col in close.columns:
+                out[col] = _one(col)
+            return out
+        return session_vwap_deviation(
+            pd.Series(close), pd.Series(price), pd.Series(volume)
+        )
+
 
 @register_operator(
     name="micro_realized_vol",
@@ -44,32 +88,36 @@ class LqtpRealturnoverrateOp(SeriesOperator):
     business_category="intraday_microstructure",
     canonical="micro_realized_vol",
     source="factor_dsl_np",
+    backend="pandas_numpy",
+    status="experimental",
 )
 class MicroRealizedVolOp(SeriesOperator):
-    """滚动已实现波动率：sqrt(sum(r^2, window))，r 为逐 bar 收益。"""
+    """滚动已实现波动率：sqrt(sum(r^2, window))，按 session 边界 reset。"""
 
     metadata = OperatorMetadata(
         name="micro_realized_vol",
         category="intraday_microstructure",
-        description="已实现波动率 sqrt rolling sum of squared returns",
+        description="已实现波动率 sqrt rolling sum of squared returns (session-aware)",
         param_names=["close"],
         return_type="series",
-        tags=["microstructure"],
+        tags=["microstructure", "pit_safe"],
     )
 
-    def _calculate_series(self, close, window: int = 20, **kwargs):
+    def _calculate_series(self, close, window: int = 20, min_periods: int = 2, **kwargs):
+        from cleaned_operators.microstructure.session import rolling_by_session
+
+        w = int(window)
+        mp = max(2, int(min_periods))
+
+        def _rv(col: pd.Series) -> pd.Series:
+            ret = col.pct_change()
+            sq = ret.pow(2)
+            rolled = rolling_by_session(sq, w, "sum", min_periods=mp)
+            return rolled.pow(0.5)
+
         if hasattr(close, "apply"):
-            return close.apply(
-                lambda s: pd.Series(s)
-                .pct_change()
-                .pow(2)
-                .rolling(int(window), min_periods=1)
-                .sum()
-                .pow(0.5)
-                .values
-            )
-        ret = pd.Series(close).pct_change()
-        return ret.pow(2).rolling(int(window), min_periods=1).sum().pow(0.5).values
+            return close.apply(_rv)
+        return _rv(pd.Series(close))
 
 
 @register_operator(
@@ -78,6 +126,7 @@ class MicroRealizedVolOp(SeriesOperator):
     business_category="intraday_microstructure",
     canonical="micro_spread",
     source="factor_dsl_np",
+    status="experimental",
 )
 class MicroSpreadOp(SeriesOperator):
     """相对价差代理：(high - low) / close。"""
@@ -104,6 +153,7 @@ class MicroSpreadOp(SeriesOperator):
     business_category="intraday_microstructure",
     canonical="micro_amihud_hf",
     source="factor_dsl_np",
+    status="experimental",
 )
 class MicroAmihudHfOp(SeriesOperator):
     """Amihud 非流动性：|r| / (close × volume)。"""
@@ -118,10 +168,14 @@ class MicroAmihudHfOp(SeriesOperator):
     )
 
     def _calculate_series(self, close, volume, **kwargs):
-        ret = close.pct_change().abs() if hasattr(close, "pct_change") else pd.Series(close).pct_change().abs()
+        from cleaned_operators.microstructure.session import pct_change_by_session
+
+        if hasattr(close, "apply"):
+            ret = close.apply(lambda s: pct_change_by_session(pd.Series(s)).abs())
+        else:
+            ret = pct_change_by_session(pd.Series(close)).abs()
         denom = close * volume
-        out = ret / denom.replace(0, np.nan)
-        return out
+        return ret / denom.replace(0, np.nan)
 
 
 @register_operator(
@@ -130,6 +184,7 @@ class MicroAmihudHfOp(SeriesOperator):
     business_category="intraday_microstructure",
     canonical="micro_mid_return",
     source="factor_dsl_np",
+    status="experimental",
 )
 class MicroMidReturnOp(SeriesOperator):
     """中间价收益：mid=(high+low)/2 的 pct_change。"""
@@ -140,12 +195,16 @@ class MicroMidReturnOp(SeriesOperator):
         description="Mid-price return from (high+low)/2",
         param_names=["high", "low"],
         return_type="series",
-        tags=["microstructure"],
+        tags=["microstructure", "pit_safe"],
     )
 
     def _calculate_series(self, high, low, **kwargs):
+        from cleaned_operators.microstructure.session import pct_change_by_session
+
         mid = (high + low) / 2.0
-        return mid.pct_change() if hasattr(mid, "pct_change") else pd.Series(mid).pct_change()
+        if hasattr(mid, "apply"):
+            return mid.apply(lambda s: pct_change_by_session(pd.Series(s)))
+        return pct_change_by_session(pd.Series(mid))
 
 
 @register_operator(
@@ -154,6 +213,7 @@ class MicroMidReturnOp(SeriesOperator):
     business_category="intraday_microstructure",
     canonical="micro_bipower_var",
     source="factor_dsl_np",
+    status="experimental",
 )
 class MicroBipowerVarOp(SeriesOperator):
     """Bipower variation：(pi/2) * rolling_mean(|r_t|*|r_{t-1}|)。"""
@@ -167,13 +227,16 @@ class MicroBipowerVarOp(SeriesOperator):
         tags=["microstructure"],
     )
 
-    def _calculate_series(self, close, window: int = 20, **kwargs):
+    def _calculate_series(self, close, window: int = 20, min_periods: int = 2, **kwargs):
+        from cleaned_operators.microstructure.session import pct_change_by_session, rolling_by_session
+
         w = int(window)
+        mp = max(2, int(min_periods))
 
         def _bv(s):
-            r = pd.Series(s).pct_change()
+            r = pct_change_by_session(pd.Series(s))
             prod = r.abs() * r.abs().shift(1)
-            return (np.pi / 2.0) * prod.rolling(w, min_periods=1).mean()
+            return (np.pi / 2.0) * rolling_by_session(prod, w, "mean", min_periods=mp)
 
         if hasattr(close, "apply"):
             return close.apply(_bv)
@@ -186,6 +249,7 @@ class MicroBipowerVarOp(SeriesOperator):
     business_category="intraday_microstructure",
     canonical="micro_jump_indicator",
     source="factor_dsl_np",
+    status="experimental",
 )
 class MicroJumpIndicatorOp(SeriesOperator):
     """跳跃指示：max(RV - BV, 0)，RV=rolling sum(r^2)。"""
@@ -199,13 +263,18 @@ class MicroJumpIndicatorOp(SeriesOperator):
         tags=["microstructure"],
     )
 
-    def _calculate_series(self, close, window: int = 20, **kwargs):
+    def _calculate_series(self, close, window: int = 20, min_periods: int = 2, **kwargs):
+        from cleaned_operators.microstructure.session import pct_change_by_session, rolling_by_session
+
         w = int(window)
+        mp = max(2, int(min_periods))
 
         def _jump(s):
-            r = pd.Series(s).pct_change()
-            rv = r.pow(2).rolling(w, min_periods=1).sum()
-            bv = (np.pi / 2.0) * (r.abs() * r.abs().shift(1)).rolling(w, min_periods=1).sum()
+            r = pct_change_by_session(pd.Series(s))
+            rv = rolling_by_session(r.pow(2), w, "sum", min_periods=mp)
+            bv = (np.pi / 2.0) * rolling_by_session(
+                r.abs() * r.abs().shift(1), w, "mean", min_periods=mp
+            )
             return (rv - bv).clip(lower=0.0)
 
         if hasattr(close, "apply"):
@@ -219,6 +288,7 @@ class MicroJumpIndicatorOp(SeriesOperator):
     business_category="intraday_microstructure",
     canonical="micro_trade_imbalance",
     source="factor_dsl_np",
+    status="experimental",
 )
 class MicroTradeImbalanceOp(SeriesOperator):
     """成交不平衡代理：rolling sum(volume * sign(r)) / rolling sum(volume)。"""
@@ -232,12 +302,18 @@ class MicroTradeImbalanceOp(SeriesOperator):
         tags=["microstructure"],
     )
 
-    def _calculate_series(self, close, volume, window: int = 20, **kwargs):
+    def _calculate_series(self, close, volume, window: int = 20, min_periods: int = 2, **kwargs):
+        from cleaned_operators.microstructure.session import pct_change_by_session, rolling_by_session
+
         w = max(1, int(window))
-        ret = close.pct_change() if hasattr(close, "pct_change") else pd.Series(close).pct_change()
+        mp = max(1, int(min_periods))
+        if hasattr(close, "apply"):
+            ret = close.apply(lambda s: pct_change_by_session(pd.Series(s)))
+        else:
+            ret = pct_change_by_session(pd.Series(close))
         signed = np.sign(ret) * volume
-        num = signed.rolling(w, min_periods=1).sum()
-        den = volume.rolling(w, min_periods=1).sum().replace(0, np.nan)
+        num = rolling_by_session(signed, w, "sum", min_periods=mp)
+        den = rolling_by_session(volume, w, "sum", min_periods=mp).replace(0, np.nan)
         return num / den
 
 
@@ -247,6 +323,7 @@ class MicroTradeImbalanceOp(SeriesOperator):
     business_category="intraday_microstructure",
     canonical="micro_vpin",
     source="factor_dsl_np",
+    status="experimental",
 )
 class MicroVpinOp(SeriesOperator):
     """VPIN 代理：rolling sum(|r| * volume) / rolling sum(volume)。"""
@@ -260,13 +337,19 @@ class MicroVpinOp(SeriesOperator):
         tags=["microstructure"],
     )
 
-    def _calculate_series(self, close, volume, window: int = 20, **kwargs):
+    def _calculate_series(self, close, volume, window: int = 20, min_periods: int = 2, **kwargs):
+        from cleaned_operators.microstructure.session import pct_change_by_session, rolling_by_session
+
         w = max(1, int(window))
-        ret = close.pct_change().abs() if hasattr(close, "pct_change") else pd.Series(close).pct_change().abs()
+        mp = max(1, int(min_periods))
+        if hasattr(close, "apply"):
+            ret = close.apply(lambda s: pct_change_by_session(pd.Series(s)).abs())
+        else:
+            ret = pct_change_by_session(pd.Series(close)).abs()
         weighted = ret * volume
-        return weighted.rolling(w, min_periods=1).sum() / volume.rolling(w, min_periods=1).sum().replace(
-            0, np.nan
-        )
+        return rolling_by_session(weighted, w, "sum", min_periods=mp) / rolling_by_session(
+            volume, w, "sum", min_periods=mp
+        ).replace(0, np.nan)
 
 
 @register_operator(
@@ -275,6 +358,7 @@ class MicroVpinOp(SeriesOperator):
     business_category="intraday_microstructure",
     canonical="micro_kyle_lambda",
     source="factor_dsl_np",
+    status="experimental",
 )
 class MicroKyleLambdaOp(SeriesOperator):
     """Kyle lambda 代理：rolling Cov(|r|, volume) / Var(volume)。"""
@@ -288,11 +372,26 @@ class MicroKyleLambdaOp(SeriesOperator):
         tags=["microstructure"],
     )
 
-    def _calculate_series(self, close, volume, window: int = 20, **kwargs):
+    def _calculate_series(self, close, volume, window: int = 20, min_periods: int = 2, **kwargs):
+        from cleaned_operators.microstructure.session import (
+            pct_change_by_session,
+            rolling_cov_by_session,
+            rolling_var_by_session,
+        )
+
         w = max(2, int(window))
-        ret = close.pct_change().abs() if hasattr(close, "pct_change") else pd.Series(close).pct_change().abs()
-        cov = ret.rolling(w, min_periods=2).cov(volume)
-        var = volume.rolling(w, min_periods=2).var().replace(0, np.nan)
+        mp = max(2, int(min_periods))
+        if hasattr(close, "apply"):
+            out = close.copy() * np.nan
+            for col in close.columns:
+                r = pct_change_by_session(close[col]).abs()
+                cov = rolling_cov_by_session(r, volume[col], w, min_periods=mp)
+                var = rolling_var_by_session(volume[col], w, min_periods=mp).replace(0, np.nan)
+                out[col] = cov / var
+            return out
+        r = pct_change_by_session(pd.Series(close)).abs()
+        cov = rolling_cov_by_session(r, pd.Series(volume), w, min_periods=mp)
+        var = rolling_var_by_session(pd.Series(volume), w, min_periods=mp).replace(0, np.nan)
         return cov / var
 
 # api stub placeholders — 未注册算子，仅供 catalog 占位；勿与 @register_operator 实现混用

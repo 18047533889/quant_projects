@@ -144,13 +144,14 @@ store.publish_from_staging(
 
 ```python
 # 带 GROUP BY / JOIN / 多表聚合的临时查询；比 read_arrow 灵活但更严格
+# 表名必须用 {{dataset}} 占位符，避免字符串字面量被误替换
 tbl = store.sql(
-    \"\"\"
+    """
     SELECT f.asset, f.datetime, f.value, p.close
-    FROM factor_lake f JOIN us_stocks_sip_day_aggs p
+    FROM {{factor_lake}} f JOIN {{us_stocks_sip_day_aggs}} p
       ON p.align_time = f.datetime AND p.ticker = f.asset
     WHERE f.value > ? ORDER BY f.datetime
-    \"\"\",
+    """,
     read_datasets=["factor_lake", "us_stocks_sip_day_aggs"],
     read_params={"factor_lake": {"factor_id": "mom_3d"}},
     params=[0.5],
@@ -174,14 +175,24 @@ from data_access import QueryBudget, get_store
 
 store = get_store()
 budget = QueryBudget(max_rows=500_000, require_columns=True)
-with store.sql_stream(
-    "SELECT align_time, ticker, close FROM us_stocks_sip_day_aggs WHERE close > ?",
+for batch in store.sql_stream(
+    "SELECT align_time, ticker, close FROM {{us_stocks_sip_day_aggs}} WHERE close > ?",
     read_datasets=["us_stocks_sip_day_aggs"],
+    view_columns={"us_stocks_sip_day_aggs": ["align_time", "ticker", "close"]},
     params=[10.0],
-    budget=budget,
-) as stream:
-    for batch in stream:
-        process(batch)  # pyarrow RecordBatch
+    query_budget=budget,
+):
+    process(batch)  # pyarrow RecordBatch
+```
+
+大表扫描也可用 ``read_auto_stream()``（按 footer 估算路由，始终 batch 返回）：
+
+```python
+for batch in store.read_auto_stream(
+    "us_stocks_sip_day_aggs",
+    columns=["align_time", "ticker", "close"],
+):
+    process(batch)
 ```
 
 与 `sql()` 相同的安全约束；无 LIMIT 时自动按 `QueryBudget.max_rows` 包装子查询。
