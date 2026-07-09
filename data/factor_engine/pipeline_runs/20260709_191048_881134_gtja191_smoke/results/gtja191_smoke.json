@@ -1,0 +1,16 @@
+{
+  "config_name": "gtja191_smoke",
+  "factor_name": "gtja191_alpha_001",
+  "timestamp": "2026-07-09T19:11:00",
+  "status": "failed",
+  "mode": "run",
+  "analysis": null,
+  "plan": null,
+  "result": null,
+  "materialization": null,
+  "errors": [
+    "'int' object has no attribute 'columns'"
+  ],
+  "traceback": "Traceback (most recent call last):\n  File \"/home/shw/quant_projects/factor_engine/runtime/pipeline/batch.py\", line 392, in run_pipeline\n    item = _execute_config_with_retries(\n  File \"/home/shw/quant_projects/factor_engine/runtime/pipeline/batch.py\", line 205, in _execute_config_with_retries\n    raise last_exc\n  File \"/home/shw/quant_projects/factor_engine/runtime/pipeline/batch.py\", line 175, in _execute_config_with_retries\n    return _execute_config(\n  File \"/home/shw/quant_projects/factor_engine/runtime/pipeline/batch.py\", line 284, in _execute_config\n    output = engine.run(factor, **run_kwargs)\n  File \"/home/shw/quant_projects/factor_engine/runtime/engine.py\", line 1109, in run\n    result = engine_to_use.backend.execute(plan, ctx)\n  File \"/home/shw/quant_projects/factor_engine/backend/hybrid_backend.py\", line 21, in execute\n    return self._sql.execute(plan, ctx)\n  File \"/home/shw/quant_projects/factor_engine/backend/sql_backend.py\", line 58, in execute\n    return self._eval_hybrid(physical.root, ctx)\n  File \"/home/shw/quant_projects/factor_engine/backend/sql_backend.py\", line 63, in _eval_hybrid\n    return self._polars.execute(plan, ctx)\n  File \"/home/shw/quant_projects/factor_engine/backend/polars_backend.py\", line 55, in execute\n    result = finalize_panel_result(self._eval(plan, ctx), ctx)\n  File \"/home/shw/quant_projects/factor_engine/backend/pandas_backend.py\", line 80, in _eval\n    out = kernel(node, ctx)\n  File \"/home/shw/quant_projects/factor_engine/backend/cleaned_bridge.py\", line 242, in _kernel\n    result = _call_cleaned_operator(operator, call_args, kw)\n  File \"/home/shw/quant_projects/factor_engine/backend/cleaned_bridge.py\", line 105, in _call_cleaned_operator\n    return operator.calculate(*call_args, **kw)\n  File \"/home/shw/quant_projects/factor_engine/cleaned_operators/base_polars.py\", line 74, in calculate\n    return self._calculate_series(*processed_args, **kwargs)\n  File \"/home/shw/quant_projects/factor_engine/cleaned_operators/common/polars_ops.py\", line 56, in calc\n    cols = _align_cols(x, y)\n  File \"/home/shw/quant_projects/factor_engine/cleaned_operators/common/polars_ops.py\", line 40, in _align_cols\n    cols = _numeric_cols(dfs[0])\n  File \"/home/shw/quant_projects/factor_engine/cleaned_operators/common/polars_ops.py\", line 35, in _numeric_cols\n    return [c for c in df.columns if c not in _SKIP]\nAttributeError: 'int' object has no attribute 'columns'\n",
+  "result_json_path": "results/gtja191_smoke.json"
+}

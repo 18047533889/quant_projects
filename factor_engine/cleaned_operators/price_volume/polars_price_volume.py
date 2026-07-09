@@ -226,6 +226,49 @@ class RollingBetaToMarketPolars(TSBetaPolars):
 
 
 @register_operator(
+    name="rolling_beta",
+    category="price_volume",
+    business_category="price_volume",
+    canonical="rolling_beta",
+    source="factor_dsl_polars",
+)
+class RollingBetaPolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="rolling_beta",
+        category="price_volume",
+        description="滚动 Beta：Cov(ret, benchmark_ret) / Var(benchmark_ret)",
+        param_names=["ret", "benchmark_ret", "window"],
+        return_type="series",
+        tags=["price_volume", "beta", "polars"],
+    )
+
+    def _calculate_series(
+        self,
+        ret: pl.DataFrame,
+        benchmark_ret: pl.DataFrame,
+        window: int = 60,
+        min_periods: int | None = None,
+        **kwargs,
+    ) -> pl.DataFrame:
+        w = max(2, int(window))
+        mp = max(2, int(min_periods)) if min_periods is not None else max(2, w // 3)
+        cols = _align_cols(ret, benchmark_ret)
+        merged = ret
+        y_cols: list[str] = []
+        for c in cols:
+            yname = f"__bench_{c}"
+            y_cols.append(yname)
+            merged = merged.with_columns(benchmark_ret[c].alias(yname))
+        exprs = []
+        for c in cols:
+            yn = f"__bench_{c}"
+            cov = pl.rolling_cov(pl.col(c), pl.col(yn), window_size=w, min_samples=mp)
+            var = pl.col(yn).rolling_var(window_size=w, min_samples=mp)
+            exprs.append((cov / var).alias(c))
+        return merged.with_columns(exprs).drop(y_cols)
+
+
+@register_operator(
     name="idio_vol",
     category="price_volume",
     business_category="price_volume",

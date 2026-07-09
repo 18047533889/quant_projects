@@ -257,6 +257,7 @@ def _dropna(self, x, **kwargs) -> pl.DataFrame:
     return x.with_columns([pl.when(pl.col(c).is_nan()).then(None).otherwise(pl.col(c)).alias(c) for c in cols])
 
 
+_register_cleaning("causal_bfill", "causal_bfill", _bfill)
 _register_cleaning("bfill", "bfill", _bfill)
 _register_cleaning("ffill", "ffill", _ffill)
 _register_cleaning("dropna", "dropna", _dropna)

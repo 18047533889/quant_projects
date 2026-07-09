@@ -26,6 +26,11 @@ engine:
   enable_cache: true
   plan_cache_dir: ../data/factors/plan_cache
 
+# data_access 源建议开启 read_auto（Arrow/Polars 零拷贝读 Parquet）
+# 在 YAML 数据源配置中设置：type: data_access, read_auto: true
+data_access:
+  read_auto: true
+
 materialization:
   lake_root: ../data/factors/lake
   target: staging_clickhouse

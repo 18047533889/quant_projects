@@ -30,6 +30,8 @@ def build_us_golden_close_panel() -> pd.Series:
 
 
 def expected_rank(panel: pd.Series) -> pd.Series:
+    from cleaned_operators.common.cs_broadcast import cs_rank_01
+
     wide = panel.unstack("instrument")
-    ranked = wide.rank(axis=1, pct=True)
+    ranked = cs_rank_01(wide)
     return ranked.stack(future_stack=True)

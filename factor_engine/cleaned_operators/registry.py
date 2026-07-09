@@ -78,6 +78,7 @@ class OperatorRegistry:
         aliases: Optional[List[str]] = None,
         source: str = "",
         status: str = "implemented",
+        backend_explicit: bool = True,
     ) -> None:
         """注册一个已实现算子；``canonical`` 为内部主键，``aliases`` 为可选 DSL 别名。"""
         canonical = canonical or operator.metadata.name
@@ -87,6 +88,9 @@ class OperatorRegistry:
             prev_status = str(existing.get("status", "implemented") or "implemented")
             if prev_status not in ("implemented", "production"):
                 status = prev_status
+        prev = existing
+        backend_meta = dict(prev.get("backend_meta") or {})
+        backend_meta[backend] = {"explicit": backend_explicit, "source": source}
         cls._catalog[canonical] = {
             "canonical": canonical,
             "backends": sorted(cls._operators[canonical].keys()),
@@ -94,10 +98,11 @@ class OperatorRegistry:
             "status": status,
             "description": getattr(operator.metadata, "description", ""),
             "param_names": _merge_param_names(
-                existing.get("param_names"),
+                prev.get("param_names"),
                 getattr(operator.metadata, "param_names", []),
             ),
-            "aliases": sorted(set((aliases or []) + cls._catalog.get(canonical, {}).get("aliases", []))),
+            "aliases": sorted(set((aliases or []) + prev.get("aliases", []))),
+            "backend_meta": backend_meta,
         }
         for alias in aliases or []:
             if alias != canonical:

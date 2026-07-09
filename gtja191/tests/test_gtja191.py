@@ -38,7 +38,7 @@ def _ema_arity_issues(formula: str) -> list[str]:
             self.issues: list[str] = []
 
         def visit_Call(self, node: ast.Call) -> None:
-            if isinstance(node.func, ast.Name) and node.func.id in ("EMA", "SMA", "WMA"):
+            if isinstance(node.func, ast.Name) and node.func.id in ("ts_ema", "EMA", "SMA", "WMA"):
                 if len(node.args) != 2:
                     self.issues.append(f"{node.func.id} has {len(node.args)} args")
             self.generic_visit(node)
@@ -61,9 +61,9 @@ class TestConversionHelpers(unittest.TestCase):
         self.assertEqual(self.conv._gtja_sma_span(9, 1), 17)
 
     def test_ema_three_arg_nested_fold(self) -> None:
-        raw = "EMA(EMA(close,13,2),10,1)"
+        raw = "ts_ema(ts_ema(close,13,2),10,1)"
         out = self.conv._post_process_dsl(raw)
-        self.assertEqual(out, "EMA(EMA(close, 12), 19)")
+        self.assertEqual(out, "ts_ema(ts_ema(close, 12), 19)")
         self.assertEqual(_ema_arity_issues(out), [])
 
     def test_rolling_max_on_composite_expr(self) -> None:
@@ -75,23 +75,25 @@ class TestConversionHelpers(unittest.TestCase):
         expr = (
             "max(rank(a), rank(ts_decay_linear(max(ts_corr(rank(close), rank(volume), 4), 13), 14)))"
         )
-        out = self.conv._fix_rolling_max_min_calls(expr)
+        out = self.conv._post_process_dsl(expr)
         self.assertIn("ts_max(ts_corr(rank(close), rank(volume), 4), 13)", out)
-        self.assertTrue(out.startswith("max(rank(a),"))
+        self.assertTrue(out.startswith("flex_max(rank(a),"))
 
     def test_preserve_elementwise_max_zero(self) -> None:
         expr = "ts_sum(max(0, high - delay(close, 1)), 26)"
-        self.assertEqual(self.conv._fix_rolling_max_min(expr), expr)
+        out = self.conv._post_process_dsl(expr)
+        self.assertIn("flex_max(0, high - ts_delay(close, 1))", out)
 
     def test_preserve_elementwise_min_two_series(self) -> None:
         expr = "min(low, delay(close, 1))"
-        self.assertEqual(self.conv._fix_rolling_max_min(expr), expr)
-
-    def test_do_not_corrupt_m_argmin(self) -> None:
-        expr = "((20 - (20 - m_argmin(low, 20)))/20)*100"
         out = self.conv._post_process_dsl(expr)
-        self.assertIn("m_argmin", out)
-        self.assertNotIn("m_argts_min", out)
+        self.assertEqual(out, "flex_min(low, ts_delay(close, 1))")
+
+    def test_do_not_corrupt_ts_argmin(self) -> None:
+        expr = "((20 - (20 - ts_argmin(low, 20)))/20)*100"
+        out = self.conv._post_process_dsl(expr)
+        self.assertIn("ts_argmin", out)
+        self.assertNotIn("ts_argts_min", out)
 
 
 class TestTranslationRegression(unittest.TestCase):
@@ -102,8 +104,8 @@ class TestTranslationRegression(unittest.TestCase):
 
     def test_alpha_007_rolling_max_min(self) -> None:
         dsl = self.catalog["gtja191_alpha_007"]["dsl_formula"]
-        self.assertIn("ts_max((((high + low + close) / 3) - close), 3)", dsl)
-        self.assertIn("ts_min((((high + low + close) / 3) - close), 3)", dsl)
+        self.assertIn("ts_max((high + low + close) / 3 - close, 3)", dsl)
+        self.assertIn("ts_min((high + low + close) / 3 - close, 3)", dsl)
 
     def test_alpha_052_no_typo_field_l(self) -> None:
         dsl = self.catalog["gtja191_alpha_052"]["dsl_formula"]
@@ -112,15 +114,18 @@ class TestTranslationRegression(unittest.TestCase):
 
     def test_alpha_089_sma_to_ema_spans(self) -> None:
         dsl = self.catalog["gtja191_alpha_089"]["dsl_formula"]
-        self.assertEqual(dsl, "2*(EMA(close, 12)-EMA(close, 26)-EMA(EMA(close, 12)-EMA(close, 26), 9))")
+        self.assertIn("ts_ema(close, 12)", dsl)
+        self.assertIn("ts_ema(close, 26)", dsl)
+        self.assertIn("ts_ema(ts_ema(close, 12) - ts_ema(close, 26), 9)", dsl)
 
     def test_alpha_064_inner_rolling_max(self) -> None:
         dsl = self.catalog["gtja191_alpha_064"]["dsl_formula"]
-        self.assertIn("ts_max(ts_corr(rank(close), rank(ts_mean(volume,60)), 4), 13)", dsl)
+        self.assertIn("ts_max(ts_corr(rank(close), rank(ts_mean(volume, 60)), 4), 13)", dsl)
+        self.assertIn("flex_max(", dsl)
 
     def test_alpha_190_count_minus_one(self) -> None:
         dsl = self.catalog["gtja191_alpha_190"]["dsl_formula"]
-        self.assertIn("ts_sum(if_else(close / delay(close, 1) - 1 >", dsl)
+        self.assertIn("ts_sum(where(close / ts_delay(close, 1) - 1 >", dsl)
         self.assertIn(", 20) - 1)", dsl)
 
     def test_auto_converted_formulas_are_idempotent(self) -> None:
@@ -158,6 +163,16 @@ class TestCatalogIntegrity(unittest.TestCase):
                 ok, msg = check_formula(dsl)
                 self.assertTrue(ok, msg)
 
+    def test_no_legacy_operator_names_in_catalog(self) -> None:
+        from lib.dsl_legacy_ops import find_legacy_operators
+
+        bad: list[str] = []
+        for name, item in self.catalog.items():
+            legacy = find_legacy_operators(item["dsl_formula"])
+            if legacy:
+                bad.append(f"{name}: {legacy}")
+        self.assertEqual(bad, [])
+
     def test_no_three_arg_ema_in_catalog(self) -> None:
         bad: list[str] = []
         for name, item in self.catalog.items():
@@ -172,7 +187,7 @@ class TestCatalogIntegrity(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertNotIn("m_argts_min", dsl)
                 self.assertNotIn("m_argts_max", dsl)
-                self.assertNotRegex(dsl, r"EMA\([^)]+,\s*\d+\s*,\s*\d+")
+                self.assertNotRegex(dsl, r"ts_ema\([^)]+,\s*\d+\s*,\s*\d+")
 
     def test_formula_files_match_catalog(self) -> None:
         for name, item in sorted(self.catalog.items()):
@@ -236,6 +251,19 @@ class TestDeliveryPackage(unittest.TestCase):
             m = json.loads(Path(path).read_text(encoding="utf-8"))
             ok, msg = check_formula(m["formula"])
             self.assertTrue(ok, f"{path}: {msg}")
+
+    def test_campaign_data_source_uses_data_access(self) -> None:
+        config_path = self.campaign_dir / "config.json"
+        self.assertTrue(config_path.exists())
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        ds = config["data_source"]
+        self.assertEqual(ds["type"], "data_access")
+        self.assertEqual(ds["dataset"], "ashare_stock_daily")
+        self.assertTrue(ds.get("read_auto"))
+        self.assertIn("close", ds["fields"])
+        self.assertEqual(ds["fields"]["close"], "Close")
+        self.assertNotIn("local", ds)
+        self.assertNotIn("cos", ds)
 
 
 if __name__ == "__main__":

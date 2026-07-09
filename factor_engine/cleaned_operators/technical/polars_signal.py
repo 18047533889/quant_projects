@@ -90,6 +90,49 @@ class RSIPolars(SeriesOperator):
         return x.with_columns(exprs)
 
 
+@register_operator(
+    name="RSI_WILDER",
+    category="financial",
+    business_category="technical_signal",
+    canonical="RSI_WILDER",
+    source="factor_dsl_polars",
+)
+class RSIWilderPolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="RSI_WILDER",
+        category="financial",
+        description="Wilder 平滑 RSI",
+        param_names=["x", "window"],
+        return_type="series",
+        tags=["financial", "polars", "wilder"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, window: int = 14, **kwargs) -> pl.DataFrame:
+        w = max(2, int(kwargs.get("d", window)))
+        alpha = 1.0 / w
+        cols = _numeric_cols(x)
+        exprs = []
+        for c in cols:
+            delta = pl.col(c).diff()
+            gain = pl.when(delta > 0).then(delta).otherwise(0.0)
+            loss = pl.when(delta < 0).then(-delta).otherwise(0.0)
+            avg_gain = gain.ewm_mean(alpha=alpha, adjust=False, min_samples=w)
+            avg_loss = loss.ewm_mean(alpha=alpha, adjust=False, min_samples=w)
+            rs = avg_gain / avg_loss
+            rsi = 100.0 - (100.0 / (1.0 + rs))
+            rsi = (
+                pl.when((avg_loss == 0) & (avg_gain > 0))
+                .then(100.0)
+                .when((avg_gain == 0) & (avg_loss > 0))
+                .then(0.0)
+                .when((avg_gain == 0) & (avg_loss == 0))
+                .then(50.0)
+                .otherwise(rsi)
+            )
+            exprs.append(rsi.alias(c))
+        return x.with_columns(exprs)
+
+
 @register_operator(name="MACD", category="financial", business_category="technical_signal", canonical="MACD", source="factor_dsl_polars")
 class MACDPolars(SeriesOperator):
     metadata = OperatorMetadata(
@@ -173,6 +216,46 @@ class ATRPolars(SeriesOperator):
                 (low[c] - prev_close).abs(),
             )
             exprs.append(tr.rolling_mean(window_size=w, min_samples=1).alias(c))
+        return close.with_columns(exprs)
+
+
+@register_operator(
+    name="ATR_WILDER",
+    category="financial",
+    business_category="technical_signal",
+    canonical="ATR_WILDER",
+    source="factor_dsl_polars",
+)
+class ATRWilderPolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="ATR_WILDER",
+        category="financial",
+        description="Wilder 平滑 ATR",
+        param_names=["high", "low", "close", "window"],
+        return_type="series",
+        tags=["financial", "polars", "wilder"],
+    )
+
+    def _calculate_series(
+        self,
+        high: pl.DataFrame,
+        low: pl.DataFrame,
+        close: pl.DataFrame,
+        window: int = 14,
+        **kwargs,
+    ) -> pl.DataFrame:
+        w = max(2, int(kwargs.get("d", window)))
+        alpha = 1.0 / w
+        cols = [c for c in _numeric_cols(close) if c in high.columns and c in low.columns]
+        exprs = []
+        for c in cols:
+            prev_close = close[c].shift(1)
+            tr = pl.max_horizontal(
+                high[c] - low[c],
+                (high[c] - prev_close).abs(),
+                (low[c] - prev_close).abs(),
+            )
+            exprs.append(tr.ewm_mean(alpha=alpha, adjust=False, min_samples=w).alias(c))
         return close.with_columns(exprs)
 
 
@@ -534,7 +617,7 @@ def _aroon_component(close: pl.Expr, window: int, *, up: bool) -> pl.Expr:
             return np.nan
         return float(np.argmax(arr) if up else np.argmin(arr))
 
-    pos = close.rolling_map(_pos, window_size=w + 1, min_samples=1)
+    pos = close.rolling_map(_pos, window_size=w + 1, min_samples=w + 1)
     return 100.0 * pos / float(w)
 
 

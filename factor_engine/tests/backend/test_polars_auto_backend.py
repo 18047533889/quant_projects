@@ -80,9 +80,10 @@ def test_polars_bfill_causal_passthrough():
     idx = pd.date_range("2024-01-01", periods=4, freq="D")
     panel = pd.DataFrame({"A": [np.nan, 1.0, np.nan, 3.0]}, index=idx)
 
-    pd_op, _ = OperatorRegistry.get_preferred("bfill", prefer="pandas_numpy")
-    pl_op, pl_backend = OperatorRegistry.get_preferred("bfill", prefer="auto")
-    assert pl_backend == "polars"
+    pd_op = OperatorRegistry.get("bfill", backend="pandas_numpy")
+    pl_op = OperatorRegistry.get("bfill", backend="polars")
+    _, auto_backend = OperatorRegistry.get_preferred("bfill", prefer="auto")
+    assert auto_backend == "pandas_numpy"
 
     pd_out = pd_op.calculate(panel.copy())
     pl_out = pl_op.calculate(panel.copy())

@@ -17,3 +17,16 @@ def resolve_factor_engine_root() -> Path | None:
     if (sibling / "api" / "dsl_parser.py").exists():
         return sibling.resolve()
     return None
+
+
+def resolve_data_access_root() -> Path | None:
+    """可选：本机旁边有 data_access 包时返回根目录。"""
+    env = os.environ.get("DATA_ACCESS_ROOT", "").strip()
+    if env:
+        root = Path(env).expanduser().resolve()
+        if (root / "store.py").exists():
+            return root
+    sibling = PACKAGE_ROOT.parent / "data_access"
+    if (sibling / "store.py").exists():
+        return sibling.resolve()
+    return None

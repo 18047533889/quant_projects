@@ -57,6 +57,32 @@ def test_ts_std_polars_matches_pandas(panel_source):
     )
 
 
+def test_ts_corr_polars_matches_pandas(panel_source):
+    load_all()
+    from api.cleaned_ops import make_cleaned_call_factory
+
+    ts_corr = make_cleaned_call_factory("ts_corr")
+    expr = ts_corr(col("close"), col("close"), 3)
+    eng_pd = FactorEngine(backend=build_backend("pandas"), data_source=panel_source)
+    eng_pl = FactorEngine(backend=build_backend("polars"), data_source=panel_source)
+    pd.testing.assert_series_equal(
+        eng_pd.run(Factor(name="t", expr=expr))["result"],
+        eng_pl.run(Factor(name="t", expr=expr))["result"],
+        check_names=False,
+        rtol=1e-4,
+        atol=1e-4,
+    )
+
+
+def test_rolling_beta_polars_backend_registered():
+    load_all()
+    from cleaned_operators.registry import OperatorRegistry
+
+    assert "polars" in OperatorRegistry.backends_for("rolling_beta")
+    assert "polars" in OperatorRegistry.backends_for("RSI_WILDER")
+    assert "polars" in OperatorRegistry.backends_for("ATR_WILDER")
+
+
 def test_if_else_polars_matches_pandas(panel_source):
     load_all()
     from api.cleaned_ops import make_cleaned_call_factory

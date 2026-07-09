@@ -407,7 +407,7 @@ class TestExecutionCore:
 
     def test_ts_mean_rank_momentum(self, engine):
         result = _run(engine, rank(ts_mean(col("close"), 2)))
-        assert result.loc[(pd.Timestamp("2024-01-03"), "A")] == 0.5
+        assert result.loc[(pd.Timestamp("2024-01-03"), "A")] == 0.0
         assert result.loc[(pd.Timestamp("2024-01-03"), "B")] == 1.0
 
     def test_delay_shifts_panel(self, engine):

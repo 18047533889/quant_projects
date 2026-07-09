@@ -1086,7 +1086,10 @@ class FactorEngine:
         s_bpd = warmup.bars_per_day
 
         input_report = None
-        if analysis.referenced_columns:
+        from planner.sql_io import plan_is_fully_sql
+
+        skip_prefetch = plan_is_fully_sql(plan) and not input_dq_check
+        if analysis.referenced_columns and not skip_prefetch:
             from storage.read_session import DataSourceReadSession
 
             session = DataSourceReadSession(engine_to_use.data_source)
@@ -1100,6 +1103,8 @@ class FactorEngine:
                 logger.info("因子 '%s' 输入 DQ 通过", factor.name)
             else:
                 session.prefetch(analysis.referenced_columns)
+        elif skip_prefetch:
+            logger.debug("因子 '%s' fully_sql，跳过列 prefetch", factor.name)
         ctx = engine_to_use._make_context()
         result = engine_to_use.backend.execute(plan, ctx)
 

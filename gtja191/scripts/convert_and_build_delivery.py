@@ -14,6 +14,8 @@ PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 if str(PACKAGE_ROOT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_ROOT))
 
+from lib.data_source import campaign_data_source  # noqa: E402
+from lib.dsl_normalize import normalize_operator_names  # noqa: E402
 from lib.dsl_validate import validate_formula  # noqa: E402
 
 GTJA_ROOT = PACKAGE_ROOT
@@ -70,7 +72,7 @@ def _load_manual_dsl() -> dict[str, str]:
     override_path = GTJA_ROOT / "dsl" / "manual_dsl_overrides.json"
     if override_path.exists():
         merged.update(json.loads(override_path.read_text(encoding="utf-8")))
-    return merged
+    return {name: _post_process_dsl(dsl) for name, dsl in merged.items()}
 
 
 # 依赖 index_close/index_open，当前 PV 主表无 benchmark 列，暂不投递
@@ -131,7 +133,7 @@ OP_MAP = [
     (r"\bTSMAX\b", "ts_max"),
     (r"\bTSRANK\b", "ts_rank"),
     (r"\bMA\b", "ts_mean"),
-    (r"\bDELAY\b", "delay"),
+    (r"\bDELAY\b", "ts_delay"),
     (r"\bDELTA\b", "ts_delta"),
     (r"\bDELAT\b", "ts_delta"),
     (r"\bRANK\b", "rank"),
@@ -143,15 +145,15 @@ OP_MAP = [
     (r"\bMIN\b", "min"),
     (r"\bCOUNT\b", "__COUNT__"),
     (r"\bPROD\b", "ts_product"),
-    (r"\bSMEAN\b", "EMA"),
+    (r"\bSMEAN\b", "ts_ema"),
     (r"\bREGRESI\b", "ts_regression"),
     (r"\bFILTER\b", "__FILTER__"),
     (r"\bSELF\b", "close"),
     (r"\bSUMIF\b", "__SUMIF__"),
-    (r"\bHIGHDAY\b", "m_argmax"),
-    (r"\bLOWDAY\b", "m_argmin"),
-    (r"\bSMA\b", "EMA"),
-    (r"\bEMA\b", "EMA"),
+    (r"\bHIGHDAY\b", "ts_argmax"),
+    (r"\bLOWDAY\b", "ts_argmin"),
+    (r"\bSMA\b", "ts_ema"),
+    (r"\bEMA\b", "ts_ema"),
     (r"\bWMA\b", "WMA"),
 ]
 
@@ -224,7 +226,7 @@ def _replace_ternary(expr: str) -> str:
         cond = expr[:q].strip()
         true_part = expr[q + 1 : colon].strip()
         false_part = expr[colon + 1 :].strip()
-        expr = f"if_else({cond}, {true_part}, {false_part})"
+        expr = f"where({cond}, {true_part}, {false_part})"
     return expr
 
 
@@ -279,7 +281,7 @@ def _replace_if_calls(expr: str) -> str:
         inner = expr[start + 1 : end]
         args = _split_top_level(inner, ",")
         if len(args) == 3:
-            out.append(f"if_else({args[0]}, {args[1]}, {args[2]})")
+            out.append(f"where({args[0]}, {args[1]}, {args[2]})")
         else:
             out.append(expr[i : end + 1])
         i = end + 1
@@ -311,16 +313,17 @@ def _gtja_sma_span(n: int, m: int) -> int:
 
 
 def _fix_ema_three_arg(expr: str) -> str:
-    """将 GTJA SMA(x,n,m) 遗留的 EMA 三参数调用折叠为 EMA(x, span)。"""
+    """将 GTJA SMA(x,n,m) 遗留的 ts_ema 三参数调用折叠为 ts_ema(x, span)。"""
     changed = True
+    token = "ts_ema("
     while changed:
         changed = False
         i = 0
         while True:
-            pos = expr.find("EMA(", i)
+            pos = expr.find(token, i)
             if pos < 0:
                 break
-            start = pos + 3
+            start = pos + len("ts_ema")
             end = _find_matching_paren(expr, start)
             if end < 0:
                 break
@@ -331,7 +334,7 @@ def _fix_ema_three_arg(expr: str) -> str:
                 try:
                     n_i, m_i = int(float(n.strip())), int(float(m.strip()))
                     span = _gtja_sma_span(n_i, m_i)
-                    expr = expr[:pos] + f"EMA({x}, {span})" + expr[end + 1 :]
+                    expr = expr[:pos] + f"ts_ema({x}, {span})" + expr[end + 1 :]
                     changed = True
                     i = pos + 1
                     continue
@@ -405,6 +408,7 @@ def _fix_rolling_max_min(expr: str) -> str:
 def _post_process_dsl(expr: str) -> str:
     expr = _fix_ema_three_arg(expr)
     expr = _fix_rolling_max_min(expr)
+    expr = normalize_operator_names(expr)
     return re.sub(r"\s+", " ", expr).strip()
 
 
@@ -450,7 +454,7 @@ def _fix_sumif(expr: str) -> str:
         args = _split_top_level(inner, ",")
         if len(args) == 3:
             val, window, cond = args
-            out.append(f"ts_sum(if_else({cond}, {val}, 0), {window})")
+            out.append(f"ts_sum(where({cond}, {val}, 0), {window})")
         else:
             out.append(expr[pos : end + 1])
         i = end + 1
@@ -476,7 +480,7 @@ def _fix_filter(expr: str) -> str:
         args = _split_top_level(inner, ",")
         if len(args) == 2:
             val, cond = args
-            out.append(f"if_else({cond}, {val}, 0)")
+            out.append(f"where({cond}, {val}, 0)")
         else:
             out.append(expr[pos : end + 1])
         i = end + 1
@@ -501,7 +505,7 @@ def _fix_count(expr: str) -> str:
         inner = expr[start + 1 : end]
         args = _split_top_level(inner, ",")
         if len(args) == 2:
-            out.append(f"ts_sum(if_else({args[0]}, 1, 0), {args[1]})")
+            out.append(f"ts_sum(where({args[0]}, 1, 0), {args[1]})")
         else:
             out.append(expr[pos : end + 1])
         i = end + 1
@@ -509,15 +513,14 @@ def _fix_count(expr: str) -> str:
 
 
 def _fix_highday_lowday(expr: str) -> str:
-    # (n - m_argmax(x, n)) -> m_argmax 在 GTJA 中 HIGHDAY 定义不同；常见写法 (n-HIGHDAY)/n
     expr = re.sub(
-        r"\(\s*(\d+)\s*-\s*m_argmax\(([^,]+),\s*(\d+)\)\s*\)",
-        r"(\1 - (\3 - m_argmax(\2, \3)))",
+        r"\(\s*(\d+)\s*-\s*ts_argmax\(([^,]+),\s*(\d+)\)\s*\)",
+        r"(\1 - (\3 - ts_argmax(\2, \3)))",
         expr,
     )
     expr = re.sub(
-        r"\(\s*(\d+)\s*-\s*m_argmin\(([^,]+),\s*(\d+)\)\s*\)",
-        r"(\1 - (\3 - m_argmin(\2, \3)))",
+        r"\(\s*(\d+)\s*-\s*ts_argmin\(([^,]+),\s*(\d+)\)\s*\)",
+        r"(\1 - (\3 - ts_argmin(\2, \3)))",
         expr,
     )
     return expr
@@ -634,10 +637,7 @@ def build_campaign(
             "forbidden_tables": ["StockBalance", "StockIncome", "StockCashFlow"],
         },
         "operator_policy": "afv_us_pv_daily",
-        "data_source": {
-            "local": "data/a_share/lqtp_data/",
-            "cos": "cos://qs-cold/clean_data/ashare/lqtp_data/",
-        },
+        "data_source": campaign_data_source(),
         "mined_by": "zhangborui",
         "created_at": "2026-07-04T16:00:00Z",
         "mining_config": {

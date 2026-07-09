@@ -93,6 +93,60 @@ class LqtpAvg2Op(SeriesOperator):
         return compute_avg2(x, fiscal_quarter)
 
 
+def _period_op_factory(helper_name: str, description: str, *, canonical: str):
+    """period_helpers 显式算子的轻量 SeriesOperator 工厂。"""
+
+    @register_operator(
+        name=canonical,
+        category="fundamental",
+        business_category="fundamental",
+        canonical=canonical,
+        source="factor_dsl_np",
+        status="experimental",
+    )
+    class _PeriodOp(SeriesOperator):
+        metadata = OperatorMetadata(
+            name=canonical,
+            category="fundamental",
+            description=description,
+            param_names=["x", "fiscal_quarter"],
+            return_type="series",
+            tags=["fundamental", "pit_safe", "period_aware"],
+        )
+
+        def _calculate_series(
+            self, x: pd.DataFrame, fiscal_quarter: pd.DataFrame | None = None, **kwargs
+        ):
+            from cleaned_operators.fundamental import period_helpers as ph
+
+            fn = getattr(ph, helper_name)
+            return fn(x, fiscal_quarter)
+
+    return _PeriodOp
+
+
+QuarterFromCumulativeOp = _period_op_factory(
+    "quarter_from_cumulative",
+    "累计值转单季（显式 period-aware；等同 quarter）",
+    canonical="quarter_from_cumulative",
+)
+TtmFromQuarterlyOp = _period_op_factory(
+    "ttm_from_quarterly",
+    "单季值滚动 4 期 TTM（输入须为单季口径）",
+    canonical="ttm_from_quarterly",
+)
+TtmFromCumulativeOp = _period_op_factory(
+    "ttm_from_cumulative",
+    "累计值 → 单季 → 滚动 4 季 TTM",
+    canonical="ttm_from_cumulative",
+)
+YoyByPeriodOp = _period_op_factory(
+    "yoy_by_period",
+    "按报告期计算同比增速（显式 period-aware；等同 yoy）",
+    canonical="yoy_by_period",
+)
+
+
 @register_operator(
     name="operating_margin",
     category="fundamental",

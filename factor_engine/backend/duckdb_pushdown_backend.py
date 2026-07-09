@@ -9,7 +9,7 @@ class DuckDBPushdownBackend(SqlBackend):
     """``build_backend('duckdb_sql'|'clickhouse_sql')``：部分/整树 SQL + Python fallback。"""
 
     def __init__(self) -> None:
-        super().__init__(operator_backend="pandas_numpy")
+        super().__init__(operator_backend="auto")
 
 
 # 企业级别名：按 data_source 自动选 DuckDB / ClickHouse 方言

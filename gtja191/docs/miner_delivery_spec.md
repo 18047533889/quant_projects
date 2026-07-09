@@ -52,7 +52,7 @@
 ```yaml
 data:
   source: ashare
-  ashare_data_dir: data/a_share/lqtp_data
+  # 执行层走 data_access 数据集 ashare_stock_daily（见 §2.8）
 symbolic:
   backtest_config_path: configs/backtest_compare_ashare.yaml
   factor_library_path: data/factorlib/all_factors_library.json
@@ -137,14 +137,25 @@ delivery:
   frequency_bucket: "daily"
   signal_structure: "cross_sectional"
   asset_class: "equity"
-  operator_policy: "lqtp_pv_daily"
+  operator_policy: "afv_us_pv_daily"
   mining_scope:
     primary_tables: ["StockDailyBar", "StockCapitalDaily"]
     auxiliary_tables: ["StockList", "StockStatus", "StockIndustry", "Calendar"]
     forbidden_tables: ["StockBalance", "StockIncome", "StockCashFlow"]
   data_source:
-    local: "data/a_share/lqtp_data/"
-    cos: "cos://qs-cold/clean_data/ashare/lqtp_data/"
+    type: data_access
+    dataset: ashare_stock_daily
+    read_auto: true
+    fields:
+      close: Close
+      open: Open
+      high: High
+      low: Low
+      volume: Volume
+      vwap: Vwap
+      amount: Amount
+      ret: Return
+      preclose: PreClose
   output_dir: "~/quant_projects/data/factor_pools/candidate_pool"
 ```
 
@@ -267,10 +278,22 @@ hash8 = hashlib.sha256(payload.encode()).hexdigest()[:8]
     "auxiliary_tables": ["StockList", "StockStatus", "StockIndustry", "Calendar"],
     "forbidden_tables": ["StockBalance", "StockIncome", "StockCashFlow"]
   },
-  "operator_policy": "lqtp_pv_daily",
+  "operator_policy": "afv_us_pv_daily",
   "data_source": {
-    "local": "data/a_share/lqtp_data/",
-    "cos": "cos://qs-cold/clean_data/ashare/lqtp_data/"
+    "type": "data_access",
+    "dataset": "ashare_stock_daily",
+    "fields": {
+      "close": "Close",
+      "open": "Open",
+      "high": "High",
+      "low": "Low",
+      "volume": "Volume",
+      "vwap": "Vwap",
+      "amount": "Amount",
+      "ret": "Return",
+      "preclose": "PreClose"
+    },
+    "read_auto": true
   },
   "mined_by": "zhangjiayin",
   "created_at": "2026-06-15T14:30:00Z",
@@ -381,7 +404,7 @@ hash8 = hashlib.sha256(payload.encode()).hexdigest()[:8]
 | `universe_id`         | 含义                    | 本地/COS 数据               | 何时填                                            |
 | ----------------------- | ------------------------- | --------------------------- | ------------------------------------------------- |
 | `A_SHARE_LQTP`        | 全 A（历史名，仍可用）    | gRPC / ClickHouse 或本地    | **新 campaign 建议改** `A_SHARE_ALL_A_EX_ST` + factor_engine |
-| `A_SHARE_ALL_A_EX_ST` | 本地 parquet 全 A 剔 ST | `data/a_share/lqtp_data/` | **A 股默认**；公式 `expression_type: dsl`，factor_engine 执行 |
+| `A_SHARE_ALL_A_EX_ST` | 全 A 剔 ST | `data_access` → `ashare_stock_daily` | **A 股默认**；公式 `expression_type: dsl`，factor_engine 执行 |
 | `CSI300`              | 沪深 300 成分           | 成分表                      | 仅 CSI300 内挖掘                                  |
 
 ❌ 没有 `A_SHARE_ALL`；本地全 A 剔 ST 用 **`A_SHARE_ALL_A_EX_ST`**。
@@ -464,14 +487,30 @@ hash8 = hashlib.sha256(payload.encode()).hexdigest()[:8]
 
 ### 2.8 `data_source`（可选）
 
+**A 股 GTJA-191 campaign 推荐（data_access）：**
+
 ```json
 "data_source": {
-  "local": "data/us_stock/massive_data/",
-  "cos": "cos://qs-cold/clean_data/us_stock/massive_data/"
+  "type": "data_access",
+  "dataset": "ashare_stock_daily",
+  "fields": {
+    "close": "Close",
+    "open": "Open",
+    "high": "High",
+    "low": "Low",
+    "volume": "Volume",
+    "vwap": "Vwap",
+    "amount": "Amount",
+    "ret": "Return",
+    "preclose": "PreClose"
+  },
+  "read_auto": true
 }
 ```
 
-仅 campaign `config.json`；AFV **不读**。`local` 相对仓库根目录。
+仅 campaign `config.json`；AFV **不读**。factor_engine 执行层须使用 **`data_access`** + `datasets.yaml` 登记名，或 `mining_integration.default_*_data_source_config()` preset。Legacy `local`/`cos` 路径 **不能** 替代 factor_engine 内 `data_source.type`。
+
+详见 `lib/data_source.py` 与 `factor_engine/docs/mining_data_source_presets.json` 中 `ashare_pv` preset。
 
 ### 2.9 `mining_run_stats`（建议投递前填写）
 

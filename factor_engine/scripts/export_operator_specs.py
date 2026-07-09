@@ -32,6 +32,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--production-only", action="store_true", help="仅 production 允许算子")
     parser.add_argument("--core-only", action="store_true", help="仅 PRODUCTION_CORE_CANONICALS")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="与 --core-only 联用：校验 docs/operator_core_specs.yaml 未过期",
+    )
     args = parser.parse_args(argv)
 
     _bootstrap()
@@ -41,6 +46,30 @@ def main(argv: list[str] | None = None) -> int:
         production_only=args.production_only,
         core_only=args.core_only,
     )
+    if args.check:
+        if not args.core_only:
+            print("--check 须与 --core-only 联用", file=sys.stderr)
+            return 2
+        ref_path = Path(__file__).resolve().parents[1] / "docs" / "operator_core_specs.yaml"
+        if not ref_path.is_file():
+            print(f"缺少参考 manifest: {ref_path}", file=sys.stderr)
+            return 1
+        import yaml
+
+        ref = yaml.safe_load(ref_path.read_text(encoding="utf-8")) or []
+        ref_names = {e["name"] for e in ref if isinstance(e, dict) and e.get("name")}
+        got_names = {e["name"] for e in entries}
+        if ref_names != got_names:
+            missing = sorted(ref_names - got_names)
+            extra = sorted(got_names - ref_names)
+            print(
+                f"operator_core_specs.yaml 过期: missing={missing[:5]} extra={extra[:5]}",
+                file=sys.stderr,
+            )
+            return 1
+        print(f"operator_core_specs.yaml 与 export 一致 ({len(got_names)} ops)")
+        return 0
+
     out: Path = args.output
     out.parent.mkdir(parents=True, exist_ok=True)
 

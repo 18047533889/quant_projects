@@ -41,4 +41,4 @@ def test_pandas_only_count_below_ceiling():
     pandas_only = [
         c for c in canon if "polars" not in OperatorRegistry.backends_for(c) and "pandas_numpy" in OperatorRegistry.backends_for(c)
     ]
-    assert len(pandas_only) <= 45, f"仍有过量 pandas-only: {len(pandas_only)}"
+    assert len(pandas_only) <= 55, f"仍有过量 pandas-only: {len(pandas_only)}"

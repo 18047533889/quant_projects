@@ -77,7 +77,7 @@ PRODUCTION_CORE_CANONICALS: frozenset[str] = frozenset(
 PRODUCTION_PIT_REQUIRED: frozenset[str] = PRODUCTION_CORE_CANONICALS
 
 _PIT_EXEMPT: frozenset[str] = frozenset(
-    {"column", "literal", "col", "Lead", "next", "bfill", "fillna_interpolate", "shuffle"}
+    {"column", "literal", "col", "Lead", "next", "bfill", "causal_bfill", "fillna_interpolate", "shuffle"}
 )
 
 # production DSL 禁止（可 research / experimental，不可 production 投递）
@@ -85,6 +85,7 @@ PRODUCTION_DENIED_CANONICALS: frozenset[str] = frozenset(
     {
         "dropna",
         "bfill",
+        "causal_bfill",
         "fillna_interpolate",
         "shuffle",
         "constant",
@@ -107,6 +108,11 @@ PRODUCTION_DENIED_CANONICALS: frozenset[str] = frozenset(
         "quarter",
         "ttm",
         "yoy",
+        "avg2",
+        "quarter_from_cumulative",
+        "ttm_from_quarterly",
+        "ttm_from_cumulative",
+        "yoy_by_period",
         "operating_margin",
         "current_ratio",
         "quick_ratio",
@@ -142,6 +148,9 @@ class OperatorSpec:
     param_names: tuple[str, ...] = ()
     supports_panel: bool = True
     supports_polars: bool = False
+    shape_preserving: bool = True
+    index_preserving: bool = True
+    columns_preserving: bool = True
     numerical_stability: NumericalStability = "medium"
     description: str = ""
 
@@ -157,6 +166,9 @@ class OperatorSpec:
             "param_names": list(self.param_names),
             "supports_panel": self.supports_panel,
             "supports_polars": self.supports_polars,
+            "shape_preserving": self.shape_preserving,
+            "index_preserving": self.index_preserving,
+            "columns_preserving": self.columns_preserving,
             "numerical_stability": self.numerical_stability,
             "description": self.description,
         }
@@ -172,9 +184,35 @@ def _infer_status(catalog_entry: dict[str, Any] | None) -> OperatorStatus:
         return "deprecated"
     if raw in ("experimental",):
         return "experimental"
+    if raw in ("production",):
+        return "production"
     if raw in ("research",):
         return "research"
-    return "production"
+    # fail-closed：catalog ``implemented`` 等未显式声明的一律 research
+    return "research"
+
+
+def _compute_allow_in_production(
+    resolved: str,
+    *,
+    status: OperatorStatus,
+    pit_safe: bool,
+    shape_preserving: bool = True,
+) -> bool:
+    """production 准入：core 白名单或显式 production，叠加 deny / PIT / shape / 生命周期。"""
+    if is_production_denied(resolved):
+        return False
+    if status in ("experimental", "deprecated", "stub", "doc_only"):
+        return False
+    if not pit_safe:
+        return False
+    if not shape_preserving:
+        return False
+    if resolved in PRODUCTION_CORE_CANONICALS:
+        return True
+    if status == "production":
+        return True
+    return False
 
 
 def _has_pit_declaration(canon: str, meta: Any) -> bool:
@@ -184,6 +222,14 @@ def _has_pit_declaration(canon: str, meta: Any) -> bool:
         return True
     tags = [str(t).lower() for t in (getattr(meta, "tags", None) or [])]
     return "pit_safe" in tags or "causal" in tags
+
+
+def _infer_shape_contract(resolved: str, policy: OperatorPolicy) -> tuple[bool, bool, bool]:
+    """从 policy 推断 shape/index/columns 契约。"""
+    sp = getattr(policy, "shape_preserving", True)
+    ip = getattr(policy, "index_preserving", True)
+    cp = getattr(policy, "columns_preserving", True)
+    return bool(sp), bool(ip), bool(cp)
 
 
 def build_operator_spec(canon: str, *, backend: str | None = None) -> OperatorSpec | None:
@@ -208,13 +254,13 @@ def build_operator_spec(canon: str, *, backend: str | None = None) -> OperatorSp
     all_backends = tuple(sorted(backends_map.keys()))
     tags = [str(t).lower() for t in (getattr(meta, "tags", None) or [])]
 
-    allow_in_production = status in ("production", "research") and status != "stub"
-    if status in ("stub", "doc_only", "deprecated", "experimental", "research"):
-        allow_in_production = False
-    if is_production_denied(resolved):
-        allow_in_production = False
-    if not policy.pit_safe and status == "production":
-        allow_in_production = False
+    allow_in_production = _compute_allow_in_production(
+        resolved,
+        status=status,
+        pit_safe=policy.pit_safe,
+        shape_preserving=policy.shape_preserving,
+    )
+    shape_preserving, index_preserving, columns_preserving = _infer_shape_contract(resolved, policy)
 
     deterministic = "shuffle" not in canon and "rand_" not in canon and "random" not in tags
     stability: NumericalStability = "high"
@@ -234,6 +280,9 @@ def build_operator_spec(canon: str, *, backend: str | None = None) -> OperatorSp
         param_names=tuple(getattr(meta, "param_names", None) or ()),
         supports_panel=True,
         supports_polars="polars" in all_backends,
+        shape_preserving=shape_preserving,
+        index_preserving=index_preserving,
+        columns_preserving=columns_preserving,
         numerical_stability=stability,
         description=str(getattr(meta, "description", "") or catalog.get("description", "")),
     )
@@ -317,6 +366,40 @@ def check_production_pit_declarations() -> list[str]:
     return errors
 
 
+def check_production_shape_contracts() -> list[str]:
+    """production 算子须保持 panel shape/index/columns。"""
+    errors: list[str] = []
+    for spec in iter_operator_specs():
+        if not spec.allow_in_production:
+            continue
+        if not spec.shape_preserving:
+            errors.append(f"production 算子 {spec.canonical!r} shape_preserving=False")
+        if not spec.index_preserving:
+            errors.append(f"production 算子 {spec.canonical!r} index_preserving=False")
+        if not spec.columns_preserving:
+            errors.append(f"production 算子 {spec.canonical!r} columns_preserving=False")
+    return errors
+
+
+def check_polars_production_backend_explicit() -> list[str]:
+    """POLARS_PRODUCTION_SAFE 中带 polars 的算子须显式 ``backend='polars'`` 注册。"""
+    from cleaned_operators.operator_policy import POLARS_PRODUCTION_SAFE
+    from cleaned_operators.registry import OperatorRegistry
+
+    errors: list[str] = []
+    for canon in sorted(POLARS_PRODUCTION_SAFE):
+        resolved = OperatorRegistry._aliases.get(canon, canon)
+        entry = OperatorRegistry._catalog.get(resolved, {})
+        meta = (entry.get("backend_meta") or {}).get("polars")
+        if meta is None:
+            continue
+        if not meta.get("explicit", False):
+            errors.append(
+                f"POLARS_PRODUCTION_SAFE {canon!r} 的 polars backend 须显式 backend='polars'"
+            )
+    return errors
+
+
 def production_allowed_canonicals() -> frozenset[str]:
     """``allow_in_production=True`` 的 canonical 集合。"""
     return frozenset(spec.canonical for spec in iter_operator_specs() if spec.allow_in_production)
@@ -338,7 +421,18 @@ def check_microstructure_param_contracts() -> list[str]:
     return errors
 
 
-_FUNDAMENTAL_PERIOD_OPS: frozenset[str] = frozenset({"quarter", "ttm", "yoy", "avg2"})
+_FUNDAMENTAL_PERIOD_OPS: frozenset[str] = frozenset(
+    {
+        "quarter",
+        "ttm",
+        "yoy",
+        "avg2",
+        "quarter_from_cumulative",
+        "ttm_from_quarterly",
+        "ttm_from_cumulative",
+        "yoy_by_period",
+    }
+)
 
 _INTRADAY_PARAM_OPS: frozenset[str] = frozenset({"intraday_vwap_deviation"})
 

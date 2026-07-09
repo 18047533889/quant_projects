@@ -1,43 +1,14 @@
-"""Polars 热路径算子集合（Top 20% 覆盖高频因子）。"""
+"""Polars 热路径算子集合（与 ``POLARS_PRODUCTION_SAFE`` 对齐）。"""
 
 from __future__ import annotations
 
 from typing import Any
 
-# 时序类：PolarsBackend 优先 native polars（与 pandas 对齐良好）
-POLARS_TS_OPS: frozenset[str] = frozenset(
-    {
-        "ts_mean",
-        "ts_sum",
-        "ts_std",
-        "ts_min",
-        "ts_max",
-        "ts_delay",
-        "ts_delta",
-        "ts_rank",
-        "ts_corr",
-        "ts_cov",
-        "decay_linear",
-        "abs",
-        "log",
-        "sign",
-        "neg",
-    }
-)
+from cleaned_operators.operator_policy import POLARS_PRODUCTION_SAFE
 
-# 全量热算子（含截面；截面可能与 pandas 有细微数值差）
-POLARS_HOT_OPS: frozenset[str] = POLARS_TS_OPS | frozenset(
-    {
-        "add",
-        "sub",
-        "mul",
-        "div",
-        "rank",
-        "zscore",
-        "scale",
-        "winsorize",
-    }
-)
+# 向后兼容别名
+POLARS_TS_OPS: frozenset[str] = POLARS_PRODUCTION_SAFE
+POLARS_HOT_OPS: frozenset[str] = POLARS_PRODUCTION_SAFE
 
 
 def is_polars_hot_op(op: str) -> bool:

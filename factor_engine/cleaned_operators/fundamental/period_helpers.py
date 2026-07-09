@@ -188,3 +188,43 @@ def compute_avg2(
         fq_arr = None if fq_series is None else fq_series.to_numpy(dtype=float)
         out[col] = _compute_avg2_1d(x[col].to_numpy(dtype=float), fq_arr)
     return out
+
+
+def quarter_from_cumulative(
+    x: pd.DataFrame,
+    fiscal_quarter: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """显式语义：输入为**累计值**，输出单季值（等同 ``compute_quarter``）。"""
+    return compute_quarter(x, fiscal_quarter)
+
+
+def compute_ttm_from_quarterly(
+    x: pd.DataFrame,
+    fiscal_quarter: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """显式语义：输入为**单季值**，滚动累加最近 4 个有效单季为 TTM。"""
+    return compute_ttm(x, fiscal_quarter)
+
+
+def ttm_from_quarterly(
+    x: pd.DataFrame,
+    fiscal_quarter: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    return compute_ttm_from_quarterly(x, fiscal_quarter)
+
+
+def ttm_from_cumulative(
+    x: pd.DataFrame,
+    fiscal_quarter: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """累计值 → 单季 → 滚动 4 季 TTM。"""
+    quarterly = quarter_from_cumulative(x, fiscal_quarter)
+    return compute_ttm_from_quarterly(quarterly, fiscal_quarter)
+
+
+def yoy_by_period(
+    x: pd.DataFrame,
+    fiscal_quarter: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """显式语义：按报告期/行 lag 计算同比增速（等同 ``compute_yoy``）。"""
+    return compute_yoy(x, fiscal_quarter)

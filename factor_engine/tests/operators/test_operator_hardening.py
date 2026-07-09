@@ -88,8 +88,17 @@ def test_polars_auto_prefers_whitelist_only():
     assert backend == "polars"
     assert op is not None
 
-    op2, backend2 = OperatorRegistry.get_preferred("ts_rank", prefer="auto")
-    assert backend2 == "pandas_numpy"
+    _op2, backend2 = OperatorRegistry.get_preferred("rank", prefer="auto")
+    assert backend2 == "polars"
+
+    _op3, backend3 = OperatorRegistry.get_preferred("ts_corr", prefer="auto")
+    assert backend3 == "polars"
+
+    _op4, backend4 = OperatorRegistry.get_preferred("ts_rank", prefer="auto")
+    assert backend4 == "polars"
+
+    _op5, backend5 = OperatorRegistry.get_preferred("MACD", prefer="auto")
+    assert backend5 == "pandas_numpy"
 
 
 def test_tier1_core_has_explicit_cost():

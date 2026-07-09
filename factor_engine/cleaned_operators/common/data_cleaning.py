@@ -28,19 +28,52 @@ from cleaned_operators.base import (
 import numpy as np
 import pandas as pd
 
+# canonical=causal_bfill backend=pandas_numpy selected=causal_bfill source=data_handling/missing_values.py
+@register_operator(
+    name="causal_bfill",
+    category="data_handling",
+    business_category="data_cleaning",
+    canonical="causal_bfill",
+    source="factor_dsl_np",
+    status="research",
+)
+class CausalBFill(SeriesOperator):
+    """因果后向占位：不引用未来值，NaN 保持 NaN。"""
+
+    metadata = OperatorMetadata(
+        name="causal_bfill",
+        category="data_handling",
+        description="因果后向占位（非传统 bfill；不引用未来值，NaN 保持 NaN）",
+        examples=["causal_bfill(close)"],
+        param_names=["x"],
+        return_type="series",
+        tags=["data_handling", "missing", "causal", "pit_safe"],
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
+        return causal_bfill(x)
+
+
 # canonical=bfill backend=pandas_numpy selected=bfill source=data_handling/missing_values.py
-@register_operator(name="bfill", category="data_handling", business_category="data_cleaning", canonical="bfill", source="factor_dsl_np")
+@register_operator(
+    name="bfill",
+    category="data_handling",
+    business_category="data_cleaning",
+    canonical="bfill",
+    source="factor_dsl_np",
+    status="deprecated",
+)
 class FillBackward(SeriesOperator):
-    """后向填充"""
+    """已弃用：请使用 ``causal_bfill``（名称易误解为传统 backward fill）。"""
 
     metadata = OperatorMetadata(
         name="bfill",
         category="data_handling",
-        description="后向填充（因子链路禁前视：保持 NaN，不引用未来值）",
-        examples=["bfill(close)"],
+        description="[deprecated] 请改用 causal_bfill；因子链路禁前视，不引用未来值",
+        examples=["causal_bfill(close)"],
         param_names=["x"],
         return_type="series",
-        tags=["data_handling", "missing", "backward"]
+        tags=["data_handling", "missing", "backward", "deprecated"],
     )
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:

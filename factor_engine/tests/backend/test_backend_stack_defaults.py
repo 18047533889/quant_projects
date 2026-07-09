@@ -9,7 +9,7 @@ import yaml
 
 from runtime.config import load_config, load_profile
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_yaml_default_backend_is_auto(tmp_path):

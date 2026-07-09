@@ -1,0 +1,10 @@
+factor_engine_configs_total 1
+factor_engine_configs_success 0
+factor_engine_configs_failed 1
+factor_engine_total_result_rows 0
+factor_engine_total_materialized_rows 0
+factor_engine_incremental_runs 0
+factor_engine_data_access_queries_total{operator="None"} 4
+factor_engine_data_access_slow_queries_total{operator="None"} 0
+factor_engine_data_access_elapsed_ms_total{operator="None"} 877.462
+factor_engine_config_rows_written{config_name="gtja191_smoke",status="failed"} 0

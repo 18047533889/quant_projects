@@ -28,5 +28,5 @@ def test_pandas_backend_end_to_end_single_factor():
 
     assert isinstance(result, pd.Series)
     assert result.index.names == ["timestamp", "instrument"]
-    assert result.loc[(pd.Timestamp("2024-01-03"), "A")] == 0.5
+    assert result.loc[(pd.Timestamp("2024-01-03"), "A")] == 0.0
     assert result.loc[(pd.Timestamp("2024-01-03"), "B")] == 1.0

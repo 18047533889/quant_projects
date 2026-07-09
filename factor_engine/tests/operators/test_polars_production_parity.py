@@ -99,11 +99,12 @@ def _parity_exprs():
         "exp": exp_(x),
         "sqrt": sqrt_(x),
         "sign": sign_(x),
-        "ts_sharpe": ts_sharpe(x, 2),
-        "ts_autocorr": ts_autocorr(x, 3, 1),
-        "ts_std": ts_std(x, 2),
         "rank": rank_(x),
         "zscore": zscore_(x),
+        "ts_std": ts_std(x, 2),
+        "ffill": make_cleaned_call_factory("ffill")(x),
+        "ts_pct": make_cleaned_call_factory("ts_pct")(x, 1),
+        "winsorize": make_cleaned_call_factory("winsorize")(x, 0.01),
     }
 
 

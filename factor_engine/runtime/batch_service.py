@@ -13,6 +13,34 @@ if TYPE_CHECKING:
     from runtime.engine import FactorEngine
 
 
+def _maybe_prepare_batch_data(
+    engine: "FactorEngine",
+    dag: Any,
+    analyses: dict[str, AnalysisResult],
+    *,
+    input_dq_check: bool,
+    input_dq_strict: bool,
+    input_dq_thresholds,
+) -> Any | None:
+    all_cols: set[str] = set()
+    for analysis in analyses.values():
+        all_cols |= analysis.referenced_columns
+    all_plans = [fp.root for fp in dag.roots] + list(dag.shared_nodes.values())
+    from planner.sql_io import should_skip_column_prefetch
+
+    if all_cols and not should_skip_column_prefetch(
+        all_plans, input_dq_check=input_dq_check
+    ):
+        return engine._prepare_batch_data(
+            engine.data_source,
+            all_cols,
+            input_dq_check=input_dq_check,
+            input_dq_strict=input_dq_strict,
+            input_dq_thresholds=input_dq_thresholds,
+        )
+    return None
+
+
 def execute_run_many(
     engine: "FactorEngine",
     factors: Sequence[Factor],
@@ -63,12 +91,10 @@ def execute_run_many(
         factors, enable_cse=enable_cse, perf=perf
     )
     perf = perf or PerfConfig.from_env()
-    all_cols: set[str] = set()
-    for analysis in analyses.values():
-        all_cols |= analysis.referenced_columns
-    input_report = engine._prepare_batch_data(
-        engine.data_source,
-        all_cols,
+    input_report = _maybe_prepare_batch_data(
+        engine,
+        dag,
+        analyses,
         input_dq_check=input_dq_check,
         input_dq_strict=input_dq_strict,
         input_dq_thresholds=input_dq_thresholds,
@@ -178,12 +204,10 @@ def execute_run_many_parallel(
     )
     perf = perf or PerfConfig.from_env()
     workers = n_jobs if n_jobs is not None else perf.max_workers
-    all_cols: set[str] = set()
-    for analysis in analyses.values():
-        all_cols |= analysis.referenced_columns
-    input_report = engine._prepare_batch_data(
-        engine.data_source,
-        all_cols,
+    input_report = _maybe_prepare_batch_data(
+        engine,
+        dag,
+        analyses,
         input_dq_check=input_dq_check,
         input_dq_strict=input_dq_strict,
         input_dq_thresholds=input_dq_thresholds,

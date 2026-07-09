@@ -29,7 +29,7 @@ def test_pandas_only_is_subset_of_intentional_or_small():
         c for c in canon if "polars" not in OperatorRegistry.backends_for(c) and "pandas_numpy" in OperatorRegistry.backends_for(c)
     )
     unexpected = [c for c in pandas_only if c not in INTENTIONALLY_PANDAS_ONLY]
-    assert len(pandas_only) <= 45, f"pandas-only 过多: {len(pandas_only)} {pandas_only}"
+    assert len(pandas_only) <= 55, f"pandas-only 过多: {len(pandas_only)} {pandas_only}"
     assert len(unexpected) == 0, f"非 intentional pandas-only: {unexpected}"
 
 

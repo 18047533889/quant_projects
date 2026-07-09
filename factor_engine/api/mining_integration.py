@@ -123,6 +123,7 @@ def default_ashare_pv_data_source_config(
             "type": "data_access",
             "dataset": "ashare_stock_daily",
             "fields": fields,
+            "read_auto": True,
         }
     if start_date is not None:
         cfg["start_date"] = start_date

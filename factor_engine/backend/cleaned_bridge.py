@@ -132,12 +132,12 @@ def _record_polars_op(ctx: ExecutionContext, op: str) -> None:
 
 def _resolve_operator(canonical: str, ctx: ExecutionContext):
     from cleaned_operators.registry import OperatorRegistry
-    from backend.polars_hot_ops import is_polars_backend_ctx, is_polars_ts_op
 
     prefer = _operator_backend_preference(ctx)
-    if is_polars_backend_ctx(ctx):
-        # 时序走 Polars；截面/四则暂回退 pandas 以保证与 PandasBackend 对齐
-        prefer = "polars" if is_polars_ts_op(canonical) else "pandas_numpy"
+    runtime = getattr(ctx, "runtime_stats", None) or {}
+    if runtime.get("backend") == "polars" and prefer == "auto":
+        # PolarsBackend：与 registry.get_preferred("auto") 一致，尊重 POLARS_PRODUCTION_SAFE
+        pass
     operator, backend = OperatorRegistry.get_preferred(canonical, prefer=prefer)
     return operator, backend
 
@@ -156,7 +156,7 @@ def _prepare_call_args(
 
     for val in evaluated:
         if isinstance(val, (pd.Series, pd.DataFrame)) or is_polars_frame(val):
-            panel = to_panel(val, ctx) if isinstance(val, pd.Series) else val
+            panel = to_panel(val, ctx) if isinstance(val, (pd.Series, pd.DataFrame)) else val
             if is_polars_frame(panel):
                 if template_panel is None and isinstance(val, pd.Series):
                     template_panel = val.unstack(level=ctx.instrument_col)

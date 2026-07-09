@@ -24,18 +24,21 @@ def _bootstrap() -> None:
 def check_operator_contracts(*, strict_tier1_cost: bool = True) -> list[str]:
     from backend.operator_cost import tier1_has_explicit_cost
     from cleaned_operators.operator_policy import (
-        TIER1_CANONICALS,
         _EXPLICIT_POLICIES,
         infer_operator_policy,
+        policy_required_canonicals,
         resolve_tier1_canonical,
         tier1_policy_keys,
     )
-    from cleaned_operators.operator_spec import check_production_pit_declarations, iter_operator_specs
     from cleaned_operators.operator_spec import (
         check_capm_param_contracts,
         check_fundamental_param_contracts,
         check_intraday_param_contracts,
         check_microstructure_param_contracts,
+        check_production_pit_declarations,
+        check_production_shape_contracts,
+        check_polars_production_backend_explicit,
+        iter_operator_specs,
     )
     from cleaned_operators.registry import OperatorRegistry
 
@@ -58,7 +61,7 @@ def check_operator_contracts(*, strict_tier1_cost: bool = True) -> list[str]:
         if key not in _EXPLICIT_POLICIES:
             errors.append(f"Tier-1 {key!r} 缺少显式 OperatorPolicy")
 
-    for name in sorted(TIER1_CANONICALS):
+    for name in sorted(policy_required_canonicals()):
         canon = resolve_tier1_canonical(name)
         if strict_tier1_cost and not tier1_has_explicit_cost(canon):
             errors.append(f"Tier-1 {canon!r} 缺少显式 OperatorCost")
@@ -74,7 +77,7 @@ def check_operator_contracts(*, strict_tier1_cost: bool = True) -> list[str]:
             continue
         policy = infer_operator_policy(op, canonical=canon)
         if canon in _EXPLICIT_POLICIES and not policy.pit_safe:
-            if canon not in {"Lead", "next", "bfill", "fillna_interpolate", "shuffle"}:
+            if canon not in {"Lead", "next", "bfill", "causal_bfill", "fillna_interpolate", "shuffle"}:
                 errors.append(f"显式 policy 算子 {canon!r} pit_safe=False 异常")
 
     for spec in iter_operator_specs():
@@ -82,10 +85,15 @@ def check_operator_contracts(*, strict_tier1_cost: bool = True) -> list[str]:
             errors.append(f"stub/doc_only 算子 {spec.canonical!r} 不应有 runtime backend")
 
     errors.extend(check_production_pit_declarations())
+    errors.extend(check_production_shape_contracts())
+    errors.extend(check_polars_production_backend_explicit())
     errors.extend(check_microstructure_param_contracts())
     errors.extend(check_fundamental_param_contracts())
     errors.extend(check_capm_param_contracts())
     errors.extend(check_intraday_param_contracts())
+    from cleaned_operators.fundamental.field_contract import check_fundamental_ratio_field_contracts
+
+    errors.extend(check_fundamental_ratio_field_contracts())
 
     return errors
 

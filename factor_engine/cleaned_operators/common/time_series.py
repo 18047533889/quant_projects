@@ -1200,16 +1200,22 @@ class TSCorrelation(SeriesOperator):
     )
     def _calculate_series(self, x: pl.DataFrame, y: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
         numeric_cols = [c for c in x.columns if c not in ['date', 'stock_code']]
-        result = x.select(['date'] if 'date' in x.columns else [])
-
+        w = max(int(window), 2)
+        merged = x
+        y_cols: list[str] = []
         for col in numeric_cols:
             if col in y.columns:
-                x_col = x[col]
-                y_col = y[col]
-                corr = x_col.rolling_corr(y_col, window_size=window, min_periods=2)
-                result = result.with_columns([corr.alias(col)])
-
-        return result
+                yname = f"__y_{col}"
+                y_cols.append(yname)
+                merged = merged.with_columns(y[col].alias(yname))
+        exprs = [
+            pl.rolling_corr(pl.col(col), pl.col(f"__y_{col}"), window_size=w, min_samples=2).alias(col)
+            for col in numeric_cols
+            if col in y.columns
+        ]
+        if not exprs:
+            return x
+        return merged.with_columns(exprs).drop(y_cols)
 
 @register_operator(name="ts_corr", category="time_series", business_category="time_series", canonical="ts_corr", source="factor_dsl_np")
 class TSCorrPolars(TSCorrelation):
@@ -1237,16 +1243,22 @@ class TSCovPolars(SeriesOperator):
     )
     def _calculate_series(self, x: pl.DataFrame, y: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
         numeric_cols = [c for c in x.columns if c not in ['date', 'stock_code']]
-        result = x.select(['date'] if 'date' in x.columns else [])
-
+        w = max(int(window), 2)
+        merged = x
+        y_cols: list[str] = []
         for col in numeric_cols:
             if col in y.columns:
-                x_col = x[col]
-                y_col = y[col]
-                cov = x_col.rolling_cov(y_col, window_size=window, min_periods=2)
-                result = result.with_columns([cov.alias(col)])
-
-        return result
+                yname = f"__y_{col}"
+                y_cols.append(yname)
+                merged = merged.with_columns(y[col].alias(yname))
+        exprs = [
+            pl.rolling_cov(pl.col(f"__y_{col}"), pl.col(col), window_size=w, min_samples=2).alias(col)
+            for col in numeric_cols
+            if col in y.columns
+        ]
+        if not exprs:
+            return x
+        return merged.with_columns(exprs).drop(y_cols)
 
 # aliases: TS_COV, m_cov, ts_covariance
 
@@ -1688,9 +1700,12 @@ class TSAutocorrPolars(SeriesOperator):
         cols = [c for c in x.columns if c not in ["date", "stock_code"]]
         return x.with_columns(
             [
-                pl.col(c)
-                .rolling_corr(pl.col(c).shift(k), window_size=w, min_periods=mp)
-                .alias(c)
+                pl.rolling_corr(
+                    pl.col(c),
+                    pl.col(c).shift(k),
+                    window_size=w,
+                    min_samples=mp,
+                ).alias(c)
                 for c in cols
             ]
         )

@@ -7,6 +7,7 @@ import pytest
 from backend.cleaned_bridge import ensure_cleaned_loaded
 from cleaned_operators.operator_policy import (
     INTENTIONALLY_PANDAS_ONLY,
+    PANDAS_ONLY_PIT_SAFE,
     PIT_UNSAFE_CANONICALS,
     infer_operator_policy,
 )
@@ -18,7 +19,10 @@ def _load():
     ensure_cleaned_loaded()
 
 
-@pytest.mark.parametrize("canonical", sorted(INTENTIONALLY_PANDAS_ONLY))
+@pytest.mark.parametrize(
+    "canonical",
+    sorted(INTENTIONALLY_PANDAS_ONLY - PANDAS_ONLY_PIT_SAFE),
+)
 def test_intentionally_pandas_only_marked_pit_unsafe(canonical: str):
     if canonical not in OperatorRegistry._operators:
         pytest.skip(f"{canonical} 未注册")

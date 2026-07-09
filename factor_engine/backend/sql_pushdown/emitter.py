@@ -66,6 +66,13 @@ def _float_attr(node: PlanNode, *keys: str, default: float) -> float:
     return default
 
 
+def _int_attr(node: PlanNode, *keys: str, default: int) -> int:
+    for key in keys:
+        if key in node.attrs and node.attrs[key] is not None:
+            return max(int(node.attrs[key]), 1)
+    return default
+
+
 def _literal_positional(node: PlanNode, index: int, *, default: float | None = None) -> float | None:
     """读取 positional literal 参数（``clip(x, lo, hi)`` 等）。"""
     pos = index + 1
@@ -241,8 +248,32 @@ def _pct_rank_expr(*, value_col: str, partition: str, dialect: SqlDialect) -> st
     return f"CASE WHEN {value_col} IS NULL THEN NULL ELSE {frac} END"
 
 
+def _cs_rank_01_expr(*, value_col: str, partition: str, dialect: SqlDialect) -> str:
+    """截面 0-1 排名，对齐 ``cs_rank_01``（单有效值行 → 全行 0.5，含 NULL 格）。"""
+    order = f"{partition} ORDER BY {value_col}"
+    if dialect != SqlDialect.CLICKHOUSE:
+        order = f"{partition} ORDER BY {value_col} NULLS LAST"
+    r = f"RANK() OVER ({order})"
+    cnt = f"COUNT({value_col}) OVER ({partition})"
+    if dialect == SqlDialect.CLICKHOUSE:
+        return (
+            f"multiIf({cnt} <= 1, 0.5, isNull({value_col}), NULL, "
+            f"({r} - 1) / nullIf({cnt} - 1, 0))"
+        )
+    return (
+        f"CASE WHEN {cnt} <= 1 THEN 0.5 "
+        f"WHEN {value_col} IS NULL THEN NULL "
+        f"ELSE ({r} - 1.0) / NULLIF({cnt} - 1, 0) END"
+    )
+
+
+def _cs_rank_01_sql(inner_sql: str, *, partition: str, dialect: SqlDialect) -> str:
+    expr = _cs_rank_01_expr(value_col="_v", partition=partition, dialect=dialect)
+    return f"SELECT ts, inst, {expr} AS _v FROM ({inner_sql}) t"
+
+
 def _cs_pct_rank_sql(inner_sql: str, *, partition: str, dialect: SqlDialect) -> str:
-    """截面百分位 rank；NaN 保持 NULL（对齐 pandas ``rank(pct=True)`` 跳过缺失）。"""
+    """截面百分位 rank；NaN 保持 NULL（``rank_pct`` / ``cs_pct_rank`` 语义）。"""
     expr = _pct_rank_expr(value_col="_v", partition=partition, dialect=dialect)
     return f"SELECT ts, inst, {expr} AS _v FROM ({inner_sql}) t"
 
@@ -498,6 +529,8 @@ def _ts_argext_sql(inner_sql: str, w: int, *, dialect: SqlDialect, pick: str) ->
 
 def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
     op = _resolve_canonical(node.op)
+    if op == "rolling_beta":
+        op = "ts_beta"
     std = _dialect_fn(dialect, "stddev")
     ln = _dialect_fn(dialect, "ln")
     g = _dialect_fn(dialect, "greatest")
@@ -754,6 +787,27 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
             has_inst_window=True,
         )
 
+    if op == "ts_sharpe":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        w = _window_int(node)
+        ann = _float_attr(node, "ann_factor", default=252.0)
+        sqrt_af = ann**0.5
+        over = (
+            f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+        )
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"CASE "
+            f"WHEN {std}(_v) OVER ({over}) = 0 AND AVG(_v) OVER ({over}) > 0 THEN 1e308 "
+            f"WHEN {std}(_v) OVER ({over}) = 0 THEN 0 "
+            f"ELSE AVG(_v) OVER ({over}) / {nf}({std}(_v) OVER ({over}), 0) "
+            f"END * {sqrt_af} AS _v "
+            f"FROM ({inner.sql}) t",
+            has_inst_window=True,
+        )
+
     if op == "ts_delay":
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
@@ -795,7 +849,7 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
         if inner is None:
             return None
         return _Layer(
-            _cs_pct_rank_sql(inner.sql, partition="PARTITION BY ts", dialect=dialect),
+            _cs_rank_01_sql(inner.sql, partition="PARTITION BY ts", dialect=dialect),
             has_inst_window=inner.has_inst_window,
             has_ts_partition=True,
         )
@@ -925,6 +979,26 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
         return _Layer(
             f"SELECT l.ts, l.inst, {corr_fn}(l._v, r._v) OVER ({over}) AS _v "
             f"FROM ({left.sql}) l INNER JOIN ({right.sql}) r USING (ts, inst)",
+            has_inst_window=True,
+        )
+
+    if op == "ts_autocorr":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        w = _window_int(node)
+        lag = _int_attr(node, "lag", default=1)
+        over = (
+            f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+        )
+        corr_fn = "corr" if dialect == SqlDialect.DUCKDB else "corrStable"
+        return _Layer(
+            f"SELECT ts, inst, {corr_fn}(curr_v, lagged_v) OVER ({over}) AS _v "
+            f"FROM ("
+            f"SELECT ts, inst, _v AS curr_v, "
+            f"LAG(_v, {lag}) OVER (PARTITION BY inst ORDER BY ts) AS lagged_v "
+            f"FROM ({inner.sql}) inner0"
+            f") aligned",
             has_inst_window=True,
         )
 

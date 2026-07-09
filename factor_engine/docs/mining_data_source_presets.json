@@ -12,6 +12,7 @@
       "volume": "Volume",
       "vwap": "Vwap"
     },
+    "read_auto": true,
     "type": "data_access"
   },
   "ashare_pv_universe": {
@@ -43,6 +44,7 @@
           "volume": "Volume",
           "vwap": "Vwap"
         },
+        "read_auto": true,
         "type": "data_access"
       },
       "status": {
@@ -82,6 +84,7 @@
           "volume": "Volume",
           "vwap": "Vwap"
         },
+        "read_auto": true,
         "type": "data_access"
       },
       "valuation": {

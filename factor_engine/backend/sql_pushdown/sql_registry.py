@@ -106,6 +106,9 @@ SQL_CAPABLE_CANONICALS: frozenset[str] = frozenset(
         # Tier 5 — 二元 EWM 矩
         "ewm_corr",
         "ewm_cov",
+        "ts_sharpe",
+        "ts_autocorr",
+        "rolling_beta",
     }
 )
 

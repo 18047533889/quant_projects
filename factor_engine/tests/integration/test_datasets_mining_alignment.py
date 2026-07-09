@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+FE_ROOT = Path(__file__).resolve().parents[2]
+
 
 def test_mining_presets_reference_registered_datasets():
     from api.datasets_contract import audit_mining_dataset_contract
@@ -62,12 +64,13 @@ def test_validate_dataset_field_bindings_catches_missing_column(tmp_path):
     assert any("MissingCol" in v for v in violations)
 
 
+FE_ROOT = Path(__file__).resolve().parents[2]
+
+
 def test_us_polygon_daily_profile_loads():
-    from pathlib import Path
     from runtime.config import load_config
 
-    root = Path(__file__).resolve().parent.parent
-    cfg = root / "examples" / "profiles" / "us_polygon_daily.yaml"
+    cfg = FE_ROOT / "examples" / "profiles" / "us_polygon_daily.yaml"
     loaded = load_config(cfg)
     assert loaded.data_source.options["dataset"] == "daily_market_summary"
     assert loaded.factor.name == "us_polygon_momentum"
@@ -76,8 +79,7 @@ def test_us_polygon_daily_profile_loads():
 def test_us_polygon_floats_profile_loads():
     from runtime.config import load_config
 
-    root = Path(__file__).resolve().parent.parent
-    loaded = load_config(root / "examples" / "profiles" / "us_polygon_floats.yaml")
+    loaded = load_config(FE_ROOT / "examples" / "profiles" / "us_polygon_floats.yaml")
     assert loaded.factor.name == "us_liquidity_mom"
     assert loaded.data_source.type == "composite"
     assert loaded.data_source.options["aliases"]["free_float_percent"] == "floats.free_float_percent"
@@ -86,8 +88,7 @@ def test_us_polygon_floats_profile_loads():
 def test_us_sip_day_aggs_profile_loads():
     from runtime.config import load_config
 
-    root = Path(__file__).resolve().parent.parent
-    loaded = load_config(root / "examples" / "profiles" / "us_sip_day_aggs.yaml")
+    loaded = load_config(FE_ROOT / "examples" / "profiles" / "us_sip_day_aggs.yaml")
     assert loaded.factor.name == "us_sip_momentum"
     assert loaded.data_source.type == "data_access"
     assert loaded.data_source.options["dataset"] == "us_stocks_sip_day_aggs"
@@ -105,8 +106,7 @@ def test_pr5_datasets_have_schema():
 def test_us_sip_fundamental_profile_loads():
     from runtime.config import load_config
 
-    root = Path(__file__).resolve().parent.parent
-    loaded = load_config(root / "examples" / "profiles" / "us_sip_fundamental.yaml")
+    loaded = load_config(FE_ROOT / "examples" / "profiles" / "us_sip_fundamental.yaml")
     assert loaded.factor.name == "us_sip_pe_rank"
     assert loaded.data_source.type == "composite"
     assert loaded.data_source.options["aliases"]["pe"] == "ratios.price_to_earnings"
@@ -116,18 +116,17 @@ def test_mining_presets_json_synced():
     import subprocess
     import sys
 
-    root = Path(__file__).resolve().parent.parent
-    env = {**dict(__import__("os").environ), "PYTHONPATH": f"{root.parent}:{root}"}
+    env = {**dict(__import__("os").environ), "PYTHONPATH": f"{FE_ROOT.parent}:{FE_ROOT}"}
     for script in (
         "export_mining_data_source_presets.py",
         "sync_factor_engine_llm_prompt_txt.py",
     ):
         proc = subprocess.run(
-            [sys.executable, str(root / "scripts" / script), "--check"],
+            [sys.executable, str(FE_ROOT / "scripts" / script), "--check"],
             capture_output=True,
             text=True,
             env=env,
-            cwd=str(root),
+            cwd=str(FE_ROOT),
         )
         assert proc.returncode == 0, f"{script}: {proc.stderr or proc.stdout}"
 
@@ -136,15 +135,14 @@ def test_full_contract_script_entrypoint():
     import subprocess
     import sys
 
-    root = Path(__file__).resolve().parent.parent
-    script = root / "scripts" / "validate_datasets_mining_alignment.py"
-    env = {**dict(__import__("os").environ), "PYTHONPATH": f"{root.parent}:{root}"}
+    script = FE_ROOT / "scripts" / "validate_datasets_mining_alignment.py"
+    env = {**dict(__import__("os").environ), "PYTHONPATH": f"{FE_ROOT.parent}:{FE_ROOT}"}
     proc = subprocess.run(
         [sys.executable, str(script)],
         capture_output=True,
         text=True,
         env=env,
-        cwd=str(root),
+        cwd=str(FE_ROOT),
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
 

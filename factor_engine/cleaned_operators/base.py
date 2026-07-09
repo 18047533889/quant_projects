@@ -135,10 +135,13 @@ def register_operator(
             instance.metadata.business_category = business_category
         if backend is not None:
             effective_backend = backend
+            backend_explicit = True
         elif "Polars" in cls.__name__:
             effective_backend = "polars"
+            backend_explicit = False
         else:
             effective_backend = "pandas_numpy"
+            backend_explicit = False
         canon = canonical or (name if name else cls.__name__)
         from cleaned_operators.registry import OperatorRegistry
         name_aliases = [name] if name and name != canon else None
@@ -149,6 +152,7 @@ def register_operator(
             source=source or "factor_dsl_np",
             aliases=name_aliases,
             status=status,
+            backend_explicit=backend_explicit,
         )
         return cls
     return decorator
