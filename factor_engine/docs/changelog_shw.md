@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-07 Backend 与文档同步（第 32 版）
+
+**内容**：SQL 下推 **58** 算子 + `column`/`literal`（共 **60** 可编译节点）；registry sql backend **62**（CI 门禁）；新增 `cs_resid`/`cs_regression` SQL；统一 Polars **325** 文档；修正 `neutralize`（组内去均值）与 `cs_resid`（截面 OLS）语义混用。
+
+- **[`sql_pushdown_coverage.md`](sql_pushdown_coverage.md)**：CI 自动生成 SQL 清单  
+- **[`operators_semantics.md`](operators_semantics.md)** / **[`dsl_operators_reference.md`](dsl_operators_reference.md)** / **[`算子与导入教程.md`](算子与导入教程.md)**：Backend §、OLS vs group_neutralize、`is_nan`/`is_finite` float64、`bfill` 因果  
+- **[`factor_engine_llm_prompt.md`](factor_engine_llm_prompt.md)**：§5.4 SQL 下推 + 修正 neutralize 描述  
+- **[`enterprise_factor_engine_roadmap.md`](enterprise_factor_engine_roadmap.md)**：Backend 覆盖行 + Phase 12 更新  
+- **`cleaned_operators/docs/operator_doc_semantics.py`**：`neutralize` 文档对齐 dedupe 别名  
+
+---
+
 ## 2026-06 文档精简
 
 **内容**：删除重复或过时文档，统一以 [`算子与导入教程.md`](算子与导入教程.md) + [`dsl_operators_reference.md`](dsl_operators_reference.md) + [`miner_delivery_spec.md`](miner_delivery_spec.md) 为挖掘侧必读；详见 [`docs/README.md`](README.md) §5「已移除文档」。
@@ -363,3 +375,90 @@
 - **新增**：[`api/mining_integration.py`](../api/mining_integration.py)、[`workspace_paths.py`](../workspace_paths.py)、投递校验 CLI、[`docs/dsl_operators_reference.md`](dsl_operators_reference.md)
 - **修复**：`build_canonical_fields.py` US OHLCV `forbidden` 误判；`cleaned_bridge` TypeError 重试；`ParquetSource` 列名回退
 - **规范**：[`docs/miner_delivery_spec.md`](miner_delivery_spec.md) v2.14（组员必读唯一正文）
+
+---
+
+## 第 40 版更改-shw（2026-07）
+
+**内容**：**DuckDB SQL 下推 Tier4（77 → 88 算子）**。
+
+- 新增：`WMA` · `ewm_std`/`ewm_var` · `cum_std`/`expanding_std` · `floor`/`ceil`/`inverse` · `count` · `Slope` · `ts_argmax`/`ts_argmin`
+- `test_sql_pushdown_tier4`；CI `min-sql` 95
+
+---
+
+## 第 39 版更改-shw（2026-07）
+
+**内容**：**DuckDB SQL 下推 Tier3 扩展（58 → 77 算子）**。
+
+- 新增 SQL 下推：`power` · 比较 `gt/lt/eq/ge/le/ne` · 逻辑 `and_/or_/not_` · `group_std` · `ts_cov` · `ts_quantile` · `ts_product` · `ts_skew` · `ts_regression` · `cum_sum/cum_max/cum_min`
+- `test_sql_pushdown_tier3`；CI `min-sql` 77；`sql_pushdown_coverage.md` 自动更新
+
+---
+
+## 第 38 版更改-shw（2026-07）
+
+**内容**：**底层栈默认启用 hybrid（DuckDB + auto）**。
+
+- YAML 未指定 `backend` 时默认 **`auto`**（SQL 下推 + Polars + Pandas fallback）
+- `prod` profile 显式 `backend: auto`
+- 投递 / smoke 模板改 `auto`；新增 `data_access_auto_smoke` / `data_access_duckdb_sql_smoke` 示例
+- `test_backend_stack_defaults`；README「底层栈与 backend 选择」矩阵
+
+---
+
+## 第 37 版更改-shw（2026-07）
+
+**内容**：**Phase 18 Pipeline 覆盖与增量批量**。
+
+- `PipelineConfigOverrides`：CLI `--dq-check` / `--write-target` / 增量参数等统一传入 engine batch
+- `config_run_batch_key` / `config_materialize_batch_key` 支持 `pipeline=` 分组
+- `materialize_many_from_config_parallel`；batch 物化路径支持 `run_many_parallel`
+- `materialize_incremental_many_from_config`；`run_config_directory --incremental` 目录 batch
+- `write_targets.LocalParquet` lazy import 解循环依赖
+- `test_enterprise_p6`；`test_pipeline_batch` 扩展 CLI 覆盖 batch 用例
+
+---
+
+## 第 36 版更改-shw（2026-07）
+
+**内容**：**Phase 17 pipeline 收敛 + allowlist 修复**。
+
+- `.data_access_allowlist.yaml` 登记 `schema_migration.py`（CI allowlist 门禁通过）
+- `pipeline._execute_config` / `materialize_incremental_from_config` 统一 `to_*_materialize_kwargs`
+- `run_config_directory` 在 eligible 时委托 `run_many_from_config` / `materialize_many_from_config`
+- `ResolvedRunKwargs.to_run_kwargs`；batch API 支持 `profile` / `enable_cse`
+- `test_pipeline_batch`；795 factor_engine 测通过
+
+---
+
+## 第 35 版更改-shw（2026-07）
+
+**内容**：**Phase 16 物化批量与配置映射**。
+
+- `ResolvedMaterializeKwargs.to_engine_materialize_kwargs` / `to_run_kwargs`；修复 `resume_materialize` / `isolate_partition_failures` 传参遗漏
+- `materialize_many_from_config(batch_run=True)`：同 scope 共享 `run_many` + `execute_materialize_from_resolved`
+- `run_many_from_config(parallel=True)` + `run_many_from_config_parallel`
+- `test_enterprise_p5`；789+ 测通过
+
+---
+
+## 第 34 版更改-shw（2026-07）
+
+**内容**：**Phase 15 批量编排与写目标收敛**。
+
+- `config_run_batch_key` + `run_many_from_config` 按 run kwargs 子分组（production auto_warmup 可 batch）
+- `ClickHouseWriteTarget.write_factor_series`；`dual_write_service` 统一经 write target
+- `storage` 公开 export `resolve_write_target` / Local / Staging / CH targets
+- `test_enterprise_p4`；CI `check_enterprise_docs`
+
+---
+
+## 第 33 版更改-shw（2026-07）
+
+**内容**：**企业级 P0/P1/P2 加固** — `factor_engine` + `data_access` 生产路径。
+
+- **data_access**：`QueryBudget` + read/sql/stream 审计；`delete_rows` dry_run/max_rows；`factor_lake` metadata schema；`sql_stream` + `apply_sql_row_limit`
+- **factor_engine**：`factor_schema` 单点契约；production `auto_warmup`；lineage `source_expr`；`dual_write_service` / `warmup_service` / `lineage_service` / `materialize_service`；`SessionBarCalendar` 分钟 warmup；`FactorWriteTarget`（local/staging/CH）；`run_many_from_config` 按 data_scope 分组；`materialize_many_from_config`；`schema_migration` + CLI；composite `join_reports` → lineage
+- **测试**：`test_enterprise_p0/p1/p2/p3`；782+ factor_engine / 168 data_access unit 通过
+- **文档**：[`enterprise_factor_engine_roadmap.md`](enterprise_factor_engine_roadmap.md) Phase 14；[`data_access/README.md`](../../data_access/README.md) PR8+

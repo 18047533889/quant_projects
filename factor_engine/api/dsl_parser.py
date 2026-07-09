@@ -166,4 +166,5 @@ def parse_factor(
         freq=freq,
         universe=universe,
         description=description,
+        source_expr=text,
     )

@@ -62,6 +62,7 @@ from __future__ import annotations
 
 from .engine import DuckDBEngine, get_shared_engine, reset_shared_engine
 from .exceptions import DataAccessError, DataError, EngineError, ValidationError
+from .query_budget import QueryBudget
 from .store import DataAccessStore, get_store, reset_store
 
 __all__ = [
@@ -75,6 +76,7 @@ __all__ = [
     "ValidationError",
     "DataError",
     "EngineError",
+    "QueryBudget",
 ]
 
 __version__ = "0.1.0"

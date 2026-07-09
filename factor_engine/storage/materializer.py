@@ -40,17 +40,19 @@ from workspace_paths import default_factor_lake_root
 
 from .catalog import FactorCatalog, compute_ir_hash
 from .exceptions import FactorNotFoundError, MaterializePartitionError
+from .partition_policy import (
+    PartitionPolicy,
+    attach_partition_columns,
+    checkpoint_year,
+    iter_partition_groups,
+    partition_key,
+    partition_path_segments,
+)
 from logging_utils import ProgressLogger, get_logger
 
 logger = get_logger("storage.materializer")
 
-METADATA_COLUMNS = (
-    "calc_time",
-    "factor_version",
-    "data_snapshot_id",
-    "is_valid",
-    "invalid_reason",
-)
+from storage.factor_schema import FACTOR_METADATA_COLUMNS as METADATA_COLUMNS
 
 
 @dataclass(frozen=True)
@@ -93,6 +95,8 @@ class ParquetMaterializer:
         self,
         lake_root: str | Path | None = None,
         catalog: FactorCatalog | None = None,
+        *,
+        staging_dataset: str = "factor_lake_staging",
     ) -> None:
         if lake_root is None:
             lake_root = default_factor_lake_root()
@@ -102,6 +106,7 @@ class ParquetMaterializer:
         if catalog is None:
             catalog = FactorCatalog(self._lake_root / "_catalog.sqlite")
         self._catalog = catalog
+        self._staging_dataset = str(staging_dataset or "factor_lake_staging")
 
     # ------------------------------------------------------------------
     # 属性
@@ -143,6 +148,8 @@ class ParquetMaterializer:
         value_dtype: str = "float32",
         write_target: str = "local",
         defer_watermark: bool = False,
+        partition_columns: list[str] | None = None,
+        storage_format: str = "long",
     ) -> dict:
         """将因子计算结果落盘为分区 Parquet。
 
@@ -242,13 +249,22 @@ class ParquetMaterializer:
         )
 
         staging_result = None
+        policy = PartitionPolicy.from_config(
+            partition_columns=partition_columns,
+            storage_format=storage_format,
+        )
         if write_staging:
             # staging 优先：失败则不写本地分区、不更新水位线
-            staging_result = self._upsert_to_data_access_staging(factor_id, df)
+            staging_result = self._upsert_to_data_access_staging(
+                factor_id, df, policy=policy
+            )
 
         partitions_written: list[int] = []
         partitions_failed: list[int] = []
         partitions_skipped: list[int] = []
+        partition_keys_written: list[str] = []
+        partition_keys_failed: list[str] = []
+        partition_keys_skipped: list[str] = []
 
         from runtime.lineage import new_run_id
 
@@ -259,50 +275,66 @@ class ParquetMaterializer:
         )
 
         factor_dir = self._lake_root / "factors" / factor_id
-        work_df = df.copy()
-        work_df["_year"] = work_df["datetime"].dt.year
+        work_df = attach_partition_columns(df, policy)
 
         if write_local:
-            partition_years = sorted(int(year) for year in work_df["_year"].unique())
+            partition_items = list(iter_partition_groups(work_df, policy))
             progress = ProgressLogger(
                 logger,
                 desc=f"落盘因子 {factor_id}",
-                total=len(partition_years),
+                total=len(partition_items),
                 unit="partition",
             )
-            for year in partition_years:
+            for part_values, partition_df in partition_items:
+                pkey = partition_key(part_values)
+                ck_year = checkpoint_year(part_values)
                 if resume:
-                    checkpoint = self._catalog.get_partition_checkpoint(factor_id, year)
+                    checkpoint = self._catalog.get_partition_checkpoint_by_key(
+                        factor_id, pkey
+                    )
+                    if checkpoint is None and policy.columns == ("year",):
+                        checkpoint = self._catalog.get_partition_checkpoint(
+                            factor_id, ck_year
+                        )
                     if checkpoint and checkpoint["status"] == "success":
-                        partitions_skipped.append(int(year))
-                        progress.advance(detail=f"year={year}, resume_skip")
+                        partitions_skipped.append(ck_year)
+                        partition_keys_skipped.append(pkey)
+                        progress.advance(detail=f"{pkey}, resume_skip")
                         continue
 
-                partition_df = work_df.loc[work_df["_year"] == year].drop(columns=["_year"])
                 try:
-                    self._upsert_partition(factor_dir, int(year), partition_df)
+                    self._upsert_partition(
+                        factor_dir,
+                        part_values,
+                        partition_df,
+                        policy=policy,
+                    )
                     self._catalog.record_partition_checkpoint(
                         factor_id=factor_id,
-                        partition_year=int(year),
+                        partition_year=ck_year,
+                        partition_key=pkey,
                         run_id=checkpoint_run_id,
                         status="success",
                     )
-                    partitions_written.append(int(year))
-                    progress.advance(detail=f"year={year}, rows={len(partition_df)}")
+                    partitions_written.append(ck_year)
+                    partition_keys_written.append(pkey)
+                    progress.advance(detail=f"{pkey}, rows={len(partition_df)}")
                 except Exception as exc:
                     self._catalog.record_partition_checkpoint(
                         factor_id=factor_id,
-                        partition_year=int(year),
+                        partition_year=ck_year,
+                        partition_key=pkey,
                         run_id=checkpoint_run_id,
                         status="failed",
                         error_message=str(exc),
                     )
-                    partitions_failed.append(int(year))
-                    progress.advance(detail=f"year={year}, failed")
+                    partitions_failed.append(ck_year)
+                    partition_keys_failed.append(pkey)
+                    progress.advance(detail=f"{pkey}, failed")
                     logger.error(
-                        "分区落盘失败 factor_id=%s year=%s error=%s",
+                        "分区落盘失败 factor_id=%s partition=%s error=%s",
                         factor_id,
-                        year,
+                        pkey,
                         exc,
                     )
                     if not isolate_partition_failures:
@@ -313,19 +345,29 @@ class ParquetMaterializer:
                     "factor_id": factor_id,
                     "rows_written": 0,
                     "partitions": [],
+                    "partition_keys": [],
                     "partitions_failed": partitions_failed,
                     "partitions_skipped": partitions_skipped,
                     "watermark": self._catalog.get_watermark(factor_id),
                     "checkpoint_run_id": checkpoint_run_id,
                     "write_target": write_target,
+                    "storage_format": policy.storage_format,
                 }
 
         # --- 5. 更新水位线 ---
+        value_columns = [c for c in work_df.columns if c not in policy.columns]
         if write_local and (partitions_written or partitions_skipped):
-            active_years = set(partitions_written) | set(partitions_skipped)
-            active_df = work_df.loc[work_df["_year"].isin(active_years)].drop(columns=["_year"])
+            active_keys = set(partition_keys_written) | set(partition_keys_skipped)
+
+            def _row_partition_key(row: pd.Series) -> str:
+                return partition_key({col: row[col] for col in policy.columns})
+
+            active_df = work_df.loc[
+                work_df.apply(_row_partition_key, axis=1).isin(active_keys),
+                value_columns,
+            ]
         else:
-            active_df = work_df.drop(columns=["_year"])
+            active_df = work_df[value_columns]
 
         start_date = active_df["datetime"].min().isoformat()
         end_date = active_df["datetime"].max().isoformat()
@@ -400,8 +442,11 @@ class ParquetMaterializer:
             "factor_id": factor_id,
             "rows_written": len(df),
             "partitions": partitions_written,
+            "partition_keys": partition_keys_written,
             "partitions_failed": partitions_failed,
+            "partition_keys_failed": partition_keys_failed,
             "partitions_skipped": partitions_skipped,
+            "partition_keys_skipped": partition_keys_skipped,
             "watermark": watermark,
             "dq_report": dq_report.to_dict() if dq_report is not None else None,
             "run_id": run_lineage.get("run_id") if run_lineage else None,
@@ -409,6 +454,8 @@ class ParquetMaterializer:
             "write_target": write_target,
             "preserve_invalid_rows": preserve_invalid_rows,
             "watermark_deferred": watermark_deferred,
+            "storage_format": policy.storage_format,
+            "partition_columns": list(policy.columns),
         }
         if pending_watermark is not None and watermark_deferred:
             summary["pending_watermark"] = pending_watermark
@@ -545,44 +592,55 @@ class ParquetMaterializer:
         df = df.dropna(subset=["value"]).reset_index(drop=True)
         return df
 
-    def _upsert_to_data_access_staging(self, factor_id: str, df: pd.DataFrame) -> dict:
-        """经 data_access 幂等 upsert 到 factor_lake_staging（生产发布前暂存区）。"""
-        import pyarrow as pa
+    def _upsert_to_data_access_staging(
+        self,
+        factor_id: str,
+        df: pd.DataFrame,
+        *,
+        policy: PartitionPolicy | None = None,
+    ) -> dict:
+        """经 data_access 幂等 upsert 到 staging 数据集（生产发布前暂存区）。"""
+        from storage.write_targets import resolve_write_target
 
-        from data_access import get_store
-
-        out = df.copy()
-        out["year"] = pd.to_datetime(out["datetime"]).dt.year.astype("int32")
-        table = pa.Table.from_pandas(out, preserve_index=False)
-        store = get_store()
-        result = store.upsert(
-            "factor_lake_staging",
-            table,
+        policy = policy or PartitionPolicy.from_config()
+        out = attach_partition_columns(df, policy)
+        target = resolve_write_target("staging", staging_dataset=self._staging_dataset)
+        result = target.write_factor_frame(
+            factor_id,
+            out,
             upsert_on=["datetime", "asset"],
-            partition_by=["year"],
-            factor_id=factor_id,
+            partition_by=list(policy.columns),
         )
         logger.info(
-            "因子 '%s' 已 upsert 到 factor_lake_staging: %s",
+            "因子 '%s' 已 upsert 到 %s: %s",
             factor_id,
+            self._staging_dataset,
             result,
         )
-        return {"dataset": "factor_lake_staging", "factor_id": factor_id, **result}
+        return result
 
     # ------------------------------------------------------------------
     # 内部：分区 Upsert + 原子写入
     # ------------------------------------------------------------------
 
     def _upsert_partition(
-        self, factor_dir: Path, year: int, new_df: pd.DataFrame
+        self,
+        factor_dir: Path,
+        part_values: dict[str, Any],
+        new_df: pd.DataFrame,
+        *,
+        policy: PartitionPolicy,
     ) -> None:
-        """对指定年份分区做幂等 Upsert。
+        """对指定 hive 分区做幂等 Upsert（long 或 wide）。"""
+        if policy.is_wide:
+            self._upsert_partition_wide(factor_dir, part_values, new_df, policy=policy)
+            return
 
-        步骤：读旧 → concat → 去重(保留最新) → 排序 → 原子覆盖写。
-        """
-        partition_dir = factor_dir / f"year={year}"
+        partition_dir = factor_dir / partition_path_segments(
+            part_values, column_order=policy.columns
+        )
         partition_dir.mkdir(parents=True, exist_ok=True)
-        parquet_path = partition_dir / "data.parquet"
+        parquet_path = partition_dir / policy.data_filename
         existing_rows = 0
 
         # 读取已有数据
@@ -614,16 +672,60 @@ class ParquetMaterializer:
         ).reset_index(drop=True)
 
         # 原子写入：先写 tmp，再 rename
-        tmp_path = partition_dir / ".data.parquet.tmp"
+        tmp_path = partition_dir / f".{policy.data_filename}.tmp"
         combined.to_parquet(tmp_path, index=False, engine="pyarrow")
         os.replace(str(tmp_path), str(parquet_path))
         logger.info(
-            "分区写入完成: factor_dir=%s, year=%s, existing_rows=%d, incoming_rows=%d, final_rows=%d",
+            "分区写入完成: factor_dir=%s, partition=%s, existing_rows=%d, "
+            "incoming_rows=%d, final_rows=%d",
             factor_dir,
-            year,
+            partition_key(part_values),
             existing_rows,
             len(new_df),
             len(combined),
+        )
+
+    def _upsert_partition_wide(
+        self,
+        factor_dir: Path,
+        part_values: dict[str, Any],
+        new_df: pd.DataFrame,
+        *,
+        policy: PartitionPolicy,
+    ) -> None:
+        """宽表 panel 分区 upsert（经 long 去重后再 pivot）。"""
+        from storage.factor_format import pivot_long_to_wide, unpivot_wide_to_long
+
+        partition_dir = factor_dir / partition_path_segments(
+            part_values, column_order=policy.columns
+        )
+        partition_dir.mkdir(parents=True, exist_ok=True)
+        parquet_path = partition_dir / policy.data_filename
+        tmp_path = partition_dir / f".{policy.data_filename}.tmp"
+
+        value_cols = ["datetime", "asset", "value"]
+        new_long = new_df[value_cols].copy()
+
+        if parquet_path.exists():
+            existing_panel = pd.read_parquet(parquet_path)
+            if "datetime" in existing_panel.columns:
+                existing_panel = existing_panel.set_index("datetime")
+            existing_long = unpivot_wide_to_long(existing_panel)
+            combined_long = pd.concat([existing_long, new_long], ignore_index=True)
+        else:
+            combined_long = new_long
+
+        combined_long = combined_long.drop_duplicates(
+            subset=["datetime", "asset"], keep="last"
+        )
+        panel = pivot_long_to_wide(combined_long)
+        panel.to_parquet(tmp_path, index=True, engine="pyarrow")
+        os.replace(str(tmp_path), str(parquet_path))
+        logger.info(
+            "宽表分区写入完成: factor_dir=%s, partition=%s, shape=%s",
+            factor_dir,
+            partition_key(part_values),
+            panel.shape,
         )
 
     @staticmethod
@@ -632,14 +734,15 @@ class ParquetMaterializer:
         total = 0
         if not factor_dir.exists():
             return 0
-        for pq_file in factor_dir.rglob("data.parquet"):
-            # 用 pyarrow 的 metadata 快速获取行数，避免加载全部数据
+        for pq_file in factor_dir.rglob("*.parquet"):
+            if pq_file.name.startswith("."):
+                continue
             try:
                 import pyarrow.parquet as pq
+
                 meta = pq.read_metadata(pq_file)
                 total += meta.num_rows
             except Exception:
-                # 退化为 pandas 读取
                 df = pd.read_parquet(pq_file)
                 total += len(df)
         return total

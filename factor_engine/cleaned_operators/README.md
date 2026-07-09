@@ -55,7 +55,12 @@ cleaned_operators/
 
 根目录仍保留 **兼容 shim**（如 `elementwise_math.py` → `common/elementwise.py`），旧 import 路径可继续使用。
 
-### 2.1 企业级运行时（Phase 11–12）
+### 2.1 企业级运行时（Phase 11–16）
+
+- **Phase 11–12**：RunWindow、DQ Profile、PIT、`staging_clickhouse` 物化、增量扩窗。
+- **Phase 14–16**：`QueryBudget` / 读审计、`FactorWriteTarget`、`run_many_from_config` / `materialize_many_from_config(batch_run)`、`SessionBarCalendar` 分钟 warmup。
+
+详见 [`docs/enterprise_factor_engine_roadmap.md`](../docs/enterprise_factor_engine_roadmap.md) 与 [`runtime/README.md`](../runtime/README.md) §8。
 
 | 能力 | 入口 |
 |------|------|
@@ -105,9 +110,9 @@ cleaned_operators/
 - `OperatorRegistry` 支持 `backend="sql"` 元数据（与 emitter 同步）
 - `LongTableDataSource` / `long_table: true`：数据源保持长表；**panel-native 仍启用**，算子链内宽表中间态、根节点一次 stack
 
-Polars 新增覆盖：`ADX/AROON/KAMA`、`Slope/ts_regression`、`sharpe_ratio`、信号算子、`group_*` 全簇、`ewm_*`、`cs_regression/cs_resid`、CAPM 簇等；**2026-07**：`polars_batch_mirror` 桥接至 **325** canonical。企业门禁 Polars ≥ **320** / SQL ≥ **43**；剩余 **36** intentional pandas-only（FFT/矩阵/随机/CDF-PDF）。
+Polars 新增覆盖：`ADX/AROON/KAMA`、`Slope/ts_regression`、`sharpe_ratio`、信号算子、`group_*` 全簇、`ewm_*`、`cs_regression/cs_resid`、CAPM 簇等；**2026-07**：`polars_batch_mirror` 桥接至 **325** canonical。企业门禁 Polars ≥ **320** / SQL ≥ **62**；剩余 **36** intentional pandas-only（FFT/矩阵/随机/CDF-PDF）。
 
-SQL 白名单 **43** 个算子（含 `ts_ema`、`group_winsorize`、`ts_beta`、`ts_mad`、`ts_rank`、`ewm_mean`、`sign`）；多子树 **WITH CSE 批执行**。
+SQL 白名单 **58** 个算子 + `column`/`literal`（共 **60** 可编译节点；registry **62**；完整清单见 [`docs/sql_pushdown_coverage.md`](../docs/sql_pushdown_coverage.md)，CI 自动生成）；含时序基础、截面 `cs_resid`/`cs_regression`、`group_*` 簇等；多子树 **WITH CSE 批执行**。
 
 **企业级门禁**：`tests/test_enterprise_readiness.py`（覆盖阈值、dedupe 契约、P0 双 backend、env bootstrap）。
 
@@ -119,7 +124,7 @@ SQL 白名单 **43** 个算子（含 `ts_ema`、`group_winsorize`、`ts_beta`、
 - **ClickHouse 写入**：`FactorEngine.materialize(write_target="clickhouse"|"staging_clickhouse")`（推荐）；兼容入口 `materialize_clickhouse()` 委托同一实现
 - **Parquet → CH ETL**：`load_parquet_to_panel_table()`
 
-SQL 已支持（MVP）：`ts_mean/std/sum/max/min/delay/delta/pct/zscore`、`ts_corr`、`rank/zscore/scale/cs_demean/group_neutralize`、`where`、四则、`abs/log/exp/sqrt/clip`。
+SQL 已支持（Tier-1）：时序 `ts_mean/std/sum/max/min/median/var/mad/delay/delta/pct/zscore/rank/corr/beta/ema/decay_linear`；截面 `rank/zscore/normalize/scale/winsorize/cs_demean/cs_resid/cs_regression`；分组 `group_rank/zscore/normalize/percentile/decay_linear/mean/neutralize/winsorize`；清洗 `fillna/ffill/bfill/coalesce/nan_to_num`；条件 `where/if_else/is_finite/is_nan`；数值安全 `protected_*`；四则与 `abs/log/exp/sqrt/clip/sign`。
 
 ---
 

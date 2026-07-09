@@ -35,8 +35,26 @@
 ### 已在白名单 — 清洗 / 截面 / 分组
 
 - **数值安全**：`protected_div` / `protected_log` / `protected_sqrt`；`nan_to_num` `fillna` `ffill` `bfill` `coalesce`
-- **截面**：`rank` `zscore` `normalize` `quantile` `scale` `winsorize` **`neutralize(x, y)`**（截面 OLS 残差）
-- **分组**：`group_rank` `group_neutralize` `group_zscore` `group_mean`（≈ 行业去均值用 `group_neutralize`）
+- **截面**：`rank` `zscore` `normalize` `quantile` `scale` `winsorize` **`cs_resid(y, x)`** / **`cs_regression(y, x, mode)`**（截面 OLS）· **`cs_demean`**
+- **分组**：`group_rank` `group_neutralize` `group_zscore` `group_mean` `group_normalize` `group_percentile` `group_decay_linear` `group_winsorize`（≈ 行业去均值用 `group_neutralize` / `neutralize` / `group_demean` 别名）
+
+### 截面缩放对照（normalize / scale / group_normalize）
+
+| 算子 | 作用域 | 零区间 / 常数列 | 典型用途 |
+|------|--------|-----------------|----------|
+| `scale(x)` | 截面 | 标准差为 0 → **0** | 截面 zscore 后再除 std（与 `zscore` 类似但实现路径不同） |
+| `normalize(x)` | 截面 | min=max → **NaN** | 截面 [0,1] min-max |
+| `group_normalize(x, grp)` | 截面 × 组 | 组内 min=max → **0.5** | 组内 [0,1] min-max（行业/板块内归一化） |
+
+**误用提示**：全市场截面用 `normalize`；组内相对位置用 `group_normalize`；二者零区间行为不同，不可互换。
+
+**OLS vs 组内去均值**：
+- **`cs_resid(y, x)`** / **`cs_regression(y, x, mode)`**：每个 timestamp 全截面 OLS，`y ~ α + β·x`（有效样本 ≥ 3）
+- **`neutralize(x, g)`** / **`group_neutralize(x, g)`**：每个 timestamp × 组内 **去均值**（非 OLS）；DSL 别名 `neutralize` → `group_neutralize`
+
+**因果清洗**：`bfill` 在因子链路中为 **因果算子**（不引用未来值，NaN 保持 NaN）；pandas / Polars / SQL 三后端一致。`ffill` 为前向填充（因果）。
+
+**检测算子 dtype**：`is_nan(x)` / `is_finite(x)` 三后端均输出 **float64 的 0.0/1.0**（非 bool/int），便于与 SQL 路径对齐。
 
 ### 已在白名单 — 技术指标（节选）
 

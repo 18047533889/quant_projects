@@ -756,9 +756,9 @@ trade_when(volume > ts_mean(volume, 20), rank(close - open), 0)
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 算术     | `add` · `subtract` · `multiply` · `divide` · `abs` · `log` · `sign` · `sqrt` · `power` · `sin` · `cos` · `exp`                                     |
 | 逻辑     | `if_else` · `and_` · `or_` · `not_`（**不能**写 `and`/`or`/`not`）                                                                                             |
-| 截面     | `rank` · `zscore` · `normalize` · `quantile` · `scale` · `winsorize` · `neutralize`                                                                               |
+| 截面     | `rank` · `zscore` · `normalize` · `quantile` · `scale` · `winsorize` · `cs_resid` · `cs_regression` · `cs_demean` |
 | 时序     | `ts_mean` · `ts_std` / `ts_std_dev` · `ts_sum` · `ts_max` · `ts_min` · `delay` / `ts_delay` · `ts_delta` · `ts_corr` · `ts_rank` · `ts_decay_linear` |
-| 分组     | `group_rank` · `group_neutralize` · `group_zscore` · `group_mean`                                                                                                          |
+| 分组     | `group_rank` · `group_neutralize` · `group_zscore` · `group_mean` · `group_normalize` · `group_percentile` |
 | 清洗     | `protected_div` · `protected_log` · `protected_sqrt` · `nan_to_num`                                                                                                        |
 | 信号     | `trade_when` · `hump_decay`                                                                                                                                                      |
 | 技术指标 | `SMA` · `EMA` · `ts_rsi` · `ts_macd` · `ts_atr` · `ts_adx` · `ts_obv` · `ts_cci` · …                                                                         |
@@ -797,10 +797,10 @@ PYTHONPATH=. python scripts/export_dsl_allowlist.py   # → docs/dsl_allowlist.j
 
 | 类别   | 代表算子                                                                                               |
 | ------ | ------------------------------------------------------------------------------------------------------ |
-| 截面   | `rank` / `cs_rank` · `zscore` / `cs_zscore` · `cs_demean` · `winsorize` · `cs_resid` |
+| 截面   | `rank` / `cs_rank` · `zscore` / `cs_zscore` · `cs_demean` · `winsorize` · `cs_resid` · `cs_regression` |
 | 时序   | `ts_mean` · `ts_std` · `ts_corr` · `ts_cov` · `delay` · `decay_linear` · `ema`     |
 | 财务   | `ttm` · `quarter` · `yoy` · `avg2` + `StockIncome.*` / `StockBalance.*`                 |
-| 中性化 | `industry_neutralize` · `size_neutralize` · `neutralize`                                       |
+| 中性化 | `group_neutralize` / `industry_neutralize`（组内去均值）· `cs_resid(y, size)`（截面 OLS 残差） |
 
 **样本 filter（A 股常用，可在框架 yaml 或 campaign config 备注）：**
 

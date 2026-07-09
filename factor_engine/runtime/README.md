@@ -4,7 +4,7 @@
 
 ### 协作者速览（约 5 分钟）
 
-1. **本目录在干什么**：**`FactorEngine`** —— **`compile`/`run`**、**`run_from_config`**、**`run_many`/`run_many_parallel`**；从 YAML 构建 **`backend`** + **`data_source`**（见 **`config.py`**）。
+1. **本目录在干什么**：**`FactorEngine`** —— **`compile`/`run`**、**`run_from_config`**、**`run_many`/`run_many_parallel`**、**`run_many_from_config`** / **`materialize_many_from_config`**；从 YAML 构建 **`backend`** + **`data_source`**（见 **`config.py`**）。
 2. **性能与资源**：**`perf_config.py`** —— CSE、并行 worker、**`FACTOR_BACKTEST_EXECUTION_ENGINE`**（多资产回测内核）等 **环境变量** 的单一入口。
 3. **从哪读**：下面 **§1** 生命周期；配置字段表见 **§2**。
 4. **边界**：**回测业务**在 monorepo **`backtest_layer/single_asset_backtest/`**（不在本目录 `backtest/`）；本目录只管 **因子引擎主链路**。
@@ -101,7 +101,30 @@ FactorEngine(backend=..., data_source=..., cache=None)
 
 ---
 
-## 8. 延伸阅读
+## 8. 企业级服务层（2026-07）
+
+| 模块 | 职责 |
+|------|------|
+| [`config_runtime.py`](config_runtime.py) | `resolve_run_kwargs` / `resolve_materialize_kwargs`；`PipelineConfigOverrides`；`config_*_batch_key` |
+| [`warmup_service.py`](warmup_service.py) | `prepare_run_warmup()` — 扩窗与 trim |
+| [`session_calendar.py`](session_calendar.py) | 分钟频 bar 级 session 日历 |
+| [`lineage_service.py`](lineage_service.py) | 物化 lineage（`source_expr`、composite join） |
+| [`materialize_service.py`](materialize_service.py) | `execute_materialize()` / `execute_materialize_from_resolved()` |
+| [`dual_write_service.py`](dual_write_service.py) | staging → ClickHouse 双写 |
+
+### 批量配置入口
+
+- **`FactorEngine.run_many_from_config(paths, parallel=False, profile=..., pipeline_overrides=...)`** / **`run_many_from_config_parallel`**：按 scope + `config_run_batch_key` 子分组。
+- **`FactorEngine.materialize_many_from_config(paths, batch_run=True, enable_cse=..., pipeline_overrides=...)`** / **`materialize_many_from_config_parallel`**：同 scope 共享 **`run_many`**（可并行根节点），再逐因子落盘。
+- **`FactorEngine.materialize_incremental_many_from_config(paths, pipeline_overrides=...)`**：多 YAML 增量物化。
+- **`pipeline.run_config_directory`**（`n_jobs=1`、≥2 配置）：自动委托上述批量 API（含 `--incremental` 与 CLI 覆盖；结果 JSON 含 `batched_engine: true`）。
+- **`ResolvedMaterializeKwargs.to_engine_materialize_kwargs()`** / **`to_incremental_materialize_kwargs()`**：pipeline 与 engine 统一传参。
+
+写目标见 [`storage/write_targets.py`](../storage/write_targets.py)：`local` / `staging` / `staging:<dataset>` / `clickhouse`。
+
+---
+
+## 9. 延伸阅读
 
 - 根目录 [`README.md`](../README.md)「配置驱动运行」  
 - [`storage/README.md`](../storage/README.md)  

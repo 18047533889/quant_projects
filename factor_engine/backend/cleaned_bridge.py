@@ -127,10 +127,21 @@ def _operator_backend_preference(ctx: ExecutionContext) -> str:
     return "auto"
 
 
+def _record_polars_op(ctx: ExecutionContext, op: str) -> None:
+    runtime = getattr(ctx, "runtime_stats", None) or {}
+    cache_stats = runtime.get("cache")
+    if cache_stats is not None and hasattr(cache_stats, "record_polars_op"):
+        cache_stats.record_polars_op(op)
+
+
 def _resolve_operator(canonical: str, ctx: ExecutionContext):
     from cleaned_operators.registry import OperatorRegistry
+    from backend.polars_hot_ops import is_polars_backend_ctx, is_polars_ts_op
 
     prefer = _operator_backend_preference(ctx)
+    if is_polars_backend_ctx(ctx):
+        # 时序走 Polars；截面/四则暂回退 pandas 以保证与 PandasBackend 对齐
+        prefer = "polars" if is_polars_ts_op(canonical) else "pandas_numpy"
     operator, backend = OperatorRegistry.get_preferred(canonical, prefer=prefer)
     return operator, backend
 
@@ -203,6 +214,9 @@ def make_cleaned_kernel(eval_fn: Callable[[PlanNode, ExecutionContext], Any], op
         operator, backend = _resolve_operator(canonical, ctx)
         if operator is None:
             raise NotImplementedError(f"cleaned operator not implemented: {op!r}")
+
+        if backend == "polars":
+            _record_polars_op(ctx, op)
 
         evaluated: list[Any] = [eval_fn(child, ctx) for child in node.inputs]
         kw = dict(node.attrs)

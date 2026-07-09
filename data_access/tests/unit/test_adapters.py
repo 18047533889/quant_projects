@@ -153,3 +153,23 @@ def test_batch_columns_single_conversion():
     assert cols["v"].name == "v"
     assert len(cols["c"]) == 2
     assert cols["c"].index.names == ["timestamp", "instrument"]
+
+
+def test_decimal_object_coerced_to_float64():
+    """DuckDB CASE WHEN 1.0/0.0 常产出 Decimal→object，应统一 float64。"""
+    from decimal import Decimal
+
+    tbl = _make_table({
+        "ts": pd.to_datetime(["2024-01-01", "2024-01-02"]),
+        "inst": ["A", "B"],
+        "value": [Decimal("1.0"), Decimal("0.0")],
+    })
+    series = arrow_to_multiindex_series(
+        tbl,
+        timestamp_column="ts",
+        instrument_column="inst",
+        value_column="value",
+    )
+    assert series.dtype == "float64"
+    assert series.iloc[0] == 1.0
+    assert series.iloc[1] == 0.0

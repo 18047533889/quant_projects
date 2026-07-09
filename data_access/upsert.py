@@ -305,9 +305,15 @@ def delete_rows_from_dataset(
     end: Any | None = None,
     after: Any | None = None,
     params: dict[str, Any] | None = None,
+    dry_run: bool = False,
+    max_rows: int | None = None,
+    reason: str | None = None,
+    ticket_id: str | None = None,
 ) -> dict[str, Any]:
     """从 staging/namespaced hive 分区删除指定时间范围内的行。"""
     import pandas as pd
+
+    from .exceptions import ValidationError
 
     start_ts = pd.Timestamp(start) if start is not None else None
     end_ts = pd.Timestamp(end) if end is not None else None
@@ -315,7 +321,12 @@ def delete_rows_from_dataset(
 
     authorizer.resolve_and_authorize(str(target_dir))
     if not target_dir.exists():
-        return {"rows_deleted": 0, "partitions": [], "elapsed_ms": 0.0}
+        return {
+            "rows_deleted": 0,
+            "partitions": [],
+            "elapsed_ms": 0.0,
+            "dry_run": dry_run,
+        }
 
     rows_deleted = 0
     partitions: list[str] = []
@@ -346,9 +357,19 @@ def delete_rows_from_dataset(
         if removed <= 0:
             continue
 
-        kept = df.loc[~delete_mask]
+        if max_rows is not None and rows_deleted + removed > max_rows:
+            raise ValidationError(
+                f"delete_rows 将删除 {rows_deleted + removed} 行，超过 max_rows={max_rows}。"
+                "请缩小时间范围或提高 max_rows。"
+            )
+
         rows_deleted += removed
         partitions.append(str(parquet_path.parent))
+
+        if dry_run:
+            continue
+
+        kept = df.loc[~delete_mask]
 
         if kept.empty:
             parquet_path.unlink(missing_ok=True)
@@ -360,6 +381,14 @@ def delete_rows_from_dataset(
             os.replace(str(tmp_path), str(parquet_path))
 
     elapsed_ms = (time.perf_counter() - t0) * 1000
+    audit_extra: dict[str, Any] = {"time_column": time_column}
+    if reason:
+        audit_extra["reason"] = reason[:500]
+    if ticket_id:
+        audit_extra["ticket_id"] = ticket_id
+    if dry_run:
+        audit_extra["dry_run"] = True
+
     audit.record(
         op="delete_rows",
         dataset=ds.name,
@@ -369,10 +398,11 @@ def delete_rows_from_dataset(
         paths=partitions[:20],
         params=params or None,
         elapsed_ms=elapsed_ms,
-        extra={"time_column": time_column},
+        extra=audit_extra,
     )
     return {
         "rows_deleted": rows_deleted,
         "partitions": partitions,
         "elapsed_ms": elapsed_ms,
+        "dry_run": dry_run,
     }

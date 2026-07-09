@@ -131,6 +131,13 @@ CLI 当前只是对 `pipeline.run_from_config` 和 `pipeline.run_config_director
 - `engine.materialize(factor, ...)`
 - `engine.run_many(factors)`
 - `engine.run_many_parallel(factors)`
+- `FactorEngine.run_many_from_config(config_paths, pipeline_overrides=...)`
+- `FactorEngine.run_many_from_config_parallel(config_paths, n_jobs=...)`
+- `FactorEngine.materialize_many_from_config(config_paths, batch_run=True, pipeline_overrides=...)`
+- `FactorEngine.materialize_many_from_config_parallel(config_paths, n_jobs=...)`
+- `FactorEngine.materialize_incremental_many_from_config(config_paths, pipeline_overrides=...)`
+
+目录批量（`run_config_directory`）在 `n_jobs=1` 且 ≥2 配置时会自动委托上述 batch API；CLI 参数（DQ、写目标、增量 since/end 等）统一封装为 `PipelineConfigOverrides` 传入，不再阻断 batch 路径。
 
 ### 手工脚本入口
 

@@ -27,3 +27,7 @@ class ExecutionContext:
     prefer_long_table: bool = False
     #: 可选性能提示（分块、内存上限等），见 :mod:`runtime.perf_config`
     perf: Any | None = None
+    #: 可选 DuckDB 读预算（``data_access.QueryBudget``），SQL 下推 / 读路径硬限制
+    query_budget: Any | None = None
+    #: 运行时统计（``ExecutionCacheSession.stats``、Polars 热路径计数等）
+    runtime_stats: dict[str, Any] | None = None

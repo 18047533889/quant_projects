@@ -10,6 +10,7 @@
 | 能力 | 现状 | 评级 |
 |------|------|------|
 | 算子数量 | **361** canonical implemented · DSL 白名单 **~560** | ✅ |
+| Backend 覆盖 | Polars **325** · SQL 下推 **58** 算子（+ column/literal = **60**）· registry **62** · pandas-only **36** | ✅ |
 | 算子层因果 | `_causal.py` + Tier-1 自动扫测 + `test_causal_operators.py` | ✅ |
 | 数据层 PIT | Composite `asof_backward` + mining preset 审计 + **examples 全量 `data_access`** | ✅ |
 | lookback 分析 | `Analyzer` + `OperatorPolicy` + `WindowedDataSource` 日内精度 | ✅ |
@@ -257,8 +258,9 @@ Phase 10 — 生产规模化（已完成）
 ├── CI 门禁（`.github/workflows/ci.yml` + enterprise_readiness）✅
 
 Phase 12 — 算子语义与 intraday（已完成）
-├── SQL 截面/分组：normalize · group_normalize · group_percentile · group_decay_linear（60 canonical）✅
+├── SQL 截面/分组/回归：normalize · group_normalize · group_percentile · group_decay_linear · cs_resid · cs_regression（58 算子 SQL 下推）✅
 ├── SQL 覆盖清单：`docs/sql_pushdown_coverage.md` CI 自动生成 ✅
+├── SQL Arrow dtype：Decimal→object 统一 float64；`is_nan`/`is_finite` 三后端 0/1 float64 ✅
 ├── SQL 条件链路：where/if_else 浮点真值 + is_finite→where→rank 集成测 ✅
 ├── SQL clip：positional 边界 + NaN 保持 NULL ✅
 ├── SQL winsorize/group_winsorize：NaN 保持 NULL ✅
@@ -284,6 +286,104 @@ Phase 13 — 读端统一（已完成）
 ├── fundamentals composite preset（balance_sheet/cash_flow/income_statement/floats）✅
 ├── `default_mining_data_source_presets()` 单点注册 ✅
 └── CI：`test_example_yaml_migration` + datasets 契约门禁 ✅
+
+Phase 14 — 企业级加固（已完成）
+├── factor_schema 单点契约 + factor_lake/staging schema 对齐 ✅
+├── production auto_warmup + lineage expression 修复 ✅
+├── QueryBudget + read/sql 审计 + delete_rows dry_run ✅
+├── composite join_reports → lineage ✅
+├── dual_write_service / warmup_service / lineage_service / materialize_service ✅
+├── FactorWriteTarget Protocol + LocalParquet / Staging / ClickHouse ✅
+├── schema_migration + migrate_factor_lake_schema CLI ✅
+├── sql_stream + apply_sql_row_limit（含 min 语义）✅
+├── run_many_from_config 按 data_scope 分组 + materialize_many_from_config ✅
+├── run_many/run_many_parallel/run_many_from_config 生产开关 ✅
+├── CH 写后 verify_factor_write（QUANT_CH_VERIFY_WRITE）✅
+└── SessionBarCalendar 分钟频精确 warmup ✅
+
+Phase 15 — 批量编排与写目标收敛（已完成）
+├── `config_run_batch_key`：同 data_scope 内按 run kwargs 子分组 ✅
+├── `run_many_from_config`：生产开关一致时仍可 run_many（含 auto_warmup）✅
+├── `ClickHouseWriteTarget.write_factor_series` + dual_write 统一 ✅
+├── `storage` 公开 export write_targets ✅
+└── `test_enterprise_p4` + CI `check_enterprise_docs` ✅
+
+Phase 16 — 物化批量与配置映射（已完成）
+├── `ResolvedMaterializeKwargs.to_engine_materialize_kwargs` / `to_run_kwargs` ✅
+├── `config_materialize_batch_key` + `materialize_many_from_config(batch_run)` ✅
+├── 同 scope 多因子共享 `run_many` + `execute_materialize_from_resolved` ✅
+├── `materialize_from_config` 补全 resume/isolate 传参 ✅
+├── `run_many_from_config(parallel=True)` + `run_many_from_config_parallel` ✅
+└── `test_enterprise_p5` ✅
+
+Phase 17 — pipeline 收敛与 allowlist（已完成）
+├── `schema_migration.py` allowlist 登记 ✅
+├── `ResolvedRunKwargs.to_run_kwargs` / `to_incremental_materialize_kwargs` ✅
+├── `pipeline._execute_config` 统一 kwargs 映射 ✅
+├── `run_config_directory` 委托 Engine 批量 API（`batched_engine`）✅
+├── `from_config(profile=...)` + batch 方法 profile 传参 ✅
+└── `test_pipeline_batch` + `INTERFACE.md` 更新 ✅
+
+Phase 18 — Pipeline 覆盖与增量批量（已完成）
+├── `PipelineConfigOverrides`：CLI 覆盖统一传入 batch resolve ✅
+├── `config_*_batch_key(..., pipeline=...)` 按覆盖分组 ✅
+├── `materialize_many_from_config_parallel` + batch 内 `run_many_parallel` ✅
+├── `materialize_incremental_many_from_config` + pipeline incremental batch ✅
+├── `write_targets.LocalParquet` lazy import `ParquetMaterializer` ✅
+└── `test_enterprise_p6` + `test_pipeline_batch` 扩展 ✅
+
+Phase 19 — 读路径优化与 run_many 生产化（已完成）
+├── `run_many` / `run_many_parallel`：`input_dq_check` 走 batch 快路径 + CSE ✅
+├── `DataSourceReadSession` + `DataAccessSource.column_cache_stats` ✅
+├── `data_access/stats.py`：footer 行数估算 + `suggest_read_mode` ✅
+├── `store.read_auto` / `dataset_read_stats`：arrow / stream / polars 自动路由 ✅
+├── `storage/partition_policy.py`：year / year+month 分区策略 ✅
+├── `ParquetMaterializer`：`storage_format=wide` + 可配置 `partition_columns` ✅
+├── `factor_lake_wide` 数据集 + registry `partition_columns` / `storage_format` ✅
+├── `ResultStore.load_factor_wide` 宽表 panel 直读快路径 ✅
+├── `cache/` 分层缓存：`ExecutionCacheSession` + L0–L3 命中统计 ✅
+├── `PolarsBackend` 真继承 + 时序 Polars / 截面 pandas 回退 ✅
+├── `backend/polars_hot_ops.py` + runtime 计数 ✅
+└── 相关测试 ✅
+
+Phase 20 — 编排与性能门禁（已完成）
+├── `planner/dependency_graph.py`：列重叠组 + 并行层 + `batch_graph` ✅
+├── `FactorEngine.analyze_batch` / `run_many` 返回 `batch_graph` ✅
+├── `runtime/shard_materialize.py`：`shard_factor_ids` + 统一 `shard_by_hash` ✅
+├── `task_queue.shard_config_paths` 委托分片模块 ✅
+├── `tests/perf/test_regression_gate.py`：compile/run_many smoke 门禁 ✅
+├── `tests/test_dependency_graph_shard.py` ✅
+├── 增量 by data event ⏳
+└── 分布式物化 worker 编排 ⏳
+
+Phase 21 — 减少重复 + 宽矩阵 + 分片物化（已完成）
+├── `cache/column_cache.py` + `cache/cache_policy.py`：列缓存 scope key ✅
+├── `ReadSession.prepare_batch` / `load_columns_once`；`run()` 统一读路径 ✅
+├── `runtime/production_policy.py` + `engine.run_mode` 硬门禁 ✅
+├── `planner/rolling_cache.py`：`run_many` 返回 rolling 共享摘要 ✅
+├── `storage/factor_matrix_materializer.py` + `engine.materialize_matrix` ✅
+├── `engine.materialize_sharded`：factor_id 哈希分片 + batch run_many ✅
+├── `data_access/layout_policy.py`：bucket 剪枝骨架 ✅
+└── `tests/test_phase21_platform.py` ✅
+
+Phase 22 — 增量事件 + 读路径深化（已完成）
+├── `factor_dependency` / `factor_column_dep` catalog 表 ✅
+├── `runtime/incremental_scheduler.py`：DataEvent → FactorUpdatePlan ✅
+├── 物化时自动 `record_factor_dependency` ✅
+├── `engine.plan_incremental_from_event` ✅
+├── registry `layout_policy` + bucket 路径/SQL 剪枝 ✅
+├── `stats.py` sidecar + `scripts/refresh_dataset_stats.py` ✅
+├── `read_auto` v2：sidecar + query_budget 超行数 → stream ✅
+├── `datasets.yaml`：`factor_matrix` 数据集登记 ✅
+└── `tests/test_phase22_platform.py` + `test_bucket_stats_phase22.py` ✅
+
+Phase 23 — 事件驱动执行 + 算子代价（已完成）
+├── `engine.materialize_incremental_from_event`（dry_run / 自动增量物化）✅
+├── `execute_incremental_updates_from_event`：catalog expression 重建 Factor ✅
+├── `backend/operator_cost.py` + `backend/routing.py` Tier 路由 ✅
+├── `run_many` 返回 `plan_costs` 摘要 ✅
+├── 分钟数据集 `layout_policy.bucket`（ashare / us_sip minute）✅
+└── `tests/test_phase23_platform.py` ✅
 
 Phase 11 — 生产地基（已完成）
 ```

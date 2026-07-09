@@ -52,6 +52,17 @@ class DataAccessSource(DataSource):
         self._column_cache: dict[str, Any] = {}
         self._panel_cache: dict[str, Any] = {}
 
+    def column_cache_stats(self) -> dict[str, int]:
+        return {
+            "cached_columns": len(self._column_cache),
+            "cached_panels": len(self._panel_cache),
+        }
+
+    def read_session(self) -> "DataSourceReadSession":
+        from .read_session import DataSourceReadSession
+
+        return DataSourceReadSession(self)
+
     def _time_range(self) -> tuple[Any, Any] | None:
         if self.start_date is None and self.end_date is None:
             return None

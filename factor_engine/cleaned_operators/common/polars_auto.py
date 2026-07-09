@@ -242,17 +242,17 @@ def _register_cleaning(canonical: str, name: str, calc_fn) -> None:
     )(_CleaningPolars)
 
 
-def _bfill(x: pl.DataFrame, **kwargs) -> pl.DataFrame:
+def _bfill(self, x, **kwargs) -> pl.DataFrame:
     """因果语义：不引用未来值，与 pandas ``causal_bfill`` 一致。"""
     return x
 
 
-def _ffill(x: pl.DataFrame, **kwargs) -> pl.DataFrame:
+def _ffill(self, x, **kwargs) -> pl.DataFrame:
     cols = _numeric_cols(x)
     return x.with_columns([pl.col(c).forward_fill().alias(c) for c in cols])
 
 
-def _dropna(x: pl.DataFrame, **kwargs) -> pl.DataFrame:
+def _dropna(self, x, **kwargs) -> pl.DataFrame:
     cols = _numeric_cols(x)
     return x.with_columns([pl.when(pl.col(c).is_nan()).then(None).otherwise(pl.col(c)).alias(c) for c in cols])
 

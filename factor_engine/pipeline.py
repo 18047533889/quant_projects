@@ -12,7 +12,11 @@ from typing import Any
 import yaml
 
 from runtime.config import FactorEngineConfig, load_config
-from runtime.config_runtime import resolve_materialize_kwargs, resolve_run_kwargs
+from runtime.config_runtime import (
+    PipelineConfigOverrides,
+    resolve_materialize_kwargs,
+    resolve_run_kwargs,
+)
 from runtime.engine import FactorEngine
 from runtime.metrics_export import (
     enrich_pipeline_summary,
@@ -256,105 +260,14 @@ def _execute_config(
             recompute_tail_bars_override=recompute_tail_bars,
             resume_materialize_override=resume_materialize,
         )
-        common_kwargs = dict(
-            factor_id=mat_opts.factor_id,
-            author=mat_opts.author,
-            frequency=mat_opts.frequency,
-            description=mat_opts.description,
-            expression=mat_opts.expression,
-            auto_warmup=mat_opts.auto_warmup,
-            trim_warmup=mat_opts.trim_warmup,
-            market=mat_opts.market,
-            dq_check=mat_opts.dq_check,
-            dq_strict=mat_opts.dq_strict,
-            dq_thresholds=mat_opts.dq_thresholds,
-            input_dq_check=mat_opts.input_dq_check,
-            input_dq_strict=mat_opts.input_dq_strict,
-            input_dq_thresholds=mat_opts.input_dq_thresholds,
-            preserve_invalid_rows=mat_opts.preserve_invalid_rows,
-            value_dtype=mat_opts.value_dtype,
-            data_source_config=mat_opts.data_source_config,
-            pit_enforce=mat_opts.pit_enforce,
-            pit_forbid_forward_fill=mat_opts.pit_forbid_forward_fill,
-        )
-        target = str(mat_opts.write_target).lower()
         if incremental:
-            mat_kwargs = {
-                **common_kwargs,
-                "lake_root": mat_opts.lake_root,
-                "write_target": mat_opts.write_target,
-                "resume_materialize": mat_opts.resume_materialize,
-                "isolate_partition_failures": mat_opts.isolate_partition_failures,
-                "since": mat_opts.since,
-                "end_date": mat_opts.end_date,
-                "lookback_extra": mat_opts.lookback_extra,
-                "recompute_tail_bars": mat_opts.recompute_tail_bars,
-                "ch_ensure_table": mat_opts.ch_ensure_table,
-            }
-            if target in ("clickhouse", "staging_clickhouse"):
-                mat_kwargs.update(
-                    {
-                        "clickhouse_table": mat_opts.clickhouse_table,
-                        "ch_host": mat_opts.clickhouse_host,
-                        "ch_port": mat_opts.clickhouse_port,
-                        "ch_database": mat_opts.clickhouse_database,
-                        "ch_username": mat_opts.clickhouse_username,
-                        "ch_password": mat_opts.clickhouse_password,
-                        "ch_secure": mat_opts.clickhouse_secure,
-                    }
-                )
-            output = engine.materialize_incremental(factor, **mat_kwargs)
-        elif target == "clickhouse":
-            output = engine.materialize(
-                factor,
-                **common_kwargs,
-                lake_root=mat_opts.lake_root,
-                write_target="clickhouse",
-                isolate_partition_failures=mat_opts.isolate_partition_failures,
-                clickhouse_table=mat_opts.clickhouse_table,
-                ch_host=mat_opts.clickhouse_host,
-                ch_port=mat_opts.clickhouse_port,
-                ch_database=mat_opts.clickhouse_database,
-                ch_username=mat_opts.clickhouse_username,
-                ch_password=mat_opts.clickhouse_password,
-                ch_secure=mat_opts.clickhouse_secure,
-            )
-        elif target == "staging_clickhouse":
-            output = engine.materialize(
-                factor,
-                **common_kwargs,
-                lake_root=mat_opts.lake_root,
-                write_target="staging_clickhouse",
-                isolate_partition_failures=mat_opts.isolate_partition_failures,
-                clickhouse_table=mat_opts.clickhouse_table,
-                ch_host=mat_opts.clickhouse_host,
-                ch_port=mat_opts.clickhouse_port,
-                ch_database=mat_opts.clickhouse_database,
-                ch_username=mat_opts.clickhouse_username,
-                ch_password=mat_opts.clickhouse_password,
-                ch_secure=mat_opts.clickhouse_secure,
+            output = engine.materialize_incremental(
+                factor, **mat_opts.to_incremental_materialize_kwargs()
             )
         else:
-            output = engine.materialize(
-                factor,
-                **common_kwargs,
-                lake_root=mat_opts.lake_root,
-                write_target=mat_opts.write_target,
-                resume_materialize=mat_opts.resume_materialize,
-                isolate_partition_failures=mat_opts.isolate_partition_failures,
-            )
+            output = engine.materialize(factor, **mat_opts.to_engine_materialize_kwargs())
     else:
-        output = engine.run(
-            factor,
-            auto_warmup=run_opts.auto_warmup,
-            trim_warmup=run_opts.trim_warmup,
-            market=run_opts.market,
-            input_dq_check=run_opts.input_dq_check,
-            input_dq_strict=run_opts.input_dq_strict,
-            input_dq_thresholds=run_opts.input_dq_thresholds,
-            pit_enforce=run_opts.pit_enforce,
-            pit_forbid_forward_fill=run_opts.pit_forbid_forward_fill,
-        )
+        output = engine.run(factor, **run_opts.to_run_kwargs())
 
     item: dict[str, Any] = {
         "config_name": config_name,
@@ -668,6 +581,225 @@ def _run_single_config_file(
     return config_name, item
 
 
+def _pipeline_item_from_engine_output(
+    *,
+    config_name: str,
+    output: dict[str, Any],
+    preview_rows: int,
+    mode: str,
+) -> dict[str, Any]:
+    factor = output.get("factor")
+    factor_name = getattr(factor, "name", None) if factor is not None else config_name
+    item: dict[str, Any] = {
+        "config_name": config_name,
+        "factor_name": factor_name,
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "status": "success",
+        "mode": mode,
+        "analysis": _build_analysis_summary(output["analysis"]),
+        "plan": _build_plan_summary(output.get("plan")),
+        "result": _build_result_summary(output["result"], preview_rows=preview_rows),
+        "materialization": None,
+        "incremental": _json_safe(output.get("incremental")),
+        "input_dq": _json_safe(output.get("input_dq")),
+        "errors": [],
+        "batched_engine": True,
+    }
+    if output.get("materialization") is not None:
+        item["materialization"] = _json_safe(output["materialization"])
+    return item
+
+
+def _directory_wants_materialize(
+    configs: list[FactorEngineConfig],
+    materialize: bool | None,
+) -> bool:
+    if materialize is not None:
+        return materialize
+    if not configs:
+        return False
+    flags = [c.materialization is not None for c in configs]
+    return all(flags)
+
+
+def _build_pipeline_overrides(
+    *,
+    dq_check: bool = False,
+    dq_strict: bool = True,
+    input_dq_check: bool = False,
+    input_dq_strict: bool = True,
+    write_target: str | None = None,
+    preserve_invalid_rows: bool | None = None,
+    resume_materialize: bool = False,
+    since: str | None = None,
+    end_date: str | None = None,
+    lookback_extra: int | None = None,
+    recompute_tail_bars: int | None = None,
+) -> PipelineConfigOverrides:
+    return PipelineConfigOverrides(
+        dq_check=dq_check,
+        dq_strict=dq_strict,
+        input_dq_check=input_dq_check,
+        input_dq_strict=input_dq_strict,
+        write_target=write_target,
+        preserve_invalid_rows=preserve_invalid_rows,
+        resume_materialize=resume_materialize,
+        since=since,
+        end_date=end_date,
+        lookback_extra=lookback_extra,
+        recompute_tail_bars=recompute_tail_bars,
+    )
+
+
+def _directory_batch_eligible(
+    config_paths: list[Path],
+    *,
+    profile: str | None,
+    materialize: bool | None,
+    incremental: bool,
+    n_jobs: int,
+    max_retries: int,
+) -> bool:
+    if incremental or int(n_jobs) != 1 or max_retries > 0 or len(config_paths) < 2:
+        return False
+    configs = [load_config(path, profile=profile) for path in config_paths]
+    mat_flags = [c.materialization is not None for c in configs]
+    if materialize is None and len(set(mat_flags)) > 1:
+        return False
+    return True
+
+
+def _directory_incremental_batch_eligible(
+    config_paths: list[Path],
+    *,
+    incremental: bool,
+    n_jobs: int,
+    max_retries: int,
+) -> bool:
+    return (
+        incremental
+        and int(n_jobs) == 1
+        and max_retries <= 0
+        and len(config_paths) >= 2
+    )
+
+
+def _run_config_directory_batch(
+    config_paths: list[Path],
+    *,
+    profile: str | None,
+    materialize: bool | None,
+    preview_rows: int,
+    pipeline_overrides: PipelineConfigOverrides,
+) -> list[tuple[str, dict[str, Any]]]:
+    configs = [load_config(path, profile=profile) for path in config_paths]
+    wants_materialize = _directory_wants_materialize(configs, materialize)
+    path_by_factor = {cfg.factor.name: path for path, cfg in zip(config_paths, configs, strict=True)}
+    pairs: list[tuple[str, dict[str, Any]]] = []
+
+    try:
+        if wants_materialize:
+            batch = FactorEngine.materialize_many_from_config(
+                config_paths,
+                batch_run=True,
+                profile=profile,
+                pipeline_overrides=pipeline_overrides,
+            )
+            for factor_name, eng_out in batch["materializations"].items():
+                path = path_by_factor.get(factor_name)
+                config_name = path.stem if path is not None else factor_name
+                pairs.append(
+                    (
+                        config_name,
+                        _pipeline_item_from_engine_output(
+                            config_name=config_name,
+                            output=eng_out,
+                            preview_rows=preview_rows,
+                            mode="materialize",
+                        ),
+                    )
+                )
+        else:
+            batch = FactorEngine.run_many_from_config(
+                config_paths,
+                profile=profile,
+                pipeline_overrides=pipeline_overrides,
+            )
+            for factor_name, eng_out in batch["runs"].items():
+                path = path_by_factor.get(factor_name)
+                config_name = path.stem if path is not None else factor_name
+                pairs.append(
+                    (
+                        config_name,
+                        _pipeline_item_from_engine_output(
+                            config_name=config_name,
+                            output=eng_out,
+                            preview_rows=preview_rows,
+                            mode="run",
+                        ),
+                    )
+                )
+    except Exception as exc:
+        logger.warning("目录 batch 失败，回退逐文件执行: %s", exc)
+        return None
+
+    expected = {path.stem for path in config_paths}
+    got = {name for name, _ in pairs}
+    if expected != got:
+        logger.warning("目录 batch 结果不完整 expected=%s got=%s，回退逐文件", expected, got)
+        return None
+    pairs.sort(key=lambda item: item[0])
+    return pairs
+
+
+def _run_config_directory_incremental_batch(
+    config_paths: list[Path],
+    *,
+    profile: str | None,
+    preview_rows: int,
+    pipeline_overrides: PipelineConfigOverrides,
+) -> list[tuple[str, dict[str, Any]]] | None:
+    configs = [load_config(path, profile=profile) for path in config_paths]
+    path_by_factor = {cfg.factor.name: path for path, cfg in zip(config_paths, configs, strict=True)}
+    pairs: list[tuple[str, dict[str, Any]]] = []
+
+    try:
+        batch = FactorEngine.materialize_incremental_many_from_config(
+            config_paths,
+            profile=profile,
+            pipeline_overrides=pipeline_overrides,
+        )
+        for factor_name, eng_out in batch["materializations"].items():
+            path = path_by_factor.get(factor_name)
+            config_name = path.stem if path is not None else factor_name
+            pairs.append(
+                (
+                    config_name,
+                    _pipeline_item_from_engine_output(
+                        config_name=config_name,
+                        output=eng_out,
+                        preview_rows=preview_rows,
+                        mode="incremental",
+                    ),
+                )
+            )
+    except Exception as exc:
+        logger.warning("目录 incremental batch 失败，回退逐文件执行: %s", exc)
+        return None
+
+    expected = {path.stem for path in config_paths}
+    got = {name for name, _ in pairs}
+    if expected != got:
+        logger.warning(
+            "目录 incremental batch 结果不完整 expected=%s got=%s，回退逐文件",
+            expected,
+            got,
+        )
+        return None
+    pairs.sort(key=lambda item: item[0])
+    return pairs
+
+
 def run_config_directory(
     config_dir: str | Path,
     *,
@@ -715,7 +847,6 @@ def run_config_directory(
         snapshot_target = snapshots_root / f"{_safe_name(config_path.stem)}.yaml"
         _copy_snapshot(config_path, snapshot_target)
 
-    workers = max(1, int(n_jobs))
     run_kwargs = dict(
         profile=profile,
         materialize=materialize,
@@ -735,28 +866,72 @@ def run_config_directory(
         recompute_tail_bars=recompute_tail_bars,
     )
 
-    if workers > 1:
-        try:
-            from joblib import Parallel, delayed
+    pairs: list[tuple[str, dict[str, Any]]] | None = None
+    pipeline_overrides = _build_pipeline_overrides(
+        dq_check=dq_check,
+        dq_strict=dq_strict,
+        input_dq_check=input_dq_check,
+        input_dq_strict=input_dq_strict,
+        write_target=write_target,
+        preserve_invalid_rows=preserve_invalid_rows,
+        resume_materialize=resume_materialize,
+        since=since,
+        end_date=end_date,
+        lookback_extra=lookback_extra,
+        recompute_tail_bars=recompute_tail_bars,
+    )
+    if _directory_incremental_batch_eligible(
+        config_paths,
+        incremental=incremental,
+        n_jobs=n_jobs,
+        max_retries=max_retries,
+    ):
+        pairs = _run_config_directory_incremental_batch(
+            config_paths,
+            profile=profile,
+            preview_rows=preview_rows,
+            pipeline_overrides=pipeline_overrides,
+        )
+    elif _directory_batch_eligible(
+        config_paths,
+        profile=profile,
+        materialize=materialize,
+        incremental=incremental,
+        n_jobs=n_jobs,
+        max_retries=max_retries,
+    ):
+        pairs = _run_config_directory_batch(
+            config_paths,
+            profile=profile,
+            materialize=materialize,
+            preview_rows=preview_rows,
+            pipeline_overrides=pipeline_overrides,
+        )
 
-            pairs = Parallel(n_jobs=workers, backend="threading")(
-                delayed(_run_single_config_file)(config_path, **run_kwargs)
-                for config_path in config_paths
-            )
-        except ImportError:
-            from concurrent.futures import ThreadPoolExecutor, as_completed
+    if pairs is None:
+        workers = max(1, int(n_jobs))
+        if workers > 1:
+            try:
+                from joblib import Parallel, delayed
 
-            pairs = []
-            with ThreadPoolExecutor(max_workers=workers) as pool:
-                futures = {
-                    pool.submit(_run_single_config_file, config_path, **run_kwargs): config_path
+                pairs = Parallel(n_jobs=workers, backend="threading")(
+                    delayed(_run_single_config_file)(config_path, **run_kwargs)
                     for config_path in config_paths
-                }
-                for future in as_completed(futures):
-                    pairs.append(future.result())
-            pairs.sort(key=lambda item: item[0])
-    else:
-        pairs = [_run_single_config_file(config_path, **run_kwargs) for config_path in config_paths]
+                )
+            except ImportError:
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+
+                pairs = []
+                with ThreadPoolExecutor(max_workers=workers) as pool:
+                    futures = {
+                        pool.submit(_run_single_config_file, config_path, **run_kwargs): config_path
+                        for config_path in config_paths
+                    }
+                    for future in as_completed(futures):
+                        pairs.append(future.result())
+                pairs.sort(key=lambda item: item[0])
+        else:
+            pairs = [_run_single_config_file(config_path, **run_kwargs) for config_path in config_paths]
 
     results: list[dict[str, Any]] = []
     for config_name, item in pairs:

@@ -24,6 +24,8 @@ from typing import Any, Mapping
 import yaml
 
 from .exceptions import ValidationError
+from .layout_policy import LayoutPolicy, parse_layout_policy
+from .query_budget import DatasetQueryPolicy, parse_dataset_query_policy
 from .namespace import resolve_namespace
 from .paths import canonicalize, expand_env
 
@@ -59,6 +61,10 @@ class StaticDataset(DatasetBase):
     glob: str                         # 相对 root 的 glob，如 "**/*.parquet"
     # PR8：可选 schema，格式 {列名: 类型字符串}，首访自检用。空 = 不校验。
     schema: Mapping[str, str] = field(default_factory=dict)
+    query_policy: DatasetQueryPolicy = field(default_factory=DatasetQueryPolicy)
+    partition_columns: tuple[str, ...] = field(default_factory=lambda: ("year",))
+    storage_format: str = "long"
+    layout_policy: LayoutPolicy | None = None
 
     @property
     def kind(self) -> str:
@@ -89,6 +95,10 @@ class ParametricDataset(DatasetBase):
     static_root: Path = field(default=Path("/"))
     # PR8：可选 schema，格式 {列名: 类型字符串}，首访自检用。空 = 不校验。
     schema: Mapping[str, str] = field(default_factory=dict)
+    query_policy: DatasetQueryPolicy = field(default_factory=DatasetQueryPolicy)
+    partition_columns: tuple[str, ...] = field(default_factory=lambda: ("year",))
+    storage_format: str = "long"
+    layout_policy: LayoutPolicy | None = None
 
     @property
     def kind(self) -> str:
@@ -125,6 +135,19 @@ def _require_str(data: dict, key: str, *, context: str) -> str:
     if not isinstance(value, str) or not value:
         raise ValidationError(f"{context}: 字段 '{key}' 必填且为非空字符串")
     return value
+
+
+def _parse_partition_columns(raw: Any, *, context: str) -> tuple[str, ...]:
+    if raw is None:
+        return ("year",)
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, (list, tuple)):
+        raise ValidationError(
+            f"{context}: partition_columns 必须是字符串列表，收到 {type(raw).__name__}"
+        )
+    cols = tuple(str(c) for c in raw if str(c))
+    return cols or ("year",)
 
 
 def _parse_dataset(name: str, raw: dict) -> Dataset:
@@ -167,6 +190,15 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
             )
         schema_decl[col] = typ
 
+    query_policy = parse_dataset_query_policy(raw.get("query_policy"), context=context)
+    partition_columns = _parse_partition_columns(raw.get("partition_columns"), context=context)
+    storage_format = str(raw.get("storage_format", "long")).lower()
+    if storage_format not in {"long", "wide"}:
+        raise ValidationError(
+            f"{context}: storage_format 必须是 long|wide，收到 {storage_format!r}"
+        )
+    layout_policy = parse_layout_policy(raw.get("layout_policy"))
+
     if kind == "static":
         # published 数据集的 root 是直接路径；namespaced 数据集在 static 里
         # 也允许，但要手动把 ${RUN_NAMESPACE} 展开
@@ -189,9 +221,11 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
             root=root,
             glob=glob,
             schema=schema_decl,
+            query_policy=query_policy,
+            partition_columns=partition_columns,
+            storage_format=storage_format,
+            layout_policy=layout_policy,
         )
-
-    # parametric
     root_template_raw = _require_str(raw, "root_template", context=context)
     root_template = expand_env(root_template_raw)
     if "${RUN_NAMESPACE}" in root_template:
@@ -221,6 +255,10 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
         params_schema=params_schema,
         static_root=static_root,
         schema=schema_decl,
+        query_policy=query_policy,
+        partition_columns=partition_columns,
+        storage_format=storage_format,
+        layout_policy=layout_policy,
     )
 
 

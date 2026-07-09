@@ -12,6 +12,7 @@ PR3 store.sql 有限 SQL 逃生口的 contract 测试。
 """
 from __future__ import annotations
 
+import concurrent.futures
 import json
 from pathlib import Path
 from textwrap import dedent
@@ -206,7 +207,7 @@ def test_sql_rejects_missing_params(sql_store):
 
 def test_sql_sql_syntax_error_raises_engine_error(sql_store):
     store, _, _ = sql_store
-    with pytest.raises(EngineError, match="sql 执行失败"):
+    with pytest.raises(EngineError, match="失败"):
         store.sql(
             "SELECT FROM FROM FROM factors",  # 语法错
             read_datasets=["factors"],
@@ -217,7 +218,7 @@ def test_sql_sql_syntax_error_raises_engine_error(sql_store):
 # ---- TEMP VIEW 生命周期 -----------------------------------------------------
 
 def test_sql_cleans_up_views_after_success(sql_store):
-    """成功执行后 DuckDB catalog 里不能留下这个 view 名。"""
+    """成功执行后 DuckDB catalog 里不能留下 scoped TEMP VIEW。"""
     store, _, engine = sql_store
     store.sql(
         "SELECT asset FROM factors",
@@ -225,9 +226,9 @@ def test_sql_cleans_up_views_after_success(sql_store):
         read_params={"factors": {"factor_id": "mom_3d"}},
     )
     rows = engine._conn.execute(
-        "SELECT view_name FROM duckdb_views() WHERE view_name = 'factors'"
+        "SELECT view_name FROM duckdb_views() WHERE view_name LIKE '__da_%'"
     ).fetchall()
-    assert rows == [], f"TEMP VIEW factors 没清: {rows}"
+    assert rows == [], f"scoped TEMP VIEW 没清: {rows}"
 
 
 def test_sql_cleans_up_views_after_failure(sql_store):
@@ -240,9 +241,9 @@ def test_sql_cleans_up_views_after_failure(sql_store):
             read_params={"factors": {"factor_id": "mom_3d"}},
         )
     rows = engine._conn.execute(
-        "SELECT view_name FROM duckdb_views() WHERE view_name = 'factors'"
+        "SELECT view_name FROM duckdb_views() WHERE view_name LIKE '__da_%'"
     ).fetchall()
-    assert rows == [], f"失败路径 TEMP VIEW 没清: {rows}"
+    assert rows == [], f"失败路径 scoped TEMP VIEW 没清: {rows}"
 
     # 失败后还能再跑一次成功查询（证明 view 清干净了）
     tbl = store.sql(
@@ -305,3 +306,67 @@ def test_sql_cannot_bypass_path_authorizer(sql_store, tmp_path):
             read_datasets=["factors"],
             read_params={"factors": {"factor_id": "mom_3d"}},
         )
+
+
+def test_sql_stream_matches_sql(sql_store):
+    store, _, _ = sql_store
+    full = store.sql(
+        "SELECT asset, value FROM factors ORDER BY datetime",
+        read_datasets=["factors"],
+        read_params={"factors": {"factor_id": "mom_3d"}},
+    )
+    batches = list(
+        store.sql_stream(
+            "SELECT asset, value FROM factors ORDER BY datetime",
+            read_datasets=["factors"],
+            read_params={"factors": {"factor_id": "mom_3d"}},
+            batch_size=2,
+        )
+    )
+    import pyarrow as pa
+
+    merged = pa.Table.from_batches(batches)
+    assert merged.num_rows == full.num_rows
+    assert merged.column_names == full.column_names
+
+
+def test_sql_requires_view_columns_in_production_mode(sql_store, monkeypatch):
+    store, _, _ = sql_store
+    monkeypatch.setenv("QUANT_PRODUCTION_MODE", "1")
+    with pytest.raises(ValidationError, match="view_columns"):
+        store.sql(
+            "SELECT asset FROM factors",
+            read_datasets=["factors"],
+            read_params={"factors": {"factor_id": "mom_3d"}},
+        )
+
+
+def test_sql_with_view_columns_in_production_mode(sql_store, monkeypatch):
+    store, _, _ = sql_store
+    monkeypatch.setenv("QUANT_PRODUCTION_MODE", "1")
+    tbl = store.sql(
+        "SELECT asset, value FROM factors WHERE value > 1.5",
+        read_datasets=["factors"],
+        read_params={"factors": {"factor_id": "mom_3d"}},
+        view_columns={"factors": ["datetime", "asset", "value"]},
+    )
+    assert tbl.num_rows == 3
+
+
+def test_parallel_sql_queries(sql_store):
+    """并发 sql() 使用唯一 TEMP VIEW，不应 catalog 冲突。"""
+    store, _, _ = sql_store
+
+    def run_one():
+        tbl = store.sql(
+            "SELECT COUNT(*) AS n FROM factors WHERE asset = ?",
+            read_datasets=["factors"],
+            read_params={"factors": {"factor_id": "mom_3d"}},
+            params=["AAPL"],
+        )
+        return tbl.to_pandas()["n"].iloc[0]
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        results = [f.result(timeout=30) for f in [pool.submit(run_one) for _ in range(16)]]
+
+    assert all(r == 3 for r in results)

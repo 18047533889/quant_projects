@@ -45,7 +45,14 @@ def _align_cols(*dfs: pl.DataFrame) -> list[str]:
 
 def _binary_colwise(combine):
     """工厂：生成「逐列二元运算」的 ``_calculate_series`` 方法。"""
-    def calc(self, x: pl.DataFrame, y: pl.DataFrame, **kwargs) -> pl.DataFrame:
+
+    def calc(self, x: pl.DataFrame, y, **kwargs) -> pl.DataFrame:
+        if isinstance(y, (int, float)):
+            cols = _numeric_cols(x)
+            lit = float(y)
+            return x.with_columns([combine(pl.col(c), lit).alias(c) for c in cols])
+        if not isinstance(y, pl.DataFrame):
+            raise TypeError(f"expected polars DataFrame or scalar, got {type(y)!r}")
         cols = _align_cols(x, y)
         return x.with_columns([combine(pl.col(c), y[c]).alias(c) for c in cols])
 

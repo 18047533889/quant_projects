@@ -2,7 +2,7 @@
 
 > **一句话定位**：所有读写 parquet 的代码，都应该走这里。
 >
-> 维护人：量化基础平台组｜最后更新：2026-04-20｜当前版本：PR3（读 + 写 + publish + upsert + 有限 sql）
+> 维护人：量化基础平台组｜最后更新：2026-07-09｜当前版本：PR8+（读/写/publish/upsert/sql/stream/polars/CH/QueryBudget）
 
 ## 为什么有这个模块
 
@@ -10,40 +10,21 @@
 每个调用方实现略有不同，每次加新数据集都要到处改，性能也拉不开差距。
 写的路径更乱：谁高兴写哪写哪，没人知道昨天晚上那批因子是谁算的。
 
-PR1 做的事：
+**当前能力（PR1–PR8+）**：
 
-1. **读入口收敛到一个 API**：`get_store().read_arrow / read_frame / load_columns`
-2. **底层统一用 DuckDB**：跨线程共享 buffer pool / parquet footer cache，重复读同一批文件飞快
-3. **数据集登记到 YAML**：加数据集只改 `config/datasets.yaml`，业务代码不动
-4. **多人共享账号下的 namespace 隔离**：保护个人实验数据不被误覆盖
+1. **读入口收敛**：`read_arrow` / `read_frame` / `load_columns` / `read_arrow_stream` / `scan_polars`
+2. **DuckDB 共享引擎**：跨线程 buffer pool / parquet footer cache
+3. **数据集登记 YAML**：`config/datasets.yaml`（含 factor_lake 元数据列 schema）
+4. **namespace 隔离**：namespaced / staging / published 三态
+5. **写与发布**：`write_arrow` / `upsert` / `publish_from_staging` / `delete_rows`（支持 dry_run）
+6. **有限 SQL**：`sql()` 只读 SELECT + 审计 + QueryBudget
+7. **读审计**：生产模式（`QUANT_PRODUCTION_MODE=1`）默认记录 read；也可 `QUANT_AUDIT_READS=true`
+8. **ClickHouse**：`clickhouse_panel` / `clickhouse_write` / 写后 `verify_factor_write`
+9. **Schema 首访自检** + **instrument_filter 守卫**
 
-PR2 做的事：
+**与 factor_engine 的配合**：读 parquet 一律 `data_source.type: data_access`；计算默认 `backend.type: auto`（DuckDB SQL 子树 + Polars/Pandas fallback）。纯 SQL 因子可用 `duckdb_sql`；ClickHouse panel 用 `clickhouse` + `clickhouse_sql`。详见 [`factor_engine/README.md`](../factor_engine/README.md)「底层栈与 backend 选择」。
 
-5. **写入口也收敛**：`get_store().write_arrow(...)` —— 只允许写 `namespaced` / `staging`，
-   `published` 直写会被 `ValidationError` 拦下来（必须走 PR3 的 publish 流程）
-6. **所有读写都留审计痕迹**：JSONL 日志（`workspace_data/logs/data_access_audit.jsonl`），
-   字段含 `namespace / operator / dataset / op / ok / elapsed_ms / path`
-7. **`publish_from_staging` 占位 API**：当前调用会 `NotImplementedError("PR3...")`，
-   API 先定型以便上游对接
-
-PR3 做的事：
-
-8. **`publish_from_staging` 实装**：staging → published 的原子切换 +
-   旧版本归档到 `_archive/` + 回滚 + 并发锁；schema / access_mode / params_schema 全程校验
-9. **`upsert`**：按 `upsert_on` 合并键做 read-merge-write（tmp+rename 原子 +
-   跨进程 O_EXCL 锁），分区场景逐 partition 合并
-10. **有限 `sql(query)` escape**：只允许 SELECT；FROM 的表必须是预先 `read_datasets=[...]`
-    声明的数据集；禁用 `INSERT / COPY / read_parquet` 等入口；全程审计
-11. **PR3 bug 防守**：publish 的 `candidate_dir = Path()` sentinel bug（会 `rmtree('.')`
-    炸仓库）已修成 `None`；加了 pytest session-scope CWD 守卫防同类事故
-
-PR4 做的事（进行中）：
-
-12. **streaming / raw 数据源登记**：`factor_values_stream / streaming_bars /
-    streaming_ticks_raw / massive_ticks / us_stocks_sip_raw` 已登记到 `datasets.yaml`
-13. **读端迁移 easy tier**：`factor_stream_manager` 默认路径对齐到 data_access 数据集根；
-    `massive_cleaning_framework` 登入 `.data_access_allowlist.yaml`（per-file 清洗语义）
-14. **后续 PR5 / PR6 路线图**：见 `docs/data_access/10_架构设计.md §8`
+PR4 及以前的分阶段说明见 `docs/data_access/10_架构设计.md`。
 
 ---
 
@@ -184,6 +165,27 @@ tbl = store.sql(
 为什么要这层：大部分 GROUP BY / window / 多表 JOIN 用 `read_arrow` 表达不了，
 但又不能裸开 `read_parquet` —— 路径白名单、审计、配额限流都得经过这条收敛。
 
+### 流式 `sql_stream()`（PR8+）
+
+大结果集用 RecordBatch 迭代，避免一次性 materialize：
+
+```python
+from data_access import QueryBudget, get_store
+
+store = get_store()
+budget = QueryBudget(max_rows=500_000, require_columns=True)
+with store.sql_stream(
+    "SELECT align_time, ticker, close FROM us_stocks_sip_day_aggs WHERE close > ?",
+    read_datasets=["us_stocks_sip_day_aggs"],
+    params=[10.0],
+    budget=budget,
+) as stream:
+    for batch in stream:
+        process(batch)  # pyarrow RecordBatch
+```
+
+与 `sql()` 相同的安全约束；无 LIMIT 时自动按 `QueryBudget.max_rows` 包装子查询。
+
 ---
 
 ## 加新数据集：只改一个文件
@@ -246,6 +248,7 @@ my_new_dataset:
 - [5 分钟快速上手](../docs/data_access/02_快速上手.md)
 - [架构设计 / 取舍](../docs/data_access/10_架构设计.md)
 - [`config/datasets.yaml`](config/datasets.yaml) — 数据集登记表本体
+- [`factor_engine/README.md`](../factor_engine/README.md) — 因子引擎批量 YAML（`run_many_from_config` / `materialize_many_from_config`）与 `staging_clickhouse` 物化
 
 ## 发反馈 / 报 bug
 

@@ -3,39 +3,66 @@
 > 自动生成：`python scripts/report_backend_coverage.py --write-doc`
 
 - canonical implemented: **361**
-- SQL 白名单: **58**
-- Registry sql backend: **60**
+- Polars backend: **325**（CI 门禁 ≥ 320）
+- SQL 可下推 canonical: **89**（含 `column`/`literal` 共 **91**）
+- Registry sql backend: **95**（CI 门禁 ≥ 95）
 
 ## Canonical 列表
 
+- `Slope`
+- `WMA`
 - `abs`
 - `add`
+- `and_`
 - `bfill`
+- `ceil`
 - `clip`
 - `coalesce`
+- `count`
 - `cs_demean`
+- `cs_regression`
+- `cs_resid`
+- `cum_max`
+- `cum_min`
+- `cum_std`
+- `cum_sum`
 - `divide`
+- `eq`
 - `ewm_mean`
+- `ewm_std`
+- `ewm_var`
 - `exp`
+- `expanding_std`
 - `ffill`
 - `fillna`
 - `fillna_const`
+- `floor`
+- `ge`
 - `group_decay_linear`
 - `group_mean`
 - `group_neutralize`
 - `group_normalize`
 - `group_percentile`
 - `group_rank`
+- `group_std`
 - `group_winsorize`
 - `group_zscore`
+- `gt`
 - `if_else`
+- `inverse`
 - `is_finite`
 - `is_nan`
+- `le`
 - `log`
+- `lt`
 - `multiply`
 - `nan_to_num`
+- `ne`
 - `neg`
 - `normalize`
+- `not_`
+- `or_`
+- `power`
 - `protected_div`
 - `protected_log`
 - `protected_sqrt`
@@ -44,8 +71,11 @@
 - `sign`
 - `sqrt`
 - `subtract`
+- `ts_argmax`
+- `ts_argmin`
 - `ts_beta`
 - `ts_corr`
+- `ts_cov`
 - `ts_decay_linear`
 - `ts_delay`
 - `ts_delta`
@@ -56,7 +86,11 @@
 - `ts_median`
 - `ts_min`
 - `ts_pct`
+- `ts_product`
+- `ts_quantile`
 - `ts_rank`
+- `ts_regression`
+- `ts_skew`
 - `ts_std`
 - `ts_sum`
 - `ts_var`

@@ -44,11 +44,14 @@ logger = get_logger("runtime.engine")
 class FactorEngine:
     """因子引擎：注入后端与数据源，对 :class:`api.factor.Factor` 做编译与执行。"""
 
-    def __init__(self, backend, data_source, cache=None) -> None:
+    def __init__(self, backend, data_source, cache=None, *, run_mode: str | None = None) -> None:
         bootstrap_runtime_env()
+        from runtime.production_policy import resolve_run_mode
+
         self.backend = backend  # PandasBackend / PolarsBackend / …，由 build_backend 构造
         self.data_source = data_source  # 从 parquet 等拉 MultiIndex 面板的统一入口
         self.cache = cache  # 列级缓存；无则每次 execute 全量算
+        self.run_mode = resolve_run_mode(run_mode)
         self.analyzer = Analyzer()  # Expr → IR + 依赖列分析
         self.lowerer = Lowerer()  # IR → 逻辑计划树
         self.optimizer = Optimizer()  # 计划级优化（常折叠等）
@@ -121,6 +124,26 @@ class FactorEngine:
         )
         return dag
 
+    def analyze_batch(
+        self,
+        factors: Sequence[Factor],
+        *,
+        enable_cse: bool | None = None,
+        perf: PerfConfig | None = None,
+    ) -> dict[str, Any]:
+        """编译多因子并返回 DAG + 列依赖图 ``batch_graph``。"""
+        from planner.dependency_graph import build_factor_batch_graph
+
+        dag, analyses = self._dag_from_factors(
+            factors, enable_cse=enable_cse, perf=perf
+        )
+        graph = build_factor_batch_graph(factors, analyses)
+        return {
+            "dag": dag,
+            "analyses": analyses,
+            "batch_graph": graph.to_dict(),
+        }
+
     @classmethod
     def _build_cache(cls, config: FactorEngineConfig, data_source) -> CacheManager | None:
         if not config.engine.enable_cache and not config.engine.plan_cache_dir:
@@ -150,38 +173,582 @@ class FactorEngine:
             type(data_source).__name__,
             "on" if cache is not None else "off",
         )
-        return cls(backend=backend, data_source=data_source, cache=cache), factor
+        return cls(
+            backend=backend,
+            data_source=data_source,
+            cache=cache,
+            run_mode=config.run.mode,
+        ), factor
 
     @classmethod
-    def from_config(cls, config_path: str | Path):
+    def from_config(cls, config_path: str | Path, *, profile: str | None = None):
         """读 YAML：建 backend、数据源、可选缓存，并解析因子表达式。"""
         logger.info("加载配置文件: %s", config_path)
-        config = load_config(config_path)
+        config = load_config(config_path, profile=profile)
         engine, factor = cls.from_loaded_config(config)
         return engine, factor, config
 
     @classmethod
-    def run_from_config(cls, config_path: str | Path):
+    def run_from_config(cls, config_path: str | Path, *, profile: str | None = None):
         """一键从配置文件跑因子，结果里附带 config 对象。"""
         logger.info("开始从配置执行因子: %s", config_path)
-        engine, factor, config = cls.from_config(config_path)
+        engine, factor, config = cls.from_config(config_path, profile=profile)
         from runtime.config_runtime import resolve_run_kwargs
 
         opts = resolve_run_kwargs(config)
-        result = engine.run(
-            factor,
-            auto_warmup=opts.auto_warmup,
-            trim_warmup=opts.trim_warmup,
-            market=opts.market,
-            input_dq_check=opts.input_dq_check,
-            input_dq_strict=opts.input_dq_strict,
-            input_dq_thresholds=opts.input_dq_thresholds,
-            pit_enforce=opts.pit_enforce,
-            pit_forbid_forward_fill=opts.pit_forbid_forward_fill,
-        )
+        result = engine.run(factor, **opts.to_run_kwargs())
         result["config"] = config
         logger.info("完成从配置执行因子: %s", factor.name)
         return result
+
+    @classmethod
+    def _run_factor_with_resolved_kwargs(
+        cls,
+        engine: FactorEngine,
+        factor: Factor,
+        config: FactorEngineConfig,
+        path: str | Path,
+        *,
+        pipeline_overrides: Any | None = None,
+    ) -> dict[str, Any]:
+        from runtime.config_runtime import resolve_run_kwargs_for_pipeline
+
+        opts = resolve_run_kwargs_for_pipeline(config, pipeline_overrides)
+        one = engine.run(factor, **opts.to_run_kwargs())
+        one["config"] = config
+        one["config_path"] = str(path)
+        return one
+
+    @classmethod
+    def _run_many_batch_from_config_group(
+        cls,
+        group: list[tuple[FactorEngine, Factor, FactorEngineConfig, str | Path]],
+        *,
+        enable_cse: bool | None,
+        parallel: bool,
+        n_jobs: int | None,
+        pipeline_overrides: Any | None,
+        results: dict[str, Any],
+        runs: dict[str, Any],
+        configs: dict[str, FactorEngineConfig],
+    ) -> None:
+        from runtime.config_runtime import config_run_batch_key, resolve_run_kwargs_for_pipeline
+
+        batches: dict[
+            tuple[Any, ...],
+            list[tuple[FactorEngine, Factor, FactorEngineConfig, str | Path]],
+        ] = {}
+        for item in group:
+            batches.setdefault(
+                config_run_batch_key(item[2], pipeline=pipeline_overrides),
+                [],
+            ).append(item)
+
+        for batch in batches.values():
+            if len(batch) == 1:
+                engine, factor, config, path = batch[0]
+                one = cls._run_factor_with_resolved_kwargs(
+                    engine,
+                    factor,
+                    config,
+                    path,
+                    pipeline_overrides=pipeline_overrides,
+                )
+                results[factor.name] = one["result"]
+                runs[factor.name] = one
+                configs[factor.name] = config
+                continue
+
+            base_engine, _, base_config, _ = batch[0]
+            opts = resolve_run_kwargs_for_pipeline(base_config, pipeline_overrides)
+            run_kwargs = {
+                "enable_cse": enable_cse,
+                **opts.to_run_kwargs(),
+            }
+            factors = [f for _, f, _, _ in batch]
+            if parallel:
+                batch_out = base_engine.run_many_parallel(
+                    factors,
+                    n_jobs=n_jobs,
+                    **run_kwargs,
+                )
+            else:
+                batch_out = base_engine.run_many(factors, **run_kwargs)
+            results.update(batch_out["results"])
+            for engine, factor, config, path in batch:
+                configs[factor.name] = config
+                runs[factor.name] = {
+                    "factor": factor,
+                    "analysis": batch_out["analyses"][factor.name],
+                    "result": batch_out["results"][factor.name],
+                    "config": config,
+                    "config_path": str(path),
+                }
+
+    @classmethod
+    def run_many_from_config(
+        cls,
+        config_paths: Sequence[str | Path],
+        *,
+        enable_cse: bool | None = None,
+        parallel: bool = False,
+        n_jobs: int | None = None,
+        profile: str | None = None,
+        pipeline_overrides: Any | None = None,
+    ) -> dict[str, Any]:
+        """多 YAML 批量 run；按数据源作用域分组，再按 run kwargs 子分组 batch。"""
+        from runtime.config_runtime import config_data_scope_key
+
+        loaded: list[tuple[FactorEngine, Factor, FactorEngineConfig, str | Path]] = []
+        for path in config_paths:
+            engine, factor, config = cls.from_config(path, profile=profile)
+            loaded.append((engine, factor, config, path))
+        if not loaded:
+            return {"results": {}, "runs": {}, "configs": {}}
+
+        groups: dict[str, list[tuple[FactorEngine, Factor, FactorEngineConfig, str | Path]]] = {}
+        for item in loaded:
+            key = config_data_scope_key(item[2])
+            groups.setdefault(key, []).append(item)
+
+        results: dict[str, Any] = {}
+        runs: dict[str, Any] = {}
+        configs: dict[str, FactorEngineConfig] = {}
+
+        for group in groups.values():
+            cls._run_many_batch_from_config_group(
+                group,
+                enable_cse=enable_cse,
+                parallel=parallel,
+                n_jobs=n_jobs,
+                pipeline_overrides=pipeline_overrides,
+                results=results,
+                runs=runs,
+                configs=configs,
+            )
+
+        return {"results": results, "runs": runs, "configs": configs}
+
+    @classmethod
+    def run_many_from_config_parallel(
+        cls,
+        config_paths: Sequence[str | Path],
+        *,
+        enable_cse: bool | None = None,
+        n_jobs: int | None = None,
+        profile: str | None = None,
+        pipeline_overrides: Any | None = None,
+    ) -> dict[str, Any]:
+        """多 YAML 批量 run；根节点并行（共享子式仍串行）。"""
+        return cls.run_many_from_config(
+            config_paths,
+            enable_cse=enable_cse,
+            parallel=True,
+            n_jobs=n_jobs,
+            profile=profile,
+            pipeline_overrides=pipeline_overrides,
+        )
+
+    @classmethod
+    def _materialize_one_from_config_item(
+        cls,
+        engine: FactorEngine,
+        factor: Factor,
+        config: FactorEngineConfig,
+        path: str | Path,
+        opts: Any | None = None,
+        *,
+        pipeline_overrides: Any | None = None,
+    ) -> tuple[str, dict[str, Any]]:
+        from runtime.config_runtime import resolve_materialize_kwargs_for_pipeline
+
+        if opts is None:
+            opts = resolve_materialize_kwargs_for_pipeline(config, pipeline_overrides)
+        out = engine.materialize(factor, **opts.to_engine_materialize_kwargs())
+        out["config"] = config
+        out["config_path"] = str(path)
+        return factor.name, out
+
+    @classmethod
+    def _materialize_batch_from_config_group(
+        cls,
+        group: list[tuple[FactorEngine, Factor, FactorEngineConfig, str | Path]],
+        outputs: dict[str, Any],
+        *,
+        batch_run: bool,
+        enable_cse: bool | None,
+        pipeline_overrides: Any | None,
+        parallel: bool,
+        n_jobs: int | None,
+    ) -> None:
+        from runtime.config_runtime import (
+            config_materialize_batch_key,
+            resolve_materialize_kwargs_for_pipeline,
+        )
+        from runtime.materialize_service import (
+            can_batch_materialize_compute,
+            execute_materialize_from_resolved,
+        )
+
+        batches: dict[
+            tuple[Any, ...],
+            list[tuple[FactorEngine, Factor, FactorEngineConfig, str | Path]],
+        ] = {}
+        for item in group:
+            batches.setdefault(
+                config_materialize_batch_key(item[2], pipeline=pipeline_overrides),
+                [],
+            ).append(item)
+
+        for batch in batches.values():
+            base_opts = resolve_materialize_kwargs_for_pipeline(batch[0][2], pipeline_overrides)
+            use_batch_run = batch_run and len(batch) > 1 and can_batch_materialize_compute(base_opts)
+            if use_batch_run:
+                engine, _, _, _ = batch[0]
+                run_kwargs = {"enable_cse": enable_cse, **base_opts.to_run_kwargs()}
+                factors = [f for _, f, _, _ in batch]
+                if parallel:
+                    run_out = engine.run_many_parallel(
+                        factors,
+                        n_jobs=n_jobs,
+                        **run_kwargs,
+                    )
+                else:
+                    run_out = engine.run_many(factors, **run_kwargs)
+                for _, factor, config, path in batch:
+                    opts = resolve_materialize_kwargs_for_pipeline(config, pipeline_overrides)
+                    output = {
+                        "factor": factor,
+                        "analysis": run_out["analyses"][factor.name],
+                        "result": run_out["results"][factor.name],
+                    }
+                    out = execute_materialize_from_resolved(engine, factor, output, opts)
+                    out["config"] = config
+                    out["config_path"] = str(path)
+                    out["batched_run"] = True
+                    outputs[factor.name] = out
+                continue
+
+            for engine, factor, config, path in batch:
+                name, out = cls._materialize_one_from_config_item(
+                    engine,
+                    factor,
+                    config,
+                    path,
+                    pipeline_overrides=pipeline_overrides,
+                )
+                outputs[name] = out
+
+    @classmethod
+    def materialize_many_from_config(
+        cls,
+        config_paths: Sequence[str | Path],
+        *,
+        batch_run: bool = True,
+        enable_cse: bool | None = None,
+        profile: str | None = None,
+        pipeline_overrides: Any | None = None,
+        parallel: bool = False,
+        n_jobs: int | None = None,
+    ) -> dict[str, Any]:
+        """多 YAML 批量物化；同 scope + 物化参数一致时共享 run_many。"""
+        from runtime.config_runtime import config_data_scope_key
+
+        loaded: list[tuple[FactorEngine, Factor, FactorEngineConfig, str | Path]] = []
+        for path in config_paths:
+            engine, factor, config = cls.from_config(path, profile=profile)
+            loaded.append((engine, factor, config, path))
+        if not loaded:
+            return {"materializations": {}}
+
+        groups: dict[str, list[tuple[FactorEngine, Factor, FactorEngineConfig, str | Path]]] = {}
+        for item in loaded:
+            key = config_data_scope_key(item[2])
+            groups.setdefault(key, []).append(item)
+
+        outputs: dict[str, Any] = {}
+        for group in groups.values():
+            cls._materialize_batch_from_config_group(
+                group,
+                outputs,
+                batch_run=batch_run,
+                enable_cse=enable_cse,
+                pipeline_overrides=pipeline_overrides,
+                parallel=parallel,
+                n_jobs=n_jobs,
+            )
+        return {"materializations": outputs}
+
+    @classmethod
+    def materialize_many_from_config_parallel(
+        cls,
+        config_paths: Sequence[str | Path],
+        *,
+        batch_run: bool = True,
+        enable_cse: bool | None = None,
+        n_jobs: int | None = None,
+        profile: str | None = None,
+        pipeline_overrides: Any | None = None,
+    ) -> dict[str, Any]:
+        """多 YAML 批量物化；共享 run_many 时根节点并行。"""
+        return cls.materialize_many_from_config(
+            config_paths,
+            batch_run=batch_run,
+            enable_cse=enable_cse,
+            profile=profile,
+            pipeline_overrides=pipeline_overrides,
+            parallel=True,
+            n_jobs=n_jobs,
+        )
+
+    def materialize_sharded(
+        self,
+        factors: Sequence[Factor],
+        *,
+        factor_ids: Sequence[str] | None = None,
+        shard_by: str = "factor_id",
+        shard_index: int = 0,
+        shard_count: int = 1,
+        run_many_batch: bool = True,
+        **materialize_kwargs: Any,
+    ) -> dict[str, Any]:
+        """分片物化：按 ``factor_id`` 哈希选取本 shard 负责的因子子集。"""
+        if shard_by != "factor_id":
+            raise ValueError(f"暂不支持 shard_by={shard_by!r}，当前仅 factor_id")
+        ids = list(factor_ids) if factor_ids is not None else [f.name for f in factors]
+        if len(ids) != len(factors):
+            raise ValueError("factor_ids 长度必须与 factors 一致")
+        from runtime.shard_materialize import shard_factor_ids
+
+        selected_ids = set(
+            shard_factor_ids(
+                ids,
+                shard_index=shard_index,
+                shard_count=shard_count,
+            )
+        )
+        selected_pairs = [
+            (f, fid)
+            for f, fid in zip(factors, ids)
+            if fid in selected_ids
+        ]
+        if not selected_pairs:
+            return {
+                "shard_index": shard_index,
+                "shard_count": shard_count,
+                "materializations": {},
+                "factor_ids": [],
+            }
+
+        sel_factors = [p[0] for p in selected_pairs]
+        sel_ids = [p[1] for p in selected_pairs]
+        outputs: dict[str, Any] = {}
+        mat = dict(materialize_kwargs)
+        run_kw = {
+            "input_dq_check": mat.pop("input_dq_check", False),
+            "input_dq_strict": mat.pop("input_dq_strict", True),
+            "input_dq_thresholds": mat.pop("input_dq_thresholds", None),
+            "auto_warmup": mat.pop("auto_warmup", False),
+            "trim_warmup": mat.pop("trim_warmup", True),
+            "market": mat.pop("market", None),
+            "pit_enforce": mat.pop("pit_enforce", False),
+            "pit_forbid_forward_fill": mat.pop("pit_forbid_forward_fill", False),
+        }
+        if run_many_batch and len(sel_factors) > 1:
+            run_out = self.run_many(sel_factors, **run_kw)
+            from runtime.materialize_service import execute_materialize
+
+            for factor, fid in zip(sel_factors, sel_ids):
+                output = {
+                    "factor": factor,
+                    "analysis": run_out["analyses"][factor.name],
+                    "result": run_out["results"][factor.name],
+                }
+                out = execute_materialize(
+                    self,
+                    factor,
+                    output,
+                    target=str(mat.get("write_target", "local")),
+                    lake_root=mat.get("lake_root"),
+                    staging_dataset=mat.get("staging_dataset", "factor_lake_staging"),
+                    factor_id=fid,
+                    author=mat.get("author"),
+                    frequency=mat.get("frequency"),
+                    description=mat.get("description"),
+                    expression=mat.get("expression"),
+                    dq_check=mat.get("dq_check", False),
+                    dq_strict=mat.get("dq_strict", True),
+                    dq_thresholds=mat.get("dq_thresholds"),
+                    write_metadata=mat.get("write_metadata", True),
+                    data_source_config=mat.get("data_source_config"),
+                    resume_materialize=mat.get("resume_materialize", False),
+                    isolate_partition_failures=mat.get(
+                        "isolate_partition_failures", True
+                    ),
+                    preserve_invalid_rows=mat.get("preserve_invalid_rows", False),
+                    value_dtype=str(mat.get("value_dtype", "float32")),
+                    clickhouse_table=mat.get("clickhouse_table"),
+                    ch_ensure_table=mat.get("ch_ensure_table", True),
+                    ch_host=mat.get("ch_host"),
+                    ch_port=mat.get("ch_port"),
+                    ch_database=mat.get("ch_database"),
+                    ch_username=mat.get("ch_username"),
+                    ch_password=mat.get("ch_password"),
+                    ch_secure=mat.get("ch_secure"),
+                    storage_format=str(mat.get("storage_format", "long")),
+                    partition_columns=mat.get("partition_columns"),
+                )
+                out["batched_run"] = True
+                out["shard_index"] = shard_index
+                out["shard_count"] = shard_count
+                outputs[factor.name] = out.get("materialization", out)
+        else:
+            for factor, fid in zip(sel_factors, sel_ids):
+                mk = {**run_kw, **mat, "factor_id": fid}
+                out = self.materialize(factor, **mk)
+                out["shard_index"] = shard_index
+                out["shard_count"] = shard_count
+                outputs[factor.name] = out
+
+        return {
+            "shard_index": shard_index,
+            "shard_count": shard_count,
+            "factor_ids": sel_ids,
+            "materializations": outputs,
+        }
+
+    def materialize_matrix(
+        self,
+        factors: Sequence[Factor],
+        *,
+        factor_ids: Sequence[str] | None = None,
+        universe: str,
+        frequency: str = "1d",
+        matrix_root: str | Path | None = None,
+        partition_columns: list[str] | None = None,
+        value_dtype: str = "float32",
+        **run_kwargs: Any,
+    ) -> dict[str, Any]:
+        """批量计算多因子并写入 factor_matrix 宽表（训练/回测加速格式）。"""
+        ids = list(factor_ids) if factor_ids is not None else [f.name for f in factors]
+        if len(ids) != len(factors):
+            raise ValueError("factor_ids 长度必须与 factors 一致")
+        run_out = self.run_many(factors, **run_kwargs)
+        results = {
+            fid: run_out["results"][factor.name]
+            for factor, fid in zip(factors, ids)
+        }
+        from storage.factor_matrix_materializer import FactorMatrixMaterializer
+
+        materializer = FactorMatrixMaterializer(matrix_root=matrix_root)
+        summary = materializer.materialize(
+            results,
+            universe=universe,
+            frequency=frequency,
+            partition_columns=partition_columns,
+            value_dtype=value_dtype,
+        )
+        summary["run_many"] = {
+            "factor_names": [f.name for f in factors],
+            "shared_nodes": len(run_out.get("dag").shared_nodes)
+            if run_out.get("dag")
+            else 0,
+        }
+        if "rolling_cache" in run_out:
+            summary["rolling_cache"] = run_out["rolling_cache"]
+        return summary
+
+    def plan_incremental_from_event(
+        self,
+        event: Any,
+        *,
+        lake_root: str | Path | None = None,
+        end_date: str | None = None,
+        lookback_extra: int = 5,
+        market: str | None = None,
+    ) -> dict[str, Any]:
+        """数据列更新事件 → 受影响因子增量重算计划。"""
+        from runtime.incremental_scheduler import (
+            DataEvent,
+            plan_updates_from_data_event,
+        )
+        from storage.materializer import ParquetMaterializer
+
+        if not isinstance(event, DataEvent):
+            event = DataEvent(
+                dataset=str(event["dataset"]),
+                column=str(event["column"]),
+                updated_date=str(event["updated_date"]),
+            )
+        catalog = ParquetMaterializer(lake_root=lake_root).catalog
+        plans = plan_updates_from_data_event(
+            catalog,
+            event,
+            end_date=end_date,
+            lookback_extra=lookback_extra,
+            market=market,
+        )
+        return {
+            "event": {
+                "dataset": event.dataset,
+                "column": event.column,
+                "updated_date": event.updated_date,
+            },
+            "plans": [p.to_dict() for p in plans],
+            "factor_count": len(plans),
+        }
+
+    def materialize_incremental_from_event(
+        self,
+        event: Any,
+        *,
+        lake_root: str | Path | None = None,
+        end_date: str | None = None,
+        lookback_extra: int = 5,
+        market: str | None = None,
+        dry_run: bool = False,
+        **materialize_kwargs: Any,
+    ) -> dict[str, Any]:
+        """数据列更新事件 → 受影响因子自动增量物化。"""
+        from runtime.incremental_scheduler import execute_incremental_updates_from_event
+
+        return execute_incremental_updates_from_event(
+            self,
+            event,
+            lake_root=str(lake_root) if lake_root is not None else None,
+            end_date=end_date,
+            lookback_extra=lookback_extra,
+            market=market,
+            dry_run=dry_run,
+            materialize_kwargs=materialize_kwargs,
+        )
+
+    @classmethod
+    def materialize_incremental_many_from_config(
+        cls,
+        config_paths: Sequence[str | Path],
+        *,
+        profile: str | None = None,
+        pipeline_overrides: Any | None = None,
+    ) -> dict[str, Any]:
+        """多 YAML 批量增量物化；逐配置 resolve + materialize_incremental。"""
+        from runtime.config_runtime import resolve_materialize_kwargs_for_pipeline
+
+        loaded: list[tuple[FactorEngine, Factor, FactorEngineConfig, str | Path]] = []
+        for path in config_paths:
+            engine, factor, config = cls.from_config(path, profile=profile)
+            loaded.append((engine, factor, config, path))
+        outputs: dict[str, Any] = {}
+        for engine, factor, config, path in loaded:
+            opts = resolve_materialize_kwargs_for_pipeline(config, pipeline_overrides)
+            out = engine.materialize_incremental(
+                factor,
+                **opts.to_incremental_materialize_kwargs(),
+            )
+            out["config"] = config
+            out["config_path"] = str(path)
+            outputs[factor.name] = out
+        return {"materializations": outputs}
 
     @classmethod
     def materialize_from_config(
@@ -209,38 +776,7 @@ class FactorEngine:
             description_override=description,
             expression_override=expression,
         )
-        result = engine.materialize(
-            factor,
-            lake_root=opts.lake_root,
-            factor_id=opts.factor_id,
-            author=opts.author,
-            frequency=opts.frequency,
-            description=opts.description,
-            expression=opts.expression,
-            auto_warmup=opts.auto_warmup,
-            trim_warmup=opts.trim_warmup,
-            market=opts.market,
-            dq_check=opts.dq_check,
-            dq_strict=opts.dq_strict,
-            dq_thresholds=opts.dq_thresholds,
-            input_dq_check=opts.input_dq_check,
-            input_dq_strict=opts.input_dq_strict,
-            input_dq_thresholds=opts.input_dq_thresholds,
-            preserve_invalid_rows=opts.preserve_invalid_rows,
-            value_dtype=opts.value_dtype,
-            write_target=opts.write_target,
-            data_source_config=opts.data_source_config,
-            pit_enforce=opts.pit_enforce,
-            pit_forbid_forward_fill=opts.pit_forbid_forward_fill,
-            clickhouse_table=opts.clickhouse_table,
-            ch_host=opts.clickhouse_host,
-            ch_port=opts.clickhouse_port,
-            ch_database=opts.clickhouse_database,
-            ch_username=opts.clickhouse_username,
-            ch_password=opts.clickhouse_password,
-            ch_secure=opts.clickhouse_secure,
-            ch_ensure_table=opts.ch_ensure_table,
-        )
+        result = engine.materialize(factor, **opts.to_engine_materialize_kwargs())
         result["config"] = config
         logger.info("完成从配置物化因子: %s", factor.name)
         return result
@@ -272,42 +808,7 @@ class FactorEngine:
             recompute_tail_bars_override=recompute_tail_bars,
         )
         result = engine.materialize_incremental(
-            factor,
-            lake_root=opts.lake_root,
-            factor_id=opts.factor_id,
-            since=opts.since,
-            end_date=opts.end_date,
-            lookback_extra=opts.lookback_extra,
-            recompute_tail_bars=opts.recompute_tail_bars,
-            author=opts.author,
-            frequency=opts.frequency,
-            description=opts.description,
-            expression=opts.expression,
-            input_dq_check=opts.input_dq_check,
-            input_dq_strict=opts.input_dq_strict,
-            input_dq_thresholds=opts.input_dq_thresholds,
-            auto_warmup=opts.auto_warmup,
-            trim_warmup=opts.trim_warmup,
-            market=opts.market,
-            dq_check=opts.dq_check,
-            dq_strict=opts.dq_strict,
-            dq_thresholds=opts.dq_thresholds,
-            preserve_invalid_rows=opts.preserve_invalid_rows,
-            value_dtype=opts.value_dtype,
-            write_target=opts.write_target,
-            data_source_config=opts.data_source_config,
-            pit_enforce=opts.pit_enforce,
-            pit_forbid_forward_fill=opts.pit_forbid_forward_fill,
-            isolate_partition_failures=opts.isolate_partition_failures,
-            resume_materialize=opts.resume_materialize,
-            clickhouse_table=opts.clickhouse_table,
-            ch_host=opts.clickhouse_host,
-            ch_port=opts.clickhouse_port,
-            ch_database=opts.clickhouse_database,
-            ch_username=opts.clickhouse_username,
-            ch_password=opts.clickhouse_password,
-            ch_secure=opts.clickhouse_secure,
-            ch_ensure_table=opts.ch_ensure_table,
+            factor, **opts.to_incremental_materialize_kwargs()
         )
         result["config"] = config
         logger.info("完成从配置增量物化因子: %s", factor.name)
@@ -319,18 +820,41 @@ class FactorEngine:
         shared_result_cache: dict[str, Any] | None = None,
         perf: PerfConfig | None = None,
     ) -> ExecutionContext:
+        from cache.session import ExecutionCacheSession
         from storage.long_table_source import LongTableDataSource
 
         prefer_long = isinstance(self.data_source, LongTableDataSource)
-        return ExecutionContext(
+        effective_perf = perf or PerfConfig.from_env()
+        base = ExecutionContext(
             data_source=self.data_source,
             cache=self.cache,
             shared_result_cache=shared_result_cache,
             panel_cache={},
             materialized_series={},
             prefer_long_table=prefer_long,
-            perf=perf,
+            perf=effective_perf,
+            query_budget=effective_perf.build_query_budget(),
         )
+        if self.cache is None and shared_result_cache is None:
+            return base
+        session = ExecutionCacheSession(
+            plan_cache=self.cache,
+            shared_result_cache=shared_result_cache,
+            panel_cache={},
+        )
+        return session.wrap_context(base)
+
+    @staticmethod
+    def _resolve_lineage_expression(factor: Factor, expression: str | None) -> str | None:
+        from runtime.lineage_service import resolve_lineage_expression
+
+        return resolve_lineage_expression(factor, expression)
+
+    @staticmethod
+    def _composite_lineage_from_source(data_source: Any) -> dict[str, Any]:
+        from runtime.lineage_service import composite_lineage_from_source
+
+        return composite_lineage_from_source(data_source)
 
     @staticmethod
     def _lineage_extra(
@@ -338,172 +862,46 @@ class FactorEngine:
         data_source_config: dict | None,
         snapshot_id: str | None,
         input_dq: dict | None = None,
+        data_source: Any = None,
         **more: Any,
     ) -> dict[str, Any]:
-        from runtime.lineage import resolve_git_commit_hash
+        from runtime.lineage_service import build_lineage_extra
 
-        extra: dict[str, Any] = {
-            "data_snapshot_id": snapshot_id,
-            "data_source_config": data_source_config,
-            "git_commit": resolve_git_commit_hash(),
-        }
-        if input_dq is not None:
-            extra["input_dq"] = input_dq
-        extra.update(more)
-        return extra
+        return build_lineage_extra(
+            data_source_config=data_source_config,
+            snapshot_id=snapshot_id,
+            input_dq=input_dq,
+            data_source=data_source,
+            **more,
+        )
+
+    @staticmethod
+    def _data_snapshot_id_from_config(data_source_config: dict | None) -> str | None:
+        from runtime.lineage_service import data_snapshot_id_from_config
+
+        return data_snapshot_id_from_config(data_source_config)
 
     @staticmethod
     def _resolve_parquet_write_target(write_target: str) -> str:
-        """多目标物化时 ParquetMaterializer 使用的 write_target。"""
-        target = str(write_target or "local").lower()
-        if target == "staging_clickhouse":
-            return "staging"
-        if target == "clickhouse":
-            return "clickhouse"
-        return target
+        from runtime.materialize_service import resolve_parquet_write_target
+
+        return resolve_parquet_write_target(write_target)
 
     @staticmethod
     def _needs_clickhouse_write(write_target: str) -> bool:
-        return str(write_target or "local").lower() in ("clickhouse", "staging_clickhouse")
+        from runtime.materialize_service import needs_clickhouse_write
 
-    @staticmethod
-    def _append_clickhouse_to_summary(
-        summary: dict[str, Any],
-        *,
-        factor_id: str,
-        result: pd.Series,
-        ast_hash: str,
-        write_target: str,
-        data_snapshot_id: str | None = None,
-        clickhouse_table: str | None = None,
-        preserve_invalid_rows: bool = False,
-        value_dtype: str = "float32",
-        write_metadata: bool = True,
-        ensure_table: bool = True,
-        dq_check: bool = False,
-        dq_strict: bool = True,
-        dq_thresholds=None,
-        ch_host: str | None = None,
-        ch_port: int | None = None,
-        ch_database: str | None = None,
-        ch_username: str | None = None,
-        ch_password: str | None = None,
-        ch_secure: bool | None = None,
-    ) -> dict[str, Any]:
-        """在 Parquet/staging 落盘后追加 ClickHouse 写入，返回更新后的 summary。"""
-        from storage.clickhouse_materializer import ClickHouseMaterializer
-        from storage.exceptions import DualWriteError
+        return needs_clickhouse_write(write_target)
 
-        ch_mat = ClickHouseMaterializer(
-            table=clickhouse_table or "factor_values",
-            host=ch_host,
-            port=ch_port,
-            database=ch_database,
-            username=ch_username,
-            password=ch_password,
-            secure=ch_secure,
-        )
-        partial = dict(summary)
-        partial["write_target"] = str(write_target).lower()
-        partial["primary_write_completed"] = True
-        try:
-            ch_summary = ch_mat.materialize(
-                factor_id=factor_id,
-                result=result,
-                factor_version=ast_hash[:16],
-                data_snapshot_id=data_snapshot_id,
-                ensure_table=ensure_table,
-                dq_check=dq_check,
-                dq_strict=dq_strict,
-                dq_thresholds=dq_thresholds,
-                preserve_invalid_rows=preserve_invalid_rows,
-                value_dtype=value_dtype,
-                write_metadata=write_metadata,
-            )
-        except Exception as exc:
-            partial["partial_write"] = True
-            partial["clickhouse_error"] = str(exc)
-            raise DualWriteError(
-                f"ClickHouse 写入失败（主存储可能已成功）: factor_id={factor_id}, error={exc}",
-                summary=partial,
-                cause=exc,
-            ) from exc
+    def _append_clickhouse_to_summary(self, summary: dict[str, Any], **kwargs) -> dict[str, Any]:
+        from runtime import dual_write_service
 
-        merged = dict(partial)
-        merged["clickhouse"] = {
-            "factor_id": ch_summary.factor_id,
-            "table": ch_summary.table,
-            "rows_written": ch_summary.rows_written,
-            "database": ch_summary.database,
-        }
-        if ch_summary.dq_report is not None:
-            merged["clickhouse_dq_report"] = ch_summary.dq_report
-        merged["partial_write"] = False
-        return merged
+        return dual_write_service.append_clickhouse_to_summary(summary, **kwargs)
 
-    def _dual_write_clickhouse(
-        self,
-        materializer: ParquetMaterializer,
-        summary: dict[str, Any],
-        *,
-        factor_id: str,
-        result: pd.Series,
-        ast_hash: str,
-        write_target: str,
-        data_snapshot_id: str | None = None,
-        clickhouse_table: str | None = None,
-        preserve_invalid_rows: bool = False,
-        value_dtype: str = "float32",
-        write_metadata: bool = True,
-        ensure_table: bool = True,
-        dq_check: bool = False,
-        dq_strict: bool = True,
-        dq_thresholds=None,
-        ch_host: str | None = None,
-        ch_port: int | None = None,
-        ch_database: str | None = None,
-        ch_username: str | None = None,
-        ch_password: str | None = None,
-        ch_secure: bool | None = None,
-    ) -> dict[str, Any]:
-        """ClickHouse 双写；若主存储延迟水位线，成功后再 commit、失败则 abort。"""
-        from storage.exceptions import DualWriteError
+    def _dual_write_clickhouse(self, materializer, summary: dict[str, Any], **kwargs) -> dict[str, Any]:
+        from runtime import dual_write_service
 
-        deferred = bool(summary.get("watermark_deferred"))
-        try:
-            merged = self._append_clickhouse_to_summary(
-                summary,
-                factor_id=factor_id,
-                result=result,
-                ast_hash=ast_hash,
-                write_target=write_target,
-                data_snapshot_id=data_snapshot_id,
-                clickhouse_table=clickhouse_table,
-                preserve_invalid_rows=preserve_invalid_rows,
-                value_dtype=value_dtype,
-                write_metadata=write_metadata,
-                ensure_table=ensure_table,
-                dq_check=dq_check,
-                dq_strict=dq_strict,
-                dq_thresholds=dq_thresholds,
-                ch_host=ch_host,
-                ch_port=ch_port,
-                ch_database=ch_database,
-                ch_username=ch_username,
-                ch_password=ch_password,
-                ch_secure=ch_secure,
-            )
-        except DualWriteError as exc:
-            partial = exc.summary or summary
-            if deferred:
-                materializer.abort_deferred_materialization(
-                    partial,
-                    error=str(exc.cause or exc),
-                )
-            raise
-        if deferred:
-            return materializer.commit_deferred_materialization(merged)
-        return merged
+        return dual_write_service.dual_write_clickhouse(materializer, summary, **kwargs)
 
     @staticmethod
     def _prefetch_columns(data_source: Any, columns: set[str]) -> None:
@@ -524,6 +922,33 @@ class FactorEngine:
         if callable(load_columns):
             load_columns(names)
             logger.info("预加载数据列: %s", names)
+
+    @staticmethod
+    def _prepare_batch_data(
+        data_source: Any,
+        columns: set[str],
+        *,
+        input_dq_check: bool = False,
+        input_dq_strict: bool = True,
+        input_dq_thresholds=None,
+        data_snapshot_id: str | None = None,
+    ) -> Any | None:
+        """批量 input_dq + 单次 prefetch（run_many 快路径）。"""
+        if not columns:
+            return None
+        from storage.read_session import DataSourceReadSession
+
+        session = DataSourceReadSession(data_source)
+        input_report = session.prepare_batch(
+            columns,
+            input_dq_check=input_dq_check,
+            input_dq_strict=input_dq_strict,
+            input_dq_thresholds=input_dq_thresholds,
+            data_snapshot_id=data_snapshot_id,
+        )
+        if input_dq_check:
+            logger.info("批量输入 DQ 通过，列数=%d", len(columns))
+        return input_report
 
     def run(
         self,
@@ -553,86 +978,48 @@ class FactorEngine:
                 pit_enforce=pit_enforce,
                 pit_forbid_forward_fill=pit_forbid_forward_fill,
             )
-        from cleaned_operators.operator_policy import (
-            bars_per_day,
-            effective_lookback,
-            infer_source_bar_freq,
+        from runtime.production_policy import (
+            assert_no_stub_operators,
+            assert_production_run_flags,
         )
 
-        source_bar_freq = infer_source_bar_freq(
-            self.data_source,
-            fallback=getattr(factor, "freq", None),
+        assert_production_run_flags(
+            mode=self.run_mode,
+            input_dq_check=input_dq_check,
+            auto_warmup=auto_warmup,
+            pit_enforce=pit_enforce,
+            context="run",
         )
-        history_buffer = effective_lookback(
-            getattr(analysis, "lookback", 0),
-            factor_freq=getattr(factor, "freq", None),
-            source_bar_freq=source_bar_freq,
+        assert_no_stub_operators(plan, mode=self.run_mode)
+        from runtime.warmup_service import prepare_run_warmup
+
+        warmup = prepare_run_warmup(
+            self,
+            factor,
+            analysis,
+            auto_warmup=auto_warmup,
+            trim_warmup=trim_warmup,
+            market=market,
         )
-        s_bpd = bars_per_day(source_bar_freq)
-        warmup_calendar_bars = history_buffer
-        if s_bpd > 1:
-            warmup_calendar_bars = max(1, (history_buffer + s_bpd - 1) // s_bpd)
-        run_window = None
-        engine_to_use = self
+        run_window = warmup.run_window
+        engine_to_use = warmup.engine
+        s_bpd = warmup.bars_per_day
 
-        if auto_warmup and history_buffer > 0:
-            from runtime.run_window import build_full_run_window, extract_source_date_bounds
-            from storage.time_window import narrow_data_source_for_window, slice_series_time_window
-            from storage.trading_calendar import get_trading_calendar, infer_market
+        input_report = None
+        if analysis.referenced_columns:
+            from storage.read_session import DataSourceReadSession
 
-            req_start, req_end = extract_source_date_bounds(self.data_source)
-            dataset = getattr(self.data_source, "dataset", None)
-            resolved_market = market or infer_market(
-                universe=getattr(factor, "universe", None),
-                dataset=str(dataset) if dataset else None,
-            )
-            cal = get_trading_calendar(resolved_market)
-            run_window = build_full_run_window(
-                requested_start=req_start,
-                requested_end=req_end,
-                lookback_bars=warmup_calendar_bars,
-                trim_output=trim_warmup,
-                calendar=cal,
-            )
-            if (
-                run_window.actual_load_start is not None
-                and run_window.actual_load_start != req_start
-            ):
-                narrowed = narrow_data_source_for_window(
-                    self.data_source,
-                    start_date=run_window.actual_load_start,
-                    end_date=run_window.actual_load_end,
+            session = DataSourceReadSession(engine_to_use.data_source)
+            if input_dq_check:
+                input_report = session.prepare_batch(
+                    analysis.referenced_columns,
+                    input_dq_check=True,
+                    input_dq_strict=input_dq_strict,
+                    input_dq_thresholds=input_dq_thresholds,
                 )
-                use_fresh = not isinstance(self.cache, PersistentPlanCache)
-                engine_to_use = self.with_data_source(narrowed, fresh_cache=use_fresh)
-                logger.info(
-                    "因子 '%s' auto_warmup: load_start %s → %s（warmup_bars=%d）",
-                    factor.name,
-                    req_start,
-                    run_window.actual_load_start,
-                    run_window.warmup_bars,
-                )
-        elif history_buffer > 0:
-            logger.info(
-                "因子 '%s' 建议历史缓冲 >= %d bars（lookback=%s）；可设 auto_warmup=True",
-                factor.name,
-                history_buffer,
-                getattr(analysis, "lookback", 0),
-            )
-
-        if input_dq_check and analysis.referenced_columns:
-            from runtime.input_dq import assert_input_dq
-
-            input_report = assert_input_dq(
-                engine_to_use.data_source,
-                analysis.referenced_columns,
-                raise_on_fail=input_dq_strict,
-                thresholds=input_dq_thresholds,
-            )
-            logger.info("因子 '%s' 输入 DQ 通过", factor.name)
-        else:
-            input_report = None
-        engine_to_use._prefetch_columns(engine_to_use.data_source, analysis.referenced_columns)
+                logger.info("因子 '%s' 输入 DQ 通过", factor.name)
+            else:
+                session.prefetch(analysis.referenced_columns)
         ctx = engine_to_use._make_context()
         result = engine_to_use.backend.execute(plan, ctx)
 
@@ -672,14 +1059,6 @@ class FactorEngine:
             out["run_window"] = run_window.to_dict()
         return out
 
-    @staticmethod
-    def _data_snapshot_id_from_config(data_source_config: dict | None) -> str | None:
-        if not data_source_config:
-            return None
-        from runtime.lineage import hash_data_source_config
-
-        return hash_data_source_config(data_source_config)
-
     def materialize(
         self,
         factor: Factor,
@@ -716,6 +1095,9 @@ class FactorEngine:
         ch_secure: bool | None = None,
         clickhouse_table: str | None = None,
         ch_ensure_table: bool = True,
+        staging_dataset: str = "factor_lake_staging",
+        storage_format: str = "long",
+        partition_columns: list[str] | None = None,
     ):
         """执行单因子并落盘（Parquet / staging / ClickHouse 或多目标组合）。"""
         target = str(write_target or "local").lower()
@@ -731,95 +1113,41 @@ class FactorEngine:
             pit_enforce=pit_enforce,
             pit_forbid_forward_fill=pit_forbid_forward_fill,
         )
-        from backend.cleaned_bridge import ensure_cleaned_loaded
-        from cleaned_operators.operator_policy import (
-            compute_operator_catalog_hash,
-            effective_lookback,
-        )
-        from runtime.lineage import build_run_lineage
+        from runtime.materialize_service import execute_materialize
 
-        ensure_cleaned_loaded()
-        from storage.catalog import compute_ir_hash
-
-        op_hash = compute_operator_catalog_hash()
-        analysis = output["analysis"]
-        snapshot_id = self._data_snapshot_id_from_config(data_source_config)
-        lineage = build_run_lineage(
-            factor_id=factor_id or factor.name,
-            factor_name=factor.name,
-            ast_hash=compute_ir_hash(analysis.ir),
-            operator_catalog_hash=op_hash,
-            expression=expression or getattr(factor, "description", None),
-            lookback=effective_lookback(getattr(analysis, "lookback", 0)),
-            referenced_columns=analysis.referenced_columns,
-            result=output["result"],
-            extra=self._lineage_extra(
-                data_source_config=data_source_config,
-                snapshot_id=snapshot_id,
-                input_dq=output.get("input_dq"),
-                run_window=output.get("run_window"),
-            ),
-        )
-        materializer = ParquetMaterializer(lake_root=lake_root)
-        ast_hash = compute_ir_hash(analysis.ir)
-        parquet_target = self._resolve_parquet_write_target(target)
-
-        summary = materializer.materialize(
-            factor_id=factor_id or factor.name,
-            result=output["result"],
-            ir_node=output["analysis"].ir,
+        return execute_materialize(
+            self,
+            factor,
+            output,
+            target=target,
+            lake_root=lake_root,
+            staging_dataset=staging_dataset,
+            factor_id=factor_id,
             author=author,
-            frequency=frequency or factor.freq,
-            description=description or factor.description,
+            frequency=frequency,
+            description=description,
             expression=expression,
             dq_check=dq_check,
             dq_strict=dq_strict,
             dq_thresholds=dq_thresholds,
-            run_lineage={**lineage.to_dict(), "factor_id": factor_id or factor.name},
             write_metadata=write_metadata,
-            data_snapshot_id=snapshot_id,
             data_source_config=data_source_config,
-            resume=resume_materialize,
+            resume_materialize=resume_materialize,
             isolate_partition_failures=isolate_partition_failures,
             preserve_invalid_rows=preserve_invalid_rows,
             value_dtype=value_dtype,
-            write_target=parquet_target,
-            defer_watermark=self._needs_clickhouse_write(target),
+            clickhouse_table=clickhouse_table,
+            ch_ensure_table=ch_ensure_table,
+            ch_host=ch_host,
+            ch_port=ch_port,
+            ch_database=ch_database,
+            ch_username=ch_username,
+            ch_password=ch_password,
+            ch_secure=ch_secure,
+            lineage_mode="full",
+            storage_format=storage_format,
+            partition_columns=partition_columns,
         )
-
-        if self._needs_clickhouse_write(target):
-            summary = self._dual_write_clickhouse(
-                materializer,
-                summary,
-                factor_id=factor_id or factor.name,
-                result=output["result"],
-                ast_hash=ast_hash,
-                write_target=target,
-                data_snapshot_id=snapshot_id,
-                clickhouse_table=clickhouse_table,
-                preserve_invalid_rows=preserve_invalid_rows,
-                value_dtype=value_dtype,
-                write_metadata=write_metadata,
-                ensure_table=ch_ensure_table,
-                ch_host=ch_host,
-                ch_port=ch_port,
-                ch_database=ch_database,
-                ch_username=ch_username,
-                ch_password=ch_password,
-                ch_secure=ch_secure,
-            )
-
-        output["materialization"] = {
-            **summary,
-            "lake_root": str(materializer.lake_root),
-        }
-        logger.info(
-            "完成落盘因子 '%s'，factor_id=%s，rows_written=%s",
-            factor.name,
-            summary["factor_id"],
-            summary["rows_written"],
-        )
-        return output
 
     def materialize_clickhouse(
         self,
@@ -827,8 +1155,6 @@ class FactorEngine:
         *,
         factor_id: str | None = None,
         table: str | None = None,
-        timestamp_column: str = "trade_date",
-        instrument_column: str = "instrument",
         factor_version: str = "",
         author: str | None = None,
         frequency: str | None = None,
@@ -856,12 +1182,15 @@ class FactorEngine:
         ch_secure: bool | None = None,
         ensure_table: bool = True,
         lake_root: str | Path | None = None,
+        staging_dataset: str = "factor_lake_staging",
+        timestamp_column: str | None = None,
+        instrument_column: str | None = None,
     ):
         """执行因子并写入 ClickHouse（catalog + watermark + CH，与 materialize 同构）。"""
-        if timestamp_column != "trade_date" or instrument_column != "instrument":
+        if timestamp_column is not None or instrument_column is not None:
             logger.warning(
-                "materialize_clickhouse 列名映射请改用 ClickHouseMaterializer；"
-                "当前委托 materialize(write_target=clickhouse)"
+                "materialize_clickhouse 的 timestamp_column/instrument_column 已废弃；"
+                "列映射请配置 ClickHouseMaterializer（默认 trade_date/instrument）。"
             )
         output = self.materialize(
             factor,
@@ -894,6 +1223,7 @@ class FactorEngine:
             ch_password=ch_password,
             ch_secure=ch_secure,
             ch_ensure_table=ensure_table,
+            staging_dataset=staging_dataset,
         )
         mat = output.get("materialization") or {}
         ch = mat.get("clickhouse") or {}
@@ -948,8 +1278,61 @@ class FactorEngine:
         *,
         perf: PerfConfig | None = None,
         enable_cse: bool | None = None,
+        auto_warmup: bool = False,
+        trim_warmup: bool = True,
+        market: str | None = None,
+        input_dq_check: bool = False,
+        input_dq_strict: bool = True,
+        input_dq_thresholds=None,
+        pit_enforce: bool = False,
+        pit_forbid_forward_fill: bool = False,
     ) -> dict[str, Any]:
-        """多因子求值：先执行 ``DAGPlan.shared_nodes``，再各因子根；含 ``plan_ref`` 时必须用此入口。"""
+        """多因子求值：先执行 ``DAGPlan.shared_nodes``，再各因子根；含 ``plan_ref`` 时必须用此入口。
+
+        ``auto_warmup`` / ``pit_enforce`` 需按因子逐个 ``run()``（lookback / PIT 编译差异）。
+        ``input_dq_check`` 在快路径上合并全量依赖列后批量校验，仍保留 CSE。
+        """
+        from runtime.production_policy import (
+            ProductionPolicyViolation,
+            assert_production_run_flags,
+            is_production_mode,
+        )
+
+        use_per_factor_run = auto_warmup or pit_enforce
+        if use_per_factor_run:
+            assert_production_run_flags(
+                mode=self.run_mode,
+                input_dq_check=input_dq_check,
+                auto_warmup=auto_warmup,
+                pit_enforce=pit_enforce,
+                context="run_many",
+            )
+        elif is_production_mode(self.run_mode) and not input_dq_check:
+            raise ProductionPolicyViolation(
+                "production 模式 run_many 快路径必须开启 input_dq_check"
+            )
+        if use_per_factor_run:
+            out: dict[str, Any] = {}
+            analyses: dict[str, AnalysisResult] = {}
+            for factor in factors:
+                one = self.run(
+                    factor,
+                    auto_warmup=auto_warmup,
+                    trim_warmup=trim_warmup,
+                    market=market,
+                    input_dq_check=input_dq_check,
+                    input_dq_strict=input_dq_strict,
+                    input_dq_thresholds=input_dq_thresholds,
+                    pit_enforce=pit_enforce,
+                    pit_forbid_forward_fill=pit_forbid_forward_fill,
+                )
+                out[factor.name] = one["result"]
+                analyses[factor.name] = one["analysis"]
+            dag, _ = self._dag_from_factors(
+                factors, enable_cse=enable_cse, perf=perf
+            )
+            return {"results": out, "dag": dag, "analyses": analyses}
+
         dag, analyses = self._dag_from_factors(
             factors, enable_cse=enable_cse, perf=perf
         )
@@ -957,7 +1340,13 @@ class FactorEngine:
         all_cols: set[str] = set()
         for analysis in analyses.values():
             all_cols |= analysis.referenced_columns
-        self._prefetch_columns(self.data_source, all_cols)
+        input_report = self._prepare_batch_data(
+            self.data_source,
+            all_cols,
+            input_dq_check=input_dq_check,
+            input_dq_strict=input_dq_strict,
+            input_dq_thresholds=input_dq_thresholds,
+        )
         ctx = self._make_context(shared_result_cache={}, perf=perf)
         # 先算共享子式，再算各因子根，避免重复执行相同子树
         if ctx.shared_result_cache is not None:
@@ -966,11 +1355,30 @@ class FactorEngine:
         out: dict[str, Any] = {}
         for fp in dag.roots:
             out[fp.factor_name] = self.backend.execute(fp.root, ctx)
-        return {
+        batch_out: dict[str, Any] = {
             "results": out,
             "dag": dag,
             "analyses": analyses,
         }
+        if input_report is not None:
+            batch_out["input_dq"] = input_report.to_dict()
+        if len(factors) > 1:
+            from planner.dependency_graph import build_factor_batch_graph
+
+            batch_out["batch_graph"] = build_factor_batch_graph(
+                factors, analyses
+            ).to_dict()
+        if dag.shared_nodes:
+            from planner.rolling_cache import summarize_rolling_cache
+
+            batch_out["rolling_cache"] = summarize_rolling_cache(dag.shared_nodes)
+        if dag.roots:
+            from backend.operator_cost import estimate_plan_cost
+
+            batch_out["plan_costs"] = {
+                fp.factor_name: estimate_plan_cost(fp.root) for fp in dag.roots
+            }
+        return batch_out
 
     def run_many_parallel(
         self,
@@ -979,8 +1387,30 @@ class FactorEngine:
         n_jobs: int | None = None,
         perf: PerfConfig | None = None,
         enable_cse: bool | None = None,
+        auto_warmup: bool = False,
+        trim_warmup: bool = True,
+        market: str | None = None,
+        input_dq_check: bool = False,
+        input_dq_strict: bool = True,
+        input_dq_thresholds=None,
+        pit_enforce: bool = False,
+        pit_forbid_forward_fill: bool = False,
     ) -> dict[str, Any]:
         """在 ``run_many`` 基础上对**各因子根**并行求值（共享子式仍先串行算完）。"""
+        if auto_warmup or pit_enforce:
+            return self.run_many(
+                factors,
+                perf=perf,
+                enable_cse=enable_cse,
+                auto_warmup=auto_warmup,
+                trim_warmup=trim_warmup,
+                market=market,
+                input_dq_check=input_dq_check,
+                input_dq_strict=input_dq_strict,
+                input_dq_thresholds=input_dq_thresholds,
+                pit_enforce=pit_enforce,
+                pit_forbid_forward_fill=pit_forbid_forward_fill,
+            )
         try:
             from joblib import Parallel, delayed
         except ImportError as exc:  # pragma: no cover
@@ -996,7 +1426,13 @@ class FactorEngine:
         all_cols: set[str] = set()
         for analysis in analyses.values():
             all_cols |= analysis.referenced_columns
-        self._prefetch_columns(self.data_source, all_cols)
+        input_report = self._prepare_batch_data(
+            self.data_source,
+            all_cols,
+            input_dq_check=input_dq_check,
+            input_dq_strict=input_dq_strict,
+            input_dq_thresholds=input_dq_thresholds,
+        )
         ctx = self._make_context(shared_result_cache={}, perf=perf)
         if ctx.shared_result_cache is not None:
             for sid, sub in dag.shared_nodes.items():
@@ -1011,7 +1447,10 @@ class FactorEngine:
             delayed(_one)(fp) for fp in dag.roots
         )
         results = dict(raw)
-        return {"results": results, "dag": dag, "analyses": analyses}
+        parallel_out: dict[str, Any] = {"results": results, "dag": dag, "analyses": analyses}
+        if input_report is not None:
+            parallel_out["input_dq"] = input_report.to_dict()
+        return parallel_out
 
     def with_data_source(self, data_source, *, fresh_cache: bool = False) -> FactorEngine:
         """返回共享 backend 的新引擎实例（用于增量时间窗口）。
@@ -1020,24 +1459,41 @@ class FactorEngine:
         ``data_scope`` 隔离，仍可命中同窗口历史结果。
         """
         if self.cache is None:
-            return FactorEngine(backend=self.backend, data_source=data_source, cache=None)
+            return FactorEngine(
+                backend=self.backend,
+                data_source=data_source,
+                cache=None,
+                run_mode=self.run_mode,
+            )
         scope = compute_data_scope(data_source)
         if isinstance(self.cache, PersistentPlanCache):
             new_cache = self.cache.with_scope(scope, clear_memory=fresh_cache)
-            return FactorEngine(backend=self.backend, data_source=data_source, cache=new_cache)
+            return FactorEngine(
+                backend=self.backend,
+                data_source=data_source,
+                cache=new_cache,
+                run_mode=self.run_mode,
+            )
         if fresh_cache:
             return FactorEngine(
                 backend=self.backend,
                 data_source=data_source,
                 cache=CacheManager(data_scope=scope),
+                run_mode=self.run_mode,
             )
         if getattr(self.cache, "data_scope", None) != scope:
             return FactorEngine(
                 backend=self.backend,
                 data_source=data_source,
                 cache=CacheManager(data_scope=scope),
+                run_mode=self.run_mode,
             )
-        return FactorEngine(backend=self.backend, data_source=data_source, cache=self.cache)
+        return FactorEngine(
+            backend=self.backend,
+            data_source=data_source,
+            cache=self.cache,
+            run_mode=self.run_mode,
+        )
 
     def run_incremental(
         self,
@@ -1189,13 +1645,9 @@ class FactorEngine:
         ch_password: str | None = None,
         ch_secure: bool | None = None,
         ch_ensure_table: bool = True,
+        staging_dataset: str = "factor_lake_staging",
     ):
         """增量执行 + 落盘 upsert + lineage（支持 staging_clickhouse / clickhouse 双写）。"""
-        from backend.cleaned_bridge import ensure_cleaned_loaded
-        from cleaned_operators.operator_policy import compute_operator_catalog_hash
-        from runtime.lineage import build_run_lineage
-        from storage.catalog import compute_ir_hash
-
         target = str(write_target or "local").lower()
         output = self.run_incremental(
             factor,
@@ -1225,81 +1677,38 @@ class FactorEngine:
             }
             return output
 
-        ensure_cleaned_loaded()
-        fid = factor_id or factor.name
-        op_hash = compute_operator_catalog_hash()
-        analysis = output["analysis"]
-        snapshot_id = self._data_snapshot_id_from_config(data_source_config)
-        lineage = build_run_lineage(
-            factor_id=fid,
-            factor_name=factor.name,
-            ast_hash=compute_ir_hash(analysis.ir),
-            operator_catalog_hash=op_hash,
-            expression=expression or getattr(factor, "description", None),
-            lookback=output["incremental"]["lookback_bars"],
-            referenced_columns=analysis.referenced_columns,
-            result=output["result"],
-            extra=self._lineage_extra(
-                data_source_config=data_source_config,
-                snapshot_id=snapshot_id,
-                input_dq=output.get("input_dq"),
-                mode="incremental",
-                incremental=output["incremental"],
-            ),
-        )
+        from runtime.materialize_service import execute_materialize
 
-        materializer = ParquetMaterializer(lake_root=lake_root)
-        ast_hash = compute_ir_hash(analysis.ir)
-        parquet_target = self._resolve_parquet_write_target(target)
-        summary = materializer.materialize(
-            factor_id=fid,
-            result=output["result"],
-            ir_node=analysis.ir,
+        output = execute_materialize(
+            self,
+            factor,
+            output,
+            target=target,
+            lake_root=lake_root,
+            staging_dataset=staging_dataset,
+            factor_id=factor_id,
             author=author,
-            frequency=frequency or factor.freq,
-            description=description or factor.description,
+            frequency=frequency,
+            description=description,
             expression=expression,
             dq_check=dq_check,
             dq_strict=dq_strict,
             dq_thresholds=dq_thresholds,
-            run_lineage={**lineage.to_dict(), "factor_id": fid},
             write_metadata=write_metadata,
-            data_snapshot_id=snapshot_id,
             data_source_config=data_source_config,
-            resume=resume_materialize,
+            resume_materialize=resume_materialize,
             isolate_partition_failures=isolate_partition_failures,
             preserve_invalid_rows=preserve_invalid_rows,
             value_dtype=value_dtype,
-            write_target=parquet_target,
-            defer_watermark=self._needs_clickhouse_write(target),
+            clickhouse_table=clickhouse_table,
+            ch_ensure_table=ch_ensure_table,
+            ch_host=ch_host,
+            ch_port=ch_port,
+            ch_database=ch_database,
+            ch_username=ch_username,
+            ch_password=ch_password,
+            ch_secure=ch_secure,
+            lineage_mode="incremental",
         )
-        if self._needs_clickhouse_write(target):
-            summary = self._dual_write_clickhouse(
-                materializer,
-                summary,
-                factor_id=fid,
-                result=output["result"],
-                ast_hash=ast_hash,
-                write_target=target,
-                data_snapshot_id=snapshot_id,
-                clickhouse_table=clickhouse_table,
-                preserve_invalid_rows=preserve_invalid_rows,
-                value_dtype=value_dtype,
-                write_metadata=write_metadata,
-                ensure_table=ch_ensure_table,
-                dq_check=dq_check,
-                dq_strict=dq_strict,
-                dq_thresholds=dq_thresholds,
-                ch_host=ch_host,
-                ch_port=ch_port,
-                ch_database=ch_database,
-                ch_username=ch_username,
-                ch_password=ch_password,
-                ch_secure=ch_secure,
-            )
-        output["materialization"] = {
-            **summary,
-            "lake_root": str(materializer.lake_root),
-            "incremental": output.get("incremental"),
-        }
+        output["materialization"]["incremental"] = output.get("incremental")
         return output

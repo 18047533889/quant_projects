@@ -34,12 +34,12 @@ def test_polars_coverage_threshold():
 def test_sql_coverage_threshold():
     canon = [c for c in OperatorRegistry.list_canonical() if OperatorRegistry.backends_for(c)]
     sql_n = sum(1 for c in canon if "sql" in OperatorRegistry.backends_for(c))
-    assert sql_n >= 60, f"sql 覆盖 {sql_n} 低于企业门禁 60"
+    assert sql_n >= 95, f"sql 覆盖 {sql_n} 低于企业门禁 95"
 
 
 def test_sql_registry_synced_with_emitter_whitelist():
     assert "ts_ema" in SQL_CAPABLE_CANONICALS
-    for name in ("ts_mean", "group_winsorize", "ts_beta", "group_decay_linear"):
+    for name in ("ts_mean", "group_winsorize", "ts_beta", "group_decay_linear", "ts_cov", "power", "WMA", "ts_argmax"):
         assert name in SQL_CAPABLE_CANONICALS
 
 
@@ -164,3 +164,10 @@ def test_examples_yaml_no_legacy_data_source_types():
         if bad:
             violations.append(f"{path.relative_to(root)}: {sorted(bad)}")
     assert not violations, violations
+
+
+def test_storage_write_targets_public_api():
+    from storage import ClickHouseWriteTarget, resolve_write_target
+
+    assert resolve_write_target("local").name == "local"
+    assert isinstance(resolve_write_target("clickhouse"), ClickHouseWriteTarget)

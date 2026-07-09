@@ -4,7 +4,7 @@ data_access.engine —— DuckDB 连接与 PRAGMA 管理
 职责：
     1. 进程内单例 DuckDB 实例（in-memory）
     2. 启动时设置性能相关 PRAGMA（threads / memory_limit / object_cache）
-    3. 暴露线程安全的查询接口 execute_arrow / execute_df
+    3. 暴露线程安全的查询接口 execute_arrow / execute_df / explain
 
 设计要点（重要，PR 里还会反复提）：
     1. 一个进程一个 duckdb.connect(":memory:")，避免多实例各自 footer 缓存
@@ -19,23 +19,23 @@ data_access.engine —— DuckDB 连接与 PRAGMA 管理
     不负责 SQL 组装（store.py）、不负责 predicate 编译（predicate.py）、
     不负责读 YAML（registry.py）。
 
-维护人：quant 基础平台组    最后更新：2026-04-19
+维护人：quant 基础平台组    最后更新：2026-07-09
 """
 
 from __future__ import annotations
 
 import logging
-import os
 import threading
 import time
-from typing import Any, Sequence
+from typing import Any, Iterator, Sequence
 
 import duckdb
 import pyarrow as pa
 
+from .duckdb_config import DuckDBConfig, apply_pragmas, resolve_duckdb_config
 from .exceptions import EngineError
 from .retry import retry_io
-from .telemetry import record_query
+from .telemetry import maybe_log_slow_query_plan, record_query
 
 
 logger = logging.getLogger("data_access.engine")
@@ -54,8 +54,8 @@ class DuckDBEngine:
         buffer pool 的收益 >> cursor 带来的额外开销。
 
     WHY 保留 `_write_lock`：
-        虽然 PR1 还没写路径，但 DuckDB 某些操作（CREATE VIEW、PRAGMA）
-        要避免并发写 catalog；提前把锁备好，上 PR2 的 publish 不用大改。
+        DuckDB 某些操作（CREATE VIEW、PRAGMA）要避免并发写 catalog；
+        sql_escape 只在 register/drop TEMP VIEW 时持锁，查询本身用 cursor 并行。
     """
 
     def __init__(
@@ -64,33 +64,50 @@ class DuckDBEngine:
         threads: int | None = None,
         memory_limit: str | None = None,
         enable_object_cache: bool = True,
+        config: DuckDBConfig | None = None,
     ) -> None:
+        self._config = config or resolve_duckdb_config(
+            threads=threads,
+            memory_limit=memory_limit,
+            enable_object_cache=enable_object_cache,
+        )
         self._conn = duckdb.connect(":memory:")
         self._write_lock = threading.Lock()
 
-        # 默认用所有可用 CPU；用户想限可以 export DUCKDB_THREADS
-        effective_threads = (
-            threads
-            if threads is not None
-            else int(os.environ.get("DUCKDB_THREADS", os.cpu_count() or 4))
-        )
-        effective_mem = memory_limit or os.environ.get("DUCKDB_MEMORY_LIMIT")
-
         with self._write_lock:
-            self._conn.execute(f"PRAGMA threads={effective_threads}")
-            if effective_mem:
-                # DuckDB 的 memory_limit 接受 '8GB' '2GB' 这种单位
-                self._conn.execute(f"PRAGMA memory_limit='{effective_mem}'")
-            if enable_object_cache:
-                self._conn.execute("PRAGMA enable_object_cache=true")
-            # 聚合查询默认不保留插入顺序，小幅提速；显式 ORDER BY 的不受影响
-            self._conn.execute("PRAGMA preserve_insertion_order=false")
+            apply_pragmas(self._conn, self._config)
 
         logger.info(
-            "DuckDB 初始化完成: threads=%d memory_limit=%s object_cache=%s version=%s",
-            effective_threads, effective_mem or "(default)", enable_object_cache,
+            "DuckDB 初始化完成: threads=%d memory_limit=%s object_cache=%s "
+            "temp_directory=%s version=%s",
+            self._config.threads,
+            self._config.memory_limit or "(default)",
+            self._config.enable_object_cache,
+            self._config.temp_directory or "(default)",
             duckdb.__version__,
         )
+
+    @property
+    def config(self) -> DuckDBConfig:
+        return self._config
+
+    # ---- catalog 写（短锁） ----
+
+    def register_temp_views(self, views: Sequence[tuple[str, str]]) -> None:
+        """注册 TEMP VIEW；views = [(view_name, inlined_sql), ...]。"""
+        with self._write_lock:
+            for view_name, inlined_sql in views:
+                self._conn.execute(f"DROP VIEW IF EXISTS {view_name}")
+                self._conn.execute(f"CREATE TEMP VIEW {view_name} AS {inlined_sql}")
+
+    def drop_temp_views(self, view_names: Sequence[str]) -> None:
+        """删除 TEMP VIEW；失败只记日志。"""
+        with self._write_lock:
+            for view_name in view_names:
+                try:
+                    self._conn.execute(f"DROP VIEW IF EXISTS {view_name}")
+                except duckdb.Error as exc:
+                    logger.warning("清理 TEMP VIEW %s 失败：%s", view_name, exc)
 
     # ---- 查询接口 ----
 
@@ -127,26 +144,63 @@ class DuckDBEngine:
             return result.to_arrow_reader(batch_size)
         return result.fetch_record_batch(batch_size)
 
-    def execute_arrow(self, sql: str, params: Sequence[Any] | None = None) -> pa.Table:
-        """执行 SQL，返回 Arrow Table（零拷贝路径，性能最优）。
-
-        每次调用开一个 cursor，线程间不共享执行状态；查询本身并行由 DuckDB
-        的 PRAGMA threads 控制。
-
-        PR6 起：执行完（含失败）把耗时送 `telemetry.record_query`，
-        便于慢查询告警和 per-operator 配额观测。telemetry 内部吞异常，
-        不会影响主路径。
-        """
-        start = time.perf_counter()
+    def explain(self, sql: str, params: Sequence[Any] | None = None) -> str:
+        """返回 EXPLAIN 计划文本（诊断用，默认不在热路径调用）。"""
+        cursor = self._conn.cursor()
         try:
-            return self._execute_arrow_core(sql, params)
+            if params is not None:
+                rows = cursor.execute(f"EXPLAIN {sql}", list(params)).fetchall()
+            else:
+                rows = cursor.execute(f"EXPLAIN {sql}").fetchall()
         except duckdb.Error as exc:
-            # 把 DuckDB 内部错包成我们的错误类型，上游好 except
+            raise EngineError(f"DuckDB EXPLAIN 失败: {exc}\nSQL: {sql[:500]}") from exc
+        finally:
+            cursor.close()
+        if not rows:
+            return ""
+        if len(rows) == 1 and len(rows[0]) == 1:
+            return str(rows[0][0])
+        return "\n".join(str(row[0]) if len(row) == 1 else str(row) for row in rows)
+
+    def profile_analyze(self, sql: str, params: Sequence[Any] | None = None) -> str:
+        """返回 EXPLAIN ANALYZE 文本（慢查询诊断，成本高于 EXPLAIN）。"""
+        cursor = self._conn.cursor()
+        try:
+            if params is not None:
+                rows = cursor.execute(f"EXPLAIN ANALYZE {sql}", list(params)).fetchall()
+            else:
+                rows = cursor.execute(f"EXPLAIN ANALYZE {sql}").fetchall()
+        except duckdb.Error as exc:
+            raise EngineError(
+                f"DuckDB EXPLAIN ANALYZE 失败: {exc}\nSQL: {sql[:500]}"
+            ) from exc
+        finally:
+            cursor.close()
+        if not rows:
+            return ""
+        if len(rows) == 1 and len(rows[0]) == 1:
+            return str(rows[0][0])
+        return "\n".join(str(row[0]) if len(row) == 1 else str(row) for row in rows)
+
+    def execute_arrow(self, sql: str, params: Sequence[Any] | None = None) -> pa.Table:
+        """执行 SQL，返回 Arrow Table（零拷贝路径，性能最优）。"""
+        start = time.perf_counter()
+        elapsed_ms = 0.0
+        try:
+            table = self._execute_arrow_core(sql, params)
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            return table
+        except duckdb.Error as exc:
             raise EngineError(f"DuckDB 查询失败: {exc}\nSQL: {sql[:500]}") from exc
         finally:
-            record_query(
-                elapsed_ms=(time.perf_counter() - start) * 1000.0,
+            if not elapsed_ms:
+                elapsed_ms = (time.perf_counter() - start) * 1000.0
+            record_query(elapsed_ms=elapsed_ms, sql=sql, op="arrow")
+            maybe_log_slow_query_plan(
+                self,
+                elapsed_ms=elapsed_ms,
                 sql=sql,
+                params=params,
                 op="arrow",
             )
 
@@ -157,24 +211,7 @@ class DuckDBEngine:
         *,
         batch_size: int = 100_000,
     ) -> pa.RecordBatchReader:
-        """执行 SQL，返回 Arrow RecordBatchReader（真正流式，按 batch 拉）。
-
-        PR7 起引入：大表扫描 / 离线 ETL 用这个代替 execute_arrow，峰值内存
-        只占一个 batch；配合 for-loop 处理完一个 batch 就可以丢。
-
-        参数：
-            batch_size: 每个 RecordBatch 的目标行数；默认 100k（经验上对
-                DuckDB 的 morsel 大小友好，小 batch 会损失向量化收益）。
-
-        注意：返回的 reader 底层持有 cursor 句柄；迭代完（或 reader.close()）
-        才会释放。不要拿 reader 存起来长期 hold——其他线程的 cursor 不受影响，
-        但进程内 open cursor 太多会让 DuckDB 花更多时间维护状态。
-
-        遥测仍然记录，但 elapsed_ms 只包含「拿到 reader 的时间」——batch
-        的实际消费时间由调用方控制，record_query 没法精确感知。
-        这是个 trade-off：下推到 reader 的 __iter__ 里会把正常 API 性能
-        拖慢几个百分点，收益和复杂度不匹配。
-        """
+        """执行 SQL，返回 Arrow RecordBatchReader（真正流式，按 batch 拉）。"""
         start = time.perf_counter()
         try:
             return self._execute_reader_core(sql, params, batch_size=batch_size)
@@ -187,23 +224,111 @@ class DuckDBEngine:
                 op="reader",
             )
 
-    def execute_df(self, sql: str, params: Sequence[Any] | None = None):
-        """执行 SQL 并返回 pandas DataFrame。
+    def execute_isolated_arrow(
+        self,
+        sql: str,
+        params: Sequence[Any] | None = None,
+    ) -> pa.Table:
+        """独立 :memory: 连接执行（ad-hoc SQL，不污染共享 catalog）。"""
+        conn = duckdb.connect(":memory:")
+        try:
+            apply_pragmas(conn, self._config)
+            if params is not None:
+                result = conn.execute(sql, list(params))
+            else:
+                result = conn.execute(sql)
+            return (
+                result.to_arrow_table()
+                if hasattr(result, "to_arrow_table")
+                else result.fetch_arrow_table()
+            )
+        except duckdb.Error as exc:
+            raise EngineError(
+                f"DuckDB isolated 查询失败: {exc}\nSQL: {sql[:500]}"
+            ) from exc
+        finally:
+            conn.close()
 
-        内部走 Arrow → to_pandas 路径，而不是 DuckDB 的 .df()，因为 Arrow 这条
-        path 在大表上快且省内存。
-        """
+    def execute_scoped_sql_arrow(
+        self,
+        register_specs: Sequence[tuple[str, str]],
+        sql: str,
+        params: Sequence[Any] | None = None,
+    ) -> pa.Table:
+        """独立连接注册 TEMP VIEW 后执行 SQL（sql_escape 专用，支持并发 sql）。"""
+        start = time.perf_counter()
+        conn = duckdb.connect(":memory:")
+        try:
+            apply_pragmas(conn, self._config)
+            for view_name, inlined_sql in register_specs:
+                conn.execute(f"CREATE TEMP VIEW {view_name} AS {inlined_sql}")
+            if params is not None:
+                result = conn.execute(sql, list(params))
+            else:
+                result = conn.execute(sql)
+            table = (
+                result.to_arrow_table()
+                if hasattr(result, "to_arrow_table")
+                else result.fetch_arrow_table()
+            )
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            record_query(elapsed_ms=elapsed_ms, sql=sql, op="scoped_sql")
+            maybe_log_slow_query_plan(
+                self,
+                elapsed_ms=elapsed_ms,
+                sql=sql,
+                params=params,
+                op="scoped_sql",
+            )
+            return table
+        except duckdb.Error as exc:
+            raise EngineError(f"DuckDB scoped sql 失败: {exc}\nSQL: {sql[:500]}") from exc
+        finally:
+            conn.close()
+
+    def execute_scoped_sql_stream(
+        self,
+        register_specs: Sequence[tuple[str, str]],
+        sql: str,
+        params: Sequence[Any] | None = None,
+        *,
+        batch_size: int = 100_000,
+    ) -> tuple[Any, Iterator[pa.RecordBatch]]:
+        """独立连接流式 scoped sql；返回 (conn, batch_iter)，迭代完须 close conn。"""
+        conn = duckdb.connect(":memory:")
+        try:
+            apply_pragmas(conn, self._config)
+            for view_name, inlined_sql in register_specs:
+                conn.execute(f"CREATE TEMP VIEW {view_name} AS {inlined_sql}")
+            if params is not None:
+                rel = conn.execute(sql, list(params))
+            else:
+                rel = conn.execute(sql)
+            if hasattr(rel, "to_arrow_reader"):
+                reader = rel.to_arrow_reader(batch_size)
+            else:
+                reader = rel.fetch_record_batch(batch_size)
+
+            def _iter() -> Iterator[pa.RecordBatch]:
+                try:
+                    yield from reader
+                finally:
+                    conn.close()
+
+            return conn, _iter()
+        except duckdb.Error as exc:
+            conn.close()
+            raise EngineError(
+                f"DuckDB scoped sql stream 失败: {exc}\nSQL: {sql[:500]}"
+            ) from exc
+
+    def execute_df(self, sql: str, params: Sequence[Any] | None = None):
+        """执行 SQL 并返回 pandas DataFrame。"""
         table = self.execute_arrow(sql, params)
-        # self_destruct=True：转完之后立刻释放 Arrow 底层 buffer，减一半内存峰值
         return table.to_pandas(self_destruct=True, split_blocks=True)
 
     def register_view(self, view_name: str, sql: str) -> None:
-        """注册一个 VIEW。用在静态数据集启动时登记。
-
-        WHY：注册成 VIEW 后业务代码 SELECT 可直接 FROM <view_name>，
-             SQL 更干净，DuckDB 也能把元数据扫描摊销到一次。
-        """
-        # 列名/视图名已被 registry 清洗过，这里不重复清洗
+        """注册一个 VIEW。用在静态数据集启动时登记。"""
         with self._write_lock:
             self._conn.execute(f"CREATE OR REPLACE VIEW {view_name} AS {sql}")
 
@@ -216,10 +341,7 @@ class DuckDBEngine:
 
 
 # ---- 进程共享单例 -----------------------------------------------------------
-# WHY：store 和 factor_engine 的 ParquetSource 都需要跑 DuckDB 查询；
-#      用同一个 DuckDBEngine 实例可以共享 buffer pool / object_cache，
-#      显著提升连续读同一批 parquet 的速度。
-# 不和 store._store 合并到一个单例：engine 本身不依赖 registry，可以更早初始化。
+
 _shared_engine: DuckDBEngine | None = None
 _shared_lock = threading.Lock()
 

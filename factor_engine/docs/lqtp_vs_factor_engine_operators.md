@@ -21,8 +21,8 @@
 | 截面 | cs_demean | ✓ | ✓ |  |
 | 截面 | scale | ✓ | ✓ |  |
 | 截面 | winsorize | ✓ | ✓ |  |
-| 截面 | cs_resid | ✓ | — |  |
-| 截面 | cs_regression(y,x[,mode]) | ✓ | — |  |
+| 截面 | cs_resid | ✓ | ✓ SQL |  |
+| 截面 | cs_regression(y,x[,mode]) | ✓ | ✓ SQL | mode 0/1/2 |
 | 标量 | abs | ✓ | ✓ |  |
 | 标量 | log | ✓ | ✓ |  |
 | 标量 | sqrt | ✓ | ✓ |  |

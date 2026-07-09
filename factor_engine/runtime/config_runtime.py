@@ -40,6 +40,19 @@ class ResolvedRunKwargs:
     pit_enforce: bool
     pit_forbid_forward_fill: bool
 
+    def to_run_kwargs(self) -> dict[str, Any]:
+        """``FactorEngine.run`` / ``run_many`` 参数字典。"""
+        return {
+            "auto_warmup": self.auto_warmup,
+            "trim_warmup": self.trim_warmup,
+            "market": self.market,
+            "input_dq_check": self.input_dq_check,
+            "input_dq_strict": self.input_dq_strict,
+            "input_dq_thresholds": self.input_dq_thresholds,
+            "pit_enforce": self.pit_enforce,
+            "pit_forbid_forward_fill": self.pit_forbid_forward_fill,
+        }
+
 
 @dataclass(frozen=True)
 class ResolvedMaterializeKwargs:
@@ -74,14 +87,233 @@ class ResolvedMaterializeKwargs:
     clickhouse_secure: bool | None
     ch_ensure_table: bool
     resume_materialize: bool
+    staging_dataset: str
+    storage_format: str
+    partition_columns: tuple[str, ...] | None
     since: str | None
     end_date: str | None
     lookback_extra: int
     recompute_tail_bars: int | None
 
+    def to_engine_materialize_kwargs(self) -> dict[str, Any]:
+        """``FactorEngine.materialize(**kwargs)`` 参数字典。"""
+        return {
+            "lake_root": self.lake_root,
+            "factor_id": self.factor_id,
+            "author": self.author,
+            "frequency": self.frequency,
+            "description": self.description,
+            "expression": self.expression,
+            "auto_warmup": self.auto_warmup,
+            "trim_warmup": self.trim_warmup,
+            "market": self.market,
+            "dq_check": self.dq_check,
+            "dq_strict": self.dq_strict,
+            "dq_thresholds": self.dq_thresholds,
+            "input_dq_check": self.input_dq_check,
+            "input_dq_strict": self.input_dq_strict,
+            "input_dq_thresholds": self.input_dq_thresholds,
+            "preserve_invalid_rows": self.preserve_invalid_rows,
+            "value_dtype": self.value_dtype,
+            "write_target": self.write_target,
+            "data_source_config": self.data_source_config,
+            "pit_enforce": self.pit_enforce,
+            "pit_forbid_forward_fill": self.pit_forbid_forward_fill,
+            "resume_materialize": self.resume_materialize,
+            "isolate_partition_failures": self.isolate_partition_failures,
+            "clickhouse_table": self.clickhouse_table,
+            "ch_host": self.clickhouse_host,
+            "ch_port": self.clickhouse_port,
+            "ch_database": self.clickhouse_database,
+            "ch_username": self.clickhouse_username,
+            "ch_password": self.clickhouse_password,
+            "ch_secure": self.clickhouse_secure,
+            "ch_ensure_table": self.ch_ensure_table,
+            "staging_dataset": self.staging_dataset,
+            "storage_format": self.storage_format,
+            "partition_columns": list(self.partition_columns)
+            if self.partition_columns
+            else None,
+        }
+
+    def to_run_kwargs(self) -> dict[str, Any]:
+        """``FactorEngine.run`` / ``run_many`` 共用 run 段参数字典。"""
+        return {
+            "auto_warmup": self.auto_warmup,
+            "trim_warmup": self.trim_warmup,
+            "market": self.market,
+            "input_dq_check": self.input_dq_check,
+            "input_dq_strict": self.input_dq_strict,
+            "input_dq_thresholds": self.input_dq_thresholds,
+            "pit_enforce": self.pit_enforce,
+            "pit_forbid_forward_fill": self.pit_forbid_forward_fill,
+        }
+
+    def to_incremental_materialize_kwargs(self) -> dict[str, Any]:
+        """``FactorEngine.materialize_incremental(**kwargs)`` 参数字典。"""
+        out = self.to_engine_materialize_kwargs()
+        out.update(
+            {
+                "since": self.since,
+                "end_date": self.end_date,
+                "lookback_extra": self.lookback_extra,
+                "recompute_tail_bars": self.recompute_tail_bars,
+            }
+        )
+        return out
+
+
+@dataclass(frozen=True)
+class PipelineConfigOverrides:
+    """pipeline / CLI 对 resolve_* 的统一覆盖（目录 batch 与 engine batch 共用）。"""
+
+    dq_check: bool = False
+    dq_strict: bool = True
+    input_dq_check: bool = False
+    input_dq_strict: bool = True
+    write_target: str | None = None
+    preserve_invalid_rows: bool | None = None
+    resume_materialize: bool = False
+    since: str | None = None
+    end_date: str | None = None
+    lookback_extra: int | None = None
+    recompute_tail_bars: int | None = None
+
+    def to_resolve_run_kwargs(self) -> dict[str, Any]:
+        return {
+            "cli_input_dq_check": True if self.input_dq_check else None,
+            "cli_input_dq_strict": self.input_dq_strict if self.input_dq_check else None,
+        }
+
+    def to_resolve_materialize_kwargs(self) -> dict[str, Any]:
+        out = self.to_resolve_run_kwargs()
+        out.update(
+            {
+                "cli_dq_check": True if self.dq_check else None,
+                "cli_dq_strict": self.dq_strict if self.dq_check else None,
+                "write_target_override": self.write_target,
+                "preserve_invalid_rows_override": self.preserve_invalid_rows,
+                "since_override": self.since,
+                "end_date_override": self.end_date,
+                "lookback_extra_override": self.lookback_extra,
+                "recompute_tail_bars_override": self.recompute_tail_bars,
+                "resume_materialize_override": self.resume_materialize or None,
+            }
+        )
+        return out
+
+
+def resolve_run_kwargs_for_pipeline(
+    config: FactorEngineConfig,
+    pipeline: PipelineConfigOverrides | None = None,
+) -> ResolvedRunKwargs:
+    extra = pipeline.to_resolve_run_kwargs() if pipeline is not None else {}
+    return resolve_run_kwargs(config, **extra)
+
+
+def resolve_materialize_kwargs_for_pipeline(
+    config: FactorEngineConfig,
+    pipeline: PipelineConfigOverrides | None = None,
+) -> ResolvedMaterializeKwargs:
+    extra = pipeline.to_resolve_materialize_kwargs() if pipeline is not None else {}
+    return resolve_materialize_kwargs(config, **extra)
+
+
+def _input_dq_thresholds_key(th: Any) -> tuple[Any, ...] | None:
+    if th is None:
+        return None
+    return (
+        th.min_rows,
+        th.min_non_null_ratio,
+        th.min_instruments,
+        th.max_inf_ratio,
+    )
+
+
+def _output_dq_thresholds_key(th: Any) -> tuple[Any, ...] | None:
+    if th is None:
+        return None
+    return (
+        th.min_coverage,
+        th.max_nan_ratio,
+        th.max_inf_ratio,
+        th.max_abs_value,
+        th.min_rows,
+        th.min_instruments_per_day,
+    )
+
 
 def build_data_source_config(config: FactorEngineConfig) -> dict[str, Any]:
     return {"type": config.data_source.type, **config.data_source.options}
+
+
+def config_data_scope_key(config: FactorEngineConfig) -> str:
+    """配置对应的数据源作用域键（run_many 分组用）。"""
+    from storage.data_scope import compute_data_scope
+    from storage.factory import build_data_source
+
+    ds = build_data_source(config.data_source)
+    return compute_data_scope(ds)
+
+
+def config_run_batch_key(
+    config: FactorEngineConfig,
+    *,
+    pipeline: PipelineConfigOverrides | None = None,
+) -> tuple[Any, ...]:
+    """同 data_scope 内 run_many 子分组键（可 hash）。"""
+    opts = resolve_run_kwargs_for_pipeline(config, pipeline)
+    return (
+        opts.auto_warmup,
+        opts.trim_warmup,
+        opts.market,
+        opts.input_dq_check,
+        opts.input_dq_strict,
+        _input_dq_thresholds_key(opts.input_dq_thresholds),
+        opts.pit_enforce,
+        opts.pit_forbid_forward_fill,
+    )
+
+
+def config_materialize_batch_key(
+    config: FactorEngineConfig,
+    *,
+    pipeline: PipelineConfigOverrides | None = None,
+) -> tuple[Any, ...]:
+    """同 data_scope 内物化 batch 键（不含 factor_id/author 等因子专属字段）。"""
+    opts = resolve_materialize_kwargs_for_pipeline(config, pipeline)
+    return (
+        opts.lake_root,
+        opts.write_target,
+        opts.staging_dataset,
+        opts.preserve_invalid_rows,
+        opts.value_dtype,
+        opts.dq_check,
+        opts.dq_strict,
+        _output_dq_thresholds_key(opts.dq_thresholds),
+        *config_run_batch_key(config, pipeline=pipeline),
+        opts.isolate_partition_failures,
+        opts.clickhouse_table,
+        opts.clickhouse_host,
+        opts.clickhouse_port,
+        opts.clickhouse_database,
+        opts.clickhouse_username,
+        opts.clickhouse_password,
+        opts.clickhouse_secure,
+        opts.ch_ensure_table,
+        opts.resume_materialize,
+        opts.storage_format,
+        opts.partition_columns,
+        opts.since,
+        opts.end_date,
+        opts.lookback_extra,
+        opts.recompute_tail_bars,
+    )
+
+
+def production_run_flags_equal(a: FactorEngineConfig, b: FactorEngineConfig) -> bool:
+    """两配置 production run 开关是否一致（同组 run_many 前提）。"""
+    return config_run_batch_key(a) == config_run_batch_key(b)
 
 
 def resolve_run_kwargs(
@@ -103,7 +335,12 @@ def resolve_run_kwargs(
         else config.dq.input_strict
     )
     return ResolvedRunKwargs(
-        auto_warmup=config.run.auto_warmup,
+        auto_warmup=_effective_bool(
+            config,
+            config_flag=config.run.auto_warmup,
+            cli_flag=None,
+            production_default=True,
+        ),
         trim_warmup=config.run.trim_warmup,
         market=config.run.calendar,
         input_dq_check=input_dq_check,
@@ -192,6 +429,9 @@ def resolve_materialize_kwargs(
             if resume_materialize_override is not None
             else bool(mat.resume_materialize) if mat else False
         ),
+        staging_dataset=str(mat.staging_dataset) if mat else "factor_lake_staging",
+        storage_format=str(mat.storage_format) if mat else "long",
+        partition_columns=mat.partition_columns if mat else None,
         since=since_override or (inc.since if inc else None),
         end_date=end_date_override or (inc.end_date if inc else None),
         lookback_extra=(

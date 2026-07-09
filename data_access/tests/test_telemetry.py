@@ -113,3 +113,25 @@ def test_record_polars_scan_counts(monkeypatch):
     snapshot = get_counters_snapshot()["test_operator"]
     assert snapshot.total_queries == 1
     assert snapshot.total_elapsed_ms == pytest.approx(12.5)
+
+
+def test_slow_query_explain_when_enabled(monkeypatch, caplog):
+    from data_access.engine import DuckDBEngine
+    from data_access.telemetry import maybe_log_slow_query_plan
+
+    monkeypatch.setenv("QUANT_EXPLAIN_SLOW_QUERY", "1")
+    monkeypatch.setenv("QUANT_EXPLAIN_QUERY_MS", "50")
+    monkeypatch.setenv("QUANT_OPERATOR", "test_operator")
+    caplog.set_level(logging.WARNING, logger="data_access.telemetry")
+    engine = DuckDBEngine(threads=2)
+    try:
+        maybe_log_slow_query_plan(
+            engine,
+            elapsed_ms=100.0,
+            sql="SELECT 1 AS x",
+            params=None,
+            op="arrow",
+        )
+    finally:
+        engine.close()
+    assert any("慢查询 EXPLAIN" in r.getMessage() for r in caplog.records)

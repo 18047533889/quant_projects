@@ -5,8 +5,8 @@
 ### 协作者速览（约 5 分钟）
 
 1. **本目录在干什么**：**按数据集分类的 YAML 模板**（日 K、分钟、基本面多表等），与根 **`README`「数据集列表」** 对齐。
-2. **怎么用**：复制一份 → 改 **`data_source.root`** 与列映射 → 改 **`factor.expr`**（DSL 白名单）→ **`FactorEngine.run_from_config('路径')`**。
-3. **字段含义**：见 **`docs/massive_parquet_data_dictionary.md`**；**`type`** 以外键全部进 **`options`**（见 **`storage/factory.py`**）。
+2. **怎么用**：复制一份 → 改 **`data_source`** 与列映射 → 改 **`factor.expr`** → 单文件 **`run_from_config`** 或批量 **`run_many_from_config` / `materialize_many_from_config`**（见根 [`README.md`](../../README.md)「企业级批量配置」）。
+3. **生产 profile**：YAML 顶行 `profile: prod` 或见 [`examples/profiles/prod.yaml`](../profiles/prod.yaml)。
 
 ---
 
@@ -15,8 +15,10 @@
 1. 复制一份 YAML 到任意路径。  
 2. 修改 **`data_source.root`**（及 `instrument_column`、`timestamp_column`、`fields` 等）指向本地 parquet。路径支持 **`~`** 与 **`QUANT_PROJECTS_ROOT`** 环境变量；默认约定 **`~/quant_projects/data/...`**（各组员 home 不同，monorepo 目录名相同）。  
 3. 修改 **`factor.expr`** 为合法 DSL（函数名在 [`docs/dsl_operators_reference.md`](../../docs/dsl_operators_reference.md) 白名单内）。  
-4. 在仓库根执行：  
+4. 单文件运行：  
    `PYTHONPATH=. python -c "from runtime.engine import FactorEngine; print(FactorEngine.run_from_config('你的.yaml'))"`
+5. 多文件批量（同数据源推荐）：  
+   `FactorEngine.run_many_from_config(['a.yaml','b.yaml'])` 或 `FactorEngine.materialize_many_from_config(..., batch_run=True)`
 
 ---
 
@@ -24,6 +26,8 @@
 
 | YAML 文件 | 典型 `data_source.type` | 内容说明 |
 |-----------|-------------------------|----------|
+| `data_access_auto_smoke.yaml` | `data_access` | **推荐**：`backend: auto`（DuckDB 读 + hybrid 算） |
+| `data_access_duckdb_sql_smoke.yaml` | `data_access` | DuckDB SQL 下推 smoke |
 | `us_stocks_sip_day_aggs_v1.yaml` | `data_access` | 日 K 线（``us_stocks_sip_day_aggs``） |
 | `day_aggs_v1_price_volume/*.yaml` | `data_access` | SIP 日 K 量价因子 |
 | `day_aggs_v1_fundamental/*.yaml` | `composite` + `data_access` | SIP 日 K + 基本面 asof（balance_sheet / cash_flow / ratios 等） |
@@ -39,6 +43,7 @@
 | `us_polygon_floats` | Polygon 日线 + 流通股 |
 
 完整 JSON：[`docs/mining_data_source_presets.json`](../docs/mining_data_source_presets.json)
+
 | `fundamentals_*.yaml`（6 个） | `data_access` | cleaned massive 基本面 |
 | `us_stocks_sip_minute_aggs_v1.yaml` | `data_access` | SIP 分钟 K（``us_stocks_sip_minute_aggs``） |
 | `fundamentals_stocks_floats.yaml` | `data_access` | 流通股（``stocks_floats``） |

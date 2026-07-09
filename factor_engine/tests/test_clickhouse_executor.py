@@ -71,7 +71,7 @@ def test_execute_clickhouse_delegates_to_execute_query():
 
     with patch("data_access.clickhouse_panel.ClickHouseConfig.from_env", return_value=mock_cfg):
         with patch("data_access.clickhouse_panel.execute_query", return_value=table) as mock_eq:
-            series = execute_compiled_sql(compiled, pctx)
+            series = execute_compiled_sql(compiled, pctx, None)
 
     mock_eq.assert_called_once()
     assert len(series) == 2

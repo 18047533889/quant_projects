@@ -112,3 +112,38 @@ def test_composite_source_supports_exact_alignment():
 
     assert pd.isna(pe.loc[(pd.Timestamp("2024-01-02"), "AAA")])
     assert pe.loc[(pd.Timestamp("2024-01-03"), "AAA")] == pytest.approx(3.0)
+
+
+def test_composite_collect_join_reports():
+    price = CountingSeriesSource(
+        {
+            "close": _build_series(
+                [
+                    ("2024-01-02", "AAA", 10.0),
+                    ("2024-01-03", "AAA", 12.0),
+                ]
+            )
+        }
+    )
+    fundamental = CountingSeriesSource(
+        {
+            "price_to_earnings": _build_series(
+                [
+                    ("2024-01-01", "AAA", 2.0),
+                    ("2024-01-03", "AAA", 3.0),
+                ]
+            )
+        }
+    )
+    source = CompositeDataSource(
+        anchor_source="price",
+        anchor_column="close",
+        sources={"price": price, "fundamental": fundamental},
+        joins={"fundamental": "asof_backward"},
+    )
+    source.load_column("fundamental.price_to_earnings")
+    reports = source.collect_join_reports()
+    assert len(reports) == 1
+    assert reports[0]["source"] == "fundamental"
+    assert reports[0]["matched_rows"] == 2
+    assert reports[0]["method"] == "asof_backward"

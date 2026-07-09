@@ -7,8 +7,9 @@
 1. **挖掘 / 投递**：[`miner_delivery_spec.md`](miner_delivery_spec.md) → [`算子与导入教程.md`](算子与导入教程.md) → [`dsl_operators_reference.md`](dsl_operators_reference.md)
 2. **算子语义**：[`operators_semantics.md`](operators_semantics.md)
 3. **字段命名**：[`canonical_data_fields.md`](canonical_data_fields.md)
-4. **版本沿革**：[`changelog_shw.md`](changelog_shw.md)（第 1–30 版为历史架构描述）
-5. **源码导读**：各包 [`README.md`](../README.md)（见下表）
+4. **版本沿革**：[`changelog_shw.md`](changelog_shw.md)（第 33–35 版：企业级 P0–P2 / 写目标 / 批量 config）
+5. **企业级 CI 文档门禁**：`scripts/check_enterprise_docs.py`（roadmap Phase 标记 + LLM prompt sync）
+6. **源码导读**：各包 [`README.md`](../README.md)（见下表）
 
 ---
 
@@ -24,7 +25,8 @@
 | [`../api/mining_integration.py`](../api/mining_integration.py) | 投递校验 API、默认 data_source |
 | [`../data_access/config/datasets.yaml`](../../data_access/config/datasets.yaml) | 登记数据集 schema（读端契约） |
 | [`mining_data_source_presets.json`](mining_data_source_presets.json) | mining preset 机器可读快照 |
-| [`enterprise_factor_engine_roadmap.md`](enterprise_factor_engine_roadmap.md) | 企业级路线图与验收表 |
+| [`enterprise_factor_engine_roadmap.md`](enterprise_factor_engine_roadmap.md) | 企业级路线图 Phase 14–16 与验收表 |
+| [`sql_pushdown_coverage.md`](sql_pushdown_coverage.md) | SQL 下推 canonical 清单（CI 自动生成） |
 
 ---
 

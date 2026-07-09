@@ -41,6 +41,15 @@ from . import audit
 from .adapters import arrow_table_to_multiindex_columns
 from .engine import DuckDBEngine, get_shared_engine, reset_shared_engine
 from .exceptions import DataError, ValidationError
+from .query_budget import (
+    QueryBudget,
+    enforce_arrow_budget,
+    enforce_stream_budget,
+    merge_dataset_policies,
+    merge_dataset_policy,
+    resolve_query_budget,
+    validate_query_request,
+)
 from .namespace import is_namespace_explicit, resolve_namespace
 from .paths import PathAuthorizer
 from .predicate import Predicate, compile_predicate
@@ -98,6 +107,23 @@ class DataAccessStore:
         # 如果未来出现 per-params schema 漂移的极端场景，再细化缓存 key。
         self._schema_checked: set[str] = set()
 
+    def _resolve_read_budget(
+        self,
+        ds: Dataset,
+        query_budget: QueryBudget | None,
+    ) -> QueryBudget:
+        base = resolve_query_budget(query_budget)
+        return merge_dataset_policy(base, ds.query_policy)
+
+    def _resolve_sql_budget(
+        self,
+        read_datasets: Sequence[str],
+        query_budget: QueryBudget | None,
+    ) -> QueryBudget:
+        base = resolve_query_budget(query_budget)
+        policies = [self._registry.get(name).query_policy for name in read_datasets]
+        return merge_dataset_policies(base, policies)
+
     # ---- 对外主 API ----
 
     def read_arrow(
@@ -107,6 +133,8 @@ class DataAccessStore:
         columns: Sequence[str] | None = None,
         time_range: tuple[Any, Any] | None = None,
         instrument_filter: Sequence[str] | None = None,
+        limit: int | None = None,
+        query_budget: QueryBudget | None = None,
         **params: Any,
     ) -> pa.Table:
         """读取已注册数据集，返回 Arrow Table（零拷贝，推荐路径）。
@@ -136,7 +164,16 @@ class DataAccessStore:
         """
         ds = self._registry.get(dataset)
         _assert_instrument_filter_supported(ds, instrument_filter)
-        paths = self._prepare_dataset_read(ds, time_range=time_range, params=params)
+        budget = self._resolve_read_budget(ds, query_budget)
+        validate_query_request(
+            budget, columns=list(columns) if columns else None, time_range=time_range
+        )
+        paths = self._prepare_dataset_read(
+            ds,
+            time_range=time_range,
+            params=params,
+            instrument_filter=instrument_filter,
+        )
         self._ensure_schema(ds, paths)
 
         sql, sql_params = self._build_select_sql(
@@ -145,16 +182,39 @@ class DataAccessStore:
             columns=columns,
             time_range=time_range,
             instrument_filter=instrument_filter,
+            limit=limit,
         )
 
         start = time.perf_counter()
-        table = self._engine.execute_arrow(sql, sql_params)
-        elapsed_ms = (time.perf_counter() - start) * 1000
-        logger.info(
-            "read_arrow dataset=%s rows=%d cols=%d elapsed_ms=%.1f",
-            dataset, table.num_rows, table.num_columns, elapsed_ms,
-        )
-        return table
+        ok = False
+        err_msg: str | None = None
+        table: pa.Table | None = None
+        try:
+            table = self._engine.execute_arrow(sql, sql_params)
+            elapsed_ms = (time.perf_counter() - start) * 1000
+            enforce_arrow_budget(budget, table, elapsed_ms=elapsed_ms)
+            ok = True
+            logger.info(
+                "read_arrow dataset=%s rows=%d cols=%d elapsed_ms=%.1f",
+                dataset, table.num_rows, table.num_columns, elapsed_ms,
+            )
+            return table
+        except Exception as exc:
+            err_msg = f"{type(exc).__name__}: {exc}"
+            raise
+        finally:
+            elapsed_ms = (time.perf_counter() - start) * 1000
+            audit.record(
+                op="read",
+                dataset=dataset,
+                ok=ok,
+                rows=table.num_rows if table is not None else None,
+                paths=paths[:5] if paths else None,
+                params=params or None,
+                elapsed_ms=elapsed_ms,
+                error=err_msg,
+                extra={"columns": list(columns) if columns else None},
+            )
 
     def read_arrow_stream(
         self,
@@ -163,7 +223,9 @@ class DataAccessStore:
         columns: Sequence[str] | None = None,
         time_range: tuple[Any, Any] | None = None,
         instrument_filter: Sequence[str] | None = None,
+        limit: int | None = None,
         batch_size: int = 100_000,
+        query_budget: QueryBudget | None = None,
         **params: Any,
     ) -> Iterator[pa.RecordBatch]:
         """流式读取（PR7）：返回一个 Arrow RecordBatch 生成器。
@@ -195,7 +257,16 @@ class DataAccessStore:
         """
         ds = self._registry.get(dataset)
         _assert_instrument_filter_supported(ds, instrument_filter)
-        paths = self._prepare_dataset_read(ds, time_range=time_range, params=params)
+        budget = self._resolve_read_budget(ds, query_budget)
+        validate_query_request(
+            budget, columns=list(columns) if columns else None, time_range=time_range
+        )
+        paths = self._prepare_dataset_read(
+            ds,
+            time_range=time_range,
+            params=params,
+            instrument_filter=instrument_filter,
+        )
         self._ensure_schema(ds, paths)
         sql, sql_params = self._build_select_sql(
             ds=ds,
@@ -203,15 +274,50 @@ class DataAccessStore:
             columns=columns,
             time_range=time_range,
             instrument_filter=instrument_filter,
+            limit=limit,
         )
         reader = self._engine.execute_reader(sql, sql_params, batch_size=batch_size)
+        start = time.perf_counter()
+        total_rows = 0
+        total_bytes = 0
+        ok = False
+        err_msg: str | None = None
+
+        def _iter_batches() -> Iterator[pa.RecordBatch]:
+            nonlocal total_rows, total_bytes, ok, err_msg
+            try:
+                for batch in reader:
+                    total_rows += batch.num_rows
+                    total_bytes += batch.nbytes
+                    enforce_stream_budget(
+                        budget,
+                        total_rows=total_rows,
+                        total_bytes=total_bytes,
+                        elapsed_ms=(time.perf_counter() - start) * 1000,
+                    )
+                    yield batch
+                ok = True
+            except Exception as exc:
+                err_msg = f"{type(exc).__name__}: {exc}"
+                raise
+            finally:
+                audit.record(
+                    op="read",
+                    dataset=dataset,
+                    ok=ok,
+                    rows=total_rows,
+                    paths=paths[:5] if paths else None,
+                    params=params or None,
+                    elapsed_ms=(time.perf_counter() - start) * 1000,
+                    error=err_msg,
+                    extra={"stream": True, "columns": list(columns) if columns else None},
+                )
+
         logger.info(
             "read_arrow_stream dataset=%s batch_size=%d params=%s",
             dataset, batch_size, params or "{}",
         )
-        # 包一层 iterator，便于调用方 `for batch in ...` 语义（reader 本身也可以迭代）
-        for batch in reader:
-            yield batch
+        return _iter_batches()
 
     def scan_polars(
         self,
@@ -220,6 +326,7 @@ class DataAccessStore:
         columns: Sequence[str] | None = None,
         time_range: tuple[Any, Any] | None = None,
         instrument_filter: Sequence[str] | None = None,
+        query_budget: QueryBudget | None = None,
         **params: Any,
     ) -> "pl.LazyFrame":
         """返回 Polars LazyFrame，惰性扫描已注册数据集（PR7）。
@@ -259,7 +366,16 @@ class DataAccessStore:
         scan_start = time.perf_counter()
         ds = self._registry.get(dataset)
         _assert_instrument_filter_supported(ds, instrument_filter)
-        paths = self._prepare_dataset_read(ds, time_range=time_range, params=params)
+        budget = self._resolve_read_budget(ds, query_budget)
+        validate_query_request(
+            budget, columns=list(columns) if columns else None, time_range=time_range
+        )
+        paths = self._prepare_dataset_read(
+            ds,
+            time_range=time_range,
+            params=params,
+            instrument_filter=instrument_filter,
+        )
         # scan_polars 也走 schema 自检：发现声明漂移尽早报。
         # Polars 自己读 parquet 不经 DuckDB，但 DESCRIBE 用共享 engine 跑，一次性
         # 开销 < 50ms（只读 footer），比跑完一次 collect 才炸便宜得多。
@@ -324,6 +440,15 @@ class DataAccessStore:
             elapsed_ms=(time.perf_counter() - scan_start) * 1000,
             paths_count=len(paths),
         )
+        audit.record(
+            op="read",
+            dataset=dataset,
+            ok=True,
+            paths=paths[:5] if paths else None,
+            params=params or None,
+            elapsed_ms=(time.perf_counter() - scan_start) * 1000,
+            extra={"scan_polars": True, "columns": list(columns) if columns else None},
+        )
         return lf
 
     def read_frame(
@@ -348,6 +473,110 @@ class DataAccessStore:
             **params,
         )
         return table.to_pandas(self_destruct=True, split_blocks=True)
+
+    def read_auto(
+        self,
+        dataset: str,
+        *,
+        columns: Sequence[str] | None = None,
+        time_range: tuple[Any, Any] | None = None,
+        instrument_filter: Sequence[str] | None = None,
+        limit: int | None = None,
+        query_budget: QueryBudget | None = None,
+        mode: str = "auto",
+        prefer_polars: bool = False,
+        batch_size: int = 100_000,
+        **params: Any,
+    ) -> pa.Table:
+        """按数据集规模自动路由 read_arrow / read_arrow_stream / scan_polars。
+
+        ``mode="auto"`` 时用 parquet footer 估算行数；``arrow`` / ``stream`` /
+        ``polars`` 可强制指定路径。最终统一 materialize 为 Arrow Table。
+        """
+        from .stats import dataset_read_stats, load_stats_sidecar
+
+        ds = self._registry.get(dataset)
+        budget = self._resolve_read_budget(ds, query_budget)
+        resolved_mode = str(mode or "auto").lower()
+        if resolved_mode == "auto":
+            sidecar = None
+            if isinstance(ds, StaticDataset):
+                sidecar = load_stats_sidecar(ds.root)
+            stats = dataset_read_stats(
+                self,
+                dataset,
+                columns=list(columns) if columns else None,
+                time_range=time_range,
+                prefer_polars=prefer_polars,
+                sidecar=sidecar,
+                **params,
+            )
+            resolved_mode = stats.suggested_mode
+            if (
+                budget.max_rows is not None
+                and stats.estimated_rows > budget.max_rows
+                and resolved_mode == "arrow"
+            ):
+                resolved_mode = "stream"
+            logger.info(
+                "read_auto dataset=%s mode=%s estimated_rows=%d files=%d budget_max_rows=%s",
+                dataset,
+                resolved_mode,
+                stats.estimated_rows,
+                stats.parquet_files,
+                budget.max_rows,
+            )
+        validate_query_request(
+            budget, columns=list(columns) if columns else None, time_range=time_range
+        )
+
+        read_kwargs = dict(
+            columns=columns,
+            time_range=time_range,
+            instrument_filter=instrument_filter,
+            query_budget=query_budget,
+            **params,
+        )
+        if resolved_mode == "polars":
+            lf = self.scan_polars(dataset, **read_kwargs)
+            table = lf.collect().to_arrow()
+            if limit is not None and table.num_rows > limit:
+                table = table.slice(0, limit)
+            return table
+        if resolved_mode == "stream":
+            batches = list(
+                self.read_arrow_stream(
+                    dataset,
+                    batch_size=batch_size,
+                    limit=limit,
+                    **read_kwargs,
+                )
+            )
+            if not batches:
+                return pa.table({})
+            return pa.Table.from_batches(batches)
+        return self.read_arrow(dataset, limit=limit, **read_kwargs)
+
+    def dataset_read_stats(
+        self,
+        dataset: str,
+        *,
+        columns: Sequence[str] | None = None,
+        time_range: tuple[Any, Any] | None = None,
+        prefer_polars: bool = False,
+        **params: Any,
+    ):
+        """返回 ``DatasetReadStats``（footer 行数估算 + 建议读路径）。"""
+        from .stats import dataset_read_stats as _dataset_read_stats
+
+        return _dataset_read_stats(
+            self,
+            dataset,
+            columns=list(columns) if columns else None,
+            time_range=time_range,
+            prefer_polars=prefer_polars,
+            **params,
+        )
 
     def load_columns(
         self,
@@ -624,6 +853,10 @@ class DataAccessStore:
         end: Any | None = None,
         after: Any | None = None,
         time_column: str | None = None,
+        dry_run: bool = False,
+        max_rows: int | None = None,
+        reason: str | None = None,
+        ticket_id: str | None = None,
         **params: Any,
     ) -> dict[str, Any]:
         """从 namespaced/staging 数据集删除时间范围内的行（行级补偿删除）。"""
@@ -645,6 +878,10 @@ class DataAccessStore:
             end=end,
             after=after,
             params=params,
+            dry_run=dry_run,
+            max_rows=max_rows,
+            reason=reason,
+            ticket_id=ticket_id,
         )
 
     def resolve_dataset_path(self, dataset: str, **params: Any) -> Path:
@@ -706,7 +943,9 @@ class DataAccessStore:
         *,
         read_datasets: Sequence[str],
         read_params: Mapping[str, Mapping[str, Any]] | None = None,
+        view_columns: Mapping[str, Sequence[str]] | None = None,
         params: Sequence[Any] | None = None,
+        query_budget: QueryBudget | None = None,
     ) -> pa.Table:
         """有限 SQL 逃生口：只允许 SELECT，FROM 的表必须是 read_datasets 里预声明的数据集。
 
@@ -739,6 +978,7 @@ class DataAccessStore:
         """
         from . import sql_escape
 
+        merged_budget = self._resolve_sql_budget(read_datasets, query_budget)
         return sql_escape.run_sql(
             registry=self._registry,
             authorizer=self._authorizer,
@@ -746,7 +986,39 @@ class DataAccessStore:
             query=query,
             read_datasets=read_datasets,
             read_params=read_params,
+            view_columns=view_columns,
             params=params,
+            query_budget=merged_budget,
+            build_select_sql=self._build_select_sql,
+            resolve_paths=self._resolve_paths,
+        )
+
+    def sql_stream(
+        self,
+        query: str,
+        *,
+        read_datasets: Sequence[str],
+        read_params: Mapping[str, Mapping[str, Any]] | None = None,
+        view_columns: Mapping[str, Sequence[str]] | None = None,
+        params: Sequence[Any] | None = None,
+        query_budget: QueryBudget | None = None,
+        batch_size: int = 100_000,
+    ) -> Iterator[pa.RecordBatch]:
+        """流式有限 SQL：与 ``sql()`` 相同约束，按 RecordBatch 返回。"""
+        from . import sql_escape
+
+        merged_budget = self._resolve_sql_budget(read_datasets, query_budget)
+        return sql_escape.run_sql_stream(
+            registry=self._registry,
+            authorizer=self._authorizer,
+            engine=self._engine,
+            query=query,
+            read_datasets=read_datasets,
+            read_params=read_params,
+            view_columns=view_columns,
+            params=params,
+            query_budget=merged_budget,
+            batch_size=batch_size,
             build_select_sql=self._build_select_sql,
             resolve_paths=self._resolve_paths,
         )
@@ -759,12 +1031,30 @@ class DataAccessStore:
         *,
         time_range: tuple[Any, Any] | None,
         params: dict[str, Any],
+        instrument_filter: Sequence[str] | None = None,
     ) -> list[str]:
         """COS 镜像 + 路径解析（read_arrow / stream / scan_polars 共用）。"""
         from .cos_mirror import ensure_local_mirror_for_dataset
 
         ensure_local_mirror_for_dataset(ds, time_range=time_range)
-        return self._resolve_paths(ds, params)
+        return self._resolve_paths(ds, params, instrument_filter=instrument_filter)
+
+    @staticmethod
+    def _bucket_hive_filters(
+        ds: Dataset,
+        instrument_filter: Sequence[str] | None,
+    ) -> dict[str, list[Any]] | None:
+        from .layout_policy import bucket_values_for_instruments
+
+        layout_policy = getattr(ds, "layout_policy", None)
+        buckets = bucket_values_for_instruments(
+            instrument_filter,
+            layout_policy,
+            partition_columns=getattr(ds, "partition_columns", ()),
+        )
+        if not buckets or layout_policy is None or layout_policy.bucket is None:
+            return None
+        return {layout_policy.bucket.column: buckets}
 
     def _ensure_schema(self, ds: Dataset, paths: list[str]) -> None:
         """首次访问 dataset 时做一次 schema 对齐校验（PR8）。
@@ -802,11 +1092,25 @@ class DataAccessStore:
         if mode == "warn":
             mark_validated(ds.name)
 
-    def _resolve_paths(self, ds: Dataset, params: dict[str, Any]) -> list[str]:
+    def _resolve_paths(
+        self,
+        ds: Dataset,
+        params: dict[str, Any],
+        *,
+        instrument_filter: Sequence[str] | None = None,
+    ) -> list[str]:
         """把 dataset + params 解析成传给 DuckDB 的 path glob 列表，并做白名单校验。"""
+        from .layout_policy import prune_glob_paths_for_buckets
+
         glob_paths = ds.resolve_paths(**params)
-        # 对每个 glob 的静态前缀部分做白名单校验；DuckDB 展开 glob 时
-        # 不会跑出这个前缀，所以等价于对展开后的所有文件校验。
+        hive_filters = self._bucket_hive_filters(ds, instrument_filter)
+        if hive_filters:
+            bucket_col = next(iter(hive_filters))
+            glob_paths = prune_glob_paths_for_buckets(
+                glob_paths,
+                bucket_col,
+                hive_filters[bucket_col],
+            )
         for g in glob_paths:
             static_part = g.split("*", 1)[0].rstrip("/")
             if static_part:
@@ -905,6 +1209,7 @@ class DataAccessStore:
         columns: Sequence[str] | None,
         time_range: tuple[Any, Any] | None,
         instrument_filter: Sequence[str] | None,
+        limit: int | None = None,
     ) -> tuple[str, list[Any]]:
         """组装 SELECT 语句。路径用 ? 参数绑定，列名/谓词用 registry 控制。"""
         if columns:
@@ -931,6 +1236,7 @@ class DataAccessStore:
         predicate = Predicate(
             time_range=time_range,
             instrument_filter=instrument_filter,
+            hive_filters=self._bucket_hive_filters(ds, instrument_filter),
         )
         compiled = compile_predicate(
             predicate,
@@ -939,6 +1245,8 @@ class DataAccessStore:
         )
 
         sql = f"SELECT {col_clause} FROM {from_clause} {compiled.where_sql}".strip()
+        if limit is not None:
+            sql = f"{sql} LIMIT {int(limit)}"
         params: list[Any] = [path_param, *compiled.params]
         return sql, params
 

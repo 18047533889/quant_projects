@@ -30,14 +30,14 @@ class Predicate:
     """结构化谓词。None 表示该维度不过滤。"""
     time_range: tuple[Any, Any] | None = None           # (start, end)，闭区间
     instrument_filter: Sequence[str] | None = None      # 标的白名单
-    # PR1 先不开放 extra atoms / partition_filter；等有真实需求再加
-    # 留字段占位是为了让上游调用方不用改签名
+    hive_filters: dict[str, Sequence[Any]] | None = None  # hive 分区列 IN 过滤
     extra: list[dict] | None = None
 
     def is_empty(self) -> bool:
         return (
             self.time_range is None
             and not self.instrument_filter
+            and not self.hive_filters
             and not self.extra
         )
 
@@ -89,6 +89,14 @@ def compile_predicate(
         # list 作为单个参数绑定到 IN ?
         clauses.append(f"{i_col} IN ?")
         params.append(list(predicate.instrument_filter))
+
+    if predicate.hive_filters:
+        for col_name in sorted(predicate.hive_filters.keys()):
+            values = list(predicate.hive_filters[col_name] or [])
+            if not values:
+                continue
+            clauses.append(f"{_quote_ident(col_name)} IN ?")
+            params.append(values)
 
     if predicate.extra:
         # 预留给后续扩展，PR1 不处理；有人传了就抛错提醒

@@ -144,7 +144,37 @@ def arrow_table_to_multiindex_columns(
     out: dict[str, Any] = {}
     for col in value_columns:
         target = output_names.get(col, col)
-        series = indexed[col]
+        series = _coerce_factor_value_series(indexed[col])
         series.name = target
         out[target] = series
     return out
+
+
+def _coerce_factor_value_series(series):
+    """SQL/Arrow 路径常见 Decimal→object；统一为 float64 以对齐 pandas 因子值。"""
+    import numpy as np
+    import pandas as pd
+    from decimal import Decimal
+
+    if pd.api.types.is_bool_dtype(series):
+        return series.astype("float64")
+
+    if pd.api.types.is_numeric_dtype(series):
+        if series.dtype != np.float64:
+            return series.astype("float64", copy=False)
+        return series
+
+    if series.dtype == object:
+        non_null = series.dropna()
+        if non_null.empty:
+            return series.astype("float64")
+        sample = non_null.head(64)
+        if all(isinstance(v, Decimal) for v in sample):
+            return series.map(
+                lambda v: float(v) if isinstance(v, Decimal) else v,
+                na_action="ignore",
+            ).astype("float64")
+        converted = pd.to_numeric(series, errors="coerce")
+        if converted.notna().sum() >= non_null.notna().sum():
+            return converted.astype("float64")
+    return series

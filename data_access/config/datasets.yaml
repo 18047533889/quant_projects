@@ -66,6 +66,15 @@ ashare_stock_minute:
   glob: "**/*.parquet"
   time_column: QuoteTime
   instrument_column: Symbol
+  # 读路径 bucket 剪枝（物理迁移至 year/month/bucket 后取消下行注释）
+  # partition_columns: [year, month, bucket]
+  layout_policy:
+    bucket:
+      column: bucket
+      count: 64
+  query_policy:
+    require_explicit_columns: true
+    max_rows: 20_000_000
   schema:
     TradeDate: date
     QuoteTime: timestamp
@@ -527,6 +536,8 @@ factor_lake:
   layout: hive
   root_template: ${FACTOR_LAKE_ROOT:-/home/shw/quant_projects/data/factors/lake}/factors/{factor_id}
   glob_template: "year=*/data.parquet"
+  partition_columns: [year]
+  storage_format: long
   params_schema:
     factor_id: str
   time_column: datetime
@@ -537,7 +548,49 @@ factor_lake:
     datetime: timestamp
     asset: string
     value: double
+    calc_time: string
+    factor_version: string
+    data_snapshot_id: string
+    is_valid: int
+    invalid_reason: string
     # year 是 hive 分区列，不在 parquet header 里，不声明
+
+factor_lake_wide:
+  kind: parametric
+  access_mode: published
+  layout: hive
+  root_template: ${FACTOR_LAKE_ROOT:-/home/shw/quant_projects/data/factors/lake}/factors/{factor_id}
+  glob_template: "year=*/panel.parquet"
+  partition_columns: [year]
+  storage_format: wide
+  params_schema:
+    factor_id: str
+  time_column: datetime
+  instrument_column: asset
+  hive_partitioning: true
+  union_by_name: true
+  schema: {}
+  # 宽表列随标的动态扩展，不做静态 schema 校验
+
+factor_matrix:
+  kind: parametric
+  access_mode: published
+  layout: hive
+  root_template: ${FACTOR_MATRIX_ROOT:-/home/shw/quant_projects/data/factors/matrix}/universe={universe}/freq={frequency}
+  glob_template: "year=*/month=*/data.parquet"
+  partition_columns: [year, month]
+  storage_format: long
+  params_schema:
+    universe: str
+    frequency: str
+  time_column: datetime
+  instrument_column: asset
+  hive_partitioning: true
+  union_by_name: true
+  schema:
+    datetime: timestamp
+    asset: string
+  # 宽矩阵：datetime + asset + factor_* 列，schema 随因子动态扩展
 
 
 # ---- 个人单标的回测结果（每人隔离） -----------------------------------------
@@ -571,12 +624,23 @@ factor_lake_staging:
   # 注意：write_arrow 用 pyarrow.dataset 写分区，生成 year=YYYY/part-xxxx-0.parquet
   # glob 用 *.parquet 兼容。PR3 迁移 materializer 时再看要不要统一成 data.parquet
   glob_template: "year=*/*.parquet"
+  partition_columns: [year]
+  storage_format: long
   params_schema:
     factor_id: str
   time_column: datetime
   instrument_column: asset
   hive_partitioning: true
   union_by_name: true
+  schema:
+    datetime: timestamp
+    asset: string
+    value: double
+    calc_time: string
+    factor_version: string
+    data_snapshot_id: string
+    is_valid: int
+    invalid_reason: string
 
 
 # ============================================================================
@@ -660,6 +724,9 @@ streaming_ticks_raw:
   instrument_column: symbol
   hive_partitioning: false
   union_by_name: true
+  query_policy:
+    require_explicit_columns: true
+    max_rows: 10_000_000
 
 
 # ---- massive ticks（raw_massive_data 里的历史逐笔） -------------------------
@@ -678,6 +745,9 @@ massive_ticks:
   instrument_column: ticker
   hive_partitioning: false
   union_by_name: true
+  query_policy:
+    require_explicit_columns: true
+    max_rows: 10_000_000
   schema:
     ticker: string
     sip_timestamp: int
@@ -810,6 +880,10 @@ us_stocks_sip_minute_aggs:
   glob: "**/*.parquet"
   time_column: window_start
   instrument_column: ticker
+  layout_policy:
+    bucket:
+      column: bucket
+      count: 64
   schema:
     ticker: string
     window_start: int

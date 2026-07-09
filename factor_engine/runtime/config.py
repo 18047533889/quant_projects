@@ -96,6 +96,9 @@ class MaterializationConfig:
     clickhouse_username: str | None = None
     clickhouse_password: str | None = None
     clickhouse_secure: bool | None = None
+    staging_dataset: str = "factor_lake_staging"
+    storage_format: str = "long"
+    partition_columns: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -108,6 +111,17 @@ class FactorEngineConfig:
     run: RunConfig = field(default_factory=RunConfig)
     dq: DQConfig = field(default_factory=DQConfig)
     pit: PITConfig = field(default_factory=PITConfig)
+
+
+def _parse_partition_columns(raw: Any) -> tuple[str, ...] | None:
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, (list, tuple)):
+        raise ValueError("materialization.partition_columns 必须是字符串列表")
+    cols = tuple(str(c) for c in raw if str(c))
+    return cols or None
 
 
 def _resolve_optional_path(value: Any, *, base_dir: Path) -> str | None:
@@ -186,7 +200,7 @@ def load_config(path: str | Path, *, profile: str | None = None) -> FactorEngine
         type=data_source_payload["type"],
         options={key: value for key, value in data_source_payload.items() if key != "type"},
     )
-    backend_config = BackendConfig(type=backend_payload.get("type", "pandas"))
+    backend_config = BackendConfig(type=backend_payload.get("type", "auto"))
     engine_config = EngineConfig(
         enable_cache=engine_payload.get("enable_cache", True),
         plan_cache_dir=_resolve_optional_path(engine_payload.get("plan_cache_dir"), base_dir=base_dir),
@@ -228,6 +242,13 @@ def load_config(path: str | Path, *, profile: str | None = None) -> FactorEngine
             clickhouse_username=materialization_payload.get("clickhouse_username"),
             clickhouse_password=materialization_payload.get("clickhouse_password"),
             clickhouse_secure=materialization_payload.get("clickhouse_secure"),
+            staging_dataset=str(
+                materialization_payload.get("staging_dataset", "factor_lake_staging")
+            ),
+            storage_format=str(materialization_payload.get("storage_format", "long")),
+            partition_columns=_parse_partition_columns(
+                materialization_payload.get("partition_columns")
+            ),
         )
 
     run_config = RunConfig(

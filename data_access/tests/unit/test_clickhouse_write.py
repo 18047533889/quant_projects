@@ -18,6 +18,7 @@ from data_access.clickhouse_write import (
     insert_factor_dataframe,
     insert_factor_series,
     load_parquet_to_panel_table,
+    verify_factor_write,
 )
 
 
@@ -349,3 +350,149 @@ def test_execute_select_rejects_mutation():
     cfg = ClickHouseConfig(host="localhost")
     with pytest.raises(Exception):
         execute_select(config=cfg, sql="INSERT INTO panel_daily VALUES (1)")
+
+
+def test_insert_factor_dataframe_preserves_invalid_reason():
+    cfg = ClickHouseConfig(host="localhost")
+    frame = pd.DataFrame(
+        {
+            "trade_date": [pd.Timestamp("2024-01-02").date(), pd.Timestamp("2024-01-03").date()],
+            "instrument": ["A", "B"],
+            "factor_id": ["f1", "f1"],
+            "value": [float("nan"), 2.0],
+            "factor_version": ["v1", "v1"],
+            "data_snapshot_id": ["snap", "snap"],
+            "is_valid": [0, 1],
+            "invalid_reason": ["inf_or_nan", ""],
+        }
+    )
+    mock_client = MagicMock()
+    mock_mod = MagicMock()
+    mock_mod.get_client.return_value = mock_client
+
+    with patch.dict(sys.modules, {"clickhouse_connect": mock_mod}):
+        rows = insert_factor_dataframe(
+            config=cfg,
+            table="factor_values",
+            frame=frame,
+            ensure_table=False,
+        )
+
+    assert rows == 2
+    inserted = mock_client.insert_df.call_args[0][1]
+    assert inserted["invalid_reason"].tolist() == ["inf_or_nan", ""]
+    assert int(inserted["is_valid"].iloc[0]) == 0
+    assert list(inserted.columns) == [
+        "trade_date",
+        "instrument",
+        "factor_id",
+        "value",
+        "calc_time",
+        "factor_version",
+        "data_snapshot_id",
+        "is_valid",
+        "invalid_reason",
+    ]
+
+
+def test_insert_factor_dataframe_ensure_table_calls_ddl():
+    cfg = ClickHouseConfig(host="localhost")
+    frame = pd.DataFrame(
+        {
+            "trade_date": [pd.Timestamp("2024-01-02").date()],
+            "instrument": ["A"],
+            "factor_id": ["f1"],
+            "value": [1.0],
+        }
+    )
+    mock_client = MagicMock()
+    mock_mod = MagicMock()
+    mock_mod.get_client.return_value = mock_client
+
+    with patch.dict(sys.modules, {"clickhouse_connect": mock_mod}):
+        insert_factor_dataframe(config=cfg, table="factor_values", frame=frame, ensure_table=True)
+
+    mock_client.command.assert_called_once()
+    mock_client.insert_df.assert_called_once()
+
+
+def test_insert_factor_series_includes_invalid_reason():
+    cfg = ClickHouseConfig(host="localhost")
+    idx = pd.MultiIndex.from_product(
+        [pd.date_range("2024-01-02", periods=2), ["A"]],
+        names=["ts", "inst"],
+    )
+    series = pd.Series([1.0, 2.0], index=idx, dtype=float)
+    mock_client = MagicMock()
+    mock_mod = MagicMock()
+    mock_mod.get_client.return_value = mock_client
+
+    with patch.dict(sys.modules, {"clickhouse_connect": mock_mod}):
+        insert_factor_series(
+            config=cfg,
+            table="factor_values",
+            factor_id="f1",
+            series=series,
+            ensure_table=False,
+        )
+
+    inserted = mock_client.insert_df.call_args[0][1]
+    assert "invalid_reason" in inserted.columns
+    assert inserted["invalid_reason"].iloc[0] == ""
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "DELETE FROM factor_values WHERE 1",
+        "UPDATE factor_values SET value = 0",
+        "DROP TABLE factor_values",
+        "ALTER TABLE factor_values ADD COLUMN x Float64",
+        "TRUNCATE TABLE factor_values",
+    ],
+)
+def test_execute_select_rejects_dml_variants(sql):
+    cfg = ClickHouseConfig(host="localhost")
+    with pytest.raises(Exception):
+        execute_select(config=cfg, sql=sql)
+
+
+def test_verify_factor_write_ok_and_failure():
+    cfg = ClickHouseConfig(host="localhost")
+    mock_client = MagicMock()
+    mock_mod = MagicMock()
+    mock_mod.get_client.return_value = mock_client
+
+    mock_client.query.return_value = MagicMock(result_rows=[(5,)])
+
+    with patch.dict(sys.modules, {"clickhouse_connect": mock_mod}):
+        out = verify_factor_write(
+            config=cfg,
+            table="factor_values",
+            factor_id="f1",
+            expected_rows=3,
+        )
+    assert out["ok"] is True
+    assert out["verified_rows"] == 5
+
+    mock_client.query.return_value = MagicMock(result_rows=[(1,)])
+    with patch.dict(sys.modules, {"clickhouse_connect": mock_mod}):
+        with pytest.raises(Exception, match="写后校验失败"):
+            verify_factor_write(
+                config=cfg,
+                table="factor_values",
+                factor_id="f1",
+                expected_rows=3,
+            )
+
+
+def test_verify_factor_write_skips_when_expected_zero():
+    cfg = ClickHouseConfig(host="localhost")
+    out = verify_factor_write(
+        config=cfg,
+        table="factor_values",
+        factor_id="f1",
+        expected_rows=0,
+    )
+    assert out["ok"] is True
+    assert out["verified_rows"] == 0

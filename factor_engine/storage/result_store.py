@@ -34,7 +34,7 @@ class PandasResultStore:
         if self.catalog.get_factor_info(factor_id) is None:
             raise FactorNotFoundError(f"Factor not found: {factor_id}")
 
-        files = self._partition_files(factor_id, start=start, end=end)
+        files, _fmt = self._partition_files(factor_id, start=start, end=end)
         if not files:
             raise FactorNotFoundError(f"Factor data not found: {factor_id}")
 
@@ -64,7 +64,34 @@ class PandasResultStore:
         end: str | None = None,
     ) -> pd.DataFrame:
         """读取单因子宽表 panel（index=datetime, columns=asset）。"""
+        files, fmt = self._partition_files(factor_id, start=start, end=end)
+        if not files:
+            raise FactorNotFoundError(f"Factor data not found: {factor_id}")
+        if fmt == "wide":
+            return self._load_wide_panels(files, start=start, end=end)
         return pivot_long_to_wide(self.load_factor(factor_id, start=start, end=end))
+
+    @staticmethod
+    def _load_wide_panels(
+        files: list[Path],
+        *,
+        start: str | None,
+        end: str | None,
+    ) -> pd.DataFrame:
+        panels: list[pd.DataFrame] = []
+        for path in files:
+            panel = pd.read_parquet(path)
+            if "datetime" in panel.columns:
+                panel = panel.set_index("datetime")
+            panels.append(panel)
+        combined = pd.concat(panels, axis=0)
+        combined.index = pd.to_datetime(combined.index)
+        combined = combined[~combined.index.duplicated(keep="last")].sort_index()
+        if start is not None:
+            combined = combined[combined.index >= pd.Timestamp(start)]
+        if end is not None:
+            combined = combined[combined.index <= pd.Timestamp(end)]
+        return combined
 
     def load_factor_panel(
         self,
@@ -133,19 +160,45 @@ class PandasResultStore:
         *,
         start: str | None,
         end: str | None,
-    ) -> list[Path]:
+    ) -> tuple[list[Path], str]:
         factor_dir = self.lake_root / "factors" / factor_id
         if not factor_dir.exists():
-            return []
+            return [], "long"
 
+        wide_files = self._filter_partition_paths(
+            sorted(factor_dir.glob("**/panel.parquet")),
+            start=start,
+            end=end,
+        )
+        if wide_files:
+            return wide_files, "wide"
+
+        long_files = self._filter_partition_paths(
+            sorted(factor_dir.glob("**/data.parquet")),
+            start=start,
+            end=end,
+        )
+        return long_files, "long"
+
+    @staticmethod
+    def _filter_partition_paths(
+        paths: list[Path],
+        *,
+        start: str | None,
+        end: str | None,
+    ) -> list[Path]:
         start_year = pd.Timestamp(start).year if start is not None else None
         end_year = pd.Timestamp(end).year if end is not None else None
         files: list[Path] = []
-        for partition in sorted(factor_dir.glob("year=*/data.parquet")):
-            try:
-                year = int(partition.parent.name.split("=", 1)[1])
-            except (IndexError, ValueError):
-                year = None
+        for partition in paths:
+            year = None
+            for segment in partition.parts:
+                if segment.startswith("year="):
+                    try:
+                        year = int(segment.split("=", 1)[1])
+                    except ValueError:
+                        year = None
+                    break
             if start_year is not None and year is not None and year < start_year:
                 continue
             if end_year is not None and year is not None and year > end_year:

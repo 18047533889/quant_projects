@@ -56,6 +56,15 @@ def test_read_event_recorded_when_opted_in(isolated_audit, monkeypatch):
     assert records[0]["op"] == "read"
 
 
+def test_read_event_recorded_in_production_mode(isolated_audit, monkeypatch):
+    monkeypatch.delenv("QUANT_AUDIT_READS", raising=False)
+    monkeypatch.setenv("QUANT_PRODUCTION_MODE", "1")
+    audit.record(op="read", dataset="ds1", ok=True, rows=5)
+    records = _read_lines(isolated_audit)
+    assert len(records) == 1
+    assert records[0]["op"] == "read"
+
+
 def test_failure_record_includes_error(isolated_audit):
     audit.record(op="write", dataset="ds1", ok=False, error="boom!" * 50)
     r = _read_lines(isolated_audit)[0]

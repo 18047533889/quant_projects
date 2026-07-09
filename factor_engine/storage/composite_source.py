@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -18,6 +19,28 @@ _ALLOWED_JOIN_METHODS = frozenset({"exact", "asof_backward", "forward_fill"})
 class CompositeJoinSpec:
     method: str = "asof_backward"
     tolerance: str | None = None
+
+
+@dataclass
+class CompositeJoinReport:
+    source: str
+    column: str
+    canonical_name: str
+    method: str
+    anchor_rows: int
+    matched_rows: int
+    unmatched_rows: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "source": self.source,
+            "column": self.column,
+            "canonical_name": self.canonical_name,
+            "method": self.method,
+            "anchor_rows": self.anchor_rows,
+            "matched_rows": self.matched_rows,
+            "unmatched_rows": self.unmatched_rows,
+        }
 
 
 class CompositeDataSource(DataSource):
@@ -53,6 +76,7 @@ class CompositeDataSource(DataSource):
         self.joins = self._normalize_joins(joins or {})
         self._column_cache: dict[str, Any] = {}
         self._anchor_index_cache = None
+        self._join_reports: list[CompositeJoinReport] = []
 
     @staticmethod
     def _normalize_aliases(aliases: Mapping[str, str]) -> dict[str, str]:
@@ -124,7 +148,22 @@ class CompositeDataSource(DataSource):
             raise ValueError(
                 f"Unsupported composite join method '{method}'. Allowed: {allowed}"
             )
+        if normalized == "forward_fill":
+            warnings.warn(
+                "Composite join method 'forward_fill' 已废弃，语义同 asof_backward；"
+                "请改用 asof_backward。",
+                DeprecationWarning,
+                stacklevel=4,
+            )
+            normalized = "asof_backward"
         return normalized
+
+    def collect_join_reports(self, *, clear: bool = True) -> list[dict[str, Any]]:
+        """返回组合 join 统计（可选写入 lineage.extra）。"""
+        reports = [r.to_dict() for r in self._join_reports]
+        if clear:
+            self._join_reports.clear()
+        return reports
 
     def _expand_alias(self, name: str) -> str:
         current = name
@@ -234,13 +273,57 @@ class CompositeDataSource(DataSource):
         out.index = out.index.set_names(["timestamp", "instrument"])
         return out
 
-    def _align_to_anchor(self, series, join_spec: CompositeJoinSpec):
+    def _record_join_report(
+        self,
+        *,
+        source_name: str,
+        column_name: str,
+        canonical_name: str,
+        join_spec: CompositeJoinSpec,
+        aligned,
+    ) -> None:
+        import pandas as pd
+
+        anchor_rows = len(aligned)
+        matched_rows = int(pd.notna(aligned).sum()) if anchor_rows else 0
+        self._join_reports.append(
+            CompositeJoinReport(
+                source=source_name,
+                column=column_name,
+                canonical_name=canonical_name,
+                method=join_spec.method,
+                anchor_rows=anchor_rows,
+                matched_rows=matched_rows,
+                unmatched_rows=max(0, anchor_rows - matched_rows),
+            )
+        )
+
+    def _align_to_anchor(
+        self,
+        series,
+        join_spec: CompositeJoinSpec,
+        *,
+        source_name: str,
+        column_name: str,
+        canonical_name: str,
+    ):
         anchor_index = self._get_anchor_index()
         if join_spec.method == "exact":
-            return self._align_exact(anchor_index, series)
-        if join_spec.method in {"asof_backward", "forward_fill"}:
-            return self._align_asof_backward(anchor_index, series, tolerance=join_spec.tolerance)
-        raise ValueError(f"Unsupported composite join method: {join_spec.method}")
+            aligned = self._align_exact(anchor_index, series)
+        elif join_spec.method in {"asof_backward", "forward_fill"}:
+            aligned = self._align_asof_backward(
+                anchor_index, series, tolerance=join_spec.tolerance
+            )
+        else:
+            raise ValueError(f"Unsupported composite join method: {join_spec.method}")
+        self._record_join_report(
+            source_name=source_name,
+            column_name=column_name,
+            canonical_name=canonical_name,
+            join_spec=join_spec,
+            aligned=aligned,
+        )
+        return aligned
 
     def load_column(self, name: str):
         if name in self._column_cache:
@@ -266,6 +349,9 @@ class CompositeDataSource(DataSource):
             series = self._align_to_anchor(
                 self.sources[source_name].load_column(column_name),
                 join_spec,
+                source_name=source_name,
+                column_name=column_name,
+                canonical_name=canonical_name,
             )
 
         self._column_cache[canonical_name] = series

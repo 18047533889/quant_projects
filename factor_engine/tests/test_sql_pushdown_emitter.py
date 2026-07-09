@@ -629,3 +629,41 @@ def test_group_decay_linear_sql():
     assert "WHEN x._v IS NULL THEN NULL" in compiled.query
 
 
+def test_cs_resid_sql():
+    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+
+    plan = PlanNode(op="cs_resid", inputs=[_col("close"), _col("open")])
+    assert plan_is_sql_capable(plan)
+    compiled = compile_plan_to_sql(
+        plan,
+        dataset="d",
+        time_column="t",
+        instrument_column="i",
+        dialect=SqlDialect.DUCKDB,
+    )
+    assert compiled is not None
+    assert "covar_samp" in compiled.query
+    assert "var_samp" in compiled.query
+    assert "< 3" in compiled.query
+    assert "y._v -" in compiled.query
+
+
+def test_cs_regression_sql_modes():
+    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+
+    for mode, needle in ((0, "y._v -"), (1, "covar_samp"), (2, "+")):
+        plan = PlanNode(
+            op="cs_regression",
+            inputs=[_col("close"), _col("open"), _lit(mode)],
+        )
+        assert plan_is_sql_capable(plan)
+        compiled = compile_plan_to_sql(
+            plan,
+            dataset="d",
+            time_column="t",
+            instrument_column="i",
+            dialect=SqlDialect.DUCKDB,
+        )
+        assert compiled is not None
+        assert needle in compiled.query
+

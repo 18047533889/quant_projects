@@ -423,7 +423,7 @@ class IsNaN(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        return x.isna()
+        return x.isna().astype(float)
 
 # aliases: IS_NAN, IS_NULL, is_null
 

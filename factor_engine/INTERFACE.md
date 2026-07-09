@@ -36,6 +36,14 @@
 - `runtime.engine.FactorEngine.materialize`
 - `runtime.engine.FactorEngine.run_many`
 - `runtime.engine.FactorEngine.run_many_parallel`
+- `runtime.engine.FactorEngine.run_many_from_config` / `run_many_from_config_parallel`（`pipeline_overrides=` 支持 CLI 覆盖）
+- `runtime.engine.FactorEngine.materialize_many_from_config` / `materialize_many_from_config_parallel`（`batch_run=True` 时共享 `run_many`）
+- `runtime.engine.FactorEngine.materialize_incremental_many_from_config`
+- `runtime.config_runtime.PipelineConfigOverrides` / `ResolvedMaterializeKwargs.to_engine_materialize_kwargs` / `to_incremental_materialize_kwargs`
+
+### `pipeline.run_config_directory(config_dir)`
+
+`n_jobs=1` 且目录内 ≥2 个 YAML 时，自动委托 Engine 批量 API（`run_many_from_config` / `materialize_many_from_config` / `materialize_incremental_many_from_config`）；CLI 覆盖（`--dq-check`、`--write-target`、`--since` 等）经 `PipelineConfigOverrides` 传入 batch 分组与 resolve。结果 JSON 含 `batched_engine: true`。
 
 ## 3. Request / Response Contract
 

@@ -132,6 +132,22 @@ class ClickHouseMaterializer:
             factor_id_column=self.factor_id_column,
             ensure_table=ensure_table,
         )
+        import os
+
+        if rows > 0 and os.environ.get("QUANT_CH_VERIFY_WRITE", "").lower() in {
+            "1",
+            "true",
+            "yes",
+        }:
+            from data_access.clickhouse_write import verify_factor_write
+
+            verify_factor_write(
+                config=config,
+                table=self.table,
+                factor_id=factor_id,
+                expected_rows=rows,
+                factor_id_column=self.factor_id_column,
+            )
         return ClickHouseMaterializeSummary(
             factor_id=factor_id,
             table=self.table,

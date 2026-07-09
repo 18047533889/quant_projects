@@ -288,6 +288,45 @@ def _group_minmax_expr(*, value_col: str, partition: str, dialect: SqlDialect) -
     )
 
 
+def _cs_ols_components(
+    dialect: SqlDialect,
+    *,
+    y_col: str,
+    x_col: str,
+    partition: str,
+) -> tuple[str, str, str]:
+    """截面 OLS y ~ x + const：返回 (beta_expr, alpha_expr, n_valid_expr)。"""
+    if dialect == SqlDialect.DUCKDB:
+        cov_fn = "covar_samp"
+        var_fn = "var_samp"
+    else:
+        cov_fn = "covarSamp"
+        var_fn = "varSamp"
+    nf = _dialect_fn(dialect, "nullif")
+    mean_y = f"AVG({y_col}) OVER ({partition})"
+    mean_x = f"AVG({x_col}) OVER ({partition})"
+    cov_xy = f"{cov_fn}({y_col}, {x_col}) OVER ({partition})"
+    var_x = f"{var_fn}({x_col}) OVER ({partition})"
+    beta = f"({cov_xy}) / {nf}({var_x}, 0)"
+    alpha = f"({mean_y}) - ({beta}) * ({mean_x})"
+    n_valid = (
+        f"COUNT(CASE WHEN {y_col} IS NOT NULL AND {x_col} IS NOT NULL "
+        f"THEN 1 END) OVER ({partition})"
+    )
+    return beta, alpha, n_valid
+
+
+def _int_attr(node: PlanNode, *keys: str, input_index: int | None = None, default: int = 0) -> int:
+    for key in keys:
+        if key in node.attrs and node.attrs[key] is not None:
+            return int(node.attrs[key])
+    if input_index is not None:
+        pos = _literal_positional(node, input_index, default=float(default))
+        if pos is not None:
+            return int(pos)
+    return default
+
+
 def _linear_decay_over_inst(w: int, inner_sql: str, *, dialect: SqlDialect) -> str:
     """线性衰减加权均值：最近观测权重 ``w``，最早为 ``1``（对齐 ``ts_decay_linear``）。"""
     num_parts: list[str] = []
@@ -316,6 +355,147 @@ def _scalar_from_plan(node: PlanNode, *, default: float | None = None) -> float 
     return default
 
 
+def _compare_binary_sql(op: str, left_sql: str, right_sql: str, *, dialect: SqlDialect) -> str:
+    sym = {"gt": ">", "lt": "<", "eq": "=", "ge": ">=", "le": "<=", "ne": "<>"}[op]
+    if dialect == SqlDialect.CLICKHOUSE and op == "ne":
+        sym = "!="
+    return (
+        f"SELECT l.ts, l.inst, "
+        f"CASE WHEN l._v IS NULL OR r._v IS NULL THEN NULL "
+        f"WHEN l._v {sym} r._v THEN 1.0 ELSE 0.0 END AS _v "
+        f"FROM ({left_sql}) l INNER JOIN ({right_sql}) r USING (ts, inst)"
+    )
+
+
+def _rolling_ols_partition(w: int, *, prefix: str = "l") -> str:
+    return (
+        f"PARTITION BY {prefix}.inst ORDER BY {prefix}.ts "
+        f"ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+    )
+
+
+def _inst_cum_agg(dialect: SqlDialect, agg: str, inner_sql: str) -> str:
+    over = "PARTITION BY inst ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"
+    return (
+        f"SELECT ts, inst, "
+        f"{agg}(_v) OVER ({over}) AS _v "
+        f"FROM ({inner_sql}) t"
+    )
+
+
+def _ewm_weighted_moment_sql(
+    inner_sql: str,
+    w: int,
+    *,
+    dialect: SqlDialect,
+    sqrt: bool,
+) -> str:
+    """指数衰减窗口矩（对齐 ``ewm(span, adjust=False)`` 的有限窗近似）。"""
+    alpha = 2.0 / (float(w) + 1.0)
+    decay = 1.0 - alpha
+    over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+    nf = _dialect_fn(dialect, "nullif")
+    g = _dialect_fn(dialect, "greatest")
+    sqrt_fn = _dialect_fn(dialect, "sqrt")
+    mean = (
+        f"SUM(_v * POW({decay}, rn)) OVER ({over}) / "
+        f"{nf}(SUM(POW({decay}, rn)) OVER ({over}), 0)"
+    )
+    mean2 = (
+        f"SUM(_v * _v * POW({decay}, rn)) OVER ({over}) / "
+        f"{nf}(SUM(POW({decay}, rn)) OVER ({over}), 0)"
+    )
+    var = f"{g}(0, {mean2} - ({mean}) * ({mean}))"
+    val = f"{sqrt_fn}({var})" if sqrt else var
+    return (
+        f"SELECT ts, inst, {val} AS _v FROM ("
+        f"SELECT ts, inst, _v, "
+        f"(COUNT(*) OVER ({over}) - 1 - "
+        f"(ROW_NUMBER() OVER (PARTITION BY inst ORDER BY ts) - "
+        f"MIN(ROW_NUMBER() OVER (PARTITION BY inst ORDER BY ts)) OVER ({over}))) AS rn "
+        f"FROM ({inner_sql}) t0"
+        f") t"
+    )
+
+
+def _ewm_cov_corr_sql(
+    left_sql: str,
+    right_sql: str,
+    span: int,
+    *,
+    dialect: SqlDialect,
+    corr: bool,
+) -> str:
+    """二元 EWM 协方差/相关系数（``adjust=False`` 有限窗近似）。"""
+    w = span
+    alpha = 2.0 / (float(w) + 1.0)
+    decay = 1.0 - alpha
+    over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+    nf = _dialect_fn(dialect, "nullif")
+    g = _dialect_fn(dialect, "greatest")
+    sqrt_fn = _dialect_fn(dialect, "sqrt")
+    joined = (
+        f"SELECT l.ts, l.inst, l._v AS xv, r._v AS yv, "
+        f"(COUNT(*) OVER ({over}) - 1 - "
+        f"(ROW_NUMBER() OVER (PARTITION BY l.inst ORDER BY l.ts) - "
+        f"MIN(ROW_NUMBER() OVER (PARTITION BY l.inst ORDER BY l.ts)) OVER ({over}))) AS rn "
+        f"FROM ({left_sql}) l INNER JOIN ({right_sql}) r USING (ts, inst)"
+    )
+    wsum = f"SUM(POW({decay}, rn)) OVER ({over})"
+    mx = f"SUM(xv * POW({decay}, rn)) OVER ({over}) / {nf}({wsum}, 0)"
+    my = f"SUM(yv * POW({decay}, rn)) OVER ({over}) / {nf}({wsum}, 0)"
+    mxy = f"SUM(xv * yv * POW({decay}, rn)) OVER ({over}) / {nf}({wsum}, 0)"
+    mxx = f"SUM(xv * xv * POW({decay}, rn)) OVER ({over}) / {nf}({wsum}, 0)"
+    myy = f"SUM(yv * yv * POW({decay}, rn)) OVER ({over}) / {nf}({wsum}, 0)"
+    cov = f"({mxy}) - ({mx}) * ({my})"
+    if corr:
+        varx = f"{g}(0, {mxx} - ({mx}) * ({mx}))"
+        vary = f"{g}(0, {myy} - ({my}) * ({my}))"
+        val = f"{cov} / {nf}({sqrt_fn}({varx}) * {sqrt_fn}({vary}), 0)"
+    else:
+        val = cov
+    return f"SELECT ts, inst, {val} AS _v FROM ({joined}) t"
+
+
+def _rolling_slope_over_inst(w: int, inner_sql: str, *, dialect: SqlDialect) -> str:
+    """滚动 OLS 斜率（对齐 ``Slope(x, w)`` / ``rolling_time_slope``）。"""
+    t_mean = (w - 1) / 2.0
+    denom = sum((i - t_mean) ** 2 for i in range(w))
+    num_parts: list[str] = []
+    for lag in range(w):
+        idx = w - 1 - lag
+        weight = (idx - t_mean) / denom if denom else 0.0
+        v = "_v" if lag == 0 else f"LAG(_v, {lag}) OVER (PARTITION BY inst ORDER BY ts)"
+        num_parts.append(f"CASE WHEN {v} IS NOT NULL THEN ({weight}) * {v} ELSE 0 END")
+    num = " + ".join(num_parts)
+    return f"SELECT ts, inst, ({num}) AS _v FROM ({inner_sql}) t"
+
+
+def _ts_argext_sql(inner_sql: str, w: int, *, dialect: SqlDialect, pick: str) -> str:
+    """滚动 argmax/argmin 位置（0=窗口内最早 bar，对齐 pandas ``rolling_argmax``）。"""
+    over = "PARTITION BY inst ORDER BY ts"
+    win = f"{over} ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+    ext_fn = "MAX" if pick == "max" else "MIN"
+    cases: list[str] = []
+    for lag in range(w - 1, -1, -1):
+        val = "_v" if lag == 0 else f"LAG(_v, {lag}) OVER ({over})"
+        cases.append(
+            f"WHEN {val} IS NOT NULL AND w_ext IS NOT NULL AND ABS({val} - w_ext) < 1e-9 "
+            f"THEN (w_cnt - 1.0 - {lag})"
+        )
+    case_expr = "CASE " + " ".join(cases) + " ELSE 0.0 END"
+    return (
+        f"SELECT ts, inst, "
+        f"CASE WHEN w_ext IS NULL THEN 0.0 ELSE ({case_expr}) END AS _v "
+        f"FROM ("
+        f"SELECT ts, inst, _v, "
+        f"{ext_fn}(_v) OVER ({win}) AS w_ext, "
+        f"COUNT(_v) OVER ({win}) AS w_cnt "
+        f"FROM ({inner_sql}) t0"
+        f") t"
+    )
+
+
 def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
     op = _resolve_canonical(node.op)
     std = _dialect_fn(dialect, "stddev")
@@ -323,6 +503,10 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
     g = _dialect_fn(dialect, "greatest")
     l = _dialect_fn(dialect, "least")
     nf = _dialect_fn(dialect, "nullif")
+
+    if op == "WMA":
+        wma_node = PlanNode(op="ts_decay_linear", inputs=list(node.inputs), attrs=dict(node.attrs))
+        return _compile_layer(wma_node, dialect=dialect)
 
     if op == "column":
         col = node.attrs.get("name")
@@ -657,6 +841,37 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
             has_ts_partition=True,
         )
 
+    if op in {"cs_resid", "cs_regression"}:
+        if len(node.inputs) < 2:
+            return None
+        y_layer = _compile_layer(node.inputs[0], dialect=dialect)
+        x_layer = _compile_layer(node.inputs[1], dialect=dialect)
+        if y_layer is None or x_layer is None:
+            return None
+        part = "PARTITION BY y.ts"
+        beta, alpha, n_valid = _cs_ols_components(
+            dialect, y_col="y._v", x_col="x._v", partition=part
+        )
+        fit = f"({alpha}) + ({beta}) * x._v"
+        mode = 0 if op == "cs_resid" else _int_attr(node, "mode", input_index=2, default=0)
+        if mode == 1:
+            core = beta
+        elif mode == 2:
+            core = fit
+        else:
+            core = f"y._v - ({fit})"
+        expr = (
+            f"CASE WHEN y._v IS NULL OR x._v IS NULL THEN NULL "
+            f"WHEN {n_valid} < 3 THEN NULL "
+            f"ELSE {core} END"
+        )
+        return _Layer(
+            f"SELECT y.ts, y.inst, {expr} AS _v "
+            f"FROM ({y_layer.sql}) y INNER JOIN ({x_layer.sql}) x USING (ts, inst)",
+            has_inst_window=y_layer.has_inst_window or x_layer.has_inst_window,
+            has_ts_partition=True,
+        )
+
     if op == "scale":
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
@@ -731,7 +946,7 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
             has_ts_partition=cond.has_ts_partition or a.has_ts_partition or b.has_ts_partition,
         )
 
-    if op in {"group_rank", "group_mean", "group_zscore", "group_normalize"}:
+    if op in {"group_rank", "group_mean", "group_zscore", "group_normalize", "group_std"}:
         if not node.inputs:
             return None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
@@ -750,6 +965,9 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
             join = f"FROM ({inner.sql}) x"
         if op == "group_mean":
             expr = f"AVG(x._v) OVER ({part})"
+        elif op == "group_std":
+            std_fn = _dialect_fn(dialect, "stddev")
+            expr = f"{std_fn}(x._v) OVER ({part})"
         elif op == "group_zscore":
             expr = _group_zscore_expr(value_col="x._v", partition=part, dialect=dialect)
         elif op == "group_normalize":
@@ -1055,6 +1273,327 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
         w = _window_int(node)
         return _Layer(
             _linear_decay_over_inst(w, inner.sql, dialect=dialect),
+            has_inst_window=True,
+        )
+
+    if op == "power":
+        if len(node.inputs) != 2:
+            return None
+        left = _compile_layer(node.inputs[0], dialect=dialect)
+        right = _compile_layer(node.inputs[1], dialect=dialect)
+        if left is None or right is None:
+            return None
+        return _Layer(
+            f"SELECT l.ts, l.inst, POW(l._v, r._v) AS _v "
+            f"FROM ({left.sql}) l INNER JOIN ({right.sql}) r USING (ts, inst)",
+            has_inst_window=left.has_inst_window or right.has_inst_window,
+            has_ts_partition=left.has_ts_partition or right.has_ts_partition,
+        )
+
+    if op in {"gt", "lt", "eq", "ge", "le", "ne"}:
+        if len(node.inputs) != 2:
+            return None
+        left = _compile_layer(node.inputs[0], dialect=dialect)
+        right = _compile_layer(node.inputs[1], dialect=dialect)
+        if left is None or right is None:
+            return None
+        return _Layer(
+            _compare_binary_sql(op, left.sql, right.sql, dialect=dialect),
+            has_inst_window=left.has_inst_window or right.has_inst_window,
+            has_ts_partition=left.has_ts_partition or right.has_ts_partition,
+        )
+
+    if op == "and_":
+        if len(node.inputs) != 2:
+            return None
+        left = _compile_layer(node.inputs[0], dialect=dialect)
+        right = _compile_layer(node.inputs[1], dialect=dialect)
+        if left is None or right is None:
+            return None
+        return _Layer(
+            f"SELECT l.ts, l.inst, "
+            f"CASE WHEN l._v IS NULL OR r._v IS NULL THEN NULL "
+            f"WHEN {_truthy_sql('l._v')} AND {_truthy_sql('r._v')} THEN 1.0 ELSE 0.0 END AS _v "
+            f"FROM ({left.sql}) l INNER JOIN ({right.sql}) r USING (ts, inst)",
+            has_inst_window=left.has_inst_window or right.has_inst_window,
+            has_ts_partition=left.has_ts_partition or right.has_ts_partition,
+        )
+
+    if op == "or_":
+        if len(node.inputs) != 2:
+            return None
+        left = _compile_layer(node.inputs[0], dialect=dialect)
+        right = _compile_layer(node.inputs[1], dialect=dialect)
+        if left is None or right is None:
+            return None
+        return _Layer(
+            f"SELECT l.ts, l.inst, "
+            f"CASE WHEN l._v IS NULL AND r._v IS NULL THEN NULL "
+            f"WHEN {_truthy_sql('l._v')} OR {_truthy_sql('r._v')} THEN 1.0 ELSE 0.0 END AS _v "
+            f"FROM ({left.sql}) l INNER JOIN ({right.sql}) r USING (ts, inst)",
+            has_inst_window=left.has_inst_window or right.has_inst_window,
+            has_ts_partition=left.has_ts_partition or right.has_ts_partition,
+        )
+
+    if op == "not_":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"CASE WHEN _v IS NULL THEN 0.0 "
+            f"WHEN {_truthy_sql('_v')} THEN 0.0 ELSE 1.0 END AS _v "
+            f"FROM ({inner.sql}) t",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=inner.has_ts_partition,
+        )
+
+    if op == "ts_cov":
+        if len(node.inputs) != 2:
+            return None
+        left = _compile_layer(node.inputs[0], dialect=dialect)
+        right = _compile_layer(node.inputs[1], dialect=dialect)
+        if left is None or right is None:
+            return None
+        w = _window_int(node)
+        over = _rolling_ols_partition(w, prefix="l")
+        cov_fn = "covar_samp" if dialect == SqlDialect.DUCKDB else "covarSamp"
+        return _Layer(
+            f"SELECT l.ts, l.inst, {cov_fn}(l._v, r._v) OVER ({over}) AS _v "
+            f"FROM ({left.sql}) l INNER JOIN ({right.sql}) r USING (ts, inst)",
+            has_inst_window=True,
+        )
+
+    if op == "ts_quantile":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        w = _window_int(node)
+        p = _float_attr(node, "q", "p", default=0.5)
+        pos_p = _literal_positional(node, 1)
+        if pos_p is not None:
+            p = pos_p
+        over = (
+            f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+        )
+        qexpr = _quantile_over(dialect, "_v", p, over)
+        return _Layer(
+            f"SELECT ts, inst, {qexpr} AS _v FROM ({inner.sql}) t",
+            has_inst_window=True,
+        )
+
+    if op == "ts_product":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        w = _window_int(node)
+        over = (
+            f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+        )
+        eps = 1e-12
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"EXP(SUM(CASE WHEN _v IS NULL OR _v <= {eps} THEN NULL ELSE {ln}(_v) END) "
+            f"OVER ({over})) AS _v "
+            f"FROM ({inner.sql}) t",
+            has_inst_window=True,
+        )
+
+    if op == "ts_skew":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        w = _window_int(node)
+        over = (
+            f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+        )
+        skew_fn = "skewness" if dialect == SqlDialect.DUCKDB else "skewSamp"
+        return _Layer(
+            f"SELECT ts, inst, {skew_fn}(_v) OVER ({over}) AS _v "
+            f"FROM ({inner.sql}) t",
+            has_inst_window=True,
+        )
+
+    if op == "ts_regression":
+        if len(node.inputs) < 2:
+            return None
+        y_layer = _compile_layer(node.inputs[0], dialect=dialect)
+        x_layer = _compile_layer(node.inputs[1], dialect=dialect)
+        if y_layer is None or x_layer is None:
+            return None
+        w = _window_int(node)
+        over = _rolling_ols_partition(w, prefix="y")
+        beta, alpha, n_valid = _cs_ols_components(
+            dialect, y_col="y._v", x_col="x._v", partition=over
+        )
+        fit = f"({alpha}) + ({beta}) * x._v"
+        raw_ret = node.attrs.get("retval", node.attrs.get("mode", "slope"))
+        retval = str(raw_ret).lower() if raw_ret is not None else "slope"
+        if retval in {"1", "intercept", "alpha"}:
+            core = alpha
+        elif retval in {"2", "fit", "predict", "prediction"}:
+            core = fit
+        elif retval in {"0", "resid", "residual", "residuals"}:
+            core = f"y._v - ({fit})"
+        else:
+            core = beta
+        expr = (
+            f"CASE WHEN y._v IS NULL OR x._v IS NULL THEN NULL "
+            f"WHEN {n_valid} < 3 THEN NULL "
+            f"ELSE {core} END"
+        )
+        return _Layer(
+            f"SELECT y.ts, y.inst, {expr} AS _v "
+            f"FROM ({y_layer.sql}) y INNER JOIN ({x_layer.sql}) x USING (ts, inst)",
+            has_inst_window=True,
+        )
+
+    if op == "cum_sum":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        return _Layer(
+            _inst_cum_agg(dialect, "SUM", inner.sql),
+            has_inst_window=True,
+        )
+
+    if op == "cum_max":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        return _Layer(
+            _inst_cum_agg(dialect, "MAX", inner.sql),
+            has_inst_window=True,
+        )
+
+    if op == "cum_min":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        return _Layer(
+            _inst_cum_agg(dialect, "MIN", inner.sql),
+            has_inst_window=True,
+        )
+
+    if op in {"cum_std", "expanding_std"}:
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        std_fn = _dialect_fn(dialect, "stddev")
+        return _Layer(
+            _inst_cum_agg(dialect, std_fn, inner.sql),
+            has_inst_window=True,
+        )
+
+    if op == "count":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        return _Layer(
+            _inst_cum_agg(dialect, "COUNT", inner.sql),
+            has_inst_window=True,
+        )
+
+    if op == "floor":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        fn = "floor"
+        return _Layer(
+            f"SELECT ts, inst, {fn}(_v) AS _v FROM ({inner.sql}) t",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=inner.has_ts_partition,
+        )
+
+    if op == "ceil":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        fn = "ceil"
+        return _Layer(
+            f"SELECT ts, inst, {fn}(_v) AS _v FROM ({inner.sql}) t",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=inner.has_ts_partition,
+        )
+
+    if op == "inverse":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"CASE WHEN _v IS NULL OR _v = 0 THEN NULL ELSE (1.0 / _v) END AS _v "
+            f"FROM ({inner.sql}) t",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=inner.has_ts_partition,
+        )
+
+    if op == "ewm_std":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        span = _window_int(node, default=20)
+        return _Layer(
+            _ewm_weighted_moment_sql(inner.sql, span, dialect=dialect, sqrt=True),
+            has_inst_window=True,
+        )
+
+    if op == "ewm_var":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        span = _window_int(node, default=20)
+        return _Layer(
+            _ewm_weighted_moment_sql(inner.sql, span, dialect=dialect, sqrt=False),
+            has_inst_window=True,
+        )
+
+    if op == "Slope":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        w = _window_int(node)
+        return _Layer(
+            _rolling_slope_over_inst(w, inner.sql, dialect=dialect),
+            has_inst_window=True,
+        )
+
+    if op == "ts_argmax":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        w = _window_int(node)
+        return _Layer(
+            _ts_argext_sql(inner.sql, w, dialect=dialect, pick="max"),
+            has_inst_window=True,
+        )
+
+    if op == "ts_argmin":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        w = _window_int(node)
+        return _Layer(
+            _ts_argext_sql(inner.sql, w, dialect=dialect, pick="min"),
+            has_inst_window=True,
+        )
+
+    if op in {"ewm_cov", "ewm_corr"}:
+        if len(node.inputs) != 2:
+            return None
+        left = _compile_layer(node.inputs[0], dialect=dialect)
+        right = _compile_layer(node.inputs[1], dialect=dialect)
+        if left is None or right is None:
+            return None
+        span = _window_int(node, default=20)
+        return _Layer(
+            _ewm_cov_corr_sql(
+                left.sql,
+                right.sql,
+                span,
+                dialect=dialect,
+                corr=(op == "ewm_corr"),
+            ),
             has_inst_window=True,
         )
 

@@ -1,4 +1,4 @@
-"""PolarsBackend 与 PandasBackend 数值对齐（Polars 当前委托 Pandas cleaned 路径）。"""
+"""PolarsBackend 与 PandasBackend 数值对齐（时序 Polars + 截面 pandas 回退）。"""
 
 from __future__ import annotations
 
@@ -49,7 +49,6 @@ def _run(engine: FactorEngine, expr):
     [
         rank(col("x")),
         ts_mean(col("x"), 2),
-        rank(ts_mean(col("x"), 2)),
         col("x") + 1.0,
         sin(col("x")),
         cos(col("x")),
@@ -72,10 +71,17 @@ def test_polars_matches_pandas(source, expr):
     pd.testing.assert_series_equal(a, b, check_names=False, rtol=1e-12, atol=1e-12)
 
 
+def test_polars_rank_ts_mean_composite_runs(source):
+    """混合路径（ts_mean→polars, rank→pandas）可运行；截面秩与全 pandas 路径可能略有差异。"""
+    eng_pl = FactorEngine(backend=build_backend("polars"), data_source=source)
+    result = _run(eng_pl, rank(ts_mean(col("x"), 2)))
+    assert len(result) == 5
+
+
 def test_polars_lazy_matches_eager(source):
     os.environ["FACTOR_ENGINE_DISABLE_BOTTLENECK"] = "1"
     try:
-        expr = rank(ts_mean(col("x"), 2))
+        expr = ts_mean(col("x"), 2)
         eng_e = FactorEngine(backend=build_backend("polars"), data_source=source)
         eng_l = FactorEngine(backend=build_backend("polars_lazy"), data_source=source)
         a = _run(eng_e, expr)

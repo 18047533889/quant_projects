@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import uuid
@@ -11,10 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-
-def _stable_bucket(key: str, shard_count: int) -> int:
-    digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
-    return int(digest[:8], 16) % max(1, int(shard_count))
+from runtime.shard_materialize import shard_by_hash
 
 
 def shard_config_paths(
@@ -24,17 +20,12 @@ def shard_config_paths(
     shard_count: int,
 ) -> list[Path]:
     """按 config 路径稳定哈希分片，供多机并行消费同一目录。"""
-    if shard_count <= 1:
-        return list(config_paths)
-    index = int(shard_index)
-    count = int(shard_count)
-    if index < 0 or index >= count:
-        raise ValueError(f"shard_index={index} 必须在 [0, {count}) 内")
-    selected: list[Path] = []
-    for path in config_paths:
-        if _stable_bucket(str(path.resolve()), count) == index:
-            selected.append(path)
-    return selected
+    return shard_by_hash(
+        config_paths,
+        shard_index=shard_index,
+        shard_count=shard_count,
+        key_fn=lambda p: str(Path(p).resolve()),
+    )
 
 
 @dataclass(frozen=True)

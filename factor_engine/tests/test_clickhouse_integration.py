@@ -233,11 +233,35 @@ def test_clickhouse_panel_read_sql_pushdown():
             "end_date": "2024-01-04",
         }
     )
-    result8 = FactorEngine(
+    engine_grp = FactorEngine(
         backend=build_backend("clickhouse_sql"),
         data_source=source_grp,
-    ).run(Factor(name="ch_gnorm", expr=group_normalize(col("close"), col("grp"))))["result"]
+    )
+    result8 = engine_grp.run(
+        Factor(name="ch_gnorm", expr=group_normalize(col("close"), col("grp")))
+    )["result"]
     assert len(result8) >= 4
     assert result8.notna().any()
+
+    from api import group_percentile, group_decay_linear, group_rank
+
+    result9 = engine_grp.run(
+        Factor(name="ch_gpct", expr=group_percentile(col("close"), col("grp"), 0.5))
+    )["result"]
+    assert len(result9) >= 4
+    assert result9.notna().any()
+    assert set(result9.dropna().unique()).issubset({0.0, 1.0})
+
+    result10 = engine_grp.run(
+        Factor(name="ch_gdecay", expr=group_decay_linear(col("close"), col("grp"), 5))
+    )["result"]
+    assert len(result10) >= 4
+    assert result10.notna().any()
+
+    result11 = engine_grp.run(
+        Factor(name="ch_grank", expr=group_rank(col("close"), col("grp")))
+    )["result"]
+    assert len(result11) >= 4
+    assert result11.notna().any()
 
     execute_query(config=cfg, sql=f"DROP TABLE IF EXISTS {table}")

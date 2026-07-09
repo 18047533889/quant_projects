@@ -715,7 +715,7 @@ class IsFinite(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        return np.isfinite(x).astype(int)
+        return np.isfinite(x).astype(float)
 
 
 

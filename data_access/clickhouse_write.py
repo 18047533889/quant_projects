@@ -241,6 +241,7 @@ def insert_factor_series(
     long_df["factor_version"] = str(factor_version)
     long_df["data_snapshot_id"] = data_snapshot_id or ""
     long_df["is_valid"] = int(is_valid)
+    long_df["invalid_reason"] = ""
     long_df["calc_time"] = pd.Timestamp.utcnow().tz_localize(None)
 
     cols = [
@@ -252,6 +253,7 @@ def insert_factor_series(
         "factor_version",
         "data_snapshot_id",
         "is_valid",
+        "invalid_reason",
     ]
     return insert_dataframe(config=config, table=table, frame=long_df, column_order=cols)
 
@@ -315,3 +317,34 @@ def execute_select(*, config: ClickHouseConfig, sql: str):
     _assert_select_only(sql)
     client = get_client(config)
     return client.query(sql).arrow()
+
+
+def verify_factor_write(
+    *,
+    config: ClickHouseConfig,
+    table: str,
+    factor_id: str,
+    expected_rows: int,
+    factor_id_column: str = "factor_id",
+) -> dict[str, Any]:
+    """写后校验：FINAL 计数应不少于本次写入行数（ReplacingMergeTree 去重语义）。"""
+    if expected_rows <= 0:
+        return {"verified_rows": 0, "expected_rows": 0, "ok": True}
+
+    t = _quote_ident(table)
+    fid_col = _quote_ident(factor_id_column)
+    escaped_id = str(factor_id).replace("'", "''")
+    sql = f"SELECT count() AS cnt FROM {t} FINAL WHERE {fid_col} = '{escaped_id}'"
+    client = get_client(config)
+    result = client.query(sql)
+    verified = int(result.result_rows[0][0]) if result.result_rows else 0
+    if verified < expected_rows:
+        raise ValidationError(
+            f"ClickHouse 写后校验失败：factor_id={factor_id!r} FINAL 计数 {verified} "
+            f"< 期望 {expected_rows}（table={table}）。"
+        )
+    return {
+        "verified_rows": verified,
+        "expected_rows": expected_rows,
+        "ok": True,
+    }

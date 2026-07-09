@@ -39,4 +39,5 @@ testpaths = ["tests"]
 markers = [
     "modin: 需要安装 modin，默认 CI 不跑",
     "integration: 需本地 parquet 或 RUN_* 环境变量",
+    "perf: 轻量性能回归 smoke（阈值宽松）",
 ]

@@ -26,7 +26,7 @@ data_source:
     preclose: PreClose
 
 backend:
-  type: pandas
+  type: auto
 
 engine:
   enable_cache: true

@@ -25,9 +25,11 @@ data_access.sql_escape —— 有限的 SQL 逃生口
 from __future__ import annotations
 
 import logging
+import os
 import re
 import time
 import uuid
+from collections.abc import Iterator
 from typing import Any, Mapping, Sequence
 
 import pyarrow as pa
@@ -36,6 +38,14 @@ from . import audit
 from .engine import DuckDBEngine
 from .exceptions import EngineError, ValidationError
 from .paths import PathAuthorizer
+from .query_budget import (
+    QueryBudget,
+    apply_sql_row_limit,
+    enforce_arrow_budget,
+    enforce_stream_budget,
+    resolve_query_budget,
+    validate_sql_view_columns,
+)
 from .registry import DatasetRegistry
 
 
@@ -61,6 +71,62 @@ _FORBIDDEN_PATTERNS = [
 _FORBIDDEN_RE = re.compile("|".join(_FORBIDDEN_PATTERNS), re.IGNORECASE)
 
 
+def _make_scope_id() -> str:
+    return uuid.uuid4().hex[:8]
+
+
+def _build_view_map(read_datasets: Sequence[str], scope_id: str) -> dict[str, str]:
+    """dataset 名 → 唯一 TEMP VIEW 名（避免并发 sql 抢 catalog）。"""
+    return {name: f"__da_{scope_id}_{name}" for name in read_datasets}
+
+
+def _rewrite_query_tables(query: str, view_map: dict[str, str]) -> str:
+    """把用户 SQL 里的 dataset 表名替换成 scope 唯一 view 名。
+
+    支持 ``FROM factors`` 与 ``FROM {{factors}}`` 两种写法。
+    """
+    rewritten = query
+    for dataset_name in sorted(view_map.keys(), key=len, reverse=True):
+        view_name = view_map[dataset_name]
+        rewritten = rewritten.replace(f"{{{{{dataset_name}}}}}", view_name)
+        rewritten = re.sub(
+            rf"\b{re.escape(dataset_name)}\b",
+            view_name,
+            rewritten,
+        )
+    return rewritten
+
+
+def _prepare_sql_views(
+    *,
+    registry: DatasetRegistry,
+    read_datasets: Sequence[str],
+    read_params: Mapping[str, Mapping[str, Any]],
+    view_columns: Mapping[str, Sequence[str]] | None,
+    scope_id: str,
+    build_select_sql,
+    resolve_paths,
+) -> tuple[dict[str, str], list[tuple[str, str]]]:
+    """返回 (view_map, register_specs)；register_specs = [(view_name, inlined_sql), ...]。"""
+    view_map = _build_view_map(read_datasets, scope_id)
+    register_specs: list[tuple[str, str]] = []
+    for name in read_datasets:
+        ds = registry.get(name)
+        ds_params = read_params.get(name, {})
+        paths = resolve_paths(ds, ds_params)
+        cols = list(view_columns[name]) if view_columns and name in view_columns else None
+        sql, sql_params = build_select_sql(
+            ds=ds,
+            paths=paths,
+            columns=cols,
+            time_range=None,
+            instrument_filter=None,
+        )
+        inlined_sql = _inline_path_params(sql, sql_params)
+        register_specs.append((view_map[name], inlined_sql))
+    return view_map, register_specs
+
+
 def run_sql(
     *,
     registry: DatasetRegistry,
@@ -69,7 +135,9 @@ def run_sql(
     query: str,
     read_datasets: Sequence[str],
     read_params: Mapping[str, Mapping[str, Any]] | None = None,
+    view_columns: Mapping[str, Sequence[str]] | None = None,
     params: Sequence[Any] | None = None,
+    query_budget: QueryBudget | None = None,
     build_select_sql,  # store._build_select_sql，避开循环 import
     resolve_paths,     # store._resolve_paths，同上
 ) -> pa.Table:
@@ -103,37 +171,29 @@ def run_sql(
     _reject_forbidden_tokens(query)
 
     read_params = dict(read_params) if read_params else {}
+    budget = resolve_query_budget(query_budget)
+    validate_sql_view_columns(budget, read_datasets, view_columns)
 
-    # 注册临时 view：每个数据集对应一个唯一 view 名，用完清。
-    # 用 uuid 前缀避免同进程里 sql() 并发调用撞名（DuckDB connection 全局 catalog）。
-    scope_id = uuid.uuid4().hex[:10]
-    view_map: dict[str, str] = {}
-    view_underlying_sql: dict[str, tuple[str, list[Any]]] = {}
-
-    for name in read_datasets:
-        ds = registry.get(name)
-        ds_params = read_params.get(name, {})
-        paths = resolve_paths(ds, ds_params)  # 这里会做 PathAuthorizer 校验
-        sql, sql_params = build_select_sql(
-            ds=ds,
-            paths=paths,
-            columns=None,
-            time_range=None,
-            instrument_filter=None,
-        )
-        # view 名用原 dataset 名（用户 SQL 里就可以直接 FROM <name>），
-        # 但加 scope_id 后缀做全进程隔离；然后我们再建一个不带 scope 的别名 view
-        # 指向它，用户 SQL 里看到的是 dataset 名。
-        # ——更简单的做法：直接用 dataset 名注册 view，但这样并发 sql() 会互踩。
-        # 所以最终方案：每个 sql() 调用都先 DROP 同名 view（如果有），再注册；
-        # 用 try/finally 兜底清理。
-        view_map[name] = name
-        view_underlying_sql[name] = (sql, sql_params)
+    scope_id = _make_scope_id()
+    view_map, register_specs = _prepare_sql_views(
+        registry=registry,
+        read_datasets=read_datasets,
+        read_params=read_params,
+        view_columns=view_columns,
+        scope_id=scope_id,
+        build_select_sql=build_select_sql,
+        resolve_paths=resolve_paths,
+    )
+    bounded_query = apply_sql_row_limit(
+        _rewrite_query_tables(query, view_map),
+        budget.max_rows,
+    )
 
     audit_fields: dict[str, Any] = {
         "datasets": list(read_datasets),
         "read_params": dict(read_params) or None,
         "query": query[:500],
+        "scope_id": scope_id,
     }
 
     rows = 0
@@ -142,79 +202,131 @@ def run_sql(
     start = time.perf_counter()
     result_table: pa.Table | None = None
 
-    # 进程共享一条 DuckDB connection；注册/drop view 串行化到 engine._write_lock
-    # 里避免并发下 catalog 冲突。
-    with engine._write_lock:
-        try:
-            # 1. 注册每个 view（现有同名 view 先 drop，避免 stale 状态干扰）
-            for name, view_name in view_map.items():
-                sql, sql_params = view_underlying_sql[name]
-                # DuckDB 的 VIEW 不支持带参数的 SQL。我们用 prepared statement
-                # 执行一次 sql 然后 CREATE VIEW AS 以结果来建不行（路径固定下来
-                # 后还是要能参数化读）。解决：把 ? 参数直接 inline 成 SQL 常量
-                # —— 只有当 params 全是来自 registry（路径字符串，已由
-                # PathAuthorizer 校验）的值时才安全。我们在 build_select_sql
-                # 里已经保证 params 只有路径 + time_range + instrument_filter；
-                # 这里 time_range/instrument_filter 都是 None，所以 params 只
-                # 含路径字符串，inline 安全。
-                inlined_sql = _inline_path_params(sql, sql_params)
-                engine._conn.execute(f"DROP VIEW IF EXISTS {view_name}")
-                engine._conn.execute(f"CREATE TEMP VIEW {view_name} AS {inlined_sql}")
+    try:
+        result_table = engine.execute_scoped_sql_arrow(
+            register_specs, bounded_query, params
+        )
+        rows = result_table.num_rows
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        enforce_arrow_budget(budget, result_table, elapsed_ms=elapsed_ms)
+        ok = True
+    except Exception as exc:
+        err_msg = f"{type(exc).__name__}: {exc}"
+        raise
+    finally:
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        audit.record(
+            op="sql",
+            dataset=",".join(read_datasets),
+            ok=ok,
+            rows=rows,
+            elapsed_ms=elapsed_ms,
+            error=err_msg,
+            extra=audit_fields,
+        )
 
-            # 2. 跑用户查询
-            # 关键：必须用同一个 engine._conn（不能 engine._conn.cursor()），
-            # 因为 CREATE TEMP VIEW 是连接级会话对象，cursor() 是独立子连接，
-            # 在子连接里看不到父连接刚建的 TEMP VIEW（会报 Table not exist）。
-            # 整个 run_sql 已经在 engine._write_lock 里串行化，单连接可接受。
-            try:
-                if params is not None:
-                    result = engine._conn.execute(query, list(params))
-                else:
-                    result = engine._conn.execute(query)
-                result_table = (
-                    result.to_arrow_table()
-                    if hasattr(result, "to_arrow_table")
-                    else result.fetch_arrow_table()
-                )
-            except Exception as exc:
-                raise EngineError(
-                    f"sql 执行失败：{exc}\nquery={query[:500]}"
-                ) from exc
-
-            rows = result_table.num_rows if result_table is not None else 0
-            ok = True
-        except Exception as exc:
-            err_msg = f"{type(exc).__name__}: {exc}"
-            raise
-        finally:
-            # 3. 清理 view（无论成败）
-            for view_name in view_map.values():
-                try:
-                    engine._conn.execute(f"DROP VIEW IF EXISTS {view_name}")
-                except Exception as drop_exc:  # noqa: BLE001
-                    # 清理失败只记日志，不能盖住原始错
-                    logger.warning(
-                        "清理 TEMP VIEW %s 失败：%s", view_name, drop_exc,
-                    )
-
-            elapsed_ms = (time.perf_counter() - start) * 1000
-            audit.record(
-                op="sql",
-                dataset=",".join(read_datasets),
-                ok=ok,
-                rows=rows,
-                elapsed_ms=elapsed_ms,
-                error=err_msg,
-                extra=audit_fields,
-            )
-
-    assert result_table is not None  # ok=True 路径必然赋值
+    assert result_table is not None
     logger.info(
         "sql rows=%d datasets=%s elapsed_ms=%.1f",
         rows, ",".join(read_datasets),
         (time.perf_counter() - start) * 1000,
     )
     return result_table
+
+
+def run_sql_stream(
+    *,
+    registry: DatasetRegistry,
+    authorizer: PathAuthorizer,
+    engine: DuckDBEngine,
+    query: str,
+    read_datasets: Sequence[str],
+    read_params: Mapping[str, Mapping[str, Any]] | None = None,
+    view_columns: Mapping[str, Sequence[str]] | None = None,
+    params: Sequence[Any] | None = None,
+    query_budget: QueryBudget | None = None,
+    batch_size: int = 100_000,
+    build_select_sql,
+    resolve_paths,
+) -> Iterator[pa.RecordBatch]:
+    """流式执行只读 SELECT；语义与 ``run_sql`` 一致，按 batch 返回。"""
+    if not query or not query.strip():
+        raise ValidationError("sql 查询不能为空")
+    if not read_datasets:
+        raise ValidationError("sql_stream() 必须显式声明 read_datasets")
+
+    _reject_forbidden_tokens(query)
+    read_params = dict(read_params) if read_params else {}
+    budget = resolve_query_budget(query_budget)
+    validate_sql_view_columns(budget, read_datasets, view_columns)
+
+    scope_id = _make_scope_id()
+    view_map, register_specs = _prepare_sql_views(
+        registry=registry,
+        read_datasets=read_datasets,
+        read_params=read_params,
+        view_columns=view_columns,
+        scope_id=scope_id,
+        build_select_sql=build_select_sql,
+        resolve_paths=resolve_paths,
+    )
+    bounded_query = apply_sql_row_limit(
+        _rewrite_query_tables(query, view_map),
+        budget.max_rows,
+    )
+
+    audit_fields: dict[str, Any] = {
+        "datasets": list(read_datasets),
+        "read_params": dict(read_params) or None,
+        "query": query[:500],
+        "stream": True,
+        "scope_id": scope_id,
+    }
+
+    total_rows = 0
+    total_bytes = 0
+    err_msg: str | None = None
+    ok = False
+    start = time.perf_counter()
+
+    def _iter_batches() -> Iterator[pa.RecordBatch]:
+        nonlocal total_rows, total_bytes, ok, err_msg
+        try:
+            _conn, batch_iter = engine.execute_scoped_sql_stream(
+                register_specs,
+                bounded_query,
+                params,
+                batch_size=batch_size,
+            )
+            del _conn  # conn 由 batch_iter finally 关闭
+            for batch in batch_iter:
+                if batch.num_rows == 0:
+                    continue
+                total_rows += batch.num_rows
+                total_bytes += batch.nbytes
+                enforce_stream_budget(
+                    budget,
+                    total_rows=total_rows,
+                    total_bytes=total_bytes,
+                    elapsed_ms=(time.perf_counter() - start) * 1000,
+                )
+                yield batch
+            ok = True
+        except Exception as exc:
+            err_msg = f"{type(exc).__name__}: {exc}"
+            raise
+        finally:
+            audit.record(
+                op="sql",
+                dataset=",".join(read_datasets),
+                ok=ok,
+                rows=total_rows,
+                elapsed_ms=(time.perf_counter() - start) * 1000,
+                error=err_msg,
+                extra=audit_fields,
+            )
+
+    return _iter_batches()
 
 
 def _reject_forbidden_tokens(query: str) -> None:

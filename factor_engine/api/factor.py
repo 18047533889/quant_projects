@@ -18,3 +18,4 @@ class Factor:
     freq: str = "1d"  # 业务语义频率，写入 YAML/物化元数据，不参与 IR 类型推导
     universe: str | None = None  # 股票池/标签，供配置与文档；执行时以数据源为准
     description: str | None = None
+    source_expr: str | None = None  # 原始 DSL 字符串（lineage 用，勿与 description 混用）

@@ -52,7 +52,12 @@ def _resolve_audit_path() -> Path:
 
 
 def _should_audit_reads() -> bool:
-    return os.environ.get("QUANT_AUDIT_READS", "").lower() in {"1", "true", "yes"}
+    flag = os.environ.get("QUANT_AUDIT_READS", "").lower()
+    if flag in {"0", "false", "no"}:
+        return False
+    if flag in {"1", "true", "yes"}:
+        return True
+    return os.environ.get("QUANT_PRODUCTION_MODE", "").lower() in {"1", "true", "yes"}
 
 
 def record(

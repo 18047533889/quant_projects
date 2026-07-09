@@ -38,7 +38,9 @@ PYTHONPATH=. python scripts/export_dsl_allowlist.py   # 刷新 docs/dsl_allowlis
 
 `add` `subtract` `multiply` `divide` `abs` `log` `sign` `sqrt` `power` `sin` `cos` `exp`  
 `if_else` `where` `and_` `or_` `not_`  
-`rank` `zscore` `normalize` `quantile` `scale` `winsorize` `neutralize`
+`rank` `zscore` `normalize` `quantile` `scale` `winsorize`  
+`cs_demean` `cs_resid(y, x)` `cs_regression(y, x, mode)` — 截面 OLS / 去均值（见 [`operators_semantics.md`](operators_semantics.md)）  
+`neutralize(x, g)` — **别名** → `group_neutralize`（组内去均值，**不是** OLS）
 
 ### 3.2 时序（通用）
 
@@ -50,8 +52,8 @@ PYTHONPATH=. python scripts/export_dsl_allowlist.py   # 刷新 docs/dsl_allowlis
 
 ### 3.3 分组
 
-`group_rank` `group_neutralize` `group_zscore` `group_mean`  
-（`group_neutralize` 与 `neutralize` 在 DSL 中有别名关系，见 `_aliases.py`）
+`group_rank` `group_neutralize` `group_zscore` `group_mean` `group_normalize` `group_percentile` `group_decay_linear` `group_winsorize`  
+（`neutralize` / `group_demean` 等为 `group_neutralize` 别名，见 `_dedupe.py`）
 
 ### 3.4 清洗 / 数值安全（已在白名单）
 
@@ -121,7 +123,24 @@ PYTHONPATH=. python scripts/export_dsl_allowlist.py   # 刷新 docs/dsl_allowlis
 
 ---
 
-## 6. 相关文档
+## 6. SQL 下推（`duckdb_sql` / `clickhouse_sql`）
+
+**权威清单**：[`sql_pushdown_coverage.md`](sql_pushdown_coverage.md)（CI 由 `scripts/report_backend_coverage.py --write-doc` 生成）。
+
+| 指标 | 数量（2026-07） |
+|------|----------------|
+| canonical 已实现 | 361 |
+| Polars backend | 325（门禁 ≥ 320） |
+| SQL 可下推算子 | **58**（+ `column`/`literal` = **60**；registry **62**） |
+| intentional pandas-only | 36 |
+
+**常用已下推**：时序 `ts_mean/std/sum/max/min/median/var/delay/delta/pct/rank/corr/beta/ema/decay_linear`；截面 `rank/zscore/normalize/scale/winsorize/cs_demean/cs_resid/cs_regression`；分组 `group_*` 全簇；清洗 `fillna/ffill/bfill/coalesce/nan_to_num`；条件 `where/if_else/is_finite/is_nan`；数值安全 `protected_*`。
+
+**未下推**：技术指标 ~200+、`quantile`、非常量 `fillna`、36 个 pandas-only（FFT/矩阵/随机等）。
+
+---
+
+## 7. 相关文档
 
 | 文档 | 用途 |
 |------|------|

@@ -17,6 +17,7 @@ def test_load_profile_prod_exists():
     assert payload["dq"]["profile"] == "us_equity_daily_prod"
     assert payload["materialization"]["target"] == "staging_clickhouse"
     assert payload["materialization"]["preserve_invalid_rows"] is True
+    assert payload["backend"]["type"] == "auto"
 
 
 def test_load_config_prod_profile_fields(tmp_path):
@@ -43,6 +44,7 @@ data_source:
     assert loaded.materialization is not None
     assert loaded.materialization.target == "staging_clickhouse"
     assert loaded.materialization.preserve_invalid_rows is True
+    assert loaded.backend.type == "auto"
 
 
 def test_config_merges_profile_overrides(tmp_path):

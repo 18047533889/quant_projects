@@ -120,9 +120,9 @@ _EXPLICIT: dict[str, OpDoc] = {
         r"\tilde{X}_{i,t} = \mathrm{clip}\bigl(X_{i,t}, Q_p, Q_{1-p}\bigr)",
     ),
     "neutralize": OpDoc(
-        "截面 OLS 中性化（对因子 Y 回归取残差）。",
-        "每个交易日回归 X ~ Y，输出残差 ε。",
-        r"X_{i,t} = \alpha_t + \beta_t Y_{i,t} + \varepsilon_{i,t}",
+        "组内去均值（行业中性）。",
+        "DSL 别名 → group_neutralize；每个 (t, group) 内 X - 组内均值。截面 OLS 残差请用 cs_resid。",
+        r"\tilde{X}_{i,t} = X_{i,t} - \bar{X}_{g(i),t}",
     ),
     "cs_resid": OpDoc(
         "截面线性回归残差。",

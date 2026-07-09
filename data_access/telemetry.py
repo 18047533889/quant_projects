@@ -67,6 +67,95 @@ def _operator_quota() -> int:
     return value if value > 0 else _DEFAULT_OPERATOR_QUOTA
 
 
+def _explain_slow_query_enabled() -> bool:
+    return os.environ.get("QUANT_EXPLAIN_SLOW_QUERY", "").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def _explain_slow_query_ms() -> float:
+    raw = os.environ.get("QUANT_EXPLAIN_QUERY_MS")
+    if not raw:
+        return _slow_query_ms()
+    try:
+        value = float(raw)
+    except ValueError:
+        return _slow_query_ms()
+    return value if value > 0 else _slow_query_ms()
+
+
+def _profile_slow_query_enabled() -> bool:
+    return os.environ.get("QUANT_PROFILE_SLOW_QUERY", "").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def maybe_log_slow_query_plan(
+    engine: Any,
+    *,
+    elapsed_ms: float,
+    sql: str,
+    params: Any,
+    op: str,
+    audit_dataset: str | None = None,
+) -> None:
+    """慢查询可选 EXPLAIN；默认关闭（QUANT_EXPLAIN_SLOW_QUERY=1 启用）。"""
+    if not _explain_slow_query_enabled():
+        return
+    if elapsed_ms < _explain_slow_query_ms():
+        return
+    try:
+        explain_fn = getattr(engine, "explain", None)
+        if not callable(explain_fn):
+            return
+        plan = explain_fn(sql, params)
+        operator = resolve_operator()
+        logger.warning(
+            "慢查询 EXPLAIN operator=%s op=%s elapsed_ms=%.1f plan=%s",
+            operator,
+            op,
+            elapsed_ms,
+            (plan[:2000] + "…") if len(plan) > 2000 else plan,
+        )
+        if audit_dataset:
+            from . import audit
+
+            audit.record(
+                op="explain",
+                dataset=audit_dataset,
+                ok=True,
+                elapsed_ms=elapsed_ms,
+                extra={"sql_op": op, "plan": plan[:4000]},
+            )
+        if _profile_slow_query_enabled():
+            profile_fn = getattr(engine, "profile_analyze", None)
+            if callable(profile_fn):
+                profile = profile_fn(sql, params)
+                logger.warning(
+                    "慢查询 PROFILE operator=%s op=%s elapsed_ms=%.1f profile=%s",
+                    operator,
+                    op,
+                    elapsed_ms,
+                    (profile[:2000] + "…") if len(profile) > 2000 else profile,
+                )
+                if audit_dataset:
+                    from . import audit
+
+                    audit.record(
+                        op="profile",
+                        dataset=audit_dataset,
+                        ok=True,
+                        elapsed_ms=elapsed_ms,
+                        extra={"sql_op": op, "profile": profile[:8000]},
+                    )
+    except Exception:  # noqa: BLE001 — 诊断失败不能影响主路径
+        pass
+
+
 @dataclass
 class OperatorCounters:
     """单 operator 的累计指标；进程生命周期计数。"""

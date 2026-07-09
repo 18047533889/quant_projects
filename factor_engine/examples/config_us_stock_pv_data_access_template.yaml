@@ -27,7 +27,7 @@ data_source:
     adj_factor: AdjFactor
 
 backend:
-  type: pandas
+  type: auto
 
 engine:
   enable_cache: true

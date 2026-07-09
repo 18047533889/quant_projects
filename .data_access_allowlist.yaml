@@ -26,10 +26,14 @@
 # ============================================================================
 - path: data_access/engine.py
   reason: "DuckDB 引擎封装本体，`import duckdb` + `duckdb.connect` 的唯一合法落点"
+- path: data_access/duckdb_config.py
+  reason: "DuckDB PRAGMA 配置模块，供 engine 与 isolated connection 复用"
 - path: data_access/store.py
   reason: "data_access 实现本体，内部 build SQL + 调 DuckDB"
 - path: data_access/publish.py
   reason: "publish 流程要直读 parquet 做行数校验，不能递归自己调 read_arrow"
+- path: data_access/stats.py
+  reason: "dataset footer 行数估算需 pq.read_metadata，与 publish 同类只读 footer"
 - path: data_access/upsert.py
   reason: "upsert 需要读已有 partition 做 merge，调 store.read_arrow 会绕一大圈"
 - path: data_access/sql_escape.py
@@ -114,6 +118,10 @@
   reason: "发布前同步本地 materializer 目录到 staging；读 parquet footer 统计行数"
 - path: factor_engine/storage/staging_loader.py
   reason: "staging 行级补偿删除：按 materializer 落盘分区读改写 parquet；非 registry dataset"
+- path: factor_engine/storage/schema_migration.py
+  reason: "因子湖 metadata 列迁移 CLI；读写 materializer 落盘路径 factors/<id>/year=*/data.parquet，非 registry dataset"
+- path: factor_engine/scripts/migrate_factor_lake_schema.py
+  reason: "因子湖 schema 迁移 CLI 入口；委托 schema_migration 读改写本地 lake 分区"
 - path: data_access/clickhouse_write.py
   reason: "Parquet→ClickHouse ETL（load_parquet_to_panel_table）读用户指定单文件；写 CH 专用路径"
 - path: scripts/verify_gtja191_factor_lake.py

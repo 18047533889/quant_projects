@@ -2,6 +2,12 @@
 
 > **第 5 版更改-shw**：因子引擎已扩展 WorldQuant BRAIN 风格算子分类；DSL 中逻辑函数须用 `and_` / `or_` / `not_`；算子语义与占位说明见同目录 [`operators_semantics.md`](operators_semantics.md)，按版本变更见 [`changelog_shw.md`](changelog_shw.md)。本 Prompt 若与上述文档冲突，以 `operators_semantics.md` 与当前 `api/operator_registry` 为准，并建议逐步同步下文「Supported Operators」列表。
 >
+> **第 35 版更改-shw**：Phase 16 — `materialize_many_from_config(batch_run=True)` 同 scope 共享 `run_many`；`run_many_from_config_parallel`；`ResolvedMaterializeKwargs.to_engine_materialize_kwargs()`。
+>
+> **第 34 版更改-shw**：Phase 15 — `config_run_batch_key` 子分组；`ClickHouseWriteTarget.write_factor_series`；`storage` export write_targets。
+>
+> **第 33 版更改-shw**：企业级 P0–P2 — `warmup_service` / `materialize_service` / `QueryBudget` / `sql_stream` / `FactorWriteTarget` / `SessionBarCalendar` 分钟 warmup；详见 [`enterprise_factor_engine_roadmap.md`](enterprise_factor_engine_roadmap.md) Phase 14。
+>
 > **第 32 版更改-shw**：**读端统一 `data_access`** — 示例 YAML / mining preset 均经 `datasets.yaml` 登记数据集；`composite` 用于价量 anchor + 基本面 asof；legacy `parquet_kline` / `multi_parquet` 仅调试。Registry 见 `data_access/config/datasets.yaml`；契约 CI：`scripts/validate_datasets_mining_alignment.py`。
 
 You are an AI assistant helping to write factor definitions and configurations for a quantitative factor engine. Below is the complete specification of the system.
@@ -580,11 +586,14 @@ col("price") / delay(col("price"), 5)  # 5-period price momentum
 > Many names from v10–19 docs (`pasteurize`, `bucket`, `ts_donchian`, `ts_sma`, …) are **NOT** in the allowlist until migrated back to `cleaned_operators`.
 
 **Group (in allowlist)**  
-`group_rank(x, g)`, `group_neutralize(x, g)`, `group_zscore(x, g)`, `group_mean(x, weight, g)`  
+`group_rank(x, g)`, `group_neutralize(x, g)`, `group_zscore(x, g)`, `group_mean(x, weight, g)`, `group_normalize(x, g)`, `group_percentile(x, g, p)`, `group_decay_linear(x, g, w)`, `group_winsorize(x, g, a)`  
+**Aliases**: `neutralize(x, g)` / `group_demean(x, g)` → **group demean** (NOT OLS)  
 **Not in allowlist**: `group_scale`, `group_backfill`
 
 **Cleaning (in allowlist)**  
 `protected_div`, `protected_log`, `protected_sqrt`, `nan_to_num`, `fillna`, `ffill`, `bfill`, `coalesce`, `winsorize`  
+**Causal note**: `bfill` does **not** use future values (NaN stays NaN).  
+**Detection ops**: `is_nan(x)`, `is_finite(x)` return **float64 0.0/1.0** (not bool).  
 **Not in allowlist**: `pasteurize`, `tail`
 
 **Technical (in allowlist — use these names)**  
@@ -592,8 +601,13 @@ Moving averages: **`SMA(x,d)`**, **`EMA(x,d)`** — not `ts_sma` / `ts_ema`
 `ts_rsi`, `ts_macd`, `ts_atr`, `ts_bbands`, `ts_adx`, `ts_adxr`, `ts_aroon`, `ts_obv`, `ts_mom`, `ts_roc`, `ts_trix`, `ts_cci`, `ts_stoch`, `ts_stochf`, `ts_willr`, `ts_kama`, `ts_skew`, `ts_kurt`  
 **Not in allowlist**: `ts_donchian`, `ts_keltner`, `ts_natr`, `ts_ad`, `ts_sar`, `ts_mfi`, `ts_ppo`, … — see [`dsl_operators_reference.md`](dsl_operators_reference.md) §4
 
-**Context / cross-section (in allowlist)**  
-`neutralize(x, y)` — OLS residual with intercept  
+**Cross-section regression (in allowlist)**  
+`cs_resid(y, x)` — OLS residual ε = y - (α + βx) per timestamp (≥3 valid pairs)  
+`cs_regression(y, x, mode)` — mode 0=residual, 1=beta, 2=fitted  
+`cs_demean(x)` — cross-sectional demean  
+**Not OLS**: `neutralize(x, g)` = group demean only
+
+**Context (not in allowlist)**  
 **Not in allowlist**: `orthogonalize`, `change_instrument`
 
 **Signals (in allowlist)**  
@@ -602,6 +616,19 @@ Moving averages: **`SMA(x,d)`**, **`EMA(x,d)`** — not `ts_sma` / `ts_ema`
 
 **Never generate (not in allowlist)**  
 `vec_avg`, `vec_sum`, all `*_stub` names (~79 in catalog). `STUB_IR_OPS` is empty; `parse_expr` rejects unknown names.
+
+### 5.4.1 SQL pushdown backends
+
+When `backend.type` is `duckdb_sql` or `clickhouse_sql`, **88 operator canonicals** compile to SQL (+ `column`/`literal` IR nodes) — see [`sql_pushdown_coverage.md`](sql_pushdown_coverage.md).
+
+**SQL-capable highlights**: `ts_mean/std/sum/max/min/delay/delta/rank/corr/beta`, `cs_resid`, `cs_regression`, `cs_demean`, `group_*` cluster, `fillna/ffill/bfill/coalesce`, `where/if_else`, `is_nan/is_finite`, `protected_*`, arithmetic.
+
+**NOT SQL (falls back to pandas/polars)**: TA indicators (~200+), `quantile`, non-constant `fillna`, FFT/matrix/random pandas-only ops.
+
+**Example (size-neutral factor via OLS)**:
+```python
+cs_resid(col("factor"), col("market_cap"))
+```
 
 ---
 
@@ -720,7 +747,58 @@ timestamp   instrument  factor_value
 
 ---
 
-## 9. Quick Reference
+## 9. Production & Enterprise (2026-07)
+
+### Profiles (`examples/profiles/prod.yaml`)
+
+| Switch | production default |
+|---|---|
+| `run.auto_warmup` | `true` |
+| `dq.strict` / input DQ | enabled |
+| `pit.enforce` | `true` |
+| `materialization.target` | `staging_clickhouse` |
+| `preserve_invalid_rows` | `true` |
+
+### Materialization targets
+
+| `write_target` | Behavior |
+|---|---|
+| `local` | Parquet factor lake partitions |
+| `staging` | `data_access` upsert → `factor_lake_staging` |
+| `clickhouse` | CH only (+ catalog) |
+| `staging_clickhouse` | staging first, then CH dual-write |
+
+Batch config: `run_many_from_config` groups by data scope, then `config_run_batch_key` for `run_many` + CSE.
+`materialize_many_from_config(batch_run=True)` shares one `run_many` per scope when materialize settings match.
+
+| Batch API | When to use |
+|---|---|
+| `FactorEngine.run_many_from_config(paths)` | Compute many factors; batches by scope + run flags |
+| `FactorEngine.run_many_from_config_parallel(paths, n_jobs=4)` | Same, parallel root evaluation |
+| `FactorEngine.materialize_many_from_config(paths, batch_run=True)` | Compute + persist; shared `run_many` then per-factor write |
+| `FactorEngine.materialize_from_config(path)` | Single YAML full materialize |
+| `profile: prod` in YAML | Loads `examples/profiles/prod.yaml` defaults |
+
+Config keys for grouping (non factor-specific): `config_data_scope_key`, `config_run_batch_key`, `config_materialize_batch_key` in `runtime/config_runtime.py`.
+
+Lineage records: `source_expr` (DSL string), `composite_join_reports`, `data_snapshot_id`, `git_commit`.
+
+### data_access read path (production)
+
+- Set `QUANT_PRODUCTION_MODE=1` → read audit + require explicit `columns`
+- `store.sql()` / `store.sql_stream()` → QueryBudget + row LIMIT
+- Factor lake schema includes metadata: `calc_time`, `factor_version`, `is_valid`, `invalid_reason`
+
+### CLI utilities
+
+```bash
+# Migrate old factor lake parquet metadata columns
+PYTHONPATH=factor_engine:. python3 factor_engine/scripts/migrate_factor_lake_schema.py --lake-root /path --apply
+```
+
+---
+
+## 10. Quick Reference
 
 | Task | Example |
 |---|---|
@@ -734,9 +812,11 @@ timestamp   instrument  factor_value
 | Profit margin | `col("net_income") / col("revenue")` |
 | Value rank | `rank(col("price_to_earnings"))` |
 | Quality rank | `rank(col("return_on_equity"))` |
+| OLS residual (size neutral) | `cs_resid(col("factor"), col("market_cap"))` |
+| Industry demean | `group_neutralize(col("factor"), col("sector"))` |
 
 ---
 
-**Version**: 1.0  
-**Last Updated**: 2026-03-26  
+**Version**: 1.1  
+**Last Updated**: 2026-07-09  
 **Status**: Production

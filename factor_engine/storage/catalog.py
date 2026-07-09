@@ -20,7 +20,7 @@ import json
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 from .exceptions import FactorHashMismatchError, FactorNotFoundError
 
@@ -123,6 +123,22 @@ CREATE TABLE IF NOT EXISTS factor_materialize_checkpoint (
     updated_at      TEXT NOT NULL,
     PRIMARY KEY (factor_id, partition_year)
 );
+
+CREATE TABLE IF NOT EXISTS factor_dependency (
+    factor_id               TEXT PRIMARY KEY,
+    referenced_columns_json TEXT NOT NULL,
+    lookback                INTEGER NOT NULL DEFAULT 0,
+    frequency               TEXT,
+    source_dataset          TEXT,
+    updated_at              TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS factor_column_dep (
+    column_name TEXT NOT NULL,
+    factor_id   TEXT NOT NULL,
+    PRIMARY KEY (column_name, factor_id),
+    FOREIGN KEY (factor_id) REFERENCES factor_dependency(factor_id)
+);
 """
 
 
@@ -155,6 +171,25 @@ class FactorCatalog:
         if "data_source_json" not in cols:
             self._conn.execute(
                 "ALTER TABLE factor_registry ADD COLUMN data_source_json TEXT"
+            )
+        ck_cols = {
+            row[1]
+            for row in self._conn.execute(
+                "PRAGMA table_info(factor_materialize_checkpoint)"
+            )
+        }
+        if "partition_key" not in ck_cols:
+            self._conn.execute(
+                "ALTER TABLE factor_materialize_checkpoint ADD COLUMN partition_key TEXT"
+            )
+            self._conn.execute(
+                "UPDATE factor_materialize_checkpoint "
+                "SET partition_key = 'year=' || CAST(partition_year AS TEXT) "
+                "WHERE partition_key IS NULL"
+            )
+            self._conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_factor_mat_ck_partition_key "
+                "ON factor_materialize_checkpoint(factor_id, partition_key)"
             )
 
     # ------------------------------------------------------------------
@@ -296,6 +331,12 @@ class FactorCatalog:
             "DELETE FROM factor_materialize_checkpoint WHERE factor_id = ?", (factor_id,)
         )
         self._conn.execute(
+            "DELETE FROM factor_column_dep WHERE factor_id = ?", (factor_id,)
+        )
+        self._conn.execute(
+            "DELETE FROM factor_dependency WHERE factor_id = ?", (factor_id,)
+        )
+        self._conn.execute(
             "DELETE FROM factor_watermark WHERE factor_id = ?", (factor_id,)
         )
         self._conn.execute(
@@ -381,16 +422,19 @@ class FactorCatalog:
         run_id: str,
         status: str,
         error_message: str | None = None,
+        partition_key: str | None = None,
     ) -> None:
         now = datetime.now(timezone.utc).isoformat()
+        pkey = partition_key or f"year={int(partition_year)}"
         self._conn.execute(
             "INSERT INTO factor_materialize_checkpoint "
-            "(factor_id, partition_year, run_id, status, error_message, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?) "
-            "ON CONFLICT(factor_id, partition_year) DO UPDATE SET "
-            "run_id=excluded.run_id, status=excluded.status, "
-            "error_message=excluded.error_message, updated_at=excluded.updated_at",
-            (factor_id, int(partition_year), run_id, status, error_message, now),
+            "(factor_id, partition_year, partition_key, run_id, status, error_message, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(factor_id, partition_key) DO UPDATE SET "
+            "partition_year=excluded.partition_year, run_id=excluded.run_id, "
+            "status=excluded.status, error_message=excluded.error_message, "
+            "updated_at=excluded.updated_at",
+            (factor_id, int(partition_year), pkey, run_id, status, error_message, now),
         )
         self._conn.commit()
 
@@ -403,6 +447,18 @@ class FactorCatalog:
             "SELECT * FROM factor_materialize_checkpoint "
             "WHERE factor_id = ? AND partition_year = ?",
             (factor_id, int(partition_year)),
+        ).fetchone()
+        return dict(row) if row else None
+
+    def get_partition_checkpoint_by_key(
+        self,
+        factor_id: str,
+        partition_key: str,
+    ) -> dict | None:
+        row = self._conn.execute(
+            "SELECT * FROM factor_materialize_checkpoint "
+            "WHERE factor_id = ? AND partition_key = ?",
+            (factor_id, partition_key),
         ).fetchone()
         return dict(row) if row else None
 
@@ -432,3 +488,74 @@ class FactorCatalog:
             (factor_id,),
         )
         self._conn.commit()
+
+    # ------------------------------------------------------------------
+    # 因子依赖 catalog（增量 by data event）
+    # ------------------------------------------------------------------
+
+    def record_factor_dependency(
+        self,
+        factor_id: str,
+        *,
+        referenced_columns: Iterable[str],
+        lookback: int = 0,
+        frequency: str | None = None,
+        source_dataset: str | None = None,
+    ) -> None:
+        """物化/run 后登记因子对数据列的依赖。"""
+        cols = sorted(set(str(c) for c in referenced_columns if c))
+        now = datetime.now(timezone.utc).isoformat()
+        self._conn.execute(
+            "INSERT INTO factor_dependency "
+            "(factor_id, referenced_columns_json, lookback, frequency, source_dataset, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(factor_id) DO UPDATE SET "
+            "referenced_columns_json=excluded.referenced_columns_json, "
+            "lookback=excluded.lookback, frequency=excluded.frequency, "
+            "source_dataset=excluded.source_dataset, updated_at=excluded.updated_at",
+            (
+                factor_id,
+                json.dumps(cols, ensure_ascii=False),
+                int(lookback),
+                frequency,
+                source_dataset,
+                now,
+            ),
+        )
+        self._conn.execute(
+            "DELETE FROM factor_column_dep WHERE factor_id = ?",
+            (factor_id,),
+        )
+        for col in cols:
+            self._conn.execute(
+                "INSERT OR IGNORE INTO factor_column_dep (column_name, factor_id) VALUES (?, ?)",
+                (col, factor_id),
+            )
+        self._conn.commit()
+
+    def get_factor_dependency(self, factor_id: str) -> dict | None:
+        row = self._conn.execute(
+            "SELECT * FROM factor_dependency WHERE factor_id = ?",
+            (factor_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        out = dict(row)
+        out["referenced_columns"] = json.loads(out.pop("referenced_columns_json", "[]"))
+        return out
+
+    def list_factors_for_column(self, column_name: str) -> list[dict]:
+        rows = self._conn.execute(
+            "SELECT d.* FROM factor_dependency d "
+            "JOIN factor_column_dep c ON d.factor_id = c.factor_id "
+            "WHERE c.column_name = ? ORDER BY d.factor_id",
+            (str(column_name),),
+        ).fetchall()
+        out: list[dict] = []
+        for row in rows:
+            item = dict(row)
+            item["referenced_columns"] = json.loads(
+                item.pop("referenced_columns_json", "[]")
+            )
+            out.append(item)
+        return out

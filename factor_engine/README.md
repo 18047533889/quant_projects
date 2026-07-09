@@ -7,9 +7,10 @@
 ### 协作者速览（新人约 5 分钟）
 
 1. **数据流（本仓库在干什么）**：`api`（`Factor` / DSL / 算子工厂，经 **`cleaned_operators`**）→ `expr` → `ir` → `planner` → `backend` → **MultiIndex 因子序列**；**编排入口**是 **`runtime/FactorEngine`**。挖掘侧入门：**[`docs/算子与导入教程.md`](docs/算子与导入教程.md)**。
-2. **规范从哪读**：算子 **能否写入 manifest** 以 [`docs/dsl_operators_reference.md`](docs/dsl_operators_reference.md) 为准；参数语义见 [`docs/operators_semantics.md`](docs/operators_semantics.md)。
-3. **动手跑**：最小脚本 [`examples/simple_factor.py`](examples/simple_factor.py)；配置驱动见 `examples/` 与 **`FactorEngine.run_from_config`**；**目标仓位回测**见 [`../../backtest_layer/single_asset_backtest/README.md`](../../backtest_layer/single_asset_backtest/README.md) 文首 **「新人 5 分钟上手」**。
-4. **版本与变更**：[`docs/changelog_shw.md`](docs/changelog_shw.md)。
+2. **Backend 覆盖（2026-07）**：Polars **325** · SQL 下推 **88** 算子（[`docs/sql_pushdown_coverage.md`](docs/sql_pushdown_coverage.md)）。
+3. **规范从哪读**：算子 **能否写入 manifest** 以 [`docs/dsl_operators_reference.md`](docs/dsl_operators_reference.md) 为准；参数语义见 [`docs/operators_semantics.md`](docs/operators_semantics.md)。
+4. **动手跑**：最小脚本 [`examples/simple_factor.py`](examples/simple_factor.py)；配置驱动见 `examples/` 与 **`FactorEngine.run_from_config`**；**批量 YAML** 见 [`runtime/README.md`](runtime/README.md) §8；**目标仓位回测**见 [`../../backtest_layer/single_asset_backtest/README.md`](../../backtest_layer/single_asset_backtest/README.md) 文首 **「新人 5 分钟上手」**。
+5. **版本与变更**：[`docs/changelog_shw.md`](docs/changelog_shw.md)；企业级路线图 [`docs/enterprise_factor_engine_roadmap.md`](docs/enterprise_factor_engine_roadmap.md)（Phase 14–16 已完成）。
 
 > **第 5 版更改-shw**：更新「支持的算子」「项目结构」与 `docs/` 索引，以反映 `api/operators/` 包、算子注册表及 WQ 风格扩展；细节仍以 `changelog_shw.md` 分版条为准。
 
@@ -51,6 +52,8 @@
 > **第 30 版更改-shw**：根目录与各包 **`README.md`** 增加 **「协作者速览（约 5 分钟）」**；**`docs/README.md`** 说明该约定。详见 `changelog_shw.md`「第 30 版」。
 
 > **第 31 版更改-shw**：**`cleaned_operators` 全量接入** — 删除 **`api/operators/`** 与强类型 **`expr/*`** 模块；DSL 白名单与 Pandas 执行均经 **`cleaned_operators`**；详见 [`api/README.md`](api/README.md)、[`cleaned_operators/README.md`](cleaned_operators/README.md)、[`docs/changelog_shw.md`](docs/changelog_shw.md)「第 31 版」。
+
+> **第 32 版更改-shw（企业级）**：**读端统一 `data_access`** + **生产 profile**（`examples/profiles/prod.yaml`）+ 批量配置 API；详见 [`docs/enterprise_factor_engine_roadmap.md`](docs/enterprise_factor_engine_roadmap.md) Phase 14–16 与 [`docs/changelog_shw.md`](docs/changelog_shw.md) 第 33–35 版。
 
 ---
 
@@ -121,7 +124,7 @@ data_source:
   end_date: 2024-12-31
 
 backend:
-  type: pandas
+  type: auto
 
 engine:
   enable_cache: true
@@ -153,7 +156,7 @@ data_source:
     balance_sheet: asof_backward
 
 backend:
-  type: pandas
+  type: auto
 ```
 
 **Legacy 直连 parquet 示例（仅调试 / 无 registry 时）：**
@@ -170,6 +173,61 @@ data_source:
 ```
 
 `examples/configs/` 目录下收录了覆盖全部数据集的 **`data_access`** 配置（见下文[数据集列表](#数据集列表)）。
+
+### 企业级批量配置（Phase 14–16）
+
+多因子 YAML 可用类方法批量执行，**按数据源 scope 分组**，再按 run / 物化参数子分组：
+
+```python
+from runtime.engine import FactorEngine
+
+paths = ["configs/fa.yaml", "configs/fb.yaml", "configs/fc.yaml"]
+
+# 仅计算（同 scope + 相同 run 开关 → run_many + CSE）
+out = FactorEngine.run_many_from_config(paths)
+out = FactorEngine.run_many_from_config_parallel(paths, n_jobs=4)
+
+# 计算 + 落盘（同 scope + 相同物化参数 → 共享一次 run_many）
+mat = FactorEngine.materialize_many_from_config(paths, batch_run=True)
+
+# 单文件物化 / 增量
+FactorEngine.materialize_from_config("configs/fa.yaml")
+FactorEngine.materialize_incremental_from_config("configs/fa.yaml", since="2024-06-01")
+```
+
+| API | 说明 |
+|-----|------|
+| `run_many_from_config` | `config_data_scope_key` → `config_run_batch_key` → `run_many` |
+| `run_many_from_config_parallel` | 根节点 joblib 并行（共享子式仍串行） |
+| `materialize_many_from_config(batch_run=True)` | 同组共享 `run_many`，再 `execute_materialize_from_resolved` |
+| `materialize_from_config` | 单 YAML；`ResolvedMaterializeKwargs` 含 `resume_materialize` / CH 等 |
+
+生产 profile 示例：[`examples/profiles/prod.yaml`](examples/profiles/prod.yaml)（`auto_warmup`、DQ、PIT、`staging_clickhouse`）。写目标：`local` / `staging` / `clickhouse` / `staging_clickhouse`（见 [`storage/write_targets.py`](storage/write_targets.py)）。
+
+读端审计与 SQL 限额：monorepo [`data_access/README.md`](../data_access/README.md)（`QueryBudget`、`sql_stream`、`verify_factor_write`）。
+
+### 底层栈与 backend 选择（2026-07）
+
+| 层 | 组件 | 说明 |
+|----|------|------|
+| **读** | `data_access` + **DuckDB** | parquet 批量读、`sql()`/`sql_stream()`、registry 白名单 |
+| **读** | `clickhouse` | 长表 panel 只读 |
+| **算** | **`auto`（默认）** | SQL 可编译子树 → DuckDB/CH；其余 → Polars（325 算子）→ Pandas 兜底（361） |
+| **算** | `duckdb_sql` | 强制 DuckDB 方言 SQL 下推（**88** 算子，见 [`sql_pushdown_coverage.md`](docs/sql_pushdown_coverage.md)） |
+| **算** | `clickhouse_sql` | ClickHouse 方言 SQL 下推 |
+| **写** | Parquet factor lake / staging / CH | 经 `write_targets`；DuckDB 不做持久化写目标 |
+
+**推荐 YAML**（未写 `backend` 时默认 **`auto`**）：
+
+```yaml
+data_source:
+  type: data_access
+  dataset: us_stocks_sip_day_aggs
+backend:
+  type: auto   # 或 duckdb_sql / clickhouse_sql / pandas（调试对齐）
+```
+
+示例：[`configs/data_access_auto_smoke.yaml`](examples/configs/data_access_auto_smoke.yaml)、[`configs/data_access_duckdb_sql_smoke.yaml`](examples/configs/data_access_duckdb_sql_smoke.yaml)。
 
 ---
 

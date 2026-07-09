@@ -105,10 +105,15 @@ def _series_from_sql_table(table, *, timestamp_col: str, instrument_col: str) ->
     )
 
 
-def execute_compiled_sql(compiled: CompiledSql, ctx: PushdownContext) -> pd.Series:
+def execute_compiled_sql(
+    compiled: CompiledSql,
+    ctx: PushdownContext,
+    data_source: Any,
+    query_budget: Any | None = None,
+) -> pd.Series:
     if compiled.dialect == SqlDialect.CLICKHOUSE:
         return _execute_clickhouse(compiled, ctx)
-    return _execute_duckdb(compiled)
+    return _execute_duckdb(compiled, ctx, data_source, query_budget=query_budget)
 
 
 def _series_from_batch_table(
@@ -132,11 +137,15 @@ def _series_from_batch_table(
 def execute_batch_compiled_sql(
     compiled: BatchCompiledSql,
     ctx: PushdownContext,
+    data_source: Any,
+    query_budget: Any | None = None,
 ) -> dict[str, pd.Series]:
     if compiled.dialect == SqlDialect.CLICKHOUSE:
         table = _execute_clickhouse_table(compiled, ctx)
     else:
-        table = _execute_duckdb_table(compiled)
+        table = _execute_duckdb_table(
+            compiled, ctx, data_source, query_budget=query_budget
+        )
 
     out: dict[str, pd.Series] = {}
     col_names = list(getattr(table, "column_names", []) or getattr(table, "schema", {}).names or [])
@@ -151,15 +160,56 @@ def execute_batch_compiled_sql(
     return out
 
 
-def _execute_duckdb_table(compiled: CompiledSql | BatchCompiledSql):
+def _build_duckdb_store_kwargs(
+    compiled: CompiledSql | BatchCompiledSql,
+    pctx: PushdownContext,
+    data_source: Any,
+    query_budget: Any | None = None,
+) -> dict[str, Any]:
+    """组装 store.sql() 参数：view_columns / read_params / query_budget。"""
+    cols: set[str] = set(compiled.referenced_columns)
+    cols.add(pctx.time_column)
+    cols.add(pctx.instrument_column)
+    fields = getattr(data_source, "fields", None) or {}
+    physical = sorted({fields.get(c, c) for c in cols})
+    view_columns = {name: physical for name in compiled.read_datasets}
+
+    read_params: dict[str, dict[str, Any]] = {}
+    ds_params = dict(getattr(data_source, "params", None) or {})
+    for name in compiled.read_datasets:
+        if ds_params:
+            read_params[name] = ds_params
+
+    _ensure_data_access()
+    from data_access.query_budget import QueryBudget, resolve_query_budget
+
+    explicit = query_budget
+    if explicit is None:
+        explicit = QueryBudget(max_rows=50_000_000)
+    return {
+        "read_datasets": list(compiled.read_datasets),
+        "view_columns": view_columns,
+        "read_params": read_params or None,
+        "query_budget": resolve_query_budget(explicit),
+    }
+
+
+def _execute_duckdb_table(
+    compiled: CompiledSql | BatchCompiledSql,
+    pctx: PushdownContext | None = None,
+    data_source: Any | None = None,
+    query_budget: Any | None = None,
+):
     _ensure_data_access()
     from data_access import get_store
 
     store = get_store()
-    return store.sql(
-        compiled.query,
-        read_datasets=list(compiled.read_datasets),
-    )
+    kwargs: dict[str, Any] = {}
+    if pctx is not None and data_source is not None:
+        kwargs = _build_duckdb_store_kwargs(
+            compiled, pctx, data_source, query_budget=query_budget
+        )
+    return store.sql(compiled.query, **kwargs)
 
 
 def _execute_clickhouse_table(compiled: CompiledSql | BatchCompiledSql, ctx: PushdownContext):
@@ -170,8 +220,15 @@ def _execute_clickhouse_table(compiled: CompiledSql | BatchCompiledSql, ctx: Pus
     return execute_query(config=config, sql=compiled.query)
 
 
-def _execute_duckdb(compiled: CompiledSql) -> pd.Series:
-    table = _execute_duckdb_table(compiled)
+def _execute_duckdb(
+    compiled: CompiledSql,
+    pctx: PushdownContext,
+    data_source: Any,
+    query_budget: Any | None = None,
+) -> pd.Series:
+    table = _execute_duckdb_table(
+        compiled, pctx, data_source, query_budget=query_budget
+    )
     return _series_from_sql_table(table, timestamp_col="ts", instrument_col="inst")
 
 
@@ -201,7 +258,9 @@ def try_execute_sql_pushdown(
     if compiled is None:
         return None
 
-    return execute_compiled_sql(compiled, pctx)
+    return execute_compiled_sql(
+        compiled, pctx, ctx.data_source, query_budget=getattr(ctx, "query_budget", None)
+    )
 
 
 def try_execute_sql_pushdown_batch(
@@ -227,4 +286,9 @@ def try_execute_sql_pushdown_batch(
     if compiled is None:
         return None
 
-    return execute_batch_compiled_sql(compiled, pctx)
+    return execute_batch_compiled_sql(
+        compiled,
+        pctx,
+        ctx.data_source,
+        query_budget=getattr(ctx, "query_budget", None),
+    )

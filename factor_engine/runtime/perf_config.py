@@ -69,6 +69,23 @@ class PerfConfig:
     backtest_execution_engine: BacktestExecutionEngine = "python"
     #: 算子 runtime 选择：auto=有 polars 则用 polars，否则 pandas
     operator_backend: OperatorBackend = "auto"
+    #: SQL/读路径行数硬上限；``None`` 表示不额外限制（仍受 data_access 默认 budget 约束）
+    query_max_rows: int | None = None
+    #: SQL/读路径结果字节硬上限
+    query_max_result_bytes: int | None = None
+
+    def build_query_budget(self) -> Any | None:
+        """构造 ``data_access.QueryBudget``；无显式限制时返回 ``None``。"""
+        if self.query_max_rows is None and self.query_max_result_bytes is None:
+            return None
+        try:
+            from data_access.query_budget import QueryBudget
+        except ImportError:
+            return None
+        return QueryBudget(
+            max_rows=self.query_max_rows,
+            max_result_bytes=self.query_max_result_bytes,
+        )
 
     @classmethod
     def from_env(cls) -> "PerfConfig":
@@ -84,6 +101,8 @@ class PerfConfig:
         - ``FACTOR_ENGINE_USE_MODIN``：``1``/``true`` 使 ``PandasBackend`` 使用 ``modin.pandas``（亦可用 ``build_backend(\"pandas_modin\")``）
         - ``FACTOR_ENGINE_POLARS_LAZY``：``1``/``true`` 使 ``PolarsBackend`` 使用 LazyFrame 再 ``collect``
         - ``FACTOR_ENGINE_OPERATOR_BACKEND``：``auto`` / ``polars`` / ``pandas_numpy``
+        - ``FACTOR_ENGINE_QUERY_MAX_ROWS``：SQL 下推 / 读路径行数硬上限
+        - ``FACTOR_ENGINE_QUERY_MAX_RESULT_BYTES``：结果字节硬上限
         """
         disable_cse = os.environ.get("FACTOR_ENGINE_DISABLE_CSE", "").lower() in (
             "1",
@@ -112,4 +131,6 @@ class PerfConfig:
             use_numba_rolling=use_numba,
             backtest_execution_engine=_env_backtest_engine("FACTOR_BACKTEST_EXECUTION_ENGINE", "python"),
             operator_backend=op_backend,  # type: ignore[arg-type]
+            query_max_rows=_env_int("FACTOR_ENGINE_QUERY_MAX_ROWS", None),
+            query_max_result_bytes=_env_int("FACTOR_ENGINE_QUERY_MAX_RESULT_BYTES", None),
         )

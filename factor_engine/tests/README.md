@@ -34,7 +34,12 @@ PYTHONPATH=. pytest tests/ -q
 | `test_planner.py` | Lowerer、Optimizer、常量折叠 |
 | `test_backend.py` | Backend 抽象与入口 |
 | `test_pandas_backend.py` | Pandas + cleaned_bridge 主路径 |
-| `test_polars_backend.py` | Polars 委托路径 |
+| `test_polars_backend.py` | Polars 路径与 pandas 对齐 |
+| `test_sql_pushdown_*.py` | SQL emitter / DuckDB 集成 / ClickHouse 方言 |
+| `test_clickhouse_materializer.py` | CH 物化 + invalid_reason |
+| `test_enterprise_readiness.py` | Polars ≥320 / SQL registry ≥62 门禁 |
+| `test_enterprise_p0.py` … `test_enterprise_p6.py` | 企业级：schema / write_targets / batch config / 物化 batch run_many / Pipeline 覆盖 |
+| `test_enterprise_materialize_paths.py` | staging_clickhouse 双写 / defer watermark |
 | `test_pandas_compat.py` | Modin / pandas 兼容 |
 | `test_dsl_parser.py` | `parse_expr` 白名单与语法 |
 | `test_config_runtime.py` | YAML → `FactorEngineConfig` |

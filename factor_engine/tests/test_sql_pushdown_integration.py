@@ -285,7 +285,7 @@ def test_sql_group_rank_and_zscore_match_pandas(tmp_path, monkeypatch):
         a = eng_pd.run(factor)["result"]
         b = eng_sql.run(factor)["result"]
         pd.testing.assert_series_equal(
-            a, b, check_names=False, check_dtype=False, rtol=1e-6, atol=1e-6
+            a, b, check_names=False, rtol=1e-6, atol=1e-6
         )
 
 
@@ -449,7 +449,7 @@ def test_sql_fillna_is_nan_scale_match_pandas(tmp_path, monkeypatch):
         a = eng_pd.run(factor)["result"]
         b = eng_sql.run(factor)["result"]
         pd.testing.assert_series_equal(
-            a, b, check_names=False, check_dtype=False, rtol=1e-6, atol=1e-6
+            a, b, check_names=False, rtol=1e-6, atol=1e-6
         )
 
 
@@ -486,7 +486,7 @@ def test_sql_where_is_finite_and_cs_demean_pipeline(tmp_path, monkeypatch):
         a = eng_pd.run(factor)["result"]
         b = eng_sql.run(factor)["result"]
         pd.testing.assert_series_equal(
-            a, b, check_names=False, check_dtype=False, rtol=1e-6, atol=1e-6
+            a, b, check_names=False, rtol=1e-6, atol=1e-6
         )
 
 
@@ -523,7 +523,44 @@ def test_sql_normalize_and_standardize_match_pandas(tmp_path, monkeypatch):
         a = eng_pd.run(factor)["result"]
         b = eng_sql.run(factor)["result"]
         pd.testing.assert_series_equal(
-            a, b, check_names=False, check_dtype=False, rtol=1e-6, atol=1e-6
+            a, b, check_names=False, rtol=1e-6, atol=1e-6
+        )
+
+
+def test_sql_cs_resid_and_regression_match_pandas(tmp_path, monkeypatch):
+    """截面 OLS cs_resid / cs_regression 与 pandas 对齐。"""
+    monkeypatch.setenv("DATA_ACCESS_CONFIG", str(_write_registry(tmp_path, tmp_path / "data")))
+    root = tmp_path / "data"
+    _seed_data(root)
+    import pyarrow.parquet as pq
+
+    df = pq.read_table(root / "panel.parquet").to_pandas()
+    df.loc[(df["Symbol"] == "A") & (df["TradeDate"] == df["TradeDate"].iloc[1]), "Close"] = float("nan")
+    df.to_parquet(root / "panel.parquet", index=False)
+
+    from api import cs_resid, cs_regression
+
+    source = build_data_source(
+        {
+            "type": "data_access",
+            "dataset": "test_daily",
+            "start_date": "2024-01-02",
+            "end_date": "2024-01-06",
+        }
+    )
+    for expr, name in (
+        (cs_resid(col("Close"), col("Open")), "cs_resid"),
+        (cs_regression(col("Close"), col("Open"), 0), "cs_regression_resid"),
+        (cs_regression(col("Close"), col("Open"), 1), "cs_regression_beta"),
+        (cs_regression(col("Close"), col("Open"), 2), "cs_regression_fit"),
+    ):
+        factor = Factor(name=name, expr=expr)
+        eng_pd = FactorEngine(backend=build_backend("pandas"), data_source=source)
+        eng_sql = FactorEngine(backend=build_backend("duckdb_sql"), data_source=source)
+        a = eng_pd.run(factor)["result"]
+        b = eng_sql.run(factor)["result"]
+        pd.testing.assert_series_equal(
+            a, b, check_names=False, rtol=1e-5, atol=1e-5
         )
 
 

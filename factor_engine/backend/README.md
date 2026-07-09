@@ -7,8 +7,10 @@
 ### 协作者速览
 
 1. **主路径**：`PandasBackend` + `KernelRegistry`（`column` / `literal` + 全部 cleaned 算子）。  
-2. **PolarsBackend**：当前 **委托** `PandasBackend`（同一 cleaned 路径）。  
-3. **不负责**：DSL（`api`）、Expr（`expr`）、计划优化（`planner`）。
+2. **PolarsBackend**：`FACTOR_ENGINE_OPERATOR_BACKEND=auto` 时优先 Polars kernel（**325** canonical）。  
+3. **SqlBackend**：`duckdb_sql` / `clickhouse_sql` — 子树 SQL 下推（**58** 算子，见 [`docs/sql_pushdown_coverage.md`](../docs/sql_pushdown_coverage.md)）。  
+4. **HybridBackend**：`auto` — SQL 可编译子树 + Polars/Pandas fallback。  
+5. **不负责**：DSL（`api`）、Expr（`expr`）、计划优化（`planner`）。
 
 ---
 
@@ -70,7 +72,9 @@ flowchart TD
 
 - `tests/test_pandas_backend.py`  
 - `tests/test_cleaned_operators_comprehensive.py`  
-- `tests/test_polars_backend.py`
+- `tests/test_polars_backend.py`  
+- `tests/test_sql_pushdown_emitter.py` / `test_sql_pushdown_integration.py`  
+- [`docs/sql_pushdown_coverage.md`](../docs/sql_pushdown_coverage.md)
 
 ---
 

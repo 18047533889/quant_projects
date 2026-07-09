@@ -14,7 +14,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--min-polars", type=int, default=320)
-    parser.add_argument("--min-sql", type=int, default=60)
+    parser.add_argument("--min-sql", type=int, default=95)
     parser.add_argument(
         "--write-doc",
         type=Path,
@@ -58,8 +58,9 @@ def main() -> int:
             f"> 自动生成：`python scripts/report_backend_coverage.py --write-doc`",
             "",
             f"- canonical implemented: **{len(canon)}**",
-            f"- SQL 白名单: **{len(SQL_CAPABLE_CANONICALS)}**",
-            f"- Registry sql backend: **{sql_n}**",
+            f"- Polars backend: **{polars_n}**（CI 门禁 ≥ {args.min_polars}）",
+            f"- SQL 可下推 canonical: **{len(report['sql_canonicals'])}**（含 `column`/`literal` 共 **{len(SQL_CAPABLE_CANONICALS)}**）",
+            f"- Registry sql backend: **{sql_n}**（CI 门禁 ≥ {args.min_sql}）",
             "",
             "## Canonical 列表",
             "",
