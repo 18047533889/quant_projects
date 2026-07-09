@@ -310,3 +310,19 @@ class DataAccessSource(DataSource):
             instrument_filter=self.instrument_filter,
             params=dict(self.params),
         )
+
+    def scan_index_long(self):
+        """仅 scan ``ts / inst`` 轴（universe 对齐，不读因子列）。"""
+        store = _get_store()
+        ds = store._registry.get(self.dataset)
+        from backend.polars_lazy import build_scan_index_long
+
+        return build_scan_index_long(
+            store,
+            self.dataset,
+            time_column=ds.time_column,
+            instrument_column=ds.instrument_column,
+            time_range=self._time_range(),
+            instrument_filter=self.instrument_filter,
+            params=dict(self.params),
+        )

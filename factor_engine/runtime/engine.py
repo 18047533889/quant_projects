@@ -907,8 +907,10 @@ class FactorEngine:
             data_source=self.data_source,
             cache=self.cache,
             shared_result_cache=shared_result_cache,
+            shared_long_lazy_cache={},
             panel_cache={},
             materialized_series={},
+            materialized_long_lazy={},
             prefer_long_table=prefer_long,
             perf=effective_perf,
             query_budget=effective_perf.build_query_budget(),
@@ -1086,9 +1088,13 @@ class FactorEngine:
         s_bpd = warmup.bars_per_day
 
         input_report = None
-        from planner.sql_io import plan_is_fully_sql
+        from planner.sql_io import should_skip_column_prefetch
 
-        skip_prefetch = plan_is_fully_sql(plan) and not input_dq_check
+        skip_prefetch = should_skip_column_prefetch(
+            [plan],
+            input_dq_check=input_dq_check,
+            backend=engine_to_use.backend,
+        )
         if analysis.referenced_columns and not skip_prefetch:
             from storage.read_session import DataSourceReadSession
 
@@ -1104,7 +1110,10 @@ class FactorEngine:
             else:
                 session.prefetch(analysis.referenced_columns)
         elif skip_prefetch:
-            logger.debug("因子 '%s' fully_sql，跳过列 prefetch", factor.name)
+            logger.debug(
+                "因子 '%s' 跳过列 prefetch（fully_sql 或 prefers_native_scan）",
+                factor.name,
+            )
         ctx = engine_to_use._make_context()
         result = engine_to_use.backend.execute(plan, ctx)
 
@@ -1160,8 +1169,16 @@ class FactorEngine:
             out["polars_expr"] = True
         if runtime.get("polars_expr_fallback"):
             out["polars_expr_fallback"] = True
+        if runtime.get("used_polars_long_path"):
+            out["used_polars_long_path"] = True
         if runtime.get("used_polars_long_native"):
             out["used_polars_long_native"] = True
+        if runtime.get("used_polars_long_map_groups"):
+            out["used_polars_long_map_groups"] = True
+        if runtime.get("used_polars_long_registry"):
+            out["used_polars_long_registry"] = True
+        if runtime.get("used_polars_long_passthrough"):
+            out["used_polars_long_passthrough"] = True
         if runtime.get("polars_long_fallback_reason"):
             out["polars_long_fallback_reason"] = runtime["polars_long_fallback_reason"]
         return out

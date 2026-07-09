@@ -29,7 +29,9 @@ def _maybe_prepare_batch_data(
     from planner.sql_io import should_skip_column_prefetch
 
     if all_cols and not should_skip_column_prefetch(
-        all_plans, input_dq_check=input_dq_check
+        all_plans,
+        input_dq_check=input_dq_check,
+        backend=engine.backend,
     ):
         return engine._prepare_batch_data(
             engine.data_source,
@@ -115,6 +117,9 @@ def execute_run_many(
     with routing_execution_scope(perf):
         if ctx.shared_result_cache is not None:
             for sid, sub in dag.shared_nodes.items():
+                runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+                runtime["polars_long_shared_sid"] = sid
+                ctx.runtime_stats = runtime  # type: ignore[attr-defined]
                 ctx.shared_result_cache[sid] = engine.backend.execute(sub, ctx)
         out: dict[str, Any] = {}
         for layer in batch_graph.parallel_layers:
@@ -238,6 +243,9 @@ def execute_run_many_parallel(
     with routing_execution_scope(perf):
         if ctx.shared_result_cache is not None:
             for sid, sub in dag.shared_nodes.items():
+                runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+                runtime["polars_long_shared_sid"] = sid
+                ctx.runtime_stats = runtime  # type: ignore[attr-defined]
                 ctx.shared_result_cache[sid] = engine.backend.execute(sub, ctx)
 
         results: dict[str, Any] = {}

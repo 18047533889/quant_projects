@@ -11,6 +11,9 @@ from .context import ExecutionContext
 class Backend(ABC):
     """具体后端（如 Pandas）实现 ``execute``。"""
 
+    #: 为 True 时 ``FactorEngine.run`` 跳过列 prefetch（由 ``scan_polars_long`` 等原生读）
+    prefers_native_scan: bool = False
+
     @abstractmethod
     def execute(self, plan: PlanNode, ctx: ExecutionContext) -> Any:
         raise NotImplementedError

@@ -17,6 +17,10 @@ class ExecutionContext:
     instrument_col: str = "instrument"
     #: 多因子 CSE 后，预计算的共享子树结果 ``sid -> Series|DataFrame``
     shared_result_cache: dict[str, Any] | None = None
+    #: CSE / plan_ref：共享子树的 long-table LazyFrame ``sid -> LazyFrame(ts,inst,_v)``
+    shared_long_lazy_cache: dict[str, Any] | None = None
+    #: SQL partial pushdown 物化列的 long-table LazyFrame ``sid -> LazyFrame``
+    materialized_long_lazy: dict[str, Any] | None = None
     #: Series id → 宽表 panel，避免同一子树重复 unstack
     panel_cache: dict[int, Any] | None = None
     #: panel-native 模式下，最终 stack 对齐用的 MultiIndex Series 模板

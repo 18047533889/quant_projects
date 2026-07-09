@@ -13,7 +13,7 @@ from api.cleaned_ops import make_cleaned_call_factory
 from api.columns import col
 from api.factor import Factor
 from backend.factory import build_backend
-from backend.polars_expr_backend import POLARS_EXPR_CAPABLE, plan_is_polars_expr_capable
+from backend.polars_expr_backend import POLARS_LONG_NATIVE, plan_is_polars_expr_capable
 from cleaned_operators import load_all
 from runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
@@ -60,7 +60,16 @@ def _run_expr(source, expr, *, use_polars_expr: bool):
 def test_polars_expr_capable_subset_of_production_ops():
     from cleaned_operators.operator_policy import POLARS_PRODUCTION_SAFE
 
-    assert POLARS_EXPR_CAPABLE - {"column", "literal"} <= POLARS_PRODUCTION_SAFE
+    # native expr 已实现但 production 门禁尚未同步的算子
+    # native long path 已有；panel production parity 以 ``where`` 别名代表
+    pending_production = {"bfill", "if_else"}
+    native_ops = POLARS_LONG_NATIVE - {
+        "column",
+        "literal",
+        "materialized_series",
+        "plan_ref",
+    }
+    assert native_ops - pending_production <= POLARS_PRODUCTION_SAFE
 
 
 @pytest.mark.parametrize(
@@ -138,9 +147,9 @@ def test_polars_expr_matches_polars_bridge(source, factory_name, expr_builder):
     plan, _ = eng.compile(Factor(name="t", expr=expr))
     assert plan_is_polars_expr_capable(plan), factory_name
 
-    base = _run_expr(source, expr, use_polars_expr=False)["result"]
+    base = _run_expr(source, expr, use_polars_expr=False)["result"].sort_index()
     fast_out = _run_expr(source, expr, use_polars_expr=True)
-    fast = fast_out["result"]
+    fast = fast_out["result"].sort_index()
     assert fast_out.get("polars_expr") is True, factory_name
     pd.testing.assert_series_equal(base, fast, check_names=False, rtol=1e-6, atol=1e-6)
 

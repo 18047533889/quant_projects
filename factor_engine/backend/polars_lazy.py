@@ -201,6 +201,38 @@ def build_scan_polars_long(
     return lf
 
 
+def build_scan_index_long(
+    store: Any,
+    dataset: str,
+    *,
+    time_column: str,
+    instrument_column: str,
+    time_range: tuple[Any, Any] | None,
+    instrument_filter: list[str] | None,
+    params: dict[str, Any] | None = None,
+) -> Any:
+    """仅 scan ts / inst 轴（universe 对齐，不读因子列）。"""
+    read_kwargs: dict[str, Any] = {
+        "columns": [time_column, instrument_column],
+        "time_range": time_range,
+        "instrument_filter": instrument_filter,
+    }
+    if params:
+        read_kwargs.update(params)
+    lf = store.scan_polars(dataset, **read_kwargs)
+    rename = {time_column: "ts", instrument_column: "inst"}
+    return lf.rename(rename).select(["ts", "inst"]).unique()
+
+
+def quote_ch_ident(name: str) -> str:
+    """ClickHouse 标识符转义（反引号包裹）。"""
+    if not isinstance(name, str) or not name:
+        raise ValueError("invalid ClickHouse identifier")
+    if "`" in name or "\x00" in name:
+        raise ValueError(f"unsafe ClickHouse identifier: {name!r}")
+    return f"`{name}`"
+
+
 def build_clickhouse_scan_sql(
     table: str,
     *,
@@ -212,18 +244,18 @@ def build_clickhouse_scan_sql(
 ) -> str:
     """构造 ClickHouse long-table scan SQL。"""
     cols = [timestamp_column, instrument_column, *physical_columns]
-    quoted = ", ".join(f"`{c}`" for c in cols)
-    sql = f"SELECT {quoted} FROM `{table}`"
+    quoted = ", ".join(quote_ch_ident(c) for c in cols)
+    sql = f"SELECT {quoted} FROM {quote_ch_ident(table)}"
     clauses: list[str] = []
     if time_range is not None:
         start, end = time_range
         if start is not None:
-            clauses.append(f"`{timestamp_column}` >= '{start}'")
+            clauses.append(f"{quote_ch_ident(timestamp_column)} >= '{start}'")
         if end is not None:
-            clauses.append(f"`{timestamp_column}` <= '{end}'")
+            clauses.append(f"{quote_ch_ident(timestamp_column)} <= '{end}'")
     if instrument_filter:
-        insts = ", ".join(f"'{s}'" for s in instrument_filter)
-        clauses.append(f"`{instrument_column}` IN ({insts})")
+        insts = ", ".join(f"'{str(s).replace(chr(39), chr(39)+chr(39))}'" for s in instrument_filter)
+        clauses.append(f"{quote_ch_ident(instrument_column)} IN ({insts})")
     if clauses:
         sql += " WHERE " + " AND ".join(clauses)
     return sql

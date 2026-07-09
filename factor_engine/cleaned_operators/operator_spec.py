@@ -148,6 +148,7 @@ class OperatorSpec:
     param_names: tuple[str, ...] = ()
     supports_panel: bool = True
     supports_polars: bool = False
+    polars_long_tier: str = "unsupported"
     shape_preserving: bool = True
     index_preserving: bool = True
     columns_preserving: bool = True
@@ -166,6 +167,7 @@ class OperatorSpec:
             "param_names": list(self.param_names),
             "supports_panel": self.supports_panel,
             "supports_polars": self.supports_polars,
+            "polars_long_tier": self.polars_long_tier,
             "shape_preserving": self.shape_preserving,
             "index_preserving": self.index_preserving,
             "columns_preserving": self.columns_preserving,
@@ -269,6 +271,10 @@ def build_operator_spec(canon: str, *, backend: str | None = None) -> OperatorSp
     elif policy.scope in ("cs",) and "regression" in canon:
         stability = "medium"
 
+    from backend.polars_long_policy import infer_polars_long_tier
+
+    polars_long_tier = infer_polars_long_tier(resolved)
+
     return OperatorSpec(
         canonical=resolved,
         status=status,
@@ -280,6 +286,7 @@ def build_operator_spec(canon: str, *, backend: str | None = None) -> OperatorSp
         param_names=tuple(getattr(meta, "param_names", None) or ()),
         supports_panel=True,
         supports_polars="polars" in all_backends,
+        polars_long_tier=polars_long_tier,
         shape_preserving=shape_preserving,
         index_preserving=index_preserving,
         columns_preserving=columns_preserving,

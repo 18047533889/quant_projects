@@ -12,8 +12,23 @@ import numpy as np
 
 from planner.logical_plan import PlanNode
 
-from .long_frame import LongFrameResult, polars_long_to_multiindex_series
+from .long_frame import (
+    LongFrameResult,
+    optional_universe_index,
+    polars_long_to_multiindex_series,
+    series_to_polars_long_lazy,
+    value_to_polars_long_lazy,
+)
 from .pandas_compat import pd
+from .polars_long_policy import (
+    POLARS_EXPR_CAPABLE,
+    POLARS_LONG_CAPABLE,
+    POLARS_LONG_COMPATIBLE,
+    POLARS_LONG_MAP_GROUPS,
+    POLARS_LONG_NATIVE,
+    collect_plan_op_stats,
+    get_polars_long_capable,
+)
 
 try:
     import polars as pl
@@ -29,142 +44,7 @@ _GRP = "_grp"
 # expanding / cum 类算子：rolling 窗口需覆盖单 inst 全长（与 SQL UNBOUNDED PRECEDING 对齐）
 _EXPANDING_WINDOW = 100_000
 
-POLARS_EXPR_CAPABLE: frozenset[str] = frozenset(
-    {
-        "column",
-        "literal",
-        "add",
-        "subtract",
-        "multiply",
-        "divide",
-        "neg",
-        "abs",
-        "sign",
-        "log",
-        "exp",
-        "sqrt",
-        "clip",
-        "power",
-        "floor",
-        "ceil",
-        "protected_div",
-        "protected_log",
-        "protected_sqrt",
-        "ts_mean",
-        "ts_sum",
-        "ts_std",
-        "ts_var",
-        "ts_median",
-        "ts_min",
-        "ts_max",
-        "ts_delay",
-        "ts_delta",
-        "ts_pct",
-        "ts_zscore",
-        "ts_corr",
-        "ffill",
-        "cum_sum",
-        "cum_max",
-        "cum_min",
-        "cum_prod",
-        "ewm_mean",
-        "ewm_std",
-        "ewm_var",
-        "ts_rank",
-        "maximum",
-        "minimum",
-        "inverse",
-        "is_finite",
-        "is_nan",
-        "rank",
-        "zscore",
-        "cs_demean",
-        "scale",
-        "normalize",
-        "rank_pct",
-        "cs_pct_rank",
-        "cs_quantile",
-        "c_percentile",
-        "winsorize",
-        "log_returns",
-        "volatility",
-        "vwap",
-        "ts_beta",
-        "ts_cov",
-        "coalesce",
-        "where",
-        "fillna_const",
-        "fillna",
-        "nan_to_num",
-        "gt",
-        "lt",
-        "eq",
-        "ge",
-        "le",
-        "ne",
-        "and_",
-        "or_",
-        "not_",
-        "group_rank",
-        "group_mean",
-        "group_zscore",
-        "group_neutralize",
-        "group_std",
-        "group_normalize",
-        "group_percentile",
-        "group_winsorize",
-        "group_decay_linear",
-        "cs_mad",
-        "cs_mad_zscore",
-        "cs_resid",
-        "cs_regression",
-        "ts_ema",
-        "ewm_mean",
-        "c_mean",
-        "c_std",
-        "c_sum",
-        "c_count",
-        "log_abs",
-        "signed_log",
-        "signed_sqrt",
-        "ts_decay_linear",
-        "WMA",
-        "ts_mad",
-        "ts_quantile",
-        "ts_product",
-        "ts_skew",
-        "ts_argmax",
-        "ts_argmin",
-        "ts_regression",
-        "Slope",
-        "rolling_beta",
-        "ts_sharpe",
-        "ts_autocorr",
-        "cum_delta",
-        "expanding_mean",
-        "expanding_std",
-        "expanding_sum",
-        "count",
-        "ewm_corr",
-        "ewm_cov",
-        "ts_ratio",
-        "ts_kurt",
-        "ts_moment",
-        "ts_max_buildup",
-        "expanding_rank",
-        "fillna_interpolate",
-        "quantile",
-        "ATR_WILDER",
-        "RSI_WILDER",
-    }
-)
-
-# 与 SQL emitter 白名单对齐的别名（long-table native 路径）
-POLARS_LONG_CAPABLE = POLARS_EXPR_CAPABLE
-
-
-def plan_is_polars_long_capable(plan: PlanNode) -> bool:
-    return plan_is_polars_expr_capable(plan)
+# 能力分层见 ``polars_long_policy``（POLARS_LONG_NATIVE / MAP_GROUPS / COMPATIBLE）
 
 
 def _resolve(op: str) -> str:
@@ -515,9 +395,22 @@ def collect_columns(node: PlanNode, out: set[str] | None = None) -> set[str]:
     return acc
 
 
-def plan_is_polars_expr_capable(plan: PlanNode) -> bool:
+def plan_is_polars_long_capable(plan: PlanNode) -> bool:
+    capable = get_polars_long_capable()
     op = _resolve(plan.op)
-    if op not in POLARS_EXPR_CAPABLE:
+    if op in {"column", "literal", "materialized_series", "plan_ref"}:
+        return all(plan_is_polars_long_capable(c) for c in plan.inputs)
+    if op not in capable:
+        return False
+    return all(plan_is_polars_long_capable(c) for c in plan.inputs)
+
+
+def plan_is_polars_expr_capable(plan: PlanNode) -> bool:
+    """手写 native + map_groups 路径（不含 registry bridge）。"""
+    op = _resolve(plan.op)
+    if op in {"column", "literal", "materialized_series", "plan_ref"}:
+        return all(plan_is_polars_expr_capable(c) for c in plan.inputs)
+    if op not in POLARS_LONG_COMPATIBLE:
         return False
     return all(plan_is_polars_expr_capable(c) for c in plan.inputs)
 
@@ -546,6 +439,49 @@ def _join_triple(
     )
 
 
+def _column_ref_name(node: PlanNode) -> str | None:
+    if node.op != "column":
+        return None
+    name = node.attrs.get("name")
+    return str(name) if name else None
+
+
+def _try_binary_from_base_columns(
+    node: PlanNode,
+    base: pl.LazyFrame,
+    op: str,
+) -> pl.LazyFrame | None:
+    """宽表 base 上两列直接 expr，避免 left/right 子树 join。"""
+    if len(node.inputs) != 2:
+        return None
+    left_name = _column_ref_name(node.inputs[0])
+    right_name = _column_ref_name(node.inputs[1])
+    if not left_name or not right_name:
+        return None
+    schema = set(base.collect_schema().names())
+    if left_name not in schema or right_name not in schema:
+        return None
+    lcol = pl.col(left_name)
+    rcol = pl.col(right_name)
+    if op == "add":
+        expr = lcol + rcol
+    elif op == "subtract":
+        expr = lcol - rcol
+    elif op == "multiply":
+        expr = lcol * rcol
+    elif op == "maximum":
+        expr = pl.max_horizontal(lcol, rcol)
+    elif op == "minimum":
+        expr = pl.min_horizontal(lcol, rcol)
+    elif op == "protected_div":
+        expr = pl.when(rcol.is_null() | (rcol == 0)).then(0.0).otherwise(lcol / rcol)
+    elif op == "divide":
+        expr = lcol / rcol
+    else:
+        return None
+    return base.select(pl.col(_TS), pl.col(_INST), expr.alias(_VAL))
+
+
 def _truthy(col: str) -> pl.Expr:
     return pl.col(col).is_not_null() & (pl.col(col) != 0)
 
@@ -568,7 +504,38 @@ def _cs_rank_pct() -> pl.Expr:
     return pl.when(pl.col(_VAL).is_null()).then(None).otherwise(frac)
 
 
-def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
+def _plan_structural_key(node: PlanNode) -> tuple[Any, ...]:
+    """Plan 子树结构键（CSE 前重复子树 dedupe 编译 / join）。"""
+    child_keys = tuple(_plan_structural_key(c) for c in node.inputs)
+    attrs_key = tuple(sorted((str(k), repr(v)) for k, v in node.attrs.items()))
+    return (_resolve(node.op), attrs_key, child_keys)
+
+
+def _compile_polars(
+    node: PlanNode,
+    base: pl.LazyFrame,
+    *,
+    ctx: Any | None = None,
+    memo: dict[tuple[Any, ...], pl.LazyFrame] | None = None,
+) -> pl.LazyFrame | None:
+    cache: dict[tuple[Any, ...], pl.LazyFrame] = {} if memo is None else memo
+    key = _plan_structural_key(node)
+    hit = cache.get(key)
+    if hit is not None:
+        return hit
+    result = _compile_polars_impl(node, base, ctx=ctx, memo=cache)
+    if result is not None:
+        cache[key] = result
+    return result
+
+
+def _compile_polars_impl(
+    node: PlanNode,
+    base: pl.LazyFrame,
+    *,
+    ctx: Any | None = None,
+    memo: dict[tuple[Any, ...], pl.LazyFrame] | None = None,
+) -> pl.LazyFrame | None:
     if pl is None:
         return None
     op = _resolve(node.op)
@@ -576,12 +543,38 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         op = "ts_decay_linear"
     elif op == "rolling_beta":
         op = "ts_beta"
+    elif op == "cum_std":
+        op = "expanding_std"
 
     if op == "column":
         name = str(node.attrs.get("name") or "")
         if not name:
             return None
         return base.select(pl.col(_TS), pl.col(_INST), pl.col(name).alias(_VAL))
+
+    if op == "materialized_series":
+        if ctx is None:
+            return None
+        sid = str(node.attrs.get("sid") or "")
+        lazy_mat = getattr(ctx, "materialized_long_lazy", None) or {}
+        if sid in lazy_mat:
+            return value_to_polars_long_lazy(lazy_mat[sid], ts_col=_TS, inst_col=_INST, value_col=_VAL)
+        mat = getattr(ctx, "materialized_series", None) or {}
+        if sid not in mat:
+            return None
+        return value_to_polars_long_lazy(mat[sid], ts_col=_TS, inst_col=_INST, value_col=_VAL)
+
+    if op == "plan_ref":
+        if ctx is None:
+            return None
+        sid = node.attrs.get("sid")
+        lazy_cache = getattr(ctx, "shared_long_lazy_cache", None) or {}
+        if sid is not None and sid in lazy_cache:
+            return value_to_polars_long_lazy(lazy_cache[sid], ts_col=_TS, inst_col=_INST, value_col=_VAL)
+        sc = getattr(ctx, "shared_result_cache", None)
+        if sc is None or sid not in sc:
+            return None
+        return value_to_polars_long_lazy(sc[sid], ts_col=_TS, inst_col=_INST, value_col=_VAL)
 
     if op == "literal":
         val = node.attrs.get("value")
@@ -590,8 +583,11 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
     if op in {"add", "subtract", "multiply", "divide", "protected_div", "maximum", "minimum"}:
         if len(node.inputs) != 2:
             return None
-        left = _compile_polars(node.inputs[0], base)
-        right = _compile_polars(node.inputs[1], base)
+        fused = _try_binary_from_base_columns(node, base, op)
+        if fused is not None:
+            return fused
+        left = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        right = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
         if left is None or right is None:
             return None
         joined = _join_binary(left, right)
@@ -616,7 +612,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
 
     if op == "inverse":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(
@@ -627,7 +623,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         )
 
     if op == "is_finite":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(
@@ -635,7 +631,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         )
 
     if op == "is_nan":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(
@@ -643,49 +639,49 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         )
 
     if op == "neg":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         return inner.with_columns((-pl.col(_VAL)).alias(_VAL)) if inner is not None else None
 
     if op == "abs":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         return inner.with_columns(pl.col(_VAL).abs().alias(_VAL)) if inner is not None else None
 
     if op == "sign":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         return inner.with_columns(pl.col(_VAL).sign().alias(_VAL)) if inner is not None else None
 
     if op == "log":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         return inner.with_columns(pl.col(_VAL).log().alias(_VAL)) if inner is not None else None
 
     if op == "exp":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         return inner.with_columns(pl.col(_VAL).exp().alias(_VAL)) if inner is not None else None
 
     if op == "sqrt":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         return inner.with_columns(pl.col(_VAL).sqrt().alias(_VAL)) if inner is not None else None
 
     if op == "floor":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         return inner.with_columns(pl.col(_VAL).floor().alias(_VAL)) if inner is not None else None
 
     if op == "ceil":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         return inner.with_columns(pl.col(_VAL).ceil().alias(_VAL)) if inner is not None else None
 
     if op == "power":
         if len(node.inputs) != 2:
             return None
-        left = _compile_polars(node.inputs[0], base)
-        right = _compile_polars(node.inputs[1], base)
+        left = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        right = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
         if left is None or right is None:
             return None
         joined = _join_binary(left, right)
         return joined.with_columns(pl.col(_VAL).pow(pl.col("_y")).alias(_VAL)).select(_TS, _INST, _VAL)
 
     if op == "protected_log":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         eps = _float_attr(node, "eps", default=1e-12)
@@ -697,13 +693,13 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         )
 
     if op == "protected_sqrt":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(pl.max_horizontal(pl.col(_VAL), pl.lit(0.0)).sqrt().alias(_VAL))
 
     if op == "clip":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         lo = _float_attr(node, "lo", "min", default=-3.0)
@@ -717,7 +713,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         return inner.with_columns(pl.col(_VAL).clip(lo, hi).alias(_VAL))
 
     if op in {"ts_mean", "ts_sum", "ts_min", "ts_max", "ts_std", "ts_var", "ts_median"}:
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
@@ -738,7 +734,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         return inner.with_columns(expr.alias(_VAL))
 
     if op == "ts_zscore":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
@@ -754,8 +750,8 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
     if op == "ts_corr":
         if len(node.inputs) < 2:
             return None
-        left = _compile_polars(node.inputs[0], base)
-        right = _compile_polars(node.inputs[1], base)
+        left = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        right = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
         if left is None or right is None:
             return None
         w = max(_window_int(node), 2)
@@ -771,8 +767,8 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
     if op == "ts_cov":
         if len(node.inputs) < 2:
             return None
-        left = _compile_polars(node.inputs[0], base)
-        right = _compile_polars(node.inputs[1], base)
+        left = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        right = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
         if left is None or right is None:
             return None
         w = max(_window_int(node), 2)
@@ -789,8 +785,8 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
     if op == "ts_beta":
         if len(node.inputs) < 2:
             return None
-        left = _compile_polars(node.inputs[0], base)
-        right = _compile_polars(node.inputs[1], base)
+        left = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        right = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
         if left is None or right is None:
             return None
         w = max(_window_int(node), 2)
@@ -810,8 +806,8 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
     if op == "vwap":
         if len(node.inputs) < 2:
             return None
-        price = _compile_polars(node.inputs[0], base)
-        vol = _compile_polars(node.inputs[1], base)
+        price = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        vol = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
         if price is None or vol is None:
             return None
         w = _window_int(node, default=20)
@@ -827,31 +823,31 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         ).select(_TS, _INST, _VAL)
 
     if op == "cum_sum":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(pl.col(_VAL).cum_sum().over(_INST, order_by=_TS).alias(_VAL))
 
     if op == "cum_max":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(pl.col(_VAL).cum_max().over(_INST, order_by=_TS).alias(_VAL))
 
     if op == "cum_min":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(pl.col(_VAL).cum_min().over(_INST, order_by=_TS).alias(_VAL))
 
     if op == "cum_prod":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(pl.col(_VAL).cum_prod().over(_INST, order_by=_TS).alias(_VAL))
 
     if op == "ts_rank":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
@@ -870,7 +866,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         )
 
     if op in {"ewm_mean", "ewm_std", "ewm_var"}:
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         alpha = _ewm_alpha(node)
@@ -885,8 +881,8 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
     if op in {"coalesce"}:
         if len(node.inputs) != 2:
             return None
-        left = _compile_polars(node.inputs[0], base)
-        right = _compile_polars(node.inputs[1], base)
+        left = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        right = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
         if left is None or right is None:
             return None
         joined = _join_binary(left, right)
@@ -895,25 +891,21 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
     if op in {"where", "if_else"}:
         if len(node.inputs) != 3:
             return None
-        cond = _compile_polars(node.inputs[0], base)
-        a = _compile_polars(node.inputs[1], base)
-        b = _compile_polars(node.inputs[2], base)
+        cond = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        a = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
+        b = _compile_polars(node.inputs[2], base, ctx=ctx, memo=memo)
         if cond is None or a is None or b is None:
             return None
-        joined = cond.join(a.rename({_VAL: "_va"}), on=[_TS, _INST], how="inner").join(
-            b.rename({_VAL: "_vb"}),
-            on=[_TS, _INST],
-            how="inner",
-        )
+        joined = _join_triple(cond, a, b)
         return joined.with_columns(
-            pl.when(_truthy(_VAL)).then(pl.col("_va")).otherwise(pl.col("_vb")).alias(_VAL)
+            pl.when(_truthy(_VAL)).then(pl.col("_ym")).otherwise(pl.col("_y")).alias(_VAL)
         ).select(_TS, _INST, _VAL)
 
     if op in {"gt", "lt", "eq", "ge", "le", "ne"}:
         if len(node.inputs) != 2:
             return None
-        left = _compile_polars(node.inputs[0], base)
-        right = _compile_polars(node.inputs[1], base)
+        left = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        right = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
         if left is None or right is None:
             return None
         joined = _join_binary(left, right)
@@ -932,8 +924,8 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
     if op == "and_":
         if len(node.inputs) != 2:
             return None
-        left = _compile_polars(node.inputs[0], base)
-        right = _compile_polars(node.inputs[1], base)
+        left = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        right = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
         if left is None or right is None:
             return None
         joined = _join_binary(left, right)
@@ -944,8 +936,8 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
     if op == "or_":
         if len(node.inputs) != 2:
             return None
-        left = _compile_polars(node.inputs[0], base)
-        right = _compile_polars(node.inputs[1], base)
+        left = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        right = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
         if left is None or right is None:
             return None
         joined = _join_binary(left, right)
@@ -954,7 +946,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         ).select(_TS, _INST, _VAL)
 
     if op == "not_":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(
@@ -962,7 +954,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         )
 
     if op in {"fillna_const", "fillna"}:
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         if op == "fillna":
@@ -978,7 +970,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         )
 
     if op == "nan_to_num":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         const = _literal_value(node, 0, default=0.0) or 0.0
@@ -987,7 +979,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         )
 
     if op in {"cs_quantile", "c_percentile"}:
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         p = _float_attr(node, "p", default=0.5)
@@ -998,7 +990,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         return inner.with_columns(q.alias(_VAL))
 
     if op == "winsorize":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         lo_p = _literal_value(node, 0)
@@ -1018,8 +1010,8 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
     if op in {"cs_resid", "cs_regression"}:
         if len(node.inputs) < 2:
             return None
-        y_layer = _compile_polars(node.inputs[0], base)
-        x_layer = _compile_polars(node.inputs[1], base)
+        y_layer = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        x_layer = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
         if y_layer is None or x_layer is None:
             return None
         joined = y_layer.join(x_layer.rename({_VAL: "_x"}), on=[_TS, _INST], how="inner")
@@ -1054,11 +1046,11 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
     }:
         if not node.inputs:
             return None
-        val = _compile_polars(node.inputs[0], base)
+        val = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if val is None:
             return None
         if len(node.inputs) >= 2 and node.inputs[1].op not in {"literal"}:
-            grp = _compile_polars(node.inputs[1], base)
+            grp = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
             if grp is None:
                 return None
             joined = val.join(grp.rename({_VAL: _GRP}), on=[_TS, _INST], how="inner")
@@ -1127,7 +1119,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
 
     if op == "cs_mad":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         med = pl.col(_VAL).median().over(_TS, order_by=_INST)
@@ -1135,7 +1127,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         return inner.with_columns(mad.alias(_VAL))
 
     if op == "cs_mad_zscore":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         med = pl.col(_VAL).median().over(_TS, order_by=_INST)
@@ -1148,14 +1140,14 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         return inner.with_columns(expr.alias(_VAL))
 
     if op == "ts_delay":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         lag = _window_int(node, default=1)
         return inner.with_columns(pl.col(_VAL).shift(lag).over(_INST, order_by=_TS).alias(_VAL))
 
     if op == "ts_delta":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         lag = _window_int(node, default=1)
@@ -1163,7 +1155,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         return inner.with_columns((pl.col(_VAL) - delayed).alias(_VAL))
 
     if op == "ts_pct":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         lag = _window_int(node, default=1)
@@ -1171,19 +1163,19 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         return inner.with_columns((pl.col(_VAL) / prev - 1.0).alias(_VAL))
 
     if op == "ffill":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(pl.col(_VAL).forward_fill().over(_INST, order_by=_TS).alias(_VAL))
 
     if op == "bfill":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner
 
     if op in {"ts_ema", "ewm_mean"}:
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         alpha = _ewm_alpha(node)
@@ -1192,19 +1184,19 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         )
 
     if op == "rank":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(_cs_rank_01().alias(_VAL))
 
     if op in {"rank_pct", "cs_pct_rank"}:
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(_cs_rank_pct().alias(_VAL))
 
     if op == "zscore":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         mean = pl.col(_VAL).mean().over(_TS, order_by=_INST)
@@ -1217,14 +1209,14 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         )
 
     if op == "cs_demean":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         mean = pl.col(_VAL).mean().over(_TS, order_by=_INST)
         return inner.with_columns((pl.col(_VAL) - mean).alias(_VAL))
 
     if op == "normalize":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         lo = pl.col(_VAL).min().over(_TS, order_by=_INST)
@@ -1238,7 +1230,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         )
 
     if op == "scale":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         s = pl.col(_VAL).abs().sum().over(_TS, order_by=_INST)
@@ -1250,7 +1242,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         )
 
     if op == "log_returns":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         prev = pl.col(_VAL).shift(1).over(_INST, order_by=_TS)
@@ -1262,7 +1254,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         )
 
     if op == "volatility":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node, default=20)
@@ -1278,7 +1270,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         )
 
     if op in {"c_mean", "c_std", "c_sum", "c_count"}:
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         if op == "c_mean":
@@ -1292,13 +1284,13 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         return inner.with_columns(expr.alias(_VAL))
 
     if op == "log_abs":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(pl.col(_VAL).abs().log().alias(_VAL))
 
     if op == "signed_log":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(
@@ -1306,7 +1298,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         )
 
     if op == "signed_sqrt":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(
@@ -1314,14 +1306,14 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         )
 
     if op == "ts_decay_linear":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
         return inner.with_columns(_rolling_linear_decay_expr(w).alias(_VAL))
 
     if op == "ts_mad":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
@@ -1340,7 +1332,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         ).select(_TS, _INST, _VAL)
 
     if op == "ts_quantile":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
@@ -1351,7 +1343,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         return inner.with_columns(_rolling_quantile_expr(w, p).alias(_VAL))
 
     if op == "ts_product":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
@@ -1366,28 +1358,28 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         return inner.with_columns(ln_sum.exp().alias(_VAL))
 
     if op == "ts_skew":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
         return inner.with_columns(_rolling_skew_expr(w).alias(_VAL))
 
     if op == "ts_argmax":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
         return inner.with_columns(_rolling_argext_expr(w, pick="max").alias(_VAL))
 
     if op == "ts_argmin":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
         return inner.with_columns(_rolling_argext_expr(w, pick="min").alias(_VAL))
 
     if op == "Slope":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
@@ -1396,8 +1388,8 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
     if op == "ts_regression":
         if len(node.inputs) < 2:
             return None
-        y_layer = _compile_polars(node.inputs[0], base)
-        x_layer = _compile_polars(node.inputs[1], base)
+        y_layer = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        x_layer = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
         if y_layer is None or x_layer is None:
             return None
         w = max(_window_int(node), 3)
@@ -1422,7 +1414,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         ).select(_TS, _INST, _VAL)
 
     if op == "ts_sharpe":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = max(_window_int(node), 2)
@@ -1442,7 +1434,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         return inner.with_columns(expr.alias(_VAL))
 
     if op == "ts_autocorr":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w, lag, mp = _ts_autocorr_window_lag(node)
@@ -1457,7 +1449,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         return tmp.with_columns(corr.alias(_VAL)).select(_TS, _INST, _VAL)
 
     if op == "cum_delta":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         first = (
@@ -1475,25 +1467,25 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         ).select(_TS, _INST, _VAL)
 
     if op == "expanding_sum":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(_expanding_sum_expr().alias(_VAL))
 
     if op == "expanding_mean":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(_expanding_mean_expr().alias(_VAL))
 
     if op == "expanding_std":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(_expanding_std_expr().alias(_VAL))
 
     if op == "count":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(_expanding_non_null_count().alias(_VAL))
@@ -1501,8 +1493,8 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
     if op in {"ewm_corr", "ewm_cov"}:
         if len(node.inputs) < 2:
             return None
-        left = _compile_polars(node.inputs[0], base)
-        right = _compile_polars(node.inputs[1], base)
+        left = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        right = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
         if left is None or right is None:
             return None
         span = max(_window_int(node, default=20), 2)
@@ -1510,7 +1502,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         return _ewm_binary_map_groups(joined, span, corr=(op == "ewm_corr"))
 
     if op == "ts_ratio":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         prev = pl.col(_VAL).shift(1).over(_INST, order_by=_TS)
@@ -1522,7 +1514,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         )
 
     if op == "ts_kurt":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
@@ -1539,7 +1531,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         )
 
     if op == "ts_moment":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = max(_int_attr(node, "d", "window", input_index=0, default=3), 1)
@@ -1549,7 +1541,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         return _unary_inst_map_groups(inner, lambda arr: ts_moment_(arr, w, k))
 
     if op == "ts_max_buildup":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
@@ -1558,7 +1550,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         return _unary_inst_map_groups(inner, lambda arr: ts_max_buildup_(arr, w))
 
     if op == "expanding_rank":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
 
@@ -1569,7 +1561,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         return _unary_inst_map_groups(inner, _expanding_rank)
 
     if op == "fillna_interpolate":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         method = "linear"
@@ -1591,7 +1583,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         return _unary_inst_map_groups(inner, _interp)
 
     if op == "quantile":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         n_bins = max(_int_attr(node, "bins", input_index=0, default=10), 0)
@@ -1612,7 +1604,7 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
         return _cs_row_map_groups(inner, _qcut)
 
     if op == "RSI_WILDER":
-        inner = _compile_polars(node.inputs[0], base)
+        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = max(_window_int(node, default=14), 2)
@@ -1627,9 +1619,9 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
     if op == "ATR_WILDER":
         if len(node.inputs) < 3:
             return None
-        high = _compile_polars(node.inputs[0], base)
-        low = _compile_polars(node.inputs[1], base)
-        close = _compile_polars(node.inputs[2], base)
+        high = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        low = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
+        close = _compile_polars(node.inputs[2], base, ctx=ctx, memo=memo)
         if high is None or low is None or close is None:
             return None
         w = max(_window_int(node, default=14), 2)
@@ -1653,7 +1645,67 @@ def _compile_polars(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
             schema={_TS: schema[_TS], _INST: schema[_INST], _VAL: pl.Float64},
         )
 
+    from .polars_registry_bridge import compile_registry_op
+
+    return compile_registry_op(node, base, lambda n, b: _compile_polars(n, b, ctx=ctx, memo=memo))
+
+
+def _first_long_lazy_from_plan(plan: PlanNode, ctx: Any) -> Any | None:
+    """从 ``plan_ref`` / ``materialized_series`` 缓存取 long LazyFrame。"""
+    if plan.op == "plan_ref":
+        sid = plan.attrs.get("sid")
+        lazy_cache = getattr(ctx, "shared_long_lazy_cache", None) or {}
+        if sid is not None and sid in lazy_cache:
+            return lazy_cache[sid]
+    if plan.op == "materialized_series":
+        sid = plan.attrs.get("sid")
+        lazy_mat = getattr(ctx, "materialized_long_lazy", None) or {}
+        if sid is not None and sid in lazy_mat:
+            return lazy_mat[sid]
+    for child in plan.inputs:
+        found = _first_long_lazy_from_plan(child, ctx)
+        if found is not None:
+            return found
     return None
+
+
+def _first_series_spine_from_plan(plan: PlanNode, ctx: Any) -> pd.Series | None:
+    """从 ``plan_ref`` / ``materialized_series`` 推断 ts/inst 骨架（无 column 引用时）。"""
+    if plan.op == "plan_ref":
+        sc = getattr(ctx, "shared_result_cache", None) or {}
+        sid = plan.attrs.get("sid")
+        val = sc.get(sid) if sid is not None else None
+        if isinstance(val, pd.Series):
+            return val
+    if plan.op == "materialized_series":
+        mat = getattr(ctx, "materialized_series", None) or {}
+        sid = plan.attrs.get("sid")
+        val = mat.get(sid) if sid is not None else None
+        if isinstance(val, pd.Series):
+            return val
+    for child in plan.inputs:
+        found = _first_series_spine_from_plan(child, ctx)
+        if found is not None:
+            return found
+    return None
+
+
+def resolve_base_lazy_for_plan(
+    plan: PlanNode,
+    ctx: Any,
+    scan_fn: Any,
+) -> pl.LazyFrame:
+    """构建 long-table 基础 LazyFrame：优先 scan 引用列，否则从缓存 Series 推断骨架。"""
+    columns = collect_columns(plan)
+    if columns:
+        return scan_fn(sorted(columns))
+    lazy_spine = _first_long_lazy_from_plan(plan, ctx)
+    if lazy_spine is not None:
+        return value_to_polars_long_lazy(lazy_spine, ts_col=_TS, inst_col=_INST, value_col=_VAL)
+    spine = _first_series_spine_from_plan(plan, ctx)
+    if spine is not None:
+        return series_to_polars_long_lazy(spine)
+    raise ValueError("scan_polars_long: no columns")
 
 
 def _build_base_lazy(ctx: Any, columns: set[str]) -> pl.LazyFrame:
@@ -1661,6 +1713,10 @@ def _build_base_lazy(ctx: Any, columns: set[str]) -> pl.LazyFrame:
     scan = getattr(ctx.data_source, "scan_polars_long", None)
     if callable(scan):
         return scan(sorted(columns))
+    from .polars_long_policy import PolarsLongStrictError, strict_polars_long_fallback
+
+    if strict_polars_long_fallback(ctx):
+        raise PolarsLongStrictError("data_source lacks scan_polars_long")
     return _build_base_lazy_from_series(ctx, columns)
 
 
@@ -1695,13 +1751,14 @@ def compile_plan_to_polars(
     plan: PlanNode,
     base_lf: pl.LazyFrame,
     *,
+    ctx: Any | None = None,
     ts_col: str = _TS,
     inst_col: str = _INST,
 ) -> LongFrameResult | None:
     """编译 PlanNode 为 long-table Polars LazyFrame + 结果列名。"""
     if pl is None:
         return None
-    compiled = _compile_polars(plan, base_lf)
+    compiled = _compile_polars(plan, base_lf, ctx=ctx)
     if compiled is None:
         return None
     return LongFrameResult(
@@ -1718,13 +1775,25 @@ def execute_polars_long_plan(
     ctx: Any,
     *,
     base_lf: pl.LazyFrame | None = None,
+    lazy_cache_key: str | None = None,
 ) -> pd.Series:
     """编译并执行 long-table 计划；仅最终 collect 一次。"""
-    cols = collect_columns(plan)
-    base = base_lf if base_lf is not None else _build_base_lazy(ctx, cols)
-    compiled = compile_plan_to_polars(plan, base)
+    if base_lf is None:
+        scan = getattr(ctx.data_source, "scan_polars_long", None)
+        if callable(scan):
+            base = resolve_base_lazy_for_plan(plan, ctx, scan)
+        else:
+            cols = collect_columns(plan)
+            base = _build_base_lazy(ctx, cols)
+    else:
+        base = base_lf
+    compiled = compile_plan_to_polars(plan, base, ctx=ctx)
     if compiled is None:
         raise RuntimeError(f"polars long compile failed for op={plan.op!r}")
+    if lazy_cache_key:
+        cache = getattr(ctx, "shared_long_lazy_cache", None)
+        if cache is not None:
+            cache[lazy_cache_key] = compiled.frame
     frame = (
         compiled.frame.sort([compiled.ts_col, compiled.inst_col])
         .select(
@@ -1734,14 +1803,13 @@ def execute_polars_long_plan(
         )
         .collect()
     )
-    template = ctx.data_source.load_column(next(iter(cols)))
     return polars_long_to_multiindex_series(
         frame,
         timestamp_col=ctx.timestamp_col,
         instrument_col=ctx.instrument_col,
         value_col="value",
-        template_index=template.index,
-    )
+        template_index=optional_universe_index(ctx),
+    ).sort_index()
 
 
 def execute_polars_expr_plan(plan: PlanNode, ctx: Any) -> pd.Series:

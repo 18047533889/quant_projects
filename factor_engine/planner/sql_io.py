@@ -17,10 +17,13 @@ def should_skip_column_prefetch(
     plans: Iterable[PlanNode],
     *,
     input_dq_check: bool = False,
+    backend: Any | None = None,
 ) -> bool:
-    """fully_sql 且无 input DQ 时跳过 ``load_columns`` / prefetch。"""
+    """fully_sql / native-scan backend 且无 input DQ 时跳过 ``load_columns`` / prefetch。"""
     if input_dq_check:
         return False
+    if backend is not None and getattr(backend, "prefers_native_scan", False):
+        return True
     nodes = list(plans)
     if not nodes:
         return False

@@ -50,3 +50,10 @@ class InMemorySeriesSource(DataSource):
             raise ValueError("scan_polars_long: no columns")
         renamed = merged.rename(columns={tcol: "ts", icol: "inst"})
         return pl.from_pandas(renamed).lazy()
+
+    def scan_index_long(self):
+        """返回 ``ts / inst`` 唯一轴 LazyFrame。"""
+        import polars as pl
+
+        lf = self.scan_polars_long(sorted(self.data.keys()))
+        return lf.select(["ts", "inst"]).unique()

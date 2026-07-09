@@ -187,17 +187,19 @@ def test_polars_long_matches_pandas(source, factory_name, expr_builder):
     expr = expr_builder()
     pd_out = _run(source, expr, "pandas")
     long_out = _run(source, expr, "polars_long")
-    assert long_out.get("used_polars_long_native") is True, factory_name
-    base = pd_out["result"]
-    fast = long_out["result"]
+    assert long_out.get("used_polars_long_path") is True, factory_name
+    assert not long_out.get("polars_long_fallback_reason"), factory_name
+    base = pd_out["result"].sort_index()
+    fast = long_out["result"].sort_index()
     pd.testing.assert_series_equal(base, fast, check_names=False, rtol=1e-6, atol=1e-6)
 
 
 def test_polars_long_fallback_on_unsupported(source):
-    from api import MACD
+    from api.cleaned_ops import make_cleaned_call_factory
 
-    out = _run(source, MACD(col("close")), "polars_long")
-    assert not out.get("used_polars_long_native")
+    fft = make_cleaned_call_factory("fft")
+    out = _run(source, fft(col("close")), "polars_long")
+    assert not out.get("used_polars_long_path")
     assert out.get("polars_long_fallback_reason") or out.get("result") is not None
 
 

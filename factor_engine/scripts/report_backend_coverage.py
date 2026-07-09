@@ -93,14 +93,14 @@ def main() -> int:
     from cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS
     from cleaned_operators.registry import OperatorRegistry
     from backend.sql_pushdown.sql_registry import SQL_CAPABLE_CANONICALS
-    from backend.polars_expr_emitter import POLARS_LONG_CAPABLE
+    from backend.polars_long_policy import get_polars_long_capable
 
     rows = _build_rows()
     canon = [r["canonical"] for r in rows]
     sql_ok_canons = {
         r["canonical"] for r in rows if r["sql_emitter_ok"]
     } - {"column", "literal"}
-    polars_long_canons = POLARS_LONG_CAPABLE - {"column", "literal"}
+    polars_long_canons = get_polars_long_capable() - {"column", "literal"}
     polars_long_sql_both = sorted(polars_long_canons & sql_ok_canons)
     polars_long_only = sorted(polars_long_canons - sql_ok_canons)
     sql_only_vs_polars_long = sorted(sql_ok_canons - polars_long_canons)

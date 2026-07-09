@@ -40,6 +40,18 @@ def test_bfill_not_polars_production_safe(loaded):
     assert backend == "pandas_numpy"
 
 
+def test_if_else_polars_long_tier(loaded):
+    s = summarize_operator("if_else")
+    assert s.polars_long_tier == "native"
+    assert summarize_operator("where").polars == "production_safe"
+
+
+def test_bfill_polars_long_passthrough_tier(loaded):
+    s = summarize_operator("bfill")
+    assert s.polars_long_tier == "passthrough"
+    assert s.polars != "production_safe"
+
+
 def test_get_best_backend_respects_production_safe(loaded):
     _, backend = get_best_backend("ts_mean", mode="production", prefer="auto")
     assert backend == "polars"

@@ -79,6 +79,7 @@ class OperatorCapabilitySummary:
     clickhouse_sql: CapabilityStatus
     allow_in_production: bool
     parity_verified: bool
+    polars_long_tier: str = "unsupported"
     notes: str = ""
 
 
@@ -88,16 +89,45 @@ def resolve_canonical(name: str) -> str:
     return OperatorRegistry._aliases.get(name, name)
 
 
-def polars_expr_capable(canonical: str) -> bool:
-    """canonical 是否在 long-table Polars 表达式后端白名单内。"""
-    from backend.polars_expr_emitter import POLARS_LONG_CAPABLE
+def polars_long_native(canonical: str) -> bool:
+    """canonical 是否在纯 Polars Expr native 白名单内。"""
+    from backend.polars_long_policy import POLARS_LONG_NATIVE
 
-    return resolve_canonical(canonical) in POLARS_LONG_CAPABLE
+    return resolve_canonical(canonical) in POLARS_LONG_NATIVE
+
+
+def polars_long_tier(canonical: str) -> str:
+    from backend.polars_long_policy import infer_polars_long_tier
+
+    return infer_polars_long_tier(canonical)
+
+
+def polars_long_tier_status(canon: str) -> CapabilityStatus:
+    """long-table tier → capability status（production 路由用）。"""
+    tier = polars_long_tier(canon)
+    if tier == "unsupported":
+        return "unsupported"
+    if tier == "native":
+        from cleaned_operators.operator_policy import POLARS_PRODUCTION_SAFE
+
+        return "production_safe" if canon in POLARS_PRODUCTION_SAFE else "parity_verified"
+    if tier in {"map_groups", "passthrough", "registry"}:
+        return "implemented"
+    return "unsupported"
+
+
+def polars_expr_capable(canonical: str) -> bool:
+    """canonical 是否在手写 Polars expr / map_groups 编译白名单内。"""
+    from backend.polars_long_policy import POLARS_LONG_COMPATIBLE
+
+    return resolve_canonical(canonical) in POLARS_LONG_COMPATIBLE
 
 
 def polars_long_capable(canonical: str) -> bool:
-    """``polars_expr_capable`` 别名。"""
-    return polars_expr_capable(canonical)
+    """canonical 是否可走 polars_long（native + map_groups + registry bridge）。"""
+    from backend.polars_long_policy import get_polars_long_capable
+
+    return resolve_canonical(canonical) in get_polars_long_capable()
 
 
 def _sql_capable_canonicals() -> frozenset[str]:
@@ -231,6 +261,7 @@ def summarize_operator(canonical: str) -> OperatorCapabilitySummary:
         clickhouse_sql=_sql_status(canon, dialect="clickhouse_sql"),
         allow_in_production=bool(spec.allow_in_production),
         parity_verified=canon in POLARS_PARITY_VERIFIED,
+        polars_long_tier=spec.polars_long_tier,
     )
 
 
