@@ -148,6 +148,9 @@ class OperatorSpec:
     columns_preserving: bool = True
     numerical_stability: NumericalStability = "medium"
     description: str = ""
+    execution_kind: str = "primitive"
+    lowering_available: bool = False
+    dual_backend_target: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         """将 ``OperatorSpec`` 序列化为普通字典。
@@ -172,6 +175,9 @@ class OperatorSpec:
             "columns_preserving": self.columns_preserving,
             "numerical_stability": self.numerical_stability,
             "description": self.description,
+            "execution_kind": self.execution_kind,
+            "lowering_available": self.lowering_available,
+            "dual_backend_target": self.dual_backend_target,
         }
 
 
@@ -315,6 +321,11 @@ def build_operator_spec(canon: str, *, backend: str | None = None) -> OperatorSp
 
     polars_long_tier = infer_polars_long_tier(resolved)
 
+    from planner.composite_lowering import has_composite_lowering, infer_execution_kind
+
+    execution_kind = infer_execution_kind(resolved)
+    lowering_available = has_composite_lowering(resolved)
+
     return OperatorSpec(
         canonical=resolved,
         status=status,
@@ -332,6 +343,9 @@ def build_operator_spec(canon: str, *, backend: str | None = None) -> OperatorSp
         columns_preserving=columns_preserving,
         numerical_stability=stability,
         description=str(getattr(meta, "description", "") or catalog.get("description", "")),
+        execution_kind=execution_kind,
+        lowering_available=lowering_available,
+        dual_backend_target=execution_kind == "composite",
     )
 
 
@@ -384,6 +398,9 @@ def spec_to_manifest_entry(spec: OperatorSpec) -> dict[str, Any]:
         "allow_in_production": spec.allow_in_production,
         "backends": list(spec.backends),
         "description": spec.description,
+        "execution_kind": spec.execution_kind,
+        "lowering_available": spec.lowering_available,
+        "dual_backend_target": spec.dual_backend_target,
     }
 
 

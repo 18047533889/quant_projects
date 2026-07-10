@@ -36,6 +36,13 @@ class FastpathCoverageRow:
     benchmark_available: bool
     production_fast_path: bool
     fastpath_block_reason: str = ""
+    execution_kind: str = "primitive"
+    lowering_available: bool = False
+    polars_long_fastpath: bool = False
+    duckdb_fastpath: bool = False
+    dual_backend_fastpath: bool = False
+    composite_dual_backend_capable: bool = False
+    lowered_primitives: tuple[str, ...] | None = None
 
     def to_csv_row(self) -> dict[str, Any]:
         """导出为 CSV/报表用扁平行字典。
@@ -71,6 +78,13 @@ class FastpathCoverageRow:
             "benchmark_available": self.benchmark_available,
             "production_fast_path": self.production_fast_path,
             "fastpath_block_reason": self.fastpath_block_reason,
+            "execution_kind": self.execution_kind,
+            "lowering_available": self.lowering_available,
+            "polars_long_fastpath": self.polars_long_fastpath,
+            "duckdb_fastpath": self.duckdb_fastpath,
+            "dual_backend_fastpath": self.dual_backend_fastpath,
+            "composite_dual_backend_capable": self.composite_dual_backend_capable,
+            "lowered_primitives": ",".join(self.lowered_primitives) if self.lowered_primitives else "",
         }
 
 
@@ -182,9 +196,30 @@ def build_fastpath_coverage_row(canon: str) -> FastpathCoverageRow:
         polars_native_ok=polars_native_prod,
         polars_tier=tier,
     )
-    production_fast_path = bool(spec.allow_in_production) and (duckdb_prod or ch_prod or polars_native_prod) and not block
+    from planner.composite_lowering import (
+        composite_dual_backend_capable,
+        has_composite_lowering,
+        infer_execution_kind,
+        lowered_primitives,
+    )
+
+    execution_kind = infer_execution_kind(name)
+    lowering_available = has_composite_lowering(name)
+    composite_capable = composite_dual_backend_capable(name) if lowering_available else False
+
+    composite_fastpath = bool(spec.allow_in_production) and composite_capable and not block
 
     native_tier = polars_long_production_tier(name) if tier == "native" else tier
+
+    production_fast_path = (
+        bool(spec.allow_in_production) and (duckdb_prod or ch_prod or polars_native_prod or composite_fastpath) and not block
+    )
+    polars_long_fastpath = bool(spec.allow_in_production) and (polars_native_prod or composite_capable) and not block
+    duckdb_fastpath = bool(spec.allow_in_production) and (duckdb_prod or composite_capable) and not block
+    dual_backend_fastpath = bool(spec.allow_in_production) and (
+        (polars_native_prod and duckdb_prod) or composite_capable
+    ) and not block
+    lowered = lowered_primitives(name) if lowering_available else None
 
     return FastpathCoverageRow(
         canonical=name,
@@ -210,6 +245,13 @@ def build_fastpath_coverage_row(canon: str) -> FastpathCoverageRow:
         benchmark_available=name in benchmark_set,
         production_fast_path=production_fast_path,
         fastpath_block_reason=block if not production_fast_path else "",
+        execution_kind=execution_kind,
+        lowering_available=lowering_available,
+        polars_long_fastpath=polars_long_fastpath,
+        duckdb_fastpath=duckdb_fastpath,
+        dual_backend_fastpath=dual_backend_fastpath,
+        composite_dual_backend_capable=composite_capable,
+        lowered_primitives=lowered,
     )
 
 
@@ -259,6 +301,11 @@ def summarize_fastpath_coverage(rows: Sequence[FastpathCoverageRow]) -> dict[str
         ),
         "polars_long_native_production_safe_count": sum(
             1 for r in rows if r.polars_long_native_production_safe
+        ),
+        "dual_backend_fastpath_count": sum(1 for r in rows if r.dual_backend_fastpath),
+        "composite_lowering_count": sum(1 for r in rows if r.lowering_available),
+        "composite_dual_backend_capable_count": sum(
+            1 for r in rows if r.composite_dual_backend_capable
         ),
         "benchmark_available_count": sum(1 for r in rows if r.benchmark_available),
         "production_fast_path": sorted(r.canonical for r in fast),

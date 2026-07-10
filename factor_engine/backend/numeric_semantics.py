@@ -55,6 +55,14 @@ OPERATOR_SEMANTICS: dict[str, NumericSemantics] = {
     "c_percentile": NumericSemantics(quantile_interpolation="linear"),
     "ts_quantile": NumericSemantics(quantile_interpolation="linear"),
     "group_percentile": NumericSemantics(quantile_interpolation="linear"),
+    "nan_to_num": NumericSemantics(output_inf_to_nan=False, output_inf_to_null=False),
+    "normalize": NumericSemantics(),
+    "ts_pct": NumericSemantics(input_nan_to_null=True),
+    "and_": NumericSemantics(),
+    "or_": NumericSemantics(),
+    "not_": NumericSemantics(),
+    "where": NumericSemantics(),
+    "log": NumericSemantics(input_nan_to_null=True),
 }
 
 
@@ -116,6 +124,36 @@ def zscore_zero_std_fill(canon: str) -> float | None:
     if policy == "nan":
         return float("nan")
     return None
+
+
+def normalize_single_valid_is_null() -> bool:
+    """截面 normalize：仅一个有效值时输出 NULL（非常数截面）。"""
+    return True
+
+
+def normalize_constant_cross_section_fill() -> float:
+    """截面 normalize：全部有效值相同（span=0）时输出 0.5。"""
+    return 0.5
+
+
+def nan_to_num_replaces_infinite() -> bool:
+    """``nan_to_num`` 将 ±Inf 替换为与 NaN/null 相同的填充常数。"""
+    return True
+
+
+def truthy_null_is_false() -> bool:
+    """逻辑算子 ``and_``/``or_``/``not_``/``where``：NULL/NaN 视为 false。"""
+    return True
+
+
+def ts_pct_zero_prev_is_null() -> bool:
+    """``ts_pct``：滞后值为 0 或 NULL 时输出 NULL（不做 forward-fill）。"""
+    return True
+
+
+def log_zero_returns_negative_infinity() -> bool:
+    """``log``：输入为 0 时输出 -Inf；负数输出 NULL。"""
+    return True
 
 
 def sql_stddev_fn_key(canon: str) -> str:

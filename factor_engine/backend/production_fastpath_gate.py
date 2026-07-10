@@ -131,20 +131,31 @@ def _check_full_plan_compilation(plan: Any, *, require: frozenset[FastpathBacken
         try:
             import polars as pl
 
-            from backend.polars_expr_emitter import compile_plan_to_polars, plan_is_polars_long_capable
+            from backend.polars_expr_emitter import (
+                collect_columns,
+                compile_plan_to_polars,
+                plan_is_polars_long_capable,
+            )
 
             if not plan_is_polars_long_capable(plan):
                 violations.append("full_plan: polars_long plan not capable")
             else:
-                probe = pl.LazyFrame(
-                    {
-                        "ts": pl.Series([], dtype=pl.Datetime(time_unit="ns")),
-                        "inst": pl.Series([], dtype=pl.Utf8),
-                        "close": pl.Series([], dtype=pl.Float64),
-                    }
-                )
-                if compile_plan_to_polars(plan, probe, ctx=None) is None:
+                columns = sorted(collect_columns(plan))
+                probe_data: dict[str, pl.Series] = {
+                    "ts": pl.Series([1], dtype=pl.Datetime(time_unit="ns")),
+                    "inst": pl.Series(["A"], dtype=pl.Utf8),
+                }
+                for name in columns:
+                    if name in {"ts", "inst"}:
+                        continue
+                    probe_data[name] = pl.Series([1.0], dtype=pl.Float64)
+                probe = pl.LazyFrame(probe_data)
+                compiled = compile_plan_to_polars(plan, probe, ctx=None)
+                if compiled is None:
                     violations.append("full_plan: polars_long compile returned None")
+                else:
+                    compiled.frame.collect_schema()
+                    compiled.frame.limit(0).collect()
         except Exception as exc:
             violations.append(f"full_plan: polars_long compile failed: {exc}")
     return violations
@@ -176,7 +187,13 @@ def check_production_fastpath_plan_ops(
     violations: list[str] = []
     ops = _iter_plan_ops(plan)
 
+    from planner.composite_lowering import has_composite_lowering
+
     for canon in ops:
+        if is_strict and has_composite_lowering(canon):
+            violations.append(f"{canon}: 未下降的 composite 算子（optimizer 须先 lower_composite_operators）")
+            continue
+
         spec = build_operator_spec(canon)
         if spec is None:
             violations.append(f"{canon}: 无 runtime 实现")

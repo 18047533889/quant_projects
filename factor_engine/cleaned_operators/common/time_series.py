@@ -373,7 +373,10 @@ class TSPctChange(SeriesOperator):
 
     def _calculate_series(self, x: pd.DataFrame, d: int = 1, **kwargs) -> pd.DataFrame:
         periods = int(kwargs.get("periods", d))
-        return x.pct_change(periods)
+        prev = x.shift(periods)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            out = x / prev - 1.0
+        return out.where(prev.notna() & (prev != 0))
 
 
 

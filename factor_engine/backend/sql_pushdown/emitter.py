@@ -1155,7 +1155,8 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             return None
         return _Layer(
             f"SELECT ts, inst, "
-            f"CASE WHEN _v IS NULL OR _v < 0 THEN NULL ELSE {ln}(_v) END AS _v "
+            f"CASE WHEN _v IS NULL OR _v < 0 THEN NULL "
+            f"WHEN _v = 0 THEN -1.0/0.0 ELSE {ln}(_v) END AS _v "
             f"FROM ({inner.sql}) t",
             has_inst_window=inner.has_inst_window,
             has_ts_partition=inner.has_ts_partition,
@@ -2006,8 +2007,9 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         coalesce = "coalesce" if dialect == SqlDialect.CLICKHOUSE else "COALESCE"
         if op == "nan_to_num":
             isnan_fn = "isNaN" if dialect == SqlDialect.CLICKHOUSE else "isnan"
+            isinf_fn = "isInfinite" if dialect == SqlDialect.CLICKHOUSE else "isinf"
             val_expr = (
-                f"CASE WHEN _v IS NULL OR {isnan_fn}(_v) THEN {lit} ELSE _v END"
+                f"CASE WHEN _v IS NULL OR {isnan_fn}(_v) OR {isinf_fn}(_v) THEN {lit} ELSE _v END"
             )
         else:
             val_expr = f"{coalesce}(_v, {lit})"
@@ -2091,8 +2093,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             return None
         return _Layer(
             f"SELECT l.ts, l.inst, "
-            f"CASE WHEN l._v IS NULL OR r._v IS NULL THEN NULL "
-            f"WHEN {_truthy_sql('l._v')} AND {_truthy_sql('r._v')} THEN 1.0 ELSE 0.0 END AS _v "
+            f"CASE WHEN {_truthy_sql('l._v')} AND {_truthy_sql('r._v')} THEN 1.0 ELSE 0.0 END AS _v "
             f"FROM ({left.sql}) l INNER JOIN ({right.sql}) r USING (ts, inst)",
             has_inst_window=left.has_inst_window or right.has_inst_window,
             has_ts_partition=left.has_ts_partition or right.has_ts_partition,
@@ -2107,8 +2108,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             return None
         return _Layer(
             f"SELECT l.ts, l.inst, "
-            f"CASE WHEN l._v IS NULL AND r._v IS NULL THEN NULL "
-            f"WHEN {_truthy_sql('l._v')} OR {_truthy_sql('r._v')} THEN 1.0 ELSE 0.0 END AS _v "
+            f"CASE WHEN {_truthy_sql('l._v')} OR {_truthy_sql('r._v')} THEN 1.0 ELSE 0.0 END AS _v "
             f"FROM ({left.sql}) l INNER JOIN ({right.sql}) r USING (ts, inst)",
             has_inst_window=left.has_inst_window or right.has_inst_window,
             has_ts_partition=left.has_ts_partition or right.has_ts_partition,

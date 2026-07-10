@@ -18,9 +18,11 @@ class Optimizer:
             常量折叠并完成 fastpath 改写后的计划根节点
         """
         folded = self._fold_literals(plan)
+        from planner.composite_lowering import lower_composite_operators
         from planner.rewrite_fastpath import rewrite_plan_for_fastpath
 
-        return rewrite_plan_for_fastpath(folded)
+        lowered = lower_composite_operators(folded)
+        return rewrite_plan_for_fastpath(lowered)
 
     def _fold_literals(self, node: PlanNode) -> PlanNode:
         """自底向上折叠二元/多元算术字面量子表达式。"""

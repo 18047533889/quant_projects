@@ -115,6 +115,9 @@ def main() -> int:
     else:
         print(
             f"production_fast_path={summary['production_fast_path_count']} "
+            f"dual_backend_fastpath={summary['dual_backend_fastpath_count']} "
+            f"composite_lowering={summary['composite_lowering_count']} "
+            f"composite_dual_capable={summary['composite_dual_backend_capable_count']} "
             f"production_allowed={summary['production_allowed_count']} "
             f"polars_native_prod={summary['polars_long_native_production_safe_count']} "
             f"sql_prod_emitter_ok={summary['sql_production_safe_emitter_ok']}"

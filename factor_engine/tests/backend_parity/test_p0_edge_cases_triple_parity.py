@@ -181,13 +181,27 @@ def test_p0_edge_polars_long_matches_pandas(edge_source, name, expr_builder):
 
 DUCKDB_EDGE_CASES = [
     ("protected_div", lambda: make_cleaned_call_factory("protected_div")(_col("numer"), _col("denom"))),
+    ("protected_log", lambda: make_cleaned_call_factory("protected_log")(_col("neg"))),
+    ("protected_sqrt", lambda: make_cleaned_call_factory("protected_sqrt")(_col("neg"))),
+    ("divide", lambda: make_cleaned_call_factory("divide")(_col("numer"), _col("denom"))),
+    ("sqrt", lambda: make_cleaned_call_factory("sqrt")(_col("neg"))),
+    ("log", lambda: make_cleaned_call_factory("log")(_col("neg"))),
+    ("where", lambda: make_cleaned_call_factory("where")(_col("flag"), _col("close"), _col("numer"))),
     ("rank", lambda: make_cleaned_call_factory("rank")(_col("close"))),
     ("zscore", lambda: make_cleaned_call_factory("zscore")(_col("close"))),
+    ("ts_zscore", lambda: make_cleaned_call_factory("ts_zscore")(_col("close"), 3)),
+    ("ts_std", lambda: make_cleaned_call_factory("ts_std")(_col("close"), 3)),
     ("ts_mean", lambda: make_cleaned_call_factory("ts_mean")(_col("close"), 3)),
+    ("ts_pct", lambda: make_cleaned_call_factory("ts_pct")(_col("close"), 1)),
+    ("group_zscore", lambda: make_cleaned_call_factory("group_zscore")(_col("close"), _col("grp"))),
     ("winsorize", lambda: make_cleaned_call_factory("winsorize")(_col("close"))),
     ("cs_mad", lambda: make_cleaned_call_factory("cs_mad")(_col("close"))),
     ("cs_mad_zscore", lambda: make_cleaned_call_factory("cs_mad_zscore")(_col("close"))),
     ("vwap", lambda: make_cleaned_call_factory("vwap")(_col("close"), _col("volume"), 2)),
+    ("power", lambda: make_cleaned_call_factory("power")(_col("close"), _col("numer"))),
+    ("scale", lambda: make_cleaned_call_factory("scale")(_col("close"))),
+    ("normalize", lambda: make_cleaned_call_factory("normalize")(_col("close"))),
+    ("volatility", lambda: make_cleaned_call_factory("volatility")(_col("close"), 3)),
 ]
 
 
@@ -215,6 +229,45 @@ def test_rank_single_valid_value_is_half(edge_source):
     long_out = _result_series(_run(src, expr, "polars_long")).iloc[0]
     assert pd_out == pytest.approx(0.5)
     assert long_out == pytest.approx(0.5)
+
+
+def test_normalize_single_valid_value_is_null(edge_source):
+    from backend.numeric_semantics import normalize_single_valid_is_null
+
+    assert normalize_single_valid_is_null()
+    idx = edge_source.data["close"].index
+    single_ts = idx[0][0]
+    mask = idx.get_level_values("timestamp") == single_ts
+    sub_idx = idx[mask][:1]
+    one = pd.Series([42.0], index=sub_idx)
+    src = InMemorySeriesSource(data={"close": one})
+    expr = make_cleaned_call_factory("normalize")(col("close"))
+    pd_out = _result_series(_run(src, expr, "pandas")).iloc[0]
+    long_out = _result_series(_run(src, expr, "polars_long")).iloc[0]
+    assert math.isnan(pd_out)
+    assert math.isnan(long_out)
+
+
+def test_ts_pct_zero_prev_is_null(edge_source):
+    from backend.numeric_semantics import ts_pct_zero_prev_is_null
+
+    assert ts_pct_zero_prev_is_null()
+    idx = pd.MultiIndex.from_tuples(
+        [
+            (pd.Timestamp("2024-01-02"), "A"),
+            (pd.Timestamp("2024-01-03"), "A"),
+            (pd.Timestamp("2024-01-04"), "A"),
+        ],
+        names=["timestamp", "instrument"],
+    )
+    close = pd.Series([0.0, 5.0, 10.0], index=idx)
+    src = InMemorySeriesSource(data={"close": close})
+    expr = make_cleaned_call_factory("ts_pct")(col("close"), 1)
+    pd_out = _result_series(_run(src, expr, "pandas"))
+    long_out = _result_series(_run(src, expr, "polars_long"))
+    assert math.isnan(pd_out.iloc[1])
+    assert math.isnan(long_out.iloc[1])
+    pd.testing.assert_series_equal(pd_out, long_out, check_names=False, rtol=1e-6, atol=1e-6)
 
 
 def test_vwap_zero_volume_polars_native(edge_source):

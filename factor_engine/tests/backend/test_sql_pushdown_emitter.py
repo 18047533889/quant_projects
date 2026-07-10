@@ -494,6 +494,7 @@ def test_nan_to_num_sql():
     )
     assert compiled is not None
     assert "isnan(_v)" in compiled.query or "isNaN(_v)" in compiled.query
+    assert "isinf(_v)" in compiled.query or "isInfinite(_v)" in compiled.query
     assert "-1" in compiled.query
 
 

@@ -57,3 +57,45 @@ class InMemorySeriesSource(DataSource):
 
         lf = self.scan_polars_long(sorted(self.data.keys()))
         return lf.select(["ts", "inst"]).unique()
+
+
+class NoLoadColumnSource:
+    """仅 ``scan_polars_long``；任何列读取/prefetch 一调用即失败。"""
+
+    def __init__(self, data: dict[str, pd.Series]) -> None:
+        self._data = data
+
+    def load_column(self, name: str):
+        raise AssertionError(f"load_column must not be called: {name!r}")
+
+    def load_columns(self, names: list[str]):
+        raise AssertionError(f"load_columns must not be called: {names!r}")
+
+    def prefetch_columns(self, names: list[str]):
+        raise AssertionError(f"prefetch_columns must not be called: {names!r}")
+
+    def scan_polars_long(self, columns: list[str]):
+        import polars as pl
+
+        from storage.factor_format import series_to_long_table
+
+        merged = None
+        tcol = icol = None
+        for name in sorted(columns):
+            series = self._data[name]
+            if tcol is None:
+                tcol = str(series.index.names[0])
+                icol = str(series.index.names[1])
+            part = series_to_long_table(
+                series,
+                timestamp_col=tcol,
+                asset_col=icol,
+                value_col=name,
+            )
+            merged = part if merged is None else merged.merge(part, on=[tcol, icol], how="outer")
+            merged[name] = merged[name].astype("float64")
+        renamed = merged.rename(columns={tcol: "ts", icol: "inst"})
+        return pl.from_pandas(renamed).lazy()
+
+    def scan_index_long(self):
+        return self.scan_polars_long(sorted(self._data.keys())).select(["ts", "inst"]).unique()

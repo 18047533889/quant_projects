@@ -2520,6 +2520,11 @@ class NeOp(TwoVarOperator):
         return (x != y).astype(float)
 
 
+def _truthy_series(x: pd.Series | pd.DataFrame) -> pd.Series | pd.DataFrame:
+    """非空且非零为真；NULL/NaN 视为 false（与 Polars/SQL fast path 一致）。"""
+    return x.notna() & (x != 0)
+
+
 # canonical=and_ backend=pandas_numpy selected=and_ source=basic_runtime
 @register_operator(name="and_", category="elementwise_math", business_category="elementwise_math", canonical="and_", source="basic_runtime")
 class AndOp(TwoVarOperator):
@@ -2533,7 +2538,7 @@ class AndOp(TwoVarOperator):
     )
 
     def _calculate_series(self, x, y, **kwargs):
-        return ((x != 0) & (y != 0)).astype(float)
+        return (_truthy_series(x) & _truthy_series(y)).astype(float)
 
 
 # canonical=or_ backend=pandas_numpy selected=or_ source=basic_runtime
@@ -2549,7 +2554,7 @@ class OrOp(TwoVarOperator):
     )
 
     def _calculate_series(self, x, y, **kwargs):
-        return ((x != 0) | (y != 0)).astype(float)
+        return (_truthy_series(x) | _truthy_series(y)).astype(float)
 
 
 # canonical=not_ backend=pandas_numpy selected=not_ source=basic_runtime
@@ -2565,7 +2570,7 @@ class NotOp(SeriesOperator):
     )
 
     def _calculate_series(self, x, **kwargs):
-        return (x == 0).astype(float)
+        return (~_truthy_series(x)).astype(float)
 
 
 # canonical=inverse backend=pandas_numpy selected=inverse source=basic_runtime

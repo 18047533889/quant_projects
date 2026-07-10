@@ -86,15 +86,21 @@ def infer_primary_route(runtime: dict[str, Any]) -> str:
 
 def _final_collect(runtime: dict[str, Any]) -> str:
     """推断最终结果物化到 Pandas 的 collect 路径。"""
-    if runtime.get("fully_sql"):
+    if runtime.get("sql_full_execution_failed"):
+        return "fallback_to_pandas_or_polars"
+    if runtime.get("sql_fully_pushed") and int(runtime.get("sql_query_count") or 0) > 0:
         return "sql_to_pandas"
+    if runtime.get("fully_sql") and int(runtime.get("sql_query_count") or 0) <= 0:
+        return "fallback_to_pandas_or_polars"
     if runtime.get("used_polars_long_path"):
         return "polars_long_to_pandas"
     backend = str(runtime.get("backend") or "")
     if backend == "polars":
         return "polars_panel_to_pandas"
     if backend in {"duckdb_sql", "sql", "clickhouse_sql"}:
-        return "sql_to_pandas"
+        if int(runtime.get("sql_query_count") or 0) > 0:
+            return "sql_to_pandas"
+        return "fallback_to_pandas_or_polars"
     return "pandas"
 
 

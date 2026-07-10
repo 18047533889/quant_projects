@@ -816,7 +816,7 @@ def _try_binary_from_base_columns(
     elif op == "divide":
         expr = lcol / rcol
     elif op == "power":
-        expr = lcol.pow(rcol)
+        expr = _safe_pow_expr(lcol, rcol)
     elif op == "gt":
         expr = pl.when(lcol > rcol).then(1.0).otherwise(0.0)
     elif op == "lt":
@@ -1610,7 +1610,11 @@ def _compile_polars_impl(
             return None
         const = _literal_value(node, 0, default=0.0) or 0.0
         return inner.with_columns(
-            pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan())
+            pl.when(
+                pl.col(_VAL).is_null()
+                | pl.col(_VAL).is_nan()
+                | pl.col(_VAL).is_infinite()
+            )
             .then(const)
             .otherwise(pl.col(_VAL))
             .alias(_VAL)

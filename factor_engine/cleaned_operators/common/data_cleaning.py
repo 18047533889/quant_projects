@@ -488,7 +488,9 @@ class NaNToNum(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, num: float = 0, **kwargs) -> pd.DataFrame:
-        return x.fillna(num)
+        arr = x.to_numpy(dtype=float, copy=True)
+        filled = np.nan_to_num(arr, nan=num, posinf=num, neginf=num)
+        return pd.DataFrame(filled, index=x.index, columns=x.columns)
 
 # aliases: NAN_TO_NUM
 

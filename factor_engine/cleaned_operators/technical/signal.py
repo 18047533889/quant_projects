@@ -510,7 +510,9 @@ class MOM(SeriesOperator):
     )
 
     def _calculate_series(self, price: pd.DataFrame, window: int = 10, **kwargs) -> pd.DataFrame:
-        return price - price.shift(window)
+        from cleaned_operators._causal import causal_lag
+
+        return price - causal_lag(price, int(window))
 
 
 
@@ -549,7 +551,12 @@ class ROC(SeriesOperator):
     )
 
     def _calculate_series(self, price: pd.DataFrame, window: int = 10, **kwargs) -> pd.DataFrame:
-        return (price - price.shift(window)) / price.shift(window).replace(0, np.nan) * 100
+        from cleaned_operators._causal import causal_lag
+
+        prev = causal_lag(price, int(window))
+        with np.errstate(divide="ignore", invalid="ignore"):
+            out = (price / prev - 1.0) * 100.0
+        return out.where(prev.notna() & (prev != 0))
 
 
 
@@ -752,6 +759,11 @@ class HumpDecay(SeriesOperator):
 
 
 # canonical=if_else backend=pandas_numpy selected=if_else source=signal/__init__.py
+def _truthy_condition(condition: pd.Series | pd.DataFrame) -> pd.Series | pd.DataFrame:
+    """非空且非零为真；NULL/NaN 视为 false（与 Polars/SQL fast path 一致）。"""
+    return condition.notna() & (condition != 0)
+
+
 @register_operator(name="if_else", category="signal", business_category="technical_signal", canonical="if_else", source="factor_dsl_np")
 class IfElse(SeriesOperator):
     """条件选择"""
@@ -767,14 +779,19 @@ class IfElse(SeriesOperator):
     )
 
     def _calculate_series(self, condition, v1=1, v2=0, **kwargs) -> pd.DataFrame:
+        truthy = _truthy_condition(condition)
         if isinstance(condition, pd.DataFrame):
-            cond_bool = condition.astype(bool)
             if isinstance(v1, pd.DataFrame) and isinstance(v2, pd.DataFrame):
-                return v1.where(cond_bool, v2)
-            result = pd.DataFrame(np.where(cond_bool, v1, v2),
-                                  index=condition.index, columns=condition.columns)
+                return v1.where(truthy, v2)
+            result = pd.DataFrame(
+                np.where(truthy.values, v1, v2),
+                index=condition.index,
+                columns=condition.columns,
+            )
             return result
-        return condition * v1 + (1 - condition) * v2
+        if isinstance(v1, pd.Series) and isinstance(v2, pd.Series):
+            return v1.where(truthy, v2)
+        return np.where(truthy, v1, v2)
 
 
 
@@ -1107,14 +1124,19 @@ class IfElse(SeriesOperator):
     )
 
     def _calculate_series(self, condition, v1=1, v2=0, **kwargs) -> pd.DataFrame:
+        truthy = _truthy_condition(condition)
         if isinstance(condition, pd.DataFrame):
-            cond_bool = condition.astype(bool)
             if isinstance(v1, pd.DataFrame) and isinstance(v2, pd.DataFrame):
-                return v1.where(cond_bool, v2)
-            result = pd.DataFrame(np.where(cond_bool, v1, v2),
-                                  index=condition.index, columns=condition.columns)
+                return v1.where(truthy, v2)
+            result = pd.DataFrame(
+                np.where(truthy.values, v1, v2),
+                index=condition.index,
+                columns=condition.columns,
+            )
             return result
-        return condition * v1 + (1 - condition) * v2
+        if isinstance(v1, pd.Series) and isinstance(v2, pd.Series):
+            return v1.where(truthy, v2)
+        return np.where(truthy, v1, v2)
 
 @register_operator(name="where", category="signal", business_category="technical_signal", canonical="where", source="factor_dsl_np")
 class Where(IfElse):

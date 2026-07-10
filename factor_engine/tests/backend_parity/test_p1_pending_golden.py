@@ -142,8 +142,28 @@ def test_pending_polars_long_matches_pandas(edge_source, name, expr_builder):
 
 @pytest.mark.parametrize("name,expr_builder", PENDING_DUCKDB_CASES)
 def test_pending_duckdb_matches_pandas(duckdb_source, name, expr_builder):
+    from tests.backend_parity.duckdb_parity_helpers import assert_duckdb_real_sql_execution
+
     expr = expr_builder()
-    _assert_close(_run(duckdb_source, expr, "pandas"), _run(duckdb_source, expr, "duckdb_sql"))
+    pd_out = _run(duckdb_source, expr, "pandas")
+    sql_run = FactorEngine(backend=build_backend("duckdb_sql"), data_source=duckdb_source).run(
+        Factor(name="t", expr=expr)
+    )
+    assert_duckdb_real_sql_execution(sql_run)
+    _assert_close(pd_out, sql_run["result"].sort_index())
+
+
+def test_cs_resid_asymmetric_null_pairwise_duckdb(duckdb_source, edge_source):
+    from tests.backend_parity.duckdb_parity_helpers import assert_duckdb_real_sql_execution
+
+    expr = F("cs_resid")(col("y"), col("x"))
+    pd_out = _run(edge_source, expr, "pandas")
+    duck_expr = F("cs_resid")(col("Y"), col("X"))
+    sql_run = FactorEngine(backend=build_backend("duckdb_sql"), data_source=duckdb_source).run(
+        Factor(name="t", expr=duck_expr)
+    )
+    assert_duckdb_real_sql_execution(sql_run)
+    _assert_close(pd_out, sql_run["result"].sort_index())
 
 
 def test_cs_resid_asymmetric_null_pairwise(edge_source):

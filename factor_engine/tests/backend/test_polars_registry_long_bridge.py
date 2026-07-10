@@ -83,11 +83,9 @@ def test_polars_long_registry_ops(source, factory_name, expr_builder):
     pd_out = _run(source, expr, "pandas")
     long_out = _run(source, expr, "polars_long")
     assert long_out.get("used_polars_long_path") is True, factory_name
-    if factory_name in {"MACD", "RSI", "MOM", "ROC", "acos"}:
+    if factory_name in {"MACD", "RSI", "acos"}:
         assert long_out.get("used_polars_long_registry") is True, factory_name
-    elif factory_name == "cum_std":
-        assert long_out.get("used_polars_long_native") is True, factory_name
-    elif factory_name == "if_else":
+    elif factory_name in {"MOM", "ROC", "cum_std", "if_else"}:
         assert long_out.get("used_polars_long_native") is True, factory_name
     pd.testing.assert_series_equal(
         pd_out["result"].sort_index(),

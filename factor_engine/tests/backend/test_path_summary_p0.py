@@ -110,3 +110,17 @@ def test_strict_sql_long_raises(monkeypatch):
     ctx = ExecutionContext(data_source=object())
     with pytest.raises(SqlLongPushdownError):
         handle_sql_long_pushdown_failure(ctx, sid="s1", exc=RuntimeError("boom"), phase="long_single")
+
+
+def test_final_collect_not_sql_when_execution_failed():
+    from backend.path_summary import _final_collect
+
+    assert _final_collect({"fully_sql": True, "sql_full_execution_failed": True}) == (
+        "fallback_to_pandas_or_polars"
+    )
+    assert _final_collect(
+        {"fully_sql": True, "sql_fully_pushed": True, "sql_query_count": 2}
+    ) == "sql_to_pandas"
+    assert _final_collect({"fully_sql": True, "sql_query_count": 0}) == (
+        "fallback_to_pandas_or_polars"
+    )

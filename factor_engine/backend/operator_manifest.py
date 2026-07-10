@@ -40,10 +40,20 @@ def build_operator_manifest_entry(canon: str) -> dict[str, Any]:
     elif tier == "native":
         polars_long_label = "native"
     native_tier = polars_long_production_tier(name) if tier == "native" else tier
+    from planner.composite_lowering import lowered_primitives as probe_lowered_primitives
+
+    lowered = probe_lowered_primitives(name) if row.lowering_available else None
     return {
         **base,
         "canonical": name,
         "shape_preserving": spec.shape_preserving,
+        "execution_kind": row.execution_kind,
+        "lowering_available": row.lowering_available,
+        "lowered_primitives": list(lowered) if lowered else [],
+        "composite_dual_backend_capable": row.composite_dual_backend_capable,
+        "dual_backend_fastpath": row.dual_backend_fastpath,
+        "polars_long_fastpath": row.polars_long_fastpath,
+        "duckdb_fastpath": row.duckdb_fastpath,
         "pandas": capability_for(name, "pandas_numpy").status,
         "polars_panel": polars.status,
         "polars_long": polars_long_label,
@@ -59,6 +69,7 @@ def build_operator_manifest_entry(canon: str) -> dict[str, Any]:
         "research_allowed": True,
         "production_allowed": spec.allow_in_production,
         "production_fastpath_allowed": row.production_fast_path,
+        "dual_backend_fastpath": row.dual_backend_fastpath,
     }
 
 
