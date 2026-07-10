@@ -10,6 +10,15 @@ class DebugBackend(Backend):
     """将 ``PlanNode`` 递归格式化为字符串（每行 ``op`` + ``attrs``）。"""
 
     def execute(self, plan: PlanNode, ctx: ExecutionContext) -> str:
+        """将逻辑计划格式化为缩进文本（不访问真实数据）。
+
+        参数:
+            plan: 逻辑计划根节点。
+            ctx: 执行上下文（调试模式下未使用）。
+
+        返回:
+            可读的 plan 树字符串。
+        """
         _ = ctx  # 调试模式不读数据源
         return self._render(plan)
 

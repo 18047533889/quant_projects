@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Panel 算子共用的 numpy 1D 内核（非独立算子库）。"""
+"""Panel 算子共用的 numpy 1D 内核（非独立算子库）。
+
+提供截面/时序/价量的逐列 numpy 实现，供 pandas 算子与 polars 桥接复用。
+函数名以下划线结尾表示内部内核，非 DSL 直接暴露。
+"""
 from __future__ import annotations
 
 from typing import Any, Callable
@@ -9,7 +13,14 @@ import pandas as pd
 
 
 def _to_array(x: Any) -> np.ndarray:
-    """统一转为 numpy 数组。"""
+    """统一将输入转为 numpy 浮点数组。
+
+参数:
+    x: ``pd.Series``、列表、元组或类数组对象。
+
+返回:
+    ``np.ndarray`` 浮点数组。
+"""
     if isinstance(x, pd.Series):
         return x.values
     if isinstance(x, (list, tuple)):
@@ -17,13 +28,30 @@ def _to_array(x: Any) -> np.ndarray:
     return np.asarray(x, dtype=float)
 
 def _rolling_window(arr: np.ndarray, d: int) -> np.ndarray:
-    """滑动窗口视图（避免复制数据）。"""
+    """构造滑动窗口 strided 视图（零拷贝）。
+
+参数:
+    arr: 一维 numpy 数组。
+    d: 窗口长度。
+
+返回:
+    形状 ``(len(arr)-d+1, d)`` 的窗口视图数组。
+"""
     shape = (arr.shape[0] - d + 1, d)
     strides = (arr.strides[0], arr.strides[0])
     return np.lib.stride_tricks.as_strided(arr, shape=shape, strides=strides)
 
 def _rolling_apply(arr: np.ndarray, d: int, fn: Callable) -> np.ndarray:
-    """在滑动窗口上应用函数。"""
+    """在滑动窗口上逐窗应用自定义函数。
+
+参数:
+    arr: 一维 numpy 数组。
+    d: 窗口长度。
+    fn: 接收窗口数组返回标量的函数。
+
+返回:
+    与 ``arr`` 等长的一维结果数组，前 ``d-1`` 个为 NaN。
+"""
     out = np.full_like(arr, np.nan, dtype=float)
     if d <= 0 or len(arr) < d:
         return out
@@ -32,22 +60,52 @@ def _rolling_apply(arr: np.ndarray, d: int, fn: Callable) -> np.ndarray:
     return out
 
 def signed_sqrt_(x) -> np.ndarray:
-    """保留符号后开方: sign(x) * sqrt(|x|)。"""
+    """保留符号的开方：``sign(x) * sqrt(|x|)``。
+
+参数:
+    x: 输入序列。
+
+返回:
+    逐元素带符号平方根数组。
+"""
     arr = _to_array(x)
     return np.sign(arr) * np.sqrt(np.abs(arr))
 
 def sigmoid_(x) -> np.ndarray:
-    """Sigmoid 映射: 1 / (1 + e^-x)。"""
+    """Sigmoid 映射：``1 / (1 + exp(-x))``。
+
+参数:
+    x: 输入序列。
+
+返回:
+    逐元素 sigmoid 数组。
+"""
     arr = _to_array(x)
     with np.errstate(over="ignore"):
         return 1.0 / (1.0 + np.exp(-arr))
 
 def cap_(x, lo: float, hi: float) -> np.ndarray:
-    """截断到区间 [lo, hi]。"""
+    """将数值截断到区间 ``[lo, hi]``。
+
+参数:
+    x: 输入序列。
+    lo: 下界。
+    hi: 上界。
+
+返回:
+    截断后的 numpy 数组。
+"""
     return np.clip(_to_array(x), lo, hi)
 
 def coalesce_(*args) -> np.ndarray:
-    """返回第一个非 NULL 值。"""
+    """返回第一个非 NaN 值（SQL COALESCE 语义）。
+
+参数:
+    *args: 多个同长度输入序列。
+
+返回:
+    逐位置取首个有限值的数组。
+"""
     arrays = [_to_array(a) for a in args]
     result = np.full_like(arrays[0], np.nan)
     for arr in arrays:
@@ -56,7 +114,14 @@ def coalesce_(*args) -> np.ndarray:
     return result
 
 def rank_(x) -> np.ndarray:
-    """截面百分位排名 [0, 1]。"""
+    """截面百分位排名，映射到 ``[0, 1]``。
+
+参数:
+    x: 一维截面样本。
+
+返回:
+    百分位排名数组，无效位置为 NaN。
+"""
     arr = _to_array(x)
     valid = ~np.isnan(arr)
     result = np.full_like(arr, np.nan)
@@ -66,7 +131,15 @@ def rank_(x) -> np.ndarray:
     return result
 
 def cs_resid_(y, x) -> np.ndarray:
-    """截面线性回归残差: y - (α + βx)。"""
+    """截面线性回归残差：``y - (α + βx)``。
+
+参数:
+    y: 因变量一维数组。
+    x: 自变量一维数组。
+
+返回:
+    残差数组，有效样本不足 3 时全 NaN。
+"""
     y_arr = _to_array(y)
     x_arr = _to_array(x)
     valid = ~(np.isnan(y_arr) | np.isnan(x_arr))
@@ -82,7 +155,16 @@ def cs_resid_(y, x) -> np.ndarray:
     return result
 
 def cs_regression_(y, x, mode: int = 0) -> np.ndarray:
-    """截面回归: mode=0 残差, 1 beta, 2 拟合值。"""
+    """截面 OLS 回归，按 mode 返回不同量。
+
+参数:
+    y: 因变量一维数组。
+    x: 自变量一维数组。
+    mode: ``0`` 残差，``1`` beta，其他为拟合值。
+
+返回:
+    与 ``y`` 等长的结果数组。
+"""
     y_arr = _to_array(y)
     x_arr = _to_array(x)
     valid = ~(np.isnan(y_arr) | np.isnan(x_arr))
@@ -103,14 +185,31 @@ def cs_regression_(y, x, mode: int = 0) -> np.ndarray:
     return result
 
 def price_spread_deviation_(x, d: int) -> np.ndarray:
-    """相对窗口均值偏离: x_t / mean(x_{t-d+1:t}) - 1。"""
+    """相对窗口均值偏离：``x_t / mean(x_{t-d+1:t}) - 1``。
+
+参数:
+    x: 一维时序数组。
+    d: 滚动窗口长度。
+
+返回:
+    偏离度数组。
+"""
     arr = _to_array(x)
     rolling_mean = _rolling_apply(arr, d, lambda w: np.nanmean(w))
     with np.errstate(divide="ignore", invalid="ignore"):
         return arr / rolling_mean - 1.0
 
 def ts_regression_slope_(x, y, d: int) -> np.ndarray:
-    """窗口回归斜率: cov(x,y)/var(x)。"""
+    """滚动窗口回归斜率：``cov(x,y)/var(x)``。
+
+参数:
+    x: 自变量一维数组。
+    y: 因变量一维数组。
+    d: 窗口长度。
+
+返回:
+    斜率数组。
+"""
     x_arr, y_arr = _to_array(x), _to_array(y)
     result = np.full_like(x_arr, np.nan, dtype=float)
     if d <= 0:
@@ -126,13 +225,30 @@ def ts_regression_slope_(x, y, d: int) -> np.ndarray:
     return result
 
 def ts_moment_(x, d: int, k: int) -> np.ndarray:
-    """窗口 k 阶中心矩: E[(x-μ)^k]。"""
+    """滚动窗口 k 阶中心矩：``E[(x-μ)^k]``。
+
+参数:
+    x: 一维时序数组。
+    d: 窗口长度。
+    k: 矩的阶数。
+
+返回:
+    k 阶中心矩数组。
+"""
     arr = _to_array(x)
     return _rolling_apply(arr, d, lambda w: np.nanmean((w - np.nanmean(w)) ** k) if not np.all(np.isnan(w)) else np.nan)
 
 def rank_corr_(x, y, d: int = 0) -> np.ndarray:
-    """秩相关系数: corr(rank(x), rank(y))。
-   当 d=0 时做截面秩相关；d>0 时做时序滚动秩相关。"""
+    """秩相关系数：``corr(rank(x), rank(y))``。
+
+参数:
+    x: 第一个序列。
+    y: 第二个序列。
+    d: ``0`` 为截面秩相关；``>0`` 为时序滚动秩相关。
+
+返回:
+    相关系数数组（截面模式为广播标量）。
+"""
     if d == 0:
         # 截面
         rx = rank_(x)
@@ -159,7 +275,15 @@ def rank_corr_(x, y, d: int = 0) -> np.ndarray:
         return result
 
 def ts_poly2_coeff_(x, d: int) -> np.ndarray:
-    """对时间索引做二次拟合后的二次项系数: x ≈ a + bt + ct², return c。"""
+    """对时间索引做二次拟合，返回二次项系数 c。
+
+参数:
+    x: 一维时序数组。
+    d: 拟合窗口长度。
+
+返回:
+    二次项系数 c 数组（``x ≈ a + bt + ct²``）。
+"""
     arr = _to_array(x)
     result = np.full_like(arr, np.nan, dtype=float)
     if d <= 0:
@@ -175,7 +299,16 @@ def ts_poly2_coeff_(x, d: int) -> np.ndarray:
     return result
 
 def ts_poly2_resid_(y, x, d: int) -> np.ndarray:
-    """二次拟合残差: y - (a + bx + cx²)。"""
+    """二次拟合残差：``y - (a + bx + cx²)`` 在窗口末 bar。
+
+参数:
+    y: 因变量一维数组。
+    x: 自变量一-dimensional数组。
+    d: 拟合窗口长度。
+
+返回:
+    窗口末 bar 的残差数组。
+"""
     y_arr, x_arr = _to_array(y), _to_array(x)
     result = np.full_like(y_arr, np.nan, dtype=float)
     if d <= 0:
@@ -193,7 +326,17 @@ def ts_poly2_resid_(y, x, d: int) -> np.ndarray:
     return result
 
 def digital_count_(x, d: int, threshold: float, run: int) -> np.ndarray:
-    """统计连续小波动片段: sum(1(|x_i/x_{i-1}-1| ≤ threshold)) for runs。"""
+    """统计连续小波动片段长度。
+
+参数:
+    x: 一维价格/收益数组。
+    d: 回溯长度上限。
+    threshold: 相邻变化率阈值。
+    run: 最小连续计数，低于此清零。
+
+返回:
+    连续小波动计数数组。
+"""
     arr = _to_array(x)
     result = np.full_like(arr, 0, dtype=float)
     if d <= 0:
@@ -210,7 +353,15 @@ def digital_count_(x, d: int, threshold: float, run: int) -> np.ndarray:
     return result
 
 def ts_max_buildup_(x, d: int) -> np.ndarray:
-    """统计持续创新高次数: sum(1(x_i = max(x_1..x_i)))。"""
+    """统计持续创新高次数。
+
+参数:
+    x: 一维时序数组。
+    d: 仅保留最近 d 期的累计计数（``d>0`` 时）。
+
+返回:
+    创新高累计次数数组。
+"""
     arr = _to_array(x)
     result = np.full_like(arr, 0, dtype=float)
     if len(arr) == 0:
@@ -231,7 +382,14 @@ def ts_max_buildup_(x, d: int) -> np.ndarray:
     return result
 
 def ttm_(x) -> np.ndarray:
-    """TTM 累加: 当前 + 前 3 报告期。"""
+    """TTM 累加：当前值 + 前 3 个报告期。
+
+参数:
+    x: 季度累计或单季值一维数组。
+
+返回:
+    滚动四季累加数组。
+"""
     arr = _to_array(x)
     result = np.full_like(arr, np.nan, dtype=float)
     for i in range(len(arr)):
@@ -242,7 +400,14 @@ def ttm_(x) -> np.ndarray:
     return result
 
 def quarter_(x) -> np.ndarray:
-    """累计值转单季度: x_t - x_{t-1}（一季报返回当期值）。"""
+    """累计值转单季度：``x_t - x_{t-1}``（首期为当期值）。
+
+参数:
+    x: 累计值一维数组。
+
+返回:
+    单季度值数组。
+"""
     arr = _to_array(x)
     result = np.full_like(arr, np.nan, dtype=float)
     result[0] = arr[0]
@@ -252,7 +417,14 @@ def quarter_(x) -> np.ndarray:
     return result
 
 def yoy_(x) -> np.ndarray:
-    """同比增速: x_t / x_{t-4} - 1。"""
+    """同比增速：``x_t / x_{t-4} - 1``。
+
+参数:
+    x: 季度值一维数组。
+
+返回:
+    同比增速数组，前 4 期为 NaN。
+"""
     arr = _to_array(x)
     result = np.full_like(arr, np.nan, dtype=float)
     if len(arr) < 5:
@@ -262,7 +434,14 @@ def yoy_(x) -> np.ndarray:
     return result
 
 def avg2_(x) -> np.ndarray:
-    """当期与上期均值: (x_t + x_{t-1}) / 2。"""
+    """当期与上期均值：``(x_t + x_{t-1}) / 2``。
+
+参数:
+    x: 一维时序数组。
+
+返回:
+    两期均值数组。
+"""
     arr = _to_array(x)
     result = np.full_like(arr, np.nan, dtype=float)
     result[0] = arr[0]
@@ -272,11 +451,29 @@ def avg2_(x) -> np.ndarray:
     return result
 
 def rolling_beta_to_market_(ret, index_ret, window: int) -> np.ndarray:
-    """滚动 Beta: Cov(r_i, r_m) / Var(r_m)。"""
+    """滚动 Beta：``Cov(r_i, r_m) / Var(r_m)``。
+
+参数:
+    ret: 个股收益一维数组。
+    index_ret: 市场收益一维数组。
+    window: 滚动窗口长度。
+
+返回:
+    Beta 数组。
+"""
     return ts_regression_slope_(index_ret, ret, window)
 
 def downside_beta_(ret, index_ret, window: int) -> np.ndarray:
-    """市场下跌样本 Beta: 只在 r_m < 0 的样本上计算。"""
+    """下行 Beta：仅在市场收益 ``< 0`` 的样本上估计。
+
+参数:
+    ret: 个股收益一维数组。
+    index_ret: 市场收益一维数组。
+    window: 滚动窗口长度。
+
+返回:
+    下行 Beta 数组。
+"""
     ret_arr, idx_arr = _to_array(ret), _to_array(index_ret)
     result = np.full_like(ret_arr, np.nan, dtype=float)
     if window <= 0:
@@ -293,7 +490,17 @@ def downside_beta_(ret, index_ret, window: int) -> np.ndarray:
     return result
 
 def tail_beta_(ret, index_ret, window: int, q: float = 0.05) -> np.ndarray:
-    """尾部 Beta: 在 r_m ≤ Q_q(r_m) 的样本上计算 Beta。"""
+    """尾部 Beta：在市场收益处于低分位样本上估计。
+
+参数:
+    ret: 个股收益一维数组。
+    index_ret: 市场收益一维数组。
+    window: 滚动窗口长度。
+    q: 市场收益分位阈值，默认 ``0.05``。
+
+返回:
+    尾部 Beta 数组。
+"""
     ret_arr, idx_arr = _to_array(ret), _to_array(index_ret)
     result = np.full_like(ret_arr, np.nan, dtype=float)
     if window <= 0:
@@ -311,7 +518,16 @@ def tail_beta_(ret, index_ret, window: int, q: float = 0.05) -> np.ndarray:
     return result
 
 def residual_momentum_capm_(ret, index_ret, window: int) -> np.ndarray:
-    """CAPM 残差动量: sum(epsilon), r_i = alpha + beta*r_m + epsilon。"""
+    """CAPM 残差动量：窗口内残差 ``epsilon`` 之和。
+
+参数:
+    ret: 个股收益一维数组。
+    index_ret: 市场收益一维数组。
+    window: 滚动窗口长度。
+
+返回:
+    残差动量数组。
+"""
     ret_arr, idx_arr = _to_array(ret), _to_array(index_ret)
     result = np.full_like(ret_arr, np.nan, dtype=float)
     if window <= 0:
@@ -332,7 +548,16 @@ def residual_momentum_capm_(ret, index_ret, window: int) -> np.ndarray:
     return result
 
 def coskewness_to_market_(ret, index_ret, window: int) -> np.ndarray:
-    """余偏度: E[(r_i-μ_i)(r_m-μ_m)²] / (σ_i * σ_m²)。"""
+    """余偏度：``E[(r_i-μ_i)(r_m-μ_m)²] / (σ_i * σ_m²)``。
+
+参数:
+    ret: 个股收益一维数组。
+    index_ret: 市场收益一维数组。
+    window: 滚动窗口长度。
+
+返回:
+    余偏度数组。
+"""
     ret_arr, idx_arr = _to_array(ret), _to_array(index_ret)
     result = np.full_like(ret_arr, np.nan, dtype=float)
     if window <= 0:
@@ -351,7 +576,16 @@ def coskewness_to_market_(ret, index_ret, window: int) -> np.ndarray:
     return result
 
 def idio_vol_(ret, index_ret, window: int) -> np.ndarray:
-    """CAPM 残差波动率: std(epsilon)。"""
+    """CAPM 残差波动率：``std(epsilon)``。
+
+参数:
+    ret: 个股收益一维数组。
+    index_ret: 市场收益一维数组。
+    window: 滚动窗口长度。
+
+返回:
+    特质波动率数组。
+"""
     ret_arr, idx_arr = _to_array(ret), _to_array(index_ret)
     result = np.full_like(ret_arr, np.nan, dtype=float)
     if window <= 0:
@@ -372,7 +606,16 @@ def idio_vol_(ret, index_ret, window: int) -> np.ndarray:
     return result
 
 def idio_skew_(ret, index_ret, window: int) -> np.ndarray:
-    """CAPM 残差偏度: skew(epsilon)。"""
+    """CAPM 残差偏度：``skew(epsilon)``。
+
+参数:
+    ret: 个股收益一维数组。
+    index_ret: 市场收益一维数组。
+    window: 滚动窗口长度。
+
+返回:
+    特质偏度数组。
+"""
     ret_arr, idx_arr = _to_array(ret), _to_array(index_ret)
     result = np.full_like(ret_arr, np.nan, dtype=float)
     if window <= 0:
@@ -393,7 +636,15 @@ def idio_skew_(ret, index_ret, window: int) -> np.ndarray:
     return result
 
 def real_turnover_rate_(volume: np.ndarray, effective_float: np.ndarray) -> np.ndarray:
-    """真实流通盘换手率: volume / effective_float_shares。"""
+    """真实流通盘换手率：``volume / effective_float``。
+
+参数:
+    volume: 成交量数组。
+    effective_float: 有效流通股本数组。
+
+返回:
+    换手率数组。
+"""
     with np.errstate(divide="ignore", invalid="ignore"):
         return _to_array(volume) / _to_array(effective_float)
 

@@ -1,4 +1,8 @@
-"""因果性辅助：滚动/扩展计算，避免使用未来样本。"""
+"""因果性辅助：滚动/扩展计算，避免使用未来样本。
+
+本模块提供 PIT-safe 的时序变换内核，供 pandas/polars 算子桥接调用。
+所有函数仅使用截至当前时点的历史窗口，禁止引用未来 bar。
+"""
 
 from __future__ import annotations
 
@@ -10,7 +14,15 @@ DEFAULT_WAVELET_WINDOW = 20
 
 
 def causal_lag(x: pd.DataFrame, n: int) -> pd.DataFrame:
-    """只允许非负滞后；负值视为未来位移，返回 NaN。"""
+    """因果滞后：仅允许非负滞后，负值视为未来位移。
+
+参数:
+    x: 输入宽表 panel（index=时间, columns=标的）。
+    n: 滞后 bar 数；``n < 0`` 时返回全 NaN。
+
+返回:
+    滞后后的 ``pd.DataFrame``；``n=0`` 时原样返回。
+"""
     lag = int(n)
     if lag < 0:
         return pd.DataFrame(np.nan, index=x.index, columns=x.columns)
@@ -20,7 +32,14 @@ def causal_lag(x: pd.DataFrame, n: int) -> pd.DataFrame:
 
 
 def causal_bfill(x: pd.DataFrame) -> pd.DataFrame:
-    """后向填充依赖未来值，因子链路中禁止。"""
+    """因果后向填充占位：因子链路中禁止使用未来值填充。
+
+参数:
+    x: 输入宽表 panel。
+
+返回:
+    原样返回 ``x``（不执行 bfill）。
+"""
     return x
 
 
@@ -30,7 +49,16 @@ def rolling_rfft_feature(
     *,
     feature: str = "dominant",
 ) -> np.ndarray:
-    """仅用截至当前时点的窗口做 RFFT，输出标量特征。"""
+    """滚动 RFFT 特征：仅用截至当前时点的窗口做频谱分析。
+
+参数:
+    arr: 一维 numpy 数组。
+    window: 滚动窗口长度。
+    feature: 特征类型，``dominant`` / ``energy`` / 其他（均值）。
+
+返回:
+    与 ``arr`` 等长的一维特征数组，窗口不足处为 NaN。
+"""
     n = len(arr)
     out = np.empty(n, dtype=np.float64)
     out[:] = np.nan
@@ -56,6 +84,16 @@ def rolling_panel_rfft(
     *,
     feature: str = "dominant",
 ) -> pd.DataFrame:
+    """panel 逐列滚动 RFFT 特征。
+
+参数:
+    x: 输入宽表 panel。
+    window: 滚动窗口长度，默认 ``DEFAULT_SPECTRAL_WINDOW``。
+    feature: 频谱特征类型，默认 ``dominant``。
+
+返回:
+    与 ``x`` 同形的特征 panel。
+"""
     arr = x.to_numpy(dtype=np.float64, copy=False)
     out = np.empty_like(arr, dtype=np.float64)
     for j in range(arr.shape[1]):
@@ -64,7 +102,14 @@ def rolling_panel_rfft(
 
 
 def expanding_svd_diagonal(x: pd.DataFrame) -> pd.DataFrame:
-    """扩展窗口 SVD：每个时点仅使用历史行。"""
+    """扩展窗口 SVD 奇异值：每个时点仅使用历史行。
+
+参数:
+    x: 输入宽表 panel（多列矩阵）。
+
+返回:
+    每行写入截至当期的奇异值对角元素，其余为 NaN。
+"""
     arr = x.values.astype(float)
     t_rows, n_cols = arr.shape
     out = np.full_like(arr, np.nan, dtype=float)
@@ -84,7 +129,14 @@ def expanding_svd_diagonal(x: pd.DataFrame) -> pd.DataFrame:
 
 
 def expanding_eig_diagonal(x: pd.DataFrame) -> pd.DataFrame:
-    """扩展窗口协方差特征值：每个时点仅使用历史行。"""
+    """扩展窗口协方差特征值：每个时点仅使用历史行。
+
+参数:
+    x: 输入宽表 panel。
+
+返回:
+    每行写入截至当期的特征值，列数对齐输入宽度。
+"""
     arr = x.values.astype(float)
     t_rows, n_cols = arr.shape
     out = np.full_like(arr, np.nan, dtype=float)
@@ -117,7 +169,17 @@ def rolling_wavelet_column(
     threshold: float = 0.1,
     wavelet: str = "db4",
 ) -> np.ndarray:
-    """滚动小波去噪：窗口内分解，仅取当前时点重构值。"""
+    """单列滚动小波去噪：窗口内分解，仅取当前时点重构值。
+
+参数:
+    col: 一维 numpy 数组。
+    window: 滚动窗口长度。
+    threshold: 小波系数软阈值。
+    wavelet: 小波基名称，默认 ``db4``。
+
+返回:
+    与 ``col`` 等长的一维去噪结果数组。
+"""
     try:
         import pywt
     except ImportError:
@@ -153,6 +215,17 @@ def rolling_wavelet_panel(
     threshold: float = 0.1,
     wavelet_type: str = "db4",
 ) -> pd.DataFrame:
+    """panel 逐列滚动小波去噪。
+
+参数:
+    x: 输入宽表 panel。
+    window: 滚动窗口长度，默认 ``DEFAULT_WAVELET_WINDOW``。
+    threshold: 小波系数软阈值。
+    wavelet_type: 小波基名称。
+
+返回:
+    与 ``x`` 同形的去噪 panel。
+"""
     arr = x.to_numpy(dtype=np.float64, copy=False)
     out = np.empty_like(arr, dtype=np.float64)
     for j in range(arr.shape[1]):
@@ -163,7 +236,15 @@ def rolling_wavelet_panel(
 
 
 def rolling_irfft_last(arr: np.ndarray, window: int) -> np.ndarray:
-    """滚动 RFFT→IRFFT，仅输出窗口末样本（因果）。"""
+    """滚动 RFFT→IRFFT，仅输出窗口末样本（因果）。
+
+参数:
+    arr: 一维 numpy 数组。
+    window: 滚动窗口长度。
+
+返回:
+    与 ``arr`` 等长的一维重构末值数组。
+"""
     n = len(arr)
     out = np.empty(n, dtype=np.float64)
     out[:] = np.nan
@@ -183,6 +264,15 @@ def rolling_irfft_last(arr: np.ndarray, window: int) -> np.ndarray:
 
 
 def rolling_panel_irfft(x: pd.DataFrame, window: int = DEFAULT_SPECTRAL_WINDOW) -> pd.DataFrame:
+    """panel 逐列滚动 IRFFT 末值。
+
+参数:
+    x: 输入宽表 panel。
+    window: 滚动窗口长度，默认 ``DEFAULT_SPECTRAL_WINDOW``。
+
+返回:
+    与 ``x`` 同形的重构 panel。
+"""
     arr = x.to_numpy(dtype=np.float64, copy=False)
     out = np.empty_like(arr, dtype=np.float64)
     for j in range(arr.shape[1]):
@@ -191,7 +281,15 @@ def rolling_panel_irfft(x: pd.DataFrame, window: int = DEFAULT_SPECTRAL_WINDOW) 
 
 
 def causal_convolve_column(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """因果 FIR 卷积：y[n] = sum_k b[k] * x[n-k]。"""
+    """因果 FIR 卷积：``y[n] = sum_k b[k] * x[n-k]``。
+
+参数:
+    a: 输入信号一维数组。
+    b: FIR 滤波器系数一维数组。
+
+返回:
+    与 ``a`` 等长的卷积结果数组。
+"""
     from scipy.signal import lfilter
 
     a = np.asarray(a, dtype=np.float64)
@@ -204,7 +302,15 @@ def causal_convolve_column(a: np.ndarray, b: np.ndarray) -> np.ndarray:
 
 
 def causal_correlate_column(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """因果互相关：每个时点仅与截至当前的样本重叠。"""
+    """因果互相关：每个时点仅与截至当前的样本重叠。
+
+参数:
+    a: 第一个一维数组。
+    b: 第二个一维数组。
+
+返回:
+    与 ``a`` 等长的互相关结果数组。
+"""
     a = np.asarray(a, dtype=np.float64)
     b = np.asarray(b, dtype=np.float64)
     n = len(a)
@@ -225,7 +331,14 @@ def causal_correlate_column(a: np.ndarray, b: np.ndarray) -> np.ndarray:
 
 
 def expanding_unwrap_panel(x: pd.DataFrame) -> pd.DataFrame:
-    """扩展窗口相位展开：每个时点仅 unwrap 历史前缀。"""
+    """扩展窗口相位展开：每个时点仅 unwrap 历史前缀。
+
+参数:
+    x: 输入宽表 panel（相位角）。
+
+返回:
+    与 ``x`` 同形的展开后 panel。
+"""
     out = np.full(x.shape, np.nan, dtype=np.float64)
     arr = x.to_numpy(dtype=np.float64, copy=False)
     for j in range(arr.shape[1]):
@@ -240,11 +353,27 @@ def expanding_unwrap_panel(x: pd.DataFrame) -> pd.DataFrame:
 
 
 def expanding_geometric_mean(x: pd.DataFrame) -> pd.DataFrame:
+    """扩展几何平均：基于对数绝对值的 expanding mean 还原。
+
+参数:
+    x: 输入宽表 panel。
+
+返回:
+    截至各时点的几何平均 panel。
+"""
     log_abs = np.log(x.abs().replace(0, np.nan))
     return np.exp(log_abs.expanding(min_periods=1).mean())
 
 
 def expanding_harmonic_mean(x: pd.DataFrame) -> pd.DataFrame:
+    """扩展调和平均。
+
+参数:
+    x: 输入宽表 panel（非零值参与计算）。
+
+返回:
+    截至各时点的调和平均 panel。
+"""
     inv = 1.0 / x.replace(0, np.nan)
     count = x.expanding(min_periods=1).count().astype(float)
     inv_sum = inv.expanding(min_periods=1).sum()
@@ -252,7 +381,19 @@ def expanding_harmonic_mean(x: pd.DataFrame) -> pd.DataFrame:
 
 
 def expanding_panel_stat(x: pd.DataFrame, stat: str, **kwargs) -> pd.DataFrame:
-    """按列扩展聚合，避免全样本广播引入未来值。"""
+    """按列扩展聚合统计，避免全样本广播引入未来值。
+
+参数:
+    x: 输入宽表 panel。
+    stat: 统计量名称（``mean``/``sum``/``count``/``std``/``var``/``sem``/``product``）。
+    **kwargs: 如 ``min_periods``、``ddof`` 等 pandas expanding 参数。
+
+返回:
+    扩展聚合结果 panel。
+
+异常:
+    ValueError: 不支持的 ``stat`` 名称。
+"""
     stat = stat.lower()
     min_periods = int(kwargs.get("min_periods", 1))
     if stat == "mean":
@@ -276,6 +417,14 @@ def expanding_panel_stat(x: pd.DataFrame, stat: str, **kwargs) -> pd.DataFrame:
 
 
 def expanding_first_not_null(x: pd.DataFrame) -> pd.DataFrame:
+    """扩展窗口内首个非空值向前填充。
+
+参数:
+    x: 输入宽表 panel。
+
+返回:
+    截至各时点所见首个有限值的 panel。
+"""
     out = pd.DataFrame(np.nan, index=x.index, columns=x.columns, dtype=float)
     for col in x.columns:
         seen = np.nan
@@ -288,7 +437,15 @@ def expanding_first_not_null(x: pd.DataFrame) -> pd.DataFrame:
 
 
 def expanding_argext(x: pd.DataFrame, which: str = "max") -> pd.DataFrame:
-    """扩展窗口内极值位置（iloc 下标）。"""
+    """扩展窗口内极值位置（iloc 下标）。
+
+参数:
+    x: 输入宽表 panel。
+    which: ``max`` 或 ``min``，指定取极大或极小位置。
+
+返回:
+    截至各时点窗口内极值位置的 panel。
+"""
     out = pd.DataFrame(np.nan, index=x.index, columns=x.columns, dtype=float)
     for col in x.columns:
         s = x[col].to_numpy(dtype=float, copy=False)
@@ -303,7 +460,16 @@ def expanding_argext(x: pd.DataFrame, which: str = "max") -> pd.DataFrame:
 
 
 def expanding_univariate(x: pd.DataFrame, fn, *, min_periods: int = 1) -> pd.DataFrame:
-    """对每列前缀调用 fn(valid_array) -> scalar。"""
+    """对每列历史前缀调用一元统计函数。
+
+参数:
+    x: 输入宽表 panel。
+    fn: 接收 ``valid_array`` 返回标量的函数。
+    min_periods: 最少有效样本数。
+
+返回:
+    扩展一元统计结果 panel。
+"""
     out = pd.DataFrame(np.nan, index=x.index, columns=x.columns, dtype=float)
     for col in x.columns:
         vals = x[col].to_numpy(dtype=float, copy=False)
@@ -328,7 +494,17 @@ def expanding_bivariate(
     *,
     min_periods: int = 3,
 ) -> pd.DataFrame:
-    """对每列对齐前缀调用 fn(x_valid, y_valid) -> scalar。"""
+    """对每列对齐前缀调用二元统计函数。
+
+参数:
+    x: 第一个输入宽表 panel。
+    y: 第二个输入宽表 panel。
+    fn: 接收 ``(x_valid, y_valid)`` 返回标量的函数。
+    min_periods: 最少配对样本数。
+
+返回:
+    扩展二元统计结果 panel。
+"""
     out = pd.DataFrame(np.nan, index=x.index, columns=x.columns, dtype=float)
     for col in x.columns:
         y_col = y[col] if col in y.columns else y.iloc[:, 0]
@@ -349,7 +525,15 @@ def expanding_bivariate(
 
 
 def causal_interpolate_panel(x: pd.DataFrame, method: str = "linear") -> pd.DataFrame:
-    """仅用历史已知点做前向填充/外推，不引用未来样本。"""
+    """仅用历史已知点做前向填充/外推，不引用未来样本。
+
+参数:
+    x: 输入宽表 panel。
+    method: 插值方法，``linear`` 为两点线性外推，否则为常数前向填充。
+
+返回:
+    因果插值后的 panel。
+"""
     out = x.copy()
     for col in x.columns:
         arr = x[col].to_numpy(dtype=float, copy=False)
@@ -383,7 +567,17 @@ def expanding_two_sample(
     *,
     min_periods: int = 2,
 ) -> pd.DataFrame:
-    """两序列各自取前缀非空样本（不要求逐行对齐）。"""
+    """两序列各自取前缀非空样本（不要求逐行对齐）。
+
+参数:
+    x: 第一个输入宽表 panel。
+    y: 第二个输入宽表 panel。
+    fn: 接收 ``(xa, ya)`` 返回标量的函数。
+    min_periods: 每序列最少有效样本数。
+
+返回:
+    扩展双样本统计结果 panel。
+"""
     out = pd.DataFrame(np.nan, index=x.index, columns=x.columns, dtype=float)
     for col in x.columns:
         y_col = y[col] if col in y.columns else y.iloc[:, 0]

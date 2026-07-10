@@ -1,4 +1,4 @@
-# -*- coding: utf-8
+# -*- coding: utf-8 -*-
 """自动改写公式/计划为更易进入 production fast path 的形式。"""
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from planner.logical_plan import PlanNode
 
 
 def _same_column(a: PlanNode, b: PlanNode) -> bool:
+    """判断两节点是否引用同一数据列。"""
     return (
         a.op == "column"
         and b.op == "column"
@@ -14,16 +15,26 @@ def _same_column(a: PlanNode, b: PlanNode) -> bool:
 
 
 def _column_node(name: str) -> PlanNode | None:
+    """构造列引用节点；空名时返回 ``None``。"""
     return PlanNode(op="column", attrs={"name": name}, inputs=[])
 
 
 def _window_attrs(node: PlanNode) -> dict:
+    """从节点 attrs 提取统一的窗口参数字典。"""
     w = node.attrs.get("d") or node.attrs.get("window") or 3
     return {"d": w, "window": w}
 
 
 def _try_rewrite_ts_zscore(node: PlanNode, inputs: list[PlanNode]) -> PlanNode | None:
-    """``(col - ts_mean(col,w)) / ts_std(col,w)`` → ``ts_zscore(col,w)``。"""
+    """``(col - ts_mean(col,w)) / ts_std(col,w)`` → ``ts_zscore(col,w)``。
+
+    参数：
+        node: 当前待匹配节点（已递归改写子节点）
+        inputs: 改写后的子节点列表
+
+    返回：
+        匹配成功时返回 ``ts_zscore`` 节点，否则 ``None``
+    """
     if node.op != "divide" or len(inputs) != 2:
         return None
     num, den = inputs
@@ -44,7 +55,15 @@ def _try_rewrite_ts_zscore(node: PlanNode, inputs: list[PlanNode]) -> PlanNode |
 
 
 def _try_rewrite_log_returns(node: PlanNode, inputs: list[PlanNode]) -> PlanNode | None:
-    """``log(divide(col, ts_delay(col,d)))`` → ``log_returns(col,d)``。"""
+    """``log(divide(col, ts_delay(col,d)))`` → ``log_returns(col,d)``。
+
+    参数：
+        node: 当前待匹配节点
+        inputs: 改写后的子节点列表
+
+    返回：
+        匹配成功时返回 ``log_returns`` 节点，否则 ``None``
+    """
     if node.op not in {"log", "protected_log", "ln"} or len(inputs) != 1:
         return None
     inner = inputs[0]
@@ -66,7 +85,14 @@ def _try_rewrite_log_returns(node: PlanNode, inputs: list[PlanNode]) -> PlanNode
 
 
 def rewrite_plan_for_fastpath(plan: PlanNode) -> PlanNode:
-    """对逻辑计划做安全、语义保持的 fastpath 友好改写。"""
+    """对逻辑计划做安全、语义保持的 fastpath 友好改写。
+
+    参数：
+        plan: 逻辑计划根节点
+
+    返回：
+        改写后的计划根节点（可能合并为专用算子或 ``protected_div`` 等）
+    """
     inputs = [rewrite_plan_for_fastpath(c) for c in plan.inputs]
     op = plan.op
     attrs = dict(plan.attrs)
@@ -96,5 +122,12 @@ def rewrite_plan_for_fastpath(plan: PlanNode) -> PlanNode:
 
 
 def rewrite_formula_for_fastpath(formula: str) -> str:
-    """字符串级占位：复杂 DSL 改写走 planner；此处仅做文档化入口。"""
+    """字符串级占位：复杂 DSL 改写走 planner；此处仅做文档化入口。
+
+    参数：
+        formula: 原始公式字符串
+
+    返回：
+        未改写的公式字符串（当前实现为透传）
+    """
     return str(formula or "")

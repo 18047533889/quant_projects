@@ -25,17 +25,21 @@ class CacheHitStats:
     polars_ops: list[str] = field(default_factory=list)
 
     def record_hit(self, layer: CacheLayer) -> None:
+        """记录某缓存层命中一次。"""
         key = layer.value
         self.hits[key] = self.hits.get(key, 0) + 1
 
     def record_miss(self, layer: CacheLayer) -> None:
+        """记录某缓存层未命中一次。"""
         key = layer.value
         self.misses[key] = self.misses.get(key, 0) + 1
 
     def record_polars_op(self, op: str) -> None:
+        """记录 Polars 热路径执行的算子名（用于 profiling）。"""
         self.polars_ops.append(str(op))
 
     def to_dict(self) -> dict:
+        """导出为可 JSON 序列化的统计 dict（写入 runtime_stats）。"""
         return {
             "hits": dict(self.hits),
             "misses": dict(self.misses),

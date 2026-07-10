@@ -49,7 +49,26 @@ __all__ = [
 
 
 def __getattr__(name: str) -> Callable[..., Any]:
-    """按名懒加载 cleaned 算子工厂（须在 ``OperatorRegistry`` 中已实现）。"""
+    """按名懒加载 cleaned 算子工厂（须在 ``OperatorRegistry`` 中已实现）。
+
+    首次访问 ``from api import ts_corr`` 等未在 ``__all__`` 显式导出的算子时，
+    校验白名单并缓存工厂至模块 ``globals``。
+
+    Parameters
+    ----------
+    name : str
+        算子 canonical 名或别名。
+
+    Returns
+    -------
+    Callable[..., CleanedCall]
+        ``make_cleaned_call_factory(name)`` 返回的 DSL 工厂。
+
+    Raises
+    ------
+    AttributeError
+        算子未在 registry 中实现。
+    """
     from backend.cleaned_bridge import ensure_cleaned_loaded
 
     ensure_cleaned_loaded()

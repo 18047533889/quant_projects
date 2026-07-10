@@ -32,12 +32,26 @@ _SKIP = frozenset({"date", "stock_code"})  # 宽表元数据列，不参与因�
 
 
 def _numeric_cols(df: pl.DataFrame) -> list[str]:
-    """返回 panel 中各标的列名（排除 date/stock_code）。"""
+    """返回 panel 中参与计算的标的列名。
+
+参数:
+    df: Polars 宽表 panel。
+
+返回:
+    排除 ``date``/``stock_code`` 后的列名列表。
+"""
     return [c for c in df.columns if c not in _SKIP]
 
 
 def _align_cols(*dfs: pl.DataFrame) -> list[str]:
-    """多输入宽表按列名取交集，避免 x/y 列数不一致。"""
+    """多输入宽表按列名取交集。
+
+参数:
+    *dfs: 一个或多个 Polars 宽表。
+
+返回:
+    所有输入共有的数值列名列表。
+"""
     cols = _numeric_cols(dfs[0])
     for df in dfs[1:]:
         cols = [c for c in cols if c in df.columns]
@@ -45,7 +59,14 @@ def _align_cols(*dfs: pl.DataFrame) -> list[str]:
 
 
 def _binary_colwise(combine):
-    """工厂：生成「逐列二元运算」的 ``_calculate_series`` 方法。"""
+    """工厂函数：生成逐列二元运算的 ``_calculate_series`` 方法。
+
+参数:
+    combine: 接收两个 Polars 表达式返回组合结果的函数。
+
+返回:
+    可绑定为算子类 ``_calculate_series`` 的方法。
+"""
 
     def calc(self, x, y, **kwargs) -> pl.DataFrame:
         if isinstance(x, (int, float)) and isinstance(y, pl.DataFrame):
@@ -75,6 +96,8 @@ def _binary_colwise(combine):
 
 @register_operator(name="add", category="elementwise_math", business_category="elementwise_math", canonical="add", source="factor_dsl_polars")
 class AddPolars(SeriesOperator):
+    """Polars 逐元素加法算子。"""
+
     metadata = OperatorMetadata(
         name="add", category="elementwise_math", description="逐元素加法",
         param_names=["x", "y"], return_type="series", tags=["elementwise", "polars"],
@@ -84,6 +107,8 @@ class AddPolars(SeriesOperator):
 
 @register_operator(name="subtract", category="elementwise_math", business_category="elementwise_math", canonical="subtract", source="factor_dsl_polars")
 class SubtractPolars(SeriesOperator):
+    """Polars 逐元素减法算子。"""
+
     metadata = OperatorMetadata(
         name="subtract", category="elementwise_math", description="逐元素减法",
         param_names=["x", "y"], return_type="series", tags=["elementwise", "polars"],
@@ -93,6 +118,8 @@ class SubtractPolars(SeriesOperator):
 
 @register_operator(name="multiply", category="elementwise_math", business_category="elementwise_math", canonical="multiply", source="factor_dsl_polars")
 class MultiplyPolars(SeriesOperator):
+    """Polars 逐元素乘法算子。"""
+
     metadata = OperatorMetadata(
         name="multiply", category="elementwise_math", description="逐元素乘法",
         param_names=["x", "y"], return_type="series", tags=["elementwise", "polars"],
@@ -102,6 +129,8 @@ class MultiplyPolars(SeriesOperator):
 
 @register_operator(name="divide", category="elementwise_math", business_category="elementwise_math", canonical="divide", source="factor_dsl_polars")
 class DividePolars(SeriesOperator):
+    """Polars 逐元素除法算子。"""
+
     metadata = OperatorMetadata(
         name="divide", category="elementwise_math", description="逐元素除法",
         param_names=["x", "y"], return_type="series", tags=["elementwise", "polars"],
@@ -110,6 +139,14 @@ class DividePolars(SeriesOperator):
 
 
 def _unary(expr_fn):
+    """工厂函数：生成逐列一元运算的 ``_calculate_series`` 方法。
+
+参数:
+    expr_fn: 接收列表达式返回变换结果的函数。
+
+返回:
+    可绑定为算子类 ``_calculate_series`` 的方法。
+"""
     def calc(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
         cols = _numeric_cols(x)
         return x.with_columns([expr_fn(pl.col(c)).alias(c) for c in cols])
@@ -119,6 +156,8 @@ def _unary(expr_fn):
 
 @register_operator(name="abs", category="math", business_category="elementwise_math", canonical="abs", source="factor_dsl_polars")
 class AbsPolars(SeriesOperator):
+    """Polars 绝对值一元算子。"""
+
     metadata = OperatorMetadata(
         name="abs", category="math", description="绝对值",
         examples=["abs(x)"], param_names=["x"], return_type="series", tags=["math", "polars"],
@@ -128,6 +167,8 @@ class AbsPolars(SeriesOperator):
 
 @register_operator(name="neg", category="math", business_category="elementwise_math", canonical="neg", source="factor_dsl_polars")
 class NegPolars(SeriesOperator):
+    """Polars 取负一元算子。"""
+
     metadata = OperatorMetadata(
         name="neg", category="math", description="取负",
         examples=["neg(x)"], param_names=["x"], return_type="series", tags=["math", "polars"],
@@ -137,6 +178,8 @@ class NegPolars(SeriesOperator):
 
 @register_operator(name="log", category="math", business_category="elementwise_math", canonical="log", source="factor_dsl_polars")
 class LogPolars(SeriesOperator):
+    """Polars 自然对数一元算子。"""
+
     metadata = OperatorMetadata(
         name="log", category="math", description="自然对数",
         examples=["log(x)"], param_names=["x"], return_type="series", tags=["math", "polars"],
@@ -146,6 +189,8 @@ class LogPolars(SeriesOperator):
 
 @register_operator(name="exp", category="math", business_category="elementwise_math", canonical="exp", source="factor_dsl_polars")
 class ExpPolars(SeriesOperator):
+    """Polars 指数一元算子。"""
+
     metadata = OperatorMetadata(
         name="exp", category="math", description="指数",
         examples=["exp(x)"], param_names=["x"], return_type="series", tags=["math", "polars"],
@@ -155,6 +200,8 @@ class ExpPolars(SeriesOperator):
 
 @register_operator(name="sqrt", category="math", business_category="elementwise_math", canonical="sqrt", source="factor_dsl_polars")
 class SqrtPolars(SeriesOperator):
+    """Polars 平方根一元算子。"""
+
     metadata = OperatorMetadata(
         name="sqrt", category="math", description="平方根",
         examples=["sqrt(x)"], param_names=["x"], return_type="series", tags=["math", "polars"],
@@ -164,6 +211,8 @@ class SqrtPolars(SeriesOperator):
 
 @register_operator(name="sin", category="math", business_category="elementwise_math", canonical="sin", source="factor_dsl_polars")
 class SinPolars(SeriesOperator):
+    """Polars 正弦一元算子。"""
+
     metadata = OperatorMetadata(
         name="sin", category="math", description="正弦",
         examples=["sin(x)"], param_names=["x"], return_type="series", tags=["math", "polars"],
@@ -173,6 +222,8 @@ class SinPolars(SeriesOperator):
 
 @register_operator(name="cos", category="math", business_category="elementwise_math", canonical="cos", source="factor_dsl_polars")
 class CosPolars(SeriesOperator):
+    """Polars 余弦一元算子。"""
+
     metadata = OperatorMetadata(
         name="cos", category="math", description="余弦",
         examples=["cos(x)"], param_names=["x"], return_type="series", tags=["math", "polars"],
@@ -182,6 +233,8 @@ class CosPolars(SeriesOperator):
 
 @register_operator(name="sign", category="math", business_category="elementwise_math", canonical="sign", source="factor_dsl_polars")
 class SignPolars(SeriesOperator):
+    """Polars 符号函数一元算子。"""
+
     metadata = OperatorMetadata(
         name="sign", category="math", description="符号函数",
         examples=["sign(x)"], param_names=["x"], return_type="series", tags=["math", "polars"],
@@ -191,6 +244,8 @@ class SignPolars(SeriesOperator):
 
 @register_operator(name="square", category="math", business_category="elementwise_math", canonical="square", source="factor_dsl_polars")
 class SquarePolars(SeriesOperator):
+    """Polars 平方一元算子。"""
+
     metadata = OperatorMetadata(
         name="square", category="math", description="平方",
         examples=["square(x)"], param_names=["x"], return_type="series", tags=["math", "polars"],
@@ -200,6 +255,8 @@ class SquarePolars(SeriesOperator):
 
 @register_operator(name="clip", category="math", business_category="elementwise_math", canonical="clip", source="factor_dsl_polars")
 class ClipPolars(SeriesOperator):
+    """Polars 区间裁剪一元算子。"""
+
     metadata = OperatorMetadata(
         name="clip", category="math", description="裁剪到 [lo, hi]",
         examples=["clip(x, -3, 3)"], param_names=["x", "lo", "hi"], return_type="series", tags=["math", "polars"],
@@ -214,6 +271,8 @@ class ClipPolars(SeriesOperator):
 
 @register_operator(name="where", category="signal", business_category="technical_signal", canonical="where", source="factor_dsl_polars")
 class WherePolars(SeriesOperator):
+    """Polars 条件选择（if-else）算子。"""
+
     metadata = OperatorMetadata(
         name="where", category="signal", description="条件选择",
         examples=["where(cond, a, b)"], param_names=["cond", "a", "b"], return_type="series",
@@ -239,6 +298,8 @@ class WherePolars(SeriesOperator):
 
 @register_operator(name="ts_pct", category="time_series", business_category="time_series", canonical="ts_pct", source="factor_dsl_polars")
 class TSPctPolars(SeriesOperator):
+    """Polars d 期变化率算子。"""
+
     metadata = OperatorMetadata(
         name="ts_pct", category="time_series", description="d 期变化率",
         examples=["ts_pct(close, 1)"], param_names=["x", "d"], return_type="series", tags=["time_series", "polars"],
@@ -254,6 +315,8 @@ class TSPctPolars(SeriesOperator):
 
 @register_operator(name="log_returns", category="financial", business_category="price_volume", canonical="log_returns", source="factor_dsl_polars")
 class LogReturnsPolars(SeriesOperator):
+    """Polars 对数收益率算子。"""
+
     metadata = OperatorMetadata(
         name="log_returns", category="financial", description="对数收益率",
         examples=["log_returns(close)"], param_names=["x"], return_type="series", tags=["financial", "polars"],
@@ -268,6 +331,8 @@ class LogReturnsPolars(SeriesOperator):
 
 @register_operator(name="ts_argmax", category="time_series", business_category="time_series", canonical="ts_argmax", source="factor_dsl_polars")
 class TSArgmaxPolars(SeriesOperator):
+    """Polars 滚动窗口最大值位置算子。"""
+
     metadata = OperatorMetadata(
         name="ts_argmax", category="time_series", description="窗口内最大值偏移",
         examples=["ts_argmax(close, 20)"], param_names=["x", "d"], return_type="series", tags=["time_series", "polars"],
@@ -282,6 +347,8 @@ class TSArgmaxPolars(SeriesOperator):
 
 @register_operator(name="ts_argmin", category="time_series", business_category="time_series", canonical="ts_argmin", source="factor_dsl_polars")
 class TSArgminPolars(SeriesOperator):
+    """Polars 滚动窗口最小值位置算子。"""
+
     metadata = OperatorMetadata(
         name="ts_argmin", category="time_series", description="窗口内最小值偏移",
         examples=["ts_argmin(close, 20)"], param_names=["x", "d"], return_type="series", tags=["time_series", "polars"],
@@ -296,6 +363,8 @@ class TSArgminPolars(SeriesOperator):
 
 @register_operator(name="ts_quantile", category="time_series", business_category="time_series", canonical="ts_quantile", source="factor_dsl_polars")
 class TSQuantilePolars(SeriesOperator):
+    """Polars 滚动分位数算子。"""
+
     metadata = OperatorMetadata(
         name="ts_quantile", category="time_series", description="滚动分位数",
         examples=["ts_quantile(returns, 20, 0.75)"], param_names=["x", "d", "q"], return_type="series",
@@ -318,6 +387,8 @@ class TSQuantilePolars(SeriesOperator):
 
 @register_operator(name="rank_corr", category="time_series", business_category="time_series", canonical="rank_corr", source="factor_dsl_polars")
 class RankCorrPolars(SeriesOperator):
+    """Polars 秩相关系数算子。"""
+
     metadata = OperatorMetadata(
         name="rank_corr", category="time_series", description="秩相关系数",
         examples=["rank_corr(close, volume, 20)"], param_names=["x", "y", "d"],
@@ -340,6 +411,8 @@ class RankCorrPolars(SeriesOperator):
 
 @register_operator(name="m_top_n_avg", category="time_series", business_category="time_series", canonical="ts_top_n_avg", source="factor_dsl_polars")
 class TSTopNAvgPolars(SeriesOperator):
+    """Polars 滚动前 N 大均值算子。"""
+
     metadata = OperatorMetadata(
         name="m_top_n_avg", category="time_series", description="滚动前 N 大均值",
         param_names=["x", "n"], return_type="series", tags=["time_series", "polars"],
@@ -357,6 +430,8 @@ class TSTopNAvgPolars(SeriesOperator):
 
 @register_operator(name="m_top_n_std", category="time_series", business_category="time_series", canonical="ts_top_n_std", source="factor_dsl_polars")
 class TSTopNStdPolars(SeriesOperator):
+    """Polars 滚动前 N 大标准差算子。"""
+
     metadata = OperatorMetadata(
         name="m_top_n_std", category="time_series", description="滚动前 N 大标准差",
         param_names=["x", "n"], return_type="series", tags=["time_series", "polars"],
@@ -374,6 +449,8 @@ class TSTopNStdPolars(SeriesOperator):
 
 @register_operator(name="ts_topk_sum", category="time_series", business_category="time_series", canonical="ts_topk_sum", source="factor_dsl_polars")
 class TSTopKSumPolars(SeriesOperator):
+    """Polars 滚动 Top-K 求和算子。"""
+
     metadata = OperatorMetadata(
         name="ts_topk_sum", category="time_series", description="滚动 Top-K 求和",
         param_names=["x", "d", "k"], return_type="series", tags=["time_series", "polars"],
@@ -392,6 +469,8 @@ class TSTopKSumPolars(SeriesOperator):
 
 @register_operator(name="cum_top_n_avg", category="time_series", business_category="time_series", canonical="cum_top_n_avg", source="factor_dsl_polars")
 class CumTopNAvgPolars(SeriesOperator):
+    """Polars 累积前 N 大均值算子。"""
+
     metadata = OperatorMetadata(
         name="cum_top_n_avg", category="time_series", description="累积前 N 大均值",
         param_names=["x", "n"], return_type="series", tags=["time_series", "polars"],
@@ -409,6 +488,8 @@ class CumTopNAvgPolars(SeriesOperator):
 
 @register_operator(name="cum_top_n_sum", category="time_series", business_category="time_series", canonical="cum_top_n_sum", source="factor_dsl_polars")
 class CumTopNSumPolars(SeriesOperator):
+    """Polars 累积前 N 大求和算子。"""
+
     metadata = OperatorMetadata(
         name="cum_top_n_sum", category="time_series", description="累积前 N 大求和",
         param_names=["x", "n"], return_type="series", tags=["time_series", "polars"],
@@ -431,7 +512,20 @@ def _flex_compare(
     compare_fn,
     rolling_fn,
 ) -> pl.DataFrame:
-    """flex_max / flex_min：逐点比较或滚动窗口（与 pandas_numpy 语义对齐）。"""
+    """flex_max/flex_min 共用：逐点比较或滚动窗口极值。
+
+参数:
+    x: 第一个输入 Polars 宽表。
+    y_or_window: 第二个宽表、标量或滚动窗口长度。
+    compare_fn: 逐点比较函数（如 ``pl.max_horizontal``）。
+    rolling_fn: 滚动极值函数工厂。
+
+返回:
+    比较或滚动极值后的 Polars DataFrame。
+
+异常:
+    TypeError: ``y_or_window`` 类型不合法时。
+"""
     cols = _numeric_cols(x)
     if isinstance(y_or_window, pl.DataFrame):
         aligned = _align_cols(x, y_or_window)
@@ -457,6 +551,8 @@ def _flex_compare(
 
 @register_operator(name="flex_max", category="math", business_category="elementwise_math", canonical="flex_max", source="factor_dsl_polars")
 class FlexMaxPolars(SeriesOperator):
+    """Polars 灵活最大值算子（逐点或滚动）。"""
+
     metadata = OperatorMetadata(
         name="flex_max", category="math", description="max(x,y) 或 rolling max",
         param_names=["x", "y_or_window"], return_type="series", tags=["math", "polars"],
@@ -473,6 +569,8 @@ class FlexMaxPolars(SeriesOperator):
 
 @register_operator(name="flex_min", category="math", business_category="elementwise_math", canonical="flex_min", source="factor_dsl_polars")
 class FlexMinPolars(SeriesOperator):
+    """Polars 灵活最小值算子（逐点或滚动）。"""
+
     metadata = OperatorMetadata(
         name="flex_min", category="math", description="min(x,y) 或 rolling min",
         param_names=["x", "y_or_window"], return_type="series", tags=["math", "polars"],
@@ -488,6 +586,15 @@ class FlexMinPolars(SeriesOperator):
 
 
 def _expanding_pandas_bridge(x: pl.DataFrame, fn) -> pl.DataFrame:
+    """扩展窗口 pandas 内核桥接：转 pandas 计算后写回 Polars。
+
+参数:
+    x: 输入 Polars 宽表 panel。
+    fn: 接收 pandas 宽表返回同形结果的扩展统计函数。
+
+返回:
+    数值列替换为计算结果后的 Polars DataFrame。
+"""
     cols = _numeric_cols(x)
     pdf = x.select(cols).to_pandas()
     out = fn(pdf)
@@ -496,6 +603,8 @@ def _expanding_pandas_bridge(x: pl.DataFrame, fn) -> pl.DataFrame:
 
 @register_operator(name="geometric_mean", category="math", business_category="elementwise_math", canonical="geometric_mean", source="factor_dsl_polars")
 class GeometricMeanPolars(SeriesOperator):
+    """Polars 扩展几何平均算子。"""
+
     metadata = OperatorMetadata(
         name="geometric_mean", category="math", description="扩展几何平均",
         param_names=["x"], return_type="series", tags=["math", "polars"],
@@ -509,6 +618,8 @@ class GeometricMeanPolars(SeriesOperator):
 
 @register_operator(name="harmonic_mean", category="math", business_category="elementwise_math", canonical="harmonic_mean", source="factor_dsl_polars")
 class HarmonicMeanPolars(SeriesOperator):
+    """Polars 扩展调和平均算子。"""
+
     metadata = OperatorMetadata(
         name="harmonic_mean", category="math", description="扩展调和平均",
         param_names=["x"], return_type="series", tags=["math", "polars"],
@@ -522,6 +633,8 @@ class HarmonicMeanPolars(SeriesOperator):
 
 @register_operator(name="first_not_null", category="statistics", business_category="statistics_regression", canonical="first_not_null", source="factor_dsl_polars")
 class FirstNotNullPolars(SeriesOperator):
+    """Polars 扩展首个非空值算子。"""
+
     metadata = OperatorMetadata(
         name="first_not_null", category="statistics", description="扩展首个非空",
         param_names=["x"], return_type="series", tags=["statistics", "polars"],

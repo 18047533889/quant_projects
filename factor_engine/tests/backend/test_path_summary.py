@@ -61,6 +61,15 @@ def test_complex_group_ops_remain_map_groups(op):
     assert infer_polars_long_tier(op) == "map_groups"
 
 
+@pytest.mark.parametrize(
+    "op",
+    ["ts_decay_linear", "WMA", "ts_argmax", "ts_skew", "ts_quantile"],
+)
+def test_python_rolling_ops_tier(op):
+    assert classify_plan_op(op) == "python_rolling"
+    assert infer_polars_long_tier(op) == "python_rolling"
+
+
 def test_group_mean_long_path_native_telemetry(source):
     expr = make_cleaned_call_factory("group_zscore")(col("close"), col("grp"))
     out = FactorEngine(backend=build_backend("polars_long"), data_source=source).run(

@@ -48,9 +48,7 @@ def _run(source, expr, backend_name: str):
     return eng.run(Factor(name="t", expr=expr))
 
 
-@pytest.mark.parametrize(
-    "factory_name,expr_builder",
-    [
+POLARS_LONG_PARITY_CASES = [
         ("ts_mean", lambda: make_cleaned_call_factory("ts_mean")(col("close"), 5)),
         ("ts_delta", lambda: make_cleaned_call_factory("ts_delta")(col("close"), 1)),
         ("ts_pct", lambda: make_cleaned_call_factory("ts_pct")(col("close"), 1)),
@@ -181,7 +179,12 @@ def _run(source, expr, backend_name: str):
                 make_cleaned_call_factory("ts_delta")(col("close"), 1),
             ),
         ),
-    ],
+]
+
+
+@pytest.mark.parametrize(
+    "factory_name,expr_builder",
+    POLARS_LONG_PARITY_CASES,
 )
 def test_polars_long_matches_pandas(source, factory_name, expr_builder):
     expr = expr_builder()

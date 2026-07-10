@@ -76,7 +76,9 @@ def test_production_fast_path_whitelist(loaded):
     assert is_production_fast_path("group_mean")
     assert is_production_fast_path("group_winsorize")
     assert is_production_fast_path("ts_rank")
-    assert is_production_fast_path("RSI_WILDER")
+    assert is_production_fast_path("ts_sharpe")
+    assert is_production_fast_path("cs_resid")
+    assert not is_production_fast_path("RSI_WILDER")
     assert is_production_fast_path("ffill")
     summary = summarize_production_fast_path()
     assert summary["production_fast_path_count"] >= 10

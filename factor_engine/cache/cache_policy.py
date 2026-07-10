@@ -17,6 +17,7 @@ class CachePolicy:
 
     @classmethod
     def for_mode(cls, mode: str) -> "CachePolicy":
+        """按运行模式返回策略；``production`` 会额外开启 L3 磁盘缓存。"""
         prod = str(mode).lower() == "production"
         return cls(
             enable_l0_cse=True,

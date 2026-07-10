@@ -8,6 +8,8 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class OperatorCost:
+    """单算子复杂度、内存与执行 tier 元数据。"""
+
     complexity: str
     memory: str
     supports_incremental: bool
@@ -16,6 +18,11 @@ class OperatorCost:
     supports_numba: bool = False
 
     def to_dict(self) -> dict[str, object]:
+        """序列化为字典。
+
+        返回:
+            含 complexity、memory、tier 等字段的字典。
+        """
         return {
             "complexity": self.complexity,
             "memory": self.memory,
@@ -189,6 +196,7 @@ _BENCHMARK_CACHE: dict[str, dict[str, BackendCost]] | None = None
 
 
 def _load_benchmark_costs() -> dict[str, dict[str, BackendCost]]:
+    """从 benchmark JSON 加载并缓存 backend 成本表。"""
     global _BENCHMARK_CACHE
     if _BENCHMARK_CACHE is not None:
         return _BENCHMARK_CACHE
@@ -261,6 +269,15 @@ _BACKEND_COST_TABLE: dict[str, dict[str, BackendCost]] = {
 
 
 def get_backend_cost(canon: str, backend: str) -> BackendCost:
+    """查询单算子在指定 backend 上的运行成本估计。
+
+    参数:
+        canon: 算子 canonical 名称。
+        backend: backend 名称，如 ``pandas_numpy``、``polars``。
+
+    返回:
+        含固定开销与每百万行耗时的 ``BackendCost``。
+    """
     canon = str(canon)
     bench = _load_benchmark_costs().get(canon, {})
     if backend in bench:
@@ -308,6 +325,14 @@ def tier1_has_explicit_cost(canon: str) -> bool:
 
 
 def get_operator_cost(op: str) -> OperatorCost:
+    """查询算子复杂度与 tier 元数据。
+
+    参数:
+        op: 算子名称。
+
+    返回:
+        已登记则返回对应 ``OperatorCost``，否则返回默认 ``_DEFAULT``。
+    """
     return _COSTS.get(str(op), _DEFAULT)
 
 

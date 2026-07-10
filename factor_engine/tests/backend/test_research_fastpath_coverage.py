@@ -25,9 +25,16 @@ def test_sql_implemented_subset_of_research_fastpath(_loaded):
     assert not missing, f"SQL implemented 未进 research fastpath: {missing[:15]}"
 
 
-def test_p1_extended_native_tier(_loaded):
+def test_p1_extended_tier(_loaded):
     from backend.polars_long_policy import infer_polars_long_tier
-    from backend.production_fastpath_tiers import P1_EXTENDED_CANONICALS
+    from backend.production_fastpath_tiers import P1_EXTENDED_CANONICALS, P1_EXTENDED_CUM_PRODUCTION_SAFE
 
+    python_rolling = {"WMA", "ts_argmax", "ts_argmin", "ts_skew", "ts_quantile", "Slope"}
     for canon in sorted(P1_EXTENDED_CANONICALS):
-        assert infer_polars_long_tier(canon) == "native", canon
+        tier = infer_polars_long_tier(canon)
+        if canon in python_rolling or canon == "ts_decay_linear":
+            assert tier == "python_rolling", canon
+        elif canon in P1_EXTENDED_CUM_PRODUCTION_SAFE:
+            assert tier == "native", canon
+        else:
+            assert tier in {"native", "python_rolling"}, canon

@@ -58,7 +58,8 @@ P0_LOGIC_CANONICALS: frozenset[str] = frozenset(
     }
 )
 
-P0_TS_CANONICALS: frozenset[str] = frozenset(
+# 简单 rolling — 可直接 production safe
+P0_TS_SIMPLE_CANONICALS: frozenset[str] = frozenset(
     {
         "ts_delay",
         "ts_delta",
@@ -71,13 +72,27 @@ P0_TS_CANONICALS: frozenset[str] = frozenset(
         "ts_var",
         "ts_median",
         "ts_zscore",
+    }
+)
+
+# 复杂 TS — 须逐算子 parity + 边界测试后才可升级 production safe
+P1_TS_COMPLEX_PARITY_PENDING: frozenset[str] = frozenset(
+    {
         "ts_ema",
-        "ts_rank",
         "ts_decay_linear",
+    }
+)
+
+# golden 边界测试已通过 — 升级 production safe
+P1_GOLDEN_VERIFIED_TS: frozenset[str] = frozenset(
+    {
+        "ts_rank",
         "ts_sharpe",
         "ts_autocorr",
     }
 )
+
+P0_TS_CANONICALS: frozenset[str] = P0_TS_SIMPLE_CANONICALS
 
 P0_CROSS_SECTION_CANONICALS: frozenset[str] = frozenset(
     {
@@ -131,14 +146,25 @@ P1_BINARY_TS_CANONICALS: frozenset[str] = frozenset(
     {"ts_corr", "ts_cov", "ts_beta", "rolling_beta"}
 )
 
-P1_CS_REGRESSION_CANONICALS: frozenset[str] = frozenset({"cs_resid", "cs_regression"})
+# 截面/滚动 OLS — 须 pairwise-null parity 后才可 production safe
+P1_REGRESSION_PARITY_PENDING: frozenset[str] = frozenset({"ts_regression", "Slope"})
 
-P1_TECHNICAL_CANONICALS: frozenset[str] = frozenset({"RSI_WILDER", "ATR_WILDER"})
+P1_GOLDEN_VERIFIED_REGRESSION: frozenset[str] = frozenset({"cs_resid", "cs_regression"})
 
-P1_DUCKDB_PARITY_PENDING: frozenset[str] = frozenset()
+# Wilder 递归指标 — research only，不进 production fastpath
+P2_TECHNICAL_RESEARCH_ONLY: frozenset[str] = frozenset({"RSI_WILDER", "ATR_WILDER"})
+
+# EWM SQL 为有限窗口近似 — 暂不进 DuckDB production safe
+P1_EWM_PARITY_PENDING: frozenset[str] = frozenset({"ewm_mean", "ewm_std", "ewm_var"})
+
+P1_DUCKDB_PARITY_PENDING: frozenset[str] = (
+    P1_TS_COMPLEX_PARITY_PENDING
+    | P1_REGRESSION_PARITY_PENDING
+    | P1_EWM_PARITY_PENDING
+)
 
 # ---------------------------------------------------------------------------
-# P1 Extended：SQL/Polars 已实现、research fast path 全覆盖（非 production_core）
+# P1 Extended：SQL/Polars 已实现；仅 cum/expanding 子集可 production safe
 # ---------------------------------------------------------------------------
 P1_EXTENDED_TS_CANONICALS: frozenset[str] = frozenset(
     {
@@ -188,30 +214,54 @@ P1_EXTENDED_CANONICALS: frozenset[str] = (
     | P1_EXTENDED_CS_CANONICALS
 )
 
+# 经 parity 后可进 production safe 的 extended 子集（逐算子升级，非整批）
+P1_EXTENDED_CUM_PRODUCTION_SAFE: frozenset[str] = frozenset(
+    {
+        "cum_sum",
+        "cum_max",
+        "cum_min",
+        "cum_prod",
+        "cum_delta",
+        "expanding_mean",
+        "expanding_sum",
+        "count",
+    }
+)
+
+P1_EXTENDED_PARITY_PENDING: frozenset[str] = (
+    P1_EXTENDED_CANONICALS
+    - P1_EXTENDED_CUM_PRODUCTION_SAFE
+    - frozenset({"ts_ratio"})
+)
+
 P1_POLARS_CORE_PRODUCTION_SAFE: frozenset[str] = (
     P1_GROUP_CANONICALS
     | P1_BINARY_TS_CANONICALS
-    | P1_CS_REGRESSION_CANONICALS
-    | P1_TECHNICAL_CANONICALS
-    | frozenset({"cs_mad", "cs_mad_zscore", "winsorize", "group_winsorize"})
+    | P1_ROBUST_CANONICALS
+    | P1_GOLDEN_VERIFIED_TS
+    | P1_GOLDEN_VERIFIED_REGRESSION
 )
 
 P1_DUCKDB_CORE_PRODUCTION_SAFE: frozenset[str] = (
     P1_GROUP_CANONICALS
     | P1_BINARY_TS_CANONICALS
-    | P1_CS_REGRESSION_CANONICALS
-    | P1_TECHNICAL_CANONICALS
-    | frozenset({"winsorize", "group_winsorize", "cs_mad", "cs_mad_zscore"})
+    | P1_ROBUST_CANONICALS
+    | P1_GOLDEN_VERIFIED_TS
+    | P1_GOLDEN_VERIFIED_REGRESSION
 )
 
-P1_EXTENDED_DUCKDB_CANONICALS: frozenset[str] = P1_EXTENDED_CANONICALS - frozenset({"ts_ratio"})
+P1_EXTENDED_DUCKDB_CANONICALS: frozenset[str] = P1_EXTENDED_CUM_PRODUCTION_SAFE
 
-P1_POLARS_PRODUCTION_SAFE: frozenset[str] = P1_POLARS_CORE_PRODUCTION_SAFE | P1_EXTENDED_CANONICALS
+P1_POLARS_PRODUCTION_SAFE: frozenset[str] = (
+    P1_POLARS_CORE_PRODUCTION_SAFE | P1_EXTENDED_CUM_PRODUCTION_SAFE
+)
 
-P1_DUCKDB_PRODUCTION_SAFE: frozenset[str] = P1_DUCKDB_CORE_PRODUCTION_SAFE | P1_EXTENDED_DUCKDB_CANONICALS
+P1_DUCKDB_PRODUCTION_SAFE: frozenset[str] = (
+    P1_DUCKDB_CORE_PRODUCTION_SAFE | P1_EXTENDED_DUCKDB_CANONICALS
+)
 
 # ---------------------------------------------------------------------------
-# P2：仍走 map_groups / Python kernel — 不进 fast path
+# P2：map_groups / Python rolling / fill — 不进 production fast path
 # ---------------------------------------------------------------------------
 P2_MAP_GROUPS_CANONICALS: frozenset[str] = frozenset(
     {
@@ -230,7 +280,20 @@ P2_FILL_INTERPOLATE_CANONICALS: frozenset[str] = frozenset({"bfill", "causal_bfi
 
 P2_NATIVE_PARITY_PENDING: frozenset[str] = frozenset()
 
-P2_RESEARCH_ONLY: frozenset[str] = P2_MAP_GROUPS_CANONICALS | P2_FILL_INTERPOLATE_CANONICALS
+P2_RESEARCH_ONLY: frozenset[str] = (
+    P2_MAP_GROUPS_CANONICALS
+    | P2_FILL_INTERPOLATE_CANONICALS
+    | P2_TECHNICAL_RESEARCH_ONLY
+)
+
+# compile/runtime gate 统一 deferred 集合
+FASTPATH_DEFERRED_CANONICALS: frozenset[str] = (
+    P2_RESEARCH_ONLY
+    | P1_TS_COMPLEX_PARITY_PENDING
+    | P1_REGRESSION_PARITY_PENDING
+    | P1_EWM_PARITY_PENDING
+    | P1_EXTENDED_PARITY_PENDING
+)
 
 # ---------------------------------------------------------------------------
 # 明确禁止 production fast path
@@ -273,6 +336,14 @@ POLARS_NATIVE_ALIASES: dict[str, str] = {
 
 
 def resolve_polars_native_canonical(canon: str) -> str:
+    """将 DSL 别名映射为 PolarsLong native emitter 使用的 canonical。
+
+    参数:
+        canon: 算子 canonical 名称或别名。
+
+    返回:
+        解析别名后的 native canonical 名称。
+    """
     from cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
@@ -280,6 +351,14 @@ def resolve_polars_native_canonical(canon: str) -> str:
 
 
 def is_p0_production_fastpath(canon: str) -> bool:
+    """判断 canonical 是否属于 P0 production fast path 核心集。
+
+    参数:
+        canon: 算子 canonical 名称或别名。
+
+    返回:
+        是否在 ``P0_PRODUCTION_FASTPATH_CANONICALS`` 白名单内。
+    """
     from cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
@@ -287,6 +366,14 @@ def is_p0_production_fastpath(canon: str) -> bool:
 
 
 def is_forbidden_production_fastpath(canon: str) -> bool:
+    """判断 canonical 是否被禁止走 production fast path。
+
+    参数:
+        canon: 算子 canonical 名称或别名。
+
+    返回:
+        是否为 ``micro_*`` 前缀或在显式禁止列表内。
+    """
     from cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)

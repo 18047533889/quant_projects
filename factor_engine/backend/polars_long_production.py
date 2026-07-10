@@ -2,7 +2,11 @@
 """PolarsLong native 三层准入：Implemented / Parity Verified / Production Safe。"""
 from __future__ import annotations
 
-from backend.polars_long_policy import POLARS_LONG_MAP_GROUPS, POLARS_LONG_NATIVE, infer_polars_long_tier
+from backend.polars_long_policy import (
+    POLARS_LONG_MAP_GROUPS,
+    POLARS_LONG_NATIVE,
+    infer_polars_long_tier,
+)
 from backend.production_fast_path import (
     PRODUCTION_TRIPLE_PARITY_CANONICALS,
     PRODUCTION_TRIPLE_PARITY_DUCKDB,
@@ -10,20 +14,18 @@ from backend.production_fast_path import (
 from backend.production_fastpath_tiers import (
     P0_PRODUCTION_FASTPATH_CANONICALS,
     P1_POLARS_PRODUCTION_SAFE,
-    P2_RESEARCH_ONLY,
+    FASTPATH_DEFERRED_CANONICALS,
     resolve_polars_native_canonical,
 )
 from backend.sql_tiers import SQL_PRODUCTION_SAFE_CANONICALS
 
-# 已实现 native expr（与 POLARS_LONG_NATIVE 同步）
+# 纯 Polars Expr native（不含 python_rolling）
 POLARS_LONG_NATIVE_IMPLEMENTED: frozenset[str] = POLARS_LONG_NATIVE
 
-# map_groups 分层
 POLARS_LONG_MAP_GROUPS_IMPLEMENTED: frozenset[str] = POLARS_LONG_MAP_GROUPS
 POLARS_LONG_MAP_GROUPS_RESEARCH: frozenset[str] = POLARS_LONG_MAP_GROUPS
 POLARS_LONG_MAP_GROUPS_PRODUCTION_ALLOWED: frozenset[str] = frozenset()
 
-# 与 pandas golden / 三后端 parity 对齐的 native 子集
 _POLARS_NATIVE_PARITY_EXTRA: frozenset[str] = frozenset(
     {
         "c_mean",
@@ -38,10 +40,6 @@ _POLARS_NATIVE_PARITY_EXTRA: frozenset[str] = frozenset(
         "rolling_beta",
         "winsorize",
         "group_winsorize",
-        "ts_argmax",
-        "ts_argmin",
-        "ts_sharpe",
-        "ts_autocorr",
     }
 )
 
@@ -54,10 +52,9 @@ POLARS_LONG_NATIVE_PARITY_VERIFIED: frozenset[str] = frozenset(
         | _POLARS_NATIVE_PARITY_EXTRA
         | (SQL_PRODUCTION_SAFE_CANONICALS & POLARS_LONG_NATIVE)
     )
-    if c in POLARS_LONG_NATIVE
+    if c in POLARS_LONG_NATIVE and c not in FASTPATH_DEFERRED_CANONICALS
 )
 
-# production fast path 允许的 native（P0 + P1 Polars parity verified）
 _POLARS_PRODUCTION_SAFE_EXPLICIT: frozenset[str] = frozenset(
     c
     for c in (P0_PRODUCTION_FASTPATH_CANONICALS | P1_POLARS_PRODUCTION_SAFE)
@@ -65,30 +62,56 @@ _POLARS_PRODUCTION_SAFE_EXPLICIT: frozenset[str] = frozenset(
 )
 
 POLARS_LONG_NATIVE_PRODUCTION_SAFE: frozenset[str] = frozenset(
-    c for c in _POLARS_PRODUCTION_SAFE_EXPLICIT if c not in P2_RESEARCH_ONLY
+    c for c in _POLARS_PRODUCTION_SAFE_EXPLICIT if c not in FASTPATH_DEFERRED_CANONICALS
 )
 
-# 向后兼容：map_groups 默认不允许 production fast path
 APPROVED_POLARS_LONG_MAP_GROUPS_PRODUCTION: frozenset[str] = POLARS_LONG_MAP_GROUPS_PRODUCTION_ALLOWED
 
-POLARS_LONG_FASTPATH_DEFERRED: frozenset[str] = frozenset(P2_RESEARCH_ONLY)
+POLARS_LONG_FASTPATH_DEFERRED: frozenset[str] = frozenset(FASTPATH_DEFERRED_CANONICALS)
 
 
 def _resolve(canon: str) -> str:
+    """将别名映射为 PolarsLong native canonical。"""
     return resolve_polars_native_canonical(canon)
 
 
 def is_polars_long_native_implemented(canon: str) -> bool:
+    """判断 canonical 是否在 PolarsLong native 已实现白名单内。
+
+    参数:
+        canon: 算子 canonical 名称或别名。
+
+    返回:
+        是否属于 ``POLARS_LONG_NATIVE_IMPLEMENTED``。
+    """
     return _resolve(canon) in POLARS_LONG_NATIVE_IMPLEMENTED
 
 
 def is_polars_long_native_parity_verified(canon: str) -> bool:
+    """判断 canonical 是否已通过 PolarsLong native parity 验证。
+
+    参数:
+        canon: 算子 canonical 名称或别名。
+
+    返回:
+        是否属于 ``POLARS_LONG_NATIVE_PARITY_VERIFIED``。
+    """
     return _resolve(canon) in POLARS_LONG_NATIVE_PARITY_VERIFIED
 
 
 def is_polars_long_native_production_safe(canon: str) -> bool:
+    """判断 canonical 是否可安全用于 production PolarsLong native 路径。
+
+    参数:
+        canon: 算子 canonical 名称或别名。
+
+    返回:
+        tier 为 native 且在 production-safe 白名单内且非 deferred。
+    """
     name = _resolve(canon)
     if name in POLARS_LONG_FASTPATH_DEFERRED:
+        return False
+    if infer_polars_long_tier(name) != "native":
         return False
     return name in POLARS_LONG_NATIVE_PRODUCTION_SAFE
 
@@ -97,6 +120,8 @@ def polars_long_production_tier(canon: str) -> str:
     """native 三层：implemented / parity_verified / production_safe / unsupported。"""
     name = _resolve(canon)
     tier = infer_polars_long_tier(name)
+    if tier == "python_rolling":
+        return "python_rolling"
     if tier != "native":
         return tier if tier != "unsupported" else "unsupported"
     if name in POLARS_LONG_NATIVE_PRODUCTION_SAFE:
@@ -109,4 +134,12 @@ def polars_long_production_tier(canon: str) -> str:
 
 
 def duckdb_triple_parity_verified(canon: str) -> bool:
+    """判断 canonical 是否在三后端 DuckDB parity 子集内。
+
+    参数:
+        canon: 算子 canonical 名称或别名。
+
+    返回:
+        是否属于 ``PRODUCTION_TRIPLE_PARITY_DUCKDB``。
+    """
     return _resolve(canon) in PRODUCTION_TRIPLE_PARITY_DUCKDB

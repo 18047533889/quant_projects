@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
-"""PIT 标签层：forward return 与特征窗口隔离（mining / backtest 侧）。"""
+"""PIT 标签层：forward return 与特征窗口隔离（mining / backtest 侧）。
+
+本模块提供标签窗口规格（``LabelWindowSpec``）、特征/标签时间轴对齐、
+forward return 构造，以及标签 DSL 的 PiT 安全审计（禁止前视算子进入标签流水线）。
+标签可使用未来收益，但须与特征 IR 在 bar 维度显式隔离（``gap_bars``）。
+"""
 
 from __future__ import annotations
 
@@ -13,7 +18,7 @@ from runtime.pit_audit import PitSafetyError, audit_ir
 
 @dataclass(frozen=True)
 class LabelWindowSpec:
-    """标签窗口规格。"""
+    """标签窗口规格：预测 horizon、特征 lookback 与隔离 gap。"""
 
     horizon_bars: int
     feature_lookback_bars: int
@@ -21,9 +26,11 @@ class LabelWindowSpec:
 
     @property
     def min_separation_bars(self) -> int:
+        """特征窗口结束与标签起始之间的最小 bar 间隔（``gap_bars`` 下界为 0）。"""
         return max(0, int(self.gap_bars))
 
     def validate_no_overlap(self) -> None:
+        """校验 horizon / lookback 参数合法（不检查实际 index 重叠）。"""
         if self.horizon_bars <= 0:
             raise ValueError("horizon_bars 必须 > 0")
         if self.feature_lookback_bars < 0:
@@ -36,7 +43,22 @@ def assert_label_feature_no_overlap(
     label_start_bar: int,
     spec: LabelWindowSpec,
 ) -> None:
-    """断言标签起始 bar 在特征窗口结束之后（含可选 gap）。"""
+    """断言标签起始 bar 在特征窗口结束之后（含可选 gap）。
+
+    Parameters
+    ----------
+    feature_end_bar : int
+        特征窗口最后一根 bar 的索引。
+    label_start_bar : int
+        标签窗口第一根 bar 的索引。
+    spec : LabelWindowSpec
+        含 ``gap_bars`` 的窗口规格。
+
+    Raises
+    ------
+    PitSafetyError
+        ``label_start_bar < feature_end_bar + gap`` 时抛出。
+    """
     spec.validate_no_overlap()
     required = feature_end_bar + spec.min_separation_bars
     if label_start_bar < required:
@@ -53,7 +75,20 @@ def build_forward_return_series(
     *,
     horizon: int = 1,
 ) -> pd.Series:
-    """构造 forward return（仅用于标签；不可作为因子特征输入）。"""
+    """构造 forward return（仅用于标签；不可作为因子特征输入）。
+
+    Parameters
+    ----------
+    close : pd.Series
+        MultiIndex ``(timestamp, instrument)`` 收盘价序列。
+    horizon : int
+        前瞻 bar 数（默认 1）。
+
+    Returns
+    -------
+    pd.Series
+        ``close[t+h] / close[t] - 1``，与输入同 index 结构。
+    """
     h = max(1, int(horizon))
     panel = close.unstack("instrument")
     fwd = panel.shift(-h) / panel - 1.0
@@ -67,7 +102,24 @@ def default_mining_label_config(
     gap_bars: int = 1,
     return_column: str = "close",
 ) -> dict[str, Any]:
-    """挖掘/回测默认标签配置（与特征窗口显式隔离）。"""
+    """挖掘/回测默认标签配置（与特征窗口显式隔离）。
+
+    Parameters
+    ----------
+    horizon_bars : int
+        标签前瞻 bar 数（默认 5）。
+    feature_lookback_bars : int
+        特征最大 lookback（默认 20，仅写入元数据）。
+    gap_bars : int
+        特征结束与标签起始之间的隔离 bar 数（默认 1）。
+    return_column : str
+        收益计算所用价格列（默认 ``"close"``）。
+
+    Returns
+    -------
+    dict[str, Any]
+        含 ``label_formula``、``horizon_bars``、``gap_bars`` 等的 JSON 可序列化配置。
+    """
     spec = LabelWindowSpec(
         horizon_bars=horizon_bars,
         feature_lookback_bars=feature_lookback_bars,
@@ -88,7 +140,20 @@ def default_mining_label_config(
 
 
 def validate_label_formula_for_pit(formula: str, *, enforce: bool = True) -> dict[str, Any]:
-    """校验标签 DSL：禁止负 lag / Lead 等前视算子进入标签流水线。"""
+    """校验标签 DSL：禁止负 lag / Lead 等前视算子进入标签流水线。
+
+    Parameters
+    ----------
+    formula : str
+        标签 DSL 公式字符串。
+    enforce : bool
+        为 ``True`` 时违规抛出 ``PitSafetyError``；否则仅写入 report。
+
+    Returns
+    -------
+    dict[str, Any]
+        含 ``ok``、``pit_safe``、``violations`` 等字段的审计报告。
+    """
     from api.dsl_parser import parse_expr
     from ir.analyzer import Analyzer
     from runtime.pit_audit import assert_pit_safe
@@ -114,7 +179,22 @@ def align_feature_and_label_windows(
     *,
     spec: LabelWindowSpec,
 ) -> tuple[pd.Index, pd.Index]:
-    """裁剪特征/标签 index，保证时间轴上无重叠区间。"""
+    """裁剪特征/标签 index，保证时间轴上无重叠区间。
+
+    Parameters
+    ----------
+    feature_index : pd.Index
+        特征可用时间戳 index。
+    label_index : pd.Index
+        标签可用时间戳 index。
+    spec : LabelWindowSpec
+        含 ``gap_bars`` 的窗口规格。
+
+    Returns
+    -------
+    tuple[pd.Index, pd.Index]
+        ``(feature_index, trimmed_label_index)``；必要时裁剪标签侧。
+    """
     spec.validate_no_overlap()
     if len(feature_index) == 0 or len(label_index) == 0:
         return feature_index, label_index

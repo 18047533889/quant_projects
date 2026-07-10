@@ -6,7 +6,15 @@ from typing import Any
 
 
 def derive_scheduling_hints(cost_summary: dict[str, Any] | None) -> dict[str, Any]:
-    """从 ``summarize_plans`` 输出推导 run_many / 物化调度建议。"""
+    """从 ``summarize_plans`` 输出推导 run_many / 物化调度建议。
+
+    参数：
+        cost_summary: :func:`planner.cost_summary.summarize_plans` 的汇总字典；
+            为 ``None`` 或空时返回空建议
+
+    返回：
+        含 ``hints``（建议动作列表）与 ``recommended``（推荐运行参数字典）的字典
+    """
     if not cost_summary:
         return {"hints": [], "recommended": {}}
 

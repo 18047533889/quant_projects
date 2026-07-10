@@ -58,12 +58,15 @@ class ExecutionCacheSession:
         )
 
     def get_shared(self, sid: str) -> Any | None:
+        """L0：读取 CSE 共享子树结果。"""
         return self._expression_cache.get(sid)
 
     def set_shared(self, sid: str, value: Any) -> None:
-        self._expression_cache.set(sid, value)
+        """L0：写入 CSE 共享子树结果。"""
+        return self._expression_cache.set(sid, value)
 
     def get_panel(self, key: Any) -> Any | None:
+        """L1：读取 panel 缓存并更新命中统计。"""
         hit = self._panel_cache.get(key)
         if hit is not None and self.stats:
             self.stats.record_hit(CacheLayer.L1_PANEL)
@@ -72,9 +75,11 @@ class ExecutionCacheSession:
         return hit
 
     def set_panel(self, key: Any, panel: Any) -> None:
+        """L1：写入 panel 缓存。"""
         self._panel_cache.set(key, panel)
 
     def get_subplan(self, key: str) -> Any | None:
+        """L2/L3：读取子计划缓存（内存或磁盘）。"""
         if self.plan_cache is None:
             return None
         hit = self.plan_cache.get(key)
@@ -97,10 +102,12 @@ class ExecutionCacheSession:
         return None
 
     def set_subplan(self, key: str, value: Any) -> None:
+        """L2/L3：写入子计划缓存。"""
         if self.plan_cache is not None:
             self.plan_cache.set(key, value)
 
     def column_cache_stats(self, data_source: Any) -> dict[str, int]:
+        """汇总 DataSource 侧列/panel 缓存条目数（L1_COLUMN）。"""
         fn = getattr(data_source, "column_cache_stats", None)
         if callable(fn):
             return dict(fn())
@@ -112,6 +119,7 @@ class ExecutionCacheSession:
         }
 
     def to_dict(self) -> dict[str, Any]:
+        """导出本会话缓存摘要（供 audit / metrics）。"""
         out: dict[str, Any] = {}
         if self.stats is not None:
             out["stats"] = self.stats.to_dict()

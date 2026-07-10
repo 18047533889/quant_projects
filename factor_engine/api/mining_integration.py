@@ -34,7 +34,18 @@ _VALUATION_FIELD_ALIASES: dict[str, str] = {
 
 
 def validate_production_dsl(formula: str) -> tuple[bool, str]:
-    """production 模式公式校验：语法 + 算子 production 允许。"""
+    """production 模式公式校验：语法 + 算子 production 允许。
+
+    Parameters
+    ----------
+    formula : str
+        DSL 公式字符串。
+
+    Returns
+    -------
+    tuple[bool, str]
+        ``(True, "OK")`` 或 ``(False, 错误说明)``。
+    """
     from cleaned_operators.operator_spec import check_production_formula_ops
 
     ok, msg = validate_factor_engine_dsl(formula)
@@ -47,7 +58,20 @@ def validate_production_dsl(formula: str) -> tuple[bool, str]:
 
 
 def validate_production_fastpath_dsl(formula: str, *, strict: bool | None = None) -> tuple[bool, str]:
-    """production fast path 公式校验：语法 + 高性能 backend 允许。"""
+    """production fast path 公式校验：语法 + 高性能 backend 允许。
+
+    Parameters
+    ----------
+    formula : str
+        DSL 公式字符串。
+    strict : bool | None
+        传给 ``check_production_fastpath_formula_ops``；``None`` 用模块默认。
+
+    Returns
+    -------
+    tuple[bool, str]
+        ``(True, "OK")`` 或 ``(False, 违规说明)``。
+    """
     ok, msg = validate_production_dsl(formula)
     if not ok:
         return False, msg
@@ -60,13 +84,20 @@ def validate_production_fastpath_dsl(formula: str, *, strict: bool | None = None
 
 
 def list_production_fastpath_allowlist(*, strict: bool = True) -> list[str]:
+    """返回 production fastpath 层算子白名单（排序后）。"""
     from backend.fastpath_allowlists import production_fastpath_allowlist
 
     return sorted(production_fastpath_allowlist(strict=strict))
 
 
 def export_fastpath_allowlists_json(*, strict: bool = True) -> dict[str, Any]:
-    """导出 research / production / production_fastpath 三层 allowlist。"""
+    """导出 research / production / production_fastpath 三层 allowlist。
+
+    Returns
+    -------
+    dict[str, Any]
+        含 ``schema_version``、各层算子列表及 ``counts`` 的 JSON 可序列化 dict。
+    """
     from backend.fastpath_allowlists import (
         production_allowlist,
         production_fastpath_allowlist,
@@ -90,6 +121,7 @@ def export_fastpath_allowlists_json(*, strict: bool = True) -> dict[str, Any]:
 
 
 def write_fastpath_allowlists(path: str | Path, *, strict: bool = True) -> Path:
+    """将三层 fastpath allowlist 写入 JSON 文件。"""
     out = Path(path)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(
@@ -100,7 +132,18 @@ def write_fastpath_allowlists(path: str | Path, *, strict: bool = True) -> Path:
 
 
 def validate_factor_engine_dsl(formula: str) -> tuple[bool, str]:
-    """校验 factor_engine DSL 语法与白名单（A 股 / 美股同一套 ``parse_expr``）。"""
+    """校验 factor_engine DSL 语法与白名单（A 股 / 美股同一套 ``parse_expr``）。
+
+    Parameters
+    ----------
+    formula : str
+        DSL 公式字符串。
+
+    Returns
+    -------
+    tuple[bool, str]
+        ``(True, "OK")`` 或 ``(False, DSLParseError 消息)``。
+    """
     text = str(formula or "").strip()
     if not text:
         return False, "empty formula"
@@ -117,11 +160,23 @@ def validate_us_dsl(formula: str) -> tuple[bool, str]:
 
 
 def list_dsl_allowlist() -> list[str]:
+    """返回完整 DSL 算子白名单（排序后的函数名列表）。"""
     return sorted(build_dsl_allowlist().keys())
 
 
 def export_dsl_allowlist_json(*, market: str | None = None) -> dict[str, Any]:
-    """导出 AFV Gateway 对齐用的算子白名单 JSON。"""
+    """导出 AFV Gateway 对齐用的算子白名单 JSON。
+
+    Parameters
+    ----------
+    market : str | None
+        市场标识（``us`` / ``ashare`` 等），决定 ``operator_policy`` 字段。
+
+    Returns
+    -------
+    dict[str, Any]
+        含 ``operators``、``count``、``operator_policy`` 的 dict。
+    """
     names = list_dsl_allowlist()
     mkt = str(market or "us").strip().lower()
     policy_by_market = {
@@ -962,7 +1017,21 @@ def validate_formula_in_mining_allowlist(
     *,
     tier: str | None = None,
 ) -> tuple[bool, str]:
-    """校验公式算子是否在指定 tier allowlist 内。"""
+    """校验公式算子是否在指定 tier allowlist 内。
+
+    Parameters
+    ----------
+    formula : str
+        DSL 公式字符串。
+    tier : str | None
+        ``research`` | ``production`` | ``production_fastpath``；
+        默认读 ``FACTOR_ENGINE_MINING_ALLOWLIST_TIER``。
+
+    Returns
+    -------
+    tuple[bool, str]
+        ``(True, "OK")`` 或 ``(False, 违规说明)``。
+    """
     import ast
 
     from cleaned_operators.registry import OperatorRegistry
@@ -998,6 +1067,7 @@ def validate_formula_in_mining_allowlist(
 
 
 def write_mining_search_space(path: str | Path, *, tier: str | None = None) -> Path:
+    """将 ``default_mining_search_space_config`` 写入 JSON 文件。"""
     out = Path(path)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(
@@ -1008,6 +1078,7 @@ def write_mining_search_space(path: str | Path, *, tier: str | None = None) -> P
 
 
 def write_dsl_allowlist(path: str | Path) -> Path:
+    """将 ``export_dsl_allowlist_json()`` 写入 JSON 文件。"""
     out = Path(path)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(
@@ -1034,7 +1105,20 @@ def default_mining_label_config(
 
 
 def validate_mining_label_formula(formula: str, *, enforce: bool = True) -> tuple[bool, str]:
-    """校验标签 DSL 不含前视算子。"""
+    """校验标签 DSL 不含前视算子。
+
+    Parameters
+    ----------
+    formula : str
+        标签 DSL 公式。
+    enforce : bool
+        传给 ``validate_label_formula_for_pit`` 的 ``enforce`` 参数。
+
+    Returns
+    -------
+    tuple[bool, str]
+        ``(True, "OK")`` 或 ``(False, 违规说明)``。
+    """
     from api.label_pit import validate_label_formula_for_pit
 
     try:

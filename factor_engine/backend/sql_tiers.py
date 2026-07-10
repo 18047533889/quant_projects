@@ -10,6 +10,7 @@ from backend.production_fastpath_tiers import (
     P1_DUCKDB_PARITY_PENDING,
     P1_DUCKDB_PRODUCTION_SAFE,
     P2_RESEARCH_ONLY,
+    FASTPATH_DEFERRED_CANONICALS,
 )
 
 # 向后兼容：``SQL_CAPABLE_CANONICALS`` == ``SQL_IMPLEMENTED_CANONICALS``
@@ -140,13 +141,14 @@ SQL_IMPLEMENTED_CANONICALS: frozenset[str] = frozenset(
     }
 )
 
-# DuckDB / ClickHouse 分层别名（ClickHouse 暂与 DuckDB parity 子集对齐）
-DUCKDB_SQL_PARITY_VERIFIED: frozenset[str] = frozenset()  # set below
-CLICKHOUSE_SQL_PARITY_VERIFIED: frozenset[str] = frozenset()
+# DuckDB 分层
+DUCKDB_SQL_PARITY_VERIFIED: frozenset[str] = frozenset()
 DUCKDB_SQL_PRODUCTION_SAFE: frozenset[str] = frozenset()
+
+# ClickHouse 独立分层（无真实 integration test 前默认空）
+CLICKHOUSE_SQL_PARITY_VERIFIED: frozenset[str] = frozenset()
 CLICKHOUSE_SQL_PRODUCTION_SAFE: frozenset[str] = frozenset()
 
-# 与 pandas golden / 三后端 parity 对齐（可 research 默认下推验证）
 SQL_PARITY_VERIFIED_CANONICALS: frozenset[str] = frozenset(
     {
         "column",
@@ -154,11 +156,8 @@ SQL_PARITY_VERIFIED_CANONICALS: frozenset[str] = frozenset(
     }
     | P0_PRODUCTION_FASTPATH_CANONICALS
     | P1_DUCKDB_PRODUCTION_SAFE
-    | P1_DUCKDB_PARITY_PENDING
-    | frozenset({"cs_quantile", "c_percentile", "group_percentile", "ts_median"})
 )
 
-# production 默认可 SQL 下推（HybridLong fast path）
 SQL_PRODUCTION_SAFE_CANONICALS: frozenset[str] = frozenset(
     {"column", "literal"}
     | P0_PRODUCTION_FASTPATH_CANONICALS
@@ -167,15 +166,14 @@ SQL_PRODUCTION_SAFE_CANONICALS: frozenset[str] = frozenset(
 
 DUCKDB_SQL_PARITY_VERIFIED = SQL_PARITY_VERIFIED_CANONICALS
 DUCKDB_SQL_PRODUCTION_SAFE = SQL_PRODUCTION_SAFE_CANONICALS
-CLICKHOUSE_SQL_PARITY_VERIFIED = frozenset(
-    c for c in SQL_PARITY_VERIFIED_CANONICALS if c not in P1_DUCKDB_PARITY_PENDING
-)
-CLICKHOUSE_SQL_PRODUCTION_SAFE = CLICKHOUSE_SQL_PARITY_VERIFIED & SQL_PRODUCTION_SAFE_CANONICALS
+
+# ClickHouse 暂不与 DuckDB 共享认证
+CLICKHOUSE_SQL_PARITY_VERIFIED = frozenset()
+CLICKHOUSE_SQL_PRODUCTION_SAFE = frozenset()
 
 # 有 emitter 实现但暂不默认 production SQL 下推
 SQL_PRODUCTION_DEFERRED_CANONICALS: frozenset[str] = frozenset(
-    P2_RESEARCH_ONLY
-    | P1_DUCKDB_PARITY_PENDING
+    FASTPATH_DEFERRED_CANONICALS
 )
 
 # 向后兼容
@@ -183,6 +181,14 @@ SQL_CAPABLE_CANONICALS = SQL_IMPLEMENTED_CANONICALS
 
 
 def is_sql_implemented(canon: str) -> bool:
+    """判断 canonical 是否有 SQL emitter 实现。
+
+    参数:
+        canon: 算子 canonical 名称或别名。
+
+    返回:
+        是否在 ``SQL_IMPLEMENTED_CANONICALS`` 内。
+    """
     from cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
@@ -190,6 +196,14 @@ def is_sql_implemented(canon: str) -> bool:
 
 
 def is_sql_parity_verified(canon: str) -> bool:
+    """判断 canonical 是否已通过 SQL parity 验证。
+
+    参数:
+        canon: 算子 canonical 名称或别名。
+
+    返回:
+        是否在 ``SQL_PARITY_VERIFIED_CANONICALS`` 内。
+    """
     from cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
@@ -197,6 +211,14 @@ def is_sql_parity_verified(canon: str) -> bool:
 
 
 def is_sql_production_safe(canon: str) -> bool:
+    """判断 canonical 是否在静态 SQL production-safe 白名单内。
+
+    参数:
+        canon: 算子 canonical 名称或别名。
+
+    返回:
+        是否在 ``SQL_PRODUCTION_SAFE_CANONICALS`` 内（不含运行时降级）。
+    """
     from cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)

@@ -8,6 +8,14 @@ from typing import Any
 
 
 def build_operator_manifest_entry(canon: str) -> dict[str, Any]:
+    """构建单个 canonical 的 manifest 条目（capability + fastpath 视图）。
+
+    参数:
+        canon: 算子 canonical 名称或别名。
+
+    返回:
+        含各 backend 状态、fastpath 标志与 parity 信息的字典。
+    """
     from backend.fastpath_coverage import build_fastpath_coverage_row
     from backend.operator_capability import capability_for, resolve_canonical
     from backend.polars_long_policy import infer_polars_long_tier
@@ -59,6 +67,15 @@ def build_operator_manifest(
     production_only: bool = False,
     fastpath_only: bool = False,
 ) -> list[dict[str, Any]]:
+    """构建全量或过滤后的算子 manifest 列表。
+
+    参数:
+        production_only: 为 ``True`` 时仅包含 ``allow_in_production`` 算子。
+        fastpath_only: 为 ``True`` 时仅包含可走 production fast path 的算子。
+
+    返回:
+        manifest 条目字典列表。
+    """
     from cleaned_operators.operator_spec import iter_operator_specs
 
     rows: list[dict[str, Any]] = []
@@ -73,6 +90,12 @@ def build_operator_manifest(
 
 
 def write_operator_manifest(path: Path, **kwargs: Any) -> None:
+    """将算子 manifest 写入 JSON 文件。
+
+    参数:
+        path: 输出文件路径。
+        **kwargs: 透传给 :func:`build_operator_manifest` 的过滤参数。
+    """
     data = {
         "schema_version": 1,
         "operators": build_operator_manifest(**kwargs),

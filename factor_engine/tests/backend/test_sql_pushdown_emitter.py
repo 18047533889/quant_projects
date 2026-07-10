@@ -72,8 +72,8 @@ def test_ts_rank_sql():
         instrument_column="inst",
     )
     assert compiled is not None
-    assert "RANK()" in compiled.query
-    assert "ROWS BETWEEN 4 PRECEDING" in compiled.query
+    assert "ROW_NUMBER()" in compiled.query
+    assert "cnt_le" in compiled.query or "countIf" in compiled.query
 
 
 def test_ewm_mean_sql():

@@ -55,6 +55,11 @@ class BackendCapability:
     notes: str = ""
 
     def to_csv_row(self) -> dict[str, str | float | bool]:
+        """导出为 CSV 扁平行字典。
+
+        返回:
+            含 canonical、backend、status 及各能力标志字段的字典。
+        """
         return {
             "canonical": self.canonical,
             "backend": self.backend,
@@ -84,6 +89,14 @@ class OperatorCapabilitySummary:
 
 
 def resolve_canonical(name: str) -> str:
+    """将算子别名解析为 canonical 名称。
+
+    参数:
+        name: 算子名或别名。
+
+    返回:
+        解析后的 canonical 名称。
+    """
     from cleaned_operators.registry import OperatorRegistry
 
     return OperatorRegistry._aliases.get(name, name)
@@ -97,6 +110,14 @@ def polars_long_native(canonical: str) -> bool:
 
 
 def polars_long_tier(canonical: str) -> str:
+    """查询 canonical 的 Polars long-table 能力 tier。
+
+    参数:
+        canonical: 算子 canonical 名称。
+
+    返回:
+        tier 标签，如 ``native``、``map_groups``、``unsupported`` 等。
+    """
     from backend.polars_long_policy import infer_polars_long_tier
 
     return infer_polars_long_tier(canonical)
@@ -131,6 +152,7 @@ def polars_long_capable(canonical: str) -> bool:
 
 
 def _sql_capable_canonicals() -> frozenset[str]:
+    """返回 SQL 已实现 canonical 集合。"""
     from backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
 
     return SQL_IMPLEMENTED_CANONICALS
@@ -171,6 +193,7 @@ def _sql_emitter_ok(canon: str) -> bool:
 
 
 def _polars_status(canon: str) -> CapabilityStatus:
+    """根据 registry 与 parity 白名单推断 Polars 能力状态。"""
     from cleaned_operators.operator_policy import (
         POLARS_PARITY_VERIFIED,
         POLARS_PRODUCTION_SAFE,
@@ -188,6 +211,7 @@ def _polars_status(canon: str) -> CapabilityStatus:
 
 
 def _pandas_status(canon: str) -> CapabilityStatus:
+    """根据 registry 推断 Pandas/Numpy 能力状态。"""
     from cleaned_operators.registry import OperatorRegistry
 
     if "pandas_numpy" in OperatorRegistry.backends_for(canon):
@@ -196,6 +220,7 @@ def _pandas_status(canon: str) -> CapabilityStatus:
 
 
 def _sql_status(canon: str, *, dialect: BackendName) -> CapabilityStatus:
+    """根据 SQL tier 与 emitter 能力推断指定方言的 SQL 状态。"""
     from backend.sql_tiers import (
         SQL_IMPLEMENTED_CANONICALS,
         SQL_PARITY_VERIFIED_CANONICALS,
@@ -328,6 +353,16 @@ def supports_sql(
     *,
     mode: str = "production",
 ) -> bool:
+    """判断 canonical 在指定数据源方言下是否可走 SQL 路径。
+
+    参数:
+        canonical: 算子 canonical 名称。
+        data_source_kind: 数据源类型，``duckdb`` 或 ``clickhouse``/``ch``。
+        mode: ``production`` 仅 parity/production_safe；``research`` 允许已实现。
+
+    返回:
+        是否支持 SQL 执行。
+    """
     canon = resolve_canonical(canonical)
     dialect: BackendName = (
         "clickhouse_sql" if data_source_kind.lower() in {"clickhouse", "ch"} else "duckdb_sql"
@@ -341,6 +376,14 @@ def supports_sql(
 
 
 def supports_pandas(canonical: str) -> bool:
+    """判断 canonical 是否有 Pandas/Numpy 实现。
+
+    参数:
+        canonical: 算子 canonical 名称。
+
+    返回:
+        registry 中是否注册了 ``pandas_numpy`` backend。
+    """
     return _pandas_status(resolve_canonical(canonical)) != "unsupported"
 
 

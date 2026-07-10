@@ -41,15 +41,26 @@ ACCEPTANCE_P1 = [
     "ts_corr",
     "rolling_beta",
     "cs_mad",
+    "cum_sum",
+    "ts_rank",
+    "ts_sharpe",
+    "ts_autocorr",
     "cs_resid",
+    "cs_regression",
+]
+
+ACCEPTANCE_P1_IMPLEMENTED_ONLY = [
     "RSI_WILDER",
     "ts_decay_linear",
+    "ts_ema",
 ]
 
 ACCEPTANCE_P2 = [
     "ewm_corr",
     "ts_kurt",
     "fillna_interpolate",
+    "RSI_WILDER",
+    "ts_decay_linear",
 ]
 
 
@@ -77,6 +88,14 @@ def test_acceptance_p1_polars_or_duckdb(_loaded, canon):
     if canon in {"cs_mad", "cs_mad_zscore"}:
         assert row.polars_long_native_production_safe
         assert row.duckdb_sql_production_safe and row.sql_emitter_ok
+
+
+@pytest.mark.parametrize("canon", ACCEPTANCE_P1_IMPLEMENTED_ONLY)
+def test_acceptance_p1_implemented_not_production_safe(_loaded, canon):
+    row = _row(canon)
+    assert row.polars_long_native or row.polars_long_tier in {"native", "python_rolling"}, canon
+    assert not row.production_fast_path, f"{canon} 已实现但不应 production fast path"
+    assert row.fastpath_block_reason
 
 
 @pytest.mark.parametrize("canon", ACCEPTANCE_P2)

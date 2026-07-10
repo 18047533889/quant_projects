@@ -71,7 +71,7 @@ def _window_int(node: PlanNode, default: int = 3) -> int:
                 return max(int(node.attrs[key]), 1)
             except (TypeError, ValueError):
                 pass
-    for idx in range(len(node.inputs) - 1, 0, -1):
+    for idx in range(1, len(node.inputs)):
         child = node.inputs[idx]
         if child.op != "literal":
             continue
@@ -197,22 +197,19 @@ def _int_attr(node: PlanNode, *keys: str, input_index: int | None = None, defaul
 
 
 def _cs_ols_exprs(y_col: str, x_col: str, *, ts: str = _TS) -> tuple[pl.Expr, pl.Expr, pl.Expr]:
-    """截面 OLS y ~ x + const（按 ts 分区）。"""
-    mean_y = pl.col(y_col).mean().over(ts)
-    mean_x = pl.col(x_col).mean().over(ts)
-    xy = (pl.col(y_col) * pl.col(x_col)).mean().over(ts)
-    x2 = (pl.col(x_col) ** 2).mean().over(ts)
+    """截面 OLS y ~ x + const（按 ts 分区，pairwise-valid 样本）。"""
+    valid = pl.col(y_col).is_not_null() & pl.col(x_col).is_not_null()
+    y_v = pl.when(valid).then(pl.col(y_col)).otherwise(None)
+    x_v = pl.when(valid).then(pl.col(x_col)).otherwise(None)
+    mean_y = y_v.mean().over(ts)
+    mean_x = x_v.mean().over(ts)
+    xy = (y_v * x_v).mean().over(ts)
+    x2 = (x_v**2).mean().over(ts)
     cov_xy = xy - mean_x * mean_y
     var_x = x2 - mean_x**2
     beta = cov_xy / pl.when(var_x.is_null() | (var_x == 0)).then(1.0).otherwise(var_x)
     alpha = mean_y - beta * mean_x
-    n_valid = (
-        pl.when(pl.col(y_col).is_not_null() & pl.col(x_col).is_not_null())
-        .then(1)
-        .otherwise(0)
-        .sum()
-        .over(ts)
-    )
+    n_valid = valid.cast(pl.Int64).sum().over(ts)
     return beta, alpha, n_valid
 
 
@@ -224,19 +221,20 @@ def _rolling_ols_parts(
     inst: str = _INST,
     ts: str = _TS,
 ) -> tuple[pl.Expr, pl.Expr, pl.Expr, pl.Expr]:
-    """滚动 OLS y ~ x + const（按 inst 分区）。"""
-    mean_y = pl.col(y_col).rolling_mean(window_size=w, min_samples=3).over(inst, order_by=ts)
-    mean_x = pl.col(x_col).rolling_mean(window_size=w, min_samples=3).over(inst, order_by=ts)
-    xy = (pl.col(y_col) * pl.col(x_col)).rolling_mean(window_size=w, min_samples=3).over(inst, order_by=ts)
-    x2 = (pl.col(x_col) ** 2).rolling_mean(window_size=w, min_samples=3).over(inst, order_by=ts)
+    """滚动 OLS y ~ x + const（pairwise-valid 样本）。"""
+    valid = pl.col(y_col).is_not_null() & pl.col(x_col).is_not_null()
+    y_v = pl.when(valid).then(pl.col(y_col)).otherwise(None)
+    x_v = pl.when(valid).then(pl.col(x_col)).otherwise(None)
+    mean_y = y_v.rolling_mean(window_size=w, min_samples=3).over(inst, order_by=ts)
+    mean_x = x_v.rolling_mean(window_size=w, min_samples=3).over(inst, order_by=ts)
+    xy = (y_v * x_v).rolling_mean(window_size=w, min_samples=3).over(inst, order_by=ts)
+    x2 = (x_v**2).rolling_mean(window_size=w, min_samples=3).over(inst, order_by=ts)
     cov_xy = xy - mean_x * mean_y
     var_x = x2 - mean_x**2
     beta = cov_xy / pl.when(var_x.is_null() | (var_x == 0)).then(None).otherwise(var_x)
     alpha = mean_y - beta * mean_x
     n_valid = (
-        pl.when(pl.col(y_col).is_not_null() & pl.col(x_col).is_not_null())
-        .then(1.0)
-        .otherwise(0.0)
+        valid.cast(pl.Float64)
         .rolling_sum(window_size=w, min_samples=1)
         .over(inst, order_by=ts)
     )
@@ -332,8 +330,17 @@ def _ts_sharpe_min_periods(w: int) -> int:
 
 
 def _ts_autocorr_window_lag(node: PlanNode) -> tuple[int, int, int]:
-    lag = max(_int_attr(node, "lag", default=1), 1)
-    w = max(lag + 2, _window_int(node))
+    lag_lit = _literal_value(node, 1)
+    if lag_lit is not None:
+        lag = max(int(lag_lit), 1)
+    else:
+        lag = max(_int_attr(node, "lag", default=1), 1)
+    win_lit = _literal_value(node, 0)
+    if win_lit is not None:
+        w = max(int(win_lit), 1)
+    else:
+        w = _window_int(node)
+    w = max(lag + 2, w)
     mp = max(2, w // 3)
     return w, lag, mp
 
@@ -344,18 +351,12 @@ def _expanding_over() -> tuple[str, str]:
 
 def _expanding_non_null_count() -> pl.Expr:
     inst, ts = _expanding_over()
-    return (
-        pl.col(_VAL)
-        .is_not_null()
-        .cast(pl.Float64)
-        .rolling_sum(window_size=_EXPANDING_WINDOW, min_samples=1)
-        .over(inst, order_by=ts)
-    )
+    return pl.col(_VAL).is_not_null().cast(pl.Float64).cum_sum().over(inst, order_by=ts)
 
 
 def _expanding_sum_expr() -> pl.Expr:
     inst, ts = _expanding_over()
-    return pl.col(_VAL).rolling_sum(window_size=_EXPANDING_WINDOW, min_samples=1).over(inst, order_by=ts)
+    return pl.col(_VAL).cum_sum().over(inst, order_by=ts)
 
 
 def _expanding_mean_expr() -> pl.Expr:
@@ -367,13 +368,8 @@ def _expanding_std_expr() -> pl.Expr:
     inst, ts = _expanding_over()
     cnt = _expanding_non_null_count()
     mean = _expanding_mean_expr()
-    mean_sq = (
-        (pl.col(_VAL) ** 2)
-        .rolling_sum(window_size=_EXPANDING_WINDOW, min_samples=1)
-        .over(inst, order_by=ts)
-        / cnt
-    )
-    var_pop = mean_sq - mean**2
+    sum_sq = (pl.col(_VAL) ** 2).cum_sum().over(inst, order_by=ts)
+    var_pop = sum_sq / cnt - mean**2
     var_sample = pl.when(cnt <= 1).then(None).otherwise(var_pop * cnt / (cnt - 1.0))
     return var_sample.sqrt()
 
@@ -1695,6 +1691,11 @@ def _compile_polars_impl(
         return inner.with_columns(pl.col(_VAL).forward_fill().over(_INST, order_by=_TS).alias(_VAL))
 
     if op == "bfill":
+        import logging
+
+        logging.getLogger("backend.polars_expr_emitter").warning(
+            "bfill on polars_long is a no-op (causal/PIT); use ffill or research-only fallback"
+        )
         inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
@@ -1790,7 +1791,12 @@ def _compile_polars_impl(
             return None
         prev = pl.col(_VAL).shift(1).over(_INST, order_by=_TS)
         return inner.with_columns(
-            pl.when(pl.col(_VAL).is_null() | prev.is_null() | (prev == 0))
+            pl.when(
+                pl.col(_VAL).is_null()
+                | prev.is_null()
+                | (pl.col(_VAL) <= 0)
+                | (prev <= 0)
+            )
             .then(None)
             .otherwise((pl.col(_VAL) / prev).log())
             .alias(_VAL)

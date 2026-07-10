@@ -1,4 +1,14 @@
-"""Production 硬策略：research 宽松 / production 强制门禁。"""
+"""Production 硬策略：research 宽松 / production 强制门禁。
+
+本模块定义 ``resolve_run_mode`` / ``is_production_mode`` 及一系列断言函数，
+在 compile / run / execute 各阶段 enforce production 约束，包括：
+
+- 显式列选择（禁止 SELECT *）
+- 强制 input_dq / auto_warmup / PIT
+- 禁止 stub 算子与非 production 算子
+- 可选 fast path 门禁（``FACTOR_ENGINE_PRODUCTION_REQUIRE_FASTPATH``）
+- Polars→pandas 回退记录与严格模式拦截
+"""
 
 from __future__ import annotations
 
@@ -13,10 +23,16 @@ class ProductionPolicyViolation(ValueError):
 
 
 def _truthy_env(name: str) -> bool:
+    """判断环境变量是否为真值（``1``/``true``/``yes``/``on``，忽略大小写）。"""
     return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def resolve_run_mode(mode: str | None = None) -> str:
+    """解析运行模式为 ``research`` 或 ``production``。
+
+    优先级：显式 ``mode`` 参数 > ``FACTOR_ENGINE_RUN_MODE`` >
+    ``QUANT_PRODUCTION_MODE`` 环境变量 > 默认 ``research``。
+    """
     if mode is not None and str(mode).strip():
         return str(mode).lower()
     fe = os.environ.get("FACTOR_ENGINE_RUN_MODE", "").strip().lower()
@@ -30,6 +46,7 @@ def resolve_run_mode(mode: str | None = None) -> str:
 
 
 def is_production_mode(mode: str | None = None) -> bool:
+    """当前是否为 production 模式。"""
     return resolve_run_mode(mode) == PRODUCTION_MODE
 
 
@@ -147,6 +164,7 @@ def assert_production_plan_ops(
 
 
 def _fastpath_gate_enabled() -> bool:
+    """是否启用 production fast path 强制门禁。"""
     return _truthy_env("FACTOR_ENGINE_PRODUCTION_REQUIRE_FASTPATH")
 
 

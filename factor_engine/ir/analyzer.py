@@ -26,22 +26,36 @@ from ir.nodes import IRNode
 
 
 def _lb_max(current: int, candidate: int) -> int:
+    """lookback 取当前已知最大值与候选窗口的较大者。"""
     return max(current, candidate)
 
 
 @dataclass
 class AnalysisResult:
+    """``Analyzer.lower`` 的返回值：IR 树 + 副作用分析摘要。"""
+
     ir: IRNode
-    lookback: int
-    has_ts_op: bool
-    has_cs_op: bool
-    referenced_columns: set[str]
+    lookback: int              # 公式所需最大历史窗口（用于 prefetch / warmup）
+    has_ts_op: bool            # 是否含时序算子（按标的分组滚动）
+    has_cs_op: bool            # 是否含截面算子（按时间截面）
+    referenced_columns: set[str]  # 公式引用的数据列名集合
 
 
 class Analyzer:
     """将 ``Expr`` 树降为 IR；所有函数调用均来自 ``cleaned_operators``。"""
 
     def lower(self, expr: Expr) -> AnalysisResult:
+        """遍历 Expr 树，生成 IRNode 并累计 lookback / 引用列 / ts·cs 标记。
+
+        参数：
+            expr: 根表达式（通常来自 ``Factor.expr`` 或 ``parse_expr``）
+
+        返回：
+            ``AnalysisResult``，其中 ``ir`` 可交给 ``planner.lowerer`` 继续 lower。
+
+        异常：
+            ``NotImplementedError``：不支持的 Expr 类型，或 kwargs 含非字面量 Expr。
+        """
         cols: set[str] = set()
         lookback = 0
         has_ts = False

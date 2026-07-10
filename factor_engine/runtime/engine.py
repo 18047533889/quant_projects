@@ -1,13 +1,28 @@
-"""运行时入口：``FactorEngine`` 串联 compile 与 run。
+"""因子引擎运行时入口：编译、执行与物化的一站式 API。
 
-编译链（单因子）::
+``FactorEngine`` 是 factor_engine 的核心门面类，串联 DSL 解析、IR 分析、
+逻辑计划优化、后端执行及因子湖物化全流程。
+
+单因子编译链::
 
     Factor.expr  →  Analyzer.lower  →  IRNode
                  →  Optimizer       →  IRNode（可选规则）
                  →  Lowerer         →  PlanNode
-                 →  PandasBackend   →  MultiIndex Series
+                 →  Backend.execute →  MultiIndex Series
 
-``run_many`` / CSE：多因子共享子表达式时插入 ``plan_ref`` 节点与 ``shared_result_cache``。
+多因子批跑（``run_many``）::
+
+    多因子 compile → CSE 提取 shared_nodes → 先算共享子树 → 再算各因子根
+
+主要入口方法：
+
+- ``compile`` / ``run``：单因子编译与执行
+- ``run_many`` / ``run_many_parallel``：多因子批跑（支持 CSE）
+- ``run_from_config`` / ``materialize_from_config``：YAML 一键运行
+- ``materialize`` / ``materialize_incremental``：执行并落盘到因子湖
+
+运行模式（``run_mode``）由 ``production_policy.resolve_run_mode`` 解析；
+production 模式下强制 input_dq、auto_warmup、PIT 及算子白名单等约束。
 """
 
 from __future__ import annotations
@@ -42,9 +57,31 @@ logger = get_logger("runtime.engine")
 
 
 class FactorEngine:
-    """因子引擎：注入后端与数据源，对 :class:`api.factor.Factor` 做编译与执行。"""
+    """因子引擎：注入后端与数据源，对 :class:`api.factor.Factor` 做编译与执行。
+
+    构造时自动引导运行时环境（``.env``）并解析 ``run_mode``（research /
+    production）。持有 ``Analyzer``、``Lowerer``、``Optimizer`` 编译组件及
+    可选列级/计划缓存。
+
+    Attributes:
+        backend: 执行后端（Pandas / Polars / Hybrid 等）。
+        data_source: 统一数据读取入口。
+        cache: 列级或计划缓存；``None`` 表示每次全量计算。
+        run_mode: 当前运行模式字符串。
+        analyzer: Expr → IR 分析器。
+        lowerer: IR → 逻辑计划转换器。
+        optimizer: 逻辑计划优化器。
+    """
 
     def __init__(self, backend, data_source, cache=None, *, run_mode: str | None = None) -> None:
+        """构造因子引擎实例。
+
+        Args:
+            backend: 由 ``build_backend`` 构造的执行后端。
+            data_source: 由 ``build_data_source`` 构造的数据源。
+            cache: 可选 ``CacheManager`` 或 ``PersistentPlanCache``。
+            run_mode: 显式运行模式；缺省从环境变量解析。
+        """
         bootstrap_runtime_env()
         from runtime.production_policy import resolve_run_mode
 
@@ -71,7 +108,23 @@ class FactorEngine:
             os.environ["FACTOR_ENGINE_RUN_MODE"] = "research"
 
     def compile(self, factor: Factor, *, pit_enforce: bool = False, pit_forbid_forward_fill: bool = False):
-        """Expr → Analyzer → Lowerer → Optimizer，返回 (plan, analysis)。"""
+        """将因子表达式编译为可执行的逻辑计划。
+
+        流程：``Analyzer.lower`` → ``Lowerer.to_logical_plan`` →
+        ``Optimizer.optimize``；production 模式下附加算子白名单与 fast path 审计。
+
+        Args:
+            factor: 待编译因子。
+            pit_enforce: 是否强制 Point-in-Time 安全审计。
+            pit_forbid_forward_fill: PIT 审计是否禁止前向填充算子。
+
+        Returns:
+            ``(optimized_plan, analysis)`` 元组，分别为逻辑计划根节点与分析结果。
+
+        Raises:
+            ProductionPolicyViolation: production 模式下计划不合规。
+            PITAuditError: PIT 审计失败（``pit_enforce=True`` 时）。
+        """
         started_at = time.perf_counter()
         logger.info("开始编译因子 '%s'", factor.name)
         analysis = self.analyzer.lower(factor.expr)
@@ -152,10 +205,18 @@ class FactorEngine:
         enable_cse: bool | None = None,
         perf: PerfConfig | None = None,
     ) -> DAGPlan:
-        """多因子编译：可选 **公共子表达式消除（CSE）**，重复子树只保留一份于 ``shared_nodes``。
+        """多因子编译：可选公共子表达式消除（CSE）。
 
-        CSE 默认开启；可用环境变量 ``FACTOR_ENGINE_DISABLE_CSE=1`` 关闭，或传入
-        ``perf=PerfConfig.from_env()`` / ``enable_cse=False``。
+        对多个因子分别 ``compile`` 后，将重复子树提取到 ``DAGPlan.shared_nodes``，
+        根计划通过 ``plan_ref`` 引用共享节点，供 ``run_many`` 一次性物化。
+
+        Args:
+            factors: 待编译因子序列。
+            enable_cse: 是否启用 CSE；``None`` 时取 ``perf.enable_cse``。
+            perf: 性能配置；缺省从环境变量加载。
+
+        Returns:
+            含 ``roots`` 与 ``shared_nodes`` 的 ``DAGPlan``。
         """
         dag, _ = self._dag_from_factors(
             factors, enable_cse=enable_cse, perf=perf
@@ -169,7 +230,14 @@ class FactorEngine:
         enable_cse: bool | None = None,
         perf: PerfConfig | None = None,
     ) -> dict[str, Any]:
-        """编译多因子并返回 DAG + 列依赖图 ``batch_graph``。"""
+        """编译多因子并返回 DAG 与列依赖批图。
+
+        除 ``compile_many`` 的 DAG 外，额外构建 ``batch_graph`` 供调度器
+        确定并行层与依赖顺序。
+
+        Returns:
+            含 ``dag``、``analyses``、``batch_graph`` 的字典。
+        """
         from planner.dependency_graph import build_factor_batch_graph
 
         dag, analyses = self._dag_from_factors(
@@ -184,6 +252,7 @@ class FactorEngine:
 
     @classmethod
     def _build_cache(cls, config: FactorEngineConfig, data_source) -> CacheManager | None:
+        """根据引擎配置与数据源作用域构造缓存管理器。"""
         if not config.engine.enable_cache and not config.engine.plan_cache_dir:
             return None
         scope = compute_data_scope(data_source)
@@ -193,7 +262,13 @@ class FactorEngine:
 
     @classmethod
     def from_loaded_config(cls, config: FactorEngineConfig):
-        """从已解析配置构造 engine 与 factor，供 pipeline 等编排层复用。"""
+        """从已解析的 ``FactorEngineConfig`` 构造 engine 与 factor。
+
+        供 pipeline 编排层或测试复用，避免重复读 YAML。
+
+        Returns:
+            ``(engine, factor)`` 元组。
+        """
         backend = build_backend(config.backend.type)
         data_source = build_data_source(config.data_source)
         cache = cls._build_cache(config, data_source)
@@ -220,7 +295,15 @@ class FactorEngine:
 
     @classmethod
     def from_config(cls, config_path: str | Path, *, profile: str | None = None):
-        """读 YAML：建 backend、数据源、可选缓存，并解析因子表达式。"""
+        """从 YAML 配置文件构造 engine、factor 与 config。
+
+        Args:
+            config_path: YAML 配置文件路径。
+            profile: 可选 profile 名称，覆盖 YAML 内 ``profile`` 键。
+
+        Returns:
+            ``(engine, factor, config)`` 三元组。
+        """
         logger.info("加载配置文件: %s", config_path)
         config = load_config(config_path, profile=profile)
         engine, factor = cls.from_loaded_config(config)
@@ -228,7 +311,18 @@ class FactorEngine:
 
     @classmethod
     def run_from_config(cls, config_path: str | Path, *, profile: str | None = None):
-        """一键从配置文件跑因子，结果里附带 config 对象。"""
+        """一键从 YAML 配置文件执行单因子。
+
+        production 模式或 ``pipeline.batched_engine=True`` 时走 ``run_many``
+        批路径；否则直接 ``run``。返回字典附带 ``config`` 对象。
+
+        Args:
+            config_path: YAML 配置文件路径。
+            profile: 可选 profile 名称。
+
+        Returns:
+            含 ``factor``、``analysis``、``plan``、``result``、``config`` 的字典。
+        """
         logger.info("开始从配置执行因子: %s", config_path)
         engine, factor, config = cls.from_config(config_path, profile=profile)
         from runtime.config_runtime import resolve_run_kwargs
@@ -348,7 +442,22 @@ class FactorEngine:
         profile: str | None = None,
         pipeline_overrides: Any | None = None,
     ) -> dict[str, Any]:
-        """多 YAML 批量 run；按数据源作用域分组，再按 run kwargs 子分组 batch。"""
+        """从多个 YAML 配置文件批量执行因子。
+
+        按数据源作用域（``config_data_scope_key``）分组，组内再按 run kwargs
+        子分组；同组多因子共享 ``run_many`` 以启用 CSE。
+
+        Args:
+            config_paths: 配置文件路径序列。
+            enable_cse: 是否启用 CSE。
+            parallel: 是否对因子根并行求值。
+            n_jobs: 并行 worker 数。
+            profile: 可选 profile 名称。
+            pipeline_overrides: pipeline 层覆盖参数。
+
+        Returns:
+            含 ``results``、``runs``、``configs`` 的字典。
+        """
         from runtime.config_runtime import config_data_scope_key
 
         loaded: list[tuple[FactorEngine, Factor, FactorEngineConfig, str | Path]] = []
@@ -391,7 +500,10 @@ class FactorEngine:
         profile: str | None = None,
         pipeline_overrides: Any | None = None,
     ) -> dict[str, Any]:
-        """多 YAML 批量 run；根节点并行（共享子式仍串行）。"""
+        """从多个 YAML 配置文件批量执行因子（根节点并行）。
+
+        等价于 ``run_many_from_config(..., parallel=True)``。
+        """
         return cls.run_many_from_config(
             config_paths,
             enable_cse=enable_cse,
@@ -503,7 +615,23 @@ class FactorEngine:
         parallel: bool = False,
         n_jobs: int | None = None,
     ) -> dict[str, Any]:
-        """多 YAML 批量物化；同 scope + 物化参数一致时共享 run_many。"""
+        """从多个 YAML 配置文件批量物化因子。
+
+        同数据源作用域且物化参数一致的因子可共享一次 ``run_many`` 计算，
+        再逐因子落盘（见 ``can_batch_materialize_compute``）。
+
+        Args:
+            config_paths: 配置文件路径序列。
+            batch_run: 是否尝试批跑共享计算。
+            enable_cse: 是否启用 CSE。
+            profile: 可选 profile 名称。
+            pipeline_overrides: pipeline 层覆盖参数。
+            parallel: 批跑时是否并行因子根。
+            n_jobs: 并行 worker 数。
+
+        Returns:
+            含 ``materializations`` 字典的结果。
+        """
         from runtime.config_runtime import config_data_scope_key
 
         loaded: list[tuple[FactorEngine, Factor, FactorEngineConfig, str | Path]] = []
@@ -542,7 +670,10 @@ class FactorEngine:
         profile: str | None = None,
         pipeline_overrides: Any | None = None,
     ) -> dict[str, Any]:
-        """多 YAML 批量物化；共享 run_many 时根节点并行。"""
+        """从多个 YAML 配置文件批量物化（根节点并行）。
+
+        等价于 ``materialize_many_from_config(..., parallel=True)``。
+        """
         return cls.materialize_many_from_config(
             config_paths,
             batch_run=batch_run,
@@ -564,11 +695,24 @@ class FactorEngine:
         run_many_batch: bool = True,
         **materialize_kwargs: Any,
     ) -> dict[str, Any]:
-        """分片物化。
+        """分片物化：按因子 ID、资产 bucket 或时间月份切分执行范围。
 
-        - ``factor_id``：按因子 ID 哈希选取子集（默认）
-        - ``asset_bucket``：按 bucket 编号取模，缩小读范围（全量因子）
-        - ``time_month``：按 ``YYYY-MM`` 哈希，缩小时间窗口（全量因子）
+        用于大规模因子生产任务的分布式/分片调度。
+
+        Args:
+            factors: 待物化因子序列。
+            factor_ids: 对应因子 ID；缺省用 ``factor.name``。
+            shard_by: 分片策略，可选 ``factor_id`` / ``asset_bucket`` / ``time_month``。
+            shard_index: 当前分片索引（0-based）。
+            shard_count: 分片总数。
+            run_many_batch: 多分片因子是否共享 ``run_many``。
+            **materialize_kwargs: 传递给 ``materialize`` 的参数。
+
+        Returns:
+            含 ``materializations``、``shard_index``、``shard_count`` 等的字典。
+
+        Raises:
+            ValueError: ``shard_by`` 不支持或 ``factor_ids`` 长度不匹配。
         """
         allowed = {"factor_id", "asset_bucket", "time_month"}
         if shard_by not in allowed:
@@ -762,7 +906,23 @@ class FactorEngine:
         value_dtype: str = "float32",
         **run_kwargs: Any,
     ) -> dict[str, Any]:
-        """批量计算多因子并写入 factor_matrix 宽表（训练/回测加速格式）。"""
+        """批量计算多因子并写入 factor_matrix 宽表格式。
+
+        宽表格式面向训练/回测场景，减少多因子读取时的 join 开销。
+
+        Args:
+            factors: 待计算因子序列。
+            factor_ids: 因子 ID 列表。
+            universe: 标的 universe 标识。
+            frequency: 因子频率。
+            matrix_root: 宽表输出根目录。
+            partition_columns: 分区列。
+            value_dtype: 值 dtype。
+            **run_kwargs: 传递给 ``run_many`` 的参数。
+
+        Returns:
+            物化摘要字典（由 ``matrix_service`` 返回）。
+        """
         from runtime.matrix_service import execute_materialize_matrix
 
         return execute_materialize_matrix(
@@ -786,7 +946,18 @@ class FactorEngine:
         lookback_extra: int = 5,
         market: str | None = None,
     ) -> dict[str, Any]:
-        """数据列更新事件 → 受影响因子增量重算计划。"""
+        """根据数据列更新事件生成受影响因子的增量重算计划。
+
+        Args:
+            event: 数据更新事件对象（含列名、时间范围等）。
+            lake_root: 因子湖根目录（查 catalog 依赖）。
+            end_date: 增量输出上界。
+            lookback_extra: lookback 缓冲 bar 数。
+            market: 市场标识。
+
+        Returns:
+            增量计划字典（受影响因子列表及窗口）。
+        """
         from runtime.incremental_event_service import plan_incremental_from_event
 
         return plan_incremental_from_event(
@@ -808,7 +979,20 @@ class FactorEngine:
         dry_run: bool = False,
         **materialize_kwargs: Any,
     ) -> dict[str, Any]:
-        """数据列更新事件 → 受影响因子自动增量物化。"""
+        """根据数据列更新事件自动增量物化受影响因子。
+
+        Args:
+            event: 数据更新事件对象。
+            lake_root: 因子湖根目录。
+            end_date: 增量输出上界。
+            lookback_extra: lookback 缓冲 bar 数。
+            market: 市场标识。
+            dry_run: 为真时仅生成计划不落盘。
+            **materialize_kwargs: 传递给 ``materialize_incremental`` 的参数。
+
+        Returns:
+            物化结果或 dry_run 计划字典。
+        """
         from runtime.incremental_event_service import materialize_incremental_from_event
 
         return materialize_incremental_from_event(
@@ -830,7 +1014,10 @@ class FactorEngine:
         profile: str | None = None,
         pipeline_overrides: Any | None = None,
     ) -> dict[str, Any]:
-        """多 YAML 批量增量物化；逐配置 resolve + materialize_incremental。"""
+        """从多个 YAML 配置文件批量增量物化。
+
+        逐配置解析 incremental 参数并调用 ``materialize_incremental``。
+        """
         from runtime.incremental_event_service import (
             materialize_incremental_many_from_config,
         )
@@ -854,7 +1041,17 @@ class FactorEngine:
         description: str | None = None,
         expression: str | None = None,
     ):
-        """一键从配置文件执行因子并落盘到因子湖（Parquet）。"""
+        """从 YAML 配置文件执行单因子并物化到因子湖（Parquet）。
+
+        Args:
+            config_path: YAML 配置文件路径。
+            lake_root: 覆盖配置中的因子湖根目录。
+            factor_id: 覆盖落盘因子 ID。
+            author/frequency/description/expression: 覆盖元数据字段。
+
+        Returns:
+            含 ``materialization`` 及 ``config`` 的执行结果字典。
+        """
         logger.info("开始从配置物化因子: %s", config_path)
         engine, factor, config = cls.from_config(config_path)
         from runtime.config_runtime import resolve_materialize_kwargs
@@ -885,7 +1082,20 @@ class FactorEngine:
         lookback_extra: int | None = None,
         recompute_tail_bars: int | None = None,
     ):
-        """从 YAML 配置执行增量物化（watermark + lookback + upsert）。"""
+        """从 YAML 配置文件执行增量物化（watermark + lookback + upsert）。
+
+        Args:
+            config_path: YAML 配置文件路径。
+            lake_root: 覆盖因子湖根目录。
+            factor_id: 覆盖落盘因子 ID。
+            since: 显式增量起点（覆盖 watermark）。
+            end_date: 输出区间上界。
+            lookback_extra: lookback 缓冲 bar 数。
+            recompute_tail_bars: 输出 tail 重算 bar 数。
+
+        Returns:
+            含 ``materialization``、``incremental`` 及 ``config`` 的结果字典。
+        """
         logger.info("开始从配置增量物化因子: %s", config_path)
         engine, factor, config = cls.from_config(config_path)
         from runtime.config_runtime import resolve_materialize_kwargs
@@ -912,6 +1122,7 @@ class FactorEngine:
         shared_result_cache: dict[str, Any] | None = None,
         perf: PerfConfig | None = None,
     ) -> ExecutionContext:
+        """构造单次执行上下文，注入缓存会话与 query budget。"""
         from cache.session import ExecutionCacheSession
         from storage.long_table_source import LongTableDataSource
 
@@ -1060,10 +1271,29 @@ class FactorEngine:
         pit_enforce: bool = False,
         pit_forbid_forward_fill: bool = False,
     ):
-        """编译后调用 ``backend.execute``，返回 factor、analysis、plan、result。
+        """编译并执行单因子，返回完整运行上下文。
 
-        ``auto_warmup=True`` 时根据 lookback 向前扩展数据源加载窗口，计算后
-        ``trim_warmup`` 为真则裁剪回用户请求的 start_date。
+        可选跳过重复编译（传入已有 ``plan`` / ``analysis``）。支持 input_dq、
+        auto_warmup（按 lookback 扩展加载窗口后裁剪）、PIT 审计及 production
+        fast path 运行时校验。
+
+        Args:
+            factor: 待执行因子。
+            plan: 可选预编译逻辑计划。
+            analysis: 可选预编译分析结果。
+            input_dq_check: 是否校验输入列质量。
+            input_dq_strict: 输入 DQ 失败是否中断。
+            input_dq_thresholds: 输入 DQ 阈值。
+            auto_warmup: 是否自动扩展 warmup 加载窗口。
+            trim_warmup: warmup 后是否裁剪回用户请求的 ``start_date``。
+            market: 市场标识（warmup 日历）。
+            pit_enforce: 是否强制 PIT 安全审计（编译阶段）。
+            pit_forbid_forward_fill: PIT 是否禁止前向填充。
+
+        Returns:
+            含 ``factor``、``analysis``、``plan``、``result`` 的字典；可选键包括
+            ``input_dq``、``run_window``、``backend_path``、``production_pandas_fallbacks``
+            及 SQL/Polars 路径诊断字段。
         """
         started_at = time.perf_counter()
         logger.info("开始执行因子 '%s'", factor.name)
@@ -1283,7 +1513,36 @@ class FactorEngine:
         storage_format: str = "long",
         partition_columns: list[str] | None = None,
     ):
-        """执行单因子并落盘（Parquet / staging / ClickHouse 或多目标组合）。"""
+        """执行单因子并将结果物化到因子湖（及可选 ClickHouse）。
+
+        内部先 ``run`` 再调用 ``materialize_service.execute_materialize``。
+        ``write_target`` 支持 ``local``、``staging``、``clickhouse``、
+        ``staging_clickhouse`` 等组合目标。
+
+        Args:
+            factor: 待物化因子。
+            lake_root: 因子湖根目录。
+            factor_id: 落盘因子 ID。
+            author/frequency/description/expression: 元数据。
+            dq_check/dq_strict/dq_thresholds: 产出 DQ 门禁。
+            input_dq_check/input_dq_strict/input_dq_thresholds: 输入 DQ。
+            data_source_config: 数据源配置快照（lineage）。
+            write_metadata: 是否写入 run 元数据。
+            resume_materialize: 断点续写分区。
+            isolate_partition_failures: 单分区失败隔离。
+            auto_warmup/trim_warmup/market: 传递给 ``run`` 的 warmup 参数。
+            preserve_invalid_rows: 保留 inf 为 ``is_valid=0``。
+            value_dtype: 落盘值 dtype。
+            write_target: 写入目标。
+            pit_enforce/pit_forbid_forward_fill: PIT 参数。
+            ch_* / clickhouse_*: ClickHouse 连接参数。
+            staging_dataset: staging 数据集名。
+            storage_format: Parquet 格式（``long`` 等）。
+            partition_columns: 自定义分区列。
+
+        Returns:
+            ``run`` 输出字典，附加 ``materialization`` 落盘摘要。
+        """
         target = str(write_target or "local").lower()
         logger.info("开始落盘因子 '%s'，write_target=%s", factor.name, target)
         output = self.run(
@@ -1370,7 +1629,30 @@ class FactorEngine:
         timestamp_column: str | None = None,
         instrument_column: str | None = None,
     ):
-        """执行因子并写入 ClickHouse（catalog + watermark + CH，与 materialize 同构）。"""
+        """执行因子并写入 ClickHouse（catalog + watermark + CH）。
+
+        等价于 ``materialize(..., write_target=\"clickhouse\")``，返回结构
+        额外含 ``clickhouse_materialization`` 摘要。
+
+        Args:
+            factor: 待物化因子。
+            factor_id: 落盘因子 ID。
+            table: ClickHouse 表名。
+            factor_version: 因子版本号。
+            author/frequency/description/expression: 元数据。
+            data_source_config: 数据源配置快照。
+            input_dq_* / dq_*: 输入与产出 DQ 参数。
+            auto_warmup/trim_warmup/market: warmup 参数。
+            preserve_invalid_rows/value_dtype: 落盘格式参数。
+            pit_enforce/pit_forbid_forward_fill: PIT 参数。
+            ch_*: ClickHouse 连接参数。
+            ensure_table: 是否自动建表。
+            lake_root/staging_dataset: Parquet 侧参数（双写场景）。
+            timestamp_column/instrument_column: 已废弃，请配置 ClickHouseMaterializer。
+
+        Returns:
+            含 ``materialization`` 与 ``clickhouse_materialization`` 的结果字典。
+        """
         if timestamp_column is not None or instrument_column is not None:
             logger.warning(
                 "materialize_clickhouse 的 timestamp_column/instrument_column 已废弃；"
@@ -1424,7 +1706,14 @@ class FactorEngine:
 
     @classmethod
     def materialize_clickhouse_from_config(cls, config_path: str | Path):
-        """从 YAML 配置执行因子并写入 ClickHouse。"""
+        """从 YAML 配置文件执行因子并写入 ClickHouse。
+
+        Args:
+            config_path: YAML 配置文件路径。
+
+        Returns:
+            含 ``clickhouse_materialization`` 的结果字典。
+        """
         engine, factor, config = cls.from_config(config_path)
         from runtime.config_runtime import resolve_materialize_kwargs
 
@@ -1471,10 +1760,25 @@ class FactorEngine:
         pit_enforce: bool = False,
         pit_forbid_forward_fill: bool = False,
     ) -> dict[str, Any]:
-        """多因子求值：先执行 ``DAGPlan.shared_nodes``，再各因子根；含 ``plan_ref`` 时必须用此入口。
+        """多因子求值：先执行共享子树，再各因子根。
 
-        ``auto_warmup`` / ``pit_enforce`` 需按因子逐个 ``run()``（lookback / PIT 编译差异）。
-        ``input_dq_check`` 在快路径上合并全量依赖列后批量校验，仍保留 CSE。
+        编译多因子 DAG（可选 CSE）后，先物化 ``DAGPlan.shared_nodes`` 到
+        ``shared_result_cache``，再按依赖图顺序执行各因子根。含 ``plan_ref``
+        节点的计划必须使用此入口而非多次 ``run``。
+
+        ``auto_warmup`` 或 ``pit_enforce`` 为真时退化为逐因子 ``run()``。
+
+        Args:
+            factors: 待求值因子序列。
+            perf: 性能配置。
+            enable_cse: 是否启用 CSE。
+            auto_warmup/trim_warmup/market: warmup 参数。
+            input_dq_check/input_dq_strict/input_dq_thresholds: 输入 DQ。
+            pit_enforce/pit_forbid_forward_fill: PIT 参数。
+
+        Returns:
+            含 ``results``、``dag``、``analyses`` 及可选 ``batch_graph``、
+            ``input_dq``、``backend_paths``、``plan_costs`` 等的字典。
         """
         from runtime.batch_service import execute_run_many
 
@@ -1509,7 +1813,22 @@ class FactorEngine:
         pit_enforce: bool = False,
         pit_forbid_forward_fill: bool = False,
     ) -> dict[str, Any]:
-        """在 ``run_many`` 基础上对**各因子根**并行求值（共享子式仍先串行算完）。"""
+        """多因子求值：共享子树串行、因子根并行。
+
+        在 ``run_many`` 基础上，同一依赖层内的因子根通过 joblib 线程池并行。
+        共享子树仍必须先串行物化。
+
+        Args:
+            factors: 待求值因子序列。
+            n_jobs: 并行 worker 数；缺省取 ``perf.max_workers``。
+            其余参数同 ``run_many``。
+
+        Returns:
+            与 ``run_many`` 结构相同的批跑结果字典。
+
+        Raises:
+            ImportError: 未安装 joblib。
+        """
         from runtime.batch_service import execute_run_many_parallel
 
         return execute_run_many_parallel(
@@ -1529,10 +1848,17 @@ class FactorEngine:
         )
 
     def with_data_source(self, data_source, *, fresh_cache: bool = False) -> FactorEngine:
-        """返回共享 backend 的新引擎实例（用于增量时间窗口）。
+        """返回共享 backend 的新引擎实例，用于切换或窄化数据源。
 
-        ``fresh_cache=True`` 时丢弃内存层子计划缓存；磁盘持久化缓存按新
-        ``data_scope`` 隔离，仍可命中同窗口历史结果。
+        典型场景：增量物化时按时间窗口 narrow 数据源。
+
+        Args:
+            data_source: 新的数据源实例。
+            fresh_cache: 是否丢弃内存层子计划缓存；磁盘持久化缓存按新
+                ``data_scope`` 隔离，仍可命中同窗口历史结果。
+
+        Returns:
+            新的 ``FactorEngine`` 实例（共享 ``backend`` 与 ``run_mode``）。
         """
         if self.cache is None:
             return FactorEngine(
@@ -1590,7 +1916,27 @@ class FactorEngine:
         auto_warmup: bool = False,
         trim_warmup: bool = True,
     ):
-        """增量执行：按 watermark 加载 lookback 窗口，仅输出/落盘 tail 区间。"""
+        """增量执行单因子：按 watermark 加载 lookback 窗口，仅输出 tail 区间。
+
+        从 catalog 读取 watermark，构建 ``IncrementalPlan`` 后窄化数据源时间
+        窗口，执行 ``run`` 并按计划裁剪结果。
+
+        Args:
+            factor: 待执行因子。
+            factor_id: catalog 因子 ID；缺省用 ``factor.name``。
+            since: 显式增量起点（覆盖 watermark）。
+            end_date: 输出区间上界。
+            lookback_extra: lookback 缓冲 bar 数。
+            recompute_tail_bars: 输出 tail 重算 bar 数。
+            lake_root: 因子湖根目录（查 watermark）。
+            input_dq_check/input_dq_strict/input_dq_thresholds: 输入 DQ。
+            market: 市场标识。
+            pit_enforce/pit_forbid_forward_fill: PIT 参数（编译阶段生效）。
+            auto_warmup/trim_warmup: warmup 参数（仅全量增量时生效 auto_warmup）。
+
+        Returns:
+            含 ``result``（已裁剪）、``incremental`` 计划及 ``analysis``、``plan`` 的字典。
+        """
         from cleaned_operators.operator_policy import infer_source_bar_freq
         from runtime.incremental import (
             build_incremental_plan,
@@ -1723,7 +2069,34 @@ class FactorEngine:
         ch_ensure_table: bool = True,
         staging_dataset: str = "factor_lake_staging",
     ):
-        """增量执行 + 落盘 upsert + lineage（支持 staging_clickhouse / clickhouse 双写）。"""
+        """增量执行单因子并物化（watermark + lookback + upsert）。
+
+        先 ``run_incremental`` 获取 tail 结果，再调用 ``execute_materialize``
+        落盘；空结果跳过写入。支持 ``staging_clickhouse`` / ``clickhouse`` 双写。
+
+        Args:
+            factor: 待物化因子。
+            factor_id: catalog 因子 ID。
+            since/end_date/lookback_extra/recompute_tail_bars: 增量窗口参数。
+            lake_root: 因子湖根目录。
+            dq_check/dq_strict/dq_thresholds: 产出 DQ。
+            author/frequency/description/expression: 元数据。
+            input_dq_check/input_dq_strict/input_dq_thresholds: 输入 DQ。
+            data_source_config: 数据源配置快照。
+            write_metadata: 是否写入 run 元数据。
+            resume_materialize/isolate_partition_failures: 分区写入策略。
+            market: 市场标识。
+            preserve_invalid_rows/value_dtype: 落盘格式。
+            write_target: 写入目标。
+            pit_enforce/pit_forbid_forward_fill: PIT 参数。
+            auto_warmup/trim_warmup: warmup 参数。
+            clickhouse_* / ch_*: ClickHouse 参数。
+            staging_dataset: staging 数据集名。
+
+        Returns:
+            含 ``materialization`` 与 ``incremental`` 的结果字典；无新数据时
+            ``materialization.skipped=True``。
+        """
         target = str(write_target or "local").lower()
         output = self.run_incremental(
             factor,

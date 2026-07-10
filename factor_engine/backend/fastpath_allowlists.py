@@ -6,6 +6,7 @@ from cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS, build_op
 
 
 def _resolve(canon: str) -> str:
+    """将别名解析为 canonical 名称。"""
     from cleaned_operators.registry import OperatorRegistry
 
     return OperatorRegistry._aliases.get(canon, canon)
@@ -70,10 +71,11 @@ def research_fastpath_allowlist() -> frozenset[str]:
         ok = False
         for check in candidates:
             row = build_fastpath_coverage_row(check)
+            tier = row.polars_long_tier
             if (
                 row.polars_long_native_production_safe
-                or (row.duckdb_sql_production_safe and row.sql_emitter_ok)
-                or row.polars_long_tier == "passthrough"
+                or tier in {"native", "python_rolling", "passthrough"}
+                or (row.sql_emitter_ok and row.sql_implemented)
             ):
                 ok = True
                 break
@@ -84,15 +86,40 @@ def research_fastpath_allowlist() -> frozenset[str]:
 
 
 def is_research_allowed(canon: str) -> bool:
+    """判断 canonical 是否在研究 allowlist 内（有 runtime 实现）。
+
+    参数:
+        canon: 算子 canonical 名称或别名。
+
+    返回:
+        是否允许在研究模式下使用。
+    """
     return _resolve(canon) in research_allowlist()
 
 
 def is_production_allowed(canon: str) -> bool:
+    """判断 canonical 是否允许 production 运行。
+
+    参数:
+        canon: 算子 canonical 名称或别名。
+
+    返回:
+        算子 spec 中 ``allow_in_production`` 是否为真。
+    """
     spec = build_operator_spec(_resolve(canon))
     return bool(spec and spec.allow_in_production)
 
 
 def is_production_fastpath_allowed(canon: str, *, strict: bool = True) -> bool:
+    """判断 canonical 是否可走 production fast path。
+
+    参数:
+        canon: 算子 canonical 名称或别名。
+        strict: 是否使用 strict 门禁规则。
+
+    返回:
+        对最小 plan 执行 fastpath 门禁后是否通过。
+    """
     from backend.production_fastpath_gate import check_production_fastpath_plan_ops
     from backend.sql_pushdown.plan_fixtures import minimal_plan
 

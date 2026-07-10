@@ -1,4 +1,8 @@
-"""多因子批跑编排：run_many / run_many_parallel 核心逻辑。"""
+"""多因子批跑编排：run_many / run_many_parallel 核心逻辑。
+
+本模块实现 ``FactorEngine.run_many`` 与 ``run_many_parallel`` 的执行体，
+负责 CSE 共享子树物化、批量 input_dq、依赖图分层调度及 production 审计。
+"""
 
 from __future__ import annotations
 
@@ -42,12 +46,28 @@ def _materialize_shared_subplan(
 
 
 def _clear_polars_long_shared_sid(ctx: Any) -> None:
+    """清除执行上下文中 Polars long 共享子树的 sid 标记。"""
     runtime = dict(getattr(ctx, "runtime_stats", None) or {})
     runtime.pop("polars_long_shared_sid", None)
     ctx.runtime_stats = runtime  # type: ignore[attr-defined]
 
 
-def _execute_root_with_path(backend: Any, plan: Any, ctx: Any) -> tuple[Any, dict[str, Any]]:
+def _execute_root_with_path(
+    backend: Any,
+    plan: Any,
+    ctx: Any,
+    *,
+    run_mode: str | None = None,
+    factor_name: str = "",
+) -> tuple[Any, dict[str, Any]]:
+    """执行单个因子根计划并快照 backend 路径摘要。
+
+    为每个因子根创建独立 ``runtime_stats`` 副本，避免路径统计互相污染；
+    production 模式下校验 fast path runtime 合规性。
+
+    Returns:
+        ``(result, backend_path_dict)`` 元组。
+    """
     from dataclasses import replace
 
     from backend.path_summary import snapshot_backend_path
@@ -70,10 +90,13 @@ def _execute_root_with_path(backend: Any, plan: Any, ctx: Any) -> tuple[Any, dic
     local_ctx = replace(ctx, runtime_stats=local_runtime)
     result = backend.execute(plan, local_ctx)
     path = snapshot_backend_path(getattr(local_ctx, "runtime_stats", None))
+    audit_ctx = f"run_many:{factor_name}" if factor_name else "run_many"
+    assert_production_fastpath_runtime(local_ctx, mode=run_mode, context=audit_ctx)
     return result, path
 
 
 def _attach_batch_backend_paths(batch_out: dict[str, Any], paths: dict[str, dict[str, Any]]) -> None:
+    """将各因子的 backend 路径写入批跑输出并生成汇总。"""
     if not paths:
         return
     from backend.path_summary import summarize_batch_backend_paths
@@ -91,6 +114,10 @@ def _maybe_prepare_batch_data(
     input_dq_strict: bool,
     input_dq_thresholds,
 ) -> Any | None:
+    """合并全量依赖列后批量 prefetch 与 input_dq（run_many 快路径）。
+
+    若计划可走 fully_sql / native_scan 则跳过 prefetch。
+    """
     all_cols: set[str] = set()
     for analysis in analyses.values():
         all_cols |= analysis.referenced_columns
@@ -127,7 +154,32 @@ def execute_run_many(
     pit_enforce: bool = False,
     pit_forbid_forward_fill: bool = False,
 ) -> dict[str, Any]:
-    """``FactorEngine.run_many`` 实现体。"""
+    """``FactorEngine.run_many`` 实现体：多因子 DAG 串行求值。
+
+    流程：编译多因子 DAG（可选 CSE）→ 批量 prefetch/input_dq →
+    物化 ``shared_nodes`` → 按依赖图分层执行各因子根。
+
+    ``auto_warmup`` 或 ``pit_enforce`` 为真时退化为逐因子 ``run()``，
+    因 lookback / PIT 编译差异无法共享快路径。
+
+    Args:
+        engine: 因子引擎实例。
+        factors: 待求值因子序列。
+        perf: 性能配置；缺省从环境变量加载。
+        enable_cse: 是否启用公共子表达式消除。
+        auto_warmup: 是否自动扩展 warmup 窗口。
+        trim_warmup: warmup 后是否裁剪回用户请求区间。
+        market: 市场标识（warmup 日历）。
+        input_dq_check: 是否校验输入列质量。
+        input_dq_strict: 输入 DQ 失败是否中断。
+        input_dq_thresholds: 输入 DQ 阈值。
+        pit_enforce: 是否强制 PIT 安全审计。
+        pit_forbid_forward_fill: PIT 审计是否禁止前向填充。
+
+    Returns:
+        含 ``results``、``dag``、``analyses`` 及可选 ``batch_graph``、
+        ``input_dq``、``backend_paths`` 等的字典。
+    """
     assert_production_run_flags(
         mode=engine.run_mode,
         input_dq_check=input_dq_check,
@@ -199,12 +251,16 @@ def execute_run_many(
             for name in layer:
                 fp = root_by_name.get(name)
                 if fp is not None:
-                    result, path = _execute_root_with_path(engine.backend, fp.root, ctx)
+                    result, path = _execute_root_with_path(
+                        engine.backend, fp.root, ctx, run_mode=engine.run_mode, factor_name=name
+                    )
                     out[name] = result
                     backend_paths[name] = path
         for fp in dag.roots:
             if fp.factor_name not in out:
-                result, path = _execute_root_with_path(engine.backend, fp.root, ctx)
+                result, path = _execute_root_with_path(
+                    engine.backend, fp.root, ctx, run_mode=engine.run_mode, factor_name=fp.factor_name
+                )
                 out[fp.factor_name] = result
                 backend_paths[fp.factor_name] = path
     batch_out: dict[str, Any] = {
@@ -265,7 +321,23 @@ def execute_run_many_parallel(
     pit_enforce: bool = False,
     pit_forbid_forward_fill: bool = False,
 ) -> dict[str, Any]:
-    """``FactorEngine.run_many_parallel`` 实现体。"""
+    """``FactorEngine.run_many_parallel`` 实现体：根节点层内并行。
+
+    共享子树仍串行物化；同一依赖层内的因子根通过 joblib 线程池并行。
+    ``auto_warmup`` / ``pit_enforce`` 为真时退化为 ``execute_run_many``。
+
+    Args:
+        engine: 因子引擎实例。
+        factors: 待求值因子序列。
+        n_jobs: 并行 worker 数；缺省取 ``perf.max_workers``。
+        其余参数同 ``execute_run_many``。
+
+    Returns:
+        与 ``execute_run_many`` 结构相同的批跑结果字典。
+
+    Raises:
+        ImportError: 未安装 joblib。
+    """
     assert_production_run_flags(
         mode=engine.run_mode,
         input_dq_check=input_dq_check,
@@ -319,7 +391,9 @@ def execute_run_many_parallel(
     root_by_name = {fp.factor_name: fp for fp in dag.roots}
 
     def _one(fp):
-        result, path = _execute_root_with_path(engine.backend, fp.root, ctx)
+        result, path = _execute_root_with_path(
+            engine.backend, fp.root, ctx, run_mode=engine.run_mode, factor_name=fp.factor_name
+        )
         return fp.factor_name, result, path
 
     with routing_execution_scope(perf):
@@ -334,7 +408,9 @@ def execute_run_many_parallel(
             fps = [root_by_name[n] for n in layer if n in root_by_name]
             if len(fps) <= 1:
                 for fp in fps:
-                    result, path = _execute_root_with_path(engine.backend, fp.root, ctx)
+                    result, path = _execute_root_with_path(
+                        engine.backend, fp.root, ctx, run_mode=engine.run_mode, factor_name=name
+                    )
                     results[fp.factor_name] = result
                     backend_paths[fp.factor_name] = path
             else:
@@ -346,7 +422,9 @@ def execute_run_many_parallel(
                     backend_paths[name] = path
         for fp in dag.roots:
             if fp.factor_name not in results:
-                result, path = _execute_root_with_path(engine.backend, fp.root, ctx)
+                result, path = _execute_root_with_path(
+                    engine.backend, fp.root, ctx, run_mode=engine.run_mode, factor_name=fp.factor_name
+                )
                 results[fp.factor_name] = result
                 backend_paths[fp.factor_name] = path
     parallel_out: dict[str, Any] = {

@@ -11,11 +11,18 @@ FastpathBackend = Literal["duckdb_sql", "polars_long_native"]
 
 @dataclass(frozen=True)
 class FastpathGateResult:
+    """Production fast path 门禁检查结果。"""
+
     ok: bool
     violations: tuple[str, ...]
     ops_checked: tuple[str, ...]
 
     def to_dict(self) -> dict[str, Any]:
+        """序列化为可 JSON 化的字典。
+
+        返回:
+            含 ok、violations、ops_checked 的字典。
+        """
         return {
             "ok": self.ok,
             "violations": list(self.violations),
@@ -39,6 +46,7 @@ def fastpath_gate_strict(*, strict: bool | None = None) -> bool:
 
 
 def _iter_plan_ops(plan: Any) -> list[str]:
+    """深度优先遍历 plan，收集去重后的 canonical 算子列表。"""
     from cleaned_operators.registry import OperatorRegistry
 
     seen: set[str] = set()
@@ -60,6 +68,7 @@ def _iter_plan_ops(plan: Any) -> list[str]:
 
 
 def _duckdb_fastpath_ok(canon: str) -> bool:
+    """判断 canonical 是否满足 DuckDB production-safe 且 emitter 可编译。"""
     from backend.operator_capability import _sql_emitter_ok
     from backend.sql_tiers import effective_sql_production_safe
 
@@ -67,6 +76,7 @@ def _duckdb_fastpath_ok(canon: str) -> bool:
 
 
 def _polars_native_fastpath_ok(canon: str) -> bool:
+    """判断 canonical 是否满足 PolarsLong native production-safe。"""
     from backend.polars_long_production import is_polars_long_native_production_safe
 
     return is_polars_long_native_production_safe(canon)
@@ -108,7 +118,7 @@ def check_production_fastpath_plan_ops(
             continue
 
         tier = infer_polars_long_tier(canon)
-        if is_strict and tier in {"map_groups", "registry", "passthrough"}:
+        if is_strict and tier in {"map_groups", "registry", "passthrough", "python_rolling"}:
             violations.append(f"{canon}: polars_long_{tier} 不可 production fast path（strict）")
             continue
 
@@ -150,9 +160,32 @@ def check_production_fastpath_plan_ops(
 
 def check_production_fastpath_formula_ops(
     formula: str,
+    *,
+    use_real_plan: bool = True,
     **kwargs: Any,
 ) -> FastpathGateResult:
-    """解析公式并检查 fast path（需 planner 可用时用 plan 版）。"""
+    """解析公式并检查 fast path。
+
+    ``use_real_plan=True``（默认）时编译真实 PlanNode；False 时仅 AST+minimal_plan 快速提示。
+    """
+    if use_real_plan:
+        try:
+            from api.dsl_parser import parse_expr
+            from ir.analyzer import Analyzer
+            from planner.lowerer import Lowerer
+            from planner.optimizer import Optimizer
+
+            expr = parse_expr(str(formula or ""))
+            analysis = Analyzer().lower(expr)
+            plan = Optimizer().optimize(Lowerer().to_logical_plan(analysis.ir))
+            return check_production_fastpath_plan_ops(plan, **kwargs)
+        except Exception as exc:
+            return FastpathGateResult(
+                ok=False,
+                violations=(f"真实 plan 编译失败: {exc}",),
+                ops_checked=(),
+            )
+
     import ast
 
     from cleaned_operators.registry import OperatorRegistry
@@ -204,6 +237,8 @@ def audit_runtime_fastpath_violations(runtime: dict[str, Any] | None) -> list[st
         violations.append("polars_expr_fallback")
     if r.get("used_polars_long_map_groups"):
         violations.append("used_polars_long_map_groups")
+    if r.get("used_polars_long_python_rolling"):
+        violations.append("used_polars_long_python_rolling")
     if r.get("used_polars_long_registry"):
         violations.append("used_polars_long_registry")
     if r.get("used_polars_long_passthrough"):

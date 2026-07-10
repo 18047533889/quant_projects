@@ -18,7 +18,7 @@ def test_benchmark_cost_affects_fastpath_coverage():
     load_all()
     register_sql_backends()
     row = build_fastpath_coverage_row("ts_mean")
-    assert row.benchmark_available is True
+    assert row.benchmark_available is False
 
 
 def test_backend_cost_baseline_json_freshness():

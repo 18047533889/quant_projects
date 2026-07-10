@@ -24,6 +24,7 @@ class ExpressionCache:
         return self._store
 
     def get(self, sid: str) -> Any | None:
+        """按 CSE 子树 id 取共享结果；命中/未命中更新 stats。"""
         if sid in self._store:
             if self._stats is not None:
                 self._stats.record_hit(CacheLayer.L0_CSE)
@@ -33,6 +34,7 @@ class ExpressionCache:
         return None
 
     def set(self, sid: str, value: Any) -> None:
+        """写入 CSE 共享子树结果（Series 或 LazyFrame）。"""
         self._store[sid] = value
 
     def __len__(self) -> int:

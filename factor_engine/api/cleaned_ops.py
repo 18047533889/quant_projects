@@ -20,8 +20,20 @@ from expr.cleaned_call import CleanedCall
 
 
 def make_cleaned_call_factory(op_name: str) -> Callable[..., CleanedCall]:
-    """为算子名 ``op_name`` 生成 DSL 工厂，例如 ``SMA(col('close'), 20)``。"""
+    """为算子名 ``op_name`` 生成 DSL 工厂，例如 ``SMA(col('close'), 20)``。
+
+    Parameters
+    ----------
+    op_name : str
+        cleaned 算子 canonical 名或别名（须在 ``OperatorRegistry`` 中已实现）。
+
+    Returns
+    -------
+    Callable[..., CleanedCall]
+        调用后返回 ``CleanedCall(op=op_name, ...)``，不执行数值计算。
+    """
     def _factory(*args: Any, **kwargs: Any) -> CleanedCall:
+        """构造 ``CleanedCall`` 节点；子表达式经 ``ensure_expr`` 包装。"""
         kw_pairs = tuple(
             (k, v if isinstance(v, (int, float, str, bool)) or v is None else ensure_expr(v))
             for k, v in kwargs.items()

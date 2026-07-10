@@ -7,6 +7,14 @@ from planner.plan_hash import structural_key
 
 
 def deep_copy_plan(node: PlanNode) -> PlanNode:
+    """深拷贝整棵 ``PlanNode`` 子树。
+
+    参数：
+        node: 待拷贝的根节点
+
+    返回：
+        与输入同形、互不共享子节点引用的新树
+    """
     return PlanNode(
         op=node.op,
         inputs=[deep_copy_plan(c) for c in node.inputs],
@@ -16,9 +24,11 @@ def deep_copy_plan(node: PlanNode) -> PlanNode:
 
 
 def _postorder(root: PlanNode) -> list[PlanNode]:
+    """后序遍历计划树，返回节点列表。"""
     out: list[PlanNode] = []
 
     def visit(n: PlanNode) -> None:
+        """后序递归访问单节点。"""
         for c in n.inputs:
             visit(c)
         out.append(n)
@@ -28,12 +38,18 @@ def _postorder(root: PlanNode) -> list[PlanNode]:
 
 
 def apply_cse(roots: list[PlanNode]) -> tuple[list[PlanNode], dict[str, PlanNode]]:
-    """对多棵根计划做 CSE。
+    """对多棵根计划做结构 CSE。
 
     出现次数大于 1 的结构键对应子树放入 ``shared_nodes``，各根中该子树一律替换为
     ``op="plan_ref"``、``attrs={"sid": <结构键>}``。
 
     结构键为 :func:`planner.plan_hash.structural_key` 的 JSON 串，可能较长但唯一稳定。
+
+    参数：
+        roots: 多因子逻辑计划根节点列表
+
+    返回：
+        ``(改写后的根列表, shared_nodes 字典)``，其中 shared_nodes 的键为结构 sid
     """
     if not roots:
         return [], {}
@@ -55,6 +71,7 @@ def apply_cse(roots: list[PlanNode]) -> tuple[list[PlanNode], dict[str, PlanNode
             shared_nodes[k] = deep_copy_plan(first_seen[k])
 
     def rewrite(n: PlanNode, memo: dict[int, str]) -> PlanNode:
+        """将重复子树替换为 ``plan_ref`` 引用。"""
         k = structural_key(n, memo)
         if counts.get(k, 0) > 1:
             return PlanNode(op="plan_ref", attrs={"sid": k}, inputs=[])

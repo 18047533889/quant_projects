@@ -20,6 +20,7 @@ class LazyColumnBundle:
     _materialized: dict[str, Any] = field(default_factory=dict)
 
     def missing_physical(self, physical: list[str]) -> list[str]:
+        """返回 bundle 中缺失的物理列名列表。"""
         have = set(self.physical_columns)
         return [c for c in physical if c not in have]
 

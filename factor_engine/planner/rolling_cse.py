@@ -27,17 +27,33 @@ _ROLLING_ATTR_IGNORE = frozenset({"min_periods", "min_count", "ddof"})
 
 
 def canonical_rolling_op(op: str) -> str:
+    """将 rolling 算子名映射为 canonical 形式。
+
+    参数：
+        op: 原始算子名
+
+    返回：
+        canonical 算子名；无别名时返回原 op
+    """
     return ROLLING_OP_CANONICAL.get(op, op)
 
 
 def _second_col_ref(node: PlanNode) -> str | None:
+    """提取双输入 rolling 算子第二路输入的列名。"""
     if len(node.inputs) < 2:
         return None
     return _first_col_ref(node.inputs[1])
 
 
 def rolling_semantic_key(node: PlanNode) -> str | None:
-    """``(canonical_op, col[, col2], window)`` 稳定语义键；非 rolling 返回 ``None``。"""
+    """``(canonical_op, col[, col2], window)`` 稳定语义键；非 rolling 返回 ``None``。
+
+    参数：
+        node: 候选 rolling 计划节点
+
+    返回：
+        JSON 语义键字符串；非 rolling 或无法解析主列时返回 ``None``
+    """
     if node.op not in ROLLING_OPS:
         return None
     op = canonical_rolling_op(node.op)
@@ -60,9 +76,11 @@ def rolling_semantic_key(node: PlanNode) -> str | None:
 
 
 def _postorder(root: PlanNode) -> list[PlanNode]:
+    """后序遍历计划树，返回节点列表。"""
     out: list[PlanNode] = []
 
     def visit(n: PlanNode) -> None:
+        """后序递归访问单节点。"""
         for c in n.inputs:
             visit(c)
         out.append(n)
@@ -75,7 +93,16 @@ def apply_rolling_cse(
     roots: list[PlanNode],
     existing_shared: dict[str, PlanNode] | None = None,
 ) -> tuple[list[PlanNode], dict[str, PlanNode]]:
-    """结构 CSE 之后按 rolling 语义键合并仍可共享的子树。"""
+    """结构 CSE 之后按 rolling 语义键合并仍可共享的子树。
+
+    参数：
+        roots: 多因子逻辑计划根节点列表
+        existing_shared: 结构 CSE 已产出的 shared_nodes（在此基础上扩展）
+
+    返回：
+        ``(改写后的根列表, 更新后的 shared_nodes)``；
+        语义相同但结构不同的 rolling 子树会被统一为 ``plan_ref``
+    """
     if not roots:
         return [], dict(existing_shared or {})
 
@@ -111,6 +138,7 @@ def apply_rolling_cse(
         return roots, shared
 
     def rewrite(n: PlanNode, memo: dict[int, str]) -> PlanNode:
+        """按 rolling 语义键将等价子树统一为 ``plan_ref``。"""
         sem = rolling_semantic_key(n)
         if sem and sem in sem_to_sid:
             sid = sem_to_sid[sem]

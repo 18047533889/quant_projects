@@ -9,6 +9,7 @@ from planner.logical_plan import PlanNode
 
 
 def _jsonable(v: Any) -> Any:
+    """将 attrs 值转为可 JSON 序列化的稳定表示。"""
     if isinstance(v, (str, int, float, bool)) or v is None:
         return v
     if isinstance(v, (list, tuple)):
@@ -19,7 +20,15 @@ def _jsonable(v: Any) -> Any:
 
 
 def structural_key(node: PlanNode, memo: dict[int, str] | None = None) -> str:
-    """递归结构键；同一子树形状得到相同字符串。"""
+    """递归计算子树结构键；同一子树形状得到相同字符串。
+
+    参数：
+        node: 待哈希的计划节点
+        memo: 可选 ``id(node) → key`` 缓存，避免重复遍历共享引用
+
+    返回：
+        稳定 JSON 字符串，编码 ``op``、排序后的 ``attrs`` 与子节点键列表
+    """
     if memo is None:
         memo = {}
     nid = id(node)
@@ -37,5 +46,12 @@ def structural_key(node: PlanNode, memo: dict[int, str] | None = None) -> str:
 
 
 def plan_cache_key(node: PlanNode) -> str:
-    """与 :func:`structural_key` 等价；别名用于执行期缓存命名。"""
+    """与 :func:`structural_key` 等价；别名用于执行期缓存命名。
+
+    参数：
+        node: 待缓存的子计划根节点
+
+    返回：
+        结构哈希字符串，可作为 SQL 子树 sid 或运行时缓存键
+    """
     return structural_key(node)

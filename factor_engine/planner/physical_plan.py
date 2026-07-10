@@ -19,7 +19,14 @@ class ExecKind(str, Enum):
 
 @dataclass(frozen=True)
 class PhysicalNode:
-    """``sql_lowerer`` 输出：带执行语义的计划节点。"""
+    """``sql_lowerer`` 输出：带执行语义的计划节点。
+
+    字段：
+        kind: 执行后端种类（SQL / PYTHON / MATERIALIZED）
+        plan: 对应的逻辑计划片段
+        sid: SQL 子树或物化列的结构缓存键（可选）
+        children: 递归标注的子物理节点
+    """
 
     kind: ExecKind
     plan: PlanNode
@@ -29,7 +36,13 @@ class PhysicalNode:
 
 @dataclass
 class PhysicalPlan:
-    """混合执行物理计划（root + 待预计算 SQL 子树）。"""
+    """混合执行物理计划（root + 待预计算 SQL 子树）。
+
+    字段：
+        root: 改写后的逻辑根（可能含 ``materialized_series`` 占位）
+        sql_subtrees: 需预计算的 SQL 子树 ``{sid: subplan}``
+        fully_sql: 整棵树是否可完全 SQL 下推执行
+    """
 
     root: PlanNode
     sql_subtrees: dict[str, PlanNode] = field(default_factory=dict)

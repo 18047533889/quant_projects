@@ -12,7 +12,15 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class FactorNode:
-    """单因子分析摘要。"""
+    """单因子分析摘要。
+
+    字段：
+        name: 因子名称
+        referenced_columns: 公式引用的数据列集合
+        lookback: 最大历史窗口长度
+        has_ts_op: 是否含时序算子
+        has_cs_op: 是否含截面算子
+    """
 
     name: str
     referenced_columns: frozenset[str]
@@ -23,7 +31,15 @@ class FactorNode:
 
 @dataclass
 class FactorBatchGraph:
-    """多因子批量执行的依赖与分组视图。"""
+    """多因子批量执行的依赖与分组视图。
+
+    字段：
+        nodes: 因子名 → 分析摘要
+        column_union: 所有因子引用列的并集
+        max_lookback: 批量内最大 lookback
+        column_overlap_groups: 共享至少一列的因子组（用于 CSE / prefetch 提示）
+        parallel_layers: 列集合不相交的因子可并行层（同 data_scope 内）
+    """
 
     nodes: dict[str, FactorNode] = field(default_factory=dict)
     column_union: frozenset[str] = frozenset()
@@ -34,6 +50,11 @@ class FactorBatchGraph:
     parallel_layers: list[list[str]] = field(default_factory=list)
 
     def to_dict(self) -> dict:
+        """序列化为可 JSON 化的摘要字典。
+
+        返回：
+            含因子列表、列并集、lookback、重叠组、并行层与各节点详情的字典
+        """
         return {
             "factors": sorted(self.nodes.keys()),
             "column_union": sorted(self.column_union),
@@ -56,7 +77,15 @@ def build_factor_batch_graph(
     factors: Sequence["Factor"],
     analyses: dict[str, "AnalysisResult"],
 ) -> FactorBatchGraph:
-    """从因子与分析结果构建批量依赖图。"""
+    """从因子与分析结果构建批量依赖图。
+
+    参数：
+        factors: 待批量执行的因子序列
+        analyses: 因子名 → ``Analyzer.lower`` 分析结果的映射
+
+    返回：
+        含列重叠组与并行层的 ``FactorBatchGraph``
+    """
     nodes: dict[str, FactorNode] = {}
     column_union: set[str] = set()
     max_lookback = 0
@@ -92,12 +121,14 @@ def _column_overlap_groups(nodes: dict[str, FactorNode]) -> list[list[str]]:
     parent = {n: n for n in names}
 
     def find(x: str) -> str:
+        """并查集 find（带路径压缩）。"""
         while parent[x] != x:
             parent[x] = parent[parent[x]]
             x = parent[x]
         return x
 
     def union(a: str, b: str) -> None:
+        """合并两因子所在连通分量。"""
         ra, rb = find(a), find(b)
         if ra != rb:
             parent[rb] = ra
@@ -147,6 +178,14 @@ def _parallel_layers(nodes: dict[str, FactorNode]) -> list[list[str]]:
 
 
 def merge_analyses_column_union(analyses: Iterable["AnalysisResult"]) -> frozenset[str]:
+    """合并多份分析结果的引用列并集。
+
+    参数：
+        analyses: ``AnalysisResult`` 可迭代序列
+
+    返回：
+        所有 ``referenced_columns`` 的并集（不可变 frozenset）
+    """
     out: set[str] = set()
     for analysis in analyses:
         out |= analysis.referenced_columns

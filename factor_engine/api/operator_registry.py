@@ -22,7 +22,16 @@ STUB_IR_OPS: frozenset[str] = frozenset()
 
 
 def build_dsl_allowlist() -> dict[str, Callable[..., Any]]:
-    """返回 ``{函数名: 工厂}``，供 ``parse_expr`` 与 ``validate_us_dsl`` 使用。"""
+    """返回 ``{函数名: 工厂}``，供 ``parse_expr`` 与 ``validate_us_dsl`` 使用。
+
+    合并 ``col`` 与 ``build_cleaned_dsl_allowlist`` 中已实现的 cleaned 算子；
+    是投递校验、DSL 解析、挖掘对接的 **唯一算子名来源**。
+
+    Returns
+    -------
+    dict[str, Callable[..., Any]]
+        键为 DSL 可调用的函数名，值为对应的 ``CleanedCall`` 工厂。
+    """
     allow = {"col": col}
     allow.update(build_cleaned_dsl_allowlist(set()))
     return allow

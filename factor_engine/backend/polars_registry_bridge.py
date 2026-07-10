@@ -1,8 +1,25 @@
 # -*- coding: utf-8
-"""Registry Polars 算子 → long-table 编译桥（按 inst / ts 分组，无整 plan panel 往返）。
+"""Registry Polars 算子 → long-table 编译桥。
 
-对 ``OperatorRegistry`` 中已有 ``backend=polars``、但未手写 expr 的 canonical，
-在 ``_compile_polars`` 末尾 fallback 到此模块。
+背景
+----
+Polars long 后端（``polars_long_backend``）把因子计划编译成 **长表 LazyFrame**，
+列固定为 ``(ts, inst, _v)``，避免整棵 plan 在宽表 panel 与 long 表之间来回转换。
+
+本模块职责
+----------
+对 ``OperatorRegistry`` 里已有 ``backend=polars``、但 **未** 在 ``polars_expr_emitter``
+手写 expr 的 canonical，在 ``_compile_polars`` 末尾 **fallback** 到此桥：
+
+1. 递归编译子节点得到多路 LazyFrame；
+2. 按 ``inst``（时序算子）或 ``ts``（截面算子）``group_by + map_groups``；
+3. 每组内构造 mini panel，调用算子原生 ``calculate()``；
+4. 写回 ``_v`` 列。
+
+非职责
+------
+- ``group_*`` 算子（需宽表分组列，long 桥不支持）→ 返回 None 走其他后端
+- ``Lead`` / ``shuffle`` 等故意跳过（前视或随机，long 路径不安全）
 """
 from __future__ import annotations
 
@@ -10,41 +27,50 @@ from typing import Any, Callable
 
 from planner.logical_plan import PlanNode
 
-from .pandas_compat import pd
-
 try:
     import polars as pl
 except ImportError:
     pl = None  # type: ignore
 
+# long 表标准列名：时间戳 / 标的 / 值
 _TS = "ts"
 _INST = "inst"
 _VAL = "_v"
 
+# 不参与 registry long-bridge 的 canonical（语义或安全原因）
 _SKIP_REGISTRY_LONG: frozenset[str] = frozenset(
     {
-        "Lead",
+        "Lead",  # 前视
         "next",
         "shuffle",
     }
 )
 
+# ``polars_registry_long_capable()`` 的进程内缓存，避免每次扫 Registry
 _REGISTRY_LONG_CACHE: frozenset[str] | None = None
 
 
 def _resolve(op: str) -> str:
+    """把 DSL 别名解析为 OperatorRegistry canonical 名。"""
     from cleaned_operators.registry import OperatorRegistry
 
     return OperatorRegistry._aliases.get(op, op)
 
 
 def _numeric_cols(df: pl.DataFrame) -> list[str]:
+    """从 Polars 算子 ``calculate`` 返回值里找出数值结果列（排除轴列）。"""
     skip = frozenset({"date", "stock_code", _TS, _INST})
     return [c for c in df.columns if c not in skip]
 
 
 def polars_registry_long_capable(*, exclude_native: frozenset[str] | None = None) -> frozenset[str]:
-    """Registry 有 polars backend、可 long-bridge 的 canonical（惰性缓存）。"""
+    """返回 Registry 中可走 long-bridge 的 canonical 集合（惰性缓存）。
+
+    条件：``backend=polars`` 且不在 ``INTENTIONALLY_PANDAS_ONLY`` / ``_SKIP_REGISTRY_LONG`` 中。
+
+    参数：
+        exclude_native: 已在 ``polars_expr_emitter`` 原生实现的算子，从集合中排除。
+    """
     global _REGISTRY_LONG_CACHE
     if _REGISTRY_LONG_CACHE is not None:
         reg_set = _REGISTRY_LONG_CACHE
@@ -63,10 +89,12 @@ def polars_registry_long_capable(*, exclude_native: frozenset[str] | None = None
 
 
 def registry_op_long_capable(op: str) -> bool:
+    """单个算子名（可含别名）是否可由 long-bridge 编译。"""
     return _resolve(op) in polars_registry_long_capable()
 
 
 def plan_registry_long_capable(plan: PlanNode) -> bool:
+    """整棵 PlanNode 子树是否 **全部** 可由 long-bridge 编译（递归检查）。"""
     op = _resolve(plan.op)
     if op in {"column", "literal"}:
         return True
@@ -76,6 +104,10 @@ def plan_registry_long_capable(plan: PlanNode) -> bool:
 
 
 def _op_scope(canonical: str) -> str:
+    """推断算子分组维度：``ts``（按标的滚动）、``cs``（按时间截面）、``group``（不支持）。
+
+    优先读 ``operator_policy`` 显式配置，其次读 Registry metadata.category。
+    """
     from cleaned_operators.operator_policy import _EXPLICIT_POLICIES
 
     if canonical in _EXPLICIT_POLICIES:
@@ -95,6 +127,7 @@ def _op_scope(canonical: str) -> str:
 
 
 def _remap_d_to_window(kwargs: dict[str, Any]) -> dict[str, Any] | None:
+    """部分算子参数名是 ``window`` 而非 ``d``；尝试自动 remap 后重试 ``calculate``。"""
     if "d" not in kwargs or "window" in kwargs:
         return None
     remapped = {k: v for k, v in kwargs.items() if k != "d"}
@@ -103,6 +136,7 @@ def _remap_d_to_window(kwargs: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _call_polars_operator(operator: Any, call_args: list[Any], kw: dict[str, Any]) -> pl.DataFrame:
+    """调用 Registry 算子的 ``calculate``；``TypeError`` 时尝试 ``d→window`` 参数 remap。"""
     try:
         return operator.calculate(*call_args, **kw)
     except TypeError as exc:
@@ -119,6 +153,10 @@ def _call_polars_operator(operator: Any, call_args: list[Any], kw: dict[str, Any
 
 
 def _extract_output_values(result: pl.DataFrame, n: int) -> list[float]:
+    """从 ``calculate`` 返回的 DataFrame 抽出 ``n`` 个标量，对齐当前分组行数。
+
+    兼容多种算子返回形态：单列 n 行、1 行 n 列、单元素等。
+    """
     cols = _numeric_cols(result)
     if not cols:
         return [float("nan")] * n
@@ -143,6 +181,11 @@ def _build_call_args(
     series_cols: list[str],
     cs: bool,
 ) -> list[Any]:
+    """把 long 表分组 ``g`` 里的序列列转成算子 ``calculate`` 期望的 panel 参数。
+
+    时序算子（``cs=False``）：单列 ``pl.DataFrame({"x": ndarray})``。
+    截面算子（``cs=True``）：每标的一列的宽表 ``pl.DataFrame({c0: [...], ...})``。
+    """
     call_args: list[Any] = []
     for kind, payload in arg_specs:
         if kind == "lit":
@@ -158,6 +201,7 @@ def _build_call_args(
 
 
 def _join_series_frames(frames: list[pl.LazyFrame], col_names: list[str]) -> pl.LazyFrame:
+    """按 ``(ts, inst)`` 内连接多路子节点 LazyFrame，列重命名为 ``_a0, _a1, ...``。"""
     out = frames[0].rename({_VAL: col_names[0]})
     for lf, name in zip(frames[1:], col_names[1:]):
         out = out.join(lf.rename({_VAL: name}), on=[_TS, _INST], how="inner")
@@ -169,6 +213,10 @@ def _parse_inputs(
     base: pl.LazyFrame,
     compile_fn: Callable[[PlanNode, pl.LazyFrame], pl.LazyFrame | None],
 ) -> tuple[list[tuple[str, Any]], list[pl.LazyFrame], dict[str, Any]] | None:
+    """解析 PlanNode 输入：字面量 → ``("lit", value)``；子计划 → 编译后的 LazyFrame。
+
+    返回 ``(arg_specs, series_frames, kwargs)``；任一子节点无法编译则返回 None。
+    """
     arg_specs: list[tuple[str, Any]] = []
     series_frames: list[pl.LazyFrame] = []
     for child in node.inputs:
@@ -193,6 +241,7 @@ def _registry_map_inst(
     operator: Any,
     kw: dict[str, Any],
 ) -> pl.LazyFrame:
+    """时序算子路径：按 ``inst`` 分组，每组内调用 ``calculate``，输出 ``(ts, inst, _v)``。"""
     schema = joined.collect_schema()
 
     def _apply(g: pl.DataFrame) -> pl.DataFrame:
@@ -219,6 +268,7 @@ def _registry_map_cs(
     operator: Any,
     kw: dict[str, Any],
 ) -> pl.LazyFrame:
+    """截面算子路径：按 ``ts`` 分组，每组内对所有标的做截面 ``calculate``。"""
     schema = joined.collect_schema()
 
     def _apply(g: pl.DataFrame) -> pl.DataFrame:
@@ -242,7 +292,16 @@ def compile_registry_op(
     base: pl.LazyFrame,
     compile_fn: Callable[[PlanNode, pl.LazyFrame], pl.LazyFrame | None],
 ) -> pl.LazyFrame | None:
-    """Fallback：调用 Registry polars 算子（按 inst 或 ts 分组）。"""
+    """Fallback：把单个 Registry Polars 算子编译为 long-table LazyFrame。
+
+    参数：
+        node: 当前 PlanNode（算子名 + 子输入 + attrs/kwargs）
+        base: 基础 long LazyFrame（含 ts/inst 轴，供 column 子节点挂接）
+        compile_fn: 递归编译子节点的回调（通常即 ``_compile_polars`` 自身）
+
+    返回：
+        成功 → ``LazyFrame(ts, inst, _v)``；不支持或失败 → ``None``（上层走其他后端）。
+    """
     if pl is None:
         return None
     canonical = _resolve(node.op)

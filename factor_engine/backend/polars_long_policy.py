@@ -8,7 +8,7 @@ from planner.logical_plan import PlanNode
 
 from .polars_registry_bridge import registry_op_long_capable
 
-# 纯 Polars Expr（无 Python map_groups / pandas kernel）
+# 纯 Polars Expr（无 Python rolling_map / map_groups / pandas kernel）
 POLARS_LONG_NATIVE: frozenset[str] = frozenset(
     {
         "column",
@@ -51,7 +51,6 @@ POLARS_LONG_NATIVE: frozenset[str] = frozenset(
         "ts_beta",
         "ts_ema",
         "ts_rank",
-        "ts_decay_linear",
         "ts_sharpe",
         "ts_autocorr",
         "rank",
@@ -111,15 +110,9 @@ POLARS_LONG_NATIVE: frozenset[str] = frozenset(
         "RSI_WILDER",
         "ATR_WILDER",
         "rolling_beta",
-        "ts_argmax",
-        "ts_argmin",
-        "WMA",
         "ts_mad",
-        "ts_quantile",
         "ts_product",
-        "ts_skew",
         "ts_regression",
-        "Slope",
         "ts_ratio",
         "log_abs",
         "signed_log",
@@ -130,6 +123,19 @@ POLARS_LONG_NATIVE: frozenset[str] = frozenset(
         "expanding_std",
         "expanding_sum",
         "count",
+    }
+)
+
+# rolling_map + NumPy/pandas callback（LazyFrame 内仍含 Python UDF）
+POLARS_LONG_PYTHON_ROLLING: frozenset[str] = frozenset(
+    {
+        "ts_decay_linear",
+        "WMA",
+        "Slope",
+        "ts_argmax",
+        "ts_argmin",
+        "ts_skew",
+        "ts_quantile",
     }
 )
 
@@ -151,7 +157,10 @@ POLARS_LONG_MAP_GROUPS: frozenset[str] = frozenset(
 POLARS_LONG_PASSTHROUGH: frozenset[str] = frozenset({"bfill", "causal_bfill"})
 
 POLARS_LONG_COMPATIBLE: frozenset[str] = (
-    POLARS_LONG_NATIVE | POLARS_LONG_MAP_GROUPS | POLARS_LONG_PASSTHROUGH
+    POLARS_LONG_NATIVE
+    | POLARS_LONG_PYTHON_ROLLING
+    | POLARS_LONG_MAP_GROUPS
+    | POLARS_LONG_PASSTHROUGH
 )
 
 # 向后兼容旧名
@@ -180,13 +189,14 @@ POLARS_LONG_CAPABLE: frozenset[str] = POLARS_LONG_COMPATIBLE
 
 
 def _resolve(op: str) -> str:
+    """将算子别名解析为 canonical 名称。"""
     from cleaned_operators.registry import OperatorRegistry
 
     return OperatorRegistry._aliases.get(op, op)
 
 
 def classify_plan_op(op: str) -> str:
-    """返回 ``native`` | ``map_groups`` | ``passthrough`` | ``registry`` | ``other`` | ``meta``。"""
+    """返回 ``native`` | ``python_rolling`` | ``map_groups`` | ``passthrough`` | ``registry`` | ``other`` | ``meta``。"""
     from backend.production_fastpath_tiers import resolve_polars_native_canonical
 
     canon = resolve_polars_native_canonical(_resolve(op))
@@ -196,6 +206,8 @@ def classify_plan_op(op: str) -> str:
         return "passthrough"
     if canon in POLARS_LONG_NATIVE:
         return "native"
+    if canon in POLARS_LONG_PYTHON_ROLLING:
+        return "python_rolling"
     if canon in POLARS_LONG_MAP_GROUPS:
         return "map_groups"
     if registry_op_long_capable(canon):
@@ -204,17 +216,26 @@ def classify_plan_op(op: str) -> str:
 
 
 def infer_polars_long_tier(op: str) -> str:
-    """算子级 long-table 能力：``native`` | ``map_groups`` | ``passthrough`` | ``registry`` | ``unsupported``。"""
+    """算子级 long-table 能力 tier。"""
     kind = classify_plan_op(op)
     if kind == "meta":
         return "meta"
-    if kind in {"native", "map_groups", "passthrough", "registry"}:
+    if kind in {"native", "python_rolling", "map_groups", "passthrough", "registry"}:
         return kind
     return "unsupported"
 
 
 def collect_plan_op_stats(plan: PlanNode) -> dict[str, list[str]]:
+    """遍历逻辑计划，按 PolarsLong tier 分类算子。
+
+    参数:
+        plan: 逻辑计划根节点。
+
+    返回:
+        含 ``polars_long_native_ops`` 等各 tier 算子列表的字典。
+    """
     native: set[str] = set()
+    python_rolling: set[str] = set()
     map_groups: set[str] = set()
     passthrough: set[str] = set()
     registry: set[str] = set()
@@ -225,6 +246,8 @@ def collect_plan_op_stats(plan: PlanNode) -> dict[str, list[str]]:
         kind = classify_plan_op(canon)
         if kind == "native" and canon not in {"column", "literal", "materialized_series", "plan_ref"}:
             native.add(canon)
+        elif kind == "python_rolling":
+            python_rolling.add(canon)
         elif kind == "map_groups":
             map_groups.add(canon)
         elif kind == "passthrough":
@@ -244,6 +267,7 @@ def collect_plan_op_stats(plan: PlanNode) -> dict[str, list[str]]:
     _walk(plan)
     return {
         "polars_long_native_ops": sorted(native),
+        "polars_long_python_rolling_ops": sorted(python_rolling),
         "polars_long_map_group_ops": sorted(map_groups),
         "polars_long_passthrough_ops": sorted(passthrough),
         "polars_long_registry_ops": sorted(registry),
@@ -257,14 +281,24 @@ def long_path_telemetry_flags(op_stats: dict[str, list[str]]) -> dict[str, bool]
     has_registry = bool(op_stats.get("polars_long_registry_ops"))
     has_other = bool(op_stats.get("polars_long_other_ops"))
     has_passthrough = bool(op_stats.get("polars_long_passthrough_ops"))
+    has_python_rolling = bool(op_stats.get("polars_long_python_rolling_ops"))
     has_native = bool(op_stats.get("polars_long_native_ops"))
-    fast_native = has_native and not (has_map or has_registry or has_other or has_passthrough)
-    # 仅 native / meta 节点（无 map_groups/registry/passthrough/other 算子）
-    if not has_native and not has_map and not has_registry and not has_other and not has_passthrough:
+    fast_native = has_native and not (
+        has_map or has_registry or has_other or has_passthrough or has_python_rolling
+    )
+    if (
+        not has_native
+        and not has_map
+        and not has_registry
+        and not has_other
+        and not has_passthrough
+        and not has_python_rolling
+    ):
         fast_native = True
     return {
         "used_polars_long_path": True,
         "used_polars_long_native": fast_native,
+        "used_polars_long_python_rolling": has_python_rolling,
         "used_polars_long_map_groups": has_map,
         "used_polars_long_registry": has_registry,
         "used_polars_long_passthrough": has_passthrough,
@@ -309,6 +343,7 @@ def assert_native_only_plan(op_stats: dict[str, list[str]], ctx=None) -> None:
     blocked: list[str] = []
     for key, label in (
         ("polars_long_map_group_ops", "map_groups"),
+        ("polars_long_python_rolling_ops", "python_rolling"),
         ("polars_long_registry_ops", "registry"),
         ("polars_long_passthrough_ops", "passthrough"),
         ("polars_long_other_ops", "other"),

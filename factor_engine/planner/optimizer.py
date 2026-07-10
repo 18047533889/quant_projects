@@ -1,3 +1,5 @@
+"""逻辑计划轻量优化：常量折叠与 fastpath 友好改写。"""
+
 from __future__ import annotations
 
 from .logical_plan import PlanNode
@@ -7,12 +9,21 @@ class Optimizer:
     """轻量计划优化：自底向上常量折叠等。"""
 
     def optimize(self, plan: PlanNode) -> PlanNode:
+        """对逻辑计划执行优化流水线。
+
+        参数：
+            plan: 未经优化的逻辑计划根节点
+
+        返回：
+            常量折叠并完成 fastpath 改写后的计划根节点
+        """
         folded = self._fold_literals(plan)
         from planner.rewrite_fastpath import rewrite_plan_for_fastpath
 
         return rewrite_plan_for_fastpath(folded)
 
     def _fold_literals(self, node: PlanNode) -> PlanNode:
+        """自底向上折叠二元/多元算术字面量子表达式。"""
         inputs = [self._fold_literals(c) for c in node.inputs]
         n = PlanNode(
             op=node.op,

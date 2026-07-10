@@ -67,7 +67,14 @@ _LOAD_MODULES = (
 
 
 def load_all() -> None:
-    """Import 全部算子子模块并完成 ``_aliases`` 注册；``cleaned_bridge`` 首次执行前会自动调用。"""
+    """Import 全部算子子模块并完成注册与去重。
+
+    按 ``_LOAD_MODULES`` 顺序加载各子模块，末尾执行 ``_dedupe`` 别名合并。
+    ``cleaned_bridge`` 首次执行前会自动调用；也可手动调用以预热 registry。
+
+    返回:
+        None
+    """
     for mod in _LOAD_MODULES:
         __import__(mod, fromlist=["*"])
     from cleaned_operators._dedupe import apply_operator_deduplication

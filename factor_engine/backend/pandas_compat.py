@@ -15,6 +15,7 @@ _cached_impl: Any | None = None
 
 
 def _env_use_modin() -> bool:
+    """检查环境变量是否请求使用 Modin。"""
     return os.environ.get("FACTOR_ENGINE_USE_MODIN", "").strip().lower() in (
         "1",
         "true",
@@ -53,6 +54,7 @@ class _LazyPd:
     __slots__ = ()
 
     def __getattr__(self, name: str) -> Any:
+        """惰性转发属性访问到真实 pandas/modin 模块。"""
         return getattr(resolve_pandas_module(), name)
 
 

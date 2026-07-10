@@ -34,7 +34,15 @@ from typing import Any, Dict, List, Optional, Tuple
 
 
 def _merge_param_names(existing: list[str] | None, new: list[str] | None) -> list[str]:
-    """多 backend 注册时保留更完整的 param_names（避免 polars bridge 覆盖）。"""
+    """多 backend 注册时合并 param_names，保留更完整的参数契约。
+
+    参数:
+        existing: 已有 catalog 中的 param_names。
+        new: 本次注册算子 metadata 中的 param_names。
+
+    返回:
+        合并后的参数名列表；同长度时优先含 ``benchmark_ret`` 的 CAPM 契约。
+    """
     old = list(existing or [])
     cur = list(new or [])
     if not old:
@@ -53,7 +61,11 @@ def _merge_param_names(existing: list[str] | None, new: list[str] | None) -> lis
 
 
 class OperatorRegistry:
-    """全局算子表；无单例类，全部classmethod访问。"""
+    """全局算子注册表（类级存储，无单例实例）。
+
+    维护 canonical → backend → 算子实例、别名映射与 catalog 元数据。
+    全部接口通过 ``classmethod`` 访问，线程安全由 import 时序保证。
+    """
 
     _operators: Dict[str, Dict[str, Any]] = {}
     _aliases: Dict[str, str] = {}
@@ -71,7 +83,20 @@ class OperatorRegistry:
         status: str = "implemented",
         backend_explicit: bool = True,
     ) -> None:
-        """注册一个已实现算子；``canonical`` 为内部主键，``aliases`` 为可选 DSL 别名。"""
+        """注册一个已实现算子到 registry。
+
+        参数:
+            operator: 算子实例（须含 ``metadata``）。
+            canonical: registry 主键；缺省时取 ``operator.metadata.name``。
+            backend: 实现后端，如 ``pandas_numpy`` / ``polars`` / ``sql``。
+            aliases: 可选 DSL 别名列表。
+            source: 溯源标记，写入 catalog。
+            status: 生命周期状态，默认 ``implemented``。
+            backend_explicit: 是否显式声明 backend（Polars production 门禁用）。
+
+        返回:
+            None
+        """
         canonical = canonical or operator.metadata.name
         cls._operators.setdefault(canonical, {})[backend] = operator
         existing = cls._catalog.get(canonical, {})
@@ -101,7 +126,15 @@ class OperatorRegistry:
 
     @classmethod
     def register_alias(cls, alias: str, canonical: str) -> None:
-        """仅登记别名（实现须已通过 ``register`` 存在，或在 catalog 中占位）。"""
+        """登记 DSL 别名 → canonical 映射。
+
+        参数:
+            alias: DSL 侧名称（如 ``ts_rsi``）。
+            canonical: 目标 canonical 名（如 ``RSI``）。
+
+        返回:
+            None
+        """
         cls._aliases[alias] = canonical
         if canonical in cls._catalog:
             aliases = set(cls._catalog[canonical].get("aliases", []))
@@ -119,7 +152,19 @@ class OperatorRegistry:
         description: str = "",
         source: str = "",
     ) -> None:
-        """文档/catalog 占位，无 runtime；不会进入 DSL 白名单。"""
+        """登记仅文档/catalog 占位条目（无 runtime 实现）。
+
+        参数:
+            canonical: 占位 canonical 名。
+            aliases: 可选别名。
+            status: 默认 ``doc_only``。
+            business_category: 业务分类标签。
+            description: 人类可读说明。
+            source: 溯源标记。
+
+        返回:
+            None
+        """
         cls._catalog[canonical] = {
             "canonical": canonical,
             "aliases": sorted(set(aliases or [])),
@@ -135,13 +180,28 @@ class OperatorRegistry:
 
     @classmethod
     def unregister(cls, canonical: str) -> None:
-        """移除重复 canonical（保留别名指向其他实现时使用）。"""
+        """从 registry 移除 canonical 及其实现与 catalog 条目。
+
+        参数:
+            canonical: 待注销的 canonical 名。
+
+        返回:
+            None
+        """
         cls._operators.pop(canonical, None)
         cls._catalog.pop(canonical, None)
 
     @classmethod
     def rename_canonical(cls, old: str, new: str) -> None:
-        """将已注册 canonical 重命名为业界标准名（保留 runtime 与 backend）。"""
+        """将已注册 canonical 重命名为标准名，保留 runtime 与 backend。
+
+        参数:
+            old: 旧 canonical 名。
+            new: 新 canonical 名；若已存在则仅注销 ``old``。
+
+        返回:
+            None
+        """
         if old == new or old not in cls._operators:
             return
         if new in cls._operators:
@@ -160,7 +220,14 @@ class OperatorRegistry:
 
     @classmethod
     def backends_for(cls, name: str) -> List[str]:
-        """返回 canonical 已注册的 backend 列表。"""
+        """查询算子已注册的 backend 列表。
+
+        参数:
+            name: DSL 名或 canonical 名（先走别名解析）。
+
+        返回:
+            已注册 backend 名排序列表，如 ``["pandas_numpy", "polars"]``。
+        """
         canonical = cls._aliases.get(name, name)
         return sorted(cls._operators.get(canonical, {}).keys())
 
@@ -171,7 +238,15 @@ class OperatorRegistry:
         *,
         prefer: str = "auto",
     ) -> Tuple[Any | None, str]:
-        """按策略选取最快可用 backend：``auto`` 优先 polars，否则 pandas。"""
+        """按策略选取最优可用 backend 及算子实例。
+
+        参数:
+            name: DSL 名或 canonical 名。
+            prefer: 偏好后端，``auto`` / ``polars`` / ``pandas_numpy`` / ``sql``。
+
+        返回:
+            ``(算子实例或 None, 实际选用的 backend 名)`` 元组。
+        """
         canonical = cls._aliases.get(name, name)
         backends = cls._operators.get(canonical, {})
         if prefer == "pandas_numpy":
@@ -193,16 +268,32 @@ class OperatorRegistry:
 
     @classmethod
     def get(cls, name: str, backend: str = "pandas_numpy") -> Any:
-        """按 DSL 名或 canonical 取算子实例；先走别名解析。"""
+        """按名称与 backend 获取算子实例。
+
+        参数:
+            name: DSL 名或 canonical 名（先走别名解析）。
+            backend: 目标后端，默认 ``pandas_numpy``。
+
+        返回:
+            算子实例；未注册时返回 ``None``。
+        """
         canonical = cls._aliases.get(name, name)
         return cls._operators.get(canonical, {}).get(backend)
 
     @classmethod
     def list_canonical(cls) -> List[str]:
-        """全部 canonical（含仅有 catalog、无实现的条目）。"""
+        """列出全部 canonical 名（含仅有 catalog、无 runtime 的条目）。
+
+        返回:
+            排序后的 canonical 名列表。
+        """
         return sorted(set(cls._operators.keys()) | set(cls._catalog.keys()))
 
     @classmethod
     def catalog(cls) -> Dict[str, dict]:
-        """导出完整 catalog 副本（脚本 ``export_dsl_allowlist`` 等使用）。"""
+        """导出完整 catalog 浅拷贝。
+
+        返回:
+            ``canonical → catalog 元数据`` 字典副本，供白名单导出与文档生成使用。
+        """
         return dict(cls._catalog)

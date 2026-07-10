@@ -2,7 +2,7 @@
 
 可扩展的量化因子引擎框架，支持表达式树构建、编译优化、多后端执行与配置驱动运行。
 
-**文档索引**：[`docs/README.md`](docs/README.md) · 挖掘投递 [`docs/miner_delivery_spec.md`](docs/miner_delivery_spec.md) · 算子写法 [`docs/算子与导入教程.md`](docs/算子与导入教程.md) · 白名单 [`docs/dsl_operators_reference.md`](docs/dsl_operators_reference.md) · 语义 [`docs/operators_semantics.md`](docs/operators_semantics.md) · 回测 ADR [`docs/adr_backtest_target_position.md`](docs/adr_backtest_target_position.md) · 变更 [`docs/changelog_shw.md`](docs/changelog_shw.md)
+**文档索引**：[`docs/README.md`](docs/README.md) · [`docs/源码注释导读.md`](docs/源码注释导读.md) · 挖掘投递 [`docs/miner_delivery_spec.md`](docs/miner_delivery_spec.md) · 算子写法 [`docs/算子与导入教程.md`](docs/算子与导入教程.md) · 白名单 [`docs/dsl_operators_reference.md`](docs/dsl_operators_reference.md) · 语义 [`docs/operators_semantics.md`](docs/operators_semantics.md) · 回测 ADR [`docs/adr_backtest_target_position.md`](docs/adr_backtest_target_position.md) · 变更 [`docs/changelog_shw.md`](docs/changelog_shw.md)
 
 ### 协作者速览（新人约 5 分钟）
 

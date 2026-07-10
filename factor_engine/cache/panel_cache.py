@@ -25,12 +25,14 @@ class PanelCache:
         return self._store.get(key)
 
     def get_for_series(self, series: Any) -> Any | None:
+        """用 Series 身份键查 panel 缓存。"""
         return self.get(series_panel_cache_key(series))
 
     def set(self, key: Any, panel: Any) -> None:
         self._store[key] = panel
 
     def set_for_series(self, series: Any, panel: Any) -> None:
+        """缓存某 Series unstack 后的宽表 panel。"""
         self.set(series_panel_cache_key(series), panel)
 
     def __len__(self) -> int:

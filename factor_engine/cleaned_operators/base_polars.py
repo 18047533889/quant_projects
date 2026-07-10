@@ -26,7 +26,10 @@ except ImportError:
 
 @dataclass
 class OperatorMetadata:
-    """操作符元数据"""
+    """Polars 算子 catalog 元数据字段。
+
+    与 ``base.OperatorMetadata`` 字段一致，供 polars backend 注册使用。
+    """
     name: str
     category: str
     description: str = ""
@@ -39,17 +42,36 @@ class OperatorMetadata:
 
 
 class Operator(ABC):
-    """所有操作符的基类"""
+    """所有 Polars runtime 算子的抽象基类。
+
+    子类须实现 ``calculate``，在 Polars 宽表 panel 上执行计算。
+    """
 
     metadata: OperatorMetadata
 
     @abstractmethod
     def calculate(self, *args, **kwargs) -> pl.DataFrame:
-        """执行计算，子类必须实现"""
+        """在 Polars panel 上执行计算。
+
+        参数:
+            *args: 位置参数（宽表及算子特定参数）。
+            **kwargs: 关键字参数。
+
+        返回:
+            与输入同形的 ``pl.DataFrame`` 结果。
+        """
         pass
 
     def validate_params(self, *args, **kwargs) -> bool:
-        """验证参数是否合法，默认直接返回True"""
+        """参数校验钩子，子类可覆盖。
+
+        参数:
+            *args: 待校验的位置参数。
+            **kwargs: 待校验的关键字参数。
+
+        返回:
+            参数合法返回 ``True``；默认放行。
+        """
         return True
 
     def __repr__(self):
@@ -60,7 +82,7 @@ class Operator(ABC):
 
 
 class SeriesOperator(Operator):
-    """序列操作符基类（输入输出都是DataFrame）"""
+    """Polars 序列算子基类：规范化窗口参数后调用 ``_calculate_series``。"""
 
     def calculate(self, *args, **kwargs) -> pl.DataFrame:
         processed_args = []
@@ -75,27 +97,51 @@ class SeriesOperator(Operator):
 
     @abstractmethod
     def _calculate_series(self, *args, **kwargs) -> pl.DataFrame:
-        """子类实现序列计算逻辑"""
+        """子类实现具体 Polars 序列计算逻辑。
+
+        参数:
+            *args: 输入 panel 及算子参数。
+            **kwargs: 额外关键字参数。
+
+        返回:
+            计算结果 ``pl.DataFrame``。
+        """
         pass
 
 
 class ScalarOperator(Operator):
-    """标量操作符基类（输出是单个值）"""
+    """Polars 标量输出算子基类（panel 路径较少使用）。"""
 
     def calculate(self, *args, **kwargs) -> Any:
         return self._calculate_scalar(*args, **kwargs)
 
     @abstractmethod
     def _calculate_scalar(self, *args, **kwargs) -> Any:
-        """子类实现标量计算逻辑"""
+        """子类实现标量计算逻辑。
+
+        参数:
+            *args: 输入参数。
+            **kwargs: 额外关键字参数。
+
+        返回:
+            标量结果。
+        """
         pass
 
 
 class TransformOperator(Operator):
-    """变换操作符基类（输入一个序列，输出一个序列）"""
+    """单序列进、单序列出 Polars 变换算子基类。"""
 
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        """子类实现"""
+        """子类实现单输入变换逻辑。
+
+        参数:
+            x: 输入 Polars 宽表 panel。
+            **kwargs: 额外关键字参数。
+
+        返回:
+            变换后的 ``pl.DataFrame``。
+        """
         raise NotImplementedError
 
     def calculate(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
@@ -103,10 +149,19 @@ class TransformOperator(Operator):
 
 
 class TwoVarOperator(Operator):
-    """双变量操作符基类"""
+    """双序列 Polars 算子基类（如 ``ts_corr``）。"""
 
     def _calculate_series(self, x: pl.DataFrame, y: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        """子类实现"""
+        """子类实现双输入序列逻辑。
+
+        参数:
+            x: 第一个输入 panel。
+            y: 第二个输入 panel。
+            **kwargs: 额外关键字参数。
+
+        返回:
+            计算结果 ``pl.DataFrame``。
+        """
         raise NotImplementedError
 
     def calculate(self, x: pl.DataFrame, y: pl.DataFrame, **kwargs) -> pl.DataFrame:
@@ -122,7 +177,20 @@ def register_operator(
     backend: str = "polars",
     status: str = "implemented",
 ):
-    """操作符装饰器"""
+    """Polars 算子类装饰器：实例化并注册到 ``OperatorRegistry``。
+
+    参数:
+        name: DSL 注册名。
+        category: 算子分类。
+        business_category: 业务分类标签。
+        canonical: registry 主键。
+        source: 溯源标记。
+        backend: 固定为 ``polars``。
+        status: 生命周期状态。
+
+    返回:
+        装饰器函数。
+    """
     def decorator(cls):
         instance = cls()
         if name:
@@ -149,7 +217,15 @@ def register_operator(
 # Numba 加速的辅助函数
 @jit(nopython=True, parallel=True, cache=True)
 def _numba_rolling_mean_2d(arr: np.ndarray, window: int) -> np.ndarray:
-    """Numba 加速的2D滚动均值计算"""
+    """Numba 加速的 2D 滚动均值（按列并行）。
+
+    参数:
+        arr: 形状 ``(rows, cols)`` 的二维数组。
+        window: 滚动窗口长度。
+
+    返回:
+        同形状的滚动均值数组。
+    """
     rows, cols = arr.shape
     result = np.full_like(arr, np.nan)
 
@@ -169,7 +245,15 @@ def _numba_rolling_mean_2d(arr: np.ndarray, window: int) -> np.ndarray:
 
 @jit(nopython=True, parallel=True, cache=True)
 def _numba_rolling_std_2d(arr: np.ndarray, window: int) -> np.ndarray:
-    """Numba 加速的2D滚动标准差计算"""
+    """Numba 加速的 2D 滚动标准差（按列并行）。
+
+    参数:
+        arr: 二维输入数组。
+        window: 滚动窗口长度。
+
+    返回:
+        同形状的滚动标准差数组。
+    """
     rows, cols = arr.shape
     result = np.full_like(arr, np.nan)
 
@@ -193,7 +277,15 @@ def _numba_rolling_std_2d(arr: np.ndarray, window: int) -> np.ndarray:
 
 @jit(nopython=True, parallel=True, cache=True)
 def _numba_rolling_sum_2d(arr: np.ndarray, window: int) -> np.ndarray:
-    """Numba 加速的2D滚动求和计算"""
+    """Numba 加速的 2D 滚动求和（按列并行）。
+
+    参数:
+        arr: 二维输入数组。
+        window: 滚动窗口长度。
+
+    返回:
+        同形状的滚动求和数组。
+    """
     rows, cols = arr.shape
     result = np.full_like(arr, np.nan)
 
@@ -210,7 +302,15 @@ def _numba_rolling_sum_2d(arr: np.ndarray, window: int) -> np.ndarray:
 
 @jit(nopython=True, parallel=True, cache=True)
 def _numba_rolling_max_2d(arr: np.ndarray, window: int) -> np.ndarray:
-    """Numba 加速的2D滚动最大值计算"""
+    """Numba 加速的 2D 滚动最大值（按列并行）。
+
+    参数:
+        arr: 二维输入数组。
+        window: 滚动窗口长度。
+
+    返回:
+        同形状的滚动最大值数组。
+    """
     rows, cols = arr.shape
     result = np.full_like(arr, np.nan)
 
@@ -228,7 +328,15 @@ def _numba_rolling_max_2d(arr: np.ndarray, window: int) -> np.ndarray:
 
 @jit(nopython=True, parallel=True, cache=True)
 def _numba_rolling_min_2d(arr: np.ndarray, window: int) -> np.ndarray:
-    """Numba 加速的2D滚动最小值计算"""
+    """Numba 加速的 2D 滚动最小值（按列并行）。
+
+    参数:
+        arr: 二维输入数组。
+        window: 滚动窗口长度。
+
+    返回:
+        同形状的滚动最小值数组。
+    """
     rows, cols = arr.shape
     result = np.full_like(arr, np.nan)
 
@@ -246,7 +354,14 @@ def _numba_rolling_min_2d(arr: np.ndarray, window: int) -> np.ndarray:
 
 @jit(nopython=True, parallel=True, cache=True)
 def _numba_zscore_2d(arr: np.ndarray) -> np.ndarray:
-    """Numba 加速的2D Z-Score计算（按行计算）"""
+    """Numba 加速的 2D 截面 Z-Score（按行计算）。
+
+    参数:
+        arr: 二维 panel 数组（行=时间，列=标的）。
+
+    返回:
+        同形状的 Z-Score 数组。
+    """
     rows, cols = arr.shape
     result = np.full_like(arr, np.nan)
 
@@ -285,7 +400,14 @@ def _numba_zscore_2d(arr: np.ndarray) -> np.ndarray:
 
 @jit(nopython=True, parallel=True, cache=True)
 def _numba_rank_2d(arr: np.ndarray) -> np.ndarray:
-    """Numba 加速的2D排名计算（按行计算，百分比排名 0-1）"""
+    """Numba 加速的 2D 截面百分位排名（按行，映射到 0-1）。
+
+    参数:
+        arr: 二维 panel 数组。
+
+    返回:
+        同形状的百分位排名数组。
+    """
     rows, cols = arr.shape
     result = np.full_like(arr, np.nan)
 
@@ -315,16 +437,18 @@ def _numba_rank_2d(arr: np.ndarray) -> np.ndarray:
 
 
 def apply_numba_rolling(df: pl.DataFrame, window: int, func_name: str = 'mean') -> pl.DataFrame:
-    """
-    应用 Numba 加速的滚动计算
+    """对 Polars 宽表应用 Numba 加速的滚动计算。
 
-    Args:
-        df: Polars DataFrame
-        window: 窗口大小
-        func_name: 函数名称 ('mean', 'std', 'sum', 'max', 'min')
+    参数:
+        df: Polars 宽表 panel（跳过 ``date``/``stock_code`` 列）。
+        window: 滚动窗口长度。
+        func_name: 聚合函数，``mean``/``std``/``sum``/``max``/``min``。
 
-    Returns:
-        计算后的 Polars DataFrame
+    返回:
+        数值列替换为滚动结果后的 ``pl.DataFrame``。
+
+    异常:
+        ValueError: 未知的 ``func_name``。
     """
     # 获取数值列
     numeric_cols = [c for c in df.columns if c not in ['date', 'stock_code']]
@@ -359,15 +483,14 @@ def apply_numba_rolling(df: pl.DataFrame, window: int, func_name: str = 'mean') 
 
 
 def apply_numba_zscore(df: pl.DataFrame, axis: int = 1) -> pl.DataFrame:
-    """
-    应用 Numba 加速的 Z-Score 计算
+    """对 Polars 宽表应用 Numba 加速的 Z-Score 标准化。
 
-    Args:
-        df: Polars DataFrame
-        axis: 计算轴（1=按行，0=按列）
+    参数:
+        df: Polars 宽表 panel。
+        axis: 计算轴，``1`` 按行（截面），``0`` 按列（时序）。
 
-    Returns:
-        计算后的 Polars DataFrame
+    返回:
+        Z-Score 标准化后的 ``pl.DataFrame``。
     """
     numeric_cols = [c for c in df.columns if c not in ['date', 'stock_code']]
     if not numeric_cols:
@@ -390,15 +513,14 @@ def apply_numba_zscore(df: pl.DataFrame, axis: int = 1) -> pl.DataFrame:
 
 
 def apply_numba_rank(df: pl.DataFrame, axis: int = 1) -> pl.DataFrame:
-    """
-    应用 Numba 加速的排名计算
+    """对 Polars 宽表应用 Numba 加速的百分位排名。
 
-    Args:
-        df: Polars DataFrame
-        axis: 计算轴（1=按行，0=按列）
+    参数:
+        df: Polars 宽表 panel。
+        axis: 计算轴，``1`` 按行（截面），``0`` 按列（时序）。
 
-    Returns:
-        计算后的 Polars DataFrame
+    返回:
+        百分位排名（0-1）后的 ``pl.DataFrame``。
     """
     numeric_cols = [c for c in df.columns if c not in ['date', 'stock_code']]
     if not numeric_cols:
@@ -424,7 +546,17 @@ _SKIP_PANEL = frozenset({"date", "stock_code"})
 
 
 def panel_pandas_bridge(x: "pl.DataFrame", fn, *args, **kwargs) -> "pl.DataFrame":
-    """Polars 宽表 ↔ pandas 桥接（parity 与 pandas_numpy 对齐）。"""
+    """Polars 宽表 ↔ pandas 桥接，保证与 pandas_numpy backend 数值一致。
+
+    参数:
+        x: 输入 Polars 宽表 panel。
+        fn: 接收 pandas 宽表并返回同形结果的函数。
+        *args: 传给 ``fn`` 的额外位置参数。
+        **kwargs: 传给 ``fn`` 的额外关键字参数。
+
+    返回:
+        数值列替换为 ``fn`` 结果后的 Polars DataFrame。
+    """
     cols = [c for c in x.columns if c not in _SKIP_PANEL]
     if not cols:
         return x

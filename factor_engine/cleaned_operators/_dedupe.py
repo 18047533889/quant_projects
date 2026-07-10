@@ -208,7 +208,17 @@ _DEDUPE_APPLIED = False
 
 
 def apply_operator_deduplication() -> None:
-    """在全部算子注册与基础别名加载后调用（``load_all()`` 末尾）。"""
+    """在全部算子注册与基础别名加载后执行去重合并。
+
+    依次执行：canonical 重命名 → 别名登记 → 冗余 canonical 注销。
+    幂等设计，重复调用仅第一次生效。
+
+    返回:
+        None
+
+    异常:
+        RuntimeError: 去重目标 canonical 无 runtime 实现时。
+    """
     global _DEDUPE_APPLIED
     if _DEDUPE_APPLIED:
         return

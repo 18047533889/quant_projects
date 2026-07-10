@@ -89,7 +89,11 @@ _POLICY_EXTENSION_CANONICALS: frozenset[str] = frozenset(
 
 # 向后兼容：Tier-1 = policy_required（延迟求值，避免与 operator_spec 循环 import）
 def policy_required_canonicals() -> frozenset[str]:
-    """必须有显式 OperatorPolicy 的 canonical 并集。"""
+    """获取必须有显式 OperatorPolicy 的 canonical 并集。
+
+返回:
+    production core、research core 与 policy 扩展算子的 ``frozenset``。
+"""
     from cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS
 
     return (
@@ -100,10 +104,26 @@ def policy_required_canonicals() -> frozenset[str]:
 
 
 def tier1_canonicals() -> frozenset[str]:
+    """向后兼容别名：等同 ``policy_required_canonicals()``。
+
+返回:
+    Tier-1 / policy_required canonical 集合。
+"""
     return policy_required_canonicals()
 
 
 def __getattr__(name: str):
+    """模块级延迟属性访问（向后兼容 ``TIER1_CANONICALS``）。
+
+参数:
+    name: 属性名。
+
+返回:
+    请求的属性值。
+
+异常:
+    AttributeError: 未知属性名。
+"""
     if name == "TIER1_CANONICALS":
         return policy_required_canonicals()
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
@@ -312,7 +332,11 @@ POLARS_PRODUCTION_SAFE: frozenset[str] = POLARS_PRODUCTION_SAFE_CORE | POLARS_PA
 
 
 def polars_implemented_canonicals() -> frozenset[str]:
-    """Registry 中已有 ``polars`` backend 的 canonical（动态，非 production 白名单）。"""
+    """动态查询 Registry 中已有 polars backend 的 canonical。
+
+返回:
+    已实现 polars 后端的 canonical ``frozenset``（非 production 白名单）。
+"""
     from cleaned_operators.registry import OperatorRegistry
 
     return frozenset(
@@ -323,7 +347,11 @@ def polars_implemented_canonicals() -> frozenset[str]:
 
 
 def check_polars_production_gate() -> list[str]:
-    """POLARS 准入：parity 并集 = safe 扩展层；PRODUCTION_CORE 须全覆盖。"""
+    """校验 Polars production 准入集合的内部一致性。
+
+返回:
+    违规描述字符串列表。
+"""
     from cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS
 
     errors: list[str] = []
@@ -347,7 +375,14 @@ def check_polars_production_gate() -> list[str]:
 
 
 def resolve_tier1_canonical(name: str) -> str:
-    """Tier-1 校验 / cost 门禁：alias → canonical。"""
+    """Tier-1 校验前将 DSL 别名解析为 canonical。
+
+参数:
+    name: DSL 名或 canonical 名。
+
+返回:
+    解析后的 canonical 名。
+"""
     from cleaned_operators.registry import OperatorRegistry
 
     if name in TIER1_ALIASES:
@@ -356,7 +391,11 @@ def resolve_tier1_canonical(name: str) -> str:
 
 
 def tier1_policy_keys() -> frozenset[str]:
-    """policy_required 在 _EXPLICIT_POLICIES 中必须存在的键（含 alias）。"""
+    """获取 policy_required 在 ``_EXPLICIT_POLICIES`` 中必须存在的键集合。
+
+返回:
+    含 canonical 与 Tier-1 别名的 ``frozenset``。
+"""
     keys = set(policy_required_canonicals())
     keys.update(TIER1_ALIASES.keys())
     for alias, canon in TIER1_ALIASES.items():
@@ -672,7 +711,11 @@ _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
 
 @dataclass
 class OperatorPolicy:
-    """算子执行语义（企业级 schema 子集）。"""
+    """算子执行语义（企业级 schema 子集）。
+
+    描述 lookback、PIT 安全、NaN 策略、shape 契约等机器可读属性，
+    供 lineage hash、数据加载缓冲与 production 审计使用。
+    """
 
     scope: Scope = "unknown"
     lookback_window: int | None = None
@@ -691,11 +734,24 @@ class OperatorPolicy:
     tags: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
+    """将 ``OperatorPolicy`` 序列化为普通字典。
+
+返回:
+    策略字段的字典表示。
+"""
         return asdict(self)
 
 
 def infer_operator_policy(op: Any, *, canonical: str | None = None) -> OperatorPolicy:
-    """从算子实例 metadata/category/tags 推断默认 policy。"""
+    """从算子实例 metadata/category/tags 推断默认 policy。
+
+参数:
+    op: 算子实例。
+    canonical: 可选 canonical 名覆盖。
+
+返回:
+    推断或查表得到的 ``OperatorPolicy`` 对象。
+"""
     canon = canonical or getattr(getattr(op, "metadata", None), "name", "") or ""
     if canon in _EXPLICIT_POLICIES:
         base = {"scope": "unknown", "pit_safe": True}
@@ -772,7 +828,14 @@ def infer_operator_policy(op: Any, *, canonical: str | None = None) -> OperatorP
 
 
 def compute_operator_catalog_hash(*, backend: str = "pandas_numpy") -> str:
-    """对所有已实现算子的 canonical + policy 做确定性 hash，用于 lineage。"""
+    """对所有已实现算子的 canonical + policy 做确定性 hash。
+
+参数:
+    backend: 目标 backend，默认 ``pandas_numpy``。
+
+返回:
+    SHA-256 十六进制摘要，用于 lineage 追踪。
+"""
     from cleaned_operators.registry import OperatorRegistry
 
     entries: list[dict[str, Any]] = []
@@ -802,9 +865,16 @@ def effective_lookback(
 ) -> int:
     """将 IR 分析 lookback 转为数据加载历史缓冲 bar 数。
 
-    当因子频率与数据源 bar 频率不一致时（如因子 ``1d``、源 ``5m``），
-    按 ``bars_per_day`` 比例换算 warmup 长度。
-    """
+参数:
+    analysis_lookback: 因子分析窗口 bar 数。
+    factor_freq: 因子频率（如 ``1d``）。
+    source_bar_freq: 数据源 bar 频率（如 ``5m``）。
+    lag_buffer: 滞后缓冲 bar 数。
+    extra: 额外安全缓冲 bar 数。
+
+返回:
+    数据加载所需的历史 bar 数。
+"""
     base = max(0, int(analysis_lookback))
     bars = base + max(0, int(lag_buffer)) + max(0, int(extra))
     if factor_freq and source_bar_freq and factor_freq != source_bar_freq:
@@ -817,7 +887,15 @@ def effective_lookback(
 
 
 def bars_to_calendar_trading_days(bars: int, bar_freq: str | None) -> int:
-    """将 bar 数换算为交易日数（用于增量/扩窗的 calendar offset）。"""
+    """将 bar 数换算为交易日数。
+
+参数:
+    bars: bar 数量。
+    bar_freq: bar 频率字符串。
+
+返回:
+    对应的交易日数（至少 1）。
+"""
     count = max(0, int(bars))
     if count <= 0:
         return 0
@@ -828,7 +906,15 @@ def bars_to_calendar_trading_days(bars: int, bar_freq: str | None) -> int:
 
 
 def infer_source_bar_freq(data_source: Any, *, fallback: str | None = "1d") -> str:
-    """从 DataSource 读取 bar 频率；无则回退 factor 或日频。"""
+    """从 DataSource 对象推断 bar 频率。
+
+参数:
+    data_source: 数据源对象（可嵌套 ``inner``/_``inner``）。
+    fallback: 无频率信息时的回退值，默认 ``1d``。
+
+返回:
+    bar 频率字符串。
+"""
     for attr in ("bar_freq", "freq"):
         value = getattr(data_source, attr, None)
         if value:
@@ -872,10 +958,16 @@ def bars_per_day(
     market: str = "US",
     session: str = "regular",
 ) -> int:
-    """解析频率字符串为每交易日 bar 数；未知频率默认 1（日频）。
+    """解析频率字符串为每交易日 bar 数。
 
-    ``market`` 支持 ``US`` / ``CN`` / ``HK``；``session`` 目前仅 ``regular``。
-    """
+参数:
+    freq: 频率字符串（如 ``5m``、``1d``）。
+    market: 市场代码，``US``/``CN``/``HK``。
+    session: 交易时段，目前仅 ``regular``。
+
+返回:
+    每交易日 bar 数；未知频率默认 1（日频）。
+"""
     if not freq:
         return 1
     text = str(freq).strip()
@@ -895,7 +987,14 @@ def bars_per_day(
 
 
 def normalize_bars_market(market: str | None) -> str:
-    """``infer_market`` / universe 市场码 → ``bars_per_day`` 市场键（US/CN/HK）。"""
+    """将 universe/市场码规范化为 ``bars_per_day`` 市场键。
+
+参数:
+    market: 市场标识字符串。
+
+返回:
+    ``US``、``CN`` 或 ``HK``。
+"""
     if not market:
         return "US"
     key = str(market).strip().lower()
@@ -912,7 +1011,14 @@ def normalize_bars_market(market: str | None) -> str:
 
 
 def bar_freq_to_timedelta(freq: str | None) -> pd.Timedelta:
-    """将 bar 频率字符串转为 Timedelta（用于日内 tick 级扩窗）。"""
+    """将 bar 频率字符串转为 ``pd.Timedelta``。
+
+参数:
+    freq: 频率字符串。
+
+返回:
+    对应的 ``pd.Timedelta``；未知时默认 1 日。
+"""
     if not freq:
         return pd.Timedelta(days=1)
     text = str(freq).strip().lower()

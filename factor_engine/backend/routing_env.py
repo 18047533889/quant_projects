@@ -12,7 +12,14 @@ if TYPE_CHECKING:
 
 @contextmanager
 def routing_execution_scope(perf: "PerfConfig | None" = None):
-    """在 execute 窗口内同步 ``FACTOR_ENGINE_USE_NUMBA`` 与 perf 配置。"""
+    """在 execute 窗口内同步 ``FACTOR_ENGINE_USE_NUMBA`` 与 perf 配置。
+
+    参数:
+        perf: 可选性能配置；``use_numba_rolling`` 为真时临时启用 Numba。
+
+    返回:
+        上下文管理器，退出时恢复环境变量。
+    """
     prev = os.environ.get("FACTOR_ENGINE_USE_NUMBA")
     if perf is not None and perf.use_numba_rolling:
         os.environ["FACTOR_ENGINE_USE_NUMBA"] = "1"

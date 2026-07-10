@@ -1,5 +1,9 @@
-# -*- coding: utf-8
-"""物化编排：Parquet/staging + 可选 ClickHouse 双写。"""
+# -*- coding: utf-8 -*-
+"""物化编排：Parquet/staging + 可选 ClickHouse 双写。
+
+本模块封装 ``FactorEngine.materialize*`` 的落盘逻辑：构建 lineage、
+调用 ``ParquetMaterializer``、记录因子依赖 catalog，并按需双写 ClickHouse。
+"""
 
 from __future__ import annotations
 
@@ -18,6 +22,10 @@ logger = get_logger("runtime.materialize_service")
 
 
 def resolve_parquet_write_target(write_target: str) -> str:
+    """将用户 write_target 映射为 Parquet 物化器可识别的目标。
+
+    ``staging_clickhouse`` 仅 Parquet 写 staging；``clickhouse`` 跳过 Parquet。
+    """
     target = str(write_target or "local").lower()
     if target == "staging_clickhouse":
         return "staging"
@@ -27,6 +35,7 @@ def resolve_parquet_write_target(write_target: str) -> str:
 
 
 def needs_clickhouse_write(write_target: str) -> bool:
+    """write_target 是否需要 ClickHouse 双写（``clickhouse`` 或 ``staging_clickhouse``）。"""
     return str(write_target or "local").lower() in ("clickhouse", "staging_clickhouse")
 
 
@@ -64,7 +73,35 @@ def execute_materialize(
     storage_format: str = "long",
     partition_columns: list[str] | None = None,
 ) -> dict[str, Any]:
-    """run 输出 → lineage → ParquetMaterializer → 可选 CH 双写。"""
+    """将 ``run`` 输出物化到因子湖（及可选 ClickHouse）。
+
+    流程：构建 lineage → ``ParquetMaterializer.materialize`` →
+    记录因子依赖 catalog → 按需 ``dual_write_clickhouse``。
+
+    Args:
+        engine: 因子引擎实例（提供 ``data_source``）。
+        factor: 因子对象。
+        output: ``run`` / ``run_incremental`` 返回的字典，须含 ``analysis`` 与 ``result``。
+        target: 写入目标（``local``/``staging``/``clickhouse``/``staging_clickhouse`` 等）。
+        lake_root: 因子湖根目录。
+        staging_dataset: staging 数据集名称。
+        factor_id: 落盘因子 ID；缺省用 ``factor.name``。
+        author/frequency/description/expression: 元数据字段。
+        dq_check/dq_strict/dq_thresholds: 产出 DQ 门禁参数。
+        write_metadata: 是否写入 run 元数据。
+        data_source_config: 数据源配置快照（lineage 用）。
+        resume_materialize: 是否断点续写分区。
+        isolate_partition_failures: 单分区失败是否隔离。
+        preserve_invalid_rows: 是否保留 inf 等为 ``is_valid=0``。
+        value_dtype: 落盘值 dtype。
+        clickhouse_* / ch_*: ClickHouse 连接与表参数。
+        lineage_mode: lineage 模式（``full`` / ``incremental``）。
+        storage_format: Parquet 存储格式（``long`` 等）。
+        partition_columns: 自定义分区列。
+
+    Returns:
+        原 ``output`` 字典，附加 ``materialization`` 键含落盘摘要。
+    """
     analysis = output["analysis"]
     lineage = lineage_service.build_materialize_lineage(
         factor=factor,
@@ -167,7 +204,10 @@ def execute_materialize_from_resolved(
     *,
     lineage_mode: str = "full",
 ) -> dict[str, Any]:
-    """已有 run 输出 + ResolvedMaterializeKwargs → 落盘（批量物化 run_many 路径）。"""
+    """已有 run 输出 + ``ResolvedMaterializeKwargs`` → 落盘。
+
+    供 ``materialize_many_from_config`` 等批量路径复用，避免重复解析 kwargs。
+    """
     return execute_materialize(
         engine,
         factor,
@@ -204,6 +244,9 @@ def execute_materialize_from_resolved(
 
 
 def can_batch_materialize_compute(opts: Any) -> bool:
-    """是否可对多因子共享一次 run_many（非增量、非 resume 分区）。"""
+    """是否可对多因子共享一次 ``run_many`` 计算（非增量、非 resume 分区）。
+
+    增量物化或断点续写分区需逐因子独立执行窗口。
+    """
     return not opts.resume_materialize and opts.since is None
 

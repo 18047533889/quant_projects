@@ -6,6 +6,14 @@ from typing import Any
 
 
 def polars_panel_enabled(ctx: Any) -> bool:
+    """判断当前上下文是否应使用 Polars 宽表 panel 路径。
+
+    参数:
+        ctx: 执行上下文。
+
+    返回:
+        ``prefer_polars_panel`` 或 runtime backend 为 polars 时为 ``True``。
+    """
     if getattr(ctx, "prefer_polars_panel", False):
         return True
     stats = getattr(ctx, "runtime_stats", None) or {}
@@ -13,6 +21,14 @@ def polars_panel_enabled(ctx: Any) -> bool:
 
 
 def pandas_panel_to_polars(panel: Any) -> Any:
+    """将 pandas 宽表转为 Polars DataFrame。
+
+    参数:
+        panel: pandas 或 polars DataFrame。
+
+    返回:
+        Polars ``DataFrame``。
+    """
     import polars as pl
 
     if isinstance(panel, pl.DataFrame):
@@ -23,6 +39,14 @@ def pandas_panel_to_polars(panel: Any) -> Any:
 
 
 def polars_panel_to_pandas(panel: Any) -> Any:
+    """将 Polars 宽表转为 pandas DataFrame。
+
+    参数:
+        panel: polars 或 pandas DataFrame。
+
+    返回:
+        pandas ``DataFrame``。
+    """
     import pandas as pd
 
     if isinstance(panel, pd.DataFrame):

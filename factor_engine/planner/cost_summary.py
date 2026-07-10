@@ -9,13 +9,27 @@ from planner.logical_plan import PlanNode
 
 
 def summarize_plan_cost(plan: PlanNode) -> dict[str, Any]:
-    """单计划代价摘要。"""
+    """单计划代价摘要。
+
+    参数：
+        plan: 单因子逻辑计划根节点
+
+    返回：
+        算子代价估计字典（来自 ``estimate_plan_cost``）
+    """
     est = estimate_plan_cost(plan)
     return dict(est) if isinstance(est, dict) else {"estimate": est}
 
 
 def summarize_plans(plans: dict[str, PlanNode]) -> dict[str, Any]:
-    """多因子 plan 代价汇总。"""
+    """多因子 plan 代价汇总。
+
+    参数：
+        plans: 因子名 → 逻辑计划根节点的映射
+
+    返回：
+        含 ``factors``、``tier_histogram``、``high_memory_ops``、``factor_count`` 的汇总字典
+    """
     per_factor: dict[str, dict[str, Any]] = {}
     tier_hist: dict[int, int] = {}
     high_memory_ops: list[str] = []
@@ -38,6 +52,7 @@ def summarize_plans(plans: dict[str, PlanNode]) -> dict[str, Any]:
 
 
 def _walk(node: PlanNode):
+    """后序生成器：依次产出子树中每个 ``PlanNode``。"""
     for child in node.inputs:
         yield from _walk(child)
     yield node

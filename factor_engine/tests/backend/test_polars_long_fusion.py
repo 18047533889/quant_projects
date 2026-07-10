@@ -11,7 +11,11 @@ from api.cleaned_ops import make_cleaned_call_factory
 from api.columns import col
 from api.factor import Factor
 from backend.factory import build_backend
-from backend.polars_long_policy import POLARS_LONG_MAP_GROUPS, POLARS_LONG_NATIVE
+from backend.polars_long_policy import (
+    POLARS_LONG_MAP_GROUPS,
+    POLARS_LONG_NATIVE,
+    POLARS_LONG_PYTHON_ROLLING,
+)
 from runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
@@ -75,15 +79,33 @@ _ROLLING_MAP_OPS = frozenset(
 )
 
 
+_PYTHON_ROLLING_OPS = frozenset(
+    {
+        "ts_decay_linear",
+        "WMA",
+        "Slope",
+        "ts_argmax",
+        "ts_argmin",
+        "ts_skew",
+        "ts_quantile",
+    }
+)
+
+
 def test_native_tier_excludes_rolling_map_ops():
     overlap = POLARS_LONG_NATIVE & _ROLLING_MAP_OPS
     assert not overlap, f"rolling_map ops mislabeled native: {sorted(overlap)}"
+    py_overlap = POLARS_LONG_PYTHON_ROLLING & _PYTHON_ROLLING_OPS
+    assert py_overlap == _PYTHON_ROLLING_OPS
 
 
-def test_ts_argmax_ts_sharpe_are_native_not_map_groups():
-    for op in ("ts_argmax", "ts_argmin", "ts_sharpe", "ts_autocorr"):
+def test_ts_sharpe_native_ts_argmax_python_rolling():
+    for op in ("ts_sharpe", "ts_autocorr"):
         assert op in POLARS_LONG_NATIVE
         assert op not in POLARS_LONG_MAP_GROUPS
+    for op in ("ts_argmax", "ts_argmin"):
+        assert op in POLARS_LONG_PYTHON_ROLLING
+        assert op not in POLARS_LONG_NATIVE
 
 
 def test_group_window_ops_are_native_not_map_groups():

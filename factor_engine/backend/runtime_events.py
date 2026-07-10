@@ -6,10 +6,12 @@ from typing import Any
 
 
 def _runtime(ctx: Any) -> dict[str, Any]:
+    """从执行上下文读取 runtime_stats 副本。"""
     return dict(getattr(ctx, "runtime_stats", None) or {})
 
 
 def _write_runtime(ctx: Any, runtime: dict[str, Any]) -> None:
+    """将 runtime_stats 写回执行上下文。"""
     ctx.runtime_stats = runtime  # type: ignore[attr-defined]
 
 
@@ -20,7 +22,14 @@ def append_runtime_event(
     backend: str | None = None,
     **payload: Any,
 ) -> None:
-    """追加事件并更新 ``latest`` 快照。"""
+    """追加事件并更新 ``latest`` 快照。
+
+    参数:
+        ctx: 执行上下文，需支持 ``runtime_stats`` 属性。
+        event_type: 事件类型标签。
+        backend: 可选 backend 名称。
+        **payload: 附加事件字段。
+    """
     runtime = _runtime(ctx)
     event: dict[str, Any] = {"type": str(event_type)}
     if backend is not None:
@@ -36,7 +45,12 @@ def append_runtime_event(
 
 
 def merge_runtime(ctx: Any, **fields: Any) -> None:
-    """合并字段到 runtime 顶层 + ``latest``（兼容旧 dict 写法）。"""
+    """合并字段到 runtime 顶层 + ``latest``（兼容旧 dict 写法）。
+
+    参数:
+        ctx: 执行上下文。
+        **fields: 要合并的 telemetry 字段。
+    """
     runtime = _runtime(ctx)
     runtime.update(fields)
     latest = dict(runtime.get("latest") or {})
@@ -46,14 +60,28 @@ def merge_runtime(ctx: Any, **fields: Any) -> None:
 
 
 def rollup_runtime_fields(ctx: Any | None) -> dict[str, Any]:
-    """从 ``latest`` + 顶层 + events 汇总 path summary 用字段。"""
+    """从 ``latest`` + 顶层 + events 汇总 path summary 用字段。
+
+    参数:
+        ctx: 执行上下文；为 ``None`` 时返回空字典。
+
+    返回:
+        重建后的完整 runtime 视图。
+    """
     if ctx is None:
         return {}
     return rebuild_runtime_from_events(_runtime(ctx))
 
 
 def rebuild_runtime_from_events(runtime: dict[str, Any] | None) -> dict[str, Any]:
-    """从 event log 重建完整 runtime 视图（path summary 主入口）。"""
+    """从 event log 重建完整 runtime 视图（path summary 主入口）。
+
+    参数:
+        runtime: 含 ``events``、``latest`` 及顶层字段的 runtime 字典。
+
+    返回:
+        合并事件后的扁平 runtime 字典。
+    """
     base = dict(runtime or {})
     out = {k: v for k, v in base.items() if k not in {"events", "latest"}}
     out.update(dict(base.get("latest") or {}))

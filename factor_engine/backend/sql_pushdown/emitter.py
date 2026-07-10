@@ -405,6 +405,79 @@ def _cs_pct_rank_sql(inner_sql: str, *, partition: str, dialect: SqlDialect) -> 
     return f"SELECT ts, inst, {expr} AS _v FROM ({inner_sql}) t"
 
 
+def _ts_pct_rank_sql(inner_sql: str, *, window: int, dialect: SqlDialect) -> str:
+    """滚动百分位 rank，对齐 ``pandas rolling.rank(pct=True, method='average')``。"""
+    w = max(int(window), 1)
+    numbered = (
+        f"SELECT ts, inst, _v, ROW_NUMBER() OVER (PARTITION BY inst ORDER BY ts) AS rn "
+        f"FROM ({inner_sql}) t0"
+    )
+    if dialect == SqlDialect.CLICKHOUSE:
+        rank_expr = (
+            f"if(b._v IS NULL, NULL, ("
+            f"SELECT if(s.cnt = 0, NULL, if(s.cnt <= 1, 1.0, "
+            f"(s.cnt_le - (s.cnt_eq - 1) / 2.0) / s.cnt)) "
+            f"FROM ("
+            f"SELECT "
+            f"countIf(p._v IS NOT NULL) AS cnt, "
+            f"countIf(p._v IS NOT NULL AND p._v <= b._v) AS cnt_le, "
+            f"countIf(p._v IS NOT NULL AND p._v = b._v) AS cnt_eq "
+            f"FROM ({numbered}) p "
+            f"WHERE p.inst = b.inst AND p.rn BETWEEN b.rn - {w - 1} AND b.rn"
+            f") s"
+            f"))"
+        )
+    else:
+        rank_expr = (
+            f"CASE WHEN b._v IS NULL THEN NULL ELSE ("
+            f"SELECT CASE WHEN s.cnt = 0 THEN NULL WHEN s.cnt <= 1 THEN 1.0 "
+            f"ELSE (s.cnt_le - (s.cnt_eq - 1) / 2.0) / s.cnt END "
+            f"FROM ("
+            f"SELECT "
+            f"COUNT(*) FILTER (WHERE p._v IS NOT NULL) AS cnt, "
+            f"COUNT(*) FILTER (WHERE p._v IS NOT NULL AND p._v <= b._v) AS cnt_le, "
+            f"COUNT(*) FILTER (WHERE p._v IS NOT NULL AND p._v = b._v) AS cnt_eq "
+            f"FROM ({numbered}) p "
+            f"WHERE p.inst = b.inst AND p.rn BETWEEN b.rn - {w - 1} AND b.rn"
+            f") s"
+            f") END"
+        )
+    return f"SELECT b.ts, b.inst, {rank_expr} AS _v FROM ({numbered}) b"
+
+
+def _rolling_corr_pandas_compat_expr(
+    *,
+    corr_col: str,
+    std_left_col: str,
+    std_right_col: str,
+    left_col: str,
+    right_col: str,
+    window_count_col: str,
+    window: int,
+    dialect: SqlDialect,
+) -> str:
+    """滚动相关；满窗零方差退化时对齐 pandas ``rolling.corr``（→ ``inf``）。"""
+    w = max(int(window), 1)
+    full = f"{window_count_col} >= {w}"
+    if dialect == SqlDialect.CLICKHOUSE:
+        return (
+            f"multiIf("
+            f"isNull({left_col}) OR isNull({right_col}), NULL, "
+            f"isFinite({corr_col}), {corr_col}, "
+            f"{full} AND (isNull({std_left_col}) OR {std_left_col} = 0) AND {std_right_col} > 0, inf, "
+            f"{full} AND (isNull({std_right_col}) OR {std_right_col} = 0) AND {std_left_col} > 0, inf, "
+            f"NULL)"
+        )
+    return (
+        f"CASE "
+        f"WHEN {left_col} IS NULL OR {right_col} IS NULL THEN NULL "
+        f"WHEN isfinite({corr_col}) THEN {corr_col} "
+        f"WHEN {full} AND ({std_left_col} IS NULL OR {std_left_col} = 0) AND {std_right_col} > 0 THEN 'Infinity'::DOUBLE "
+        f"WHEN {full} AND ({std_right_col} IS NULL OR {std_right_col} = 0) AND {std_left_col} > 0 THEN 'Infinity'::DOUBLE "
+        f"ELSE NULL END"
+    )
+
+
 def _group_zscore_expr(
     *,
     value_col: str,
@@ -1103,7 +1176,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         lag = f"LAG(_v) OVER (PARTITION BY inst ORDER BY ts)"
         return _Layer(
             f"SELECT ts, inst, "
-            f"CASE WHEN _v IS NULL OR {lag} IS NULL OR {lag} = 0 THEN NULL "
+            f"CASE WHEN _v IS NULL OR {lag} IS NULL OR _v <= 0 OR {lag} <= 0 THEN NULL "
             f"ELSE {ln}(_v / {lag}) END AS _v "
             f"FROM ({inner.sql}) t",
             has_inst_window=True,
@@ -1336,19 +1409,36 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        w = _window_int(node)
-        lag = _int_attr(node, "lag", default=1)
+        lag_pos = _literal_positional(node, 1, default=1.0)
+        lag = max(int(lag_pos or 1), 1)
+        w = max(lag + 2, _window_int(node))
         over = (
             f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
         )
-        corr_fn = "corr" if dialect == SqlDialect.DUCKDB else "corrStable"
+        corr_expr = _rolling_corr_pandas_compat_expr(
+            corr_col="_corr",
+            std_left_col="_std_l",
+            std_right_col="_std_r",
+            left_col="curr_v",
+            right_col="lagged_v",
+            window_count_col="_win_cnt",
+            window=w,
+            dialect=dialect,
+        )
         return _Layer(
-            f"SELECT ts, inst, {corr_fn}(curr_v, lagged_v) OVER ({over}) AS _v "
+            f"SELECT ts, inst, {corr_expr} AS _v "
+            f"FROM ("
+            f"SELECT ts, inst, curr_v, lagged_v, "
+            f"COUNT(*) OVER ({over}) AS _win_cnt, "
+            f"{'corr' if dialect == SqlDialect.DUCKDB else 'corrStable'}(curr_v, lagged_v) OVER ({over}) AS _corr, "
+            f"{'stddev_samp' if dialect == SqlDialect.DUCKDB else 'stddevSamp'}(curr_v) OVER ({over}) AS _std_l, "
+            f"{'stddev_samp' if dialect == SqlDialect.DUCKDB else 'stddevSamp'}(lagged_v) OVER ({over}) AS _std_r "
             f"FROM ("
             f"SELECT ts, inst, _v AS curr_v, "
             f"LAG(_v, {lag}) OVER (PARTITION BY inst ORDER BY ts) AS lagged_v "
             f"FROM ({inner.sql}) inner0"
-            f") aligned",
+            f") aligned"
+            f") scored",
             has_inst_window=True,
         )
 
@@ -1642,11 +1732,8 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if inner is None:
             return None
         w = _window_int(node)
-        over = (
-            f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
-        )
         return _Layer(
-            _cs_pct_rank_sql(inner.sql, partition=over, dialect=dialect),
+            _ts_pct_rank_sql(inner.sql, window=w, dialect=dialect),
             has_inst_window=True,
         )
 

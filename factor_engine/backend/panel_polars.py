@@ -43,4 +43,12 @@ def polars_to_panel(result: Any, *, template: pd.DataFrame) -> pd.DataFrame:
 
 
 def is_polars_frame(obj: Any) -> bool:
+    """判断对象是否为 Polars DataFrame。
+
+    参数:
+        obj: 待检测对象。
+
+    返回:
+        polars 已安装且对象为 ``pl.DataFrame`` 时为 ``True``。
+    """
     return pl is not None and isinstance(obj, pl.DataFrame)

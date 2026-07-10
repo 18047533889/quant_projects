@@ -11,6 +11,8 @@ _BENCHMARK_JSON = Path(__file__).resolve().parents[1] / "benchmarks" / "backend_
 
 @dataclass(frozen=True)
 class FastpathCoverageRow:
+    """单 canonical 的 fast path 覆盖矩阵行。"""
+
     canonical: str
     allow_in_production: bool
     pandas_numpy_status: str
@@ -36,6 +38,11 @@ class FastpathCoverageRow:
     fastpath_block_reason: str = ""
 
     def to_csv_row(self) -> dict[str, Any]:
+        """导出为 CSV/报表用扁平行字典。
+
+        返回:
+            含各 backend 状态、parity 与 fastpath 标志的字段字典。
+        """
         return {
             "canonical": self.canonical,
             "allow_in_production": self.allow_in_production,
@@ -68,12 +75,18 @@ class FastpathCoverageRow:
 
 
 def _benchmark_canonicals() -> frozenset[str]:
+    """从 benchmark JSON 读取已实测的 canonical 集合。"""
     if not _BENCHMARK_JSON.is_file():
         return frozenset()
     try:
         import json
 
         data = json.loads(_BENCHMARK_JSON.read_text(encoding="utf-8"))
+        if data.get("generated_by") == "seed_defaults":
+            return frozenset()
+        provenance = data.get("provenance") or {}
+        if provenance.get("measured") is False:
+            return frozenset()
         ops = data.get("operators") or data.get("canonicals") or {}
         if isinstance(ops, dict):
             return frozenset(str(k) for k in ops)
@@ -92,6 +105,7 @@ def _fastpath_block_reason(
     polars_native_ok: bool,
     polars_tier: str,
 ) -> str:
+    """推断 canonical 被 production fast path 阻断的原因。"""
     from backend.polars_long_production import POLARS_LONG_FASTPATH_DEFERRED
     from backend.sql_tiers import SQL_PRODUCTION_DEFERRED_CANONICALS
 
@@ -101,7 +115,7 @@ def _fastpath_block_reason(
         return "deferred_complex_op"
     if duckdb_ok or polars_native_ok:
         return ""
-    if polars_tier in {"map_groups", "registry"}:
+    if polars_tier in {"map_groups", "registry", "python_rolling"}:
         return f"polars_long_{polars_tier}_not_fastpath"
     if polars_tier == "passthrough":
         return "polars_long_passthrough"
@@ -116,6 +130,14 @@ def _fastpath_block_reason(
 
 
 def build_fastpath_coverage_row(canon: str) -> FastpathCoverageRow:
+    """构建单个 canonical 的 fast path 覆盖行。
+
+    参数:
+        canon: 算子 canonical 名称或别名。
+
+    返回:
+        聚合各 backend 状态与 parity 证据的 ``FastpathCoverageRow``。
+    """
     from backend.operator_capability import (
         _sql_emitter_ok,
         capability_for,
@@ -194,6 +216,14 @@ def build_fastpath_coverage_row(canon: str) -> FastpathCoverageRow:
 def build_fastpath_coverage_matrix(
     canonicals: Sequence[str] | None = None,
 ) -> list[FastpathCoverageRow]:
+    """构建 fast path 覆盖矩阵。
+
+    参数:
+        canonicals: 可选 canonical 子集；为 ``None`` 时使用全量 capability 矩阵。
+
+    返回:
+        ``FastpathCoverageRow`` 列表。
+    """
     from backend.operator_capability import build_capability_matrix, resolve_canonical
 
     if canonicals is None:
@@ -205,6 +235,14 @@ def build_fastpath_coverage_matrix(
 
 
 def summarize_fastpath_coverage(rows: Sequence[FastpathCoverageRow]) -> dict[str, Any]:
+    """汇总 fast path 覆盖统计（报表 / CI）。
+
+    参数:
+        rows: fast path 覆盖行序列。
+
+    返回:
+        含 production 允许数、fast path 数及阻断样例的摘要字典。
+    """
     prod_rows = [r for r in rows if r.allow_in_production]
     fast = [r for r in prod_rows if r.production_fast_path]
     blocked = [r for r in prod_rows if not r.production_fast_path]

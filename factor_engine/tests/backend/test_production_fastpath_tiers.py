@@ -39,12 +39,43 @@ def test_p1_group_polars_production_safe(_loaded):
 
 
 def test_p1_robust_duckdb_production_safe(_loaded):
-    from backend.production_fastpath_tiers import P1_DUCKDB_PARITY_PENDING
     from backend.sql_tiers import effective_sql_production_safe
 
-    assert not P1_DUCKDB_PARITY_PENDING
     for canon in ("cs_mad", "cs_mad_zscore", "winsorize", "group_winsorize"):
         assert effective_sql_production_safe(canon), canon
+
+
+def test_p1_regression_not_production_safe(_loaded):
+    from backend.polars_long_production import is_polars_long_native_production_safe
+    from backend.production_fastpath_tiers import P1_REGRESSION_PARITY_PENDING
+    from backend.sql_tiers import effective_sql_production_safe
+
+    for canon in P1_REGRESSION_PARITY_PENDING:
+        assert not is_polars_long_native_production_safe(canon), canon
+        assert not effective_sql_production_safe(canon), canon
+
+
+def test_p1_golden_verified_production_safe(_loaded):
+    from backend.polars_long_production import is_polars_long_native_production_safe
+    from backend.production_fastpath_tiers import (
+        P1_GOLDEN_VERIFIED_REGRESSION,
+        P1_GOLDEN_VERIFIED_TS,
+    )
+    from backend.sql_tiers import effective_sql_production_safe
+
+    for canon in sorted(P1_GOLDEN_VERIFIED_TS | P1_GOLDEN_VERIFIED_REGRESSION):
+        assert is_polars_long_native_production_safe(canon), canon
+        assert effective_sql_production_safe(canon), canon
+
+
+def test_p1_ts_complex_not_production_safe(_loaded):
+    from backend.polars_long_production import is_polars_long_native_production_safe
+    from backend.production_fastpath_tiers import P1_TS_COMPLEX_PARITY_PENDING
+    from backend.sql_tiers import effective_sql_production_safe
+
+    for canon in P1_TS_COMPLEX_PARITY_PENDING:
+        assert not is_polars_long_native_production_safe(canon), canon
+        assert not effective_sql_production_safe(canon), canon
 
 
 def test_rolling_beta_native_not_map_groups(_loaded):
@@ -128,4 +159,5 @@ def test_sql_tier_aliases(_loaded):
 
     assert DUCKDB_SQL_PARITY_VERIFIED == SQL_PARITY_VERIFIED_CANONICALS
     assert DUCKDB_SQL_PRODUCTION_SAFE == SQL_PRODUCTION_SAFE_CANONICALS
-    assert CLICKHOUSE_SQL_PRODUCTION_SAFE <= CLICKHOUSE_SQL_PARITY_VERIFIED
+    assert not CLICKHOUSE_SQL_PRODUCTION_SAFE
+    assert not CLICKHOUSE_SQL_PARITY_VERIFIED

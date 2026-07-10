@@ -56,6 +56,7 @@ def resolve_path(value: str | Path, *, base_dir: Path | None = None) -> Path:
 
 
 def workspace_data_root() -> Path:
+    """workspace 数据根：优先环境变量，其次 ``quant_projects/data``。"""
     override = os.getenv("QUANTSOCIETY_WORKSPACE_DATA_ROOT")
     if override:
         return Path(override).expanduser().resolve()
@@ -66,6 +67,7 @@ def workspace_data_root() -> Path:
 
 
 def default_factor_lake_root() -> Path:
+    """因子湖根目录：``FACTOR_LAKE_ROOT`` 或 ``{workspace_data}/factors/lake``。"""
     override = os.getenv("FACTOR_LAKE_ROOT")
     if override:
         return Path(override).expanduser().resolve()

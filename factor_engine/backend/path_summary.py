@@ -81,6 +81,7 @@ def infer_primary_route(runtime: dict[str, Any]) -> str:
 
 
 def _final_collect(runtime: dict[str, Any]) -> str:
+    """推断最终结果物化到 Pandas 的 collect 路径。"""
     if runtime.get("fully_sql"):
         return "sql_to_pandas"
     if runtime.get("used_polars_long_path"):

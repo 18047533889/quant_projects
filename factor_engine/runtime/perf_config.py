@@ -1,10 +1,15 @@
-"""执行期性能与资源参数：从环境变量读取，适配不同机器。"""
+"""执行期性能与资源参数：从环境变量读取，适配不同机器。
+
+``PerfConfig`` 集中管理并行度、内存护栏、CSE、panel-native 路径、
+Numba rolling、回测内核、算子后端选择及 SQL 读路径预算等可调参数。
+所有字段均可通过 ``PerfConfig.from_env()`` 从环境变量加载。
+"""
 
 from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 
 OperatorBackend = Literal["auto", "polars", "pandas_numpy"]
@@ -14,6 +19,7 @@ BacktestExecutionEngine = Literal["python", "numpy", "numba", "auto"]
 
 
 def _env_int(name: str, default: int | None) -> int | None:
+    """读取正整数环境变量；空值、非正数或非法字符串返回 ``default``。"""
     raw = os.environ.get(name, "").strip()
     if not raw:
         return default
@@ -26,6 +32,7 @@ def _env_int(name: str, default: int | None) -> int | None:
 
 
 def _env_float(name: str, default: float | None) -> float | None:
+    """读取正浮点环境变量；空值、非正数或非法字符串返回 ``default``。"""
     raw = os.environ.get(name, "").strip()
     if not raw:
         return default
@@ -37,11 +44,13 @@ def _env_float(name: str, default: float | None) -> float | None:
 
 
 def _env_str(name: str, default: str) -> str:
+    """读取字符串环境变量；空值返回 ``default``。"""
     raw = os.environ.get(name, "").strip()
     return raw if raw else default
 
 
 def _env_backtest_engine(name: str, default: BacktestExecutionEngine) -> BacktestExecutionEngine:
+    """读取回测执行内核环境变量；非法值静默回退 ``default``。"""
     raw = _env_str(name, default).lower()
     if raw in {"python", "numpy", "numba", "auto"}:
         return raw  # type: ignore[return-value]
@@ -75,7 +84,14 @@ class PerfConfig:
     query_max_result_bytes: int | None = None
 
     def build_query_budget(self) -> Any | None:
-        """构造 ``data_access.QueryBudget``；production 强制显式 columns。"""
+        """构造 ``data_access.QueryBudget`` 供执行上下文使用。
+
+        若 ``query_max_rows`` / ``query_max_result_bytes`` 任一非空则显式构造
+        预算；production 模式下 ``resolve_query_budget`` 会强制显式列选择。
+
+        Returns:
+            ``QueryBudget`` 实例，或 ``data_access`` 不可导入时返回 ``None``。
+        """
         try:
             from data_access.query_budget import QueryBudget, resolve_query_budget
         except ImportError:
@@ -90,20 +106,22 @@ class PerfConfig:
 
     @classmethod
     def from_env(cls) -> "PerfConfig":
-        """环境变量：
+        """从环境变量构造 ``PerfConfig`` 实例。
 
-        - ``FACTOR_ENGINE_MAX_WORKERS``：正整数
-        - ``FACTOR_ENGINE_INSTRUMENT_CHUNK``：正整数，按标的分块
-        - ``FACTOR_ENGINE_MAX_MEMORY_MB``：正浮点，内存提示（MB）
-        - ``FACTOR_ENGINE_DISABLE_CSE``：``1``/``true`` 关闭 CSE
+        支持的环境变量：
+
+        - ``FACTOR_ENGINE_MAX_WORKERS``：正整数，多进程/线程 worker 数
+        - ``FACTOR_ENGINE_INSTRUMENT_CHUNK``：正整数，按标的分块大小
+        - ``FACTOR_ENGINE_MAX_MEMORY_MB``：正浮点，软内存上限（MB）
+        - ``FACTOR_ENGINE_DISABLE_CSE``：``1``/``true`` 关闭多因子 CSE
         - ``FACTOR_ENGINE_DISABLE_PANEL_NATIVE``：``1``/``true`` 关闭 panel-native 宽表路径
         - ``FACTOR_ENGINE_USE_NUMBA``：``1``/``true`` 尝试 Numba rolling
-        - ``FACTOR_BACKTEST_EXECUTION_ENGINE``：``python``/``numpy``/``numba``/``auto``，多资产回测执行内核选择
-        - ``FACTOR_ENGINE_USE_MODIN``：``1``/``true`` 使 ``PandasBackend`` 使用 ``modin.pandas``（亦可用 ``build_backend(\"pandas_modin\")``）
-        - ``FACTOR_ENGINE_POLARS_LAZY``：``1``/``true`` 使 ``PolarsBackend`` 使用 LazyFrame 再 ``collect``
+        - ``FACTOR_BACKTEST_EXECUTION_ENGINE``：``python``/``numpy``/``numba``/``auto``
+        - ``FACTOR_ENGINE_USE_MODIN``：``1``/``true`` 使 PandasBackend 使用 modin
+        - ``FACTOR_ENGINE_POLARS_LAZY``：``1``/``true`` 使 PolarsBackend 使用 LazyFrame
         - ``FACTOR_ENGINE_OPERATOR_BACKEND``：``auto`` / ``polars`` / ``pandas_numpy``
-        - ``FACTOR_ENGINE_QUERY_MAX_ROWS``：SQL 下推 / 读路径行数硬上限
-        - ``FACTOR_ENGINE_QUERY_MAX_RESULT_BYTES``：结果字节硬上限
+        - ``FACTOR_ENGINE_QUERY_MAX_ROWS``：SQL 下推行数硬上限
+        - ``FACTOR_ENGINE_QUERY_MAX_RESULT_BYTES``：SQL 结果字节硬上限
         """
         disable_cse = os.environ.get("FACTOR_ENGINE_DISABLE_CSE", "").lower() in (
             "1",

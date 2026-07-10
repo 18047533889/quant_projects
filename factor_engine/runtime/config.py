@@ -1,3 +1,14 @@
+"""因子引擎 YAML 配置模型与加载器。
+
+本模块定义 ``FactorEngineConfig`` 及其嵌套 dataclass，并提供 ``load_config`` /
+``load_profile`` 从 YAML 文件（可选 profile 叠加）解析为强类型配置对象。
+
+典型用法::
+
+    config = load_config("examples/my_factor.yaml", profile="production")
+    engine, factor = FactorEngine.from_loaded_config(config)
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -14,6 +25,8 @@ _PROFILES_DIR = Path(__file__).resolve().parent.parent / "examples" / "profiles"
 
 @dataclass(frozen=True)
 class FactorDefinitionConfig:
+    """单因子 DSL 定义（对应 YAML ``factor`` 段）。"""
+
     name: str
     expr: str
     freq: str = "1d"
@@ -23,6 +36,12 @@ class FactorDefinitionConfig:
 
 @dataclass(frozen=True)
 class DataSourceConfig:
+    """数据源配置（对应 YAML ``data_source`` 段）。
+
+    ``type`` 由 ``storage.factory.build_data_source`` 识别；
+    其余键值落入 ``options`` 供具体实现读取。
+    """
+
     type: str
     options: dict[str, Any] = field(default_factory=dict)
 
@@ -36,6 +55,8 @@ class BackendConfig:
 
 @dataclass(frozen=True)
 class EngineConfig:
+    """引擎运行时缓存策略（对应 YAML ``engine`` 段）。"""
+
     enable_cache: bool = True
     plan_cache_dir: str | None = None
 
@@ -52,6 +73,12 @@ class RunConfig:
 
 @dataclass(frozen=True)
 class DQConfig:
+    """数据质量门禁配置（对应 YAML ``dq`` 段）。
+
+    ``profile`` 可引用预置阈值模板；``strict`` 控制产出 DQ，
+    ``input_strict`` 控制输入列 DQ 失败是否中断。
+    """
+
     profile: str | None = None
     strict: bool = False
     input_strict: bool = True
@@ -59,6 +86,8 @@ class DQConfig:
 
 @dataclass(frozen=True)
 class PITConfig:
+    """Point-in-Time 审计配置（对应 YAML ``pit`` 段）。"""
+
     enforce: bool = False
     forbid_forward_fill: bool = False
 
@@ -75,7 +104,16 @@ class IncrementalConfig:
 
 @dataclass(frozen=True)
 class MaterializationConfig:
-    """因子物化到数据湖的元信息（与 ``FactorEngine.materialize*`` 配套）。"""
+    """因子物化到数据湖的元信息与写入策略（对应 YAML ``materialization`` 段）。
+
+    ``target`` 可选值：
+
+    - ``local``：仅写本地 Parquet 因子湖
+    - ``staging``：写 staging 数据集
+    - ``clickhouse``：仅写 ClickHouse
+    - ``staging_clickhouse``：Parquet staging + ClickHouse 双写
+    - ``both``：本地 + staging（历史别名）
+    """
 
     lake_root: str | None = None
     factor_id: str | None = None
@@ -112,6 +150,8 @@ class PipelineConfig:
 
 @dataclass(frozen=True)
 class FactorEngineConfig:
+    """因子引擎完整配置根对象，聚合各 YAML 段。"""
+
     factor: FactorDefinitionConfig
     data_source: DataSourceConfig
     backend: BackendConfig = field(default_factory=BackendConfig)
@@ -124,6 +164,7 @@ class FactorEngineConfig:
 
 
 def _parse_partition_columns(raw: Any) -> tuple[str, ...] | None:
+    """解析物化分区列配置，支持单字符串或字符串列表。"""
     if raw is None:
         return None
     if isinstance(raw, str):
@@ -135,6 +176,7 @@ def _parse_partition_columns(raw: Any) -> tuple[str, ...] | None:
 
 
 def _resolve_optional_path(value: Any, *, base_dir: Path) -> str | None:
+    """将相对路径解析为绝对路径；空值返回 ``None``。"""
     if value is None:
         return None
     text = str(value).strip()
@@ -144,6 +186,7 @@ def _resolve_optional_path(value: Any, *, base_dir: Path) -> str | None:
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """递归合并两个字典，``override`` 覆盖 ``base`` 同名键。"""
     merged = dict(base)
     for key, value in override.items():
         if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
@@ -154,6 +197,7 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 
 
 def _resolve_profile_path(profile: str) -> Path:
+    """将 profile 名称映射到 ``examples/profiles/{name}.yaml`` 路径。"""
     name = str(profile).strip()
     if not name:
         raise ValueError("profile name must be non-empty")
@@ -164,6 +208,7 @@ def _resolve_profile_path(profile: str) -> Path:
 
 
 def load_profile(profile: str) -> dict[str, Any]:
+    """加载预置 profile YAML 为原始字典（不含主配置文件覆盖）。"""
     path = _resolve_profile_path(profile)
     payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(payload, dict):
@@ -172,6 +217,22 @@ def load_profile(profile: str) -> dict[str, Any]:
 
 
 def load_config(path: str | Path, *, profile: str | None = None) -> FactorEngineConfig:
+    """从 YAML 文件加载并解析为 ``FactorEngineConfig``。
+
+    若 ``profile`` 参数或 YAML 内 ``profile`` 键存在，则先加载 profile 再
+    深度合并主配置。相对路径字段相对于配置文件所在目录解析。
+
+    Args:
+        path: 配置文件路径。
+        profile: 可选 profile 名称，覆盖 YAML 内的 ``profile`` 键。
+
+    Returns:
+        解析后的强类型配置对象。
+
+    Raises:
+        ValueError: YAML 结构不合法或缺少必填字段。
+        FileNotFoundError: profile 文件不存在。
+    """
     config_path = Path(path)
     payload = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     if not isinstance(payload, dict):

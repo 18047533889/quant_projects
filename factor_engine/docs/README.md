@@ -9,7 +9,7 @@
 3. **字段命名**：[`canonical_data_fields.md`](canonical_data_fields.md)
 4. **版本沿革**：[`changelog_shw.md`](changelog_shw.md)（第 33–35 版：企业级 P0–P2 / 写目标 / 批量 config）
 5. **企业级 CI 文档门禁**：`scripts/check_enterprise_docs.py`（roadmap Phase 标记 + LLM prompt sync）
-6. **源码导读**：各包 [`README.md`](../README.md)（见下表）
+6. **源码导读**：[`源码注释导读.md`](源码注释导读.md) · 各包 [`README.md`](../README.md)（见下表）
 
 ---
 
@@ -64,6 +64,12 @@
 | `tests/` | [`tests/README.md`](../tests/README.md) |
 | `examples/` | [`examples/README.md`](../examples/README.md) |
 | `scripts/` | [`scripts/README.md`](../scripts/README.md) |
+| `cache/` | [`cache/README.md`](../cache/README.md) |
+| `util/` | [`util/README.md`](../util/README.md) |
+| `backend/sql_pushdown/` | [`backend/sql_pushdown/README.md`](../backend/sql_pushdown/README.md) |
+| `storage/sources/` | [`storage/sources/README.md`](../storage/sources/README.md) |
+| `benchmarks/` | [`benchmarks/README.md`](../benchmarks/README.md) |
+| `cleaned_operators/common/` 等 | 各子目录 [`README.md`](../cleaned_operators/README.md) |
 
 回测长篇说明：monorepo [`../../backtest_layer/single_asset_backtest/README.md`](../../backtest_layer/single_asset_backtest/README.md)
 

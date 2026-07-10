@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
-"""增量因子生产：结合 watermark + lookback 缓冲。"""
+"""增量因子生产：结合 watermark + lookback 缓冲。
+
+增量物化时根据 catalog watermark 确定输出起点，向前扩展 lookback 窗口加载
+原始数据，计算完整 load 区间后仅保留 tail 输出区间，避免全量重算。
+"""
 
 from __future__ import annotations
 
@@ -17,7 +21,7 @@ from storage.time_window import (
 
 @dataclass(frozen=True)
 class IncrementalPlan:
-    """增量执行计划。"""
+    """增量执行计划：描述加载窗口、输出窗口与 watermark 状态。"""
 
     factor_id: str
     lookback_bars: int
@@ -32,6 +36,7 @@ class IncrementalPlan:
     window_mode: str = "daily"
 
     def to_dict(self) -> dict[str, Any]:
+        """序列化为可 JSON 化的字典（时间戳转为 ISO 字符串）。"""
         return {
             "factor_id": self.factor_id,
             "lookback_bars": self.lookback_bars,
@@ -61,7 +66,28 @@ def build_incremental_plan(
     factor_freq: str | None = None,
     source_bar_freq: str | None = None,
 ) -> IncrementalPlan:
-    """构建增量计划；日内源按 ``bars_to_calendar_trading_days`` 换算窗口。"""
+    """构建增量执行计划。
+
+    根据 watermark / ``since`` 确定输出起点，结合因子 IR lookback 与
+    ``lookback_extra`` 计算加载窗口。日内 bar 频率会通过
+    ``resolve_incremental_window_for_bar_freq`` 换算为交易日窗口。
+
+    Args:
+        factor_id: 因子标识，用于 catalog watermark 查询。
+        analysis_lookback: 编译分析得到的 IR lookback bar 数。
+        watermark: catalog 中已有 watermark 字典，可为 ``None``（全量）。
+        since: 显式覆盖 watermark 的起始日期。
+        end_date: 输出区间上界。
+        lookback_extra: 在 IR lookback 基础上额外加载的 bar 缓冲。
+        recompute_tail_bars: 输出 tail 重算 bar 数；``None`` 时取 ``lookback + 1``。
+        market: 市场标识，用于交易日历。
+        calendar: 可选交易日历实例；缺省时按 ``market`` 加载。
+        factor_freq: 因子频率（如 ``1d``）。
+        source_bar_freq: 数据源 bar 频率（日内因子与日线源混用时需区分）。
+
+    Returns:
+        不可变的 ``IncrementalPlan`` 实例。
+    """
     from storage.trading_calendar import get_trading_calendar
 
     wm_end: str | None = None
@@ -117,6 +143,10 @@ def slice_factor_result_for_incremental(
     result: pd.Series,
     plan: IncrementalPlan,
 ) -> pd.Series:
+    """按增量计划裁剪因子结果，仅保留 ``output_start`` 至 ``output_end`` 区间。
+
+    全量运行（``plan.is_full_run``）或 ``output_start`` 为空时原样返回。
+    """
     if plan.is_full_run or plan.output_start is None:
         return result
     return slice_series_time_window(

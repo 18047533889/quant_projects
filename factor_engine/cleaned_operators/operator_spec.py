@@ -1,5 +1,9 @@
 # -*- coding: utf-8
-"""算子生产契约：metadata + policy + lifecycle 统一视图。"""
+"""算子生产契约：metadata + policy + lifecycle 统一视图。
+
+聚合 registry 元数据与 ``OperatorPolicy``，提供 production 准入判定、
+manifest 导出及 CI 契约校验函数。
+"""
 
 from __future__ import annotations
 
@@ -31,8 +35,11 @@ _LEGACY_PRODUCTION_CORE: frozenset[str] = frozenset(
 _FASTPATH_ALIAS_ONLY: frozenset[str] = frozenset({"if_else"})
 
 
-def _build_production_core_canonicals() -> frozenset[str]:
-    """PRODUCTION_CORE = P0/P1 production fastpath safe ∪ legacy PIT core。"""
+def _build_production_core_canonicals    """构建 PRODUCTION_CORE canonical 集合。
+
+返回:
+    P0/P1 fastpath safe 与 legacy PIT core 的并集（排除仅别名条目）。
+"""
     from backend.production_fastpath_tiers import (
         P0_PRODUCTION_FASTPATH_CANONICALS,
         P1_POLARS_CORE_PRODUCTION_SAFE,
@@ -102,6 +109,14 @@ PRODUCTION_DENIED_CANONICALS: frozenset[str] = frozenset(
 
 
 def is_production_denied(canon: str) -> bool:
+    """判断 canonical 是否禁止用于 production 投递。
+
+参数:
+    canon: canonical 算子名。
+
+返回:
+    禁止返回 ``True``（含 ``micro_*`` 前缀算子）。
+"""
     if canon in PRODUCTION_DENIED_CANONICALS:
         return True
     if str(canon).startswith("micro_"):
@@ -111,7 +126,10 @@ def is_production_denied(canon: str) -> bool:
 
 @dataclass(frozen=True)
 class OperatorSpec:
-    """算子生产契约（metadata + policy + lifecycle 聚合）。"""
+    """算子生产契约（metadata + policy + lifecycle 聚合视图）。
+
+    字段涵盖生命周期、PIT 安全、backend 支持、数值稳定性等生产门禁属性。
+    """
 
     canonical: str
     status: OperatorStatus
@@ -131,6 +149,11 @@ class OperatorSpec:
     description: str = ""
 
     def to_dict(self) -> dict[str, Any]:
+    """将 ``OperatorSpec`` 序列化为普通字典。
+
+返回:
+    含 canonical、status、policy 等字段的字典。
+"""
         return {
             "canonical": self.canonical,
             "status": self.status,
@@ -152,6 +175,14 @@ class OperatorSpec:
 
 
 def _infer_status(catalog_entry: dict[str, Any] | None) -> OperatorStatus:
+    """从 catalog 条目推断算子生命周期状态。
+
+参数:
+    catalog_entry: registry catalog 中的元数据字典，可为 ``None``。
+
+返回:
+    ``OperatorStatus`` 枚举值；未显式声明时 fail-closed 为 ``research``。
+"""
     raw = str((catalog_entry or {}).get("status", "implemented") or "implemented").lower()
     if raw.endswith("stub"):
         return "stub"
@@ -169,14 +200,17 @@ def _infer_status(catalog_entry: dict[str, Any] | None) -> OperatorStatus:
     return "research"
 
 
-def _compute_allow_in_production(
-    resolved: str,
-    *,
-    status: OperatorStatus,
-    pit_safe: bool,
-    shape_preserving: bool = True,
-) -> bool:
-    """production 准入：PRODUCTION_CORE（= fastpath P0/P1 safe + legacy）+ 显式 production。"""
+def _compute_allow_in_production    """计算算子是否允许用于 production。
+
+参数:
+    resolved: 解析后的 canonical 名。
+    status: 算子生命周期状态。
+    pit_safe: 是否 PIT 安全。
+    shape_preserving: 是否保持 panel 形状。
+
+返回:
+    允许 production 返回 ``True``。
+"""
     if is_production_denied(resolved):
         return False
     if status in ("experimental", "deprecated", "stub", "doc_only"):
@@ -191,6 +225,15 @@ def _compute_allow_in_production(
 
 
 def _has_pit_declaration(canon: str, meta: Any) -> bool:
+    """检查算子是否有显式 PIT 策略声明。
+
+参数:
+    canon: canonical 名。
+    meta: 算子 ``metadata`` 对象。
+
+返回:
+    有显式 policy 或 ``pit_safe``/``causal`` tag 返回 ``True``。
+"""
     from cleaned_operators.operator_policy import _EXPLICIT_POLICIES
 
     if canon in _EXPLICIT_POLICIES:
@@ -199,16 +242,30 @@ def _has_pit_declaration(canon: str, meta: Any) -> bool:
     return "pit_safe" in tags or "causal" in tags
 
 
-def _infer_shape_contract(resolved: str, policy: OperatorPolicy) -> tuple[bool, bool, bool]:
-    """从 policy 推断 shape/index/columns 契约。"""
+def _infer_shape_contract    """从 policy 推断 shape/index/columns 保持契约。
+
+参数:
+    resolved: canonical 名。
+    policy: 算子执行策略对象。
+
+返回:
+    ``(shape_preserving, index_preserving, columns_preserving)`` 三元组。
+"""
     sp = getattr(policy, "shape_preserving", True)
     ip = getattr(policy, "index_preserving", True)
     cp = getattr(policy, "columns_preserving", True)
     return bool(sp), bool(ip), bool(cp)
 
 
-def build_operator_spec(canon: str, *, backend: str | None = None) -> OperatorSpec | None:
-    """从 Registry 构建单个算子的生产契约视图。"""
+def build_operator_spec    """从 Registry 构建单个算子的生产契约视图。
+
+参数:
+    canon: DSL 名或 canonical 名。
+    backend: 指定 backend；默认优先 ``pandas_numpy``。
+
+返回:
+    ``OperatorSpec`` 实例；无 runtime 时返回 ``None``。
+"""
     from cleaned_operators.registry import OperatorRegistry
 
     resolved = OperatorRegistry._aliases.get(canon, canon)
@@ -269,6 +326,11 @@ def build_operator_spec(canon: str, *, backend: str | None = None) -> OperatorSp
 
 
 def iter_operator_specs() -> list[OperatorSpec]:
+    """遍历全部已注册算子并构建 ``OperatorSpec`` 列表。
+
+返回:
+    按 canonical 排序的 ``OperatorSpec`` 列表。
+"""
     from cleaned_operators.registry import OperatorRegistry
 
     specs: list[OperatorSpec] = []
@@ -279,8 +341,14 @@ def iter_operator_specs() -> list[OperatorSpec]:
     return specs
 
 
-def spec_to_manifest_entry(spec: OperatorSpec) -> dict[str, Any]:
-    """审查清单风格的 manifest 条目（YAML/JSON 导出用）。"""
+def spec_to_manifest_entry    """将 ``OperatorSpec`` 转为审查清单风格的 manifest 条目。
+
+参数:
+    spec: 算子生产契约对象。
+
+返回:
+    供 YAML/JSON 导出的 manifest 字典。
+"""
     pol = spec.policy
     scope_map = {
         "ts": "time_series",
@@ -308,12 +376,15 @@ def spec_to_manifest_entry(spec: OperatorSpec) -> dict[str, Any]:
     }
 
 
-def export_operator_manifest(
-    *,
-    production_only: bool = False,
-    core_only: bool = False,
-) -> list[dict[str, Any]]:
-    """导出全部（或过滤后）算子 manifest 列表。"""
+def export_operator_manifest    """导出全部或过滤后的算子 manifest 列表。
+
+参数:
+    production_only: 仅导出 ``allow_in_production=True`` 的算子。
+    core_only: 仅导出 ``PRODUCTION_CORE`` 集合内的算子。
+
+返回:
+    manifest 条目字典列表。
+"""
     entries: list[dict[str, Any]] = []
     seen: set[str] = set()
     for spec in iter_operator_specs():
@@ -328,8 +399,11 @@ def export_operator_manifest(
     return entries
 
 
-def check_production_pit_declarations() -> list[str]:
-    """production 核心算子须显式 PIT 声明（fail-closed 扫尾）。"""
+def check_production_pit_declarations    """校验 production 核心算子须显式 PIT 声明。
+
+返回:
+    违规描述字符串列表；无问题时为空列表。
+"""
     from cleaned_operators.registry import OperatorRegistry
 
     errors: list[str] = []
@@ -346,8 +420,11 @@ def check_production_pit_declarations() -> list[str]:
     return errors
 
 
-def check_production_shape_contracts() -> list[str]:
-    """production 算子须保持 panel shape/index/columns。"""
+def check_production_shape_contracts    """校验 production 算子须保持 panel shape/index/columns。
+
+返回:
+    违规描述字符串列表。
+"""
     errors: list[str] = []
     for spec in iter_operator_specs():
         if not spec.allow_in_production:
@@ -361,8 +438,11 @@ def check_production_shape_contracts() -> list[str]:
     return errors
 
 
-def check_polars_production_backend_explicit() -> list[str]:
-    """POLARS_PRODUCTION_SAFE 中带 polars 的算子须显式 ``backend='polars'`` 注册。"""
+def check_polars_production_backend_explicit    """校验 POLARS_PRODUCTION_SAFE 算子的 polars backend 须显式注册。
+
+返回:
+    违规描述字符串列表。
+"""
     from cleaned_operators.operator_policy import POLARS_PRODUCTION_SAFE
     from cleaned_operators.registry import OperatorRegistry
 
@@ -380,13 +460,19 @@ def check_polars_production_backend_explicit() -> list[str]:
     return errors
 
 
-def production_allowed_canonicals() -> frozenset[str]:
-    """``allow_in_production=True`` 的 canonical 集合。"""
+def production_allowed_canonicals    """获取允许用于 production 的 canonical 集合。
+
+返回:
+    ``allow_in_production=True`` 的 canonical ``frozenset``。
+"""
     return frozenset(spec.canonical for spec in iter_operator_specs() if spec.allow_in_production)
 
 
-def check_microstructure_param_contracts() -> list[str]:
-    """微观结构算子须声明非空 param_names。"""
+def check_microstructure_param_contracts    """校验微观结构算子须声明非空 ``param_names``。
+
+返回:
+    违规描述字符串列表。
+"""
     from cleaned_operators.registry import OperatorRegistry
 
     errors: list[str] = []
@@ -417,8 +503,11 @@ _FUNDAMENTAL_PERIOD_OPS: frozenset[str] = frozenset(
 _INTRADAY_PARAM_OPS: frozenset[str] = frozenset({"intraday_vwap_deviation"})
 
 
-def check_intraday_param_contracts() -> list[str]:
-    """日内算子须声明非空 param_names。"""
+def check_intraday_param_contracts    """校验日内算子须声明非空 ``param_names``。
+
+返回:
+    违规描述字符串列表。
+"""
     from cleaned_operators.registry import OperatorRegistry
 
     errors: list[str] = []
@@ -443,8 +532,11 @@ _CAPM_DUAL_INPUT_OPS: frozenset[str] = frozenset(
 )
 
 
-def check_fundamental_param_contracts() -> list[str]:
-    """基本面 period 算子须声明 x + fiscal_quarter 参数契约。"""
+def check_fundamental_param_contracts    """校验基本面 period 算子须声明 ``x`` + ``fiscal_quarter`` 参数契约。
+
+返回:
+    违规描述字符串列表。
+"""
     from cleaned_operators.registry import OperatorRegistry
 
     errors: list[str] = []
@@ -460,8 +552,11 @@ def check_fundamental_param_contracts() -> list[str]:
     return errors
 
 
-def check_capm_param_contracts() -> list[str]:
-    """CAPM 类算子须声明 ret + benchmark_ret + window。"""
+def check_capm_param_contracts    """校验 CAPM 类算子须声明 ``ret`` + ``benchmark_ret`` + ``window``。
+
+返回:
+    违规描述字符串列表。
+"""
     from cleaned_operators.registry import OperatorRegistry
 
     required = ("ret", "benchmark_ret", "window")
@@ -481,8 +576,14 @@ def check_capm_param_contracts() -> list[str]:
     return errors
 
 
-def check_production_plan_ops(plan: Any) -> list[str]:
-    """遍历逻辑计划 / IR，检查算子是否 production 允许。"""
+def check_production_plan_ops    """遍历逻辑计划/IR，检查算子是否 production 允许。
+
+参数:
+    plan: 逻辑计划根节点（含 ``op`` 与 ``inputs`` 属性）。
+
+返回:
+    违规描述字符串列表。
+"""
     from cleaned_operators.registry import OperatorRegistry
 
     allowed = production_allowed_canonicals()
@@ -505,8 +606,14 @@ def check_production_plan_ops(plan: Any) -> list[str]:
     return errors
 
 
-def check_production_formula_ops(formula: str) -> list[str]:
-    """解析公式中出现的算子名，检查是否均 production 允许。"""
+def check_production_formula_ops    """解析公式中出现的算子名，检查是否均 production 允许。
+
+参数:
+    formula: DSL 公式字符串。
+
+返回:
+    违规或语法错误描述列表。
+"""
     import ast
 
     from cleaned_operators.registry import OperatorRegistry

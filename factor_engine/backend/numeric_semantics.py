@@ -59,6 +59,14 @@ OPERATOR_SEMANTICS: dict[str, NumericSemantics] = {
 
 
 def semantics_for(canon: str) -> NumericSemantics:
+    """查询算子级数值语义，未覆盖时返回全局默认。
+
+    参数:
+        canon: 算子 canonical 名称或别名。
+
+    返回:
+        对应的 ``NumericSemantics`` 配置。
+    """
     from cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
@@ -66,14 +74,32 @@ def semantics_for(canon: str) -> NumericSemantics:
 
 
 def std_ddof_value(canon: str) -> int:
+    """返回标准差/方差算子的 ddof 数值。
+
+    参数:
+        canon: 算子 canonical 名称。
+
+    返回:
+        sample 策略为 ``1``，population 策略为 ``0``。
+    """
     return 1 if semantics_for(canon).std_ddof == "sample" else 0
 
 
 def protected_epsilon_default() -> float:
+    """返回 protected 算子默认 epsilon 常量。
+
+    返回:
+        用于除零/对数保护的极小正数。
+    """
     return 1e-12
 
 
 def protected_div_default() -> float:
+    """返回 protected_div 除零时的默认填充值。
+
+    返回:
+        除零保护策略下的默认输出。
+    """
     return 0.0
 
 
