@@ -63,17 +63,11 @@ def test_complex_group_ops_remain_map_groups(op):
 
 @pytest.mark.parametrize(
     "op",
-    ["ts_decay_linear", "WMA", "ts_skew", "ts_quantile"],
+    ["ts_decay_linear", "WMA", "ts_skew", "ts_quantile", "ts_argmax", "ts_argmin"],
 )
 def test_python_rolling_ops_tier(op):
     assert classify_plan_op(op) == "python_rolling"
     assert infer_polars_long_tier(op) == "python_rolling"
-
-
-@pytest.mark.parametrize("op", ["ts_argmax", "ts_argmin"])
-def test_batch2_rolling_ops_native_tier(op):
-    assert infer_polars_long_tier(op) == "native"
-    assert classify_plan_op(op) == "native"
 
 
 def test_group_mean_long_path_native_telemetry(source):
@@ -91,6 +85,31 @@ def test_infer_primary_route_native():
         {"backend": "polars_long", "used_polars_long_path": True, "used_polars_long_native": True}
     )
     assert route == "polars_long_native"
+
+
+def test_infer_primary_route_python_rolling():
+    route = infer_primary_route(
+        {
+            "backend": "polars_long",
+            "used_polars_long_path": True,
+            "used_polars_long_python_rolling": True,
+            "used_polars_long_native": False,
+            "polars_long_python_rolling_ops": ["ts_argmax"],
+        }
+    )
+    assert route == "polars_long_python_rolling"
+
+
+def test_ts_argmax_python_rolling_telemetry(source):
+    expr = make_cleaned_call_factory("ts_argmax")(col("close"), 2)
+    out = FactorEngine(backend=build_backend("polars_long"), data_source=source).run(
+        Factor(name="t", expr=expr)
+    )
+    assert out.get("used_polars_long_path") is True
+    assert out.get("used_polars_long_python_rolling") is True
+    assert not out.get("used_polars_long_native")
+    assert out.get("polars_long_python_rolling_ops") == ["ts_argmax"]
+    assert out.get("backend_path_summary", {}).get("primary_route") == "polars_long_python_rolling"
 
 
 def test_run_many_backend_path_summary(source):

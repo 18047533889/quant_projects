@@ -95,7 +95,7 @@ def build_scope_document() -> dict:
         elif primitive_dual_backend_production_safe(canon):
             status = "certified_dual"
         elif canon in batch2:
-            status = "batch2_candidate"
+            status = "python_rolling_pending"
         elif canon in structural:
             status = "structural_candidate"
         else:

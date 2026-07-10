@@ -62,6 +62,8 @@ def infer_primary_route(runtime: dict[str, Any]) -> str:
         return "sql_plan_only"
     if runtime.get("used_polars_long_native"):
         return "polars_long_native"
+    if runtime.get("used_polars_long_python_rolling"):
+        return "polars_long_python_rolling"
     if runtime.get("used_polars_long_map_groups"):
         return "polars_long_map_groups"
     if runtime.get("used_polars_long_registry"):
@@ -122,6 +124,8 @@ def _infer_fastpath_route(runtime: dict[str, Any]) -> str:
         "sql_partial_polars_long",
     }:
         return "fast"
+    if route == "polars_long_python_rolling":
+        return "slow"
     if route in {"sql_partial", "polars_long", "sql_plan_only"}:
         return "mixed"
     if route in {"polars_long_map_groups", "polars_long_registry", "polars_long_passthrough"}:
@@ -155,9 +159,11 @@ def build_backend_path_summary(runtime: dict[str, Any] | None) -> dict[str, Any]
         "sql_query_count": int(r.get("sql_query_count") or 0),
         "used_polars_long_path": bool(r.get("used_polars_long_path")),
         "used_polars_long_native": bool(r.get("used_polars_long_native")),
+        "used_polars_long_python_rolling": bool(r.get("used_polars_long_python_rolling")),
         "used_polars_long_map_groups": bool(r.get("used_polars_long_map_groups")),
         "used_polars_long_registry": bool(r.get("used_polars_long_registry")),
         "polars_long_native_ops": list(r.get("polars_long_native_ops") or []),
+        "polars_long_python_rolling_ops": list(r.get("polars_long_python_rolling_ops") or []),
         "polars_long_map_group_ops": list(r.get("polars_long_map_group_ops") or []),
         "polars_long_registry_ops": list(r.get("polars_long_registry_ops") or []),
         "polars_long_passthrough_ops": list(r.get("polars_long_passthrough_ops") or []),
@@ -220,6 +226,7 @@ def snapshot_backend_path(runtime: dict[str, Any] | None) -> dict[str, Any]:
         "primary_route": infer_primary_route(r),
         "used_polars_long_path": bool(r.get("used_polars_long_path")),
         "used_polars_long_native": bool(r.get("used_polars_long_native")),
+        "used_polars_long_python_rolling": bool(r.get("used_polars_long_python_rolling")),
         "used_polars_long_map_groups": bool(r.get("used_polars_long_map_groups")),
         "used_polars_long_registry": bool(r.get("used_polars_long_registry")),
         "used_polars_long_passthrough": bool(r.get("used_polars_long_passthrough")),
@@ -229,6 +236,7 @@ def snapshot_backend_path(runtime: dict[str, Any] | None) -> dict[str, Any]:
     }
     for key in (
         "polars_long_native_ops",
+        "polars_long_python_rolling_ops",
         "polars_long_map_group_ops",
         "polars_long_registry_ops",
         "polars_long_passthrough_ops",
@@ -254,6 +262,7 @@ def snapshot_from_run_output(run_out: dict[str, Any]) -> dict[str, Any]:
         "backend": run_out.get("backend"),
         "used_polars_long_path": run_out.get("used_polars_long_path"),
         "used_polars_long_native": run_out.get("used_polars_long_native"),
+        "used_polars_long_python_rolling": run_out.get("used_polars_long_python_rolling"),
         "used_polars_long_map_groups": run_out.get("used_polars_long_map_groups"),
         "used_polars_long_registry": run_out.get("used_polars_long_registry"),
         "used_polars_long_passthrough": run_out.get("used_polars_long_passthrough"),
@@ -268,6 +277,7 @@ def snapshot_from_run_output(run_out: dict[str, Any]) -> dict[str, Any]:
         "production_fastpath_ok": run_out.get("production_fastpath_ok"),
         "production_fastpath_violations": run_out.get("production_fastpath_violations"),
         "polars_long_native_ops": run_out.get("polars_long_native_ops"),
+        "polars_long_python_rolling_ops": run_out.get("polars_long_python_rolling_ops"),
         "polars_long_map_group_ops": run_out.get("polars_long_map_group_ops"),
         "polars_long_registry_ops": run_out.get("polars_long_registry_ops"),
         "polars_long_passthrough_ops": run_out.get("polars_long_passthrough_ops"),

@@ -1429,6 +1429,8 @@ class FactorEngine:
             out["used_polars_long_path"] = True
         if runtime.get("used_polars_long_native"):
             out["used_polars_long_native"] = True
+        if runtime.get("used_polars_long_python_rolling"):
+            out["used_polars_long_python_rolling"] = True
         if runtime.get("used_polars_long_map_groups"):
             out["used_polars_long_map_groups"] = True
         if runtime.get("used_polars_long_registry"):
@@ -1452,6 +1454,7 @@ class FactorEngine:
             "production_fastpath_ok",
             "production_fastpath_violations",
             "polars_long_native_ops",
+            "polars_long_python_rolling_ops",
             "polars_long_map_group_ops",
             "polars_long_registry_ops",
             "polars_long_passthrough_ops",

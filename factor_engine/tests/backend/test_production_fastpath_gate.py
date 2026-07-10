@@ -20,10 +20,10 @@ def _loaded():
 @pytest.mark.parametrize(
     "op",
     [
-        "ts_mean",
         "rank",
+        "ts_std",
         "protected_div",
-        "group_mean",
+        "group_zscore",
         "zscore",
     ],
 )

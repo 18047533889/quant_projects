@@ -63,7 +63,9 @@ def test_winsorize_native_tier_implemented():
     assert not is_polars_long_native_production_safe("winsorize")
 
 
-def test_ts_mean_native_tier_production_safe():
+def test_ts_std_native_tier_production_safe():
+    assert polars_long_production_tier("ts_std") == "production_safe"
+    assert is_polars_long_native_production_safe("ts_std")
     assert polars_long_production_tier("ts_mean") == "production_safe"
     assert is_polars_long_native_production_safe("ts_mean")
 

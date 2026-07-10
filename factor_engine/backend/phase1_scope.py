@@ -93,21 +93,33 @@ def assert_production_requires_certification(canon: str) -> None:
 
 
 def phase1_summary() -> dict[str, Any]:
-    from backend.composite_evidence import COMPOSITE_FULL_PARITY_VERIFIED
+    from backend.composite_evidence import (
+        COMPOSITE_FULL_PARITY_VERIFIED,
+        composite_production_safe,
+    )
     from backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+    from cleaned_operators.operator_spec import is_production_denied
+    from planner.composite_lowering import list_composite_lowerings
 
     prim = phase1_primitives()
     comp = phase1_composites()
+    comp_full = COMPOSITE_FULL_PARITY_VERIFIED & comp
+    comp_prod = frozenset(c for c in list_composite_lowerings() if composite_production_safe(c))
+    comp_denied = frozenset(
+        c for c in comp if is_production_denied(c) or c not in comp_prod
+    )
+    prim_cert = PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE & prim
     return {
         "frozen_commit_sha": scope_frozen_commit_sha(),
         "primitive_count": len(prim),
         "composite_count": len(comp),
         "total_scope": len(prim) + len(comp),
-        "primitive_certified_dual": len(PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE & prim),
-        "composite_certified": len(COMPOSITE_FULL_PARITY_VERIFIED & comp),
-        "certified_total": len(
-            (PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE & prim) | (COMPOSITE_FULL_PARITY_VERIFIED & comp)
-        ),
+        "primitive_certified_dual": len(prim_cert),
+        "composite_full_parity_count": len(comp_full),
+        "composite_production_certified_count": len(comp_prod),
+        "composite_policy_denied_count": len(comp_denied & comp_full),
+        "composite_certified": len(comp_prod),
+        "certified_total": len(prim_cert) + len(comp_prod),
     }
 
 

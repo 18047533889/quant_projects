@@ -51,7 +51,7 @@ COMPOSITE_DUCKDB_REAL_SQL_VERIFIED = COMPOSITE_LOWERED_DUCKDB_VERIFIED
 
 
 def composite_structurally_capable(canon: str) -> bool:
-    """展开后 primitive 名称均在 dual-backend static safe 集合内。"""
+    """展开后 primitive 均已 dual-backend production 认证（可组合 nesting）。"""
     from planner.composite_lowering import composite_dual_backend_capable
 
     return composite_dual_backend_capable(canon)

@@ -89,9 +89,20 @@ def _resolve(op: str) -> str:
 
 def _window_int(node: PlanNode, default: int = 3) -> int:
     """从 PlanNode attrs 或 literal 子节点解析滚动窗口（与 DuckDB 共用）。"""
-    from backend.plan_params import window_from_plan_node
+    return _window_spec(node, default=default).size
 
-    return window_from_plan_node(node, default=default)
+
+def _window_spec(node: PlanNode, default: int = 3):
+    """完整 WindowSpec（min_periods / ddof / closed）。"""
+    from backend.plan_params import window_spec_from_plan_node
+    from backend.window_spec import WindowSpec
+
+    spec = window_spec_from_plan_node(node, default=default)
+    if spec.closed != "right":
+        from backend.plan_params import PlanParamError
+
+        raise PlanParamError(f"closed={spec.closed!r} 暂未支持，仅 right")
+    return spec
 
 
 def _ewm_alpha(node: PlanNode, default_span: int = 20) -> float:
@@ -1323,34 +1334,41 @@ def _compile_polars_impl(
             return None
         from backend.numeric_semantics import std_ddof_value
 
-        w = _window_int(node)
-        ddof = std_ddof_value(op) if op in {"ts_std", "ts_var"} else 1
-        if op == "ts_mean":
-            expr = pl.col(_VAL).rolling_mean(window_size=w, min_samples=1).over(_INST, order_by=_TS)
-        elif op == "ts_sum":
-            expr = pl.col(_VAL).rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
-        elif op == "ts_min":
-            expr = pl.col(_VAL).rolling_min(window_size=w, min_samples=1).over(_INST, order_by=_TS)
-        elif op == "ts_max":
-            expr = pl.col(_VAL).rolling_max(window_size=w, min_samples=1).over(_INST, order_by=_TS)
-        elif op == "ts_var":
-            expr = pl.col(_VAL).rolling_var(window_size=w, min_samples=1, ddof=ddof).over(_INST, order_by=_TS)
-        elif op == "ts_median":
-            expr = pl.col(_VAL).rolling_median(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+        spec = _window_spec(node)
+        w = spec.size
+        mp = spec.min_periods
+        if op in {"ts_std", "ts_var"}:
+            ddof = spec.ddof if "ddof" in (node.attrs or {}) else std_ddof_value(op)
         else:
-            expr = pl.col(_VAL).rolling_std(window_size=w, min_samples=1, ddof=ddof).over(_INST, order_by=_TS)
+            ddof = 1
+        if op == "ts_mean":
+            expr = pl.col(_VAL).rolling_mean(window_size=w, min_samples=mp).over(_INST, order_by=_TS)
+        elif op == "ts_sum":
+            expr = pl.col(_VAL).rolling_sum(window_size=w, min_samples=mp).over(_INST, order_by=_TS)
+        elif op == "ts_min":
+            expr = pl.col(_VAL).rolling_min(window_size=w, min_samples=mp).over(_INST, order_by=_TS)
+        elif op == "ts_max":
+            expr = pl.col(_VAL).rolling_max(window_size=w, min_samples=mp).over(_INST, order_by=_TS)
+        elif op == "ts_var":
+            expr = pl.col(_VAL).rolling_var(window_size=w, min_samples=mp, ddof=ddof).over(_INST, order_by=_TS)
+        elif op == "ts_median":
+            expr = pl.col(_VAL).rolling_median(window_size=w, min_samples=mp).over(_INST, order_by=_TS)
+        else:
+            expr = pl.col(_VAL).rolling_std(window_size=w, min_samples=mp, ddof=ddof).over(_INST, order_by=_TS)
         return inner.with_columns(expr.alias(_VAL))
 
     if op == "ts_zscore":
         inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        w = _window_int(node)
+        spec = _window_spec(node)
+        w = spec.size
+        mp = spec.min_periods
         from backend.numeric_semantics import std_ddof_value
 
         ddof = std_ddof_value("ts_zscore")
-        mean = pl.col(_VAL).rolling_mean(window_size=w, min_samples=1).over(_INST, order_by=_TS)
-        std = pl.col(_VAL).rolling_std(window_size=w, min_samples=1, ddof=ddof).over(_INST, order_by=_TS)
+        mean = pl.col(_VAL).rolling_mean(window_size=w, min_samples=mp).over(_INST, order_by=_TS)
+        std = pl.col(_VAL).rolling_std(window_size=w, min_samples=mp, ddof=ddof).over(_INST, order_by=_TS)
         return inner.with_columns(
             (
                 (pl.col(_VAL) - mean)
@@ -1433,11 +1451,13 @@ def _compile_polars_impl(
         vol = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
         if price is None or vol is None:
             return None
-        w = _window_int(node, default=20)
+        spec = _window_spec(node, default=20)
+        w = spec.size
+        mp = spec.min_periods
         joined = _join_binary(price, vol)
         pv = pl.col(_VAL) * pl.col("_y")
-        sum_pv = pv.rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
-        sum_v = pl.col("_y").rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+        sum_pv = pv.rolling_sum(window_size=w, min_samples=mp).over(_INST, order_by=_TS)
+        sum_v = pl.col("_y").rolling_sum(window_size=w, min_samples=mp).over(_INST, order_by=_TS)
         return joined.with_columns(
             pl.when(sum_v.is_null() | (sum_v == 0))
             .then(None)

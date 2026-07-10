@@ -124,8 +124,6 @@ POLARS_LONG_NATIVE: frozenset[str] = frozenset(
         "expanding_std",
         "expanding_sum",
         "count",
-        "ts_argmax",
-        "ts_argmin",
     }
 )
 
@@ -137,6 +135,8 @@ POLARS_LONG_PYTHON_ROLLING: frozenset[str] = frozenset(
         "Slope",
         "ts_skew",
         "ts_quantile",
+        "ts_argmax",
+        "ts_argmin",
     }
 )
 
@@ -298,15 +298,6 @@ def long_path_telemetry_flags(op_stats: dict[str, list[str]]) -> dict[str, bool]
     fast_native = has_native and not (
         has_map or has_registry or has_other or has_passthrough or has_python_rolling
     )
-    if (
-        not has_native
-        and not has_map
-        and not has_registry
-        and not has_other
-        and not has_passthrough
-        and not has_python_rolling
-    ):
-        fast_native = True
     return {
         "used_polars_long_path": True,
         "used_polars_long_native": fast_native,

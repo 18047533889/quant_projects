@@ -86,10 +86,10 @@ _PYTHON_ROLLING_OPS = frozenset(
         "Slope",
         "ts_skew",
         "ts_quantile",
+        "ts_argmax",
+        "ts_argmin",
     }
 )
-
-_NATIVE_BATCH2_ROLLING_OPS = frozenset({"ts_argmax", "ts_argmin"})
 
 
 def test_native_tier_excludes_rolling_map_ops():
@@ -99,13 +99,13 @@ def test_native_tier_excludes_rolling_map_ops():
     assert py_overlap == _PYTHON_ROLLING_OPS
 
 
-def test_ts_sharpe_native_ts_argmax_native_batch2():
+def test_ts_sharpe_native_ts_argmax_python_rolling():
     for op in ("ts_sharpe", "ts_autocorr"):
         assert op in POLARS_LONG_NATIVE
         assert op not in POLARS_LONG_MAP_GROUPS
-    for op in _NATIVE_BATCH2_ROLLING_OPS:
-        assert op in POLARS_LONG_NATIVE
-        assert op not in POLARS_LONG_PYTHON_ROLLING
+    for op in ("ts_argmax", "ts_argmin"):
+        assert op in POLARS_LONG_PYTHON_ROLLING
+        assert op not in POLARS_LONG_NATIVE
 
 
 def test_group_window_ops_are_native_not_map_groups():

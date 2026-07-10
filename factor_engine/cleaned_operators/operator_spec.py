@@ -183,12 +183,10 @@ def infer_production_policy(canon: str) -> ProductionPolicy:
     if allow:
         return "allowed"
     if has_composite_lowering(resolved):
-        from backend.composite_evidence import composite_production_safe
+        from backend.composite_evidence import composite_evidence_complete, composite_production_safe
 
         if composite_production_safe(resolved):
             return "allowed"
-        from backend.composite_evidence import composite_evidence_complete
-
         if composite_evidence_complete(resolved):
             return "pending"
         return "pending"
@@ -316,9 +314,9 @@ def _compute_allow_in_production(
     from planner.composite_lowering import has_composite_lowering
 
     if has_composite_lowering(resolved):
-        from backend.composite_evidence import composite_evidence_complete
+        from backend.composite_evidence import composite_production_safe
 
-        if composite_evidence_complete(resolved):
+        if composite_production_safe(resolved):
             return pit_safe
         return False
     if resolved in PRODUCTION_CORE_CANONICALS:

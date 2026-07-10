@@ -1,7 +1,7 @@
 schema_version: 1
 freeze_id: phase1-dual-backend-primitives-v1
-frozen_at: '2026-07-10T16:24:30.273272+00:00'
-frozen_commit_sha: 4fbefdc15afc357e13950cfc6f144d8a37c8fbcf
+frozen_at: '2026-07-10T18:08:30.855536+00:00'
+frozen_commit_sha: 97e3e1d4783a1070b9e2fa8bc30be9d89c607a2a
 description: 第一阶段 production 范围冻结：约 90 primitive + 16 composite。未经 scripts/certify_operator.py
   完整证据链不得新增 production 算子。
 invariants:
@@ -345,17 +345,17 @@ primitives:
   cs_mad:
     kind: primitive
     tier: p1_core
-    phase1_status: structural_candidate
+    phase1_status: certified_dual
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: parity_verified
+      production_tier: production_safe
     duckdb_sql:
       implemented: true
-      production_safe: false
+      production_safe: true
     certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
     semantics:
       scope: unknown
       null_policy: propagate
@@ -369,17 +369,17 @@ primitives:
   cs_mad_zscore:
     kind: primitive
     tier: p1_core
-    phase1_status: structural_candidate
+    phase1_status: certified_dual
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: parity_verified
+      production_tier: production_safe
     duckdb_sql:
       implemented: true
-      production_safe: false
+      production_safe: true
     certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
     semantics:
       scope: unknown
       null_policy: propagate
@@ -1476,8 +1476,8 @@ primitives:
     phase1_status: deferred
     production_policy: denied
     polars_long:
-      tier: native
-      production_tier: implemented
+      tier: python_rolling
+      production_tier: python_rolling
     duckdb_sql:
       implemented: true
       production_safe: false
@@ -1500,8 +1500,8 @@ primitives:
     phase1_status: deferred
     production_policy: denied
     polars_long:
-      tier: native
-      production_tier: implemented
+      tier: python_rolling
+      production_tier: python_rolling
     duckdb_sql:
       implemented: true
       production_safe: false
@@ -2097,5 +2097,5 @@ primitives:
 counts:
   primitives: 86
   composites: 16
-  certified_dual: 12
-  composite_certified: 10
+  certified_dual: 14
+  composite_certified: 1

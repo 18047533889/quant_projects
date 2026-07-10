@@ -38,6 +38,8 @@ def edge_source():
         names=["timestamp", "instrument"],
     )
     close = pd.Series([10.0, 11.0, np.nan, 12.0, 20.0, 20.0, 21.0, 22.0], index=idx)
+    open_ = close - 0.5
+    ret = pd.Series([0.01, 0.02, -0.01, 0.03, 0.04, 0.01, 0.02, 0.05], index=idx)
     numer = pd.Series([1.0, 2.0, 3.0, 4.0, 0.0, 1e-15, -1e-15, np.nan], index=idx)
     denom = pd.Series([0.0, 1.0, 1e-15, 2.0, 1.0, 0.0, -1.0, 1.0], index=idx)
     neg = pd.Series([0.0, -1.0, -4.0, 1e-15, 2.0, np.nan, 3.0, -2.0], index=idx)
@@ -47,6 +49,8 @@ def edge_source():
     return InMemorySeriesSource(
         data={
             "close": close,
+            "open": open_,
+            "ret": ret,
             "numer": numer,
             "denom": denom,
             "neg": neg,
@@ -73,6 +77,8 @@ test_daily:
     TradeDate: date
     Symbol: string
     Close: double
+    Open: double
+    Ret: double
     Numer: double
     Denom: double
     Neg: double
@@ -90,6 +96,8 @@ def _seed_duckdb(root: Path, mem: InMemorySeriesSource) -> None:
     rows = []
     mapping = {
         "close": "Close",
+        "open": "Open",
+        "ret": "Ret",
         "numer": "Numer",
         "denom": "Denom",
         "neg": "Neg",
@@ -140,6 +148,8 @@ def _col(name: str):
     return col(
         {
             "close": "Close",
+            "open": "Open",
+            "ret": "Ret",
             "numer": "Numer",
             "denom": "Denom",
             "neg": "Neg",
@@ -163,6 +173,12 @@ EDGE_CASES = [
     ("zscore", lambda: make_cleaned_call_factory("zscore")(col("close"))),
     ("ts_zscore", lambda: make_cleaned_call_factory("ts_zscore")(col("close"), 3)),
     ("ts_std", lambda: make_cleaned_call_factory("ts_std")(col("close"), 3)),
+    ("ts_mean", lambda: make_cleaned_call_factory("ts_mean")(col("close"), 3)),
+    ("group_mean", lambda: make_cleaned_call_factory("group_mean")(col("close"), col("grp"))),
+    ("group_winsorize", lambda: make_cleaned_call_factory("group_winsorize")(col("close"), col("grp"))),
+    ("ts_corr", lambda: make_cleaned_call_factory("ts_corr")(col("close"), col("open"), 3)),
+    ("ts_cov", lambda: make_cleaned_call_factory("ts_cov")(col("ret"), col("close"), 3)),
+    ("ts_beta", lambda: make_cleaned_call_factory("ts_beta")(col("ret"), col("close"), 3)),
     ("group_zscore", lambda: make_cleaned_call_factory("group_zscore")(col("close"), col("grp"))),
     ("winsorize", lambda: make_cleaned_call_factory("winsorize")(col("close"))),
     ("cs_mad", lambda: make_cleaned_call_factory("cs_mad")(col("close"))),
@@ -195,6 +211,11 @@ DUCKDB_EDGE_CASES = [
     ("ts_std", lambda: make_cleaned_call_factory("ts_std")(_col("close"), 3)),
     ("ts_mean", lambda: make_cleaned_call_factory("ts_mean")(_col("close"), 3)),
     ("ts_pct", lambda: make_cleaned_call_factory("ts_pct")(_col("close"), 1)),
+    ("group_mean", lambda: make_cleaned_call_factory("group_mean")(_col("close"), _col("grp"))),
+    ("group_winsorize", lambda: make_cleaned_call_factory("group_winsorize")(_col("close"), _col("grp"))),
+    ("ts_corr", lambda: make_cleaned_call_factory("ts_corr")(_col("close"), _col("open"), 3)),
+    ("ts_cov", lambda: make_cleaned_call_factory("ts_cov")(_col("ret"), _col("close"), 3)),
+    ("ts_beta", lambda: make_cleaned_call_factory("ts_beta")(_col("ret"), _col("close"), 3)),
     ("group_zscore", lambda: make_cleaned_call_factory("group_zscore")(_col("close"), _col("grp"))),
     ("winsorize", lambda: make_cleaned_call_factory("winsorize")(_col("close"))),
     ("cs_mad", lambda: make_cleaned_call_factory("cs_mad")(_col("close"))),

@@ -23,18 +23,12 @@ def _row(canon: str):
 
 
 ACCEPTANCE_DUAL_BACKEND = [
-    "ts_mean",
-    "ts_std",
-    "rank",
-    "zscore",
+    "group_zscore",
     "protected_div",
     "protected_log",
-    "group_mean",
-    "group_zscore",
-    "group_winsorize",
-    "ts_corr",
-    "ts_cov",
-    "ts_beta",
+    "rank",
+    "ts_std",
+    "zscore",
 ]
 
 ACCEPTANCE_POLARS_ONLY = [

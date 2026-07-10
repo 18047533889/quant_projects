@@ -54,9 +54,17 @@ def _resolve_canonical(op: str) -> str:
 
 def _window_int(node: PlanNode, default: int = 3) -> int:
     """从 attrs 或子 literal 输入解析窗口长度（与 PolarsLong 共用）。"""
-    from backend.plan_params import window_from_plan_node
+    return _window_spec(node, default=default).size
 
-    return window_from_plan_node(node, default=default)
+
+def _window_spec(node: PlanNode, default: int = 3):
+    """完整 WindowSpec。"""
+    from backend.plan_params import PlanParamError, window_spec_from_plan_node
+
+    spec = window_spec_from_plan_node(node, default=default)
+    if spec.closed != "right":
+        raise PlanParamError(f"closed={spec.closed!r} 暂未支持，仅 right")
+    return spec
 
 
 def _float_attr(node: PlanNode, *keys: str, default: float) -> float:
@@ -232,14 +240,23 @@ def _structural_use_counts(plan: PlanNode) -> dict[str, int]:
     return counts
 
 
-def _inst_window(dialect: SqlDialect, w: int, agg: str, inner_sql: str) -> str:
-    """按 instrument 分区的固定长度滚动窗口聚合 SQL。"""
-    return (
-        f"SELECT ts, inst, "
-        f"{agg}(_v) OVER (PARTITION BY inst ORDER BY ts "
-        f"ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW) AS _v "
-        f"FROM ({inner_sql}) t"
-    )
+def _inst_window(
+    dialect: SqlDialect,
+    w: int,
+    agg: str,
+    inner_sql: str,
+    *,
+    min_periods: int = 1,
+) -> str:
+    """按 instrument 分区的固定长度滚动窗口聚合 SQL（含 min_periods 门槛）。"""
+    over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+    cnt = f"COUNT(_v) OVER ({over})"
+    rolled = f"{agg}(_v) OVER ({over})"
+    if min_periods <= 1:
+        body = rolled
+    else:
+        body = f"CASE WHEN {cnt} < {min_periods} THEN NULL ELSE {rolled} END"
+    return f"SELECT ts, inst, {body} AS _v FROM ({inner_sql}) t"
 
 
 def _wilder_ewm_over_inst(inner_sql: str, w: int, *, dialect: SqlDialect, value_col: str = "_v") -> str:
@@ -688,17 +705,22 @@ def _zscore_window_expr(
     partition: str,
     dialect: SqlDialect,
     std_fn_name: str = "stddev",
+    min_periods: int = 1,
 ) -> str:
     """zscore / ts_zscore：std=0 → 0，NULL 保持缺失。"""
     std_fn = _dialect_fn(dialect, std_fn_name)
     avg = f"AVG({value_col}) OVER ({partition})"
     stdv = f"{std_fn}({value_col}) OVER ({partition})"
-    return (
+    core = (
         f"CASE WHEN {value_col} IS NULL THEN NULL "
         f"WHEN {stdv} IS NULL THEN NULL "
         f"WHEN {stdv} = 0 THEN 0 "
         f"ELSE ({value_col} - {avg}) / {stdv} END"
     )
+    if min_periods <= 1:
+        return core
+    cnt = f"COUNT({value_col}) OVER ({partition})"
+    return f"CASE WHEN {cnt} < {min_periods} THEN NULL ELSE {core} END"
 
 
 def _normalize_window_expr(*, value_col: str, partition: str) -> str:
@@ -1242,9 +1264,9 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        w = _window_int(node)
+        spec = _window_spec(node)
         return _Layer(
-            _inst_window(dialect, w, "AVG", inner.sql),
+            _inst_window(dialect, spec.size, "AVG", inner.sql, min_periods=spec.min_periods),
             has_inst_window=True,
         )
 
@@ -1252,9 +1274,20 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        w = _window_int(node)
+        spec = _window_spec(node)
+        over = (
+            f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
+        )
+        expr = _rolling_std_min_periods_sql(
+            value_col="_v",
+            over=over,
+            window=spec.size,
+            scale_expr="1",
+            dialect=dialect,
+            min_periods=spec.min_periods,
+        )
         return _Layer(
-            _inst_window(dialect, w, std, inner.sql),
+            f"SELECT ts, inst, {expr} AS _v FROM ({inner.sql}) t",
             has_inst_window=True,
         )
 
@@ -1262,9 +1295,9 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        w = _window_int(node)
+        spec = _window_spec(node)
         return _Layer(
-            _inst_window(dialect, w, "SUM", inner.sql),
+            _inst_window(dialect, spec.size, "SUM", inner.sql, min_periods=spec.min_periods),
             has_inst_window=True,
         )
 
@@ -1292,11 +1325,16 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        w = _window_int(node)
+        spec = _window_spec(node)
         over = (
-            f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+            f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
         )
-        expr = _zscore_window_expr(value_col="_v", partition=over, dialect=dialect)
+        expr = _zscore_window_expr(
+            value_col="_v",
+            partition=over,
+            dialect=dialect,
+            min_periods=spec.min_periods,
+        )
         return _Layer(
             f"SELECT ts, inst, {expr} AS _v FROM ({inner.sql}) t",
             has_inst_window=True,
@@ -1439,14 +1477,17 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         vol = _compile_layer(node.inputs[1], dialect=dialect)
         if price is None or vol is None:
             return None
-        w = _window_int(node, default=20)
+        spec = _window_spec(node, default=20)
         over = (
-            f"PARTITION BY p.inst ORDER BY p.ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+            f"PARTITION BY p.inst ORDER BY p.ts ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
         )
+        cnt = f"COUNT(v._v) OVER ({over})"
+        mp = spec.min_periods
         return _Layer(
             f"SELECT p.ts, p.inst, "
-            f"SUM(p._v * v._v) OVER ({over}) / "
-            f"{nf}(SUM(v._v) OVER ({over}), 0) AS _v "
+            f"CASE WHEN {cnt} < {mp} THEN NULL "
+            f"ELSE SUM(p._v * v._v) OVER ({over}) / "
+            f"{nf}(SUM(v._v) OVER ({over}), 0) END AS _v "
             f"FROM ({price.sql}) p INNER JOIN ({vol.sql}) v USING (ts, inst)",
             has_inst_window=True,
         )

@@ -24,9 +24,16 @@ class CertStage(str, Enum):
     NO_FALLBACK = "no_fallback_verified"
 
 
+class CompositeCertStage(str, Enum):
+    REFERENCE_TO_LOWERED_PANDAS = "reference_to_lowered_pandas"
+    LOWERED_POLARS_NATIVE = "lowered_polars_native"
+    LOWERED_DUCKDB_REAL_SQL = "lowered_duckdb_real_sql"
+    EDGE_VERIFIED = "edge_verified"
+
+
 @dataclass
 class CertStageResult:
-    stage: CertStage
+    stage: CertStage | CompositeCertStage
     passed: bool
     detail: str = ""
 
@@ -46,55 +53,61 @@ class CertificationReport:
         return {
             "canonical": self.canonical,
             "ok": self.ok,
-            "stages": {s.stage.value: {"passed": s.passed, "detail": s.detail} for s in self.stages},
+            "stages": {
+                (s.stage.value if hasattr(s.stage, "value") else str(s.stage)): {
+                    "passed": s.passed,
+                    "detail": s.detail,
+                }
+                for s in self.stages
+            },
             "wrote_evidence": self.wrote_evidence,
             "manifest_ok": self.manifest_ok,
         }
 
 
-# 阶段 → pytest 选择器（须与 parity case 名称一致）
+# Primitive 阶段 → pytest 模块
 _STAGE_PYTEST: dict[CertStage, list[str]] = {
     CertStage.POLARS_REFERENCE: [
         "tests/backend_parity/test_production_core_triple_parity.py",
         "tests/backend_parity/test_production_safe_bulk_parity.py",
-        "tests/backend_parity/test_batch2_rolling_triple_parity.py",
+    ],
+    CertStage.DUCKDB_REFERENCE: [
+        "tests/backend_parity/test_production_core_triple_parity.py",
     ],
     CertStage.DUCKDB_REAL_SQL: [
         "tests/backend_parity/test_production_core_triple_parity.py",
         "tests/backend_parity/test_production_safe_bulk_parity.py",
-        "tests/backend_parity/test_batch2_rolling_triple_parity.py",
     ],
-    CertStage.POLARS_EDGE: [
-        "tests/backend_parity/test_p0_edge_cases_triple_parity.py",
-        "tests/backend_parity/test_batch2_rolling_triple_parity.py",
-    ],
-    CertStage.DUCKDB_EDGE: [
-        "tests/backend_parity/test_p0_edge_cases_triple_parity.py",
-        "tests/backend_parity/test_batch2_rolling_triple_parity.py",
-    ],
+    CertStage.POLARS_EDGE: ["tests/backend_parity/test_p0_edge_cases_triple_parity.py"],
+    CertStage.DUCKDB_EDGE: ["tests/backend_parity/test_p0_edge_cases_triple_parity.py"],
     CertStage.NO_FALLBACK: ["tests/backend_parity/test_polars_long_no_pandas_path.py"],
 }
 
+# Composite 阶段 → pytest 模块（与 composite_verified.json 键一一对应）
+_COMPOSITE_STAGE_PYTEST: dict[CompositeCertStage, list[str]] = {
+    CompositeCertStage.REFERENCE_TO_LOWERED_PANDAS: [
+        "tests/backend_parity/test_composite_reference_semantics.py",
+    ],
+    CompositeCertStage.LOWERED_POLARS_NATIVE: [
+        "tests/backend_parity/test_composite_lowered_triple_parity.py",
+    ],
+    CompositeCertStage.LOWERED_DUCKDB_REAL_SQL: [
+        "tests/backend_parity/test_composite_lowered_triple_parity.py",
+    ],
+    CompositeCertStage.EDGE_VERIFIED: [
+        "tests/backend_parity/test_composite_edge_triple_parity.py",
+    ],
+}
 
-def _pytest_for_stage(stage: CertStage, canon: str) -> tuple[bool, str]:
-    files = _STAGE_PYTEST.get(stage, [])
+
+def _pytest_for_stage(stage: CertStage | CompositeCertStage, canon: str) -> tuple[bool, str]:
+    if isinstance(stage, CompositeCertStage):
+        files = _COMPOSITE_STAGE_PYTEST.get(stage, [])
+    else:
+        files = _STAGE_PYTEST.get(stage, [])
     if not files:
         return True, "skip"
-    expr = canon.replace("_", "\\_")
-    cmd = [
-        sys.executable,
-        "-m",
-        "pytest",
-        "-q",
-        *[f"{f}::{expr}" if "::" not in f else f for f in files],
-        "-k",
-        canon,
-        "--tb=line",
-    ]
-    flat_files = []
-    for f in files:
-        flat_files.append(f)
-    cmd = [sys.executable, "-m", "pytest", "-q", *flat_files, "-k", canon, "--tb=line"]
+    cmd = [sys.executable, "-m", "pytest", "-q", *files, "-k", canon, "--tb=line"]
     env = dict(**{k: v for k, v in __import__("os").environ.items()})
     root = str(FE_ROOT.parent)
     fe = str(FE_ROOT)
@@ -120,21 +133,20 @@ def _load_evidence(path: Path) -> dict[str, list[str]]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _write_evidence_key(canon: str, stage: CertStage, *, composite: bool = False) -> None:
-    path = COMPOSITE_EVIDENCE_JSON if composite else EVIDENCE_JSON
-    data = _load_evidence(path)
+def _write_primitive_evidence(canon: str, stage: CertStage) -> None:
+    data = _load_evidence(EVIDENCE_JSON)
     key = stage.value
-    if composite:
-        mapping = {
-            CertStage.POLARS_REFERENCE: "reference_to_lowered_pandas",
-            CertStage.DUCKDB_REAL_SQL: "lowered_duckdb_real_sql",
-            CertStage.POLARS_EDGE: "lowered_polars_native",
-            CertStage.DUCKDB_EDGE: "edge_verified",
-        }
-        key = mapping.get(stage, stage.value)
     items = sorted(set(data.get(key, [])) | {canon})
     data[key] = items
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    EVIDENCE_JSON.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def _write_composite_evidence(canon: str, stage: CompositeCertStage) -> None:
+    data = _load_evidence(COMPOSITE_EVIDENCE_JSON)
+    key = stage.value
+    items = sorted(set(data.get(key, [])) | {canon})
+    data[key] = items
+    COMPOSITE_EVIDENCE_JSON.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def run_certification(
@@ -144,7 +156,7 @@ def run_certification(
     refresh_manifest: bool = True,
 ) -> CertificationReport:
     """运行单算子认证流水线。"""
-    from backend.phase1_scope import assert_phase1_freeze, is_phase1_in_scope
+    from backend.phase1_scope import is_phase1_in_scope
     from planner.composite_lowering import has_composite_lowering
 
     canon = canonical.strip()
@@ -156,25 +168,19 @@ def run_certification(
         return report
 
     is_composite = has_composite_lowering(canon)
-    stages = [
-        CertStage.POLARS_REFERENCE,
-        CertStage.DUCKDB_REAL_SQL,
-        CertStage.POLARS_EDGE,
-        CertStage.DUCKDB_EDGE,
-        CertStage.NO_FALLBACK,
-    ]
     if is_composite:
-        stages = [
-            CertStage.POLARS_REFERENCE,
-            CertStage.DUCKDB_REAL_SQL,
-            CertStage.POLARS_EDGE,
-        ]
+        stages: list[CertStage | CompositeCertStage] = list(CompositeCertStage)
+    else:
+        stages = list(CertStage)
 
     for stage in stages:
         ok, detail = _pytest_for_stage(stage, canon)
         report.stages.append(CertStageResult(stage, ok, detail))
         if ok and write_evidence:
-            _write_evidence_key(canon, stage, composite=is_composite)
+            if isinstance(stage, CompositeCertStage):
+                _write_composite_evidence(canon, stage)
+            else:
+                _write_primitive_evidence(canon, stage)
 
     report.wrote_evidence = write_evidence
 

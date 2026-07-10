@@ -172,11 +172,13 @@ def _fresh_long_runtime(runtime: dict[str, Any]) -> dict[str, Any]:
     for key in (
         "used_polars_long_path",
         "used_polars_long_native",
+        "used_polars_long_python_rolling",
         "used_polars_long_map_groups",
         "used_polars_long_registry",
         "used_polars_long_passthrough",
         "polars_long_columns",
         "polars_long_native_ops",
+        "polars_long_python_rolling_ops",
         "polars_long_map_group_ops",
         "polars_long_registry_ops",
         "polars_long_passthrough_ops",
@@ -187,6 +189,40 @@ def _fresh_long_runtime(runtime: dict[str, Any]) -> dict[str, Any]:
     ):
         out.pop(key, None)
     return out
+
+
+def _record_shared_lazy_op_stats(ctx: ExecutionContext, plan: PlanNode, sid: str) -> None:
+    """CSE lazy 编译成功后缓存子树 tier 统计，供 ``plan_ref`` 根计划 rollup。"""
+    runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+    shared = dict(runtime.get("shared_long_lazy_op_stats") or {})
+    shared[str(sid)] = collect_plan_op_stats(plan)
+    runtime["shared_long_lazy_op_stats"] = shared
+    ctx.runtime_stats = runtime  # type: ignore[attr-defined]
+
+
+def _merge_shared_op_stats(plan: PlanNode, ctx: ExecutionContext, op_stats: dict[str, list[str]]) -> dict[str, list[str]]:
+    """将 ``plan_ref`` 引用的共享子树 tier 统计合并进当前计划统计。"""
+    runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+    shared = dict(runtime.get("shared_long_lazy_op_stats") or {})
+    if not shared:
+        return op_stats
+
+    merged = {k: list(v) for k, v in op_stats.items()}
+
+    def _walk(node: PlanNode) -> None:
+        if node.op == "plan_ref":
+            sid = str(node.attrs.get("sid") or "")
+            ref_stats = shared.get(sid)
+            if ref_stats:
+                for key, ops in ref_stats.items():
+                    bucket = set(merged.get(key) or [])
+                    bucket.update(ops)
+                    merged[key] = sorted(bucket)
+        for child in node.inputs:
+            _walk(child)
+
+    _walk(plan)
+    return merged
 
 
 class PolarsLongBackend(Backend):
@@ -318,6 +354,7 @@ class PolarsLongBackend(Backend):
         try:
             base_lf = resolve_base_lazy_for_plan(plan, ctx, scan_fn)
             compile_polars_long_lazy(plan, ctx, base_lf=base_lf, lazy_cache_key=str(sid))
+            _record_shared_lazy_op_stats(ctx, plan, str(sid))
             return True
         except Exception as exc:
             runtime = dict(getattr(ctx, "runtime_stats", None) or {})
@@ -416,7 +453,7 @@ class PolarsLongBackend(Backend):
                 base_lf=base_lf,
                 lazy_cache_key=lazy_key,
             )
-            op_stats = collect_plan_op_stats(plan)
+            op_stats = _merge_shared_op_stats(plan, ctx, collect_plan_op_stats(plan))
             assert_native_only_plan(op_stats, ctx)
             telemetry = long_path_telemetry_flags(op_stats)
             _record_long_stats(

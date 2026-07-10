@@ -88,8 +88,8 @@ NO_PANDAS_CASES = [
     ("ts_beta", lambda: make_cleaned_call_factory("ts_beta")(col("ret"), col("close"), 2)),
     ("ts_delay", lambda: make_cleaned_call_factory("ts_delay")(col("close"), 1)),
     ("log_returns", lambda: make_cleaned_call_factory("log_returns")(col("close"))),
-    ("ts_argmax", lambda: make_cleaned_call_factory("ts_argmax")(col("close"), 3)),
-    ("ts_argmin", lambda: make_cleaned_call_factory("ts_argmin")(col("close"), 3)),
+    ("cs_mad", lambda: make_cleaned_call_factory("cs_mad")(col("close"))),
+    ("cs_mad_zscore", lambda: make_cleaned_call_factory("cs_mad_zscore")(col("close"))),
 ]
 
 

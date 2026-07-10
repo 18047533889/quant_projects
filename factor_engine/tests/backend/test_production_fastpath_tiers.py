@@ -39,12 +39,14 @@ def test_p1_group_dual_backend_subset(_loaded):
     from backend.polars_long_production import is_polars_long_native_production_safe
     from backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
 
+    assert "group_zscore" in PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+    assert is_polars_long_native_production_safe("group_zscore")
     assert "group_mean" in PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
     assert is_polars_long_native_production_safe("group_mean")
     assert not is_polars_long_native_production_safe("group_rank")
 
 
-def test_p1_robust_winsorize_not_dual_backend(_loaded):
+def test_p1_robust_winsorize_dual_backend(_loaded):
     from backend.polars_long_production import is_polars_long_native_production_safe
     from backend.primitive_evidence import (
         DUCKDB_REAL_SQL_VERIFIED,
@@ -54,6 +56,7 @@ def test_p1_robust_winsorize_not_dual_backend(_loaded):
 
     assert "group_winsorize" in DUCKDB_REAL_SQL_VERIFIED
     assert "group_winsorize" in PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+    assert is_polars_long_native_production_safe("group_winsorize")
     assert not effective_sql_production_safe("winsorize")
     assert not is_polars_long_native_production_safe("winsorize")
 

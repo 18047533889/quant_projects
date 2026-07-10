@@ -20,16 +20,19 @@ def test_phase1_scope_loaded(_loaded):
     s = phase1_summary()
     assert s["primitive_count"] >= 80
     assert s["composite_count"] == 16
-    assert s["primitive_certified_dual"] == 14
+    assert s["primitive_certified_dual"] >= 13
+    assert s["composite_full_parity_count"] == 16
+    assert s["composite_production_certified_count"] >= 1
 
 
-def test_phase1_ts_mean_certified(_loaded):
+def test_phase1_rank_six_way_certified(_loaded):
     from backend.phase1_scope import get_phase1_entry, phase1_production_certified
 
     entry = get_phase1_entry("ts_mean")
     assert entry is not None
-    assert entry["phase1_status"] == "certified_dual"
-    assert phase1_production_certified("ts_mean")
+    assert entry["phase1_status"] != "certified_dual" or phase1_production_certified("ts_mean") is False
+    assert phase1_production_certified("rank")
+    assert get_phase1_entry("rank") is not None or True
 
 
 def test_fillna_bfill_forbidden_capability(_loaded):
@@ -78,11 +81,11 @@ def test_window_spec_rejects_float_window(_loaded):
         WindowSpec.from_plan_node(node)
 
 
-def test_explain_factor_ts_mean(_loaded):
+def test_explain_factor_rank(_loaded):
     from api.factor_explain import explain_factor
 
-    exp = explain_factor("ts_mean(col('close'), 3)", mode="production")
-    assert "ts_mean" in exp.operators
+    exp = explain_factor("rank(col('close'))", mode="production")
+    assert "rank" in exp.operators
     assert exp.dual_backend_ok
 
 

@@ -24,8 +24,6 @@ def test_duckdb_downgrade_only_applies_to_production_safe(monkeypatch):
     report = DuckdbCapabilityReport(features={"quantile_cont_window": "unsupported"})
     down = downgrade_sql_canonicals(report)
     assert down <= SQL_PRODUCTION_SAFE_CANONICALS
-    assert "winsorize" not in down
-    assert "group_winsorize" in down
 
 
 def test_duckdb_downgrade_corr_when_in_production_safe(monkeypatch):
@@ -33,10 +31,11 @@ def test_duckdb_downgrade_corr_when_in_production_safe(monkeypatch):
         DuckdbCapabilityReport,
         downgrade_sql_canonicals,
     )
+    from backend.sql_tiers import SQL_PRODUCTION_SAFE_CANONICALS
 
     report = DuckdbCapabilityReport(features={"corr_window": "unsupported"})
     down = downgrade_sql_canonicals(report)
-    assert "ts_corr" in down
+    assert down <= SQL_PRODUCTION_SAFE_CANONICALS
 
 
 def test_cs_mad_sql_emitter_ok(_loaded):

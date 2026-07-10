@@ -119,10 +119,14 @@ def _series(run_out) -> pd.Series:
 
 @pytest.mark.parametrize("name,expr_builder", BATCH2_ROLLING_CASES)
 def test_batch2_polars_long_matches_pandas(mem_source, name, expr_builder):
+    from backend.polars_long_policy import infer_polars_long_tier
+
+    assert infer_polars_long_tier(name) == "python_rolling"
     expr = expr_builder()
     pd_out = _series(_run(mem_source, expr, "pandas"))
     pl_run = _run(mem_source, expr, "polars_long")
-    assert pl_run.get("used_polars_long_native") is True
+    assert pl_run.get("used_polars_long_path") is True
+    assert not pl_run.get("polars_long_fallback_reason")
     long_out = _series(pl_run)
     pd.testing.assert_series_equal(pd_out, long_out, check_names=False, rtol=1e-5, atol=1e-5)
 

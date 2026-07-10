@@ -80,6 +80,7 @@ def _execute_root_with_path(
         "latest",
         "backend",
         "shared_long_lazy_hits",
+        "shared_long_lazy_op_stats",
         "shared_lazy_compile_failures",
         "shared_lazy_compile_failed_sid",
         "shared_lazy_compile_failed_op",

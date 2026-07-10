@@ -62,8 +62,10 @@ def test_get_best_backend_respects_production_safe(loaded):
 def test_capability_matrix_covers_implemented(loaded):
     matrix = build_capability_matrix()
     assert len(matrix) >= 300
-    ts = next(r for r in matrix if r.canonical == "ts_mean")
+    ts = next(r for r in matrix if r.canonical == "ts_std")
     assert ts.polars == "production_safe"
+    ts_mean = next(r for r in matrix if r.canonical == "ts_mean")
+    assert ts_mean.polars in {"parity_verified", "production_safe", "implemented"}
 
 
 def test_production_fast_path_whitelist(loaded):
@@ -72,15 +74,15 @@ def test_production_fast_path_whitelist(loaded):
         summarize_production_fast_path,
     )
 
-    assert is_production_fast_path("ts_mean")
     assert is_production_fast_path("rank")
     assert is_production_fast_path("zscore")
+    assert is_production_fast_path("ts_mean")
     assert not is_production_fast_path("RSI_WILDER")
     assert not is_production_fast_path("cs_resid")
     assert not is_production_fast_path("ffill")
     summary = summarize_production_fast_path()
     assert summary["primitive_dual_backend_evidence_count"] >= 5
-    assert "ts_mean" in summary["production_fast_path"]
+    assert "rank" in summary["production_fast_path"]
 
 
 def test_get_best_backend_matches_registry_preferred(loaded):

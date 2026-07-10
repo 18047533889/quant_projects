@@ -88,6 +88,7 @@ def rebuild_runtime_from_events(runtime: dict[str, Any] | None) -> dict[str, Any
 
     events = list(base.get("events") or [])
     native_ops: list[str] = list(out.get("polars_long_native_ops") or [])
+    python_rolling_ops: list[str] = list(out.get("polars_long_python_rolling_ops") or [])
     map_ops: list[str] = list(out.get("polars_long_map_group_ops") or [])
     registry_ops: list[str] = list(out.get("polars_long_registry_ops") or [])
 
@@ -114,9 +115,15 @@ def rebuild_runtime_from_events(runtime: dict[str, Any] | None) -> dict[str, Any
                 out["python_fallback_subtree_sids"] = sids
         elif et == "polars_long_native":
             out["used_polars_long_path"] = True
-            out["used_polars_long_native"] = True
+            if "used_polars_long_native" in event:
+                out["used_polars_long_native"] = bool(event.get("used_polars_long_native"))
+            else:
+                out["used_polars_long_native"] = True
+            if "used_polars_long_python_rolling" in event:
+                out["used_polars_long_python_rolling"] = bool(event.get("used_polars_long_python_rolling"))
             for key, bucket in (
                 ("polars_long_native_ops", native_ops),
+                ("polars_long_python_rolling_ops", python_rolling_ops),
                 ("polars_long_map_group_ops", map_ops),
                 ("polars_long_registry_ops", registry_ops),
             ):
@@ -139,6 +146,8 @@ def rebuild_runtime_from_events(runtime: dict[str, Any] | None) -> dict[str, Any
 
     if native_ops:
         out["polars_long_native_ops"] = native_ops
+    if python_rolling_ops:
+        out["polars_long_python_rolling_ops"] = python_rolling_ops
     if map_ops:
         out["polars_long_map_group_ops"] = map_ops
     if registry_ops:

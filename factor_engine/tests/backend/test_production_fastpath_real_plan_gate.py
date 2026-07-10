@@ -21,7 +21,7 @@ def test_real_plan_gate_accepts_multi_column(_loaded):
     from backend.production_fastpath_gate import check_production_fastpath_formula_ops
 
     result = check_production_fastpath_formula_ops(
-        "ts_mean(col('close'), 5)",
+        "rank(col('close'))",
         use_real_plan=True,
         check_full_plan=True,
         require_mode="any",
@@ -56,7 +56,7 @@ def test_real_plan_gate_collects_all_referenced_columns(_loaded):
     from backend.production_fastpath_gate import check_production_fastpath_formula_ops
 
     result = check_production_fastpath_formula_ops(
-        "ts_mean(col('volume'), 5)",
+        "zscore(col('volume'))",
         use_real_plan=True,
         check_full_plan=True,
         require_mode="any",
@@ -109,7 +109,7 @@ def test_minimal_plan_hint_differs_from_real_plan(_loaded):
     assert not hint.ok
 
 
-def test_real_plan_gate_accepts_mom_composite(_loaded):
+def test_real_plan_gate_rejects_mom_until_primitives_certified(_loaded):
     from backend.production_fastpath_gate import check_production_fastpath_formula_ops
 
     result = check_production_fastpath_formula_ops(
@@ -117,7 +117,8 @@ def test_real_plan_gate_accepts_mom_composite(_loaded):
         use_real_plan=True,
         check_full_plan=False,
     )
-    assert result.ok, result.violations
+    assert not result.ok
+    assert any("MOM" in v for v in result.violations)
 
 
 def test_gate_rejects_unlowered_composite_in_strict(_loaded):
