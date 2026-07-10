@@ -103,26 +103,45 @@ def delete_staging_rows(
     """从 factor_lake_staging 删除指定时间范围内的行（行级补偿删除）。
 
     ``start``/``end`` 为闭区间；``after`` 为开区间下界（删除 strictly > after 的行）。
+    staging 数据集未注册时跳过删除（本地 repair / 无 staging 环境）。
     """
     _ensure_data_access()
-    from data_access import get_store
+    try:
+        from data_access import get_store
 
-    store = get_store()
-    if hasattr(store, "delete_rows"):
-        result = store.delete_rows(
-            "factor_lake_staging",
-            start=start,
-            end=end,
-            after=after,
-            factor_id=factor_id,
-        )
-    else:
-        result = _delete_staging_rows_local(
-            factor_id,
-            start=start,
-            end=end,
-            after=after,
-        )
+        store = get_store()
+        if hasattr(store, "delete_rows"):
+            result = store.delete_rows(
+                "factor_lake_staging",
+                start=start,
+                end=end,
+                after=after,
+                factor_id=factor_id,
+            )
+        else:
+            result = _delete_staging_rows_local(
+                factor_id,
+                start=start,
+                end=end,
+                after=after,
+            )
+    except Exception as exc:
+        from data_access.exceptions import ValidationError
+
+        if isinstance(exc, ValidationError) or "未注册" in str(exc):
+            logger.warning(
+                "staging 补偿跳过 factor_id=%s：%s",
+                factor_id,
+                exc,
+            )
+            return {
+                "ok": False,
+                "skipped": True,
+                "factor_id": factor_id,
+                "rows_deleted": 0,
+                "reason": str(exc),
+            }
+        raise
 
     rows_deleted = int(result.get("rows_deleted", 0))
     logger.info(

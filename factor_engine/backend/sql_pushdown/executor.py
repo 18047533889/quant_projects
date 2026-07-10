@@ -258,6 +258,8 @@ def _execute_clickhouse(compiled: CompiledSql, ctx: PushdownContext) -> pd.Serie
 def try_execute_sql_pushdown_long(
     plan: PlanNode,
     ctx: ExecutionContext,
+    *,
+    sid: str | None = None,
 ) -> Any | None:
     """SQL 子树 → long-table LazyFrame（``ts, inst, _v``）；失败返回 None。"""
     pctx = extract_pushdown_context(ctx)
@@ -284,7 +286,13 @@ def try_execute_sql_pushdown_long(
                 compiled, pctx, ctx.data_source, query_budget=getattr(ctx, "query_budget", None)
             )
         return _lazy_from_sql_table(table)
-    except Exception:
+    except Exception as exc:
+        from backend.sql_pushdown.strict import handle_sql_long_pushdown_failure
+
+        try:
+            handle_sql_long_pushdown_failure(ctx, sid=sid, exc=exc, phase="long_single")
+        except Exception:
+            raise
         return None
 
 
@@ -328,7 +336,18 @@ def try_execute_sql_pushdown_batch_long(
             part = df.select(["ts", "inst", pl.col(alias).alias("_v")]).lazy()
             out[sid] = part
         return out
-    except Exception:
+    except Exception as exc:
+        from backend.sql_pushdown.strict import handle_sql_long_pushdown_failure
+
+        try:
+            handle_sql_long_pushdown_failure(
+                ctx,
+                sid=",".join(sorted(plans.keys())[:3]),
+                exc=exc,
+                phase="long_batch",
+            )
+        except Exception:
+            raise
         return None
 
 

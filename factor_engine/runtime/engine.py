@@ -85,9 +85,23 @@ class FactorEngine:
             )
         logical_plan = self.lowerer.to_logical_plan(analysis.ir)
         optimized_plan = self.optimizer.optimize(logical_plan)
-        from runtime.production_policy import assert_production_plan_ops
+        from runtime.production_policy import (
+            assert_no_unapproved_map_groups_in_production,
+            assert_production_fastpath_plan,
+            assert_production_plan_ops,
+        )
 
         assert_production_plan_ops(
+            optimized_plan,
+            mode=self.run_mode,
+            context=f"compile:{factor.name}",
+        )
+        assert_no_unapproved_map_groups_in_production(
+            optimized_plan,
+            mode=self.run_mode,
+            context=f"compile:{factor.name}",
+        )
+        assert_production_fastpath_plan(
             optimized_plan,
             mode=self.run_mode,
             context=f"compile:{factor.name}",
@@ -914,6 +928,7 @@ class FactorEngine:
             prefer_long_table=prefer_long,
             perf=effective_perf,
             query_budget=effective_perf.build_query_budget(),
+            runtime_stats={},
         )
         if self.cache is None and shared_result_cache is None:
             return base
@@ -1115,7 +1130,13 @@ class FactorEngine:
                 factor.name,
             )
         ctx = engine_to_use._make_context()
+        from runtime.production_policy import record_production_fastpath_check
+
+        record_production_fastpath_check(ctx, plan, mode=engine_to_use.run_mode)
         result = engine_to_use.backend.execute(plan, ctx)
+        from runtime.production_policy import assert_production_fastpath_runtime
+
+        assert_production_fastpath_runtime(ctx, mode=engine_to_use.run_mode, context=f"run:{factor.name}")
 
         if run_window is not None and run_window.trim_output and run_window.requested_start:
             from storage.time_window import slice_series_time_window
@@ -1181,6 +1202,45 @@ class FactorEngine:
             out["used_polars_long_passthrough"] = True
         if runtime.get("polars_long_fallback_reason"):
             out["polars_long_fallback_reason"] = runtime["polars_long_fallback_reason"]
+        for key in (
+            "used_sql_pushdown",
+            "fully_sql",
+            "sql_subtree_count",
+            "sql_subtrees",
+            "sql_fully_pushed",
+            "sql_partial_pushed",
+            "sql_long_lazy_subtrees",
+            "sql_series_subtrees",
+            "sql_fallback_subtree_count",
+            "sql_dialect",
+            "sql_query_count",
+            "production_fastpath_ok",
+            "production_fastpath_violations",
+            "polars_long_native_ops",
+            "polars_long_map_group_ops",
+            "polars_long_registry_ops",
+            "polars_long_passthrough_ops",
+            "polars_long_other_ops",
+            "polars_long_columns",
+        ):
+            if key in runtime:
+                out[key] = runtime[key]
+        from backend.path_summary import build_backend_path_summary, snapshot_backend_path
+        from backend.runtime_labels import resolve_runtime_backend_label
+
+        runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+        from backend.runtime_labels import resolve_runtime_backend_label
+        from backend.path_summary import build_backend_path_summary, snapshot_backend_path
+
+        runtime.setdefault("backend", resolve_runtime_backend_label(getattr(engine_to_use, "backend", None)))
+        if fallbacks and "production_pandas_fallbacks" not in runtime:
+            runtime["production_pandas_fallbacks"] = fallbacks
+        out["backend_path"] = snapshot_backend_path(runtime)
+        out["backend_path_summary"] = out["backend_path"].get("backend_path_summary") or build_backend_path_summary(
+            runtime
+        )
+        if runtime.get("events"):
+            out["runtime_events"] = list(runtime["events"])
         return out
 
     def materialize(

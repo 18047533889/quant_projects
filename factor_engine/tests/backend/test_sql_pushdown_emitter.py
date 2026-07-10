@@ -142,6 +142,24 @@ def test_ts_corr_sql_with_literal_window_input():
     assert "corr" in compiled.query.lower()
 
 
+def test_ts_beta_sql_with_literal_window_input():
+    from backend.sql_pushdown.emitter import compile_plan_to_sql
+
+    plan = PlanNode(
+        op="ts_beta",
+        inputs=[_col("ret"), _col("close"), PlanNode(op="literal", attrs={"value": 3}, inputs=[])],
+        attrs={},
+    )
+    compiled = compile_plan_to_sql(
+        plan,
+        dataset="d",
+        time_column="t",
+        instrument_column="i",
+    )
+    assert compiled is not None
+    assert "covar" in compiled.query.lower()
+
+
 def test_group_neutralize_sql():
     from backend.sql_pushdown.emitter import compile_plan_to_sql
 

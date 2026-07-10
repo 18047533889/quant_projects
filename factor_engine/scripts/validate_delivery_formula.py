@@ -21,6 +21,8 @@ def main() -> int:
     parser.add_argument("--market", default="us_stock")
     parser.add_argument("--expression-type", default="dsl")
     parser.add_argument("--manifest", type=Path, help="manifest.json 路径")
+    parser.add_argument("--require-production", action="store_true")
+    parser.add_argument("--require-fastpath", action="store_true")
     args = parser.parse_args()
 
     if args.manifest:
@@ -37,6 +39,8 @@ def main() -> int:
         market=market,
         expression_type=expr_type,
         formula=formula,
+        require_production=args.require_production,
+        require_fastpath=args.require_fastpath,
     )
     if ok:
         print(f"OK: {msg}")

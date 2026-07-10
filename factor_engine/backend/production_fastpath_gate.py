@@ -1,0 +1,220 @@
+# -*- coding: utf-8
+"""Production vs Production Fast Path 双层门禁。"""
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+from typing import Any, Literal, Sequence
+
+FastpathBackend = Literal["duckdb_sql", "polars_long_native"]
+
+
+@dataclass(frozen=True)
+class FastpathGateResult:
+    ok: bool
+    violations: tuple[str, ...]
+    ops_checked: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "ok": self.ok,
+            "violations": list(self.violations),
+            "ops_checked": list(self.ops_checked),
+        }
+
+
+_SKIP_OPS = frozenset({"column", "literal", "materialized_series", "plan_ref"})
+
+
+def fastpath_gate_strict(*, strict: bool | None = None) -> bool:
+    """``FACTOR_ENGINE_PRODUCTION_REQUIRE_FASTPATH=1`` 时启用 strict 规则。"""
+    if strict is not None:
+        return bool(strict)
+    return os.environ.get("FACTOR_ENGINE_PRODUCTION_REQUIRE_FASTPATH", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _iter_plan_ops(plan: Any) -> list[str]:
+    from cleaned_operators.registry import OperatorRegistry
+
+    seen: set[str] = set()
+    ops: list[str] = []
+
+    def walk(node: Any) -> None:
+        op = str(getattr(node, "op", "") or "")
+        if not op:
+            return
+        canon = OperatorRegistry._aliases.get(op, op)
+        if canon not in seen and canon not in _SKIP_OPS:
+            seen.add(canon)
+            ops.append(canon)
+        for child in getattr(node, "inputs", []) or []:
+            walk(child)
+
+    walk(plan)
+    return ops
+
+
+def _duckdb_fastpath_ok(canon: str) -> bool:
+    from backend.operator_capability import _sql_emitter_ok
+    from backend.sql_tiers import effective_sql_production_safe
+
+    return effective_sql_production_safe(canon) and _sql_emitter_ok(canon)
+
+
+def _polars_native_fastpath_ok(canon: str) -> bool:
+    from backend.polars_long_production import is_polars_long_native_production_safe
+
+    return is_polars_long_native_production_safe(canon)
+
+
+def check_production_fastpath_plan_ops(
+    plan: Any,
+    *,
+    require: Sequence[FastpathBackend] = ("duckdb_sql", "polars_long_native"),
+    strict: bool | None = None,
+) -> FastpathGateResult:
+    """检查计划每个 op 是否可走 production fast path。
+
+    strict 模式（``FACTOR_ENGINE_PRODUCTION_REQUIRE_FASTPATH=1`` 默认开启）额外禁止：
+    - map_groups / registry / passthrough（即使 DuckDB 可下推）
+    - deferred 算子
+    """
+    from backend.polars_long_policy import infer_polars_long_tier
+    from backend.polars_long_production import POLARS_LONG_FASTPATH_DEFERRED
+    from backend.sql_tiers import SQL_PRODUCTION_DEFERRED_CANONICALS
+    from cleaned_operators.operator_spec import build_operator_spec
+
+    is_strict = fastpath_gate_strict(strict=strict)
+    require_set = frozenset(require)
+    violations: list[str] = []
+    ops = _iter_plan_ops(plan)
+
+    for canon in ops:
+        spec = build_operator_spec(canon)
+        if spec is None:
+            violations.append(f"{canon}: 无 runtime 实现")
+            continue
+        if not spec.allow_in_production:
+            violations.append(f"{canon}: 不允许 production（status={spec.status}）")
+            continue
+
+        if canon in POLARS_LONG_FASTPATH_DEFERRED or canon in SQL_PRODUCTION_DEFERRED_CANONICALS:
+            violations.append(f"{canon}: deferred，不可 production fast path")
+            continue
+
+        tier = infer_polars_long_tier(canon)
+        if is_strict and tier in {"map_groups", "registry", "passthrough"}:
+            violations.append(f"{canon}: polars_long_{tier} 不可 production fast path（strict）")
+            continue
+
+        duck_ok = _duckdb_fastpath_ok(canon)
+        polars_ok = _polars_native_fastpath_ok(canon)
+
+        if not is_strict:
+            from backend.polars_long_production import APPROVED_POLARS_LONG_MAP_GROUPS_PRODUCTION
+
+            if tier == "map_groups" and not duck_ok and canon not in APPROVED_POLARS_LONG_MAP_GROUPS_PRODUCTION:
+                violations.append(f"{canon}: map_groups 未批准 production fast path")
+                continue
+            if tier == "registry" and not duck_ok:
+                violations.append(f"{canon}: registry bridge 不可 production fast path")
+                continue
+            if tier == "passthrough" and not duck_ok:
+                violations.append(f"{canon}: passthrough 不可 production fast path")
+                continue
+
+        allowed = False
+        if "duckdb_sql" in require_set and duck_ok:
+            allowed = True
+        if "polars_long_native" in require_set and polars_ok:
+            allowed = True
+        if not allowed:
+            parts: list[str] = []
+            if "duckdb_sql" in require_set and not duck_ok:
+                parts.append("duckdb_sql 非 production_safe 或 emitter 失败")
+            if "polars_long_native" in require_set and not polars_ok:
+                parts.append("polars_long_native 非 production_safe")
+            violations.append(f"{canon}: {'; '.join(parts)}")
+
+    return FastpathGateResult(
+        ok=not violations,
+        violations=tuple(violations),
+        ops_checked=tuple(ops),
+    )
+
+
+def check_production_fastpath_formula_ops(
+    formula: str,
+    **kwargs: Any,
+) -> FastpathGateResult:
+    """解析公式并检查 fast path（需 planner 可用时用 plan 版）。"""
+    import ast
+
+    from cleaned_operators.registry import OperatorRegistry
+    from planner.logical_plan import PlanNode
+
+    try:
+        tree = ast.parse(str(formula or ""), mode="eval")
+    except SyntaxError as exc:
+        return FastpathGateResult(ok=False, violations=(f"公式语法错误: {exc}",), ops_checked=())
+
+    ops: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            name = node.func.id
+            if name == "col":
+                continue
+            canon = OperatorRegistry._aliases.get(name, name)
+            if canon not in _SKIP_OPS:
+                ops.append(canon)
+
+    if not ops:
+        return FastpathGateResult(ok=True, violations=(), ops_checked=())
+
+    from backend.sql_pushdown.plan_fixtures import column, minimal_plan
+
+    violations: list[str] = []
+    for op in sorted(set(ops)):
+        try:
+            sub = minimal_plan(op)
+        except Exception:
+            sub = PlanNode(op=op, inputs=[column("close")], attrs={"d": 3})
+        result = check_production_fastpath_plan_ops(sub, **kwargs)
+        violations.extend(result.violations)
+
+    return FastpathGateResult(
+        ok=not violations,
+        violations=tuple(dict.fromkeys(violations)),
+        ops_checked=tuple(sorted(set(ops))),
+    )
+
+
+def audit_runtime_fastpath_violations(runtime: dict[str, Any] | None) -> list[str]:
+    """执行后审计：pandas fallback / polars_long fallback / 非 native tier。"""
+    r = dict(runtime or {})
+    violations: list[str] = []
+    if r.get("polars_long_fallback_reason"):
+        violations.append(f"polars_long_fallback: {r['polars_long_fallback_reason']}")
+    if r.get("polars_expr_fallback"):
+        violations.append("polars_expr_fallback")
+    if r.get("used_polars_long_map_groups"):
+        violations.append("used_polars_long_map_groups")
+    if r.get("used_polars_long_registry"):
+        violations.append("used_polars_long_registry")
+    if r.get("used_polars_long_passthrough"):
+        violations.append("used_polars_long_passthrough")
+    for fb in r.get("production_pandas_fallbacks") or []:
+        if isinstance(fb, dict) and fb.get("op"):
+            violations.append(f"pandas_fallback:{fb['op']}")
+    if r.get("production_fastpath_ok") is False:
+        for v in r.get("production_fastpath_violations") or []:
+            violations.append(f"plan_gate:{v}")
+    route = str(r.get("primary_route") or "")
+    if route in {"pandas_fallback", "polars_panel_fallback", "polars_expr_fallback"}:
+        violations.append(f"primary_route:{route}")
+    return violations

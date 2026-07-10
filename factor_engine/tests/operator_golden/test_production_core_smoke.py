@@ -31,6 +31,27 @@ _SKIP_SMOKE: frozenset[str] = frozenset(
     }
 )
 
+_BINARY_TWO_PANEL: frozenset[str] = frozenset(
+    {
+        "add",
+        "subtract",
+        "multiply",
+        "divide",
+        "gt",
+        "lt",
+        "ge",
+        "le",
+        "eq",
+        "ne",
+        "and_",
+        "or_",
+        "maximum",
+        "minimum",
+        "ts_cov",
+        "vwap",
+    }
+)
+
 _UNARY_SMOKE: dict[str, dict] = {
     "ts_mean": {"d": 2},
     "ts_sum": {"d": 2},
@@ -65,10 +86,14 @@ _UNARY_SMOKE: dict[str, dict] = {
     "sqrt": {},
     "sign": {},
     "neg": {},
-    "add": {},
-    "subtract": {},
-    "multiply": {},
-    "divide": {},
+    "power": {"exponent": 2.0},
+    "fillna": {"value": 0.0},
+    "volatility": {"window": 2},
+    "log_returns": {"periods": 1},
+    "winsorize": {"lower": 0.05, "upper": 0.95},
+    "group_winsorize": {"lower": 0.05, "upper": 0.95},
+    "vwap": {"d": 2},
+    "ts_cov": {"d": 2},
 }
 
 
@@ -86,10 +111,13 @@ def test_production_core_unary_smoke(golden_panel, loaded, canonical: str):
     assert op is not None, canonical
 
     kw = dict(_UNARY_SMOKE.get(canonical, {"d": 2}))
-    if canonical in {"add", "subtract", "multiply", "divide"}:
-        out = op.calculate(golden_panel.copy(), golden_panel.copy(), **kw)
+    panel = golden_panel.copy()
+    if canonical in _BINARY_TWO_PANEL:
+        out = op.calculate(panel, panel, **kw)
+    elif canonical == "not_":
+        out = op.calculate(panel > 0, **kw)
     else:
-        out = op.calculate(golden_panel.copy(), **kw)
+        out = op.calculate(panel, **kw)
 
     assert_panel_shape_unchanged(golden_panel, out)
     assert isinstance(out, pd.DataFrame)

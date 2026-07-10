@@ -155,6 +155,24 @@ def test_run_many_shared_lazy_only_skips_series_cache(source):
         assert sid in (ctx.shared_long_lazy_cache or {})
 
 
+def test_run_many_shared_lazy_records_hits(source):
+    sub = ts_mean(col("close"), 2)
+    f1 = Factor(name="a", expr=sub)
+    f2 = Factor(name="b", expr=rank(sub))
+    f3 = Factor(name="c", expr=make_cleaned_call_factory("zscore")(sub))
+    eng = FactorEngine(backend=build_backend("polars_long"), data_source=source)
+    out = eng.run_many([f1, f2, f3])
+    summary = out.get("backend_path_summary") or {}
+    paths = out.get("backend_paths") or {}
+    hits = summary.get("shared_long_lazy_hits_total", 0)
+    if hits < 1:
+        hits = max(
+            (int((p.get("backend_path_summary") or {}).get("shared_long_lazy_hits") or 0) for p in paths.values()),
+            default=0,
+        )
+    assert hits >= 1
+
+
 def test_binary_column_fusion_from_wide_base(source):
     """两列二元 op 应直接宽表 expr，结果与 pandas 一致。"""
     close = source.data["close"]

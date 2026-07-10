@@ -41,6 +41,8 @@ def source():
         "group_std",
         "group_normalize",
         "group_percentile",
+        "group_winsorize",
+        "group_decay_linear",
         "cs_mad",
         "cs_mad_zscore",
     ],
@@ -52,7 +54,7 @@ def test_window_group_ops_are_native_tier(op):
 
 @pytest.mark.parametrize(
     "op",
-    ["group_winsorize", "group_decay_linear"],
+    ["ewm_corr", "ts_kurt", "quantile"],
 )
 def test_complex_group_ops_remain_map_groups(op):
     assert classify_plan_op(op) == "map_groups"

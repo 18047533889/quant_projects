@@ -15,6 +15,8 @@ from .sql_backend import SqlBackend
 class HybridLongBackend(SqlBackend):
     """``build_backend('auto_long')`` / ``hybrid_long``：SQL 子树 + Polars long native。"""
 
+    runtime_backend_label = "hybrid_long"
+
     prefers_native_scan = True
     supports_lazy_shared = True
 

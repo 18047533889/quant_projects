@@ -86,7 +86,7 @@ def test_polars_long_registry_ops(source, factory_name, expr_builder):
     if factory_name in {"MACD", "RSI", "MOM", "ROC", "acos"}:
         assert long_out.get("used_polars_long_registry") is True, factory_name
     elif factory_name == "cum_std":
-        assert long_out.get("used_polars_long_map_groups") is True, factory_name
+        assert long_out.get("used_polars_long_native") is True, factory_name
     elif factory_name == "if_else":
         assert long_out.get("used_polars_long_native") is True, factory_name
     pd.testing.assert_series_equal(

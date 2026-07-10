@@ -16,6 +16,7 @@ def literal(value) -> PlanNode:
 def minimal_plan(op: str) -> PlanNode:
     """为 registry 中每个 canonical 构造可编译的最小逻辑计划。"""
     close, volume, industry = column("close"), column("volume"), column("industry")
+    high, low = column("high"), column("low")
     if op in {
         "add",
         "subtract",
@@ -69,6 +70,10 @@ def minimal_plan(op: str) -> PlanNode:
         return PlanNode(op=op, inputs=[close], attrs={"d": 20, "window": 20})
     if op in {"ewm_mean", "ewm_std", "ewm_var", "WMA", "ts_decay_linear"}:
         return PlanNode(op=op, inputs=[close], attrs={"span": 5, "window": 5, "d": 5})
+    if op == "ATR_WILDER":
+        return PlanNode(op=op, inputs=[high, low, close], attrs={"d": 14, "window": 14})
+    if op == "RSI_WILDER":
+        return PlanNode(op=op, inputs=[close], attrs={"d": 14, "window": 14})
     if op == "not_":
         return PlanNode(op=op, inputs=[close], attrs={})
     return PlanNode(op=op, inputs=[close], attrs={"d": 3, "window": 3, "span": 3})

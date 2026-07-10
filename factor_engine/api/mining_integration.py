@@ -46,6 +46,59 @@ def validate_production_dsl(formula: str) -> tuple[bool, str]:
     return True, "OK"
 
 
+def validate_production_fastpath_dsl(formula: str, *, strict: bool | None = None) -> tuple[bool, str]:
+    """production fast path 公式校验：语法 + 高性能 backend 允许。"""
+    ok, msg = validate_production_dsl(formula)
+    if not ok:
+        return False, msg
+    from backend.production_fastpath_gate import check_production_fastpath_formula_ops
+
+    result = check_production_fastpath_formula_ops(formula, strict=strict)
+    if not result.ok:
+        return False, "; ".join(result.violations)
+    return True, "OK"
+
+
+def list_production_fastpath_allowlist(*, strict: bool = True) -> list[str]:
+    from backend.fastpath_allowlists import production_fastpath_allowlist
+
+    return sorted(production_fastpath_allowlist(strict=strict))
+
+
+def export_fastpath_allowlists_json(*, strict: bool = True) -> dict[str, Any]:
+    """导出 research / production / production_fastpath 三层 allowlist。"""
+    from backend.fastpath_allowlists import (
+        production_allowlist,
+        production_fastpath_allowlist,
+        research_allowlist,
+    )
+
+    research = sorted(research_allowlist())
+    production = sorted(production_allowlist())
+    fastpath = sorted(production_fastpath_allowlist(strict=strict))
+    return {
+        "schema_version": "factor_engine.fastpath_allowlists.v1",
+        "research_allowlist": research,
+        "production_allowlist": production,
+        "production_fastpath_allowlist": fastpath,
+        "counts": {
+            "research": len(research),
+            "production": len(production),
+            "production_fastpath": len(fastpath),
+        },
+    }
+
+
+def write_fastpath_allowlists(path: str | Path, *, strict: bool = True) -> Path:
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(
+        json.dumps(export_fastpath_allowlists_json(strict=strict), ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return out
+
+
 def validate_factor_engine_dsl(formula: str) -> tuple[bool, str]:
     """校验 factor_engine DSL 语法与白名单（A 股 / 美股同一套 ``parse_expr``）。"""
     text = str(formula or "").strip()
@@ -829,15 +882,129 @@ def validate_manifest_for_execution(
     market: str,
     expression_type: str | None,
     formula: str,
+    require_production: bool = False,
+    require_fastpath: bool | None = None,
 ) -> tuple[bool, str]:
-    """按 market / expression_type 决定是否做 factor_engine 语法校验。"""
+    """按 market / expression_type 决定是否做 factor_engine 语法校验。
+
+    ``require_production``：额外校验 production allowlist。
+    ``require_fastpath``：额外校验 production fastpath；默认读
+    ``FACTOR_ENGINE_MINING_REQUIRE_FASTPATH=1``。
+    """
+    import os
+
     mkt = str(market or "").strip()
     et = str(expression_type or "dsl").strip() or "dsl"
     if et == "python":
         return True, "skip: python intermediate; translate to dsl before delivery"
-    if et in ("dsl", "lqtp_dsl", ""):
-        return validate_factor_engine_dsl(formula)
-    return False, f"unsupported expression_type: {et!r}"
+    if et not in ("dsl", "lqtp_dsl", ""):
+        return False, f"unsupported expression_type: {et!r}"
+
+    if require_fastpath is None:
+        require_fastpath = os.environ.get("FACTOR_ENGINE_MINING_REQUIRE_FASTPATH", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+
+    if require_fastpath:
+        return validate_production_fastpath_dsl(formula)
+    if require_production:
+        return validate_production_dsl(formula)
+    return validate_factor_engine_dsl(formula)
+
+
+def default_mining_operator_allowlist(*, tier: str = "production_fastpath") -> list[str]:
+    """挖掘搜索空间分层 allowlist。
+
+    ``tier``：``research`` | ``production`` | ``production_fastpath``
+    """
+    tier_key = resolve_mining_allowlist_tier(tier)
+    if tier_key == "research":
+        from backend.fastpath_allowlists import research_allowlist
+
+        return sorted(research_allowlist())
+    if tier_key == "production":
+        from backend.fastpath_allowlists import production_allowlist
+
+        return sorted(production_allowlist())
+    return list_production_fastpath_allowlist()
+
+
+def resolve_mining_allowlist_tier(tier: str | None = None) -> str:
+    """解析挖掘 allowlist tier；默认 ``FACTOR_ENGINE_MINING_ALLOWLIST_TIER``。"""
+    import os
+
+    if tier is not None and str(tier).strip():
+        return str(tier).strip().lower()
+    env = os.environ.get("FACTOR_ENGINE_MINING_ALLOWLIST_TIER", "").strip().lower()
+    if env in {"research", "production", "production_fastpath"}:
+        return env
+    return "production_fastpath"
+
+
+def default_mining_search_space_config(*, tier: str | None = None) -> dict[str, Any]:
+    """Campaign / DSL 生成器默认搜索空间（含 allowlist tier）。"""
+    tier_key = resolve_mining_allowlist_tier(tier)
+    ops = default_mining_operator_allowlist(tier=tier_key)
+    return {
+        "schema_version": "factor_engine.mining_search_space.v1",
+        "allowlist_tier": tier_key,
+        "operators": ops,
+        "count": len(ops),
+        "require_fastpath_validation": tier_key == "production_fastpath",
+    }
+
+
+def validate_formula_in_mining_allowlist(
+    formula: str,
+    *,
+    tier: str | None = None,
+) -> tuple[bool, str]:
+    """校验公式算子是否在指定 tier allowlist 内。"""
+    import ast
+
+    from cleaned_operators.registry import OperatorRegistry
+
+    tier_key = resolve_mining_allowlist_tier(tier)
+    allowed = frozenset(default_mining_operator_allowlist(tier=tier_key))
+    text = str(formula or "").strip()
+    if not text:
+        return False, "empty formula"
+    ok, msg = validate_factor_engine_dsl(text)
+    if not ok:
+        return False, msg
+    try:
+        tree = ast.parse(text, mode="eval")
+    except SyntaxError as exc:
+        return False, str(exc)
+    unknown: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            name = node.func.id
+            if name == "col":
+                continue
+            canon = OperatorRegistry._aliases.get(name, name)
+            if canon not in allowed and canon not in {"column", "literal"}:
+                unknown.append(canon)
+    if unknown:
+        return False, f"operators not in {tier_key} allowlist: {sorted(set(unknown))}"
+    if tier_key == "production_fastpath":
+        return validate_production_fastpath_dsl(text)
+    if tier_key == "production":
+        return validate_production_dsl(text)
+    return True, "OK"
+
+
+def write_mining_search_space(path: str | Path, *, tier: str | None = None) -> Path:
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(
+        json.dumps(default_mining_search_space_config(tier=tier), ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return out
 
 
 def write_dsl_allowlist(path: str | Path) -> Path:

@@ -7,7 +7,10 @@ class Optimizer:
     """轻量计划优化：自底向上常量折叠等。"""
 
     def optimize(self, plan: PlanNode) -> PlanNode:
-        return self._fold_literals(plan)
+        folded = self._fold_literals(plan)
+        from planner.rewrite_fastpath import rewrite_plan_for_fastpath
+
+        return rewrite_plan_for_fastpath(folded)
 
     def _fold_literals(self, node: PlanNode) -> PlanNode:
         inputs = [self._fold_literals(c) for c in node.inputs]

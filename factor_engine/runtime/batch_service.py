@@ -7,7 +7,12 @@ from typing import TYPE_CHECKING, Any, Sequence
 from api.factor import Factor
 from ir.analyzer import AnalysisResult
 from runtime.perf_config import PerfConfig
-from runtime.production_policy import assert_production_run_flags, assert_production_factors
+from runtime.production_policy import (
+    assert_production_fastpath_runtime,
+    assert_production_factors,
+    assert_production_run_flags,
+    summarize_pandas_fallbacks,
+)
 
 if TYPE_CHECKING:
     from runtime.engine import FactorEngine
@@ -20,6 +25,11 @@ def _materialize_shared_subplan(
     sid: str,
 ) -> None:
     """CSE 共享子树：优先 lazy-only 编译，否则 eager execute 写入 ``shared_result_cache``。"""
+    if (
+        getattr(sub, "op", None) == "literal"
+        and getattr(backend, "supports_lazy_shared", False)
+    ):
+        return
     runtime = dict(getattr(ctx, "runtime_stats", None) or {})
     runtime["polars_long_shared_sid"] = sid
     ctx.runtime_stats = runtime  # type: ignore[attr-defined]
@@ -38,10 +48,28 @@ def _clear_polars_long_shared_sid(ctx: Any) -> None:
 
 
 def _execute_root_with_path(backend: Any, plan: Any, ctx: Any) -> tuple[Any, dict[str, Any]]:
-    from backend.path_summary import snapshot_backend_path
+    from dataclasses import replace
 
-    result = backend.execute(plan, ctx)
-    path = snapshot_backend_path(getattr(ctx, "runtime_stats", None))
+    from backend.path_summary import snapshot_backend_path
+    from backend.polars_long_backend import _fresh_long_runtime
+
+    parent_runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+    local_runtime = _fresh_long_runtime(parent_runtime)
+    for key in (
+        "events",
+        "latest",
+        "backend",
+        "shared_long_lazy_hits",
+        "shared_lazy_compile_failures",
+        "shared_lazy_compile_failed_sid",
+        "shared_lazy_compile_failed_op",
+        "shared_lazy_compile_error_type",
+    ):
+        if key in parent_runtime:
+            local_runtime[key] = parent_runtime[key]
+    local_ctx = replace(ctx, runtime_stats=local_runtime)
+    result = backend.execute(plan, local_ctx)
+    path = snapshot_backend_path(getattr(local_ctx, "runtime_stats", None))
     return result, path
 
 
@@ -209,11 +237,15 @@ def execute_run_many(
         batch_out["scheduling_hints"] = derive_scheduling_hints(
             batch_out["cost_summary"]
         )
-    from runtime.production_policy import summarize_pandas_fallbacks
-
+    assert_production_fastpath_runtime(ctx, mode=engine.run_mode, context="run_many")
     fallbacks = summarize_pandas_fallbacks(ctx)
     if fallbacks:
         batch_out["production_pandas_fallbacks"] = fallbacks
+    from backend.path_summary import summarize_lazy_caches
+
+    lazy_cache = summarize_lazy_caches(ctx)
+    if lazy_cache:
+        batch_out["lazy_cache_summary"] = lazy_cache
     return batch_out
 
 
@@ -327,9 +359,13 @@ def execute_run_many_parallel(
         parallel_out["input_dq"] = input_report.to_dict()
     if len(factors) > 1:
         parallel_out["batch_graph"] = batch_graph.to_dict()
-    from runtime.production_policy import summarize_pandas_fallbacks
-
+    assert_production_fastpath_runtime(ctx, mode=engine.run_mode, context="run_many_parallel")
     fallbacks = summarize_pandas_fallbacks(ctx)
     if fallbacks:
         parallel_out["production_pandas_fallbacks"] = fallbacks
+    from backend.path_summary import summarize_lazy_caches
+
+    lazy_cache = summarize_lazy_caches(ctx)
+    if lazy_cache:
+        parallel_out["lazy_cache_summary"] = lazy_cache
     return parallel_out

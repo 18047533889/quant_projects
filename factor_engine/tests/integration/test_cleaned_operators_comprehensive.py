@@ -347,7 +347,8 @@ class TestPlannerOptimizer:
                 Analyzer().lower(divide(Literal(1.0), Literal(0.0))).ir
             )
         )
-        assert plan.op == "divide"
+        # rewrite_fastpath 将 divide → protected_div；均不应常量折叠为 literal
+        assert plan.op in {"divide", "protected_div"}
 
 
 # ---------------------------------------------------------------------------

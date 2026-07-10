@@ -81,6 +81,11 @@ def main() -> int:
         default=None,
         help="写入 backend 三层覆盖 Markdown",
     )
+    parser.add_argument(
+        "--production-fast-path",
+        action="store_true",
+        help="输出 production fast path（三后端 parity）摘要",
+    )
     args = parser.parse_args()
 
     _bootstrap()
@@ -93,7 +98,8 @@ def main() -> int:
     from cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS
     from cleaned_operators.registry import OperatorRegistry
     from backend.sql_pushdown.sql_registry import SQL_CAPABLE_CANONICALS
-    from backend.polars_long_policy import get_polars_long_capable
+    from backend.polars_long_policy import get_polars_long_capable, POLARS_LONG_NATIVE
+    from backend.production_fast_path import summarize_production_fast_path
 
     rows = _build_rows()
     canon = [r["canonical"] for r in rows]
@@ -119,6 +125,10 @@ def main() -> int:
         if r["allow_in_production"] and not r["production_polars_safe"]
     )
     prod_allowed_pandas_only = sorted(set(prod_allowed_pandas_only))
+    fast_path = summarize_production_fast_path()
+    polars_long_native_n = len(
+        POLARS_LONG_NATIVE - {"column", "literal", "materialized_series", "plan_ref"}
+    )
     has_polars_not_safe = sorted(
         r["canonical"]
         for r in rows
@@ -139,6 +149,11 @@ def main() -> int:
         "production_core_polars_gap": sorted(
             PRODUCTION_CORE_CANONICALS - POLARS_PRODUCTION_SAFE
         ),
+        "polars_long_native": polars_long_native_n,
+        "production_fast_path": fast_path["production_fast_path_count"],
+        "production_fast_path_ops": fast_path["production_fast_path"],
+        "triple_parity_duckdb": fast_path["triple_parity_duckdb_count"],
+        "production_core_fast_path_gap_count": fast_path["production_core_fast_path_gap_count"],
         "polars": polars_n,
         "sql_registry": len(SQL_CAPABLE_CANONICALS),
         "sql_emitter_ok": sql_n,
@@ -230,6 +245,10 @@ def main() -> int:
             f"- Polars long only (无 SQL): **{len(report['polars_long_only'])}**",
             f"- SQL only (无 Polars long): **{report['sql_only_vs_polars_long_count']}**",
             f"- PRODUCTION_CORE: **{report['production_core']}**（Polars gap: {report['production_core_polars_gap'] or '无'}）",
+            f"- PolarsLong native: **{report['polars_long_native']}**",
+            f"- Production fast path（三后端 parity）: **{report['production_fast_path']}**",
+            f"- DuckDB triple parity: **{report['triple_parity_duckdb']}**",
+            f"- PRODUCTION_CORE fast path gap: **{report['production_core_fast_path_gap_count']}**",
             f"- production 允许但仅 pandas: **{len(prod_allowed_pandas_only)}**",
             f"- 有 Polars 未进 production safe: **{report['has_polars_not_production_safe_count']}**",
             "",
@@ -250,6 +269,17 @@ def main() -> int:
         args.write_backend_doc.parent.mkdir(parents=True, exist_ok=True)
         args.write_backend_doc.write_text("\n".join(lines), encoding="utf-8")
 
+    if args.production_fast_path:
+        fp = fast_path
+        print(
+            f"production_fast_path={fp['production_fast_path_count']} "
+            f"triple_parity={fp['triple_parity_count']} "
+            f"duckdb_triple={fp['triple_parity_duckdb_count']} "
+            f"core_gap={fp['production_core_fast_path_gap_count']}"
+        )
+        for name in fp["production_fast_path"]:
+            print(f"  {name}")
+
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     elif not args.detail and not args.capability_csv:
@@ -258,6 +288,8 @@ def main() -> int:
             f"polars={polars_n} parity={report['parity_verified']} "
             f"prod_safe={report['polars_production_safe']} "
             f"polars_long={report['polars_long_capable']} "
+            f"polars_long_native={report['polars_long_native']} "
+            f"fast_path={report['production_fast_path']} "
             f"sql_emitter_ok={sql_n} pandas_only={report['pandas_only']}"
         )
         if report["production_core_polars_gap"]:

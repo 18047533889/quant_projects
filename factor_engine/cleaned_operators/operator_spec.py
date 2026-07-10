@@ -11,67 +11,42 @@ from cleaned_operators.operator_policy import OperatorPolicy, infer_operator_pol
 OperatorStatus = Literal["production", "research", "experimental", "deprecated", "stub", "doc_only"]
 NumericalStability = Literal["high", "medium", "low"]
 
-# SQL 下推 / DSL 常用 production 核心 canonical（PIT 门禁对齐此清单）
-PRODUCTION_CORE_CANONICALS: frozenset[str] = frozenset(
+# P0/P1 fastpath 已 production safe、但不在 P0|P1 批次中的 legacy PIT core
+_LEGACY_PRODUCTION_CORE: frozenset[str] = frozenset(
     {
-        # 时序
-        "ts_mean",
-        "ts_sum",
-        "ts_min",
-        "ts_max",
-        "ts_std",
-        "ts_var",
-        "ts_median",
-        "ts_zscore",
-        "ts_delay",
-        "ts_delta",
-        "ts_pct",
-        "ts_rank",
-        "ts_corr",
         "ts_ema",
-        "ts_beta",
-        "rolling_beta",
         "ts_decay_linear",
+        "ts_rank",
         "ts_sharpe",
         "ts_autocorr",
-        # 截面
-        "rank",
-        "zscore",
-        "winsorize",
-        "scale",
-        "normalize",
-        "cs_demean",
         "cs_resid",
         "cs_regression",
-        # 分组
-        "group_rank",
-        "group_mean",
-        "group_zscore",
-        "group_neutralize",
-        # 元素 / 条件
-        "add",
-        "subtract",
-        "multiply",
-        "divide",
-        "abs",
-        "log",
-        "clip",
-        "exp",
-        "sqrt",
-        "sign",
-        "where",
-        # 清洗
         "ffill",
-        "fillna_const",
-        "coalesce",
-        "protected_div",
-        "protected_log",
-        "protected_sqrt",
-        # 技术 Wilder
         "RSI_WILDER",
         "ATR_WILDER",
     }
 )
+
+# DSL alias；canonical 为 ``where``
+_FASTPATH_ALIAS_ONLY: frozenset[str] = frozenset({"if_else"})
+
+
+def _build_production_core_canonicals() -> frozenset[str]:
+    """PRODUCTION_CORE = P0/P1 production fastpath safe ∪ legacy PIT core。"""
+    from backend.production_fastpath_tiers import (
+        P0_PRODUCTION_FASTPATH_CANONICALS,
+        P1_POLARS_CORE_PRODUCTION_SAFE,
+    )
+
+    return (
+        P0_PRODUCTION_FASTPATH_CANONICALS
+        | P1_POLARS_CORE_PRODUCTION_SAFE
+        | _LEGACY_PRODUCTION_CORE
+    ) - _FASTPATH_ALIAS_ONLY
+
+
+# SQL 下推 / DSL 常用 production 核心 canonical（PIT 门禁 / 契约脚本对齐此清单）
+PRODUCTION_CORE_CANONICALS: frozenset[str] = _build_production_core_canonicals()
 
 # 向后兼容别名
 PRODUCTION_PIT_REQUIRED: frozenset[str] = PRODUCTION_CORE_CANONICALS
@@ -201,19 +176,17 @@ def _compute_allow_in_production(
     pit_safe: bool,
     shape_preserving: bool = True,
 ) -> bool:
-    """production 准入：core 白名单或显式 production，叠加 deny / PIT / shape / 生命周期。"""
+    """production 准入：PRODUCTION_CORE（= fastpath P0/P1 safe + legacy）+ 显式 production。"""
     if is_production_denied(resolved):
         return False
     if status in ("experimental", "deprecated", "stub", "doc_only"):
-        return False
-    if not pit_safe:
         return False
     if not shape_preserving:
         return False
     if resolved in PRODUCTION_CORE_CANONICALS:
         return True
     if status == "production":
-        return True
+        return pit_safe
     return False
 
 

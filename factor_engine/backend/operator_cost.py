@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -99,6 +100,35 @@ _COSTS: dict[str, OperatorCost] = {
     "log": OperatorCost("O(N)", "low", True, 2, True, False),
     "clip": OperatorCost("O(N)", "low", True, 2, True, False),
     "neg": OperatorCost("O(N)", "low", True, 2, True, False),
+    "power": OperatorCost("O(N)", "low", True, 2, True, False),
+    "floor": OperatorCost("O(N)", "low", True, 2, True, False),
+    "ceil": OperatorCost("O(N)", "low", True, 2, True, False),
+    "inverse": OperatorCost("O(N)", "low", True, 2, True, False),
+    "maximum": OperatorCost("O(N)", "low", True, 2, True, False),
+    "minimum": OperatorCost("O(N)", "low", True, 2, True, False),
+    "gt": OperatorCost("O(N)", "low", True, 2, True, False),
+    "lt": OperatorCost("O(N)", "low", True, 2, True, False),
+    "ge": OperatorCost("O(N)", "low", True, 2, True, False),
+    "le": OperatorCost("O(N)", "low", True, 2, True, False),
+    "eq": OperatorCost("O(N)", "low", True, 2, True, False),
+    "ne": OperatorCost("O(N)", "low", True, 2, True, False),
+    "and_": OperatorCost("O(N)", "low", True, 2, True, False),
+    "or_": OperatorCost("O(N)", "low", True, 2, True, False),
+    "not_": OperatorCost("O(N)", "low", True, 2, True, False),
+    "is_nan": OperatorCost("O(N)", "low", True, 2, True, False),
+    "is_finite": OperatorCost("O(N)", "low", True, 2, True, False),
+    "nan_to_num": OperatorCost("O(N)", "low", True, 2, True, False),
+    "fillna": OperatorCost("O(N)", "low", True, 2, True, False),
+    "c_mean": OperatorCost("O(N)", "medium", False, 2, True, False),
+    "c_std": OperatorCost("O(N)", "medium", False, 2, True, False),
+    "c_sum": OperatorCost("O(N)", "medium", False, 2, True, False),
+    "c_count": OperatorCost("O(N)", "low", False, 2, True, False),
+    "cs_mad": OperatorCost("O(N log N)", "medium", False, 2, True, False),
+    "cs_mad_zscore": OperatorCost("O(N log N)", "medium", False, 2, True, False),
+    "group_std": OperatorCost("O(N)", "medium", False, 2, True, False),
+    "group_normalize": OperatorCost("O(N)", "medium", False, 2, True, False),
+    "group_percentile": OperatorCost("O(N log N)", "medium", False, 2, True, False),
+    "ts_cov": OperatorCost("O(NW)", "high", False, 1, True, True),
     "exp": OperatorCost("O(N)", "low", True, 2, True, False),
     "sqrt": OperatorCost("O(N)", "low", True, 2, True, False),
     "sign": OperatorCost("O(N)", "low", True, 2, True, False),
@@ -154,6 +184,54 @@ class BackendCost:
 
 _DEFAULT_BACKEND_COST = BackendCost("pandas_numpy", 1.0, 80.0, 1.0, False)
 
+_BENCHMARK_JSON = Path(__file__).resolve().parents[1] / "benchmarks" / "backend_cost_baseline.json"
+_BENCHMARK_CACHE: dict[str, dict[str, BackendCost]] | None = None
+
+
+def _load_benchmark_costs() -> dict[str, dict[str, BackendCost]]:
+    global _BENCHMARK_CACHE
+    if _BENCHMARK_CACHE is not None:
+        return _BENCHMARK_CACHE
+    table: dict[str, dict[str, BackendCost]] = {}
+    if _BENCHMARK_JSON.is_file():
+        try:
+            import json
+
+            data = json.loads(_BENCHMARK_JSON.read_text(encoding="utf-8"))
+            for canon, backends in (data.get("operators") or {}).items():
+                if not isinstance(backends, dict):
+                    continue
+                row: dict[str, BackendCost] = {}
+                for backend, spec in backends.items():
+                    if not isinstance(spec, dict) or "error" in spec:
+                        continue
+                    bname = str(backend)
+                    if bname.startswith("polars_panel"):
+                        bname = "polars"
+                    elif bname.startswith("polars_long"):
+                        bname = "polars_long"
+                    elif bname == "polars_long":
+                        bname = "polars_long"
+                    elif "@" in bname:
+                        bname = bname.split("@", 1)[0]
+                        if bname == "polars_panel":
+                            bname = "polars"
+                        elif bname == "polars_long":
+                            bname = "polars_long"
+                    row[bname] = BackendCost(
+                        backend=bname,
+                        fixed_overhead_ms=float(spec.get("fixed_overhead_ms", 1.0)),
+                        per_million_rows_ms=float(spec.get("per_million_rows_ms", 80.0)),
+                        memory_factor=float(spec.get("memory_factor", 1.0)),
+                        requires_conversion=bname in {"polars", "clickhouse_sql"},
+                    )
+                if row:
+                    table[str(canon)] = row
+        except Exception:
+            table = {}
+    _BENCHMARK_CACHE = table
+    return table
+
 _BACKEND_COST_TABLE: dict[str, dict[str, BackendCost]] = {
     "ts_mean": {
         "pandas_numpy": BackendCost("pandas_numpy", 1.0, 80.0, 1.0, False),
@@ -184,6 +262,9 @@ _BACKEND_COST_TABLE: dict[str, dict[str, BackendCost]] = {
 
 def get_backend_cost(canon: str, backend: str) -> BackendCost:
     canon = str(canon)
+    bench = _load_benchmark_costs().get(canon, {})
+    if backend in bench:
+        return bench[backend]
     table = _BACKEND_COST_TABLE.get(canon, {})
     return table.get(backend, _DEFAULT_BACKEND_COST)
 

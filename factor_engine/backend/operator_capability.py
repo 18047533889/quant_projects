@@ -131,9 +131,9 @@ def polars_long_capable(canonical: str) -> bool:
 
 
 def _sql_capable_canonicals() -> frozenset[str]:
-    from backend.sql_pushdown.sql_registry import SQL_CAPABLE_CANONICALS
+    from backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
 
-    return SQL_CAPABLE_CANONICALS
+    return SQL_IMPLEMENTED_CANONICALS
 
 
 _EMITTER_OK_CACHE: dict[str, bool] = {}
@@ -196,16 +196,30 @@ def _pandas_status(canon: str) -> CapabilityStatus:
 
 
 def _sql_status(canon: str, *, dialect: BackendName) -> CapabilityStatus:
-    if canon not in _sql_capable_canonicals():
+    from backend.sql_tiers import (
+        SQL_IMPLEMENTED_CANONICALS,
+        SQL_PARITY_VERIFIED_CANONICALS,
+    )
+
+    if canon not in SQL_IMPLEMENTED_CANONICALS:
         return "unsupported"
     if not _sql_emitter_ok(canon):
         return "implemented"
-    from cleaned_operators.operator_spec import build_operator_spec
 
-    spec = build_operator_spec(canon)
-    if spec.allow_in_production:
-        return "production_safe"
-    return "parity_verified"
+    if dialect == "clickhouse_sql":
+        from backend.sql_pushdown.clickhouse_capabilities import effective_clickhouse_production_safe
+
+        if effective_clickhouse_production_safe(canon):
+            return "production_safe"
+    else:
+        from backend.sql_tiers import effective_sql_production_safe
+
+        if effective_sql_production_safe(canon):
+            return "production_safe"
+
+    if canon in SQL_PARITY_VERIFIED_CANONICALS:
+        return "parity_verified"
+    return "implemented"
 
 
 def capability_for(canonical: str, backend: BackendName) -> BackendCapability:

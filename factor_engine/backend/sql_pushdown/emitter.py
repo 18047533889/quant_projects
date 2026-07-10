@@ -2,8 +2,9 @@
 """PlanNode → SQL 编译（长表语义；支持 DuckDB / ClickHouse 方言）。"""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
+from contextvars import ContextVar
 from typing import Any, Sequence
 
 from cleaned_operators.registry import OperatorRegistry
@@ -163,6 +164,7 @@ def _dialect_fn(dialect: SqlDialect, name: str) -> str:
     if dialect == SqlDialect.CLICKHOUSE:
         mapping = {
             "stddev": "stddevSamp",
+            "stddev_pop": "stddevPop",
             "ln": "log",
             "greatest": "greatest",
             "least": "least",
@@ -175,6 +177,7 @@ def _dialect_fn(dialect: SqlDialect, name: str) -> str:
         return mapping.get(name, name)
     mapping = {
         "stddev": "STDDEV_SAMP",
+        "stddev_pop": "STDDEV_POP",
         "ln": "ln",
         "greatest": "GREATEST",
         "least": "LEAST",
@@ -194,6 +197,34 @@ class _Layer:
     has_ts_partition: bool = False
 
 
+@dataclass
+class _SqlCompileMemo:
+    """DAG-level CTE 去重：同一 structural_key 只编译一次。"""
+
+    use_counts: dict[str, int]
+    refs: dict[str, str] = field(default_factory=dict)
+    bodies: list[tuple[str, str]] = field(default_factory=list)
+    _counter: int = 0
+
+
+_sql_memo_ctx: ContextVar[_SqlCompileMemo | None] = ContextVar("_sql_memo_ctx", default=None)
+
+
+def _structural_use_counts(plan: PlanNode) -> dict[str, int]:
+    from planner.plan_hash import structural_key
+
+    counts: dict[str, int] = {}
+
+    def walk(n: PlanNode) -> None:
+        key = structural_key(n)
+        counts[key] = counts.get(key, 0) + 1
+        for child in n.inputs:
+            walk(child)
+
+    walk(plan)
+    return counts
+
+
 def _inst_window(dialect: SqlDialect, w: int, agg: str, inner_sql: str) -> str:
     return (
         f"SELECT ts, inst, "
@@ -201,6 +232,102 @@ def _inst_window(dialect: SqlDialect, w: int, agg: str, inner_sql: str) -> str:
         f"ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW) AS _v "
         f"FROM ({inner_sql}) t"
     )
+
+
+def _wilder_ewm_over_inst(inner_sql: str, w: int, *, dialect: SqlDialect, value_col: str = "_v") -> str:
+    """Wilder 平滑（alpha=1/w），与 pandas ``ewm(alpha=1/w, adjust=False)`` 对齐。"""
+    alpha = 1.0 / float(max(w, 1))
+    decay = 1.0 - alpha
+    over = (
+        f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+    )
+    if dialect == SqlDialect.CLICKHOUSE:
+        return (
+            f"SELECT ts, inst, "
+            f"exponentialMovingAverage({value_col}, {alpha}) OVER (PARTITION BY inst ORDER BY ts) AS _v "
+            f"FROM ({inner_sql}) t"
+        )
+    return (
+        f"SELECT ts, inst, "
+        f"SUM({value_col} * POW({decay}, rn)) OVER ({over}) / "
+        f"NULLIF(SUM(POW({decay}, rn)) OVER ({over}), 0) AS _v "
+        f"FROM ("
+        f"SELECT ts, inst, {value_col}, "
+        f"(COUNT(*) OVER ({over}) - 1 - "
+        f"(ROW_NUMBER() OVER (PARTITION BY inst ORDER BY ts) - "
+        f"MIN(ROW_NUMBER() OVER (PARTITION BY inst ORDER BY ts)) OVER ({over}))) AS rn "
+        f"FROM ({inner_sql}) t0"
+        f") t"
+    )
+
+
+def _rsi_wilder_sql(close_sql: str, w: int, *, dialect: SqlDialect) -> str:
+    g = _dialect_fn(dialect, "greatest")
+    abs_fn = _dialect_fn(dialect, "abs")
+    delta = f"(_v - LAG(_v, 1) OVER (PARTITION BY inst ORDER BY ts))"
+    if dialect == SqlDialect.CLICKHOUSE:
+        gain_expr = f"if(isNull({delta}), NULL, {g}(0, {delta}))"
+        loss_expr = f"if(isNull({delta}), NULL, {g}(0, -({delta})))"
+    else:
+        gain_expr = f"CASE WHEN {delta} IS NULL THEN NULL ELSE {g}(0, {delta}) END"
+        loss_expr = f"CASE WHEN {delta} IS NULL THEN NULL ELSE {g}(0, -({delta})) END"
+    gain_sql = f"SELECT ts, inst, {gain_expr} AS _v FROM ({close_sql}) c0"
+    loss_sql = f"SELECT ts, inst, {loss_expr} AS _v FROM ({close_sql}) c1"
+    avg_gain = _wilder_ewm_over_inst(gain_sql, w, dialect=dialect)
+    avg_loss = _wilder_ewm_over_inst(loss_sql, w, dialect=dialect)
+    if dialect == SqlDialect.CLICKHOUSE:
+        rs = "g.gain / nullIf(l.loss, 0)"
+        core = f"100 - (100 / (1 + {rs}))"
+        return (
+            f"SELECT c.ts, c.inst, "
+            f"if(l.loss = 0 AND g.gain > 0, 100, "
+            f"if(g.gain = 0 AND l.loss > 0, 0, "
+            f"if(g.gain = 0 AND l.loss = 0, 50, {core}))) AS _v "
+            f"FROM ({close_sql}) c "
+            f"INNER JOIN (SELECT ts, inst, _v AS gain FROM ({avg_gain}) g0) g USING (ts, inst) "
+            f"INNER JOIN (SELECT ts, inst, _v AS loss FROM ({avg_loss}) l0) l USING (ts, inst)"
+        )
+    return (
+        f"SELECT c.ts, c.inst, "
+        f"CASE "
+        f"WHEN l.loss = 0 AND g.gain > 0 THEN 100 "
+        f"WHEN g.gain = 0 AND l.loss > 0 THEN 0 "
+        f"WHEN g.gain = 0 AND l.loss = 0 THEN 50 "
+        f"ELSE 100 - (100 / (1 + g.gain / NULLIF(l.loss, 0))) END AS _v "
+        f"FROM ({close_sql}) c "
+        f"INNER JOIN (SELECT ts, inst, _v AS gain FROM ({avg_gain}) g0) g USING (ts, inst) "
+        f"INNER JOIN (SELECT ts, inst, _v AS loss FROM ({avg_loss}) l0) l USING (ts, inst)"
+    )
+
+
+def _atr_wilder_sql(
+    high_sql: str,
+    low_sql: str,
+    close_sql: str,
+    w: int,
+    *,
+    dialect: SqlDialect,
+) -> str:
+    abs_fn = _dialect_fn(dialect, "abs")
+    g = _dialect_fn(dialect, "greatest")
+    lag_close = f"LAG(c._v, 1) OVER (PARTITION BY h.inst ORDER BY h.ts)"
+    if dialect == SqlDialect.CLICKHOUSE:
+        tr_expr = (
+            f"if(isNull({lag_close}), NULL, "
+            f"{g}(h._v - l._v, {abs_fn}(h._v - {lag_close}), {abs_fn}(l._v - {lag_close})))"
+        )
+    else:
+        tr_expr = (
+            f"CASE WHEN {lag_close} IS NULL THEN NULL "
+            f"ELSE {g}(h._v - l._v, {abs_fn}(h._v - {lag_close}), {abs_fn}(l._v - {lag_close})) END"
+        )
+    tr_sql = (
+        f"SELECT h.ts, h.inst, {tr_expr} AS _v "
+        f"FROM ({high_sql}) h "
+        f"INNER JOIN ({low_sql}) l USING (ts, inst) "
+        f"INNER JOIN ({close_sql}) c USING (ts, inst)"
+    )
+    return _wilder_ewm_over_inst(tr_sql, w, dialect=dialect)
 
 
 def _ffill_over_inst(inner_sql: str, *, dialect: SqlDialect) -> str:
@@ -278,15 +405,25 @@ def _cs_pct_rank_sql(inner_sql: str, *, partition: str, dialect: SqlDialect) -> 
     return f"SELECT ts, inst, {expr} AS _v FROM ({inner_sql}) t"
 
 
-def _group_zscore_expr(*, value_col: str, partition: str, dialect: SqlDialect) -> str:
-    """组内 zscore；零/缺失标准差时输出 0（对齐 pandas group_zscore）。"""
-    std_fn = _dialect_fn(dialect, "stddev")
+def _group_zscore_expr(
+    *,
+    value_col: str,
+    partition: str,
+    dialect: SqlDialect,
+    canon: str = "group_zscore",
+) -> str:
+    """组内 zscore；零/缺失标准差时输出语义见 ``numeric_semantics``。"""
+    from backend.numeric_semantics import sql_stddev_fn_key, zscore_zero_std_fill
+
+    std_fn = _dialect_fn(dialect, sql_stddev_fn_key(canon))
     nf = _dialect_fn(dialect, "nullif")
+    zero_fill = zscore_zero_std_fill(canon)
+    zero_sql = "0" if zero_fill == 0.0 else ("NULL" if zero_fill is None else "NaN")
     avg = f"AVG({value_col}) OVER ({partition})"
     stdv = f"{std_fn}({value_col}) OVER ({partition})"
     return (
         f"CASE WHEN {value_col} IS NULL THEN NULL "
-        f"WHEN {stdv} IS NULL OR {stdv} = 0 THEN 0 "
+        f"WHEN {stdv} IS NULL OR {stdv} = 0 THEN {zero_sql} "
         f"ELSE ({value_col} - {avg}) / {nf}({stdv}, 0) END"
     )
 
@@ -422,6 +559,44 @@ def _cs_broadcast_agg(agg: str, inner_sql: str) -> str:
     )
 
 
+def _cs_mad_sql(inner_sql: str, *, dialect: SqlDialect) -> str:
+    """截面 MAD：median(|x - median(x)|) 广播到各行。"""
+    med_fn = "median"
+    return (
+        f"SELECT ts, inst, "
+        f"{med_fn}(abs(_v - med)) OVER (PARTITION BY ts) AS _v "
+        f"FROM ("
+        f"SELECT ts, inst, _v, {med_fn}(_v) OVER (PARTITION BY ts) AS med "
+        f"FROM ({inner_sql}) t0"
+        f") t"
+    )
+
+
+def _cs_mad_zscore_sql(inner_sql: str, *, dialect: SqlDialect) -> str:
+    """MAD 稳健 zscore：(x - median) / MAD；MAD=0 → NULL。"""
+    med_fn = "median"
+    if dialect == SqlDialect.CLICKHOUSE:
+        core = (
+            f"if(isNull(mad) OR mad = 0, NULL, (_v - med) / mad)"
+        )
+    else:
+        core = (
+            f"CASE WHEN mad IS NULL OR mad = 0 THEN NULL "
+            f"ELSE (_v - med) / mad END"
+        )
+    return (
+        f"SELECT ts, inst, {core} AS _v "
+        f"FROM ("
+        f"SELECT ts, inst, _v, med, "
+        f"{med_fn}(abs(_v - med)) OVER (PARTITION BY ts) AS mad "
+        f"FROM ("
+        f"SELECT ts, inst, _v, {med_fn}(_v) OVER (PARTITION BY ts) AS med "
+        f"FROM ({inner_sql}) t0"
+        f") t1"
+        f") t"
+    )
+
+
 def _cum_delta_sql(inner_sql: str, *, dialect: SqlDialect) -> str:
     over = "PARTITION BY inst ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"
     first_v = f"FIRST_VALUE(_v IGNORE NULLS) OVER ({over})"
@@ -553,7 +728,7 @@ def _ts_argext_sql(inner_sql: str, w: int, *, dialect: SqlDialect, pick: str) ->
     )
 
 
-def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
+def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
     op = _resolve_canonical(node.op)
     if op == "rolling_beta":
         op = "ts_beta"
@@ -615,8 +790,10 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
         right = _compile_layer(node.inputs[1], dialect=dialect)
         if left is None or right is None:
             return None
-        eps = _float_attr(node, "epsilon", default=1e-12)
-        default = _float_attr(node, "default", default=0.0)
+        from backend.numeric_semantics import protected_div_default, protected_epsilon_default
+
+        eps = _float_attr(node, "epsilon", default=protected_epsilon_default())
+        default = _float_attr(node, "default", default=protected_div_default())
         abs_fn = _dialect_fn(dialect, "abs")
         coalesce_fn = "coalesce" if dialect == SqlDialect.CLICKHOUSE else "COALESCE"
         lit = _sql_literal(default)
@@ -1007,6 +1184,26 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
             has_ts_partition=True,
         )
 
+    if op == "cs_mad":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        return _Layer(
+            _cs_mad_sql(inner.sql, dialect=dialect),
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=True,
+        )
+
+    if op == "cs_mad_zscore":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        return _Layer(
+            _cs_mad_zscore_sql(inner.sql, dialect=dialect),
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=True,
+        )
+
     if op == "c_mean":
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
@@ -1152,6 +1349,30 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
             f"LAG(_v, {lag}) OVER (PARTITION BY inst ORDER BY ts) AS lagged_v "
             f"FROM ({inner.sql}) inner0"
             f") aligned",
+            has_inst_window=True,
+        )
+
+    if op == "RSI_WILDER":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        w = max(_window_int(node, default=14), 2)
+        return _Layer(
+            _rsi_wilder_sql(inner.sql, w, dialect=dialect),
+            has_inst_window=True,
+        )
+
+    if op == "ATR_WILDER":
+        if len(node.inputs) < 3:
+            return None
+        high = _compile_layer(node.inputs[0], dialect=dialect)
+        low = _compile_layer(node.inputs[1], dialect=dialect)
+        close = _compile_layer(node.inputs[2], dialect=dialect)
+        if high is None or low is None or close is None:
+            return None
+        w = max(_window_int(node, default=14), 2)
+        return _Layer(
+            _atr_wilder_sql(high.sql, low.sql, close.sql, w, dialect=dialect),
             has_inst_window=True,
         )
 
@@ -1973,6 +2194,32 @@ def _build_base_cte(
     )
 
 
+def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
+    """带 optional CTE memo 的编译入口（递归经此函数以共享子树）。"""
+    memo = _sql_memo_ctx.get()
+    if memo is not None:
+        from planner.plan_hash import structural_key
+
+        key = structural_key(node)
+        if key in memo.refs:
+            return _Layer(f"SELECT ts, inst, _v FROM {memo.refs[key]}")
+    layer = _compile_layer_impl(node, dialect=dialect)
+    if layer is None or memo is None:
+        return layer
+    from planner.plan_hash import structural_key
+
+    key = structural_key(node)
+    canon = _resolve_canonical(node.op)
+    if canon in {"column", "literal"} or memo.use_counts.get(key, 0) < 2:
+        return layer
+    if key not in memo.refs:
+        memo._counter += 1
+        name = f"s{memo._counter}"
+        memo.refs[key] = name
+        memo.bodies.append((name, layer.sql))
+    return _Layer(f"SELECT ts, inst, _v FROM {memo.refs[key]}")
+
+
 def compile_plan_to_sql(
     plan: PlanNode,
     *,
@@ -1987,7 +2234,13 @@ def compile_plan_to_sql(
     if not plan_is_sql_capable(plan):
         return None
 
-    layer = _compile_layer(plan, dialect=dialect)
+    use_counts = _structural_use_counts(plan)
+    memo = _SqlCompileMemo(use_counts=use_counts) if any(c > 1 for c in use_counts.values()) else None
+    token = _sql_memo_ctx.set(memo)
+    try:
+        layer = _compile_layer(plan, dialect=dialect)
+    finally:
+        _sql_memo_ctx.reset(token)
     if layer is None:
         return None
 
@@ -2014,8 +2267,13 @@ def compile_plan_to_sql(
         filt=push_filter,
         dialect=dialect,
     )
+    cte_parts = [base]
+    if memo and memo.bodies:
+        for name, sql in memo.bodies:
+            cte_parts.append(f"{name} AS (SELECT ts, inst, _v FROM ({sql}) t)")
+    with_body = ", ".join(cte_parts)
     query = (
-        f"WITH {base} "
+        f"WITH {with_body} "
         f"SELECT ts, inst, _v AS value FROM ({layer.sql}) result "
         f"ORDER BY ts, inst"
     )

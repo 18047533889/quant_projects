@@ -51,6 +51,26 @@ def _record_long_stats(
     if fallback_exc_type:
         runtime["polars_long_fallback_exception_type"] = fallback_exc_type
     ctx.runtime_stats = runtime  # type: ignore[attr-defined]
+    from backend.runtime_events import append_runtime_event
+
+    if used_long_path:
+        append_runtime_event(
+            ctx,
+            "polars_long_native",
+            backend=str(runtime.get("backend") or "polars_long"),
+            columns=columns,
+            **(telemetry or {}),
+            **{k: v for k, v in (op_stats or {}).items() if k.endswith("_ops")},
+        )
+    elif fallback_reason:
+        append_runtime_event(
+            ctx,
+            "polars_long_fallback",
+            backend=str(runtime.get("backend") or "polars_long"),
+            reason=fallback_reason,
+            op=fallback_op,
+            error_type=fallback_exc_type,
+        )
 
 
 def _fallback_or_raise(
@@ -104,6 +124,8 @@ def _fresh_long_runtime(runtime: dict[str, Any]) -> dict[str, Any]:
 class PolarsLongBackend(Backend):
     """Long-table native Polars：``scan_polars_long`` → expr emitter → 一次 collect。"""
 
+    runtime_backend_label = "polars_long"
+
     prefers_native_scan = True
     supports_lazy_shared = True
 
@@ -118,6 +140,27 @@ class PolarsLongBackend(Backend):
         sid: str,
     ) -> bool:
         """CSE 共享子树：编译 LazyFrame 写入 ``shared_long_lazy_cache``，不 collect。"""
+        return self._compile_lazy_shared_impl(plan, ctx, sid=sid)
+
+    def compile_lazy(
+        self,
+        plan: PlanNode,
+        ctx: ExecutionContext,
+        *,
+        sid: str | None = None,
+    ) -> bool:
+        """别名：``compile_lazy_shared``（run_many CSE lazy-only）。"""
+        if sid is None:
+            return False
+        return self.compile_lazy_shared(plan, ctx, sid=sid)
+
+    def _compile_lazy_shared_impl(
+        self,
+        plan: PlanNode,
+        ctx: ExecutionContext,
+        *,
+        sid: str,
+    ) -> bool:
         scan_fn = getattr(ctx.data_source, "scan_polars_long", None) if ctx.data_source else None
         if not callable(scan_fn):
             return False
@@ -131,17 +174,65 @@ class PolarsLongBackend(Backend):
         if not plan_is_polars_long_capable(plan):
             return False
 
+        if plan.op == "literal":
+            return False
+
+        if plan.op == "column":
+            import polars as pl
+
+            from .polars_expr_emitter import _INST, _TS, _VAL
+
+            name = str(plan.attrs.get("name") or "")
+            if not name:
+                return False
+            lf = scan_fn([name]).select(
+                pl.col(_TS),
+                pl.col(_INST),
+                pl.col(name).alias(_VAL),
+            )
+            cache = getattr(ctx, "shared_long_lazy_cache", None)
+            if cache is not None:
+                cache[str(sid)] = lf
+            return True
+
         try:
             base_lf = resolve_base_lazy_for_plan(plan, ctx, scan_fn)
             compile_polars_long_lazy(plan, ctx, base_lf=base_lf, lazy_cache_key=str(sid))
             return True
-        except Exception:
+        except Exception as exc:
+            runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+            failures = list(runtime.get("shared_lazy_compile_failures") or [])
+            failures.append(
+                {
+                    "sid": str(sid),
+                    "op": str(plan.op),
+                    "error_type": type(exc).__name__,
+                    "error": str(exc)[:300],
+                }
+            )
+            runtime["shared_lazy_compile_failures"] = failures
+            runtime["shared_lazy_compile_failed_sid"] = str(sid)
+            runtime["shared_lazy_compile_failed_op"] = str(plan.op)
+            runtime["shared_lazy_compile_error_type"] = type(exc).__name__
+            ctx.runtime_stats = runtime  # type: ignore[attr-defined]
+            from backend.runtime_events import append_runtime_event
+
+            append_runtime_event(
+                ctx,
+                "shared_lazy_compile_failed",
+                backend="polars_long",
+                sid=str(sid),
+                op=str(plan.op),
+                error_type=type(exc).__name__,
+                error=str(exc)[:300],
+            )
             return False
 
     def execute(self, plan: PlanNode, ctx: ExecutionContext) -> Any:
         root_ctx = ctx
         runtime = _fresh_long_runtime(dict(getattr(ctx, "runtime_stats", None) or {}))
-        runtime["backend"] = "polars_long"
+        if str(runtime.get("backend") or "") not in {"hybrid_long", "auto_long"}:
+            runtime["backend"] = "polars_long"
         ctx = replace(ctx, runtime_stats=runtime)
 
         scan_fn = getattr(ctx.data_source, "scan_polars_long", None) if ctx.data_source else None

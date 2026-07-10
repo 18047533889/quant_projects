@@ -64,20 +64,13 @@ def test_fused_base_column_ops_match_pandas(source, factory_name, expr_builder):
     )
 
 
-# emitter 内已知使用 rolling_map 的算子，不得出现在 POLARS_LONG_NATIVE
+# emitter 内已知使用 rolling_map / map_groups 的算子，不得出现在 POLARS_LONG_NATIVE
 _ROLLING_MAP_OPS = frozenset(
     {
-        "ts_rank",
-        "ts_decay_linear",
-        "WMA",
-        "ts_mad",
-        "ts_quantile",
-        "ts_product",
-        "ts_skew",
-        "ts_argmax",
-        "ts_argmin",
         "ts_kurt",
         "ts_moment",
+        "ts_max_buildup",
+        "ewm_corr",
     }
 )
 
@@ -87,6 +80,12 @@ def test_native_tier_excludes_rolling_map_ops():
     assert not overlap, f"rolling_map ops mislabeled native: {sorted(overlap)}"
 
 
+def test_ts_argmax_ts_sharpe_are_native_not_map_groups():
+    for op in ("ts_argmax", "ts_argmin", "ts_sharpe", "ts_autocorr"):
+        assert op in POLARS_LONG_NATIVE
+        assert op not in POLARS_LONG_MAP_GROUPS
+
+
 def test_group_window_ops_are_native_not_map_groups():
     for op in (
         "group_mean",
@@ -94,6 +93,7 @@ def test_group_window_ops_are_native_not_map_groups():
         "group_neutralize",
         "group_rank",
         "group_percentile",
+        "group_winsorize",
     ):
         assert op in POLARS_LONG_NATIVE
         assert op not in POLARS_LONG_MAP_GROUPS
@@ -101,6 +101,97 @@ def test_group_window_ops_are_native_not_map_groups():
 
 def test_group_percentile_native_matches_pandas(source):
     expr = make_cleaned_call_factory("group_percentile")(col("close"), col("grp"), 0.5)
+    pd_out = _run(source, expr, "pandas")["result"].sort_index()
+    long_out = _run(source, expr, "polars_long")
+    assert long_out.get("used_polars_long_native") is True
+    pd.testing.assert_series_equal(
+        pd_out,
+        long_out["result"].sort_index(),
+        check_names=False,
+        rtol=1e-6,
+        atol=1e-6,
+    )
+
+
+def test_group_winsorize_native_matches_pandas(source):
+    expr = make_cleaned_call_factory("group_winsorize")(col("close"), col("grp"))
+    pd_out = _run(source, expr, "pandas")["result"].sort_index()
+    long_out = _run(source, expr, "polars_long")
+    assert long_out.get("used_polars_long_native") is True
+    pd.testing.assert_series_equal(
+        pd_out,
+        long_out["result"].sort_index(),
+        check_names=False,
+        rtol=1e-6,
+        atol=1e-6,
+    )
+
+
+def test_dag_fusion_ts_mean_add_matches_pandas(source):
+    """``add(ts_mean, ts_mean)`` 应走宽表 DAG fusion，结果与 pandas 一致。"""
+    f = make_cleaned_call_factory
+    expr = f("add")(f("ts_mean")(col("close"), 2), f("ts_mean")(col("close"), 3))
+    pd_out = _run(source, expr, "pandas")["result"].sort_index()
+    long_out = _run(source, expr, "polars_long")
+    assert long_out.get("used_polars_long_native") is True
+    pd.testing.assert_series_equal(
+        pd_out,
+        long_out["result"].sort_index(),
+        check_names=False,
+        rtol=1e-6,
+        atol=1e-6,
+    )
+
+
+def test_dag_fusion_ts_mean_delta_matches_pandas(source):
+    f = make_cleaned_call_factory
+    expr = f("subtract")(f("ts_mean")(col("close"), 2), f("ts_delta")(col("close"), 1))
+    pd_out = _run(source, expr, "pandas")["result"].sort_index()
+    long_out = _run(source, expr, "polars_long")
+    pd.testing.assert_series_equal(
+        pd_out,
+        long_out["result"].sort_index(),
+        check_names=False,
+        rtol=1e-6,
+        atol=1e-6,
+    )
+
+
+def test_dag_fusion_nary_add_ts_matches_pandas(source):
+    """``add(add(ts_mean, ts_mean), ts_delta)`` 同列 n-ary fusion。"""
+    f = make_cleaned_call_factory
+    inner = f("add")(f("ts_mean")(col("close"), 2), f("ts_mean")(col("close"), 3))
+    expr = f("add")(inner, f("ts_delta")(col("close"), 1))
+    pd_out = _run(source, expr, "pandas")["result"].sort_index()
+    long_out = _run(source, expr, "polars_long")
+    assert long_out.get("used_polars_long_native") is True
+    pd.testing.assert_series_equal(
+        pd_out,
+        long_out["result"].sort_index(),
+        check_names=False,
+        rtol=1e-6,
+        atol=1e-6,
+    )
+
+
+def test_dag_fusion_rank_ts_mean_matches_pandas(source):
+    """``rank(ts_mean(col,w))`` unary-over-ts fusion，与 pandas 一致且无 registry fallback。"""
+    expr = make_cleaned_call_factory("rank")(make_cleaned_call_factory("ts_mean")(col("close"), 2))
+    pd_out = _run(source, expr, "pandas")["result"].sort_index()
+    long_out = _run(source, expr, "polars_long")
+    assert long_out.get("used_polars_long_native") is True
+    assert not (long_out.get("polars_long_registry_ops") or [])
+    pd.testing.assert_series_equal(
+        pd_out,
+        long_out["result"].sort_index(),
+        check_names=False,
+        rtol=1e-6,
+        atol=1e-6,
+    )
+
+
+def test_dag_fusion_zscore_ts_mean_matches_pandas(source):
+    expr = make_cleaned_call_factory("zscore")(make_cleaned_call_factory("ts_mean")(col("close"), 2))
     pd_out = _run(source, expr, "pandas")["result"].sort_index()
     long_out = _run(source, expr, "polars_long")
     assert long_out.get("used_polars_long_native") is True

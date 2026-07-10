@@ -80,9 +80,26 @@ def source():
     "factory_name,expr_builder",
     [
         ("ts_mean", lambda: make_cleaned_call_factory("ts_mean")(col("close"), 5)),
+        ("rank", lambda: make_cleaned_call_factory("rank")(col("close"))),
+        (
+            "group_mean",
+            lambda: make_cleaned_call_factory("group_mean")(col("close"), col("volume")),
+        ),
+        (
+            "vwap",
+            lambda: make_cleaned_call_factory("vwap")(col("close"), col("volume"), 3),
+        ),
         (
             "protected_div",
             lambda: make_cleaned_call_factory("protected_div")(col("close"), col("volume")),
+        ),
+        (
+            "where",
+            lambda: make_cleaned_call_factory("where")(
+                make_cleaned_call_factory("gt")(col("close"), 0),
+                col("close"),
+                col("volume"),
+            ),
         ),
         (
             "add_combo",

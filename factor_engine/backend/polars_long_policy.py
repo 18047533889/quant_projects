@@ -50,6 +50,10 @@ POLARS_LONG_NATIVE: frozenset[str] = frozenset(
         "ts_cov",
         "ts_beta",
         "ts_ema",
+        "ts_rank",
+        "ts_decay_linear",
+        "ts_sharpe",
+        "ts_autocorr",
         "rank",
         "rank_pct",
         "zscore",
@@ -99,52 +103,47 @@ POLARS_LONG_NATIVE: frozenset[str] = frozenset(
         "group_std",
         "group_normalize",
         "group_percentile",
+        "group_winsorize",
         "cs_mad",
         "cs_mad_zscore",
+        "cs_resid",
+        "cs_regression",
+        "RSI_WILDER",
+        "ATR_WILDER",
+        "rolling_beta",
+        "ts_argmax",
+        "ts_argmin",
+        "WMA",
+        "ts_mad",
+        "ts_quantile",
+        "ts_product",
+        "ts_skew",
+        "ts_regression",
+        "Slope",
+        "ts_ratio",
+        "log_abs",
+        "signed_log",
+        "signed_sqrt",
+        "group_decay_linear",
+        "cum_delta",
+        "expanding_mean",
+        "expanding_std",
+        "expanding_sum",
+        "count",
     }
 )
 
 # map_groups / rolling_map(pandas) / 截面 Python 分箱等
 POLARS_LONG_MAP_GROUPS: frozenset[str] = frozenset(
     {
-        "group_winsorize",
-        "group_decay_linear",
-        "cs_resid",
-        "cs_regression",
-        "log_abs",
-        "signed_log",
-        "signed_sqrt",
-        "ts_decay_linear",
-        "WMA",
-        "ts_mad",
-        "ts_quantile",
-        "ts_product",
-        "ts_skew",
-        "ts_argmax",
-        "ts_argmin",
-        "ts_regression",
-        "Slope",
-        "rolling_beta",
-        "ts_rank",
-        "ts_sharpe",
-        "ts_autocorr",
-        "cum_delta",
-        "expanding_mean",
-        "expanding_std",
-        "expanding_sum",
-        "count",
         "ewm_corr",
         "ewm_cov",
-        "ts_ratio",
         "ts_kurt",
         "ts_moment",
         "ts_max_buildup",
         "expanding_rank",
         "fillna_interpolate",
         "quantile",
-        "ATR_WILDER",
-        "RSI_WILDER",
-        "cum_std",
     }
 )
 
@@ -188,7 +187,9 @@ def _resolve(op: str) -> str:
 
 def classify_plan_op(op: str) -> str:
     """返回 ``native`` | ``map_groups`` | ``passthrough`` | ``registry`` | ``other`` | ``meta``。"""
-    canon = _resolve(op)
+    from backend.production_fastpath_tiers import resolve_polars_native_canonical
+
+    canon = resolve_polars_native_canonical(_resolve(op))
     if canon in {"column", "literal", "materialized_series", "plan_ref"}:
         return "meta"
     if canon in POLARS_LONG_PASSTHROUGH:

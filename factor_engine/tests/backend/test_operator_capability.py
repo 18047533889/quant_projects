@@ -66,6 +66,23 @@ def test_capability_matrix_covers_implemented(loaded):
     assert ts.polars == "production_safe"
 
 
+def test_production_fast_path_whitelist(loaded):
+    from backend.production_fast_path import (
+        is_production_fast_path,
+        summarize_production_fast_path,
+    )
+
+    assert is_production_fast_path("ts_mean")
+    assert is_production_fast_path("group_mean")
+    assert is_production_fast_path("group_winsorize")
+    assert is_production_fast_path("ts_rank")
+    assert is_production_fast_path("RSI_WILDER")
+    assert is_production_fast_path("ffill")
+    summary = summarize_production_fast_path()
+    assert summary["production_fast_path_count"] >= 10
+    assert "ts_beta" in summary["production_fast_path"]
+
+
 def test_get_best_backend_matches_registry_preferred(loaded):
     for name in ("ts_mean", "rank", "bfill", "MACD"):
         op_a, b_a = OperatorRegistry.get_preferred(name, prefer="auto")

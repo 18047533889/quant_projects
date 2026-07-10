@@ -30,6 +30,8 @@ from .polars_long_policy import (
     get_polars_long_capable,
 )
 
+from dataclasses import dataclass
+
 try:
     import polars as pl
 except ImportError:
@@ -40,6 +42,15 @@ _INST = "inst"
 _VAL = "_v"
 
 _GRP = "_grp"
+
+
+@dataclass(frozen=True)
+class CompiledLongExpr:
+    """Expr DAG 节点：单条 ``pl.Expr`` + 依赖列（避免中间 LazyFrame join）。"""
+
+    expr: Any
+    required_cols: frozenset[str]
+    tmp_exprs: tuple[Any, ...] = ()
 
 # expanding / cum 类算子：rolling 窗口需覆盖单 inst 全长（与 SQL UNBOUNDED PRECEDING 对齐）
 _EXPANDING_WINDOW = 100_000
@@ -87,6 +98,52 @@ def _ewm_alpha(node: PlanNode, default_span: int = 20) -> float:
                 pass
     span = _window_int(node, default=default_span)
     return 2.0 / (float(span) + 1.0)
+
+
+def _wilder_alpha(node: PlanNode, default: int = 14) -> tuple[float, int]:
+    w = max(_window_int(node, default=default), 2)
+    return 1.0 / float(w), w
+
+
+def _rsi_wilder_expr(value_col: str, *, window: int, alpha: float) -> pl.Expr:
+    delta = pl.col(value_col).diff()
+    gain = pl.when(delta.is_null()).then(None).when(delta > 0).then(delta).otherwise(0.0)
+    loss = pl.when(delta.is_null()).then(None).when(delta < 0).then(-delta).otherwise(0.0)
+    avg_gain = gain.ewm_mean(alpha=alpha, adjust=False, min_periods=window)
+    avg_loss = loss.ewm_mean(alpha=alpha, adjust=False, min_periods=window)
+    rs = avg_gain / avg_loss.replace(0.0, None)
+    return (
+        pl.when((avg_loss == 0) & (avg_gain > 0))
+        .then(100.0)
+        .when((avg_gain == 0) & (avg_loss > 0))
+        .then(0.0)
+        .when((avg_gain == 0) & (avg_loss == 0))
+        .then(50.0)
+        .otherwise(100.0 - (100.0 / (1.0 + rs)))
+    )
+
+
+def _atr_wilder_expr(
+    high_col: str,
+    low_col: str,
+    close_col: str,
+    *,
+    window: int,
+    alpha: float,
+) -> pl.Expr:
+    prev_close = pl.col(close_col).shift(1)
+    tr = (
+        pl.when(prev_close.is_null())
+        .then(None)
+        .otherwise(
+            pl.max_horizontal(
+                pl.col(high_col) - pl.col(low_col),
+                (pl.col(high_col) - prev_close).abs(),
+                (pl.col(low_col) - prev_close).abs(),
+            )
+        )
+    )
+    return tr.ewm_mean(alpha=alpha, adjust=False, min_periods=window)
 
 
 def _float_attr(node: PlanNode, *keys: str, default: float) -> float:
@@ -448,8 +505,10 @@ def _column_ref_name(node: PlanNode) -> str | None:
 
 def _protected_div_expr(numer: pl.Expr, denom: pl.Expr, node: PlanNode) -> pl.Expr:
     """与 SQL / Pandas 一致：|denom| <= epsilon → default。"""
-    eps = _float_attr(node, "epsilon", "eps", default=1e-12)
-    default = _float_attr(node, "default", default=0.0)
+    from backend.numeric_semantics import protected_div_default, protected_epsilon_default
+
+    eps = _float_attr(node, "epsilon", "eps", default=protected_epsilon_default())
+    default = _float_attr(node, "default", default=protected_div_default())
     return (
         pl.when(numer.is_null() | denom.is_null())
         .then(default)
@@ -461,13 +520,198 @@ def _protected_div_expr(numer: pl.Expr, denom: pl.Expr, node: PlanNode) -> pl.Ex
 
 def _protected_log_expr(val: pl.Expr, node: PlanNode) -> pl.Expr:
     """与 SQL / Pandas 一致：x <= epsilon → log(epsilon)。"""
-    eps = _float_attr(node, "epsilon", "eps", default=1e-12)
+    from backend.numeric_semantics import protected_epsilon_default
+
+    eps = _float_attr(node, "epsilon", "eps", default=protected_epsilon_default())
     log_eps = pl.lit(eps).log()
     return pl.when(val.is_null() | (val <= eps)).then(log_eps).otherwise(val.log())
 
 
 def _truthy_expr(expr: pl.Expr) -> pl.Expr:
     return expr.is_not_null() & (expr != 0)
+
+
+def _bump_shared_long_lazy_hit(ctx: Any | None) -> None:
+    if ctx is None:
+        return
+    runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+    runtime["shared_long_lazy_hits"] = int(runtime.get("shared_long_lazy_hits") or 0) + 1
+    ctx.runtime_stats = runtime  # type: ignore[attr-defined]
+
+
+_FUSABLE_TS_ON_COLUMN: frozenset[str] = frozenset(
+    {
+        "ts_mean",
+        "ts_sum",
+        "ts_min",
+        "ts_max",
+        "ts_std",
+        "ts_var",
+        "ts_delay",
+        "ts_delta",
+        "ts_pct",
+    }
+)
+
+
+def _parse_ts_op_on_column(node: PlanNode) -> tuple[str, str, int] | None:
+    """识别 ``ts_*(column(x), window)`` 形态，返回 (op, col, window)。"""
+    op = _resolve(node.op)
+    if op not in _FUSABLE_TS_ON_COLUMN:
+        return None
+    if not node.inputs:
+        return None
+    col = _column_ref_name(node.inputs[0])
+    if not col:
+        return None
+    w = max(_window_int(node, default=1), 1)
+    return op, col, w
+
+
+def _ts_rolling_expr_on_column(op: str, col_name: str, window: int) -> pl.Expr:
+    """在宽表 base 列上直接构造 ts 窗口 expr（用于 DAG fusion）。"""
+    from backend.numeric_semantics import std_ddof_value
+
+    c = pl.col(col_name)
+    w = window
+    if op == "ts_mean":
+        return c.rolling_mean(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+    if op == "ts_sum":
+        return c.rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+    if op == "ts_min":
+        return c.rolling_min(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+    if op == "ts_max":
+        return c.rolling_max(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+    if op == "ts_var":
+        ddof = std_ddof_value(op)
+        return c.rolling_var(window_size=w, min_samples=1, ddof=ddof).over(_INST, order_by=_TS)
+    if op == "ts_std":
+        ddof = std_ddof_value(op)
+        return c.rolling_std(window_size=w, min_samples=1, ddof=ddof).over(_INST, order_by=_TS)
+    if op == "ts_delay":
+        return c.shift(w).over(_INST, order_by=_TS)
+    if op == "ts_delta":
+        return c - c.shift(w).over(_INST, order_by=_TS)
+    if op == "ts_pct":
+        prev = c.shift(w).over(_INST, order_by=_TS)
+        return pl.when(prev.is_null() | (prev == 0)).then(None).otherwise((c - prev) / prev)
+    raise KeyError(op)
+
+
+def _binary_fused_expr(op: str, left: pl.Expr, right: pl.Expr, node: PlanNode) -> pl.Expr:
+    if op == "add":
+        return left + right
+    if op == "subtract":
+        return left - right
+    if op == "multiply":
+        return left * right
+    if op == "maximum":
+        return pl.max_horizontal(left, right)
+    if op == "minimum":
+        return pl.min_horizontal(left, right)
+    if op == "protected_div":
+        return _protected_div_expr(left, right, node)
+    if op == "divide":
+        return left / right
+    if op == "power":
+        return left.pow(right)
+    if op == "gt":
+        return pl.when(left > right).then(1.0).otherwise(0.0)
+    if op == "lt":
+        return pl.when(left < right).then(1.0).otherwise(0.0)
+    if op == "eq":
+        return pl.when(left == right).then(1.0).otherwise(0.0)
+    if op == "ge":
+        return pl.when(left >= right).then(1.0).otherwise(0.0)
+    if op == "le":
+        return pl.when(left <= right).then(1.0).otherwise(0.0)
+    if op == "ne":
+        return pl.when(left != right).then(1.0).otherwise(0.0)
+    if op == "and_":
+        return pl.when(_truthy_expr(left) & _truthy_expr(right)).then(1.0).otherwise(0.0)
+    if op == "or_":
+        return pl.when(_truthy_expr(left) | _truthy_expr(right)).then(1.0).otherwise(0.0)
+    raise KeyError(op)
+
+
+def _try_fuse_binary_ts_on_column(
+    node: PlanNode,
+    base: pl.LazyFrame,
+    op: str,
+) -> pl.LazyFrame | None:
+    """DAG fusion：同列 ts 子树一次 with_columns，避免 join。"""
+    if op not in _BINARY_FUSION_OPS:
+        return None
+    if op == "add":
+        nary = _try_fuse_nary_add_ts(node, base)
+        if nary is not None:
+            return nary
+    if len(node.inputs) != 2:
+        return None
+    left = _parse_ts_op_on_column(node.inputs[0])
+    right = _parse_ts_op_on_column(node.inputs[1])
+    if left is None or right is None:
+        return None
+    lop, lcol, lw = left
+    rop, rcol, rw = right
+    if lcol != rcol:
+        return None
+    schema = set(base.collect_schema().names())
+    if lcol not in schema:
+        return None
+    tmp_l, tmp_r = "_fuse_l", "_fuse_r"
+    l_expr = _ts_rolling_expr_on_column(lop, lcol, lw)
+    r_expr = _ts_rolling_expr_on_column(rop, rcol, rw)
+    out_expr = _binary_fused_expr(op, pl.col(tmp_l), pl.col(tmp_r), node)
+    return (
+        base.with_columns(l_expr.alias(tmp_l), r_expr.alias(tmp_r))
+        .select(pl.col(_TS), pl.col(_INST), out_expr.alias(_VAL))
+    )
+
+
+def _flatten_add_ts_leaves(node: PlanNode) -> list[PlanNode] | None:
+    """展开 ``add(add(ts_a, ts_b), ts_c)`` 为同列 ts 叶子列表。"""
+    op = _resolve(node.op)
+    if op == "add" and len(node.inputs) == 2:
+        left = _flatten_add_ts_leaves(node.inputs[0])
+        right = _flatten_add_ts_leaves(node.inputs[1])
+        if left is None or right is None:
+            return None
+        return left + right
+    if _parse_ts_op_on_column(node) is not None:
+        return [node]
+    return None
+
+
+def _try_fuse_nary_add_ts(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
+    """``add(ts_mean, ts_mean, ts_delta, ...)`` 同列 n-ary fusion。"""
+    leaves = _flatten_add_ts_leaves(node)
+    if leaves is None or len(leaves) < 2:
+        return None
+    parsed = [_parse_ts_op_on_column(leaf) for leaf in leaves]
+    if any(p is None for p in parsed):
+        return None
+    cols = {p[1] for p in parsed if p is not None}
+    if len(cols) != 1:
+        return None
+    col_name = next(iter(cols))
+    schema = set(base.collect_schema().names())
+    if col_name not in schema:
+        return None
+    tmp_names: list[str] = []
+    tmp_exprs: list[pl.Expr] = []
+    for i, (ts_op, _, window) in enumerate(parsed):
+        assert ts_op is not None
+        name = f"_fuse_{i}"
+        tmp_names.append(name)
+        tmp_exprs.append(_ts_rolling_expr_on_column(ts_op, col_name, window).alias(name))
+    sum_expr = pl.col(tmp_names[0])
+    for name in tmp_names[1:]:
+        sum_expr = sum_expr + pl.col(name)
+    return (
+        base.with_columns(tmp_exprs)
+        .select(pl.col(_TS), pl.col(_INST), sum_expr.alias(_VAL))
+    )
 
 
 def _try_binary_from_base_columns(
@@ -619,19 +863,106 @@ def _truthy(col: str) -> pl.Expr:
     return pl.col(col).is_not_null() & (pl.col(col) != 0)
 
 
-def _cs_rank_01() -> pl.Expr:
-    r = pl.col(_VAL).rank(method="average").over(_TS, order_by=_INST)
-    n = pl.col(_VAL).count().over(_TS, order_by=_INST)
+def _cs_rank_01_on(value_col: str) -> pl.Expr:
+    """截面 0-1 rank，指定列名（DAG fusion 用）。"""
+    r = pl.col(value_col).rank(method="average").over(_TS, order_by=_INST)
+    n = pl.col(value_col).count().over(_TS, order_by=_INST)
     return (
         pl.when(n <= 1)
         .then(0.5)
-        .when(pl.col(_VAL).is_null())
+        .when(pl.col(value_col).is_null())
         .then(None)
         .otherwise((r - 1.0) / (n - 1.0))
     )
 
 
-def _cs_rank_pct() -> pl.Expr:
+def _zscore_on(value_col: str, *, canon: str = "zscore") -> pl.Expr:
+    from backend.numeric_semantics import std_ddof_value, zscore_zero_std_fill
+
+    ddof = std_ddof_value(canon)
+    zero_fill = zscore_zero_std_fill(canon)
+    mean = pl.col(value_col).mean().over(_TS, order_by=_INST)
+    std = pl.col(value_col).std(ddof=ddof).over(_TS, order_by=_INST)
+    return (
+        pl.when(pl.col(value_col).is_null())
+        .then(None)
+        .when(std.is_null())
+        .then(None)
+        .when(std == 0)
+        .then(zero_fill)
+        .otherwise((pl.col(value_col) - mean) / std)
+    )
+
+
+_UNARY_FUSE_OVER_TS: frozenset[str] = frozenset(
+    {"rank", "rank_pct", "cs_pct_rank", "zscore", "neg", "abs", "scale", "normalize"}
+)
+
+
+def _try_fuse_unary_over_ts(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
+    """``rank(ts_mean(col,w))`` 等：ts 窗口 + 一元 op 一次 with_columns，避免 join。"""
+    op = _resolve(node.op)
+    if op not in _UNARY_FUSE_OVER_TS or len(node.inputs) != 1:
+        return None
+    ts = _parse_ts_op_on_column(node.inputs[0])
+    if ts is None:
+        return None
+    ts_op, col_name, window = ts
+    schema = set(base.collect_schema().names())
+    if col_name not in schema:
+        return None
+    tmp = "_fuse_ts"
+    ts_expr = _ts_rolling_expr_on_column(ts_op, col_name, window)
+    lf = base.with_columns(ts_expr.alias(tmp))
+    if op == "rank":
+        out_expr = _cs_rank_01_on(tmp)
+    elif op in {"rank_pct", "cs_pct_rank"}:
+        n = pl.col(tmp).count().over(_TS, order_by=_INST)
+        frac = pl.col(tmp).rank(method="average").over(_TS, order_by=_INST) / pl.when(n > 0).then(
+            n.cast(pl.Float64)
+        ).otherwise(None)
+        out_expr = pl.when(pl.col(tmp).is_null()).then(None).otherwise(frac)
+    elif op == "zscore":
+        out_expr = _zscore_on(tmp, canon="zscore")
+    elif op == "neg":
+        out_expr = -pl.col(tmp)
+    elif op == "abs":
+        out_expr = pl.col(tmp).abs()
+    elif op == "scale":
+        lo = pl.col(tmp).min().over(_TS, order_by=_INST)
+        hi = pl.col(tmp).max().over(_TS, order_by=_INST)
+        span = hi - lo
+        out_expr = pl.when(span.is_null() | (span == 0)).then(0.5).otherwise((pl.col(tmp) - lo) / span)
+    elif op == "normalize":
+        mean = pl.col(tmp).mean().over(_TS, order_by=_INST)
+        std = pl.col(tmp).std(ddof=1).over(_TS, order_by=_INST)
+        out_expr = pl.when(std.is_null() | (std == 0)).then(0.0).otherwise((pl.col(tmp) - mean) / std)
+    else:
+        return None
+    return lf.select(pl.col(_TS), pl.col(_INST), out_expr.alias(_VAL))
+
+
+def _apply_compiled_long_expr(base: pl.LazyFrame, compiled: CompiledLongExpr) -> pl.LazyFrame:
+    """CompiledLongExpr → LazyFrame(ts, inst, _v)。"""
+    if compiled.tmp_exprs:
+        lf = base.with_columns(list(compiled.tmp_exprs))
+    else:
+        lf = base
+    return lf.select(pl.col(_TS), pl.col(_INST), compiled.expr.alias(_VAL))
+
+
+def _cs_rank_01(*, canon: str = "rank") -> pl.Expr:
+    """截面 0-1 rank；语义见 ``numeric_semantics.semantics_for(canon)``。"""
+    from backend.numeric_semantics import rank_ignore_nan
+
+    _ = rank_ignore_nan(canon)
+    return _cs_rank_01_on(_VAL)
+
+
+def _cs_rank_pct(*, canon: str = "rank_pct") -> pl.Expr:
+    from backend.numeric_semantics import rank_ignore_nan
+
+    _ = rank_ignore_nan(canon)
     n = pl.col(_VAL).count().over(_TS, order_by=_INST)
     frac = pl.col(_VAL).rank(method="average").over(_TS, order_by=_INST) / pl.when(n > 0).then(n.cast(pl.Float64)).otherwise(None)
     return pl.when(pl.col(_VAL).is_null()).then(None).otherwise(frac)
@@ -703,6 +1034,7 @@ def _compile_polars_impl(
         sid = node.attrs.get("sid")
         lazy_cache = getattr(ctx, "shared_long_lazy_cache", None) or {}
         if sid is not None and sid in lazy_cache:
+            _bump_shared_long_lazy_hit(ctx)
             return value_to_polars_long_lazy(lazy_cache[sid], ts_col=_TS, inst_col=_INST, value_col=_VAL)
         sc = getattr(ctx, "shared_result_cache", None)
         if sc is None or sid not in sc:
@@ -716,6 +1048,9 @@ def _compile_polars_impl(
     if op in _BINARY_FUSION_OPS:
         if len(node.inputs) != 2:
             return None
+        fused_ts = _try_fuse_binary_ts_on_column(node, base, op)
+        if fused_ts is not None:
+            return fused_ts
         fused = _try_binary_from_base_columns(node, base, op)
         if fused is not None:
             return fused
@@ -840,7 +1175,10 @@ def _compile_polars_impl(
         inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        return inner.with_columns(pl.max_horizontal(pl.col(_VAL), pl.lit(0.0)).sqrt().alias(_VAL))
+        clipped = pl.max_horizontal(pl.col(_VAL), pl.lit(0.0))
+        return inner.with_columns(
+            pl.when(pl.col(_VAL).is_null()).then(None).otherwise(clipped.sqrt()).alias(_VAL)
+        )
 
     if op == "clip":
         inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
@@ -860,7 +1198,10 @@ def _compile_polars_impl(
         inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
+        from backend.numeric_semantics import std_ddof_value
+
         w = _window_int(node)
+        ddof = std_ddof_value(op) if op in {"ts_std", "ts_var"} else 1
         if op == "ts_mean":
             expr = pl.col(_VAL).rolling_mean(window_size=w, min_samples=1).over(_INST, order_by=_TS)
         elif op == "ts_sum":
@@ -870,11 +1211,11 @@ def _compile_polars_impl(
         elif op == "ts_max":
             expr = pl.col(_VAL).rolling_max(window_size=w, min_samples=1).over(_INST, order_by=_TS)
         elif op == "ts_var":
-            expr = pl.col(_VAL).rolling_var(window_size=w, min_samples=1, ddof=1).over(_INST, order_by=_TS)
+            expr = pl.col(_VAL).rolling_var(window_size=w, min_samples=1, ddof=ddof).over(_INST, order_by=_TS)
         elif op == "ts_median":
             expr = pl.col(_VAL).rolling_median(window_size=w, min_samples=1).over(_INST, order_by=_TS)
         else:
-            expr = pl.col(_VAL).rolling_std(window_size=w, min_samples=1, ddof=1).over(_INST, order_by=_TS)
+            expr = pl.col(_VAL).rolling_std(window_size=w, min_samples=1, ddof=ddof).over(_INST, order_by=_TS)
         return inner.with_columns(expr.alias(_VAL))
 
     if op == "ts_zscore":
@@ -882,8 +1223,11 @@ def _compile_polars_impl(
         if inner is None:
             return None
         w = _window_int(node)
+        from backend.numeric_semantics import std_ddof_value
+
+        ddof = std_ddof_value("ts_zscore")
         mean = pl.col(_VAL).rolling_mean(window_size=w, min_samples=1).over(_INST, order_by=_TS)
-        std = pl.col(_VAL).rolling_std(window_size=w, min_samples=1, ddof=1).over(_INST, order_by=_TS)
+        std = pl.col(_VAL).rolling_std(window_size=w, min_samples=1, ddof=ddof).over(_INST, order_by=_TS)
         return inner.with_columns(
             (
                 (pl.col(_VAL) - mean)
@@ -1007,19 +1351,19 @@ def _compile_polars_impl(
         if inner is None:
             return None
         w = _window_int(node)
-
-        def _rolling_rank_pct(s: pl.Series) -> float | None:
-            if len(s) == 0:
-                return None
-            ranks = s.rank(method="average")
-            return float(ranks[-1] / len(s))
-
-        return inner.with_columns(
+        rank = (
             pl.col(_VAL)
-            .rolling_map(_rolling_rank_pct, window_size=w, min_samples=1)
+            .rolling_rank(window_size=w, min_samples=1, method="average")
             .over(_INST, order_by=_TS)
-            .alias(_VAL)
         )
+        cnt = (
+            pl.col(_VAL)
+            .is_not_null()
+            .cast(pl.Float64)
+            .rolling_sum(window_size=w, min_samples=1)
+            .over(_INST, order_by=_TS)
+        )
+        return inner.with_columns((rank / cnt).alias(_VAL))
 
     if op in {"ewm_mean", "ewm_std", "ewm_var"}:
         inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
@@ -1267,18 +1611,23 @@ def _compile_polars_impl(
         elif op == "group_mean":
             expr = pl.col(_VAL).mean().over(*over_keys, order_by=_INST)
         elif op == "group_std":
-            expr = pl.col(_VAL).std(ddof=1).over(*over_keys, order_by=_INST)
+            from backend.numeric_semantics import std_ddof_value
+
+            expr = pl.col(_VAL).std(ddof=std_ddof_value("group_std")).over(*over_keys, order_by=_INST)
         elif op in {"group_zscore", "group_neutralize"}:
+            from backend.numeric_semantics import std_ddof_value, zscore_zero_std_fill
+
             mean = pl.col(_VAL).mean().over(*over_keys, order_by=_INST)
             if op == "group_neutralize":
                 expr = pl.when(pl.col(_VAL).is_null()).then(None).otherwise(pl.col(_VAL) - mean)
             else:
-                std = pl.col(_VAL).std(ddof=1).over(*over_keys, order_by=_INST)
+                std = pl.col(_VAL).std(ddof=std_ddof_value("group_zscore")).over(*over_keys, order_by=_INST)
+                zero_fill = zscore_zero_std_fill("group_zscore")
                 expr = (
                     pl.when(pl.col(_VAL).is_null())
                     .then(None)
                     .when(std.is_null() | (std == 0))
-                    .then(0.0)
+                    .then(zero_fill)
                     .otherwise((pl.col(_VAL) - mean) / std)
                 )
         elif op == "group_normalize":
@@ -1361,30 +1710,43 @@ def _compile_polars_impl(
         )
 
     if op == "rank":
+        fused = _try_fuse_unary_over_ts(node, base)
+        if fused is not None:
+            return fused
         inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(_cs_rank_01().alias(_VAL))
 
     if op in {"rank_pct", "cs_pct_rank"}:
+        fused = _try_fuse_unary_over_ts(node, base)
+        if fused is not None:
+            return fused
         inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(_cs_rank_pct().alias(_VAL))
 
     if op == "zscore":
+        fused = _try_fuse_unary_over_ts(node, base)
+        if fused is not None:
+            return fused
         inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
+        from backend.numeric_semantics import std_ddof_value, zscore_zero_std_fill
+
+        ddof = std_ddof_value("zscore")
+        zero_fill = zscore_zero_std_fill("zscore")
         mean = pl.col(_VAL).mean().over(_TS, order_by=_INST)
-        std = pl.col(_VAL).std(ddof=1).over(_TS, order_by=_INST)
+        std = pl.col(_VAL).std(ddof=ddof).over(_TS, order_by=_INST)
         return inner.with_columns(
             pl.when(pl.col(_VAL).is_null())
             .then(None)
             .when(std.is_null())
             .then(None)
             .when(std == 0)
-            .then(0.0)
+            .then(zero_fill)
             .otherwise((pl.col(_VAL) - mean) / std)
             .alias(_VAL)
         )
@@ -1788,14 +2150,35 @@ def _compile_polars_impl(
         inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        w = max(_window_int(node, default=14), 2)
-        from cleaned_operators.technical.signal import _compute_rsi_wilder
-
-        def _rsi(arr: np.ndarray) -> np.ndarray:
-            pdf = pd.DataFrame({"v": arr.astype(float, copy=False)})
-            return _compute_rsi_wilder(pdf, w)["v"].to_numpy(dtype=float)
-
-        return _unary_inst_map_groups(inner, _rsi)
+        alpha, w = _wilder_alpha(node)
+        delta = pl.col(_VAL).diff().over(_INST, order_by=_TS)
+        gain = (
+            pl.when(delta.is_null())
+            .then(None)
+            .when(delta > 0)
+            .then(delta)
+            .otherwise(0.0)
+        )
+        loss = (
+            pl.when(delta.is_null())
+            .then(None)
+            .when(delta < 0)
+            .then(-delta)
+            .otherwise(0.0)
+        )
+        avg_gain = gain.ewm_mean(alpha=alpha, adjust=False, min_periods=w).over(_INST, order_by=_TS)
+        avg_loss = loss.ewm_mean(alpha=alpha, adjust=False, min_periods=w).over(_INST, order_by=_TS)
+        rs = avg_gain / pl.when(avg_loss == 0).then(None).otherwise(avg_loss)
+        expr = (
+            pl.when((avg_loss == 0) & (avg_gain > 0))
+            .then(100.0)
+            .when((avg_gain == 0) & (avg_loss > 0))
+            .then(0.0)
+            .when((avg_gain == 0) & (avg_loss == 0))
+            .then(50.0)
+            .otherwise(100.0 - (100.0 / (1.0 + rs)))
+        )
+        return inner.with_columns(expr.alias(_VAL))
 
     if op == "ATR_WILDER":
         if len(node.inputs) < 3:
@@ -1805,26 +2188,22 @@ def _compile_polars_impl(
         close = _compile_polars(node.inputs[2], base, ctx=ctx, memo=memo)
         if high is None or low is None or close is None:
             return None
-        w = max(_window_int(node, default=14), 2)
+        alpha, w = _wilder_alpha(node)
         joined = _join_triple(high, low, close)
-        from cleaned_operators.technical.signal import _compute_atr_wilder
-        schema = joined.collect_schema()
-
-        def _apply(g: pl.DataFrame) -> pl.DataFrame:
-            h = pd.DataFrame({"v": g[_VAL].to_numpy().astype(float, copy=False)})
-            lo = pd.DataFrame({"v": g["_ym"].to_numpy().astype(float, copy=False)})
-            cl = pd.DataFrame({"v": g["_y"].to_numpy().astype(float, copy=False)})
-            out = _compute_atr_wilder(h, lo, cl, w)["v"].to_numpy(dtype=float)
-            return g.select(
-                pl.col(_TS),
-                pl.col(_INST),
-                pl.Series(_VAL, out),
+        prev_close = pl.col("_y").shift(1).over(_INST, order_by=_TS)
+        tr = (
+            pl.when(prev_close.is_null())
+            .then(None)
+            .otherwise(
+                pl.max_horizontal(
+                    pl.col(_VAL) - pl.col("_ym"),
+                    (pl.col(_VAL) - prev_close).abs(),
+                    (pl.col("_ym") - prev_close).abs(),
+                )
             )
-
-        return joined.group_by(_INST, maintain_order=True).map_groups(
-            _apply,
-            schema={_TS: schema[_TS], _INST: schema[_INST], _VAL: pl.Float64},
         )
+        expr = tr.ewm_mean(alpha=alpha, adjust=False, min_periods=w).over(_INST, order_by=_TS)
+        return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
 
     from .polars_registry_bridge import compile_registry_op
 

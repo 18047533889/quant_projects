@@ -8,6 +8,7 @@ import pytest
 from backend.sql_pushdown.emitter import compile_plan_to_sql, plan_is_sql_capable
 from backend.sql_pushdown.plan_fixtures import minimal_plan
 from backend.sql_pushdown.sql_registry import SQL_CAPABLE_CANONICALS, register_sql_backends
+from backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS, SQL_PRODUCTION_SAFE_CANONICALS
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -15,7 +16,8 @@ def _load_sql_markers():
     register_sql_backends()
 
 
-_SQL_OPS = sorted(SQL_CAPABLE_CANONICALS - {"column", "literal"})
+_SQL_OPS = sorted(SQL_IMPLEMENTED_CANONICALS - {"column", "literal"})
+assert SQL_CAPABLE_CANONICALS == SQL_IMPLEMENTED_CANONICALS
 
 
 @pytest.mark.parametrize("op", _SQL_OPS)

@@ -78,20 +78,34 @@ def test_protected_log_small_value_uses_log_epsilon(edge_source):
     assert out.loc[idx[2]] == pytest.approx(math.log(eps), rel=1e-6)
 
 
-def test_ts_rank_in_map_groups_not_native():
-    assert "ts_rank" not in POLARS_LONG_NATIVE
-    assert "ts_rank" in POLARS_LONG_MAP_GROUPS
+def test_protected_log_null_matches_pandas_log_epsilon(edge_source):
+    """Pandas ``protected_log``：NaN 视为 <= epsilon → log(eps)（与 PolarsLong/SQL 一致）。"""
+    import math
+
+    import numpy as np
+
+    idx = edge_source.data["z"].index
+    nan_idx = idx[5]
+    expr = make_cleaned_call_factory("protected_log")(col("z"))
+    pd_out = _run(edge_source, expr, "pandas")
+    long_out = _run(edge_source, expr, "polars_long")
+    eps = 1e-12
+    assert np.isnan(edge_source.data["z"].loc[nan_idx])
+    assert pd_out.loc[nan_idx] == pytest.approx(math.log(eps), rel=1e-6)
+    assert long_out.loc[nan_idx] == pytest.approx(math.log(eps), rel=1e-6)
+    assert "ts_rank" in POLARS_LONG_NATIVE
+    assert "ts_rank" not in POLARS_LONG_MAP_GROUPS
 
 
-def test_require_native_rejects_ts_rank(edge_source):
+def test_require_native_accepts_ts_rank(edge_source):
     import os
 
     expr = make_cleaned_call_factory("ts_rank")(col("x"), 3)
     os.environ["FACTOR_ENGINE_POLARS_LONG_REQUIRE_NATIVE"] = "1"
     try:
-        with pytest.raises(Exception, match="require_native|non-native"):
-            FactorEngine(backend=build_backend("polars_long"), data_source=edge_source).run(
-                Factor(name="t", expr=expr)
-            )
+        out = FactorEngine(backend=build_backend("polars_long"), data_source=edge_source).run(
+            Factor(name="t", expr=expr)
+        )["result"]
+        assert len(out) > 0
     finally:
         os.environ.pop("FACTOR_ENGINE_POLARS_LONG_REQUIRE_NATIVE", None)

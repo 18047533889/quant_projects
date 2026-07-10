@@ -152,9 +152,19 @@ MEMORY_CASES = [
     ("group_percentile", lambda: make_cleaned_call_factory("group_percentile")(col("close"), col("grp"), 0.5)),
     ("ts_corr", lambda: make_cleaned_call_factory("ts_corr")(col("close"), col("open"), 3)),
     ("ts_cov", lambda: make_cleaned_call_factory("ts_cov")(col("ret"), col("close"), 3)),
+    ("ts_beta", lambda: make_cleaned_call_factory("ts_beta")(col("ret"), col("close"), 3)),
+    ("group_winsorize", lambda: make_cleaned_call_factory("group_winsorize")(col("close"), col("grp"))),
+    ("cs_mad", lambda: make_cleaned_call_factory("cs_mad")(col("close"))),
+    ("cs_mad_zscore", lambda: make_cleaned_call_factory("cs_mad_zscore")(col("close"))),
     ("vwap", lambda: make_cleaned_call_factory("vwap")(col("close"), col("volume"), 3)),
     ("power", lambda: make_cleaned_call_factory("power")(col("close"), col("volume"))),
     ("gt", lambda: make_cleaned_call_factory("gt")(col("close"), col("open"))),
+    ("c_mean", lambda: make_cleaned_call_factory("c_mean")(col("close"))),
+    ("cs_pct_rank", lambda: make_cleaned_call_factory("cs_pct_rank")(col("close"))),
+    ("ts_median", lambda: make_cleaned_call_factory("ts_median")(col("close"), 3)),
+    ("rank_pct", lambda: make_cleaned_call_factory("rank_pct")(col("close"))),
+    ("add", lambda: make_cleaned_call_factory("add")(col("close"), col("open"))),
+    ("where", lambda: make_cleaned_call_factory("where")(col("grp"), col("close"), col("open"))),
 ]
 
 
@@ -177,6 +187,10 @@ DUCKDB_CASES = [
     ("group_zscore", lambda: make_cleaned_call_factory("group_zscore")(_col("close"), _col("grp"))),
     ("ts_corr", lambda: make_cleaned_call_factory("ts_corr")(_col("close"), _col("open"), 3)),
     ("ts_cov", lambda: make_cleaned_call_factory("ts_cov")(_col("ret"), _col("close"), 3)),
+    ("ts_beta", lambda: make_cleaned_call_factory("ts_beta")(_col("ret"), _col("close"), 3)),
+    ("group_winsorize", lambda: make_cleaned_call_factory("group_winsorize")(_col("close"), _col("grp"))),
+    ("cs_mad", lambda: make_cleaned_call_factory("cs_mad")(_col("close"))),
+    ("cs_mad_zscore", lambda: make_cleaned_call_factory("cs_mad_zscore")(_col("close"))),
 ]
 
 

@@ -146,6 +146,92 @@ def assert_production_plan_ops(
         )
 
 
+def _fastpath_gate_enabled() -> bool:
+    return _truthy_env("FACTOR_ENGINE_PRODUCTION_REQUIRE_FASTPATH")
+
+
+def assert_production_fastpath_plan(
+    plan: Any,
+    *,
+    mode: str | None = None,
+    context: str = "compile",
+) -> None:
+    """production + ``FACTOR_ENGINE_PRODUCTION_REQUIRE_FASTPATH=1``：须可走 fast path。"""
+    if not is_production_mode(mode) or not _fastpath_gate_enabled():
+        return
+    from backend.production_fastpath_gate import check_production_fastpath_plan_ops, fastpath_gate_strict
+
+    result = check_production_fastpath_plan_ops(plan, strict=fastpath_gate_strict())
+    if not result.ok:
+        raise ProductionPolicyViolation(
+            f"production fast path {context} 未通过: {'; '.join(result.violations)}"
+        )
+
+
+def assert_production_fastpath_runtime(
+    ctx: Any,
+    *,
+    mode: str | None = None,
+    context: str = "execute",
+) -> None:
+    """production fastpath：执行后不得发生 fallback / 非 native tier。"""
+    if not is_production_mode(mode) or not _fastpath_gate_enabled():
+        return
+    from backend.production_fastpath_gate import audit_runtime_fastpath_violations
+
+    runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+    violations = audit_runtime_fastpath_violations(runtime)
+    if violations:
+        raise ProductionPolicyViolation(
+            f"production fast path {context} runtime 违规: {'; '.join(violations)}"
+        )
+
+
+def assert_no_unapproved_map_groups_in_production(
+    plan: Any,
+    *,
+    mode: str | None = None,
+    context: str = "compile",
+) -> None:
+    """production 默认禁止 map_groups（除非在批准白名单）。"""
+    if not is_production_mode(mode):
+        return
+    from backend.polars_long_policy import infer_polars_long_tier
+    from backend.polars_long_production import APPROVED_POLARS_LONG_MAP_GROUPS_PRODUCTION
+    from cleaned_operators.registry import OperatorRegistry
+
+    bad: list[str] = []
+
+    def walk(node: Any) -> None:
+        op = str(getattr(node, "op", "") or "")
+        if not op:
+            return
+        canon = OperatorRegistry._aliases.get(op, op)
+        if infer_polars_long_tier(canon) == "map_groups" and canon not in APPROVED_POLARS_LONG_MAP_GROUPS_PRODUCTION:
+            bad.append(canon)
+        for child in getattr(node, "inputs", []) or []:
+            walk(child)
+
+    walk(plan)
+    if bad:
+        unique = sorted(set(bad))
+        raise ProductionPolicyViolation(
+            f"production 模式 {context} 含未批准 map_groups 算子: {', '.join(unique)}"
+        )
+
+
+def record_production_fastpath_check(ctx: Any, plan: Any, *, mode: str | None = None) -> None:
+    """记录 fast path 检查结果到 runtime_stats（不强制）。"""
+    from backend.production_fastpath_gate import check_production_fastpath_plan_ops, fastpath_gate_strict
+
+    result = check_production_fastpath_plan_ops(plan, strict=fastpath_gate_strict())
+    runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+    runtime["production_fastpath_ok"] = result.ok
+    if result.violations:
+        runtime["production_fastpath_violations"] = list(result.violations)
+    ctx.runtime_stats = runtime  # type: ignore[attr-defined]
+
+
 def assert_production_factors(
     factors: Iterable[Any],
     *,
