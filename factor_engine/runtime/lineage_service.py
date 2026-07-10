@@ -13,6 +13,7 @@ from storage.composite_source import CompositeDataSource
 
 
 def resolve_lineage_expression(factor: Factor, expression: str | None) -> str | None:
+    """解析物化 lineage 用的 DSL 表达式（显式参数优先于 factor 元数据）。"""
     if expression:
         return expression
     source = getattr(factor, "source_expr", None)
@@ -20,6 +21,7 @@ def resolve_lineage_expression(factor: Factor, expression: str | None) -> str | 
 
 
 def composite_lineage_from_source(data_source: Any) -> dict[str, Any]:
+    """从 :class:`CompositeDataSource` 收集 join 报告写入 lineage extra。"""
     if not isinstance(data_source, CompositeDataSource):
         return {}
     reports = data_source.collect_join_reports(clear=False)
@@ -36,6 +38,7 @@ def build_lineage_extra(
     data_source: Any = None,
     **more: Any,
 ) -> dict[str, Any]:
+    """组装物化 lineage 的 ``extra`` 字段（snapshot、git、input_dq 等）。"""
     extra: dict[str, Any] = {
         "data_snapshot_id": snapshot_id,
         "data_source_config": data_source_config,
@@ -50,6 +53,7 @@ def build_lineage_extra(
 
 
 def data_snapshot_id_from_config(data_source_config: dict | None) -> str | None:
+    """由数据源配置字典计算 ``data_snapshot_id``；空配置返回 ``None``。"""
     if not data_source_config:
         return None
     return hash_data_source_config(data_source_config)
@@ -67,6 +71,7 @@ def build_materialize_lineage(
     mode: str = "full",
     incremental: dict | None = None,
 ):
+    """为全量/增量物化构建 :class:`RunLineage`。"""
     from backend.cleaned_bridge import ensure_cleaned_loaded
 
     ensure_cleaned_loaded()

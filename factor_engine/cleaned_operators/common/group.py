@@ -29,6 +29,7 @@ import pandas as pd
 # canonical=deltas backend=pandas_numpy selected=deltas source=time_series/panel_ops.py
 @register_operator(name="deltas", category="time_series", business_category="group_neutralization", canonical="deltas", source="factor_dsl_np")
 class Deltas(SeriesOperator):
+    """n期差分 (与Delta相同) x - Ref(x, n)"""
     metadata = OperatorMetadata(
         name="deltas", category="time_series",
         description="n期差分 (与Delta相同) x - Ref(x, n)",
@@ -44,6 +45,7 @@ class Deltas(SeriesOperator):
 # canonical=group_decay_linear backend=pandas_numpy selected=group_decay_linear source=cross_sectional/group_ops.py
 @register_operator(name="group_decay_linear", category="cross_sectional", business_category="group_neutralization", canonical="group_decay_linear", source="factor_dsl_np")
 class GroupDecayLinear(SeriesOperator):
+    """在指定分组内进行线性衰减加权，按排名赋予线性递减权重"""
 
     metadata = OperatorMetadata(
         name="group_decay_linear",
@@ -103,6 +105,7 @@ class GroupDecayLinear(SeriesOperator):
 # canonical=group_demean backend=pandas_numpy selected=group_demean source=cross_sectional/group_ops.py
 @register_operator(name="group_demean", category="cross_sectional", business_category="group_neutralization", canonical="group_neutralize", source="factor_dsl_np")
 class GroupDemean(SeriesOperator):
+    """在指定分组内进行去均值处理 (x - group_mean)"""
 
     metadata = OperatorMetadata(
         name="group_demean",
@@ -190,6 +193,7 @@ class GroupMean(SeriesOperator):
 # canonical=group_normalize backend=pandas_numpy selected=group_normalize source=cross_sectional/group_ops.py
 @register_operator(name="group_normalize", category="cross_sectional", business_category="group_neutralization", canonical="group_normalize", source="factor_dsl_np")
 class GroupNormalize(SeriesOperator):
+    """在指定分组内对股票进行归一化到[0,1]"""
 
     metadata = OperatorMetadata(
         name="group_normalize",
@@ -405,6 +409,7 @@ class GroupStd(SeriesOperator):
 # canonical=group_winsorize backend=pandas_numpy selected=group_winsorize source=cross_sectional/group_ops.py
 @register_operator(name="group_winsorize", category="cross_sectional", business_category="group_neutralization", canonical="group_winsorize", source="factor_dsl_np")
 class GroupWinsorize(SeriesOperator):
+    """在指定分组内进行缩尾处理，将超出分位数a的值截断"""
 
     metadata = OperatorMetadata(
         name="group_winsorize",
@@ -519,6 +524,7 @@ class GroupZScore(SeriesOperator):
 # canonical=move backend=pandas_numpy selected=move source=time_series/panel_ops.py
 @register_operator(name="move", category="time_series", business_category="group_neutralization", canonical="move", source="factor_dsl_np")
 class Move(SeriesOperator):
+    """滑动窗口均值 (与m_avg相同)"""
     metadata = OperatorMetadata(
         name="move", category="time_series",
         description="滑动窗口均值 (与m_avg相同)",
@@ -534,6 +540,7 @@ class Move(SeriesOperator):
 # canonical=panel_neutralize backend=pandas_numpy selected=panel_neutralize source=time_series/panel_ops.py
 @register_operator(name="panel_neutralize", category="time_series", business_category="group_neutralization", canonical="panel_neutralize", source="factor_dsl_np")
 class PanelNeutralize(SeriesOperator):
+    """多维中性化 (按组去均值)"""
     metadata = OperatorMetadata(
         name="panel_neutralize", category="time_series",
         description="多维中性化 (按组去均值)",
@@ -563,6 +570,7 @@ class PanelNeutralize(SeriesOperator):
 # canonical=panel_rank backend=pandas_numpy selected=panel_rank source=time_series/panel_ops.py
 @register_operator(name="panel_rank", category="time_series", business_category="group_neutralization", canonical="panel_rank", source="factor_dsl_np")
 class PanelRank(SeriesOperator):
+    """面板排名 (按行百分位排名)"""
     metadata = OperatorMetadata(
         name="panel_rank", category="time_series",
         description="面板排名 (按行百分位排名)",
@@ -578,6 +586,7 @@ class PanelRank(SeriesOperator):
 # canonical=panel_standardize backend=pandas_numpy selected=panel_standardize source=time_series/panel_ops.py
 @register_operator(name="panel_standardize", category="time_series", business_category="group_neutralization", canonical="panel_standardize", source="factor_dsl_np")
 class PanelStandardize(SeriesOperator):
+    """面板Z-Score标准化 (按行标准化)"""
     metadata = OperatorMetadata(
         name="panel_standardize", category="time_series",
         description="面板Z-Score标准化 (按行标准化)",
@@ -595,6 +604,7 @@ class PanelStandardize(SeriesOperator):
 # canonical=panel_zscore backend=pandas_numpy selected=panel_zscore source=time_series/panel_ops.py
 @register_operator(name="panel_zscore", category="time_series", business_category="group_neutralization", canonical="panel_zscore", source="factor_dsl_np")
 class PanelZscore(SeriesOperator):
+    """面板Z-Score (按行Z-Score标准化)"""
     metadata = OperatorMetadata(
         name="panel_zscore", category="time_series",
         description="面板Z-Score (按行Z-Score标准化)",
@@ -612,6 +622,7 @@ class PanelZscore(SeriesOperator):
 # canonical=ratios backend=pandas_numpy selected=ratios source=time_series/panel_ops.py
 @register_operator(name="ratios", category="time_series", business_category="group_neutralization", canonical="ts_ratio", source="factor_dsl_np")
 class Ratios(SeriesOperator):
+    """当前值与前一期之比 x / Ref(x, 1)"""
     metadata = OperatorMetadata(
         name="ratios", category="time_series",
         description="当前值与前一期之比 x / Ref(x, 1)",
@@ -627,6 +638,7 @@ class Ratios(SeriesOperator):
 # 重复实现：见 group_neutralize；dedupe 注销
 # @register_operator(name="industry_neutralize", ...)
 class IndustryNeutralize(SeriesOperator):
+    """行业组内去均值（需传入 industry 分组列）"""
     metadata = OperatorMetadata(
         name="industry_neutralize",
         category="group_neutralization",
@@ -657,6 +669,7 @@ class IndustryNeutralize(SeriesOperator):
 
 @register_operator(name="size_neutralize", category="group_neutralization", business_category="group_neutralization", canonical="size_neutralize", source="factor_dsl_np")
 class SizeNeutralize(SeriesOperator):
+    """市值中性化（对 log(market_cap) 做截面回归残差）"""
     metadata = OperatorMetadata(
         name="size_neutralize",
         category="group_neutralization",

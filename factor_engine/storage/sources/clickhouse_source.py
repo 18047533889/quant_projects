@@ -14,13 +14,37 @@ logger = get_logger("storage.clickhouse_source")
 
 
 def _ensure_data_access_importable() -> None:
+    """将 quant_projects 根目录加入 sys.path。
+    
+    参数:
+        无
+    
+    返回:
+        无
+    """
     root = str(quant_projects_root())
     if root not in sys.path:
         sys.path.insert(0, root)
 
 
 class ClickHouseSource(DataSource):
-    """从 ClickHouse 宽表/长表读行情或 panel 物化表。"""
+    """从 ClickHouse 表读取 MultiIndex Series。
+    
+    参数:
+        table: ClickHouse 表名（可选）
+        timestamp_column: 见函数签名（可选）
+        instrument_column: 见函数签名（可选）
+        fields: 逻辑列到物理列映射（可选）
+        start_date: 起始日期（可选）
+        end_date: 结束日期（可选）
+        instrument_filter: 见函数签名（可选）
+        host: 见函数签名（可选）
+        port: 见函数签名（可选）
+        database: 见函数签名（可选）
+        username: 见函数签名（可选）
+        password: 见函数签名（可选）
+        secure: 见函数签名（可选）
+    """
 
     def __init__(
         self,
@@ -39,6 +63,26 @@ class ClickHouseSource(DataSource):
         password: str | None = None,
         secure: bool | None = None,
     ) -> None:
+        """初始化实例。
+        
+        参数:
+            table: ClickHouse 表名（可选）
+            timestamp_column: 见函数签名（可选）
+            instrument_column: 见函数签名（可选）
+            fields: 逻辑列到物理列映射（可选）
+            start_date: 起始日期（可选）
+            end_date: 结束日期（可选）
+            instrument_filter: 见函数签名（可选）
+            host: 见函数签名（可选）
+            port: 见函数签名（可选）
+            database: 见函数签名（可选）
+            username: 见函数签名（可选）
+            password: 见函数签名（可选）
+            secure: 见函数签名（可选）
+        
+        返回:
+            无
+        """
         self.table = table
         self.timestamp_column = timestamp_column
         self.instrument_column = instrument_column
@@ -62,11 +106,27 @@ class ClickHouseSource(DataSource):
         self._panel_cache: dict[str, Any] = {}
 
     def _time_range(self) -> tuple[Any, Any] | None:
+        """_time_range。
+        
+        参数:
+            无
+        
+        返回:
+            tuple[Any, Any] | None
+        """
         if self.start_date is None and self.end_date is None:
             return None
         return (self.start_date, self.end_date)
 
     def _resolve_columns(self, names: list[str]) -> tuple[list[str], dict[str, str]]:
+        """_resolve_columns。
+        
+        参数:
+            names: 逻辑列名列表
+        
+        返回:
+            tuple[list[str], dict[str, str]]
+        """
         physical: list[str] = []
         output_names: dict[str, str] = {}
         for name in names:
@@ -77,11 +137,27 @@ class ClickHouseSource(DataSource):
         return physical, output_names
 
     def load_column(self, name: str):
+        """load_column。
+        
+        参数:
+            name: 逻辑列名
+        
+        返回:
+            无
+        """
         if name in self._column_cache:
             return self._column_cache[name]
         return self.load_columns([name])[name]
 
     def load_columns(self, names: list[str]) -> dict[str, Any]:
+        """load_columns。
+        
+        参数:
+            names: 逻辑列名列表
+        
+        返回:
+            dict[str, Any]
+        """
         needed = [n for n in names if n not in self._column_cache]
         if not needed:
             return {n: self._column_cache[n] for n in names}
@@ -112,11 +188,26 @@ class ClickHouseSource(DataSource):
         return {n: self._column_cache[n] for n in names}
 
     def prefetch_columns(self, names: list[str]) -> None:
+        """prefetch_columns。
+        
+        参数:
+            names: 逻辑列名列表
+        
+        返回:
+            无
+        """
         if names:
             self.load_columns(names)
 
     def prefetch_panels(self, names: list[str]) -> None:
-        """批量预加载宽表 panel（一次 SQL 读 + 本地 unstack）。"""
+        """批量预加载宽表 panel（一次 SQL 读 + 本地 unstack）。
+        
+        参数:
+            names: 逻辑列名列表
+        
+        返回:
+            无
+        """
         needed = [n for n in names if n not in self._panel_cache]
         if not needed:
             return
@@ -132,6 +223,14 @@ class ClickHouseSource(DataSource):
                 self._panel_cache[name] = series.unstack(level=inst_level)
 
     def load_column_panel(self, name: str):
+        """load_column_panel。
+        
+        参数:
+            name: 逻辑列名
+        
+        返回:
+            无
+        """
         if name in self._panel_cache:
             return self._panel_cache[name]
         series = self.load_column(name)
@@ -145,7 +244,14 @@ class ClickHouseSource(DataSource):
         return panel
 
     def scan_polars_long(self, columns: list[str]):
-        """ClickHouse 直查 long LazyFrame（无 unstack / 无宽表 panel）。"""
+        """ClickHouse 直查 long LazyFrame（无 unstack / 无宽表 panel）。
+        
+        参数:
+            columns: 列名列表
+        
+        返回:
+            无
+        """
         physical, output_names = self._resolve_columns(columns)
         _ensure_data_access_importable()
         from data_access.clickhouse_panel import ClickHouseConfig
@@ -164,4 +270,12 @@ class ClickHouseSource(DataSource):
         )
 
     def dataset_axis_columns(self) -> tuple[str, str]:
+        """dataset_axis_columns。
+        
+        参数:
+            无
+        
+        返回:
+            tuple[str, str]
+        """
         return self.timestamp_column, self.instrument_column

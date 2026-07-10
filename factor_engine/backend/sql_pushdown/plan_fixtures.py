@@ -1,20 +1,26 @@
 # -*- coding: utf-8
-"""SQL capability / emitter 测试用最小 PlanNode 构造。"""
+"""SQL capability / emitter 测试用最小 PlanNode 构造。
+
+为 registry 中每个 canonical 生成可编译的最小逻辑计划，供能力探测与
+emitter 回归测试复用。
+"""
 from __future__ import annotations
 
 from planner.logical_plan import PlanNode
 
 
 def column(name: str) -> PlanNode:
+    """构造列引用节点 ``column(name)``。"""
     return PlanNode(op="column", attrs={"name": name})
 
 
 def literal(value) -> PlanNode:
+    """构造字面量节点 ``literal(value)``。"""
     return PlanNode(op="literal", attrs={"value": value})
 
 
 def minimal_plan(op: str) -> PlanNode:
-    """为 registry 中每个 canonical 构造可编译的最小逻辑计划。"""
+    """为 registry 中指定 canonical 构造可编译的最小逻辑计划。"""
     close, volume, industry = column("close"), column("volume"), column("industry")
     high, low = column("high"), column("low")
     if op in {

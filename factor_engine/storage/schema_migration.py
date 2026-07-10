@@ -27,7 +27,15 @@ def migrate_factor_parquet_file(
     *,
     dry_run: bool = True,
 ) -> dict[str, Any]:
-    """单文件补全 metadata 列；有变更且非 dry_run 时原子覆盖。"""
+    """为单个 Parquet 文件补全 metadata 列。
+    
+    参数:
+        path: 文件或目录路径
+        dry_run: 是否仅演练不写盘（可选）
+    
+    返回:
+        dict[str, Any]
+    """
     path = Path(path)
     if not path.is_file():
         return {"path": str(path), "changed": False, "reason": "missing"}
@@ -67,7 +75,16 @@ def migrate_factor_lake_tree(
     factor_id: str | None = None,
     dry_run: bool = True,
 ) -> dict[str, Any]:
-    """扫描 ``factors/{factor_id}/year=*/*.parquet`` 并迁移 metadata 列。"""
+    """扫描因子湖目录并迁移 metadata 列。
+    
+    参数:
+        root: 根目录路径
+        factor_id: 因子唯一标识（可选）
+        dry_run: 是否仅演练不写盘（可选）
+    
+    返回:
+        dict[str, Any]
+    """
     root = Path(root)
     base = root / "factors"
     if factor_id:

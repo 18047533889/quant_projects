@@ -14,12 +14,28 @@ logger = get_logger("storage.data_access_source")
 
 
 def _ensure_data_access_importable() -> None:
+    """将 quant_projects 根目录加入 sys.path。
+    
+    参数:
+        无
+    
+    返回:
+        无
+    """
     root = str(quant_projects_root())
     if root not in sys.path:
         sys.path.insert(0, root)
 
 
 def _get_store():
+    """获取 data_access 全局 store 实例。
+    
+    参数:
+        无
+    
+    返回:
+        无
+    """
     _ensure_data_access_importable()
     from data_access import get_store
 
@@ -27,7 +43,19 @@ def _get_store():
 
 
 class DataAccessSource(DataSource):
-    """``datasets.yaml`` 登记的数据集 → ``(timestamp, instrument)`` MultiIndex Series。"""
+    """通过 data_access 读取已登记数据集列。
+    
+    参数:
+        dataset: data_access 数据集名称（可选）
+        fields: 逻辑列到物理列映射（可选）
+        start_date: 起始日期（可选）
+        end_date: 结束日期（可选）
+        instrument_filter: 见函数签名（可选）
+        normalize_timestamp: 见函数签名（可选）
+        timestamp_unit: 见函数签名（可选）
+        read_auto: 见函数签名（可选）
+        params: 见函数签名（可选）
+    """
 
     def __init__(
         self,
@@ -42,6 +70,22 @@ class DataAccessSource(DataSource):
         read_auto: bool | None = None,
         params: dict[str, Any] | None = None,
     ) -> None:
+        """初始化实例。
+        
+        参数:
+            dataset: data_access 数据集名称（可选）
+            fields: 逻辑列到物理列映射（可选）
+            start_date: 起始日期（可选）
+            end_date: 结束日期（可选）
+            instrument_filter: 见函数签名（可选）
+            normalize_timestamp: 见函数签名（可选）
+            timestamp_unit: 见函数签名（可选）
+            read_auto: 见函数签名（可选）
+            params: 见函数签名（可选）
+        
+        返回:
+            无
+        """
         self.dataset = dataset
         self.fields = dict(fields or {})
         self.start_date = start_date
@@ -60,33 +104,79 @@ class DataAccessSource(DataSource):
         self._lazy_bundle: Any | None = None
 
     def column_cache_stats(self) -> dict[str, int]:
+        """column_cache_stats。
+        
+        参数:
+            无
+        
+        返回:
+            dict[str, int]
+        """
         return {
             "cached_columns": len(self._column_cache),
             "cached_panels": len(self._panel_cache),
         }
 
     def enable_lazy_scan(self, enabled: bool = True) -> None:
-        """启用 ``scan_polars`` 读路径（配合 ``PolarsBackend.use_lazy``）。"""
+        """启用 ``scan_polars`` 读路径（配合 ``PolarsBackend.use_lazy``）。
+        
+        参数:
+            enabled: 见函数签名（可选）
+        
+        返回:
+            无
+        """
         self._lazy_scan = bool(enabled)
         if enabled:
             self.read_auto = True
 
     @property
     def lazy_scan(self) -> bool:
+        """lazy_scan。
+        
+        参数:
+            无
+        
+        返回:
+            bool
+        """
         return bool(self._lazy_scan)
 
     def read_session(self) -> "DataSourceReadSession":
+        """read_session。
+        
+        参数:
+            无
+        
+        返回:
+            'DataSourceReadSession'
+        """
         from .read_session import DataSourceReadSession
 
         return DataSourceReadSession(self)
 
     def _time_range(self) -> tuple[Any, Any] | None:
+        """_time_range。
+        
+        参数:
+            无
+        
+        返回:
+            tuple[Any, Any] | None
+        """
         if self.start_date is None and self.end_date is None:
             return None
         return (self.start_date, self.end_date)
 
     def _resolve_columns(self, names: list[str]) -> tuple[list[str], dict[str, str]]:
-        """逻辑列名 → (物理列名列表, output_names 映射)。"""
+        """逻辑列名 → (物理列名列表, output_names 映射)。
+        
+        参数:
+            names: 逻辑列名列表
+        
+        返回:
+            tuple[list[str], dict[str, str]]
+        """
         physical: list[str] = []
         output_names: dict[str, str] = {}
         for name in names:
@@ -97,12 +187,28 @@ class DataAccessSource(DataSource):
         return physical, output_names
 
     def load_column(self, name: str):
+        """load_column。
+        
+        参数:
+            name: 逻辑列名
+        
+        返回:
+            无
+        """
         if name in self._column_cache:
             return self._column_cache[name]
         result = self.load_columns([name])
         return result[name]
 
     def load_columns(self, names: list[str]) -> dict[str, Any]:
+        """load_columns。
+        
+        参数:
+            names: 逻辑列名列表
+        
+        返回:
+            dict[str, Any]
+        """
         needed = [n for n in names if n not in self._column_cache]
         if not needed:
             return {n: self._column_cache[n] for n in names}
@@ -196,7 +302,14 @@ class DataAccessSource(DataSource):
         return {n: self._column_cache[n] for n in names}
 
     def prefetch_columns(self, names: list[str]) -> None:
-        """批量预加载列（lazy_scan 时构建共享 LazyColumnBundle，单次 collect）。"""
+        """批量预加载列（lazy_scan 时构建共享 LazyColumnBundle，单次 collect）。
+        
+        参数:
+            names: 逻辑列名列表
+        
+        返回:
+            无
+        """
         if not names:
             return
         if self.read_auto and self._lazy_scan:
@@ -205,6 +318,14 @@ class DataAccessSource(DataSource):
         self.load_columns(names)
 
     def _prefetch_lazy_bundle(self, names: list[str]) -> None:
+        """_prefetch_lazy_bundle。
+        
+        参数:
+            names: 逻辑列名列表
+        
+        返回:
+            无
+        """
         needed = [n for n in names if n not in self._column_cache]
         if not needed:
             return
@@ -266,7 +387,14 @@ class DataAccessSource(DataSource):
             self._column_cache[n] = fetched[n]
 
     def prefetch_panels(self, names: list[str]) -> None:
-        """一次 SQL 批量读列并 unstack 为宽表 panel（panel-native 热路径）。"""
+        """一次 SQL 批量读列并 unstack 为宽表 panel（panel-native 热路径）。
+        
+        参数:
+            names: 逻辑列名列表
+        
+        返回:
+            无
+        """
         needed = [n for n in names if n not in self._panel_cache]
         if not needed:
             return
@@ -277,12 +405,26 @@ class DataAccessSource(DataSource):
                 self._panel_cache[name] = series.unstack(level=level)
 
     def dataset_axis_columns(self) -> tuple[str, str]:
-        """registry 中该数据集的时间列 / 标的列（SQL 下推用）。"""
+        """registry 中该数据集的时间列 / 标的列（SQL 下推用）。
+        
+        参数:
+            无
+        
+        返回:
+            tuple[str, str]
+        """
         store = _get_store()
         return store.dataset_axis_columns(self.dataset)
 
     def load_column_panel(self, name: str):
-        """加载单列为宽表 panel（index=时间, columns=标的），供 panel-native 热路径。"""
+        """加载单列为宽表 panel（index=时间, columns=标的），供 panel-native 热路径。
+        
+        参数:
+            name: 逻辑列名
+        
+        返回:
+            无
+        """
         if name in self._panel_cache:
             return self._panel_cache[name]
         series = self.load_column(name)
@@ -292,7 +434,14 @@ class DataAccessSource(DataSource):
         return panel
 
     def scan_polars_long(self, columns: list[str]):
-        """Parquet/DuckDB scan → ``ts / inst / <cols>`` LazyFrame（PolarsLongBackend 用）。"""
+        """Parquet/DuckDB scan → ``ts / inst / <cols>`` LazyFrame（PolarsLongBackend 用）。
+        
+        参数:
+            columns: 列名列表
+        
+        返回:
+            无
+        """
         physical, output_names = self._resolve_columns(columns)
         store = _get_store()
         ds = store._registry.get(self.dataset)
@@ -312,7 +461,14 @@ class DataAccessSource(DataSource):
         )
 
     def scan_index_long(self):
-        """仅 scan ``ts / inst`` 轴（universe 对齐，不读因子列）。"""
+        """仅 scan ``ts / inst`` 轴（universe 对齐，不读因子列）。
+        
+        参数:
+            无
+        
+        返回:
+            无
+        """
         store = _get_store()
         ds = store._registry.get(self.dataset)
         from backend.polars_lazy import build_scan_index_long

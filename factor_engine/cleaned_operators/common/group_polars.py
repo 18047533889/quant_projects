@@ -149,6 +149,7 @@ def _rank_row(row_x, row_g):
 
 @register_operator(name="group_mean", category="cross_sectional", business_category="group_neutralization", canonical="group_mean", source="factor_dsl_polars")
 class GroupMeanPolars(SeriesOperator):
+    """Polars 组内均值"""
     metadata = OperatorMetadata(
         name="group_mean", category="cross_sectional", description="组内均值",
         param_names=["x", "group"], return_type="series", tags=["cross_sectional", "polars"],
@@ -160,6 +161,7 @@ class GroupMeanPolars(SeriesOperator):
 
 @register_operator(name="group_std", category="cross_sectional", business_category="group_neutralization", canonical="group_std", source="factor_dsl_polars")
 class GroupStdPolars(SeriesOperator):
+    """Polars 组内标准差"""
     metadata = OperatorMetadata(
         name="group_std", category="cross_sectional", description="组内标准差",
         param_names=["x", "group"], return_type="series", tags=["cross_sectional", "polars"],
@@ -178,6 +180,7 @@ class GroupStdPolars(SeriesOperator):
     backend="polars",
 )
 class GroupZscorePolars(SeriesOperator):
+    """Polars 组内 zscore"""
     metadata = OperatorMetadata(
         name="group_zscore", category="cross_sectional", description="组内 zscore",
         param_names=["x", "group"], return_type="series", tags=["cross_sectional", "polars"],
@@ -189,6 +192,7 @@ class GroupZscorePolars(SeriesOperator):
 
 @register_operator(name="group_rank", category="cross_sectional", business_category="group_neutralization", canonical="group_rank", source="factor_dsl_polars")
 class GroupRankPolars(SeriesOperator):
+    """Polars 组内排名 pct"""
     metadata = OperatorMetadata(
         name="group_rank", category="cross_sectional", description="组内排名 pct",
         param_names=["x", "group"], return_type="series", tags=["cross_sectional", "polars"],
@@ -200,6 +204,7 @@ class GroupRankPolars(SeriesOperator):
 
 @register_operator(name="group_normalize", category="cross_sectional", business_category="group_neutralization", canonical="group_normalize", source="factor_dsl_polars")
 class GroupNormalizePolars(SeriesOperator):
+    """Polars 组内 [0,1] 归一化"""
     metadata = OperatorMetadata(
         name="group_normalize", category="cross_sectional", description="组内 [0,1] 归一化",
         param_names=["x", "group"], return_type="series", tags=["cross_sectional", "polars"],
@@ -233,6 +238,7 @@ class GroupNormalizePolars(SeriesOperator):
 
 @register_operator(name="group_winsorize", category="cross_sectional", business_category="group_neutralization", canonical="group_winsorize", source="factor_dsl_polars")
 class GroupWinsorizePolars(SeriesOperator):
+    """Polars 组内缩尾"""
     metadata = OperatorMetadata(
         name="group_winsorize", category="cross_sectional", description="组内缩尾",
         param_names=["x", "group", "a"], return_type="series", tags=["cross_sectional", "polars"],
@@ -266,6 +272,7 @@ class GroupWinsorizePolars(SeriesOperator):
 
 @register_operator(name="group_percentile", category="cross_sectional", business_category="group_neutralization", canonical="group_percentile", source="factor_dsl_polars")
 class GroupPercentilePolars(SeriesOperator):
+    """Polars 组内分位数"""
     metadata = OperatorMetadata(
         name="group_percentile", category="cross_sectional", description="组内分位数",
         param_names=["x", "group", "p"], return_type="series", tags=["cross_sectional", "polars"],
@@ -339,6 +346,7 @@ def _decay_linear_row(row_x: np.ndarray, row_g: np.ndarray | None) -> np.ndarray
     source="factor_dsl_polars",
 )
 class GroupDecayLinearPolars(SeriesOperator):
+    """Polars 组内线性衰减加权"""
     metadata = OperatorMetadata(
         name="group_decay_linear",
         category="cross_sectional",

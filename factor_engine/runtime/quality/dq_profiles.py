@@ -26,6 +26,7 @@ def _load_profiles_payload() -> dict[str, Any]:
 
 
 def list_dq_profiles() -> list[str]:
+    """列出 ``dq_profiles.yaml`` 中已定义的 profile 名称。"""
     profiles = _load_profiles_payload().get("profiles") or {}
     return sorted(profiles.keys())
 
@@ -50,6 +51,7 @@ def resolve_output_dq_thresholds(profile: str | None) -> DQThresholds | None:
 
 
 def resolve_input_dq_thresholds(profile: str | None) -> InputDQThresholds | None:
+    """按 profile 名返回输入 DQ 阈值；None 表示使用 ``InputDQThresholds`` 默认值。"""
     if not profile:
         return None
     profiles = _load_profiles_payload().get("profiles") or {}

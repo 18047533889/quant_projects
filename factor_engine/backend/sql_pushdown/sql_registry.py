@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
-"""SQL 下推能力与 OperatorRegistry 对齐。"""
+"""SQL 下推能力与 OperatorRegistry 对齐。
+
+维护 SQL 可编译 canonical 集合，并为每个算子登记 ``backend='sql'`` 占位元数据，
+供 planner / emitter 判断计划树是否可下推。
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -71,11 +75,12 @@ def register_sql_backends() -> None:
 
 
 def resolve_canonical(op: str) -> str:
+    """将算子别名解析为 canonical 名称。"""
     return OperatorRegistry._aliases.get(op, op)
 
 
 def is_sql_capable(plan: PlanNode) -> bool:
-    """计划树是否全部由 SQL backend 支持。"""
+    """递归判断计划树是否全部由 SQL backend 支持的算子构成。"""
     register_sql_backends()
     canon = resolve_canonical(plan.op)
     if canon not in SQL_CAPABLE_CANONICALS:
@@ -84,5 +89,6 @@ def is_sql_capable(plan: PlanNode) -> bool:
 
 
 def sql_backends_for(name: str) -> list[str]:
+    """返回算子名在 OperatorRegistry 中登记的后端列表（含 ``sql``）。"""
     register_sql_backends()
     return OperatorRegistry.backends_for(name)

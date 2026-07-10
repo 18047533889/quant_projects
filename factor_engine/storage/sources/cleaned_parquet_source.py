@@ -6,10 +6,24 @@ from .parquet_source import ParquetSource
 
 
 class CleanedParquetSource(ParquetSource):
-    """面向 cleaned parquet 的标准数据源。
-
+    """面向 cleaned parquet 的 ParquetSource 子类。
+    
+    参数:
+        root: 根目录路径
+        timestamp_column: 见函数签名（可选）
+        timestamp_col: 见函数签名（可选）
+        instrument_column: 见函数签名（可选）
+        instrument_col: 见函数签名（可选）
+        fields: 逻辑列到物理列映射（可选）
+        max_files: 见函数签名（可选）
+        timestamp_unit: 见函数签名（可选）
+        start_date: 起始日期（可选）
+        end_date: 结束日期（可选）
+        recursive: 见函数签名（可选）
+    
+    
     默认读取 raw_data_cleaning 清洗层统一输出的 `align_time` 和 `ticker`，
-    因此接 cleaned 数据时不需要每次重复写 timestamp/instrument 配置。
+        因此接 cleaned 数据时不需要每次重复写 timestamp/instrument 配置。
     """
 
     def __init__(
@@ -27,6 +41,24 @@ class CleanedParquetSource(ParquetSource):
         end_date: str | None = None,
         recursive: bool = True,
     ) -> None:
+        """初始化实例。
+        
+        参数:
+            root: 根目录路径
+            timestamp_column: 见函数签名（可选）
+            timestamp_col: 见函数签名（可选）
+            instrument_column: 见函数签名（可选）
+            instrument_col: 见函数签名（可选）
+            fields: 逻辑列到物理列映射（可选）
+            max_files: 见函数签名（可选）
+            timestamp_unit: 见函数签名（可选）
+            start_date: 起始日期（可选）
+            end_date: 结束日期（可选）
+            recursive: 见函数签名（可选）
+        
+        返回:
+            无
+        """
         super().__init__(
             root=root,
             timestamp_column=timestamp_col or timestamp_column or "align_time",

@@ -51,6 +51,7 @@ class Lead(SeriesOperator):
 # canonical=cum_avg backend=pandas_numpy selected=cum_avg source=time_series/cum_ops.py
 @register_operator(name="cum_avg", category="time_series", business_category="shift_diff_cum", canonical="cum_avg", source="factor_dsl_np")
 class CumAvg(SeriesOperator):
+    """累积均值 (扩展平均)"""
     metadata = OperatorMetadata(
         name="cum_avg", category="time_series",
         description="累积均值 (扩展平均)",
@@ -66,6 +67,7 @@ class CumAvg(SeriesOperator):
 # canonical=cum_count backend=pandas_numpy selected=cum_count source=time_series/cum_ops.py
 @register_operator(name="cum_count", category="time_series", business_category="shift_diff_cum", canonical="cum_count", source="factor_dsl_np")
 class CumCount(SeriesOperator):
+    """累积非空值计数"""
     metadata = OperatorMetadata(
         name="cum_count", category="time_series",
         description="累积非空值计数",
@@ -81,6 +83,7 @@ class CumCount(SeriesOperator):
 # canonical=cum_delta backend=pandas_numpy selected=cum_delta source=time_series/cum_ops.py
 @register_operator(name="cum_delta", category="time_series", business_category="shift_diff_cum", canonical="cum_delta", source="factor_dsl_np")
 class CumDelta(SeriesOperator):
+    """累积变化量 x - first(x)"""
     metadata = OperatorMetadata(
         name="cum_delta", category="time_series",
         description="累积变化量 x - first(x)",
@@ -106,6 +109,7 @@ class CumDelta(SeriesOperator):
 # canonical=cum_first backend=pandas_numpy selected=cum_first source=time_series/cum_ops.py
 @register_operator(name="cum_first", category="time_series", business_category="shift_diff_cum", canonical="cum_first", source="factor_dsl_np")
 class CumFirst(SeriesOperator):
+    """截至目前的首个有效值"""
     metadata = OperatorMetadata(
         name="cum_first", category="time_series",
         description="截至目前的首个有效值",
@@ -126,6 +130,7 @@ class CumFirst(SeriesOperator):
 # canonical=cum_last backend=pandas_numpy selected=cum_last source=time_series/cum_ops.py
 @register_operator(name="cum_last", category="time_series", business_category="shift_diff_cum", canonical="cum_last", source="factor_dsl_np")
 class CumLast(SeriesOperator):
+    """截至目前的最末有效值"""
     metadata = OperatorMetadata(
         name="cum_last", category="time_series",
         description="截至目前的最末有效值",
@@ -141,6 +146,7 @@ class CumLast(SeriesOperator):
 # canonical=cum_max backend=pandas_numpy selected=cum_max source=time_series/cum_ops.py
 @register_operator(name="cum_max", category="time_series", business_category="shift_diff_cum", canonical="cum_max", source="factor_dsl_np")
 class CumMax(SeriesOperator):
+    """累积最大值"""
     metadata = OperatorMetadata(
         name="cum_max", category="time_series",
         description="累积最大值",
@@ -156,6 +162,7 @@ class CumMax(SeriesOperator):
 # canonical=cum_min backend=pandas_numpy selected=cum_min source=time_series/cum_ops.py
 @register_operator(name="cum_min", category="time_series", business_category="shift_diff_cum", canonical="cum_min", source="factor_dsl_np")
 class CumMin(SeriesOperator):
+    """累积最小值"""
     metadata = OperatorMetadata(
         name="cum_min", category="time_series",
         description="累积最小值",
@@ -171,6 +178,7 @@ class CumMin(SeriesOperator):
 # canonical=cum_positive_streak backend=pandas_numpy selected=cum_positive_streak source=time_series/cum_ops.py
 @register_operator(name="cum_positive_streak", category="time_series", business_category="shift_diff_cum", canonical="cum_positive_streak", source="factor_dsl_np")
 class CumPositiveStreak(SeriesOperator):
+    """连续正值计数"""
     metadata = OperatorMetadata(
         name="cum_positive_streak", category="time_series",
         description="连续正值计数",
@@ -193,6 +201,7 @@ class CumPositiveStreak(SeriesOperator):
 # canonical=cum_prod backend=pandas_numpy selected=cum_prod source=time_series/cum_ops.py
 @register_operator(name="cum_prod", category="time_series", business_category="shift_diff_cum", canonical="cum_prod", source="factor_dsl_np")
 class CumProd(SeriesOperator):
+    """累积乘积"""
     metadata = OperatorMetadata(
         name="cum_prod", category="time_series",
         description="累积乘积",
@@ -208,6 +217,7 @@ class CumProd(SeriesOperator):
 # canonical=cum_rank backend=pandas_numpy selected=cum_rank source=time_series/cum_ops.py
 @register_operator(name="cum_rank", category="time_series", business_category="shift_diff_cum", canonical="cum_rank", source="factor_dsl_np")
 class CumRank(SeriesOperator):
+    """累积排名 (当前值在历史中的百分位排名)"""
     metadata = OperatorMetadata(
         name="cum_rank", category="time_series",
         description="累积排名 (当前值在历史中的百分位排名)",
@@ -223,6 +233,7 @@ class CumRank(SeriesOperator):
 # canonical=cum_standardize backend=pandas_numpy selected=cum_standardize source=time_series/cum_ops.py
 @register_operator(name="cum_standardize", category="time_series", business_category="shift_diff_cum", canonical="expanding_zscore", source="factor_dsl_np")
 class CumStandardize(SeriesOperator):
+    """累积Z-Score标准化"""
     metadata = OperatorMetadata(
         name="cum_standardize", category="time_series",
         description="累积Z-Score标准化",
@@ -240,6 +251,7 @@ class CumStandardize(SeriesOperator):
 # canonical=cum_std backend=pandas_numpy selected=cum_std source=time_series/cum_ops.py
 @register_operator(name="cum_std", category="time_series", business_category="shift_diff_cum", canonical="cum_std", source="factor_dsl_np")
 class CumStd(SeriesOperator):
+    """累积标准差 (扩展标准差)"""
     metadata = OperatorMetadata(
         name="cum_std", category="time_series",
         description="累积标准差 (扩展标准差)",
@@ -255,6 +267,7 @@ class CumStd(SeriesOperator):
 # canonical=cum_sum backend=pandas_numpy selected=cum_sum source=time_series/cum_ops.py
 @register_operator(name="cum_sum", category="time_series", business_category="shift_diff_cum", canonical="cum_sum", source="factor_dsl_np")
 class CumSum(SeriesOperator):
+    """累积求和"""
     metadata = OperatorMetadata(
         name="cum_sum", category="time_series",
         description="累积求和",

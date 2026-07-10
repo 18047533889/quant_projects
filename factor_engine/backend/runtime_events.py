@@ -103,7 +103,15 @@ def rebuild_runtime_from_events(runtime: dict[str, Any] | None) -> dict[str, Any
             out["fully_sql"] = True
         elif et == "sql_partial_pushed":
             out["sql_partial_pushed"] = True
-            out["used_sql_pushdown"] = True
+            if int(event.get("query_count") or out.get("sql_query_count") or 0) > 0:
+                out["used_sql_pushdown"] = True
+        elif et == "sql_python_fallback":
+            out["sql_fallback_subtree_count"] = int(
+                event.get("fallback_count") or out.get("sql_fallback_subtree_count") or 0
+            )
+            sids = list(event.get("fallback_sids") or [])
+            if sids:
+                out["python_fallback_subtree_sids"] = sids
         elif et == "polars_long_native":
             out["used_polars_long_path"] = True
             out["used_polars_long_native"] = True

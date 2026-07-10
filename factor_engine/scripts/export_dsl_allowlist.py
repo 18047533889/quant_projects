@@ -14,6 +14,7 @@ from api.mining_integration import write_dsl_allowlist  # noqa: E402
 
 
 def main() -> int:
+    """导出 factor_engine DSL 算子白名单 JSON。"""
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "-o",

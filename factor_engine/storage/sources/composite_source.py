@@ -17,12 +17,22 @@ _ALLOWED_JOIN_METHODS = frozenset({"exact", "asof_backward", "forward_fill"})
 
 @dataclass(frozen=True)
 class CompositeJoinSpec:
+    """组合数据源单源 join 对齐规格。
+    
+    参数:
+        无
+    """
     method: str = "asof_backward"
     tolerance: str | None = None
 
 
 @dataclass
 class CompositeJoinReport:
+    """组合 join 对齐统计报告。
+    
+    参数:
+        无
+    """
     source: str
     column: str
     canonical_name: str
@@ -32,6 +42,14 @@ class CompositeJoinReport:
     unmatched_rows: int
 
     def to_dict(self) -> dict[str, Any]:
+        """to_dict。
+        
+        参数:
+            无
+        
+        返回:
+            dict[str, Any]
+        """
         return {
             "source": self.source,
             "column": self.column,
@@ -44,7 +62,16 @@ class CompositeJoinReport:
 
 
 class CompositeDataSource(DataSource):
-    """将多个数据源对外暴露为统一列空间，并按锚点源索引对齐。"""
+    """多数据源按锚点对齐的统一列空间。
+    
+    参数:
+        anchor_source: 锚点数据源名称（可选）
+        anchor_column: 锚点列引用（可选）
+        sources: 子数据源映射（可选）
+        joins: 非锚点源的 join 配置（可选）
+        aliases: 列名别名映射（可选）
+        allow_unqualified_anchor_columns: 见函数签名（可选）
+    """
 
     def __init__(
         self,
@@ -56,6 +83,19 @@ class CompositeDataSource(DataSource):
         aliases: Mapping[str, str] | None = None,
         allow_unqualified_anchor_columns: bool = True,
     ) -> None:
+        """初始化实例。
+        
+        参数:
+            anchor_source: 锚点数据源名称（可选）
+            anchor_column: 锚点列引用（可选）
+            sources: 子数据源映射（可选）
+            joins: 非锚点源的 join 配置（可选）
+            aliases: 列名别名映射（可选）
+            allow_unqualified_anchor_columns: 见函数签名（可选）
+        
+        返回:
+            无
+        """
         if not isinstance(anchor_source, str) or not anchor_source.strip():
             raise ValueError("Composite data source requires a non-empty anchor_source")
         if not isinstance(anchor_column, str) or not anchor_column.strip():
@@ -80,6 +120,14 @@ class CompositeDataSource(DataSource):
 
     @staticmethod
     def _normalize_aliases(aliases: Mapping[str, str]) -> dict[str, str]:
+        """_normalize_aliases。
+        
+        参数:
+            aliases: 列名别名映射
+        
+        返回:
+            dict[str, str]
+        """
         normalized: dict[str, str] = {}
         for alias, target in aliases.items():
             if not isinstance(alias, str) or not alias.strip():
@@ -93,6 +141,14 @@ class CompositeDataSource(DataSource):
         self,
         joins: Mapping[str, Any],
     ) -> dict[str, CompositeJoinSpec]:
+        """_normalize_joins。
+        
+        参数:
+            joins: 非锚点源的 join 配置
+        
+        返回:
+            dict[str, CompositeJoinSpec]
+        """
         unexpected = sorted(set(joins) - set(self.sources))
         if unexpected:
             joined = ", ".join(unexpected)
@@ -112,6 +168,15 @@ class CompositeDataSource(DataSource):
         source_name: str,
         raw: Any,
     ) -> CompositeJoinSpec:
+        """_parse_join_spec。
+        
+        参数:
+            source_name: 见函数签名
+            raw: 见函数签名
+        
+        返回:
+            CompositeJoinSpec
+        """
         if raw is None:
             return CompositeJoinSpec()
         if isinstance(raw, str):
@@ -134,6 +199,14 @@ class CompositeDataSource(DataSource):
 
     @staticmethod
     def _normalize_join_method(method: Any) -> str:
+        """_normalize_join_method。
+        
+        参数:
+            method: 见函数签名
+        
+        返回:
+            str
+        """
         if not isinstance(method, str) or not method.strip():
             raise ValueError("Composite join method must be a non-empty string")
         lowered = method.strip().lower()
@@ -159,13 +232,28 @@ class CompositeDataSource(DataSource):
         return normalized
 
     def collect_join_reports(self, *, clear: bool = True) -> list[dict[str, Any]]:
-        """返回组合 join 统计（可选写入 lineage.extra）。"""
+        """返回组合 join 统计（可选写入 lineage.extra）。
+        
+        参数:
+            clear: 见函数签名（可选）
+        
+        返回:
+            list[dict[str, Any]]
+        """
         reports = [r.to_dict() for r in self._join_reports]
         if clear:
             self._join_reports.clear()
         return reports
 
     def _expand_alias(self, name: str) -> str:
+        """_expand_alias。
+        
+        参数:
+            name: 逻辑列名
+        
+        返回:
+            str
+        """
         current = name
         visited: set[str] = set()
         while current in self.aliases:
@@ -177,9 +265,26 @@ class CompositeDataSource(DataSource):
 
     @staticmethod
     def _canonical_name(source_name: str, column_name: str) -> str:
+        """_canonical_name。
+        
+        参数:
+            source_name: 见函数签名
+            column_name: 数据列名
+        
+        返回:
+            str
+        """
         return f"{source_name}.{column_name}"
 
     def _resolve_reference(self, name: str) -> tuple[str, str, str]:
+        """_resolve_reference。
+        
+        参数:
+            name: 逻辑列名
+        
+        返回:
+            tuple[str, str, str]
+        """
         if not isinstance(name, str) or not name.strip():
             raise KeyError("Composite column name must be a non-empty string")
 
@@ -210,6 +315,14 @@ class CompositeDataSource(DataSource):
         )
 
     def _get_anchor_index(self):
+        """_get_anchor_index。
+        
+        参数:
+            无
+        
+        返回:
+            无
+        """
         import pandas as pd
 
         if self._anchor_index_cache is not None:
@@ -230,6 +343,14 @@ class CompositeDataSource(DataSource):
 
     @staticmethod
     def _parse_tolerance(value: str | None):
+        """_parse_tolerance。
+        
+        参数:
+            value: 缓存值
+        
+        返回:
+            无
+        """
         if value is None:
             return None
 
@@ -242,9 +363,28 @@ class CompositeDataSource(DataSource):
 
     @staticmethod
     def _align_exact(anchor_index, series):
+        """_align_exact。
+        
+        参数:
+            anchor_index: 见函数签名
+            series: MultiIndex Series
+        
+        返回:
+            无
+        """
         return series.reindex(anchor_index)
 
     def _align_asof_backward(self, anchor_index, series, *, tolerance: str | None = None):
+        """_align_asof_backward。
+        
+        参数:
+            anchor_index: 见函数签名
+            series: MultiIndex Series
+            tolerance: 见函数签名（可选）
+        
+        返回:
+            无
+        """
         import pandas as pd
 
         if len(anchor_index) == 0:
@@ -282,6 +422,18 @@ class CompositeDataSource(DataSource):
         join_spec: CompositeJoinSpec,
         aligned,
     ) -> None:
+        """_record_join_report。
+        
+        参数:
+            source_name: 见函数签名（可选）
+            column_name: 数据列名（可选）
+            canonical_name: 见函数签名（可选）
+            join_spec: 见函数签名（可选）
+            aligned: 见函数签名（可选）
+        
+        返回:
+            无
+        """
         import pandas as pd
 
         anchor_rows = len(aligned)
@@ -307,6 +459,18 @@ class CompositeDataSource(DataSource):
         column_name: str,
         canonical_name: str,
     ):
+        """_align_to_anchor。
+        
+        参数:
+            series: MultiIndex Series
+            join_spec: 见函数签名
+            source_name: 见函数签名（可选）
+            column_name: 数据列名（可选）
+            canonical_name: 见函数签名（可选）
+        
+        返回:
+            无
+        """
         anchor_index = self._get_anchor_index()
         if join_spec.method == "exact":
             aligned = self._align_exact(anchor_index, series)
@@ -326,6 +490,14 @@ class CompositeDataSource(DataSource):
         return aligned
 
     def load_column(self, name: str):
+        """load_column。
+        
+        参数:
+            name: 逻辑列名
+        
+        返回:
+            无
+        """
         if name in self._column_cache:
             logger.debug("命中组合列缓存: %s", name)
             return self._column_cache[name]
@@ -361,10 +533,34 @@ class CompositeDataSource(DataSource):
         return series
 
     def load_columns(self, names: list[str]) -> dict[str, Any]:
+        """load_columns。
+        
+        参数:
+            names: 逻辑列名列表
+        
+        返回:
+            dict[str, Any]
+        """
         return {n: self.load_column(n) for n in names}
 
     def prefetch_columns(self, names: list[str]) -> None:
+        """prefetch_columns。
+        
+        参数:
+            names: 逻辑列名列表
+        
+        返回:
+            无
+        """
         self.load_columns(names)
 
     def prefetch_panels(self, names: list[str]) -> None:
+        """prefetch_panels。
+        
+        参数:
+            names: 逻辑列名列表
+        
+        返回:
+            无
+        """
         self.prefetch_columns(names)

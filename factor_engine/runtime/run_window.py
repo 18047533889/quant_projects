@@ -28,6 +28,7 @@ class RunWindow:
     trim_output: bool
 
     def to_dict(self) -> dict[str, Any]:
+        """序列化为可 JSON 化的字典。"""
         return {
             "requested_start": self.requested_start,
             "requested_end": self.requested_end,

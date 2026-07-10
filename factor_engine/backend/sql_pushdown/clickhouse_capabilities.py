@@ -1,5 +1,9 @@
 # -*- coding: utf-8
-"""ClickHouse 窗口函数能力探测（部署前降级 SQL tier）。"""
+"""ClickHouse 窗口函数能力探测（部署前降级 SQL tier）。
+
+运行时探测 ClickHouse 客户端是否支持关键窗口函数，据此从
+``CLICKHOUSE_SQL_PRODUCTION_SAFE`` 临时降级不兼容的 canonical。
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -10,14 +14,17 @@ from backend.sql_pushdown.duckdb_capabilities import CapabilityLevel
 
 @dataclass
 class ClickhouseCapabilityReport:
+    """ClickHouse 能力探测报告：版本号、各特性支持级别与错误列表。"""
     version: str = ""
     features: dict[str, CapabilityLevel] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
 
     def is_supported(self, feature: str) -> bool:
+        """判断指定特性是否探测为 ``supported``。"""
         return self.features.get(feature) == "supported"
 
     def to_dict(self) -> dict[str, Any]:
+        """序列化为可 JSON 化的字典。"""
         return {
             "version": self.version,
             "features": dict(self.features),
@@ -45,7 +52,7 @@ _FEATURE_PROBES: tuple[tuple[str, str], ...] = (
 
 
 def probe_clickhouse_capabilities(client=None) -> ClickhouseCapabilityReport:
-    """探测 ClickHouse；无 client 时标记为 unknown（不阻断静态 tier）。"""
+    """探测 ClickHouse 窗口函数能力；无 client 时标记为 unknown（不阻断静态 tier）。"""
     report = ClickhouseCapabilityReport()
     if client is None:
         for name, _ in _FEATURE_PROBES:
@@ -95,6 +102,7 @@ _CACHED_REPORT: ClickhouseCapabilityReport | None = None
 
 
 def get_clickhouse_capability_report(*, refresh: bool = False) -> ClickhouseCapabilityReport:
+    """获取缓存的 ClickHouse 能力报告；``refresh=True`` 时重新探测。"""
     global _CACHED_REPORT
     if _CACHED_REPORT is None or refresh:
         _CACHED_REPORT = probe_clickhouse_capabilities()
@@ -102,6 +110,7 @@ def get_clickhouse_capability_report(*, refresh: bool = False) -> ClickhouseCapa
 
 
 def effective_clickhouse_production_safe(canon: str, *, refresh: bool = False) -> bool:
+    """判断 canonical 在 ClickHouse 上是否仍为 production-safe（含运行时降级）。"""
     from backend.sql_tiers import CLICKHOUSE_SQL_PRODUCTION_SAFE
     from cleaned_operators.registry import OperatorRegistry
 

@@ -35,6 +35,7 @@ class IntradayAggregator:
 
     @classmethod
     def from_panel(cls, panels: dict[str, pd.Series]) -> IntradayAggregator:
+        """由列名 → MultiIndex Series 字典构造聚合器。"""
         normalized: dict[str, pd.Series] = {}
         for name, series in panels.items():
             normalized[name] = _require_multiindex(series, name)
@@ -73,6 +74,7 @@ class IntradayAggregator:
         return pd.Series(daily[column].values, index=idx, name=column)
 
     def first(self, column: str) -> pd.Series:
+        """日初值（first bar of day）。"""
         if column not in self.panels:
             raise KeyError(f"列 {column!r} 不在面板中")
         df = self._stack_frame()
@@ -88,6 +90,7 @@ class IntradayAggregator:
         return pd.Series(daily[column].values, index=idx, name=column)
 
     def sum(self, column: str) -> pd.Series:
+        """按 (trade_date, asset) 对列求和。"""
         if column not in self.panels:
             raise KeyError(f"列 {column!r} 不在面板中")
         df = self._stack_frame()
@@ -96,6 +99,7 @@ class IntradayAggregator:
         return grouped.rename(column)
 
     def mean(self, column: str) -> pd.Series:
+        """按 (trade_date, asset) 对列求均值。"""
         if column not in self.panels:
             raise KeyError(f"列 {column!r} 不在面板中")
         df = self._stack_frame()
@@ -172,6 +176,7 @@ class IntradayAggregatedDataSource(DataSource):
         return IntradayAggregator.from_panel(panels)
 
     def load_column(self, name: str) -> Any:
+        """加载日频聚合列（首次访问时批量计算并缓存）。"""
         if name in self._cache:
             return self._cache[name]
         agg = self._build_aggregator()
@@ -185,4 +190,5 @@ class IntradayAggregatedDataSource(DataSource):
         return self._cache[name]
 
     def load_columns(self, names: list[str]) -> dict[str, Any]:
+        """批量加载多个日频聚合列。"""
         return {n: self.load_column(n) for n in names}

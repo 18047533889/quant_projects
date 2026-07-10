@@ -1,8 +1,24 @@
 # -*- coding: utf-8
 """PlanNode → Polars Expr 编译器（long-table native，对齐 SQL emitter 的 ts/inst/value 语义）。
 
-``compile_plan_to_polars`` 不经过 ``cleaned_bridge`` / panel 往返；
-由 ``PolarsLongBackend`` 或（兼容）``FACTOR_ENGINE_POLARS_EXPR=1`` 调用。
+本模块是 factor engine **Polars long-table 路径**的核心编译层：将逻辑计划 ``PlanNode`` 递归
+lowering 为 ``(ts, inst, _v)`` 形态的 ``pl.LazyFrame`` / ``pl.Expr``，避免经 ``cleaned_bridge``
+或 panel 宽表往返，从而与 ``sql_pushdown/emitter`` 保持时序/截面/数值语义一致。
+
+主要职责
+--------
+* **编译**：``compile_plan_to_polars`` / ``compile_polars_long_lazy`` 在宽表 base LazyFrame 上
+  生成 long-table 结果列。
+* **执行**：``execute_polars_long_plan`` 一次 collect 并还原为 MultiIndex ``pd.Series``。
+* **能力探测**：``plan_is_polars_long_capable`` / ``plan_is_polars_expr_capable`` 判断计划
+  是否可走 native / map_groups / registry bridge 路径。
+* **DAG 融合**：同列 ``ts_*`` 子树、二元 base 列引用等优化，减少中间 join。
+* **桥接**：未手写 native 的算子 fallback 至 ``polars_registry_bridge``。
+
+调用入口
+--------
+由 ``PolarsLongBackend`` 直接调用；兼容 ``FACTOR_ENGINE_POLARS_EXPR=1`` 时经
+``execute_polars_expr_plan`` 走同一执行链。
 """
 from __future__ import annotations
 
@@ -46,7 +62,13 @@ _GRP = "_grp"
 
 @dataclass(frozen=True)
 class CompiledLongExpr:
-    """Expr DAG 节点：单条 ``pl.Expr`` + 依赖列（避免中间 LazyFrame join）。"""
+    """Expr DAG 节点：单条 ``pl.Expr`` + 依赖列（避免中间 LazyFrame join）。
+
+    属性:
+        expr: 最终值列表达式。
+        required_cols: 编译所需 base 列名集合。
+        tmp_exprs: 可选中间 with_columns 表达式元组。
+    """
 
     expr: Any
     required_cols: frozenset[str]
@@ -59,12 +81,14 @@ _EXPANDING_WINDOW = 100_000
 
 
 def _resolve(op: str) -> str:
+    """解析算子别名至 canonical 名称。"""
     from cleaned_operators.registry import OperatorRegistry
 
     return OperatorRegistry._aliases.get(op, op)
 
 
 def _window_int(node: PlanNode, default: int = 3) -> int:
+    """从 PlanNode attrs 或 literal 子节点解析滚动窗口整数（至少为 1）。"""
     for key in ("d", "window", "span"):
         if key in node.attrs and node.attrs[key] is not None:
             try:
@@ -89,6 +113,7 @@ def _window_int(node: PlanNode, default: int = 3) -> int:
 
 
 def _ewm_alpha(node: PlanNode, default_span: int = 20) -> float:
+    """从 PlanNode 解析 EWM span 并换算为 alpha = 2/(span+1)。"""
     for key in ("span", "d", "window"):
         if key in node.attrs and node.attrs[key] is not None:
             try:
@@ -101,11 +126,13 @@ def _ewm_alpha(node: PlanNode, default_span: int = 20) -> float:
 
 
 def _wilder_alpha(node: PlanNode, default: int = 14) -> tuple[float, int]:
+    """解析 Wilder 平滑参数，返回 (alpha=1/w, window)。"""
     w = max(_window_int(node, default=default), 2)
     return 1.0 / float(w), w
 
 
 def _rsi_wilder_expr(value_col: str, *, window: int, alpha: float) -> pl.Expr:
+    """构造 Wilder RSI 的 Polars 表达式（按 inst 时序）。"""
     delta = pl.col(value_col).diff()
     gain = pl.when(delta.is_null()).then(None).when(delta > 0).then(delta).otherwise(0.0)
     loss = pl.when(delta.is_null()).then(None).when(delta < 0).then(-delta).otherwise(0.0)
@@ -131,6 +158,7 @@ def _atr_wilder_expr(
     window: int,
     alpha: float,
 ) -> pl.Expr:
+    """构造 Wilder ATR 的 Polars 表达式（TR 的 EWM 均值）。"""
     prev_close = pl.col(close_col).shift(1)
     tr = (
         pl.when(prev_close.is_null())
@@ -147,6 +175,7 @@ def _atr_wilder_expr(
 
 
 def _float_attr(node: PlanNode, *keys: str, default: float) -> float:
+    """按 keys 顺序从 node.attrs 读取首个 float 属性，否则返回 default。"""
     for key in keys:
         if key in node.attrs and node.attrs[key] is not None:
             return float(node.attrs[key])
@@ -171,6 +200,7 @@ def _const_fill_value(node: PlanNode, *, default: float | None = None) -> float 
 
 
 def _literal_value(node: PlanNode, index: int = 0, *, default: float | None = None) -> float | None:
+    """读取 node.inputs[index+1] 处 literal 子节点的数值，无法解析则返回 default。"""
     pos = index + 1
     if pos >= len(node.inputs):
         return default
@@ -186,6 +216,7 @@ def _literal_value(node: PlanNode, index: int = 0, *, default: float | None = No
 
 
 def _int_attr(node: PlanNode, *keys: str, input_index: int | None = None, default: int = 0) -> int:
+    """从 attrs 或指定 literal 输入解析 int 属性。"""
     for key in keys:
         if key in node.attrs and node.attrs[key] is not None:
             return int(node.attrs[key])
@@ -243,6 +274,7 @@ def _rolling_ols_parts(
 
 
 def _ts_regression_retval(node: PlanNode) -> str:
+    """解析 ts_regression 返回值模式：slope / intercept / fit / resid。"""
     raw = node.attrs.get("retval", node.attrs.get("mode", "slope"))
     if raw is None:
         return "slope"
@@ -257,6 +289,7 @@ def _ts_regression_retval(node: PlanNode) -> str:
 
 
 def _rolling_linear_decay_expr(w: int) -> pl.Expr:
+    """构造线性衰减加权滚动均值 expr（权重 1..w，对齐 ts_decay_linear）。"""
     weights = np.arange(1, w + 1, dtype=np.float64)
 
     def _fn(arr: np.ndarray) -> float:
@@ -272,6 +305,7 @@ def _rolling_linear_decay_expr(w: int) -> pl.Expr:
 
 
 def _rolling_time_slope_expr(w: int) -> pl.Expr:
+    """构造窗口内时间序列线性回归斜率 expr（x 为等距时间索引）。"""
     t = np.arange(w, dtype=np.float64)
     t = t - t.mean()
     denom = float(np.dot(t, t))
@@ -293,6 +327,7 @@ def _rolling_time_slope_expr(w: int) -> pl.Expr:
 
 
 def _rolling_argext_expr(w: int, *, pick: str) -> pl.Expr:
+    """构造滚动 argmax/argmin expr（pick 为 ``max`` 或 ``min``）。"""
     def _fn(arr: np.ndarray) -> float:
         arr = np.asarray(arr, dtype=np.float64)
         if arr.size == 0 or not np.isfinite(arr).any():
@@ -305,6 +340,7 @@ def _rolling_argext_expr(w: int, *, pick: str) -> pl.Expr:
 
 
 def _rolling_skew_expr(w: int) -> pl.Expr:
+    """构造滚动偏度 expr（pandas skew，至少 3 个有效样本）。"""
     def _fn(arr: np.ndarray) -> float:
         s = pd.Series(np.asarray(arr, dtype=np.float64))
         if s.count() < 3:
@@ -316,6 +352,7 @@ def _rolling_skew_expr(w: int) -> pl.Expr:
 
 
 def _rolling_quantile_expr(w: int, p: float) -> pl.Expr:
+    """构造滚动分位数 expr（pandas quantile，分位 p）。"""
     def _fn(arr: np.ndarray) -> float:
         s = pd.Series(np.asarray(arr, dtype=np.float64))
         if s.count() == 0:
@@ -326,10 +363,12 @@ def _rolling_quantile_expr(w: int, p: float) -> pl.Expr:
 
 
 def _ts_sharpe_min_periods(w: int) -> int:
+    """ts_sharpe 最小有效样本数：max(2, w//3)。"""
     return max(2, w // 3)
 
 
 def _ts_autocorr_window_lag(node: PlanNode) -> tuple[int, int, int]:
+    """解析 ts_autocorr 的 (window, lag, min_periods) 三元组。"""
     lag_lit = _literal_value(node, 1)
     if lag_lit is not None:
         lag = max(int(lag_lit), 1)
@@ -346,25 +385,30 @@ def _ts_autocorr_window_lag(node: PlanNode) -> tuple[int, int, int]:
 
 
 def _expanding_over() -> tuple[str, str]:
+    """expanding/cum 算子的 over 分区键：(inst, ts)。"""
     return _INST, _TS
 
 
 def _expanding_non_null_count() -> pl.Expr:
+    """expanding 非空计数 expr（cum_sum of is_not_null）。"""
     inst, ts = _expanding_over()
     return pl.col(_VAL).is_not_null().cast(pl.Float64).cum_sum().over(inst, order_by=ts)
 
 
 def _expanding_sum_expr() -> pl.Expr:
+    """expanding 累加和 expr（按 inst 时序 cum_sum）。"""
     inst, ts = _expanding_over()
     return pl.col(_VAL).cum_sum().over(inst, order_by=ts)
 
 
 def _expanding_mean_expr() -> pl.Expr:
+    """expanding 均值 expr（sum / 非空计数）。"""
     cnt = _expanding_non_null_count()
     return pl.when(cnt <= 0).then(None).otherwise(_expanding_sum_expr() / cnt)
 
 
 def _expanding_std_expr() -> pl.Expr:
+    """expanding 样本标准差 expr（Welford 等价 cum 公式）。"""
     inst, ts = _expanding_over()
     cnt = _expanding_non_null_count()
     mean = _expanding_mean_expr()
@@ -438,6 +482,15 @@ def _ewm_binary_map_groups(joined: pl.LazyFrame, span: int, *, corr: bool) -> pl
 
 
 def collect_columns(node: PlanNode, out: set[str] | None = None) -> set[str]:
+    """递归收集 Plan 子树引用的原始列名。
+
+    参数:
+        node: 逻辑计划根或子节点。
+        out: 可选累加器；为 None 时新建 set。
+
+    返回:
+        所有 ``column`` 节点 ``name`` 属性的集合。
+    """
     acc = out if out is not None else set()
     if node.op == "column":
         name = node.attrs.get("name")
@@ -449,6 +502,14 @@ def collect_columns(node: PlanNode, out: set[str] | None = None) -> set[str]:
 
 
 def plan_is_polars_long_capable(plan: PlanNode) -> bool:
+    """判断计划是否可由 Polars long-table 后端完整执行。
+
+    参数:
+        plan: 待检测的逻辑计划根节点。
+
+    返回:
+        若 plan 及所有子节点算子均在 ``polars_long_policy`` 能力集内则为 True。
+    """
     capable = get_polars_long_capable()
     op = _resolve(plan.op)
     if op in {"column", "literal", "materialized_series", "plan_ref"}:
@@ -459,7 +520,14 @@ def plan_is_polars_long_capable(plan: PlanNode) -> bool:
 
 
 def plan_is_polars_expr_capable(plan: PlanNode) -> bool:
-    """手写 native + map_groups 路径（不含 registry bridge）。"""
+    """判断计划是否可走手写 native + map_groups 路径（不含 registry bridge）。
+
+    参数:
+        plan: 待检测的逻辑计划根节点。
+
+    返回:
+        若 plan 及子节点算子均在 ``POLARS_LONG_COMPATIBLE`` 内则为 True。
+    """
     op = _resolve(plan.op)
     if op in {"column", "literal", "materialized_series", "plan_ref"}:
         return all(plan_is_polars_expr_capable(c) for c in plan.inputs)
@@ -469,6 +537,7 @@ def plan_is_polars_expr_capable(plan: PlanNode) -> bool:
 
 
 def _join_binary(left: pl.LazyFrame, right: pl.LazyFrame) -> pl.LazyFrame:
+    """按 (ts, inst) inner join 两个 long LazyFrame，右值列重命名为 ``_y``。"""
     return left.join(
         right.rename({_VAL: "_y"}),
         on=[_TS, _INST],
@@ -481,6 +550,7 @@ def _join_triple(
     mid: pl.LazyFrame,
     right: pl.LazyFrame,
 ) -> pl.LazyFrame:
+    """按 (ts, inst) 串联 join 三个 long LazyFrame（mid→``_ym``，right→``_y``）。"""
     return left.join(
         mid.rename({_VAL: "_ym"}),
         on=[_TS, _INST],
@@ -493,6 +563,7 @@ def _join_triple(
 
 
 def _column_ref_name(node: PlanNode) -> str | None:
+    """若 node 为 ``column`` 算子则返回列名字符串，否则 None。"""
     if node.op != "column":
         return None
     name = node.attrs.get("name")
@@ -524,10 +595,12 @@ def _protected_log_expr(val: pl.Expr, node: PlanNode) -> pl.Expr:
 
 
 def _truthy_expr(expr: pl.Expr) -> pl.Expr:
+    """将 expr 转为布尔：非 null 且非零。"""
     return expr.is_not_null() & (expr != 0)
 
 
 def _bump_shared_long_lazy_hit(ctx: Any | None) -> None:
+    """递增 ctx.runtime_stats 中 shared_long_lazy 缓存命中计数。"""
     if ctx is None:
         return
     runtime = dict(getattr(ctx, "runtime_stats", None) or {})
@@ -595,6 +668,7 @@ def _ts_rolling_expr_on_column(op: str, col_name: str, window: int) -> pl.Expr:
 
 
 def _binary_fused_expr(op: str, left: pl.Expr, right: pl.Expr, node: PlanNode) -> pl.Expr:
+    """将二元算子 op 应用于已融合的 left/right Expr（含 protected_div 等）。"""
     if op == "add":
         return left + right
     if op == "subtract":
@@ -610,7 +684,7 @@ def _binary_fused_expr(op: str, left: pl.Expr, right: pl.Expr, node: PlanNode) -
     if op == "divide":
         return left / right
     if op == "power":
-        return left.pow(right)
+        return _safe_pow_expr(left, right)
     if op == "gt":
         return pl.when(left > right).then(1.0).otherwise(0.0)
     if op == "lt":
@@ -765,6 +839,7 @@ def _try_binary_from_base_columns(
 
 
 def _try_coalesce_from_base_columns(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
+    """宽表 base 上两列 coalesce 融合，避免子树 join。"""
     if len(node.inputs) != 2:
         return None
     left_name = _column_ref_name(node.inputs[0])
@@ -779,6 +854,7 @@ def _try_coalesce_from_base_columns(node: PlanNode, base: pl.LazyFrame) -> pl.La
 
 
 def _try_where_from_base_columns(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame | None:
+    """宽表 base 上 where(cond, a, b) 三列融合，避免子树 join。"""
     if len(node.inputs) != 3:
         return None
     cond_name = _column_ref_name(node.inputs[0])
@@ -855,7 +931,21 @@ _BINARY_FUSION_OPS = frozenset(
 )
 
 
+def _safe_pow_expr(base: pl.Expr, exp: pl.Expr) -> pl.Expr:
+    """非法定义域返回 NULL（对齐 SQL emitter）。"""
+    return (
+        pl.when(base.is_null() | exp.is_null())
+        .then(None)
+        .when((base < 0) & (exp != exp.floor()))
+        .then(None)
+        .when((base == 0) & (exp < 0))
+        .then(None)
+        .otherwise(base.pow(exp))
+    )
+
+
 def _truthy(col: str) -> pl.Expr:
+    """列名版 truthy：``pl.col(col)`` 非 null 且非零。"""
     return pl.col(col).is_not_null() & (pl.col(col) != 0)
 
 
@@ -873,6 +963,7 @@ def _cs_rank_01_on(value_col: str) -> pl.Expr:
 
 
 def _zscore_on(value_col: str, *, canon: str = "zscore") -> pl.Expr:
+    """指定列名的截面 zscore expr（按 ts 分区，语义见 numeric_semantics）。"""
     from backend.numeric_semantics import std_ddof_value, zscore_zero_std_fill
 
     ddof = std_ddof_value(canon)
@@ -887,6 +978,23 @@ def _zscore_on(value_col: str, *, canon: str = "zscore") -> pl.Expr:
         .when(std == 0)
         .then(zero_fill)
         .otherwise((pl.col(value_col) - mean) / std)
+    )
+
+
+def _normalize_on(value_col: str) -> pl.Expr:
+    """截面 min-max normalize；单有效值 → NULL，常数截面 → 0.5。"""
+    lo = pl.col(value_col).min().over(_TS, order_by=_INST)
+    hi = pl.col(value_col).max().over(_TS, order_by=_INST)
+    span = hi - lo
+    cnt = pl.col(value_col).count().over(_TS, order_by=_INST)
+    return (
+        pl.when(pl.col(value_col).is_null())
+        .then(None)
+        .when(cnt <= 1)
+        .then(None)
+        .when(span.is_null() | (span == 0))
+        .then(0.5)
+        .otherwise((pl.col(value_col) - lo) / span)
     )
 
 
@@ -925,14 +1033,10 @@ def _try_fuse_unary_over_ts(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame 
     elif op == "abs":
         out_expr = pl.col(tmp).abs()
     elif op == "scale":
-        lo = pl.col(tmp).min().over(_TS, order_by=_INST)
-        hi = pl.col(tmp).max().over(_TS, order_by=_INST)
-        span = hi - lo
-        out_expr = pl.when(span.is_null() | (span == 0)).then(0.5).otherwise((pl.col(tmp) - lo) / span)
+        s = pl.col(tmp).abs().sum().over(_TS, order_by=_INST)
+        out_expr = pl.when(s.is_null() | (s == 0)).then(0.0).otherwise(pl.col(tmp) / s)
     elif op == "normalize":
-        mean = pl.col(tmp).mean().over(_TS, order_by=_INST)
-        std = pl.col(tmp).std(ddof=1).over(_TS, order_by=_INST)
-        out_expr = pl.when(std.is_null() | (std == 0)).then(0.0).otherwise((pl.col(tmp) - mean) / std)
+        out_expr = _normalize_on(tmp)
     else:
         return None
     return lf.select(pl.col(_TS), pl.col(_INST), out_expr.alias(_VAL))
@@ -956,6 +1060,7 @@ def _cs_rank_01(*, canon: str = "rank") -> pl.Expr:
 
 
 def _cs_rank_pct(*, canon: str = "rank_pct") -> pl.Expr:
+    """截面百分位 rank expr（rank/n，语义见 numeric_semantics）。"""
     from backend.numeric_semantics import rank_ignore_nan
 
     _ = rank_ignore_nan(canon)
@@ -978,6 +1083,7 @@ def _compile_polars(
     ctx: Any | None = None,
     memo: dict[tuple[Any, ...], pl.LazyFrame] | None = None,
 ) -> pl.LazyFrame | None:
+    """带结构键 memo 的 PlanNode → long LazyFrame 编译入口（CSE dedupe）。"""
     cache: dict[tuple[Any, ...], pl.LazyFrame] = {} if memo is None else memo
     key = _plan_structural_key(node)
     hit = cache.get(key)
@@ -996,6 +1102,7 @@ def _compile_polars_impl(
     ctx: Any | None = None,
     memo: dict[tuple[Any, ...], pl.LazyFrame] | None = None,
 ) -> pl.LazyFrame | None:
+    """PlanNode 递归 lowering 核心：按算子分发 native expr / fusion / map_groups / bridge。"""
     if pl is None:
         return None
     op = _resolve(node.op)
@@ -1070,7 +1177,7 @@ def _compile_polars_impl(
         elif op == "divide":
             expr = pl.col(_VAL) / pl.col("_y")
         elif op == "power":
-            expr = pl.col(_VAL).pow(pl.col("_y"))
+            expr = _safe_pow_expr(pl.col(_VAL), pl.col("_y"))
         elif op in {"gt", "lt", "eq", "ge", "le", "ne"}:
             cmp_map = {
                 "gt": pl.col(_VAL) > pl.col("_y"),
@@ -1105,7 +1212,10 @@ def _compile_polars_impl(
         if inner is None:
             return None
         return inner.with_columns(
-            pl.col(_VAL).is_finite().cast(pl.Float64).alias(_VAL)
+            pl.when(pl.col(_VAL).is_null())
+            .then(0.0)
+            .otherwise(pl.col(_VAL).is_finite().cast(pl.Float64))
+            .alias(_VAL)
         )
 
     if op == "is_nan":
@@ -1113,7 +1223,7 @@ def _compile_polars_impl(
         if inner is None:
             return None
         return inner.with_columns(
-            pl.col(_VAL).is_nan().cast(pl.Float64).alias(_VAL)
+            (pl.col(_VAL).is_null() | pl.col(_VAL).is_nan()).cast(pl.Float64).alias(_VAL)
         )
 
     if op == "neg":
@@ -1130,7 +1240,14 @@ def _compile_polars_impl(
 
     if op == "log":
         inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
-        return inner.with_columns(pl.col(_VAL).log().alias(_VAL)) if inner is not None else None
+        if inner is None:
+            return None
+        return inner.with_columns(
+            pl.when(pl.col(_VAL).is_null() | (pl.col(_VAL) < 0))
+            .then(None)
+            .otherwise(pl.col(_VAL).log())
+            .alias(_VAL)
+        )
 
     if op == "exp":
         inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
@@ -1138,7 +1255,14 @@ def _compile_polars_impl(
 
     if op == "sqrt":
         inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
-        return inner.with_columns(pl.col(_VAL).sqrt().alias(_VAL)) if inner is not None else None
+        if inner is None:
+            return None
+        return inner.with_columns(
+            pl.when(pl.col(_VAL).is_null() | (pl.col(_VAL) < 0))
+            .then(None)
+            .otherwise(pl.col(_VAL).sqrt())
+            .alias(_VAL)
+        )
 
     if op == "floor":
         inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
@@ -1159,7 +1283,7 @@ def _compile_polars_impl(
         if left is None or right is None:
             return None
         joined = _join_binary(left, right)
-        return joined.with_columns(pl.col(_VAL).pow(pl.col("_y")).alias(_VAL)).select(_TS, _INST, _VAL)
+        return joined.with_columns(_safe_pow_expr(pl.col(_VAL), pl.col("_y")).alias(_VAL)).select(_TS, _INST, _VAL)
 
     if op == "protected_log":
         inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
@@ -1486,7 +1610,10 @@ def _compile_polars_impl(
             return None
         const = _literal_value(node, 0, default=0.0) or 0.0
         return inner.with_columns(
-            pl.when(pl.col(_VAL).is_nan()).then(const).otherwise(pl.col(_VAL)).alias(_VAL)
+            pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan())
+            .then(const)
+            .otherwise(pl.col(_VAL))
+            .alias(_VAL)
         )
 
     if op in {"cs_quantile", "c_percentile"}:
@@ -1682,7 +1809,12 @@ def _compile_polars_impl(
             return None
         lag = _window_int(node, default=1)
         prev = pl.col(_VAL).shift(lag).over(_INST, order_by=_TS)
-        return inner.with_columns((pl.col(_VAL) / prev - 1.0).alias(_VAL))
+        return inner.with_columns(
+            pl.when(prev.is_null() | (prev == 0))
+            .then(None)
+            .otherwise(pl.col(_VAL) / prev - 1.0)
+            .alias(_VAL)
+        )
 
     if op == "ffill":
         inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
@@ -1691,15 +1823,18 @@ def _compile_polars_impl(
         return inner.with_columns(pl.col(_VAL).forward_fill().over(_INST, order_by=_TS).alias(_VAL))
 
     if op == "bfill":
-        import logging
+        from backend.polars_long_policy import UnsupportedCausalOperatorError
 
-        logging.getLogger("backend.polars_expr_emitter").warning(
-            "bfill on polars_long is a no-op (causal/PIT); use ffill or research-only fallback"
+        raise UnsupportedCausalOperatorError(
+            "polars_long 不支持 bfill/causal_bfill（因果占位，非传统 backward fill）；请改用 ffill 或 pandas 研究路径"
         )
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
-        if inner is None:
-            return None
-        return inner
+
+    if op == "causal_bfill":
+        from backend.polars_long_policy import UnsupportedCausalOperatorError
+
+        raise UnsupportedCausalOperatorError(
+            "polars_long 不支持 bfill/causal_bfill（因果占位，非传统 backward fill）；请改用 ffill 或 pandas 研究路径"
+        )
 
     if op in {"ts_ema", "ewm_mean"}:
         inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
@@ -1763,15 +1898,7 @@ def _compile_polars_impl(
         inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        lo = pl.col(_VAL).min().over(_TS, order_by=_INST)
-        hi = pl.col(_VAL).max().over(_TS, order_by=_INST)
-        span = hi - lo
-        return inner.with_columns(
-            pl.when(span.is_null() | (span == 0))
-            .then(0.5)
-            .otherwise((pl.col(_VAL) - lo) / span)
-            .alias(_VAL)
-        )
+        return inner.with_columns(_normalize_on(_VAL).alias(_VAL))
 
     if op == "scale":
         inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
@@ -2261,7 +2388,16 @@ def resolve_base_lazy_for_plan(
     ctx: Any,
     scan_fn: Any,
 ) -> pl.LazyFrame:
-    """构建 long-table 基础 LazyFrame：优先 scan 引用列，否则从缓存 Series 推断骨架。"""
+    """构建 long-table 基础 LazyFrame：优先 scan 引用列，否则从缓存 Series 推断骨架。
+
+    参数:
+        plan: 待编译的逻辑计划。
+        ctx: 执行上下文（含 materialized / shared 缓存）。
+        scan_fn: ``data_source.scan_polars_long`` 等列扫描回调。
+
+    返回:
+        含 ts/inst 及引用列的宽表 LazyFrame。
+    """
     columns = collect_columns(plan)
     if columns:
         return scan_fn(sorted(columns))
@@ -2287,6 +2423,7 @@ def _build_base_lazy(ctx: Any, columns: set[str]) -> pl.LazyFrame:
 
 
 def _build_base_lazy_from_series(ctx: Any, columns: set[str]) -> pl.LazyFrame:
+    """无 scan_polars_long 时，逐列 load_column 并 merge 为宽表 LazyFrame。"""
     if pl is None:
         raise ImportError("polars is required for polars long-table backend")
     from storage.factor_format import series_to_long_table
@@ -2321,7 +2458,18 @@ def compile_plan_to_polars(
     ts_col: str = _TS,
     inst_col: str = _INST,
 ) -> LongFrameResult | None:
-    """编译 PlanNode 为 long-table Polars LazyFrame + 结果列名。"""
+    """编译 PlanNode 为 long-table Polars LazyFrame + 结果列名。
+
+    参数:
+        plan: 逻辑计划根节点。
+        base_lf: 宽表 base LazyFrame（含 ts/inst 及引用列）。
+        ctx: 可选执行上下文（materialized_series / plan_ref 等）。
+        ts_col: 时间戳列名，默认 ``ts``。
+        inst_col: 标的列名，默认 ``inst``。
+
+    返回:
+        ``LongFrameResult``；polars 不可用或编译失败时为 None。
+    """
     if pl is None:
         return None
     compiled = _compile_polars(plan, base_lf, ctx=ctx)
@@ -2343,7 +2491,17 @@ def compile_polars_long_lazy(
     base_lf: pl.LazyFrame | None = None,
     lazy_cache_key: str | None = None,
 ) -> LongFrameResult:
-    """编译 long-table 计划为 LazyFrame（不 collect）。"""
+    """编译 long-table 计划为 LazyFrame（不 collect）。
+
+    参数:
+        plan: 逻辑计划根节点。
+        ctx: 执行上下文。
+        base_lf: 可选预构建 base；为 None 时自动 scan 或 merge 列。
+        lazy_cache_key: 非空时将结果 LazyFrame 写入 shared_long_lazy_cache。
+
+    返回:
+        含 frame/value_col/ts_col/inst_col 的 ``LongFrameResult``。
+    """
     if base_lf is None:
         scan = getattr(ctx.data_source, "scan_polars_long", None)
         if callable(scan):
@@ -2370,7 +2528,17 @@ def execute_polars_long_plan(
     base_lf: pl.LazyFrame | None = None,
     lazy_cache_key: str | None = None,
 ) -> pd.Series:
-    """编译并执行 long-table 计划；仅最终 collect 一次。"""
+    """编译并执行 long-table 计划；仅最终 collect 一次。
+
+    参数:
+        plan: 逻辑计划根节点。
+        ctx: 执行上下文。
+        base_lf: 可选预构建 base LazyFrame。
+        lazy_cache_key: 可选 shared long lazy 缓存键。
+
+    返回:
+        MultiIndex (timestamp, instrument) 的 ``pd.Series`` 因子结果。
+    """
     compiled = compile_polars_long_lazy(
         plan, ctx, base_lf=base_lf, lazy_cache_key=lazy_cache_key
     )
@@ -2393,5 +2561,13 @@ def execute_polars_long_plan(
 
 
 def execute_polars_expr_plan(plan: PlanNode, ctx: Any) -> pd.Series:
-    """兼容旧名：``PolarsBackend`` + ``FACTOR_ENGINE_POLARS_EXPR=1``。"""
+    """兼容旧名：``PolarsBackend`` + ``FACTOR_ENGINE_POLARS_EXPR=1``。
+
+    参数:
+        plan: 逻辑计划根节点。
+        ctx: 执行上下文。
+
+    返回:
+        与 ``execute_polars_long_plan`` 相同的 MultiIndex Series。
+    """
     return execute_polars_long_plan(plan, ctx)

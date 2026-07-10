@@ -31,6 +31,7 @@ from cleaned_operators.base import (
     status="experimental",
 )
 class LqtpRealturnoverrateOp(TwoVarOperator):
+    """真实流通盘换手率：volume / float_shares"""
     metadata = OperatorMetadata(
         name="real_turnover_rate",
         category="intraday_microstructure",

@@ -12,6 +12,7 @@ FE_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _bootstrap() -> None:
+    """初始化 sys.path 并加载算子注册表与 SQL backend。"""
     root = str(FE_ROOT.parent)
     if root not in sys.path:
         sys.path.insert(0, root)
@@ -26,12 +27,14 @@ def _bootstrap() -> None:
 
 
 def _matrix_rows(canonicals):
+    """为给定 canonical 列表构建 fast path 覆盖行。"""
     from backend.fastpath_coverage import build_fastpath_coverage_row
 
     return [build_fastpath_coverage_row(c) for c in sorted(canonicals)]
 
 
 def _parity_cell(row) -> str:
+    """将 pandas↔polars / pandas↔duckdb parity 状态渲染为 yes / partial / no。"""
     if row.pandas_polars_long_parity and row.pandas_duckdb_parity:
         return "yes"
     if row.pandas_polars_long_parity or row.pandas_duckdb_parity:
@@ -40,6 +43,7 @@ def _parity_cell(row) -> str:
 
 
 def _markdown_table(rows) -> str:
+    """将覆盖行渲染为 Markdown 表格。"""
     lines = [
         "| 算子 | PolarsLong native | DuckDB SQL | parity | production safe |",
         "| --- | ---: | ---: | ---: | ---: |",
@@ -57,6 +61,7 @@ def _markdown_table(rows) -> str:
 
 
 def main() -> int:
+    """导出 production fast path 验收矩阵（stdout 或 --markdown / --json）。"""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--markdown", type=Path, default=None)

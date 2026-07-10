@@ -33,11 +33,24 @@ logger = get_logger("storage.factor_matrix_materializer")
 
 @dataclass(frozen=True)
 class FactorMatrixLayout:
+    """factor_matrix 宽表布局路径规则。
+    
+    参数:
+        无
+    """
     universe: str
     frequency: str = "1d"
     partition_columns: tuple[str, ...] = ("year", "month")
 
     def base_dir(self, matrix_root: Path) -> Path:
+        """base_dir。
+        
+        参数:
+            matrix_root: factor_matrix 根目录
+        
+        返回:
+            Path
+        """
         return (
             matrix_root
             / f"universe={self.universe}"
@@ -46,9 +59,21 @@ class FactorMatrixLayout:
 
 
 class FactorMatrixMaterializer:
-    """将多因子 MultiIndex Series 合并写入宽矩阵 Parquet。"""
+    """多因子矩阵宽表物化器。
+    
+    参数:
+        matrix_root: factor_matrix 根目录（可选）
+    """
 
     def __init__(self, matrix_root: str | Path | None = None) -> None:
+        """初始化实例。
+        
+        参数:
+            matrix_root: factor_matrix 根目录（可选）
+        
+        返回:
+            无
+        """
         if matrix_root is None:
             env_root = os.environ.get("FACTOR_MATRIX_ROOT")
             matrix_root = env_root or "factor_matrix"
@@ -57,6 +82,14 @@ class FactorMatrixMaterializer:
 
     @property
     def matrix_root(self) -> Path:
+        """matrix_root。
+        
+        参数:
+            无
+        
+        返回:
+            Path
+        """
         return self._matrix_root
 
     def materialize(
@@ -68,7 +101,18 @@ class FactorMatrixMaterializer:
         partition_columns: Iterable[str] | None = None,
         value_dtype: str = "float32",
     ) -> dict[str, Any]:
-        """``factor_id -> Series`` 合并为宽表并按 hive 分区落盘。"""
+        """``factor_id -> Series`` 合并为宽表并按 hive 分区落盘。
+        
+        参数:
+            results: 见函数签名
+            universe: 标的池标识（可选）
+            frequency: 因子频率（可选）
+            partition_columns: 见函数签名（可选）
+            value_dtype: 见函数签名（可选）
+        
+        返回:
+            dict[str, Any]
+        """
         if not results:
             return {
                 "universe": universe,
@@ -159,7 +203,17 @@ class FactorMatrixMaterializer:
         frequency: str = "1d",
         factor_ids: Iterable[str] | None = None,
     ) -> pd.DataFrame:
-        """读取 universe 下全部或指定因子列宽表。"""
+        """读取 universe 下全部或指定因子列宽表。
+        
+        参数:
+            matrix_root: factor_matrix 根目录
+            universe: 标的池标识（可选）
+            frequency: 因子频率（可选）
+            factor_ids: 因子 ID 列表（可选）
+        
+        返回:
+            pd.DataFrame
+        """
         base = (
             Path(matrix_root)
             / f"universe={universe}"

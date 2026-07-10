@@ -31,18 +31,22 @@ def _fallback_route(runtime: dict[str, Any]) -> str:
 
 def infer_primary_route(runtime: dict[str, Any]) -> str:
     """从 ``runtime_stats`` 推断主执行路径。"""
-    if runtime.get("sql_fully_pushed") or (
-        runtime.get("fully_sql") and runtime.get("used_sql_pushdown")
-    ):
+    query_count = int(runtime.get("sql_query_count") or 0)
+    if runtime.get("sql_fully_pushed") and query_count > 0:
         dialect = str(runtime.get("sql_dialect") or "duckdb").lower()
         if "clickhouse" in dialect:
             return "clickhouse_sql_full"
         return "duckdb_sql_full"
+    if runtime.get("sql_full_execution_failed") or (
+        runtime.get("fully_sql") and not runtime.get("sql_fully_pushed") and query_count <= 0
+    ):
+        return "sql_full_execution_failed"
     fb = _fallback_route(runtime)
     if fb not in {"unknown", "pandas_fallback"} and (
         runtime.get("polars_long_fallback_reason")
         or runtime.get("sql_long_pushdown_failed_sid")
         or runtime.get("production_pandas_fallbacks")
+        or int(runtime.get("sql_fallback_subtree_count") or 0) > 0
     ):
         return fb
     if runtime.get("polars_long_fallback_reason") and not runtime.get("used_polars_long_path"):
@@ -50,12 +54,12 @@ def infer_primary_route(runtime: dict[str, Any]) -> str:
         if backend == "polars":
             return "polars_long_to_polars_panel"
         return "polars_long_to_pandas"
-    if runtime.get("fully_sql"):
-        return "sql_full"
-    if runtime.get("used_sql_pushdown") or runtime.get("sql_subtree_count", 0) > 0:
+    if runtime.get("used_sql_pushdown") and query_count > 0:
         if runtime.get("used_polars_long_path"):
             return "sql_partial_polars_long"
         return "sql_partial"
+    if runtime.get("fully_sql") or runtime.get("sql_plan_fully_compilable"):
+        return "sql_plan_only"
     if runtime.get("used_polars_long_native"):
         return "polars_long_native"
     if runtime.get("used_polars_long_map_groups"):
@@ -98,13 +102,26 @@ def _infer_fastpath_route(runtime: dict[str, Any]) -> str:
     """真快 / 半快 / fallback 粗分类。"""
     if runtime.get("polars_long_fallback_reason") or runtime.get("production_pandas_fallbacks"):
         return "fallback"
+    if int(runtime.get("sql_fallback_subtree_count") or 0) > 0:
+        return "fallback"
+    if runtime.get("sql_full_execution_failed"):
+        return "fallback"
+    if runtime.get("used_sql_pushdown") and int(runtime.get("sql_query_count") or 0) <= 0:
+        return "fallback"
     route = infer_primary_route(runtime)
-    if route in {"sql_full", "duckdb_sql_full", "clickhouse_sql_full", "polars_long_native", "sql_partial_polars_long"}:
+    if route in {
+        "duckdb_sql_full",
+        "clickhouse_sql_full",
+        "polars_long_native",
+        "sql_partial_polars_long",
+    }:
         return "fast"
-    if route in {"sql_partial", "polars_long"}:
+    if route in {"sql_partial", "polars_long", "sql_plan_only"}:
         return "mixed"
     if route in {"polars_long_map_groups", "polars_long_registry", "polars_long_passthrough"}:
         return "slow"
+    if route in {"sql_full_execution_failed", "sql_to_python_fallback"}:
+        return "fallback"
     return route or "unknown"
 
 
@@ -116,8 +133,10 @@ def build_backend_path_summary(runtime: dict[str, Any] | None) -> dict[str, Any]
     summary: dict[str, Any] = {
         "backend": r.get("backend"),
         "primary_route": infer_primary_route(r),
+        "sql_plan_fully_compilable": bool(r.get("sql_plan_fully_compilable") or r.get("fully_sql")),
         "fully_sql": bool(r.get("fully_sql")),
-        "used_sql_pushdown": bool(r.get("used_sql_pushdown")),
+        "sql_full_execution_failed": bool(r.get("sql_full_execution_failed")),
+        "used_sql_pushdown": bool(r.get("used_sql_pushdown")) and int(r.get("sql_query_count") or 0) > 0,
         "sql_subtree_count": int(r.get("sql_subtree_count") or 0),
         "sql_subtrees": list(r.get("sql_subtrees") or []),
         "sql_fully_pushed": bool(r.get("sql_fully_pushed")),
@@ -125,6 +144,7 @@ def build_backend_path_summary(runtime: dict[str, Any] | None) -> dict[str, Any]
         "sql_long_lazy_subtrees": list(r.get("sql_long_lazy_subtrees") or []),
         "sql_series_subtrees": list(r.get("sql_series_subtrees") or []),
         "sql_fallback_subtree_count": int(r.get("sql_fallback_subtree_count") or 0),
+        "python_fallback_subtree_sids": list(r.get("python_fallback_subtree_sids") or []),
         "sql_dialect": r.get("sql_dialect"),
         "sql_query_count": int(r.get("sql_query_count") or 0),
         "used_polars_long_path": bool(r.get("used_polars_long_path")),

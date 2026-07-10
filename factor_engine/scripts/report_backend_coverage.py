@@ -17,6 +17,7 @@ FE_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _bootstrap():
+    """初始化 sys.path 并加载算子注册表与 SQL backend。"""
     root = str(FE_ROOT.parent)
     if root not in sys.path:
         sys.path.insert(0, root)
@@ -31,6 +32,7 @@ def _bootstrap():
 
 
 def _build_rows() -> list[dict[str, object]]:
+    """构建每个 canonical 的后端能力扁平行（pandas / polars / SQL 等）。"""
     from backend.operator_capability import build_capability_matrix, polars_expr_capable, resolve_canonical
 
     rows: list[dict[str, object]] = []
@@ -55,6 +57,7 @@ def _build_rows() -> list[dict[str, object]]:
 
 
 def main() -> int:
+    """输出 backend 三层覆盖摘要，可选写入 Markdown 文档或 CSV 明细。"""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true")
     parser.add_argument(

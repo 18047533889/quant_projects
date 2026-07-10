@@ -40,6 +40,7 @@ def _ewm_alpha(span: int) -> float:
 
 @register_operator(name="ewm_mean", category="data_handling", business_category="data_cleaning", canonical="ewm_mean", source="factor_dsl_polars")
 class EWMMeanPolars(SeriesOperator):
+    """Polars EMA"""
     metadata = OperatorMetadata(
         name="ewm_mean", category="data_handling", description="EMA",
         param_names=["x", "span"], return_type="series", tags=["data_handling", "polars"],
@@ -55,6 +56,7 @@ class EWMMeanPolars(SeriesOperator):
 
 @register_operator(name="ewm", category="data_handling", business_category="data_cleaning", canonical="ewm", source="factor_dsl_polars")
 class EWMPolars(SeriesOperator):
+    """Polars EWM（alpha）"""
     metadata = OperatorMetadata(
         name="ewm", category="data_handling", description="EWM（alpha）",
         param_names=["x", "alpha"], return_type="series", tags=["data_handling", "polars"],
@@ -72,6 +74,7 @@ class EWMPolars(SeriesOperator):
 
 @register_operator(name="ewm_std", category="data_handling", business_category="data_cleaning", canonical="ewm_std", source="factor_dsl_polars")
 class EWMStdPolars(SeriesOperator):
+    """Polars EWM 标准差"""
     metadata = OperatorMetadata(
         name="ewm_std", category="data_handling", description="EWM 标准差",
         param_names=["x", "span"], return_type="series", tags=["data_handling", "polars"],
@@ -86,6 +89,7 @@ class EWMStdPolars(SeriesOperator):
 
 @register_operator(name="ewm_var", category="data_handling", business_category="data_cleaning", canonical="ewm_var", source="factor_dsl_polars")
 class EWMVarPolars(SeriesOperator):
+    """Polars EWM 方差"""
     metadata = OperatorMetadata(
         name="ewm_var", category="data_handling", description="EWM 方差",
         param_names=["x", "span"], return_type="series", tags=["data_handling", "polars"],
@@ -137,6 +141,7 @@ class EWMCovPolars(SeriesOperator):
 
 @register_operator(name="expanding_max", category="data_handling", business_category="data_cleaning", canonical="expanding_max", source="factor_dsl_polars")
 class ExpandingMaxPolars(SeriesOperator):
+    """Polars 扩展最大值"""
     metadata = OperatorMetadata(
         name="expanding_max", category="data_handling", description="扩展最大值",
         param_names=["x"], return_type="series", tags=["data_handling", "polars"],
@@ -149,6 +154,7 @@ class ExpandingMaxPolars(SeriesOperator):
 
 @register_operator(name="expanding_min", category="data_handling", business_category="data_cleaning", canonical="expanding_min", source="factor_dsl_polars")
 class ExpandingMinPolars(SeriesOperator):
+    """Polars 扩展最小值"""
     metadata = OperatorMetadata(
         name="expanding_min", category="data_handling", description="扩展最小值",
         param_names=["x"], return_type="series", tags=["data_handling", "polars"],
@@ -161,6 +167,7 @@ class ExpandingMinPolars(SeriesOperator):
 
 @register_operator(name="expanding_sum", category="data_handling", business_category="data_cleaning", canonical="expanding_sum", source="factor_dsl_polars")
 class ExpandingSumPolars(SeriesOperator):
+    """Polars 扩展求和"""
     metadata = OperatorMetadata(
         name="expanding_sum", category="data_handling", description="扩展求和",
         param_names=["x"], return_type="series", tags=["data_handling", "polars"],
@@ -173,6 +180,7 @@ class ExpandingSumPolars(SeriesOperator):
 
 @register_operator(name="fillna_const", category="data_handling", business_category="data_cleaning", canonical="fillna_const", source="factor_dsl_polars")
 class FillNAConstPolars(SeriesOperator):
+    """Polars 常量填充"""
     metadata = OperatorMetadata(
         name="fillna_const", category="data_handling", description="常量填充",
         param_names=["x", "value"], return_type="series", tags=["data_handling", "polars"],
@@ -205,6 +213,7 @@ class FillnaInterpolatePolars(SeriesOperator):
 
 @register_operator(name="expanding_rank", category="data_handling", business_category="data_cleaning", canonical="expanding_rank", source="factor_dsl_polars")
 class ExpandingRankPolars(SeriesOperator):
+    """Polars 扩展窗口百分位排名"""
     metadata = OperatorMetadata(
         name="expanding_rank", category="data_handling", description="扩展窗口百分位排名",
         param_names=["x"], return_type="series", tags=["data_handling", "polars"],
@@ -219,6 +228,7 @@ class ExpandingRankPolars(SeriesOperator):
 
 @register_operator(name="is_nan", category="data_handling", business_category="data_cleaning", canonical="is_nan", source="factor_dsl_polars")
 class IsNaNPolars(SeriesOperator):
+    """Polars 是否为 NaN/null"""
     metadata = OperatorMetadata(
         name="is_nan", category="data_handling", description="是否为 NaN/null",
         param_names=["x"], return_type="series", tags=["data_handling", "polars"],
@@ -234,6 +244,7 @@ class IsNaNPolars(SeriesOperator):
 
 @register_operator(name="is_inf", category="data_handling", business_category="data_cleaning", canonical="is_inf", source="factor_dsl_polars")
 class IsInfPolars(SeriesOperator):
+    """Polars 是否为无穷"""
     metadata = OperatorMetadata(
         name="is_inf", category="data_handling", description="是否为无穷",
         param_names=["x"], return_type="series", tags=["data_handling", "polars"],

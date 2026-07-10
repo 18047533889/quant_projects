@@ -31,6 +31,8 @@ def _effective_bool(
 
 @dataclass(frozen=True)
 class ResolvedRunKwargs:
+    """解析后的 ``FactorEngine.run`` / ``run_many`` 运行参数。"""
+
     auto_warmup: bool
     trim_warmup: bool
     market: str | None
@@ -56,6 +58,8 @@ class ResolvedRunKwargs:
 
 @dataclass(frozen=True)
 class ResolvedMaterializeKwargs:
+    """解析后的 ``FactorEngine.materialize`` / ``materialize_incremental`` 参数。"""
+
     lake_root: str | None
     factor_id: str | None
     author: str | None
@@ -180,12 +184,14 @@ class PipelineConfigOverrides:
     recompute_tail_bars: int | None = None
 
     def to_resolve_run_kwargs(self) -> dict[str, Any]:
+        """转为 ``resolve_run_kwargs`` 可接收的 CLI 覆盖参数字典。"""
         return {
             "cli_input_dq_check": True if self.input_dq_check else None,
             "cli_input_dq_strict": self.input_dq_strict if self.input_dq_check else None,
         }
 
     def to_resolve_materialize_kwargs(self) -> dict[str, Any]:
+        """转为 ``resolve_materialize_kwargs`` 可接收的 CLI 覆盖参数字典。"""
         out = self.to_resolve_run_kwargs()
         out.update(
             {
@@ -207,6 +213,7 @@ def resolve_run_kwargs_for_pipeline(
     config: FactorEngineConfig,
     pipeline: PipelineConfigOverrides | None = None,
 ) -> ResolvedRunKwargs:
+    """结合 pipeline CLI 覆盖解析 run 参数。"""
     extra = pipeline.to_resolve_run_kwargs() if pipeline is not None else {}
     return resolve_run_kwargs(config, **extra)
 
@@ -215,6 +222,7 @@ def resolve_materialize_kwargs_for_pipeline(
     config: FactorEngineConfig,
     pipeline: PipelineConfigOverrides | None = None,
 ) -> ResolvedMaterializeKwargs:
+    """结合 pipeline CLI 覆盖解析物化参数。"""
     extra = pipeline.to_resolve_materialize_kwargs() if pipeline is not None else {}
     return resolve_materialize_kwargs(config, **extra)
 
@@ -244,6 +252,7 @@ def _output_dq_thresholds_key(th: Any) -> tuple[Any, ...] | None:
 
 
 def build_data_source_config(config: FactorEngineConfig) -> dict[str, Any]:
+    """从引擎配置提取数据源 type + options 字典。"""
     return {"type": config.data_source.type, **config.data_source.options}
 
 
@@ -322,6 +331,7 @@ def resolve_run_kwargs(
     cli_input_dq_check: bool | None = None,
     cli_input_dq_strict: bool | None = None,
 ) -> ResolvedRunKwargs:
+    """从 YAML 配置解析 run 段参数（含 production 默认与 CLI 覆盖）。"""
     prod = _production_mode(config)
     input_dq_check = _effective_bool(
         config,
@@ -372,6 +382,7 @@ def resolve_materialize_kwargs(
     recompute_tail_bars_override: int | None = None,
     resume_materialize_override: bool | None = None,
 ) -> ResolvedMaterializeKwargs:
+    """从 YAML 配置解析物化段参数（含增量窗口与 ClickHouse 连接）。"""
     run = resolve_run_kwargs(
         config,
         cli_input_dq_check=cli_input_dq_check,

@@ -734,11 +734,11 @@ class OperatorPolicy:
     tags: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
-    """将 ``OperatorPolicy`` 序列化为普通字典。
+        """将 ``OperatorPolicy`` 序列化为普通字典。
 
-返回:
-    策略字段的字典表示。
-"""
+        返回:
+            策略字段的字典表示。
+        """
         return asdict(self)
 
 

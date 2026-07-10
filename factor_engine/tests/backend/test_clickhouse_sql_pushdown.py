@@ -204,7 +204,7 @@ def test_try_execute_sql_pushdown_clickhouse_nan_to_num():
 
     mock_eq.assert_called_once()
     sql = mock_eq.call_args.kwargs.get("sql") or mock_eq.call_args.args[1]
-    assert "coalesce(" in sql
+    assert "isNaN(" in sql or "isnan(" in sql
     assert series is not None
 
 

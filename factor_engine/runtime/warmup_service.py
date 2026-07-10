@@ -21,6 +21,8 @@ logger = get_logger("runtime.warmup_service")
 
 @dataclass(frozen=True)
 class WarmupContext:
+    """``prepare_run_warmup`` 返回值：可能已切换数据源/缓存的引擎与扩窗计划。"""
+
     engine: Any
     run_window: RunWindow | None
     source_bar_freq: str

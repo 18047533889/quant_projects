@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
-"""执行编译后的因子 SQL（DuckDB / ClickHouse）。"""
+"""执行编译后的因子 SQL（DuckDB / ClickHouse）。
+
+从 ``ExecutionContext`` 提取下推上下文，编译 PlanNode 为 SQL 并在目标引擎执行，
+支持单因子与批量（共享 base CTE）两种模式，以及 pandas Series 与 Polars LazyFrame 输出。
+"""
 from __future__ import annotations
 
 import sys
@@ -23,6 +27,7 @@ from .source_resolver import resolve_pushdown_source
 
 
 def _ensure_data_access() -> None:
+    """确保 ``quant_projects`` 根目录在 ``sys.path`` 中以便导入 data_access。"""
     root = str(quant_projects_root())
     if root not in sys.path:
         sys.path.insert(0, root)
@@ -30,6 +35,7 @@ def _ensure_data_access() -> None:
 
 @dataclass(frozen=True)
 class PushdownContext:
+    """SQL 下推执行上下文：方言、数据源定位、轴列名与可选过滤条件。"""
     dialect: SqlDialect
     time_column: str
     instrument_column: str
@@ -40,7 +46,11 @@ class PushdownContext:
 
 
 def extract_pushdown_context(ctx: ExecutionContext) -> PushdownContext | None:
-    """从 DataAccess / ClickHouse / Composite / LongTable 提取 SQL 下推上下文。"""
+    """从 ExecutionContext 的数据源提取 SQL 下推上下文。
+
+    支持 DataAccess（DuckDB 数据集）、ClickHouse 表、Composite 与 LongTable 包装；
+    无法解析时返回 ``None``。
+    """
     ds = resolve_pushdown_source(ctx.data_source)
     if ds is None:
         return None
@@ -94,6 +104,7 @@ def extract_pushdown_context(ctx: ExecutionContext) -> PushdownContext | None:
 
 
 def _series_from_sql_table(table, *, timestamp_col: str, instrument_col: str) -> pd.Series:
+    """将 Arrow/SQL 查询结果转为 MultiIndex (ts, inst) Series。"""
     from data_access.adapters import arrow_to_multiindex_series
 
     return arrow_to_multiindex_series(
@@ -129,6 +140,7 @@ def execute_compiled_sql(
     data_source: Any,
     query_budget: Any | None = None,
 ) -> pd.Series:
+    """在 DuckDB 或 ClickHouse 上执行已编译 SQL，返回 MultiIndex Series。"""
     if compiled.dialect == SqlDialect.CLICKHOUSE:
         return _execute_clickhouse(compiled, ctx)
     return _execute_duckdb(compiled, ctx, data_source, query_budget=query_budget)
@@ -141,6 +153,7 @@ def _series_from_batch_table(
     instrument_col: str,
     value_column: str,
 ) -> pd.Series:
+    """批量查询结果中按列别名提取 MultiIndex Series。"""
     from data_access.adapters import arrow_to_multiindex_series
 
     return arrow_to_multiindex_series(
@@ -158,6 +171,7 @@ def execute_batch_compiled_sql(
     data_source: Any,
     query_budget: Any | None = None,
 ) -> dict[str, pd.Series]:
+    """执行批量编译 SQL，返回 ``sid -> MultiIndex Series`` 映射。"""
     if compiled.dialect == SqlDialect.CLICKHOUSE:
         table = _execute_clickhouse_table(compiled, ctx)
     else:
@@ -218,6 +232,7 @@ def _execute_duckdb_table(
     data_source: Any | None = None,
     query_budget: Any | None = None,
 ):
+    """通过 data_access store 在 DuckDB 上执行 SQL，返回 Arrow 表。"""
     _ensure_data_access()
     from data_access import get_store
 
@@ -231,6 +246,7 @@ def _execute_duckdb_table(
 
 
 def _execute_clickhouse_table(compiled: CompiledSql | BatchCompiledSql, ctx: PushdownContext):
+    """在 ClickHouse 上执行 SQL，返回查询结果表。"""
     _ensure_data_access()
     from data_access.clickhouse_panel import ClickHouseConfig, execute_query
 
@@ -244,6 +260,7 @@ def _execute_duckdb(
     data_source: Any,
     query_budget: Any | None = None,
 ) -> pd.Series:
+    """DuckDB 单因子执行：SQL → Arrow 表 → MultiIndex Series。"""
     table = _execute_duckdb_table(
         compiled, pctx, data_source, query_budget=query_budget
     )
@@ -251,6 +268,7 @@ def _execute_duckdb(
 
 
 def _execute_clickhouse(compiled: CompiledSql, ctx: PushdownContext) -> pd.Series:
+    """ClickHouse 单因子执行：SQL → 结果表 → MultiIndex Series。"""
     table = _execute_clickhouse_table(compiled, ctx)
     return _series_from_sql_table(table, timestamp_col="ts", instrument_col="inst")
 
@@ -261,7 +279,10 @@ def try_execute_sql_pushdown_long(
     *,
     sid: str | None = None,
 ) -> Any | None:
-    """SQL 子树 → long-table LazyFrame（``ts, inst, _v``）；失败返回 None。"""
+    """尝试将 SQL 可编译子树下推为 long-table LazyFrame（``ts, inst, _v``）。
+
+    编译或执行失败时返回 ``None``；strict 模式下失败会抛出异常。
+    """
     pctx = extract_pushdown_context(ctx)
     if pctx is None:
         return None
@@ -300,7 +321,7 @@ def try_execute_sql_pushdown_batch_long(
     plans: dict[str, PlanNode],
     ctx: ExecutionContext,
 ) -> dict[str, Any] | None:
-    """批量 SQL → ``sid -> LazyFrame``。"""
+    """批量 SQL 下推为 ``sid -> LazyFrame``；共享 base CTE，一次 round-trip。"""
     if not plans:
         return {}
     pctx = extract_pushdown_context(ctx)
@@ -355,7 +376,10 @@ def try_execute_sql_pushdown(
     plan: PlanNode,
     ctx: ExecutionContext,
 ) -> pd.Series | None:
-    """若计划可 SQL 化则在 DuckDB/ClickHouse 内执行；执行失败时返回 None 以触发 Python/Polars fallback。"""
+    """若计划可 SQL 化则在 DuckDB/ClickHouse 内执行并返回 Series。
+
+    上下文不可下推、编译失败或执行异常时返回 ``None``，由调用方回退 Python/Polars。
+    """
     pctx = extract_pushdown_context(ctx)
     if pctx is None:
         return None
@@ -384,7 +408,7 @@ def try_execute_sql_pushdown_batch(
     plans: dict[str, PlanNode],
     ctx: ExecutionContext,
 ) -> dict[str, pd.Series] | None:
-    """批量 SQL 下推：共享 base CTE，一次 round-trip。"""
+    """批量 SQL 下推：多子树合并为一条 WITH 查询，返回 ``sid -> Series``。"""
     if not plans:
         return {}
     pctx = extract_pushdown_context(ctx)

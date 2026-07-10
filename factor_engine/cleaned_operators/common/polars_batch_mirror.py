@@ -42,6 +42,8 @@ def _register_bridge(
         def _calculate_series(self, x: pl.DataFrame, *args, **kwargs) -> pl.DataFrame:
             return bridge_registry(canonical, x, *args, **kwargs)
 
+    _BridgeOp.__doc__ = f"{canonical}（Polars 桥接）"
+
     _BridgeOp.__name__ = f"{canonical.title().replace('_', '')}PolarsBridge"
     register_operator(
         name=op_name,
@@ -84,6 +86,8 @@ def _register_colwise(
                 return colwise_numpy_kernel(x, kernel, d=window, k=k_val)
             extra = {key: val for key, val in kwargs.items() if key not in {"d", "window", "k", "order"}}
             return colwise_numpy_kernel(x, kernel, d=window, **extra)
+
+    _ColwiseOp.__doc__ = f"{canonical}（Polars colwise 核）"
 
     _ColwiseOp.__name__ = f"{canonical.title().replace('_', '')}PolarsColwise"
     register_operator(
@@ -207,6 +211,7 @@ for _canon in (
     backend="polars",
 )
 class TSMomentPolarsBridge(SeriesOperator):
+    """窗口 k 阶中心矩（pandas 核 parity）"""
     metadata = OperatorMetadata(
         name="ts_moment",
         category="time_series",

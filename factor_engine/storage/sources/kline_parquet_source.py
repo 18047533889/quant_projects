@@ -14,12 +14,16 @@ logger = get_logger("storage.kline_parquet_source")
 
 @dataclass
 class KlineParquetSource(DataSource):
-    """K 线专用 parquet 数据源。
-
+    """K 线 Parquet 数据源（按日期分区目录）。
+    
+    参数:
+        无
+    
+    
     PR1 起底层改走 `data_access.DuckDBEngine`：一次 SQL 读所有文件，
-    性能与并发稳定性都比老的 `pd.read_parquet` 逐文件循环好。
-    公开 API（`load_column(name) → MultiIndex Series`）保持不变，
-    因子代码无需改动。
+        性能与并发稳定性都比老的 `pd.read_parquet` 逐文件循环好。
+        公开 API（`load_column(name) → MultiIndex Series`）保持不变，
+        因子代码无需改动。
     """
 
     root: str
@@ -39,6 +43,14 @@ class KlineParquetSource(DataSource):
     _file_cache: list[Path] | None = field(default=None, init=False, repr=False)
 
     def load_column(self, name: str):
+        """load_column。
+        
+        参数:
+            name: 逻辑列名
+        
+        返回:
+            无
+        """
         if name in self._column_cache:
             return self._column_cache[name]
 
@@ -63,7 +75,14 @@ class KlineParquetSource(DataSource):
         return series
 
     def prefetch_columns(self, names: list[str]) -> None:
-        """批量预取列，单次 DuckDB 读多列以减少 IO。"""
+        """批量预取列，单次 DuckDB 读多列以减少 IO。
+        
+        参数:
+            names: 逻辑列名列表
+        
+        返回:
+            无
+        """
         missing = [n for n in names if n not in self._column_cache]
         if not missing:
             return
@@ -90,9 +109,27 @@ class KlineParquetSource(DataSource):
             self._column_cache[logical] = self._frame_to_series(df, physical, logical)
 
     def prefetch_panels(self, names: list[str]) -> None:
+        """prefetch_panels。
+        
+        参数:
+            names: 逻辑列名列表
+        
+        返回:
+            无
+        """
         self.prefetch_columns(names)
 
     def _frame_to_series(self, df, source_name: str, logical_name: str):
+        """将缓存 DataFrame 还原为 MultiIndex Series。
+        
+        参数:
+            df: 输入 DataFrame
+            source_name: 见函数签名
+            logical_name: 见函数签名
+        
+        返回:
+            无
+        """
         df = df.rename(
             columns={
                 self.instrument_column: "instrument",
@@ -114,6 +151,15 @@ class KlineParquetSource(DataSource):
     # ---- 内部：DuckDB 读 ----
 
     def _duckdb_read_batch(self, files: list[Path], read_columns: list[str]):
+        """_duckdb_read_batch。
+        
+        参数:
+            files: 见函数签名
+            read_columns: 见函数签名
+        
+        返回:
+            无
+        """
         try:
             from data_access.engine import get_shared_engine
         except ModuleNotFoundError:
@@ -126,6 +172,15 @@ class KlineParquetSource(DataSource):
         return table.to_pandas(self_destruct=True, split_blocks=True)
 
     def _duckdb_read_per_file(self, files: list[Path], read_columns: list[str]):
+        """_duckdb_read_per_file。
+        
+        参数:
+            files: 见函数签名
+            read_columns: 见函数签名
+        
+        返回:
+            无
+        """
         import pandas as pd
         try:
             from data_access.engine import get_shared_engine
@@ -161,6 +216,16 @@ class KlineParquetSource(DataSource):
         *,
         skip_errors: bool = False,
     ):
+        """_pandas_read_files。
+        
+        参数:
+            files: 见函数签名
+            read_columns: 见函数签名
+            skip_errors: 见函数签名（可选）
+        
+        返回:
+            无
+        """
         import pandas as pd
 
         frames = []
@@ -182,6 +247,14 @@ class KlineParquetSource(DataSource):
         return pd.concat(frames, ignore_index=True)
 
     def _selected_files(self) -> list[Path]:
+        """_selected_files。
+        
+        参数:
+            无
+        
+        返回:
+            list[Path]
+        """
         if self._file_cache is None:
             root = Path(self.root)
             self._file_cache = sorted(root.rglob(self.file_pattern))
@@ -198,6 +271,16 @@ class KlineParquetSource(DataSource):
         return files
 
     def _matches_date_range(self, path: Path, start: date | None, end: date | None) -> bool:
+        """_matches_date_range。
+        
+        参数:
+            path: 文件或目录路径
+            start: 起始时间（含）
+            end: 结束时间（含）
+        
+        返回:
+            bool
+        """
         try:
             file_date = date.fromisoformat(path.stem)
         except ValueError:
@@ -210,6 +293,14 @@ class KlineParquetSource(DataSource):
         return True
 
     def _convert_timestamp(self, series):
+        """_convert_timestamp。
+        
+        参数:
+            series: MultiIndex Series
+        
+        返回:
+            无
+        """
         import pandas as pd
         from pandas.api.types import is_datetime64_any_dtype, is_numeric_dtype
 

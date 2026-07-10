@@ -103,7 +103,14 @@ def resolve_canonical(name: str) -> str:
 
 
 def polars_long_native(canonical: str) -> bool:
-    """canonical 是否在纯 Polars Expr native 白名单内。"""
+    """判断 canonical 是否在纯 Polars Expr native 白名单内。
+
+    参数:
+        canonical: 算子 canonical 名称或别名。
+
+    返回:
+        是否属于 ``POLARS_LONG_NATIVE`` 集合。
+    """
     from backend.polars_long_policy import POLARS_LONG_NATIVE
 
     return resolve_canonical(canonical) in POLARS_LONG_NATIVE
@@ -124,7 +131,14 @@ def polars_long_tier(canonical: str) -> str:
 
 
 def polars_long_tier_status(canon: str) -> CapabilityStatus:
-    """long-table tier → capability status（production 路由用）。"""
+    """将 long-table tier 映射为 capability status（production 路由用）。
+
+    参数:
+        canon: 算子 canonical 名称或别名。
+
+    返回:
+        对应 backend 能力状态标签。
+    """
     tier = polars_long_tier(canon)
     if tier == "unsupported":
         return "unsupported"
@@ -132,20 +146,36 @@ def polars_long_tier_status(canon: str) -> CapabilityStatus:
         from cleaned_operators.operator_policy import POLARS_PRODUCTION_SAFE
 
         return "production_safe" if canon in POLARS_PRODUCTION_SAFE else "parity_verified"
+    if tier == "blocked_causal":
+        return "unsupported"
     if tier in {"map_groups", "passthrough", "registry"}:
         return "implemented"
     return "unsupported"
 
 
 def polars_expr_capable(canonical: str) -> bool:
-    """canonical 是否在手写 Polars expr / map_groups 编译白名单内。"""
+    """判断 canonical 是否在手写 Polars expr / map_groups 编译白名单内。
+
+    参数:
+        canonical: 算子 canonical 名称或别名。
+
+    返回:
+        是否属于 ``POLARS_LONG_COMPATIBLE`` 集合。
+    """
     from backend.polars_long_policy import POLARS_LONG_COMPATIBLE
 
     return resolve_canonical(canonical) in POLARS_LONG_COMPATIBLE
 
 
 def polars_long_capable(canonical: str) -> bool:
-    """canonical 是否可走 polars_long（native + map_groups + registry bridge）。"""
+    """判断 canonical 是否可走 polars_long（native + map_groups + registry bridge）。
+
+    参数:
+        canonical: 算子 canonical 名称或别名。
+
+    返回:
+        是否在 ``get_polars_long_capable()`` 返回的集合内。
+    """
     from backend.polars_long_policy import get_polars_long_capable
 
     return resolve_canonical(canonical) in get_polars_long_capable()
@@ -248,7 +278,15 @@ def _sql_status(canon: str, *, dialect: BackendName) -> CapabilityStatus:
 
 
 def capability_for(canonical: str, backend: BackendName) -> BackendCapability:
-    """导出单个 canonical × backend 能力行。"""
+    """导出单个 canonical × backend 能力行。
+
+    参数:
+        canonical: 算子 canonical 名称或别名。
+        backend: 目标 backend 名称。
+
+    返回:
+        含状态、加速比与各能力标志的 ``BackendCapability``。
+    """
     from cleaned_operators.operator_policy import infer_operator_policy
     from backend.operator_cost import default_backend_speedup
 
@@ -286,7 +324,14 @@ def capability_for(canonical: str, backend: BackendName) -> BackendCapability:
 
 
 def summarize_operator(canonical: str) -> OperatorCapabilitySummary:
-    """按 canonical 聚合四 backend 状态。"""
+    """按 canonical 聚合四 backend 能力状态。
+
+    参数:
+        canonical: 算子 canonical 名称或别名。
+
+    返回:
+        多 backend 聚合视图 ``OperatorCapabilitySummary``。
+    """
     from cleaned_operators.operator_policy import POLARS_PARITY_VERIFIED
     from cleaned_operators.operator_spec import build_operator_spec
 
@@ -307,7 +352,14 @@ def summarize_operator(canonical: str) -> OperatorCapabilitySummary:
 def build_capability_matrix(
     canonicals: Sequence[str] | None = None,
 ) -> list[OperatorCapabilitySummary]:
-    """全量或子集 capability 矩阵（按 resolve_canonical 去重）。"""
+    """构建全量或子集 capability 矩阵（按 resolve_canonical 去重）。
+
+    参数:
+        canonicals: 可选 canonical 子集；为 ``None`` 时遍历 registry 全量。
+
+    返回:
+        ``OperatorCapabilitySummary`` 列表。
+    """
     from cleaned_operators.registry import OperatorRegistry
 
     if canonicals is None:
@@ -329,7 +381,14 @@ def build_capability_matrix(
 def export_flat_capabilities(
     canonicals: Sequence[str] | None = None,
 ) -> list[BackendCapability]:
-    """展开为 canonical × backend 扁平行（CSV 导出）。"""
+    """展开为 canonical × backend 扁平行（CSV 导出）。
+
+    参数:
+        canonicals: 可选 canonical 子集。
+
+    返回:
+        ``BackendCapability`` 扁平行列表。
+    """
     rows: list[BackendCapability] = []
     for summary in build_capability_matrix(canonicals):
         for backend in ("pandas_numpy", "polars", "duckdb_sql", "clickhouse_sql"):
@@ -338,7 +397,15 @@ def export_flat_capabilities(
 
 
 def supports_polars(canonical: str, *, mode: str = "production") -> bool:
-    """production 仅 parity/production_safe；research 可有 polars 实现即可。"""
+    """判断 canonical 是否可走 Polars 热路径。
+
+    参数:
+        canonical: 算子 canonical 名称或别名。
+        mode: ``production`` 仅 production_safe；``research`` 允许已实现/parity。
+
+    返回:
+        当前模式下是否支持 Polars 执行。
+    """
     status = _polars_status(resolve_canonical(canonical))
     if status == "unsupported":
         return False
@@ -398,6 +465,16 @@ def get_best_backend(
     """算子热路径 backend 选型：Polars（已验证） vs Pandas fallback。
 
     SQL 不在此函数选择——由 HybridBackend / SQL lowerer 在 plan 层处理。
+
+    参数:
+        name: 算子名称或别名。
+        mode: 运行模式，影响 Polars 白名单严格程度。
+        data_source_kind: 数据源类型（本函数内未直接用于 SQL 选型）。
+        row_count_estimate: 可选行数估计，用于成本路由。
+        prefer: 强制 backend（``pandas_numpy``/``polars``/``sql``/``auto``）。
+
+    返回:
+        ``(算子实例或 None, backend 名称)`` 元组。
     """
     import os
 

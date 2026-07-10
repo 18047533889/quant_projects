@@ -10,7 +10,11 @@ import pandas as pd
 
 @runtime_checkable
 class FactorWriteTarget(Protocol):
-    """因子落盘目标（Parquet / staging / ClickHouse）。"""
+    """因子落盘目标协议。
+    
+    参数:
+        无
+    """
 
     name: str
 
@@ -23,21 +27,51 @@ class FactorWriteTarget(Protocol):
         partition_by: list[str] | None = None,
         **params: Any,
     ) -> dict[str, Any]:
-        """写入已规范化的长表 DataFrame（datetime, asset, value + 可选 metadata）。"""
+        """写入已规范化的长表 DataFrame（datetime, asset, value + 可选 metadata）。
+        
+        参数:
+            factor_id: 因子唯一标识
+            frame: 长表 DataFrame
+            upsert_on: 见函数签名（可选）
+            partition_by: 见函数签名（可选）
+        
+        返回:
+            dict[str, Any]
+        """
 
 
 class LocalParquetWriteTarget:
-    """写入本地因子湖分区 Parquet（year=YYYY/data.parquet）。"""
+    """写入本地因子湖分区 Parquet。
+    
+    参数:
+        lake_root: 因子湖根目录（可选）
+    """
 
     name = "local"
 
     def __init__(self, lake_root: str | Path | None = None) -> None:
+        """初始化实例。
+        
+        参数:
+            lake_root: 因子湖根目录（可选）
+        
+        返回:
+            无
+        """
         from storage.materializer import ParquetMaterializer
 
         self._materializer = ParquetMaterializer(lake_root=lake_root)
 
     @property
     def lake_root(self) -> Path:
+        """lake_root。
+        
+        参数:
+            无
+        
+        返回:
+            Path
+        """
         return self._materializer.lake_root
 
     def write_factor_frame(
@@ -49,6 +83,17 @@ class LocalParquetWriteTarget:
         partition_by: list[str] | None = None,
         **params: Any,
     ) -> dict[str, Any]:
+        """write_factor_frame。
+        
+        参数:
+            factor_id: 因子唯一标识
+            frame: 长表 DataFrame
+            upsert_on: 见函数签名（可选）
+            partition_by: 见函数签名（可选）
+        
+        返回:
+            dict[str, Any]
+        """
         del upsert_on, params
         from storage.partition_policy import PartitionPolicy, attach_partition_columns, iter_partition_groups
 
@@ -77,11 +122,23 @@ class LocalParquetWriteTarget:
 
 
 class StagingWriteTarget:
-    """经 data_access upsert 写入 staging 数据集。"""
+    """经 data_access upsert 写入 staging。
+    
+    参数:
+        dataset: data_access 数据集名称（可选）
+    """
 
     name = "staging"
 
     def __init__(self, dataset: str = "factor_lake_staging") -> None:
+        """初始化实例。
+        
+        参数:
+            dataset: data_access 数据集名称（可选）
+        
+        返回:
+            无
+        """
         self.dataset = str(dataset or "factor_lake_staging")
 
     def write_factor_frame(
@@ -93,6 +150,17 @@ class StagingWriteTarget:
         partition_by: list[str] | None = None,
         **params: Any,
     ) -> dict[str, Any]:
+        """write_factor_frame。
+        
+        参数:
+            factor_id: 因子唯一标识
+            frame: 长表 DataFrame
+            upsert_on: 见函数签名（可选）
+            partition_by: 见函数签名（可选）
+        
+        返回:
+            dict[str, Any]
+        """
         import pyarrow as pa
 
         from data_access import get_store
@@ -116,7 +184,17 @@ class StagingWriteTarget:
 
 
 class ClickHouseWriteTarget:
-    """经 ClickHouseMaterializer 写入 ReplacingMergeTree 长表。"""
+    """经 ClickHouseMaterializer 写入 ClickHouse。
+    
+    参数:
+        table: ClickHouse 表名（可选）
+        host: 见函数签名（可选）
+        port: 见函数签名（可选）
+        database: 见函数签名（可选）
+        username: 见函数签名（可选）
+        password: 见函数签名（可选）
+        secure: 见函数签名（可选）
+    """
 
     name = "clickhouse"
 
@@ -131,6 +209,20 @@ class ClickHouseWriteTarget:
         password: str | None = None,
         secure: bool | None = None,
     ) -> None:
+        """初始化实例。
+        
+        参数:
+            table: ClickHouse 表名（可选）
+            host: 见函数签名（可选）
+            port: 见函数签名（可选）
+            database: 见函数签名（可选）
+            username: 见函数签名（可选）
+            password: 见函数签名（可选）
+            secure: 见函数签名（可选）
+        
+        返回:
+            无
+        """
         self.table = table
         self._ch_overrides = {
             k: v
@@ -157,6 +249,20 @@ class ClickHouseWriteTarget:
         ensure_table: bool = True,
         **params: Any,
     ) -> dict[str, Any]:
+        """write_factor_frame。
+        
+        参数:
+            factor_id: 因子唯一标识
+            frame: 长表 DataFrame
+            upsert_on: 见函数签名（可选）
+            partition_by: 见函数签名（可选）
+            factor_version: 见函数签名（可选）
+            data_snapshot_id: 见函数签名（可选）
+            ensure_table: 见函数签名（可选）
+        
+        返回:
+            dict[str, Any]
+        """
         del upsert_on, partition_by, params
         from storage.clickhouse_materializer import ClickHouseMaterializer
 
@@ -198,7 +304,24 @@ class ClickHouseWriteTarget:
         write_metadata: bool = True,
         **params: Any,
     ) -> dict[str, Any]:
-        """从 MultiIndex Series 写入 ClickHouse（dual_write / 纯 CH 路径）。"""
+        """从 MultiIndex Series 写入 ClickHouse（dual_write / 纯 CH 路径）。
+        
+        参数:
+            factor_id: 因子唯一标识
+            result: 因子计算结果 Series
+            factor_version: 见函数签名（可选）
+            data_snapshot_id: 见函数签名（可选）
+            ensure_table: 见函数签名（可选）
+            dq_check: 见函数签名（可选）
+            dq_strict: 见函数签名（可选）
+            dq_thresholds: 见函数签名（可选）
+            preserve_invalid_rows: 见函数签名（可选）
+            value_dtype: 见函数签名（可选）
+            write_metadata: 见函数签名（可选）
+        
+        返回:
+            dict[str, Any]
+        """
         del params
         from storage.clickhouse_materializer import ClickHouseMaterializer
 
@@ -238,7 +361,17 @@ def resolve_write_target(
     clickhouse_table: str = "factor_values",
     **ch_overrides: Any,
 ) -> FactorWriteTarget:
-    """按名称解析写目标。"""
+    """按名称解析因子写目标实例。
+    
+    参数:
+        name: 逻辑列名
+        lake_root: 因子湖根目录（可选）
+        staging_dataset: 见函数签名（可选）
+        clickhouse_table: 见函数签名（可选）
+    
+    返回:
+        FactorWriteTarget
+    """
     normalized = str(name or "local").lower()
     if normalized in {"local", "parquet"}:
         return LocalParquetWriteTarget(lake_root=lake_root)

@@ -1,3 +1,9 @@
+"""真实 Parquet 数据集上的因子冒烟测试（集成验证用）。
+
+对 ``DATASET_SPECS`` 中各数据集构造简易因子并执行 ``FactorEngine.run``，
+用于 CI / 本地快速验证 DSL 与数据接入是否正常。
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -14,6 +20,8 @@ from storage.datasource import DataSource
 
 @dataclass(frozen=True)
 class DatasetSpec:
+    """单个 Parquet 数据集的列映射与候选因子列。"""
+
     name: str
     relative_path: str
     timestamp_col: str
@@ -112,6 +120,8 @@ DATASET_SPECS: tuple[DatasetSpec, ...] = (
 
 
 class MultiParquetSeriesSource(DataSource):
+    """从目录下多个 Parquet 文件读取列并规范为 MultiIndex Series。"""
+
     def __init__(
         self,
         root: str | Path,
@@ -122,6 +132,7 @@ class MultiParquetSeriesSource(DataSource):
         start_date: str | None = None,
         end_date: str | None = None,
     ) -> None:
+        """配置根目录、时间/标的列名及可选日期过滤。"""
         self.root = Path(root)
         self.timestamp_col = timestamp_col
         self.instrument_col = instrument_col
@@ -143,6 +154,7 @@ class MultiParquetSeriesSource(DataSource):
         return str(value)
 
     def load_column(self, name: str):
+        """通过 DuckDB 读取列并规范为 ``(timestamp, instrument)`` MultiIndex Series。"""
         import pandas as pd
         from data_access.engine import get_shared_engine
 
@@ -231,6 +243,7 @@ def run_dataset_factor_smoke(
     spec: DatasetSpec,
     max_files: int = 2,
 ) -> dict[str, Any]:
+    """对单个数据集运行 rank/zscore/ts_mean 等冒烟因子并汇总结果。"""
     import pandas as pd
 
     dataset_root = Path(massive_parquet_root) / spec.relative_path
@@ -281,4 +294,5 @@ def run_dataset_factor_smoke(
 
 
 def run_all_dataset_smokes(massive_parquet_root: str | Path, max_files: int = 2) -> list[dict[str, Any]]:
+    """对 ``DATASET_SPECS`` 中全部数据集依次执行冒烟测试。"""
     return [run_dataset_factor_smoke(massive_parquet_root, spec, max_files=max_files) for spec in DATASET_SPECS]

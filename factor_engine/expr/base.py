@@ -32,27 +32,35 @@ class Expr:
         return CleanedCall(op=op, args=(self, ensure_expr(other)))
 
     def __add__(self, other: Any) -> "Expr":
+        """表达式加法 → ``CleanedCall(op='add')``。"""
         return self._binop("add", other)
 
     def __radd__(self, other: Any) -> "Expr":
+        """右加法 ``scalar + expr``。"""
         return ensure_expr(other)._binop("add", self)
 
     def __sub__(self, other: Any) -> "Expr":
+        """表达式减法。"""
         return self._binop("subtract", other)
 
     def __rsub__(self, other: Any) -> "Expr":
+        """右减法 ``scalar - expr``。"""
         return ensure_expr(other)._binop("subtract", self)
 
     def __mul__(self, other: Any) -> "Expr":
+        """表达式乘法。"""
         return self._binop("multiply", other)
 
     def __rmul__(self, other: Any) -> "Expr":
+        """右乘法。"""
         return ensure_expr(other)._binop("multiply", self)
 
     def __truediv__(self, other: Any) -> "Expr":
+        """表达式真除法。"""
         return self._binop("divide", other)
 
     def __rtruediv__(self, other: Any) -> "Expr":
+        """右除法 ``scalar / expr``。"""
         return ensure_expr(other)._binop("divide", self)
 
     def __neg__(self) -> "Expr":

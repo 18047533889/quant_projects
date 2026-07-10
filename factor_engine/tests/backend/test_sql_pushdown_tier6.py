@@ -152,6 +152,6 @@ def test_rank_pct_emits_pct_rank_not_cs_rank_01():
     )
     assert compiled is not None
     sql = compiled.query
-    assert "PARTITION BY ts" in sql
-    assert "RANK()" in sql
-    assert "NULLIF" in sql
+    assert "cnt_le" in sql or "countIf" in sql or "COUNT(*) FILTER" in sql
+    assert "/ s.cnt" in sql or "nullIf(s.cnt" in sql
+    assert "- 1.0) / NULLIF(s.cnt - 1" not in sql

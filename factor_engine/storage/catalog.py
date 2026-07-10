@@ -26,6 +26,14 @@ from .exceptions import FactorHashMismatchError, FactorNotFoundError
 
 
 def _parse_json_field(raw: Any) -> dict[str, Any]:
+    """将 JSON 字段解析为字典（容错空值）。
+    
+    参数:
+        raw: 见函数签名
+    
+    返回:
+        dict[str, Any]
+    """
     if raw is None:
         return {}
     if isinstance(raw, dict):
@@ -41,15 +49,24 @@ def _parse_json_field(raw: Any) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 def compute_ir_hash(ir_node) -> str:
-    """将 ``IRNode`` 树递归序列化为确定性 JSON，取 SHA-256 摘要。
-
-    序列化规则
-    ----------
-    - ``sort_keys=True`` 保证字典顺序确定性。
-    - 仅包含 ``op``、``attrs``、``inputs``（递归），排除内存地址等运行时信息。
+    """将 IR 树序列化后计算 SHA-256 摘要。
+    
+    参数:
+        ir_node: 因子 IR 树根节点
+    
+    返回:
+        str
     """
 
     def _serialize(node) -> dict:
+        """递归序列化 IR 节点为字典。
+        
+        参数:
+            node: 见函数签名
+        
+        返回:
+            dict
+        """
         return {
             "op": node.op,
             "attrs": {k: _normalize(v) for k, v in sorted(node.attrs.items())},
@@ -57,7 +74,14 @@ def compute_ir_hash(ir_node) -> str:
         }
 
     def _normalize(v: Any) -> Any:
-        """将不可 JSON 序列化的值规范化。"""
+        """规范化不可 JSON 序列化的属性值。
+        
+        参数:
+            v: 见函数签名
+        
+        返回:
+            Any
+        """
         if isinstance(v, float):
             # 处理 NaN / Inf 的 JSON 兼容
             if v != v:  # NaN
@@ -143,16 +167,21 @@ CREATE TABLE IF NOT EXISTS factor_column_dep (
 
 
 class FactorCatalog:
-    """SQLite 元数据目录，管理因子注册与水位线。
-
-    Parameters
-    ----------
-    db_path : str | Path
-        SQLite 文件路径（如 ``lake_root/_catalog.sqlite``）。
-        若文件不存在，首次连接时自动创建并建表。
+    """SQLite 因子元数据目录（注册、水位线、血缘）。
+    
+    参数:
+        db_path: SQLite 数据库路径
     """
 
     def __init__(self, db_path: str | Path) -> None:
+        """初始化实例。
+        
+        参数:
+            db_path: SQLite 数据库路径
+        
+        返回:
+            无
+        """
         self._db_path = Path(db_path)
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(self._db_path), timeout=30.0)
@@ -164,7 +193,14 @@ class FactorCatalog:
         self._conn.commit()
 
     def _migrate_schema(self) -> None:
-        """向后兼容：为旧 catalog 补列。"""
+        """向后兼容：为旧 catalog 补列。
+        
+        参数:
+            无
+        
+        返回:
+            无
+        """
         cols = {
             row[1] for row in self._conn.execute("PRAGMA table_info(factor_registry)")
         }
@@ -197,14 +233,39 @@ class FactorCatalog:
     # ------------------------------------------------------------------
 
     def __enter__(self):
+        """__enter__。
+        
+        参数:
+            无
+        
+        返回:
+            无
+        """
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        """__exit__。
+        
+        参数:
+            exc_type: 见函数签名
+            exc_val: 见函数签名
+            exc_tb: 见函数签名
+        
+        返回:
+            无
+        """
         self.close()
         return False
 
     def close(self) -> None:
-        """显式关闭数据库连接。"""
+        """显式关闭数据库连接。
+        
+        参数:
+            无
+        
+        返回:
+            无
+        """
         self._conn.close()
 
     # ------------------------------------------------------------------
@@ -223,11 +284,24 @@ class FactorCatalog:
         data_source_config: dict | None = None,
     ) -> None:
         """注册因子。如 factor_id 已存在且 Hash 一致则静默跳过；不一致则报错。
-
+        
+        参数:
+            factor_id: 因子唯一标识
+            author: 见函数签名
+            frequency: 因子频率
+            ast_hash: 因子 AST 哈希
+            description: 见函数签名（可选）
+            expression: 见函数签名（可选）
+            data_source_config: 见函数签名（可选）
+        
+        返回:
+            无
+        
+        
         Raises
-        ------
-        FactorHashMismatchError
-            ``factor_id`` 已注册但 ``ast_hash`` 与既存记录不同。
+                ------
+                FactorHashMismatchError
+                    ``factor_id`` 已注册但 ``ast_hash`` 与既存记录不同。
         """
         existing = self.get_factor_info(factor_id)
         ds_json = (
@@ -261,7 +335,15 @@ class FactorCatalog:
         self._conn.commit()
 
     def verify_hash(self, factor_id: str, ast_hash: str) -> bool:
-        """校验因子 Hash 是否与注册一致。未注册返回 True（尚无冲突）。"""
+        """校验因子 Hash 是否与注册一致。未注册返回 True（尚无冲突）。
+        
+        参数:
+            factor_id: 因子唯一标识
+            ast_hash: 因子 AST 哈希
+        
+        返回:
+            bool
+        """
         existing = self.get_factor_info(factor_id)
         if existing is None:
             return True
@@ -273,7 +355,14 @@ class FactorCatalog:
 
     def get_watermark(self, factor_id: str) -> dict | None:
         """返回水位线字典 ``{factor_id, start_date, end_date, last_updated, row_count}``。
-
+        
+        参数:
+            factor_id: 因子唯一标识
+        
+        返回:
+            dict | None
+        
+        
         未找到返回 ``None``。
         """
         row = self._conn.execute(
@@ -289,7 +378,17 @@ class FactorCatalog:
         *,
         row_count: int | None = None,
     ) -> None:
-        """插入或更新水位线（UPSERT）。"""
+        """插入或更新水位线（UPSERT）。
+        
+        参数:
+            factor_id: 因子唯一标识
+            start_date: 起始日期
+            end_date: 结束日期
+            row_count: 见函数签名（可选）
+        
+        返回:
+            无
+        """
         now = datetime.now(timezone.utc).isoformat()
         self._conn.execute(
             "INSERT INTO factor_watermark (factor_id, start_date, end_date, last_updated, row_count) "
@@ -306,14 +405,28 @@ class FactorCatalog:
     # ------------------------------------------------------------------
 
     def get_factor_info(self, factor_id: str) -> dict | None:
-        """返回因子注册信息字典，未找到返回 ``None``。"""
+        """返回因子注册信息字典，未找到返回 ``None``。
+        
+        参数:
+            factor_id: 因子唯一标识
+        
+        返回:
+            dict | None
+        """
         row = self._conn.execute(
             "SELECT * FROM factor_registry WHERE factor_id = ?", (factor_id,)
         ).fetchone()
         return dict(row) if row else None
 
     def list_factors(self) -> list[dict]:
-        """返回所有已注册因子的列表。"""
+        """返回所有已注册因子的列表。
+        
+        参数:
+            无
+        
+        返回:
+            list[dict]
+        """
         rows = self._conn.execute(
             "SELECT r.*, w.start_date, w.end_date, w.last_updated, w.row_count "
             "FROM factor_registry r "
@@ -323,7 +436,14 @@ class FactorCatalog:
         return [dict(r) for r in rows]
 
     def delete_factor(self, factor_id: str) -> None:
-        """从 Catalog 中删除因子注册信息和水位线（不删除物理文件）。"""
+        """从 Catalog 中删除因子注册信息和水位线（不删除物理文件）。
+        
+        参数:
+            factor_id: 因子唯一标识
+        
+        返回:
+            无
+        """
         self._conn.execute(
             "DELETE FROM factor_run WHERE factor_id = ?", (factor_id,)
         )
@@ -349,7 +469,14 @@ class FactorCatalog:
     # ------------------------------------------------------------------
 
     def record_run(self, lineage: dict) -> None:
-        """记录一次因子运行血缘（append-only）。"""
+        """记录一次因子运行血缘（append-only）。
+        
+        参数:
+            lineage: 运行血缘记录字典
+        
+        返回:
+            无
+        """
         now = lineage.get("created_at") or datetime.now(timezone.utc).isoformat()
         self._conn.execute(
             "INSERT INTO factor_run "
@@ -376,6 +503,15 @@ class FactorCatalog:
         self._conn.commit()
 
     def list_runs(self, factor_id: str, *, limit: int = 20) -> list[dict]:
+        """list_runs。
+        
+        参数:
+            factor_id: 因子唯一标识
+            limit: 返回条数上限（可选）
+        
+        返回:
+            list[dict]
+        """
         rows = self._conn.execute(
             "SELECT * FROM factor_run WHERE factor_id = ? ORDER BY created_at DESC LIMIT ?",
             (factor_id, limit),
@@ -388,7 +524,15 @@ class FactorCatalog:
         factor_id: str | None = None,
         limit: int = 50,
     ) -> list[dict]:
-        """列出 extra_json 中 ``dual_write_failed=true`` 的物化 run。"""
+        """列出 extra_json 中 ``dual_write_failed=true`` 的物化 run。
+        
+        参数:
+            factor_id: 因子唯一标识（可选）
+            limit: 返回条数上限（可选）
+        
+        返回:
+            list[dict]
+        """
         if factor_id:
             rows = self.list_runs(factor_id, limit=max(limit * 10, 100))
         else:
@@ -404,6 +548,14 @@ class FactorCatalog:
         return failures
 
     def list_recent_runs(self, *, limit: int = 200) -> list[dict]:
+        """list_recent_runs。
+        
+        参数:
+            limit: 返回条数上限（可选）
+        
+        返回:
+            list[dict]
+        """
         rows = self._conn.execute(
             "SELECT * FROM factor_run ORDER BY created_at DESC LIMIT ?",
             (limit,),
@@ -424,6 +576,19 @@ class FactorCatalog:
         error_message: str | None = None,
         partition_key: str | None = None,
     ) -> None:
+        """record_partition_checkpoint。
+        
+        参数:
+            factor_id: 因子唯一标识（可选）
+            partition_year: 分区年份（可选）
+            run_id: 运行 ID（可选）
+            status: checkpoint 状态（可选）
+            error_message: 见函数签名（可选）
+            partition_key: 分区键字符串（可选）
+        
+        返回:
+            无
+        """
         now = datetime.now(timezone.utc).isoformat()
         pkey = partition_key or f"year={int(partition_year)}"
         self._conn.execute(
@@ -443,6 +608,15 @@ class FactorCatalog:
         factor_id: str,
         partition_year: int,
     ) -> dict | None:
+        """get_partition_checkpoint。
+        
+        参数:
+            factor_id: 因子唯一标识
+            partition_year: 分区年份
+        
+        返回:
+            dict | None
+        """
         row = self._conn.execute(
             "SELECT * FROM factor_materialize_checkpoint "
             "WHERE factor_id = ? AND partition_year = ?",
@@ -455,6 +629,15 @@ class FactorCatalog:
         factor_id: str,
         partition_key: str,
     ) -> dict | None:
+        """get_partition_checkpoint_by_key。
+        
+        参数:
+            factor_id: 因子唯一标识
+            partition_key: 分区键字符串
+        
+        返回:
+            dict | None
+        """
         row = self._conn.execute(
             "SELECT * FROM factor_materialize_checkpoint "
             "WHERE factor_id = ? AND partition_key = ?",
@@ -468,6 +651,15 @@ class FactorCatalog:
         *,
         status: str | None = None,
     ) -> list[dict]:
+        """list_partition_checkpoints。
+        
+        参数:
+            factor_id: 因子唯一标识
+            status: checkpoint 状态（可选）
+        
+        返回:
+            list[dict]
+        """
         if status is None:
             rows = self._conn.execute(
                 "SELECT * FROM factor_materialize_checkpoint "
@@ -483,6 +675,14 @@ class FactorCatalog:
         return [dict(r) for r in rows]
 
     def clear_partition_checkpoints(self, factor_id: str) -> None:
+        """clear_partition_checkpoints。
+        
+        参数:
+            factor_id: 因子唯一标识
+        
+        返回:
+            无
+        """
         self._conn.execute(
             "DELETE FROM factor_materialize_checkpoint WHERE factor_id = ?",
             (factor_id,),
@@ -502,7 +702,18 @@ class FactorCatalog:
         frequency: str | None = None,
         source_dataset: str | None = None,
     ) -> None:
-        """物化/run 后登记因子对数据列的依赖。"""
+        """物化/run 后登记因子对数据列的依赖。
+        
+        参数:
+            factor_id: 因子唯一标识
+            referenced_columns: 依赖的数据列名集合（可选）
+            lookback: 回看 bar 数（可选）
+            frequency: 因子频率（可选）
+            source_dataset: 来源数据集名称（可选）
+        
+        返回:
+            无
+        """
         cols = sorted(set(str(c) for c in referenced_columns if c))
         now = datetime.now(timezone.utc).isoformat()
         self._conn.execute(
@@ -534,6 +745,14 @@ class FactorCatalog:
         self._conn.commit()
 
     def get_factor_dependency(self, factor_id: str) -> dict | None:
+        """get_factor_dependency。
+        
+        参数:
+            factor_id: 因子唯一标识
+        
+        返回:
+            dict | None
+        """
         row = self._conn.execute(
             "SELECT * FROM factor_dependency WHERE factor_id = ?",
             (factor_id,),
@@ -545,6 +764,14 @@ class FactorCatalog:
         return out
 
     def list_factors_for_column(self, column_name: str) -> list[dict]:
+        """list_factors_for_column。
+        
+        参数:
+            column_name: 数据列名
+        
+        返回:
+            list[dict]
+        """
         rows = self._conn.execute(
             "SELECT d.* FROM factor_dependency d "
             "JOIN factor_column_dep c ON d.factor_id = c.factor_id "
@@ -561,6 +788,14 @@ class FactorCatalog:
         return out
 
     def list_factors_for_dataset(self, dataset: str) -> list[dict]:
+        """list_factors_for_dataset。
+        
+        参数:
+            dataset: data_access 数据集名称
+        
+        返回:
+            list[dict]
+        """
         rows = self._conn.execute(
             "SELECT * FROM factor_dependency WHERE source_dataset = ? ORDER BY factor_id",
             (str(dataset),),
@@ -575,6 +810,14 @@ class FactorCatalog:
         return out
 
     def list_dependency_columns(self) -> list[str]:
+        """list_dependency_columns。
+        
+        参数:
+            无
+        
+        返回:
+            list[str]
+        """
         rows = self._conn.execute(
             "SELECT DISTINCT column_name FROM factor_column_dep ORDER BY column_name"
         ).fetchall()

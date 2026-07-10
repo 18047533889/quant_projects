@@ -10,6 +10,7 @@ OUT_PATH = FE_ROOT / "cleaned_operators" / "docs" / "operators_catalog.md"
 
 
 def _load():
+    """加载算子注册表、policy 推断器并注册 SQL backend。"""
     import sys
 
     root = str(FE_ROOT.parent)
@@ -28,6 +29,7 @@ def _load():
 
 
 def _render(registry, infer_policy) -> str:
+    """将注册表与 policy 渲染为 operators_catalog.md 正文。"""
     catalog = registry._catalog
     lines = [
         "# Operators Catalog（自动生成）",
@@ -70,6 +72,7 @@ def _render(registry, infer_policy) -> str:
 
 
 def main() -> None:
+    """从 OperatorRegistry + OperatorPolicy 生成 operators_catalog.md。"""
     registry, infer_policy = _load()
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUT_PATH.write_text(_render(registry, infer_policy), encoding="utf-8")

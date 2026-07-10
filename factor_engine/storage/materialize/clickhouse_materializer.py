@@ -13,6 +13,14 @@ logger = get_logger("storage.clickhouse_materializer")
 
 
 def _ensure_data_access() -> None:
+    """确保 data_access 包可导入。
+    
+    参数:
+        无
+    
+    返回:
+        无
+    """
     root = str(quant_projects_root())
     if root not in sys.path:
         sys.path.insert(0, root)
@@ -20,6 +28,11 @@ def _ensure_data_access() -> None:
 
 @dataclass(frozen=True)
 class ClickHouseMaterializeSummary:
+    """ClickHouse 物化结果摘要。
+    
+    参数:
+        无
+    """
     factor_id: str
     table: str
     rows_written: int
@@ -28,7 +41,20 @@ class ClickHouseMaterializeSummary:
 
 
 class ClickHouseMaterializer:
-    """将 ``pd.Series`` 因子结果写入 ClickHouse，复用 Parquet 规范化与清洗逻辑。"""
+    """因子结果物化到 ClickHouse 长表。
+    
+    参数:
+        table: ClickHouse 表名（可选）
+        timestamp_column: 见函数签名（可选）
+        instrument_column: 见函数签名（可选）
+        factor_id_column: 见函数签名（可选）
+        host: 见函数签名（可选）
+        port: 见函数签名（可选）
+        database: 见函数签名（可选）
+        username: 见函数签名（可选）
+        password: 见函数签名（可选）
+        secure: 见函数签名（可选）
+    """
 
     def __init__(
         self,
@@ -44,6 +70,23 @@ class ClickHouseMaterializer:
         password: str | None = None,
         secure: bool | None = None,
     ) -> None:
+        """初始化实例。
+        
+        参数:
+            table: ClickHouse 表名（可选）
+            timestamp_column: 见函数签名（可选）
+            instrument_column: 见函数签名（可选）
+            factor_id_column: 见函数签名（可选）
+            host: 见函数签名（可选）
+            port: 见函数签名（可选）
+            database: 见函数签名（可选）
+            username: 见函数签名（可选）
+            password: 见函数签名（可选）
+            secure: 见函数签名（可选）
+        
+        返回:
+            无
+        """
         self.table = table
         self.timestamp_column = timestamp_column
         self.instrument_column = instrument_column
@@ -76,6 +119,24 @@ class ClickHouseMaterializer:
         value_dtype: str = "float32",
         write_metadata: bool = True,
     ) -> ClickHouseMaterializeSummary:
+        """materialize。
+        
+        参数:
+            factor_id: 因子唯一标识
+            result: 因子计算结果 Series
+            factor_version: 见函数签名（可选）
+            data_snapshot_id: 见函数签名（可选）
+            ensure_table: 见函数签名（可选）
+            dq_check: 见函数签名（可选）
+            dq_strict: 见函数签名（可选）
+            dq_thresholds: 见函数签名（可选）
+            preserve_invalid_rows: 见函数签名（可选）
+            value_dtype: 见函数签名（可选）
+            write_metadata: 见函数签名（可选）
+        
+        返回:
+            ClickHouseMaterializeSummary
+        """
         _ensure_data_access()
         from data_access.clickhouse_panel import ClickHouseConfig
         from data_access.clickhouse_write import insert_factor_dataframe

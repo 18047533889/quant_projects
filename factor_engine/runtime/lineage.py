@@ -13,6 +13,8 @@ from typing import Any
 
 @dataclass
 class RunLineage:
+    """单次因子运行的血缘记录（AST、算子 catalog、DQ、行数等）。"""
+
     run_id: str
     factor_id: str
     factor_name: str
@@ -29,10 +31,12 @@ class RunLineage:
     extra: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
+        """转为普通字典，便于 catalog / JSON 持久化。"""
         return asdict(self)
 
 
 def new_run_id() -> str:
+    """生成新的运行 UUID（hex，无连字符）。"""
     return uuid.uuid4().hex
 
 
@@ -50,6 +54,7 @@ def build_run_lineage(
     run_id: str | None = None,
     extra: dict[str, Any] | None = None,
 ) -> RunLineage:
+    """从分析结果与执行输出组装 :class:`RunLineage`。"""
     row_count = len(result) if result is not None else None
     non_null = int(result.notna().sum()) if result is not None and hasattr(result, "notna") else None
     dq_passed = dq_report.passed if dq_report is not None else None
@@ -70,6 +75,7 @@ def build_run_lineage(
 
 
 def hash_data_source_config(config: dict[str, Any]) -> str:
+    """对数据源配置做稳定 SHA256，用作 ``data_snapshot_id``。"""
     payload = json.dumps(config, sort_keys=True, default=str, ensure_ascii=False)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 

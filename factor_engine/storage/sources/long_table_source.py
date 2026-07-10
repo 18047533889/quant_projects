@@ -8,9 +8,21 @@ from .datasource import DataSource
 
 
 class LongTableDataSource(DataSource):
-    """包装现有数据源：列读取走 MultiIndex Series；panel 按需 lazy unstack 并缓存。"""
+    """长表模式包装器，列读走 Series、panel 按需 unstack。
+    
+    参数:
+        inner: 内层数据源
+    """
 
     def __init__(self, inner: DataSource) -> None:
+        """初始化实例。
+        
+        参数:
+            inner: 内层数据源
+        
+        返回:
+            无
+        """
         self._inner = inner
         self._panel_cache: dict[str, Any] = {}
         for attr in (
@@ -27,25 +39,63 @@ class LongTableDataSource(DataSource):
                 setattr(self, attr, getattr(inner, attr))
 
     def load_column(self, name: str):
+        """load_column。
+        
+        参数:
+            name: 逻辑列名
+        
+        返回:
+            无
+        """
         return self._inner.load_column(name)
 
     def load_columns(self, names: list[str]) -> dict[str, Any]:
+        """load_columns。
+        
+        参数:
+            names: 逻辑列名列表
+        
+        返回:
+            dict[str, Any]
+        """
         loader = getattr(self._inner, "load_columns", None)
         if callable(loader):
             return loader(names)
         return {n: self.load_column(n) for n in names}
 
     def prefetch_columns(self, names: list[str]) -> None:
+        """prefetch_columns。
+        
+        参数:
+            names: 逻辑列名列表
+        
+        返回:
+            无
+        """
         fn = getattr(self._inner, "prefetch_columns", None)
         if callable(fn):
             fn(names)
 
     def prefetch_panels(self, names: list[str]) -> None:
-        """长表模式：批量预加载列但不 unstack。"""
+        """长表模式：批量预加载列但不 unstack。
+        
+        参数:
+            names: 逻辑列名列表
+        
+        返回:
+            无
+        """
         self.prefetch_columns(names)
 
     def scan_polars_long(self, columns: list[str]):
-        """优先 inner.scan_polars_long；否则从 Series 拼 long LazyFrame。"""
+        """优先 inner.scan_polars_long；否则从 Series 拼 long LazyFrame。
+        
+        参数:
+            columns: 列名列表
+        
+        返回:
+            无
+        """
         inner_scan = getattr(self._inner, "scan_polars_long", None)
         if callable(inner_scan):
             return inner_scan(columns)
@@ -74,7 +124,14 @@ class LongTableDataSource(DataSource):
         return pl.from_pandas(renamed).lazy()
 
     def load_column_panel(self, name: str):
-        """按需 unstack 一次并缓存（panel-native / 宽表算子热路径）。"""
+        """按需 unstack 一次并缓存（panel-native / 宽表算子热路径）。
+        
+        参数:
+            name: 逻辑列名
+        
+        返回:
+            无
+        """
         if name in self._panel_cache:
             return self._panel_cache[name]
         series = self.load_column(name)
@@ -93,6 +150,14 @@ class LongTableDataSource(DataSource):
         return panel
 
     def dataset_axis_columns(self) -> tuple[str, str]:
+        """dataset_axis_columns。
+        
+        参数:
+            无
+        
+        返回:
+            tuple[str, str]
+        """
         fn = getattr(self._inner, "dataset_axis_columns", None)
         if callable(fn):
             return fn()

@@ -27,6 +27,7 @@ from cleaned_operators.base import (
 
 @register_operator(name="ttm", category="fundamental", business_category="fundamental", canonical="ttm", source="factor_dsl_np", status="experimental")
 class LqtpTtmOp(SeriesOperator):
+    """滚动十二个月（TTM）累加；可选 fiscal_quarter(1-4) 对齐报告期"""
     metadata = OperatorMetadata(
         name="ttm",
         category="fundamental",
@@ -44,6 +45,7 @@ class LqtpTtmOp(SeriesOperator):
 
 @register_operator(name="quarter", category="fundamental", business_category="fundamental", canonical="quarter", source="factor_dsl_np", status="experimental")
 class LqtpQuarterOp(SeriesOperator):
+    """累计值转单季度；Q1/跨年用当期值，其余期用差分；可选 fiscal_quarter"""
     metadata = OperatorMetadata(
         name="quarter",
         category="fundamental",
@@ -61,6 +63,7 @@ class LqtpQuarterOp(SeriesOperator):
 
 @register_operator(name="yoy", category="fundamental", business_category="fundamental", canonical="yoy", source="factor_dsl_np", status="experimental")
 class LqtpYoyOp(SeriesOperator):
+    """同比增速；默认 lag=4，可选 fiscal_quarter 找同季度去年同期"""
     metadata = OperatorMetadata(
         name="yoy",
         category="fundamental",
@@ -78,6 +81,7 @@ class LqtpYoyOp(SeriesOperator):
 
 @register_operator(name="avg2", category="fundamental", business_category="fundamental", canonical="avg2", source="factor_dsl_np")
 class LqtpAvg2Op(SeriesOperator):
+    """当期与上期均值；可选 fiscal_quarter 限制连续报告期"""
     metadata = OperatorMetadata(
         name="avg2",
         category="fundamental",
@@ -122,6 +126,7 @@ def _period_op_factory(helper_name: str, description: str, *, canonical: str):
             fn = getattr(ph, helper_name)
             return fn(x, fiscal_quarter)
 
+    _PeriodOp.__doc__ = description
     return _PeriodOp
 
 
@@ -156,6 +161,7 @@ YoyByPeriodOp = _period_op_factory(
     status="experimental",
 )
 class OperatingMarginOp(TwoVarOperator):
+    """营业利润率：operating_income / revenue（分母为 0 时 NaN）"""
     metadata = OperatorMetadata(
         name="operating_margin",
         category="fundamental",
@@ -180,6 +186,7 @@ class OperatingMarginOp(TwoVarOperator):
     status="experimental",
 )
 class CurrentRatioOp(TwoVarOperator):
+    """流动比率：current_assets / current_liabilities（分母为 0 时 NaN）"""
     metadata = OperatorMetadata(
         name="current_ratio",
         category="fundamental",
@@ -210,6 +217,7 @@ class CurrentRatioOp(TwoVarOperator):
     status="experimental",
 )
 class QuickRatioOp(SeriesOperator):
+    """速动比率：(current_assets - inventory) / current_liabilities"""
     metadata = OperatorMetadata(
         name="quick_ratio",
         category="fundamental",
@@ -245,6 +253,7 @@ class QuickRatioOp(SeriesOperator):
     status="experimental",
 )
 class DebtToEquityOp(TwoVarOperator):
+    """负债权益比：total_debt / total_equity（分母为 0 时 NaN）"""
     metadata = OperatorMetadata(
         name="debt_to_equity",
         category="fundamental",

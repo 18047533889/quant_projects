@@ -133,7 +133,11 @@ def _col(name: str):
 def _run(source, expr, backend: str):
     return FactorEngine(backend=build_backend(backend), data_source=source).run(
         Factor(name="t", expr=expr)
-    )["result"].sort_index()
+    )
+
+
+def _result_series(run_out) -> pd.Series:
+    return run_out["result"].sort_index()
 
 
 F = make_cleaned_call_factory
@@ -285,14 +289,18 @@ def _assert_series(pd_out, other_out):
 @pytest.mark.parametrize("name,expr_builder", POLARS_BULK_CASES)
 def test_bulk_polars_long_matches_pandas(bulk_source, name, expr_builder):
     expr = expr_builder()
-    pd_out = _run(bulk_source, expr, "pandas")
-    long_out = _run(bulk_source, expr, "polars_long")
+    pd_out = _result_series(_run(bulk_source, expr, "pandas"))
+    long_out = _result_series(_run(bulk_source, expr, "polars_long"))
     _assert_series(pd_out, long_out)
 
 
 @pytest.mark.parametrize("name,expr_builder", DUCKDB_BULK_CASES)
 def test_bulk_duckdb_matches_pandas(duckdb_bulk_source, name, expr_builder):
+    from tests.backend_parity.duckdb_parity_helpers import assert_duckdb_real_sql_execution
+
     expr = expr_builder()
-    pd_out = _run(duckdb_bulk_source, expr, "pandas")
-    sql_out = _run(duckdb_bulk_source, expr, "duckdb_sql")
+    pd_out = _result_series(_run(duckdb_bulk_source, expr, "pandas"))
+    sql_run = _run(duckdb_bulk_source, expr, "duckdb_sql")
+    assert_duckdb_real_sql_execution(sql_run)
+    sql_out = _result_series(sql_run)
     _assert_series(pd_out, sql_out)

@@ -56,6 +56,7 @@ def _time_slope_col(col: pl.Expr, window: int) -> pl.Expr:
 
 @register_operator(name="Slope", category="statistics", business_category="statistics_regression", canonical="Slope", source="factor_dsl_polars")
 class SlopePolars(SeriesOperator):
+    """Polars 滚动时间斜率"""
     metadata = OperatorMetadata(
         name="Slope", category="statistics", description="滚动时间斜率",
         param_names=["x", "window"], return_type="series", tags=["statistics", "polars"],
@@ -69,6 +70,7 @@ class SlopePolars(SeriesOperator):
 
 @register_operator(name="ts_regression", category="time_series", business_category="time_series", canonical="ts_regression", source="factor_dsl_polars")
 class TSRegressionPolars(SeriesOperator):
+    """Polars 滚动回归"""
     metadata = OperatorMetadata(
         name="ts_regression", category="time_series", description="滚动回归",
         param_names=["y", "x", "window", "lag", "retval"], return_type="series", tags=["time_series", "polars"],
@@ -116,6 +118,7 @@ def _rolling_binary(
 
 @register_operator(name="avg", category="statistics", business_category="statistics_regression", canonical="avg", source="factor_dsl_polars")
 class AvgPolars(SeriesOperator):
+    """Polars 滚动均值"""
     metadata = OperatorMetadata(
         name="avg", category="statistics", description="滚动均值",
         param_names=["x", "window"], return_type="series", tags=["statistics", "polars"],
@@ -128,6 +131,7 @@ class AvgPolars(SeriesOperator):
 
 @register_operator(name="Var", category="statistics", business_category="statistics_regression", canonical="Var", source="factor_dsl_polars")
 class VarPolars(SeriesOperator):
+    """Polars 滚动方差"""
     metadata = OperatorMetadata(
         name="Var", category="statistics", description="滚动方差",
         param_names=["x", "window"], return_type="series", tags=["statistics", "polars"],
@@ -140,6 +144,7 @@ class VarPolars(SeriesOperator):
 
 @register_operator(name="Skew", category="statistics", business_category="statistics_regression", canonical="Skew", source="factor_dsl_polars")
 class SkewPolars(SeriesOperator):
+    """Polars 滚动偏度"""
     metadata = OperatorMetadata(
         name="Skew", category="statistics", description="滚动偏度",
         param_names=["x", "window"], return_type="series", tags=["statistics", "polars"],
@@ -152,6 +157,7 @@ class SkewPolars(SeriesOperator):
 
 @register_operator(name="Kurt", category="statistics", business_category="statistics_regression", canonical="Kurt", source="factor_dsl_polars")
 class KurtPolars(SeriesOperator):
+    """Polars 滚动峰度"""
     metadata = OperatorMetadata(
         name="Kurt", category="statistics", description="滚动峰度",
         param_names=["x", "window"], return_type="series", tags=["statistics", "polars"],
@@ -177,6 +183,7 @@ class KurtPolars(SeriesOperator):
 
 @register_operator(name="Median", category="statistics", business_category="statistics_regression", canonical="Median", source="factor_dsl_polars")
 class MedianPolars(SeriesOperator):
+    """Polars 滚动中位数"""
     metadata = OperatorMetadata(
         name="Median", category="statistics", description="滚动中位数",
         param_names=["x", "window"], return_type="series", tags=["statistics", "polars"],
@@ -189,6 +196,7 @@ class MedianPolars(SeriesOperator):
 
 @register_operator(name="count", category="statistics", business_category="statistics_regression", canonical="count", source="factor_dsl_polars")
 class CountPolars(SeriesOperator):
+    """Polars 滚动非空计数"""
     metadata = OperatorMetadata(
         name="count", category="statistics", description="滚动非空计数",
         param_names=["x", "window"], return_type="series", tags=["statistics", "polars"],
@@ -203,6 +211,7 @@ class CountPolars(SeriesOperator):
 
 @register_operator(name="Beta", category="statistics", business_category="statistics_regression", canonical="Beta", source="factor_dsl_polars")
 class BetaPolars(SeriesOperator):
+    """Polars 滚动 Beta"""
     metadata = OperatorMetadata(
         name="Beta", category="statistics", description="滚动 Beta",
         param_names=["y", "x", "window"], return_type="series", tags=["statistics", "polars"],
@@ -221,6 +230,7 @@ class BetaPolars(SeriesOperator):
 
 @register_operator(name="Corr", category="statistics", business_category="statistics_regression", canonical="Corr", source="factor_dsl_polars")
 class CorrPolars(SeriesOperator):
+    """Polars 滚动相关"""
     metadata = OperatorMetadata(
         name="Corr", category="statistics", description="滚动相关",
         param_names=["x", "y", "window"], return_type="series", tags=["statistics", "polars"],
@@ -235,6 +245,7 @@ class CorrPolars(SeriesOperator):
 
 @register_operator(name="Cov", category="statistics", business_category="statistics_regression", canonical="Cov", source="factor_dsl_polars")
 class CovPolars(SeriesOperator):
+    """Polars 滚动协方差"""
     metadata = OperatorMetadata(
         name="Cov", category="statistics", description="滚动协方差",
         param_names=["x", "y", "window"], return_type="series", tags=["statistics", "polars"],
@@ -249,6 +260,7 @@ class CovPolars(SeriesOperator):
 
 @register_operator(name="Covariance", category="statistics", business_category="statistics_regression", canonical="Covariance", source="factor_dsl_polars")
 class CovariancePolars(CovPolars):
+    """Polars 滚动协方差"""
     metadata = OperatorMetadata(
         name="Covariance", category="statistics", description="滚动协方差",
         param_names=["x", "y", "window"], return_type="series", tags=["statistics", "polars"],
@@ -257,6 +269,7 @@ class CovariancePolars(CovPolars):
 
 @register_operator(name="intercept", category="statistics", business_category="statistics_regression", canonical="intercept", source="factor_dsl_polars")
 class InterceptPolars(SeriesOperator):
+    """Polars 滚动 OLS 截距"""
     metadata = OperatorMetadata(
         name="intercept", category="statistics", description="滚动 OLS 截距",
         param_names=["y", "x", "window"], return_type="series", tags=["statistics", "polars"],
@@ -278,6 +291,7 @@ class InterceptPolars(SeriesOperator):
 
 @register_operator(name="r_squared", category="statistics", business_category="statistics_regression", canonical="r_squared", source="factor_dsl_polars")
 class RSquaredPolars(SeriesOperator):
+    """Polars 滚动 R²"""
     metadata = OperatorMetadata(
         name="r_squared", category="statistics", description="滚动 R²",
         param_names=["y", "x", "window"], return_type="series", tags=["statistics", "polars"],
@@ -293,6 +307,7 @@ class RSquaredPolars(SeriesOperator):
 
 @register_operator(name="residual", category="statistics", business_category="statistics_regression", canonical="residual", source="factor_dsl_polars")
 class ResidualPolars(SeriesOperator):
+    """Polars 滚动回归残差均值"""
     metadata = OperatorMetadata(
         name="residual", category="statistics", description="滚动回归残差均值",
         param_names=["y", "x", "window"], return_type="series", tags=["statistics", "polars"],
@@ -316,6 +331,7 @@ class ResidualPolars(SeriesOperator):
 
 @register_operator(name="Mode", category="statistics", business_category="statistics_regression", canonical="Mode", source="factor_dsl_polars")
 class ModePolars(SeriesOperator):
+    """Polars 滚动众数"""
     metadata = OperatorMetadata(
         name="Mode", category="statistics", description="滚动众数",
         param_names=["x", "window"], return_type="series", tags=["statistics", "polars"],
@@ -339,6 +355,7 @@ class ModePolars(SeriesOperator):
 
 @register_operator(name="autocorr", category="statistics", business_category="statistics_regression", canonical="autocorr", source="factor_dsl_polars")
 class AutocorrPolars(SeriesOperator):
+    """Polars 自相关系数"""
     metadata = OperatorMetadata(
         name="autocorr", category="statistics", description="自相关系数",
         param_names=["x", "lag"], return_type="series", tags=["statistics", "polars"],
@@ -356,6 +373,7 @@ class AutocorrPolars(SeriesOperator):
 
 @register_operator(name="beta", category="statistics", business_category="statistics_regression", canonical="beta", source="factor_dsl_polars")
 class betaPolars(BetaPolars):
+    """Polars 滚动 Beta（小写）"""
     metadata = OperatorMetadata(
         name="beta", category="statistics", description="滚动 Beta（小写）",
         param_names=["y", "x", "window"], return_type="series", tags=["statistics", "polars"],

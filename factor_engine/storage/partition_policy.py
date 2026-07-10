@@ -14,7 +14,11 @@ SUPPORTED_DERIVED_COLUMNS = frozenset({"year", "month", "day"})
 
 @dataclass(frozen=True)
 class PartitionPolicy:
-    """物化分区与存储格式策略。"""
+    """Hive 分区与存储格式策略配置。
+    
+    参数:
+        无
+    """
 
     columns: tuple[str, ...] = DEFAULT_PARTITION_COLUMNS
     storage_format: str = "long"  # long | wide
@@ -27,6 +31,15 @@ class PartitionPolicy:
         partition_columns: Iterable[str] | None = None,
         storage_format: str | None = None,
     ) -> "PartitionPolicy":
+        """from_config。
+        
+        参数:
+            partition_columns: 见函数签名（可选）
+            storage_format: 见函数签名（可选）
+        
+        返回:
+            'PartitionPolicy'
+        """
         cols = tuple(str(c) for c in partition_columns) if partition_columns else DEFAULT_PARTITION_COLUMNS
         fmt = str(storage_format or "long").lower()
         if fmt not in {"long", "wide"}:
@@ -41,6 +54,14 @@ class PartitionPolicy:
 
     @property
     def is_wide(self) -> bool:
+        """is_wide。
+        
+        参数:
+            无
+        
+        返回:
+            bool
+        """
         return self.storage_format == "wide"
 
 
@@ -50,7 +71,16 @@ def attach_partition_columns(
     *,
     datetime_col: str = "datetime",
 ) -> pd.DataFrame:
-    """从 datetime 列派生 hive 分区列（year/month/day）。"""
+    """从 datetime 列派生 hive 分区列。
+    
+    参数:
+        df: 输入 DataFrame
+        policy: 分区策略
+        datetime_col: 见函数签名（可选）
+    
+    返回:
+        pd.DataFrame
+    """
     out = df.copy()
     dt = pd.to_datetime(out[datetime_col])
     for col in policy.columns:
@@ -66,7 +96,15 @@ def attach_partition_columns(
 
 
 def partition_path_segments(part_values: dict[str, Any], *, column_order: tuple[str, ...] | None = None) -> Path:
-    """``year=2024/month=06`` 形式的路径段（默认按 policy 列顺序）。"""
+    """生成分区目录路径段（year=YYYY/...）。
+    
+    参数:
+        part_values: 见函数签名
+        column_order: 见函数签名（可选）
+    
+    返回:
+        Path
+    """
     if column_order:
         keys = [k for k in column_order if k in part_values]
     else:
@@ -75,11 +113,26 @@ def partition_path_segments(part_values: dict[str, Any], *, column_order: tuple[
 
 
 def partition_key(part_values: dict[str, Any]) -> str:
-    """checkpoint / 日志用的稳定分区键。"""
+    """生成 checkpoint 用的稳定分区键字符串。
+    
+    参数:
+        part_values: 见函数签名
+    
+    返回:
+        str
+    """
     return "|".join(f"{k}={part_values[k]}" for k in sorted(part_values.keys()))
 
 
 def parse_partition_key(key: str) -> dict[str, int]:
+    """解析分区键字符串为字典。
+    
+    参数:
+        key: 缓存键
+    
+    返回:
+        dict[str, int]
+    """
     out: dict[str, int] = {}
     for segment in key.split("|"):
         if "=" not in segment:
@@ -90,7 +143,14 @@ def parse_partition_key(key: str) -> dict[str, int]:
 
 
 def checkpoint_year(part_values: dict[str, Any]) -> int:
-    """catalog ``partition_year`` 列编码（year-only 用 year；year+month 用 year*100+month）。"""
+    """将分区值编码为 catalog partition_year 整数。
+    
+    参数:
+        part_values: 见函数签名
+    
+    返回:
+        int
+    """
     year = int(part_values.get("year", 0))
     if "month" in part_values:
         return year * 100 + int(part_values["month"])
@@ -101,7 +161,15 @@ def iter_partition_groups(
     df: pd.DataFrame,
     policy: PartitionPolicy,
 ) -> Iterator[tuple[dict[str, Any], pd.DataFrame]]:
-    """按分区列 groupby，产出 (part_values, partition_df)。"""
+    """按分区列 groupby 迭代产出分区 DataFrame。
+    
+    参数:
+        df: 输入 DataFrame
+        policy: 分区策略
+    
+    返回:
+        Iterator[tuple[dict[str, Any], pd.DataFrame]]
+    """
     group_cols = list(policy.columns)
     missing = [c for c in group_cols if c not in df.columns]
     if missing:

@@ -409,7 +409,7 @@ def execute_run_many_parallel(
             if len(fps) <= 1:
                 for fp in fps:
                     result, path = _execute_root_with_path(
-                        engine.backend, fp.root, ctx, run_mode=engine.run_mode, factor_name=name
+                        engine.backend, fp.root, ctx, run_mode=engine.run_mode, factor_name=fp.factor_name
                     )
                     results[fp.factor_name] = result
                     backend_paths[fp.factor_name] = path

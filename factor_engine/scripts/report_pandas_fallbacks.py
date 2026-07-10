@@ -19,6 +19,7 @@ from pathlib import Path
 
 
 def _extract_fallbacks(payload: object) -> list[dict[str, str]]:
+    """从 engine 结果 JSON（单条或批跑嵌套结构）递归提取 production_pandas_fallbacks。"""
     if isinstance(payload, dict):
         if "production_pandas_fallbacks" in payload:
             raw = payload["production_pandas_fallbacks"]
@@ -41,6 +42,7 @@ def _extract_fallbacks(payload: object) -> list[dict[str, str]]:
 
 
 def _summarize(fallbacks: list[dict[str, str]]) -> dict[str, object]:
+    """按算子名聚合 fallback 事件计数。"""
     by_op = Counter(str(x.get("op", "?")) for x in fallbacks)
     return {
         "total_events": len(fallbacks),
@@ -50,6 +52,7 @@ def _summarize(fallbacks: list[dict[str, str]]) -> dict[str, object]:
 
 
 def main() -> int:
+    """汇总 production 运行中的 Polars→Pandas fallback 记录。"""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", type=Path, help="单条或批跑 engine 结果 JSON")
     parser.add_argument("--fail-if-any", action="store_true", help="存在 fallback 时 exit 1")

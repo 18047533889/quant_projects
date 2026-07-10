@@ -153,8 +153,10 @@ POLARS_LONG_MAP_GROUPS: frozenset[str] = frozenset(
     }
 )
 
-# 因果透传（与 SQL 一致：不引用未来值，long path 直接 passthrough inner）
-POLARS_LONG_PASSTHROUGH: frozenset[str] = frozenset({"bfill", "causal_bfill"})
+# 因果填充算子：禁止 polars_long / SQL fast path silent no-op（见 ``UnsupportedCausalOperatorError``）
+POLARS_LONG_BLOCKED_CAUSAL: frozenset[str] = frozenset({"bfill", "causal_bfill"})
+
+POLARS_LONG_PASSTHROUGH: frozenset[str] = frozenset()
 
 POLARS_LONG_COMPATIBLE: frozenset[str] = (
     POLARS_LONG_NATIVE
@@ -202,6 +204,8 @@ def classify_plan_op(op: str) -> str:
     canon = resolve_polars_native_canonical(_resolve(op))
     if canon in {"column", "literal", "materialized_series", "plan_ref"}:
         return "meta"
+    if canon in POLARS_LONG_BLOCKED_CAUSAL:
+        return "blocked_causal"
     if canon in POLARS_LONG_PASSTHROUGH:
         return "passthrough"
     if canon in POLARS_LONG_NATIVE:
@@ -220,6 +224,8 @@ def infer_polars_long_tier(op: str) -> str:
     kind = classify_plan_op(op)
     if kind == "meta":
         return "meta"
+    if kind == "blocked_causal":
+        return "blocked_causal"
     if kind in {"native", "python_rolling", "map_groups", "passthrough", "registry"}:
         return kind
     return "unsupported"
@@ -238,10 +244,12 @@ def collect_plan_op_stats(plan: PlanNode) -> dict[str, list[str]]:
     python_rolling: set[str] = set()
     map_groups: set[str] = set()
     passthrough: set[str] = set()
+    blocked_causal: set[str] = set()
     registry: set[str] = set()
     other: set[str] = set()
 
     def _walk(node: PlanNode) -> None:
+        """递归遍历计划并按 tier 分类算子。"""
         canon = _resolve(node.op)
         kind = classify_plan_op(canon)
         if kind == "native" and canon not in {"column", "literal", "materialized_series", "plan_ref"}:
@@ -252,6 +260,8 @@ def collect_plan_op_stats(plan: PlanNode) -> dict[str, list[str]]:
             map_groups.add(canon)
         elif kind == "passthrough":
             passthrough.add(canon)
+        elif kind == "blocked_causal":
+            blocked_causal.add(canon)
         elif kind == "registry":
             registry.add(canon)
         elif kind == "other" and canon not in {
@@ -270,6 +280,7 @@ def collect_plan_op_stats(plan: PlanNode) -> dict[str, list[str]]:
         "polars_long_python_rolling_ops": sorted(python_rolling),
         "polars_long_map_group_ops": sorted(map_groups),
         "polars_long_passthrough_ops": sorted(passthrough),
+        "polars_long_blocked_causal_ops": sorted(blocked_causal),
         "polars_long_registry_ops": sorted(registry),
         "polars_long_other_ops": sorted(other),
     }
@@ -326,6 +337,10 @@ class PolarsLongStrictError(RuntimeError):
     """Strict 模式下 long native 失败，禁止 fallback。"""
 
 
+class UnsupportedCausalOperatorError(PolarsLongStrictError):
+    """bfill / causal_bfill 等在 fast path 禁止 silent no-op。"""
+
+
 class PolarsLongNativeRequiredError(PolarsLongStrictError):
     """``FACTOR_ENGINE_POLARS_LONG_REQUIRE_NATIVE=1`` 时 plan 含非 native 算子。"""
 
@@ -334,6 +349,26 @@ def require_polars_long_native_only(ctx=None) -> bool:
     """仅允许 ``POLARS_LONG_NATIVE`` + meta；禁止 map_groups / registry / passthrough。"""
     raw = os.environ.get("FACTOR_ENGINE_POLARS_LONG_REQUIRE_NATIVE", "").strip().lower()
     return raw in {"1", "true", "yes", "on"}
+
+
+def plan_contains_blocked_causal(plan) -> bool:
+    """计划树是否含 ``bfill`` / ``causal_bfill``。"""
+    from planner.logical_plan import PlanNode
+
+    if not isinstance(plan, PlanNode):
+        return False
+    canon = _resolve(str(plan.op))
+    if canon in POLARS_LONG_BLOCKED_CAUSAL:
+        return True
+    return any(plan_contains_blocked_causal(c) for c in plan.inputs)
+
+
+def assert_no_blocked_causal_plan(plan, *, backend: str) -> None:
+    """fast path 遇 blocked causal 算子时立即失败。"""
+    if plan_contains_blocked_causal(plan):
+        raise UnsupportedCausalOperatorError(
+            f"{backend} 不支持 bfill/causal_bfill（因果占位，非传统 backward fill）；请改用 ffill 或 pandas 研究路径"
+        )
 
 
 def assert_native_only_plan(op_stats: dict[str, list[str]], ctx=None) -> None:

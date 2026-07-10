@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def main() -> int:
+    """运行企业级文档一致性检查（LLM prompt 同步、roadmap Phase 标记等）。"""
     checks = [
         [
             sys.executable,

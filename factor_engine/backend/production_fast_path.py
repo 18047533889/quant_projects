@@ -63,7 +63,14 @@ PRODUCTION_TRIPLE_PARITY_DUCKDB: frozenset[str] = frozenset(
 
 
 def is_production_fast_path(canon: str) -> bool:
-    """canonical 是否可走 production fast path（duckdb production_safe 或 polars native production_safe）。"""
+    """判断 canonical 是否可走 production fast path。
+
+    参数:
+        canon: 算子 canonical 名称或别名。
+
+    返回:
+        DuckDB production_safe 或 Polars native production_safe 时为 ``True``。
+    """
     from backend.fastpath_coverage import build_fastpath_coverage_row
     from .operator_capability import resolve_canonical
 
@@ -72,7 +79,11 @@ def is_production_fast_path(canon: str) -> bool:
 
 
 def summarize_production_fast_path() -> dict[str, Any]:
-    """报表：production fast path 覆盖摘要。"""
+    """生成 production fast path 覆盖报表摘要。
+
+    返回:
+        含 triple parity、fast path 计数与 core gap 样例的字典。
+    """
     from cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS
 
     from .operator_capability import resolve_canonical

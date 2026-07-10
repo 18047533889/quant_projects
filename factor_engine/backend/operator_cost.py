@@ -206,6 +206,13 @@ def _load_benchmark_costs() -> dict[str, dict[str, BackendCost]]:
             import json
 
             data = json.loads(_BENCHMARK_JSON.read_text(encoding="utf-8"))
+            if str(data.get("generated_by") or "") == "seed_defaults":
+                _BENCHMARK_CACHE = {}
+                return {}
+            provenance = data.get("provenance") if isinstance(data.get("provenance"), dict) else {}
+            if provenance and not provenance.get("measured"):
+                _BENCHMARK_CACHE = {}
+                return {}
             for canon, backends in (data.get("operators") or {}).items():
                 if not isinstance(backends, dict):
                     continue
@@ -291,7 +298,16 @@ def default_backend_speedup(
     backend: str,
     status: str,
 ) -> float:
-    """相对 pandas 的粗粒度加速比（用于 capability 导出）。"""
+    """估算相对 pandas 的粗粒度加速比（用于 capability 导出）。
+
+    参数:
+        canon: 算子 canonical 名称。
+        backend: 目标 backend 名称。
+        status: 能力状态；``unsupported`` 时返回 ``1.0``。
+
+    返回:
+        相对 pandas 的加速比（>= 1.0）。
+    """
     if status == "unsupported":
         return 1.0
     base = get_backend_cost(canon, "pandas_numpy")
@@ -308,7 +324,17 @@ def estimate_backend_cost(
     row_count_estimate: int | None = None,
     requires_conversion: bool | None = None,
 ) -> float:
-    """估算相对成本（越小越快）。"""
+    """估算相对成本（越小越快）。
+
+    参数:
+        canon: 算子 canonical 名称。
+        backend: 目标 backend 名称。
+        row_count_estimate: 可选行数估计，默认 50 万行。
+        requires_conversion: 是否需格式转换开销；为 ``None`` 时使用成本表默认值。
+
+    返回:
+        相对成本浮点数。
+    """
     bc = get_backend_cost(canon, backend)
     conv = bc.requires_conversion if requires_conversion is None else requires_conversion
     rows = row_count_estimate or 500_000
@@ -320,7 +346,14 @@ def estimate_backend_cost(
 
 
 def tier1_has_explicit_cost(canon: str) -> bool:
-    """Tier-1 算子是否在 cost model 中显式登记（非仅 _DEFAULT）。"""
+    """判断 Tier-1 算子是否在 cost model 中显式登记。
+
+    参数:
+        canon: 算子 canonical 名称。
+
+    返回:
+        是否在 ``_COSTS`` 字典中有专属条目（非仅 ``_DEFAULT``）。
+    """
     return canon in _COSTS
 
 
@@ -337,12 +370,20 @@ def get_operator_cost(op: str) -> OperatorCost:
 
 
 def estimate_plan_cost(plan: object) -> dict[str, object]:
-    """逻辑计划子树代价摘要（节点数 + 最大 tier）。"""
+    """计算逻辑计划子树代价摘要（节点数 + 最大 tier）。
+
+    参数:
+        plan: 逻辑计划根节点或子树。
+
+    返回:
+        含 ``node_count``、``max_tier``、``expensive_ops`` 的字典。
+    """
     max_tier = 0
     expensive: list[str] = []
     node_count = 0
 
     def walk(node: object) -> None:
+        """递归遍历计划子树并累计代价统计。"""
         nonlocal max_tier, node_count
         node_count += 1
         op = str(getattr(node, "op", "") or "")

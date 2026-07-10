@@ -29,7 +29,9 @@ class CleanedCall(Expr):
     kwargs: Tuple[Tuple[str, Any], ...] = ()
 
     def children(self) -> Tuple[Expr, ...]:
+        """子表达式列表（即 ``args``）。"""
         return self.args
 
     def kwargs_dict(self) -> Mapping[str, Any]:
+        """把 ``kwargs`` 元组转为普通 dict，供 analyzer 读取。"""
         return dict(self.kwargs)

@@ -113,6 +113,7 @@ def _compute_dmi_adx(
 # canonical=ADX backend=pandas_numpy selected=ADX source=financial/__init__.py
 @register_operator(name="ADX", category="financial", business_category="technical_signal", canonical="ADX", source="factor_dsl_np")
 class ADX(SeriesOperator):
+    """平均趋向指数"""
     metadata = OperatorMetadata(
         name="ADX",
         category="financial",
@@ -134,6 +135,7 @@ class ADX(SeriesOperator):
 # canonical=ADXR backend=pandas_numpy selected=ADXR source=financial/__init__.py
 @register_operator(name="ADXR", category="financial", business_category="technical_signal", canonical="ADXR", source="factor_dsl_np")
 class ADXR(SeriesOperator):
+    """平滑平均趋向指数"""
     metadata = OperatorMetadata(
         name="ADXR",
         category="financial",
@@ -158,6 +160,7 @@ class ADXR(SeriesOperator):
 # canonical=AROON backend=pandas_numpy selected=AROON source=financial/__init__.py
 @register_operator(name="AROON", category="financial", business_category="technical_signal", canonical="AROON", source="factor_dsl_np")
 class Aroon(SeriesOperator):
+    """Aroon指标（Aroon Up - Aroon Down）"""
     metadata = OperatorMetadata(
         name="AROON",
         category="financial",
@@ -180,6 +183,7 @@ class Aroon(SeriesOperator):
 # canonical=AROON_down backend=pandas_numpy selected=AROON_down source=financial/__init__.py
 @register_operator(name="AROON_down", category="financial", business_category="technical_signal", canonical="AROON_down", source="factor_dsl_np")
 class AroonDown(SeriesOperator):
+    """Aroon下降指标"""
     metadata = OperatorMetadata(
         name="AROON_down",
         category="financial",
@@ -199,6 +203,7 @@ class AroonDown(SeriesOperator):
 # canonical=AROON_up backend=pandas_numpy selected=AROON_up source=financial/__init__.py
 @register_operator(name="AROON_up", category="financial", business_category="technical_signal", canonical="AROON_up", source="factor_dsl_np")
 class AroonUp(SeriesOperator):
+    """Aroon上升指标"""
     metadata = OperatorMetadata(
         name="AROON_up",
         category="financial",
@@ -245,6 +250,7 @@ class ATR(SeriesOperator):
     source="factor_dsl_np",
 )
 class ATRWilder(SeriesOperator):
+    """Wilder 平均真实波幅"""
     metadata = OperatorMetadata(
         name="ATR_WILDER",
         category="financial",
@@ -263,6 +269,7 @@ class ATRWilder(SeriesOperator):
 # canonical=BollingerBands backend=pandas_numpy selected=BollingerBands source=financial/__init__.py
 @register_operator(name="BollingerBands", category="financial", business_category="technical_signal", canonical="BollingerBands", source="factor_dsl_np")
 class BollingerBands(SeriesOperator):
+    """布林带中轨（移动平均）"""
     metadata = OperatorMetadata(
         name="BollingerBands",
         category="financial",
@@ -323,6 +330,7 @@ class BollingerUpper(SeriesOperator):
 # canonical=CCI backend=pandas_numpy selected=CCI source=financial/__init__.py
 @register_operator(name="CCI", category="financial", business_category="technical_signal", canonical="CCI", source="factor_dsl_np")
 class CCI(SeriesOperator):
+    """商品通道指数"""
     metadata = OperatorMetadata(
         name="CCI",
         category="financial",
@@ -344,6 +352,7 @@ class CCI(SeriesOperator):
 # canonical=DPO backend=pandas_numpy selected=DPO source=financial/__init__.py
 @register_operator(name="DPO", category="financial", business_category="technical_signal", canonical="DPO", source="factor_dsl_np")
 class DPO(SeriesOperator):
+    """去趋势价格振荡器"""
     metadata = OperatorMetadata(
         name="DPO",
         category="financial",
@@ -363,6 +372,7 @@ class DPO(SeriesOperator):
 # canonical=KAMA backend=pandas_numpy selected=KAMA source=financial/__init__.py
 @register_operator(name="KAMA", category="financial", business_category="technical_signal", canonical="KAMA", source="factor_dsl_np")
 class KAMA(SeriesOperator):
+    """考夫曼自适应移动平均"""
     metadata = OperatorMetadata(
         name="KAMA",
         category="financial",
@@ -422,6 +432,7 @@ class MACD(SeriesOperator):
 # canonical=MACD_hist backend=pandas_numpy selected=MACD_hist source=financial/__init__.py
 @register_operator(name="MACD_hist", category="financial", business_category="technical_signal", canonical="MACD_hist", source="factor_dsl_np")
 class MACDHist(SeriesOperator):
+    """MACD柱状图（MACD线 - 信号线）"""
     metadata = OperatorMetadata(
         name="MACD_hist",
         category="financial",
@@ -444,6 +455,7 @@ class MACDHist(SeriesOperator):
 # canonical=MACD_line backend=pandas_numpy selected=MACD_line source=financial/__init__.py
 @register_operator(name="MACD_line", category="financial", business_category="technical_signal", canonical="MACD_line", source="factor_dsl_np")
 class MACDLine(SeriesOperator):
+    """MACD线（快线EMA - 慢线EMA）"""
     metadata = OperatorMetadata(
         name="MACD_line",
         category="financial",
@@ -486,6 +498,7 @@ class MACDSignal(SeriesOperator):
 # canonical=MOM backend=pandas_numpy selected=MOM source=financial/__init__.py
 @register_operator(name="MOM", category="financial", business_category="technical_signal", canonical="MOM", source="factor_dsl_np")
 class MOM(SeriesOperator):
+    """动量指标"""
     metadata = OperatorMetadata(
         name="MOM",
         category="financial",
@@ -524,6 +537,7 @@ class OBV(SeriesOperator):
 # canonical=ROC backend=pandas_numpy selected=ROC source=financial/__init__.py
 @register_operator(name="ROC", category="financial", business_category="technical_signal", canonical="ROC", source="factor_dsl_np")
 class ROC(SeriesOperator):
+    """变动率指标"""
     metadata = OperatorMetadata(
         name="ROC",
         category="financial",
@@ -573,6 +587,7 @@ class RSI(SeriesOperator):
     source="factor_dsl_np",
 )
 class RSIWilder(SeriesOperator):
+    """Wilder 相对强弱指数"""
     metadata = OperatorMetadata(
         name="RSI_WILDER",
         category="financial",
@@ -593,6 +608,7 @@ class RSIWilder(SeriesOperator):
 # canonical=StochasticD backend=pandas_numpy selected=StochasticD source=financial/__init__.py
 @register_operator(name="StochasticD", category="financial", business_category="technical_signal", canonical="StochasticD", source="factor_dsl_np")
 class StochasticD(SeriesOperator):
+    """随机指标%D（%K的移动平均）"""
     metadata = OperatorMetadata(
         name="StochasticD",
         category="financial",
@@ -614,6 +630,7 @@ class StochasticD(SeriesOperator):
 # canonical=StochasticK backend=pandas_numpy selected=StochasticK source=financial/__init__.py
 @register_operator(name="StochasticK", category="financial", business_category="technical_signal", canonical="StochasticK", source="factor_dsl_np")
 class StochasticK(SeriesOperator):
+    """随机指标%K"""
     metadata = OperatorMetadata(
         name="StochasticK",
         category="financial",
@@ -634,6 +651,7 @@ class StochasticK(SeriesOperator):
 # canonical=TRIX backend=pandas_numpy selected=TRIX source=financial/__init__.py
 @register_operator(name="TRIX", category="financial", business_category="technical_signal", canonical="TRIX", source="factor_dsl_np")
 class TRIX(SeriesOperator):
+    """三重指数平滑移动平均变化率"""
     metadata = OperatorMetadata(
         name="TRIX",
         category="financial",
@@ -655,6 +673,7 @@ class TRIX(SeriesOperator):
 # canonical=WilliamsR backend=pandas_numpy selected=WilliamsR source=financial/__init__.py
 @register_operator(name="WilliamsR", category="financial", business_category="technical_signal", canonical="WilliamsR", source="factor_dsl_np")
 class WilliamsR(SeriesOperator):
+    """威廉指标%R"""
     metadata = OperatorMetadata(
         name="WilliamsR",
         category="financial",
@@ -700,6 +719,7 @@ class Clamp(SeriesOperator):
 # canonical=hump_decay backend=pandas_numpy selected=hump_decay source=signal/__init__.py
 @register_operator(name="hump_decay", category="signal", business_category="technical_signal", canonical="hump_decay", source="factor_dsl_np")
 class HumpDecay(SeriesOperator):
+    """阈值衰减：仅当变化量绝对值超过hump时才更新值"""
     metadata = OperatorMetadata(
         name="hump_decay",
         category="signal",
@@ -861,6 +881,7 @@ class SignedPower(SeriesOperator):
 # canonical=trade_when backend=pandas_numpy selected=trade_when source=signal/__init__.py
 @register_operator(name="trade_when", category="signal", business_category="technical_signal", canonical="trade_when", source="factor_dsl_np")
 class TradeWhen(SeriesOperator):
+    """条件信号：condition为真时返回signal，否则返回fallback"""
     metadata = OperatorMetadata(
         name="trade_when",
         category="signal",

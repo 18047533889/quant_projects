@@ -9,6 +9,7 @@ from pathlib import Path
 
 
 def _bootstrap() -> None:
+    """初始化 sys.path、运行时环境并加载算子注册表。"""
     root = Path(__file__).resolve().parents[1]
     project = root.parent
     for p in (str(root), str(project)):
@@ -22,6 +23,7 @@ def _bootstrap() -> None:
 
 
 def check_operator_contracts(*, strict_tier1_cost: bool = True) -> list[str]:
+    """验收算子 metadata / policy / alias / stub / cost 等契约，返回错误列表。"""
     from backend.operator_cost import tier1_has_explicit_cost
     from cleaned_operators.operator_policy import (
         _EXPLICIT_POLICIES,
@@ -102,6 +104,7 @@ def check_operator_contracts(*, strict_tier1_cost: bool = True) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """CLI 入口：运行算子契约验收，失败时 exit 1。"""
     parser = argparse.ArgumentParser(description="算子契约验收")
     parser.add_argument(
         "--skip-tier1-cost",

@@ -9,6 +9,7 @@ from pathlib import Path
 
 
 def _bootstrap() -> None:
+    """初始化 sys.path、运行时环境并加载算子注册表。"""
     root = Path(__file__).resolve().parents[1]
     project = root.parent
     for p in (str(root), str(project)):
@@ -22,6 +23,7 @@ def _bootstrap() -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """导出算子 OperatorSpec manifest（JSON / YAML），可选校验 core specs 未过期。"""
     parser = argparse.ArgumentParser(description="导出算子 manifest")
     parser.add_argument(
         "-o",

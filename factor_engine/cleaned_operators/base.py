@@ -145,6 +145,7 @@ class ScalarOperator(Operator):
         返回:
             标量结果。
         """
+        pass
 
 
 class TransformOperator(Operator):

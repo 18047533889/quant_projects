@@ -17,8 +17,8 @@ def test_group_rank_sql():
         plan, dataset="d", time_column="t", instrument_column="i"
     )
     assert sql is not None
-    assert "RANK()" in sql.query
-    assert "g._v" in sql.query
+    assert "cnt_le" in sql.query or "countIf" in sql.query
+    assert "_grp" in sql.query
 
 
 def test_winsorize_sql():

@@ -42,6 +42,7 @@ CATEGORY_INTRO = {
 
 
 def _load_registry():
+    """加载算子注册表与 DSL 白名单。"""
     import sys
 
     if str(FE_ROOT) not in sys.path:
@@ -56,6 +57,7 @@ def _load_registry():
 
 
 def _category_by_canonical() -> dict[str, str]:
+    """扫描 ``@register_operator`` 装饰器，提取 canonical → business_category 映射。"""
     cat_by_canon: dict[str, str] = {}
     for py in (FE_ROOT / "cleaned_operators").glob("*.py"):
         if py.name.startswith("_"):
@@ -70,6 +72,7 @@ def _category_by_canonical() -> dict[str, str]:
 
 
 def _collect_canonical_entries(OperatorRegistry, allowlist: dict) -> dict[str, dict]:
+    """合并 DSL 白名单、catalog 与 metadata，构建 canonical 文档条目。"""
     catalog = OperatorRegistry._catalog
     alias_to_canon = dict(OperatorRegistry._aliases)
 
@@ -115,6 +118,7 @@ _PLACEHOLDER_DESCRIPTIONS = frozenset({
 
 
 def _render(entries: dict[str, dict], allowlist_count: int) -> str:
+    """将 canonical 条目按分类渲染为算子全览 Markdown。"""
     from cleaned_operators.docs.operator_doc_semantics import get_operator_doc
 
     by_cat: dict[str, list[dict]] = defaultdict(list)
@@ -231,6 +235,7 @@ def _render(entries: dict[str, dict], allowlist_count: int) -> str:
 
 
 def main() -> int:
+    """从 cleaned_operators 注册表生成 ``docs/算子全览.md``。"""
     OperatorRegistry, allowlist = _load_registry()
     entries = _collect_canonical_entries(OperatorRegistry, allowlist)
     content = _render(entries, len(allowlist))

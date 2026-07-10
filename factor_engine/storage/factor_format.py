@@ -18,7 +18,17 @@ def series_to_long_table(
     asset_col: str = "asset",
     value_col: str = VALUE_COLUMN,
 ) -> pd.DataFrame:
-    """MultiIndex Series → 长表 ``[datetime, asset, value]``。"""
+    """MultiIndex Series 转因子长表 DataFrame。
+    
+    参数:
+        series: MultiIndex Series
+        timestamp_col: 见函数签名（可选）
+        asset_col: 见函数签名（可选）
+        value_col: 见函数签名（可选）
+    
+    返回:
+        pd.DataFrame
+    """
     if not isinstance(series, pd.Series):
         raise ValueError(f"期望 pd.Series，实际 {type(series).__name__}")
     if not isinstance(series.index, pd.MultiIndex) or series.index.nlevels < 2:
@@ -49,7 +59,18 @@ def long_table_to_series(
     value_col: str = VALUE_COLUMN,
     sort: bool = True,
 ) -> pd.Series:
-    """长表 → MultiIndex Series（timestamp, instrument）。"""
+    """因子长表转 MultiIndex Series。
+    
+    参数:
+        frame: 长表 DataFrame
+        timestamp_col: 见函数签名（可选）
+        asset_col: 见函数签名（可选）
+        value_col: 见函数签名（可选）
+        sort: 见函数签名（可选）
+    
+    返回:
+        pd.Series
+    """
     missing = {timestamp_col, asset_col, value_col} - set(frame.columns)
     if missing:
         raise ValueError(f"长表缺少列: {sorted(missing)}")
@@ -76,7 +97,17 @@ def pivot_long_to_wide(
     asset_col: str = "asset",
     value_col: str = VALUE_COLUMN,
 ) -> pd.DataFrame:
-    """单因子长表 → 宽表 panel（index=时间, columns=标的）。"""
+    """单因子长表转宽表 panel。
+    
+    参数:
+        frame: 长表 DataFrame
+        timestamp_col: 见函数签名（可选）
+        asset_col: 见函数签名（可选）
+        value_col: 见函数签名（可选）
+    
+    返回:
+        pd.DataFrame
+    """
     missing = {timestamp_col, asset_col, value_col} - set(frame.columns)
     if missing:
         raise ValueError(f"长表缺少列: {sorted(missing)}")
@@ -96,7 +127,17 @@ def unpivot_wide_to_long(
     asset_col: str = "asset",
     value_col: str = VALUE_COLUMN,
 ) -> pd.DataFrame:
-    """宽表 panel → 长表。"""
+    """宽表 panel 转因子长表。
+    
+    参数:
+        panel: 见函数签名
+        timestamp_col: 见函数签名（可选）
+        asset_col: 见函数签名（可选）
+        value_col: 见函数签名（可选）
+    
+    返回:
+        pd.DataFrame
+    """
     if panel.index.name is None:
         panel = panel.copy()
         panel.index.name = timestamp_col
@@ -122,7 +163,17 @@ def pivot_multi_factor_long_to_wide(
     timestamp_col: str = "datetime",
     asset_col: str = "asset",
 ) -> pd.DataFrame:
-    """多因子长表（每因子一列 value）→ MultiIndex 列宽表 ``(factor, asset)``。"""
+    """多因子长表转 MultiIndex 列宽表。
+    
+    参数:
+        frame: 长表 DataFrame
+        factor_columns: 见函数签名
+        timestamp_col: 见函数签名（可选）
+        asset_col: 见函数签名（可选）
+    
+    返回:
+        pd.DataFrame
+    """
     factor_cols = list(factor_columns)
     if not factor_cols:
         raise ValueError("factor_columns 不能为空")

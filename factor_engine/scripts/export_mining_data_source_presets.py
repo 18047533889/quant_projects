@@ -12,6 +12,7 @@ DEFAULT_OUT = FE_ROOT / "docs" / "mining_data_source_presets.json"
 
 
 def main() -> int:
+    """导出 mining 默认 data_source preset JSON；``--check`` 校验已提交文件未过期。"""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "-o",

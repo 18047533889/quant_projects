@@ -12,10 +12,22 @@ from storage.exceptions import FactorNotFoundError
 
 
 class PublishNotApprovedError(PermissionError):
-    """发布未获审批。"""
+    """因子湖发布未获审批时抛出。
+    
+    参数:
+        无
+    """
 
 
 def is_publish_approved(*, approve: bool = False) -> bool:
+    """检查发布是否已获审批。
+    
+    参数:
+        approve: 是否显式审批发布（可选）
+    
+    返回:
+        bool
+    """
     if approve:
         return True
     return os.environ.get("QUANT_PUBLISH_APPROVED", "").lower() in (
@@ -26,6 +38,14 @@ def is_publish_approved(*, approve: bool = False) -> bool:
 
 
 def require_publish_approval(*, approve: bool = False) -> None:
+    """要求发布审批，未通过则抛错。
+    
+    参数:
+        approve: 是否显式审批发布（可选）
+    
+    返回:
+        无
+    """
     if not is_publish_approved(approve=approve):
         raise PublishNotApprovedError(
             "因子湖发布需要显式审批：传入 approve=True 或设置 QUANT_PUBLISH_APPROVED=1"
@@ -33,6 +53,14 @@ def require_publish_approval(*, approve: bool = False) -> None:
 
 
 def _resolve_staging_factor_dir(factor_id: str) -> Path:
+    """解析 staging 中因子目录路径。
+    
+    参数:
+        factor_id: 因子唯一标识
+    
+    返回:
+        Path
+    """
     from data_access import get_store
 
     store = get_store()
@@ -40,6 +68,14 @@ def _resolve_staging_factor_dir(factor_id: str) -> Path:
 
 
 def _count_parquet_rows(root: Path) -> int:
+    """统计目录下 Parquet 文件总行数。
+    
+    参数:
+        root: 根目录路径
+    
+    返回:
+        int
+    """
     import pyarrow.parquet as pq
 
     total = 0
@@ -55,7 +91,15 @@ def sync_local_factor_to_staging(
     factor_id: str,
     lake_root: str | Path,
 ) -> dict[str, Any]:
-    """将 materializer 本地湖目录复制到 factor_lake_staging（原子目录替换）。"""
+    """将本地因子湖目录原子复制到 staging。
+    
+    参数:
+        factor_id: 因子唯一标识（可选）
+        lake_root: 因子湖根目录（可选）
+    
+    返回:
+        dict[str, Any]
+    """
     source = Path(lake_root) / "factors" / factor_id
     if not source.exists():
         raise FileNotFoundError(f"本地因子目录不存在: {source}")
@@ -89,7 +133,14 @@ def sync_local_factor_to_staging(
 
 
 def staging_has_data(factor_id: str) -> bool:
-    """检查 factor_lake_staging 是否已有该因子数据（direct upsert 路径）。"""
+    """检查 staging 是否已有因子数据。
+    
+    参数:
+        factor_id: 因子唯一标识
+    
+    返回:
+        bool
+    """
     staging_dir = _resolve_staging_factor_dir(factor_id)
     return _count_parquet_rows(staging_dir) > 0
 
@@ -103,7 +154,19 @@ def publish_factor_lake(
     reconcile: bool = True,
     data_source_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """审批后将 factor_lake_staging 晋升为 factor_lake。"""
+    """审批后将 staging 晋升为 published 因子湖。
+    
+    参数:
+        factor_id: 因子唯一标识（可选）
+        lake_root: 因子湖根目录（可选）
+        approve: 是否显式审批发布（可选）
+        sync_from_local: 见函数签名（可选）
+        reconcile: 见函数签名（可选）
+        data_source_config: 见函数签名（可选）
+    
+    返回:
+        dict[str, Any]
+    """
     require_publish_approval(approve=approve)
 
     from runtime.snapshot_reconcile import reconcile_data_snapshot

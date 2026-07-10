@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
-"""SLO 告警规则：基于 pipeline metrics 的阈值检查。"""
+"""SLO 告警规则：基于 pipeline metrics 的阈值检查。
+
+``DEFAULT_SLO_RULES`` 为默认规则列表（成功率、DQ、双写失败、物化延迟）。
+"""
 
 from __future__ import annotations
 

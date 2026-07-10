@@ -1285,6 +1285,7 @@ class TSDecayLinearPolars(SeriesOperator):
 
 # helper for ts_corr
 class TSCorrelation(SeriesOperator):
+    """滚动相关系数 (与m_cor相同)"""
     metadata = OperatorMetadata(
         name="ts_correlation", category="time_series",
         description="滚动相关系数 (与m_cor相同)",
@@ -1629,6 +1630,7 @@ class TSSkewnessPolars(SeriesOperator):
 
 # helper for ts_std
 class TSStdDev(SeriesOperator):
+    """滚动标准差 (与m_std相同)"""
     metadata = OperatorMetadata(
         name="ts_std_dev", category="time_series",
         description="滚动标准差 (与m_std相同)",

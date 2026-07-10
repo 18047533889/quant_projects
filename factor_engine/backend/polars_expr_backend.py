@@ -1,5 +1,17 @@
 # -*- coding: utf-8
-"""兼容层：旧 ``polars_expr_backend`` 模块名 → ``polars_expr_emitter``。"""
+"""Polars 表达式后端兼容层。
+
+本模块为历史 import 路径保留的薄封装，所有实现已迁移至
+``polars_expr_emitter`` 与 ``polars_long_policy``。
+
+重新导出内容
+------------
+- 能力集合：``POLARS_EXPR_CAPABLE``、``POLARS_LONG_CAPABLE`` 等；
+- 计划编译与执行：``compile_plan_to_polars``、``execute_polars_expr_plan``、
+  ``execute_polars_long_plan``；
+- 能力检测：``plan_is_polars_expr_capable``、``plan_is_polars_long_capable``；
+- 遥测辅助：``collect_columns``、``collect_plan_op_stats``。
+"""
 from __future__ import annotations
 
 from .polars_expr_emitter import (  # noqa: F401

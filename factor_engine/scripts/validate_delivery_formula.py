@@ -16,6 +16,7 @@ from api.mining_integration import validate_manifest_for_execution  # noqa: E402
 
 
 def main() -> int:
+    """校验单行 DSL 公式或 manifest.json 是否满足投递/生产/fastpath 门禁。"""
     parser = argparse.ArgumentParser()
     parser.add_argument("formula", nargs="?", help="单行 DSL 公式")
     parser.add_argument("--market", default="us_stock")

@@ -63,7 +63,6 @@ SQL_IMPLEMENTED_CANONICALS: frozenset[str] = frozenset(
         "ts_rank",
         "ewm_mean",
         "ffill",
-        "bfill",
         "fillna_const",
         "ts_decay_linear",
         "coalesce",

@@ -33,6 +33,8 @@ def shard_config_paths(
 
 @dataclass(frozen=True)
 class QueueJob:
+    """任务队列中的单条作业记录。"""
+
     job_id: str
     config_path: str
     payload: dict[str, Any]
@@ -45,11 +47,13 @@ class FileTaskQueue:
     """基于目录的文件任务队列（pending/running/done/failed）。"""
 
     def __init__(self, root: str | Path) -> None:
+        """初始化队列目录（pending/running/done/failed 子目录）。"""
         self.root = Path(root)
         for name in ("pending", "running", "done", "failed"):
             (self.root / name).mkdir(parents=True, exist_ok=True)
 
     def enqueue(self, config_path: str | Path, **payload: Any) -> QueueJob:
+        """将新任务写入 pending 目录并返回作业对象。"""
         now = datetime.now(timezone.utc).isoformat()
         job_id = uuid.uuid4().hex
         job = QueueJob(
@@ -69,6 +73,7 @@ class FileTaskQueue:
         return QueueJob(**data)
 
     def claim(self) -> QueueJob | None:
+        """原子认领一条 pending 任务，移至 running 并返回。"""
         pending_dir = self.root / "pending"
         for path in sorted(pending_dir.glob("*.json")):
             running_path = self.root / "running" / path.name
@@ -93,9 +98,11 @@ class FileTaskQueue:
         return None
 
     def complete(self, job_id: str, *, result: dict[str, Any] | None = None) -> None:
+        """将 running 任务标记为 done 并写入可选结果。"""
         self._finalize(job_id, bucket="done", result=result)
 
     def fail(self, job_id: str, *, error: str) -> None:
+        """将 running 任务标记为 failed 并记录错误信息。"""
         self._finalize(job_id, bucket="failed", result={"error": error})
 
     def retry_or_fail(
@@ -205,6 +212,7 @@ class ObjectStoreTaskQueue:
     """对象存储任务队列（S3 等）；本地路径无 ``://`` 时委托 ``FileTaskQueue``。"""
 
     def __init__(self, root: str | Path) -> None:
+        """本地路径委托 ``FileTaskQueue``；``s3://`` 等走 fsspec 对象存储。"""
         text = str(root).strip()
         if "://" not in text:
             self._delegate: FileTaskQueue | None = FileTaskQueue(text)
@@ -240,6 +248,7 @@ class ObjectStoreTaskQueue:
             return json.loads(fh.read())
 
     def enqueue(self, config_path: str | Path, **payload: Any) -> QueueJob:
+        """将新任务写入 pending 并返回作业对象。"""
         if self._delegate is not None:
             return self._delegate.enqueue(config_path, **payload)
         now = datetime.now(timezone.utc).isoformat()
@@ -256,6 +265,7 @@ class ObjectStoreTaskQueue:
         return job
 
     def claim(self) -> QueueJob | None:
+        """原子认领一条 pending 任务，移至 running 并返回。"""
         if self._delegate is not None:
             return self._delegate.claim()
         assert self._fs is not None
@@ -282,11 +292,13 @@ class ObjectStoreTaskQueue:
         return None
 
     def complete(self, job_id: str, *, result: dict[str, Any] | None = None) -> None:
+        """将 running 任务标记为 done 并写入可选结果。"""
         if self._delegate is not None:
             return self._delegate.complete(job_id, result=result)
         self._finalize(job_id, bucket="done", result=result)
 
     def fail(self, job_id: str, *, error: str) -> None:
+        """将 running 任务标记为 failed 并记录错误信息。"""
         if self._delegate is not None:
             return self._delegate.fail(job_id, error=error)
         self._finalize(job_id, bucket="failed", result={"error": error})
@@ -313,6 +325,7 @@ class ObjectStoreTaskQueue:
         self._fs.rm(running, missing_ok=True)
 
     def stats(self) -> dict[str, int]:
+        """各状态任务数量。"""
         if self._delegate is not None:
             return self._delegate.stats()
         assert self._fs is not None
@@ -322,6 +335,7 @@ class ObjectStoreTaskQueue:
         }
 
     def requeue_stale_running(self, *, max_age_seconds: float | None = None) -> int:
+        """将超时的 running 任务移回 pending（worker 崩溃恢复）。"""
         if self._delegate is not None:
             return self._delegate.requeue_stale_running(max_age_seconds=max_age_seconds)
         assert self._fs is not None
@@ -365,6 +379,7 @@ class RedisTaskQueue:
     """Redis 任务队列 backend（Phase 10）；未安装 redis 时 raise ImportError。"""
 
     def __init__(self, redis_url: str, *, prefix: str = "factor_engine:queue") -> None:
+        """连接 Redis 并初始化 pending/running/done/failed 哈希桶。"""
         try:
             import redis
         except ImportError as exc:
@@ -381,6 +396,7 @@ class RedisTaskQueue:
         return f"{self._prefix}:{bucket}"
 
     def enqueue(self, config_path: str | Path, **payload: Any) -> QueueJob:
+        """将新任务写入 Redis pending 哈希并返回作业对象。"""
         now = datetime.now(timezone.utc).isoformat()
         job_id = uuid.uuid4().hex
         job = QueueJob(
@@ -395,6 +411,7 @@ class RedisTaskQueue:
         return job
 
     def claim(self) -> QueueJob | None:
+        """从 Redis pending 哈希中原子认领一条任务。"""
         pending_key = self._key("pending")
         for job_id, raw in self._redis.hgetall(pending_key).items():
             if self._redis.hdel(pending_key, job_id) == 0:
@@ -414,9 +431,11 @@ class RedisTaskQueue:
         return None
 
     def complete(self, job_id: str, *, result: dict[str, Any] | None = None) -> None:
+        """将 running 任务标记为 done 并写入可选结果。"""
         self._finalize(job_id, bucket="done", result=result)
 
     def fail(self, job_id: str, *, error: str) -> None:
+        """将 running 任务标记为 failed 并记录错误信息。"""
         self._finalize(job_id, bucket="failed", result={"error": error})
 
     def _finalize(self, job_id: str, *, bucket: str, result: dict[str, Any] | None) -> None:
@@ -441,6 +460,7 @@ class RedisTaskQueue:
         self._redis.hset(self._key(bucket), job_id, json.dumps(final.__dict__, ensure_ascii=False))
 
     def stats(self) -> dict[str, int]:
+        """各状态任务数量。"""
         return {
             bucket: self._redis.hlen(self._key(bucket))
             for bucket in ("pending", "running", "done", "failed")

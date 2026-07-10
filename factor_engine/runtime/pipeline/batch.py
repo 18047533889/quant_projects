@@ -1,3 +1,5 @@
+"""配置驱动批跑：单文件 / 目录 pipeline 执行与指标导出。"""
+
 from __future__ import annotations
 
 import json
@@ -32,16 +34,19 @@ from workspace_paths import workspace_data_root
 
 
 def _safe_name(name: str, max_len: int = 100) -> str:
+    """把任意字符串清理为路径/文件名安全片段。"""
     cleaned = re.sub(r"[^0-9A-Za-z_\u4e00-\u9fff\-]+", "_", name).strip("_")
     return cleaned[:max_len] if len(cleaned) > max_len else cleaned
 
 
 def _default_output_root(name: str) -> Path:
+    """未指定 output_root 时，在 workspace_data 下生成带时间戳的 run 目录。"""
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     return workspace_data_root() / "factor_engine" / "pipeline_runs" / f"{stamp}_{_safe_name(name)}"
 
 
 def _prepare_output_root(output_root: str | Path | None, fallback_name: str) -> tuple[Path, Path, Path]:
+    """创建 run 根目录及 ``results/``、``config_snapshots/`` 子目录（旧结果清掉）。"""
     root = Path(output_root).resolve() if output_root is not None else _default_output_root(fallback_name)
     results_root = root / "results"
     snapshots_root = root / "config_snapshots"
@@ -57,6 +62,7 @@ def _prepare_output_root(output_root: str | Path | None, fallback_name: str) -> 
 
 
 def _json_safe(value: Any) -> Any:
+    """递归把对象转为 JSON 可序列化结构（未知类型转 str）。"""
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
     if isinstance(value, dict):
@@ -67,6 +73,7 @@ def _json_safe(value: Any) -> Any:
 
 
 def _count_plan_nodes(plan: Any) -> int:
+    """递归统计 PlanNode 子树节点数。"""
     inputs = getattr(plan, "inputs", []) or []
     return 1 + sum(_count_plan_nodes(item) for item in inputs)
 
@@ -385,6 +392,7 @@ def run_pipeline(
     lookback_extra: int | None = None,
     recompute_tail_bars: int | None = None,
 ) -> dict[str, Any]:
+    """执行单个 YAML 配置：run 或 materialize，写出结果 JSON 与 run_summary。"""
     root, results_root, _ = _prepare_output_root(output_root, config.factor.name)
     config_name = Path(config_path).stem if config_path is not None else config.factor.name
 
@@ -458,6 +466,7 @@ def run(
     lookback_extra: int | None = None,
     recompute_tail_bars: int | None = None,
 ) -> dict[str, Any]:
+    """``run_pipeline`` 的别名。"""
     return run_pipeline(
         config,
         config_path=config_path,
@@ -501,6 +510,7 @@ def run_from_config(
     lookback_extra: int | None = None,
     recompute_tail_bars: int | None = None,
 ) -> dict[str, Any]:
+    """从 YAML 路径加载配置并执行 pipeline。"""
     config_path = Path(config_path)
     root, results_root, _ = _prepare_output_root(output_root, config_path.stem)
 
@@ -841,6 +851,7 @@ def run_config_directory(
     lookback_extra: int | None = None,
     recompute_tail_bars: int | None = None,
 ) -> dict[str, Any]:
+    """批量执行目录内 YAML 配置，支持分片、并行、目录级 engine batch 与指标导出。"""
     config_dir = Path(config_dir)
     all_config_paths = sorted(path for path in config_dir.glob(pattern) if path.is_file())
     if not all_config_paths:

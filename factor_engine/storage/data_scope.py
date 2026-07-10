@@ -9,6 +9,14 @@ from typing import Any
 
 
 def _jsonable(value: Any) -> Any:
+    """将值递归转为 JSON 可序列化结构。
+    
+    参数:
+        value: 缓存值
+    
+    返回:
+        Any
+    """
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
     if isinstance(value, (list, tuple)):
@@ -19,7 +27,14 @@ def _jsonable(value: Any) -> Any:
 
 
 def compute_data_scope(data_source: Any) -> str:
-    """从 data_source 提取稳定作用域键（dataset / 日期边界 / root 等）。"""
+    """从数据源提取稳定作用域指纹（plan 缓存键）。
+    
+    参数:
+        data_source: 数据源实例
+    
+    返回:
+        str
+    """
     payload: dict[str, Any] = {}
     for attr in (
         "dataset",

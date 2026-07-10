@@ -30,6 +30,7 @@ import pandas as pd
 # canonical=cumulative_returns backend=pandas_numpy selected=cumulative_returns source=financial/__init__.py
 @register_operator(name="cumulative_returns", category="financial", business_category="price_volume", canonical="cumulative_returns", source="factor_dsl_np")
 class CumulativeReturns(SeriesOperator):
+    """累计收益率"""
     metadata = OperatorMetadata(
         name="cumulative_returns",
         category="financial",
@@ -49,6 +50,7 @@ class CumulativeReturns(SeriesOperator):
 # canonical=max_drawdown backend=pandas_numpy selected=max_drawdown source=financial/__init__.py
 @register_operator(name="max_drawdown", category="financial", business_category="price_volume", canonical="max_drawdown", source="factor_dsl_np")
 class MaxDrawdown(SeriesOperator):
+    """最大回撤"""
     metadata = OperatorMetadata(
         name="max_drawdown",
         category="financial",
@@ -108,6 +110,7 @@ class LogReturns(SeriesOperator):
 # canonical=sharpe_ratio backend=pandas_numpy selected=sharpe_ratio source=financial/__init__.py
 @register_operator(name="sharpe_ratio", category="financial", business_category="price_volume", canonical="sharpe_ratio", source="factor_dsl_np")
 class SharpeRatio(SeriesOperator):
+    """年化夏普比率"""
     metadata = OperatorMetadata(
         name="sharpe_ratio",
         category="financial",
@@ -196,6 +199,7 @@ class Volatility(SeriesOperator):
 # canonical=vwap backend=pandas_numpy selected=vwap source=financial/__init__.py
 @register_operator(name="vwap", category="financial", business_category="price_volume", canonical="vwap", source="factor_dsl_np")
 class VWAP(SeriesOperator):
+    """成交量加权平均价"""
     metadata = OperatorMetadata(
         name="vwap",
         category="financial",
@@ -253,6 +257,7 @@ class RollingBetaOp(SeriesOperator):
     status="experimental",
 )
 class LqtpRollingbetatomarketOp(SeriesOperator):
+    """[experimental] 滚动市场 Beta；请优先使用 rolling_beta(ret, benchmark, window)"""
     metadata = OperatorMetadata(
         name="rolling_beta_to_market",
         category="price_volume",
@@ -274,6 +279,7 @@ class LqtpRollingbetatomarketOp(SeriesOperator):
 
 @register_operator(name="downside_beta", category="price_volume", business_category="price_volume", canonical="downside_beta", source="factor_dsl_np", status="experimental")
 class LqtpDownsidebetaOp(SeriesOperator):
+    """下行 Beta：仅在 benchmark_ret < 0 子样本上估计"""
     metadata = OperatorMetadata(
         name="downside_beta",
         category="price_volume",
@@ -298,6 +304,7 @@ class LqtpDownsidebetaOp(SeriesOperator):
 
 @register_operator(name="tail_beta", category="price_volume", business_category="price_volume", canonical="tail_beta", source="factor_dsl_np", status="experimental")
 class LqtpTailbetaOp(SeriesOperator):
+    """尾部 Beta：在 benchmark_ret 最低 q 分位子样本上估计"""
     metadata = OperatorMetadata(
         name="tail_beta",
         category="price_volume",
@@ -323,6 +330,7 @@ class LqtpTailbetaOp(SeriesOperator):
 
 @register_operator(name="residual_momentum_capm", category="price_volume", business_category="price_volume", canonical="residual_momentum_capm", source="factor_dsl_np", status="experimental")
 class LqtpResidualmomentumcapmOp(SeriesOperator):
+    """CAPM 残差动量：窗口内回归残差之和"""
     metadata = OperatorMetadata(
         name="residual_momentum_capm",
         category="price_volume",
@@ -347,6 +355,7 @@ class LqtpResidualmomentumcapmOp(SeriesOperator):
 
 @register_operator(name="coskewness_to_market", category="price_volume", business_category="price_volume", canonical="coskewness_to_market", source="factor_dsl_np", status="experimental")
 class LqtpCoskewnesstomarketOp(SeriesOperator):
+    """相对市场的协偏度"""
     metadata = OperatorMetadata(
         name="coskewness_to_market",
         category="price_volume",
@@ -371,6 +380,7 @@ class LqtpCoskewnesstomarketOp(SeriesOperator):
 
 @register_operator(name="idio_vol", category="price_volume", business_category="price_volume", canonical="idio_vol", source="factor_dsl_np", status="experimental")
 class LqtpIdiovolOp(SeriesOperator):
+    """特质波动率：CAPM 残差滚动标准差"""
     metadata = OperatorMetadata(
         name="idio_vol",
         category="price_volume",
@@ -395,6 +405,7 @@ class LqtpIdiovolOp(SeriesOperator):
 
 @register_operator(name="idio_skew", category="price_volume", business_category="price_volume", canonical="idio_skew", source="factor_dsl_np", status="experimental")
 class LqtpIdioskewOp(SeriesOperator):
+    """特质偏度：CAPM 残差滚动偏度"""
     metadata = OperatorMetadata(
         name="idio_skew",
         category="price_volume",

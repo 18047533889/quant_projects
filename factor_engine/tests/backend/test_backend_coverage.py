@@ -97,7 +97,6 @@ SQL_REQUIRED = frozenset(
         "ewm_mean",
         "sign",
         "ffill",
-        "bfill",
         "fillna_const",
         "ts_decay_linear",
         "coalesce",

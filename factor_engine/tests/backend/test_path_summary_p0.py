@@ -67,10 +67,24 @@ def test_infer_duckdb_sql_full_route():
             "fully_sql": True,
             "used_sql_pushdown": True,
             "sql_fully_pushed": True,
+            "sql_query_count": 1,
             "sql_dialect": "duckdb",
         }
     )
     assert route == "duckdb_sql_full"
+
+
+def test_infer_sql_full_execution_failed_route():
+    route = infer_primary_route(
+        {
+            "backend": "duckdb_sql",
+            "fully_sql": True,
+            "sql_fully_pushed": False,
+            "sql_full_execution_failed": True,
+            "sql_query_count": 0,
+        }
+    )
+    assert route == "sql_full_execution_failed"
 
 
 def test_execute_root_uses_isolated_runtime_stats(loaded, source):

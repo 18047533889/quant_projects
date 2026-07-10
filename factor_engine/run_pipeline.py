@@ -1,3 +1,7 @@
+"""factor_engine 流水线 CLI 入口。
+
+支持单配置/目录批量运行、双写对账、数据事件增量物化、依赖查询与分布式任务队列。
+"""
 from __future__ import annotations
 
 import argparse
@@ -16,6 +20,7 @@ logger = get_logger("run_pipeline")
 
 
 def _run_reconcile(args: argparse.Namespace) -> dict:
+    """执行 reconcile 子命令（dual-write 或 snapshot 对账）。"""
     if args.reconcile_command == "dual-write":
         from runtime.dual_write_reconcile import (
             list_open_dual_write_failures,
@@ -84,6 +89,7 @@ def _run_reconcile(args: argparse.Namespace) -> dict:
 
 
 def _add_common_options(parser: argparse.ArgumentParser) -> None:
+    """为 config / config-dir / queue worker 子解析器注册通用运行选项。"""
     parser.add_argument("--output-root", type=Path, default=None, help="Override pipeline output root")
     mode_group = parser.add_mutually_exclusive_group()
     mode_group.add_argument(
@@ -207,6 +213,7 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
 
 
 def parse_args() -> argparse.Namespace:
+    """解析 CLI 参数并返回命名空间（含 config / reconcile / event / deps / queue 子命令）。"""
     parser = argparse.ArgumentParser(description="Run factor_engine pipeline from a config file or config directory.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -355,6 +362,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def _build_queue_from_args(args: argparse.Namespace):
+    """根据 CLI 参数构造 file / redis / object_store 任务队列实例。"""
     from runtime.task_queue import build_task_queue
 
     if args.backend == "redis":
@@ -374,6 +382,7 @@ def _build_queue_from_args(args: argparse.Namespace):
 
 
 def _run_queue_enqueue(args: argparse.Namespace) -> dict:
+    """将配置目录下所有 YAML 批量入队。"""
     from runtime.task_queue import enqueue_config_directory
 
     queue = _build_queue_from_args(args)
@@ -382,6 +391,7 @@ def _run_queue_enqueue(args: argparse.Namespace) -> dict:
 
 
 def _run_queue_enqueue_event(args: argparse.Namespace) -> dict:
+    """将数据列更新事件入队，供 worker 增量物化。"""
     from runtime.task_queue import enqueue_data_event
 
     queue = _build_queue_from_args(args)
@@ -404,6 +414,7 @@ def _run_queue_enqueue_event(args: argparse.Namespace) -> dict:
 
 
 def _dispatch_queue_job(job, *, profile=None, strict_dq=False, dq_strict=True, incremental=False):
+    """根据 job 类型分发到 config 运行或 data_event 增量物化。"""
     from pathlib import Path
 
     from runtime.task_queue import JOB_TYPE_DATA_EVENT
@@ -442,6 +453,7 @@ def _dispatch_queue_job(job, *, profile=None, strict_dq=False, dq_strict=True, i
 
 
 def _run_queue_worker(args: argparse.Namespace) -> dict:
+    """消费任务队列：claim → 执行 → complete / retry / fail。"""
     import time
 
     queue = _build_queue_from_args(args)
@@ -499,6 +511,7 @@ def _run_queue_worker(args: argparse.Namespace) -> dict:
 
 
 def _run_data_event(args: argparse.Namespace) -> dict:
+    """处理数据列更新事件，触发受影响因子的增量物化。"""
     from pipeline_event import run_data_event
 
     out = run_data_event(
@@ -519,6 +532,7 @@ def _run_data_event(args: argparse.Namespace) -> dict:
 
 
 def _run_deps(args: argparse.Namespace) -> dict:
+    """查询因子依赖 catalog（按列、数据集或反向索引）。"""
     from runtime.dependency_catalog import DependencyCatalog
 
     dep = DependencyCatalog.from_lake(args.lake_root)
@@ -543,6 +557,7 @@ def _run_deps(args: argparse.Namespace) -> dict:
 
 
 def main() -> None:
+    """CLI 主入口：解析参数、配置日志并按子命令分发执行。"""
     args = parse_args()
     configure_logging(args.log_level, log_file=args.log_file)
 

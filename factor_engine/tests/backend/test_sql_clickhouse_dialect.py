@@ -67,11 +67,12 @@ def _ch_sql(plan: PlanNode) -> str:
     return compiled.query
 
 
-def test_group_rank_clickhouse_uses_to_float64_rank():
+def test_group_rank_clickhouse_uses_average_rank():
     plan = PlanNode(op="group_rank", inputs=[_col("close"), _col("grp")])
     q = _ch_sql(plan)
-    assert "toFloat64(RANK()" in q
-    assert "isNull(x._v)" in q or "if(isNull" in q
+    assert "countIf" in q
+    assert "cnt_le" in q or "countIf(p._v IS NOT NULL AND p._v <=" in q
+    assert "isNull(b._v)" in q or "if(b._v IS NULL" in q
 
 
 def test_group_zscore_clickhouse_stddev():
@@ -87,8 +88,8 @@ def test_group_percentile_clickhouse_dialect():
         inputs=[_col("close"), _col("grp"), PlanNode(op="literal", inputs=[], attrs={"value": 0.5})],
     )
     q = _ch_sql(plan)
-    assert "toFloat64(RANK()" in q
-    assert "WHEN x._v IS NULL THEN 0.0" in q
+    assert "countIf" in q
+    assert "WHEN b._oval IS NULL THEN 0.0" in q or "if(b._oval IS NULL" in q
     assert "<= 0.5" in q
 
 
@@ -124,9 +125,9 @@ def test_tier6_clickhouse_dialect():
     ):
         plan = minimal_plan(op)
         q = _ch_sql(plan)
-        assert "PARTITION BY" in q or "OVER (" in q, op
+        assert "countIf" in q or "cnt_le" in q or "PARTITION BY" in q or "OVER (" in q, op
         if op in {"rank_pct", "cs_pct_rank"}:
-            assert "toFloat64(RANK()" in q or "RANK()" in q
+            assert "countIf" in q or "cnt_le" in q
         if op == "cs_quantile":
             assert "quantileExact" in q
         if op == "log_returns":

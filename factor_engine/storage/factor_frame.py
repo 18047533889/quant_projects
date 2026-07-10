@@ -25,7 +25,23 @@ def prepare_factor_dataframe(
     value_dtype: str = "float32",
     write_metadata: bool = True,
 ) -> tuple[pd.DataFrame, dict[str, Any] | None, str]:
-    """返回 (长表 DataFrame, dq_report_dict, ast_hash)。"""
+    """规范化因子结果为长表并可选执行 DQ。
+    
+    参数:
+        result: 因子计算结果 Series
+        ir_node: 因子 IR 树根节点（可选）
+        ast_hash: 因子 AST 哈希（可选）
+        data_snapshot_id: 见函数签名（可选）
+        dq_check: 见函数签名（可选）
+        dq_strict: 见函数签名（可选）
+        dq_thresholds: 见函数签名（可选）
+        preserve_invalid_rows: 见函数签名（可选）
+        value_dtype: 见函数签名（可选）
+        write_metadata: 见函数签名（可选）
+    
+    返回:
+        tuple[pd.DataFrame, dict[str, Any] | None, str]
+    """
     if ast_hash is None:
         if ir_node is not None:
             ast_hash = compute_ir_hash(ir_node)

@@ -11,6 +11,7 @@ FE_ROOT = Path(__file__).resolve().parents[1]
 
 
 def main() -> int:
+    """校验 mining preset / prod profile 与 data_access datasets.yaml 契约一致。"""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--profile",

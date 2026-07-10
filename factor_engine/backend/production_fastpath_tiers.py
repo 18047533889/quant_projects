@@ -260,6 +260,14 @@ P1_DUCKDB_PRODUCTION_SAFE: frozenset[str] = (
     P1_DUCKDB_CORE_PRODUCTION_SAFE | P1_EXTENDED_DUCKDB_CANONICALS
 )
 
+
+def dual_backend_production_safe() -> frozenset[str]:
+    """PolarsLong native 与 DuckDB SQL 同时 production-safe 的交集。"""
+    from backend.polars_long_production import POLARS_LONG_NATIVE_PRODUCTION_SAFE
+    from backend.sql_tiers import DUCKDB_SQL_PRODUCTION_SAFE
+
+    return frozenset(POLARS_LONG_NATIVE_PRODUCTION_SAFE & DUCKDB_SQL_PRODUCTION_SAFE)
+
 # ---------------------------------------------------------------------------
 # P2：map_groups / Python rolling / fill — 不进 production fast path
 # ---------------------------------------------------------------------------

@@ -18,6 +18,7 @@ def _numeric_cols(df: pl.DataFrame) -> list[str]:
 
 @register_operator(name="prev", category="time_series", business_category="shift_diff_cum", canonical="prev", source="factor_dsl_polars")
 class PrevPolars(SeriesOperator):
+    """Polars 滞后 1 期"""
     metadata = OperatorMetadata(
         name="prev", category="time_series", description="滞后 1 期",
         param_names=["x"], return_type="series", tags=["time_series", "polars"],
@@ -30,6 +31,7 @@ class PrevPolars(SeriesOperator):
 
 @register_operator(name="next", category="time_series", business_category="shift_diff_cum", canonical="next", source="factor_dsl_polars")
 class NextPolars(SeriesOperator):
+    """Polars 前视禁用，输出 NaN"""
     metadata = OperatorMetadata(
         name="next", category="time_series", description="前视禁用，输出 NaN",
         param_names=["x"], return_type="series", tags=["time_series", "polars"],
@@ -42,6 +44,7 @@ class NextPolars(SeriesOperator):
 
 @register_operator(name="Lead", category="time_series", business_category="shift_diff_cum", canonical="Lead", source="factor_dsl_polars")
 class LeadPolars(SeriesOperator):
+    """Polars 前视禁用"""
     metadata = OperatorMetadata(
         name="Lead", category="time_series", description="前视禁用",
         param_names=["x", "n"], return_type="series", tags=["time_series", "polars"],
@@ -54,6 +57,7 @@ class LeadPolars(SeriesOperator):
 
 @register_operator(name="expanding_mean", category="data_handling", business_category="data_cleaning", canonical="expanding_mean", source="factor_dsl_polars")
 class ExpandingMeanPolars(SeriesOperator):
+    """Polars 扩展均值"""
     metadata = OperatorMetadata(
         name="expanding_mean", category="data_handling", description="扩展均值",
         param_names=["x"], return_type="series", tags=["data_handling", "polars"],
@@ -71,6 +75,7 @@ class ExpandingMeanPolars(SeriesOperator):
 
 @register_operator(name="expanding_std", category="data_handling", business_category="data_cleaning", canonical="expanding_std", source="factor_dsl_polars")
 class ExpandingStdPolars(SeriesOperator):
+    """Polars 扩展标准差"""
     metadata = OperatorMetadata(
         name="expanding_std", category="data_handling", description="扩展标准差",
         param_names=["x"], return_type="series", tags=["data_handling", "polars"],
@@ -95,6 +100,7 @@ class ExpandingStdPolars(SeriesOperator):
 
 @register_operator(name="expanding_zscore", category="time_series", business_category="shift_diff_cum", canonical="expanding_zscore", source="factor_dsl_polars")
 class ExpandingZscorePolars(SeriesOperator):
+    """Polars 扩展 zscore"""
     metadata = OperatorMetadata(
         name="expanding_zscore", category="time_series", description="扩展 zscore",
         param_names=["x"], return_type="series", tags=["time_series", "polars"],

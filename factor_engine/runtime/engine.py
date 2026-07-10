@@ -357,6 +357,7 @@ class FactorEngine:
         *,
         pipeline_overrides: Any | None = None,
     ) -> dict[str, Any]:
+        """单配置文件跑一个因子：合并 pipeline overrides 后 ``engine.run``。"""
         from runtime.config_runtime import resolve_run_kwargs_for_pipeline
 
         opts = resolve_run_kwargs_for_pipeline(config, pipeline_overrides)
@@ -378,6 +379,7 @@ class FactorEngine:
         runs: dict[str, Any],
         configs: dict[str, FactorEngineConfig],
     ) -> None:
+        """同 data_scope + run kwargs 的一组配置：单条直接 run，多条 ``run_many``/并行。"""
         from runtime.config_runtime import config_run_batch_key, resolve_run_kwargs_for_pipeline
 
         batches: dict[
@@ -524,6 +526,7 @@ class FactorEngine:
         *,
         pipeline_overrides: Any | None = None,
     ) -> tuple[str, dict[str, Any]]:
+        """落盘单个 config 项，返回 ``(factor_name, materialize_output)``。"""
         from runtime.config_runtime import resolve_materialize_kwargs_for_pipeline
 
         if opts is None:
@@ -1450,6 +1453,7 @@ class FactorEngine:
             "polars_long_map_group_ops",
             "polars_long_registry_ops",
             "polars_long_passthrough_ops",
+            "polars_long_blocked_causal_ops",
             "polars_long_other_ops",
             "polars_long_columns",
         ):

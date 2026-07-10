@@ -57,6 +57,8 @@ def _register_unary(
         )
         _calculate_series = _unary_calc(expr_fn)
 
+    _UnaryPolars.__doc__ = desc
+
     _UnaryPolars.__name__ = f"{canonical.title().replace('_', '')}PolarsAuto"
     register_operator(
         name=op_name,
@@ -94,6 +96,8 @@ def _register_binary_horizontal(
         def _calculate_series(self, x: pl.DataFrame, y: pl.DataFrame, **kwargs) -> pl.DataFrame:
             cols = [c for c in _numeric_cols(x) if c in y.columns]
             return x.with_columns([combine(pl.col(c), y[c]).alias(c) for c in cols])
+
+    _BinaryPolars.__doc__ = description or f"Polars {canonical}"
 
     _BinaryPolars.__name__ = f"{canonical.title().replace('_', '')}PolarsAuto"
     register_operator(
@@ -170,6 +174,8 @@ for _canon, _name in (
                 cols = _numeric_cols(x)
                 return x.with_columns([_expanding_mean_col(pl.col(c)).alias(c) for c in cols])
 
+        _ExpandingMeanPolars.__doc__ = f"Polars {_canon}"
+
         _ExpandingMeanPolars.__name__ = f"{_canon.title()}PolarsAuto"
         register_operator(
             name=_name,
@@ -182,6 +188,7 @@ for _canon, _name in (
 if not _has_polars("running_std"):
 
     class RunningStdPolarsAuto(SeriesOperator):
+        """Polars running_std"""
         metadata = OperatorMetadata(
             name="running_std",
             category="math",
@@ -232,6 +239,8 @@ def _register_cleaning(canonical: str, name: str, calc_fn) -> None:
         )
         _calculate_series = calc_fn
 
+    _CleaningPolars.__doc__ = f"Polars {canonical}"
+
     _CleaningPolars.__name__ = f"{canonical.title()}PolarsAuto"
     register_operator(
         name=name,
@@ -265,6 +274,7 @@ _register_cleaning("dropna", "dropna", _dropna)
 if not _has_polars("coalesce"):
 
     class CoalescePolarsAuto(SeriesOperator):
+        """Polars coalesce"""
         metadata = OperatorMetadata(
             name="coalesce",
             category="elementwise_math",
@@ -293,6 +303,7 @@ _register_unary("sigmoid", name="sigmoid", description="Sigmoid", expr_fn=lambda
 if not _has_polars("and_"):
 
     class AndPolarsAuto(SeriesOperator):
+        """逻辑与"""
         metadata = OperatorMetadata(
             name="and_", category="elementwise_math", description="逻辑与",
             param_names=["x", "y"], return_type="series", tags=["elementwise", "polars"],
@@ -313,6 +324,7 @@ if not _has_polars("and_"):
 if not _has_polars("or_"):
 
     class OrPolarsAuto(SeriesOperator):
+        """逻辑或"""
         metadata = OperatorMetadata(
             name="or_", category="elementwise_math", description="逻辑或",
             param_names=["x", "y"], return_type="series", tags=["elementwise", "polars"],
@@ -335,6 +347,7 @@ _register_unary("not_", name="not_", description="逻辑非", expr_fn=lambda c: 
 if not _has_polars("fillna"):
 
     class FillNaPolarsAuto(SeriesOperator):
+        """NaN 填充"""
         metadata = OperatorMetadata(
             name="fillna", category="data_handling", description="NaN 填充",
             param_names=["x", "value"], return_type="series", tags=["data_handling", "polars"],
@@ -369,6 +382,8 @@ def _register_compare(canon: str, name: str, op_fn) -> None:
             cols = [c for c in _numeric_cols(x) if c in y.columns]
             return x.with_columns([op_fn(pl.col(c), y[c]).alias(c) for c in cols])
 
+    _ComparePolars.__doc__ = f"Polars {canon}"
+
     _ComparePolars.__name__ = f"{canon.upper()}PolarsAuto"
     register_operator(
         name=name,
@@ -392,6 +407,7 @@ for _canon, _name, _op in (
 if not _has_polars("atan2"):
 
     class Atan2PolarsAuto(SeriesOperator):
+        """atan2"""
         metadata = OperatorMetadata(
             name="atan2", category="math", description="atan2",
             param_names=["y", "x"], return_type="series", tags=["math", "polars"],

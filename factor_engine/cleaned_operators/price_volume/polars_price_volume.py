@@ -36,6 +36,7 @@ def _align_cols(*dfs: pl.DataFrame) -> list[str]:
 
 @register_operator(name="cumulative_returns", category="financial", business_category="price_volume", canonical="cumulative_returns", source="factor_dsl_polars")
 class CumulativeReturnsPolars(SeriesOperator):
+    """Polars 累计收益率"""
     metadata = OperatorMetadata(
         name="cumulative_returns", category="financial", description="累计收益率",
         param_names=["price"], return_type="series", tags=["financial", "polars"],
@@ -52,6 +53,7 @@ class CumulativeReturnsPolars(SeriesOperator):
 
 @register_operator(name="volatility", category="financial", business_category="price_volume", canonical="volatility", source="factor_dsl_polars")
 class VolatilityPolars(SeriesOperator):
+    """Polars 滚动波动率（年化）"""
     metadata = OperatorMetadata(
         name="volatility", category="financial", description="滚动波动率（年化）",
         param_names=["x", "window"], return_type="series", tags=["financial", "polars"],
@@ -81,6 +83,7 @@ class VolatilityPolars(SeriesOperator):
 
 @register_operator(name="vwap", category="financial", business_category="price_volume", canonical="vwap", source="factor_dsl_polars")
 class VWAPPolars(SeriesOperator):
+    """Polars 成交量加权平均价"""
     metadata = OperatorMetadata(
         name="vwap", category="financial", description="成交量加权平均价",
         param_names=["price", "volume", "window"], return_type="series", tags=["financial", "polars"],
@@ -109,6 +112,7 @@ class VWAPPolars(SeriesOperator):
     backend="polars",
 )
 class TSBetaPolars(SeriesOperator):
+    """Polars 滚动 Beta"""
     metadata = OperatorMetadata(
         name="m_beta", category="time_series", description="滚动 Beta",
         param_names=["y", "x", "window"], return_type="series", tags=["time_series", "polars"],
@@ -134,6 +138,7 @@ class TSBetaPolars(SeriesOperator):
 
 @register_operator(name="sharpe_ratio", category="financial", business_category="price_volume", canonical="sharpe_ratio", source="factor_dsl_polars")
 class SharpeRatioPolars(SeriesOperator):
+    """Polars 年化夏普比率"""
     metadata = OperatorMetadata(
         name="sharpe_ratio", category="financial", description="年化夏普比率",
         param_names=["returns", "window"], return_type="series", tags=["financial", "polars"],
@@ -155,6 +160,7 @@ class SharpeRatioPolars(SeriesOperator):
 
 @register_operator(name="max_drawdown", category="financial", business_category="price_volume", canonical="max_drawdown", source="factor_dsl_polars")
 class MaxDrawdownPolars(SeriesOperator):
+    """Polars 最大回撤"""
     metadata = OperatorMetadata(
         name="max_drawdown", category="financial", description="最大回撤",
         param_names=["returns"], return_type="series", tags=["financial", "polars"],
@@ -193,6 +199,7 @@ def _conditional_beta(ret: np.ndarray, mkt: np.ndarray, window: int, *, mode: st
 
 @register_operator(name="downside_beta", category="price_volume", business_category="price_volume", canonical="downside_beta", source="factor_dsl_polars")
 class DownsideBetaPolars(SeriesOperator):
+    """Polars 下行 Beta"""
     metadata = OperatorMetadata(
         name="downside_beta", category="price_volume", description="下行 Beta",
         param_names=["ret", "benchmark_ret", "window"], return_type="series", tags=["price_volume", "polars"],
@@ -214,6 +221,7 @@ class DownsideBetaPolars(SeriesOperator):
 
 @register_operator(name="tail_beta", category="price_volume", business_category="price_volume", canonical="tail_beta", source="factor_dsl_polars")
 class TailBetaPolars(SeriesOperator):
+    """Polars 尾部 Beta"""
     metadata = OperatorMetadata(
         name="tail_beta", category="price_volume", description="尾部 Beta",
         param_names=["ret", "benchmark_ret", "window", "q"], return_type="series", tags=["price_volume", "polars"],
@@ -242,6 +250,7 @@ class TailBetaPolars(SeriesOperator):
     source="factor_dsl_polars",
 )
 class RollingBetaToMarketPolars(TSBetaPolars):
+    """Polars 滚动市场 Beta"""
     metadata = OperatorMetadata(
         name="rolling_beta_to_market",
         category="price_volume",
@@ -260,6 +269,7 @@ class RollingBetaToMarketPolars(TSBetaPolars):
     source="factor_dsl_polars",
 )
 class RollingBetaPolars(SeriesOperator):
+    """Polars 滚动 Beta：Cov(ret, benchmark_ret) / Var(benchmark_ret)"""
     metadata = OperatorMetadata(
         name="rolling_beta",
         category="price_volume",
@@ -357,6 +367,7 @@ def _apply_numpy_kernel_2d(
     source="factor_dsl_polars",
 )
 class ResidualMomentumCapmPolars(SeriesOperator):
+    """Polars CAPM 残差动量"""
     metadata = OperatorMetadata(
         name="residual_momentum_capm",
         category="price_volume",
@@ -383,6 +394,7 @@ class ResidualMomentumCapmPolars(SeriesOperator):
     source="factor_dsl_polars",
 )
 class CoskewnessToMarketPolars(SeriesOperator):
+    """Polars 相对市场的余偏度"""
     metadata = OperatorMetadata(
         name="coskewness_to_market",
         category="price_volume",
@@ -409,6 +421,7 @@ class CoskewnessToMarketPolars(SeriesOperator):
     source="factor_dsl_polars",
 )
 class IdioSkewPolars(SeriesOperator):
+    """Polars CAPM 残差偏度"""
     metadata = OperatorMetadata(
         name="idio_skew",
         category="price_volume",

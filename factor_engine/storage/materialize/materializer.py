@@ -57,7 +57,11 @@ from storage.factor_schema import FACTOR_METADATA_COLUMNS as METADATA_COLUMNS
 
 @dataclass(frozen=True)
 class MaterializeMetadata:
-    """因子湖长表可选元数据列。"""
+    """因子落盘元数据字段容器。
+    
+    参数:
+        无
+    """
 
     calc_time: str
     factor_version: str
@@ -71,7 +75,14 @@ class MaterializeMetadata:
 # ---------------------------------------------------------------------------
 
 def _get_default_author() -> str:
-    """优先环境变量 ``QUANTSOCIETY_USER``，其次系统登录名，最后 ``anonymous``。"""
+    """获取默认因子作者标识。
+    
+    参数:
+        无
+    
+    返回:
+        str
+    """
     return os.getenv("QUANTSOCIETY_USER", getpass.getuser() or "anonymous")
 
 
@@ -80,15 +91,12 @@ def _get_default_author() -> str:
 # ---------------------------------------------------------------------------
 
 class ParquetMaterializer:
-    """因子落盘器：将引擎计算结果（``pd.Series``）写入分区 Parquet + SQLite Catalog。
-
-    Parameters
-    ----------
-    lake_root : str | Path | None
-        落盘根目录。``None`` 时优先读取 ``FACTOR_LAKE_ROOT``，否则落到
-        统一的 ``workspace_data/factors/lake``。
-    catalog : FactorCatalog | None
-        元数据目录实例。``None`` 时自动在 ``lake_root/_catalog.sqlite`` 创建。
+    """因子结果物化到本地 Parquet 因子湖。
+    
+    参数:
+        lake_root: 因子湖根目录（可选）
+        catalog: FactorCatalog 实例（可选）
+        staging_dataset: 见函数签名（可选）
     """
 
     def __init__(
@@ -98,6 +106,16 @@ class ParquetMaterializer:
         *,
         staging_dataset: str = "factor_lake_staging",
     ) -> None:
+        """初始化实例。
+        
+        参数:
+            lake_root: 因子湖根目录（可选）
+            catalog: FactorCatalog 实例（可选）
+            staging_dataset: 见函数签名（可选）
+        
+        返回:
+            无
+        """
         if lake_root is None:
             lake_root = default_factor_lake_root()
         self._lake_root = Path(lake_root)
@@ -114,10 +132,26 @@ class ParquetMaterializer:
 
     @property
     def lake_root(self) -> Path:
+        """lake_root。
+        
+        参数:
+            无
+        
+        返回:
+            Path
+        """
         return self._lake_root
 
     @property
     def catalog(self) -> FactorCatalog:
+        """catalog。
+        
+        参数:
+            无
+        
+        返回:
+            FactorCatalog
+        """
         return self._catalog
 
     # ------------------------------------------------------------------
@@ -152,38 +186,34 @@ class ParquetMaterializer:
         storage_format: str = "long",
     ) -> dict:
         """将因子计算结果落盘为分区 Parquet。
-
-        Parameters
-        ----------
-        factor_id : str
-            因子唯一标识（含版本号），如 ``'momentum_5m_v1'``。
-        result : pd.Series
-            引擎输出的 MultiIndex(timestamp, instrument) Series。
-        author : str | None
-            作者名。``None`` 时使用系统登录名。
-        frequency : str
-            频率标记（``'5m'``, ``'1d'`` 等）。
-        ast_hash : str | None
-            预先计算好的 AST Hash。如提供则直接使用。
-        ir_node : IRNode | None
-            IR 根节点。如 ``ast_hash`` 未提供，则从此节点计算。
-            两者都未提供时使用占位 Hash。
-        description : str | None
-            因子描述（人类可读）。
-        expression : str | None
-            原始 DSL 表达式字符串。
-
-        Returns
-        -------
-        dict
-            落盘摘要：``{factor_id, rows_written, partitions, watermark}``
-
-        Raises
-        ------
-        FactorHashMismatchError
-            公式变更但 factor_id 未升级。
-        ValueError
-            输入数据格式不符合预期。
+        
+        参数:
+            factor_id: 因子唯一标识
+            result: 因子计算结果 Series
+            author: 见函数签名（可选）
+            frequency: 因子频率（可选）
+            ast_hash: 因子 AST 哈希（可选）
+            ir_node: 因子 IR 树根节点（可选）
+            description: 见函数签名（可选）
+            expression: 见函数签名（可选）
+            dq_check: 见函数签名（可选）
+            dq_strict: 见函数签名（可选）
+            dq_thresholds: 见函数签名（可选）
+            run_lineage: 见函数签名（可选）
+            write_metadata: 见函数签名（可选）
+            data_snapshot_id: 见函数签名（可选）
+            data_source_config: 见函数签名（可选）
+            isolate_partition_failures: 见函数签名（可选）
+            resume: 见函数签名（可选）
+            preserve_invalid_rows: 见函数签名（可选）
+            value_dtype: 见函数签名（可选）
+            write_target: 见函数签名（可选）
+            defer_watermark: 见函数签名（可选）
+            partition_columns: 见函数签名（可选）
+            storage_format: 见函数签名（可选）
+        
+        返回:
+            dict
         """
         if author is None:
             author = _get_default_author()
@@ -360,6 +390,14 @@ class ParquetMaterializer:
             active_keys = set(partition_keys_written) | set(partition_keys_skipped)
 
             def _row_partition_key(row: pd.Series) -> str:
+                """_row_partition_key。
+                
+                参数:
+                    row: 见函数签名
+                
+                返回:
+                    str
+                """
                 return partition_key({col: row[col] for col in policy.columns})
 
             active_df = work_df.loc[
@@ -466,7 +504,14 @@ class ParquetMaterializer:
         return summary
 
     def commit_deferred_materialization(self, summary: dict) -> dict:
-        """双写成功：提交延迟的水位线与 lineage。"""
+        """双写成功：提交延迟的水位线与 lineage。
+        
+        参数:
+            summary: 见函数签名
+        
+        返回:
+            dict
+        """
         if not summary.get("watermark_deferred"):
             return summary
         factor_id = summary["factor_id"]
@@ -499,7 +544,16 @@ class ParquetMaterializer:
         error: str,
         downstream: str = "clickhouse",
     ) -> dict:
-        """双写失败：记录失败 run，不更新水位线。"""
+        """双写失败：记录失败 run，不更新水位线。
+        
+        参数:
+            summary: 见函数签名
+            error: 见函数签名（可选）
+            downstream: 见函数签名（可选）
+        
+        返回:
+            dict
+        """
         if not summary.get("watermark_deferred"):
             return summary
         factor_id = summary["factor_id"]
@@ -540,11 +594,20 @@ class ParquetMaterializer:
         value_dtype: str = "float32",
     ) -> pd.DataFrame:
         """MultiIndex Series → 长表 DataFrame[datetime, asset, value(float32)]。
-
+        
+        参数:
+            result: 因子计算结果 Series
+            metadata: 见函数签名（可选）
+            value_dtype: 见函数签名（可选）
+        
+        返回:
+            pd.DataFrame
+        
+        
         Raises
-        ------
-        ValueError
-            若 ``result`` 不是 MultiIndex Series 或索引层级不足。
+                ------
+                ValueError
+                    若 ``result`` 不是 MultiIndex Series 或索引层级不足。
         """
         if not isinstance(result, pd.Series):
             raise ValueError(
@@ -577,7 +640,15 @@ class ParquetMaterializer:
 
     @staticmethod
     def _clean(df: pd.DataFrame, *, preserve_invalid_rows: bool = False) -> pd.DataFrame:
-        """清洗：inf → NaN；生产模式可保留无效行并标注 invalid_reason。"""
+        """清洗：inf → NaN；生产模式可保留无效行并标注 invalid_reason。
+        
+        参数:
+            df: 输入 DataFrame
+            preserve_invalid_rows: 见函数签名（可选）
+        
+        返回:
+            pd.DataFrame
+        """
         df = df.copy()
         df["value"] = df["value"].replace([np.inf, -np.inf], np.nan)
         if preserve_invalid_rows:
@@ -599,7 +670,16 @@ class ParquetMaterializer:
         *,
         policy: PartitionPolicy | None = None,
     ) -> dict:
-        """经 data_access 幂等 upsert 到 staging 数据集（生产发布前暂存区）。"""
+        """经 data_access 幂等 upsert 到 staging 数据集（生产发布前暂存区）。
+        
+        参数:
+            factor_id: 因子唯一标识
+            df: 输入 DataFrame
+            policy: 分区策略（可选）
+        
+        返回:
+            dict
+        """
         from storage.write_targets import resolve_write_target
 
         policy = policy or PartitionPolicy.from_config()
@@ -631,7 +711,17 @@ class ParquetMaterializer:
         *,
         policy: PartitionPolicy,
     ) -> None:
-        """对指定 hive 分区做幂等 Upsert（long 或 wide）。"""
+        """对指定 hive 分区做幂等 Upsert（long 或 wide）。
+        
+        参数:
+            factor_dir: 见函数签名
+            part_values: 见函数签名
+            new_df: 见函数签名
+            policy: 分区策略（可选）
+        
+        返回:
+            无
+        """
         if policy.is_wide:
             self._upsert_partition_wide(factor_dir, part_values, new_df, policy=policy)
             return
@@ -693,7 +783,17 @@ class ParquetMaterializer:
         *,
         policy: PartitionPolicy,
     ) -> None:
-        """宽表 panel 分区 upsert（经 long 去重后再 pivot）。"""
+        """宽表 panel 分区 upsert（经 long 去重后再 pivot）。
+        
+        参数:
+            factor_dir: 见函数签名
+            part_values: 见函数签名
+            new_df: 见函数签名
+            policy: 分区策略（可选）
+        
+        返回:
+            无
+        """
         from storage.factor_format import pivot_long_to_wide, unpivot_wide_to_long
 
         partition_dir = factor_dir / partition_path_segments(
@@ -730,7 +830,14 @@ class ParquetMaterializer:
 
     @staticmethod
     def _count_total_rows(factor_dir: Path) -> int:
-        """统计因子目录下所有分区 Parquet 的总行数。"""
+        """统计因子目录下所有分区 Parquet 的总行数。
+        
+        参数:
+            factor_dir: 见函数签名
+        
+        返回:
+            int
+        """
         total = 0
         if not factor_dir.exists():
             return 0
@@ -753,13 +860,13 @@ class ParquetMaterializer:
 
     def delete_factor(self, factor_id: str, *, delete_files: bool = False) -> None:
         """从 Catalog 删除因子。可选同时删除物理文件。
-
-        Parameters
-        ----------
-        factor_id : str
-            要删除的因子 ID。
-        delete_files : bool
-            ``True`` 时同时删除对应 Parquet 目录。
+        
+        参数:
+            factor_id: 因子唯一标识
+            delete_files: 见函数签名（可选）
+        
+        返回:
+            无
         """
         self._catalog.delete_factor(factor_id)
         if delete_files:
@@ -771,5 +878,12 @@ class ParquetMaterializer:
                 logger.info("已删除因子 '%s' 的物理文件。", factor_id)
 
     def list_factors(self) -> list[dict]:
-        """列出所有已注册因子信息。"""
+        """列出所有已注册因子信息。
+        
+        参数:
+            无
+        
+        返回:
+            list[dict]
+        """
         return self._catalog.list_factors()

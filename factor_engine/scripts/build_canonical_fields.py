@@ -117,6 +117,7 @@ TABLE_META_BY_MARKET: dict[str, dict[str, dict[str, Any]]] = {
 
 
 def get_table_meta(table: str, market: str | None = None) -> dict[str, Any]:
+    """获取逻辑表的 domain_root / role / market 元数据（支持按 market 覆盖）。"""
     meta = dict(TABLE_META.get(table, {}))
     if market:
         meta.update(TABLE_META_BY_MARKET.get(market, {}).get(table, {}))
@@ -156,6 +157,7 @@ DOMAIN_ROOTS = ("price_volume", "fundamental", "alternative", "microstructure")
 
 
 def pascal_to_snake(name: str) -> str:
+    """PascalCase 列名转 snake_case canonical。"""
     s1 = re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", name)
     return re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", s1).lower()
 
@@ -182,6 +184,7 @@ def infer_signal_domain(physical: str, table: str, role: str, market: str) -> st
 
 
 def infer_formula_usage(role: str, signal_domain: str | None) -> str:
+    """根据列角色与 signal_domain 推断公式中的用法约束。"""
     if role == "metadata":
         return "forbidden"
     if role == "key":
@@ -196,6 +199,7 @@ def infer_formula_usage(role: str, signal_domain: str | None) -> str:
 
 
 def column_role(physical: str, table: str, market: str) -> str:
+    """推断列角色：key / signal / filter / auxiliary / metadata。"""
     if physical in KEY_COLUMNS:
         return "key"
     if any(p.search(physical) for p in METADATA_PATTERNS):
@@ -217,6 +221,7 @@ def build_column_entry(
     market: str,
     explicit: dict[str, dict[str, str]] | None = None,
 ) -> dict[str, Any]:
+    """为单列构建 canonical 字段条目（含 role、formula_usage、LQTP 别名等）。"""
     explicit = explicit or {}
     canonical = explicit.get(table, {}).get(physical)
     if not canonical:
@@ -256,6 +261,7 @@ def build_table_from_scan(
     local_path: str,
     explicit: dict[str, dict[str, str]],
 ) -> dict[str, Any]:
+    """将 schema 扫描结果组装为逻辑表定义（含全部列条目）。"""
     meta = get_table_meta(table, market)
     ts = "TradeDate" if "TradeDate" in scan["columns"] else None
     inst = "Symbol" if "Symbol" in scan["columns"] else (
@@ -278,6 +284,7 @@ def build_table_from_scan(
 
 
 def load_massive_datasets() -> dict[str, list[dict[str, str]]]:
+    """从 Massive 数据字典 JSON 加载外部数据集列清单。"""
     if not MASSIVE_DICT.is_file():
         return {}
     data = json.loads(MASSIVE_DICT.read_text(encoding="utf-8"))
@@ -514,6 +521,7 @@ def rescan_local_parquet() -> dict[str, Any]:
 
 
 def build_document() -> dict[str, Any]:
+    """扫描本地 parquet 与 Massive 字典，组装完整 canonical_data_fields 文档。"""
     rescan_local_parquet()
     scan = json.loads(SCHEMA_SCAN.read_text(encoding="utf-8"))
     massive = load_massive_datasets()
@@ -670,6 +678,7 @@ def build_document() -> dict[str, Any]:
 
 
 def main() -> int:
+    """生成或校验 ``canonical_data_fields.json`` 契约文档。"""
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true", help="校验现有 JSON 是否与当前扫描一致（仅比 local 表列数）")
     args = parser.parse_args()

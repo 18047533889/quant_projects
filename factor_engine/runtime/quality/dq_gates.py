@@ -15,6 +15,8 @@ import pandas as pd
 
 @dataclass
 class DQThresholds:
+    """因子产出 DQ 门禁阈值。"""
+
     min_coverage: float = 0.05
     max_nan_ratio: float = 0.95
     max_inf_ratio: float = 0.0
@@ -25,6 +27,8 @@ class DQThresholds:
 
 @dataclass
 class DQCheckResult:
+    """单项 DQ 检查结果。"""
+
     name: str
     passed: bool
     message: str
@@ -33,13 +37,17 @@ class DQCheckResult:
 
 @dataclass
 class FactorDQReport:
+    """因子产出 DQ 报告（多项检查聚合）。"""
+
     checks: list[DQCheckResult] = field(default_factory=list)
 
     @property
     def passed(self) -> bool:
+        """是否全部检查通过。"""
         return all(c.passed for c in self.checks)
 
     def to_dict(self) -> dict[str, Any]:
+        """序列化为 JSON 友好字典。"""
         return {
             "passed": self.passed,
             "checks": [
@@ -185,6 +193,7 @@ def assert_factor_dq(
     raise_on_fail: bool = True,
     preserve_invalid_rows: bool = False,
 ) -> FactorDQReport:
+    """执行产出 DQ 检查；``raise_on_fail=True`` 时未通过则抛 :class:`FactorDQError`。"""
     report = evaluate_factor_dq(
         result,
         thresholds=thresholds,

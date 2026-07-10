@@ -21,14 +21,18 @@ class PitSafetyError(RuntimeError):
 
 @dataclass
 class PitAuditReport:
+    """PIT 安全审计报告。"""
+
     violations: list[str] = field(default_factory=list)
     checked_ops: list[str] = field(default_factory=list)
 
     @property
     def passed(self) -> bool:
+        """是否无违规算子。"""
         return not self.violations
 
     def to_dict(self) -> dict[str, Any]:
+        """序列化为 JSON 友好字典。"""
         return {
             "passed": self.passed,
             "violations": list(self.violations),
@@ -91,6 +95,7 @@ def assert_pit_safe(
     forbid_forward_fill: bool = False,
     fail_on_missing: bool = True,
 ) -> PitAuditReport:
+    """审计 IR；``enforce=True`` 时未通过则抛 :class:`PitSafetyError`。"""
     report = audit_ir(
         ir,
         forbid_forward_fill=forbid_forward_fill,

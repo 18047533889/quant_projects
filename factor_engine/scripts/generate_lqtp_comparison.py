@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Generate docs/lqtp_vs_factor_engine_operators.md from cleaned_operators allowlist."""
-
+"""从 cleaned_operators 白名单生成 LQTP vs factor_engine 算子对照 Markdown。"""
 from __future__ import annotations
 
 import re
@@ -99,6 +98,7 @@ LQTP_ROWS: list[tuple[str, str, set[str]]] = [
 
 
 def _parse_categories(guide_text: str) -> dict[str, str]:
+    """从算子全览 Markdown 解析 canonical → 中文分类名映射。"""
     cat_map: dict[str, str] = {}
     current = "未分类"
     for line in guide_text.splitlines():
@@ -113,10 +113,12 @@ def _parse_categories(guide_text: str) -> dict[str, str]:
 
 
 def _fe_has(names: set[str], allow_lower: set[str]) -> bool:
+    """判断 LQTP 手册列出的算子名是否在 factor_engine DSL 白名单中。"""
     return any(n.lower() in allow_lower for n in names)
 
 
 def main() -> None:
+    """生成 ``docs/lqtp_vs_factor_engine_operators.md`` 对照表。"""
     load_all()
     allow = build_dsl_allowlist()
     allow_lower = {k.lower() for k in allow}

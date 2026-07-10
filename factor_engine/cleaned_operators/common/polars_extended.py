@@ -34,6 +34,7 @@ def _rolling_window(x: pl.DataFrame, window: int, expr_fn) -> pl.DataFrame:
 
 @register_operator(name="m_var", category="time_series", business_category="time_series", canonical="ts_var", source="factor_dsl_polars")
 class TSVarPolars(SeriesOperator):
+    """Polars 滚动方差"""
     metadata = OperatorMetadata(
         name="m_var", category="time_series", description="滚动方差",
         param_names=["x", "window"], return_type="series", tags=["time_series", "polars"],
@@ -46,6 +47,7 @@ class TSVarPolars(SeriesOperator):
 
 @register_operator(name="m_median", category="time_series", business_category="time_series", canonical="ts_median", source="factor_dsl_polars")
 class TSMedianPolars(SeriesOperator):
+    """Polars 滚动中位数"""
     metadata = OperatorMetadata(
         name="m_median", category="time_series", description="滚动中位数",
         param_names=["x", "window"], return_type="series", tags=["time_series", "polars"],
@@ -58,6 +60,7 @@ class TSMedianPolars(SeriesOperator):
 
 @register_operator(name="m_mad", category="time_series", business_category="time_series", canonical="ts_mad", source="factor_dsl_polars")
 class TSMadPolars(SeriesOperator):
+    """Polars 滚动 MAD"""
     metadata = OperatorMetadata(
         name="m_mad", category="time_series", description="滚动 MAD",
         param_names=["x", "window"], return_type="series", tags=["time_series", "polars"],
@@ -77,6 +80,7 @@ class TSMadPolars(SeriesOperator):
 
 @register_operator(name="power", category="math", business_category="elementwise_math", canonical="power", source="factor_dsl_polars")
 class PowerPolars(SeriesOperator):
+    """Polars 幂"""
     metadata = OperatorMetadata(
         name="power", category="math", description="幂",
         param_names=["x", "p"], return_type="series", tags=["math", "polars"],
@@ -90,6 +94,7 @@ class PowerPolars(SeriesOperator):
 
 @register_operator(name="log10", category="math", business_category="elementwise_math", canonical="log10", source="factor_dsl_polars")
 class Log10Polars(SeriesOperator):
+    """Polars log10"""
     metadata = OperatorMetadata(
         name="log10", category="math", description="log10",
         param_names=["x"], return_type="series", tags=["math", "polars"],
@@ -102,6 +107,7 @@ class Log10Polars(SeriesOperator):
 
 @register_operator(name="tanh", category="math", business_category="elementwise_math", canonical="tanh", source="factor_dsl_polars")
 class TanhPolars(SeriesOperator):
+    """Polars tanh"""
     metadata = OperatorMetadata(
         name="tanh", category="math", description="tanh",
         param_names=["x"], return_type="series", tags=["math", "polars"],
@@ -114,6 +120,7 @@ class TanhPolars(SeriesOperator):
 
 @register_operator(name="minimum", category="math", business_category="elementwise_math", canonical="minimum", source="factor_dsl_polars")
 class MinimumPolars(SeriesOperator):
+    """Polars 逐元素 min(x,y)"""
     metadata = OperatorMetadata(
         name="minimum", category="math", description="逐元素 min(x,y)",
         param_names=["x", "y"], return_type="series", tags=["math", "polars"],
@@ -128,6 +135,7 @@ class MinimumPolars(SeriesOperator):
 
 @register_operator(name="maximum", category="math", business_category="elementwise_math", canonical="maximum", source="factor_dsl_polars")
 class MaximumPolars(SeriesOperator):
+    """Polars 逐元素 max(x,y)"""
     metadata = OperatorMetadata(
         name="maximum", category="math", description="逐元素 max(x,y)",
         param_names=["x", "y"], return_type="series", tags=["math", "polars"],
@@ -143,6 +151,7 @@ class MaximumPolars(SeriesOperator):
 
 @register_operator(name="if_else", category="signal", business_category="technical_signal", canonical="if_else", source="factor_dsl_polars")
 class IfElsePolars(SeriesOperator):
+    """Polars 条件选择"""
     metadata = OperatorMetadata(
         name="if_else", category="signal", description="条件选择",
         param_names=["condition", "v1", "v2"], return_type="series", tags=["signal", "polars"],
@@ -158,6 +167,7 @@ class IfElsePolars(SeriesOperator):
 
 @register_operator(name="ifnan", category="signal", business_category="technical_signal", canonical="ifnan", source="factor_dsl_polars")
 class IfNaNPolars(SeriesOperator):
+    """Polars NaN 替换"""
     metadata = OperatorMetadata(
         name="ifnan", category="signal", description="NaN 替换",
         param_names=["x", "v"], return_type="series", tags=["signal", "polars"],
@@ -171,6 +181,7 @@ class IfNaNPolars(SeriesOperator):
 
 @register_operator(name="row_sum", category="cross_sectional", business_category="cross_sectional", canonical="row_sum", source="factor_dsl_polars")
 class RowSumPolars(SeriesOperator):
+    """Polars 行求和"""
     metadata = OperatorMetadata(
         name="row_sum", category="cross_sectional", description="行求和",
         param_names=["x"], return_type="series", tags=["cross_sectional", "polars"],
@@ -184,6 +195,7 @@ class RowSumPolars(SeriesOperator):
 
 @register_operator(name="row_avg", category="cross_sectional", business_category="cross_sectional", canonical="row_avg", source="factor_dsl_polars")
 class RowAvgPolars(SeriesOperator):
+    """Polars 行均值"""
     metadata = OperatorMetadata(
         name="row_avg", category="cross_sectional", description="行均值",
         param_names=["x"], return_type="series", tags=["cross_sectional", "polars"],
@@ -197,6 +209,7 @@ class RowAvgPolars(SeriesOperator):
 
 @register_operator(name="row_std", category="cross_sectional", business_category="cross_sectional", canonical="row_std", source="factor_dsl_polars")
 class RowStdPolars(SeriesOperator):
+    """Polars 行标准差"""
     metadata = OperatorMetadata(
         name="row_std", category="cross_sectional", description="行标准差",
         param_names=["x"], return_type="series", tags=["cross_sectional", "polars"],
@@ -215,6 +228,7 @@ class RowStdPolars(SeriesOperator):
 
 @register_operator(name="row_min", category="cross_sectional", business_category="cross_sectional", canonical="row_min", source="factor_dsl_polars")
 class RowMinPolars(SeriesOperator):
+    """Polars 行最小"""
     metadata = OperatorMetadata(
         name="row_min", category="cross_sectional", description="行最小",
         param_names=["x"], return_type="series", tags=["cross_sectional", "polars"],
@@ -228,6 +242,7 @@ class RowMinPolars(SeriesOperator):
 
 @register_operator(name="row_max", category="cross_sectional", business_category="cross_sectional", canonical="row_max", source="factor_dsl_polars")
 class RowMaxPolars(SeriesOperator):
+    """Polars 行最大"""
     metadata = OperatorMetadata(
         name="row_max", category="cross_sectional", description="行最大",
         param_names=["x"], return_type="series", tags=["cross_sectional", "polars"],
@@ -241,6 +256,7 @@ class RowMaxPolars(SeriesOperator):
 
 @register_operator(name="cum_sum", category="time_series", business_category="shift_diff_cum", canonical="cum_sum", source="factor_dsl_polars")
 class CumSumPolars(SeriesOperator):
+    """Polars 累计和"""
     metadata = OperatorMetadata(
         name="cum_sum", category="time_series", description="累计和",
         param_names=["x"], return_type="series", tags=["time_series", "polars"],
@@ -253,6 +269,7 @@ class CumSumPolars(SeriesOperator):
 
 @register_operator(name="cum_max", category="time_series", business_category="shift_diff_cum", canonical="cum_max", source="factor_dsl_polars")
 class CumMaxPolars(SeriesOperator):
+    """Polars 累计最大"""
     metadata = OperatorMetadata(
         name="cum_max", category="time_series", description="累计最大",
         param_names=["x"], return_type="series", tags=["time_series", "polars"],
@@ -265,6 +282,7 @@ class CumMaxPolars(SeriesOperator):
 
 @register_operator(name="cum_min", category="time_series", business_category="shift_diff_cum", canonical="cum_min", source="factor_dsl_polars")
 class CumMinPolars(SeriesOperator):
+    """Polars 累计最小"""
     metadata = OperatorMetadata(
         name="cum_min", category="time_series", description="累计最小",
         param_names=["x"], return_type="series", tags=["time_series", "polars"],
@@ -277,6 +295,7 @@ class CumMinPolars(SeriesOperator):
 
 @register_operator(name="cum_prod", category="time_series", business_category="shift_diff_cum", canonical="cum_prod", source="factor_dsl_polars")
 class CumProdPolars(SeriesOperator):
+    """Polars 累计积"""
     metadata = OperatorMetadata(
         name="cum_prod", category="time_series", description="累计积",
         param_names=["x"], return_type="series", tags=["time_series", "polars"],
@@ -289,6 +308,7 @@ class CumProdPolars(SeriesOperator):
 
 @register_operator(name="cum_count", category="time_series", business_category="shift_diff_cum", canonical="cum_count", source="factor_dsl_polars")
 class CumCountPolars(SeriesOperator):
+    """Polars 累积非空计数"""
     metadata = OperatorMetadata(
         name="cum_count", category="time_series", description="累积非空计数",
         param_names=["x"], return_type="series", tags=["time_series", "polars"],
@@ -303,6 +323,7 @@ class CumCountPolars(SeriesOperator):
 
 @register_operator(name="cum_last", category="time_series", business_category="shift_diff_cum", canonical="cum_last", source="factor_dsl_polars")
 class CumLastPolars(SeriesOperator):
+    """Polars 截至目前最末有效值"""
     metadata = OperatorMetadata(
         name="cum_last", category="time_series", description="截至目前最末有效值",
         param_names=["x"], return_type="series", tags=["time_series", "polars"],
@@ -368,6 +389,7 @@ def _apply_col_kernel(x: pl.DataFrame, kernel) -> pl.DataFrame:
 
 @register_operator(name="cum_delta", category="time_series", business_category="shift_diff_cum", canonical="cum_delta", source="factor_dsl_polars")
 class CumDeltaPolars(SeriesOperator):
+    """Polars 累积变化量 x - first(x)"""
     metadata = OperatorMetadata(
         name="cum_delta", category="time_series", description="累积变化量 x - first(x)",
         param_names=["x"], return_type="series", tags=["time_series", "polars"],
@@ -379,6 +401,7 @@ class CumDeltaPolars(SeriesOperator):
 
 @register_operator(name="cum_first", category="time_series", business_category="shift_diff_cum", canonical="cum_first", source="factor_dsl_polars")
 class CumFirstPolars(SeriesOperator):
+    """Polars 截至目前首个有效值"""
     metadata = OperatorMetadata(
         name="cum_first", category="time_series", description="截至目前首个有效值",
         param_names=["x"], return_type="series", tags=["time_series", "polars"],
@@ -390,6 +413,7 @@ class CumFirstPolars(SeriesOperator):
 
 @register_operator(name="cum_positive_streak", category="time_series", business_category="shift_diff_cum", canonical="cum_positive_streak", source="factor_dsl_polars")
 class CumPositiveStreakPolars(SeriesOperator):
+    """Polars 连续正值计数"""
     metadata = OperatorMetadata(
         name="cum_positive_streak", category="time_series", description="连续正值计数",
         param_names=["x"], return_type="series", tags=["time_series", "polars"],
@@ -401,6 +425,7 @@ class CumPositiveStreakPolars(SeriesOperator):
 
 @register_operator(name="row_median", category="cross_sectional", business_category="cross_sectional", canonical="row_median", source="factor_dsl_polars")
 class RowMedianPolars(SeriesOperator):
+    """Polars 行中位数"""
     metadata = OperatorMetadata(
         name="row_median", category="cross_sectional", description="行中位数",
         param_names=["x"], return_type="series", tags=["cross_sectional", "polars"],
@@ -419,6 +444,7 @@ class RowMedianPolars(SeriesOperator):
 
 @register_operator(name="row_count", category="cross_sectional", business_category="cross_sectional", canonical="row_count", source="factor_dsl_polars")
 class RowCountPolars(SeriesOperator):
+    """Polars 行非空计数"""
     metadata = OperatorMetadata(
         name="row_count", category="cross_sectional", description="行非空计数",
         param_names=["x"], return_type="series", tags=["cross_sectional", "polars"],
@@ -432,6 +458,7 @@ class RowCountPolars(SeriesOperator):
 
 @register_operator(name="row_var", category="cross_sectional", business_category="cross_sectional", canonical="row_var", source="factor_dsl_polars")
 class RowVarPolars(SeriesOperator):
+    """Polars 行方差"""
     metadata = OperatorMetadata(
         name="row_var", category="cross_sectional", description="行方差",
         param_names=["x"], return_type="series", tags=["cross_sectional", "polars"],
@@ -450,6 +477,7 @@ class RowVarPolars(SeriesOperator):
 
 @register_operator(name="row_corr", category="cross_sectional", business_category="cross_sectional", canonical="row_corr", source="factor_dsl_polars")
 class RowCorrPolars(SeriesOperator):
+    """Polars 行相关（两输入同名列）"""
     metadata = OperatorMetadata(
         name="row_corr", category="cross_sectional", description="行相关（两输入同名列）",
         param_names=["x", "y"], return_type="series", tags=["cross_sectional", "polars"],
@@ -473,6 +501,7 @@ class RowCorrPolars(SeriesOperator):
 
 @register_operator(name="row_beta", category="cross_sectional", business_category="cross_sectional", canonical="row_beta", source="factor_dsl_polars")
 class RowBetaPolars(SeriesOperator):
+    """Polars 行 Beta"""
     metadata = OperatorMetadata(
         name="row_beta", category="cross_sectional", description="行 Beta",
         param_names=["y", "x"], return_type="series", tags=["cross_sectional", "polars"],
@@ -504,6 +533,7 @@ class RowBetaPolars(SeriesOperator):
     source="factor_dsl_polars",
 )
 class NormalizePolars(SeriesOperator):
+    """Polars 归一化到[0, 1]（按行 min-max）"""
     metadata = OperatorMetadata(
         name="normalize",
         category="math",
@@ -535,6 +565,7 @@ class NormalizePolars(SeriesOperator):
     source="factor_dsl_polars",
 )
 class QuantilePolars(SeriesOperator):
+    """Polars 截面分箱/离散化（按行 qcut）"""
     metadata = OperatorMetadata(
         name="quantile",
         category="statistics",
@@ -581,6 +612,7 @@ def _broadcast_row_stat(x: pl.DataFrame, stat_fn) -> pl.DataFrame:
 
 @register_operator(name="row_prod", category="cross_sectional", business_category="cross_sectional", canonical="row_prod", source="factor_dsl_polars")
 class RowProdPolars(SeriesOperator):
+    """Polars 行连乘"""
     metadata = OperatorMetadata(
         name="row_prod", category="cross_sectional", description="行连乘",
         param_names=["x"], return_type="series", tags=["cross_sectional", "polars"],
@@ -592,6 +624,7 @@ class RowProdPolars(SeriesOperator):
 
 @register_operator(name="row_skew", category="cross_sectional", business_category="cross_sectional", canonical="row_skew", source="factor_dsl_polars")
 class RowSkewPolars(SeriesOperator):
+    """Polars 行偏度"""
     metadata = OperatorMetadata(
         name="row_skew", category="cross_sectional", description="行偏度",
         param_names=["x"], return_type="series", tags=["cross_sectional", "polars"],
@@ -610,6 +643,7 @@ class RowSkewPolars(SeriesOperator):
 
 @register_operator(name="row_kurt", category="cross_sectional", business_category="cross_sectional", canonical="row_kurt", source="factor_dsl_polars")
 class RowKurtPolars(SeriesOperator):
+    """Polars 行峰度"""
     metadata = OperatorMetadata(
         name="row_kurt", category="cross_sectional", description="行峰度",
         param_names=["x"], return_type="series", tags=["cross_sectional", "polars"],

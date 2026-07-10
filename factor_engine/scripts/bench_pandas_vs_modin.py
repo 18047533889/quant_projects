@@ -33,6 +33,7 @@ from tests.helpers import InMemorySeriesSource
 
 
 def _panel(n_inst: int = 30, n_days: int = 60) -> dict[str, pd.Series]:
+    """构造用于 benchmark 的多标的日频 close 面板。"""
     idx = pd.MultiIndex.from_product(
         [pd.date_range("2020-01-01", periods=n_days, freq="D"), [f"S{i:03d}" for i in range(n_inst)]],
         names=["timestamp", "instrument"],
@@ -42,6 +43,7 @@ def _panel(n_inst: int = 30, n_days: int = 60) -> dict[str, pd.Series]:
 
 
 def _bench(label: str, n_runs: int = 5) -> float:
+    """对指定 backend 标签预热后多次运行因子，返回平均单次耗时（秒）。"""
     data = _panel()
     src = InMemorySeriesSource(data=data)
     fac = Factor(name="b", expr=rank(ts_mean(col("close"), 20)))
@@ -55,6 +57,7 @@ def _bench(label: str, n_runs: int = 5) -> float:
 
 
 def main() -> None:
+    """对比纯 pandas 与 Modin（``FACTOR_ENGINE_USE_MODIN=1``）在同一因子上的耗时。"""
     os.environ["FACTOR_ENGINE_DISABLE_BOTTLENECK"] = "1"
     try:
         t_pd = _bench("pandas")

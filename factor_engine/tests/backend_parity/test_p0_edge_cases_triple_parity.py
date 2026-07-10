@@ -129,7 +129,11 @@ def duckdb_source(tmp_path, monkeypatch, edge_source):
 def _run(source, expr, backend: str):
     return FactorEngine(backend=build_backend(backend), data_source=source).run(
         Factor(name="t", expr=expr)
-    )["result"].sort_index()
+    )
+
+
+def _result_series(run_out) -> pd.Series:
+    return run_out["result"].sort_index()
 
 
 def _col(name: str):
@@ -170,8 +174,8 @@ EDGE_CASES = [
 @pytest.mark.parametrize("name,expr_builder", EDGE_CASES)
 def test_p0_edge_polars_long_matches_pandas(edge_source, name, expr_builder):
     expr = expr_builder()
-    pd_out = _run(edge_source, expr, "pandas")
-    long_out = _run(edge_source, expr, "polars_long")
+    pd_out = _result_series(_run(edge_source, expr, "pandas"))
+    long_out = _result_series(_run(edge_source, expr, "polars_long"))
     pd.testing.assert_series_equal(pd_out, long_out, check_names=False, rtol=1e-6, atol=1e-6)
 
 
@@ -189,9 +193,13 @@ DUCKDB_EDGE_CASES = [
 
 @pytest.mark.parametrize("name,expr_builder", DUCKDB_EDGE_CASES)
 def test_p0_edge_duckdb_matches_pandas(duckdb_source, name, expr_builder):
+    from tests.backend_parity.duckdb_parity_helpers import assert_duckdb_real_sql_execution
+
     expr = expr_builder()
-    pd_out = _run(duckdb_source, expr, "pandas")
-    sql_out = _run(duckdb_source, expr, "duckdb_sql")
+    pd_out = _result_series(_run(duckdb_source, expr, "pandas"))
+    sql_run = _run(duckdb_source, expr, "duckdb_sql")
+    assert_duckdb_real_sql_execution(sql_run)
+    sql_out = _result_series(sql_run)
     pd.testing.assert_series_equal(pd_out, sql_out, check_names=False, rtol=1e-6, atol=1e-6)
 
 
@@ -203,8 +211,8 @@ def test_rank_single_valid_value_is_half(edge_source):
     one = pd.Series([42.0], index=sub_idx)
     src = InMemorySeriesSource(data={"close": one})
     expr = make_cleaned_call_factory("rank")(col("close"))
-    pd_out = _run(src, expr, "pandas").iloc[0]
-    long_out = _run(src, expr, "polars_long").iloc[0]
+    pd_out = _result_series(_run(src, expr, "pandas")).iloc[0]
+    long_out = _result_series(_run(src, expr, "polars_long")).iloc[0]
     assert pd_out == pytest.approx(0.5)
     assert long_out == pytest.approx(0.5)
 
@@ -215,6 +223,6 @@ def test_vwap_zero_volume_polars_native(edge_source):
         Factor(name="t", expr=expr)
     )
     assert out.get("used_polars_long_native") is True
-    pd_out = _run(edge_source, expr, "pandas")
+    pd_out = _result_series(_run(edge_source, expr, "pandas"))
     long_out = out["result"].sort_index()
     pd.testing.assert_series_equal(pd_out, long_out, check_names=False, rtol=1e-6, atol=1e-6)

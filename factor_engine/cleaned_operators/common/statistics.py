@@ -104,6 +104,7 @@ class ACF(SeriesOperator):
 # canonical=Beta backend=pandas_numpy selected=Beta source=statistics/regression.py
 @register_operator(name="Beta", category="statistics", business_category="statistics_regression", canonical="Beta", source="factor_dsl_np")
 class Beta(SeriesOperator):
+    """回归Beta系数"""
     metadata = OperatorMetadata(
         name="Beta", category="statistics",
         description="回归Beta系数",
@@ -163,6 +164,7 @@ class Cov(SeriesOperator):
 # canonical=Covariance backend=pandas_numpy selected=Covariance source=statistics/regression_ex.py
 @register_operator(name="Covariance", category="statistics", business_category="statistics_regression", canonical="Covariance", source="factor_dsl_np")
 class Covariance(SeriesOperator):
+    """协方差全称"""
     metadata = OperatorMetadata(
         name="Covariance", category="statistics",
         description="协方差全称",
@@ -178,6 +180,7 @@ class Covariance(SeriesOperator):
 # canonical=Intercept backend=pandas_numpy selected=Intercept source=statistics/regression.py
 @register_operator(name="Intercept", category="statistics", business_category="statistics_regression", canonical="Intercept", source="factor_dsl_np")
 class Intercept(SeriesOperator):
+    """OLS回归截距"""
     metadata = OperatorMetadata(
         name="Intercept", category="statistics",
         description="OLS回归截距",
@@ -304,6 +307,7 @@ class Percentile(SeriesOperator):
 # canonical=R2 backend=pandas_numpy selected=R2 source=statistics/regression.py
 @register_operator(name="R2", category="statistics", business_category="statistics_regression", canonical="R2", source="factor_dsl_np")
 class R2(SeriesOperator):
+    """R-squared决定系数"""
     metadata = OperatorMetadata(
         name="R2", category="statistics",
         description="R-squared决定系数",
@@ -319,6 +323,7 @@ class R2(SeriesOperator):
 # canonical=Residual backend=pandas_numpy selected=Residual source=statistics/regression.py
 @register_operator(name="Residual", category="statistics", business_category="statistics_regression", canonical="Residual", source="factor_dsl_np")
 class Residual(SeriesOperator):
+    """回归残差均值"""
     metadata = OperatorMetadata(
         name="Residual", category="statistics",
         description="回归残差均值",
@@ -356,6 +361,7 @@ class Skew(SeriesOperator):
 # canonical=Slope backend=pandas_numpy selected=Slope source=statistics/regression.py
 @register_operator(name="Slope", category="statistics", business_category="statistics_regression", canonical="Slope", source="factor_dsl_np")
 class Slope(SeriesOperator):
+    """时间序列斜率 (对时间t的线性回归斜率)"""
     metadata = OperatorMetadata(
         name="Slope", category="statistics",
         description="时间序列斜率 (对时间t的线性回归斜率)",
@@ -417,6 +423,7 @@ class Var(SeriesOperator):
 # canonical=at_imax backend=pandas_numpy selected=at_imax source=statistics/aggregate_ops.py
 @register_operator(name="at_imax", category="statistics", business_category="statistics_regression", canonical="at_imax", source="factor_dsl_np")
 class at_imax(SeriesOperator):
+    """列最大值索引"""
     metadata = OperatorMetadata(
         name="at_imax", category="statistics",
         description="列最大值索引",
@@ -432,6 +439,7 @@ class at_imax(SeriesOperator):
 # canonical=at_imin backend=pandas_numpy selected=at_imin source=statistics/aggregate_ops.py
 @register_operator(name="at_imin", category="statistics", business_category="statistics_regression", canonical="at_imin", source="factor_dsl_np")
 class at_imin(SeriesOperator):
+    """列最小值索引"""
     metadata = OperatorMetadata(
         name="at_imin", category="statistics",
         description="列最小值索引",
@@ -447,6 +455,7 @@ class at_imin(SeriesOperator):
 # canonical=autocorr backend=pandas_numpy selected=autocorr source=statistics/aggregate_ops.py
 @register_operator(name="autocorr", category="statistics", business_category="statistics_regression", canonical="autocorr", source="factor_dsl_np")
 class autocorr(SeriesOperator):
+    """自相关系数"""
     metadata = OperatorMetadata(
         name="autocorr", category="statistics",
         description="自相关系数",
@@ -469,6 +478,7 @@ class autocorr(SeriesOperator):
 # canonical=avg backend=pandas_numpy selected=avg source=statistics/aggregate_ops.py
 @register_operator(name="avg", category="statistics", business_category="statistics_regression", canonical="avg", source="factor_dsl_np")
 class avg(SeriesOperator):
+    """列平均值"""
     metadata = OperatorMetadata(
         name="avg", category="statistics",
         description="列平均值",
@@ -484,6 +494,7 @@ class avg(SeriesOperator):
 # canonical=bartlett_test backend=pandas_numpy selected=bartlett_test source=statistics/hypothesis_ops.py
 @register_operator(name="bartlett_test", category="statistics", business_category="statistics_regression", canonical="bartlett_test", source="factor_dsl_np")
 class bartlett_test(SeriesOperator):
+    """Bartlett方差齐性检验"""
     metadata = OperatorMetadata(
         name="bartlett_test", category="statistics",
         description="Bartlett方差齐性检验",
@@ -504,6 +515,7 @@ class bartlett_test(SeriesOperator):
 # canonical=beta backend=pandas_numpy selected=beta source=statistics/regression_ex.py
 @register_operator(name="beta", category="statistics", business_category="statistics_regression", canonical="beta", source="factor_dsl_np")
 class beta(SeriesOperator):
+    """小写beta回归系数"""
     metadata = OperatorMetadata(
         name="beta", category="statistics",
         description="小写beta回归系数",
@@ -519,6 +531,7 @@ class beta(SeriesOperator):
 # canonical=cdf_chi2 backend=pandas_numpy selected=cdf_chi2 source=statistics/probability_ops.py
 @register_operator(name="cdf_chi2", category="statistics", business_category="statistics_regression", canonical="cdf_chi2", source="factor_dsl_np")
 class cdf_chi2(SeriesOperator):
+    """卡方分布累积分布函数"""
     metadata = OperatorMetadata(
         name="cdf_chi2", category="statistics",
         description="卡方分布累积分布函数",
@@ -534,6 +547,7 @@ class cdf_chi2(SeriesOperator):
 # canonical=cdf_f backend=pandas_numpy selected=cdf_f source=statistics/probability_ops.py
 @register_operator(name="cdf_f", category="statistics", business_category="statistics_regression", canonical="cdf_f", source="factor_dsl_np")
 class cdf_f(SeriesOperator):
+    """F分布累积分布函数"""
     metadata = OperatorMetadata(
         name="cdf_f", category="statistics",
         description="F分布累积分布函数",
@@ -549,6 +563,7 @@ class cdf_f(SeriesOperator):
 # canonical=cdf_normal backend=pandas_numpy selected=cdf_normal source=statistics/probability_ops.py
 @register_operator(name="cdf_normal", category="statistics", business_category="statistics_regression", canonical="cdf_normal", source="factor_dsl_np")
 class cdf_normal(SeriesOperator):
+    """正态分布累积分布函数"""
     metadata = OperatorMetadata(
         name="cdf_normal", category="statistics",
         description="正态分布累积分布函数",
@@ -564,6 +579,7 @@ class cdf_normal(SeriesOperator):
 # canonical=cdf_t backend=pandas_numpy selected=cdf_t source=statistics/probability_ops.py
 @register_operator(name="cdf_t", category="statistics", business_category="statistics_regression", canonical="cdf_t", source="factor_dsl_np")
 class cdf_t(SeriesOperator):
+    """t分布累积分布函数"""
     metadata = OperatorMetadata(
         name="cdf_t", category="statistics",
         description="t分布累积分布函数",
@@ -579,6 +595,7 @@ class cdf_t(SeriesOperator):
 # canonical=chi_square_test backend=pandas_numpy selected=chi_square_test source=statistics/hypothesis_ops.py
 @register_operator(name="chi_square_test", category="statistics", business_category="statistics_regression", canonical="chi_square_test", source="factor_dsl_np")
 class chi_square_test(SeriesOperator):
+    """卡方检验"""
     metadata = OperatorMetadata(
         name="chi_square_test", category="statistics",
         description="卡方检验",
@@ -599,6 +616,7 @@ class chi_square_test(SeriesOperator):
 # canonical=corr_test backend=pandas_numpy selected=corr_test source=statistics/hypothesis_ops.py
 @register_operator(name="corr_test", category="statistics", business_category="statistics_regression", canonical="corr_test", source="factor_dsl_np")
 class corr_test(SeriesOperator):
+    """Pearson相关性检验"""
     metadata = OperatorMetadata(
         name="corr_test", category="statistics",
         description="Pearson相关性检验",
@@ -619,6 +637,7 @@ class corr_test(SeriesOperator):
 # canonical=count backend=pandas_numpy selected=count source=statistics/aggregate_ops.py
 @register_operator(name="count", category="statistics", business_category="statistics_regression", canonical="count", source="factor_dsl_np")
 class count(SeriesOperator):
+    """非空值计数"""
     metadata = OperatorMetadata(
         name="count", category="statistics",
         description="非空值计数",
@@ -634,6 +653,7 @@ class count(SeriesOperator):
 # canonical=durbin_watson_test backend=pandas_numpy selected=durbin_watson_test source=statistics/hypothesis_ops.py
 @register_operator(name="durbin_watson_test", category="statistics", business_category="statistics_regression", canonical="durbin_watson_test", source="factor_dsl_np")
 class durbin_watson_test(SeriesOperator):
+    """Durbin-Watson自相关检验"""
     metadata = OperatorMetadata(
         name="durbin_watson_test", category="statistics",
         description="Durbin-Watson自相关检验",
@@ -651,6 +671,7 @@ class durbin_watson_test(SeriesOperator):
 # canonical=first backend=pandas_numpy selected=first source=statistics/aggregate_ops.py
 @register_operator(name="first", category="statistics", business_category="statistics_regression", canonical="first", source="factor_dsl_np")
 class first(SeriesOperator):
+    """列首值"""
     metadata = OperatorMetadata(
         name="first", category="statistics",
         description="列首值",
@@ -666,6 +687,7 @@ class first(SeriesOperator):
 # canonical=first_not_null backend=pandas_numpy selected=first_not_null source=statistics/aggregate_ops.py
 @register_operator(name="first_not_null", category="statistics", business_category="statistics_regression", canonical="first_not_null", source="factor_dsl_np")
 class first_not_null(SeriesOperator):
+    """列首个非空值"""
     metadata = OperatorMetadata(
         name="first_not_null", category="statistics",
         description="列首个非空值",
@@ -681,6 +703,7 @@ class first_not_null(SeriesOperator):
 # canonical=granger_causality backend=pandas_numpy selected=granger_causality source=statistics/hypothesis_ops.py
 @register_operator(name="granger_causality", category="statistics", business_category="statistics_regression", canonical="granger_causality", source="factor_dsl_np")
 class granger_causality(SeriesOperator):
+    """Granger因果检验"""
     metadata = OperatorMetadata(
         name="granger_causality", category="statistics",
         description="Granger因果检验",
@@ -707,6 +730,7 @@ class granger_causality(SeriesOperator):
 # canonical=intercept backend=pandas_numpy selected=intercept source=statistics/regression_ex.py
 @register_operator(name="intercept", category="statistics", business_category="statistics_regression", canonical="intercept", source="factor_dsl_np")
 class intercept(SeriesOperator):
+    """小写intercept回归截距"""
     metadata = OperatorMetadata(
         name="intercept", category="statistics",
         description="小写intercept回归截距",
@@ -722,6 +746,7 @@ class intercept(SeriesOperator):
 # canonical=jarque_bera_test backend=pandas_numpy selected=jarque_bera_test source=statistics/hypothesis_ops.py
 @register_operator(name="jarque_bera_test", category="statistics", business_category="statistics_regression", canonical="jarque_bera_test", source="factor_dsl_np")
 class jarque_bera_test(SeriesOperator):
+    """Jarque-Bera正态性检验"""
     metadata = OperatorMetadata(
         name="jarque_bera_test", category="statistics",
         description="Jarque-Bera正态性检验",
@@ -741,6 +766,7 @@ class jarque_bera_test(SeriesOperator):
 # canonical=kendall_corr_test backend=pandas_numpy selected=kendall_corr_test source=statistics/hypothesis_ops.py
 @register_operator(name="kendall_corr_test", category="statistics", business_category="statistics_regression", canonical="kendall_corr_test", source="factor_dsl_np")
 class kendall_corr_test(SeriesOperator):
+    """Kendall相关性检验"""
     metadata = OperatorMetadata(
         name="kendall_corr_test", category="statistics",
         description="Kendall相关性检验",
@@ -761,6 +787,7 @@ class kendall_corr_test(SeriesOperator):
 # canonical=kpss_test backend=pandas_numpy selected=kpss_test source=statistics/hypothesis_ops.py
 @register_operator(name="kpss_test", category="statistics", business_category="statistics_regression", canonical="kpss_test", source="factor_dsl_np")
 class kpss_test(SeriesOperator):
+    """KPSS平稳性检验"""
     metadata = OperatorMetadata(
         name="kpss_test", category="statistics",
         description="KPSS平稳性检验",
@@ -781,6 +808,7 @@ class kpss_test(SeriesOperator):
 # canonical=ks_test backend=pandas_numpy selected=ks_test source=statistics/hypothesis_ops.py
 @register_operator(name="ks_test", category="statistics", business_category="statistics_regression", canonical="ks_test", source="factor_dsl_np")
 class ks_test(SeriesOperator):
+    """KS检验"""
     metadata = OperatorMetadata(
         name="ks_test", category="statistics",
         description="KS检验",
@@ -800,6 +828,7 @@ class ks_test(SeriesOperator):
 # canonical=lasso backend=pandas_numpy selected=lasso source=statistics/regression_ex.py
 @register_operator(name="lasso", category="statistics", business_category="statistics_regression", canonical="lasso", source="factor_dsl_np")
 class Lasso(SeriesOperator):
+    """Lasso回归(L1正则化)，单参数时返回序列的L1正则化趋势，双参数时执行Lasso回归"""
     metadata = OperatorMetadata(
         name="lasso", category="statistics",
         description="Lasso回归(L1正则化)，单参数时返回序列的L1正则化趋势，双参数时执行Lasso回归",
@@ -865,6 +894,7 @@ class Lasso(SeriesOperator):
 # canonical=last backend=pandas_numpy selected=last source=statistics/aggregate_ops.py
 @register_operator(name="last", category="statistics", business_category="statistics_regression", canonical="last", source="factor_dsl_np")
 class last(SeriesOperator):
+    """列末值"""
     metadata = OperatorMetadata(
         name="last", category="statistics",
         description="列末值",
@@ -880,6 +910,7 @@ class last(SeriesOperator):
 # canonical=last_not_null backend=pandas_numpy selected=last_not_null source=statistics/aggregate_ops.py
 @register_operator(name="last_not_null", category="statistics", business_category="statistics_regression", canonical="last_not_null", source="factor_dsl_np")
 class last_not_null(SeriesOperator):
+    """列最后非空值"""
     metadata = OperatorMetadata(
         name="last_not_null", category="statistics",
         description="列最后非空值",
@@ -895,6 +926,7 @@ class last_not_null(SeriesOperator):
 # canonical=levene_test backend=pandas_numpy selected=levene_test source=statistics/hypothesis_ops.py
 @register_operator(name="levene_test", category="statistics", business_category="statistics_regression", canonical="levene_test", source="factor_dsl_np")
 class levene_test(SeriesOperator):
+    """Levene方差齐性检验"""
     metadata = OperatorMetadata(
         name="levene_test", category="statistics",
         description="Levene方差齐性检验",
@@ -915,6 +947,7 @@ class levene_test(SeriesOperator):
 # canonical=lilliefors_test backend=pandas_numpy selected=lilliefors_test source=statistics/hypothesis_ops.py
 @register_operator(name="lilliefors_test", category="statistics", business_category="statistics_regression", canonical="lilliefors_test", source="factor_dsl_np")
 class lilliefors_test(SeriesOperator):
+    """Lilliefors正态性检验"""
     metadata = OperatorMetadata(
         name="lilliefors_test", category="statistics",
         description="Lilliefors正态性检验",
@@ -934,6 +967,7 @@ class lilliefors_test(SeriesOperator):
 # canonical=mean_agg backend=pandas_numpy selected=mean_agg source=statistics/aggregate_ops.py
 @register_operator(name="mean_agg", category="statistics", business_category="statistics_regression", canonical="mean_agg", source="factor_dsl_np")
 class mean_agg(SeriesOperator):
+    """列平均值(同avg)"""
     metadata = OperatorMetadata(
         name="mean_agg", category="statistics",
         description="列平均值(同avg)",
@@ -949,6 +983,7 @@ class mean_agg(SeriesOperator):
 # canonical=pacf backend=pandas_numpy selected=pacf source=statistics/aggregate_ops.py
 @register_operator(name="pacf", category="statistics", business_category="statistics_regression", canonical="pacf", source="factor_dsl_np")
 class pacf(SeriesOperator):
+    """偏自相关系数"""
     metadata = OperatorMetadata(
         name="pacf", category="statistics",
         description="偏自相关系数",
@@ -974,6 +1009,7 @@ class pacf(SeriesOperator):
 # canonical=pdf_chi2 backend=pandas_numpy selected=pdf_chi2 source=statistics/probability_ops.py
 @register_operator(name="pdf_chi2", category="statistics", business_category="statistics_regression", canonical="pdf_chi2", source="factor_dsl_np")
 class pdf_chi2(SeriesOperator):
+    """卡方分布概率密度函数"""
     metadata = OperatorMetadata(
         name="pdf_chi2", category="statistics",
         description="卡方分布概率密度函数",
@@ -989,6 +1025,7 @@ class pdf_chi2(SeriesOperator):
 # canonical=pdf_f backend=pandas_numpy selected=pdf_f source=statistics/probability_ops.py
 @register_operator(name="pdf_f", category="statistics", business_category="statistics_regression", canonical="pdf_f", source="factor_dsl_np")
 class pdf_f(SeriesOperator):
+    """F分布概率密度函数"""
     metadata = OperatorMetadata(
         name="pdf_f", category="statistics",
         description="F分布概率密度函数",
@@ -1004,6 +1041,7 @@ class pdf_f(SeriesOperator):
 # canonical=pdf_normal backend=pandas_numpy selected=pdf_normal source=statistics/probability_ops.py
 @register_operator(name="pdf_normal", category="statistics", business_category="statistics_regression", canonical="pdf_normal", source="factor_dsl_np")
 class pdf_normal(SeriesOperator):
+    """正态分布概率密度函数"""
     metadata = OperatorMetadata(
         name="pdf_normal", category="statistics",
         description="正态分布概率密度函数",
@@ -1019,6 +1057,7 @@ class pdf_normal(SeriesOperator):
 # canonical=pdf_t backend=pandas_numpy selected=pdf_t source=statistics/probability_ops.py
 @register_operator(name="pdf_t", category="statistics", business_category="statistics_regression", canonical="pdf_t", source="factor_dsl_np")
 class pdf_t(SeriesOperator):
+    """t分布概率密度函数"""
     metadata = OperatorMetadata(
         name="pdf_t", category="statistics",
         description="t分布概率密度函数",
@@ -1034,6 +1073,7 @@ class pdf_t(SeriesOperator):
 # canonical=product backend=pandas_numpy selected=product source=statistics/aggregate_ops.py
 @register_operator(name="product", category="statistics", business_category="statistics_regression", canonical="product", source="factor_dsl_np")
 class product(SeriesOperator):
+    """列连乘积"""
     metadata = OperatorMetadata(
         name="product", category="statistics",
         description="列连乘积",
@@ -1049,6 +1089,7 @@ class product(SeriesOperator):
 # canonical=quantile backend=pandas_numpy selected=quantile source=statistics/regression_ex.py
 @register_operator(name="quantile", category="statistics", business_category="statistics_regression", canonical="quantile", source="factor_dsl_np")
 class quantile(SeriesOperator):
+    """分箱/离散化"""
     metadata = OperatorMetadata(
         name="quantile", category="statistics",
         description="分箱/离散化",
@@ -1075,6 +1116,7 @@ class quantile(SeriesOperator):
 # canonical=quantile_normal backend=pandas_numpy selected=quantile_normal source=statistics/probability_ops.py
 @register_operator(name="quantile_normal", category="statistics", business_category="statistics_regression", canonical="quantile_normal", source="factor_dsl_np")
 class quantile_normal(SeriesOperator):
+    """正态分布分位数函数"""
     metadata = OperatorMetadata(
         name="quantile_normal", category="statistics",
         description="正态分布分位数函数",
@@ -1090,6 +1132,7 @@ class quantile_normal(SeriesOperator):
 # canonical=quantile_t backend=pandas_numpy selected=quantile_t source=statistics/probability_ops.py
 @register_operator(name="quantile_t", category="statistics", business_category="statistics_regression", canonical="quantile_t", source="factor_dsl_np")
 class quantile_t(SeriesOperator):
+    """t分布分位数函数"""
     metadata = OperatorMetadata(
         name="quantile_t", category="statistics",
         description="t分布分位数函数",
@@ -1105,6 +1148,7 @@ class quantile_t(SeriesOperator):
 # canonical=r_squared backend=pandas_numpy selected=r_squared source=statistics/regression_ex.py
 @register_operator(name="r_squared", category="statistics", business_category="statistics_regression", canonical="r_squared", source="factor_dsl_np")
 class r_squared(SeriesOperator):
+    """R-squared决定系数"""
     metadata = OperatorMetadata(
         name="r_squared", category="statistics",
         description="R-squared决定系数",
@@ -1120,6 +1164,7 @@ class r_squared(SeriesOperator):
 # canonical=rand_exp backend=pandas_numpy selected=rand_exp source=statistics/probability_ops.py
 @register_operator(name="rand_exp", category="statistics", business_category="statistics_regression", canonical="rand_exp", source="factor_dsl_np")
 class rand_exp(SeriesOperator):
+    """指数分布随机数"""
     metadata = OperatorMetadata(
         name="rand_exp", category="statistics",
         description="指数分布随机数",
@@ -1137,6 +1182,7 @@ class rand_exp(SeriesOperator):
 # canonical=rand_lognormal backend=pandas_numpy selected=rand_lognormal source=statistics/probability_ops.py
 @register_operator(name="rand_lognormal", category="statistics", business_category="statistics_regression", canonical="rand_lognormal", source="factor_dsl_np")
 class rand_lognormal(SeriesOperator):
+    """对数正态分布随机数"""
     metadata = OperatorMetadata(
         name="rand_lognormal", category="statistics",
         description="对数正态分布随机数",
@@ -1153,6 +1199,7 @@ class rand_lognormal(SeriesOperator):
 # canonical=rand_normal backend=pandas_numpy selected=rand_normal source=statistics/probability_ops.py
 @register_operator(name="rand_normal", category="statistics", business_category="statistics_regression", canonical="rand_normal", source="factor_dsl_np")
 class rand_normal(SeriesOperator):
+    """正态分布随机数"""
     metadata = OperatorMetadata(
         name="rand_normal", category="statistics",
         description="正态分布随机数",
@@ -1169,6 +1216,7 @@ class rand_normal(SeriesOperator):
 # canonical=rand_poisson backend=pandas_numpy selected=rand_poisson source=statistics/probability_ops.py
 @register_operator(name="rand_poisson", category="statistics", business_category="statistics_regression", canonical="rand_poisson", source="factor_dsl_np")
 class rand_poisson(SeriesOperator):
+    """泊松分布随机数"""
     metadata = OperatorMetadata(
         name="rand_poisson", category="statistics",
         description="泊松分布随机数",
@@ -1185,6 +1233,7 @@ class rand_poisson(SeriesOperator):
 # canonical=rand_uniform backend=pandas_numpy selected=rand_uniform source=statistics/probability_ops.py
 @register_operator(name="rand_uniform", category="statistics", business_category="statistics_regression", canonical="rand_uniform", source="factor_dsl_np")
 class rand_uniform(SeriesOperator):
+    """均匀分布随机数"""
     metadata = OperatorMetadata(
         name="rand_uniform", category="statistics",
         description="均匀分布随机数",
@@ -1201,6 +1250,7 @@ class rand_uniform(SeriesOperator):
 # canonical=regress backend=pandas_numpy selected=regress source=statistics/regression_ex.py
 @register_operator(name="regress", category="statistics", business_category="statistics_regression", canonical="regress", source="factor_dsl_np")
 class regress(SeriesOperator):
+    """通用回归接口，支持指定返回值类型(slope/intercept/r_squared/residual)"""
     metadata = OperatorMetadata(
         name="regress", category="statistics",
         description="通用回归接口，支持指定返回值类型(slope/intercept/r_squared/residual)",
@@ -1218,6 +1268,7 @@ class regress(SeriesOperator):
 # canonical=residual backend=pandas_numpy selected=residual source=statistics/regression_ex.py
 @register_operator(name="residual", category="statistics", business_category="statistics_regression", canonical="residual", source="factor_dsl_np")
 class residual(SeriesOperator):
+    """小写residual回归残差均值"""
     metadata = OperatorMetadata(
         name="residual", category="statistics",
         description="小写residual回归残差均值",
@@ -1233,6 +1284,7 @@ class residual(SeriesOperator):
 # canonical=ridge backend=pandas_numpy selected=ridge source=statistics/regression_ex.py
 @register_operator(name="ridge", category="statistics", business_category="statistics_regression", canonical="ridge", source="factor_dsl_np")
 class Ridge(SeriesOperator):
+    """Ridge回归(L2正则化)，单参数时返回序列的L2正则化趋势，双参数时执行Ridge回归"""
     metadata = OperatorMetadata(
         name="ridge", category="statistics",
         description="Ridge回归(L2正则化)，单参数时返回序列的L2正则化趋势，双参数时执行Ridge回归",
@@ -1296,6 +1348,7 @@ class Ridge(SeriesOperator):
 # canonical=sample backend=pandas_numpy selected=sample source=statistics/probability_ops.py
 @register_operator(name="sample", category="statistics", business_category="statistics_regression", canonical="sample", source="factor_dsl_np")
 class sample(SeriesOperator):
+    """随机抽样"""
     metadata = OperatorMetadata(
         name="sample", category="statistics",
         description="随机抽样",
@@ -1321,6 +1374,7 @@ class sample(SeriesOperator):
 # canonical=sem backend=pandas_numpy selected=sem source=statistics/aggregate_ops.py
 @register_operator(name="sem", category="statistics", business_category="statistics_regression", canonical="sem", source="factor_dsl_np")
 class sem(SeriesOperator):
+    """均值标准误"""
     metadata = OperatorMetadata(
         name="sem", category="statistics",
         description="均值标准误",
@@ -1336,6 +1390,7 @@ class sem(SeriesOperator):
 # canonical=shuffle backend=pandas_numpy selected=shuffle source=statistics/probability_ops.py
 @register_operator(name="shuffle", category="statistics", business_category="statistics_regression", canonical="shuffle", source="factor_dsl_np")
 class shuffle(SeriesOperator):
+    """随机打乱"""
     metadata = OperatorMetadata(
         name="shuffle", category="statistics",
         description="随机打乱",
@@ -1351,6 +1406,7 @@ class shuffle(SeriesOperator):
 # canonical=slope backend=pandas_numpy selected=slope source=statistics/regression_ex.py
 @register_operator(name="slope", category="statistics", business_category="statistics_regression", canonical="slope", source="factor_dsl_np")
 class slope(SeriesOperator):
+    """小写slope回归斜率"""
     metadata = OperatorMetadata(
         name="slope", category="statistics",
         description="小写slope回归斜率",
@@ -1366,6 +1422,7 @@ class slope(SeriesOperator):
 # canonical=spearman_corr_test backend=pandas_numpy selected=spearman_corr_test source=statistics/hypothesis_ops.py
 @register_operator(name="spearman_corr_test", category="statistics", business_category="statistics_regression", canonical="spearman_corr_test", source="factor_dsl_np")
 class spearman_corr_test(SeriesOperator):
+    """Spearman相关性检验"""
     metadata = OperatorMetadata(
         name="spearman_corr_test", category="statistics",
         description="Spearman相关性检验",
@@ -1386,6 +1443,7 @@ class spearman_corr_test(SeriesOperator):
 # canonical=stationarity_test backend=pandas_numpy selected=stationarity_test source=statistics/hypothesis_ops.py
 @register_operator(name="stationarity_test", category="statistics", business_category="statistics_regression", canonical="stationarity_test", source="factor_dsl_np")
 class stationarity_test(SeriesOperator):
+    """ADF平稳性检验"""
     metadata = OperatorMetadata(
         name="stationarity_test", category="statistics",
         description="ADF平稳性检验",
@@ -1406,6 +1464,7 @@ class stationarity_test(SeriesOperator):
 # canonical=std_agg backend=pandas_numpy selected=std_agg source=statistics/aggregate_ops.py
 @register_operator(name="std_agg", category="statistics", business_category="statistics_regression", canonical="std_agg", source="factor_dsl_np")
 class std_agg(SeriesOperator):
+    """样本标准差"""
     metadata = OperatorMetadata(
         name="std_agg", category="statistics",
         description="样本标准差",
@@ -1421,6 +1480,7 @@ class std_agg(SeriesOperator):
 # canonical=stdp backend=pandas_numpy selected=stdp source=statistics/aggregate_ops.py
 @register_operator(name="stdp", category="statistics", business_category="statistics_regression", canonical="stdp", source="factor_dsl_np")
 class stdp(SeriesOperator):
+    """总体标准差"""
     metadata = OperatorMetadata(
         name="stdp", category="statistics",
         description="总体标准差",
@@ -1436,6 +1496,7 @@ class stdp(SeriesOperator):
 # canonical=sum_agg backend=pandas_numpy selected=sum_agg source=statistics/aggregate_ops.py
 @register_operator(name="sum_agg", category="statistics", business_category="statistics_regression", canonical="sum_agg", source="factor_dsl_np")
 class sum_agg(SeriesOperator):
+    """列求和"""
     metadata = OperatorMetadata(
         name="sum_agg", category="statistics",
         description="列求和",
@@ -1451,6 +1512,7 @@ class sum_agg(SeriesOperator):
 # canonical=ttest_one_sample backend=pandas_numpy selected=ttest_one_sample source=statistics/hypothesis_ops.py
 @register_operator(name="ttest_one_sample", category="statistics", business_category="statistics_regression", canonical="ttest_one_sample", source="factor_dsl_np")
 class ttest_one_sample(SeriesOperator):
+    """单样本t检验"""
     metadata = OperatorMetadata(
         name="ttest_one_sample", category="statistics",
         description="单样本t检验",
@@ -1470,6 +1532,7 @@ class ttest_one_sample(SeriesOperator):
 # canonical=ttest_paired backend=pandas_numpy selected=ttest_paired source=statistics/hypothesis_ops.py
 @register_operator(name="ttest_paired", category="statistics", business_category="statistics_regression", canonical="ttest_paired", source="factor_dsl_np")
 class ttest_paired(SeriesOperator):
+    """配对t检验"""
     metadata = OperatorMetadata(
         name="ttest_paired", category="statistics",
         description="配对t检验",
@@ -1490,6 +1553,7 @@ class ttest_paired(SeriesOperator):
 # canonical=ttest_two_samples backend=pandas_numpy selected=ttest_two_samples source=statistics/hypothesis_ops.py
 @register_operator(name="ttest_two_samples", category="statistics", business_category="statistics_regression", canonical="ttest_two_samples", source="factor_dsl_np")
 class ttest_two_samples(SeriesOperator):
+    """双样本t检验"""
     metadata = OperatorMetadata(
         name="ttest_two_samples", category="statistics",
         description="双样本t检验",
@@ -1510,6 +1574,7 @@ class ttest_two_samples(SeriesOperator):
 # canonical=varp backend=pandas_numpy selected=varp source=statistics/aggregate_ops.py
 @register_operator(name="varp", category="statistics", business_category="statistics_regression", canonical="varp", source="factor_dsl_np")
 class varp(SeriesOperator):
+    """总体方差"""
     metadata = OperatorMetadata(
         name="varp", category="statistics",
         description="总体方差",
@@ -1525,6 +1590,7 @@ class varp(SeriesOperator):
 # canonical=wavg backend=pandas_numpy selected=wavg source=statistics/regression_ex.py
 @register_operator(name="wavg", category="statistics", business_category="statistics_regression", canonical="wavg", source="factor_dsl_np")
 class wavg(SeriesOperator):
+    """加权平均"""
     metadata = OperatorMetadata(
         name="wavg", category="statistics",
         description="加权平均",
@@ -1555,6 +1621,7 @@ class wavg(SeriesOperator):
 # canonical=wsum backend=pandas_numpy selected=wsum source=statistics/regression_ex.py
 @register_operator(name="wsum", category="statistics", business_category="statistics_regression", canonical="wsum", source="factor_dsl_np")
 class wsum(SeriesOperator):
+    """加权求和"""
     metadata = OperatorMetadata(
         name="wsum", category="statistics",
         description="加权求和",

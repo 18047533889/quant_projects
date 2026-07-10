@@ -15,13 +15,42 @@ from .factor_format import (
 
 
 class ResultStore(ABC):
+    """因子结果写入抽象接口。
+    
+    参数:
+        无
+    """
     @abstractmethod
     def write(self, factor_name: str, result) -> None:
+        """write。
+        
+        参数:
+            factor_name: 因子名称
+            result: 因子计算结果 Series
+        
+        返回:
+            无
+        """
         raise NotImplementedError
 
 
 class PandasResultStore:
+    """基于本地 Parquet 因子湖的 pandas 读取器。
+    
+    参数:
+        lake_root: 因子湖根目录
+        catalog: FactorCatalog 实例（可选）
+    """
     def __init__(self, lake_root: str | Path, catalog: FactorCatalog | None = None) -> None:
+        """初始化实例。
+        
+        参数:
+            lake_root: 因子湖根目录
+            catalog: FactorCatalog 实例（可选）
+        
+        返回:
+            无
+        """
         self.lake_root = Path(lake_root)
         self.catalog = catalog or FactorCatalog(self.lake_root / "_catalog.sqlite")
 
@@ -32,6 +61,16 @@ class PandasResultStore:
         start: str | None = None,
         end: str | None = None,
     ) -> pd.DataFrame:
+        """load_factor。
+        
+        参数:
+            factor_id: 因子唯一标识
+            start: 起始时间（含）（可选）
+            end: 结束时间（含）（可选）
+        
+        返回:
+            pd.DataFrame
+        """
         if self.catalog.get_factor_info(factor_id) is None:
             raise FactorNotFoundError(f"Factor not found: {factor_id}")
 
@@ -54,7 +93,16 @@ class PandasResultStore:
         start: str | None = None,
         end: str | None = None,
     ) -> pd.Series:
-        """读取单因子并返回 MultiIndex Series。"""
+        """读取单因子并返回 MultiIndex Series。
+        
+        参数:
+            factor_id: 因子唯一标识
+            start: 起始时间（含）（可选）
+            end: 结束时间（含）（可选）
+        
+        返回:
+            pd.Series
+        """
         return long_table_to_series(self.load_factor(factor_id, start=start, end=end))
 
     def load_factor_wide(
@@ -64,7 +112,16 @@ class PandasResultStore:
         start: str | None = None,
         end: str | None = None,
     ) -> pd.DataFrame:
-        """读取单因子宽表 panel（index=datetime, columns=asset）。"""
+        """读取单因子宽表 panel（index=datetime, columns=asset）。
+        
+        参数:
+            factor_id: 因子唯一标识
+            start: 起始时间（含）（可选）
+            end: 结束时间（含）（可选）
+        
+        返回:
+            pd.DataFrame
+        """
         files, fmt = self._partition_files(factor_id, start=start, end=end)
         if not files:
             raise FactorNotFoundError(f"Factor data not found: {factor_id}")
@@ -79,6 +136,16 @@ class PandasResultStore:
         start: str | None,
         end: str | None,
     ) -> pd.DataFrame:
+        """_load_wide_panels。
+        
+        参数:
+            files: 见函数签名
+            start: 起始时间（含）（可选）
+            end: 结束时间（含）（可选）
+        
+        返回:
+            pd.DataFrame
+        """
         panels: list[pd.DataFrame] = []
         for path in files:
             panel = pd.read_parquet(path)
@@ -101,7 +168,16 @@ class PandasResultStore:
         start: str | None = None,
         end: str | None = None,
     ) -> pd.DataFrame:
-        """``load_factor_wide`` 别名。"""
+        """``load_factor_wide`` 别名。
+        
+        参数:
+            factor_id: 因子唯一标识
+            start: 起始时间（含）（可选）
+            end: 结束时间（含）（可选）
+        
+        返回:
+            pd.DataFrame
+        """
         return self.load_factor_wide(factor_id, start=start, end=end)
 
     def load_factors(
@@ -111,6 +187,16 @@ class PandasResultStore:
         start: str | None = None,
         end: str | None = None,
     ) -> pd.DataFrame:
+        """load_factors。
+        
+        参数:
+            factor_ids: 因子 ID 列表
+            start: 起始时间（含）（可选）
+            end: 结束时间（含）（可选）
+        
+        返回:
+            pd.DataFrame
+        """
         merged: pd.DataFrame | None = None
         for factor_id in factor_ids:
             frame = PandasResultStore.load_factor(self, factor_id, start=start, end=end)
@@ -130,7 +216,16 @@ class PandasResultStore:
         start: str | None = None,
         end: str | None = None,
     ) -> pd.DataFrame:
-        """读取多因子宽表 panel（列 MultiIndex: factor_id × asset）。"""
+        """读取多因子宽表 panel（列 MultiIndex: factor_id × asset）。
+        
+        参数:
+            factor_ids: 因子 ID 列表
+            start: 起始时间（含）（可选）
+            end: 结束时间（含）（可选）
+        
+        返回:
+            pd.DataFrame
+        """
         long_df = self.load_factors(factor_ids, start=start, end=end)
         return pivot_multi_factor_long_to_wide(long_df, factor_ids)
 
@@ -141,7 +236,16 @@ class PandasResultStore:
         start: str | None = None,
         end: str | None = None,
     ) -> pd.DataFrame:
-        """单因子返回 datetime×asset；多因子返回 (factor_id, asset) 列宽表。"""
+        """单因子返回 datetime×asset；多因子返回 (factor_id, asset) 列宽表。
+        
+        参数:
+            factor_ids: 因子 ID 列表
+            start: 起始时间（含）（可选）
+            end: 结束时间（含）（可选）
+        
+        返回:
+            pd.DataFrame
+        """
         if len(factor_ids) == 1:
             return self.load_factor_wide(factor_ids[0], start=start, end=end)
         return self.load_factors_wide(factor_ids, start=start, end=end)
@@ -153,6 +257,16 @@ class PandasResultStore:
         start: str | None = None,
         end: str | None = None,
     ) -> pd.DataFrame:
+        """to_pandas。
+        
+        参数:
+            factor_ids: 因子 ID 列表
+            start: 起始时间（含）（可选）
+            end: 结束时间（含）（可选）
+        
+        返回:
+            pd.DataFrame
+        """
         return self.load_factors(factor_ids, start=start, end=end)
 
     def load_matrix(
@@ -165,7 +279,19 @@ class PandasResultStore:
         start: str | None = None,
         end: str | None = None,
     ) -> pd.DataFrame:
-        """读取 factor_matrix 宽表（``FactorMatrixMaterializer`` 布局）。"""
+        """读取 factor_matrix 宽表（``FactorMatrixMaterializer`` 布局）。
+        
+        参数:
+            factor_ids: 因子 ID 列表
+            universe: 标的池标识（可选）
+            frequency: 因子频率（可选）
+            matrix_root: factor_matrix 根目录（可选）
+            start: 起始时间（含）（可选）
+            end: 结束时间（含）（可选）
+        
+        返回:
+            pd.DataFrame
+        """
         from storage.materialize.factor_matrix_materializer import FactorMatrixMaterializer
 
         root = matrix_root
@@ -194,6 +320,16 @@ class PandasResultStore:
         start: str | None,
         end: str | None,
     ) -> tuple[list[Path], str]:
+        """_partition_files。
+        
+        参数:
+            factor_id: 因子唯一标识
+            start: 起始时间（含）（可选）
+            end: 结束时间（含）（可选）
+        
+        返回:
+            tuple[list[Path], str]
+        """
         factor_dir = self.lake_root / "factors" / factor_id
         if not factor_dir.exists():
             return [], "long"
@@ -220,6 +356,16 @@ class PandasResultStore:
         start: str | None,
         end: str | None,
     ) -> list[Path]:
+        """_filter_partition_paths。
+        
+        参数:
+            paths: 见函数签名
+            start: 起始时间（含）（可选）
+            end: 结束时间（含）（可选）
+        
+        返回:
+            list[Path]
+        """
         start_year = pd.Timestamp(start).year if start is not None else None
         end_year = pd.Timestamp(end).year if end is not None else None
         files: list[Path] = []
@@ -241,6 +387,11 @@ class PandasResultStore:
 
 
 class PolarsResultStore(PandasResultStore):
+    """返回 Polars LazyFrame 的因子湖读取器。
+    
+    参数:
+        无
+    """
     def load_factor_wide(
         self,
         factor_id: str,
@@ -248,6 +399,16 @@ class PolarsResultStore(PandasResultStore):
         start: str | None = None,
         end: str | None = None,
     ):
+        """load_factor_wide。
+        
+        参数:
+            factor_id: 因子唯一标识
+            start: 起始时间（含）（可选）
+            end: 结束时间（含）（可选）
+        
+        返回:
+            无
+        """
         import polars as pl
 
         frame = super().load_factor_wide(factor_id, start=start, end=end)
@@ -260,6 +421,16 @@ class PolarsResultStore(PandasResultStore):
         start: str | None = None,
         end: str | None = None,
     ):
+        """load_factors_wide。
+        
+        参数:
+            factor_ids: 因子 ID 列表
+            start: 起始时间（含）（可选）
+            end: 结束时间（含）（可选）
+        
+        返回:
+            无
+        """
         import polars as pl
 
         frame = super().load_factors_wide(factor_ids, start=start, end=end)
@@ -272,6 +443,16 @@ class PolarsResultStore(PandasResultStore):
         start: str | None = None,
         end: str | None = None,
     ):
+        """load_factor。
+        
+        参数:
+            factor_id: 因子唯一标识
+            start: 起始时间（含）（可选）
+            end: 结束时间（含）（可选）
+        
+        返回:
+            无
+        """
         import polars as pl
 
         frame = super().load_factor(factor_id, start=start, end=end)
@@ -284,6 +465,16 @@ class PolarsResultStore(PandasResultStore):
         start: str | None = None,
         end: str | None = None,
     ):
+        """load_factors。
+        
+        参数:
+            factor_ids: 因子 ID 列表
+            start: 起始时间（含）（可选）
+            end: 结束时间（含）（可选）
+        
+        返回:
+            无
+        """
         import polars as pl
 
         frame = PandasResultStore.load_factors(self, factor_ids, start=start, end=end)
@@ -296,10 +487,29 @@ class PolarsResultStore(PandasResultStore):
         start: str | None = None,
         end: str | None = None,
     ) -> pd.DataFrame:
+        """to_pandas。
+        
+        参数:
+            factor_ids: 因子 ID 列表
+            start: 起始时间（含）（可选）
+            end: 结束时间（含）（可选）
+        
+        返回:
+            pd.DataFrame
+        """
         return PandasResultStore.load_factors(self, factor_ids, start=start, end=end)
 
 
 def build_result_store(lake_root: str | Path, catalog: FactorCatalog | None = None):
+    """按环境依赖构造 Pandas 或 Polars 结果存储。
+    
+    参数:
+        lake_root: 因子湖根目录
+        catalog: FactorCatalog 实例（可选）
+    
+    返回:
+        无
+    """
     try:
         import polars  # noqa: F401
     except ModuleNotFoundError:

@@ -229,6 +229,7 @@ def write_prometheus_metrics_file(
     summary: dict[str, Any],
     output_path: str | Path,
 ) -> Path:
+    """将 pipeline summary 转为 Prometheus text 并写入文件。"""
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(to_prometheus_text(summary), encoding="utf-8")
@@ -239,6 +240,7 @@ def write_otlp_metrics_file(
     summary: dict[str, Any],
     output_path: str | Path,
 ) -> Path:
+    """将 pipeline summary 转为 OTLP JSON 并写入文件。"""
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(

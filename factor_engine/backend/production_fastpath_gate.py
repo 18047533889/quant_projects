@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Literal, Sequence
 
 FastpathBackend = Literal["duckdb_sql", "polars_long_native"]
+RequireMode = Literal["any", "all"]
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,28 @@ def fastpath_gate_strict(*, strict: bool | None = None) -> bool:
     }
 
 
+def dual_backend_gate_required(*, require_dual: bool | None = None) -> bool:
+    """``FACTOR_ENGINE_PRODUCTION_REQUIRE_DUAL_BACKEND=1`` 时要求双后端同时 production-safe。"""
+    if require_dual is not None:
+        return bool(require_dual)
+    return os.environ.get("FACTOR_ENGINE_PRODUCTION_REQUIRE_DUAL_BACKEND", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _resolve_require_mode(
+    require_mode: RequireMode,
+    *,
+    require_dual: bool | None = None,
+) -> RequireMode:
+    if dual_backend_gate_required(require_dual=require_dual):
+        return "all"
+    return require_mode
+
+
 def _iter_plan_ops(plan: Any) -> list[str]:
     """深度优先遍历 plan，收集去重后的 canonical 算子列表。"""
     from cleaned_operators.registry import OperatorRegistry
@@ -53,6 +76,7 @@ def _iter_plan_ops(plan: Any) -> list[str]:
     ops: list[str] = []
 
     def walk(node: Any) -> None:
+        """深度优先遍历 plan 节点收集 canonical 算子。"""
         op = str(getattr(node, "op", "") or "")
         if not op:
             return
@@ -82,11 +106,58 @@ def _polars_native_fastpath_ok(canon: str) -> bool:
     return is_polars_long_native_production_safe(canon)
 
 
+def _check_full_plan_compilation(plan: Any, *, require: frozenset[FastpathBackend]) -> list[str]:
+    """对完整 plan 做端到端编译探测（非 minimal_plan 单算子）。"""
+    violations: list[str] = []
+    if "duckdb_sql" in require:
+        try:
+            from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql, plan_is_sql_capable
+
+            if not plan_is_sql_capable(plan):
+                violations.append("full_plan: duckdb plan not sql capable")
+            else:
+                compiled = compile_plan_to_sql(
+                    plan,
+                    dataset="__fastpath_probe__",
+                    time_column="ts",
+                    instrument_column="inst",
+                    dialect=SqlDialect.DUCKDB,
+                )
+                if compiled is None or not str(compiled.query or "").strip():
+                    violations.append("full_plan: duckdb compile returned empty")
+        except Exception as exc:
+            violations.append(f"full_plan: duckdb compile failed: {exc}")
+    if "polars_long_native" in require:
+        try:
+            import polars as pl
+
+            from backend.polars_expr_emitter import compile_plan_to_polars, plan_is_polars_long_capable
+
+            if not plan_is_polars_long_capable(plan):
+                violations.append("full_plan: polars_long plan not capable")
+            else:
+                probe = pl.LazyFrame(
+                    {
+                        "ts": pl.Series([], dtype=pl.Datetime(time_unit="ns")),
+                        "inst": pl.Series([], dtype=pl.Utf8),
+                        "close": pl.Series([], dtype=pl.Float64),
+                    }
+                )
+                if compile_plan_to_polars(plan, probe, ctx=None) is None:
+                    violations.append("full_plan: polars_long compile returned None")
+        except Exception as exc:
+            violations.append(f"full_plan: polars_long compile failed: {exc}")
+    return violations
+
+
 def check_production_fastpath_plan_ops(
     plan: Any,
     *,
     require: Sequence[FastpathBackend] = ("duckdb_sql", "polars_long_native"),
+    require_mode: RequireMode = "any",
     strict: bool | None = None,
+    require_dual: bool | None = None,
+    check_full_plan: bool | None = None,
 ) -> FastpathGateResult:
     """检查计划每个 op 是否可走 production fast path。
 
@@ -100,6 +171,7 @@ def check_production_fastpath_plan_ops(
     from cleaned_operators.operator_spec import build_operator_spec
 
     is_strict = fastpath_gate_strict(strict=strict)
+    mode = _resolve_require_mode(require_mode, require_dual=require_dual)
     require_set = frozenset(require)
     violations: list[str] = []
     ops = _iter_plan_ops(plan)
@@ -118,7 +190,7 @@ def check_production_fastpath_plan_ops(
             continue
 
         tier = infer_polars_long_tier(canon)
-        if is_strict and tier in {"map_groups", "registry", "passthrough", "python_rolling"}:
+        if is_strict and tier in {"map_groups", "registry", "passthrough", "python_rolling", "blocked_causal"}:
             violations.append(f"{canon}: polars_long_{tier} 不可 production fast path（strict）")
             continue
 
@@ -138,18 +210,29 @@ def check_production_fastpath_plan_ops(
                 violations.append(f"{canon}: passthrough 不可 production fast path")
                 continue
 
-        allowed = False
-        if "duckdb_sql" in require_set and duck_ok:
-            allowed = True
-        if "polars_long_native" in require_set and polars_ok:
-            allowed = True
+        need_duck = "duckdb_sql" in require_set
+        need_polars = "polars_long_native" in require_set
+        if mode == "all":
+            allowed = (not need_duck or duck_ok) and (not need_polars or polars_ok)
+        else:
+            allowed = False
+            if need_duck and duck_ok:
+                allowed = True
+            if need_polars and polars_ok:
+                allowed = True
         if not allowed:
             parts: list[str] = []
-            if "duckdb_sql" in require_set and not duck_ok:
+            if need_duck and not duck_ok:
                 parts.append("duckdb_sql 非 production_safe 或 emitter 失败")
-            if "polars_long_native" in require_set and not polars_ok:
+            if need_polars and not polars_ok:
                 parts.append("polars_long_native 非 production_safe")
+            if mode == "all":
+                parts.append("require_mode=all 需双后端同时满足")
             violations.append(f"{canon}: {'; '.join(parts)}")
+
+    do_full_plan = check_full_plan if check_full_plan is not None else is_strict
+    if do_full_plan and not violations:
+        violations.extend(_check_full_plan_compilation(plan, require=require_set))
 
     return FastpathGateResult(
         ok=not violations,
@@ -228,7 +311,7 @@ def check_production_fastpath_formula_ops(
 
 
 def audit_runtime_fastpath_violations(runtime: dict[str, Any] | None) -> list[str]:
-    """执行后审计：pandas fallback / polars_long fallback / 非 native tier。"""
+    """执行后审计：pandas fallback / polars_long fallback / SQL fallback / 非 native tier。"""
     r = dict(runtime or {})
     violations: list[str] = []
     if r.get("polars_long_fallback_reason"):
@@ -243,6 +326,18 @@ def audit_runtime_fastpath_violations(runtime: dict[str, Any] | None) -> list[st
         violations.append("used_polars_long_registry")
     if r.get("used_polars_long_passthrough"):
         violations.append("used_polars_long_passthrough")
+    blocked_causal = list(r.get("polars_long_blocked_causal_ops") or [])
+    if blocked_causal:
+        violations.append(f"polars_long_blocked_causal:{','.join(blocked_causal)}")
+    sql_fallback = int(r.get("sql_fallback_subtree_count") or 0)
+    if sql_fallback > 0:
+        violations.append(f"sql_fallback_subtrees:{sql_fallback}")
+    if r.get("sql_full_execution_failed"):
+        violations.append("fully_sql_plan_execution_failed")
+    if r.get("used_sql_pushdown") and int(r.get("sql_query_count") or 0) <= 0:
+        violations.append("false_sql_pushdown_telemetry")
+    if r.get("sql_long_pushdown_error_type"):
+        violations.append(f"sql_long_pushdown_failed:{r['sql_long_pushdown_error_type']}")
     for fb in r.get("production_pandas_fallbacks") or []:
         if isinstance(fb, dict) and fb.get("op"):
             violations.append(f"pandas_fallback:{fb['op']}")
@@ -250,6 +345,12 @@ def audit_runtime_fastpath_violations(runtime: dict[str, Any] | None) -> list[st
         for v in r.get("production_fastpath_violations") or []:
             violations.append(f"plan_gate:{v}")
     route = str(r.get("primary_route") or "")
-    if route in {"pandas_fallback", "polars_panel_fallback", "polars_expr_fallback"}:
+    if route in {
+        "pandas_fallback",
+        "polars_panel_fallback",
+        "polars_expr_fallback",
+        "sql_full_execution_failed",
+        "sql_to_python_fallback",
+    }:
         violations.append(f"primary_route:{route}")
     return violations

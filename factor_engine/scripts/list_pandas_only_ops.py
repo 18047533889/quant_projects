@@ -19,6 +19,7 @@ _BUCKETS = (
 
 
 def _bucket(name: str) -> str:
+    """按名称前缀将 canonical 归入研发排期类别。"""
     low = name.lower()
     for label, prefixes in _BUCKETS:
         if any(low.startswith(p.lower()) or p.lower() in low for p in prefixes if p):
@@ -27,6 +28,7 @@ def _bucket(name: str) -> str:
 
 
 def main() -> int:
+    """列出仍缺 Polars backend 的 canonical，按类别分组输出。"""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()

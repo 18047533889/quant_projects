@@ -10,6 +10,7 @@ FE_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _bootstrap() -> None:
+    """初始化 sys.path 并加载算子注册表与 SQL backend。"""
     root = str(FE_ROOT.parent)
     if root not in sys.path:
         sys.path.insert(0, root)
@@ -24,6 +25,7 @@ def _bootstrap() -> None:
 
 
 def main() -> int:
+    """生成或校验 operator_manifest.json（AI / DSL / production gate 统一清单）。"""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--out",

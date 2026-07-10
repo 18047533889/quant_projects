@@ -26,6 +26,7 @@ class ExecutionCacheSession:
     stats: CacheHitStats | None = None
 
     def __post_init__(self) -> None:
+        """初始化默认 dict 与 ``ExpressionCache`` / ``PanelCache`` 包装。"""
         if self.panel_cache is None:
             self.panel_cache = {}
         if self.shared_result_cache is None:
@@ -37,10 +38,12 @@ class ExecutionCacheSession:
 
     @property
     def expression_cache(self) -> ExpressionCache:
+        """L0 CSE 共享结果缓存包装。"""
         return self._expression_cache
 
     @property
     def panel_cache_store(self) -> PanelCache:
+        """L1 panel unstack 缓存包装。"""
         return self._panel_cache
 
     def wrap_context(self, ctx: Any) -> Any:

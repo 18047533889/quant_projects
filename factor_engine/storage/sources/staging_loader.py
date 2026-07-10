@@ -18,6 +18,14 @@ _VALUE_COLUMNS = ("value",)
 
 
 def _ensure_data_access() -> None:
+    """确保 data_access 包可导入。
+    
+    参数:
+        无
+    
+    返回:
+        无
+    """
     from workspace_paths import quant_projects_root
 
     root = str(quant_projects_root())
@@ -31,7 +39,16 @@ def load_factor_series_from_staging(
     start: str | None = None,
     end: str | None = None,
 ) -> pd.Series:
-    """读取 staging 中指定因子的 MultiIndex Series。"""
+    """从 staging 数据集读取因子 MultiIndex Series。
+    
+    参数:
+        factor_id: 因子唯一标识
+        start: 起始时间（含）（可选）
+        end: 结束时间（含）（可选）
+    
+    返回:
+        pd.Series
+    """
     _ensure_data_access()
     from data_access import get_store
 
@@ -82,7 +99,14 @@ def load_factor_series_from_staging(
 
 
 def staging_factor_exists(factor_id: str) -> bool:
-    """staging 是否已有该因子数据（轻量探测）。"""
+    """探测 staging 是否已有指定因子数据。
+    
+    参数:
+        factor_id: 因子唯一标识
+    
+    返回:
+        bool
+    """
     try:
         load_factor_series_from_staging(factor_id)
         return True
@@ -100,10 +124,20 @@ def delete_staging_rows(
     end: str | None = None,
     after: str | None = None,
 ) -> dict[str, Any]:
-    """从 factor_lake_staging 删除指定时间范围内的行（行级补偿删除）。
-
+    """从 staging 删除指定时间范围的因子行。
+    
+    参数:
+        factor_id: 因子唯一标识
+        start: 起始时间（含）（可选）
+        end: 结束时间（含）（可选）
+        after: 开区间下界（严格大于）（可选）
+    
+    返回:
+        dict[str, Any]
+    
+    
     ``start``/``end`` 为闭区间；``after`` 为开区间下界（删除 strictly > after 的行）。
-    staging 数据集未注册时跳过删除（本地 repair / 无 staging 环境）。
+        staging 数据集未注册时跳过删除（本地 repair / 无 staging 环境）。
     """
     _ensure_data_access()
     try:
@@ -164,7 +198,17 @@ def _delete_staging_rows_local(
     end: str | None = None,
     after: str | None = None,
 ) -> dict[str, Any]:
-    """data_access 无 delete_rows API 时的本地 fallback。"""
+    """无 delete_rows API 时的本地 Parquet 行删除 fallback。
+    
+    参数:
+        factor_id: 因子唯一标识
+        start: 起始时间（含）（可选）
+        end: 结束时间（含）（可选）
+        after: 开区间下界（严格大于）（可选）
+    
+    返回:
+        dict[str, Any]
+    """
     import os
     import uuid
 

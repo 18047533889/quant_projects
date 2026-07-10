@@ -46,5 +46,24 @@ def test_runtime_audit_catches_fallback(_loaded):
     assert any("map_groups" in x for x in v)
 
 
+def test_runtime_audit_catches_sql_fallback(_loaded):
+    v = audit_runtime_fastpath_violations(
+        {
+            "sql_fallback_subtree_count": 2,
+            "used_sql_pushdown": True,
+            "sql_query_count": 0,
+            "sql_full_execution_failed": True,
+        }
+    )
+    assert any("sql_fallback" in x for x in v)
+    assert any("false_sql_pushdown" in x for x in v)
+    assert any("fully_sql_plan_execution_failed" in x for x in v)
+
+
+def test_runtime_audit_catches_blocked_causal(_loaded):
+    v = audit_runtime_fastpath_violations({"polars_long_blocked_causal_ops": ["bfill"]})
+    assert any("blocked_causal" in x for x in v)
+
+
 def test_fastpath_gate_strict_env_default_off(_loaded):
     assert fastpath_gate_strict(strict=False) is False

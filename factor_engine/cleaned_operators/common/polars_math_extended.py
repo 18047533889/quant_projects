@@ -39,48 +39,56 @@ def _binary(combine):
 
 @register_operator(name="asin", category="math", business_category="elementwise_math", canonical="asin", source="factor_dsl_polars")
 class AsinPolars(SeriesOperator):
+    """Polars 反正弦"""
     metadata = OperatorMetadata(name="asin", category="math", description="反正弦", param_names=["x"], tags=["math", "polars"])
     _calculate_series = _unary(lambda c: c.arcsin())
 
 
 @register_operator(name="acos", category="math", business_category="elementwise_math", canonical="acos", source="factor_dsl_polars")
 class AcosPolars(SeriesOperator):
+    """Polars 反余弦"""
     metadata = OperatorMetadata(name="acos", category="math", description="反余弦", param_names=["x"], tags=["math", "polars"])
     _calculate_series = _unary(lambda c: c.arccos())
 
 
 @register_operator(name="atan", category="math", business_category="elementwise_math", canonical="atan", source="factor_dsl_polars")
 class AtanPolars(SeriesOperator):
+    """Polars 反正切"""
     metadata = OperatorMetadata(name="atan", category="math", description="反正切", param_names=["x"], tags=["math", "polars"])
     _calculate_series = _unary(lambda c: c.arctan())
 
 
 @register_operator(name="tan", category="math", business_category="elementwise_math", canonical="tan", source="factor_dsl_polars")
 class TanPolars(SeriesOperator):
+    """Polars 正切"""
     metadata = OperatorMetadata(name="tan", category="math", description="正切", param_names=["x"], tags=["math", "polars"])
     _calculate_series = _unary(lambda c: c.tan())
 
 
 @register_operator(name="cbrt", category="math", business_category="elementwise_math", canonical="cbrt", source="factor_dsl_polars")
 class CbrtPolars(SeriesOperator):
+    """Polars 立方根"""
     metadata = OperatorMetadata(name="cbrt", category="math", description="立方根", param_names=["x"], tags=["math", "polars"])
     _calculate_series = _unary(lambda c: c.pow(1.0 / 3.0))
 
 
 @register_operator(name="ceil", category="math", business_category="elementwise_math", canonical="ceil", source="factor_dsl_polars")
 class CeilPolars(SeriesOperator):
+    """Polars 向上取整"""
     metadata = OperatorMetadata(name="ceil", category="math", description="向上取整", param_names=["x"], tags=["math", "polars"])
     _calculate_series = _unary(lambda c: c.ceil())
 
 
 @register_operator(name="floor", category="math", business_category="elementwise_math", canonical="floor", source="factor_dsl_polars")
 class FloorPolars(SeriesOperator):
+    """Polars 向下取整"""
     metadata = OperatorMetadata(name="floor", category="math", description="向下取整", param_names=["x"], tags=["math", "polars"])
     _calculate_series = _unary(lambda c: c.floor())
 
 
 @register_operator(name="round", category="math", business_category="elementwise_math", canonical="round", source="factor_dsl_polars")
 class RoundPolars(SeriesOperator):
+    """Polars 四舍五入"""
     metadata = OperatorMetadata(
         name="round", category="math", description="四舍五入", param_names=["x", "decimals"], tags=["math", "polars"],
     )
@@ -93,12 +101,14 @@ class RoundPolars(SeriesOperator):
 
 @register_operator(name="inv", category="math", business_category="elementwise_math", canonical="inv", source="factor_dsl_polars")
 class InvPolars(SeriesOperator):
+    """Polars 倒数"""
     metadata = OperatorMetadata(name="inv", category="math", description="倒数", param_names=["x"], tags=["math", "polars"])
     _calculate_series = _unary(lambda c: 1.0 / c)
 
 
 @register_operator(name="inverse", category="elementwise_math", business_category="elementwise_math", canonical="inverse", source="factor_dsl_polars")
 class InversePolars(SeriesOperator):
+    """Polars 倒数"""
     metadata = OperatorMetadata(name="inverse", category="elementwise_math", description="倒数", param_names=["x"], tags=["polars"])
 
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
@@ -110,12 +120,14 @@ class InversePolars(SeriesOperator):
 
 @register_operator(name="reverse", category="elementwise_math", business_category="elementwise_math", canonical="reverse", source="factor_dsl_polars")
 class ReversePolars(SeriesOperator):
+    """Polars 取负"""
     metadata = OperatorMetadata(name="reverse", category="elementwise_math", description="取负", param_names=["x"], tags=["polars"])
     _calculate_series = _unary(lambda c: -c)
 
 
 @register_operator(name="real", category="math", business_category="elementwise_math", canonical="real", source="factor_dsl_polars")
 class RealPolars(SeriesOperator):
+    """Polars 实部"""
     metadata = OperatorMetadata(name="real", category="math", description="实部", param_names=["x"], tags=["math", "polars"])
 
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
@@ -129,6 +141,7 @@ class RealPolars(SeriesOperator):
 
 @register_operator(name="imag", category="math", business_category="elementwise_math", canonical="imag", source="factor_dsl_polars")
 class ImagPolars(SeriesOperator):
+    """Polars 虚部"""
     metadata = OperatorMetadata(name="imag", category="math", description="虚部", param_names=["x"], tags=["math", "polars"])
 
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
@@ -144,6 +157,7 @@ class ImagPolars(SeriesOperator):
 
 @register_operator(name="arg", category="math", business_category="elementwise_math", canonical="arg", source="factor_dsl_polars")
 class ArgPolars(SeriesOperator):
+    """Polars 相位"""
     metadata = OperatorMetadata(name="arg", category="math", description="相位", param_names=["x"], tags=["math", "polars"])
 
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
@@ -159,6 +173,7 @@ class ArgPolars(SeriesOperator):
 
 @register_operator(name="atan2", category="math", business_category="elementwise_math", canonical="atan2", source="factor_dsl_polars")
 class Atan2Polars(SeriesOperator):
+    """Polars atan2"""
     metadata = OperatorMetadata(name="atan2", category="math", description="atan2", param_names=["y", "x"], tags=["math", "polars"])
 
     def _calculate_series(self, y: pl.DataFrame, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
@@ -167,6 +182,7 @@ class Atan2Polars(SeriesOperator):
 
 @register_operator(name="lerp", category="math", business_category="elementwise_math", canonical="lerp", source="factor_dsl_polars")
 class LerpPolars(SeriesOperator):
+    """Polars 线性插值"""
     metadata = OperatorMetadata(name="lerp", category="math", description="线性插值", param_names=["a", "b", "f"], tags=["math", "polars"])
 
     def _calculate_series(self, a: pl.DataFrame, b: pl.DataFrame, f: float = 0.5, **kwargs) -> pl.DataFrame:
@@ -177,6 +193,7 @@ class LerpPolars(SeriesOperator):
 
 @register_operator(name="blom_transform", category="math", business_category="elementwise_math", canonical="blom_transform", source="factor_dsl_polars")
 class BlomTransformPolars(SeriesOperator):
+    """Polars Blom 变换"""
     metadata = OperatorMetadata(name="blom_transform", category="math", description="Blom 变换", param_names=["x"], tags=["math", "polars"])
 
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
@@ -185,6 +202,7 @@ class BlomTransformPolars(SeriesOperator):
 
 @register_operator(name="interpolate", category="math", business_category="elementwise_math", canonical="interpolate", source="factor_dsl_polars")
 class InterpolatePolars(SeriesOperator):
+    """Polars 插值"""
     metadata = OperatorMetadata(name="interpolate", category="math", description="插值", param_names=["x", "factor"], tags=["math", "polars"])
 
     def _calculate_series(self, x: pl.DataFrame, factor: int = 2, **kwargs) -> pl.DataFrame:
@@ -193,6 +211,7 @@ class InterpolatePolars(SeriesOperator):
 
 @register_operator(name="avg2", category="fundamental", business_category="fundamental", canonical="avg2", source="factor_dsl_polars")
 class Avg2Polars(SeriesOperator):
+    """Polars 当期与上期均值"""
     metadata = OperatorMetadata(name="avg2", category="fundamental", description="当期与上期均值", param_names=["x"], tags=["polars"])
 
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
@@ -203,6 +222,7 @@ class Avg2Polars(SeriesOperator):
 
 @register_operator(name="at_imax", category="statistics", business_category="statistics_regression", canonical="at_imax", source="factor_dsl_polars")
 class AtImaxPolars(SeriesOperator):
+    """Polars 扩展 argmax"""
     metadata = OperatorMetadata(name="at_imax", category="statistics", description="扩展 argmax", param_names=["x"], tags=["polars"])
 
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
@@ -211,6 +231,7 @@ class AtImaxPolars(SeriesOperator):
 
 @register_operator(name="at_imin", category="statistics", business_category="statistics_regression", canonical="at_imin", source="factor_dsl_polars")
 class AtIminPolars(SeriesOperator):
+    """Polars 扩展 argmin"""
     metadata = OperatorMetadata(name="at_imin", category="statistics", description="扩展 argmin", param_names=["x"], tags=["polars"])
 
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
@@ -219,6 +240,7 @@ class AtIminPolars(SeriesOperator):
 
 @register_operator(name="digital_count", category="time_series", business_category="time_series", canonical="digital_count", source="factor_dsl_polars")
 class DigitalCountPolars(SeriesOperator):
+    """Polars 连续小波动计数"""
     metadata = OperatorMetadata(
         name="digital_count", category="time_series", description="连续小波动计数",
         param_names=["x", "d", "threshold", "run"], tags=["polars"],

@@ -46,7 +46,25 @@ def ensure_cleaned_loaded() -> None:
 
 
 def series_to_panel(s: pd.Series, ctx: ExecutionContext) -> pd.DataFrame:
-    """``(timestamp, instrument)`` MultiIndex Series → 宽表（列=标的）。"""
+    """将 ``(timestamp, instrument)`` MultiIndex Series 转为宽表 panel。
+
+    参数
+    ----
+    s : pd.Series
+        输入 Series，index 必须为两级 MultiIndex。
+    ctx : ExecutionContext
+        执行上下文，提供 ``panel_cache`` 与列名配置。
+
+    返回
+    ----
+    pd.DataFrame
+        宽表 panel，index 为时间，columns 为标的。
+
+    异常
+    ----
+    TypeError
+        输入 Series 的 index 不是 MultiIndex 时抛出。
+    """
     if not isinstance(s.index, pd.MultiIndex):
         raise TypeError("cleaned_bridge expects MultiIndex (timestamp, instrument) Series")
     cache = ctx.panel_cache
@@ -76,7 +94,22 @@ def panel_to_series(
     *,
     template: pd.Series,
 ) -> pd.Series:
-    """宽表 panel → 与 ``template`` index 对齐的 MultiIndex Series。"""
+    """将宽表 panel 转为与 ``template`` index 对齐的 MultiIndex Series。
+
+    参数
+    ----
+    panel : pd.DataFrame
+        宽表 panel，index 为时间，columns 为标的。
+    ctx : ExecutionContext
+        执行上下文，提供 ``timestamp_col`` / ``instrument_col``。
+    template : pd.Series
+        对齐模板，决定输出 Series 的 index 形态。
+
+    返回
+    ----
+    pd.Series
+        stack 后与 ``template.index`` 对齐的 MultiIndex Series。
+    """
     stacked = panel.stack(future_stack=True)
     stacked.index.names = [ctx.timestamp_col, ctx.instrument_col]
     if len(stacked) == len(template.index) and stacked.index.equals(template.index):
@@ -85,13 +118,36 @@ def panel_to_series(
 
 
 def _resolve_canonical(op: str) -> str:
+    """将算子名（含别名）解析为 canonical 名称。
+
+    参数
+    ----
+    op : str
+        逻辑计划或 DSL 中的算子名。
+
+    返回
+    ----
+    str
+        ``OperatorRegistry`` 中的 canonical 算子名。
+    """
     from cleaned_operators.registry import OperatorRegistry
 
     return OperatorRegistry._aliases.get(op, op)
 
 
 def _remap_d_to_window(kwargs: dict[str, Any]) -> dict[str, Any] | None:
-    """部分算子参数名是 ``window``，而 planner 节点 attrs 常用 ``d``；在此统一重试。"""
+    """将 planner 常用的 ``d`` 参数名重映射为算子期望的 ``window``。
+
+    参数
+    ----
+    kwargs : dict[str, Any]
+        算子调用关键字参数。
+
+    返回
+    ----
+    dict[str, Any] | None
+        重映射后的参数字典；无需重映射时返回 ``None``。
+    """
     if "d" not in kwargs or "window" in kwargs:
         return None
     remapped = {k: v for k, v in kwargs.items() if k != "d"}
@@ -100,7 +156,27 @@ def _remap_d_to_window(kwargs: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _call_cleaned_operator(operator, call_args: list[Any], kw: dict[str, Any]) -> Any:
-    """调用 ``calculate``；若因 ``d``/``window`` 关键字不匹配失败则自动重映射一次。"""
+    """调用算子 ``calculate``；关键字不匹配时自动尝试 ``d`` → ``window`` 重映射。
+
+    参数
+    ----
+    operator
+        cleaned 算子实例，需提供 ``calculate`` 方法。
+    call_args : list[Any]
+        位置参数列表（panel 或标量）。
+    kw : dict[str, Any]
+        关键字参数（来自 ``PlanNode.attrs``）。
+
+    返回
+    ----
+    Any
+        算子 ``calculate`` 的返回值。
+
+    异常
+    ----
+    TypeError
+        原始调用与重映射后均失败时抛出。
+    """
     try:
         return operator.calculate(*call_args, **kw)
     except TypeError as exc:
@@ -117,6 +193,18 @@ def _call_cleaned_operator(operator, call_args: list[Any], kw: dict[str, Any]) -
 
 
 def _operator_backend_preference(ctx: ExecutionContext) -> str:
+    """从执行上下文读取算子后端偏好。
+
+    参数
+    ----
+    ctx : ExecutionContext
+        执行期上下文。
+
+    返回
+    ----
+    str
+        ``perf.operator_backend`` 值，未配置时返回 ``"auto"``。
+    """
     perf = getattr(ctx, "perf", None)
     if perf is not None and getattr(perf, "operator_backend", None):
         return str(perf.operator_backend)
@@ -124,6 +212,15 @@ def _operator_backend_preference(ctx: ExecutionContext) -> str:
 
 
 def _record_polars_op(ctx: ExecutionContext, op: str) -> None:
+    """记录一次 Polars 算子热路径调用（写入缓存会话统计）。
+
+    参数
+    ----
+    ctx : ExecutionContext
+        执行期上下文，``runtime_stats.cache`` 可能持有统计会话。
+    op : str
+        被调用的算子名。
+    """
     runtime = getattr(ctx, "runtime_stats", None) or {}
     cache_stats = runtime.get("cache")
     if cache_stats is not None and hasattr(cache_stats, "record_polars_op"):
@@ -131,6 +228,20 @@ def _record_polars_op(ctx: ExecutionContext, op: str) -> None:
 
 
 def _resolve_operator(canonical: str, ctx: ExecutionContext):
+    """按后端偏好从 ``OperatorRegistry`` 解析算子实例与后端标签。
+
+    参数
+    ----
+    canonical : str
+        canonical 算子名。
+    ctx : ExecutionContext
+        执行期上下文，决定 ``get_preferred`` 的偏好参数。
+
+    返回
+    ----
+    tuple
+        ``(operator, backend)`` 二元组，``backend`` 为 ``"polars"`` 或 ``"pandas_numpy"``。
+    """
     from cleaned_operators.registry import OperatorRegistry
 
     prefer = _operator_backend_preference(ctx)
@@ -148,6 +259,22 @@ def _prepare_call_args(
     *,
     backend: str,
 ) -> tuple[list[Any], pd.Series | None, pd.DataFrame | None]:
+    """将子节点求值结果转换为算子 ``calculate`` 所需的位置参数。
+
+    参数
+    ----
+    evaluated : list[Any]
+        子节点递归求值结果列表。
+    ctx : ExecutionContext
+        执行期上下文。
+    backend : str
+        目标算子后端（``"polars"`` 或 ``"pandas_numpy"``）。
+
+    返回
+    ----
+    tuple[list[Any], pd.Series | None, pd.DataFrame | None]
+        ``(call_args, template_series, template_panel)`` 三元组。
+    """
     from .panel_polars import is_polars_frame
 
     call_args: list[Any] = []
@@ -188,6 +315,31 @@ def _normalize_operator_result(
     template_panel: pd.DataFrame | None,
     ctx: ExecutionContext,
 ) -> Any:
+    """将算子返回值规范化为引擎统一的输出形态。
+
+    参数
+    ----
+    result : Any
+        算子 ``calculate`` 的原始返回值。
+    backend : str
+        实际使用的算子后端。
+    template : pd.Series
+        对齐模板 Series。
+    template_panel : pd.DataFrame | None
+        宽表对齐模板（Polars 路径必需）。
+    ctx : ExecutionContext
+        执行期上下文。
+
+    返回
+    ----
+    Any
+        MultiIndex Series 或 panel-native 模式下的 DataFrame。
+
+    异常
+    ----
+    ValueError
+        Polars 后端返回 DataFrame 但缺少 ``template_panel`` 时抛出。
+    """
     if backend == "polars":
         from .panel_polars import is_polars_frame, polars_to_panel
 
@@ -208,9 +360,43 @@ def _normalize_operator_result(
 
 
 def make_cleaned_kernel(eval_fn: Callable[[PlanNode, ExecutionContext], Any], op: str):
-    """为逻辑计划算子名 ``op`` 生成 PandasBackend 用的 kernel 闭包。"""
+    """为逻辑计划算子名 ``op`` 生成 PandasBackend 用的 kernel 闭包。
+
+    参数
+    ----
+    eval_fn : Callable
+        子节点递归求值函数，签名为 ``(node, ctx) -> Any``。
+    op : str
+        算子名，用于查找 ``OperatorRegistry`` 中的实现。
+
+    返回
+    ----
+    Callable
+        kernel 闭包，签名为 ``(node: PlanNode, ctx: ExecutionContext) -> pd.Series``。
+    """
 
     def _kernel(node: PlanNode, ctx: ExecutionContext) -> pd.Series:
+        """cleaned 算子 kernel：求值子节点、调用算子并规范化输出。
+
+        参数
+        ----
+        node : PlanNode
+            当前逻辑计划节点，``inputs`` 为子节点，``attrs`` 为算子参数。
+        ctx : ExecutionContext
+            执行期上下文。
+
+        返回
+        ----
+        pd.Series
+            与输入模板对齐的 MultiIndex Series（panel-native 模式下可能为 DataFrame）。
+
+        异常
+        ----
+        NotImplementedError
+            算子在 ``OperatorRegistry`` 中无实现时抛出。
+        ValueError
+            算子无 Series 输入且 ``template_series`` 未配置时抛出。
+        """
         ensure_cleaned_loaded()
 
         canonical = _resolve_canonical(op)
@@ -258,7 +444,18 @@ def make_cleaned_kernel(eval_fn: Callable[[PlanNode, ExecutionContext], Any], op
 
 
 def list_cleaned_ops_for_backend(skip: set[str]) -> list[str]:
-    """列出可挂到 ``KernelRegistry`` 的全部已实现算子名（canonical + 别名）。"""
+    """列出可挂到 ``KernelRegistry`` 的全部已实现算子名（canonical + 别名）。
+
+    参数
+    ----
+    skip : set[str]
+        需要排除的算子名集合。
+
+    返回
+    ----
+    list[str]
+        已排序的可用算子名列表。
+    """
     ensure_cleaned_loaded()
     from cleaned_operators.registry import OperatorRegistry
 
@@ -279,7 +476,20 @@ def list_cleaned_ops_for_backend(skip: set[str]) -> list[str]:
 
 
 def build_cleaned_dsl_allowlist(skip: set[str] | None = None) -> dict[str, Any]:
-    """``{DSL函数名: make_cleaned_call_factory(...)}``，仅含已有 runtime 的条目。"""
+    """构建 DSL 白名单：``{DSL函数名: make_cleaned_call_factory(...)}``。
+
+    仅包含 ``OperatorRegistry`` 中已有 runtime 实现的条目。
+
+    参数
+    ----
+    skip : set[str] | None
+        需要排除的算子名集合，默认空集。
+
+    返回
+    ----
+    dict[str, Any]
+        DSL 函数名到调用工厂的映射。
+    """
     ensure_cleaned_loaded()
     from cleaned_operators.registry import OperatorRegistry
 
@@ -303,7 +513,18 @@ def build_cleaned_dsl_allowlist(skip: set[str] | None = None) -> dict[str, Any]:
 
 
 def build_production_dsl_allowlist(skip: set[str] | None = None) -> dict[str, Any]:
-    """production 投递白名单：仅 ``OperatorSpec.allow_in_production`` 为真的算子。"""
+    """构建 production 投递白名单：仅 ``OperatorSpec.allow_in_production`` 为真的算子。
+
+    参数
+    ----
+    skip : set[str] | None
+        需要排除的算子名集合，默认空集。
+
+    返回
+    ----
+    dict[str, Any]
+        通过 production 策略过滤后的 DSL 白名单。
+    """
     from cleaned_operators.operator_spec import build_operator_spec
 
     full = build_cleaned_dsl_allowlist(skip)

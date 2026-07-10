@@ -35,6 +35,7 @@ class FactorUpdatePlan:
     is_full_run: bool
 
     def to_dict(self) -> dict[str, Any]:
+        """序列化为可 JSON 化的字典。"""
         return {
             "factor_id": self.factor_id,
             "column": self.column,

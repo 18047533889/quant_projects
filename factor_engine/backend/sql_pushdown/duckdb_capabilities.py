@@ -1,5 +1,9 @@
 # -*- coding: utf-8
-"""DuckDB 版本与窗口函数能力探测（部署前降级 SQL tier）。"""
+"""DuckDB 版本与窗口函数能力探测（部署前降级 SQL tier）。
+
+运行时探测 DuckDB 连接是否支持关键窗口函数（相关、分位数、median 等），
+据此从 ``SQL_PRODUCTION_SAFE`` 临时降级不兼容的 canonical。
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -10,14 +14,17 @@ CapabilityLevel = str  # supported | unsupported | requires_version
 
 @dataclass
 class DuckdbCapabilityReport:
+    """DuckDB 能力探测报告：版本号、各特性支持级别与错误列表。"""
     version: str = ""
     features: dict[str, CapabilityLevel] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
 
     def is_supported(self, feature: str) -> bool:
+        """判断指定特性是否探测为 ``supported``。"""
         return self.features.get(feature) == "supported"
 
     def to_dict(self) -> dict[str, Any]:
+        """序列化为可 JSON 化的字典。"""
         return {
             "version": self.version,
             "features": dict(self.features),
@@ -36,7 +43,7 @@ _FEATURE_PROBES: tuple[tuple[str, str], ...] = (
 
 
 def probe_duckdb_capabilities(con=None) -> DuckdbCapabilityReport:
-    """探测 DuckDB 连接；``con=None`` 时用内存连接。"""
+    """探测 DuckDB 连接的窗口函数能力；``con=None`` 时使用内存连接。"""
     report = DuckdbCapabilityReport()
     owns = False
     try:
@@ -98,6 +105,7 @@ _CACHED_REPORT: DuckdbCapabilityReport | None = None
 
 
 def get_duckdb_capability_report(*, refresh: bool = False) -> DuckdbCapabilityReport:
+    """获取缓存的 DuckDB 能力报告；``refresh=True`` 时重新探测。"""
     global _CACHED_REPORT
     if _CACHED_REPORT is None or refresh:
         _CACHED_REPORT = probe_duckdb_capabilities()

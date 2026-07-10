@@ -32,6 +32,7 @@ from tests.helpers import InMemorySeriesSource
 
 
 def _panel(n_inst: int = 20, n_days: int = 50) -> dict[str, pd.Series]:
+    """构造用于 profiling 的多标的日频面板数据。"""
     idx = pd.MultiIndex.from_product(
         [pd.date_range("2024-01-01", periods=n_days, freq="D"), [f"S{i:03d}" for i in range(n_inst)]],
         names=["timestamp", "instrument"],
@@ -44,6 +45,7 @@ def _panel(n_inst: int = 20, n_days: int = 50) -> dict[str, pd.Series]:
 
 
 def main() -> None:
+    """对 PandasBackend 代表性因子运行 cProfile 并输出热点统计。"""
     data = _panel()
     src = InMemorySeriesSource(data=data)
     eng = FactorEngine(backend=PandasBackend(), data_source=src)

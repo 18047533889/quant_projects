@@ -1,5 +1,9 @@
-# -*- coding: utf-8
-"""SQL 下推：编译 + DuckDB/ClickHouse 执行 + registry 对齐。"""
+# -*- coding: utf-8 -*-
+"""SQL 下推子包：PlanNode 编译、DuckDB/ClickHouse 执行与 registry 对齐。
+
+对外导出 ``compile_plan_to_sql``、``try_execute_sql_pushdown`` 等入口；
+导入时自动调用 ``register_sql_backends()`` 登记 SQL backend 元数据。
+"""
 
 from backend.sql_pushdown.emitter import (
     CompiledSql,

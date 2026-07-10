@@ -1,5 +1,8 @@
 # -*- coding: utf-8
-"""日内 session bar 日历：分钟/小时频 warmup 按 bar 精确扩窗。"""
+"""日内 session bar 日历：分钟/小时频 warmup 按 bar 精确扩窗。
+
+``SessionCalendar`` 为 :class:`SessionBarCalendar` 的别名。
+"""
 
 from __future__ import annotations
 
@@ -34,10 +37,12 @@ class SessionBarCalendar:
 
     @property
     def bar_timedelta(self) -> pd.Timedelta:
+        """单根 bar 对应的 ``Timedelta``。"""
         return bar_freq_to_timedelta(self.bar_freq)
 
     @property
     def session_bars(self) -> int:
+        """每个交易 session 的 bar 数。"""
         if self.bars_per_session is not None:
             return self.bars_per_session
         return bars_per_day(self.bar_freq, market=self.market, session=self.session)

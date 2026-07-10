@@ -201,7 +201,7 @@ def test_sql_tier2_ffill_and_decay_match_pandas(tmp_path, monkeypatch):
     df.loc[(df["Symbol"] == "A") & (df["TradeDate"] == df["TradeDate"].iloc[1]), "Close"] = float("nan")
     df.to_parquet(root / "panel.parquet", index=False)
 
-    from api import ts_decay_linear, ffill, bfill
+    from api import ts_decay_linear, ffill
 
     source = build_data_source(
         {
@@ -215,7 +215,6 @@ def test_sql_tier2_ffill_and_decay_match_pandas(tmp_path, monkeypatch):
     for expr, name in (
         (ts_decay_linear(col("Close"), 3), "decay"),
         (ffill(col("Close")), "ffill"),
-        (bfill(col("Close")), "bfill"),
     ):
         factor = Factor(name=name, expr=expr)
         eng_pd = FactorEngine(backend=build_backend("pandas"), data_source=source)

@@ -12,6 +12,7 @@ FE_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _bootstrap() -> None:
+    """初始化 sys.path 并加载算子注册表与 SQL backend。"""
     root = str(FE_ROOT.parent)
     if root not in sys.path:
         sys.path.insert(0, root)
@@ -26,6 +27,7 @@ def _bootstrap() -> None:
 
 
 def _validate_strict(rows, *, require_block_reason: bool) -> list[str]:
+    """严格模式校验：production core 全覆盖、SQL emitter 与 block_reason 完整性。"""
     from backend.operator_capability import resolve_canonical
     from cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS
 
@@ -64,6 +66,7 @@ def _validate_strict(rows, *, require_block_reason: bool) -> list[str]:
 
 
 def main() -> int:
+    """输出 backend fast path 覆盖报表；``--strict`` 时作为 CI 门禁。"""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true", help="JSON 摘要")
     parser.add_argument("--csv", type=Path, default=None, help="写出 CSV 明细")

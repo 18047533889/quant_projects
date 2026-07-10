@@ -11,6 +11,14 @@ from workspace_paths import resolve_path
 
 
 def _extract_source_spec(config: Any) -> tuple[str, dict[str, Any]]:
+    """从 dict 或 dataclass 配置提取 (type, options)。
+    
+    参数:
+        config: 数据源或运行时配置
+    
+    返回:
+        tuple[str, dict[str, Any]]
+    """
     if isinstance(config, dict):
         raw = dict(config)
         source_type = raw.pop("type")
@@ -30,6 +38,17 @@ def _pop_option(
     default: Any = None,
     required: bool = False,
 ) -> Any:
+    """从 options 弹出首个非空配置项。
+    
+    参数:
+        options: 数据源配置选项字典
+        default: 见函数签名
+        required: 见函数签名（可选）
+        *names: 逻辑列名列表（可选）
+    
+    返回:
+        Any
+    """
     for name in names:
         if name in options and options[name] is not None:
             return options.pop(name)
@@ -40,6 +59,15 @@ def _pop_option(
 
 
 def _ensure_no_extra_options(source_type: str, options: dict[str, Any]) -> None:
+    """校验数据源配置无多余未识别选项。
+    
+    参数:
+        source_type: 数据源类型字符串
+        options: 数据源配置选项字典
+    
+    返回:
+        无
+    """
     if not options:
         return
     unexpected = ", ".join(sorted(options))
@@ -47,6 +75,15 @@ def _ensure_no_extra_options(source_type: str, options: dict[str, Any]) -> None:
 
 
 def _wrap_long_table(source: Any, *, long_table: bool) -> Any:
+    """按需用 LongTableDataSource 包装内层数据源。
+    
+    参数:
+        source: 见函数签名
+        long_table: 是否包装为长表数据源（可选）
+    
+    返回:
+        Any
+    """
     if not long_table:
         return source
     from .long_table_source import LongTableDataSource
@@ -55,11 +92,27 @@ def _wrap_long_table(source: Any, *, long_table: bool) -> Any:
 
 
 def _normalize_path(value: Any) -> str:
+    """将路径解析为工作区绝对路径字符串。
+    
+    参数:
+        value: 缓存值
+    
+    返回:
+        str
+    """
     return str(resolve_path(str(value)))
 
 
 def _attach_bar_freq(source: Any, bar_freq: str) -> Any:
-    """为 DataSource 挂载 bar 频率（供 warmup / lookback 换算）。"""
+    """为数据源挂载 bar 频率属性。
+    
+    参数:
+        source: 见函数签名
+        bar_freq: bar 频率字符串
+    
+    返回:
+        Any
+    """
     if bar_freq and not getattr(source, "bar_freq", None):
         source.bar_freq = bar_freq
     return source
@@ -71,7 +124,16 @@ def _apply_date_range_to_source_config(
     start_date: str | None,
     end_date: str | None,
 ) -> Any:
-    """将 composite 顶层的 ``start_date``/``end_date`` 下发到各子源（子源已显式设置则不覆盖）。"""
+    """将顶层日期范围递归下发到 composite 子源。
+    
+    参数:
+        config: 数据源或运行时配置
+        start_date: 起始日期（可选）
+        end_date: 结束日期（可选）
+    
+    返回:
+        Any
+    """
     if not isinstance(config, dict) or (start_date is None and end_date is None):
         return config
     cfg = dict(config)
@@ -94,7 +156,14 @@ def _apply_date_range_to_source_config(
 
 
 def build_data_source(config: Any):
-    """根据运行时配置构造单数据源或组合数据源实例。"""
+    """根据运行时配置构造数据源或组合数据源实例。
+    
+    参数:
+        config: 数据源或运行时配置
+    
+    返回:
+        无
+    """
 
     # YAML 可为 dict 或已解析的 dataclass；统一成 (type, options) 再分支
     source_type, options = _extract_source_spec(config)

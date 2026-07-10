@@ -12,6 +12,8 @@ canonical 名（``RSI``、``rank``、``decay_linear``）指向同一 ``Operator`
 - 新增 DSL 别名：在本文件 ``register_alias``，并确保 canonical 已在对应 ``*.py`` 实现；
 - 技术指标 ``ts_*`` → 大写 canonical 见下方「§ 技术指标」段；
 - 重复算子合并见 [`_dedupe.py`](_dedupe.py)（别名重定向 + 注销冗余 canonical）。
+
+本模块无函数定义，import 时产生副作用（向 ``OperatorRegistry`` 登记别名）。
 """
 from cleaned_operators.registry import OperatorRegistry
 

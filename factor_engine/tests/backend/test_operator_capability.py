@@ -46,9 +46,9 @@ def test_if_else_polars_long_tier(loaded):
     assert summarize_operator("where").polars == "production_safe"
 
 
-def test_bfill_polars_long_passthrough_tier(loaded):
+def test_bfill_polars_long_tier(loaded):
     s = summarize_operator("bfill")
-    assert s.polars_long_tier == "passthrough"
+    assert s.polars_long_tier == "blocked_causal"
     assert s.polars != "production_safe"
 
 

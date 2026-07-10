@@ -1,5 +1,15 @@
 # -*- coding: utf-8 -*-
-"""重复算子合并 + 业界标准命名（WorldQuant / pandas 惯例）。"""
+"""重复算子合并 + 业界标准命名（WorldQuant / pandas 惯例）。
+
+本模块在 ``load_all()`` 末尾调用 ``apply_operator_deduplication()``，
+将历史方言名重定向到 canonical 并注销冗余主键。
+
+常量
+----
+- ``CANONICAL_RENAMES``：旧 canonical → 新 canonical 重命名表；
+- ``DEDUPE_ALIASES``：别名 → 保留 canonical 映射；
+- ``REMOVED_CANONICALS``：去重后注销的冗余 canonical 列表。
+"""
 from __future__ import annotations
 
 from cleaned_operators.registry import OperatorRegistry

@@ -34,10 +34,23 @@ def source():
     return InMemorySeriesSource(data={"close": close})
 
 
-def test_bfill_is_passthrough_not_native():
-    assert "bfill" in POLARS_LONG_PASSTHROUGH
-    assert classify_plan_op("bfill") == "passthrough"
-    assert infer_polars_long_tier("bfill") == "passthrough"
+def test_bfill_is_blocked_causal_not_passthrough():
+    from backend.polars_long_policy import POLARS_LONG_BLOCKED_CAUSAL, POLARS_LONG_PASSTHROUGH
+
+    assert "bfill" in POLARS_LONG_BLOCKED_CAUSAL
+    assert "bfill" not in POLARS_LONG_PASSTHROUGH
+    assert classify_plan_op("bfill") == "blocked_causal"
+    assert infer_polars_long_tier("bfill") == "blocked_causal"
+
+
+def test_bfill_long_path_raises(source):
+    from backend.polars_long_policy import UnsupportedCausalOperatorError
+
+    expr = make_cleaned_call_factory("bfill")(col("close"))
+    with pytest.raises(UnsupportedCausalOperatorError):
+        FactorEngine(backend=build_backend("polars_long"), data_source=source).run(
+            Factor(name="t", expr=expr)
+        )
 
 
 def test_if_else_production_tier():
@@ -48,16 +61,6 @@ def test_if_else_production_tier():
     assert spec.polars_long_tier == "native"
     # panel polars 以 ``where`` 为 production parity 代表（if_else 为 DSL 别名）
     assert summarize_operator("where").polars == "production_safe"
-
-
-def test_bfill_long_path_passthrough_telemetry(source):
-    expr = make_cleaned_call_factory("bfill")(col("close"))
-    out = FactorEngine(backend=build_backend("polars_long"), data_source=source).run(
-        Factor(name="t", expr=expr)
-    )
-    assert out.get("used_polars_long_path") is True
-    assert out.get("used_polars_long_passthrough") is True
-    assert not out.get("used_polars_long_native")
 
 
 def test_compile_memo_dedupes_duplicate_subtree(source):

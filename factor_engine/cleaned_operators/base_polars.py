@@ -1,4 +1,3 @@
-from __future__ import annotations
 # -*- coding: utf-8 -*-
 """
 Polars 算子基类（实验/备用 backend）。
@@ -6,6 +5,7 @@ Polars 算子基类（实验/备用 backend）。
 与 ``base.py`` 结构相同，但 ``register_operator`` 会把 backend 标为 ``polars``。
 当前生产路径 ``PandasBackend`` 使用 ``pandas_numpy`` 实现；Polars 类供后续加速或对照测试。
 """
+from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
@@ -85,6 +85,7 @@ class SeriesOperator(Operator):
     """Polars 序列算子基类：规范化窗口参数后调用 ``_calculate_series``。"""
 
     def calculate(self, *args, **kwargs) -> pl.DataFrame:
+        """在宽表 panel 上计算本算子；参数见 operators_semantics.md。"""
         processed_args = []
         for a in args:
             if isinstance(a, float) and a == int(a):
@@ -113,6 +114,7 @@ class ScalarOperator(Operator):
     """Polars 标量输出算子基类（panel 路径较少使用）。"""
 
     def calculate(self, *args, **kwargs) -> Any:
+        """在宽表 panel 上计算本算子；参数见 operators_semantics.md。"""
         return self._calculate_scalar(*args, **kwargs)
 
     @abstractmethod
@@ -145,6 +147,7 @@ class TransformOperator(Operator):
         raise NotImplementedError
 
     def calculate(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        """在宽表 panel 上计算本算子；参数见 operators_semantics.md。"""
         return self._calculate_series(x, **kwargs)
 
 
@@ -165,6 +168,7 @@ class TwoVarOperator(Operator):
         raise NotImplementedError
 
     def calculate(self, x: pl.DataFrame, y: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        """在宽表 panel 上计算本算子；参数见 operators_semantics.md。"""
         return self._calculate_series(x, y, **kwargs)
 
 

@@ -13,6 +13,7 @@ TXT_PATH = FE_ROOT / "docs" / "factor_engine_llm_prompt.txt"
 
 
 def _strip_inline_md(text: str) -> str:
+    """去除 Markdown 内联语法（链接、粗体、行内代码）。"""
     text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
     text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
     text = re.sub(r"`([^`]+)`", r"\1", text)
@@ -20,6 +21,7 @@ def _strip_inline_md(text: str) -> str:
 
 
 def md_to_txt(md: str) -> str:
+    """将 Markdown 文档转换为纯文本格式（标题、引用、分隔线等）。"""
     out: list[str] = []
     for raw in md.splitlines():
         line = raw.rstrip()
@@ -55,6 +57,7 @@ def md_to_txt(md: str) -> str:
 
 
 def main() -> int:
+    """同步 ``factor_engine_llm_prompt.md`` 为纯文本 ``.txt``；``--check`` 用于 CI。"""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--check",

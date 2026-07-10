@@ -131,10 +131,13 @@ def _col(name: str):
 
 
 def _run(source, expr, backend_name: str):
-    out = FactorEngine(backend=build_backend(backend_name), data_source=source).run(
+    return FactorEngine(backend=build_backend(backend_name), data_source=source).run(
         Factor(name="t", expr=expr)
     )
-    return out["result"].sort_index()
+
+
+def _result_series(run_out) -> pd.Series:
+    return run_out["result"].sort_index()
 
 
 MEMORY_CASES = [
@@ -171,8 +174,8 @@ MEMORY_CASES = [
 @pytest.mark.parametrize("name,expr_builder", MEMORY_CASES)
 def test_production_core_polars_long_matches_pandas(mem_source, name, expr_builder):
     expr = expr_builder()
-    pd_out = _run(mem_source, expr, "pandas")
-    long_out = _run(mem_source, expr, "polars_long")
+    pd_out = _result_series(_run(mem_source, expr, "pandas"))
+    long_out = _result_series(_run(mem_source, expr, "polars_long"))
     pd.testing.assert_series_equal(pd_out, long_out, check_names=False, rtol=1e-6, atol=1e-6)
 
 
@@ -196,9 +199,13 @@ DUCKDB_CASES = [
 
 @pytest.mark.parametrize("name,expr_builder", DUCKDB_CASES)
 def test_production_core_duckdb_matches_pandas(duckdb_source, name, expr_builder):
+    from tests.backend_parity.duckdb_parity_helpers import assert_duckdb_real_sql_execution
+
     expr = expr_builder()
-    pd_out = _run(duckdb_source, expr, "pandas")
-    sql_out = _run(duckdb_source, expr, "duckdb_sql")
+    pd_out = _result_series(_run(duckdb_source, expr, "pandas"))
+    sql_run = _run(duckdb_source, expr, "duckdb_sql")
+    assert_duckdb_real_sql_execution(sql_run)
+    sql_out = _result_series(sql_run)
     pd.testing.assert_series_equal(pd_out, sql_out, check_names=False, rtol=1e-6, atol=1e-6)
 
 
@@ -208,6 +215,10 @@ def test_production_core_duckdb_matches_polars_long(mem_source, duckdb_source, n
     if name not in mem_cases:
         pytest.skip("no memory expr")
     expr = mem_cases[name]()
-    long_out = _run(mem_source, expr, "polars_long")
-    sql_out = _run(duckdb_source, expr_builder(), "duckdb_sql")
+    long_out = _result_series(_run(mem_source, expr, "polars_long"))
+    sql_run = _run(duckdb_source, expr_builder(), "duckdb_sql")
+    from tests.backend_parity.duckdb_parity_helpers import assert_duckdb_real_sql_execution
+
+    assert_duckdb_real_sql_execution(sql_run)
+    sql_out = _result_series(sql_run)
     pd.testing.assert_series_equal(long_out, sql_out, check_names=False, rtol=1e-6, atol=1e-6)

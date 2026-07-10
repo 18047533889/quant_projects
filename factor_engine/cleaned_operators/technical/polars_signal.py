@@ -45,6 +45,7 @@ def _wma(x: pl.DataFrame, window: int) -> pl.DataFrame:
 
 @register_operator(name="EMA", category="time_series", business_category="time_series", canonical="ts_ema", source="factor_dsl_polars")
 class EMAPolars(SeriesOperator):
+    """Polars 指数移动平均"""
     metadata = OperatorMetadata(
         name="EMA", category="time_series", description="指数移动平均",
         param_names=["x", "span"], return_type="series", tags=["time_series", "polars"],
@@ -57,6 +58,7 @@ class EMAPolars(SeriesOperator):
 
 @register_operator(name="WMA", category="time_series", business_category="time_series", canonical="WMA", source="factor_dsl_polars")
 class WMAPolars(SeriesOperator):
+    """Polars 加权移动平均"""
     metadata = OperatorMetadata(
         name="WMA", category="time_series", description="加权移动平均",
         param_names=["x", "window"], return_type="series", tags=["time_series", "polars"],
@@ -69,6 +71,7 @@ class WMAPolars(SeriesOperator):
 
 @register_operator(name="RSI", category="financial", business_category="technical_signal", canonical="RSI", source="factor_dsl_polars")
 class RSIPolars(SeriesOperator):
+    """Polars 相对强弱指数"""
     metadata = OperatorMetadata(
         name="RSI", category="financial", description="相对强弱指数",
         param_names=["x", "window"], return_type="series", tags=["financial", "polars"],
@@ -99,6 +102,7 @@ class RSIPolars(SeriesOperator):
     backend="polars",
 )
 class RSIWilderPolars(SeriesOperator):
+    """Polars Wilder 平滑 RSI"""
     metadata = OperatorMetadata(
         name="RSI_WILDER",
         category="financial",
@@ -120,6 +124,7 @@ class RSIWilderPolars(SeriesOperator):
 
 @register_operator(name="MACD", category="financial", business_category="technical_signal", canonical="MACD", source="factor_dsl_polars")
 class MACDPolars(SeriesOperator):
+    """Polars MACD 线"""
     metadata = OperatorMetadata(
         name="MACD", category="financial", description="MACD 线",
         param_names=["x", "fast", "slow", "signal"], return_type="series", tags=["financial", "polars"],
@@ -138,6 +143,7 @@ class MACDPolars(SeriesOperator):
 
 @register_operator(name="MACD_line", category="financial", business_category="technical_signal", canonical="MACD_line", source="factor_dsl_polars")
 class MACDLinePolars(MACDPolars):
+    """Polars MACD 线"""
     metadata = OperatorMetadata(
         name="MACD_line", category="financial", description="MACD 线",
         param_names=["price", "fast", "slow"], return_type="series", tags=["financial", "polars"],
@@ -146,6 +152,7 @@ class MACDLinePolars(MACDPolars):
 
 @register_operator(name="MACD_signal", category="financial", business_category="technical_signal", canonical="MACD_signal", source="factor_dsl_polars")
 class MACDSignalPolars(SeriesOperator):
+    """Polars MACD 信号线"""
     metadata = OperatorMetadata(
         name="MACD_signal", category="financial", description="MACD 信号线",
         param_names=["price", "fast", "slow", "signal"], return_type="series", tags=["financial", "polars"],
@@ -161,6 +168,7 @@ class MACDSignalPolars(SeriesOperator):
 
 @register_operator(name="MACD_hist", category="financial", business_category="technical_signal", canonical="MACD_hist", source="factor_dsl_polars")
 class MACDHistPolars(SeriesOperator):
+    """Polars MACD 柱"""
     metadata = OperatorMetadata(
         name="MACD_hist", category="financial", description="MACD 柱",
         param_names=["price", "fast", "slow", "signal"], return_type="series", tags=["financial", "polars"],
@@ -177,6 +185,7 @@ class MACDHistPolars(SeriesOperator):
 
 @register_operator(name="ATR", category="financial", business_category="technical_signal", canonical="ATR", source="factor_dsl_polars")
 class ATRPolars(SeriesOperator):
+    """Polars 平均真实波幅"""
     metadata = OperatorMetadata(
         name="ATR", category="financial", description="平均真实波幅",
         param_names=["high", "low", "close", "window"], return_type="series", tags=["financial", "polars"],
@@ -213,6 +222,7 @@ class ATRPolars(SeriesOperator):
     backend="polars",
 )
 class ATRWilderPolars(SeriesOperator):
+    """Polars Wilder 平滑 ATR"""
     metadata = OperatorMetadata(
         name="ATR_WILDER",
         category="financial",
@@ -267,6 +277,7 @@ def _align_cols(*dfs: pl.DataFrame) -> list[str]:
 
 @register_operator(name="BollingerBands", category="financial", business_category="technical_signal", canonical="BollingerBands", source="factor_dsl_polars")
 class BollingerBandsPolars(SeriesOperator):
+    """Polars 布林带中轨"""
     metadata = OperatorMetadata(
         name="BollingerBands", category="financial", description="布林带中轨",
         param_names=["price", "window", "std_dev"], return_type="series", tags=["financial", "polars"],
@@ -279,6 +290,7 @@ class BollingerBandsPolars(SeriesOperator):
 
 @register_operator(name="BollingerLower", category="financial", business_category="technical_signal", canonical="BollingerLower", source="factor_dsl_polars")
 class BollingerLowerPolars(SeriesOperator):
+    """Polars 布林带下轨"""
     metadata = OperatorMetadata(
         name="BollingerLower", category="financial", description="布林带下轨",
         param_names=["x", "window", "std_dev"], return_type="series", tags=["financial", "polars"],
@@ -295,6 +307,7 @@ class BollingerLowerPolars(SeriesOperator):
 
 @register_operator(name="BollingerUpper", category="financial", business_category="technical_signal", canonical="BollingerUpper", source="factor_dsl_polars")
 class BollingerUpperPolars(SeriesOperator):
+    """Polars 布林带上轨"""
     metadata = OperatorMetadata(
         name="BollingerUpper", category="financial", description="布林带上轨",
         param_names=["x", "window", "std_dev"], return_type="series", tags=["financial", "polars"],
@@ -311,6 +324,7 @@ class BollingerUpperPolars(SeriesOperator):
 
 @register_operator(name="StochasticK", category="financial", business_category="technical_signal", canonical="StochasticK", source="factor_dsl_polars")
 class StochasticKPolars(SeriesOperator):
+    """Polars 随机指标 %K"""
     metadata = OperatorMetadata(
         name="StochasticK", category="financial", description="随机指标 %K",
         param_names=["high", "low", "close", "window"], return_type="series", tags=["financial", "polars"],
@@ -331,6 +345,7 @@ class StochasticKPolars(SeriesOperator):
 
 @register_operator(name="StochasticD", category="financial", business_category="technical_signal", canonical="StochasticD", source="factor_dsl_polars")
 class StochasticDPolars(SeriesOperator):
+    """Polars 随机指标 %D"""
     metadata = OperatorMetadata(
         name="StochasticD", category="financial", description="随机指标 %D",
         param_names=["high", "low", "close", "window"], return_type="series", tags=["financial", "polars"],
@@ -348,6 +363,7 @@ class StochasticDPolars(SeriesOperator):
 
 @register_operator(name="MOM", category="financial", business_category="technical_signal", canonical="MOM", source="factor_dsl_polars")
 class MOMPolars(SeriesOperator):
+    """Polars 动量"""
     metadata = OperatorMetadata(
         name="MOM", category="financial", description="动量",
         param_names=["price", "window"], return_type="series", tags=["financial", "polars"],
@@ -361,6 +377,7 @@ class MOMPolars(SeriesOperator):
 
 @register_operator(name="ROC", category="financial", business_category="technical_signal", canonical="ROC", source="factor_dsl_polars")
 class ROCPolars(SeriesOperator):
+    """Polars 变化率"""
     metadata = OperatorMetadata(
         name="ROC", category="financial", description="变化率",
         param_names=["price", "window"], return_type="series", tags=["financial", "polars"],
@@ -376,6 +393,7 @@ class ROCPolars(SeriesOperator):
 
 @register_operator(name="WilliamsR", category="financial", business_category="technical_signal", canonical="WilliamsR", source="factor_dsl_polars")
 class WilliamsRPolars(SeriesOperator):
+    """Polars 威廉 %R"""
     metadata = OperatorMetadata(
         name="WilliamsR", category="financial", description="威廉 %R",
         param_names=["high", "low", "close", "window"], return_type="series", tags=["financial", "polars"],
@@ -396,6 +414,7 @@ class WilliamsRPolars(SeriesOperator):
 
 @register_operator(name="TRIX", category="financial", business_category="technical_signal", canonical="TRIX", source="factor_dsl_polars")
 class TRIXPolars(SeriesOperator):
+    """Polars 三重 EMA 变化率"""
     metadata = OperatorMetadata(
         name="TRIX", category="financial", description="三重 EMA 变化率",
         param_names=["close", "window"], return_type="series", tags=["financial", "polars"],
@@ -412,6 +431,7 @@ class TRIXPolars(SeriesOperator):
 
 @register_operator(name="OBV", category="financial", business_category="technical_signal", canonical="OBV", source="factor_dsl_polars")
 class OBVPolars(SeriesOperator):
+    """Polars 能量潮"""
     metadata = OperatorMetadata(
         name="OBV", category="financial", description="能量潮",
         param_names=["price", "volume"], return_type="series", tags=["financial", "polars"],
@@ -428,6 +448,7 @@ class OBVPolars(SeriesOperator):
 
 @register_operator(name="CCI", category="financial", business_category="technical_signal", canonical="CCI", source="factor_dsl_polars")
 class CCIPolars(SeriesOperator):
+    """Polars 商品通道指数"""
     metadata = OperatorMetadata(
         name="CCI", category="financial", description="商品通道指数",
         param_names=["high", "low", "close", "window"], return_type="series", tags=["financial", "polars"],
@@ -456,6 +477,7 @@ class CCIPolars(SeriesOperator):
 
 @register_operator(name="DPO", category="financial", business_category="technical_signal", canonical="DPO", source="factor_dsl_polars")
 class DPOPolars(SeriesOperator):
+    """Polars 去趋势价格振荡器"""
     metadata = OperatorMetadata(
         name="DPO", category="financial", description="去趋势价格振荡器",
         param_names=["close", "window"], return_type="series", tags=["financial", "polars"],
@@ -549,6 +571,7 @@ def _kama_1d(values: np.ndarray, sc: np.ndarray) -> np.ndarray:
 
 @register_operator(name="ADX", category="financial", business_category="technical_signal", canonical="ADX", source="factor_dsl_polars")
 class ADXPolars(SeriesOperator):
+    """Polars 平均趋向指数"""
     metadata = OperatorMetadata(
         name="ADX", category="financial", description="平均趋向指数",
         param_names=["high", "low", "close", "window"], return_type="series", tags=["financial", "polars"],
@@ -575,6 +598,7 @@ class ADXPolars(SeriesOperator):
 
 @register_operator(name="ADXR", category="financial", business_category="technical_signal", canonical="ADXR", source="factor_dsl_polars")
 class ADXRPolars(SeriesOperator):
+    """Polars 平滑 ADX"""
     metadata = OperatorMetadata(
         name="ADXR", category="financial", description="平滑 ADX",
         param_names=["high", "low", "close", "window"], return_type="series", tags=["financial", "polars"],
@@ -605,6 +629,7 @@ def _aroon_component(close: pl.Expr, window: int, *, up: bool) -> pl.Expr:
 
 @register_operator(name="AROON_up", category="financial", business_category="technical_signal", canonical="AROON_up", source="factor_dsl_polars")
 class AroonUpPolars(SeriesOperator):
+    """Polars Aroon Up"""
     metadata = OperatorMetadata(
         name="AROON_up", category="financial", description="Aroon Up",
         param_names=["close", "window"], return_type="series", tags=["financial", "polars"],
@@ -618,6 +643,7 @@ class AroonUpPolars(SeriesOperator):
 
 @register_operator(name="AROON_down", category="financial", business_category="technical_signal", canonical="AROON_down", source="factor_dsl_polars")
 class AroonDownPolars(SeriesOperator):
+    """Polars Aroon Down"""
     metadata = OperatorMetadata(
         name="AROON_down", category="financial", description="Aroon Down",
         param_names=["close", "window"], return_type="series", tags=["financial", "polars"],
@@ -631,6 +657,7 @@ class AroonDownPolars(SeriesOperator):
 
 @register_operator(name="AROON", category="financial", business_category="technical_signal", canonical="AROON", source="factor_dsl_polars")
 class AroonPolars(SeriesOperator):
+    """Polars Aroon Up - Down"""
     metadata = OperatorMetadata(
         name="AROON", category="financial", description="Aroon Up - Down",
         param_names=["close", "window"], return_type="series", tags=["financial", "polars"],
@@ -646,6 +673,7 @@ class AroonPolars(SeriesOperator):
 
 @register_operator(name="KAMA", category="financial", business_category="technical_signal", canonical="KAMA", source="factor_dsl_polars")
 class KAMAPolars(SeriesOperator):
+    """Polars 考夫曼自适应移动平均"""
     metadata = OperatorMetadata(
         name="KAMA", category="financial", description="考夫曼自适应移动平均",
         param_names=["close", "window"], return_type="series", tags=["financial", "polars"],
@@ -674,6 +702,7 @@ class KAMAPolars(SeriesOperator):
 
 @register_operator(name="is_finite", category="signal", business_category="technical_signal", canonical="is_finite", source="factor_dsl_polars")
 class IsFinitePolars(SeriesOperator):
+    """Polars 是否有限"""
     metadata = OperatorMetadata(
         name="is_finite", category="signal", description="是否有限",
         param_names=["x"], return_type="series", tags=["signal", "polars"],
@@ -686,6 +715,7 @@ class IsFinitePolars(SeriesOperator):
 
 @register_operator(name="saturate", category="signal", business_category="technical_signal", canonical="saturate", source="factor_dsl_polars")
 class SaturatePolars(SeriesOperator):
+    """Polars 限制到 [0,1]"""
     metadata = OperatorMetadata(
         name="saturate", category="signal", description="限制到 [0,1]",
         param_names=["x"], return_type="series", tags=["signal", "polars"],
@@ -698,6 +728,7 @@ class SaturatePolars(SeriesOperator):
 
 @register_operator(name="signed_log", category="signal", business_category="technical_signal", canonical="signed_log", source="factor_dsl_polars")
 class SignedLogPolars(SeriesOperator):
+    """Polars 符号对数"""
     metadata = OperatorMetadata(
         name="signed_log", category="signal", description="符号对数",
         param_names=["x"], return_type="series", tags=["signal", "polars"],
@@ -712,6 +743,7 @@ class SignedLogPolars(SeriesOperator):
 
 @register_operator(name="signed_power", category="signal", business_category="technical_signal", canonical="signed_power", source="factor_dsl_polars")
 class SignedPowerPolars(SeriesOperator):
+    """Polars 符号幂"""
     metadata = OperatorMetadata(
         name="signed_power", category="signal", description="符号幂",
         param_names=["x", "c"], return_type="series", tags=["signal", "polars"],
@@ -727,6 +759,7 @@ class SignedPowerPolars(SeriesOperator):
 
 @register_operator(name="trade_when", category="signal", business_category="technical_signal", canonical="trade_when", source="factor_dsl_polars")
 class TradeWhenPolars(SeriesOperator):
+    """Polars 条件信号"""
     metadata = OperatorMetadata(
         name="trade_when", category="signal", description="条件信号",
         param_names=["condition", "signal", "fallback"], return_type="series", tags=["signal", "polars"],
@@ -808,6 +841,7 @@ def _vp_weighted_price(
 
 @register_operator(name="hump_decay", category="signal", business_category="technical_signal", canonical="hump_decay", source="factor_dsl_polars")
 class HumpDecayPolars(SeriesOperator):
+    """Polars 阈值衰减"""
     metadata = OperatorMetadata(
         name="hump_decay", category="signal", description="阈值衰减",
         param_names=["x", "hump"], return_type="series", tags=["signal", "polars"],
@@ -827,6 +861,7 @@ class HumpDecayPolars(SeriesOperator):
 
 @register_operator(name="vp_weighted_price", category="signal", business_category="technical_signal", canonical="vp_weighted_price", source="factor_dsl_polars")
 class VPWeightedPricePolars(SeriesOperator):
+    """Polars 量价加权价格"""
     metadata = OperatorMetadata(
         name="vp_weighted_price", category="signal", description="量价加权价格",
         param_names=["close", "volume", "open", "high", "low"], return_type="series", tags=["signal", "polars"],
@@ -847,6 +882,7 @@ class VPWeightedPricePolars(SeriesOperator):
 
 @register_operator(name="vpmacd", category="signal", business_category="technical_signal", canonical="vpmacd", source="factor_dsl_polars")
 class VPMACDPolars(SeriesOperator):
+    """Polars VP-MACD"""
     metadata = OperatorMetadata(
         name="vpmacd", category="signal", description="VP-MACD",
         param_names=["close", "volume", "open", "high", "low", "lambda_param"],
@@ -873,6 +909,7 @@ class VPMACDPolars(SeriesOperator):
 
 @register_operator(name="vpmacd_signal", category="signal", business_category="technical_signal", canonical="vpmacd_signal", source="factor_dsl_polars")
 class VPMACDSignalPolars(SeriesOperator):
+    """Polars VP-MACD 信号线"""
     metadata = OperatorMetadata(
         name="vpmacd_signal", category="signal", description="VP-MACD 信号线",
         param_names=["close", "volume", "open", "high", "low", "lambda_param"],

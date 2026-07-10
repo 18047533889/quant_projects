@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 
-def test_benchmark_cost_loaded_for_ts_mean():
-    from backend.operator_cost import get_backend_cost
+def test_benchmark_cost_ignores_seed_defaults():
+    import backend.operator_cost as oc
 
-    bc = get_backend_cost("ts_mean", "duckdb_sql")
-    assert bc.per_million_rows_ms < 80.0
+    oc._BENCHMARK_CACHE = None
+    bench = oc._load_benchmark_costs()
+    assert bench == {}
+    bc = oc.get_backend_cost("ts_mean", "duckdb_sql")
+    table = oc._BACKEND_COST_TABLE["ts_mean"]["duckdb_sql"]
+    assert bc.per_million_rows_ms == table.per_million_rows_ms
 
 
 def test_benchmark_cost_affects_fastpath_coverage():

@@ -126,6 +126,7 @@ class EWM(SeriesOperator):
 # canonical=ewm_corr backend=pandas_numpy selected=ewm_corr source=data_handling/window_ops.py
 @register_operator(name="ewm_corr", category="data_handling", business_category="data_cleaning", canonical="ewm_corr", source="factor_dsl_np")
 class EWMCorr(SeriesOperator):
+    """指数加权相关系数"""
     metadata = OperatorMetadata(
         name="ewm_corr",
         category="data_handling",
@@ -144,6 +145,7 @@ class EWMCorr(SeriesOperator):
 # canonical=ewm_cov backend=pandas_numpy selected=ewm_cov source=data_handling/window_ops.py
 @register_operator(name="ewm_cov", category="data_handling", business_category="data_cleaning", canonical="ewm_cov", source="factor_dsl_np")
 class EWMCov(SeriesOperator):
+    """指数加权协方差"""
     metadata = OperatorMetadata(
         name="ewm_cov",
         category="data_handling",
@@ -202,6 +204,7 @@ class EWMStd(SeriesOperator):
 # canonical=ewm_var backend=pandas_numpy selected=ewm_var source=data_handling/window_ops.py
 @register_operator(name="ewm_var", category="data_handling", business_category="data_cleaning", canonical="ewm_var", source="factor_dsl_np")
 class EWMVar(SeriesOperator):
+    """指数加权方差"""
     metadata = OperatorMetadata(
         name="ewm_var",
         category="data_handling",
@@ -220,6 +223,7 @@ class EWMVar(SeriesOperator):
 # canonical=expanding_max backend=pandas_numpy selected=expanding_max source=data_handling/window_ops.py
 @register_operator(name="expanding_max", category="data_handling", business_category="data_cleaning", canonical="expanding_max", source="factor_dsl_np")
 class ExpandingMax(SeriesOperator):
+    """扩展窗口最大值"""
     metadata = OperatorMetadata(
         name="expanding_max",
         category="data_handling",
@@ -238,6 +242,7 @@ class ExpandingMax(SeriesOperator):
 # canonical=expanding_mean backend=pandas_numpy selected=expanding_mean source=data_handling/window_ops.py
 @register_operator(name="expanding_mean", category="data_handling", business_category="data_cleaning", canonical="expanding_mean", source="factor_dsl_np")
 class ExpandingMean(SeriesOperator):
+    """扩展窗口均值"""
     metadata = OperatorMetadata(
         name="expanding_mean",
         category="data_handling",
@@ -256,6 +261,7 @@ class ExpandingMean(SeriesOperator):
 # canonical=expanding_min backend=pandas_numpy selected=expanding_min source=data_handling/window_ops.py
 @register_operator(name="expanding_min", category="data_handling", business_category="data_cleaning", canonical="expanding_min", source="factor_dsl_np")
 class ExpandingMin(SeriesOperator):
+    """扩展窗口最小值"""
     metadata = OperatorMetadata(
         name="expanding_min",
         category="data_handling",
@@ -274,6 +280,7 @@ class ExpandingMin(SeriesOperator):
 # canonical=expanding_rank backend=pandas_numpy selected=expanding_rank source=data_handling/window_ops.py
 @register_operator(name="expanding_rank", category="data_handling", business_category="data_cleaning", canonical="expanding_rank", source="factor_dsl_np")
 class ExpandingRank(SeriesOperator):
+    """扩展窗口排名（当前值在历史中的百分位排名）"""
     metadata = OperatorMetadata(
         name="expanding_rank",
         category="data_handling",
@@ -292,6 +299,7 @@ class ExpandingRank(SeriesOperator):
 # canonical=expanding_std backend=pandas_numpy selected=expanding_std source=data_handling/window_ops.py
 @register_operator(name="expanding_std", category="data_handling", business_category="data_cleaning", canonical="expanding_std", source="factor_dsl_np")
 class ExpandingStd(SeriesOperator):
+    """扩展窗口标准差"""
     metadata = OperatorMetadata(
         name="expanding_std",
         category="data_handling",
@@ -310,6 +318,7 @@ class ExpandingStd(SeriesOperator):
 # canonical=expanding_sum backend=pandas_numpy selected=expanding_sum source=data_handling/window_ops.py
 @register_operator(name="expanding_sum", category="data_handling", business_category="data_cleaning", canonical="expanding_sum", source="factor_dsl_np")
 class ExpandingSum(SeriesOperator):
+    """扩展窗口求和"""
     metadata = OperatorMetadata(
         name="expanding_sum",
         category="data_handling",
@@ -405,6 +414,7 @@ class FillNAConst(SeriesOperator):
 # canonical=fillna_interpolate backend=pandas_numpy selected=fillna_interpolate source=data_handling/missing_values.py
 @register_operator(name="fillna_interpolate", category="data_handling", business_category="data_cleaning", canonical="fillna_interpolate", source="factor_dsl_np")
 class FillnaInterpolate(SeriesOperator):
+    """插值填充缺失值（method: linear, quadratic, cubic）"""
     metadata = OperatorMetadata(
         name="fillna_interpolate",
         category="data_handling",
@@ -586,6 +596,7 @@ class WindowSum(SeriesOperator):
 # canonical=protected_div backend=pandas_numpy selected=protected_div source=basic_runtime
 @register_operator(name="protected_div", category="data_cleaning", business_category="data_cleaning", canonical="protected_div", source="basic_runtime")
 class ProtectedDivOp(TwoVarOperator):
+    """安全除法：|y|<=epsilon 时返回 default"""
     metadata = OperatorMetadata(
         name="protected_div",
         category="data_cleaning",
@@ -604,6 +615,7 @@ class ProtectedDivOp(TwoVarOperator):
 # canonical=protected_log backend=pandas_numpy selected=protected_log source=basic_runtime
 @register_operator(name="protected_log", category="data_cleaning", business_category="data_cleaning", canonical="protected_log", source="basic_runtime")
 class ProtectedLogOp(SeriesOperator):
+    """安全对数：log(max(x, epsilon))"""
     metadata = OperatorMetadata(
         name="protected_log",
         category="data_cleaning",
@@ -621,6 +633,7 @@ class ProtectedLogOp(SeriesOperator):
 # canonical=protected_sqrt backend=pandas_numpy selected=protected_sqrt source=basic_runtime
 @register_operator(name="protected_sqrt", category="data_cleaning", business_category="data_cleaning", canonical="protected_sqrt", source="basic_runtime")
 class ProtectedSqrtOp(SeriesOperator):
+    """安全平方根：sqrt(max(x, 0))"""
     metadata = OperatorMetadata(
         name="protected_sqrt",
         category="data_cleaning",

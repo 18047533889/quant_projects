@@ -20,6 +20,7 @@ from workspace_paths import default_factor_lake_root
 
 
 def main() -> int:
+    """补全因子湖 Parquet metadata 列（默认 dry-run，``--apply`` 实际写入）。"""
     parser = argparse.ArgumentParser(description="补全因子湖 Parquet metadata 列")
     parser.add_argument(
         "--lake-root",

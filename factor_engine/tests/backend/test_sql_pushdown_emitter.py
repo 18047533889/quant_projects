@@ -53,7 +53,7 @@ def test_rank_ts_mean_sql():
         instrument_column="inst",
     )
     assert compiled is not None
-    assert "RANK()" in compiled.query
+    assert "cnt_le" in compiled.query or "countIf" in compiled.query
     assert "AVG" in compiled.query
 
 
@@ -258,12 +258,12 @@ def test_decay_linear_alias_sql_capable():
     assert plan_is_sql_capable(plan)
 
 
-def test_bfill_sql_causal_passthrough():
-    """bfill 为因果算子：SQL 透传 inner，不引用未来值。"""
+def test_bfill_sql_not_capable():
+    """bfill 禁止 SQL fast path silent passthrough。"""
     from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = PlanNode(op="bfill", inputs=[_col("close")])
-    assert plan_is_sql_capable(plan)
+    assert not plan_is_sql_capable(plan)
     compiled = compile_plan_to_sql(
         plan,
         dataset="d",
@@ -271,9 +271,7 @@ def test_bfill_sql_causal_passthrough():
         instrument_column="i",
         dialect=SqlDialect.DUCKDB,
     )
-    assert compiled is not None
-    assert "FIRST_VALUE" not in compiled.query
-    assert "ORDER BY ts DESC" not in compiled.query
+    assert compiled is None
 
 
 def test_rank_skips_null_in_sql():
@@ -288,8 +286,8 @@ def test_rank_skips_null_in_sql():
         dialect=SqlDialect.DUCKDB,
     )
     assert compiled is not None
-    assert "WHEN _v IS NULL THEN NULL" in compiled.query
-    assert "COUNT(_v)" in compiled.query
+    assert "WHEN b._v IS NULL THEN NULL" in compiled.query or "isNull(b._v)" in compiled.query
+    assert "cnt_le" in compiled.query or "countIf" in compiled.query
 
 
 def test_group_rank_skips_null_in_sql():
@@ -307,8 +305,8 @@ def test_group_rank_skips_null_in_sql():
         dialect=SqlDialect.DUCKDB,
     )
     assert compiled is not None
-    assert "WHEN x._v IS NULL THEN NULL" in compiled.query
-    assert "COUNT(x._v)" in compiled.query
+    assert "CASE WHEN b._v IS NULL THEN NULL" in compiled.query
+    assert "_grp" in compiled.query
 
 
 def test_group_zscore_zero_std_sql():
@@ -335,7 +333,6 @@ def test_clickhouse_tier2_emitter():
 
     for op, attrs in (
         ("ffill", {}),
-        ("bfill", {}),
         ("ts_decay_linear", {"d": 3}),
     ):
         plan = PlanNode(op=op, inputs=[_col("close")], attrs=attrs)
@@ -358,8 +355,7 @@ def test_clickhouse_tier2_emitter():
         dialect=SqlDialect.CLICKHOUSE,
     )
     assert rank_sql is not None
-    assert "isNull(_v)" in rank_sql.query
-    assert "nullIf(COUNT(_v)" in rank_sql.query
+    assert "countIf" in rank_sql.query or "isNull(b._v)" in rank_sql.query
 
 
 def test_coalesce_sql():
@@ -497,7 +493,8 @@ def test_nan_to_num_sql():
         dialect=SqlDialect.DUCKDB,
     )
     assert compiled is not None
-    assert "COALESCE(_v, -1" in compiled.query
+    assert "isnan(_v)" in compiled.query or "isNaN(_v)" in compiled.query
+    assert "-1" in compiled.query
 
 
 def test_is_nan_sql():
@@ -642,8 +639,8 @@ def test_group_percentile_sql():
         dialect=SqlDialect.DUCKDB,
     )
     assert compiled is not None
-    assert "WHEN x._v IS NULL THEN 0.0" in compiled.query
-    assert "<= 0.5" in compiled.query
+    assert "WHEN b._oval IS NULL THEN 0.0" in compiled.query
+    assert "cnt_le" in compiled.query or "COUNT(*) FILTER" in compiled.query
 
 
 def test_group_decay_linear_sql():
@@ -664,9 +661,6 @@ def test_group_decay_linear_sql():
     assert compiled is not None
     assert "RANK()" in compiled.query
     assert "WHEN x._v IS NULL THEN NULL" in compiled.query
-
-
-def test_cs_resid_sql():
     from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = PlanNode(op="cs_resid", inputs=[_col("close"), _col("open")])

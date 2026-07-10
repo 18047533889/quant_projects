@@ -13,6 +13,8 @@ import pandas as pd
 
 @dataclass
 class InputDQThresholds:
+    """输入侧 DQ 阈值。"""
+
     min_rows: int = 1
     min_non_null_ratio: float = 0.01
     min_instruments: int = 1
@@ -21,6 +23,8 @@ class InputDQThresholds:
 
 @dataclass
 class InputColumnReport:
+    """单列输入 DQ 检查结果。"""
+
     column: str
     passed: bool
     row_count: int
@@ -31,13 +35,17 @@ class InputColumnReport:
 
 @dataclass
 class InputDQReport:
+    """多列输入 DQ 报告。"""
+
     columns: list[InputColumnReport] = field(default_factory=list)
 
     @property
     def passed(self) -> bool:
+        """是否全部列检查通过。"""
         return all(c.passed for c in self.columns)
 
     def to_dict(self) -> dict[str, Any]:
+        """序列化为 JSON 友好字典。"""
         return {
             "passed": self.passed,
             "columns": [
@@ -55,6 +63,8 @@ class InputDQReport:
 
 
 class InputDQError(RuntimeError):
+    """输入 DQ 门禁未通过。"""
+
     def __init__(self, report: InputDQReport):
         self.report = report
         failed = [c.column for c in report.columns if not c.passed]
@@ -173,6 +183,7 @@ def assert_input_dq(
     thresholds: InputDQThresholds | None = None,
     raise_on_fail: bool = True,
 ) -> InputDQReport:
+    """执行输入 DQ 检查；``raise_on_fail=True`` 时未通过则抛 :class:`InputDQError`。"""
     report = evaluate_input_columns(data_source, columns, thresholds=thresholds)
     if not report.passed and raise_on_fail:
         raise InputDQError(report)

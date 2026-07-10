@@ -23,6 +23,7 @@ if not _has_pandas("maximum"):
         source="factor_dsl_np_parity",
     )
     class MaximumNp(SeriesOperator):
+        """逐元素 max(x,y)"""
         metadata = OperatorMetadata(
             name="maximum",
             category="math",
@@ -50,6 +51,7 @@ if not _has_pandas("minimum"):
         source="factor_dsl_np_parity",
     )
     class MinimumNp(SeriesOperator):
+        """逐元素 min(x,y)"""
         metadata = OperatorMetadata(
             name="minimum",
             category="math",

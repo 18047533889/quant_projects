@@ -35,6 +35,7 @@ def _align_cols(*dfs: pl.DataFrame) -> list[str]:
     source="factor_dsl_polars",
 )
 class RealTurnoverRatePolars(SeriesOperator):
+    """Polars 真实换手率 volume/float"""
     metadata = OperatorMetadata(
         name="real_turnover_rate",
         category="intraday_microstructure",
@@ -59,6 +60,7 @@ class RealTurnoverRatePolars(SeriesOperator):
     source="factor_dsl_polars",
 )
 class MicroRealizedVolPolars(SeriesOperator):
+    """Polars 已实现波动率"""
     metadata = OperatorMetadata(
         name="micro_realized_vol",
         category="intraday_microstructure",
@@ -86,6 +88,7 @@ class MicroRealizedVolPolars(SeriesOperator):
     source="factor_dsl_polars",
 )
 class MicroSpreadPolars(SeriesOperator):
+    """Polars 相对价差"""
     metadata = OperatorMetadata(
         name="micro_spread",
         category="intraday_microstructure",
@@ -112,6 +115,7 @@ class MicroSpreadPolars(SeriesOperator):
     source="factor_dsl_polars",
 )
 class MicroAmihudHfPolars(SeriesOperator):
+    """Polars Amihud illiquidity"""
     metadata = OperatorMetadata(
         name="micro_amihud_hf",
         category="intraday_microstructure",
@@ -137,6 +141,7 @@ class MicroAmihudHfPolars(SeriesOperator):
     source="factor_dsl_polars",
 )
 class MicroMidReturnPolars(SeriesOperator):
+    """Polars Mid-price return"""
     metadata = OperatorMetadata(
         name="micro_mid_return",
         category="intraday_microstructure",
@@ -162,6 +167,7 @@ class MicroMidReturnPolars(SeriesOperator):
     source="factor_dsl_polars",
 )
 class MicroBipowerVarPolars(SeriesOperator):
+    """Polars Bipower variation"""
     metadata = OperatorMetadata(
         name="micro_bipower_var",
         category="intraday_microstructure",
@@ -198,6 +204,7 @@ class MicroBipowerVarPolars(SeriesOperator):
     source="factor_dsl_polars",
 )
 class MicroJumpIndicatorPolars(SeriesOperator):
+    """Polars Jump indicator"""
     metadata = OperatorMetadata(
         name="micro_jump_indicator",
         category="intraday_microstructure",
@@ -230,6 +237,7 @@ class MicroJumpIndicatorPolars(SeriesOperator):
     source="factor_dsl_polars",
 )
 class MicroTradeImbalancePolars(SeriesOperator):
+    """Polars Trade imbalance proxy"""
     metadata = OperatorMetadata(
         name="micro_trade_imbalance",
         category="intraday_microstructure",
@@ -263,6 +271,7 @@ class MicroTradeImbalancePolars(SeriesOperator):
     source="factor_dsl_polars",
 )
 class MicroVpinPolars(SeriesOperator):
+    """Polars VPIN proxy"""
     metadata = OperatorMetadata(
         name="micro_vpin",
         category="intraday_microstructure",
@@ -295,6 +304,7 @@ class MicroVpinPolars(SeriesOperator):
     source="factor_dsl_polars",
 )
 class MicroKyleLambdaPolars(SeriesOperator):
+    """Polars Kyle lambda proxy"""
     metadata = OperatorMetadata(
         name="micro_kyle_lambda",
         category="intraday_microstructure",

@@ -12,13 +12,25 @@ logger = get_logger("storage.parquet_source")
 
 
 class ParquetSource(DataSource):
-    """通用 parquet 单数据源实现。
-
+    """通用 Parquet 目录/文件数据源。
+    
+    参数:
+        root: 根目录路径
+        timestamp_column: 见函数签名（可选）
+        instrument_column: 见函数签名（可选）
+        fields: 逻辑列到物理列映射（可选）
+        max_files: 见函数签名（可选）
+        timestamp_unit: 见函数签名（可选）
+        start_date: 起始日期（可选）
+        end_date: 结束日期（可选）
+        recursive: 见函数签名（可选）
+    
+    
     约定每次按需读取一列，将其整理成 `(timestamp, instrument)` MultiIndex Series。
-    既可用于 fundamentals 这类多文件目录，也可用于单文件 parquet。
-
-    本实现优先尝试可选依赖 ``data_access.DuckDBEngine`` 批量读 parquet；
-    未安装 ``data_access`` 时自动回退 pandas，行为与旧版兼容。
+        既可用于 fundamentals 这类多文件目录，也可用于单文件 parquet。
+    
+        本实现优先尝试可选依赖 ``data_access.DuckDBEngine`` 批量读 parquet；
+        未安装 ``data_access`` 时自动回退 pandas，行为与旧版兼容。
     """
 
     def __init__(
@@ -34,6 +46,22 @@ class ParquetSource(DataSource):
         end_date: str | None = None,
         recursive: bool = True,
     ) -> None:
+        """初始化实例。
+        
+        参数:
+            root: 根目录路径
+            timestamp_column: 见函数签名（可选）
+            instrument_column: 见函数签名（可选）
+            fields: 逻辑列到物理列映射（可选）
+            max_files: 见函数签名（可选）
+            timestamp_unit: 见函数签名（可选）
+            start_date: 起始日期（可选）
+            end_date: 结束日期（可选）
+            recursive: 见函数签名（可选）
+        
+        返回:
+            无
+        """
         self.root = Path(root)
         self.timestamp_column = timestamp_column
         self.instrument_column = instrument_column
@@ -61,6 +89,14 @@ class ParquetSource(DataSource):
     }
 
     def _ensure_columns_resolved(self, sample_path: Path) -> None:
+        """_ensure_columns_resolved。
+        
+        参数:
+            sample_path: 见函数签名
+        
+        返回:
+            无
+        """
         if self._columns_resolved:
             return
         import pyarrow.parquet as pq
@@ -96,7 +132,14 @@ class ParquetSource(DataSource):
 
     def load_column(self, name: str):
         """旧契约：加载单列为 `(timestamp, instrument)` MultiIndex Series。
-
+        
+        参数:
+            name: 逻辑列名
+        
+        返回:
+            无
+        
+        
         PR1 起内部走 load_columns 批量读，连续读同一个 source 的多列时显著更快。
         """
         if name in self._column_cache:
@@ -107,18 +150,25 @@ class ParquetSource(DataSource):
 
     def load_columns(self, names: list[str]) -> dict[str, Any]:
         """批量加载多列，返回 `{name: MultiIndex Series}`。
-
+        
+        参数:
+            names: 逻辑列名列表
+        
+        返回:
+            dict[str, Any]
+        
+        
         这是 PR1 新增的核心性能 API：相比旧的多次 load_column（每次都重新扫
-        parquet footer + 重读 ts/instrument 两列），这里一次 SQL 拿齐所有列。
-
-        行为保证：
-            - 每个 Series 的 index 为 (timestamp, instrument)，与 load_column 一致
-            - name 若在 self.fields 里有映射，则读实际列但输出用 name
-            - 已缓存的列命中 cache；未缓存的列合并成一次查询
-
-        容错：
-            首选「一次性读所有文件」的批量路径；若失败（如有个别坏 parquet），
-            自动降级到逐文件 + 跳过坏文件的模式，只要不是所有文件都坏就能返回。
+                parquet footer + 重读 ts/instrument 两列），这里一次 SQL 拿齐所有列。
+        
+                行为保证：
+                    - 每个 Series 的 index 为 (timestamp, instrument)，与 load_column 一致
+                    - name 若在 self.fields 里有映射，则读实际列但输出用 name
+                    - 已缓存的列命中 cache；未缓存的列合并成一次查询
+        
+                容错：
+                    首选「一次性读所有文件」的批量路径；若失败（如有个别坏 parquet），
+                    自动降级到逐文件 + 跳过坏文件的模式，只要不是所有文件都坏就能返回。
         """
         # 分离已缓存 / 需要查询的列
         needed: list[str] = []
@@ -174,15 +224,37 @@ class ParquetSource(DataSource):
         return series_map
 
     def prefetch_columns(self, names: list[str]) -> None:
-        """批量预取列（委托 load_columns）。"""
+        """批量预取列（委托 load_columns）。
+        
+        参数:
+            names: 逻辑列名列表
+        
+        返回:
+            无
+        """
         self.load_columns(names)
 
     def prefetch_panels(self, names: list[str]) -> None:
+        """prefetch_panels。
+        
+        参数:
+            names: 逻辑列名列表
+        
+        返回:
+            无
+        """
         for name in names:
             self.load_column_panel(name)
 
     def load_column_panel(self, name: str):
-        """加载单列为宽表 panel（index=时间, columns=标的）。"""
+        """加载单列为宽表 panel（index=时间, columns=标的）。
+        
+        参数:
+            name: 逻辑列名
+        
+        返回:
+            无
+        """
         if name in self._panel_cache:
             return self._panel_cache[name]
         series = self.load_column(name)
@@ -200,7 +272,17 @@ class ParquetSource(DataSource):
         inst_col: str,
         value_cols: list[str],
     ):
-        """一次 SQL 读所有文件所有列，返回 pandas DataFrame（未清洗）。"""
+        """一次 SQL 读所有文件所有列，返回 pandas DataFrame（未清洗）。
+        
+        参数:
+            files: 见函数签名
+            ts_col: 见函数签名
+            inst_col: 见函数签名
+            value_cols: 见函数签名
+        
+        返回:
+            无
+        """
         read_cols = list(dict.fromkeys([ts_col, inst_col, *value_cols]))
         col_clause = ", ".join(f'"{c}"' for c in read_cols)
         paths = [str(p) for p in files]
@@ -235,7 +317,17 @@ class ParquetSource(DataSource):
         inst_col: str,
         value_cols: list[str],
     ):
-        """逐文件读（fallback），跳过读失败的文件，最后 concat。"""
+        """逐文件读（fallback），跳过读失败的文件，最后 concat。
+        
+        参数:
+            files: 见函数签名
+            ts_col: 见函数签名
+            inst_col: 见函数签名
+            value_cols: 见函数签名
+        
+        返回:
+            无
+        """
         import pandas as pd
         try:
             from data_access.engine import get_shared_engine
@@ -278,6 +370,16 @@ class ParquetSource(DataSource):
         *,
         skip_errors: bool = False,
     ):
+        """_pandas_read_files。
+        
+        参数:
+            files: 见函数签名
+            read_columns: 见函数签名
+            skip_errors: 见函数签名（可选）
+        
+        返回:
+            无
+        """
         import pandas as pd
 
         frames = []
@@ -306,11 +408,20 @@ class ParquetSource(DataSource):
         actual_names: list[str],
     ) -> dict[str, Any]:
         """把 DataFrame 里的各值列转成 `(timestamp, instrument)` MultiIndex Series。
-
+        
+        参数:
+            frame: 长表 DataFrame
+            needed: 见函数签名（可选）
+            actual_names: 见函数签名（可选）
+        
+        返回:
+            dict[str, Any]
+        
+        
         处理：
-            - timestamp 时区/单位规范化
-            - instrument 规范化（strip + str）
-            - 丢弃 key 残缺行 + 时间窗口过滤 + 去重 + sort_index
+                    - timestamp 时区/单位规范化
+                    - instrument 规范化（strip + str）
+                    - 丢弃 key 残缺行 + 时间窗口过滤 + 去重 + sort_index
         """
         import pandas as pd
 
@@ -352,6 +463,14 @@ class ParquetSource(DataSource):
     # ---- 文件发现 + 日期窗口筛选（和旧版相同） ----------------------------
 
     def _selected_files(self) -> list[Path]:
+        """_selected_files。
+        
+        参数:
+            无
+        
+        返回:
+            list[Path]
+        """
         if self._files_cache is not None:
             return self._files_cache
         if self.root.is_file():
@@ -376,6 +495,15 @@ class ParquetSource(DataSource):
 
     @staticmethod
     def _extract_partition_value(path: Path, key: str) -> int | None:
+        """_extract_partition_value。
+        
+        参数:
+            path: 文件或目录路径
+            key: 缓存键
+        
+        返回:
+            int | None
+        """
         pattern = re.compile(rf"{re.escape(key)}=(\d{{1,4}})$")
         for part in reversed(path.parts):
             match = pattern.fullmatch(part)
@@ -385,6 +513,14 @@ class ParquetSource(DataSource):
 
     @classmethod
     def _infer_path_time_window(cls, path: Path):
+        """_infer_path_time_window。
+        
+        参数:
+            path: 文件或目录路径
+        
+        返回:
+            无
+        """
         import pandas as pd
 
         date_match = re.search(r"(\d{4}-\d{2}-\d{2})", path.stem)
@@ -414,6 +550,14 @@ class ParquetSource(DataSource):
         return start, end
 
     def _path_matches_requested_range(self, path: Path) -> bool:
+        """_path_matches_requested_range。
+        
+        参数:
+            path: 文件或目录路径
+        
+        返回:
+            bool
+        """
         time_window = self._infer_path_time_window(path)
         if time_window is None:
             return True
@@ -429,6 +573,14 @@ class ParquetSource(DataSource):
 
     @staticmethod
     def _normalize_instrument(value: Any) -> str | None:
+        """_normalize_instrument。
+        
+        参数:
+            value: 缓存值
+        
+        返回:
+            str | None
+        """
         import pandas as pd
 
         if value is None:
@@ -444,6 +596,14 @@ class ParquetSource(DataSource):
 
     @staticmethod
     def _normalize_bound(value: str | None):
+        """_normalize_bound。
+        
+        参数:
+            value: 缓存值
+        
+        返回:
+            无
+        """
         if value is None:
             return None
 
@@ -457,6 +617,14 @@ class ParquetSource(DataSource):
         return bound
 
     def _coerce_timestamp(self, series):
+        """_coerce_timestamp。
+        
+        参数:
+            series: MultiIndex Series
+        
+        返回:
+            无
+        """
         import pandas as pd
 
         if self.timestamp_unit:
