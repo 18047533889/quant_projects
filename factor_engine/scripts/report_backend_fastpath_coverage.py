@@ -55,9 +55,10 @@ def _validate_strict(
 
     if require_block_reason:
         for r in rows:
-            if r.allow_in_production and not r.production_fast_path and not r.fastpath_block_reason:
+            blocked = not r.effective_production_fastpath
+            if r.allow_in_production and blocked and not r.fastpath_block_reason:
                 errors.append(
-                    f"{r.canonical}: production_allowed 但 production_fast_path=False 且无 block_reason"
+                    f"{r.canonical}: production_allowed 但 effective_production_fastpath=False 且无 block_reason"
                 )
 
     for c in PRODUCTION_CORE_CANONICALS:
@@ -67,7 +68,7 @@ def _validate_strict(
         if rc not in by_canon:
             continue
         row = by_canon[rc]
-        if row.allow_in_production and not row.production_fast_path and not row.fastpath_block_reason:
+        if row.allow_in_production and not row.effective_production_fastpath and not row.fastpath_block_reason:
             errors.append(f"PRODUCTION_CORE {rc}: 缺少 fastpath_block_reason")
 
     if require_dual_backend:

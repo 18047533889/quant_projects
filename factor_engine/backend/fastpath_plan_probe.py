@@ -62,28 +62,37 @@ class ProbeSchemaBuilder:
         *,
         time_column: str = "ts",
         instrument_column: str = "inst",
-        n_rows: int = 4,
+        n_rows: int = 32,
+        n_instruments: int = 4,
     ) -> Any:
         """构造 typed Polars LazyFrame 供 full-plan compile/collect 探测。"""
         import polars as pl
 
         specs = cls.from_plan(plan, time_column=time_column, instrument_column=instrument_column)
-        ts_values = [f"2024-01-{d + 2:02d}T00:00:00" for d in range(n_rows)]
+        insts = [chr(ord("A") + i) for i in range(n_instruments)]
+        ts_values: list[str] = []
+        inst_values: list[str] = []
+        for d in range(max(1, n_rows // n_instruments)):
+            ts_values.extend([f"2024-01-{d + 2:02d}T00:00:00"] * n_instruments)
+            inst_values.extend(insts)
+        n_rows = len(ts_values)
         data: dict[str, pl.Series] = {
             time_column: pl.Series(ts_values, dtype=pl.Datetime(time_unit="ns")),
-            instrument_column: pl.Series(["A"] * n_rows, dtype=pl.Utf8),
+            instrument_column: pl.Series(inst_values, dtype=pl.Utf8),
         }
         for spec in specs:
             if spec.dtype == "utf8":
-                data[spec.name] = pl.Series(["G1"] * n_rows, dtype=pl.Utf8)
+                groups = ["G1", "G1", "G2", "G2"] * (n_rows // 4 + 1)
+                data[spec.name] = pl.Series(groups[:n_rows], dtype=pl.Utf8)
             elif spec.dtype == "boolean":
-                data[spec.name] = pl.Series([True, False, True, False][:n_rows], dtype=pl.Boolean)
+                data[spec.name] = pl.Series([i % 2 == 0 for i in range(n_rows)], dtype=pl.Boolean)
             elif spec.dtype == "int64":
-                data[spec.name] = pl.Series([1, 2, 3, 4][:n_rows], dtype=pl.Int64)
+                data[spec.name] = pl.Series([(i % 5) + 1 for i in range(n_rows)], dtype=pl.Int64)
             elif spec.dtype == "datetime":
                 data[spec.name] = pl.Series(ts_values, dtype=pl.Datetime(time_unit="ns"))
             else:
-                data[spec.name] = pl.Series([1.0, 2.0, 3.0, 4.0][:n_rows], dtype=pl.Float64)
+                vals = [float((i % 7) + 1) if i % 11 else float("nan") for i in range(n_rows)]
+                data[spec.name] = pl.Series(vals, dtype=pl.Float64)
         return pl.LazyFrame(data)
 
     @classmethod
@@ -93,30 +102,35 @@ class ProbeSchemaBuilder:
         *,
         time_column: str = "ts",
         instrument_column: str = "inst",
-        n_rows: int = 4,
+        n_rows: int = 32,
+        n_instruments: int = 4,
     ) -> Any:
         """构造 DuckDB 内存探测表（Arrow/pandas）。"""
         import pandas as pd
 
         specs = cls.from_plan(plan, time_column=time_column, instrument_column=instrument_column)
+        insts = [chr(ord("A") + i) for i in range(n_instruments)]
         rows: list[dict[str, Any]] = []
-        for i in range(n_rows):
-            row: dict[str, Any] = {
-                time_column: pd.Timestamp(f"2024-01-{i + 2:02d}"),
-                instrument_column: "A",
-            }
-            for spec in specs:
-                if spec.dtype == "utf8":
-                    row[spec.name] = "G1"
-                elif spec.dtype == "boolean":
-                    row[spec.name] = bool(i % 2 == 0)
-                elif spec.dtype == "int64":
-                    row[spec.name] = i + 1
-                elif spec.dtype == "datetime":
-                    row[spec.name] = pd.Timestamp(f"2024-01-{i + 2:02d}")
-                else:
-                    row[spec.name] = float(i + 1)
-            rows.append(row)
+        idx = 0
+        for d in range(max(1, n_rows // n_instruments)):
+            for inst in insts:
+                row: dict[str, Any] = {
+                    time_column: pd.Timestamp(f"2024-01-{d + 2:02d}"),
+                    instrument_column: inst,
+                }
+                for spec in specs:
+                    if spec.dtype == "utf8":
+                        row[spec.name] = "G1" if inst in {"A", "B"} else "G2"
+                    elif spec.dtype == "boolean":
+                        row[spec.name] = bool(idx % 2 == 0)
+                    elif spec.dtype == "int64":
+                        row[spec.name] = (idx % 5) + 1
+                    elif spec.dtype == "datetime":
+                        row[spec.name] = pd.Timestamp(f"2024-01-{d + 2:02d}")
+                    else:
+                        row[spec.name] = float("nan") if idx % 11 == 0 else float((idx % 7) + 1)
+                rows.append(row)
+                idx += 1
         return pd.DataFrame(rows)
 
 

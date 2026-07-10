@@ -73,16 +73,14 @@ def test_production_fast_path_whitelist(loaded):
     )
 
     assert is_production_fast_path("ts_mean")
-    assert is_production_fast_path("group_mean")
-    assert is_production_fast_path("group_winsorize")
-    assert is_production_fast_path("ts_rank")
-    assert is_production_fast_path("ts_sharpe")
-    assert is_production_fast_path("cs_resid")
+    assert is_production_fast_path("rank")
+    assert is_production_fast_path("zscore")
     assert not is_production_fast_path("RSI_WILDER")
-    assert is_production_fast_path("ffill")
+    assert not is_production_fast_path("cs_resid")
+    assert not is_production_fast_path("ffill")
     summary = summarize_production_fast_path()
-    assert summary["production_fast_path_count"] >= 10
-    assert "ts_beta" in summary["production_fast_path"]
+    assert summary["primitive_dual_backend_evidence_count"] >= 5
+    assert "ts_mean" in summary["production_fast_path"]
 
 
 def test_get_best_backend_matches_registry_preferred(loaded):

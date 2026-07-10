@@ -35,3 +35,22 @@ def test_operator_manifest_json_fresh(_loaded):
         cwd=str(ROOT),
     )
     assert proc.returncode == 0, proc.stderr or proc.stdout
+
+
+def test_operator_manifest_commit_sha_current(_loaded):
+    import json
+    import subprocess
+
+    data = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    sha = (
+        subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(ROOT),
+            stderr=subprocess.DEVNULL,
+        )
+        .decode()
+        .strip()
+    )
+    assert data.get("generated_commit_sha") == sha, (
+        f"manifest commit drift: {data.get('generated_commit_sha')!r} != {sha!r}"
+    )

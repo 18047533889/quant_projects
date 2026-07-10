@@ -31,8 +31,6 @@ _LEGACY_PRODUCTION_CORE: frozenset[str] = frozenset(
         "ts_rank",
         "ts_sharpe",
         "ts_autocorr",
-        "cs_resid",
-        "cs_regression",
         "ffill",
     }
 )
@@ -65,6 +63,14 @@ def _build_production_core_canonicals() -> frozenset[str]:
 
 # SQL 下推 / DSL 常用 production 核心 canonical（PIT 门禁 / 契约脚本对齐此清单）
 PRODUCTION_CORE_CANONICALS: frozenset[str] = _build_production_core_canonicals()
+
+
+def production_allowed_composite_canonicals() -> frozenset[str]:
+    """证据齐全的 composite（非 micro_* / PRODUCTION_DENIED）。"""
+    from backend.composite_evidence import composite_production_safe
+    from planner.composite_lowering import list_composite_lowerings
+
+    return frozenset(c for c in list_composite_lowerings() if composite_production_safe(c))
 
 # 向后兼容别名
 PRODUCTION_PIT_REQUIRED: frozenset[str] = PRODUCTION_CORE_CANONICALS
@@ -177,6 +183,14 @@ def infer_production_policy(canon: str) -> ProductionPolicy:
     if allow:
         return "allowed"
     if has_composite_lowering(resolved):
+        from backend.composite_evidence import composite_production_safe
+
+        if composite_production_safe(resolved):
+            return "allowed"
+        from backend.composite_evidence import composite_evidence_complete
+
+        if composite_evidence_complete(resolved):
+            return "pending"
         return "pending"
     if is_production_denied(resolved):
         return "denied"
@@ -298,6 +312,14 @@ def _compute_allow_in_production(
     if status in ("experimental", "deprecated", "stub", "doc_only"):
         return False
     if not shape_preserving:
+        return False
+    from planner.composite_lowering import has_composite_lowering
+
+    if has_composite_lowering(resolved):
+        from backend.composite_evidence import composite_evidence_complete
+
+        if composite_evidence_complete(resolved):
+            return pit_safe
         return False
     if resolved in PRODUCTION_CORE_CANONICALS:
         return True

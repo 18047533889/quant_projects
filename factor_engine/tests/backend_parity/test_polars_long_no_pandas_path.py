@@ -63,14 +63,18 @@ def source():
 
 NO_PANDAS_CASES = [
     ("ts_mean", lambda: make_cleaned_call_factory("ts_mean")(col("close"), 3)),
+    ("ts_std", lambda: make_cleaned_call_factory("ts_std")(col("close"), 3)),
     ("rank", lambda: make_cleaned_call_factory("rank")(col("close"))),
+    ("zscore", lambda: make_cleaned_call_factory("zscore")(col("close"))),
     ("group_mean", lambda: make_cleaned_call_factory("group_mean")(col("close"), col("grp"))),
     ("group_zscore", lambda: make_cleaned_call_factory("group_zscore")(col("close"), col("grp"))),
+    ("group_winsorize", lambda: make_cleaned_call_factory("group_winsorize")(col("close"), col("grp"))),
     ("vwap", lambda: make_cleaned_call_factory("vwap")(col("close"), col("volume"), 3)),
     (
         "protected_div",
         lambda: make_cleaned_call_factory("protected_div")(col("close"), col("volume")),
     ),
+    ("protected_log", lambda: make_cleaned_call_factory("protected_log")(col("close"))),
     (
         "where",
         lambda: make_cleaned_call_factory("where")(
@@ -84,6 +88,8 @@ NO_PANDAS_CASES = [
     ("ts_beta", lambda: make_cleaned_call_factory("ts_beta")(col("ret"), col("close"), 2)),
     ("ts_delay", lambda: make_cleaned_call_factory("ts_delay")(col("close"), 1)),
     ("log_returns", lambda: make_cleaned_call_factory("log_returns")(col("close"))),
+    ("ts_argmax", lambda: make_cleaned_call_factory("ts_argmax")(col("close"), 3)),
+    ("ts_argmin", lambda: make_cleaned_call_factory("ts_argmin")(col("close"), 3)),
 ]
 
 

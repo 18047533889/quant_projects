@@ -88,28 +88,10 @@ def _resolve(op: str) -> str:
 
 
 def _window_int(node: PlanNode, default: int = 3) -> int:
-    """从 PlanNode attrs 或 literal 子节点解析滚动窗口整数（至少为 1）。"""
-    for key in ("d", "window", "span"):
-        if key in node.attrs and node.attrs[key] is not None:
-            try:
-                return max(int(node.attrs[key]), 1)
-            except (TypeError, ValueError):
-                pass
-    for idx in range(1, len(node.inputs)):
-        child = node.inputs[idx]
-        if child.op != "literal":
-            continue
-        val = child.attrs.get("value")
-        if isinstance(val, bool) or not isinstance(val, (int, float)):
-            continue
-        if isinstance(val, float) and val != int(val):
-            continue
-        try:
-            return max(int(val), 1)
-        except (TypeError, ValueError):
-            pass
-        break
-    return default
+    """从 PlanNode attrs 或 literal 子节点解析滚动窗口（与 DuckDB 共用）。"""
+    from backend.plan_params import window_from_plan_node
+
+    return window_from_plan_node(node, default=default)
 
 
 def _ewm_alpha(node: PlanNode, default_span: int = 20) -> float:
@@ -1671,6 +1653,7 @@ def _compile_polars_impl(
         return inner.with_columns(pl.col(_VAL).clip(lo, hi).alias(_VAL))
 
     if op in {"cs_resid", "cs_regression"}:
+        from backend.plan_params import int_mode_from_plan_node
         if len(node.inputs) < 2:
             return None
         y_layer = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
@@ -1680,7 +1663,7 @@ def _compile_polars_impl(
         joined = y_layer.join(x_layer.rename({_VAL: "_x"}), on=[_TS, _INST], how="inner")
         beta, alpha, n_valid = _cs_ols_exprs(_VAL, "_x")
         fit = alpha + beta * pl.col("_x")
-        mode = 0 if op == "cs_resid" else _int_attr(node, "mode", input_index=2, default=0)
+        mode = 0 if op == "cs_resid" else int_mode_from_plan_node(node, input_index=2, default=0)
         if mode == 1:
             core = beta
         elif mode == 2:

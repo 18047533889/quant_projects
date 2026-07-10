@@ -708,6 +708,23 @@ _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
     "yoy_by_period": {"scope": "ts", "pit_safe": True, "min_periods": 5},
     "avg2": {"scope": "ts", "pit_safe": True, "min_periods": 2},
     "ts_zscore": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    # Phase-1 composite lowerings（evidence 齐全且非 micro_* 可 production）
+    "MOM": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ROC": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "BollingerBands": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "BollingerUpper": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "BollingerLower": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "DPO": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "WilliamsR": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "StochasticK": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "StochasticD": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "OBV": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "operating_margin": {"scope": "elementwise", "pit_safe": True},
+    "current_ratio": {"scope": "elementwise", "pit_safe": True},
+    "quick_ratio": {"scope": "elementwise", "pit_safe": True},
+    "debt_to_equity": {"scope": "elementwise", "pit_safe": True},
+    "real_turnover_rate": {"scope": "elementwise", "pit_safe": True},
+    "micro_spread": {"scope": "elementwise", "pit_safe": True},
 }
 
 

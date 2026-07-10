@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-# 与 tests/backend_parity/test_production_core_triple_parity.py 保持同步
+# 与 tests/backend_parity/test_production_core_triple_parity.py 保持同步（历史参考）
 PRODUCTION_TRIPLE_PARITY_CANONICALS: frozenset[str] = frozenset(
     {
-        # P0 核心
         "add",
         "subtract",
         "multiply",
@@ -28,7 +27,6 @@ PRODUCTION_TRIPLE_PARITY_CANONICALS: frozenset[str] = frozenset(
         "power",
         "where",
         "gt",
-        # P1
         "group_mean",
         "group_zscore",
         "group_rank",
@@ -43,7 +41,6 @@ PRODUCTION_TRIPLE_PARITY_CANONICALS: frozenset[str] = frozenset(
     }
 )
 
-# DuckDB SQL pushdown 三后端 parity 子集（需 parquet data_access）
 PRODUCTION_TRIPLE_PARITY_DUCKDB: frozenset[str] = frozenset(
     {
         "ts_mean",
@@ -58,53 +55,69 @@ PRODUCTION_TRIPLE_PARITY_DUCKDB: frozenset[str] = frozenset(
         "ts_corr",
         "ts_cov",
         "ts_beta",
+        "cs_mad",
+        "cs_mad_zscore",
     }
 )
 
 
-def is_production_fast_path(canon: str) -> bool:
-    """判断 canonical 是否可走 production fast path。
-
-    参数:
-        canon: 算子 canonical 名称或别名。
-
-    返回:
-        DuckDB production_safe 或 Polars native production_safe 时为 ``True``。
-    """
+def is_any_backend_fastpath(canon: str) -> bool:
+    """任一 backend production-safe 且未被 block。"""
     from backend.fastpath_coverage import build_fastpath_coverage_row
-    from .operator_capability import resolve_canonical
+    from backend.operator_capability import resolve_canonical
 
     row = build_fastpath_coverage_row(resolve_canonical(canon))
-    return row.production_fast_path
+    return row.production_fast_path or row.composite_dual_backend_fastpath
+
+
+def is_dual_backend_fastpath(canon: str) -> bool:
+    """直接 dual-backend fastpath（不含 composite lowering）。"""
+    from backend.fastpath_coverage import build_fastpath_coverage_row
+    from backend.operator_capability import resolve_canonical
+
+    row = build_fastpath_coverage_row(resolve_canonical(canon))
+    return row.dual_backend_fastpath
+
+
+def is_effective_dual_backend_fastpath(canon: str) -> bool:
+    """统一 production 口径：direct 或 composite dual-backend fastpath。"""
+    from backend.fastpath_coverage import build_fastpath_coverage_row
+    from backend.operator_capability import resolve_canonical
+
+    row = build_fastpath_coverage_row(resolve_canonical(canon))
+    return row.effective_dual_backend_fastpath
+
+
+def is_production_fast_path(canon: str) -> bool:
+    """Production 投递应使用 effective dual-backend fastpath。"""
+    return is_effective_dual_backend_fastpath(canon)
 
 
 def summarize_production_fast_path() -> dict[str, Any]:
-    """生成 production fast path 覆盖报表摘要。
+    """生成 production fast path 覆盖报表摘要。"""
+    from cleaned_operators.operator_spec import PRODUCTION_DUAL_BACKEND_CORE_CANONICALS
 
-    返回:
-        含 triple parity、fast path 计数与 core gap 样例的字典。
-    """
-    from cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS
-
-    from .operator_capability import resolve_canonical
-    from .polars_long_policy import POLARS_LONG_NATIVE, infer_polars_long_tier
-    from .sql_pushdown.sql_registry import SQL_CAPABLE_CANONICALS
+    from backend.operator_capability import resolve_canonical
+    from backend.polars_long_policy import POLARS_LONG_NATIVE, infer_polars_long_tier
+    from backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+    from backend.sql_pushdown.sql_registry import SQL_CAPABLE_CANONICALS
 
     triple = sorted(PRODUCTION_TRIPLE_PARITY_CANONICALS)
     duckdb_triple = sorted(PRODUCTION_TRIPLE_PARITY_DUCKDB)
-    native_triple = sorted(
-        c for c in triple if infer_polars_long_tier(c) == "native"
-    )
+    native_triple = sorted(c for c in triple if infer_polars_long_tier(c) == "native")
     sql_triple = sorted(c for c in duckdb_triple if c in SQL_CAPABLE_CANONICALS)
-    fast_path = sorted(c for c in triple if is_production_fast_path(c))
+    fast_path = sorted(c for c in triple if is_effective_dual_backend_fastpath(c))
     core_gap = sorted(
-        PRODUCTION_CORE_CANONICALS - set(fast_path) - {"column", "literal"}
+        PRODUCTION_DUAL_BACKEND_CORE_CANONICALS - set(fast_path) - {"column", "literal"}
     )
-    native_not_triple = sorted(POLARS_LONG_NATIVE - PRODUCTION_TRIPLE_PARITY_CANONICALS - {"column", "literal", "materialized_series", "plan_ref"})
+    native_not_triple = sorted(
+        POLARS_LONG_NATIVE - PRODUCTION_TRIPLE_PARITY_CANONICALS - {"column", "literal", "materialized_series", "plan_ref"}
+    )
     return {
         "triple_parity_count": len(triple),
         "triple_parity_native_count": len(native_triple),
         "triple_parity_duckdb_count": len(duckdb_triple),
+        "primitive_dual_backend_evidence_count": len(PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE),
         "production_fast_path_count": len(fast_path),
         "production_fast_path": fast_path,
         "triple_parity_duckdb": duckdb_triple,

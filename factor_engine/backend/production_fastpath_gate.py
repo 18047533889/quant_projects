@@ -160,6 +160,40 @@ def _polars_native_fastpath_ok(canon: str) -> bool:
     return is_polars_long_native_production_safe(canon)
 
 
+def _composite_production_fastpath_sources(
+    original_plan: Any,
+    lowering_trace: Sequence[tuple[str, tuple[str, ...]]] | None,
+) -> frozenset[str]:
+    """原始 plan 中已通过 composite 证据链的算子。"""
+    from backend.composite_evidence import composite_production_safe
+    from planner.composite_lowering import has_composite_lowering
+
+    sources: set[str] = set()
+    for canon in _iter_plan_ops(original_plan):
+        if has_composite_lowering(canon) and composite_production_safe(canon):
+            sources.add(canon)
+    for src, _ in lowering_trace or ():
+        if composite_production_safe(src):
+            sources.add(src)
+    return frozenset(sources)
+
+
+def _uses_composite_production_fastpath_only(
+    original_plan: Any,
+    lowering_trace: Sequence[tuple[str, tuple[str, ...]]] | None,
+) -> bool:
+    """原始 plan 仅含 composite_production_safe 算子（走 composite fastpath 路径）。"""
+    from planner.composite_lowering import has_composite_lowering
+
+    original_ops = _iter_plan_ops(original_plan)
+    if not original_ops:
+        return False
+    return all(
+        has_composite_lowering(op) and op in _composite_production_fastpath_sources(original_plan, lowering_trace)
+        for op in original_ops
+    )
+
+
 def _check_full_plan_compilation(plan: Any, *, require: frozenset[FastpathBackend]) -> list[str]:
     """对完整 plan 做端到端 compile + 执行探测（非 minimal_plan 单算子）。"""
     violations: list[str] = []
@@ -271,6 +305,31 @@ def check_lowered_backend_fastpath(
     )
 
 
+def resolve_fastpath_gate_kwargs(
+    *,
+    mode: str | None = None,
+    strict: bool | None = None,
+    require_mode: RequireMode | None = None,
+    require_dual: bool | None = None,
+    check_full_plan: bool | None = None,
+) -> dict[str, Any]:
+    """production 模式默认双后端 ``all`` + strict + full-plan 执行探测。"""
+    from runtime.production_policy import is_production_mode
+
+    prod = is_production_mode(mode)
+    require_dual_on = prod or dual_backend_gate_required(require_dual=require_dual)
+    strict_on = prod or fastpath_gate_strict(strict=strict)
+    resolved_require_mode: RequireMode = (
+        "all" if (prod or require_dual_on) else (require_mode or "any")
+    )
+    return {
+        "strict": strict_on,
+        "require_mode": resolved_require_mode,
+        "require_dual": require_dual_on,
+        "check_full_plan": True if prod else check_full_plan,
+    }
+
+
 def check_production_fastpath_plan_ops(
     plan: Any,
     *,
@@ -281,21 +340,49 @@ def check_production_fastpath_plan_ops(
     require_dual: bool | None = None,
     check_full_plan: bool | None = None,
     lowering_trace: Sequence[tuple[str, tuple[str, ...]]] | None = None,
+    mode: str | None = None,
 ) -> FastpathGateResult:
     """两阶段 production gate：原始 policy + lowered backend fastpath。"""
+    from backend.operator_call_policy import check_plan_operator_calls
+    from runtime.production_policy import is_production_mode
+    gate_kw = resolve_fastpath_gate_kwargs(
+        mode=mode,
+        strict=strict,
+        require_mode=require_mode,
+        require_dual=require_dual,
+        check_full_plan=check_full_plan,
+    )
     violations: list[str] = []
     original_ops: tuple[str, ...] = ()
+    prod = is_production_mode(mode)
     if original_plan is not None:
         original_ops = tuple(_iter_plan_ops(original_plan))
         violations.extend(check_original_operator_policy(original_plan))
+        violations.extend(check_plan_operator_calls(original_plan, production=prod))
+    violations.extend(check_plan_operator_calls(plan, production=prod))
+
+    trace = tuple(lowering_trace or ())
+    if original_plan is not None and _uses_composite_production_fastpath_only(original_plan, trace):
+        do_full_plan = gate_kw["check_full_plan"]
+        if do_full_plan:
+            require_set = frozenset(require)
+            violations.extend(_check_full_plan_compilation(plan, require=require_set))
+        return FastpathGateResult(
+            ok=not violations,
+            violations=tuple(dict.fromkeys(violations)),
+            ops_checked=tuple(_iter_plan_ops(plan)),
+            original_ops=original_ops,
+            lowered_ops=tuple(_iter_plan_ops(plan)),
+            lowering_trace=trace,
+        )
 
     backend = check_lowered_backend_fastpath(
         plan,
         require=require,
-        require_mode=require_mode,
-        strict=strict,
-        require_dual=require_dual,
-        check_full_plan=check_full_plan,
+        require_mode=gate_kw["require_mode"],
+        strict=gate_kw["strict"],
+        require_dual=gate_kw["require_dual"],
+        check_full_plan=gate_kw["check_full_plan"],
     )
     violations.extend(backend.violations)
     trace = tuple(lowering_trace or ())

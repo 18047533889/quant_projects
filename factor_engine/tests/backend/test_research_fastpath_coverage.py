@@ -29,12 +29,13 @@ def test_p1_extended_tier(_loaded):
     from backend.polars_long_policy import infer_polars_long_tier
     from backend.production_fastpath_tiers import P1_EXTENDED_CANONICALS, P1_EXTENDED_CUM_PRODUCTION_SAFE
 
-    python_rolling = {"WMA", "ts_argmax", "ts_argmin", "ts_skew", "ts_quantile", "Slope"}
+    python_rolling = {"WMA", "ts_skew", "ts_quantile", "Slope"}
+    native_batch2 = {"ts_argmax", "ts_argmin"}
     for canon in sorted(P1_EXTENDED_CANONICALS):
         tier = infer_polars_long_tier(canon)
         if canon in python_rolling or canon == "ts_decay_linear":
             assert tier == "python_rolling", canon
-        elif canon in P1_EXTENDED_CUM_PRODUCTION_SAFE:
+        elif canon in native_batch2 or canon in P1_EXTENDED_CUM_PRODUCTION_SAFE:
             assert tier == "native", canon
         else:
             assert tier in {"native", "python_rolling"}, canon

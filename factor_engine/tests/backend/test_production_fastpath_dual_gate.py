@@ -27,8 +27,12 @@ def test_require_mode_all_blocks_single_backend_only(_loaded, monkeypatch):
         "backend.production_fastpath_gate._polars_native_fastpath_ok",
         lambda _c: True,
     )
-    any_mode = check_production_fastpath_plan_ops(plan, require_mode="any", strict=True, check_full_plan=False)
-    all_mode = check_production_fastpath_plan_ops(plan, require_mode="all", strict=True, check_full_plan=False)
+    any_mode = check_production_fastpath_plan_ops(
+        plan, require_mode="any", strict=True, check_full_plan=False, mode="research"
+    )
+    all_mode = check_production_fastpath_plan_ops(
+        plan, require_mode="all", strict=True, check_full_plan=False, mode="research"
+    )
     assert any_mode.ok
     assert not all_mode.ok
 

@@ -77,22 +77,43 @@ def composite_full_parity_verified(canon: str) -> bool:
     return canon in COMPOSITE_FULL_PARITY_VERIFIED
 
 
-def composite_production_safe(canon: str) -> bool:
-    """Composite 可认证为 production-safe 的完整证据链。"""
+def composite_evidence_complete(canon: str) -> bool:
+    """Composite 五证齐全（不含 production policy / allow 判定）。"""
     from planner.composite_lowering import has_composite_lowering
-    from cleaned_operators.operator_spec import build_operator_spec, infer_production_policy
 
     if not has_composite_lowering(canon):
         return False
-    spec = build_operator_spec(canon)
-    if spec is None or not spec.allow_in_production:
-        return False
-    if infer_production_policy(canon) != "allowed":
-        return False
     return (
-        composite_structurally_capable(canon)
-        and composite_reference_parity_verified(canon)
-        and composite_polars_native_verified(canon)
-        and composite_duckdb_real_sql_verified(canon)
-        and composite_edge_verified(canon)
+        canon in COMPOSITE_REFERENCE_TO_LOWERED_PANDAS_VERIFIED
+        and canon in COMPOSITE_LOWERED_POLARS_VERIFIED
+        and canon in COMPOSITE_LOWERED_DUCKDB_VERIFIED
+        and canon in COMPOSITE_EDGE_VERIFIED
     )
+
+
+def composite_production_safe(canon: str) -> bool:
+    """Composite 可认证为 production-safe 的完整证据链（不依赖 allow_in_production 循环）。"""
+    from cleaned_operators.operator_spec import _infer_status, is_production_denied
+    from cleaned_operators.registry import OperatorRegistry
+    from cleaned_operators.operator_policy import infer_operator_policy
+    from planner.composite_lowering import has_composite_lowering
+
+    if not has_composite_lowering(canon):
+        return False
+    if is_production_denied(canon):
+        return False
+    backends_map = OperatorRegistry._operators.get(canon)
+    if not backends_map:
+        return False
+    chosen = "pandas_numpy" if "pandas_numpy" in backends_map else next(iter(backends_map))
+    op = backends_map.get(chosen)
+    if op is None:
+        return False
+    catalog = OperatorRegistry._catalog.get(canon, {})
+    status = _infer_status(catalog)
+    if status in ("experimental", "deprecated", "stub", "doc_only"):
+        return False
+    policy = infer_operator_policy(op, canonical=canon)
+    if not policy.pit_safe or not policy.shape_preserving:
+        return False
+    return composite_evidence_complete(canon) and composite_structurally_capable(canon)

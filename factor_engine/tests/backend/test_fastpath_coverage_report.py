@@ -43,7 +43,9 @@ def test_production_allowed_without_fastpath_has_reason(coverage_rows):
     bad = [
         r.canonical
         for r in coverage_rows
-        if r.allow_in_production and not r.production_fast_path and not r.fastpath_block_reason
+        if r.allow_in_production
+        and not r.effective_production_fastpath
+        and not r.fastpath_block_reason
     ]
     assert not bad, f"production 算子缺少 fastpath_block_reason: {bad[:20]}"
 

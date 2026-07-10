@@ -1,5 +1,5 @@
 # -*- coding: utf-8
-"""Production fast path 分层与 P0/P1 准入测试。"""
+"""Production fast path 分层与 evidence 准入测试。"""
 from __future__ import annotations
 
 import pytest
@@ -14,35 +14,48 @@ def _loaded():
     register_sql_backends()
 
 
-def test_p0_all_polars_native_production_safe(_loaded):
+def test_primitive_dual_backend_evidence_is_production_safe(_loaded):
     from backend.polars_long_production import is_polars_long_native_production_safe
-    from backend.production_fastpath_tiers import P0_PRODUCTION_FASTPATH_CANONICALS
-
-    missing = sorted(c for c in P0_PRODUCTION_FASTPATH_CANONICALS if not is_polars_long_native_production_safe(c))
-    assert not missing, f"P0 未进 POLARS_LONG_NATIVE_PRODUCTION_SAFE: {missing}"
-
-
-def test_p0_all_duckdb_production_safe(_loaded):
-    from backend.production_fastpath_tiers import P0_PRODUCTION_FASTPATH_CANONICALS
+    from backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
     from backend.sql_tiers import effective_sql_production_safe
 
-    missing = sorted(c for c in P0_PRODUCTION_FASTPATH_CANONICALS if not effective_sql_production_safe(c))
-    assert not missing, f"P0 未进 DUCKDB_SQL_PRODUCTION_SAFE: {missing}"
-
-
-def test_p1_group_polars_production_safe(_loaded):
-    from backend.polars_long_production import is_polars_long_native_production_safe
-    from backend.production_fastpath_tiers import P1_GROUP_CANONICALS
-
-    missing = sorted(c for c in P1_GROUP_CANONICALS if not is_polars_long_native_production_safe(c))
-    assert not missing, f"P1 group 未进 PolarsLong production safe: {missing}"
-
-
-def test_p1_robust_duckdb_production_safe(_loaded):
-    from backend.sql_tiers import effective_sql_production_safe
-
-    for canon in ("cs_mad", "cs_mad_zscore", "winsorize", "group_winsorize"):
+    for canon in sorted(PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE):
+        assert is_polars_long_native_production_safe(canon), canon
         assert effective_sql_production_safe(canon), canon
+
+
+def test_p0_not_auto_production_without_evidence(_loaded):
+    """P0 候选池不再自动等于 production-safe（须 primitive evidence）。"""
+    from backend.polars_long_production import is_polars_long_native_production_safe
+    from backend.production_fastpath_tiers import P0_PRODUCTION_FASTPATH_CANONICALS
+    from backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+
+    p0_only = P0_PRODUCTION_FASTPATH_CANONICALS - PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+    assert len(p0_only) > 10
+    assert not is_polars_long_native_production_safe("fillna")
+
+
+def test_p1_group_dual_backend_subset(_loaded):
+    from backend.polars_long_production import is_polars_long_native_production_safe
+    from backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+
+    assert "group_mean" in PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+    assert is_polars_long_native_production_safe("group_mean")
+    assert not is_polars_long_native_production_safe("group_rank")
+
+
+def test_p1_robust_winsorize_not_dual_backend(_loaded):
+    from backend.polars_long_production import is_polars_long_native_production_safe
+    from backend.primitive_evidence import (
+        DUCKDB_REAL_SQL_VERIFIED,
+        PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE,
+    )
+    from backend.sql_tiers import effective_sql_production_safe
+
+    assert "group_winsorize" in DUCKDB_REAL_SQL_VERIFIED
+    assert "group_winsorize" in PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+    assert not effective_sql_production_safe("winsorize")
+    assert not is_polars_long_native_production_safe("winsorize")
 
 
 def test_p1_regression_not_production_safe(_loaded):
@@ -55,17 +68,16 @@ def test_p1_regression_not_production_safe(_loaded):
         assert not effective_sql_production_safe(canon), canon
 
 
-def test_p1_golden_verified_production_safe(_loaded):
+def test_p1_golden_ts_requires_evidence(_loaded):
     from backend.polars_long_production import is_polars_long_native_production_safe
-    from backend.production_fastpath_tiers import (
-        P1_GOLDEN_VERIFIED_REGRESSION,
-        P1_GOLDEN_VERIFIED_TS,
-    )
-    from backend.sql_tiers import effective_sql_production_safe
+    from backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+    from backend.production_fastpath_tiers import P1_GOLDEN_VERIFIED_TS
 
-    for canon in sorted(P1_GOLDEN_VERIFIED_TS | P1_GOLDEN_VERIFIED_REGRESSION):
-        assert is_polars_long_native_production_safe(canon), canon
-        assert effective_sql_production_safe(canon), canon
+    for canon in P1_GOLDEN_VERIFIED_TS:
+        if canon in PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE:
+            assert is_polars_long_native_production_safe(canon), canon
+        else:
+            assert not is_polars_long_native_production_safe(canon), canon
 
 
 def test_p1_ts_complex_not_production_safe(_loaded):
@@ -119,20 +131,6 @@ def test_p2_and_forbidden_not_production_safe(_loaded):
             continue
         result = check_production_fastpath_plan_ops(plan, strict=True)
         assert not result.ok, f"{canon} 不应通过 strict fastpath gate: {result.violations}"
-
-
-def test_winsorize_production_safe(_loaded):
-    from backend.polars_long_production import (
-        is_polars_long_native_production_safe,
-        polars_long_production_tier,
-    )
-    from backend.sql_tiers import effective_sql_production_safe
-
-    assert polars_long_production_tier("winsorize") == "production_safe"
-    assert is_polars_long_native_production_safe("winsorize")
-    assert is_polars_long_native_production_safe("group_winsorize")
-    assert effective_sql_production_safe("winsorize")
-    assert effective_sql_production_safe("group_winsorize")
 
 
 def test_p2_map_groups_not_production_safe(_loaded):

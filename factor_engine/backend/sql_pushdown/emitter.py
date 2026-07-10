@@ -52,21 +52,11 @@ def _resolve_canonical(op: str) -> str:
     return OperatorRegistry._aliases.get(op, op)
 
 
-def _window_int(node: PlanNode, default: int = 20) -> int:
-    """从 attrs 或子 literal 输入解析窗口长度（至少为 1）。"""
-    attrs = node.attrs
-    for key in ("d", "window", "n", "periods"):
-        if key in attrs and attrs[key] is not None:
-            return max(int(attrs[key]), 1)
-    for child in node.inputs:
-        if child.op == "literal":
-            val = child.attrs.get("value")
-            if val is not None:
-                try:
-                    return max(int(val), 1)
-                except (TypeError, ValueError):
-                    pass
-    return default
+def _window_int(node: PlanNode, default: int = 3) -> int:
+    """从 attrs 或子 literal 输入解析窗口长度（与 PolarsLong 共用）。"""
+    from backend.plan_params import window_from_plan_node
+
+    return window_from_plan_node(node, default=default)
 
 
 def _float_attr(node: PlanNode, *keys: str, default: float) -> float:
@@ -1568,7 +1558,9 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             dialect, y_col="y._v", x_col="x._v", partition=part
         )
         fit = f"({alpha}) + ({beta}) * x._v"
-        mode = 0 if op == "cs_resid" else _int_attr(node, "mode", input_index=2, default=0)
+        from backend.plan_params import int_mode_from_plan_node
+
+        mode = 0 if op == "cs_resid" else int_mode_from_plan_node(node, input_index=2, default=0)
         if mode == 1:
             core = beta
         elif mode == 2:

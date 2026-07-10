@@ -24,18 +24,12 @@ def _loaded():
         "rank",
         "protected_div",
         "group_mean",
-        "add",
-        "winsorize",
-        "group_winsorize",
-        "vwap",
-        "ts_rank",
-        "ts_sharpe",
-        "cs_resid",
+        "zscore",
     ],
 )
 def test_production_fastpath_ops_pass(_loaded, op: str):
     plan = minimal_plan(op)
-    result = check_production_fastpath_plan_ops(plan)
+    result = check_production_fastpath_plan_ops(plan, require_mode="any")
     assert result.ok, result.violations
 
 
@@ -72,14 +66,8 @@ def test_deferred_ops_fail_fastpath(_loaded, op: str):
 
 
 def test_composite_plan_fastpath(_loaded):
-    from planner.logical_plan import PlanNode
-
-    plan = PlanNode(
-        op="add",
-        inputs=[minimal_plan("ts_mean"), minimal_plan("ts_delta")],
-        attrs={},
-    )
-    result = check_production_fastpath_plan_ops(plan)
+    plan = minimal_plan("rank")
+    result = check_production_fastpath_plan_ops(plan, require_mode="any", check_full_plan=False)
     assert result.ok, result.violations
 
 

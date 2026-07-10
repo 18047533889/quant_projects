@@ -179,7 +179,9 @@ def assert_production_fastpath_plan(
         return
     from backend.production_fastpath_gate import check_production_fastpath_plan_ops, fastpath_gate_strict
 
-    result = check_production_fastpath_plan_ops(plan, strict=fastpath_gate_strict())
+    result = check_production_fastpath_plan_ops(
+        plan, strict=fastpath_gate_strict(), mode=mode
+    )
     if not result.ok:
         raise ProductionPolicyViolation(
             f"production fast path {context} 未通过: {'; '.join(result.violations)}"
@@ -242,7 +244,9 @@ def record_production_fastpath_check(ctx: Any, plan: Any, *, mode: str | None = 
     """记录 fast path 检查结果到 runtime_stats（不强制）。"""
     from backend.production_fastpath_gate import check_production_fastpath_plan_ops, fastpath_gate_strict
 
-    result = check_production_fastpath_plan_ops(plan, strict=fastpath_gate_strict())
+    result = check_production_fastpath_plan_ops(
+        plan, strict=fastpath_gate_strict(), mode=mode
+    )
     runtime = dict(getattr(ctx, "runtime_stats", None) or {})
     runtime["production_fastpath_ok"] = result.ok
     if result.violations:

@@ -24,6 +24,7 @@ _POLARS_PARITY_SOURCES: tuple[tuple[str, str], ...] = (
     ("tests.backend_parity.test_production_safe_bulk_parity", "POLARS_BULK_CASES"),
     ("tests.backend_parity.test_p1_pending_golden", "PENDING_GOLDEN_CASES"),
     ("tests.backend_parity.test_polars_long_no_pandas_path", "NO_PANDAS_CASES"),
+    ("tests.backend_parity.test_batch2_rolling_triple_parity", "BATCH2_ROLLING_CASES"),
 )
 
 _DUCKDB_PARITY_SOURCES: tuple[tuple[str, str], ...] = (
@@ -31,6 +32,7 @@ _DUCKDB_PARITY_SOURCES: tuple[tuple[str, str], ...] = (
     ("tests.backend_parity.test_p0_edge_cases_triple_parity", "DUCKDB_EDGE_CASES"),
     ("tests.backend_parity.test_production_safe_bulk_parity", "DUCKDB_BULK_CASES"),
     ("tests.backend_parity.test_p1_pending_golden", "PENDING_DUCKDB_CASES"),
+    ("tests.backend_parity.test_batch2_rolling_triple_parity", "BATCH2_ROLLING_CASES"),
 )
 
 

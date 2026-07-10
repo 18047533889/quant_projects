@@ -49,7 +49,6 @@ P0_LOGIC_CANONICALS: frozenset[str] = frozenset(
         "where",
         "if_else",
         "coalesce",
-        "fillna",
         "fillna_const",
         "nan_to_num",
         "is_nan",
@@ -147,9 +146,9 @@ P1_BINARY_TS_CANONICALS: frozenset[str] = frozenset(
 )
 
 # 截面/滚动 OLS — 须 pairwise-null parity 后才可 production safe
-P1_REGRESSION_PARITY_PENDING: frozenset[str] = frozenset({"ts_regression", "Slope"})
+P1_REGRESSION_PARITY_PENDING: frozenset[str] = frozenset({"ts_regression", "Slope", "cs_resid", "cs_regression"})
 
-P1_GOLDEN_VERIFIED_REGRESSION: frozenset[str] = frozenset({"cs_resid", "cs_regression"})
+P1_GOLDEN_VERIFIED_REGRESSION: frozenset[str] = frozenset()
 
 # Wilder 递归指标 — research only，不进 production fastpath
 P2_TECHNICAL_RESEARCH_ONLY: frozenset[str] = frozenset({"RSI_WILDER", "ATR_WILDER"})
@@ -228,9 +227,12 @@ P1_EXTENDED_CUM_PRODUCTION_SAFE: frozenset[str] = frozenset(
     }
 )
 
+P1_BATCH2_ROLLING_PRODUCTION_SAFE: frozenset[str] = frozenset({"ts_argmax", "ts_argmin"})
+
 P1_EXTENDED_PARITY_PENDING: frozenset[str] = (
     P1_EXTENDED_CANONICALS
     - P1_EXTENDED_CUM_PRODUCTION_SAFE
+    - P1_BATCH2_ROLLING_PRODUCTION_SAFE
     - frozenset({"ts_ratio"})
 )
 
@@ -253,20 +255,29 @@ P1_DUCKDB_CORE_PRODUCTION_SAFE: frozenset[str] = (
 P1_EXTENDED_DUCKDB_CANONICALS: frozenset[str] = P1_EXTENDED_CUM_PRODUCTION_SAFE
 
 P1_POLARS_PRODUCTION_SAFE: frozenset[str] = (
-    P1_POLARS_CORE_PRODUCTION_SAFE | P1_EXTENDED_CUM_PRODUCTION_SAFE
+    P1_POLARS_CORE_PRODUCTION_SAFE
+    | P1_EXTENDED_CUM_PRODUCTION_SAFE
+    | P1_BATCH2_ROLLING_PRODUCTION_SAFE
 )
 
 P1_DUCKDB_PRODUCTION_SAFE: frozenset[str] = (
-    P1_DUCKDB_CORE_PRODUCTION_SAFE | P1_EXTENDED_DUCKDB_CANONICALS
+    P1_DUCKDB_CORE_PRODUCTION_SAFE | P1_EXTENDED_DUCKDB_CANONICALS | P1_BATCH2_ROLLING_PRODUCTION_SAFE
 )
 
 
 def dual_backend_production_safe() -> frozenset[str]:
-    """PolarsLong native 与 DuckDB SQL 同时 production-safe 的交集。"""
-    from backend.polars_long_production import POLARS_LONG_NATIVE_PRODUCTION_SAFE
-    from backend.sql_tiers import DUCKDB_SQL_PRODUCTION_SAFE
+    """PolarsLong + DuckDB 同时 production-safe（须 primitive evidence）。"""
+    from backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
 
-    return frozenset(POLARS_LONG_NATIVE_PRODUCTION_SAFE & DUCKDB_SQL_PRODUCTION_SAFE)
+    return frozenset(PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE)
+
+
+def dual_backend_structural_candidates() -> frozenset[str]:
+    """双后端 static 候选（implemented，非 evidence 认证）。"""
+    from backend.polars_long_policy import POLARS_LONG_NATIVE
+    from backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
+
+    return frozenset(POLARS_LONG_NATIVE & SQL_IMPLEMENTED_CANONICALS)
 
 # ---------------------------------------------------------------------------
 # P2：map_groups / Python rolling / fill — 不进 production fast path

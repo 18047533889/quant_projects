@@ -124,6 +124,8 @@ POLARS_LONG_NATIVE: frozenset[str] = frozenset(
         "expanding_std",
         "expanding_sum",
         "count",
+        "ts_argmax",
+        "ts_argmin",
     }
 )
 
@@ -133,8 +135,6 @@ POLARS_LONG_PYTHON_ROLLING: frozenset[str] = frozenset(
         "ts_decay_linear",
         "WMA",
         "Slope",
-        "ts_argmax",
-        "ts_argmin",
         "ts_skew",
         "ts_quantile",
     }

@@ -149,20 +149,25 @@ DUCKDB_SQL_PRODUCTION_SAFE: frozenset[str] = frozenset()
 CLICKHOUSE_SQL_PARITY_VERIFIED: frozenset[str] = frozenset()
 CLICKHOUSE_SQL_PRODUCTION_SAFE: frozenset[str] = frozenset()
 
+from backend.primitive_evidence import (
+    DUCKDB_REAL_SQL_VERIFIED,
+    POLARS_REFERENCE_PARITY_VERIFIED,
+    PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE,
+)
+
 SQL_PARITY_VERIFIED_CANONICALS: frozenset[str] = frozenset(
-    {
-        "column",
-        "literal",
-    }
+    {"column", "literal"}
+) | DUCKDB_REAL_SQL_VERIFIED
+
+_STATIC_SQL_CANDIDATES: frozenset[str] = (
+    frozenset({"column", "literal"})
     | P0_PRODUCTION_FASTPATH_CANONICALS
     | P1_DUCKDB_PRODUCTION_SAFE
 )
 
 SQL_PRODUCTION_SAFE_CANONICALS: frozenset[str] = frozenset(
-    {"column", "literal"}
-    | P0_PRODUCTION_FASTPATH_CANONICALS
-    | P1_DUCKDB_PRODUCTION_SAFE
-)
+    c for c in _STATIC_SQL_CANDIDATES if c in PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+) | frozenset({"column", "literal"})
 
 DUCKDB_SQL_PARITY_VERIFIED = SQL_PARITY_VERIFIED_CANONICALS
 DUCKDB_SQL_PRODUCTION_SAFE = SQL_PRODUCTION_SAFE_CANONICALS

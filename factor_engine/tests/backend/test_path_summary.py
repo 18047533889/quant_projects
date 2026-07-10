@@ -63,11 +63,17 @@ def test_complex_group_ops_remain_map_groups(op):
 
 @pytest.mark.parametrize(
     "op",
-    ["ts_decay_linear", "WMA", "ts_argmax", "ts_skew", "ts_quantile"],
+    ["ts_decay_linear", "WMA", "ts_skew", "ts_quantile"],
 )
 def test_python_rolling_ops_tier(op):
     assert classify_plan_op(op) == "python_rolling"
     assert infer_polars_long_tier(op) == "python_rolling"
+
+
+@pytest.mark.parametrize("op", ["ts_argmax", "ts_argmin"])
+def test_batch2_rolling_ops_native_tier(op):
+    assert infer_polars_long_tier(op) == "native"
+    assert classify_plan_op(op) == "native"
 
 
 def test_group_mean_long_path_native_telemetry(source):

@@ -46,6 +46,7 @@ class FastpathCoverageRow:
     composite_dual_backend_fastpath: bool = False
     effective_production_fastpath: bool = False
     effective_dual_backend_fastpath: bool = False
+    dual_backend_parity_verified: bool = False
     production_policy: str = "denied"
     lowered_primitives: tuple[str, ...] | None = None
 
@@ -76,7 +77,10 @@ class FastpathCoverageRow:
             "duckdb_sql_production_safe": self.duckdb_sql_production_safe,
             "clickhouse_sql_production_safe": self.clickhouse_sql_production_safe,
             "polars_long_native_production_safe": self.polars_long_native_production_safe,
-            "parity": self.pandas_polars_long_parity or self.pandas_duckdb_parity,
+            "parity": self.dual_backend_parity_verified,
+            "polars_parity_verified": self.pandas_polars_long_parity,
+            "duckdb_parity_verified": self.pandas_duckdb_parity,
+            "dual_backend_parity_verified": self.dual_backend_parity_verified,
             "pandas_polars_long_parity": self.pandas_polars_long_parity,
             "pandas_duckdb_parity": self.pandas_duckdb_parity,
             "benchmark": self.benchmark_available,
@@ -191,6 +195,10 @@ def build_fastpath_coverage_row(canon: str) -> FastpathCoverageRow:
         is_polars_long_native_production_safe,
         polars_long_production_tier,
     )
+    from backend.primitive_evidence import (
+        DUCKDB_REAL_SQL_VERIFIED,
+        POLARS_REFERENCE_PARITY_VERIFIED,
+    )
     from backend.production_fast_path import PRODUCTION_TRIPLE_PARITY_CANONICALS
     from backend.sql_tiers import (
         SQL_IMPLEMENTED_CANONICALS,
@@ -215,8 +223,9 @@ def build_fastpath_coverage_row(canon: str) -> FastpathCoverageRow:
     duckdb_prod = effective_sql_production_safe(name) and sql_emitter_ok
     ch_prod = effective_clickhouse_production_safe(name) and sql_emitter_ok
     polars_native_prod = is_polars_long_native_production_safe(name)
-    pandas_polars_parity = name in POLARS_PARITY_VERIFIED or name in PRODUCTION_TRIPLE_PARITY_CANONICALS
-    pandas_duckdb_parity = duckdb_triple_parity_verified(name)
+    pandas_polars_parity = name in POLARS_REFERENCE_PARITY_VERIFIED
+    pandas_duckdb_parity = name in DUCKDB_REAL_SQL_VERIFIED
+    dual_backend_parity = pandas_polars_parity and pandas_duckdb_parity
     benchmark_set = _benchmark_canonicals()
 
     from backend.composite_evidence import composite_production_safe as is_composite_production_safe
@@ -279,6 +288,7 @@ def build_fastpath_coverage_row(canon: str) -> FastpathCoverageRow:
         polars_long_native_production_safe=polars_native_prod,
         pandas_polars_long_parity=pandas_polars_parity,
         pandas_duckdb_parity=pandas_duckdb_parity,
+        dual_backend_parity_verified=dual_backend_parity,
         benchmark_available=name in benchmark_set,
         production_fast_path=production_fast_path,
         fastpath_block_reason=block if not production_fast_path else "",

@@ -39,12 +39,16 @@ def test_production_core_equals_fastpath_p0_p1_plus_legacy():
     assert not (PRODUCTION_ALLOWED_DEFERRED_CANONICALS & PRODUCTION_DUAL_BACKEND_CORE_CANONICALS)
 
 
-def test_production_allowed_equals_core():
+def test_production_allowed_equals_core_plus_composites():
     from cleaned_operators import load_all
     from cleaned_operators.operator_spec import (
         PRODUCTION_CORE_CANONICALS,
         production_allowed_canonicals,
+        production_allowed_composite_canonicals,
     )
 
     load_all()
-    assert production_allowed_canonicals() == PRODUCTION_CORE_CANONICALS
+    composites = production_allowed_composite_canonicals()
+    expected = PRODUCTION_CORE_CANONICALS | composites
+    assert production_allowed_canonicals() == expected
+    assert not (composites & PRODUCTION_CORE_CANONICALS)

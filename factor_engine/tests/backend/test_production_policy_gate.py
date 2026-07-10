@@ -62,15 +62,14 @@ def test_formula_gate_rejects_current_ratio_even_if_lowered(_loaded):
     assert any("current_ratio" in v for v in result.violations)
 
 
-def test_formula_gate_rejects_mom_pending_policy(_loaded):
-    """MOM 有 lowering 但 production_policy=pending，不得通过 production gate。"""
+def test_formula_gate_accepts_mom_composite_production_safe(_loaded):
+    """MOM 证据齐全且 composite_production_safe，须通过 production gate。"""
     result = check_production_fastpath_formula_ops(
         "MOM(col('close'), 5)",
         use_real_plan=True,
         check_full_plan=False,
     )
-    assert not result.ok
-    assert any("MOM" in v and "pending" in v for v in result.violations)
+    assert result.ok, result.violations
 
 
 def test_formula_gate_accepts_ts_mean_primitive(_loaded):
@@ -151,9 +150,11 @@ def test_policy_gate_rejects_composite_allowed_without_evidence(_loaded, monkeyp
     folded = Optimizer()._fold_literals(plan)
 
     from cleaned_operators import operator_spec as ospec
+    import backend.composite_evidence as cev
 
     real_infer = ospec.infer_production_policy
     real_build = ospec.build_operator_spec
+    real_safe = cev.composite_production_safe
 
     def _fake_mom_allowed(canon: str) -> str:
         if canon == "MOM":
@@ -166,10 +167,21 @@ def test_policy_gate_rejects_composite_allowed_without_evidence(_loaded, monkeyp
             return spec
         from dataclasses import replace
 
-        return replace(spec, allow_in_production=True, production_policy="allowed")
+        return replace(
+            spec,
+            allow_in_production=True,
+            production_policy="allowed",
+            pit_safe=True,
+        )
+
+    def _fake_mom_unsafe(canon: str) -> bool:
+        if canon == "MOM":
+            return False
+        return real_safe(canon)
 
     monkeypatch.setattr(ospec, "infer_production_policy", _fake_mom_allowed)
     monkeypatch.setattr(ospec, "build_operator_spec", _fake_mom_spec)
+    monkeypatch.setattr(cev, "composite_production_safe", _fake_mom_unsafe)
     violations = check_original_operator_policy(folded)
     assert any("MOM" in v and "production evidence incomplete" in v for v in violations)
 

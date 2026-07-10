@@ -38,6 +38,14 @@ def test_composite_duckdb_evidence_matches_triple_parity_cases(_loaded):
     assert COMPOSITE_LOWERED_DUCKDB_VERIFIED == tested
 
 
+def test_composite_edge_evidence_matches_edge_cases(_loaded):
+    from backend.composite_evidence import COMPOSITE_EDGE_VERIFIED
+    from tests.backend_parity.composite_edge_helpers import COMPOSITE_EDGE_CASES
+
+    tested = frozenset(c.canon for c in COMPOSITE_EDGE_CASES)
+    assert COMPOSITE_EDGE_VERIFIED == tested
+
+
 def test_composite_edge_evidence_is_subset_of_reference(_loaded):
     from backend.composite_evidence import (
         COMPOSITE_EDGE_VERIFIED,

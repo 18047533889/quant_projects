@@ -1,5 +1,5 @@
 # -*- coding: utf-8
-"""Production fast path 验收矩阵（P0 / P1 关键算子）。"""
+"""Production fast path 验收矩阵（evidence 驱动）。"""
 from __future__ import annotations
 
 import pytest
@@ -22,37 +22,39 @@ def _row(canon: str):
     return build_fastpath_coverage_row(canon)
 
 
-ACCEPTANCE_P0 = [
-    "add",
+ACCEPTANCE_DUAL_BACKEND = [
     "ts_mean",
+    "ts_std",
     "rank",
+    "zscore",
     "protected_div",
+    "protected_log",
+    "group_mean",
+    "group_zscore",
+    "group_winsorize",
+    "ts_corr",
+    "ts_cov",
+    "ts_beta",
+]
+
+ACCEPTANCE_POLARS_ONLY = [
+    "add",
     "where",
     "vwap",
     "c_mean",
     "cs_pct_rank",
     "power",
-    "is_nan",
+    "ts_zscore",
 ]
 
-ACCEPTANCE_P1 = [
-    "group_mean",
-    "group_percentile",
-    "ts_corr",
-    "rolling_beta",
-    "cs_mad",
-    "cum_sum",
+ACCEPTANCE_P1_NOT_PRODUCTION = [
     "ts_rank",
     "ts_sharpe",
     "ts_autocorr",
     "cs_resid",
     "cs_regression",
-]
-
-ACCEPTANCE_P1_IMPLEMENTED_ONLY = [
-    "RSI_WILDER",
-    "ts_decay_linear",
-    "ts_ema",
+    "rolling_beta",
+    "cum_sum",
 ]
 
 ACCEPTANCE_P2 = [
@@ -64,42 +66,39 @@ ACCEPTANCE_P2 = [
 ]
 
 
-@pytest.mark.parametrize("canon", ACCEPTANCE_P0)
-def test_acceptance_p0_production_fastpath(_loaded, canon):
+@pytest.mark.parametrize("canon", ACCEPTANCE_DUAL_BACKEND)
+def test_acceptance_dual_backend_evidence(_loaded, canon):
     from backend.polars_long_production import is_polars_long_native_production_safe
+    from backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+    from backend.production_fast_path import is_effective_dual_backend_fastpath
     from backend.sql_tiers import effective_sql_production_safe
-    from backend.operator_capability import _sql_emitter_ok
 
-    row = _row(canon)
-    assert row.polars_long_native, canon
-    assert is_polars_long_native_production_safe(canon), canon
-    assert effective_sql_production_safe(canon) and _sql_emitter_ok(canon), canon
-    assert row.polars_long_native_production_safe
-    assert row.sql_production_safe and row.sql_emitter_ok
+    assert canon in PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+    assert is_polars_long_native_production_safe(canon)
+    assert effective_sql_production_safe(canon)
+    assert is_effective_dual_backend_fastpath(canon)
 
 
-@pytest.mark.parametrize("canon", ACCEPTANCE_P1)
-def test_acceptance_p1_polars_or_duckdb(_loaded, canon):
-    row = _row(canon)
-    assert row.polars_long_native or row.sql_implemented, canon
-    assert row.polars_long_native_production_safe or (
-        row.sql_production_safe and row.sql_emitter_ok
-    ), f"{canon}: {row.fastpath_block_reason}"
-    if canon in {"cs_mad", "cs_mad_zscore"}:
-        assert row.polars_long_native_production_safe
-        assert row.duckdb_sql_production_safe and row.sql_emitter_ok
+@pytest.mark.parametrize("canon", ACCEPTANCE_POLARS_ONLY)
+def test_acceptance_polars_reference_without_dual(_loaded, canon):
+    from backend.primitive_evidence import (
+        POLARS_REFERENCE_PARITY_VERIFIED,
+        PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE,
+    )
+
+    assert canon in POLARS_REFERENCE_PARITY_VERIFIED
+    assert canon not in PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
 
 
-@pytest.mark.parametrize("canon", ACCEPTANCE_P1_IMPLEMENTED_ONLY)
-def test_acceptance_p1_implemented_not_production_safe(_loaded, canon):
-    row = _row(canon)
-    assert row.polars_long_native or row.polars_long_tier in {"native", "python_rolling"}, canon
-    assert not row.production_fast_path, f"{canon} 已实现但不应 production fast path"
-    assert row.fastpath_block_reason
+@pytest.mark.parametrize("canon", ACCEPTANCE_P1_NOT_PRODUCTION)
+def test_acceptance_p1_not_dual_production(_loaded, canon):
+    from backend.production_fast_path import is_effective_dual_backend_fastpath
+
+    assert not is_effective_dual_backend_fastpath(canon)
 
 
 @pytest.mark.parametrize("canon", ACCEPTANCE_P2)
-def test_acceptance_p2_not_production_fastpath(_loaded, canon):
-    row = _row(canon)
-    assert not row.production_fast_path, f"{canon} 不应 production fast path"
-    assert row.fastpath_block_reason
+def test_acceptance_p2_not_production(_loaded, canon):
+    from backend.production_fast_path import is_effective_dual_backend_fastpath
+
+    assert not is_effective_dual_backend_fastpath(canon)

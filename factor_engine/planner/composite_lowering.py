@@ -219,13 +219,13 @@ def collect_plan_ops(node: PlanNode) -> list[str]:
 
 
 def composite_dual_backend_capable(canon: str) -> bool:
-    """composite 算子展开后，全部 primitive 均在 dual-backend production-safe 集合内。"""
+    """composite 算子展开后，全部 primitive 均在双后端 structural 候选内。"""
     prims = lowered_primitives(canon)
     if not prims:
         return False
-    from backend.production_fastpath_tiers import dual_backend_production_safe
+    from backend.production_fastpath_tiers import dual_backend_structural_candidates
 
-    safe = dual_backend_production_safe()
+    safe = dual_backend_structural_candidates()
     return all(p in safe for p in prims)
 
 

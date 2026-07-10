@@ -104,6 +104,8 @@ class FactorEngine:
         if is_production_mode(run_mode):
             os.environ["FACTOR_ENGINE_RUN_MODE"] = PRODUCTION_MODE
             os.environ["QUANT_PRODUCTION_MODE"] = "1"
+            os.environ["FACTOR_ENGINE_PRODUCTION_REQUIRE_FASTPATH"] = "1"
+            os.environ["FACTOR_ENGINE_PRODUCTION_REQUIRE_DUAL_BACKEND"] = "1"
         else:
             os.environ["FACTOR_ENGINE_RUN_MODE"] = "research"
 

@@ -9,7 +9,12 @@
 > **完全不了解 factor_engine？** 请先读 **[`docs/FactorEngine完全指南.md`](docs/FactorEngine完全指南.md)**（总文档，30 分钟建立全局认识）。
 
 1. **数据流（本仓库在干什么）**：`api`（`Factor` / DSL / 算子工厂，经 **`cleaned_operators`**）→ `expr` → `ir` → `planner` → `backend` → **MultiIndex 因子序列**；**编排入口**是 **`runtime/FactorEngine`**。挖掘侧入门：**[`docs/算子与导入教程.md`](docs/算子与导入教程.md)**。
-2. **Backend 覆盖（2026-07）**：Polars **325** · SQL 下推 **88** 算子（[`docs/sql_pushdown_coverage.md`](docs/sql_pushdown_coverage.md)）。
+2. **Backend 覆盖（2026-07）**（详见 [`docs/sql_pushdown_coverage.md`](docs/sql_pushdown_coverage.md)）：
+   - **Polars registry capable**：325（含 map_groups / registry bridge，非全部 native）
+   - **DuckDB SQL emitter implemented**：~88 canonical（implemented，非 production-safe）
+   - **Primitive dual-backend production-safe**（证据交集）：见 `evidence/primitive_verified.json` 中 `PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE`（须 Polars reference + DuckDB real SQL + no-fallback 三证齐全）
+   - **Composite**：16 个 lowered triple parity + evidence JSON；`production_policy` 仍为 pending，未正式 production 放行
+   - **第一阶段冻结清单**：[`evidence/phase1_production_scope.yaml`](evidence/phase1_production_scope.yaml)（84 primitive + 16 composite）；认证流水线：`python scripts/certify_operator.py <canonical>`
 3. **规范从哪读**：算子 **能否写入 manifest** 以 [`docs/dsl_operators_reference.md`](docs/dsl_operators_reference.md) 为准；参数语义见 [`docs/operators_semantics.md`](docs/operators_semantics.md)。
 4. **动手跑**：最小脚本 [`examples/simple_factor.py`](examples/simple_factor.py)；配置驱动见 `examples/` 与 **`FactorEngine.run_from_config`**；**批量 YAML** 见 [`runtime/README.md`](runtime/README.md) §8；**目标仓位回测**见 [`../../backtest_layer/single_asset_backtest/README.md`](../../backtest_layer/single_asset_backtest/README.md) 文首 **「新人 5 分钟上手」**。
 5. **版本与变更**：[`docs/changelog_shw.md`](docs/changelog_shw.md)

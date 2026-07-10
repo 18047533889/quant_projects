@@ -14,28 +14,29 @@ def _loaded():
     register_sql_backends()
 
 
-def test_duckdb_downgrade_includes_winsorize_when_no_quantile(monkeypatch):
+def test_duckdb_downgrade_only_applies_to_production_safe(monkeypatch):
     from backend.sql_pushdown.duckdb_capabilities import (
         DuckdbCapabilityReport,
         downgrade_sql_canonicals,
     )
+    from backend.sql_tiers import SQL_PRODUCTION_SAFE_CANONICALS
 
     report = DuckdbCapabilityReport(features={"quantile_cont_window": "unsupported"})
     down = downgrade_sql_canonicals(report)
-    assert "winsorize" in down
+    assert down <= SQL_PRODUCTION_SAFE_CANONICALS
+    assert "winsorize" not in down
     assert "group_winsorize" in down
 
 
-def test_duckdb_downgrade_includes_cs_mad_when_no_median(monkeypatch):
+def test_duckdb_downgrade_corr_when_in_production_safe(monkeypatch):
     from backend.sql_pushdown.duckdb_capabilities import (
         DuckdbCapabilityReport,
         downgrade_sql_canonicals,
     )
 
-    report = DuckdbCapabilityReport(features={"median_window": "unsupported"})
+    report = DuckdbCapabilityReport(features={"corr_window": "unsupported"})
     down = downgrade_sql_canonicals(report)
-    assert "cs_mad" in down
-    assert "cs_mad_zscore" in down
+    assert "ts_corr" in down
 
 
 def test_cs_mad_sql_emitter_ok(_loaded):
