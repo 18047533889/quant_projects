@@ -4,6 +4,12 @@
 
 ---
 
+## 2026-07 文档清理
+
+**内容**：删除已完成/过期的规划类文档（`enterprise_factor_engine_roadmap.md`、`performance_platform_plan.md`、`STRUCTURE.md`、`lqtp_vs_factor_engine_operators.md`）；总览并入 [`FactorEngine完全指南.md`](FactorEngine完全指南.md)；根 `README.md` 移除冗长分版脚注。
+
+---
+
 ## 2026-07 Backend 与文档同步（第 32 版）
 
 **内容**：SQL 下推 **58** 算子 + `column`/`literal`（共 **60** 可编译节点）；registry sql backend **62**（CI 门禁）；新增 `cs_resid`/`cs_regression` SQL；统一 Polars **325** 文档；修正 `neutralize`（组内去均值）与 `cs_resid`（截面 OLS）语义混用。
@@ -11,7 +17,6 @@
 - **[`sql_pushdown_coverage.md`](sql_pushdown_coverage.md)**：CI 自动生成 SQL 清单  
 - **[`operators_semantics.md`](operators_semantics.md)** / **[`dsl_operators_reference.md`](dsl_operators_reference.md)** / **[`算子与导入教程.md`](算子与导入教程.md)**：Backend §、OLS vs group_neutralize、`is_nan`/`is_finite` float64、`bfill` 因果  
 - **[`factor_engine_llm_prompt.md`](factor_engine_llm_prompt.md)**：§5.4 SQL 下推 + 修正 neutralize 描述  
-- **[`enterprise_factor_engine_roadmap.md`](enterprise_factor_engine_roadmap.md)**：Backend 覆盖行 + Phase 12 更新  
 - **`cleaned_operators/docs/operator_doc_semantics.py`**：`neutralize` 文档对齐 dedupe 别名  
 
 ---
@@ -461,4 +466,4 @@
 - **data_access**：`QueryBudget` + read/sql/stream 审计；`delete_rows` dry_run/max_rows；`factor_lake` metadata schema；`sql_stream` + `apply_sql_row_limit`
 - **factor_engine**：`factor_schema` 单点契约；production `auto_warmup`；lineage `source_expr`；`dual_write_service` / `warmup_service` / `lineage_service` / `materialize_service`；`SessionBarCalendar` 分钟 warmup；`FactorWriteTarget`（local/staging/CH）；`run_many_from_config` 按 data_scope 分组；`materialize_many_from_config`；`schema_migration` + CLI；composite `join_reports` → lineage
 - **测试**：`test_enterprise_p0/p1/p2/p3`；782+ factor_engine / 168 data_access unit 通过
-- **文档**：[`enterprise_factor_engine_roadmap.md`](enterprise_factor_engine_roadmap.md) Phase 14；[`data_access/README.md`](../../data_access/README.md) PR8+
+- **文档**：企业级路线图（已删除，见 changelog 2026-07 文档清理）；[`data_access/README.md`](../../data_access/README.md) PR8+

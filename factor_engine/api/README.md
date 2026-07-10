@@ -1,5 +1,7 @@
 # `api` — 用户接口层
 
+> **零基础读者**：请先读 **[`docs/FactorEngine完全指南.md`](../docs/FactorEngine完全指南.md)**。
+
 本目录是 **研究员、挖掘框架与 factor_engine 交互的唯一 Python 入口**：提供列引用、因子对象、DSL 解析，以及 **全部算子的工厂函数**（构造 `Expr`，不在此目录做数值计算）。
 
 > **第 31 版（cleaned 全量接入）**：原 **`api/operators/`** 子包已删除。算子工厂统一由 **`cleaned_ops.make_cleaned_call_factory`** + **`operator_registry.build_dsl_allowlist()`** 驱动，runtime 实现在 **`cleaned_operators/`**。  

@@ -3,15 +3,7 @@ FACTOR ENGINE - LLM PROMPT GUIDE
 ================================================================================
 
 
-NOTE: 第 5 版更改-shw：因子引擎已扩展 WorldQuant BRAIN 风格算子分类；DSL 中逻辑函数须用 and_ / or_ / not_；算子语义与占位说明见同目录 operators_semantics.md，按版本变更见 changelog_shw.md。本 Prompt 若与上述文档冲突，以 operators_semantics.md 与当前 api/operator_registry 为准，并建议逐步同步下文「Supported Operators」列表。
->
-NOTE: 第 35 版更改-shw：Phase 16 — materialize_many_from_config(batch_run=True) 同 scope 共享 run_many；run_many_from_config_parallel；ResolvedMaterializeKwargs.to_engine_materialize_kwargs()。
->
-NOTE: 第 34 版更改-shw：Phase 15 — config_run_batch_key 子分组；ClickHouseWriteTarget.write_factor_series；storage export write_targets。
->
-NOTE: 第 33 版更改-shw：企业级 P0–P2 — warmup_service / materialize_service / QueryBudget / sql_stream / FactorWriteTarget / SessionBarCalendar 分钟 warmup；详见 enterprise_factor_engine_roadmap.md Phase 14。
->
-NOTE: 第 32 版更改-shw：读端统一 data_access — 示例 YAML / mining preset 均经 datasets.yaml 登记数据集；composite 用于价量 anchor + 基本面 asof；legacy parquet_kline / multi_parquet 仅调试。Registry 见 data_access/config/datasets.yaml；契约 CI：scripts/validate_datasets_mining_alignment.py。
+NOTE: 算子语义与 DSL 限制以 operators_semantics.md 为准；变更历史见 changelog_shw.md。与下文冲突时以上述文档为准。
 
 You are an AI assistant helping to write factor definitions and configurations for a quantitative factor engine. Below is the complete specification of the system.
 

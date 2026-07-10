@@ -63,7 +63,7 @@ PYTHONPATH=. python scripts/export_dsl_allowlist.py
 
 | 脚本 | 用途 |
 |------|------|
-| [`check_enterprise_docs.py`](check_enterprise_docs.py) | CI：roadmap Phase 14–16 标记 + LLM prompt 同步 |
+| [`check_enterprise_docs.py`](check_enterprise_docs.py) | CI：`factor_engine_llm_prompt.md` 与 `.txt` 同步检查 |
 | [`sync_factor_engine_llm_prompt_txt.py`](sync_factor_engine_llm_prompt_txt.py) | `factor_engine_llm_prompt.md` → `.txt` |
 | [`migrate_factor_lake_schema.py`](migrate_factor_lake_schema.py) | 旧因子湖 parquet 补 metadata 列 |
 | [`report_backend_coverage.py`](report_backend_coverage.py) | Polars/SQL 覆盖报告 + `sql_pushdown_coverage.md` |
@@ -89,5 +89,4 @@ PYTHONPATH=. python scripts/migrate_factor_lake_schema.py --lake-root /path/to/l
 
 - [`backend/pandas_compat.py`](../backend/pandas_compat.py)  
 - [`runtime/perf_config.py`](../runtime/perf_config.py)  
-- [`docs/enterprise_factor_engine_roadmap.md`](../docs/enterprise_factor_engine_roadmap.md)  
-- 根 [`README.md`](../README.md) 第 23 版关于 Modin/CSE 的说明  
+- [`docs/FactorEngine完全指南.md`](../docs/FactorEngine完全指南.md)  

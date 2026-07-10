@@ -614,6 +614,25 @@ class ProtectedDivOp(TwoVarOperator):
         return out.replace([np.inf, -np.inf], default).fillna(default)
 
 
+# canonical=safe_div_null backend=pandas_numpy selected=safe_div_null source=basic_runtime
+@register_operator(name="safe_div_null", category="data_cleaning", business_category="data_cleaning", canonical="safe_div_null", source="basic_runtime")
+class SafeDivNullOp(TwoVarOperator):
+    """比率除法：零/NULL 分母 → NULL（不填充 default）。"""
+    metadata = OperatorMetadata(
+        name="safe_div_null",
+        category="data_cleaning",
+        description="比率除法：numerator/denominator；NULL 或 |denom|<=epsilon → NULL",
+        param_names=["x", "y", "epsilon"],
+        return_type="series",
+        tags=["data_cleaning", "pit_safe", "ratio"],
+    )
+
+    def _calculate_series(self, x, y, epsilon=1e-12, **kwargs):
+        denom = y.where(y.abs() > epsilon)
+        out = x / denom
+        return out.replace([np.inf, -np.inf], np.nan)
+
+
 # canonical=protected_log backend=pandas_numpy selected=protected_log source=basic_runtime
 @register_operator(name="protected_log", category="data_cleaning", business_category="data_cleaning", canonical="protected_log", source="basic_runtime")
 class ProtectedLogOp(SeriesOperator):

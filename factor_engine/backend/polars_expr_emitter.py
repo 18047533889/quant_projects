@@ -570,6 +570,20 @@ def _column_ref_name(node: PlanNode) -> str | None:
     return str(name) if name else None
 
 
+def _safe_div_null_expr(numer: pl.Expr, denom: pl.Expr, node: PlanNode) -> pl.Expr:
+    """零/NULL 分母 → NULL（比率语义，不填 default）。"""
+    from backend.numeric_semantics import protected_epsilon_default
+
+    eps = _float_attr(node, "epsilon", "eps", default=protected_epsilon_default())
+    return (
+        pl.when(numer.is_null() | denom.is_null())
+        .then(None)
+        .when(denom.abs() <= eps)
+        .then(None)
+        .otherwise(numer / denom)
+    )
+
+
 def _protected_div_expr(numer: pl.Expr, denom: pl.Expr, node: PlanNode) -> pl.Expr:
     """与 SQL / Pandas 一致：|denom| <= epsilon → default。"""
     from backend.numeric_semantics import protected_div_default, protected_epsilon_default
@@ -681,6 +695,8 @@ def _binary_fused_expr(op: str, left: pl.Expr, right: pl.Expr, node: PlanNode) -
         return pl.min_horizontal(left, right)
     if op == "protected_div":
         return _protected_div_expr(left, right, node)
+    if op == "safe_div_null":
+        return _safe_div_null_expr(left, right, node)
     if op == "divide":
         return left / right
     if op == "power":
@@ -813,6 +829,8 @@ def _try_binary_from_base_columns(
         expr = pl.min_horizontal(lcol, rcol)
     elif op == "protected_div":
         expr = _protected_div_expr(lcol, rcol, node)
+    elif op == "safe_div_null":
+        expr = _safe_div_null_expr(lcol, rcol, node)
     elif op == "divide":
         expr = lcol / rcol
     elif op == "power":
@@ -916,6 +934,7 @@ _BINARY_FUSION_OPS = frozenset(
         "multiply",
         "divide",
         "protected_div",
+        "safe_div_null",
         "maximum",
         "minimum",
         "power",
@@ -1174,6 +1193,8 @@ def _compile_polars_impl(
             expr = pl.min_horizontal(pl.col(_VAL), pl.col("_y"))
         elif op == "protected_div":
             expr = _protected_div_expr(pl.col(_VAL), pl.col("_y"), node)
+        elif op == "safe_div_null":
+            expr = _safe_div_null_expr(pl.col(_VAL), pl.col("_y"), node)
         elif op == "divide":
             expr = pl.col(_VAL) / pl.col("_y")
         elif op == "power":

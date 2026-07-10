@@ -1090,6 +1090,27 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_ts_partition=left.has_ts_partition or right.has_ts_partition,
         )
 
+    if op == "safe_div_null":
+        if len(node.inputs) != 2:
+            return None
+        left = _compile_layer(node.inputs[0], dialect=dialect)
+        right = _compile_layer(node.inputs[1], dialect=dialect)
+        if left is None or right is None:
+            return None
+        from backend.numeric_semantics import protected_epsilon_default
+
+        eps = _float_attr(node, "epsilon", default=protected_epsilon_default())
+        abs_fn = _dialect_fn(dialect, "abs")
+        return _Layer(
+            f"SELECT l.ts, l.inst, "
+            f"CASE WHEN l._v IS NULL OR r._v IS NULL THEN NULL "
+            f"WHEN {abs_fn}(r._v) <= {eps} THEN NULL "
+            f"ELSE l._v / r._v END AS _v "
+            f"FROM ({left.sql}) l INNER JOIN ({right.sql}) r USING (ts, inst)",
+            has_inst_window=left.has_inst_window or right.has_inst_window,
+            has_ts_partition=left.has_ts_partition or right.has_ts_partition,
+        )
+
     if op == "protected_log":
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:

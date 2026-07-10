@@ -106,15 +106,16 @@ def test_minimal_plan_hint_differs_from_real_plan(_loaded):
     assert not hint.ok
 
 
-def test_real_plan_gate_accepts_mom_after_lowering(_loaded):
+def test_real_plan_gate_rejects_mom_pending_policy(_loaded):
     from backend.production_fastpath_gate import check_production_fastpath_formula_ops
 
     result = check_production_fastpath_formula_ops(
         "MOM(col('close'), 5)",
         use_real_plan=True,
-        check_full_plan=True,
+        check_full_plan=False,
     )
-    assert result.ok, result.violations
+    assert not result.ok
+    assert any("pending" in v for v in result.violations)
 
 
 def test_gate_rejects_unlowered_composite_in_strict(_loaded):

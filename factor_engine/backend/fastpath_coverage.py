@@ -42,6 +42,9 @@ class FastpathCoverageRow:
     duckdb_fastpath: bool = False
     dual_backend_fastpath: bool = False
     composite_dual_backend_capable: bool = False
+    composite_production_safe: bool = False
+    composite_dual_backend_fastpath: bool = False
+    production_policy: str = "denied"
     lowered_primitives: tuple[str, ...] | None = None
 
     def to_csv_row(self) -> dict[str, Any]:
@@ -84,6 +87,9 @@ class FastpathCoverageRow:
             "duckdb_fastpath": self.duckdb_fastpath,
             "dual_backend_fastpath": self.dual_backend_fastpath,
             "composite_dual_backend_capable": self.composite_dual_backend_capable,
+            "composite_production_safe": self.composite_production_safe,
+            "composite_dual_backend_fastpath": self.composite_dual_backend_fastpath,
+            "production_policy": self.production_policy,
             "lowered_primitives": ",".join(self.lowered_primitives) if self.lowered_primitives else "",
         }
 
@@ -115,26 +121,43 @@ def _fastpath_block_reason(
     *,
     canon: str,
     allow_in_production: bool,
+    production_policy: str,
     duckdb_ok: bool,
     polars_native_ok: bool,
     polars_tier: str,
+    execution_kind: str,
+    composite_structurally_capable: bool,
+    composite_production_safe: bool,
 ) -> str:
-    """推断 canonical 被 production fast path 阻断的原因。"""
+    """推断 canonical 被 production fast path 阻断的原因（优先级有序）。"""
     from backend.polars_long_production import POLARS_LONG_FASTPATH_DEFERRED
     from backend.sql_tiers import SQL_PRODUCTION_DEFERRED_CANONICALS
+    from cleaned_operators.operator_spec import is_production_permanently_forbidden
 
     if canon in {"column", "literal", "materialized_series", "plan_ref"}:
         return ""
+    if not allow_in_production:
+        if production_policy == "permanently_forbidden" or is_production_permanently_forbidden(canon):
+            return "permanently_forbidden"
+        if production_policy == "pending":
+            return "composite_policy_pending"
+        return "not_production_allowed"
+    if production_policy == "permanently_forbidden" or is_production_permanently_forbidden(canon):
+        return "permanently_forbidden"
     if canon in POLARS_LONG_FASTPATH_DEFERRED or canon in SQL_PRODUCTION_DEFERRED_CANONICALS:
         return "deferred_complex_op"
-    if duckdb_ok or polars_native_ok:
-        return ""
+    if execution_kind == "composite":
+        if composite_production_safe:
+            return ""
+        if composite_structurally_capable:
+            return "composite_evidence_missing"
+        return "composite_not_structurally_capable"
     if polars_tier in {"map_groups", "registry", "python_rolling"}:
         return f"polars_long_{polars_tier}_not_fastpath"
     if polars_tier == "passthrough":
         return "polars_long_passthrough"
-    if not allow_in_production:
-        return "not_production_allowed"
+    if duckdb_ok and polars_native_ok:
+        return ""
     reasons: list[str] = []
     if not duckdb_ok:
         reasons.append("no_duckdb_production_safe")
@@ -174,6 +197,8 @@ def build_fastpath_coverage_row(canon: str) -> FastpathCoverageRow:
     from cleaned_operators.operator_policy import POLARS_PARITY_VERIFIED
     from cleaned_operators.operator_spec import build_operator_spec
 
+    from cleaned_operators.operator_spec import build_operator_spec, infer_production_policy
+
     name = resolve_canonical(canon)
     spec = build_operator_spec(name)
     tier = infer_polars_long_tier(name)
@@ -189,13 +214,8 @@ def build_fastpath_coverage_row(canon: str) -> FastpathCoverageRow:
     pandas_polars_parity = name in POLARS_PARITY_VERIFIED or name in PRODUCTION_TRIPLE_PARITY_CANONICALS
     pandas_duckdb_parity = duckdb_triple_parity_verified(name)
     benchmark_set = _benchmark_canonicals()
-    block = _fastpath_block_reason(
-        canon=name,
-        allow_in_production=bool(spec.allow_in_production),
-        duckdb_ok=duckdb_prod,
-        polars_native_ok=polars_native_prod,
-        polars_tier=tier,
-    )
+
+    from backend.composite_evidence import composite_production_safe as is_composite_production_safe
     from planner.composite_lowering import (
         composite_dual_backend_capable,
         has_composite_lowering,
@@ -204,22 +224,33 @@ def build_fastpath_coverage_row(canon: str) -> FastpathCoverageRow:
     )
 
     execution_kind = infer_execution_kind(name)
+    production_policy = infer_production_policy(name)
     lowering_available = has_composite_lowering(name)
-    composite_capable = composite_dual_backend_capable(name) if lowering_available else False
+    composite_structural = composite_dual_backend_capable(name) if lowering_available else False
+    composite_prod_safe = is_composite_production_safe(name) if lowering_available else False
+    lowered = lowered_primitives(name) if lowering_available else None
 
-    composite_fastpath = bool(spec.allow_in_production) and composite_capable and not block
+    block = _fastpath_block_reason(
+        canon=name,
+        allow_in_production=bool(spec.allow_in_production),
+        production_policy=production_policy,
+        duckdb_ok=duckdb_prod,
+        polars_native_ok=polars_native_prod,
+        polars_tier=tier,
+        execution_kind=execution_kind,
+        composite_structurally_capable=composite_structural,
+        composite_production_safe=composite_prod_safe,
+    )
 
     native_tier = polars_long_production_tier(name) if tier == "native" else tier
 
-    production_fast_path = (
-        bool(spec.allow_in_production) and (duckdb_prod or ch_prod or polars_native_prod or composite_fastpath) and not block
-    )
-    polars_long_fastpath = bool(spec.allow_in_production) and (polars_native_prod or composite_capable) and not block
-    duckdb_fastpath = bool(spec.allow_in_production) and (duckdb_prod or composite_capable) and not block
-    dual_backend_fastpath = bool(spec.allow_in_production) and (
-        (polars_native_prod and duckdb_prod) or composite_capable
-    ) and not block
-    lowered = lowered_primitives(name) if lowering_available else None
+    direct_any = bool(spec.allow_in_production) and (duckdb_prod or ch_prod or polars_native_prod)
+    direct_dual = bool(spec.allow_in_production) and polars_native_prod and duckdb_prod
+    production_fast_path = direct_any and not block
+    polars_long_fastpath = bool(spec.allow_in_production) and polars_native_prod and not block
+    duckdb_fastpath = bool(spec.allow_in_production) and duckdb_prod and not block
+    dual_backend_fastpath = direct_dual and not block
+    composite_dual_backend_fastpath = composite_prod_safe and not block
 
     return FastpathCoverageRow(
         canonical=name,
@@ -250,7 +281,10 @@ def build_fastpath_coverage_row(canon: str) -> FastpathCoverageRow:
         polars_long_fastpath=polars_long_fastpath,
         duckdb_fastpath=duckdb_fastpath,
         dual_backend_fastpath=dual_backend_fastpath,
-        composite_dual_backend_capable=composite_capable,
+        composite_dual_backend_capable=composite_structural,
+        composite_production_safe=composite_prod_safe,
+        composite_dual_backend_fastpath=composite_dual_backend_fastpath,
+        production_policy=production_policy,
         lowered_primitives=lowered,
     )
 
@@ -307,6 +341,7 @@ def summarize_fastpath_coverage(rows: Sequence[FastpathCoverageRow]) -> dict[str
         "composite_dual_backend_capable_count": sum(
             1 for r in rows if r.composite_dual_backend_capable
         ),
+        "composite_production_safe_count": sum(1 for r in rows if r.composite_production_safe),
         "benchmark_available_count": sum(1 for r in rows if r.benchmark_available),
         "production_fast_path": sorted(r.canonical for r in fast),
         "production_blocked_sample": [

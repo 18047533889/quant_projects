@@ -137,6 +137,12 @@ _register_bridge(
     param_names=["x", "y"],
 )
 _register_bridge(
+    "safe_div_null",
+    category="data_cleaning",
+    business_category="data_cleaning",
+    param_names=["x", "y"],
+)
+_register_bridge(
     "wavg",
     category="statistics",
     business_category="statistics_regression",

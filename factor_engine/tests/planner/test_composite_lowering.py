@@ -96,6 +96,19 @@ def test_collect_plan_ops_after_lowering():
     assert "ROC" not in ops
 
 
+def test_obv_lowers_with_coalesce_on_sign():
+    plan = PlanNode(
+        op="OBV",
+        inputs=[_col("close"), _col("volume")],
+        attrs={},
+    )
+    out = lower_composite_operators(plan)
+    assert out.op == "cum_sum"
+    inner = out.inputs[0]
+    assert inner.op == "multiply"
+    assert inner.inputs[0].op == "fillna_const"
+
+
 def test_obv_lowers_to_cum_sum_chain():
     plan = PlanNode(
         op="OBV",
@@ -106,8 +119,9 @@ def test_obv_lowers_to_cum_sum_chain():
     assert out.op == "cum_sum"
     inner = out.inputs[0]
     assert inner.op == "multiply"
-    assert inner.inputs[0].op == "sign"
-    assert inner.inputs[0].inputs[0].op == "ts_delta"
+    assert inner.inputs[0].op == "fillna_const"
+    assert inner.inputs[0].inputs[0].op == "sign"
+    assert inner.inputs[0].inputs[0].inputs[0].op == "ts_delta"
 
 
 def test_stochastic_k_lowers_to_min_max_div():
@@ -118,7 +132,7 @@ def test_stochastic_k_lowers_to_min_max_div():
     )
     out = lower_composite_operators(plan)
     assert out.op == "multiply"
-    assert out.inputs[1].op == "protected_div"
+    assert out.inputs[0].op == "safe_div_null"
 
 
 def test_stochastic_d_lowers_to_mean_of_k():
@@ -145,7 +159,7 @@ def test_operating_margin_lowers_to_protected_div():
         attrs={},
     )
     out = lower_composite_operators(plan)
-    assert out.op == "protected_div"
+    assert out.op == "safe_div_null"
 
 
 def test_quick_ratio_lowers_to_subtract_and_div():
@@ -155,7 +169,7 @@ def test_quick_ratio_lowers_to_subtract_and_div():
         attrs={},
     )
     out = lower_composite_operators(plan)
-    assert out.op == "protected_div"
+    assert out.op == "safe_div_null"
     assert out.inputs[0].op == "subtract"
 
 
@@ -166,7 +180,7 @@ def test_micro_spread_lowers_to_protected_div():
         attrs={},
     )
     out = lower_composite_operators(plan)
-    assert out.op == "protected_div"
+    assert out.op == "safe_div_null"
     assert out.inputs[0].op == "subtract"
 
 

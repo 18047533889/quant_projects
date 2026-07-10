@@ -63,6 +63,21 @@ _PIT_EXEMPT: frozenset[str] = frozenset(
     {"column", "literal", "col", "Lead", "next", "bfill", "causal_bfill", "fillna_interpolate", "shuffle"}
 )
 
+PERMANENTLY_FORBIDDEN_CANONICALS: frozenset[str] = frozenset(
+    {
+        "bfill",
+        "causal_bfill",
+        "fillna_interpolate",
+        "shuffle",
+        "Lead",
+        "next",
+        "dropna",
+        "constant",
+    }
+)
+
+ProductionPolicy = Literal["allowed", "pending", "denied", "permanently_forbidden"]
+
 # production DSL 禁止（可 research / experimental，不可 production 投递）
 PRODUCTION_DENIED_CANONICALS: frozenset[str] = frozenset(
     {
@@ -125,6 +140,47 @@ def is_production_denied(canon: str) -> bool:
     return False
 
 
+def infer_production_policy(canon: str) -> ProductionPolicy:
+    """推断算子 production policy（与 execution_kind 独立）。"""
+    from cleaned_operators.registry import OperatorRegistry
+    from planner.composite_lowering import has_composite_lowering
+
+    resolved = OperatorRegistry._aliases.get(canon, canon)
+    if resolved in PERMANENTLY_FORBIDDEN_CANONICALS:
+        return "permanently_forbidden"
+    backends_map = OperatorRegistry._operators.get(resolved)
+    if not backends_map:
+        return "denied"
+    chosen = "pandas_numpy" if "pandas_numpy" in backends_map else next(iter(backends_map))
+    op = backends_map.get(chosen)
+    if op is None:
+        return "denied"
+    catalog = OperatorRegistry._catalog.get(resolved, {})
+    status = _infer_status(catalog)
+    policy = infer_operator_policy(op, canonical=resolved)
+    allow = _compute_allow_in_production(
+        resolved,
+        status=status,
+        pit_safe=policy.pit_safe,
+        shape_preserving=policy.shape_preserving,
+    )
+    if allow:
+        return "allowed"
+    if has_composite_lowering(resolved):
+        return "pending"
+    if is_production_denied(resolved):
+        return "denied"
+    return "denied"
+
+
+def is_production_permanently_forbidden(canon: str) -> bool:
+    """永久禁止 production（含 PIT 泄漏类算子）。"""
+    from cleaned_operators.registry import OperatorRegistry
+
+    resolved = OperatorRegistry._aliases.get(canon, canon)
+    return resolved in PERMANENTLY_FORBIDDEN_CANONICALS
+
+
 @dataclass(frozen=True)
 class OperatorSpec:
     """算子生产契约（metadata + policy + lifecycle 聚合视图）。
@@ -149,6 +205,7 @@ class OperatorSpec:
     numerical_stability: NumericalStability = "medium"
     description: str = ""
     execution_kind: str = "primitive"
+    production_policy: ProductionPolicy = "denied"
     lowering_available: bool = False
     dual_backend_target: bool = False
 
@@ -176,6 +233,7 @@ class OperatorSpec:
             "numerical_stability": self.numerical_stability,
             "description": self.description,
             "execution_kind": self.execution_kind,
+            "production_policy": self.production_policy,
             "lowering_available": self.lowering_available,
             "dual_backend_target": self.dual_backend_target,
         }
@@ -324,6 +382,7 @@ def build_operator_spec(canon: str, *, backend: str | None = None) -> OperatorSp
     from planner.composite_lowering import has_composite_lowering, infer_execution_kind
 
     execution_kind = infer_execution_kind(resolved)
+    production_policy = infer_production_policy(resolved)
     lowering_available = has_composite_lowering(resolved)
 
     return OperatorSpec(
@@ -344,8 +403,9 @@ def build_operator_spec(canon: str, *, backend: str | None = None) -> OperatorSp
         numerical_stability=stability,
         description=str(getattr(meta, "description", "") or catalog.get("description", "")),
         execution_kind=execution_kind,
+        production_policy=production_policy,
         lowering_available=lowering_available,
-        dual_backend_target=execution_kind == "composite",
+        dual_backend_target=execution_kind in {"composite", "primitive", "stateful"},
     )
 
 
@@ -399,6 +459,7 @@ def spec_to_manifest_entry(spec: OperatorSpec) -> dict[str, Any]:
         "backends": list(spec.backends),
         "description": spec.description,
         "execution_kind": spec.execution_kind,
+        "production_policy": spec.production_policy,
         "lowering_available": spec.lowering_available,
         "dual_backend_target": spec.dual_backend_target,
     }

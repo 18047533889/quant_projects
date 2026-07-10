@@ -51,16 +51,20 @@ def main() -> int:
             print(f"缺少参考 manifest: {ref_path}", file=sys.stderr)
             return 1
         ref = json.loads(ref_path.read_text(encoding="utf-8"))
-        got = {
-            "schema_version": 1,
-            "operators": build_operator_manifest(
-                production_only=args.production_only,
-                fastpath_only=args.fastpath_only,
-            ),
-        }
-        if ref != got:
-            ref_names = {e.get("canonical") for e in ref.get("operators", [])}
-            got_names = {e.get("canonical") for e in got.get("operators", [])}
+        got_ops = build_operator_manifest(
+            production_only=args.production_only,
+            fastpath_only=args.fastpath_only,
+        )
+        ref_ops = ref.get("operators", [])
+        if ref.get("schema_version") != 2:
+            print(
+                f"operator_manifest.json 过期: schema_version={ref.get('schema_version')!r} (expected 2)",
+                file=sys.stderr,
+            )
+            return 1
+        if ref_ops != got_ops:
+            ref_names = {e.get("canonical") for e in ref_ops}
+            got_names = {e.get("canonical") for e in got_ops}
             print(
                 f"operator_manifest.json 过期: "
                 f"missing={sorted(ref_names - got_names)[:5]} "

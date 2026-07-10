@@ -1,5 +1,7 @@
 # `runtime` — 运行时编排（详尽说明)
 
+> **零基础读者**：请先读 **[`docs/FactorEngine完全指南.md`](../docs/FactorEngine完全指南.md)**。
+
 本目录提供 **因子引擎对外主入口 `FactorEngine`**：组装 **`backend` + `data_source` + 可选 cache**，完成 **compile → execute**，并支持 **YAML 一键运行** 与 **多因子并行**。
 
 ### 协作者速览（约 5 分钟）

@@ -37,6 +37,7 @@ DEFAULT_SEMANTICS = NumericSemantics()
 # 算子级覆盖
 OPERATOR_SEMANTICS: dict[str, NumericSemantics] = {
     "protected_div": NumericSemantics(div_zero="default"),
+    "safe_div_null": NumericSemantics(div_zero="null"),
     "protected_log": NumericSemantics(input_nan_to_null=True, div_zero="default"),
     "protected_sqrt": NumericSemantics(input_nan_to_null=True),
     "divide": NumericSemantics(div_zero="inf"),

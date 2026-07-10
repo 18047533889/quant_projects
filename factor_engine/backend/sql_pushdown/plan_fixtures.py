@@ -42,6 +42,7 @@ def minimal_plan(op: str) -> PlanNode:
         "ewm_corr",
         "ewm_cov",
         "protected_div",
+        "safe_div_null",
         "ts_regression",
         "Slope",
         "power",

@@ -30,6 +30,7 @@ POLARS_LONG_NATIVE: frozenset[str] = frozenset(
         "floor",
         "ceil",
         "protected_div",
+        "safe_div_null",
         "protected_log",
         "protected_sqrt",
         "inverse",

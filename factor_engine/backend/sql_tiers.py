@@ -67,6 +67,7 @@ SQL_IMPLEMENTED_CANONICALS: frozenset[str] = frozenset(
         "ts_decay_linear",
         "coalesce",
         "protected_div",
+        "safe_div_null",
         "protected_log",
         "protected_sqrt",
         "nan_to_num",

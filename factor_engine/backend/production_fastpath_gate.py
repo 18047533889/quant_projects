@@ -17,6 +17,9 @@ class FastpathGateResult:
     ok: bool
     violations: tuple[str, ...]
     ops_checked: tuple[str, ...]
+    original_ops: tuple[str, ...] = ()
+    lowered_ops: tuple[str, ...] = ()
+    lowering_trace: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         """序列化为可 JSON 化的字典。
@@ -28,7 +31,50 @@ class FastpathGateResult:
             "ok": self.ok,
             "violations": list(self.violations),
             "ops_checked": list(self.ops_checked),
+            "original_ops": list(self.original_ops),
+            "lowered_ops": list(self.lowered_ops),
+            "lowering_trace": [{"source": s, "primitives": list(p)} for s, p in self.lowering_trace],
         }
+
+
+def check_original_operator_policy(plan: Any) -> list[str]:
+    """阶段 A：原始 plan（lowering 前）production policy 门禁。"""
+    from cleaned_operators.operator_spec import (
+        build_operator_spec,
+        infer_production_policy,
+        is_production_denied,
+        is_production_permanently_forbidden,
+    )
+
+    violations: list[str] = []
+    for canon in _iter_plan_ops(plan):
+        if is_production_permanently_forbidden(canon):
+            violations.append(f"{canon}: permanently forbidden")
+            continue
+        policy = infer_production_policy(canon)
+        if policy == "permanently_forbidden":
+            violations.append(f"{canon}: production_policy=permanently_forbidden")
+            continue
+        if policy == "pending":
+            violations.append(f"{canon}: production_policy=pending（research composite，不可 production）")
+            continue
+        if policy == "denied" or is_production_denied(canon):
+            violations.append(f"{canon}: production_policy=denied")
+            continue
+        spec = build_operator_spec(canon)
+        if spec is None:
+            violations.append(f"{canon}: 无 runtime 实现")
+            continue
+        if not spec.allow_in_production:
+            violations.append(f"{canon}: 不允许 production（status={spec.status}）")
+            continue
+        if not spec.pit_safe:
+            violations.append(f"{canon}: pit_safe=False")
+        if not spec.deterministic:
+            violations.append(f"{canon}: non-deterministic")
+        if not spec.shape_preserving:
+            violations.append(f"{canon}: shape_preserving=False")
+    return violations
 
 
 _SKIP_OPS = frozenset({"column", "literal", "materialized_series", "plan_ref"})
@@ -161,7 +207,7 @@ def _check_full_plan_compilation(plan: Any, *, require: frozenset[FastpathBacken
     return violations
 
 
-def check_production_fastpath_plan_ops(
+def check_lowered_backend_fastpath(
     plan: Any,
     *,
     require: Sequence[FastpathBackend] = ("duckdb_sql", "polars_long_native"),
@@ -170,24 +216,18 @@ def check_production_fastpath_plan_ops(
     require_dual: bool | None = None,
     check_full_plan: bool | None = None,
 ) -> FastpathGateResult:
-    """检查计划每个 op 是否可走 production fast path。
-
-    strict 模式（``FACTOR_ENGINE_PRODUCTION_REQUIRE_FASTPATH=1`` 默认开启）额外禁止：
-    - map_groups / registry / passthrough（即使 DuckDB 可下推）
-    - deferred 算子
-    """
+    """阶段 B：lowering 后 plan 的 backend fastpath 门禁。"""
     from backend.polars_long_policy import infer_polars_long_tier
     from backend.polars_long_production import POLARS_LONG_FASTPATH_DEFERRED
     from backend.sql_tiers import SQL_PRODUCTION_DEFERRED_CANONICALS
     from cleaned_operators.operator_spec import build_operator_spec
+    from planner.composite_lowering import has_composite_lowering
 
     is_strict = fastpath_gate_strict(strict=strict)
     mode = _resolve_require_mode(require_mode, require_dual=require_dual)
     require_set = frozenset(require)
     violations: list[str] = []
     ops = _iter_plan_ops(plan)
-
-    from planner.composite_lowering import has_composite_lowering
 
     for canon in ops:
         if is_strict and has_composite_lowering(canon):
@@ -258,16 +298,51 @@ def check_production_fastpath_plan_ops(
     )
 
 
+def check_production_fastpath_plan_ops(
+    plan: Any,
+    *,
+    original_plan: Any | None = None,
+    require: Sequence[FastpathBackend] = ("duckdb_sql", "polars_long_native"),
+    require_mode: RequireMode = "any",
+    strict: bool | None = None,
+    require_dual: bool | None = None,
+    check_full_plan: bool | None = None,
+    lowering_trace: Sequence[tuple[str, tuple[str, ...]]] | None = None,
+) -> FastpathGateResult:
+    """两阶段 production gate：原始 policy + lowered backend fastpath。"""
+    violations: list[str] = []
+    original_ops: tuple[str, ...] = ()
+    if original_plan is not None:
+        original_ops = tuple(_iter_plan_ops(original_plan))
+        violations.extend(check_original_operator_policy(original_plan))
+
+    backend = check_lowered_backend_fastpath(
+        plan,
+        require=require,
+        require_mode=require_mode,
+        strict=strict,
+        require_dual=require_dual,
+        check_full_plan=check_full_plan,
+    )
+    violations.extend(backend.violations)
+    trace = tuple(lowering_trace or ())
+    return FastpathGateResult(
+        ok=not violations,
+        violations=tuple(dict.fromkeys(violations)),
+        ops_checked=backend.ops_checked,
+        original_ops=original_ops,
+        lowered_ops=backend.ops_checked,
+        lowering_trace=trace,
+    )
+
+
 def check_production_fastpath_formula_ops(
     formula: str,
     *,
     use_real_plan: bool = True,
     **kwargs: Any,
 ) -> FastpathGateResult:
-    """解析公式并检查 fast path。
-
-    ``use_real_plan=True``（默认）时编译真实 PlanNode；False 时仅 AST+minimal_plan 快速提示。
-    """
+    """解析公式并检查 fast path（两阶段：原始 policy + lowered backend）。"""
     if use_real_plan:
         try:
             from api.dsl_parser import parse_expr
@@ -277,8 +352,14 @@ def check_production_fastpath_formula_ops(
 
             expr = parse_expr(str(formula or ""))
             analysis = Analyzer().lower(expr)
-            plan = Optimizer().optimize(Lowerer().to_logical_plan(analysis.ir))
-            return check_production_fastpath_plan_ops(plan, **kwargs)
+            original = Lowerer().to_logical_plan(analysis.ir)
+            optimized, pre_lowering, trace = Optimizer().optimize_with_trace(original)
+            return check_production_fastpath_plan_ops(
+                optimized,
+                original_plan=pre_lowering,
+                lowering_trace=trace,
+                **kwargs,
+            )
         except Exception as exc:
             return FastpathGateResult(
                 ok=False,

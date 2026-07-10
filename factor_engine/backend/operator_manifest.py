@@ -6,21 +6,18 @@ import json
 from pathlib import Path
 from typing import Any
 
+from backend.composite_evidence import COMPOSITE_REFERENCE_PARITY_VERIFIED
+
 
 def build_operator_manifest_entry(canon: str) -> dict[str, Any]:
-    """构建单个 canonical 的 manifest 条目（capability + fastpath 视图）。
-
-    参数:
-        canon: 算子 canonical 名称或别名。
-
-    返回:
-        含各 backend 状态、fastpath 标志与 parity 信息的字典。
-    """
+    """构建单个 canonical 的 manifest 条目（capability + fastpath 视图）。"""
     from backend.fastpath_coverage import build_fastpath_coverage_row
     from backend.operator_capability import capability_for, resolve_canonical
     from backend.polars_long_policy import infer_polars_long_tier
     from backend.sql_tiers import effective_sql_production_safe
     from cleaned_operators.operator_spec import build_operator_spec, spec_to_manifest_entry
+    from planner.composite_lowering import lowered_primitives as probe_lowered_primitives
+    from backend.polars_long_production import polars_long_production_tier
 
     name = resolve_canonical(canon)
     spec = build_operator_spec(name)
@@ -32,7 +29,6 @@ def build_operator_manifest_entry(canon: str) -> dict[str, Any]:
     polars = capability_for(name, "polars")
     ch = capability_for(name, "clickhouse_sql")
     tier = infer_polars_long_tier(name)
-    from backend.polars_long_production import polars_long_production_tier
 
     polars_long_label = tier
     if tier == "native" and row.polars_long_native_production_safe:
@@ -40,20 +36,22 @@ def build_operator_manifest_entry(canon: str) -> dict[str, Any]:
     elif tier == "native":
         polars_long_label = "native"
     native_tier = polars_long_production_tier(name) if tier == "native" else tier
-    from planner.composite_lowering import lowered_primitives as probe_lowered_primitives
-
     lowered = probe_lowered_primitives(name) if row.lowering_available else None
+
     return {
         **base,
         "canonical": name,
         "shape_preserving": spec.shape_preserving,
+        "production_policy": spec.production_policy,
         "execution_kind": row.execution_kind,
         "lowering_available": row.lowering_available,
         "lowered_primitives": list(lowered) if lowered else [],
         "composite_dual_backend_capable": row.composite_dual_backend_capable,
-        "dual_backend_fastpath": row.dual_backend_fastpath,
+        "composite_production_safe": row.composite_production_safe,
+        "composite_reference_parity": name in COMPOSITE_REFERENCE_PARITY_VERIFIED,
         "polars_long_fastpath": row.polars_long_fastpath,
         "duckdb_fastpath": row.duckdb_fastpath,
+        "dual_backend_fastpath": row.dual_backend_fastpath,
         "pandas": capability_for(name, "pandas_numpy").status,
         "polars_panel": polars.status,
         "polars_long": polars_long_label,
@@ -69,7 +67,6 @@ def build_operator_manifest_entry(canon: str) -> dict[str, Any]:
         "research_allowed": True,
         "production_allowed": spec.allow_in_production,
         "production_fastpath_allowed": row.production_fast_path,
-        "dual_backend_fastpath": row.dual_backend_fastpath,
     }
 
 
@@ -78,15 +75,7 @@ def build_operator_manifest(
     production_only: bool = False,
     fastpath_only: bool = False,
 ) -> list[dict[str, Any]]:
-    """构建全量或过滤后的算子 manifest 列表。
-
-    参数:
-        production_only: 为 ``True`` 时仅包含 ``allow_in_production`` 算子。
-        fastpath_only: 为 ``True`` 时仅包含可走 production fast path 的算子。
-
-    返回:
-        manifest 条目字典列表。
-    """
+    """构建全量或过滤后的算子 manifest 列表。"""
     from cleaned_operators.operator_spec import iter_operator_specs
 
     rows: list[dict[str, Any]] = []
@@ -100,15 +89,35 @@ def build_operator_manifest(
     return rows
 
 
-def write_operator_manifest(path: Path, **kwargs: Any) -> None:
-    """将算子 manifest 写入 JSON 文件。
+def _manifest_metadata() -> dict[str, str]:
+    """Manifest 生成元数据（schema v2）。"""
+    import subprocess
+    from datetime import datetime, timezone
 
-    参数:
-        path: 输出文件路径。
-        **kwargs: 透传给 :func:`build_operator_manifest` 的过滤参数。
-    """
+    sha = "unknown"
+    try:
+        sha = (
+            subprocess.check_output(
+                ["git", "rev-parse", "HEAD"],
+                cwd=str(Path(__file__).resolve().parents[1]),
+                stderr=subprocess.DEVNULL,
+            )
+            .decode()
+            .strip()
+        )
+    except Exception:
+        pass
+    return {
+        "schema_version": 2,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_commit_sha": sha,
+    }
+
+
+def write_operator_manifest(path: Path, **kwargs: Any) -> None:
+    """将算子 manifest 写入 JSON 文件。"""
     data = {
-        "schema_version": 1,
+        **_manifest_metadata(),
         "operators": build_operator_manifest(**kwargs),
     }
     path.parent.mkdir(parents=True, exist_ok=True)

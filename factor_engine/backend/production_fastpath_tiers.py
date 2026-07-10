@@ -32,7 +32,7 @@ P0_ELEMENT_CANONICALS: frozenset[str] = frozenset(
 )
 
 P0_PROTECTED_CANONICALS: frozenset[str] = frozenset(
-    {"protected_div", "protected_log", "protected_sqrt"}
+    {"protected_div", "protected_log", "protected_sqrt", "safe_div_null"}
 )
 
 P0_LOGIC_CANONICALS: frozenset[str] = frozenset(

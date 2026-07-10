@@ -79,6 +79,7 @@ def _count_plan_nodes(plan: Any) -> int:
 
 
 def _build_analysis_summary(analysis: Any) -> dict[str, Any]:
+    """把 ``AnalysisResult`` 压成 pipeline JSON 可序列化摘要。"""
     return {
         "lookback": int(getattr(analysis, "lookback", 0)),
         "has_ts_op": bool(getattr(analysis, "has_ts_op", False)),
@@ -89,6 +90,7 @@ def _build_analysis_summary(analysis: Any) -> dict[str, Any]:
 
 
 def _build_plan_summary(plan: Any) -> dict[str, Any]:
+    """计划树根算子名与节点总数。"""
     return {
         "root_op": getattr(plan, "op", None),
         "node_count": _count_plan_nodes(plan),
@@ -96,6 +98,7 @@ def _build_plan_summary(plan: Any) -> dict[str, Any]:
 
 
 def _build_result_summary(result: Any, preview_rows: int) -> dict[str, Any]:
+    """因子结果 Series 的行数、dtype、前几行 preview（供 pipeline 报告）。"""
     row_count = int(len(result)) if hasattr(result, "__len__") else None
     non_null_count = None
     if hasattr(result, "notna"):
@@ -125,18 +128,21 @@ def _build_result_summary(result: Any, preview_rows: int) -> dict[str, Any]:
 
 
 def _write_yaml_snapshot(config: FactorEngineConfig, target_path: Path) -> str:
+    """把解析后的配置写回 YAML 快照文件。"""
     target_path.parent.mkdir(parents=True, exist_ok=True)
     target_path.write_text(yaml.safe_dump(asdict(config), allow_unicode=True, sort_keys=False), encoding="utf-8")
     return str(target_path)
 
 
 def _copy_snapshot(config_path: Path, target_path: Path) -> str:
+    """原样复制用户 YAML 到 run 目录 config_snapshots/。"""
     target_path.parent.mkdir(parents=True, exist_ok=True)
     target_path.write_text(config_path.read_text(encoding="utf-8"), encoding="utf-8")
     return str(target_path)
 
 
 def _failed_result(*, config_name: str, factor_name: str | None, mode: str, exc: Exception) -> dict[str, Any]:
+    """单条 config 失败时的标准 pipeline 结果结构（含 traceback）。"""
     return {
         "config_name": config_name,
         "factor_name": factor_name,
@@ -175,6 +181,7 @@ def _execute_config_with_retries(
     lookback_extra: int | None = None,
     recompute_tail_bars: int | None = None,
 ) -> dict[str, Any]:
+    """带 ``max_retries`` 的 config 执行包装，失败打 warning 后重试。"""
     attempts = max(0, int(max_retries)) + 1
     last_exc: Exception | None = None
     for attempt in range(attempts):
@@ -231,6 +238,7 @@ def _execute_config(
     lookback_extra: int | None = None,
     recompute_tail_bars: int | None = None,
 ) -> dict[str, Any]:
+    """执行单条 YAML：``run`` / ``materialize`` / ``materialize_incremental`` 三模式。"""
     engine, factor = FactorEngine.from_loaded_config(config)
     should_materialize = config.materialization is not None if materialize is None else materialize
     if incremental and not should_materialize:
@@ -310,6 +318,7 @@ def _execute_config(
 
 
 def _write_result_json(results_root: Path, name: str, item: dict[str, Any]) -> str:
+    """写入单因子 pipeline 结果 JSON，返回相对路径 ``results/xxx.json``。"""
     filename = f"{_safe_name(name)}.json"
     relative_path = Path("results") / filename
     item["result_json_path"] = str(relative_path)
@@ -326,6 +335,7 @@ def _finalize_run_summary(
     extra: dict[str, Any] | None = None,
     otlp_endpoint: str | None = None,
 ) -> dict[str, Any]:
+    """汇总 batch 结果、写 run_summary / metrics，可选 OTLP 推送。"""
     summary = _build_summary(
         output_root=output_root,
         results=results,
@@ -357,6 +367,7 @@ def _finalize_run_summary(
 
 
 def _build_summary(*, output_root: Path, results: list[dict[str, Any]], config_source: str | None = None) -> dict[str, Any]:
+    """统计本次 pipeline run 的成功/失败/落盘条数。"""
     return {
         "timestamp": datetime.now().isoformat(timespec="seconds"),
         "output_root": str(output_root),
@@ -577,6 +588,7 @@ def _run_single_config_file(
     lookback_extra: int | None = None,
     recompute_tail_bars: int | None = None,
 ) -> tuple[str, dict[str, Any]]:
+    """加载单个 YAML 并执行，返回 ``(config_stem, pipeline_item)``。"""
     config_name = config_path.stem
     try:
         config = load_config(config_path, profile=profile)
@@ -612,6 +624,7 @@ def _pipeline_item_from_engine_output(
     preview_rows: int,
     mode: str,
 ) -> dict[str, Any]:
+    """把 ``FactorEngine.run/materialize`` 输出转成标准 pipeline item 结构。"""
     factor = output.get("factor")
     factor_name = getattr(factor, "name", None) if factor is not None else config_name
     item: dict[str, Any] = {
@@ -638,6 +651,7 @@ def _directory_wants_materialize(
     configs: list[FactorEngineConfig],
     materialize: bool | None,
 ) -> bool:
+    """目录 batch 是否应走 materialize（CLI 显式指定或全部 config 含 materialization）。"""
     if materialize is not None:
         return materialize
     if not configs:
@@ -660,6 +674,7 @@ def _build_pipeline_overrides(
     lookback_extra: int | None = None,
     recompute_tail_bars: int | None = None,
 ) -> PipelineConfigOverrides:
+    """把 CLI/pipeline 层 DQ、落盘、增量参数打包为 overrides 对象。"""
     return PipelineConfigOverrides(
         dq_check=dq_check,
         dq_strict=dq_strict,
@@ -684,6 +699,7 @@ def _directory_batch_eligible(
     n_jobs: int,
     max_retries: int,
 ) -> bool:
+    """目录是否可用 ``run_many_from_config(batch_run=True)`` 一次引擎 batch（非 incremental）。"""
     if incremental or int(n_jobs) != 1 or max_retries > 0 or len(config_paths) < 2:
         return False
     configs = [load_config(path, profile=profile) for path in config_paths]
@@ -700,6 +716,7 @@ def _directory_incremental_batch_eligible(
     n_jobs: int,
     max_retries: int,
 ) -> bool:
+    """目录是否可用 ``materialize_many_from_config(batch_run=True)`` 增量 batch。"""
     return (
         incremental
         and int(n_jobs) == 1
@@ -716,6 +733,7 @@ def _run_config_directory_batch(
     preview_rows: int,
     pipeline_overrides: PipelineConfigOverrides,
 ) -> list[tuple[str, dict[str, Any]]]:
+    """同目录多 YAML：一次 ``run_many`` 或 ``materialize_many`` batch，再拆成 pipeline items。"""
     configs = [load_config(path, profile=profile) for path in config_paths]
     wants_materialize = _directory_wants_materialize(configs, materialize)
     path_by_factor = {cfg.factor.name: path for path, cfg in zip(config_paths, configs, strict=True)}
@@ -783,6 +801,7 @@ def _run_config_directory_incremental_batch(
     preview_rows: int,
     pipeline_overrides: PipelineConfigOverrides,
 ) -> list[tuple[str, dict[str, Any]]] | None:
+    """目录增量 batch：``materialize_many_from_config(incremental=True, batch_run=True)``。"""
     configs = [load_config(path, profile=profile) for path in config_paths]
     path_by_factor = {cfg.factor.name: path for path, cfg in zip(config_paths, configs, strict=True)}
     pairs: list[tuple[str, dict[str, Any]]] = []

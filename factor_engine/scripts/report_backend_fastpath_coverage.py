@@ -26,7 +26,12 @@ def _bootstrap() -> None:
     register_sql_backends()
 
 
-def _validate_strict(rows, *, require_block_reason: bool) -> list[str]:
+def _validate_strict(
+    rows,
+    *,
+    require_block_reason: bool,
+    require_dual_backend: bool = False,
+) -> list[str]:
     """严格模式校验：production core 全覆盖、SQL emitter 与 block_reason 完整性。"""
     from backend.operator_capability import resolve_canonical
     from cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS
@@ -62,6 +67,21 @@ def _validate_strict(rows, *, require_block_reason: bool) -> list[str]:
         if row.allow_in_production and not row.production_fast_path and not row.fastpath_block_reason:
             errors.append(f"PRODUCTION_CORE {rc}: 缺少 fastpath_block_reason")
 
+    if require_dual_backend:
+        from backend.polars_long_production import POLARS_LONG_FASTPATH_DEFERRED
+        from backend.sql_tiers import SQL_PRODUCTION_DEFERRED_CANONICALS
+        from planner.composite_lowering import infer_execution_kind
+
+        for r in rows:
+            if not r.allow_in_production:
+                continue
+            if r.canonical in POLARS_LONG_FASTPATH_DEFERRED or r.canonical in SQL_PRODUCTION_DEFERRED_CANONICALS:
+                continue
+            if infer_execution_kind(r.canonical) in {"composite", "stateful", "external_kernel"}:
+                continue
+            if not r.dual_backend_fastpath:
+                errors.append(f"{r.canonical}: production 算子未达到 dual_backend_fastpath")
+
     return errors
 
 
@@ -80,7 +100,13 @@ def main() -> int:
         action="store_true",
         help="仅输出 PRODUCTION_CORE_CANONICALS",
     )
+    parser.add_argument(
+        "--require-dual-backend",
+        action="store_true",
+        help="production allowed 算子须 dual_backend_fastpath=True",
+    )
     args = parser.parse_args()
+    require_dual = args.require_dual_backend or args.strict
 
     _bootstrap()
 
@@ -137,7 +163,11 @@ def main() -> int:
                 )
 
     if args.strict:
-        errors = _validate_strict(rows, require_block_reason=True)
+        errors = _validate_strict(
+            rows,
+            require_block_reason=True,
+            require_dual_backend=require_dual,
+        )
         if errors:
             print("\nSTRICT FAILURES:", file=sys.stderr)
             for e in errors:

@@ -2,58 +2,17 @@
 
 可扩展的量化因子引擎框架，支持表达式树构建、编译优化、多后端执行与配置驱动运行。
 
-**文档索引**：[`docs/README.md`](docs/README.md) · [`docs/源码注释导读.md`](docs/源码注释导读.md) · 挖掘投递 [`docs/miner_delivery_spec.md`](docs/miner_delivery_spec.md) · 算子写法 [`docs/算子与导入教程.md`](docs/算子与导入教程.md) · 白名单 [`docs/dsl_operators_reference.md`](docs/dsl_operators_reference.md) · 语义 [`docs/operators_semantics.md`](docs/operators_semantics.md) · 回测 ADR [`docs/adr_backtest_target_position.md`](docs/adr_backtest_target_position.md) · 变更 [`docs/changelog_shw.md`](docs/changelog_shw.md)
+**文档索引**：**[`docs/FactorEngine完全指南.md`](docs/FactorEngine完全指南.md)**（零基础必读） · [`docs/README.md`](docs/README.md) · [`docs/源码注释导读.md`](docs/源码注释导读.md) · 挖掘投递 [`docs/miner_delivery_spec.md`](docs/miner_delivery_spec.md) · 算子写法 [`docs/算子与导入教程.md`](docs/算子与导入教程.md) · 白名单 [`docs/dsl_operators_reference.md`](docs/dsl_operators_reference.md) · 语义 [`docs/operators_semantics.md`](docs/operators_semantics.md) · 回测 ADR [`docs/adr_backtest_target_position.md`](docs/adr_backtest_target_position.md) · 变更 [`docs/changelog_shw.md`](docs/changelog_shw.md)
 
 ### 协作者速览（新人约 5 分钟）
+
+> **完全不了解 factor_engine？** 请先读 **[`docs/FactorEngine完全指南.md`](docs/FactorEngine完全指南.md)**（总文档，30 分钟建立全局认识）。
 
 1. **数据流（本仓库在干什么）**：`api`（`Factor` / DSL / 算子工厂，经 **`cleaned_operators`**）→ `expr` → `ir` → `planner` → `backend` → **MultiIndex 因子序列**；**编排入口**是 **`runtime/FactorEngine`**。挖掘侧入门：**[`docs/算子与导入教程.md`](docs/算子与导入教程.md)**。
 2. **Backend 覆盖（2026-07）**：Polars **325** · SQL 下推 **88** 算子（[`docs/sql_pushdown_coverage.md`](docs/sql_pushdown_coverage.md)）。
 3. **规范从哪读**：算子 **能否写入 manifest** 以 [`docs/dsl_operators_reference.md`](docs/dsl_operators_reference.md) 为准；参数语义见 [`docs/operators_semantics.md`](docs/operators_semantics.md)。
 4. **动手跑**：最小脚本 [`examples/simple_factor.py`](examples/simple_factor.py)；配置驱动见 `examples/` 与 **`FactorEngine.run_from_config`**；**批量 YAML** 见 [`runtime/README.md`](runtime/README.md) §8；**目标仓位回测**见 [`../../backtest_layer/single_asset_backtest/README.md`](../../backtest_layer/single_asset_backtest/README.md) 文首 **「新人 5 分钟上手」**。
-5. **版本与变更**：[`docs/changelog_shw.md`](docs/changelog_shw.md)；企业级路线图 [`docs/enterprise_factor_engine_roadmap.md`](docs/enterprise_factor_engine_roadmap.md)（Phase 14–16 已完成）。
-
-> **第 5 版更改-shw**：更新「支持的算子」「项目结构」与 `docs/` 索引，以反映 `api/operators/` 包、算子注册表及 WQ 风格扩展；细节仍以 `changelog_shw.md` 分版条为准。
-
-> **第 7 版更改-shw**：落地 **清洗 / 技术指标 / 上下文 / group_*** 与 **子树缓存 MVP**；README 本节与结构树同步，详见 `changelog_shw.md`「第 7 版」。
-
-> **第 8 版更改-shw**：对齐 **`docs/factor_engine_llm_prompt`（.md / .txt）** 中算子字典与 **`enable_cache`** 说明；**`test_dsl_parser`** 覆盖新 DSL；`changelog` 为第 3 版 **`group_*` 占位** 补历史脚注。详见 `changelog_shw.md`「第 8 版」。
-
-> **第 9 版更改-shw**：**Bottleneck** 加速 `ts_mean` / `ts_max` / `ts_min`（安装 `factor-engine[accel]` 后生效）；可用环境变量 **`FACTOR_ENGINE_DISABLE_BOTTLENECK=1`** 对照测试或与 pandas 完全一致路径。详见 `changelog_shw.md`「第 9 版」。
-
-> **第 10–14 版更改-shw**：`bucket` / `trade_when` / `ts_step(d,anchor)` / `hump` 已在 Pandas 实装；**`vec_avg` / `vec_sum`** 按路线图 **路径 B** 暂缓；**PolarsBackend** 当前 **委托 PandasBackend**（保留 `build_backend("polars")` 入口，非独立 Polars 执行）；未注册进 `cleaned_operators` 的远期算子 **不在 DSL 白名单**，`parse_expr` 即失败；**`sin` / `cos`** 与 **Joblib** 多因子示例见 `examples/run_factors_joblib.py`。详见 `changelog_shw.md`。
-
-> **第 15 版更改-shw**：为 `bucket` / `trade_when` / `ts_step` / `hump`、`ts_regression` / `ts_quantile`、`group_*`、`orthogonalize` / `change_instrument` 及远期 stub 等 **加长源码内中文说明**（`expr/`、`api/operators/`、`pandas_backend` 相关 docstring）。详见 `changelog_shw.md`「第 15 版」。
-
-> **第 16 版更改-shw**：**技术指标大扩展**（`ts_atr`/`ts_donchian`/`ts_keltner`/`ts_macd`/`ts_cci`/`ts_stoch`/`ts_obv`/`ts_mfi`/`ts_dema` 等，见 `operators_semantics.md`）；**`neutralize`**（截面 OLS 残差）；**`ts_skew`/`ts_kurt`**。详见 `changelog_shw.md`「第 16 版」。
-> **第 18 版更改-shw**：**技术指标第二波**（`ts_adx`/`ts_aroon`/`ts_ad`/`ts_adosc`/`ts_sar`/`ts_cmo`/`ts_ppo`/`ts_apo`/`ts_ultosc`/`ts_stochrsi`/`ts_tema`/`ts_trima`/`ts_t3`）。详见 `changelog_shw.md`「第 18 版」。
-
-> **第 19 版更改-shw**：**技术指标第三批**（`ts_bop`/`ts_mom`/`ts_stochf`/`ts_trix`/`ts_adxr`/`ts_dx`/`ts_rocr`/`ts_rocr100`/`ts_linearreg_slope`/`ts_linearreg_angle`）。详见 `changelog_shw.md`「第 19 版」。
-
-> **第 20 版更改-shw**（**历史**；华泰对照文档已删除）：曾新增华泰研报算子对照；现 **只认** `build_dsl_allowlist()`。详见 `changelog_shw.md`「第 20 版」。
-
-> **第 21 版更改-shw**：曾新增独立华泰对照 py（已由 **第 22 版** 替代为融入 `api/operators` / `expr`）。
-
-> **第 22 版更改-shw**（**历史**；`expr/intraday.py`、`api/operators/intraday.py` 已在 **第 31 版** 删除）：华泰算子融入旧模块；新增 **`exp`**、**`INTRADAY_STUB_OPS`**；删除 `api/htsc_factor_factory_reference.py`。分钟 stub 现见 **`cleaned_operators/intraday_microstructure.py`**（catalog `status=stub`）。详见 `changelog_shw.md`「第 22 版」。
-
-> **第 23 版更改-shw**：**性能与后端选项**——[`planner/cse.py`](planner/cse.py) 多因子 **CSE** + [`FactorEngine.run_many`](runtime/engine.py)；[`backend/pandas_compat.py`](backend/pandas_compat.py) 可选 **Modin**（`pandas_modin` / `FACTOR_ENGINE_USE_MODIN`）；[`PolarsBackend`](backend/polars_backend.py) 扩展算子子集 + **`polars_lazy` / `FACTOR_ENGINE_POLARS_LAZY`**；[`runtime/perf_config.py`](runtime/perf_config.py)；脚本 [`scripts/profile_pandas_backend.py`](scripts/profile_pandas_backend.py)、[`scripts/bench_pandas_vs_modin.py`](scripts/bench_pandas_vs_modin.py)。详见 `changelog_shw.md`「第 23 版」。
-
-> **第 24 版更改-shw**：新增 **`backtest/` 单标回测子系统**（Backtrader 可选依赖）、冻结 `target_position` 对接 ADR，并补充最小示例与测试。详见 `changelog_shw.md`「第 24 版」。
->
-> **第 25 版更改-shw**：回测补齐 **D-3 策略注册/策略库**（`strategy_name`/`strategy_version`/`strategy_params`/`strategy_instance_id`）并引入 **分层指标 profile**（`core`/`standard`/`industrial`，覆盖 `sortino`/`calmar`/`var_95`/`cvar_95` 等扩展指标）。详见 `changelog_shw.md`「第 25 版」。
->
-> **第 26 版更改-shw**：回测补充 **信号时点与防前视**（`BacktestConfig.target_lag_bars`、`portfolio_weight_lag_bars`）、**可复现指纹**说明，并整理 README 回测章节与 ADR §13。详见 `changelog_shw.md`「第 26 版」。
->
-> **第 27 版更改-shw**：为 **`api/`、`backend/`、`expr/`、`ir/`、`planner/`、`runtime/`、`storage/`、`scripts/`、`tests/`、`examples/`、`docs/`** 等目录各增 **`README.md`**，并在 [`docs/README.md`](docs/README.md) 汇总索引。详见 `changelog_shw.md`「第 27 版」。
->
-> **第 28 版更改-shw**：各包 **`README.md` 深度扩写**（架构说明、逐文件表、数据流、契约与测试索引）。详见 `changelog_shw.md`「第 28 版」。
->
-> **第 29 版更改-shw**：**多资产回测文档与实现对齐**——`backtest/README.md`、`docs/adr_backtest_target_position.md`、根 `README.md` 统一叙述 **执行层 → `executed_weights` → 滞后 → 毛/净收益**；明确 **`portfolio_execution_engine: python`** 与 **`FACTOR_BACKTEST_EXECUTION_ENGINE`** 的关系及 **多资产 `data_fingerprint` 基于执行后权重**。详见 `changelog_shw.md`「第 29 版」。
->
-> **第 30 版更改-shw**：根目录与各包 **`README.md`** 增加 **「协作者速览（约 5 分钟）」**；**`docs/README.md`** 说明该约定。详见 `changelog_shw.md`「第 30 版」。
-
-> **第 31 版更改-shw**：**`cleaned_operators` 全量接入** — 删除 **`api/operators/`** 与强类型 **`expr/*`** 模块；DSL 白名单与 Pandas 执行均经 **`cleaned_operators`**；详见 [`api/README.md`](api/README.md)、[`cleaned_operators/README.md`](cleaned_operators/README.md)、[`docs/changelog_shw.md`](docs/changelog_shw.md)「第 31 版」。
-
-> **第 32 版更改-shw（企业级）**：**读端统一 `data_access`** + **生产 profile**（`examples/profiles/prod.yaml`）+ 批量配置 API；详见 [`docs/enterprise_factor_engine_roadmap.md`](docs/enterprise_factor_engine_roadmap.md) Phase 14–16 与 [`docs/changelog_shw.md`](docs/changelog_shw.md) 第 33–35 版。
+5. **版本与变更**：[`docs/changelog_shw.md`](docs/changelog_shw.md)
 
 ---
 

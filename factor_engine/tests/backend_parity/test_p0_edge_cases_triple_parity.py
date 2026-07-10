@@ -152,6 +152,7 @@ def _col(name: str):
 
 EDGE_CASES = [
     ("protected_div", lambda: make_cleaned_call_factory("protected_div")(col("numer"), col("denom"))),
+    ("safe_div_null", lambda: make_cleaned_call_factory("safe_div_null")(col("numer"), col("denom"))),
     ("protected_log", lambda: make_cleaned_call_factory("protected_log")(col("neg"))),
     ("protected_sqrt", lambda: make_cleaned_call_factory("protected_sqrt")(col("neg"))),
     ("divide", lambda: make_cleaned_call_factory("divide")(col("numer"), col("denom"))),
@@ -181,6 +182,7 @@ def test_p0_edge_polars_long_matches_pandas(edge_source, name, expr_builder):
 
 DUCKDB_EDGE_CASES = [
     ("protected_div", lambda: make_cleaned_call_factory("protected_div")(_col("numer"), _col("denom"))),
+    ("safe_div_null", lambda: make_cleaned_call_factory("safe_div_null")(_col("numer"), _col("denom"))),
     ("protected_log", lambda: make_cleaned_call_factory("protected_log")(_col("neg"))),
     ("protected_sqrt", lambda: make_cleaned_call_factory("protected_sqrt")(_col("neg"))),
     ("divide", lambda: make_cleaned_call_factory("divide")(_col("numer"), _col("denom"))),

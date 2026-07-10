@@ -96,6 +96,18 @@ def cum_sum(x: PlanNode) -> PlanNode:
     return PlanNode(op="cum_sum", inputs=[x], attrs={})
 
 
+def fillna_const(x: PlanNode, value: float) -> PlanNode:
+    return PlanNode(op="fillna_const", inputs=[x, literal(float(value))], attrs={})
+
+
 def protected_div(left: PlanNode, right: PlanNode) -> PlanNode:
     return binop("protected_div", left, right)
+
+
+def safe_div_null(left: PlanNode, right: PlanNode) -> PlanNode:
+    return binop("safe_div_null", left, right)
+
+
+def coalesce(*values: PlanNode) -> PlanNode:
+    return PlanNode(op="coalesce", inputs=list(values), attrs={})
 

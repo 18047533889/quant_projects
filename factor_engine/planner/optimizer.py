@@ -22,7 +22,30 @@ class Optimizer:
         from planner.rewrite_fastpath import rewrite_plan_for_fastpath
 
         lowered = lower_composite_operators(folded)
-        return rewrite_plan_for_fastpath(lowered)
+        refolded = self._fold_literals(lowered)
+        return rewrite_plan_for_fastpath(refolded)
+
+    def lower_only(self, plan: PlanNode) -> PlanNode:
+        """仅 composite lowering + 常量折叠（不含 fastpath rewrite）。"""
+        from planner.composite_lowering import lower_composite_operators
+
+        folded = self._fold_literals(plan)
+        lowered = lower_composite_operators(folded)
+        return self._fold_literals(lowered)
+
+    def optimize_with_trace(
+        self, plan: PlanNode
+    ) -> tuple[PlanNode, PlanNode, tuple[tuple[str, tuple[str, ...]], ...]]:
+        """返回 ``(optimized_plan, pre_lowering_plan, lowering_trace)``。"""
+        from planner.composite_lowering import build_lowering_trace, lower_composite_operators
+        from planner.rewrite_fastpath import rewrite_plan_for_fastpath
+
+        folded = self._fold_literals(plan)
+        lowered = lower_composite_operators(folded)
+        refolded = self._fold_literals(lowered)
+        final = rewrite_plan_for_fastpath(refolded)
+        trace = build_lowering_trace(folded, refolded)
+        return final, folded, trace
 
     def _fold_literals(self, node: PlanNode) -> PlanNode:
         """自底向上折叠二元/多元算术字面量子表达式。"""

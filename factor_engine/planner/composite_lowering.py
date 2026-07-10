@@ -11,7 +11,17 @@ LoweringFn = Callable[[PlanNode], PlanNode]
 _COMPOSITE_LOWERINGS: dict[str, LoweringFn] = {}
 _LOWERINGS_LOADED = False
 
-ExecutionKind = str  # primitive | composite | stateful | external_kernel | forbidden
+ExecutionKind = str  # primitive | composite | stateful | external_kernel
+
+MAX_COMPOSITE_LOWERING_DEPTH = 32
+
+
+class CompositeLoweringCycleError(RuntimeError):
+    """Composite lowering 检测到循环。"""
+
+
+class CompositeLoweringDepthError(RuntimeError):
+    """Composite lowering 超过最大深度。"""
 
 # 需 external kernel / 非 SQL-Polars 可内联的算子（research 或专用 runtime）
 EXTERNAL_KERNEL_CANONICALS: frozenset[str] = frozenset(
@@ -103,9 +113,7 @@ def has_composite_lowering(canon: str) -> bool:
 
 
 def infer_execution_kind(canon: str) -> str:
-    """推断算子 execution_kind（coverage / manifest 用）。"""
-    from cleaned_operators.operator_spec import is_production_denied
-
+    """推断算子 execution_kind（不受 production deny 影响）。"""
     resolved = canon
     try:
         from cleaned_operators.registry import OperatorRegistry
@@ -114,8 +122,6 @@ def infer_execution_kind(canon: str) -> str:
     except Exception:
         pass
 
-    if is_production_denied(resolved):
-        return "forbidden"
     if has_composite_lowering(resolved):
         return "composite"
     if resolved in EXTERNAL_KERNEL_CANONICALS:
@@ -135,12 +141,38 @@ def infer_execution_kind(canon: str) -> str:
     return "primitive"
 
 
-def lower_composite_operators(node: PlanNode) -> PlanNode:
+def build_lowering_trace(before: PlanNode, after: PlanNode) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """对比 lowering 前后 plan，返回 ``(source_canonical, lowered_primitives...)`` 轨迹。"""
+    from cleaned_operators.registry import OperatorRegistry
+
+    before_ops = set(collect_plan_ops(before))
+    trace: list[tuple[str, tuple[str, ...]]] = []
+    for src in before_ops:
+        if not has_composite_lowering(src):
+            continue
+        prims = lowered_primitives(src)
+        if prims:
+            trace.append((src, prims))
+    _ = OperatorRegistry  # registry import warms aliases for collect_plan_ops
+    after_ops = tuple(collect_plan_ops(after))
+    if not trace and before_ops - set(after_ops):
+        for removed in sorted(before_ops - set(after_ops)):
+            if has_composite_lowering(removed):
+                prims = tuple(op for op in after_ops if op not in before_ops) or after_ops
+                trace.append((removed, prims))
+    return tuple(trace)
+
+
+def lower_composite_operators(
+    node: PlanNode,
+    *,
+    _stack: tuple[str, ...] = (),
+) -> PlanNode:
     """自底向上递归，将已注册的高级算子展开为基础 DAG。"""
     _ensure_lowerings_loaded()
     from cleaned_operators.registry import OperatorRegistry
 
-    children = [lower_composite_operators(child) for child in node.inputs]
+    children = [lower_composite_operators(child, _stack=_stack) for child in node.inputs]
     current = PlanNode(
         op=node.op,
         inputs=children,
@@ -148,13 +180,20 @@ def lower_composite_operators(node: PlanNode) -> PlanNode:
         node_id=node.node_id,
     )
     canon = OperatorRegistry._aliases.get(current.op, current.op)
+    if canon in _stack:
+        chain = " -> ".join(_stack + (canon,))
+        raise CompositeLoweringCycleError(f"CompositeLoweringCycleError: {chain}")
+    if len(_stack) >= MAX_COMPOSITE_LOWERING_DEPTH:
+        raise CompositeLoweringDepthError(
+            f"Composite lowering exceeded max depth {MAX_COMPOSITE_LOWERING_DEPTH}: {' -> '.join(_stack)}"
+        )
     lowering = _COMPOSITE_LOWERINGS.get(canon)
     if lowering is None:
         return current
     lowered = lowering(current)
     if lowered.op == current.op and lowered.inputs == current.inputs:
         return current
-    return lower_composite_operators(lowered)
+    return lower_composite_operators(lowered, _stack=_stack + (canon,))
 
 
 def collect_plan_ops(node: PlanNode) -> list[str]:
@@ -208,5 +247,5 @@ def lowered_primitives(canon: str) -> tuple[str, ...] | None:
         inputs=probe_inputs,
         attrs={"window": 3, "d": 3, "std_dev": 2.0},
     )
-    lowered = lower_composite_operators(stub)
+    lowered = lower_composite_operators(stub, _stack=())
     return tuple(collect_plan_ops(lowered))

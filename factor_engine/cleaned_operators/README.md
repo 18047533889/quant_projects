@@ -55,12 +55,10 @@ cleaned_operators/
 
 根目录仍保留 **兼容 shim**（如 `elementwise_math.py` → `common/elementwise.py`），旧 import 路径可继续使用。
 
-### 2.1 企业级运行时（Phase 11–16）
+### 2.1 企业级运行时
 
-- **Phase 11–12**：RunWindow、DQ Profile、PIT、`staging_clickhouse` 物化、增量扩窗。
-- **Phase 14–16**：`QueryBudget` / 读审计、`FactorWriteTarget`、`run_many_from_config` / `materialize_many_from_config(batch_run)`、`SessionBarCalendar` 分钟 warmup。
-
-详见 [`docs/enterprise_factor_engine_roadmap.md`](../docs/enterprise_factor_engine_roadmap.md) 与 [`runtime/README.md`](../runtime/README.md) §8。
+- RunWindow、DQ Profile、PIT、staging 物化、增量扩窗、双写对账等能力见 [`runtime/README.md`](../runtime/README.md) §8。
+- 生产 profile：[`examples/profiles/prod.yaml`](../examples/profiles/prod.yaml)
 
 | 能力 | 入口 |
 |------|------|

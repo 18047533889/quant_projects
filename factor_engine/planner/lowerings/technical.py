@@ -76,8 +76,8 @@ def lower_williams_r(node: PlanNode) -> PlanNode:
     ll = H.ts_min(low, w)
     num = H.binop("subtract", hh, close)
     den = H.binop("subtract", hh, ll)
-    ratio = H.protected_div(num, den)
-    return H.binop("multiply", H.literal(-100.0), ratio)
+    ratio = H.safe_div_null(num, den)
+    return H.binop("multiply", ratio, H.literal(-100.0))
 
 
 def _stochastic_k(high: PlanNode, low: PlanNode, close: PlanNode, window: int) -> PlanNode:
@@ -85,7 +85,7 @@ def _stochastic_k(high: PlanNode, low: PlanNode, close: PlanNode, window: int) -
     hh = H.ts_max(high, window)
     num = H.binop("subtract", close, ll)
     den = H.binop("subtract", hh, ll)
-    return H.binop("multiply", H.literal(100.0), H.protected_div(num, den))
+    return H.binop("multiply", H.safe_div_null(num, den), H.literal(100.0))
 
 
 @register_lowering("BollingerBands")
@@ -123,6 +123,6 @@ def lower_obv(node: PlanNode) -> PlanNode:
     if len(node.inputs) < 2:
         return node
     price, volume = node.inputs[0], node.inputs[1]
-    direction = H.unary("sign", H.ts_delta(price, 1))
+    direction = H.fillna_const(H.unary("sign", H.ts_delta(price, 1)), 0.0)
     signed_vol = H.binop("multiply", direction, volume)
     return H.cum_sum(signed_vol)
