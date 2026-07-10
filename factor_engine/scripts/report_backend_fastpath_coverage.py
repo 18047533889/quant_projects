@@ -34,7 +34,10 @@ def _validate_strict(
 ) -> list[str]:
     """严格模式校验：production core 全覆盖、SQL emitter 与 block_reason 完整性。"""
     from backend.operator_capability import resolve_canonical
-    from cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS
+    from cleaned_operators.operator_spec import (
+        PRODUCTION_CORE_CANONICALS,
+        PRODUCTION_DUAL_BACKEND_CORE_CANONICALS,
+    )
 
     errors: list[str] = []
     by_canon = {r.canonical: r for r in rows}
@@ -77,7 +80,25 @@ def _validate_strict(
                 continue
             if r.canonical in POLARS_LONG_FASTPATH_DEFERRED or r.canonical in SQL_PRODUCTION_DEFERRED_CANONICALS:
                 continue
-            if infer_execution_kind(r.canonical) in {"composite", "stateful", "external_kernel"}:
+            kind = infer_execution_kind(r.canonical)
+            if kind == "external_kernel":
+                continue
+            if kind == "stateful":
+                if not r.fastpath_block_reason and not r.effective_production_fastpath:
+                    errors.append(f"{r.canonical}: stateful production 缺少 fastpath_block_reason")
+                continue
+            if kind == "composite":
+                if r.production_policy == "allowed":
+                    if not r.composite_production_safe:
+                        errors.append(
+                            f"{r.canonical}: production composite evidence incomplete"
+                        )
+                    if not r.composite_dual_backend_fastpath:
+                        errors.append(
+                            f"{r.canonical}: production composite not dual-backend"
+                        )
+                continue
+            if r.canonical not in PRODUCTION_DUAL_BACKEND_CORE_CANONICALS:
                 continue
             if not r.dual_backend_fastpath:
                 errors.append(f"{r.canonical}: production 算子未达到 dual_backend_fastpath")
@@ -141,7 +162,9 @@ def main() -> int:
     else:
         print(
             f"production_fast_path={summary['production_fast_path_count']} "
+            f"effective_production_fastpath={summary['effective_production_fastpath_count']} "
             f"dual_backend_fastpath={summary['dual_backend_fastpath_count']} "
+            f"effective_dual_backend={summary['effective_dual_backend_fastpath_count']} "
             f"composite_lowering={summary['composite_lowering_count']} "
             f"composite_dual_capable={summary['composite_dual_backend_capable_count']} "
             f"production_allowed={summary['production_allowed_count']} "

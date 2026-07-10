@@ -22,6 +22,105 @@ from tests.helpers import InMemorySeriesSource
 
 F = make_cleaned_call_factory
 
+# CI evidence contract 同步源（须与 evidence/composite_verified.json 一致）
+COMPOSITE_TRIPLE_PARITY_CASES: tuple[dict, ...] = (
+    {"canon": "MOM", "mem": lambda: F("MOM")(_col_mem("close"), 3), "duck": lambda: F("MOM")(_col_duck("close"), 3)},
+    {"canon": "ROC", "mem": lambda: F("ROC")(_col_mem("close"), 3), "duck": lambda: F("ROC")(_col_duck("close"), 3)},
+    {
+        "canon": "BollingerBands",
+        "mem": lambda: F("BollingerBands")(_col_mem("close"), 3),
+        "duck": lambda: F("BollingerBands")(_col_duck("close"), 3),
+    },
+    {
+        "canon": "BollingerUpper",
+        "mem": lambda: F("BollingerUpper")(_col_mem("close"), 3),
+        "duck": lambda: F("BollingerUpper")(_col_duck("close"), 3),
+    },
+    {
+        "canon": "BollingerLower",
+        "mem": lambda: F("BollingerLower")(_col_mem("close"), 3),
+        "duck": lambda: F("BollingerLower")(_col_duck("close"), 3),
+    },
+    {"canon": "DPO", "mem": lambda: F("DPO")(_col_mem("close"), 4), "duck": lambda: F("DPO")(_col_duck("close"), 4)},
+    {
+        "canon": "WilliamsR",
+        "mem": lambda: F("WilliamsR")(_col_mem("high"), _col_mem("low"), _col_mem("close"), 3),
+        "duck": lambda: F("WilliamsR")(_col_duck("high"), _col_duck("low"), _col_duck("close"), 3),
+    },
+    {
+        "canon": "StochasticK",
+        "mem": lambda: F("StochasticK")(_col_mem("high"), _col_mem("low"), _col_mem("close"), 3),
+        "duck": lambda: F("StochasticK")(_col_duck("high"), _col_duck("low"), _col_duck("close"), 3),
+    },
+    {
+        "canon": "StochasticD",
+        "mem": lambda: F("StochasticD")(_col_mem("high"), _col_mem("low"), _col_mem("close"), 3),
+        "duck": lambda: F("StochasticD")(_col_duck("high"), _col_duck("low"), _col_duck("close"), 3),
+    },
+    {
+        "canon": "OBV",
+        "mem": lambda: F("OBV")(_col_mem("close"), _col_mem("volume")),
+        "duck": lambda: F("OBV")(_col_duck("close"), _col_duck("volume")),
+    },
+    {
+        "canon": "operating_margin",
+        "mem": lambda: F("operating_margin")(_col_mem("operating_income"), _col_mem("revenue")),
+        "duck": lambda: F("operating_margin")(_col_duck("operating_income"), _col_duck("revenue")),
+    },
+    {
+        "canon": "current_ratio",
+        "mem": lambda: F("current_ratio")(_col_mem("current_assets"), _col_mem("current_liabilities")),
+        "duck": lambda: F("current_ratio")(_col_duck("current_assets"), _col_duck("current_liabilities")),
+    },
+    {
+        "canon": "quick_ratio",
+        "mem": lambda: F("quick_ratio")(
+            _col_mem("current_assets"), _col_mem("inventory"), _col_mem("current_liabilities")
+        ),
+        "duck": lambda: F("quick_ratio")(
+            _col_duck("current_assets"), _col_duck("inventory"), _col_duck("current_liabilities")
+        ),
+    },
+    {
+        "canon": "debt_to_equity",
+        "mem": lambda: F("debt_to_equity")(_col_mem("total_debt"), _col_mem("total_equity")),
+        "duck": lambda: F("debt_to_equity")(_col_duck("total_debt"), _col_duck("total_equity")),
+    },
+    {
+        "canon": "real_turnover_rate",
+        "mem": lambda: F("real_turnover_rate")(_col_mem("volume"), _col_mem("float_shares")),
+        "duck": lambda: F("real_turnover_rate")(_col_duck("volume"), _col_duck("float_shares")),
+    },
+    {
+        "canon": "micro_spread",
+        "mem": lambda: F("micro_spread")(_col_mem("high"), _col_mem("low"), _col_mem("close")),
+        "duck": lambda: F("micro_spread")(_col_duck("high"), _col_duck("low"), _col_duck("close")),
+    },
+)
+
+
+def _col_mem(name: str):
+    return col(name)
+
+
+def _col_duck(name: str):
+    return col(
+        {
+            "close": "Close",
+            "high": "High",
+            "low": "Low",
+            "volume": "Volume",
+            "operating_income": "OperatingIncome",
+            "revenue": "Revenue",
+            "current_assets": "CurrentAssets",
+            "current_liabilities": "CurrentLiabilities",
+            "inventory": "Inventory",
+            "total_debt": "TotalDebt",
+            "total_equity": "TotalEquity",
+            "float_shares": "FloatShares",
+        }.get(name, name)
+    )
+
 
 @pytest.fixture(scope="module")
 def composite_source():
@@ -44,7 +143,20 @@ def composite_source():
     low = close - 0.5
     volume = pd.Series([100.0, 110.0, 0.0, 120.0, 200.0, 210.0, 190.0, 220.0], index=idx)
     return InMemorySeriesSource(
-        data={"close": close, "high": high, "low": low, "volume": volume}
+        data={
+            "close": close,
+            "high": high,
+            "low": low,
+            "volume": volume,
+            "operating_income": pd.Series([100.0, 110.0, 0.0, 120.0, 200.0, 180.0, 210.0, 220.0], index=idx),
+            "revenue": pd.Series([200.0, 220.0, 110.0, 240.0, 400.0, 0.0, 420.0, 440.0], index=idx),
+            "current_assets": pd.Series([50.0, 55.0, 52.0, 60.0, 80.0, 78.0, 82.0, 85.0], index=idx),
+            "current_liabilities": pd.Series([25.0, 0.0, 26.0, 30.0, 40.0, 41.0, 0.0, 42.0], index=idx),
+            "inventory": pd.Series([5.0, 5.5, 5.2, 6.0, 8.0, 7.8, 8.2, 8.5], index=idx),
+            "total_debt": pd.Series([30.0, 31.0, 32.0, 33.0, 60.0, 61.0, 62.0, 63.0], index=idx),
+            "total_equity": pd.Series([70.0, 0.0, 72.0, 73.0, 140.0, 141.0, 142.0, 143.0], index=idx),
+            "float_shares": pd.Series([1e6, 1e6, 0.0, 1e6, 2e6, 2e6, 2e6, 2e6], index=idx),
+        }
     )
 
 
@@ -67,6 +179,14 @@ test_daily:
     High: double
     Low: double
     Volume: double
+    OperatingIncome: double
+    Revenue: double
+    CurrentAssets: double
+    CurrentLiabilities: double
+    Inventory: double
+    TotalDebt: double
+    TotalEquity: double
+    FloatShares: double
 """
     path = tmp_path / "datasets.yaml"
     path.write_text(content.strip() + "\n", encoding="utf-8")
@@ -80,6 +200,14 @@ def _seed_duckdb(root: Path, mem: InMemorySeriesSource) -> None:
         "high": "High",
         "low": "Low",
         "volume": "Volume",
+        "operating_income": "OperatingIncome",
+        "revenue": "Revenue",
+        "current_assets": "CurrentAssets",
+        "current_liabilities": "CurrentLiabilities",
+        "inventory": "Inventory",
+        "total_debt": "TotalDebt",
+        "total_equity": "TotalEquity",
+        "float_shares": "FloatShares",
     }
     rows = []
     for (ts, sym) in mem.data["close"].index:
@@ -107,21 +235,6 @@ def duckdb_composite_source(tmp_path_factory, composite_source):
     except ImportError:
         pass
     return build_data_source({"type": "data_access", "dataset": "test_daily"})
-
-
-def _col_mem(name: str):
-    return col(name)
-
-
-def _col_duck(name: str):
-    return col(
-        {
-            "close": "Close",
-            "high": "High",
-            "low": "Low",
-            "volume": "Volume",
-        }.get(name, name)
-    )
 
 
 def _run(source, expr, backend: str):
@@ -154,35 +267,11 @@ def _assert_lowered_triple(
     pd.testing.assert_series_equal(pd_out, duck_out, check_names=False, rtol=rtol, atol=atol)
 
 
-@pytest.mark.parametrize(
-    "mem_builder,duck_builder",
-    [
-        (
-            lambda: F("MOM")(_col_mem("close"), 3),
-            lambda: F("MOM")(_col_duck("close"), 3),
-        ),
-        (
-            lambda: F("ROC")(_col_mem("close"), 3),
-            lambda: F("ROC")(_col_duck("close"), 3),
-        ),
-        (
-            lambda: F("WilliamsR")(_col_mem("high"), _col_mem("low"), _col_mem("close"), 3),
-            lambda: F("WilliamsR")(_col_duck("high"), _col_duck("low"), _col_duck("close"), 3),
-        ),
-        (
-            lambda: F("StochasticK")(_col_mem("high"), _col_mem("low"), _col_mem("close"), 3),
-            lambda: F("StochasticK")(_col_duck("high"), _col_duck("low"), _col_duck("close"), 3),
-        ),
-        (
-            lambda: F("OBV")(_col_mem("close"), _col_mem("volume")),
-            lambda: F("OBV")(_col_duck("close"), _col_duck("volume")),
-        ),
-    ],
-)
-def test_composite_lowered_triple_parity(composite_source, duckdb_composite_source, mem_builder, duck_builder):
+@pytest.mark.parametrize("case", COMPOSITE_TRIPLE_PARITY_CASES, ids=lambda c: c["canon"])
+def test_composite_lowered_triple_parity(composite_source, duckdb_composite_source, case):
     _assert_lowered_triple(
         composite_source,
         duckdb_composite_source,
-        mem_builder(),
-        duck_builder(),
+        case["mem"](),
+        case["duck"](),
     )

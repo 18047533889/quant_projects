@@ -136,3 +136,40 @@ def test_obv_first_row_zero_reference(_loaded):
     ref = reference_pandas_calculate(case, panels)
     first = ref.stack(future_stack=True).loc[(pd.Timestamp("2024-01-01"), "A")]
     assert first == 0.0
+
+
+def test_policy_gate_rejects_composite_allowed_without_evidence(_loaded, monkeypatch):
+    """policy=allowed 但 composite_production_safe=False 时 gate 必须拒绝。"""
+    from planner.logical_plan import PlanNode
+    from planner.optimizer import Optimizer
+
+    plan = PlanNode(
+        op="MOM",
+        inputs=[PlanNode(op="column", attrs={"name": "close"}, inputs=[])],
+        attrs={"window": 5},
+    )
+    folded = Optimizer()._fold_literals(plan)
+
+    from cleaned_operators import operator_spec as ospec
+
+    real_infer = ospec.infer_production_policy
+    real_build = ospec.build_operator_spec
+
+    def _fake_mom_allowed(canon: str) -> str:
+        if canon == "MOM":
+            return "allowed"
+        return real_infer(canon)
+
+    def _fake_mom_spec(canon: str, **kwargs):
+        spec = real_build(canon, **kwargs)
+        if spec is None or spec.canonical != "MOM":
+            return spec
+        from dataclasses import replace
+
+        return replace(spec, allow_in_production=True, production_policy="allowed")
+
+    monkeypatch.setattr(ospec, "infer_production_policy", _fake_mom_allowed)
+    monkeypatch.setattr(ospec, "build_operator_spec", _fake_mom_spec)
+    violations = check_original_operator_policy(folded)
+    assert any("MOM" in v and "production evidence incomplete" in v for v in violations)
+

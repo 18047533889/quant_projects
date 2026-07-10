@@ -15,19 +15,25 @@ from cleaned_operators.operator_policy import OperatorPolicy, infer_operator_pol
 OperatorStatus = Literal["production", "research", "experimental", "deprecated", "stub", "doc_only"]
 NumericalStability = Literal["high", "medium", "low"]
 
-# P0/P1 fastpath 已 production safe、但不在 P0|P1 批次中的 legacy PIT core
-_LEGACY_PRODUCTION_CORE: frozenset[str] = frozenset(
+# stateful / deferred：允许 production 但不计入 strict dual-backend core
+PRODUCTION_ALLOWED_DEFERRED_CANONICALS: frozenset[str] = frozenset(
     {
         "ts_ema",
         "ts_decay_linear",
+        "RSI_WILDER",
+        "ATR_WILDER",
+    }
+)
+
+# legacy PIT core（不含 deferred stateful）
+_LEGACY_PRODUCTION_CORE: frozenset[str] = frozenset(
+    {
         "ts_rank",
         "ts_sharpe",
         "ts_autocorr",
         "cs_resid",
         "cs_regression",
         "ffill",
-        "RSI_WILDER",
-        "ATR_WILDER",
     }
 )
 
@@ -35,12 +41,8 @@ _LEGACY_PRODUCTION_CORE: frozenset[str] = frozenset(
 _FASTPATH_ALIAS_ONLY: frozenset[str] = frozenset({"if_else"})
 
 
-def _build_production_core_canonicals() -> frozenset[str]:
-    """构建 PRODUCTION_CORE canonical 集合。
-
-    返回:
-        P0/P1 fastpath safe 与 legacy PIT core 的并集（排除仅别名条目）。
-    """
+def _build_production_dual_backend_core() -> frozenset[str]:
+    """构建 strict dual-backend production core（不含 deferred stateful）。"""
     from backend.production_fastpath_tiers import (
         P0_PRODUCTION_FASTPATH_CANONICALS,
         P1_POLARS_CORE_PRODUCTION_SAFE,
@@ -51,6 +53,14 @@ def _build_production_core_canonicals() -> frozenset[str]:
         | P1_POLARS_CORE_PRODUCTION_SAFE
         | _LEGACY_PRODUCTION_CORE
     ) - _FASTPATH_ALIAS_ONLY
+
+
+PRODUCTION_DUAL_BACKEND_CORE_CANONICALS: frozenset[str] = _build_production_dual_backend_core()
+
+
+def _build_production_core_canonicals() -> frozenset[str]:
+    """构建 PRODUCTION_CORE canonical 集合（dual-backend core + deferred allowed）。"""
+    return PRODUCTION_DUAL_BACKEND_CORE_CANONICALS | PRODUCTION_ALLOWED_DEFERRED_CANONICALS
 
 
 # SQL 下推 / DSL 常用 production 核心 canonical（PIT 门禁 / 契约脚本对齐此清单）

@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from backend.composite_evidence import COMPOSITE_REFERENCE_PARITY_VERIFIED
+from backend.composite_evidence import COMPOSITE_REFERENCE_TO_LOWERED_PANDAS_VERIFIED
 
 
 def build_operator_manifest_entry(canon: str) -> dict[str, Any]:
@@ -48,10 +48,14 @@ def build_operator_manifest_entry(canon: str) -> dict[str, Any]:
         "lowered_primitives": list(lowered) if lowered else [],
         "composite_dual_backend_capable": row.composite_dual_backend_capable,
         "composite_production_safe": row.composite_production_safe,
-        "composite_reference_parity": name in COMPOSITE_REFERENCE_PARITY_VERIFIED,
+        "composite_reference_parity": name in COMPOSITE_REFERENCE_TO_LOWERED_PANDAS_VERIFIED,
+        "composite_reference_to_lowered_pandas": name in COMPOSITE_REFERENCE_TO_LOWERED_PANDAS_VERIFIED,
         "polars_long_fastpath": row.polars_long_fastpath,
         "duckdb_fastpath": row.duckdb_fastpath,
         "dual_backend_fastpath": row.dual_backend_fastpath,
+        "composite_dual_backend_fastpath": row.composite_dual_backend_fastpath,
+        "effective_production_fastpath": row.effective_production_fastpath,
+        "effective_dual_backend_fastpath": row.effective_dual_backend_fastpath,
         "pandas": capability_for(name, "pandas_numpy").status,
         "polars_panel": polars.status,
         "polars_long": polars_long_label,
@@ -66,7 +70,7 @@ def build_operator_manifest_entry(canon: str) -> dict[str, Any]:
         "benchmark": row.benchmark_available,
         "research_allowed": True,
         "production_allowed": spec.allow_in_production,
-        "production_fastpath_allowed": row.production_fast_path,
+        "production_fastpath_allowed": row.effective_production_fastpath,
     }
 
 
@@ -83,7 +87,7 @@ def build_operator_manifest(
         if production_only and not spec.allow_in_production:
             continue
         entry = build_operator_manifest_entry(spec.canonical)
-        if fastpath_only and not entry.get("production_fastpath_allowed"):
+        if fastpath_only and not entry.get("effective_production_fastpath"):
             continue
         rows.append(entry)
     return rows

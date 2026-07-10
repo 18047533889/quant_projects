@@ -44,6 +44,8 @@ class FastpathCoverageRow:
     composite_dual_backend_capable: bool = False
     composite_production_safe: bool = False
     composite_dual_backend_fastpath: bool = False
+    effective_production_fastpath: bool = False
+    effective_dual_backend_fastpath: bool = False
     production_policy: str = "denied"
     lowered_primitives: tuple[str, ...] | None = None
 
@@ -89,6 +91,8 @@ class FastpathCoverageRow:
             "composite_dual_backend_capable": self.composite_dual_backend_capable,
             "composite_production_safe": self.composite_production_safe,
             "composite_dual_backend_fastpath": self.composite_dual_backend_fastpath,
+            "effective_production_fastpath": self.effective_production_fastpath,
+            "effective_dual_backend_fastpath": self.effective_dual_backend_fastpath,
             "production_policy": self.production_policy,
             "lowered_primitives": ",".join(self.lowered_primitives) if self.lowered_primitives else "",
         }
@@ -251,6 +255,8 @@ def build_fastpath_coverage_row(canon: str) -> FastpathCoverageRow:
     duckdb_fastpath = bool(spec.allow_in_production) and duckdb_prod and not block
     dual_backend_fastpath = direct_dual and not block
     composite_dual_backend_fastpath = composite_prod_safe and not block
+    effective_production_fastpath = production_fast_path or composite_dual_backend_fastpath
+    effective_dual_backend_fastpath = dual_backend_fastpath or composite_dual_backend_fastpath
 
     return FastpathCoverageRow(
         canonical=name,
@@ -284,6 +290,8 @@ def build_fastpath_coverage_row(canon: str) -> FastpathCoverageRow:
         composite_dual_backend_capable=composite_structural,
         composite_production_safe=composite_prod_safe,
         composite_dual_backend_fastpath=composite_dual_backend_fastpath,
+        effective_production_fastpath=effective_production_fastpath,
+        effective_dual_backend_fastpath=effective_dual_backend_fastpath,
         production_policy=production_policy,
         lowered_primitives=lowered,
     )
@@ -337,6 +345,10 @@ def summarize_fastpath_coverage(rows: Sequence[FastpathCoverageRow]) -> dict[str
             1 for r in rows if r.polars_long_native_production_safe
         ),
         "dual_backend_fastpath_count": sum(1 for r in rows if r.dual_backend_fastpath),
+        "effective_production_fastpath_count": sum(1 for r in rows if r.effective_production_fastpath),
+        "effective_dual_backend_fastpath_count": sum(
+            1 for r in rows if r.effective_dual_backend_fastpath
+        ),
         "composite_lowering_count": sum(1 for r in rows if r.lowering_available),
         "composite_dual_backend_capable_count": sum(
             1 for r in rows if r.composite_dual_backend_capable

@@ -39,12 +39,14 @@ class FastpathGateResult:
 
 def check_original_operator_policy(plan: Any) -> list[str]:
     """阶段 A：原始 plan（lowering 前）production policy 门禁。"""
+    from backend.composite_evidence import composite_production_safe
     from cleaned_operators.operator_spec import (
         build_operator_spec,
         infer_production_policy,
         is_production_denied,
         is_production_permanently_forbidden,
     )
+    from planner.composite_lowering import has_composite_lowering
 
     violations: list[str] = []
     for canon in _iter_plan_ops(plan):
@@ -68,6 +70,12 @@ def check_original_operator_policy(plan: Any) -> list[str]:
         if not spec.allow_in_production:
             violations.append(f"{canon}: 不允许 production（status={spec.status}）")
             continue
+        if has_composite_lowering(canon):
+            if policy == "allowed" and not composite_production_safe(canon):
+                violations.append(
+                    f"{canon}: composite policy allowed but production evidence incomplete"
+                )
+                continue
         if not spec.pit_safe:
             violations.append(f"{canon}: pit_safe=False")
         if not spec.deterministic:
@@ -153,57 +161,22 @@ def _polars_native_fastpath_ok(canon: str) -> bool:
 
 
 def _check_full_plan_compilation(plan: Any, *, require: frozenset[FastpathBackend]) -> list[str]:
-    """对完整 plan 做端到端编译探测（非 minimal_plan 单算子）。"""
+    """对完整 plan 做端到端 compile + 执行探测（非 minimal_plan 单算子）。"""
     violations: list[str] = []
     if "duckdb_sql" in require:
         try:
-            from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql, plan_is_sql_capable
+            from backend.fastpath_plan_probe import probe_duckdb_full_plan
 
-            if not plan_is_sql_capable(plan):
-                violations.append("full_plan: duckdb plan not sql capable")
-            else:
-                compiled = compile_plan_to_sql(
-                    plan,
-                    dataset="__fastpath_probe__",
-                    time_column="ts",
-                    instrument_column="inst",
-                    dialect=SqlDialect.DUCKDB,
-                )
-                if compiled is None or not str(compiled.query or "").strip():
-                    violations.append("full_plan: duckdb compile returned empty")
+            probe_duckdb_full_plan(plan)
         except Exception as exc:
-            violations.append(f"full_plan: duckdb compile failed: {exc}")
+            violations.append(f"full_plan: duckdb execute failed: {exc}")
     if "polars_long_native" in require:
         try:
-            import polars as pl
+            from backend.fastpath_plan_probe import probe_polars_full_plan
 
-            from backend.polars_expr_emitter import (
-                collect_columns,
-                compile_plan_to_polars,
-                plan_is_polars_long_capable,
-            )
-
-            if not plan_is_polars_long_capable(plan):
-                violations.append("full_plan: polars_long plan not capable")
-            else:
-                columns = sorted(collect_columns(plan))
-                probe_data: dict[str, pl.Series] = {
-                    "ts": pl.Series([1], dtype=pl.Datetime(time_unit="ns")),
-                    "inst": pl.Series(["A"], dtype=pl.Utf8),
-                }
-                for name in columns:
-                    if name in {"ts", "inst"}:
-                        continue
-                    probe_data[name] = pl.Series([1.0], dtype=pl.Float64)
-                probe = pl.LazyFrame(probe_data)
-                compiled = compile_plan_to_polars(plan, probe, ctx=None)
-                if compiled is None:
-                    violations.append("full_plan: polars_long compile returned None")
-                else:
-                    compiled.frame.collect_schema()
-                    compiled.frame.limit(0).collect()
+            probe_polars_full_plan(plan)
         except Exception as exc:
-            violations.append(f"full_plan: polars_long compile failed: {exc}")
+            violations.append(f"full_plan: polars_long execute failed: {exc}")
     return violations
 
 
