@@ -41,11 +41,13 @@ jobs:
             data_access/tests/unit/test_params_validation_strict.py \
             data_access/tests/unit/test_key_policy_deterministic.py \
             data_access/tests/unit/test_scan_handle_guard.py
-      - name: FactorEngine data scope and GTJA operator semantics
+      - name: FactorEngine data scope, cache, and GTJA operator semantics
         run: |
           pytest -q \
             factor_engine/tests/test_data_scope_stability.py \
-            factor_engine/tests/test_gtja_compat_semantics.py
+            factor_engine/tests/test_data_access_source_snapshot_cache.py \
+            factor_engine/tests/test_gtja_compat_semantics.py \
+            factor_engine/tests/test_scalar_comparison_semantics.py
       - name: Compile and execute all 185 GTJA factors
         run: |
           python gtja191/scripts/validate_factor_engine_coverage.py \
