@@ -11,6 +11,14 @@ from .read_contract import canonicalize_params
 
 _UNSAFE_PATH_CHARS = re.compile(r"[/\\:\0]")
 _PATH_SEGMENT_DEFAULT = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
+_INTEGER_TEXT = re.compile(r"^[+-]?\d+$")
+_SUPPORTED_TYPES = {"str", "int"}
+_TYPE_ALIASES = {
+    "string": "str",
+    "varchar": "str",
+    "integer": "int",
+    "int64": "int",
+}
 
 
 @dataclass(frozen=True)
@@ -29,32 +37,72 @@ class ParamSpec:
     @classmethod
     def from_yaml_value(cls, name: str, raw: Any) -> "ParamSpec":
         if isinstance(raw, str):
-            return cls(name=name, type=raw.lower())
-        if not isinstance(raw, dict):
+            payload: dict[str, Any] = {"type": raw}
+        elif isinstance(raw, dict):
+            payload = dict(raw)
+        else:
             raise ValidationError(
                 f"params_schema['{name}'] 必须是字符串或 mapping，收到 {type(raw).__name__}"
             )
-        ptype = str(raw.get("type", "str")).lower()
-        pattern = raw.get("pattern")
+
+        ptype = _TYPE_ALIASES.get(
+            str(payload.get("type", "str")).strip().lower(),
+            str(payload.get("type", "str")).strip().lower(),
+        )
+        if ptype not in _SUPPORTED_TYPES:
+            raise ValidationError(
+                f"params_schema['{name}'].type 仅支持 {sorted(_SUPPORTED_TYPES)}，收到 {ptype!r}"
+            )
+
+        pattern = payload.get("pattern")
         if pattern is not None:
             pattern = str(pattern)
-        enum_raw = raw.get("values") or raw.get("enum")
+            try:
+                re.compile(pattern)
+            except re.error as exc:
+                raise ValidationError(
+                    f"params_schema['{name}'].pattern 不是合法正则: {pattern!r}"
+                ) from exc
+
+        enum_raw = payload.get("values") or payload.get("enum")
         enum_values: tuple[str, ...] = ()
         if enum_raw is not None:
             if not isinstance(enum_raw, (list, tuple)):
                 raise ValidationError(f"params_schema['{name}'].values 必须是列表")
             enum_values = tuple(str(v) for v in enum_raw)
-        min_int = raw.get("min")
-        max_int = raw.get("max")
+            if not enum_values:
+                raise ValidationError(f"params_schema['{name}'].values 不能为空列表")
+
+        min_int = payload.get("min")
+        max_int = payload.get("max")
+        try:
+            parsed_min = int(min_int) if min_int is not None else None
+            parsed_max = int(max_int) if max_int is not None else None
+            max_length = int(payload.get("max_length", 256))
+        except (TypeError, ValueError) as exc:
+            raise ValidationError(
+                f"params_schema['{name}'] 的 min/max/max_length 必须是整数"
+            ) from exc
+        if max_length <= 0:
+            raise ValidationError(f"params_schema['{name}'].max_length 必须 > 0")
+        if parsed_min is not None and parsed_max is not None and parsed_min > parsed_max:
+            raise ValidationError(
+                f"params_schema['{name}'] 的 min 不能大于 max"
+            )
+        if ptype != "int" and (parsed_min is not None or parsed_max is not None):
+            raise ValidationError(
+                f"params_schema['{name}'] 只有 int 类型可以声明 min/max"
+            )
+
         return cls(
             name=name,
             type=ptype,
             pattern=pattern,
-            path_segment=bool(raw.get("path_segment", False)),
+            path_segment=bool(payload.get("path_segment", False)),
             enum_values=enum_values,
-            min_int=int(min_int) if min_int is not None else None,
-            max_int=int(max_int) if max_int is not None else None,
-            max_length=int(raw.get("max_length", 256)),
+            min_int=parsed_min,
+            max_int=parsed_max,
+            max_length=max_length,
         )
 
 
@@ -63,7 +111,12 @@ def parse_params_schema(raw: Mapping[str, Any]) -> dict[str, ParamSpec]:
         raise ValidationError("parametric 数据集必须声明非空 params_schema")
     out: dict[str, ParamSpec] = {}
     for key, val in raw.items():
-        out[str(key)] = ParamSpec.from_yaml_value(str(key), val)
+        name = str(key)
+        if not name or not name.isidentifier():
+            raise ValidationError(
+                f"params_schema 参数名必须是合法 Python 标识符，收到 {name!r}"
+            )
+        out[name] = ParamSpec.from_yaml_value(name, val)
     return out
 
 
@@ -72,7 +125,7 @@ def validate_params(
     specs: Mapping[str, ParamSpec],
     params: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """校验并规范化 params；通过后才允许进入路径模板 .format()。"""
+    """校验并规范化 params；通过后才允许进入路径模板 ``.format()``。"""
     missing = [k for k in specs if k not in params]
     if missing:
         raise ValidationError(
@@ -86,35 +139,49 @@ def validate_params(
 
     normalized: dict[str, Any] = {}
     for name, spec in specs.items():
-        raw = params[name]
-        normalized[name] = _validate_one(dataset_name, spec, raw)
+        normalized[name] = _validate_one(dataset_name, spec, params[name])
     return normalized
+
+
+def _parse_strict_int(ctx: str, raw: Any) -> int:
+    """只接受真正整数或整数字符串，禁止 1.5 被 ``int()`` 静默截断。"""
+    if isinstance(raw, bool):
+        raise ValidationError(f"{ctx} 必须是整数，不能是 bool")
+    if isinstance(raw, int):
+        return raw
+    if isinstance(raw, str) and _INTEGER_TEXT.fullmatch(raw.strip()):
+        return int(raw.strip())
+    raise ValidationError(f"{ctx} 必须是整数或整数字符串，收到 {raw!r}")
 
 
 def _validate_one(dataset_name: str, spec: ParamSpec, raw: Any) -> Any:
     ctx = f"数据集 '{dataset_name}' 参数 '{spec.name}'"
 
     if spec.type == "int":
-        if isinstance(raw, bool) or not isinstance(raw, int):
-            try:
-                val = int(raw)
-            except (TypeError, ValueError) as exc:
-                raise ValidationError(f"{ctx} 必须是整数，收到 {raw!r}") from exc
-        else:
-            val = raw
+        val = _parse_strict_int(ctx, raw)
         if spec.min_int is not None and val < spec.min_int:
             raise ValidationError(f"{ctx} 小于最小值 {spec.min_int}")
         if spec.max_int is not None and val > spec.max_int:
             raise ValidationError(f"{ctx} 大于最大值 {spec.max_int}")
+        if spec.enum_values and str(val) not in spec.enum_values:
+            raise ValidationError(
+                f"{ctx} 必须是 {list(spec.enum_values)} 之一，收到 {val!r}"
+            )
         return val
 
-    text = str(raw)
+    if raw is None:
+        raise ValidationError(f"{ctx} 不能为空")
+    text = str(raw).strip()
     if not text:
         raise ValidationError(f"{ctx} 不能为空字符串")
     if len(text) > spec.max_length:
         raise ValidationError(f"{ctx} 长度超过 {spec.max_length}")
     if _UNSAFE_PATH_CHARS.search(text):
         raise ValidationError(f"{ctx} 含非法路径字符（/ \\ : NUL）")
+    # 所有 parametric 参数最终都会进入 root/glob 模板；即使 YAML 未显式
+    # 标记 path_segment，也不能允许 '.' / '..' 这种目录遍历片段。
+    if text in {".", ".."}:
+        raise ValidationError(f"{ctx} 不能是路径遍历片段")
 
     if spec.enum_values and text not in spec.enum_values:
         raise ValidationError(
@@ -126,9 +193,6 @@ def _validate_one(dataset_name: str, spec: ParamSpec, raw: Any) -> Any:
         pattern = _PATH_SEGMENT_DEFAULT.pattern
     if pattern is not None and not re.fullmatch(pattern, text):
         raise ValidationError(f"{ctx} 不匹配 pattern {pattern!r}，收到 {text!r}")
-
-    if spec.path_segment and (".." in text or text in {".", ".."}):
-        raise ValidationError(f"{ctx} 不能是路径遍历片段")
 
     return text
 

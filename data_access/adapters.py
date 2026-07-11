@@ -10,7 +10,7 @@ WHY 单独一个模块：
     （有的带 sort、有的带 normalize、有的带 dedup）。统一在这里，改一处
     生效全局，也方便写测试验证契约。
 
-维护人：quant 基础平台组    最后更新：2026-04-19
+维护人：quant 基础平台组    最后更新：2026-07-11
 """
 
 from __future__ import annotations
@@ -38,29 +38,10 @@ def arrow_to_multiindex_series(
 ):
     """把 Arrow Table 转成 `(timestamp, instrument)` MultiIndex Series。
 
-    参数：
-        table: DuckDB 查出来的 Arrow Table，至少含 timestamp_column、
-               instrument_column、value_column 三列
-        value_column: 要作为 Series 值的列
-        output_name: 结果 Series 的 name；默认用 value_column
-        sort_index: 是否 sort_index()（默认 True，和原 ParquetSource 一致）
-        dedup: 是否按 (ts, instrument) 去重保留最后一条（原代码默认行为）
-        normalize_timestamp: 是否 .dt.normalize()（日线数据有时需要）
-        timestamp_unit: 如果 timestamp 列是数值（epoch），用哪个单位转 datetime；
-                        None 表示不转，信任 Arrow schema
-
-    返回：
-        pd.Series，索引名固定为 ["timestamp", "instrument"]，name=output_name
-
-    兼容性：
-        原 ParquetSource.load_column 返回的 Series 长这样：
-            MultiIndex [timestamp: datetime64[ns] (tz-naive),
-                        instrument: str]
-            values: 原列类型
-        本函数的默认参数就是为了对齐这个契约。
+    ``key_policy`` 是正式键契约。``dedup`` 仅保留为旧调用兼容参数：当策略允许
+    ``keep_last`` 时决定是否执行旧式去重；production/strict 模式默认直接拒绝
+    无效键和重复键。
     """
-    import pandas as pd
-
     name = output_name or value_column
     batch = arrow_table_to_multiindex_columns(
         table,
@@ -90,7 +71,7 @@ def arrow_table_to_multiindex_columns(
     normalize_timestamp: bool = False,
     timestamp_unit: str | None = None,
 ) -> dict[str, Any]:
-    """一次 Arrow→pandas 转换，批量产出多列 MultiIndex Series（load_columns 热路径）。"""
+    """一次 Arrow→pandas 转换，批量产出多列 MultiIndex Series。"""
     import pandas as pd
 
     if not value_columns:
@@ -114,7 +95,9 @@ def arrow_table_to_multiindex_columns(
     ts_series = df[timestamp_column]
     if timestamp_unit is not None:
         ts_numeric = pd.to_numeric(ts_series, errors="coerce")
-        ts_series = pd.to_datetime(ts_numeric, unit=timestamp_unit, utc=True, errors="coerce")
+        ts_series = pd.to_datetime(
+            ts_numeric, unit=timestamp_unit, utc=True, errors="coerce"
+        )
     elif not pd.api.types.is_datetime64_any_dtype(ts_series):
         ts_series = pd.to_datetime(ts_series, utc=True, errors="coerce")
 
@@ -135,12 +118,14 @@ def arrow_table_to_multiindex_columns(
         {
             "timestamp": ts_series,
             "instrument": inst_series,
-        }
+        },
+        index=df.index,
     )
     for col in value_columns:
         frame[col] = df[col]
+    if policy.duplicate_resolution:
+        frame["_revision"] = df[policy.duplicate_resolution]
 
-    policy = resolve_key_policy(key_policy)
     null_mask = frame["timestamp"].isna() | frame["instrument"].isna()
     if null_mask.any():
         if policy.invalid_key == "error":
@@ -148,22 +133,45 @@ def arrow_table_to_multiindex_columns(
                 f"Arrow→MultiIndex 转换发现 {int(null_mask.sum())} 行无效键"
                 "（timestamp 或 instrument 为空）；production 模式禁止静默丢弃。"
             )
-        frame = frame[~null_mask]
+        frame = frame.loc[~null_mask].copy()
 
     if policy.duplicate_resolution:
-        rev_col = policy.duplicate_resolution
-        if rev_col not in df.columns:
+        # 版本列只有在存在同一主键多条记录时才参与决议，但所有有效键行都必须
+        # 具备版本值，否则“最新一条”无法被确定性定义。
+        revision_null = frame["_revision"].isna()
+        if revision_null.any():
             raise ValidationError(
-                f"KeyPolicy.duplicate_resolution 指定列 {rev_col!r} 不在 Arrow Table 中"
+                f"duplicate_resolution={policy.duplicate_resolution!r} 存在 "
+                f"{int(revision_null.sum())} 行 NULL，无法确定性去重"
             )
-        frame["_revision"] = df[rev_col]
-        frame = frame.sort_values("_revision", ascending=False)
-        frame = frame.drop_duplicates(
-            subset=["timestamp", "instrument"], keep="first"
+
+        duplicate_key_mask = frame.duplicated(
+            subset=["timestamp", "instrument"], keep=False
         )
+        if duplicate_key_mask.any():
+            duplicate_version_mask = frame.loc[duplicate_key_mask].duplicated(
+                subset=["timestamp", "instrument", "_revision"], keep=False
+            )
+            if duplicate_version_mask.any():
+                raise ValidationError(
+                    "同一 (timestamp, instrument, revision) 出现重复记录；"
+                    "版本列无法提供唯一顺序，拒绝依赖文件扫描顺序"
+                )
+
+            # mergesort 保证稳定；先按 key 排序，再按 revision 降序，选择最新版本。
+            frame = frame.sort_values(
+                ["timestamp", "instrument", "_revision"],
+                ascending=[True, True, False],
+                kind="mergesort",
+            )
+            frame = frame.drop_duplicates(
+                subset=["timestamp", "instrument"], keep="first"
+            )
         frame = frame.drop(columns=["_revision"])
     else:
-        dup_mask = frame.duplicated(subset=["timestamp", "instrument"], keep=False)
+        dup_mask = frame.duplicated(
+            subset=["timestamp", "instrument"], keep=False
+        )
         if dup_mask.any():
             if policy.duplicate_key == "error":
                 raise ValidationError(
@@ -171,13 +179,11 @@ def arrow_table_to_multiindex_columns(
                     "（timestamp, instrument）；production 模式禁止静默 dedup。"
                 )
             if dedup:
+                # 仅为历史研究模式保留。没有 revision/order 列时 keep_last 不是
+                # production 语义，严格模式会在上面的 policy 分支直接失败。
                 frame = frame.drop_duplicates(
                     subset=["timestamp", "instrument"], keep="last"
                 )
-        elif dedup:
-            frame = frame.drop_duplicates(
-                subset=["timestamp", "instrument"], keep="last"
-            )
 
     indexed = frame.set_index(["timestamp", "instrument"])
     indexed.index = indexed.index.set_names(["timestamp", "instrument"])
