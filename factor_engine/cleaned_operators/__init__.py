@@ -18,7 +18,7 @@ __all__ = [
     "microstructure",
 ]
 
-# gtja_compat 在全部 common pandas 实现之后加载，以同 canonical 覆盖历史兼容实现；
+# 审计覆盖模块放在对应历史 pandas 实现之后，以同 canonical 覆盖；
 # Polars 实现随后注册在独立 backend，不会覆盖 pandas_numpy。
 _LOAD_MODULES = (
     "cleaned_operators.common.elementwise",
@@ -29,6 +29,7 @@ _LOAD_MODULES = (
     "cleaned_operators.common.data_cleaning",
     "cleaned_operators.common.statistics",
     "cleaned_operators.common.gtja_compat",
+    "cleaned_operators.common.scalar_compare",
     "cleaned_operators.common.polars_ops",
     "cleaned_operators.common.group_polars",
     "cleaned_operators.common.shift_polars",
