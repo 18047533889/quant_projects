@@ -24,22 +24,36 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
 
-      - name: Clone upstream RECONSTRUCT branch
+      - name: Download upstream RECONSTRUCT archive
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf /tmp/AutoFactorEvaluation
-          git -c http.https://github.com/.extraheader= clone \
-            --depth 1 \
-            --branch RECONSTRUCT \
-            https://github.com/HKUST-QUANT-SOCIETY/AutoFactorEvaluation.git \
-            /tmp/AutoFactorEvaluation
-          git -C /tmp/AutoFactorEvaluation submodule update --init --recursive --depth 1 || true
-          if command -v git-lfs >/dev/null 2>&1; then
-            git -C /tmp/AutoFactorEvaluation lfs install --local
-            git -C /tmp/AutoFactorEvaluation lfs pull
-          fi
-          echo "UPSTREAM_SHA=$(git -C /tmp/AutoFactorEvaluation rev-parse HEAD)" >> "$GITHUB_ENV"
+          rm -rf /tmp/autofactor-src /tmp/autofactor.zip /tmp/import-debug.log
+          mkdir -p /tmp/autofactor-src
+          {
+            echo "Downloading public source archive..."
+            curl --fail --location --retry 3 --retry-delay 2 \
+              --output /tmp/autofactor.zip \
+              https://codeload.github.com/HKUST-QUANT-SOCIETY/AutoFactorEvaluation/zip/refs/heads/RECONSTRUCT
+            unzip -q /tmp/autofactor.zip -d /tmp/autofactor-src
+            source_dir=$(find /tmp/autofactor-src -mindepth 1 -maxdepth 1 -type d | head -n 1)
+            test -n "$source_dir"
+            echo "SOURCE_DIR=$source_dir" >> "$GITHUB_ENV"
+
+            upstream_sha=$(curl --fail --silent --show-error --location \
+              https://api.github.com/repos/HKUST-QUANT-SOCIETY/AutoFactorEvaluation/commits/RECONSTRUCT \
+              | python -c 'import json,sys; print(json.load(sys.stdin)["sha"])')
+            test -n "$upstream_sha"
+            echo "UPSTREAM_SHA=$upstream_sha" >> "$GITHUB_ENV"
+          } 2>&1 | tee /tmp/import-debug.log
+
+      - name: Upload import diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: autofactor-import-diagnostics
+          path: /tmp/import-debug.log
+          if-no-files-found: ignore
 
       - name: Validate and vendor upstream tree
         shell: bash
@@ -48,14 +62,14 @@ jobs:
           target="AutoFactorEvaluation"
           rm -rf "$target"
 
-          large_files=$(find /tmp/AutoFactorEvaluation -type f -size +95M -print)
+          large_files=$(find "$SOURCE_DIR" -type f -size +95M -print)
           if [ -n "$large_files" ]; then
             echo "Refusing to import files larger than 95 MiB:" >&2
             echo "$large_files" >&2
             exit 1
           fi
 
-          suspicious=$(find /tmp/AutoFactorEvaluation -type f \
+          suspicious=$(find "$SOURCE_DIR" -type f \
             \( -name '.env' -o -name '*.pem' -o -name '*.key' -o -name 'id_rsa*' \) \
             -not -name '*.example' -not -name '*.sample' -print)
           if [ -n "$suspicious" ]; then
@@ -65,7 +79,7 @@ jobs:
           fi
 
           mkdir -p "$target"
-          rsync -a --exclude='.git' /tmp/AutoFactorEvaluation/ "$target"/
+          rsync -a --exclude='.git' "$SOURCE_DIR"/ "$target"/
           find "$target" -name '.git' -prune -exec rm -rf {} +
 
           cat > "$target/UPSTREAM.md" <<EOF
