@@ -1,9 +1,8 @@
 """AutoFactorEvaluation evaluation package.
 
-The GTJA185 batch evaluator is dependency-light and must remain importable without
-loading the legacy timeseries/indicator/label stack.  Legacy public names are
-therefore resolved lazily; importing ``evaluation.gtja185_batch`` no longer
-implicitly imports vectorbt or opens legacy evaluation resources.
+The provider-neutral batch evaluator remains importable without loading the
+legacy timeseries/indicator/label stack. Factor packs live in sibling projects
+and implement the public FactorPack contract.
 """
 from __future__ import annotations
 
@@ -11,6 +10,10 @@ from importlib import import_module
 from typing import Any
 
 _LAZY_EXPORTS: dict[str, tuple[str, str]] = {
+    "BatchEvaluationConfig": ("evaluation.batch", "BatchEvaluationConfig"),
+    "FactorDefinition": ("evaluation.batch", "FactorDefinition"),
+    "FactorPack": ("evaluation.batch", "FactorPack"),
+    "run_factor_pack_evaluation": ("evaluation.batch", "run_factor_pack_evaluation"),
     "EvaluationPipelineResult": ("evaluation.pipeline", "EvaluationPipelineResult"),
     "run_evaluation_pipeline": ("evaluation.pipeline", "run_evaluation_pipeline"),
     "process_factor_dir": ("evaluation.scripts.worker", "process_factor_dir"),
