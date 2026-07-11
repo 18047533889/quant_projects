@@ -1,0 +1,61 @@
+name: Decouple Factor Packs
+
+on:
+  push:
+    branches: [agent/autofactor-gtja185-evaluation]
+    paths:
+      - ".github/scripts/decouple_factor_packs.py"
+      - ".github/workflows/decouple-factor-packs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: decouple-factor-packs
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/autofactor-gtja185-evaluation
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Apply provider-neutral architecture
+        run: python .github/scripts/decouple_factor_packs.py
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -r AutoFactorEvaluation-RECONSTRUCT/requirements.txt
+      - name: Validate core isolation
+        env:
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/AutoFactorEvaluation-RECONSTRUCT
+        run: |
+          test ! -d AutoFactorEvaluation-RECONSTRUCT/factor_packs
+          test -z "$(grep -RIlE 'factor_packs\.gtja|gtja191|gtja185' AutoFactorEvaluation-RECONSTRUCT/evaluation || true)"
+          python -m compileall -q AutoFactorEvaluation-RECONSTRUCT
+          pytest -q AutoFactorEvaluation-RECONSTRUCT/tests/test_batch_contracts.py AutoFactorEvaluation-RECONSTRUCT/tests/test_quant_platform_integration.py
+      - name: Validate external GTJA185 integration
+        env:
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/AutoFactorEvaluation-RECONSTRUCT:${{ github.workspace }}/gtja191
+          FACTOR_ENGINE_DISABLE_NUMBA: "1"
+        run: |
+          python -m compileall -q gtja191
+          pytest -q gtja191/tests/test_autofactor_integration.py gtja191/tests/test_full_catalog_factor_engine.py gtja191/tests/test_gtja191.py
+      - name: Commit decoupled architecture
+        run: |
+          rm -f .github/scripts/decouple_factor_packs.py
+          rm -f .github/workflows/decouple-factor-packs.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Decouple external factor packs from AutoFactorEvaluation"
+          git push origin HEAD:agent/autofactor-gtja185-evaluation
