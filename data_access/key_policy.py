@@ -18,8 +18,17 @@ class KeyPolicy:
 def resolve_key_policy(policy: KeyPolicy | None = None) -> KeyPolicy:
     if policy is not None:
         return policy
-    if os.environ.get("QUANT_PRODUCTION_MODE", "").lower() in {"1", "true", "yes"}:
+    prod = os.environ.get("QUANT_PRODUCTION_MODE", "").lower() in {"1", "true", "yes"}
+    strict = os.environ.get("DATA_ACCESS_STRICT_READ", "").lower() in {"1", "true", "yes"}
+    revision_col = os.environ.get("DATA_ACCESS_REVISION_COLUMN", "").strip() or None
+    if prod or strict:
+        if revision_col:
+            return KeyPolicy(
+                invalid_key="error",
+                duplicate_key="keep_last",
+                duplicate_resolution=revision_col,
+            )
         return KeyPolicy(invalid_key="error", duplicate_key="error")
-    if os.environ.get("DATA_ACCESS_STRICT_READ", "").lower() in {"1", "true", "yes"}:
-        return KeyPolicy(invalid_key="error", duplicate_key="error")
+    if revision_col:
+        return KeyPolicy(duplicate_resolution=revision_col)
     return KeyPolicy()

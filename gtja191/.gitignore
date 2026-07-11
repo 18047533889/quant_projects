@@ -1,0 +1,2 @@
+examples/materialize/*.yaml
+dsl/materialize_report.json

@@ -44,6 +44,7 @@ from . import audit
 from .exceptions import DataError, ValidationError
 from .namespace import is_namespace_explicit, resolve_namespace
 from .paths import PathAuthorizer
+from .publish_manifest import write_publish_manifest
 from .registry import Dataset, DatasetRegistry, ParametricDataset, StaticDataset
 
 
@@ -158,14 +159,18 @@ def publish_from_staging(
                 )
 
             ok = True             
-            # publish流程会先建个临时目录 candidate_dir,把 staging 数据复制进去，校验通过后再rename为 published 目标路径。若candidatedir 仍没改路径，程序结束就在 finally 后面把临时名字 candidate_dir删掉，不留在磁盘上。
-            candidate_dir = None  #这行的错误，原来是 candidate_dir = Path()，本意是随便给个哨兵值，让他无参从而是空值，让后面 if 判断为 false， 这样 finally 就会识别 false 从而跳过清理 candidatedir
-            # 但无参数Path() 等价于 Path('.')，代表了当前工作目录，是非空而且 exists()==True 恒为真，所以会错误的让 finally 里的 shutil.rmtree(candidate_dir)
-            #然后在做pytest时会执行这段命令然后误删当前工作目录
+            candidate_dir = None
 
-            # 注意：这里 **必须** 是 None 而不是 Path()。Path() 等价于 PoixPath('.')，
-            # 既非空也 exists()==True，会让 finally 里的 shutil.rmtree(candidate_dir)
-            # 把当前工作目录整个删掉——pytest 下 CWD 就是仓库根。
+            manifest_path = write_publish_manifest(
+                target_dir,
+                staging_name=staging_name,
+                target_name=target_name,
+                params=params,
+                rows=source_rows,
+                archive_path=archive_path,
+                elapsed_ms=(time.perf_counter() - start) * 1000,
+            )
+            logger.info("publish manifest written: %s", manifest_path)
     except Exception as exc:
         err_msg = f"{type(exc).__name__}: {exc}"
         raise
@@ -206,6 +211,7 @@ def publish_from_staging(
         "archive_path": str(archive_path) if archive_path else None,
         "rows": source_rows,
         "elapsed_ms": elapsed_ms,
+        "manifest_path": str(target_dir / ".publish_manifest.json"),
     }
 
 

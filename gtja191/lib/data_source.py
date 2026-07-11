@@ -48,6 +48,30 @@ def campaign_data_source() -> dict[str, Any]:
     return default_ashare_pv_data_source(read_auto=True)
 
 
+def production_date_range(
+    *,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> tuple[str, str]:
+    """与 campaign mining_config 对齐的全量落值区间。"""
+    return start_date or "2014-01-01", end_date or "2026-06-25"
+
+
+def production_data_source(
+    *,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    read_auto: bool = True,
+) -> dict[str, Any]:
+    """全量落值 data_access 配置（与 factor_engine mining_integration 字段一致）。"""
+    start, end = production_date_range(start_date=start_date, end_date=end_date)
+    return default_ashare_pv_data_source(
+        start_date=start,
+        end_date=end,
+        read_auto=read_auto,
+    )
+
+
 def smoke_data_source(
     *,
     start_date: str = "2016-01-04",

@@ -61,9 +61,12 @@ from .read_contract import (
     ReadLineage,
     ReadResult,
     ReadStats,
+    SqlReadLineage,
+    SqlReadResult,
     build_data_snapshot,
     build_file_manifest,
     file_manifest_hash,
+    merge_sql_data_snapshots,
 )
 from .scan_handle import ScanHandle
 from .namespace import is_namespace_explicit, resolve_namespace
@@ -156,6 +159,22 @@ class DataAccessStore:
             schema=getattr(ds, "schema", None),
             paths=paths,
             params=read_params if isinstance(ds, ParametricDataset) else None,
+        )
+
+    def build_sql_snapshot(
+        self,
+        read_datasets: Sequence[str],
+        read_params: Mapping[str, Mapping[str, Any]] | None = None,
+    ) -> DataSnapshot:
+        """为 sql() 多 dataset 读路径构建合并 DataSnapshot。"""
+        params_map = dict(read_params or {})
+        snapshots = [
+            self.describe_dataset(name, params=params_map.get(name, {}))
+            for name in sorted(read_datasets)
+        ]
+        return merge_sql_data_snapshots(
+            snapshots,
+            registry_hash=self._registry_hash,
         )
 
     def _resolve_read_budget(
@@ -1262,6 +1281,51 @@ class DataAccessStore:
             query_budget=merged_budget,
             build_select_sql=self._build_select_sql,
             resolve_paths=self._resolve_paths,
+        )
+
+    def sql_result(
+        self,
+        query: str,
+        *,
+        read_datasets: Sequence[str],
+        read_params: Mapping[str, Mapping[str, Any]] | None = None,
+        view_columns: Mapping[str, Sequence[str]] | None = None,
+        params: Sequence[Any] | None = None,
+        query_budget: QueryBudget | None = None,
+    ) -> SqlReadResult:
+        """与 ``sql()`` 相同，但返回带合并 ``DataSnapshot`` 的 ``SqlReadResult``。"""
+        snapshot = self.build_sql_snapshot(read_datasets, read_params)
+        start = time.perf_counter()
+        table = self.sql(
+            query,
+            read_datasets=read_datasets,
+            read_params=read_params,
+            view_columns=view_columns,
+            params=params,
+            query_budget=query_budget,
+        )
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        params_map = dict(read_params or {})
+        lineage = SqlReadLineage(
+            datasets=tuple(sorted(read_datasets)),
+            read_params=tuple(
+                sorted(
+                    (name, tuple(sorted(params_map.get(name, {}).items())))
+                    for name in read_datasets
+                )
+            ),
+            query_preview=query[:500],
+        )
+        stats = ReadStats(
+            rows=table.num_rows,
+            bytes=table.nbytes,
+            elapsed_ms=elapsed_ms,
+        )
+        return SqlReadResult(
+            table=table,
+            snapshot=snapshot,
+            stats=stats,
+            lineage=lineage,
         )
 
     def sql_stream(

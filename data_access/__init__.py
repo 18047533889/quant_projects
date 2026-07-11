@@ -64,7 +64,7 @@ from .engine import DuckDBEngine, get_shared_engine, reset_shared_engine
 from .exceptions import DataAccessError, DataError, EngineError, ValidationError
 from .key_policy import KeyPolicy
 from .query_budget import QueryBudget
-from .read_contract import DataSnapshot, ReadResult
+from .read_contract import DataSnapshot, ReadResult, SqlReadResult
 from .scan_handle import ScanHandle
 from .store import DataAccessStore, get_store, reset_store
 
@@ -83,6 +83,7 @@ __all__ = [
     "KeyPolicy",
     "DataSnapshot",
     "ReadResult",
+    "SqlReadResult",
     "ScanHandle",
 ]
 

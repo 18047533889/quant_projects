@@ -124,8 +124,28 @@
   reason: "因子湖 schema 迁移 CLI 入口；委托 schema_migration 读改写本地 lake 分区"
 - path: data_access/clickhouse_write.py
   reason: "Parquet→ClickHouse ETL（load_parquet_to_panel_table）读用户指定单文件；写 CH 专用路径"
+- path: data_access/clickhouse/write.py
+  reason: "ClickHouse 物化读本地 parquet 单文件；CH ETL 专用路径，非 registry dataset"
+- path: data_access/scripts/execute_bucket_migration.py
+  reason: "bucket 分区迁移运维脚本；逐文件读改写 parquet，一次性数据布局变更"
 - path: scripts/verify_gtja191_factor_lake.py
   reason: "GTJA191 factor lake 结构审计 + 重算对比；按 factors/<id>/year=*/data.parquet 逐分区读，非 registry dataset"
+- path: factor_engine/backend/fastpath_plan_probe.py
+  reason: "执行计划探测工具；隔离 DuckDB 探测 fastpath 能力，非生产读路径"
+- path: factor_engine/backend/sql_pushdown/duckdb_capabilities.py
+  reason: "SQL 下推能力探测；进程内 :memory: DuckDB 探针，非 data_access 读路径"
+- path: factor_engine/benchmarks/**
+  reason: "算子 benchmark 自造 panel parquet fixture，非 registry dataset"
+- path: factor_engine/runtime/reconcile/snapshot_reconcile.py
+  reason: "data_snapshot_id 对账读 materializer 本地 lake 分区 parquet；物化输出非 registry dataset"
+- path: factor_engine/storage/materialize/**
+  reason: "因子物化落盘读写本地 factors/<id>/ 分区；materializer 底层 IO，非 registry dataset"
+- path: factor_engine/storage/sources/kline_parquet_source.py
+  reason: "legacy K 线按文件读；PR7+ 切 DataAccessSource 后下线"
+- path: factor_engine/storage/sources/parquet_source.py
+  reason: "legacy DuckDB 批量读 parquet；DataAccessSource 底层实现之一"
+- path: factor_engine/storage/sources/staging_loader.py
+  reason: "staging 行级补偿删除：按 materializer 落盘分区读改写 parquet；非 registry dataset"
 
 
 # ============================================================================

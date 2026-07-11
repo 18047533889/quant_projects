@@ -191,3 +191,76 @@ def build_data_snapshot(
         files=files,
         params=tuple(sorted(canon.items())),
     )
+
+
+@dataclass(frozen=True)
+class SqlReadLineage:
+    """sql() 多 dataset 读 lineage。"""
+
+    datasets: tuple[str, ...]
+    read_params: tuple[tuple[str, tuple[tuple[str, Any], ...]], ...] = ()
+    query_preview: str = ""
+
+
+@dataclass(frozen=True)
+class SqlReadResult:
+    """sql() 返回：结果表 + 合并 snapshot。"""
+
+    table: pa.Table
+    snapshot: DataSnapshot
+    stats: ReadStats
+    lineage: SqlReadLineage
+
+
+def merge_sql_data_snapshots(
+    snapshots: Sequence[DataSnapshot],
+    *,
+    registry_hash: str,
+) -> DataSnapshot:
+    """多 dataset sql() 路径：合并各 dataset snapshot 为单一 identity。"""
+    if not snapshots:
+        raise ValueError("merge_sql_data_snapshots 需要至少一个 snapshot")
+    if len(snapshots) == 1:
+        return snapshots[0]
+
+    ordered = sorted(snapshots, key=lambda s: s.dataset)
+    combined_files: list[FileVersion] = []
+    seen_paths: set[str] = set()
+    for snap in ordered:
+        for fv in snap.files:
+            if fv.path not in seen_paths:
+                seen_paths.add(fv.path)
+                combined_files.append(fv)
+
+    manifest_hash = file_manifest_hash(combined_files)
+    merged_params: dict[str, Any] = {}
+    for snap in ordered:
+        for k, v in snap.params:
+            merged_params[f"{snap.dataset}.{k}"] = v
+
+    identity = json.dumps(
+        {
+            "kind": "sql_merge",
+            "datasets": [s.dataset for s in ordered],
+            "child_snapshot_ids": [s.snapshot_id for s in ordered],
+            "registry_hash": registry_hash,
+            "manifest_hash": manifest_hash,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+    snapshot_id = _sha256_text(identity)[:24]
+    schema_hash = _sha256_text(
+        "|".join(s.schema_hash for s in ordered)
+    )[:16]
+    return DataSnapshot(
+        snapshot_id=snapshot_id,
+        dataset=",".join(s.dataset for s in ordered),
+        registry_hash=registry_hash,
+        schema_hash=schema_hash,
+        file_manifest_hash=manifest_hash,
+        files=tuple(combined_files),
+        params=tuple(sorted(merged_params.items())),
+    )
+

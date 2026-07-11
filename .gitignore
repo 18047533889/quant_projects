@@ -15,24 +15,30 @@ venv/
 .coverage
 htmlcov/
 
-# 数据与运行时产物（分发包不含大文件）
-data/**/*.parquet
+# 数据与运行时产物（parquet 不同步，迁移后从 COS/本地重新拉取）
+**/*.parquet
 data/a_share/lqtp_data/**
 data/us_stock/**
-data/factors/lake/**/*.parquet
 data/factors/lake/_runs/**
-data/factors/lake/*.sqlite*
+data/factors/lake/factors/**
+data/factors/lake/gtja191/factors/**
 data/cache/**
 logs/**
 output/**
 *.nohup
 *.log
 
-# IDE
+# macOS / IDE
+.DS_Store
 .idea/
 .vscode/
 *.swp
-.DS_Store
+
+# 个人 workspace / 运行时数据（公共代码必须在仓库顶层 data_access/ factor_engine/）
+workspaces/
+workspace_data/
+factor_engine/util/workspace_data/
+.scheduled_*.ready
 
 # 敏感信息
 .env

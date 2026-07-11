@@ -32,7 +32,7 @@ def build_fastest_engine(data_source: Any):
 
     ``backend=auto``（HybridBackend）对部分 ``ts_corr(rank(...), rank(...))`` 嵌套式
     在 Polars 算子层暂无数值 parity（如 alpha_001）；投递与 smoke 因此固定走 pandas，
-    保证 191 条公式与 factor_engine 参考结果一致。
+    保证 185 条公式与 factor_engine 参考结果一致。
     """
     from backend.factory import build_backend
     from runtime.engine import FactorEngine

@@ -135,6 +135,12 @@ def test_publish_basic_flow(publish_store):
     assert Path(result["target_path"]) == lake_root / "factors" / "mom_3d"
     assert result["archive_path"] is None   # 首次发布，没有旧版本可归档
     assert Path(result["target_path"]).exists()
+    assert "manifest_path" in result
+    from data_access.publish_manifest import read_publish_manifest
+
+    manifest = read_publish_manifest(Path(result["target_path"]))
+    assert manifest is not None
+    assert manifest["rows"] == 4
 
     # 读 published 拿得到
     got = store.read_frame("factors_pub", factor_id="mom_3d", columns=["asset", "value"])

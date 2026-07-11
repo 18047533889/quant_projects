@@ -93,6 +93,7 @@ def main() -> int:
     blocking = {k: v for k, v in blocking.items() if v}
     summary = {
         "total": len(catalog),
+        "deliverable": len([v for v in catalog.values() if v.get("valid") and not v.get("delivery_excluded")]),
         "clean": len(catalog) - len(blocking),
         "blocking_issues": blocking,
         "benchmark_pending": [k for k, v in report.items() if "needs_benchmark_field" in v],
@@ -103,6 +104,7 @@ def main() -> int:
         json.dumps(
             {
                 "total": summary["total"],
+                "deliverable": summary["deliverable"],
                 "clean": summary["clean"],
                 "blocking": len(blocking),
                 "benchmark_pending": len(summary["benchmark_pending"]),

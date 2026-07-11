@@ -79,15 +79,30 @@ python3 scripts/materialize_week2_factors.py
 ## 投递校验
 
 ```bash
-# DSL 语法
-cd factor_engine && python3 scripts/validate_delivery_formula.py --manifest path/to/manifest.json
-
-# 字段 / domain
 python3 factor-pool-standard/scripts/check_manifest_fields.py path/to/manifest.json
-
-# 代码规范（禁止直读 parquet）
 python3 scripts/check_data_access_allowlist.py
+bash scripts/verify_repo_tracking.sh
 ```
+
+## Git 同步到 GitHub（必读）
+
+公共代码 `data_access/`、`factor_engine/` **必须在仓库顶层被 Git 跟踪**。  
+勿仅用 `git add -u`（不会添加新文件）。详见 [docs/REPO_SYNC.md](docs/REPO_SYNC.md)。
+
+```bash
+bash scripts/verify_repo_tracking.sh
+bash scripts/git_sync_public_code.sh --dry-run
+bash scripts/git_sync_public_code.sh --commit "你的说明" --push
+```
+
+## 从上游 sparse clone 同步（可选，需 GITHUB_TOKEN）
+
+```bash
+export GITHUB_TOKEN=ghp_xxx
+bash scripts/sync_quantsociety_backend.sh
+```
+
+不会覆盖本地定制的 `data_access/`、`factor_engine/`。
 
 ## 测试
 
@@ -97,11 +112,8 @@ pytest data_access/tests/ -q
 cd factor_engine && pytest tests/ -q
 ```
 
-## 从上游同步（需 GITHUB_TOKEN）
+## 更多文档
 
-```bash
-export GITHUB_TOKEN=ghp_xxx
-bash scripts/sync_quantsociety_backend.sh
-```
-
-不会覆盖本地定制的 `data_access/`、`factor_engine/`。
+- [STRUCTURE.md](STRUCTURE.md) — 目录结构
+- [docs/REPO_SYNC.md](docs/REPO_SYNC.md) — Git 同步与 GitHub 可见性
+- [docs/data_access/](docs/data_access/) — data_access 团队规范

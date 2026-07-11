@@ -97,9 +97,12 @@ def arrow_table_to_multiindex_columns(
         return {}
 
     output_names = output_names or {}
+    policy = resolve_key_policy(key_policy)
     needed_cols = list(
         dict.fromkeys([timestamp_column, instrument_column, *value_columns])
     )
+    if policy.duplicate_resolution and policy.duplicate_resolution not in needed_cols:
+        needed_cols.append(policy.duplicate_resolution)
     missing = [c for c in needed_cols if c not in table.column_names]
     if missing:
         raise KeyError(
@@ -147,17 +150,34 @@ def arrow_table_to_multiindex_columns(
             )
         frame = frame[~null_mask]
 
-    dup_mask = frame.duplicated(subset=["timestamp", "instrument"], keep=False)
-    if dup_mask.any():
-        if policy.duplicate_key == "error":
+    if policy.duplicate_resolution:
+        rev_col = policy.duplicate_resolution
+        if rev_col not in df.columns:
             raise ValidationError(
-                f"Arrow→MultiIndex 转换发现 {int(dup_mask.sum())} 行重复键"
-                "（timestamp, instrument）；production 模式禁止静默 dedup。"
+                f"KeyPolicy.duplicate_resolution 指定列 {rev_col!r} 不在 Arrow Table 中"
             )
-        if dedup:
-            frame = frame.drop_duplicates(subset=["timestamp", "instrument"], keep="last")
-    elif dedup:
-        frame = frame.drop_duplicates(subset=["timestamp", "instrument"], keep="last")
+        frame["_revision"] = df[rev_col]
+        frame = frame.sort_values("_revision", ascending=False)
+        frame = frame.drop_duplicates(
+            subset=["timestamp", "instrument"], keep="first"
+        )
+        frame = frame.drop(columns=["_revision"])
+    else:
+        dup_mask = frame.duplicated(subset=["timestamp", "instrument"], keep=False)
+        if dup_mask.any():
+            if policy.duplicate_key == "error":
+                raise ValidationError(
+                    f"Arrow→MultiIndex 转换发现 {int(dup_mask.sum())} 行重复键"
+                    "（timestamp, instrument）；production 模式禁止静默 dedup。"
+                )
+            if dedup:
+                frame = frame.drop_duplicates(
+                    subset=["timestamp", "instrument"], keep="last"
+                )
+        elif dedup:
+            frame = frame.drop_duplicates(
+                subset=["timestamp", "instrument"], keep="last"
+            )
 
     indexed = frame.set_index(["timestamp", "instrument"])
     indexed.index = indexed.index.set_names(["timestamp", "instrument"])

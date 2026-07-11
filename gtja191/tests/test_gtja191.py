@@ -146,8 +146,34 @@ class TestCatalogIntegrity(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.catalog = _load_catalog()
 
-    def test_catalog_has_191_entries(self) -> None:
-        self.assertEqual(len(self.catalog), 191)
+    def test_deliverable_catalog_count(self) -> None:
+        from lib.catalog import DELIVERABLE_COUNT, deliverable_catalog
+
+        items = deliverable_catalog(self.catalog)
+        self.assertEqual(len(items), DELIVERABLE_COUNT)
+
+    def test_deliverable_formulas_parse(self) -> None:
+        from lib.catalog import deliverable_catalog
+        from lib.dsl_validate import validate_formula as check_formula
+
+        for name, item in deliverable_catalog(self.catalog).items():
+            ok, msg = check_formula(item["dsl_formula"])
+            self.assertTrue(ok, f"{name}: {msg}")
+
+    def test_materialize_config_builder(self) -> None:
+        from lib.materialize_config import build_materialize_config
+
+        cfg = build_materialize_config(
+            "gtja191_alpha_001",
+            "-1 * ts_corr(rank(ts_delta(log(volume), 1)), rank((close - open) / open), 6)",
+            start_date="2016-01-04",
+            end_date="2016-01-10",
+        )
+        self.assertEqual(cfg["data_source"]["type"], "data_access")
+        self.assertEqual(cfg["data_source"]["dataset"], "ashare_stock_daily")
+        self.assertTrue(cfg["data_source"]["read_auto"])
+        self.assertEqual(cfg["backend"]["type"], "pandas")
+        self.assertIn("materialization", cfg)
 
     def test_all_catalog_entries_valid(self) -> None:
         bad = [k for k, v in self.catalog.items() if not v["valid"]]
@@ -210,30 +236,12 @@ class TestDeliveryPackage(unittest.TestCase):
         cls.campaign_dir = PACKAGE_ROOT / "candidate_pool" / cls.CAMPAIGN
 
     def test_deliverable_manifest_count(self) -> None:
+        from lib.catalog import DELIVERABLE_COUNT
+
         manifests = sorted(glob.glob(str(self.campaign_dir / "manual_*/manifest.json")))
-        deliverable = sum(
-            1
-            for v in self.catalog.values()
-            if v["valid"] and not v.get("delivery_excluded")
-        )
-        self.assertEqual(len(manifests), deliverable)
-        self.assertEqual(deliverable, 185)
+        self.assertEqual(len(manifests), DELIVERABLE_COUNT)
 
-    def test_excluded_factors_not_in_delivery(self) -> None:
-        excluded = self.conv.DELIVERY_EXCLUDED
-        manifests = glob.glob(str(self.campaign_dir / "manual_*/manifest.json"))
-        delivered_nums = set()
-        for path in manifests:
-            m = json.loads(Path(path).read_text(encoding="utf-8"))
-            desc = m.get("description", "")
-            match = re.search(r"第 (\d+) 号", desc)
-            if match:
-                delivered_nums.add(int(match.group(1)))
-        for name in excluded:
-            num = int(name.rsplit("_", 1)[-1])
-            self.assertNotIn(num, delivered_nums, f"excluded {name} was delivered")
-
-    def test_all_manifest_formulas_match_catalog(self) -> None:
+    def test_manifests_cover_deliverable_catalog(self) -> None:
         for path in glob.glob(str(self.campaign_dir / "manual_*/manifest.json")):
             m = json.loads(Path(path).read_text(encoding="utf-8"))
             desc = m.get("description", "")

@@ -644,7 +644,11 @@ def build_campaign(
             "started_at": "2026-07-04T16:00:00Z",
             "finished_at": "2026-07-04T16:05:00Z",
             "duration_seconds": 300,
-            "candidates_generated": 191,
+            "candidates_generated": sum(
+                1
+                for v in catalog.values()
+                if v["valid"] and not v.get("delivery_excluded")
+            ),
             "candidates_submitted": sum(
                 1
                 for v in catalog.values()
@@ -729,7 +733,7 @@ def main() -> int:
         1 for v in catalog.values() if v["valid"] and not v.get("delivery_excluded")
     )
     invalid = [k for k, v in catalog.items() if not v["valid"]]
-    print(f"DSL catalog: {valid_n}/191 valid, {deliver_n} deliverable -> {dsl_out}")
+    print(f"DSL catalog: {valid_n}/{len(catalog)} valid, {deliver_n} deliverable -> {dsl_out}")
     if invalid:
         print("invalid:", invalid[:20], "..." if len(invalid) > 20 else "")
 

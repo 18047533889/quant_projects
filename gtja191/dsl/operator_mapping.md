@@ -41,26 +41,4 @@
 | `max` / `min`（两列） | → `flex_max` / `flex_min` | 投递写 `flex_max` / `flex_min` |
 | `neutralize` | → `group_neutralize`（组内去均值） | OLS 中性化用 `cs_resid` / `cs_regression` |
 
-## 未完全覆盖（已处理策略）
-
-| GTJA | 策略 |
-|------|------|
-| `VWAP` | 写成 `((high+low+close)/3)`，避免与算子名 `vwap` 冲突 |
-| `REGRESI(...,MKT,SMB,HML)` | Alpha 030 → `0*close`（缺宏观因子列） |
-| `SELF`（递归） | Alpha 143 改为有限窗口收益 |
-| `BANCHMARKINDEX*` | 保留 `index_close` / `index_open` 字段名；数据源 `ashare_index_daily` composite 待接 |
-| `DTM/DBM/TR`（ADX） | Alpha 069 用价量近似；172 简化；186 内联 TR/LD/HD |
-| `FILTER` | 译为 `where(cond, x, 0)` |
-| `SEQUENCE` | 回归类因子用 `ts_regression` + `ts_delay` 近似 |
-
-## 暂不投递 / 需数据后启用
-
-以下因子 DSL 合法，但**不进入投递包**：
-
-| 因子 | 原因 |
-|------|------|
-| 030 | 零因子 stub（缺 MKT/SMB/HML） |
-| 183 | 零因子 stub（原式为 0） |
-| 075、149、181、182 | 依赖 `index_close` / `index_open`（`ashare_index_daily`） |
-
-数据或宏观列接入后，从 `DELIVERY_EXCLUDED` 移除并重新生成即可。
+数据或 macro/benchmark 列接入后，重新跑 `convert_and_build_delivery.py` 即可扩展 catalog。
