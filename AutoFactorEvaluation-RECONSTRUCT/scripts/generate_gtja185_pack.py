@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -71,7 +70,7 @@ def main() -> int:
         **payload,
         "pack_hash": pack_hash,
         "metadata": {
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "source_catalog_hash": source_catalog_hash,
             "generator": "AutoFactorEvaluation-RECONSTRUCT/scripts/generate_gtja185_pack.py",
             "source_catalog": str(source_catalog_path.relative_to(REPO)),
             "factor_count": len(factors),

@@ -2412,7 +2412,7 @@
   ],
   "pack_hash": "b152ab8f05e3a02a1082ac51bc32a09ea59a7172d79d62819d8cd1793407f56e",
   "metadata": {
-    "generated_at": "2026-07-11T11:40:45.075307+00:00",
+    "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
     "generator": "AutoFactorEvaluation-RECONSTRUCT/scripts/generate_gtja185_pack.py",
     "source_catalog": "gtja191/dsl/gtja191_dsl_catalog.json",
     "factor_count": 185

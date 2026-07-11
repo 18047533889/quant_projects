@@ -369,8 +369,7 @@ def _purify_series(series: pd.Series, *, mad_multiplier: float, min_assets: int)
             return pd.Series(np.nan, index=group.index, dtype=float)
         return (clipped - mean) / std
 
-    purified = values.groupby(level="datetime", group_keys=False).apply(transform)
-    purified.index = purified.index.droplevel(0) if purified.index.nlevels == 3 else purified.index
+    purified = values.groupby(level="datetime", group_keys=False).transform(transform)
     purified.index = purified.index.set_names(["datetime", "asset"])
     return purified.sort_index().rename(series.name)
 
@@ -455,8 +454,8 @@ def _long_short_series(
         if not bottom_mask.any() or not top_mask.any():
             continue
         spreads[pd.Timestamp(date)] = float(valid.loc[top_mask, "return"].mean() - valid.loc[bottom_mask, "return"].mean())
-        top = set(valid.index.get_level_values("asset")[top_mask])
-        bottom = set(valid.index.get_level_values("asset")[bottom_mask])
+        top = set(valid.index.get_level_values("asset")[np.asarray(top_mask, dtype=bool)])
+        bottom = set(valid.index.get_level_values("asset")[np.asarray(bottom_mask, dtype=bool)])
         if previous_top is not None and previous_bottom is not None:
             top_turn = 1.0 - len(top & previous_top) / max(len(top | previous_top), 1)
             bottom_turn = 1.0 - len(bottom & previous_bottom) / max(len(bottom | previous_bottom), 1)
@@ -533,13 +532,15 @@ def _evaluate_one(
     execute_seconds: float,
 ) -> tuple[FactorRunRecord, pd.Series]:
     purified = _purify_series(raw, mad_multiplier=config.winsor_mad, min_assets=config.min_assets)
-    finite = np.isfinite(purified.to_numpy(dtype=float, na_value=np.nan))
+    finite = np.isfinite(pd.to_numeric(purified, errors="coerce").to_numpy(dtype=float))
     finite_values = int(finite.sum())
     coverage = finite_values / max(len(purified), 1)
 
+    primary_forward = forward_returns[min(config.horizons)].reindex(purified.index)
+    train_positions = np.flatnonzero(_split_mask(purified.index, "train", bounds))
     train_ic = _daily_ic(
-        purified.loc[_split_mask(purified.index, "train", bounds)],
-        forward_returns[min(config.horizons)].loc[_split_mask(forward_returns[min(config.horizons)].index, "train", bounds)],
+        purified.iloc[train_positions],
+        primary_forward.iloc[train_positions],
         min_assets=config.min_assets,
     )
     direction_mean = pd.to_numeric(train_ic.get("rank_ic", pd.Series(dtype=float)), errors="coerce").mean()
