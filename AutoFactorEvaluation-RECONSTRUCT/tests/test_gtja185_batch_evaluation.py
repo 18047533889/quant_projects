@@ -26,6 +26,7 @@ def test_gtja185_pack_is_complete_and_versioned():
         assert len(factor.formula_hash) == 64
         if "VWAP" in factor.source_formula.upper():
             assert "col('vwap')" in factor.formula or 'col("vwap")' in factor.formula
+            assert "(high + low + close) / 3" not in factor.formula
 
 
 def test_pack_manifests_preserve_factor_identity():
@@ -61,10 +62,29 @@ def test_all_185_are_evaluated_on_synthetic_panel(tmp_path: Path):
     assert summary.factor_count == 185
     assert summary.succeeded == 185
     assert summary.failed == 0
+    assert sum(summary.route_counts.values()) == 185
+
     ranking = pd.read_csv(tmp_path / "ranking.csv")
     assert len(ranking) == 185
     assert ranking["factor_name"].nunique() == 185
+    required_columns = {
+        "validation_rank_ic",
+        "validation_rank_ic_ir",
+        "validation_rank_ic_q_value",
+        "validation_long_short_net_hac_sharpe",
+        "test_rank_ic",
+        "test_long_short_net_hac_sharpe",
+    }
+    assert required_columns <= set(ranking.columns)
+
     payload = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
     assert payload["pack_hash"] == load_gtja185_pack().pack_hash
     assert payload["snapshot_id"] == "synthetic:gtja185-full-test"
+    assert len(payload["records"]) == 185
     assert all(record["status"] == "success" for record in payload["records"])
+    assert all(record["finite_values"] > 0 for record in payload["records"])
+    assert all("multiple_testing" in record["metrics"] for record in payload["records"])
+    assert all(
+        record["metrics"]["multiple_testing"]["family_size"] == 185
+        for record in payload["records"]
+    )
