@@ -9,6 +9,12 @@ on:
       - "AutoFactorEvaluation-RECONSTRUCT/**"
       - "factor_engine/**"
       - "data_access/**"
+  pull_request:
+    paths:
+      - ".github/workflows/autofactor-integration-audit.yml"
+      - "AutoFactorEvaluation-RECONSTRUCT/**"
+      - "factor_engine/**"
+      - "data_access/**"
   workflow_dispatch:
 
 permissions:
