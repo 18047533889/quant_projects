@@ -7,6 +7,7 @@ import ast
 import json
 import sys
 import time
+import traceback
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -91,8 +92,7 @@ def validate_catalog(*, execute: bool = True, periods: int = 420, symbols: int =
         inv = _inventory(formula)
         operator_counts.update(inv.calls)
         referenced_fields.update(inv.explicit_columns)
-        bare_fields = {n for n in inv.names if n in _ALLOWED_FIELDS}
-        referenced_fields.update(bare_fields)
+        referenced_fields.update({n for n in inv.names if n in _ALLOWED_FIELDS})
 
         source_formula = str(item.get("source_formula", "")).upper()
         if "VWAP" in source_formula and "col('vwap')" not in formula and 'col("vwap")' not in formula:
@@ -107,7 +107,6 @@ def validate_catalog(*, execute: bool = True, periods: int = 420, symbols: int =
             continue
 
         unknown_fields = sorted((inv.names - set(inv.calls)) - _ALLOWED_FIELDS)
-        # 字符串常量、函数名不会进入 unknown_fields；剩余 bare name 必须是已知字段。
         if unknown_fields:
             errors.append(
                 {
@@ -146,13 +145,14 @@ def validate_catalog(*, execute: bool = True, periods: int = 420, symbols: int =
             if finite <= 0:
                 raise AssertionError("factor produced no finite values on synthetic panel")
             executed += 1
-        except Exception as exc:  # aggregate all 185 failures in one report
+        except Exception as exc:
             errors.append(
                 {
                     "factor": name,
                     "stage": "execute" if execute else "compile",
                     "error": f"{type(exc).__name__}: {exc}",
                     "formula": formula,
+                    "traceback": traceback.format_exc(limit=12),
                 }
             )
 
