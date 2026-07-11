@@ -806,75 +806,6 @@ def _archive_empty_campaigns(pool_dir: Path, record_dir: Path) -> list[str]:
     return archived
 
 
-def run_gtja185_batch_pipeline(
-    *,
-    output_dir: str | Path,
-    dataset: str | None = None,
-    run_mode: str = "research",
-    universe_id: str = "A_SHARE_ALL_A_EX_ST",
-    start_date: str | None = None,
-    end_date: str | None = None,
-    horizons: tuple[int, ...] = (1, 5, 21),
-    batch_size: int = 8,
-    min_assets: int = 20,
-    entry_lag: int = 1,
-    cost_bps: float = 10.0,
-    universe_dataset: str | None = None,
-    universe_membership_field: str = "is_member",
-    tradability_field: str | None = "is_tradable",
-    require_point_in_time_universe: bool = False,
-    fdr_alpha: float = 0.10,
-    limit: int | None = None,
-    synthetic: bool = False,
-    materialize_staging: bool = False,
-    publish: bool = False,
-    strict: bool = True,
-):
-    """Run the canonical 185-factor pack through the new batch evaluator."""
-    from evaluation.gtja185_batch import (
-        BatchEvaluationConfig,
-        build_synthetic_market_frame,
-        run_gtja185_evaluation,
-    )
-
-    resolved_universe_dataset = universe_dataset
-    if require_point_in_time_universe and not resolved_universe_dataset:
-        resolved_universe_dataset = "ashare_universe_daily"
-    config = BatchEvaluationConfig(
-        market="ashare",
-        dataset=dataset,
-        run_mode=run_mode,
-        universe_id=universe_id,
-        start_date=start_date,
-        end_date=end_date,
-        horizons=horizons,
-        batch_size=batch_size,
-        min_assets=min_assets,
-        entry_lag=entry_lag,
-        cost_bps=cost_bps,
-        fdr_alpha=fdr_alpha,
-        universe_dataset=resolved_universe_dataset,
-        universe_membership_field=universe_membership_field,
-        tradability_field=tradability_field,
-        require_point_in_time_universe=require_point_in_time_universe,
-        limit=limit,
-        materialize_staging=materialize_staging,
-        publish=publish,
-        strict=strict,
-    )
-    frame = build_synthetic_market_frame(periods=420, symbols=max(8, min_assets)) if synthetic else None
-    snapshot_id = "synthetic:gtja185-cli" if synthetic else None
-    return run_gtja185_evaluation(
-        config,
-        output_dir=output_dir,
-        market_frame=frame,
-        snapshot_id=snapshot_id,
-    )
-
-
-# ============================================================
-# CLI
-# ============================================================
 
 def _validate_all_paths(cfg) -> None:
     """启动前验证所有本地必需路径是否存在。缺失则自动创建。
@@ -909,28 +840,6 @@ def main():
     _setup_logging()
 
     p = argparse.ArgumentParser(description="AutoFactorEvaluation 全流程管道")
-    p.add_argument("--gtja185", action="store_true", help="评估完整 GTJA185 内置因子包")
-    p.add_argument("--gtja-output", default="AutoFactorEvaluation-RECONSTRUCT/output/gtja185")
-    p.add_argument("--gtja-dataset", default=None)
-    p.add_argument("--gtja-run-mode", choices=["research", "production"], default="research")
-    p.add_argument("--gtja-universe-id", default="A_SHARE_ALL_A_EX_ST")
-    p.add_argument("--gtja-start-date", default=None)
-    p.add_argument("--gtja-end-date", default=None)
-    p.add_argument("--gtja-horizons", default="1,5,21")
-    p.add_argument("--gtja-batch-size", type=int, default=8)
-    p.add_argument("--gtja-min-assets", type=int, default=20)
-    p.add_argument("--gtja-entry-lag", type=int, default=1)
-    p.add_argument("--gtja-cost-bps", type=float, default=10.0)
-    p.add_argument("--gtja-fdr-alpha", type=float, default=0.10)
-    p.add_argument("--gtja-universe-dataset", default=None)
-    p.add_argument("--gtja-universe-membership-field", default="is_member")
-    p.add_argument("--gtja-tradability-field", default="is_tradable")
-    p.add_argument("--gtja-require-pit-universe", action="store_true")
-    p.add_argument("--gtja-limit", type=int, default=None)
-    p.add_argument("--gtja-synthetic", action="store_true")
-    p.add_argument("--gtja-materialize-staging", action="store_true")
-    p.add_argument("--gtja-publish", action="store_true")
-    p.add_argument("--gtja-allow-partial", action="store_true")
     p.add_argument("--gateway-only", action="store_true", help="仅 Gateway 审查+路由")
     p.add_argument("--assetization-only", action="store_true", help="仅 Assetization 计算+路由")
     p.add_argument("--all", action="store_true", help="全流程（Gateway → Assetization → Purification → Evaluation）")
@@ -948,36 +857,6 @@ def main():
     p.add_argument("--no-preload", action="store_false", dest="preload",
                     help="禁用进程内存预加载")
     args = p.parse_args()
-
-    if args.gtja185:
-        from dataclasses import asdict
-
-        horizons = tuple(int(part.strip()) for part in args.gtja_horizons.split(",") if part.strip())
-        summary = run_gtja185_batch_pipeline(
-            output_dir=args.gtja_output,
-            dataset=args.gtja_dataset,
-            run_mode=args.gtja_run_mode,
-            universe_id=args.gtja_universe_id,
-            start_date=args.gtja_start_date,
-            end_date=args.gtja_end_date,
-            horizons=horizons,
-            batch_size=args.gtja_batch_size,
-            min_assets=args.gtja_min_assets,
-            entry_lag=args.gtja_entry_lag,
-            cost_bps=args.gtja_cost_bps,
-            fdr_alpha=args.gtja_fdr_alpha,
-            universe_dataset=args.gtja_universe_dataset,
-            universe_membership_field=args.gtja_universe_membership_field,
-            tradability_field=args.gtja_tradability_field or None,
-            require_point_in_time_universe=args.gtja_require_pit_universe,
-            limit=args.gtja_limit,
-            synthetic=args.gtja_synthetic,
-            materialize_staging=args.gtja_materialize_staging,
-            publish=args.gtja_publish,
-            strict=not args.gtja_allow_partial,
-        )
-        print(json.dumps(asdict(summary), ensure_ascii=False, indent=2, default=str))
-        return
 
     # 全流程启动前验证所有路径已就绪
     if not any([args.gateway_only, args.assetization_only, args.purification_only, args.evaluation_only]):
