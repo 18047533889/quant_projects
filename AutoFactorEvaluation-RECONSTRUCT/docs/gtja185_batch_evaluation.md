@@ -17,15 +17,20 @@ regenerated from the same canonical source. Formulas that reference VWAP use the
    to single-factor runs so one bad factor cannot hide the other results.
 4. Replace non-finite values, apply daily cross-sectional MAD winsorization and z-scoring.
 5. Build forward returns from the configured price field, defaulting to real `vwap`.
-6. Split dates chronologically into train, validation and test samples.
+   A signal observed at `t` enters no earlier than `t+1`; same-bar execution is forbidden.
+6. Split dates chronologically into train, validation and test samples and purge any row
+   whose label exit date crosses the next split boundary.
 7. Choose signal direction from **training RankIC only**. Validation and test observations
    never participate in sign selection or parameter fitting.
-8. Report Pearson IC, RankIC, ICIR, t-statistic, positive ratio, coverage, quantile
-   long-short return, turnover, annualized return/volatility, Sharpe, max drawdown, hit
-   rate and yearly stability for every configured horizon.
-9. Produce deterministic routing recommendations (`tier3a_core`, `tier3b_satellite`,
+8. Report Pearson IC, RankIC, ICIR, ordinary and Newey-West/HAC t-statistics, positive
+   ratio, coverage, equal-weight quantile long-short gross and transaction-cost-adjusted
+   net returns, weight turnover, annualized return/volatility, Sharpe, max drawdown, hit
+   rate and yearly stability for every configured horizon. Routing uses net performance.
+9. Production mode requires a registered point-in-time universe dataset with explicit
+   membership and optional tradability flags; missing membership fails closed.
+10. Produce deterministic routing recommendations (`tier3a_core`, `tier3b_satellite`,
    `tier2_research`, `rejected`) without silently publishing a factor.
-10. Optionally upsert factor values to `factor_lake_staging`; publication remains a separate,
+11. Optionally upsert factor values to `factor_lake_staging`; publication remains a separate,
     explicit action.
 
 Every run writes:

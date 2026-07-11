@@ -55,6 +55,12 @@ class BatchEvaluationConfig:
     valid_fraction: float = 0.20
     annualization: int = 252
     forward_price_field: str = "vwap"
+    entry_lag: int = 1
+    cost_bps: float = 10.0
+    universe_dataset: str | None = None
+    universe_membership_field: str = "is_member"
+    tradability_field: str | None = "is_tradable"
+    require_point_in_time_universe: bool = False
     materialize_staging: bool = False
     publish: bool = False
     factor_version: str = "gtja185.v1"
@@ -78,8 +84,20 @@ class BatchEvaluationConfig:
             raise ValueError("valid_fraction must be in (0, 1)")
         if self.train_fraction + self.valid_fraction >= 1:
             raise ValueError("train_fraction + valid_fraction must be < 1")
+        if self.entry_lag < 1:
+            raise ValueError("entry_lag must be >= 1 to prevent same-bar execution bias")
+        if not math.isfinite(float(self.cost_bps)) or self.cost_bps < 0:
+            raise ValueError("cost_bps must be a finite non-negative number")
         if self.publish and not self.materialize_staging:
             raise ValueError("publish=True requires materialize_staging=True")
+        if str(self.run_mode).lower() == "production" and not self.require_point_in_time_universe:
+            raise ValueError(
+                "production GTJA185 evaluation requires require_point_in_time_universe=True"
+            )
+        if self.require_point_in_time_universe and not self.universe_dataset:
+            raise ValueError(
+                "require_point_in_time_universe=True requires a registered universe_dataset"
+            )
 
 
 @dataclass(frozen=True)
@@ -374,17 +392,76 @@ def _purify_series(series: pd.Series, *, mad_multiplier: float, min_assets: int)
     return purified.sort_index().rename(series.name)
 
 
-def _price_forward_returns(frame: pd.DataFrame, horizons: Sequence[int], price_field: str) -> dict[int, pd.Series]:
+def _price_forward_returns(
+    frame: pd.DataFrame,
+    horizons: Sequence[int],
+    price_field: str,
+    *,
+    entry_lag: int,
+) -> dict[int, pd.Series]:
+    """Return next-entry holding-period returns.
+
+    A signal observed on date ``t`` enters at ``t + entry_lag`` and exits after
+    ``horizon`` additional trading observations.  This prevents same-bar execution
+    bias and makes the label convention explicit.
+    """
     if price_field not in frame.columns:
         raise ValueError(f"forward price field not found: {price_field}")
+    if entry_lag < 1:
+        raise ValueError("entry_lag must be >= 1")
     panel = frame.set_index(["datetime", "asset"])[price_field].astype(float).sort_index()
     outputs: dict[int, pd.Series] = {}
     grouped = panel.groupby(level="asset", group_keys=False)
+    entry = grouped.shift(-entry_lag)
     for horizon in sorted(set(int(h) for h in horizons)):
-        future = grouped.shift(-horizon)
-        value = future / panel - 1.0
-        outputs[horizon] = value.replace([np.inf, -np.inf], np.nan).rename(f"forward_return_{horizon}")
+        exit_price = grouped.shift(-(entry_lag + horizon))
+        value = exit_price / entry - 1.0
+        outputs[horizon] = value.replace([np.inf, -np.inf], np.nan).rename(
+            f"forward_return_{horizon}"
+        )
     return outputs
+
+
+def _purged_split_mask(
+    index: pd.MultiIndex,
+    split: str,
+    bounds: SplitBoundaries,
+    trading_dates: pd.DatetimeIndex,
+    *,
+    entry_lag: int,
+    horizon: int,
+) -> np.ndarray:
+    """Chronological split mask with label-end purging/embargo.
+
+    A row belongs to a split only when both its signal date and label exit date
+    are inside that same split.  Training labels therefore never consume
+    validation observations, and validation labels never consume test data.
+    """
+    dates = pd.DatetimeIndex(pd.to_datetime(index.get_level_values("datetime"))).normalize()
+    calendar = pd.DatetimeIndex(trading_dates).normalize().unique().sort_values()
+    positions = calendar.get_indexer(dates)
+    exit_positions = positions + int(entry_lag) + int(horizon)
+    valid_exit = (positions >= 0) & (exit_positions >= 0) & (exit_positions < len(calendar))
+    exit_dates = np.full(len(dates), np.datetime64("NaT"), dtype="datetime64[ns]")
+    exit_dates[valid_exit] = calendar.to_numpy(dtype="datetime64[ns]")[exit_positions[valid_exit]]
+    exit_index = pd.DatetimeIndex(exit_dates)
+    train_end = pd.Timestamp(bounds.train_end)
+    valid_end = pd.Timestamp(bounds.valid_end)
+    last_date = pd.Timestamp(bounds.last_date)
+    if split == "train":
+        return np.asarray(valid_exit & (dates <= train_end) & (exit_index <= train_end))
+    if split == "valid":
+        return np.asarray(
+            valid_exit
+            & (dates > train_end)
+            & (dates <= valid_end)
+            & (exit_index <= valid_end)
+        )
+    if split == "test":
+        return np.asarray(valid_exit & (dates > valid_end) & (exit_index <= last_date))
+    if split == "all":
+        return np.asarray(valid_exit)
+    raise ValueError(f"unknown split: {split}")
 
 
 def _safe_corr(x: pd.Series, y: pd.Series, method: str) -> float:
@@ -412,20 +489,46 @@ def _daily_ic(signal: pd.Series, returns: pd.Series, *, min_assets: int) -> pd.D
     return pd.DataFrame(rows)
 
 
-def _summary_stats(values: pd.Series) -> dict[str, float | int | None]:
+def _summary_stats(
+    values: pd.Series,
+    *,
+    hac_lags: int = 0,
+) -> dict[str, float | int | None]:
     clean = pd.to_numeric(values, errors="coerce").dropna().astype(float)
     if clean.empty:
-        return {"count": 0, "mean": None, "std": None, "ir": None, "t_stat": None, "positive_ratio": None}
+        return {
+            "count": 0,
+            "mean": None,
+            "std": None,
+            "ir": None,
+            "t_stat": None,
+            "hac_t_stat": None,
+            "positive_ratio": None,
+        }
     mean = float(clean.mean())
     std = float(clean.std(ddof=1)) if len(clean) > 1 else float("nan")
     ir = mean / std if math.isfinite(std) and std > 0 else float("nan")
     t_stat = mean / (std / math.sqrt(len(clean))) if math.isfinite(std) and std > 0 else float("nan")
+
+    values_np = clean.to_numpy(dtype=float)
+    demeaned = values_np - mean
+    n = len(values_np)
+    max_lag = min(max(int(hac_lags), 0), max(n - 1, 0))
+    long_run_variance = float(np.dot(demeaned, demeaned) / n)
+    for lag in range(1, max_lag + 1):
+        weight = 1.0 - lag / (max_lag + 1.0)
+        gamma = float(np.dot(demeaned[lag:], demeaned[:-lag]) / n)
+        long_run_variance += 2.0 * weight * gamma
+    long_run_variance = max(long_run_variance, 0.0)
+    hac_se = math.sqrt(long_run_variance / n) if n else float("nan")
+    hac_t_stat = mean / hac_se if math.isfinite(hac_se) and hac_se > 0 else float("nan")
     return {
         "count": int(len(clean)),
         "mean": mean,
         "std": std if math.isfinite(std) else None,
         "ir": ir if math.isfinite(ir) else None,
         "t_stat": t_stat if math.isfinite(t_stat) else None,
+        "hac_t_stat": hac_t_stat if math.isfinite(hac_t_stat) else None,
         "positive_ratio": float((clean > 0).mean()),
     }
 
@@ -436,12 +539,14 @@ def _long_short_series(
     *,
     min_assets: int,
     n_quantiles: int,
-) -> tuple[pd.Series, pd.Series]:
+    cost_bps: float,
+) -> tuple[pd.Series, pd.Series, pd.Series]:
+    """Build equal-weight gross/net long-short returns and weight turnover."""
     joined = pd.concat([signal.rename("signal"), returns.rename("return")], axis=1)
-    spreads: dict[pd.Timestamp, float] = {}
+    gross_returns: dict[pd.Timestamp, float] = {}
+    net_returns: dict[pd.Timestamp, float] = {}
     turnovers: dict[pd.Timestamp, float] = {}
-    previous_top: set[str] | None = None
-    previous_bottom: set[str] | None = None
+    previous_weights: dict[str, float] = {}
     for date, group in joined.groupby(level="datetime", sort=True):
         valid = group.dropna()
         if len(valid) < max(min_assets, n_quantiles * 2):
@@ -449,19 +554,35 @@ def _long_short_series(
         ranked = valid["signal"].rank(method="average", pct=True)
         low_cut = 1.0 / n_quantiles
         high_cut = 1.0 - low_cut
-        bottom_mask = ranked <= low_cut
-        top_mask = ranked > high_cut
+        bottom_mask = np.asarray(ranked <= low_cut, dtype=bool)
+        top_mask = np.asarray(ranked > high_cut, dtype=bool)
         if not bottom_mask.any() or not top_mask.any():
             continue
-        spreads[pd.Timestamp(date)] = float(valid.loc[top_mask, "return"].mean() - valid.loc[bottom_mask, "return"].mean())
-        top = set(valid.index.get_level_values("asset")[np.asarray(top_mask, dtype=bool)])
-        bottom = set(valid.index.get_level_values("asset")[np.asarray(bottom_mask, dtype=bool)])
-        if previous_top is not None and previous_bottom is not None:
-            top_turn = 1.0 - len(top & previous_top) / max(len(top | previous_top), 1)
-            bottom_turn = 1.0 - len(bottom & previous_bottom) / max(len(bottom | previous_bottom), 1)
-            turnovers[pd.Timestamp(date)] = float((top_turn + bottom_turn) / 2)
-        previous_top, previous_bottom = top, bottom
-    return pd.Series(spreads, name="long_short").sort_index(), pd.Series(turnovers, name="turnover").sort_index()
+        assets = valid.index.get_level_values("asset").astype(str)
+        top_assets = list(assets[top_mask])
+        bottom_assets = list(assets[bottom_mask])
+        weights = {
+            **{asset: 1.0 / len(top_assets) for asset in top_assets},
+            **{asset: -1.0 / len(bottom_assets) for asset in bottom_assets},
+        }
+        realized = valid["return"].to_dict()
+        gross = float(sum(weights[str(asset)] * float(value) for asset, value in realized.items() if str(asset) in weights))
+        all_assets = set(weights) | set(previous_weights)
+        turnover = 0.5 * sum(
+            abs(weights.get(asset, 0.0) - previous_weights.get(asset, 0.0))
+            for asset in all_assets
+        )
+        transaction_cost = turnover * float(cost_bps) / 10_000.0
+        timestamp = pd.Timestamp(date)
+        gross_returns[timestamp] = gross
+        net_returns[timestamp] = gross - transaction_cost
+        turnovers[timestamp] = float(turnover)
+        previous_weights = weights
+    return (
+        pd.Series(gross_returns, name="long_short_gross").sort_index(),
+        pd.Series(net_returns, name="long_short_net").sort_index(),
+        pd.Series(turnovers, name="turnover").sort_index(),
+    )
 
 
 def _performance_stats(returns: pd.Series, *, annualization: float) -> dict[str, float | int | None]:
@@ -510,7 +631,7 @@ def _route_factor(metrics: Mapping[str, Any], *, coverage: float) -> str:
     test = primary.get("test", {})
     rank_ic = ((test.get("rank_ic") or {}).get("mean"))
     icir = ((test.get("rank_ic") or {}).get("ir"))
-    sharpe = ((test.get("long_short") or {}).get("sharpe"))
+    sharpe = ((test.get("long_short_net") or {}).get("sharpe"))
     positive = ((test.get("rank_ic") or {}).get("positive_ratio"))
     if coverage < 0.35 or rank_ic is None or rank_ic <= 0:
         return "rejected"
@@ -526,6 +647,7 @@ def _evaluate_one(
     raw: pd.Series,
     forward_returns: Mapping[int, pd.Series],
     bounds: SplitBoundaries,
+    trading_dates: pd.DatetimeIndex,
     config: BatchEvaluationConfig,
     *,
     compile_seconds: float,
@@ -536,8 +658,18 @@ def _evaluate_one(
     finite_values = int(finite.sum())
     coverage = finite_values / max(len(purified), 1)
 
-    primary_forward = forward_returns[min(config.horizons)].reindex(purified.index)
-    train_positions = np.flatnonzero(_split_mask(purified.index, "train", bounds))
+    primary_horizon = min(config.horizons)
+    primary_forward = forward_returns[primary_horizon].reindex(purified.index)
+    train_positions = np.flatnonzero(
+        _purged_split_mask(
+            purified.index,
+            "train",
+            bounds,
+            trading_dates,
+            entry_lag=config.entry_lag,
+            horizon=primary_horizon,
+        )
+    )
     train_ic = _daily_ic(
         purified.iloc[train_positions],
         primary_forward.iloc[train_positions],
@@ -552,22 +684,52 @@ def _evaluate_one(
         horizon_metrics: dict[str, Any] = {}
         annualization = config.annualization / max(int(horizon), 1)
         for split in ("train", "valid", "test", "all"):
-            mask = _split_mask(signal.index, split, bounds)
-            split_signal = signal.iloc[np.flatnonzero(mask)]
-            split_returns = future.reindex(signal.index).iloc[np.flatnonzero(mask)]
+            mask = _purged_split_mask(
+                signal.index,
+                split,
+                bounds,
+                trading_dates,
+                entry_lag=config.entry_lag,
+                horizon=int(horizon),
+            )
+            positions = np.flatnonzero(mask)
+            split_signal = signal.iloc[positions]
+            split_returns = future.reindex(signal.index).iloc[positions]
             daily = _daily_ic(split_signal, split_returns, min_assets=config.min_assets)
-            long_short, turnover = _long_short_series(
+            long_short_gross, long_short_net, turnover = _long_short_series(
                 split_signal,
                 split_returns,
                 min_assets=config.min_assets,
                 n_quantiles=config.n_quantiles,
+                cost_bps=config.cost_bps,
             )
             horizon_metrics[split] = {
-                "ic": _summary_stats(daily.get("ic", pd.Series(dtype=float))),
-                "rank_ic": _summary_stats(daily.get("rank_ic", pd.Series(dtype=float))),
-                "long_short": _performance_stats(long_short, annualization=annualization),
+                "ic": _summary_stats(
+                    daily.get("ic", pd.Series(dtype=float)),
+                    hac_lags=max(int(horizon) - 1, 0),
+                ),
+                "rank_ic": _summary_stats(
+                    daily.get("rank_ic", pd.Series(dtype=float)),
+                    hac_lags=max(int(horizon) - 1, 0),
+                ),
+                "long_short_gross": _performance_stats(
+                    long_short_gross,
+                    annualization=annualization,
+                ),
+                "long_short_net": _performance_stats(
+                    long_short_net,
+                    annualization=annualization,
+                ),
+                "long_short": _performance_stats(
+                    long_short_net,
+                    annualization=annualization,
+                ),
+                "cost_bps": float(config.cost_bps),
                 "turnover_mean": float(turnover.mean()) if not turnover.empty else None,
-                "coverage": float(pd.concat([split_signal, split_returns], axis=1).dropna().shape[0] / max(len(split_signal), 1)),
+                "coverage": float(
+                    pd.concat([split_signal, split_returns], axis=1).dropna().shape[0]
+                    / max(len(split_signal), 1)
+                ),
             }
         year_rows: dict[str, Any] = {}
         aligned = pd.concat([signal.rename("signal"), future.rename("return")], axis=1).dropna()
@@ -610,9 +772,10 @@ def _ranking_rows(records: Sequence[FactorRunRecord]) -> list[dict[str, Any]]:
                 "test_rank_ic": ((test.get("rank_ic") or {}).get("mean")),
                 "test_rank_ic_ir": ((test.get("rank_ic") or {}).get("ir")),
                 "test_rank_ic_positive_ratio": ((test.get("rank_ic") or {}).get("positive_ratio")),
-                "test_long_short_sharpe": ((test.get("long_short") or {}).get("sharpe")),
-                "test_long_short_annual_return": ((test.get("long_short") or {}).get("annual_return")),
-                "test_long_short_max_drawdown": ((test.get("long_short") or {}).get("max_drawdown")),
+                "test_long_short_gross_sharpe": ((test.get("long_short_gross") or {}).get("sharpe")),
+                "test_long_short_net_sharpe": ((test.get("long_short_net") or {}).get("sharpe")),
+                "test_long_short_net_annual_return": ((test.get("long_short_net") or {}).get("annual_return")),
+                "test_long_short_net_max_drawdown": ((test.get("long_short_net") or {}).get("max_drawdown")),
                 "turnover_mean": test.get("turnover_mean"),
                 "compile_seconds": record.compile_seconds,
                 "execute_seconds": record.execute_seconds,
@@ -623,7 +786,7 @@ def _ranking_rows(records: Sequence[FactorRunRecord]) -> list[dict[str, Any]]:
         key=lambda row: (
             row.get("route_score", -1),
             row.get("test_rank_ic_ir") if row.get("test_rank_ic_ir") is not None else -999,
-            row.get("test_long_short_sharpe") if row.get("test_long_short_sharpe") is not None else -999,
+            row.get("test_long_short_net_sharpe") if row.get("test_long_short_net_sharpe") is not None else -999,
         ),
         reverse=True,
     )
@@ -651,12 +814,95 @@ def _resume_record(path: Path, *, formula_hash: str, snapshot_id: str, config_ha
     return FactorRunRecord(**record)
 
 
+def _load_point_in_time_universe(
+    config: BatchEvaluationConfig,
+) -> tuple[pd.DataFrame, str]:
+    if not config.universe_dataset:
+        raise ValueError("universe_dataset is required")
+    from data_access import get_store
+
+    store = get_store()
+    dataset = store.get_dataset(config.universe_dataset)
+    columns = [
+        dataset.time_column,
+        dataset.instrument_column,
+        config.universe_membership_field,
+    ]
+    if config.tradability_field:
+        columns.append(config.tradability_field)
+    result = store.read_result(
+        config.universe_dataset,
+        columns=list(dict.fromkeys(columns)),
+        time_range=(config.start_date, config.end_date)
+        if config.start_date or config.end_date
+        else None,
+        instrument_filter=list(config.instrument_filter)
+        if config.instrument_filter
+        else None,
+    )
+    frame = result.table.to_pandas().rename(
+        columns={
+            dataset.time_column: "datetime",
+            dataset.instrument_column: "asset",
+            config.universe_membership_field: "is_member",
+            **(
+                {config.tradability_field: "is_tradable"}
+                if config.tradability_field
+                else {}
+            ),
+        }
+    )
+    frame["datetime"] = pd.to_datetime(frame["datetime"], errors="raise")
+    frame["asset"] = frame["asset"].astype(str)
+    if frame.duplicated(["datetime", "asset"]).any():
+        raise ValueError(
+            f"universe dataset {config.universe_dataset} contains duplicate keys"
+        )
+    frame["is_member"] = frame["is_member"].fillna(False).astype(bool)
+    if "is_tradable" in frame.columns:
+        frame["is_tradable"] = frame["is_tradable"].fillna(False).astype(bool)
+    return frame, str(result.snapshot.snapshot_id)
+
+
+def _apply_point_in_time_universe(
+    market_frame: pd.DataFrame,
+    universe_frame: pd.DataFrame,
+) -> pd.DataFrame:
+    required = {"datetime", "asset", "is_member"}
+    missing = sorted(required - set(universe_frame.columns))
+    if missing:
+        raise ValueError(f"universe frame missing required columns: {missing}")
+    universe = universe_frame.copy()
+    universe["datetime"] = pd.to_datetime(universe["datetime"], errors="raise")
+    universe["asset"] = universe["asset"].astype(str)
+    if universe.duplicated(["datetime", "asset"]).any():
+        raise ValueError("universe frame contains duplicate (datetime, asset) keys")
+    columns = ["datetime", "asset", "is_member"]
+    if "is_tradable" in universe.columns:
+        columns.append("is_tradable")
+    merged = market_frame.merge(
+        universe[columns],
+        on=["datetime", "asset"],
+        how="left",
+        validate="one_to_one",
+    )
+    eligible = merged["is_member"].fillna(False).astype(bool)
+    if "is_tradable" in merged.columns:
+        eligible &= merged["is_tradable"].fillna(False).astype(bool)
+    filtered = merged.loc[eligible, market_frame.columns].copy()
+    if filtered.empty:
+        raise ValueError("point-in-time universe filter removed all market rows")
+    return filtered.sort_values(["asset", "datetime"]).reset_index(drop=True)
+
+
 def run_gtja185_evaluation(
     config: BatchEvaluationConfig,
     *,
     output_dir: str | Path,
     market_frame: pd.DataFrame | None = None,
     snapshot_id: str | None = None,
+    universe_frame: pd.DataFrame | None = None,
+    universe_snapshot_id: str | None = None,
 ) -> BatchRunSummary:
     config.validate()
     started_perf = time.perf_counter()
@@ -684,6 +930,16 @@ def run_gtja185_evaluation(
     else:
         snapshot_id = str(snapshot_id or f"synthetic:{_canonical_hash({'rows': len(market_frame), 'columns': list(market_frame.columns)})[:16]}")
     market_frame = _normalize_market_frame(market_frame)
+    if config.require_point_in_time_universe:
+        if universe_frame is None:
+            universe_frame, universe_snapshot_id = _load_point_in_time_universe(config)
+        market_frame = _apply_point_in_time_universe(market_frame, universe_frame)
+        snapshot_id = (
+            f"market={snapshot_id}|universe={universe_snapshot_id or 'provided'}"
+        )
+    trading_dates = pd.DatetimeIndex(
+        sorted(pd.to_datetime(market_frame["datetime"]).dt.normalize().unique())
+    )
     bounds = _split_boundaries(market_frame, config)
     config_payload = asdict(config)
     config_hash = _canonical_hash(config_payload)
@@ -705,6 +961,7 @@ def run_gtja185_evaluation(
         market_frame,
         config.horizons,
         config.forward_price_field,
+        entry_lag=config.entry_lag,
     )
 
     records: list[FactorRunRecord] = []
@@ -750,6 +1007,7 @@ def run_gtja185_evaluation(
                 raw_results[factor.name],
                 forward_returns,
                 bounds,
+                trading_dates,
                 config,
                 compile_seconds=compile_timings.get(factor.name, 0.0),
                 execute_seconds=execute_timings.get(factor.name, 0.0),
@@ -857,6 +1115,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--min-assets", type=int, default=20)
     parser.add_argument("--n-quantiles", type=int, default=5)
+    parser.add_argument("--entry-lag", type=int, default=1)
+    parser.add_argument("--cost-bps", type=float, default=10.0)
+    parser.add_argument("--universe-dataset", default=None)
+    parser.add_argument("--universe-membership-field", default="is_member")
+    parser.add_argument("--tradability-field", default="is_tradable")
+    parser.add_argument("--require-point-in-time-universe", action="store_true")
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--factor", action="append", default=[])
     parser.add_argument("--materialize-staging", action="store_true")
@@ -879,6 +1143,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         batch_size=args.batch_size,
         min_assets=args.min_assets,
         n_quantiles=args.n_quantiles,
+        entry_lag=args.entry_lag,
+        cost_bps=args.cost_bps,
+        universe_dataset=args.universe_dataset,
+        universe_membership_field=args.universe_membership_field,
+        tradability_field=args.tradability_field or None,
+        require_point_in_time_universe=args.require_point_in_time_universe,
         materialize_staging=args.materialize_staging,
         publish=args.publish,
         strict=not args.allow_partial,
