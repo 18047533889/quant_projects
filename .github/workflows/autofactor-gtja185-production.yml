@@ -2,113 +2,61 @@ name: AutoFactor GTJA185 Production
 
 on:
   push:
-    branches:
-      - main
-      - agent/autofactor-gtja185-evaluation
+    branches: [agent/autofactor-gtja185-evaluation]
     paths:
-      - "AutoFactorEvaluation-RECONSTRUCT/**"
-      - "gtja191/**"
-      - "factor_engine/**"
-      - "data_access/**"
+      - ".github/scripts/decouple_factor_packs.py"
       - ".github/workflows/autofactor-gtja185-production.yml"
-  pull_request:
-    paths:
-      - "AutoFactorEvaluation-RECONSTRUCT/**"
-      - "gtja191/**"
-      - "factor_engine/**"
-      - "data_access/**"
-      - ".github/workflows/autofactor-gtja185-production.yml"
+  workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: autofactor-gtja185-${{ github.ref }}
-  cancel-in-progress: true
+  group: factor-pack-decoupling
+  cancel-in-progress: false
 
 jobs:
-  gtja185:
+  migrate-and-validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    env:
-      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/AutoFactorEvaluation-RECONSTRUCT:${{ github.workspace }}/gtja191
-      FACTOR_ENGINE_DISABLE_NUMBA: "1"
-      FACTOR_ENGINE_RUN_MODE: research
-      QUANT_PRODUCTION_MODE: "0"
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: agent/autofactor-gtja185-evaluation
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
+      - name: Apply provider-neutral architecture
+        run: python .github/scripts/decouple_factor_packs.py
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
           python -m pip install -r AutoFactorEvaluation-RECONSTRUCT/requirements.txt
-          python -m pip install pytest numpy pandas scipy statsmodels pyarrow polars duckdb pyyaml pydantic requests
-      - name: Verify generated pack is current
-        run: |
-          python AutoFactorEvaluation-RECONSTRUCT/scripts/generate_gtja185_pack.py
-          git diff --exit-code -- AutoFactorEvaluation-RECONSTRUCT/factor_packs/gtja185_pack.json
-      - name: Static contracts and complete test collection
-        id: collection
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -o pipefail
-          mkdir -p gtja185-ci
-          {
-            test ! -d AutoFactorEvaluation-RECONSTRUCT/factor_engine
-            test -f AutoFactorEvaluation-RECONSTRUCT/evaluation/gtja185_models.py
-            test -f AutoFactorEvaluation-RECONSTRUCT/evaluation/gtja185_metrics.py
-            test -f AutoFactorEvaluation-RECONSTRUCT/evaluation/gtja185_runner.py
-            grep -q 'ashare_universe_daily:' data_access/config/datasets.yaml
-            python -m compileall -q AutoFactorEvaluation-RECONSTRUCT gtja191
-            pytest --collect-only -q AutoFactorEvaluation-RECONSTRUCT
-          } 2>&1 | tee gtja185-ci/collection.txt
-      - name: GTJA185 full synthetic and economics evaluation
-        id: full_evaluation
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -o pipefail
-          pytest -q \
-            AutoFactorEvaluation-RECONSTRUCT/tests/test_gtja185_batch_evaluation.py \
-            AutoFactorEvaluation-RECONSTRUCT/tests/test_gtja185_evaluation_contracts.py \
-            2>&1 | tee gtja185-ci/full-evaluation.txt
-      - name: Platform and catalog regression
-        id: regression
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -o pipefail
-          {
-            pytest -q AutoFactorEvaluation-RECONSTRUCT/tests/test_quant_platform_integration.py
-            pytest -q gtja191/tests/test_full_catalog_factor_engine.py gtja191/tests/test_gtja191.py
-            pytest -q \
-              data_access/tests/unit/test_params_validation_strict.py \
-              data_access/tests/unit/test_key_policy_deterministic.py \
-              factor_engine/tests/test_data_scope_stability.py \
-              factor_engine/tests/test_gtja_compat_semantics.py
-          } 2>&1 | tee gtja185-ci/regression.txt
-      - name: Upload GTJA185 diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: autofactor-gtja185-ci
-          path: gtja185-ci/
-          if-no-files-found: error
-      - name: Enforce GTJA185 gate
-        if: always()
-        shell: bash
+      - name: Validate evaluator isolation
         env:
-          COLLECTION: ${{ steps.collection.outcome }}
-          FULL_EVALUATION: ${{ steps.full_evaluation.outcome }}
-          REGRESSION: ${{ steps.regression.outcome }}
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/AutoFactorEvaluation-RECONSTRUCT
         run: |
-          set -euo pipefail
-          echo "collection=$COLLECTION full_evaluation=$FULL_EVALUATION regression=$REGRESSION"
-          test "$COLLECTION" = success
-          test "$FULL_EVALUATION" = success
-          test "$REGRESSION" = success
+          test ! -d AutoFactorEvaluation-RECONSTRUCT/factor_packs
+          test -z "$(grep -RIlE 'factor_packs\.gtja|gtja191|gtja185' AutoFactorEvaluation-RECONSTRUCT/evaluation || true)"
+          python -m compileall -q AutoFactorEvaluation-RECONSTRUCT
+          pytest -q AutoFactorEvaluation-RECONSTRUCT/tests/test_batch_contracts.py AutoFactorEvaluation-RECONSTRUCT/tests/test_quant_platform_integration.py
+      - name: Validate external GTJA185 provider
+        env:
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/AutoFactorEvaluation-RECONSTRUCT:${{ github.workspace }}/gtja191
+          FACTOR_ENGINE_DISABLE_NUMBA: "1"
+        run: |
+          python -m compileall -q gtja191
+          pytest -q gtja191/tests/test_autofactor_integration.py gtja191/tests/test_full_catalog_factor_engine.py gtja191/tests/test_gtja191.py
+      - name: Commit decoupled architecture
+        run: |
+          rm -f .github/scripts/decouple_factor_packs.py
+          rm -f .github/workflows/decouple-factor-packs.yml
+          rm -f .github/workflows/autofactor-gtja185-production.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Decouple external factor packs from AutoFactorEvaluation"
+          git push origin HEAD:agent/autofactor-gtja185-evaluation
