@@ -2,7 +2,10 @@
 
 AutoFactorEvaluation ships a versioned bundle of all **185 deliverable GTJA191 factors**.
 The bundle is generated from `gtja191/lib/catalog.py`; each formula and the complete pack
-carry SHA-256 fingerprints, and CI rejects stale or semantically drifted copies.
+carry SHA-256 fingerprints, and CI rejects stale or semantically drifted copies. GTJA catalog,
+candidate manifests, formula files, materialization YAML and the AutoFactorEvaluation pack are
+regenerated from the same canonical source. Formulas that reference VWAP use the actual
+`col('vwap')` market field rather than a typical-price proxy.
 
 ## Official execution path
 
@@ -40,6 +43,16 @@ Every run writes:
 Resume is allowed only when the factor formula hash, DataAccess snapshot ID and evaluation
 configuration hash all match. A changed formula, dataset snapshot or metric configuration
 forces recomputation.
+
+The committed GTJA materialization YAML files use repository-relative defaults:
+
+```text
+data/factors/plan_cache/gtja191
+data/factors/lake/gtja191
+```
+
+They therefore remain portable across CI, research servers and developer workstations; runtime
+orchestration may override the output root without regenerating the formulas.
 
 ## Full real-data run
 
