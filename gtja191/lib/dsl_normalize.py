@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import ast
 import math
+import operator
 import re
 
 _FN_RENAMES: dict[str, str] = {
@@ -18,21 +19,52 @@ _FN_RENAMES: dict[str, str] = {
     "slope": "ts_time_slope",
 }
 
-
-def _is_int_literal(node: ast.AST) -> int | None:
-    if isinstance(node, ast.Constant) and isinstance(node.value, int):
-        return node.value
-    return None
+_BINARY_CONSTANT_OPS = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.FloorDiv: operator.floordiv,
+    ast.Mod: operator.mod,
+    ast.Pow: operator.pow,
+}
+_UNARY_CONSTANT_OPS = {ast.UAdd: operator.pos, ast.USub: operator.neg}
 
 
 def _literal_number(node: ast.AST) -> float | int | None:
-    try:
-        value = ast.literal_eval(node)
-    except (ValueError, TypeError, SyntaxError):
+    """只计算由数值常量与白名单算术运算构成的 AST。"""
+    if isinstance(node, ast.Constant):
+        value = node.value
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        return value
+    if isinstance(node, ast.UnaryOp) and type(node.op) in _UNARY_CONSTANT_OPS:
+        operand = _literal_number(node.operand)
+        if operand is None:
+            return None
+        try:
+            value = _UNARY_CONSTANT_OPS[type(node.op)](operand)
+        except (ArithmeticError, ValueError, OverflowError):
+            return None
+        return value if isinstance(value, (int, float)) and math.isfinite(float(value)) else None
+    if isinstance(node, ast.BinOp) and type(node.op) in _BINARY_CONSTANT_OPS:
+        left = _literal_number(node.left)
+        right = _literal_number(node.right)
+        if left is None or right is None:
+            return None
+        try:
+            value = _BINARY_CONSTANT_OPS[type(node.op)](left, right)
+        except (ArithmeticError, ValueError, OverflowError, ZeroDivisionError):
+            return None
+        return value if isinstance(value, (int, float)) and math.isfinite(float(value)) else None
+    return None
+
+
+def _is_int_literal(node: ast.AST) -> int | None:
+    value = _literal_number(node)
+    if value is None or int(value) != value:
         return None
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    return value
+    return int(value)
 
 
 def _is_rolling_max_min(call: ast.Call) -> bool:
@@ -41,10 +73,7 @@ def _is_rolling_max_min(call: ast.Call) -> bool:
     n = _is_int_literal(call.args[1])
     if n is None or n < 2:
         return False
-    a0 = call.args[0]
-    if isinstance(a0, ast.Constant) and isinstance(a0.value, (int, float)):
-        return False
-    return True
+    return _literal_number(call.args[0]) is None
 
 
 def _flatten_add_names(node: ast.AST) -> list[str] | None:
@@ -82,6 +111,16 @@ class _CanonicalRenamer(ast.NodeTransformer):
                 ),
                 node,
             )
+        value = _literal_number(node)
+        if value is not None:
+            return ast.copy_location(ast.Constant(value=value), node)
+        return node
+
+    def visit_UnaryOp(self, node: ast.UnaryOp) -> ast.AST:
+        self.generic_visit(node)
+        value = _literal_number(node)
+        if value is not None:
+            return ast.copy_location(ast.Constant(value=value), node)
         return node
 
     def visit_Call(self, node: ast.Call) -> ast.AST:
@@ -95,7 +134,6 @@ class _CanonicalRenamer(ast.NodeTransformer):
         if name in _FN_RENAMES:
             node.func.id = _FN_RENAMES[name]
             name = node.func.id
-        # 纯标量 power 不应进入 cleaned Series operator；在 DSL 层确定性折叠。
         if name == "power" and len(node.args) == 2 and not node.keywords:
             base = _literal_number(node.args[0])
             exponent = _literal_number(node.args[1])
