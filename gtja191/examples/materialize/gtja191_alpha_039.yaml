@@ -1,0 +1,40 @@
+factor:
+  name: gtja191_alpha_039
+  expr: (rank(ts_decay_linear(ts_delta(close, 2), 8)) - rank(ts_decay_linear(ts_corr((high
+    + low + close) / 3 * 0.3 + open * 0.7, ts_sum(ts_mean(volume, 180), 37), 14),
+    12))) * -1
+  freq: 1d
+  universe: ASHARE_ALL
+  description: GTJA-191 gtja191_alpha_039
+data_source:
+  type: data_access
+  dataset: ashare_stock_daily
+  read_auto: true
+  start_date: '2014-01-01'
+  end_date: '2026-06-25'
+  fields:
+    open: Open
+    high: High
+    low: Low
+    close: Close
+    volume: Volume
+    vwap: Vwap
+    amount: Amount
+    ret: Return
+    preclose: PreClose
+backend:
+  type: pandas
+engine:
+  enable_cache: true
+  plan_cache_dir: /home/shw/quant_projects/data/factors/plan_cache/gtja191
+materialization:
+  lake_root: /home/shw/quant_projects/data/factors/lake/gtja191
+  factor_id: gtja191_alpha_039
+  author: gtja191
+  frequency: 1d
+  expression: (rank(ts_decay_linear(ts_delta(close, 2), 8)) - rank(ts_decay_linear(ts_corr((high
+    + low + close) / 3 * 0.3 + open * 0.7, ts_sum(ts_mean(volume, 180), 37), 14),
+    12))) * -1
+  target: local
+  preserve_invalid_rows: true
+  value_dtype: float32

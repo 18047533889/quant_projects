@@ -1,0 +1,31 @@
+{
+  "ok": true,
+  "factor_count": 1,
+  "succeeded": 1,
+  "failed": 0,
+  "elapsed_seconds": 493.003,
+  "lake_root": "/home/shw/quant_projects/data/factors/lake/gtja191",
+  "config_dir": "/home/shw/quant_projects/gtja191/examples/materialize",
+  "results": [
+    {
+      "factor": "gtja191_alpha_001",
+      "factor_id": "gtja191_alpha_001",
+      "rows_written": 13849178,
+      "partitions": [
+        2016,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025,
+        2026
+      ],
+      "lake_root": "/home/shw/quant_projects/data/factors/lake/gtja191"
+    }
+  ],
+  "errors": []
+}

@@ -1,2 +1,2 @@
-examples/materialize/*.yaml
-dsl/materialize_report.json
+# 运行时日志（不同步）
+dsl/materialize_run.log

@@ -1,0 +1,38 @@
+factor:
+  name: gtja191_alpha_046
+  expr: (ts_mean(close, 3) + ts_mean(close, 6) + ts_mean(close, 12) + ts_mean(close,
+    24)) / (4 * close)
+  freq: 1d
+  universe: ASHARE_ALL
+  description: GTJA-191 gtja191_alpha_046
+data_source:
+  type: data_access
+  dataset: ashare_stock_daily
+  read_auto: true
+  start_date: '2014-01-01'
+  end_date: '2026-06-25'
+  fields:
+    open: Open
+    high: High
+    low: Low
+    close: Close
+    volume: Volume
+    vwap: Vwap
+    amount: Amount
+    ret: Return
+    preclose: PreClose
+backend:
+  type: pandas
+engine:
+  enable_cache: true
+  plan_cache_dir: /home/shw/quant_projects/data/factors/plan_cache/gtja191
+materialization:
+  lake_root: /home/shw/quant_projects/data/factors/lake/gtja191
+  factor_id: gtja191_alpha_046
+  author: gtja191
+  frequency: 1d
+  expression: (ts_mean(close, 3) + ts_mean(close, 6) + ts_mean(close, 12) + ts_mean(close,
+    24)) / (4 * close)
+  target: local
+  preserve_invalid_rows: true
+  value_dtype: float32
