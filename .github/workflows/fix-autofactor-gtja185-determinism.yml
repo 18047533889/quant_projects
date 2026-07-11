@@ -1,0 +1,51 @@
+name: Fix AutoFactor GTJA185 Determinism
+
+on:
+  push:
+    branches:
+      - agent/autofactor-gtja185-evaluation
+    paths:
+      - ".github/workflows/fix-autofactor-gtja185-determinism.yml"
+      - ".github/scripts/fix_autofactor_gtja185_determinism.py"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fix-autofactor-gtja185-determinism
+  cancel-in-progress: false
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/autofactor-gtja185-evaluation
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Apply deterministic fixes
+        run: python .github/scripts/fix_autofactor_gtja185_determinism.py
+      - name: Verify pack stability
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp AutoFactorEvaluation-RECONSTRUCT/factor_packs/gtja185_pack.json /tmp/gtja185_pack.json
+          python AutoFactorEvaluation-RECONSTRUCT/scripts/generate_gtja185_pack.py
+          cmp /tmp/gtja185_pack.json AutoFactorEvaluation-RECONSTRUCT/factor_packs/gtja185_pack.json
+          python -m compileall -q AutoFactorEvaluation-RECONSTRUCT/evaluation/gtja185_batch.py
+      - name: Commit fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/scripts/fix_autofactor_gtja185_determinism.py
+          rm -f .github/workflows/fix-autofactor-gtja185-determinism.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Make GTJA185 pack and evaluation deterministic"
+          git push origin HEAD:agent/autofactor-gtja185-evaluation
