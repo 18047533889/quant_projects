@@ -10,6 +10,13 @@ on:
       - "gtja191/**"
       - "factor_engine/**"
       - "data_access/**"
+  pull_request:
+    paths:
+      - ".github/workflows/autofactor-gtja185-audit.yml"
+      - "AutoFactorEvaluation-RECONSTRUCT/**"
+      - "gtja191/**"
+      - "factor_engine/**"
+      - "data_access/**"
   workflow_dispatch:
 
 permissions:
