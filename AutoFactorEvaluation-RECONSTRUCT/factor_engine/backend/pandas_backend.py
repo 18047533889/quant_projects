@@ -1,0 +1,78 @@
+"""Pandas 执行后端：逻辑计划 → MultiIndex Series 结果。
+
+注册策略
+--------
+- ``column`` / ``literal``：内建 kernel，从 ``ExecutionContext.data_source`` 取列或常量；
+- **其余所有** ``PlanNode.op``：启动时由 ``list_cleaned_ops_for_backend`` 批量注册为
+  ``make_cleaned_kernel``，100% 走 ``cleaned_operators``，无第二套逐算子 kernel 文件。
+
+缓存：若 ``ctx.cache`` 存在，按 ``plan_cache_key(node)``  memoize 子计划结果。
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from planner.logical_plan import PlanNode
+from planner.plan_hash import plan_cache_key
+
+from .base import Backend
+from .cleaned_bridge import list_cleaned_ops_for_backend, make_cleaned_kernel
+from .context import ExecutionContext
+from .kernels import KernelRegistry
+
+
+class PandasBackend(Backend):
+    """按 ``PlanNode.op`` 分派 kernel；除 ``column`` / ``literal`` / ``plan_ref`` 外均为 cleaned。"""
+
+    def __init__(self) -> None:
+        self._registry = KernelRegistry()
+        self._register_kernels()
+
+    def execute(self, plan: PlanNode, ctx: ExecutionContext) -> Any:
+        return self._eval(plan, ctx)
+
+    def _eval(self, node: PlanNode, ctx: ExecutionContext) -> Any:
+        if node.op == "plan_ref":
+            sc = getattr(ctx, "shared_result_cache", None)
+            if sc is None:
+                raise RuntimeError(
+                    "plan_ref requires ExecutionContext.shared_result_cache; "
+                    "use FactorEngine.run_many() after compile_many CSE."
+                )
+            sid = node.attrs["sid"]
+            if sid not in sc:
+                raise KeyError(f"missing shared subplan result for sid prefix={sid[:64]!r}...")
+            return sc[sid]
+
+        cache = getattr(ctx, "cache", None)
+        cache_key: str | None = None
+        if cache is not None:
+            cache_key = plan_cache_key(node)
+            hit = cache.get(cache_key)
+            if hit is not None:
+                return hit
+
+        try:
+            kernel = self._registry.get(node.op)
+        except KeyError as exc:
+            raise NotImplementedError(f"Unsupported op: {node.op}") from exc
+
+        out = kernel(node, ctx)
+        if cache is not None and cache_key is not None:
+            cache.set(cache_key, out)
+        return out
+
+    def _register_kernels(self) -> None:
+        reg = self._registry.register
+        reg("column", self._op_column)
+        reg("literal", self._op_literal)
+        for op in list_cleaned_ops_for_backend(set()):
+            reg(op, make_cleaned_kernel(self._eval, op))
+
+    def _op_column(self, node: PlanNode, ctx: ExecutionContext):
+        return ctx.data_source.load_column(node.attrs["name"])
+
+    def _op_literal(self, node: PlanNode, ctx: ExecutionContext):
+        _ = ctx
+        return node.attrs["value"]

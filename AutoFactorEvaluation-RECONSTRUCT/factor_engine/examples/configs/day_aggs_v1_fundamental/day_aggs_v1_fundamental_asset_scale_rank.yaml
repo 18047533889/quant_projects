@@ -1,0 +1,39 @@
+factor:
+  name: day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1
+  expr: rank(col("total_assets"))
+  freq: 1d
+  universe: equities
+  description: 基本面规模因子 - 总资产截面排名，数值越高表示资产规模越大
+
+data_source:
+  type: composite
+  anchor: price
+  anchor_column: close
+  aliases:
+    total_assets: balance_sheet.total_assets
+  sources:
+    price:
+      type: cleaned_parquet
+      root: ~/quant_projects/data/us_stock/cleaned_massive_data/us_stocks_sip/day_aggs_v1
+      recursive: true
+      start_date: 2016-01-01
+      end_date: 2025-12-31 23:59:59
+    balance_sheet:
+      type: cleaned_parquet
+      root: ~/quant_projects/data/us_stock/cleaned_massive_data/fundamentals/balance_sheet
+      recursive: true
+      start_date: 2016-01-01
+      end_date: 2025-12-31 23:59:59
+  joins:
+    balance_sheet:
+      method: asof_backward
+
+backend:
+  type: pandas
+
+engine:
+  enable_cache: true
+
+materialization:
+  lake_root: ~/quant_projects/data/factors/lake
+  factor_id: day_aggs_v1_fundamental_asset_scale_rank_2016_2025_v1

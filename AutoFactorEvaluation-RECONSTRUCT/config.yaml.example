@@ -1,0 +1,111 @@
+# ============================================================
+# AutoFactorEvaluation — A股样例配置文件
+# ============================================================
+# 放置路径: all_configs/auto_factor_evaluation/config.yaml
+# 或通过环境变量 AFVCONFIG 指定配置目录
+# ============================================================
+
+# ════════════════════════════════════════════════════════════
+# 一、基座路径（三大基座，所有子路径自动推导）
+# ════════════════════════════════════════════════════════════
+
+candidate_pool: cos://qs-cold/candidate_pool/ashare/
+  # 候选因子池 COS 基座
+  # 自动推导子路径:
+  #   candidate/  — 封板因子投放入口
+  #   archive/    — 已处理完成的 campaign 归档
+
+factor_pool: cos://qs-cold/factor_pool/ashare/
+  # 因子持久化存储 COS 基座
+  # 自动推导子路径 (tier1~tier4):
+  #   tier1/gateway_pass_base/
+  #   tier1/gateway_duplicated_base/
+  #   tier1/gateway_anti_sample_base/
+  #   tier1/assetization_raw_factor_base/
+  #   tier1/purification_pure_factor_base/
+  #   tier2/2_fix_base/
+  #   tier2/2x_llm_mutation_base/
+  #   tier3/3a_core_production_base/
+  #   tier3/3b_satellite_production_base/
+  #   tier3/3c_feature_matierial_base/
+  #   tier3/3d_operation_storage_base/
+  #   tier4/anti_sample_base/
+
+local_tmp: /tmp/auto_factor_evaluation_tmp
+  # 本地临时工作区基座（默认 /tmp/auto_factor_evaluation_tmp）
+  # 自动推导子路径:
+  #   tier0/gateway_temp/
+  #   tier0/assetization_temp/
+  #   tier0/purification_temp/
+  #   tier0/evaluation_temp/
+  #   cache/market_data/
+  #   cache/timeseries_forward_return/
+  #   cache/evaluation_label/
+  #   cache/gateway_report/
+  #   logs/pipeline/
+  #   logs/gateway/
+  #   logs/assetization/
+  #   logs/purification/
+  #   logs/evaluation/
+
+# ════════════════════════════════════════════════════════════
+# 二、数据源路径
+# ════════════════════════════════════════════════════════════
+
+market_data:
+  path: cos://qs-cold/clean_data/ashare/lqtp_data/StockDailyBar/
+    # 行情数据表路径
+    # 支持 COS 路径（cos://...）或本地绝对路径（/data/...）
+    # A 股样例：已包含 StockDailyBar 表的完整路径
+  forward_return_field: Vwap
+    # 用于计算 forward return（前向收益率）的字段名
+    # A 股样例：Vwap（成交量加权均价）
+  adjustment_field: Factor
+    # 后复权调整使用的字段名
+    # A 股样例：Factor（复权因子）
+
+industry_data:
+  path: cos://qs-cold/clean_data/ashare/lqtp_data/StockIndustry/
+    # 行业分类数据表路径
+    # 支持 COS 路径或本地绝对路径
+  source_field: IndustrySource
+    # 表中用于识别行业分类口径的字段名
+    # A 股样例：IndustrySource（如 "sws2021"）
+  code_field: IndustryCode
+    # 表中表示行业代码的字段名
+    # A 股样例：IndustryCode（如 "610000"）
+  standard: sws2021
+    # 行业分类口径
+    # A 股样例：sws2021（申万 2021 版行业分类）
+
+# ════════════════════════════════════════════════════════════
+# 三、DeepSeek API 密钥
+# ════════════════════════════════════════════════════════════
+
+deepseek:
+  api_key: sk-your-deepseek-api-key-here
+    # DeepSeek API 密钥（字符串，非文件路径）
+    # 用于 Evaluation 阶段的路由推荐
+
+# ════════════════════════════════════════════════════════════
+# 四、模块参数（暂保留，后续整理）
+# ════════════════════════════════════════════════════════════
+
+gateway:
+  max_complexity:               50
+  max_ast_depth:                10
+  semantic_similarity_threshold: 0.95
+
+purification:
+  imputation_method:            linear
+  max_delay:                    5
+  decay_rate:                   0.5
+  winsorization_mad_multiplier: 5
+
+evaluation:
+  horizons:          [1, 5, 21]
+  min_assets:        50
+  n_quantiles:       5
+  factor_direction:  1
+  weighting:         equal
+  cost_bps:          10

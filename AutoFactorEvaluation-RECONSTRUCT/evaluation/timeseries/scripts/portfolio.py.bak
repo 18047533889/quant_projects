@@ -1,0 +1,101 @@
+"""多空组合换手、成本与净值路径计算。
+
+对应文档：evaluation/timeseries/docs/FID_timeseries_performance_series.md
+职责：基于换手率计算交易成本，并生成累计收益与回撤序列。
+"""
+
+from __future__ import annotations
+
+import numpy as np
+import pandas as pd
+
+from .config import TimeseriesConfig
+from .schemas import (
+    COL_ASSET,
+    COL_CUM_RETURN,
+    COL_DRAWDOWN,
+    COL_EVAL_RUN_ID,
+    COL_FACTOR_ID,
+    COL_GROSS_RETURN,
+    COL_HORIZON,
+    COL_NET_RETURN,
+    COL_TURNOVER,
+)
+
+
+def compute_turnover_series(
+    weight_rows: list[dict],
+    horizons: list[int],
+    factor_id: str,
+    eval_run_id: str,
+) -> pd.DataFrame:
+    """按持有期计算多空组合换手率（FID §2.5）。
+
+    公式：
+        `turnover_t = 0.5 * sum_i |w_t(i) - w_{t-1}(i)|`（资产并集上求和）。
+
+    约定：
+        每个 horizon 首期换手率记为 `NaN`，表示建仓期不计交易换手。
+    """
+    wdf = pd.DataFrame(weight_rows) if weight_rows else pd.DataFrame(columns=["date", COL_HORIZON, COL_ASSET, "weight"])
+    if wdf.empty:
+        return pd.DataFrame(columns=["date", COL_HORIZON, COL_FACTOR_ID, COL_EVAL_RUN_ID, COL_TURNOVER])
+
+    rows_out: list[pd.DataFrame] = []
+    for h in sorted(int(x) for x in horizons):
+        subh = wdf.loc[wdf[COL_HORIZON] == h, ["date", COL_ASSET, "weight"]].copy()
+        if subh.empty:
+            continue
+        wide = (
+            subh.pivot_table(index="date", columns=COL_ASSET, values="weight", aggfunc="sum")
+            .sort_index()
+            .fillna(0.0)
+        )
+        turnover = 0.5 * wide.diff().abs().sum(axis=1)
+        if not turnover.empty:
+            turnover.iloc[0] = np.nan
+        df_h = turnover.rename(COL_TURNOVER).reset_index()
+        df_h[COL_HORIZON] = h
+        df_h[COL_FACTOR_ID] = factor_id
+        df_h[COL_EVAL_RUN_ID] = eval_run_id
+        rows_out.append(df_h[["date", COL_HORIZON, COL_FACTOR_ID, COL_EVAL_RUN_ID, COL_TURNOVER]])
+    if not rows_out:
+        return pd.DataFrame(columns=["date", COL_HORIZON, COL_FACTOR_ID, COL_EVAL_RUN_ID, COL_TURNOVER])
+    return pd.concat(rows_out, ignore_index=True)
+
+
+def attach_cost_and_path(
+    ls_df: pd.DataFrame,
+    turnover_df: pd.DataFrame,
+    config: TimeseriesConfig,
+) -> pd.DataFrame:
+    """为多空收益附加交易成本、累计收益与回撤路径（FID §2.5）。
+
+    公式：
+        `net_return_t = gross_return_t - (cost_bps / 10000) * turnover_t`。
+
+    约定：
+        构造净值路径时将缺失净收益临时按 0 处理，避免中断累计收益与回撤曲线。
+    """
+    out = ls_df.copy()
+    if out.empty:
+        out[COL_CUM_RETURN] = []
+        out[COL_DRAWDOWN] = []
+        return out
+
+    out = out.merge(
+        turnover_df[["date", COL_HORIZON, COL_TURNOVER]],
+        on=["date", COL_HORIZON],
+        how="left",
+    )
+    cost_rate = float(config.cost_bps) / 10000.0
+    out[COL_NET_RETURN] = out[COL_GROSS_RETURN] - cost_rate * out[COL_TURNOVER]
+    # 缺失净收益按 0 构造路径，避免累计曲线中断。
+    out = out.sort_values([COL_HORIZON, "date"]).copy()
+    net_for_path = out[COL_NET_RETURN].fillna(0.0).astype(float)
+    equity = (1.0 + net_for_path).groupby(out[COL_HORIZON]).cumprod()
+    roll_max = equity.groupby(out[COL_HORIZON]).cummax()
+    out[COL_CUM_RETURN] = equity - 1.0
+    out[COL_DRAWDOWN] = equity / roll_max - 1.0
+    return out
+
