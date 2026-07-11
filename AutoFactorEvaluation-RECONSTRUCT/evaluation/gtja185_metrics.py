@@ -185,7 +185,7 @@ def purify_series(
     eligible = (counts >= int(min_assets)) & np.isfinite(stds) & (stds > 1e-12)
     standardized = clipped.sub(means, axis=0).div(stds, axis=0)
     standardized.loc[~eligible, :] = np.nan
-    stacked = standardized.stack(dropna=False, future_stack=True).rename(series.name)
+    stacked = standardized.stack(future_stack=True).rename(series.name)
     stacked.index = stacked.index.set_names(["datetime", "asset"])
     return stacked.reindex(values.index).sort_index()
 
@@ -456,12 +456,13 @@ def apply_validation_fdr(records: Sequence[FactorRunRecord], *, alpha: float) ->
         if record.status != "success":
             continue
         validation = primary_horizon_metrics(record).get("valid", {})
-        p_value = ((validation.get("rank_ic") or {}).get("hac_p_value"))
-        if p_value is None:
-            continue
-        value = float(p_value)
-        if math.isfinite(value) and 0 <= value <= 1:
-            candidates.append((index, value))
+        raw_p_value = ((validation.get("rank_ic") or {}).get("hac_p_value"))
+        p_value = 1.0
+        if raw_p_value is not None:
+            candidate = float(raw_p_value)
+            if math.isfinite(candidate) and 0 <= candidate <= 1:
+                p_value = candidate
+        candidates.append((index, p_value))
     ordered = sorted(candidates, key=lambda item: item[1])
     family_size = len(ordered)
     q_values: dict[int, float] = {}
