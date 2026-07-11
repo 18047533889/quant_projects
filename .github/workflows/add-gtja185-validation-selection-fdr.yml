@@ -1,0 +1,51 @@
+name: Add GTJA185 Validation Selection FDR
+
+on:
+  push:
+    branches:
+      - agent/autofactor-gtja185-evaluation
+    paths:
+      - ".github/workflows/add-gtja185-validation-selection-fdr.yml"
+      - ".github/scripts/add_gtja185_validation_selection_fdr.py"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: add-gtja185-validation-selection-fdr
+  cancel-in-progress: false
+
+jobs:
+  add:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/autofactor-gtja185-evaluation
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Add validation-only selection and FDR
+        run: python .github/scripts/add_gtja185_validation_selection_fdr.py
+      - name: Verify code shape
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m compileall -q AutoFactorEvaluation-RECONSTRUCT/evaluation/gtja185_batch.py
+          grep -q 'benjamini_hochberg' AutoFactorEvaluation-RECONSTRUCT/evaluation/gtja185_batch.py
+          grep -q 'test_routing_uses_validation_not_test' AutoFactorEvaluation-RECONSTRUCT/tests/test_gtja185_evaluation_contracts.py
+          grep -q 'test_benjamini_hochberg_controls_185_factor_family' AutoFactorEvaluation-RECONSTRUCT/tests/test_gtja185_evaluation_contracts.py
+      - name: Commit selection controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/scripts/add_gtja185_validation_selection_fdr.py
+          rm -f .github/workflows/add-gtja185-validation-selection-fdr.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Use validation-only GTJA185 selection with FDR control"
+          git push origin HEAD:agent/autofactor-gtja185-evaluation
