@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Any
 
 from lib.dsl_normalize import normalize_operator_names
@@ -12,11 +11,19 @@ CATALOG_PATH = PACKAGE_ROOT / "dsl" / "gtja191_dsl_catalog.json"
 DELIVERABLE_COUNT = 185
 SOURCE_FORMULA_COUNT = 191
 
-# 原始 REGBETA(..., SEQUENCE(n)) 是“对时间序列位置回归”，不是对 lag(close) 回归。
+# 经源公式逐项核对的转换修正。
 _AUDITED_FORMULA_OVERRIDES: dict[str, str] = {
+    # REGBETA(..., SEQUENCE(n)) 是“对时间位置回归”，不是对 lag(close) 回归。
     "gtja191_alpha_021": "ts_time_slope(ts_mean(close, 6), 6)",
     "gtja191_alpha_116": "ts_time_slope(close, 20)",
     "gtja191_alpha_147": "ts_time_slope(ts_mean(close, 12), 12)",
+    # 源公式为 rank(corr(sum(mid,19), sum(mean(volume,40),19),13)) 的五次方；
+    # 历史转换误把 13 写成 power(13)，并把 5 当成 corr 窗口。
+    "gtja191_alpha_056": (
+        "rank(open - ts_min(open, 12)) < "
+        "rank(power(rank(ts_corr(ts_sum((high + low) / 2, 19), "
+        "ts_sum(ts_mean(volume, 40), 19), 13)), 5))"
+    ),
 }
 
 
@@ -28,7 +35,6 @@ def _normalize_item(name: str, item: dict[str, Any]) -> dict[str, Any]:
 
 
 def load_catalog() -> dict[str, dict[str, Any]]:
-    """加载并应用当前 FactorEngine 的字段/算子语义修正。"""
     raw = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         raise ValueError("GTJA catalog root must be a mapping")
@@ -46,7 +52,6 @@ def is_deliverable(item: dict[str, Any]) -> bool:
 def deliverable_catalog(
     catalog: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """185 条可投递因子（factor_engine 落值 / manifest 默认集合）。"""
     catalog = catalog or load_catalog()
     return {name: item for name, item in catalog.items() if is_deliverable(item)}
 
