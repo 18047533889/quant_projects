@@ -25,25 +25,19 @@ def protected_div_null_preserved() -> bool:
 
 
 def max_horizontal_polars(left: "pl.Expr", right: "pl.Expr") -> "pl.Expr":
-    """maximum：任一 NULL → NULL（对齐 DuckDB GREATEST）。"""
+    """maximum：任一 NULL/NaN → NULL（对齐 DuckDB GREATEST）。"""
     import polars as pl
 
-    return (
-        pl.when(left.is_null() | right.is_null())
-        .then(None)
-        .otherwise(pl.max_horizontal(left, right))
-    )
+    missing = left.is_null() | right.is_null() | left.is_nan() | right.is_nan()
+    return pl.when(missing).then(None).otherwise(pl.max_horizontal(left, right))
 
 
 def min_horizontal_polars(left: "pl.Expr", right: "pl.Expr") -> "pl.Expr":
-    """minimum：任一 NULL → NULL。"""
+    """minimum：任一 NULL/NaN → NULL。"""
     import polars as pl
 
-    return (
-        pl.when(left.is_null() | right.is_null())
-        .then(None)
-        .otherwise(pl.min_horizontal(left, right))
-    )
+    missing = left.is_null() | right.is_null() | left.is_nan() | right.is_nan()
+    return pl.when(missing).then(None).otherwise(pl.min_horizontal(left, right))
 
 
 def _both_finite(left: "pl.Expr", right: "pl.Expr") -> "pl.Expr":
@@ -136,13 +130,16 @@ def protected_div_sql(
 
 
 def div_or_default_polars(numer: "pl.Expr", denom: "pl.Expr", *, eps: float, default: float) -> "pl.Expr":
-    """|denom|<=eps 或 NULL 输入 → default（旧 protected_div 填充语义）。"""
+    """|denom|<=eps 或 NULL/NaN 输入 → default（旧 protected_div 填充语义）。"""
     import polars as pl
 
+    missing = (
+        numer.is_null() | denom.is_null() | numer.is_nan() | denom.is_nan()
+    )
     return (
         pl.when(denom.abs() <= eps)
         .then(default)
-        .when(numer.is_null() | denom.is_null())
+        .when(missing)
         .then(default)
         .otherwise(numer / denom)
     )

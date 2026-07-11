@@ -154,8 +154,12 @@ _VALID_MODES = ("off", "warn", "strict")
 
 
 def _resolve_mode() -> str:
-    """读 QUANT_SCHEMA_CHECK，非法值兜底 warn。"""
-    raw = os.environ.get("QUANT_SCHEMA_CHECK", "warn").strip().lower()
+    """读 QUANT_SCHEMA_CHECK；production 默认 strict。"""
+    raw = os.environ.get("QUANT_SCHEMA_CHECK", "").strip().lower()
+    if not raw:
+        prod = os.environ.get("QUANT_PRODUCTION_MODE", "").lower() in {"1", "true", "yes"}
+        strict_read = os.environ.get("DATA_ACCESS_STRICT_READ", "").lower() in {"1", "true", "yes"}
+        raw = "strict" if (prod or strict_read) else "warn"
     if raw not in _VALID_MODES:
         logger.warning(
             "QUANT_SCHEMA_CHECK='%s' 不合法，使用默认 'warn'（合法值：%s）",
@@ -261,21 +265,29 @@ def enforce_schema_or_raise(result: SchemaCheckResult, *, mode: str | None = Non
 
 # ---- 进程级缓存 -------------------------------------------------------------
 #
-# 同一 dataset 的 schema 校验只做一次，所以需要一个进程内缓存。我们把它放在
-# store.DataAccessStore 实例上按需持有，但为了测试能方便 reset，把快照接口也暴露
-# 到模块级。
+# 缓存 key = dataset + params fingerprint + file manifest hash（见 schema_cache_key）。
 _validated: set[str] = set()
 _validated_lock = threading.Lock()
 
 
-def mark_validated(dataset_name: str) -> None:
-    with _validated_lock:
-        _validated.add(dataset_name)
+def schema_cache_key(
+    dataset_name: str,
+    *,
+    params_fingerprint: str = "",
+    manifest_hash: str = "",
+) -> str:
+    """首访 schema 校验缓存键（含 params 与 manifest，避免 factor_id 间漂移漏检）。"""
+    return f"{dataset_name}:{params_fingerprint}:{manifest_hash}"
 
 
-def is_validated(dataset_name: str) -> bool:
+def mark_validated(cache_key: str) -> None:
     with _validated_lock:
-        return dataset_name in _validated
+        _validated.add(cache_key)
+
+
+def is_validated(cache_key: str) -> bool:
+    with _validated_lock:
+        return cache_key in _validated
 
 
 def reset_validated_cache() -> None:

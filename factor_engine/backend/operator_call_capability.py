@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from backend.plan_params import int_mode_from_plan_node
 from planner.logical_plan import PlanNode
@@ -174,6 +174,58 @@ def _backend_evidence_ok(canon: str, backend: BackendName) -> bool:
     return True
 
 
+def _ffill_capability(node: PlanNode, *, production: bool) -> CapabilityResult:
+    from backend.production_signature import _ffill_has_limit
+
+    if production and not _ffill_has_limit(node):
+        return CapabilityResult(
+            CapabilityLevel.RESEARCH,
+            "ffill(x) unlimited forbidden in production; use ffill(x, limit=N) or max_age",
+        )
+    return CapabilityResult(CapabilityLevel.PRODUCTION, "ffill")
+
+
+def _production_gate(canon: str, node: PlanNode | None, *, backend: BackendName) -> CapabilityResult | None:
+    """通用 production gate：signature + parameter domain + backend evidence + artifact。"""
+    from backend.evidence_provenance import evidence_artifact_valid
+    from backend.operator_evidence_schema import parameter_domain_verified
+    from backend.production_signature import has_production_signature, verify_production_signature
+
+    if not evidence_artifact_valid():
+        return CapabilityResult(
+            CapabilityLevel.RESEARCH,
+            f"{canon}: evidence artifact 无效或过期（须运行 certify_primitive_evidence.py）",
+        )
+    ok_sig, reason = verify_production_signature(canon, node, production=True)
+    if not ok_sig:
+        return CapabilityResult(CapabilityLevel.RESEARCH, reason or f"{canon}: production signature pending")
+    if has_production_signature(canon) or canon in {
+        "fillna",
+        "scale",
+        "cs_regression",
+        "winsorize",
+        "quantile",
+        "ts_quantile",
+        "cs_quantile",
+        "ffill",
+    }:
+        rec = __import__(
+            "backend.operator_evidence_schema", fromlist=["operator_evidence_record"]
+        ).operator_evidence_record(canon)
+        if rec is not None and rec.get("supported_calls"):
+            if not parameter_domain_verified(canon, node, production=True):
+                return CapabilityResult(
+                    CapabilityLevel.RESEARCH,
+                    f"{canon}: parameter domain 未认证",
+                )
+    if backend not in {"any", ""} and not _backend_evidence_ok(canon, backend):
+        return CapabilityResult(
+            CapabilityLevel.RESEARCH,
+            f"{canon} 未通过 {backend} 证据认证",
+        )
+    return None
+
+
 def check_operator_call_capability(
     canonical: str,
     *,
@@ -216,6 +268,10 @@ def check_operator_call_capability(
         if node is None:
             return CapabilityResult(CapabilityLevel.RESEARCH, f"{canon} 需要 plan 节点")
         return _quantile_capability(node, production=production)
+    if canon == "ffill":
+        if node is None:
+            return CapabilityResult(CapabilityLevel.RESEARCH, "ffill 需要 plan 节点")
+        return _ffill_capability(node, production=production)
     if production:
         from backend.phase1_scope import phase1_production_certified
 
@@ -224,11 +280,9 @@ def check_operator_call_capability(
                 CapabilityLevel.RESEARCH,
                 f"{canon} 不在第一阶段 dual-backend 证据认证集",
             )
-        if backend not in {"any", ""} and not _backend_evidence_ok(canon, backend):
-            return CapabilityResult(
-                CapabilityLevel.RESEARCH,
-                f"{canon} 未通过 {backend} 证据认证",
-            )
+        gate = _production_gate(canon, node, backend=backend)
+        if gate is not None:
+            return gate
     return CapabilityResult(CapabilityLevel.PRODUCTION)
 
 

@@ -1,6 +1,6 @@
 {
-  "schema_version": 2,
-  "description": "Primitive production evidence（由 CI 测试 case 维护，禁止从 production 白名单反向生成）",
+  "schema_version": 3,
+  "description": "Primitive production evidence（须 pytest 通过后由 certify_primitive_evidence.py 写入）",
   "polars_reference_parity": [
     "abs",
     "add",
@@ -17,33 +17,44 @@
     "cs_mad",
     "cs_mad_zscore",
     "cs_pct_rank",
+    "cum_delta",
     "cum_max",
     "cum_min",
     "cum_prod",
     "cum_sum",
+    "div_or_default",
     "divide",
     "eq",
     "exp",
+    "expanding_mean",
     "expanding_sum",
     "ffill",
-    "fillna",
     "fillna_const",
     "floor",
     "ge",
+    "group_count",
+    "group_max",
     "group_mean",
+    "group_min",
     "group_neutralize",
     "group_normalize",
     "group_percentile",
     "group_rank",
     "group_std",
+    "group_sum",
     "group_winsorize",
     "group_zscore",
     "gt",
     "inverse",
     "is_finite",
+    "is_infinite",
+    "is_nan",
+    "is_not_null",
     "is_null",
     "le",
     "log",
+    "log_abs",
+    "log_fill_invalid",
     "log_returns",
     "lt",
     "maximum",
@@ -64,6 +75,8 @@
     "safe_div_null",
     "scale",
     "sign",
+    "signed_log",
+    "signed_sqrt",
     "sqrt",
     "subtract",
     "ts_autocorr",
@@ -100,31 +113,49 @@
     "ceil",
     "clip",
     "coalesce",
+    "count",
     "cs_demean",
     "cs_mad",
     "cs_mad_zscore",
     "cs_pct_rank",
+    "cum_delta",
+    "cum_max",
+    "cum_min",
+    "cum_prod",
     "cum_sum",
+    "div_or_default",
     "divide",
     "eq",
     "exp",
+    "expanding_mean",
+    "expanding_sum",
     "ffill",
     "fillna_const",
     "floor",
     "ge",
+    "group_count",
+    "group_max",
     "group_mean",
+    "group_min",
     "group_neutralize",
     "group_normalize",
     "group_percentile",
     "group_rank",
     "group_std",
+    "group_sum",
     "group_winsorize",
     "group_zscore",
     "gt",
     "inverse",
     "is_finite",
+    "is_infinite",
+    "is_nan",
+    "is_not_null",
+    "is_null",
     "le",
     "log",
+    "log_abs",
+    "log_fill_invalid",
     "log_returns",
     "lt",
     "maximum",
@@ -145,8 +176,11 @@
     "safe_div_null",
     "scale",
     "sign",
+    "signed_log",
+    "signed_sqrt",
     "sqrt",
     "subtract",
+    "ts_autocorr",
     "ts_beta",
     "ts_corr",
     "ts_cov",
@@ -157,10 +191,13 @@
     "ts_median",
     "ts_min",
     "ts_pct",
+    "ts_rank",
+    "ts_sharpe",
     "ts_std",
     "ts_sum",
     "ts_var",
     "ts_zscore",
+    "volatility",
     "vwap",
     "where",
     "winsorize",
@@ -187,31 +224,39 @@
     "cum_min",
     "cum_prod",
     "cum_sum",
+    "div_or_default",
     "divide",
     "eq",
     "exp",
     "expanding_mean",
     "expanding_sum",
     "ffill",
-    "fillna",
     "fillna_const",
     "floor",
     "ge",
+    "group_count",
+    "group_max",
     "group_mean",
+    "group_min",
     "group_neutralize",
     "group_normalize",
     "group_percentile",
     "group_rank",
     "group_std",
+    "group_sum",
     "group_winsorize",
     "group_zscore",
     "gt",
     "inverse",
     "is_finite",
+    "is_infinite",
     "is_nan",
+    "is_not_null",
     "is_null",
     "le",
     "log",
+    "log_abs",
+    "log_fill_invalid",
     "log_returns",
     "lt",
     "maximum",
@@ -229,10 +274,11 @@
     "protected_sqrt",
     "rank",
     "rank_pct",
-    "rolling_beta",
     "safe_div_null",
     "scale",
     "sign",
+    "signed_log",
+    "signed_sqrt",
     "sqrt",
     "subtract",
     "ts_autocorr",
@@ -247,6 +293,7 @@
     "ts_min",
     "ts_pct",
     "ts_rank",
+    "ts_sharpe",
     "ts_std",
     "ts_sum",
     "ts_var",
@@ -278,31 +325,39 @@
     "cum_min",
     "cum_prod",
     "cum_sum",
+    "div_or_default",
     "divide",
     "eq",
     "exp",
     "expanding_mean",
     "expanding_sum",
     "ffill",
-    "fillna",
     "fillna_const",
     "floor",
     "ge",
+    "group_count",
+    "group_max",
     "group_mean",
+    "group_min",
     "group_neutralize",
     "group_normalize",
     "group_percentile",
     "group_rank",
     "group_std",
+    "group_sum",
     "group_winsorize",
     "group_zscore",
     "gt",
     "inverse",
     "is_finite",
+    "is_infinite",
     "is_nan",
+    "is_not_null",
     "is_null",
     "le",
     "log",
+    "log_abs",
+    "log_fill_invalid",
     "log_returns",
     "lt",
     "maximum",
@@ -320,10 +375,11 @@
     "protected_sqrt",
     "rank",
     "rank_pct",
-    "rolling_beta",
     "safe_div_null",
     "scale",
     "sign",
+    "signed_log",
+    "signed_sqrt",
     "sqrt",
     "subtract",
     "ts_autocorr",
@@ -338,6 +394,7 @@
     "ts_min",
     "ts_pct",
     "ts_rank",
+    "ts_sharpe",
     "ts_std",
     "ts_sum",
     "ts_var",
@@ -359,31 +416,48 @@
     "ceil",
     "clip",
     "coalesce",
+    "count",
     "cs_demean",
     "cs_mad",
     "cs_mad_zscore",
     "cs_pct_rank",
+    "cum_delta",
+    "cum_max",
+    "cum_min",
+    "cum_prod",
     "cum_sum",
+    "div_or_default",
     "divide",
     "eq",
     "exp",
+    "expanding_mean",
+    "expanding_sum",
     "ffill",
     "fillna_const",
     "floor",
     "ge",
+    "group_count",
+    "group_max",
     "group_mean",
+    "group_min",
     "group_neutralize",
     "group_normalize",
     "group_percentile",
     "group_rank",
     "group_std",
+    "group_sum",
     "group_winsorize",
     "group_zscore",
     "gt",
     "inverse",
     "is_finite",
+    "is_infinite",
+    "is_not_null",
+    "is_null",
     "le",
     "log",
+    "log_abs",
+    "log_fill_invalid",
     "log_returns",
     "lt",
     "maximum",
@@ -404,8 +478,11 @@
     "safe_div_null",
     "scale",
     "sign",
+    "signed_log",
+    "signed_sqrt",
     "sqrt",
     "subtract",
+    "ts_autocorr",
     "ts_beta",
     "ts_corr",
     "ts_cov",
@@ -416,6 +493,8 @@
     "ts_median",
     "ts_min",
     "ts_pct",
+    "ts_rank",
+    "ts_sharpe",
     "ts_std",
     "ts_sum",
     "ts_var",
@@ -437,31 +516,48 @@
     "ceil",
     "clip",
     "coalesce",
+    "count",
     "cs_demean",
     "cs_mad",
     "cs_mad_zscore",
     "cs_pct_rank",
+    "cum_delta",
+    "cum_max",
+    "cum_min",
+    "cum_prod",
     "cum_sum",
+    "div_or_default",
     "divide",
     "eq",
     "exp",
+    "expanding_mean",
+    "expanding_sum",
     "ffill",
     "fillna_const",
     "floor",
     "ge",
+    "group_count",
+    "group_max",
     "group_mean",
+    "group_min",
     "group_neutralize",
     "group_normalize",
     "group_percentile",
     "group_rank",
     "group_std",
+    "group_sum",
     "group_winsorize",
     "group_zscore",
     "gt",
     "inverse",
     "is_finite",
+    "is_infinite",
+    "is_not_null",
+    "is_null",
     "le",
     "log",
+    "log_abs",
+    "log_fill_invalid",
     "log_returns",
     "lt",
     "maximum",
@@ -482,8 +578,11 @@
     "safe_div_null",
     "scale",
     "sign",
+    "signed_log",
+    "signed_sqrt",
     "sqrt",
     "subtract",
+    "ts_autocorr",
     "ts_beta",
     "ts_corr",
     "ts_cov",
@@ -494,6 +593,8 @@
     "ts_median",
     "ts_min",
     "ts_pct",
+    "ts_rank",
+    "ts_sharpe",
     "ts_std",
     "ts_sum",
     "ts_var",
@@ -524,33 +625,49 @@
     "ceil",
     "clip",
     "coalesce",
+    "count",
     "cs_demean",
     "cs_mad",
     "cs_mad_zscore",
     "cs_pct_rank",
+    "cum_delta",
+    "cum_max",
+    "cum_min",
+    "cum_prod",
     "cum_sum",
+    "div_or_default",
     "divide",
     "eq",
     "exp",
+    "expanding_mean",
+    "expanding_sum",
     "ffill",
     "fillna_const",
     "floor",
     "ge",
+    "group_count",
+    "group_max",
     "group_mean",
+    "group_min",
     "group_neutralize",
     "group_normalize",
     "group_percentile",
     "group_rank",
     "group_std",
+    "group_sum",
     "group_winsorize",
     "group_zscore",
     "gt",
     "inverse",
     "is_finite",
+    "is_infinite",
     "is_nan",
+    "is_not_null",
     "is_null",
     "le",
     "log",
+    "log_abs",
+    "log_fill_invalid",
     "log_returns",
     "lt",
     "maximum",
@@ -571,6 +688,8 @@
     "safe_div_null",
     "scale",
     "sign",
+    "signed_log",
+    "signed_sqrt",
     "sqrt",
     "subtract",
     "ts_autocorr",
@@ -607,7 +726,10 @@
       "execution_variants": [
         "direct",
         "fused_ts_unary"
-      ]
+      ],
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708",
+      "parameter_domain_hash": "402cf7b3ca3881e5"
     },
     "cs_regression": {
       "semantic_version": "1.0.0",
@@ -624,91 +746,588 @@
         "nary_ts_fusion",
         "generic_binary_join",
         "nested_binary"
-      ]
+      ],
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
     },
     "gt": {
       "execution_variants": [
         "base_column_fused",
         "generic_binary_join"
-      ]
+      ],
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
     },
     "maximum": {
       "execution_variants": [
         "base_column_fused",
         "generic_binary_join"
-      ]
+      ],
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
     },
     "minimum": {
       "execution_variants": [
         "base_column_fused",
         "generic_binary_join"
-      ]
+      ],
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
     },
     "rank": {
       "execution_variants": [
         "direct",
         "fused_ts_unary"
-      ]
+      ],
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
     },
     "rank_pct": {
       "execution_variants": [
         "direct",
         "fused_ts_unary"
-      ]
+      ],
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
     },
     "where": {
       "execution_variants": [
         "direct",
         "nested_conditional"
-      ]
+      ],
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
     },
     "zscore": {
       "execution_variants": [
         "direct",
         "fused_ts_unary"
-      ]
+      ],
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
     },
     "cs_pct_rank": {
       "execution_variants": [
         "direct",
         "fused_ts_unary"
-      ]
+      ],
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
     },
     "eq": {
       "execution_variants": [
         "base_column_fused",
         "generic_binary_join"
-      ]
+      ],
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
     },
     "ge": {
       "execution_variants": [
         "base_column_fused",
         "generic_binary_join"
-      ]
+      ],
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
     },
     "le": {
       "execution_variants": [
         "base_column_fused",
         "generic_binary_join"
-      ]
+      ],
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
     },
     "lt": {
       "execution_variants": [
         "base_column_fused",
         "generic_binary_join"
-      ]
+      ],
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
     },
     "ne": {
       "execution_variants": [
         "base_column_fused",
         "generic_binary_join"
-      ]
+      ],
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
     },
     "normalize": {
       "execution_variants": [
         "direct",
         "fused_ts_unary"
-      ]
+      ],
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "abs": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "and_": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "c_count": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "c_mean": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "c_std": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "c_sum": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "ceil": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "clip": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "coalesce": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "cs_demean": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "cs_mad": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "cs_mad_zscore": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "cum_sum": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "divide": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "exp": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "ffill": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708",
+      "parameter_domain_hash": "190af1764c2a0fd1"
+    },
+    "fillna_const": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708",
+      "parameter_domain_hash": "a94bbfcaae8c82c5"
+    },
+    "floor": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "group_mean": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "group_neutralize": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "group_normalize": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "group_percentile": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "group_rank": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "group_std": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "group_winsorize": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "group_zscore": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "inverse": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "is_finite": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "log": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "log_returns": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "multiply": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "nan_to_num": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "neg": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "not_": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "or_": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "power": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "protected_div": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "protected_log": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "protected_sqrt": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "safe_div_null": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "sign": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "sqrt": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "subtract": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "ts_beta": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "ts_corr": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "ts_cov": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "ts_delay": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "ts_delta": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "ts_max": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "ts_mean": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708",
+      "parameter_domain_hash": "e8cfb21c180d9cb7"
+    },
+    "ts_median": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "ts_min": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "ts_pct": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "ts_std": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "ts_sum": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "ts_var": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "ts_zscore": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "vwap": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "winsorize": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "count": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "cum_delta": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "cum_max": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "cum_min": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "cum_prod": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "expanding_mean": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "expanding_sum": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "is_infinite": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "is_not_null": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "is_null": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "ts_autocorr": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "ts_rank": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "volatility": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "div_or_default": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "group_count": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "group_max": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "group_min": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "group_sum": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "is_nan": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "log_abs": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "log_fill_invalid": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "signed_log": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "signed_sqrt": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    },
+    "ts_sharpe": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "0e8f4d58089337a7",
+      "implementation_hash_duckdb": "1adfea56b0df2708"
+    }
+  },
+  "provenance": {
+    "artifact_kind": "test_passed",
+    "commit_sha": "76cabd0267d82ddd5c912b6f5d6fda1f6c936889",
+    "passed_at": "2026-07-11T04:18:52.360922+00:00",
+    "runtime_versions": {
+      "python": "3.10.12",
+      "polars": "1.42.1",
+      "duckdb": "1.5.4",
+      "pyarrow": "24.0.0"
+    },
+    "case_registry_hash": "3fdd40a9186c91d2",
+    "stages_passed": [
+      "case_registry_sync",
+      "polars_reference_parity",
+      "polars_edge_verified",
+      "duckdb_reference_parity",
+      "duckdb_real_sql_verified",
+      "duckdb_edge_verified",
+      "no_fallback_verified",
+      "duckdb_nan_edge_verified",
+      "duckdb_inf_edge_verified",
+      "composite_reference_parity",
+      "composite_triple_parity",
+      "polars_native_static_audit",
+      "parameter_signature_gate",
+      "plan_variant_parity",
+      "chunk_invariance",
+      "manifest_and_evidence_drift"
+    ],
+    "emitter_hashes": {
+      "implementation_hash_polars_emitter": "0e8f4d58089337a7",
+      "implementation_hash_duckdb_emitter": "1adfea56b0df2708"
     }
   }
 }

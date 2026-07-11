@@ -21,7 +21,7 @@ def test_data_access_scan_polars_long_renames_axes():
     mock_ds = MagicMock()
     mock_ds.time_column = "TradeDate"
     mock_ds.instrument_column = "Symbol"
-    mock_store._registry.get.return_value = mock_ds
+    mock_store.get_dataset.return_value = mock_ds
 
     base = pl.LazyFrame(
         {
@@ -31,7 +31,7 @@ def test_data_access_scan_polars_long_renames_axes():
             "Volume": [100.0, 200.0],
         }
     )
-    mock_store.scan_polars.return_value = base
+    mock_store.scan.return_value = base
 
     with patch("storage.sources.data_access_source._get_store", return_value=mock_store):
         lf = src.scan_polars_long(["close", "volume"])
@@ -41,8 +41,6 @@ def test_data_access_scan_polars_long_renames_axes():
     row = lf.collect().row(0)
     assert row[0] == "2024-01-01"
     assert row[1] == "A"
-    mock_store.scan_polars.assert_called_once()
-    call_cols = mock_store.scan_polars.call_args.kwargs.get("columns") or mock_store.scan_polars.call_args[1].get("columns")
-    if call_cols is None:
-        call_cols = mock_store.scan_polars.call_args[0][1] if len(mock_store.scan_polars.call_args[0]) > 1 else None
-    assert "Close" in (call_cols or mock_store.scan_polars.call_args.kwargs["columns"])
+    mock_store.scan.assert_called_once()
+    call_cols = mock_store.scan.call_args.kwargs.get("columns")
+    assert "Close" in call_cols

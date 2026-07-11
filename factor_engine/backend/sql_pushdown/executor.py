@@ -384,15 +384,18 @@ def try_execute_sql_pushdown(
     if pctx is None:
         return None
 
-    compiled = compile_plan_to_sql(
-        plan,
-        dataset=pctx.dataset,
-        table=pctx.table,
-        time_column=pctx.time_column,
-        instrument_column=pctx.instrument_column,
-        filt=pctx.filt,
-        dialect=pctx.dialect,
-    )
+    try:
+        compiled = compile_plan_to_sql(
+            plan,
+            dataset=pctx.dataset,
+            table=pctx.table,
+            time_column=pctx.time_column,
+            instrument_column=pctx.instrument_column,
+            filt=pctx.filt,
+            dialect=pctx.dialect,
+        )
+    except Exception:
+        return None
     if compiled is None:
         return None
 
@@ -415,15 +418,18 @@ def try_execute_sql_pushdown_batch(
     if pctx is None:
         return None
 
-    compiled = compile_plans_batch_to_sql(
-        plans,
-        dataset=pctx.dataset,
-        table=pctx.table,
-        time_column=pctx.time_column,
-        instrument_column=pctx.instrument_column,
-        filt=pctx.filt,
-        dialect=pctx.dialect,
-    )
+    try:
+        compiled = compile_plans_batch_to_sql(
+            plans,
+            dataset=pctx.dataset,
+            table=pctx.table,
+            time_column=pctx.time_column,
+            instrument_column=pctx.instrument_column,
+            filt=pctx.filt,
+            dialect=pctx.dialect,
+        )
+    except Exception:
+        return None
     if compiled is None:
         return None
 

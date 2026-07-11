@@ -133,7 +133,9 @@ def execute_materialize(
         dq_thresholds=dq_thresholds,
         run_lineage={**lineage.to_dict(), "factor_id": factor_id or factor.name},
         write_metadata=write_metadata,
-        data_snapshot_id=lineage_service.data_snapshot_id_from_config(data_source_config),
+        data_snapshot_id=lineage_service.resolve_data_snapshot_id(
+            engine.data_source, data_source_config
+        ),
         data_source_config=data_source_config,
         resume=resume_materialize,
         isolate_partition_failures=isolate_partition_failures,
@@ -166,7 +168,9 @@ def execute_materialize(
             result=output["result"],
             ast_hash=ast_hash,
             write_target=target,
-            data_snapshot_id=lineage_service.data_snapshot_id_from_config(data_source_config),
+            data_snapshot_id=lineage_service.resolve_data_snapshot_id(
+            engine.data_source, data_source_config
+        ),
             clickhouse_table=clickhouse_table,
             preserve_invalid_rows=preserve_invalid_rows,
             value_dtype=value_dtype,

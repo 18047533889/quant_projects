@@ -27,11 +27,11 @@ class VwapSpec:
 class VolatilitySpec:
     """``volatility(x, window)`` = rolling_std(x, ddof=1) * sqrt(252)。
 
-    输入为**价格或收益率序列本身**，不内部计算 log return。
+    输入 **x 为收益率序列**（调用方负责 log_returns / pct_change），不内部计算收益。
     """
 
     kind: VolatilityKind = "rolling_std_annualized"
-    input_is_return: bool = False
+    input_is_return: bool = True
     annualization_factor: float = 252.0**0.5
     ddof: int = 1
     min_periods_ratio: float = 0.5

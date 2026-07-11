@@ -76,13 +76,22 @@ def supported_calls_match(node: PlanNode, supported: Mapping[str, Any]) -> bool:
     return True
 
 
-def parameter_domain_verified(canon: str, node: PlanNode | None = None) -> bool:
-    """算子是否在 evidence 中声明了参数域，且当前调用匹配。"""
+def parameter_domain_verified(canon: str, node: PlanNode | None = None, *, production: bool = False) -> bool:
+    """算子是否在 evidence 中声明了参数域，且当前调用匹配（production 默认 fail-closed）。"""
     rec = operator_evidence_record(canon)
     if rec is None:
+        if production:
+            return False
         return True
     supported = rec.get("supported_calls")
     if not supported:
+        if production:
+            from backend.production_signature import signature_for
+
+            sig = signature_for(canon)
+            if sig is not None and sig.default_status != "production":
+                return False
+            return node is not None
         return True
     if node is None:
         return False

@@ -12,7 +12,21 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-ChecklistStatus = Literal["defined", "implemented", "tested", "deferred_phase2"]
+ChecklistStatus = Literal[
+    "defined",
+    "implemented",
+    "tested",
+    "wired_polars",
+    "wired_duckdb",
+    "gate_enforced",
+    "parity_tested",
+    "production_verified",
+    "deferred_phase2",
+]
+
+PHASE1_COMPLETE_STATUSES = frozenset(
+    {"gate_enforced", "parity_tested", "production_verified", "tested"}
+)
 
 
 @dataclass(frozen=True)
@@ -42,23 +56,23 @@ PRODUCTION_CHECKLIST: tuple[ChecklistItem, ...] = (
     ChecklistItem("§16", "vwap 精度/溢出", "defined", "backend.financial_semantics"),
     ChecklistItem("§17", "cumulative incremental state", "deferred_phase2", "backend.cumulative_state_spec"),
     ChecklistItem("§18", "空 universe shape", "defined", "backend.universe_spec"),
-    ChecklistItem("§19", "代数性质测试", "tested", "tests.backend_parity.test_production_invariants"),
-    ChecklistItem("§20", "fuzz parity", "tested", "tests.backend_parity.fuzz_parity"),
+    ChecklistItem("§19", "代数性质测试", "parity_tested", "tests.backend_parity.test_production_invariants"),
+    ChecklistItem("§20", "fuzz parity", "parity_tested", "tests.backend_parity.fuzz_parity"),
     ChecklistItem("§21", "plan 性能预算", "defined", "backend.plan_performance_spec"),
     ChecklistItem("§22", "plan cost tags", "defined", "backend.plan_cost_tags"),
-    ChecklistItem("§23", "optimizer on/off parity", "tested", "tests.backend_parity.test_plan_variant_parity"),
+    ChecklistItem("§23", "optimizer on/off parity", "parity_tested", "tests.backend_parity.test_plan_variant_parity"),
     ChecklistItem("§24", "operator_semantic_version", "defined", "backend.operator_semantic_version"),
-    ChecklistItem("§25", "production 按签名准入", "defined", "backend.production_signature"),
+    ChecklistItem("§25", "production 按签名准入", "gate_enforced", "backend.production_signature"),
 )
 
 
 def checklist_complete_for_phase1() -> bool:
-    """Phase-1 所需项均已 defined/implemented/tested（§3/§17 可 deferred）。"""
+    """Phase-1 仅接受 gate_enforced / parity_tested / production_verified / tested。"""
     allowed_deferred = {"§3", "§17"}
     for item in PRODUCTION_CHECKLIST:
         if item.section in allowed_deferred:
             continue
-        if item.status not in {"defined", "implemented", "tested"}:
+        if item.status not in PHASE1_COMPLETE_STATUSES:
             return False
     return True
 

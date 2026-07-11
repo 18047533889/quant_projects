@@ -19,6 +19,9 @@ from typing import Any
 
 import pyarrow as pa
 
+from .exceptions import ValidationError
+from .key_policy import KeyPolicy, resolve_key_policy
+
 
 def arrow_to_multiindex_series(
     table: pa.Table,
@@ -29,6 +32,7 @@ def arrow_to_multiindex_series(
     output_name: str | None = None,
     sort_index: bool = True,
     dedup: bool = True,
+    key_policy: KeyPolicy | None = None,
     normalize_timestamp: bool = False,
     timestamp_unit: str | None = None,
 ):
@@ -66,6 +70,7 @@ def arrow_to_multiindex_series(
         output_names={value_column: name},
         sort_index=sort_index,
         dedup=dedup,
+        key_policy=key_policy,
         normalize_timestamp=normalize_timestamp,
         timestamp_unit=timestamp_unit,
     )
@@ -81,6 +86,7 @@ def arrow_table_to_multiindex_columns(
     output_names: dict[str, str] | None = None,
     sort_index: bool = True,
     dedup: bool = True,
+    key_policy: KeyPolicy | None = None,
     normalize_timestamp: bool = False,
     timestamp_unit: str | None = None,
 ) -> dict[str, Any]:
@@ -131,9 +137,26 @@ def arrow_table_to_multiindex_columns(
     for col in value_columns:
         frame[col] = df[col]
 
-    frame = frame[frame["timestamp"].notna() & frame["instrument"].notna()]
+    policy = resolve_key_policy(key_policy)
+    null_mask = frame["timestamp"].isna() | frame["instrument"].isna()
+    if null_mask.any():
+        if policy.invalid_key == "error":
+            raise ValidationError(
+                f"Arrow→MultiIndex 转换发现 {int(null_mask.sum())} 行无效键"
+                "（timestamp 或 instrument 为空）；production 模式禁止静默丢弃。"
+            )
+        frame = frame[~null_mask]
 
-    if dedup:
+    dup_mask = frame.duplicated(subset=["timestamp", "instrument"], keep=False)
+    if dup_mask.any():
+        if policy.duplicate_key == "error":
+            raise ValidationError(
+                f"Arrow→MultiIndex 转换发现 {int(dup_mask.sum())} 行重复键"
+                "（timestamp, instrument）；production 模式禁止静默 dedup。"
+            )
+        if dedup:
+            frame = frame.drop_duplicates(subset=["timestamp", "instrument"], keep="last")
+    elif dedup:
         frame = frame.drop_duplicates(subset=["timestamp", "instrument"], keep="last")
 
     indexed = frame.set_index(["timestamp", "instrument"])

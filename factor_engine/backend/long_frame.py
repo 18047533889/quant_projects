@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Iterable
 
 from .pandas_compat import pd
 
@@ -21,6 +21,25 @@ class LongFrameResult:
     ts_col: str = "ts"
     inst_col: str = "inst"
     is_lazy: bool = True
+
+
+def long_table_to_polars_lazy(
+    frame: pd.DataFrame,
+    *,
+    float_cols: Iterable[str],
+) -> Any:
+    """Pandas 长表 → Polars LazyFrame；float 列保留 IEEE NaN（避免 ``from_pandas`` 的 nan→NULL）。"""
+    import polars as pl
+
+    fset = set(float_cols)
+    cols: dict[str, Any] = {}
+    for name in frame.columns:
+        if name in fset:
+            vals = frame[name].to_numpy(dtype="float64", na_value=float("nan"))
+            cols[name] = pl.Series(name, vals, dtype=pl.Float64)
+        else:
+            cols[name] = frame[name]
+    return pl.DataFrame(cols).lazy()
 
 
 def series_to_polars_long_lazy(
@@ -46,7 +65,15 @@ def series_to_polars_long_lazy(
         value_col=value_col,
     )
     renamed = pdf.rename(columns={tcol: ts_col, icol: inst_col, value_col: "_v"})
-    return pl.from_pandas(renamed[[ts_col, inst_col, "_v"]]).lazy()
+    # 保留 IEEE NaN（pl.from_pandas 默认 nan_to_null=True 会把 NaN 变成 NULL）
+    vals = renamed["_v"].to_numpy(dtype="float64", na_value=float("nan"))
+    return pl.DataFrame(
+        {
+            ts_col: renamed[ts_col],
+            inst_col: renamed[inst_col],
+            "_v": pl.Series("_v", vals, dtype=pl.Float64),
+        }
+    ).lazy()
 
 
 def is_polars_long_lazy(val: Any) -> bool:

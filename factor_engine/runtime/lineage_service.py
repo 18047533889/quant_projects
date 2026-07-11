@@ -52,6 +52,18 @@ def build_lineage_extra(
     return extra
 
 
+def resolve_data_snapshot_id(
+    data_source: Any | None,
+    data_source_config: dict | None,
+) -> str | None:
+    """优先读路径 snapshot，其次配置 hash。"""
+    if data_source is not None:
+        read_snap = getattr(data_source, "data_snapshot_id", None)
+        if read_snap:
+            return str(read_snap)
+    return data_snapshot_id_from_config(data_source_config)
+
+
 def data_snapshot_id_from_config(data_source_config: dict | None) -> str | None:
     """由数据源配置字典计算 ``data_snapshot_id``；空配置返回 ``None``。"""
     if not data_source_config:
@@ -75,7 +87,7 @@ def build_materialize_lineage(
     from backend.cleaned_bridge import ensure_cleaned_loaded
 
     ensure_cleaned_loaded()
-    snapshot_id = data_snapshot_id_from_config(data_source_config)
+    snapshot_id = resolve_data_snapshot_id(data_source, data_source_config)
     op_hash = compute_operator_catalog_hash()
     lookback = effective_lookback(getattr(analysis, "lookback", 0))
     if mode == "incremental" and output.get("incremental"):

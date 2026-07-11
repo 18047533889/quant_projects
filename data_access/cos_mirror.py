@@ -8,6 +8,7 @@ data_access.cos_mirror —— COS 清洗数据本地镜像按需同步（A 股 /
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import subprocess
@@ -295,13 +296,63 @@ def _local_table_dir(spec: MirrorSpec) -> Path:
     return spec.local_root
 
 
+def _write_download_manifest(dest: Path) -> None:
+    """写入本地镜像 manifest（size + mtime），供弱一致跳过决策。"""
+    manifest = dest.with_suffix(dest.suffix + ".manifest.json")
+    try:
+        st = dest.stat()
+    except OSError:
+        return
+    payload = {
+        "path": str(dest),
+        "size": st.st_size,
+        "mtime_ns": st.st_mtime_ns,
+    }
+    manifest.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+
+
+def _local_file_fresh(dest: Path) -> bool:
+    """本地文件存在且 manifest 与 stat 一致时视为已同步。"""
+    if not dest.exists():
+        return False
+    st = dest.stat()
+    if st.st_size <= 0:
+        return False
+    manifest = dest.with_suffix(dest.suffix + ".manifest.json")
+    if not manifest.exists():
+        return False
+    try:
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return payload.get("size") == st.st_size and payload.get("mtime_ns") == st.st_mtime_ns
+
+
 def _sync_cos_file(cos_uri: str, dest: Path) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
-    if dest.exists() and dest.stat().st_size > 0:
+    if _local_file_fresh(dest):
         return
+    tmp = dest.with_suffix(dest.suffix + ".tmp")
+    if tmp.exists():
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
     try:
-        _run_cos_cli(["cp", cos_uri, str(dest)])
+        _run_cos_cli(["cp", cos_uri, str(tmp)])
+        if not tmp.exists() or tmp.stat().st_size <= 0:
+            logger.debug("cos_mirror: 跳过空/缺失下载 %s", cos_uri)
+            if tmp.exists():
+                tmp.unlink()
+            return
+        tmp.replace(dest)
+        _write_download_manifest(dest)
     except subprocess.CalledProcessError as exc:
+        if tmp.exists():
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
         if _is_missing_object_error(exc):
             logger.debug("cos_mirror: 跳过缺失文件 %s", cos_uri)
             return

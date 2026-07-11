@@ -1,9 +1,37 @@
-"""Polars LazyFrame 读路径：scan_polars → 单次 collect → MultiIndex Series。"""
+"""Polars LazyFrame 读路径：store.scan → 单次 collect → MultiIndex Series。"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
+
+
+def _collect_arrow_table(lf: Any, *, select_cols: list[str]) -> Any:
+    """ScanHandle / LazyFrame 统一 collect → Arrow Table。"""
+    from data_access.query_budget import collect_polars_with_budget
+    from data_access.scan_handle import ScanHandle
+
+    selected = lf.select(select_cols)
+    if isinstance(selected, ScanHandle):
+        return selected.collect().table
+    if isinstance(lf, ScanHandle):
+        return lf.select(select_cols).collect().table
+    return collect_polars_with_budget(selected)
+
+
+def _store_scan(store: Any, dataset: str, read_kwargs: dict[str, Any]) -> Any:
+    """优先 ``store.scan()``（budget + snapshot）；回退 ``scan_polars``。"""
+    scan_fn = getattr(store, "scan", None)
+    if callable(scan_fn):
+        return scan_fn(dataset, **read_kwargs)
+    return store.scan_polars(dataset, **read_kwargs)
+
+
+def _snapshot_id_from_scan(scan_obj: Any) -> str | None:
+    snap = getattr(scan_obj, "snapshot", None)
+    if snap is not None:
+        return getattr(snap, "snapshot_id", None)
+    return None
 
 
 @dataclass
@@ -17,6 +45,7 @@ class LazyColumnBundle:
     output_names: dict[str, str]
     normalize_timestamp: bool
     timestamp_unit: str | None
+    snapshot_id: str | None = None
     _materialized: dict[str, Any] = field(default_factory=dict)
 
     def missing_physical(self, physical: list[str]) -> list[str]:
@@ -41,9 +70,7 @@ class LazyColumnBundle:
                     [self.time_column, self.instrument_column, *pending]
                 )
             )
-            table = (
-                self.lf.select(select_cols).collect().to_arrow()
-            )
+            table = _collect_arrow_table(self.lf, select_cols=select_cols)
             reverse = {src: tgt for src, tgt in (output_names or self.output_names).items()}
             fetched = arrow_table_to_multiindex_columns(
                 table,
@@ -97,15 +124,16 @@ def build_lazy_column_bundle(
     }
     if params:
         read_kwargs.update(params)
-    lf = store.scan_polars(dataset, **read_kwargs)
+    scan_obj = _store_scan(store, dataset, read_kwargs)
     return LazyColumnBundle(
-        lf=lf,
+        lf=scan_obj,
         time_column=time_column,
         instrument_column=instrument_column,
         physical_columns=tuple(physical_columns),
         output_names=dict(output_names or {}),
         normalize_timestamp=normalize_timestamp,
         timestamp_unit=timestamp_unit,
+        snapshot_id=_snapshot_id_from_scan(scan_obj),
     )
 
 
@@ -149,8 +177,8 @@ def scan_dataset_columns(
     if params:
         read_kwargs.update(params)
 
-    lf = store.scan_polars(dataset, **read_kwargs)
-    table = lf.collect().to_arrow()
+    scan_obj = _store_scan(store, dataset, read_kwargs)
+    table = _collect_arrow_table(scan_obj, select_cols=all_cols)
     reverse_names = {src: tgt for src, tgt in (output_names or {}).items()}
     fetched = arrow_table_to_multiindex_columns(
         table,
@@ -191,7 +219,7 @@ def build_scan_polars_long(
     }
     if params:
         read_kwargs.update(params)
-    lf = store.scan_polars(dataset, **read_kwargs)
+    lf = _store_scan(store, dataset, read_kwargs)
     rename: dict[str, str] = {time_column: "ts", instrument_column: "inst"}
     for phys in physical_columns:
         logical = output_names.get(phys, phys)
@@ -220,7 +248,7 @@ def build_scan_index_long(
     }
     if params:
         read_kwargs.update(params)
-    lf = store.scan_polars(dataset, **read_kwargs)
+    lf = _store_scan(store, dataset, read_kwargs)
     rename = {time_column: "ts", instrument_column: "inst"}
     return lf.rename(rename).select(["ts", "inst"]).unique()
 

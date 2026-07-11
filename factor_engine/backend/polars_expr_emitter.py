@@ -57,6 +57,38 @@ _TS = "ts"
 _INST = "inst"
 _VAL = "_v"
 
+_PREDICATE_OPS: frozenset[str] = frozenset(
+    {"is_nan", "is_null", "is_not_null", "is_finite", "is_infinite"}
+)
+_NAN_PRESERVE_PARENT_OPS: frozenset[str] = frozenset({"maximum", "minimum"})
+
+
+def _sanitize_nan_for_compute(inner: pl.LazyFrame | None) -> pl.LazyFrame | None:
+    """Pandas 数值路径：IEEE NaN 按缺失处理（rolling / coalesce 等）。"""
+    if inner is None:
+        return None
+    return inner.with_columns(
+        pl.when(pl.col(_VAL).is_nan()).then(None).otherwise(pl.col(_VAL)).alias(_VAL)
+    )
+
+
+def _compile_child(
+    node: PlanNode,
+    index: int,
+    base: pl.LazyFrame,
+    *,
+    parent_op: str,
+    ctx: Any | None = None,
+    memo: dict[tuple[Any, ...], pl.LazyFrame] | None = None,
+) -> pl.LazyFrame | None:
+    """编译子节点；非 predicate 父算子在子结果上将 NaN 规范为 NULL。"""
+    if index >= len(node.inputs):
+        return None
+    inner = _compile_polars(node.inputs[index], base, ctx=ctx, memo=memo)
+    if inner is None or parent_op in _PREDICATE_OPS or parent_op in _NAN_PRESERVE_PARENT_OPS:
+        return inner
+    return _sanitize_nan_for_compute(inner)
+
 _GRP = "_grp"
 
 
@@ -472,10 +504,17 @@ def _pandas_aligned_cum_prod_expr() -> pl.Expr:
     return _cum_current_row_null_guard(pl.col(_VAL).cum_prod().over(inst, order_by=ts))
 
 
+def _valid_obs_expr(col: str = _VAL) -> pl.Expr:
+    """Pandas ``notna`` 对齐：非 NULL 且非 IEEE NaN。"""
+    from backend.logical_semantics import is_null_polars_expr
+
+    return pl.when(is_null_polars_expr(col) > 0).then(0.0).otherwise(1.0)
+
+
 def _expanding_non_null_count() -> pl.Expr:
     """expanding 非空计数 expr（cum_sum of is_not_null）。"""
     inst, ts = _expanding_over()
-    return pl.col(_VAL).is_not_null().cast(pl.Float64).cum_sum().over(inst, order_by=ts)
+    return _valid_obs_expr().cum_sum().over(inst, order_by=ts)
 
 
 def _expanding_sum_expr() -> pl.Expr:
@@ -487,7 +526,7 @@ def _expanding_mean_expr() -> pl.Expr:
     """expanding 均值 expr（sum / 非空计数，NULL 行输出 NULL）。"""
     inst, ts = _expanding_over()
     c = pl.col(_VAL)
-    cnt = c.is_not_null().cast(pl.Float64).cum_sum().over(inst, order_by=ts)
+    cnt = _valid_obs_expr().cum_sum().over(inst, order_by=ts)
     run = c.fill_null(0).cum_sum().over(inst, order_by=ts)
     return (
         pl.when(c.is_null())
@@ -780,7 +819,7 @@ def _ts_rolling_expr_on_column(op: str, col_name: str, spec) -> pl.Expr:
     """在宽表 base 列上直接构造 ts 窗口 expr（用于 DAG fusion，完整 WindowSpec）。"""
     from backend.numeric_semantics import std_ddof_value
 
-    c = pl.col(col_name)
+    c = pl.when(pl.col(col_name).is_nan()).then(None).otherwise(pl.col(col_name))
     w = spec.size
     mp = spec.min_periods
     if op == "ts_mean":
@@ -1034,7 +1073,12 @@ def _try_coalesce_from_base_columns(node: PlanNode, base: pl.LazyFrame) -> pl.La
     schema = set(base.collect_schema().names())
     if left_name not in schema or right_name not in schema:
         return None
-    expr = pl.coalesce(pl.col(left_name), pl.col(right_name))
+
+    def _na_as_null(name: str) -> pl.Expr:
+        c = pl.col(name)
+        return pl.when(c.is_nan()).then(None).otherwise(c)
+
+    expr = pl.coalesce(_na_as_null(left_name), _na_as_null(right_name))
     return base.select(pl.col(_TS), pl.col(_INST), expr.alias(_VAL))
 
 
@@ -1108,6 +1152,7 @@ _BINARY_FUSION_OPS = frozenset(
         "multiply",
         "divide",
         "protected_div",
+        "div_or_default",
         "safe_div_null",
         "maximum",
         "minimum",
@@ -1356,8 +1401,8 @@ def _compile_polars_impl(
         fused = _try_binary_from_base_columns(node, base, op)
         if fused is not None:
             return fused
-        left = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
-        right = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
+        left = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        right = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
         if left is None or right is None:
             return None
         joined = _join_binary(left, right)
@@ -1400,7 +1445,7 @@ def _compile_polars_impl(
         return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
 
     if op == "inverse":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(
@@ -1411,7 +1456,7 @@ def _compile_polars_impl(
         )
 
     if op == "is_finite":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         from backend.elementwise_semantics import is_finite_polars_expr
@@ -1419,7 +1464,7 @@ def _compile_polars_impl(
         return inner.with_columns(is_finite_polars_expr(_VAL).alias(_VAL))
 
     if op == "is_infinite":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         from backend.elementwise_semantics import is_infinite_polars_expr
@@ -1427,7 +1472,7 @@ def _compile_polars_impl(
         return inner.with_columns(is_infinite_polars_expr(_VAL).alias(_VAL))
 
     if op == "is_null":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         from backend.logical_semantics import is_null_polars_expr
@@ -1435,7 +1480,7 @@ def _compile_polars_impl(
         return inner.with_columns(is_null_polars_expr(_VAL).alias(_VAL))
 
     if op == "is_not_null":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         from backend.logical_semantics import is_not_null_polars_expr
@@ -1443,7 +1488,7 @@ def _compile_polars_impl(
         return inner.with_columns(is_not_null_polars_expr(_VAL).alias(_VAL))
 
     if op == "is_nan":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         from backend.logical_semantics import is_nan_polars_expr
@@ -1451,19 +1496,19 @@ def _compile_polars_impl(
         return inner.with_columns(is_nan_polars_expr(_VAL).alias(_VAL))
 
     if op == "neg":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         return inner.with_columns((-pl.col(_VAL)).alias(_VAL)) if inner is not None else None
 
     if op == "abs":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         return inner.with_columns(pl.col(_VAL).abs().alias(_VAL)) if inner is not None else None
 
     if op == "sign":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         return inner.with_columns(pl.col(_VAL).sign().alias(_VAL)) if inner is not None else None
 
     if op == "log":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(
@@ -1474,7 +1519,7 @@ def _compile_polars_impl(
         )
 
     if op == "exp":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         from backend.inf_sanitize import apply_inf_policy_polars_fast
@@ -1484,7 +1529,7 @@ def _compile_polars_impl(
         )
 
     if op == "sqrt":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(
@@ -1495,11 +1540,11 @@ def _compile_polars_impl(
         )
 
     if op == "floor":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         return inner.with_columns(pl.col(_VAL).floor().alias(_VAL)) if inner is not None else None
 
     if op == "ceil":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         return inner.with_columns(pl.col(_VAL).ceil().alias(_VAL)) if inner is not None else None
 
     if op == "power":
@@ -1508,27 +1553,27 @@ def _compile_polars_impl(
         fused = _try_binary_from_base_columns(node, base, op)
         if fused is not None:
             return fused
-        left = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
-        right = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
+        left = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        right = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
         if left is None or right is None:
             return None
         joined = _join_binary(left, right)
         return joined.with_columns(_safe_pow_expr(pl.col(_VAL), pl.col("_y")).alias(_VAL)).select(_TS, _INST, _VAL)
 
     if op == "protected_log":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(_protected_log_expr(pl.col(_VAL), node).alias(_VAL))
 
     if op == "log_fill_invalid":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(_log_fill_invalid_expr(pl.col(_VAL), node).alias(_VAL))
 
     if op == "protected_sqrt":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         clipped = pl.max_horizontal(pl.col(_VAL), pl.lit(0.0))
@@ -1537,7 +1582,7 @@ def _compile_polars_impl(
         )
 
     if op == "clip":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         lo = _float_attr(node, "lo", "min", default=-3.0)
@@ -1551,7 +1596,7 @@ def _compile_polars_impl(
         return inner.with_columns(pl.col(_VAL).clip(lo, hi).alias(_VAL))
 
     if op in {"ts_mean", "ts_sum", "ts_min", "ts_max", "ts_std", "ts_var", "ts_median"}:
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         from backend.numeric_semantics import std_ddof_value
@@ -1580,7 +1625,7 @@ def _compile_polars_impl(
         return inner.with_columns(expr.alias(_VAL))
 
     if op == "ts_zscore":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         spec = _window_spec(node)
@@ -1613,8 +1658,8 @@ def _compile_polars_impl(
         from backend.pairwise_rolling import polars_pairwise_output_guard
 
         pspec = PairWindowSpec.from_plan_node(node)
-        left = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
-        right = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
+        left = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        right = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
         if left is None or right is None:
             return None
         joined = _join_binary(left, right)
@@ -1637,8 +1682,8 @@ def _compile_polars_impl(
         from backend.pairwise_rolling import polars_pairwise_output_guard
 
         pspec = PairWindowSpec.from_plan_node(node)
-        left = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
-        right = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
+        left = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        right = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
         if left is None or right is None:
             return None
         joined = _join_binary(left, right)
@@ -1662,8 +1707,8 @@ def _compile_polars_impl(
         from backend.pairwise_rolling import polars_ts_beta_expr
 
         pspec = PairWindowSpec.from_plan_node(node)
-        left = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
-        right = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
+        left = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        right = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
         if left is None or right is None:
             return None
         joined = _join_binary(left, right)
@@ -1685,8 +1730,8 @@ def _compile_polars_impl(
         from backend.pairwise_rolling import polars_vwap_expr
 
         spec = _window_spec(node, default=20)
-        price = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
-        vol = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
+        price = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        vol = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
         if price is None or vol is None:
             return None
         joined = _join_binary(price, vol)
@@ -1699,31 +1744,31 @@ def _compile_polars_impl(
         return joined.with_columns(vwap.alias(_VAL)).select(_TS, _INST, _VAL)
 
     if op == "cum_sum":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(_pandas_aligned_cum_sum_expr().alias(_VAL))
 
     if op == "cum_max":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(_pandas_aligned_cum_max_expr().alias(_VAL))
 
     if op == "cum_min":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(_pandas_aligned_cum_min_expr().alias(_VAL))
 
     if op == "cum_prod":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(_pandas_aligned_cum_prod_expr().alias(_VAL))
 
     if op == "ts_rank":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         spec = _window_spec(node)
@@ -1740,7 +1785,7 @@ def _compile_polars_impl(
         )
 
     if op in {"ewm_mean", "ewm_std", "ewm_var"}:
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         alpha = _ewm_alpha(node)
@@ -1759,15 +1804,15 @@ def _compile_polars_impl(
             fused = _try_coalesce_from_base_columns(node, base)
             if fused is not None:
                 return fused
-            left = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
-            right = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
+            left = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+            right = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
             if left is None or right is None:
                 return None
             joined = _join_binary(left, right)
             return joined.with_columns(pl.coalesce(pl.col(_VAL), pl.col("_y")).alias(_VAL)).select(
                 _TS, _INST, _VAL
             )
-        acc = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        acc = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if acc is None:
             return None
         for child in node.inputs[1:]:
@@ -1786,9 +1831,9 @@ def _compile_polars_impl(
         fused = _try_where_from_base_columns(node, base)
         if fused is not None:
             return fused
-        cond = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
-        a = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
-        b = _compile_polars(node.inputs[2], base, ctx=ctx, memo=memo)
+        cond = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        a = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+        b = _compile_child(node, 2, base, parent_op=op, ctx=ctx, memo=memo)
         if cond is None or a is None or b is None:
             return None
         joined = _join_triple(cond, a, b)
@@ -1802,8 +1847,8 @@ def _compile_polars_impl(
         fused = _try_binary_from_base_columns(node, base, op)
         if fused is not None:
             return fused
-        left = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
-        right = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
+        left = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        right = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
         if left is None or right is None:
             return None
         joined = _join_binary(left, right)
@@ -1825,8 +1870,8 @@ def _compile_polars_impl(
         fused = _try_binary_from_base_columns(node, base, op)
         if fused is not None:
             return fused
-        left = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
-        right = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
+        left = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        right = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
         if left is None or right is None:
             return None
         joined = _join_binary(left, right)
@@ -1840,8 +1885,8 @@ def _compile_polars_impl(
         fused = _try_binary_from_base_columns(node, base, op)
         if fused is not None:
             return fused
-        left = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
-        right = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
+        left = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        right = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
         if left is None or right is None:
             return None
         joined = _join_binary(left, right)
@@ -1850,7 +1895,7 @@ def _compile_polars_impl(
         ).select(_TS, _INST, _VAL)
 
     if op == "not_":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(
@@ -1858,7 +1903,7 @@ def _compile_polars_impl(
         )
 
     if op in {"fillna_const", "fillna"}:
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         if op == "fillna":
@@ -1874,7 +1919,7 @@ def _compile_polars_impl(
         )
 
     if op == "nan_to_num":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         const = _const_fill_value(node, default=0.0)
@@ -1892,7 +1937,7 @@ def _compile_polars_impl(
         )
 
     if op in {"cs_quantile", "c_percentile"}:
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         p = _float_attr(node, "p", default=0.5)
@@ -1905,7 +1950,7 @@ def _compile_polars_impl(
     if op == "winsorize":
         from backend.plan_params import parse_winsorize_quantiles
 
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         lo_p, hi_p = parse_winsorize_quantiles(node)
@@ -1917,8 +1962,8 @@ def _compile_polars_impl(
         from backend.plan_params import int_mode_from_plan_node
         if len(node.inputs) < 2:
             return None
-        y_layer = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
-        x_layer = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
+        y_layer = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        x_layer = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
         if y_layer is None or x_layer is None:
             return None
         joined = y_layer.join(x_layer.rename({_VAL: "_x"}), on=[_TS, _INST], how="left")
@@ -1943,6 +1988,10 @@ def _compile_polars_impl(
     if op in {
         "group_rank",
         "group_mean",
+        "group_sum",
+        "group_min",
+        "group_max",
+        "group_count",
         "group_zscore",
         "group_neutralize",
         "group_std",
@@ -1953,11 +2002,11 @@ def _compile_polars_impl(
     }:
         if not node.inputs:
             return None
-        val = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        val = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if val is None:
             return None
         if len(node.inputs) >= 2 and node.inputs[1].op not in {"literal"}:
-            grp = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
+            grp = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
             if grp is None:
                 return None
             joined = val.join(grp.rename({_VAL: _GRP}), on=[_TS, _INST], how="left")
@@ -2002,6 +2051,24 @@ def _compile_polars_impl(
             )
         elif op == "group_mean":
             expr = pl.col(_VAL).mean().over(*over_keys, order_by=_INST)
+        elif op == "group_sum":
+            expr = (
+                pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan())
+                .then(None)
+                .otherwise(pl.col(_VAL).sum().over(*over_keys, order_by=_INST))
+            )
+        elif op == "group_min":
+            expr = pl.col(_VAL).min().over(*over_keys, order_by=_INST)
+        elif op == "group_max":
+            expr = pl.col(_VAL).max().over(*over_keys, order_by=_INST)
+        elif op == "group_count":
+            expr = (
+                pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan())
+                .then(None)
+                .otherwise(
+                    pl.col(_VAL).count().over(*over_keys, order_by=_INST).cast(pl.Float64)
+                )
+            )
         elif op == "group_std":
             from backend.numeric_semantics import std_ddof_value
 
@@ -2041,7 +2108,7 @@ def _compile_polars_impl(
         return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
 
     if op == "cs_mad":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         med = pl.col(_VAL).median().over(_TS, order_by=_INST)
@@ -2049,7 +2116,7 @@ def _compile_polars_impl(
         return inner.with_columns(mad.alias(_VAL))
 
     if op == "cs_mad_zscore":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         med = pl.col(_VAL).median().over(_TS, order_by=_INST)
@@ -2062,14 +2129,14 @@ def _compile_polars_impl(
         return inner.with_columns(expr.alias(_VAL))
 
     if op == "ts_delay":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         lag = _window_int(node, default=1)
         return inner.with_columns(pl.col(_VAL).shift(lag).over(_INST, order_by=_TS).alias(_VAL))
 
     if op == "ts_delta":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         lag = _window_int(node, default=1)
@@ -2077,7 +2144,7 @@ def _compile_polars_impl(
         return inner.with_columns((pl.col(_VAL) - delayed).alias(_VAL))
 
     if op == "ts_pct":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         lag = _window_int(node, default=1)
@@ -2090,7 +2157,7 @@ def _compile_polars_impl(
         )
 
     if op == "ffill":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(pl.col(_VAL).forward_fill().over(_INST, order_by=_TS).alias(_VAL))
@@ -2110,7 +2177,7 @@ def _compile_polars_impl(
         )
 
     if op in {"ts_ema", "ewm_mean"}:
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         alpha = _ewm_alpha(node)
@@ -2122,7 +2189,7 @@ def _compile_polars_impl(
         fused = _try_fuse_unary_over_ts(node, base)
         if fused is not None:
             return fused
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(_cs_rank_01().alias(_VAL))
@@ -2131,7 +2198,7 @@ def _compile_polars_impl(
         fused = _try_fuse_unary_over_ts(node, base)
         if fused is not None:
             return fused
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(_cs_rank_pct().alias(_VAL))
@@ -2140,7 +2207,7 @@ def _compile_polars_impl(
         fused = _try_fuse_unary_over_ts(node, base)
         if fused is not None:
             return fused
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         from backend.numeric_semantics import std_ddof_value, zscore_zero_std_fill
@@ -2161,20 +2228,20 @@ def _compile_polars_impl(
         )
 
     if op == "cs_demean":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         mean = pl.col(_VAL).mean().over(_TS, order_by=_INST)
         return inner.with_columns((pl.col(_VAL) - mean).alias(_VAL))
 
     if op == "normalize":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(_normalize_on(_VAL).alias(_VAL))
 
     if op == "scale":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         to_val = _scale_to_value(node)
@@ -2185,7 +2252,7 @@ def _compile_polars_impl(
         )
 
     if op == "log_returns":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         prev = pl.col(_VAL).shift(1).over(_INST, order_by=_TS)
@@ -2202,7 +2269,7 @@ def _compile_polars_impl(
         )
 
     if op == "volatility":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node, default=20)
@@ -2218,7 +2285,7 @@ def _compile_polars_impl(
         )
 
     if op in {"c_mean", "c_std", "c_sum", "c_count"}:
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         valid = pl.col(_VAL).count().over(_TS, order_by=_INST)
@@ -2236,13 +2303,19 @@ def _compile_polars_impl(
         return inner.with_columns(expr.alias(_VAL))
 
     if op == "log_abs":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        return inner.with_columns(pl.col(_VAL).abs().log().alias(_VAL))
+        abs_v = pl.col(_VAL).abs()
+        return inner.with_columns(
+            pl.when(pl.col(_VAL).is_null() | (abs_v == 0))
+            .then(None)
+            .otherwise(abs_v.log())
+            .alias(_VAL)
+        )
 
     if op == "signed_log":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(
@@ -2250,7 +2323,7 @@ def _compile_polars_impl(
         )
 
     if op == "signed_sqrt":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(
@@ -2258,14 +2331,14 @@ def _compile_polars_impl(
         )
 
     if op == "ts_decay_linear":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
         return inner.with_columns(_rolling_linear_decay_expr(w).alias(_VAL))
 
     if op == "ts_mad":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
@@ -2284,7 +2357,7 @@ def _compile_polars_impl(
         ).select(_TS, _INST, _VAL)
 
     if op == "ts_quantile":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
@@ -2295,49 +2368,49 @@ def _compile_polars_impl(
         return inner.with_columns(_rolling_quantile_expr(w, p).alias(_VAL))
 
     if op == "ts_product":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
         return inner.with_columns(_rolling_product_expr(w).alias(_VAL))
 
     if op == "ts_median_abs_deviation":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
         return inner.with_columns(_rolling_median_abs_dev_expr(w).alias(_VAL))
 
     if op == "ts_mean_abs_deviation":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
         return inner.with_columns(_rolling_mean_abs_dev_expr(w).alias(_VAL))
 
     if op == "ts_skew":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
         return inner.with_columns(_rolling_skew_expr(w).alias(_VAL))
 
     if op == "ts_argmax":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
         return inner.with_columns(_rolling_argext_expr(w, pick="max").alias(_VAL))
 
     if op == "ts_argmin":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
         return inner.with_columns(_rolling_argext_expr(w, pick="min").alias(_VAL))
 
     if op == "Slope":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
@@ -2346,8 +2419,8 @@ def _compile_polars_impl(
     if op == "ts_regression":
         if len(node.inputs) < 2:
             return None
-        y_layer = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
-        x_layer = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
+        y_layer = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        x_layer = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
         if y_layer is None or x_layer is None:
             return None
         w = max(_window_int(node), 3)
@@ -2372,7 +2445,7 @@ def _compile_polars_impl(
         ).select(_TS, _INST, _VAL)
 
     if op == "ts_sharpe":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = max(_window_int(node), 2)
@@ -2394,7 +2467,7 @@ def _compile_polars_impl(
         return inner.with_columns(apply_inf_policy_polars_fast(expr, "ts_sharpe").alias(_VAL))
 
     if op == "ts_autocorr":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w, lag, mp = _ts_autocorr_window_lag(node)
@@ -2409,7 +2482,7 @@ def _compile_polars_impl(
         return tmp.with_columns(corr.alias(_VAL)).select(_TS, _INST, _VAL)
 
     if op == "cum_delta":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         first = (
@@ -2427,25 +2500,25 @@ def _compile_polars_impl(
         ).select(_TS, _INST, _VAL)
 
     if op == "expanding_sum":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(_expanding_sum_expr().alias(_VAL))
 
     if op == "expanding_mean":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(_expanding_mean_expr().alias(_VAL))
 
     if op == "expanding_std":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return _expanding_std_map_groups(inner)
 
     if op == "count":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         return inner.with_columns(_expanding_non_null_count().alias(_VAL))
@@ -2453,8 +2526,8 @@ def _compile_polars_impl(
     if op in {"ewm_corr", "ewm_cov"}:
         if len(node.inputs) < 2:
             return None
-        left = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
-        right = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
+        left = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        right = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
         if left is None or right is None:
             return None
         span = max(_window_int(node, default=20), 2)
@@ -2462,7 +2535,7 @@ def _compile_polars_impl(
         return _ewm_binary_map_groups(joined, span, corr=(op == "ewm_corr"))
 
     if op == "ts_ratio":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         prev = pl.col(_VAL).shift(1).over(_INST, order_by=_TS)
@@ -2474,7 +2547,7 @@ def _compile_polars_impl(
         )
 
     if op == "ts_kurt":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
@@ -2491,7 +2564,7 @@ def _compile_polars_impl(
         )
 
     if op == "ts_moment":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = max(_int_attr(node, "d", "window", input_index=0, default=3), 1)
@@ -2501,7 +2574,7 @@ def _compile_polars_impl(
         return _unary_inst_map_groups(inner, lambda arr: ts_moment_(arr, w, k))
 
     if op == "ts_max_buildup":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
@@ -2510,7 +2583,7 @@ def _compile_polars_impl(
         return _unary_inst_map_groups(inner, lambda arr: ts_max_buildup_(arr, w))
 
     if op == "expanding_rank":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
 
@@ -2521,7 +2594,7 @@ def _compile_polars_impl(
         return _unary_inst_map_groups(inner, _expanding_rank)
 
     if op == "fillna_interpolate":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         method = "linear"
@@ -2543,7 +2616,7 @@ def _compile_polars_impl(
         return _unary_inst_map_groups(inner, _interp)
 
     if op == "quantile":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         n_bins = max(_int_attr(node, "bins", input_index=0, default=10), 0)
@@ -2564,7 +2637,7 @@ def _compile_polars_impl(
         return _cs_row_map_groups(inner, _qcut)
 
     if op == "RSI_WILDER":
-        inner = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         alpha, w = _wilder_alpha(node)
@@ -2600,9 +2673,9 @@ def _compile_polars_impl(
     if op == "ATR_WILDER":
         if len(node.inputs) < 3:
             return None
-        high = _compile_polars(node.inputs[0], base, ctx=ctx, memo=memo)
-        low = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
-        close = _compile_polars(node.inputs[2], base, ctx=ctx, memo=memo)
+        high = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        low = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+        close = _compile_child(node, 2, base, parent_op=op, ctx=ctx, memo=memo)
         if high is None or low is None or close is None:
             return None
         alpha, w = _wilder_alpha(node)
@@ -2731,7 +2804,9 @@ def _build_base_lazy_from_series(ctx: Any, columns: set[str]) -> pl.LazyFrame:
     if merged is None:
         raise ValueError("polars long: no columns referenced")
     renamed = merged.rename(columns={tcol: _TS, icol: _INST})
-    return pl.from_pandas(renamed).lazy()
+    from backend.long_frame import long_table_to_polars_lazy
+
+    return long_table_to_polars_lazy(renamed, float_cols=sorted(columns))
 
 
 def compile_plan_to_polars(

@@ -25,6 +25,7 @@ import yaml
 
 from .exceptions import ValidationError
 from .layout_policy import LayoutPolicy, parse_layout_policy
+from .params_validation import ParamSpec, parse_params_schema, validate_params
 from .query_budget import DatasetQueryPolicy, parse_dataset_query_policy
 from .namespace import resolve_namespace
 from .paths import canonicalize, expand_env
@@ -89,7 +90,8 @@ class ParametricDataset(DatasetBase):
     """
     root_template: str                # 含 ${ENV} 和 {param} 占位符的 root 模板
     glob_template: str                # 同上，相对 root 的 glob 模板
-    params_schema: Mapping[str, str]  # {参数名: "str" | "int"}
+    params_schema: Mapping[str, str]  # {参数名: "str" | "int"}（YAML 摘要）
+    param_specs: Mapping[str, ParamSpec] = field(default_factory=dict)  # 硬校验规格
     # 预先算好的 canonical root（不含参数部分），用于白名单校验。
     # 例如 factor_lake 的 static_root 是 ${lake_root}/factors
     static_root: Path = field(default=Path("/"))
@@ -106,23 +108,14 @@ class ParametricDataset(DatasetBase):
 
     def resolve_paths(self, **params: Any) -> list[str]:
         """用 params 填模板，返回给 DuckDB 的 glob 表达式。"""
-        missing = [k for k in self.params_schema if k not in params]
-        if missing:
-            raise ValidationError(
-                f"参数化数据集 '{self.name}' 缺参数：{missing}；"
-                f"必填：{list(self.params_schema)}"
-            )
-        # 只允许白名单里的参数，防止用户塞奇怪 key 进模板
-        extra = set(params) - set(self.params_schema)
-        if extra:
-            raise ValidationError(
-                f"数据集 '{self.name}' 收到未登记参数：{sorted(extra)}"
-            )
-        # 用 .format 填参数；env var 在 root_template 里已 expand 过
+        specs = self.param_specs or {
+            k: ParamSpec(name=k, type=t) for k, t in self.params_schema.items()
+        }
+        validated = validate_params(self.name, specs, params)
         try:
-            root = self.root_template.format(**params)
-            glob_part = self.glob_template.format(**params)
-        except KeyError as exc:  # 理论上不会到这（上面已经校验），留个兜底
+            root = self.root_template.format(**validated)
+            glob_part = self.glob_template.format(**validated)
+        except KeyError as exc:
             raise ValidationError(f"模板变量缺失：{exc}") from exc
         return [str(Path(root) / glob_part)]
 
@@ -234,7 +227,8 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
     params_schema_raw = raw.get("params_schema", {})
     if not isinstance(params_schema_raw, dict) or not params_schema_raw:
         raise ValidationError(f"{context}: parametric 数据集必须声明非空 params_schema")
-    params_schema = {str(k): str(v) for k, v in params_schema_raw.items()}
+    param_specs = parse_params_schema(params_schema_raw)
+    params_schema = {k: spec.type for k, spec in param_specs.items()}
 
     # 算出静态前缀用于白名单：把模板里第一个 { 之前的部分当做可白名单化的根。
     # 这是一个保守但够用的做法；如果以后需要更细的路径鉴权再升级。
@@ -253,6 +247,7 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
         root_template=root_template,
         glob_template=glob_template,
         params_schema=params_schema,
+        param_specs=param_specs,
         static_root=static_root,
         schema=schema_decl,
         query_policy=query_policy,

@@ -78,10 +78,11 @@ class DataSourceReadSession:
             dict[str, Any]
         """
         names = sorted(set(columns))
+        snap = data_snapshot_id or getattr(self._source, "data_snapshot_id", None)
         scope = column_cache_scope(
             self._source,
             names,
-            data_snapshot_id=data_snapshot_id,
+            data_snapshot_id=snap,
         )
         self._last_scope_key = scope.key
         self.prefetch(names)
@@ -115,10 +116,11 @@ class DataSourceReadSession:
         names = sorted(set(columns))
         if not names:
             return None
+        snap = data_snapshot_id or getattr(self._source, "data_snapshot_id", None)
         scope = column_cache_scope(
             self._source,
             names,
-            data_snapshot_id=data_snapshot_id,
+            data_snapshot_id=snap,
         )
         self._last_scope_key = scope.key
         input_report = None

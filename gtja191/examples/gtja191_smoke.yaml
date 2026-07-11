@@ -1,5 +1,4 @@
-# GTJA-191 smoke：最快执行路径
-# data_access(read_auto) + backend auto (SQL 下推 + Polars，失败自动降级)
+# GTJA-191 smoke：read_auto 读数 + pandas 算子（191 条全量数值 parity）
 #
 # cd factor_engine && PYTHONPATH=. python3 run_pipeline.py config ../gtja191/examples/gtja191_smoke.yaml --run-only
 
@@ -8,7 +7,7 @@ factor:
   expr: -1 * ts_corr(rank(ts_delta(log(volume), 1)), rank((close - open) / open), 6)
   freq: 1d
   universe: ASHARE_ALL
-  description: GTJA-191 Alpha 001 smoke (canonical DSL + auto backend)
+  description: GTJA-191 Alpha 001 smoke (canonical DSL + pandas backend)
 
 data_source:
   type: data_access
@@ -28,7 +27,7 @@ data_source:
     preclose: PreClose
 
 backend:
-  type: auto
+  type: pandas
 
 engine:
   enable_cache: true

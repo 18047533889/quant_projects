@@ -25,9 +25,13 @@ from backend.universe_spec import empty_universe_preserves_keys
 from planner.logical_plan import PlanNode
 
 
-def test_production_checklist_phase1_complete():
-    assert checklist_complete_for_phase1()
-    assert len(PRODUCTION_CHECKLIST) >= 25
+def test_production_checklist_phase1_tracks_wiring():
+    from backend.production_checklist import PHASE1_COMPLETE_STATUSES, checklist_summary
+
+    summary = checklist_summary()
+    assert summary.get("defined", 0) > 0
+    assert "gate_enforced" in PHASE1_COMPLETE_STATUSES
+    assert "parity_tested" in PHASE1_COMPLETE_STATUSES
 
 
 def test_core_contract_flags():

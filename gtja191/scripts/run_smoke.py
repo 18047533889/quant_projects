@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""用 factor_engine 最快路径（auto + read_auto）跑 GTJA-191 smoke。"""
+"""用 factor_engine（read_auto + pandas）跑 GTJA-191 smoke。"""
 from __future__ import annotations
 
 import argparse
@@ -76,7 +76,7 @@ def run_smoke(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Run GTJA-191 factor smoke via fastest engine (auto + read_auto)"
+        description="Run GTJA-191 factor smoke (read_auto + pandas backend)"
     )
     parser.add_argument("--factor", default="gtja191_alpha_001")
     parser.add_argument("--start-date", default="2016-01-04")

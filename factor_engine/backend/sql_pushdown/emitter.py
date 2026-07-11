@@ -1518,6 +1518,8 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
         )
         cnt = f"COUNT(_v) OVER ({over})"
+        std = _dialect_fn(dialect, "stddev")
+        nf = _dialect_fn(dialect, "nullif")
         return _Layer(
             f"SELECT ts, inst, "
             f"CASE "
@@ -1933,7 +1935,17 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_ts_partition=cond.has_ts_partition or a.has_ts_partition or b.has_ts_partition,
         )
 
-    if op in {"group_rank", "group_mean", "group_zscore", "group_normalize", "group_std"}:
+    if op in {
+        "group_rank",
+        "group_mean",
+        "group_sum",
+        "group_min",
+        "group_max",
+        "group_count",
+        "group_zscore",
+        "group_normalize",
+        "group_std",
+    }:
         if not node.inputs:
             return None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
@@ -1961,6 +1973,17 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             )
         if op == "group_mean":
             expr = f"AVG(x._v) OVER ({part})"
+        elif op == "group_sum":
+            expr = f"CASE WHEN x._v IS NULL THEN NULL ELSE SUM(x._v) OVER ({part}) END"
+        elif op == "group_min":
+            expr = f"MIN(x._v) OVER ({part})"
+        elif op == "group_max":
+            expr = f"MAX(x._v) OVER ({part})"
+        elif op == "group_count":
+            expr = (
+                f"CASE WHEN x._v IS NULL THEN NULL "
+                f"ELSE CAST(COUNT(x._v) OVER ({part}) AS DOUBLE) END"
+            )
         elif op == "group_std":
             std_fn = _dialect_fn(dialect, "stddev")
             cnt = f"COUNT(x._v) OVER ({part})"
@@ -2529,8 +2552,12 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
+        over = "PARTITION BY inst ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"
+        run = f"SUM(CASE WHEN _v IS NULL THEN 0 ELSE _v END) OVER ({over})"
+        cnt = f"SUM(CASE WHEN _v IS NOT NULL THEN 1 ELSE 0 END) OVER ({over})"
+        body = f"CASE WHEN _v IS NULL THEN NULL WHEN {cnt} <= 0 THEN NULL ELSE {run} / {cnt} END"
         return _Layer(
-            _inst_cum_agg("AVG", inner.sql),
+            f"SELECT ts, inst, {body} AS _v FROM ({inner.sql}) t",
             has_inst_window=True,
         )
 
@@ -2604,7 +2631,9 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         ln_fn = _dialect_fn(dialect, "ln")
         return _Layer(
             f"SELECT ts, inst, "
-            f"CASE WHEN _v IS NULL THEN NULL ELSE {ln_fn}({abs_fn}(_v)) END AS _v "
+            f"CASE WHEN _v IS NULL THEN NULL "
+            f"WHEN {abs_fn}(_v) = 0 THEN NULL "
+            f"ELSE {ln_fn}({abs_fn}(_v)) END AS _v "
             f"FROM ({inner.sql}) t",
             has_inst_window=inner.has_inst_window,
             has_ts_partition=inner.has_ts_partition,

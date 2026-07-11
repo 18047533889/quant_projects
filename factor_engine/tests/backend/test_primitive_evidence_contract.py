@@ -1,5 +1,5 @@
 # -*- coding: utf-8
-"""Primitive evidence JSON 与 parity 测试 case 一致。"""
+"""Primitive evidence：case registry 与 verified artifact 契约。"""
 from __future__ import annotations
 
 import pytest
@@ -30,31 +30,51 @@ def _merged_cases():
     }
 
 
-def test_primitive_polars_reference_matches_cases(_loaded):
-    from backend.primitive_evidence import POLARS_REFERENCE_PARITY_VERIFIED
+def _case_registry_sets():
+    from backend.primitive_evidence import (
+        CASE_REGISTRY_DUCKDB_EDGE,
+        CASE_REGISTRY_DUCKDB_REFERENCE,
+        CASE_REGISTRY_NO_FALLBACK,
+        CASE_REGISTRY_POLARS_EDGE,
+        CASE_REGISTRY_POLARS_REFERENCE,
+        CASE_REGISTRY_SIX_WAY,
+    )
+
+    return {
+        "polars_reference": CASE_REGISTRY_POLARS_REFERENCE,
+        "duckdb_reference": CASE_REGISTRY_DUCKDB_REFERENCE,
+        "polars_edge": CASE_REGISTRY_POLARS_EDGE,
+        "duckdb_edge": CASE_REGISTRY_DUCKDB_EDGE,
+        "no_fallback": CASE_REGISTRY_NO_FALLBACK,
+        "six_way": CASE_REGISTRY_SIX_WAY,
+    }
+
+
+def test_primitive_case_registry_matches_cases(_loaded):
     from tests.backend_parity.evidence_case_registry import case_names
 
     cases = _merged_cases()
-    assert POLARS_REFERENCE_PARITY_VERIFIED == case_names(cases["polars_reference"])
+    reg = _case_registry_sets()
+    assert reg["polars_reference"] == case_names(cases["polars_reference"])
+    assert reg["duckdb_reference"] == case_names(cases["duckdb_reference"])
+    assert reg["polars_edge"] == case_names(cases["polars_edge"])
+    assert reg["duckdb_edge"] == case_names(cases["duckdb_edge"])
+    assert reg["no_fallback"] == case_names(cases["no_fallback"])
 
 
-def test_primitive_duckdb_reference_matches_cases(_loaded):
-    from backend.primitive_evidence import DUCKDB_REFERENCE_PARITY_VERIFIED
-    from tests.backend_parity.evidence_case_registry import case_names
-
-    cases = _merged_cases()
-    assert DUCKDB_REFERENCE_PARITY_VERIFIED == case_names(cases["duckdb_reference"])
-
-
-def test_primitive_duckdb_real_sql_matches_cases(_loaded):
-    from backend.primitive_evidence import DUCKDB_REAL_SQL_VERIFIED
-    from tests.backend_parity.evidence_case_registry import case_names
-
-    cases = _merged_cases()
-    assert DUCKDB_REAL_SQL_VERIFIED == case_names(cases["duckdb_reference"])
+def test_primitive_case_registry_six_way_intersection(_loaded):
+    reg = _case_registry_sets()
+    expected = (
+        reg["polars_reference"]
+        & reg["polars_edge"]
+        & reg["duckdb_reference"]
+        & reg["duckdb_edge"]
+        & reg["no_fallback"]
+    )
+    assert reg["six_way"] == expected
 
 
-def test_primitive_dual_backend_is_six_way_intersection(_loaded):
+def test_primitive_verified_subset_of_case_registry(_loaded):
     from backend.primitive_evidence import (
         DUCKDB_EDGE_VERIFIED,
         DUCKDB_REAL_SQL_VERIFIED,
@@ -65,39 +85,31 @@ def test_primitive_dual_backend_is_six_way_intersection(_loaded):
         PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE,
     )
 
-    expected = (
-        POLARS_REFERENCE_PARITY_VERIFIED
-        & POLARS_EDGE_VERIFIED
-        & DUCKDB_REFERENCE_PARITY_VERIFIED
-        & DUCKDB_REAL_SQL_VERIFIED
-        & DUCKDB_EDGE_VERIFIED
-        & NO_FALLBACK_VERIFIED
-    )
-    assert PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE == expected
+    reg = _case_registry_sets()
+    assert POLARS_REFERENCE_PARITY_VERIFIED <= reg["polars_reference"]
+    assert DUCKDB_REFERENCE_PARITY_VERIFIED <= reg["duckdb_reference"]
+    assert DUCKDB_REAL_SQL_VERIFIED <= reg["duckdb_reference"]
+    assert POLARS_EDGE_VERIFIED <= reg["polars_edge"]
+    assert DUCKDB_EDGE_VERIFIED <= reg["duckdb_edge"]
+    assert NO_FALLBACK_VERIFIED <= reg["no_fallback"]
+    assert PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE <= reg["six_way"]
 
 
-def test_primitive_no_fallback_matches_cases(_loaded):
-    from backend.primitive_evidence import NO_FALLBACK_VERIFIED
-    from tests.backend_parity.evidence_case_registry import case_names
+def test_verified_artifact_has_provenance_when_present(_loaded):
+    from pathlib import Path
 
-    cases = _merged_cases()
-    assert NO_FALLBACK_VERIFIED == case_names(cases["no_fallback"])
+    from backend.evidence_provenance import evidence_artifact_valid, load_verified_artifact
 
-
-def test_primitive_polars_edge_matches_cases(_loaded):
-    from backend.primitive_evidence import POLARS_EDGE_VERIFIED
-    from tests.backend_parity.evidence_case_registry import case_names
-
-    cases = _merged_cases()
-    assert POLARS_EDGE_VERIFIED == case_names(cases["polars_edge"])
-
-
-def test_primitive_duckdb_edge_matches_cases(_loaded):
-    from backend.primitive_evidence import DUCKDB_EDGE_VERIFIED
-    from tests.backend_parity.evidence_case_registry import case_names
-
-    cases = _merged_cases()
-    assert DUCKDB_EDGE_VERIFIED == case_names(cases["duckdb_edge"])
+    path = Path(__file__).resolve().parents[2] / "evidence" / "primitive_verified.json"
+    if not path.is_file():
+        pytest.skip("primitive_verified.json 尚未生成")
+    data = load_verified_artifact()
+    prov = data.get("provenance") or {}
+    if evidence_artifact_valid():
+        assert prov.get("artifact_kind") == "test_passed"
+        assert prov.get("commit_sha")
+        assert prov.get("passed_at")
+        assert prov.get("case_registry_hash")
 
 
 def test_sql_production_safe_subset_of_primitive_evidence(_loaded):

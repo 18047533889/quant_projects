@@ -18,6 +18,10 @@
   - pandas_numpy
   - polars
   description: Wilder 平均真实波幅
+  execution_kind: stateful
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: RSI_WILDER
   scope: time_series
   frequency: any
@@ -36,6 +40,10 @@
   - pandas_numpy
   - polars
   description: Wilder 相对强弱指数
+  execution_kind: stateful
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: abs
   scope: elementwise
   frequency: any
@@ -53,6 +61,10 @@
   - pandas_numpy
   - polars
   description: 计算绝对值
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: add
   scope: elementwise
   frequency: any
@@ -69,6 +81,10 @@
   - pandas_numpy
   - polars
   description: Basic runtime operator
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: and_
   scope: elementwise
   frequency: any
@@ -85,6 +101,10 @@
   - pandas_numpy
   - polars
   description: Basic runtime operator
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: c_count
   scope: cross_sectional
   frequency: any
@@ -102,6 +122,10 @@
   - pandas_numpy
   - polars
   description: 计算截面非空计数
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: c_mean
   scope: cross_sectional
   frequency: any
@@ -119,6 +143,10 @@
   - pandas_numpy
   - polars
   description: 计算截面均值
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: c_std
   scope: cross_sectional
   frequency: any
@@ -136,6 +164,10 @@
   - pandas_numpy
   - polars
   description: 计算截面标准差
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: c_sum
   scope: cross_sectional
   frequency: any
@@ -153,6 +185,10 @@
   - pandas_numpy
   - polars
   description: 计算截面求和
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: ceil
   scope: elementwise
   frequency: any
@@ -170,6 +206,10 @@
   - pandas_numpy
   - polars
   description: 向上取整
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: clip
   scope: elementwise
   frequency: any
@@ -189,6 +229,10 @@
   - pandas_numpy
   - polars
   description: 裁剪到 [lo, hi] 区间
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: coalesce
   scope: elementwise
   frequency: any
@@ -207,6 +251,10 @@
   - pandas_numpy
   - polars
   description: 返回第一个非 NaN 值
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: cs_demean
   scope: cross_sectional
   frequency: any
@@ -224,6 +272,10 @@
   - pandas_numpy
   - polars
   description: 截面数据减去均值
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: cs_mad
   scope: cross_sectional
   frequency: any
@@ -241,6 +293,10 @@
   - pandas_numpy
   - polars
   description: 截面中位绝对偏差（MAD，广播到各列）
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: cs_mad_zscore
   scope: cross_sectional
   frequency: any
@@ -258,6 +314,10 @@
   - pandas_numpy
   - polars
   description: MAD 稳健 Z-Score：(x - median) / MAD
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: cs_pct_rank
   scope: cross_sectional
   frequency: any
@@ -275,43 +335,10 @@
   - pandas_numpy
   - polars
   description: 截面百分位排名（同 rank_pct）
-- name: cs_regression
-  scope: cross_sectional
-  frequency: any
-  input_fields:
-  - y
-  - x
-  - mode
-  output_type: series
-  pit_safe: true
-  includes_current: true
-  lookback: null
-  min_periods: null
-  nan_policy: propagate
-  status: research
-  allow_in_production: true
-  backends:
-  - pandas_numpy
-  - polars
-  description: '截面回归: mode=0 残差, 1 beta, 2 拟合值'
-- name: cs_resid
-  scope: cross_sectional
-  frequency: any
-  input_fields:
-  - y
-  - x
-  output_type: series
-  pit_safe: true
-  includes_current: true
-  lookback: null
-  min_periods: null
-  nan_policy: propagate
-  status: research
-  allow_in_production: true
-  backends:
-  - pandas_numpy
-  - polars
-  description: 截面线性回归残差 y - (α + βx)
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: divide
   scope: elementwise
   frequency: any
@@ -328,6 +355,10 @@
   - pandas_numpy
   - polars
   description: Basic runtime operator
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: eq
   scope: elementwise
   frequency: any
@@ -344,6 +375,10 @@
   - pandas_numpy
   - polars
   description: Basic runtime operator
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: exp
   scope: elementwise
   frequency: any
@@ -361,6 +396,10 @@
   - pandas_numpy
   - polars
   description: 计算e的x次方
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: ffill
   scope: elementwise
   frequency: any
@@ -378,24 +417,10 @@
   - pandas_numpy
   - polars
   description: 前向填充（用前值填充NaN）
-- name: fillna
-  scope: elementwise
-  frequency: any
-  input_fields:
-  - x
-  - method
-  output_type: series
-  pit_safe: true
-  includes_current: true
-  lookback: null
-  min_periods: null
-  nan_policy: propagate
-  status: research
-  allow_in_production: true
-  backends:
-  - pandas_numpy
-  - polars
-  description: '缺失值填充（method: ''mean'', ''median'', ''zero'', ''ffill'', ''bfill''）'
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: fillna_const
   scope: elementwise
   frequency: any
@@ -414,6 +439,10 @@
   - pandas_numpy
   - polars
   description: 常量填充
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: floor
   scope: elementwise
   frequency: any
@@ -431,6 +460,10 @@
   - pandas_numpy
   - polars
   description: 向下取整
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: ge
   scope: elementwise
   frequency: any
@@ -447,6 +480,10 @@
   - pandas_numpy
   - polars
   description: Basic runtime operator
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: group_mean
   scope: cross_sectional
   frequency: any
@@ -465,6 +502,10 @@
   - pandas_numpy
   - polars
   description: 计算组内均值
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: group_neutralize
   scope: cross_sectional
   frequency: any
@@ -483,6 +524,10 @@
   - pandas_numpy
   - polars
   description: 在指定分组内进行去均值处理 (x - group_mean)
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: group_normalize
   scope: cross_sectional
   frequency: any
@@ -501,6 +546,10 @@
   - pandas_numpy
   - polars
   description: 在指定分组内对股票进行归一化到[0,1]
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: group_percentile
   scope: cross_sectional
   frequency: any
@@ -520,6 +569,10 @@
   - pandas_numpy
   - polars
   description: 判断股票在组内的分位位置，返回0或1
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: group_rank
   scope: cross_sectional
   frequency: any
@@ -538,6 +591,10 @@
   - pandas_numpy
   - polars
   description: 在指定分组内对股票进行排名，返回归一化排名(0-1)
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: group_std
   scope: cross_sectional
   frequency: any
@@ -556,6 +613,10 @@
   - pandas_numpy
   - polars
   description: 计算组内标准差
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: group_winsorize
   scope: cross_sectional
   frequency: any
@@ -575,6 +636,10 @@
   - pandas_numpy
   - polars
   description: 在指定分组内进行缩尾处理，将超出分位数a的值截断
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: group_zscore
   scope: cross_sectional
   frequency: any
@@ -593,6 +658,10 @@
   - pandas_numpy
   - polars
   description: 在指定分组内进行Z-Score标准化 (x-mean)/std
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: gt
   scope: elementwise
   frequency: any
@@ -609,6 +678,10 @@
   - pandas_numpy
   - polars
   description: Basic runtime operator
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: inverse
   scope: elementwise
   frequency: any
@@ -625,6 +698,10 @@
   - pandas_numpy
   - polars
   description: Basic runtime operator
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: is_finite
   scope: elementwise
   frequency: any
@@ -642,6 +719,10 @@
   - pandas_numpy
   - polars
   description: 判断是否为有限数
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: is_nan
   scope: elementwise
   frequency: any
@@ -659,6 +740,10 @@
   - pandas_numpy
   - polars
   description: 判断是否为NaN
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: le
   scope: elementwise
   frequency: any
@@ -675,6 +760,10 @@
   - pandas_numpy
   - polars
   description: Basic runtime operator
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: log
   scope: elementwise
   frequency: any
@@ -692,6 +781,10 @@
   - pandas_numpy
   - polars
   description: 计算自然对数（底数为e）
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: log_returns
   scope: time_series
   frequency: any
@@ -709,6 +802,10 @@
   - pandas_numpy
   - polars
   description: 对数收益率 ln(P_t / P_{t-1})
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: lt
   scope: elementwise
   frequency: any
@@ -725,6 +822,10 @@
   - pandas_numpy
   - polars
   description: Basic runtime operator
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: maximum
   scope: elementwise
   frequency: any
@@ -743,6 +844,10 @@
   - pandas_numpy
   - polars
   description: 逐元素 max(x,y)
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: minimum
   scope: elementwise
   frequency: any
@@ -761,6 +866,10 @@
   - pandas_numpy
   - polars
   description: 逐元素 min(x,y)
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: multiply
   scope: elementwise
   frequency: any
@@ -777,6 +886,10 @@
   - pandas_numpy
   - polars
   description: Basic runtime operator
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: nan_to_num
   scope: elementwise
   frequency: any
@@ -795,6 +908,10 @@
   - pandas_numpy
   - polars
   description: NaN转数值
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: ne
   scope: elementwise
   frequency: any
@@ -811,6 +928,10 @@
   - pandas_numpy
   - polars
   description: Basic runtime operator
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: neg
   scope: elementwise
   frequency: any
@@ -828,6 +949,10 @@
   - pandas_numpy
   - polars
   description: 返回-x
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: normalize
   scope: cross_sectional
   frequency: any
@@ -845,6 +970,10 @@
   - pandas_numpy
   - polars
   description: 归一化到[0, 1]
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: not_
   scope: elementwise
   frequency: any
@@ -861,6 +990,10 @@
   - pandas_numpy
   - polars
   description: Basic runtime operator
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: or_
   scope: elementwise
   frequency: any
@@ -877,6 +1010,10 @@
   - pandas_numpy
   - polars
   description: Basic runtime operator
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: power
   scope: elementwise
   frequency: any
@@ -895,6 +1032,10 @@
   - pandas_numpy
   - polars
   description: 计算x的y次方
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: protected_div
   scope: elementwise
   frequency: any
@@ -915,6 +1056,10 @@
   - pandas_numpy
   - polars
   description: 安全除法：|y|<=epsilon 时返回 default
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: protected_log
   scope: elementwise
   frequency: any
@@ -933,6 +1078,10 @@
   - pandas_numpy
   - polars
   description: 安全对数：log(max(x, epsilon))
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: protected_sqrt
   scope: elementwise
   frequency: any
@@ -950,6 +1099,10 @@
   - pandas_numpy
   - polars
   description: 安全平方根：sqrt(max(x, 0))
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: rank
   scope: cross_sectional
   frequency: any
@@ -967,6 +1120,10 @@
   - pandas_numpy
   - polars
   description: 截面 0-1 排名（单有效值 → 0.5）；pandas 百分位排名见 rank_pct
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: rank_pct
   scope: cross_sectional
   frequency: any
@@ -984,6 +1141,10 @@
   - pandas_numpy
   - polars
   description: 截面 pandas 百分位排名 rank/count
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: rolling_beta
   scope: time_series
   frequency: any
@@ -1003,6 +1164,33 @@
   - pandas_numpy
   - polars
   description: 滚动 Beta：Cov(ret, benchmark_ret) / Var(benchmark_ret)
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
+- name: safe_div_null
+  scope: elementwise
+  frequency: any
+  input_fields:
+  - x
+  - y
+  - epsilon
+  output_type: series
+  pit_safe: true
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: research
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 比率除法：numerator/denominator；NULL 或 |denom|<=epsilon → NULL
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: scale
   scope: cross_sectional
   frequency: any
@@ -1021,6 +1209,10 @@
   - pandas_numpy
   - polars
   description: 缩放数据使sum(abs(x))=指定值（与c_scale相同）
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: sign
   scope: elementwise
   frequency: any
@@ -1038,6 +1230,10 @@
   - pandas_numpy
   - polars
   description: 返回符号：正数返回1，负数返回-1，零返回0
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: sqrt
   scope: elementwise
   frequency: any
@@ -1055,6 +1251,10 @@
   - pandas_numpy
   - polars
   description: 计算平方根
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: subtract
   scope: elementwise
   frequency: any
@@ -1071,6 +1271,10 @@
   - pandas_numpy
   - polars
   description: Basic runtime operator
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: ts_autocorr
   scope: time_series
   frequency: any
@@ -1090,6 +1294,10 @@
   - pandas_numpy
   - polars
   description: 滚动自相关 corr(x_t, x_{t-lag}) within window
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: ts_beta
   scope: time_series
   frequency: any
@@ -1109,6 +1317,10 @@
   - pandas_numpy
   - polars
   description: 计算两变量的n期移动Beta
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: ts_corr
   scope: time_series
   frequency: any
@@ -1128,6 +1340,10 @@
   - pandas_numpy
   - polars
   description: 滚动相关系数 (ts_correlation的别名)
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: ts_cov
   scope: time_series
   frequency: any
@@ -1147,6 +1363,10 @@
   - pandas_numpy
   - polars
   description: 滚动协方差 (与m_cov相同)
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: ts_decay_linear
   scope: time_series
   frequency: any
@@ -1165,6 +1385,10 @@
   - pandas_numpy
   - polars
   description: 线性加权滚动平均
+  execution_kind: stateful
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: ts_delay
   scope: time_series
   frequency: any
@@ -1183,6 +1407,10 @@
   - pandas_numpy
   - polars
   description: n期滞后 (与Ref相同)
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: ts_delta
   scope: time_series
   frequency: any
@@ -1201,6 +1429,10 @@
   - pandas_numpy
   - polars
   description: n期差分 (与Delta相同)
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: ts_ema
   scope: time_series
   frequency: any
@@ -1219,6 +1451,10 @@
   - pandas_numpy
   - polars
   description: 计算n期指数移动平均
+  execution_kind: stateful
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: ts_max
   scope: time_series
   frequency: any
@@ -1237,6 +1473,10 @@
   - pandas_numpy
   - polars
   description: 滚动最大值 (与m_max相同)
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: ts_mean
   scope: time_series
   frequency: any
@@ -1255,6 +1495,10 @@
   - pandas_numpy
   - polars
   description: 滚动均值 (与m_avg相同)
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: ts_median
   scope: time_series
   frequency: any
@@ -1273,6 +1517,10 @@
   - pandas_numpy
   - polars
   description: 计算n期移动中位数
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: ts_min
   scope: time_series
   frequency: any
@@ -1291,6 +1539,10 @@
   - pandas_numpy
   - polars
   description: 滚动最小值 (与m_min相同)
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: ts_pct
   scope: time_series
   frequency: any
@@ -1309,6 +1561,10 @@
   - pandas_numpy
   - polars
   description: d 期变化率
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: ts_rank
   scope: time_series
   frequency: any
@@ -1327,6 +1583,10 @@
   - pandas_numpy
   - polars
   description: 滚动排名 (与m_rank相同)
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: ts_sharpe
   scope: time_series
   frequency: any
@@ -1346,6 +1606,10 @@
   - pandas_numpy
   - polars
   description: 滚动夏普：mean/std * sqrt(ann_factor)
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: ts_std
   scope: time_series
   frequency: any
@@ -1364,6 +1628,10 @@
   - pandas_numpy
   - polars
   description: 滚动标准差 (ts_std_dev的别名)
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: ts_sum
   scope: time_series
   frequency: any
@@ -1382,6 +1650,10 @@
   - pandas_numpy
   - polars
   description: 滚动求和 (与m_sum相同)
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: ts_var
   scope: time_series
   frequency: any
@@ -1400,6 +1672,10 @@
   - pandas_numpy
   - polars
   description: 计算n期移动方差
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: ts_zscore
   scope: time_series
   frequency: any
@@ -1418,6 +1694,10 @@
   - pandas_numpy
   - polars
   description: 滚动Z-Score (与m_zscore相同)
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: volatility
   scope: time_series
   frequency: any
@@ -1436,6 +1716,10 @@
   - pandas_numpy
   - polars
   description: 波动率（年化）
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: vwap
   scope: time_series
   frequency: any
@@ -1455,6 +1739,10 @@
   - pandas_numpy
   - polars
   description: 成交量加权平均价
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: where
   scope: elementwise
   frequency: any
@@ -1474,6 +1762,10 @@
   - pandas_numpy
   - polars
   description: 条件选择（与if_else相同）
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: winsorize
   scope: cross_sectional
   frequency: any
@@ -1493,6 +1785,10 @@
   - pandas_numpy
   - polars
   description: 缩尾处理
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
 - name: zscore
   scope: cross_sectional
   frequency: any
@@ -1510,3 +1806,7 @@
   - pandas_numpy
   - polars
   description: 对截面数据进行Z-Score标准化（与c_zscore相同）
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true

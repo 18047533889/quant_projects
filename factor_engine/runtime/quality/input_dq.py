@@ -204,7 +204,7 @@ def load_dataset_stats_for_source(data_source: Any) -> Any | None:
         try:
             from data_access import get_store
 
-            ds = get_store()._registry.get(str(dataset))
+            ds = get_store().get_dataset(str(dataset))
             root = getattr(ds, "root", None)
         except Exception:
             return None

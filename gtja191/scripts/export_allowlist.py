@@ -24,10 +24,9 @@ def main() -> int:
     from api.mining_integration import export_dsl_allowlist_json  # noqa: WPS433
 
     payload = export_dsl_allowlist_json(market="ashare")
-    ops = payload["operators"]
     out = PACKAGE_ROOT / "dsl" / "fe_dsl_allowlist.json"
-    out.write_text(json.dumps(ops, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(f"exported {len(ops)} operators -> {out}")
+    out.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"exported {payload['count']} operators -> {out}")
     return 0
 
 

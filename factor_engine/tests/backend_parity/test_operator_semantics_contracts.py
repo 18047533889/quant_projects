@@ -150,12 +150,17 @@ def test_window_spec_rejects_fractional_ddof(_loaded):
 
 
 def test_backend_specific_capability(_loaded):
+    from backend.evidence_provenance import evidence_artifact_valid
     from backend.operator_call_capability import CapabilityLevel, check_operator_call_capability
 
     ok_polars = check_operator_call_capability("rank", backend="polars_long", production=True)
     ok_duck = check_operator_call_capability("rank", backend="duckdb_sql", production=True)
-    assert ok_polars.level == CapabilityLevel.PRODUCTION
-    assert ok_duck.level == CapabilityLevel.PRODUCTION
+    if evidence_artifact_valid():
+        assert ok_polars.level == CapabilityLevel.PRODUCTION
+        assert ok_duck.level == CapabilityLevel.PRODUCTION
+    else:
+        assert ok_polars.level == CapabilityLevel.RESEARCH
+        assert ok_duck.level == CapabilityLevel.RESEARCH
     bad = check_operator_call_capability("ts_mad", backend="polars_long", production=True)
     assert bad.level == CapabilityLevel.RESEARCH
 

@@ -31,6 +31,16 @@
 | `||` | `or_` | |
 | `^` | `power` | |
 
+## factor_engine 别名陷阱（勿在 GTJA 投递 DSL 中使用）
+
+| factor_engine 别名 | 实际语义 | GTJA 正确写法 |
+|--------------------|----------|---------------|
+| `SMA(x, n)` | 简单滚动均值 `ts_mean` | GTJA `SMA(x,n,m)` → `ts_ema(x, span)` |
+| `delay` / `shift` | → `ts_delay` | 投递写 `ts_delay` |
+| `if_else` / `IIF` | → `where` | 投递写 `where` |
+| `max` / `min`（两列） | → `flex_max` / `flex_min` | 投递写 `flex_max` / `flex_min` |
+| `neutralize` | → `group_neutralize`（组内去均值） | OLS 中性化用 `cs_resid` / `cs_regression` |
+
 ## 未完全覆盖（已处理策略）
 
 | GTJA | 策略 |

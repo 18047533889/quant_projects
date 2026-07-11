@@ -121,7 +121,9 @@ class LongTableDataSource(DataSource):
         if merged is None:
             raise ValueError("scan_polars_long: no columns")
         renamed = merged.rename(columns={ts: "ts", inst: "inst"})
-        return pl.from_pandas(renamed).lazy()
+        from backend.long_frame import long_table_to_polars_lazy
+
+        return long_table_to_polars_lazy(renamed, float_cols=columns)
 
     def load_column_panel(self, name: str):
         """按需 unstack 一次并缓存（panel-native / 宽表算子热路径）。

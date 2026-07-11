@@ -1,4 +1,4 @@
-"""GTJA-191 最快执行路径：HybridBackend(auto) + read_auto。"""
+"""GTJA-191 执行路径：data_access read_auto + PandasBackend（全量数值 parity）。"""
 from __future__ import annotations
 
 from typing import Any
@@ -25,18 +25,22 @@ def enable_fastest_read(source: Any) -> Any:
 
 
 def build_fastest_engine(data_source: Any):
-    """构建 factor_engine 最快执行栈（backend=auto, operator_backend=auto）。
+    """构建 GTJA-191 推荐执行栈。
 
-    auto 路径：SQL 可下推子树走 DuckDB，其余走 Polars；SQL 编译/执行失败时
-    自动降级 Polars/Pandas（见 factor_engine sql_pushdown/executor）。
+    - **读数**：``read_auto``（与 factor_engine mining_integration 一致）
+    - **算子**：``PandasBackend`` + ``operator_backend=pandas_numpy``
+
+    ``backend=auto``（HybridBackend）对部分 ``ts_corr(rank(...), rank(...))`` 嵌套式
+    在 Polars 算子层暂无数值 parity（如 alpha_001）；投递与 smoke 因此固定走 pandas，
+    保证 191 条公式与 factor_engine 参考结果一致。
     """
     from backend.factory import build_backend
     from runtime.engine import FactorEngine
     from runtime.perf_config import PerfConfig
 
-    backend = build_backend("auto")
+    backend = build_backend("pandas")
     perf = PerfConfig(
-        operator_backend="auto",
+        operator_backend="pandas_numpy",
         enable_cse=True,
         panel_native=True,
     )

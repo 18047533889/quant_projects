@@ -190,6 +190,129 @@ class GroupMean(SeriesOperator):
 
 
 
+# canonical=group_sum backend=pandas_numpy selected=group_sum source=cross_sectional/group_ops.py
+@register_operator(name="group_sum", category="cross_sectional", business_category="group_neutralization", canonical="group_sum", source="factor_dsl_np")
+class GroupSum(SeriesOperator):
+    """组内求和"""
+
+    metadata = OperatorMetadata(
+        name="group_sum",
+        category="cross_sectional",
+        description="计算组内求和",
+        examples=["group_sum(volume, industry_code)"],
+        param_names=["x", "group"],
+        return_type="series",
+        tags=["cross_sectional", "sum", "group", "aggregate"],
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, **kwargs) -> pd.DataFrame:
+        result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
+        for date in x.index:
+            x_slice = x.loc[date]
+            group_slice = group.loc[date] if group is not None and date in group.index else None
+            if group_slice is None or group_slice.isna().all():
+                result.loc[date] = x_slice.sum()
+                continue
+            for group_val in group_slice.dropna().unique():
+                mask = (group_slice == group_val) & x_slice.notna()
+                if mask.sum() > 0:
+                    result.loc[date, x_slice[mask].index] = x_slice[mask].sum()
+        return result
+
+
+
+# canonical=group_min backend=pandas_numpy selected=group_min source=cross_sectional/group_ops.py
+@register_operator(name="group_min", category="cross_sectional", business_category="group_neutralization", canonical="group_min", source="factor_dsl_np")
+class GroupMin(SeriesOperator):
+    """组内最小值"""
+
+    metadata = OperatorMetadata(
+        name="group_min",
+        category="cross_sectional",
+        description="计算组内最小值",
+        examples=["group_min(close, industry_code)"],
+        param_names=["x", "group"],
+        return_type="series",
+        tags=["cross_sectional", "min", "group", "aggregate"],
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, **kwargs) -> pd.DataFrame:
+        result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
+        for date in x.index:
+            x_slice = x.loc[date]
+            group_slice = group.loc[date] if group is not None and date in group.index else None
+            if group_slice is None or group_slice.isna().all():
+                result.loc[date] = x_slice.min()
+                continue
+            for group_val in group_slice.dropna().unique():
+                mask = (group_slice == group_val) & x_slice.notna()
+                if mask.sum() > 0:
+                    result.loc[date, x_slice[mask].index] = x_slice[mask].min()
+        return result
+
+
+
+# canonical=group_max backend=pandas_numpy selected=group_max source=cross_sectional/group_ops.py
+@register_operator(name="group_max", category="cross_sectional", business_category="group_neutralization", canonical="group_max", source="factor_dsl_np")
+class GroupMax(SeriesOperator):
+    """组内最大值"""
+
+    metadata = OperatorMetadata(
+        name="group_max",
+        category="cross_sectional",
+        description="计算组内最大值",
+        examples=["group_max(close, industry_code)"],
+        param_names=["x", "group"],
+        return_type="series",
+        tags=["cross_sectional", "max", "group", "aggregate"],
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, **kwargs) -> pd.DataFrame:
+        result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
+        for date in x.index:
+            x_slice = x.loc[date]
+            group_slice = group.loc[date] if group is not None and date in group.index else None
+            if group_slice is None or group_slice.isna().all():
+                result.loc[date] = x_slice.max()
+                continue
+            for group_val in group_slice.dropna().unique():
+                mask = (group_slice == group_val) & x_slice.notna()
+                if mask.sum() > 0:
+                    result.loc[date, x_slice[mask].index] = x_slice[mask].max()
+        return result
+
+
+
+# canonical=group_count backend=pandas_numpy selected=group_count source=cross_sectional/group_ops.py
+@register_operator(name="group_count", category="cross_sectional", business_category="group_neutralization", canonical="group_count", source="factor_dsl_np")
+class GroupCount(SeriesOperator):
+    """组内非空计数"""
+
+    metadata = OperatorMetadata(
+        name="group_count",
+        category="cross_sectional",
+        description="计算组内非空样本数",
+        examples=["group_count(close, industry_code)"],
+        param_names=["x", "group"],
+        return_type="series",
+        tags=["cross_sectional", "count", "group", "aggregate"],
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, **kwargs) -> pd.DataFrame:
+        result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
+        for date in x.index:
+            x_slice = x.loc[date]
+            group_slice = group.loc[date] if group is not None and date in group.index else None
+            if group_slice is None or group_slice.isna().all():
+                result.loc[date] = x_slice.notna().sum()
+                continue
+            for group_val in group_slice.dropna().unique():
+                mask = (group_slice == group_val) & x_slice.notna()
+                result.loc[date, x_slice[mask].index] = float(mask.sum())
+        return result
+
+
+
 # canonical=group_normalize backend=pandas_numpy selected=group_normalize source=cross_sectional/group_ops.py
 @register_operator(name="group_normalize", category="cross_sectional", business_category="group_neutralization", canonical="group_normalize", source="factor_dsl_np")
 class GroupNormalize(SeriesOperator):

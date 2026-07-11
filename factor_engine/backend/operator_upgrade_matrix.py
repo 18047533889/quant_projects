@@ -8,6 +8,8 @@ from typing import Any, Literal
 BatchId = Literal["A", "B", "C", "D", "E", "F"]
 ProductionStatus = Literal[
     "certified_dual",
+    "backend_execution_certified",
+    "operational_production_certified",
     "structural_candidate",
     "semantic_pending",
     "python_rolling",
@@ -98,6 +100,9 @@ class OperatorUpgradeRow:
     alignment_verified: bool
     chunk_invariance: bool
     performance_verified: bool
+    semantic_certified: bool
+    backend_execution_certified: bool
+    operational_production_certified: bool
     production_status: ProductionStatus
     upgrade_batch: BatchId | None
     block_reason: str | None
@@ -108,7 +113,10 @@ class OperatorUpgradeRow:
         d = asdict(self)
         d["certification_gaps"] = list(self.certification_gaps)
         d["execution_variants"] = list(self.execution_variants)
-        d["certified_dual"] = self.production_status == "certified_dual"
+        d["certified_dual"] = self.backend_execution_certified
+        d["semantic_certified"] = self.semantic_certified
+        d["backend_execution_certified"] = self.backend_execution_certified
+        d["operational_production_certified"] = self.operational_production_certified
         return d
 
 
@@ -186,6 +194,33 @@ def infer_block_reason(canon: str, *, batch: BatchId | None, gaps: tuple[str, ..
     return "not_in_phase1_scope"
 
 
+def _parameter_domain_complete(canon: str) -> bool:
+    from backend.operator_evidence_schema import operator_evidence_record
+    from backend.production_signature import operational_production_allowed, signature_for
+
+    if not operational_production_allowed(canon):
+        return False
+    sig = signature_for(canon)
+    if sig is None:
+        return True
+    rec = operator_evidence_record(canon)
+    if rec and rec.get("supported_calls"):
+        return True
+    return sig.default_status == "production"
+
+
+def _type_signature_complete(canon: str) -> bool:
+    from backend.operator_types import OPERATOR_SIGNATURES
+
+    return canon in OPERATOR_SIGNATURES
+
+
+def _alignment_verified() -> bool:
+    from backend.ordering_spec import duplicate_ts_inst_keys_forbidden
+
+    return duplicate_ts_inst_keys_forbidden()
+
+
 def build_operator_upgrade_row(canon: str) -> OperatorUpgradeRow:
     from backend.operator_capability import polars_long_tier
     from backend.polars_long_policy import (
@@ -199,7 +234,10 @@ def build_operator_upgrade_row(canon: str) -> OperatorUpgradeRow:
         FORBIDDEN_PRODUCTION_FASTPATH,
         dual_backend_structural_candidates,
     )
-    from backend.primitive_evidence import primitive_dual_backend_production_safe
+    from backend.primitive_evidence import (
+        primitive_dual_backend_production_safe,
+        primitive_operational_production_certified,
+    )
     from backend.sql_tiers import is_sql_implemented
     from cleaned_operators.operator_spec import infer_production_policy
 
@@ -217,9 +255,18 @@ def build_operator_upgrade_row(canon: str) -> OperatorUpgradeRow:
     polars_pure = tier == "native" and canon in POLARS_LONG_NATIVE
     duck_impl = is_sql_implemented(canon)
     certified = primitive_dual_backend_production_safe(canon)
+    operational = primitive_operational_production_certified(canon)
+    param_complete = _parameter_domain_complete(canon)
+    type_complete = _type_signature_complete(canon)
+    align_ok = _alignment_verified()
+    chunk_ok = False
+    perf_ok = False
+    semantic_ok = batch not in {"B", None} or certified
 
-    if certified:
-        status: ProductionStatus = "certified_dual"
+    if operational and param_complete and type_complete and align_ok and chunk_ok and perf_ok:
+        status: ProductionStatus = "operational_production_certified"
+    elif certified:
+        status = "backend_execution_certified"
     elif batch == "C" or canon in POLARS_LONG_PYTHON_ROLLING:
         status = "python_rolling"
     elif canon in FORBIDDEN_PRODUCTION_FASTPATH:
@@ -264,14 +311,17 @@ def build_operator_upgrade_row(canon: str) -> OperatorUpgradeRow:
         polars_pure_native=polars_pure,
         duckdb_implemented=duck_impl,
         duckdb_real_sql=canon in _evidence_sets()["duckdb_real_sql_verified"],
-        semantic_contract_complete=batch not in {"B", None} or certified,
-        parameter_domain_complete=batch != "B" or certified,
-        type_signature_complete=True,
+        semantic_contract_complete=semantic_ok,
+        parameter_domain_complete=param_complete,
+        type_signature_complete=type_complete,
         normal_parity=canon in _evidence_sets()["polars_reference_parity"],
         edge_parity=canon in _evidence_sets()["polars_edge_verified"],
-        alignment_verified=True,
-        chunk_invariance=False,
-        performance_verified=False,
+        alignment_verified=align_ok,
+        chunk_invariance=chunk_ok,
+        performance_verified=perf_ok,
+        semantic_certified=semantic_ok,
+        backend_execution_certified=certified,
+        operational_production_certified=operational and param_complete and type_complete and align_ok,
         production_status=status,
         upgrade_batch=batch,
         block_reason=infer_block_reason(canon, batch=batch, gaps=gaps),
@@ -300,14 +350,17 @@ def build_upgrade_matrix(*, primitives: list[str] | None = None) -> dict[str, An
     for canon, row in rows.items():
         if row.upgrade_batch:
             by_batch[row.upgrade_batch].append(canon)
-    certified = [c for c, r in rows.items() if r.production_status == "certified_dual"]
+    certified = [c for c, r in rows.items() if r.backend_execution_certified]
+    operational = [c for c, r in rows.items() if r.operational_production_certified]
     batch_a = [c for c in BATCH_A_CERTIFICATION_ONLY if c in certified]
     return {
-        "schema_version": 1,
-        "description": "算子 production 升级矩阵：按阻断原因分层，驱动 Batch A–F 推进",
+        "schema_version": 2,
+        "description": "算子 production 升级矩阵：semantic / backend_execution / operational 三层认证",
         "counts": {
             "primitives": len(rows),
             "certified_dual": len(certified),
+            "backend_execution_certified": len(certified),
+            "operational_production_certified": len(operational),
             "batch_a_total": len(BATCH_A_CERTIFICATION_ONLY),
             "batch_a_certified": len(batch_a),
             "batch_a_pending": len(BATCH_A_CERTIFICATION_ONLY) - len(batch_a),

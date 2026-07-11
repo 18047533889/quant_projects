@@ -47,7 +47,7 @@ def series_to_long_table(
     out = frame[keep].copy()
     out[timestamp_col] = pd.to_datetime(out[timestamp_col])
     out[asset_col] = out[asset_col].astype("string")
-    out[value_col] = out[value_col].astype("float32")
+    out[value_col] = out[value_col].astype("float64")
     return out
 
 

@@ -16,7 +16,12 @@ class DSLParseError(ValueError):
 def load_allowlist() -> set[str]:
     snap = PACKAGE_ROOT / "dsl" / "fe_dsl_allowlist.json"
     if snap.exists():
-        return set(json.loads(snap.read_text(encoding="utf-8")))
+        raw = json.loads(snap.read_text(encoding="utf-8"))
+        if isinstance(raw, list):
+            return set(raw)
+        if isinstance(raw, dict):
+            ops = raw.get("operators", [])
+            return set(ops)
     raw = PACKAGE_ROOT / "dsl" / "dsl_allowlist.json"
     data = json.loads(raw.read_text(encoding="utf-8"))
     return {op.lower() for op in data.get("operators", [])}
@@ -32,6 +37,7 @@ FIELD_NAMES = {
     "amount",
     "ret",
     "pre_close",
+    "preclose",
     "vwap",
     "index_close",
     "index_open",

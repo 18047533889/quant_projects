@@ -46,13 +46,25 @@ ds:
     return store, "ds", str(override)
 
 
-def test_read_root_override(bucket_dataset_store):
+def test_read_root_override_dev_only(bucket_dataset_store, monkeypatch):
     store, name, override = bucket_dataset_store
+    monkeypatch.delenv("QUANT_PRODUCTION_MODE", raising=False)
+    monkeypatch.delenv("DATA_ACCESS_STRICT_READ", raising=False)
     paths = store._resolve_paths(
         store._registry.get(name),
         {"read_root": override},
     )
     assert "alt_layout" in paths[0]
+
+
+def test_read_root_blocked_in_production(bucket_dataset_store, monkeypatch):
+    store, name, override = bucket_dataset_store
+    monkeypatch.setenv("QUANT_PRODUCTION_MODE", "1")
+    with pytest.raises(Exception, match="read_root"):
+        store._resolve_paths(
+            store._registry.get(name),
+            {"read_root": override},
+        )
 
 
 def test_bucket_values_does_not_break_static_resolve(bucket_dataset_store):

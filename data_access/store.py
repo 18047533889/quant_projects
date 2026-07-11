@@ -23,6 +23,8 @@ data_access.store —— 对外唯一数据读写入口
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import os
 import shutil
@@ -41,30 +43,45 @@ from . import audit
 from .adapters import arrow_table_to_multiindex_columns
 from .engine import DuckDBEngine, get_shared_engine, reset_shared_engine
 from .exceptions import DataError, ValidationError
+from .params_validation import params_fingerprint
 from .query_budget import (
     QueryBudget,
     enforce_arrow_budget,
+    enforce_scan_file_budget,
     enforce_stream_budget,
     merge_dataset_policies,
     merge_dataset_policy,
     resolve_query_budget,
     validate_query_request,
+    _production_mode,
+    _strict_read_mode,
 )
+from .read_contract import (
+    DataSnapshot,
+    ReadLineage,
+    ReadResult,
+    ReadStats,
+    build_data_snapshot,
+    build_file_manifest,
+    file_manifest_hash,
+)
+from .scan_handle import ScanHandle
 from .namespace import is_namespace_explicit, resolve_namespace
 from .paths import PathAuthorizer
 from .predicate import Predicate, compile_predicate
-from .schema_validation import (
-    check_schema,
-    enforce_schema_or_raise,
-    mark_validated,
-    reset_validated_cache,
-)
 from .registry import (
     Dataset,
     DatasetRegistry,
     ParametricDataset,
     StaticDataset,
     load_registry,
+)
+from .schema_validation import (
+    check_schema,
+    enforce_schema_or_raise,
+    mark_validated,
+    reset_validated_cache,
+    schema_cache_key,
 )
 from .telemetry import record_polars_scan
 
@@ -101,11 +118,45 @@ class DataAccessStore:
         self._registry = registry
         self._engine = engine
         self._authorizer = PathAuthorizer(registry.allowed_roots())
-        # PR8：首访 schema 自检的进程内缓存。同 dataset 只校验一次。
-        # 说明：缓存 key 是 dataset 名而非 (name, params)——假设同名 dataset 的
-        # 实际 schema 在不同参数下是一致的（factor_lake 不同 factor_id 列应相同）。
-        # 如果未来出现 per-params schema 漂移的极端场景，再细化缓存 key。
+        # PR8 + P0：首访 schema 自检缓存 key = dataset + params + manifest
         self._schema_checked: set[str] = set()
+        self._registry_hash = _compute_registry_hash(registry)
+
+    @property
+    def registry(self) -> DatasetRegistry:
+        """已加载的数据集登记表（只读）。"""
+        return self._registry
+
+    def get_dataset(self, name: str) -> Dataset:
+        """按名获取已注册数据集元数据。"""
+        return self._registry.get(name)
+
+    def registry_fingerprint(self) -> str:
+        """登记表内容指纹（用于 data_snapshot_id）。"""
+        return self._registry_hash
+
+    def describe_dataset(
+        self,
+        dataset: str,
+        *,
+        params: Mapping[str, Any] | None = None,
+        instrument_filter: Sequence[str] | None = None,
+    ) -> DataSnapshot:
+        """解析路径并构建数据快照（不读数据）。"""
+        ds = self._registry.get(dataset)
+        read_params = self._split_read_params(dict(params or {}))
+        paths = self._resolve_paths(
+            ds,
+            read_params,
+            instrument_filter=instrument_filter,
+        )
+        return build_data_snapshot(
+            dataset=dataset,
+            registry_hash=self._registry_hash,
+            schema=getattr(ds, "schema", None),
+            paths=paths,
+            params=read_params if isinstance(ds, ParametricDataset) else None,
+        )
 
     def _resolve_read_budget(
         self,
@@ -114,6 +165,164 @@ class DataAccessStore:
     ) -> QueryBudget:
         base = resolve_query_budget(query_budget)
         return merge_dataset_policy(base, ds.query_policy)
+
+    @staticmethod
+    def _split_read_params(params: dict[str, Any]) -> dict[str, Any]:
+        """剥离读路径元参数（不进 params_schema / snapshot params）。"""
+        out = dict(params)
+        for key in ("read_root", "_read_root", "bucket_values", "read_auto", "lazy_scan"):
+            out.pop(key, None)
+        return out
+
+    def _build_snapshot(
+        self,
+        *,
+        dataset: str,
+        ds: Dataset,
+        paths: list[str],
+        params: dict[str, Any],
+    ) -> DataSnapshot:
+        read_params = self._split_read_params(params)
+        return build_data_snapshot(
+            dataset=dataset,
+            registry_hash=self._registry_hash,
+            schema=getattr(ds, "schema", None),
+            paths=paths,
+            params=read_params if isinstance(ds, ParametricDataset) else None,
+        )
+
+    def _schema_fingerprint(
+        self,
+        ds: Dataset,
+        paths: list[str],
+        params: dict[str, Any],
+    ) -> str:
+        read_params = self._split_read_params(params)
+        pf = params_fingerprint(read_params if isinstance(ds, ParametricDataset) else None)
+        manifest = file_manifest_hash(build_file_manifest(paths))
+        return schema_cache_key(ds.name, params_fingerprint=pf, manifest_hash=manifest)
+
+    def read_result(
+        self,
+        dataset: str,
+        *,
+        columns: Sequence[str] | None = None,
+        time_range: tuple[Any, Any] | None = None,
+        instrument_filter: Sequence[str] | None = None,
+        limit: int | None = None,
+        query_budget: QueryBudget | None = None,
+        **params: Any,
+    ) -> ReadResult:
+        """读取数据集并返回带 ``DataSnapshot`` 的 ``ReadResult``（审计/lineage 用）。"""
+        ds = self._registry.get(dataset)
+        _assert_instrument_filter_supported(ds, instrument_filter)
+        budget = self._resolve_read_budget(ds, query_budget)
+        validate_query_request(
+            budget, columns=list(columns) if columns else None, time_range=time_range
+        )
+        paths = self._prepare_dataset_read(
+            ds,
+            time_range=time_range,
+            params=params,
+            instrument_filter=instrument_filter,
+        )
+        self._enforce_scan_files(budget, paths)
+        self._ensure_schema(ds, paths, params)
+        snapshot = self._build_snapshot(
+            dataset=dataset, ds=ds, paths=paths, params=params
+        )
+        lineage = ReadLineage(
+            dataset=dataset,
+            columns=tuple(columns) if columns else (),
+            time_range=time_range,
+            instrument_filter=tuple(instrument_filter) if instrument_filter else (),
+            params=snapshot.params,
+        )
+
+        sql, sql_params = self._build_select_sql(
+            ds=ds,
+            paths=paths,
+            columns=columns,
+            time_range=time_range,
+            instrument_filter=instrument_filter,
+            limit=limit,
+        )
+
+        start = time.perf_counter()
+        ok = False
+        err_msg: str | None = None
+        table: pa.Table | None = None
+        try:
+            table = self._engine.execute_arrow(sql, sql_params)
+            elapsed_ms = (time.perf_counter() - start) * 1000
+            enforce_arrow_budget(budget, table, elapsed_ms=elapsed_ms)
+            ok = True
+            stats = ReadStats(
+                rows=table.num_rows,
+                bytes=table.nbytes,
+                elapsed_ms=elapsed_ms,
+                paths=tuple(paths[:20]),
+            )
+            logger.info(
+                "read_result dataset=%s rows=%d cols=%d elapsed_ms=%.1f snapshot=%s",
+                dataset,
+                table.num_rows,
+                table.num_columns,
+                elapsed_ms,
+                snapshot.snapshot_id,
+            )
+            return ReadResult(
+                table=table,
+                snapshot=snapshot,
+                stats=stats,
+                lineage=lineage,
+            )
+        except Exception as exc:
+            err_msg = f"{type(exc).__name__}: {exc}"
+            raise
+        finally:
+            elapsed_ms = (time.perf_counter() - start) * 1000
+            audit.record(
+                op="read",
+                dataset=dataset,
+                ok=ok,
+                rows=table.num_rows if table is not None else None,
+                paths=paths[:5] if paths else None,
+                params=params or None,
+                elapsed_ms=elapsed_ms,
+                error=err_msg,
+                extra={
+                    "columns": list(columns) if columns else None,
+                    "snapshot_id": snapshot.snapshot_id,
+                },
+            )
+
+    def read_asof(
+        self,
+        dataset: str,
+        *,
+        as_of: Any,
+        columns: Sequence[str] | None = None,
+        instrument_filter: Sequence[str] | None = None,
+        limit: int | None = None,
+        query_budget: QueryBudget | None = None,
+        **params: Any,
+    ) -> ReadResult:
+        """Point-in-time 读：``time_column <= as_of``（闭区间上界）。
+
+        返回带 ``DataSnapshot`` 的 ``ReadResult``，供 lineage / 回测复现使用。
+        """
+        if as_of is None:
+            raise ValidationError("read_asof 必须指定 as_of（时间戳或日期字符串）")
+        return self.read_result(
+            dataset,
+            columns=columns,
+            time_range=(None, as_of),
+            instrument_filter=instrument_filter,
+            limit=limit,
+            query_budget=query_budget,
+            **params,
+        )
 
     def _resolve_sql_budget(
         self,
@@ -162,59 +371,15 @@ class DataAccessStore:
             ...     instrument_filter=["AAPL", "MSFT"],
             ... )
         """
-        ds = self._registry.get(dataset)
-        _assert_instrument_filter_supported(ds, instrument_filter)
-        budget = self._resolve_read_budget(ds, query_budget)
-        validate_query_request(
-            budget, columns=list(columns) if columns else None, time_range=time_range
-        )
-        paths = self._prepare_dataset_read(
-            ds,
-            time_range=time_range,
-            params=params,
-            instrument_filter=instrument_filter,
-        )
-        self._ensure_schema(ds, paths)
-
-        sql, sql_params = self._build_select_sql(
-            ds=ds,
-            paths=paths,
+        return self.read_result(
+            dataset,
             columns=columns,
             time_range=time_range,
             instrument_filter=instrument_filter,
             limit=limit,
-        )
-
-        start = time.perf_counter()
-        ok = False
-        err_msg: str | None = None
-        table: pa.Table | None = None
-        try:
-            table = self._engine.execute_arrow(sql, sql_params)
-            elapsed_ms = (time.perf_counter() - start) * 1000
-            enforce_arrow_budget(budget, table, elapsed_ms=elapsed_ms)
-            ok = True
-            logger.info(
-                "read_arrow dataset=%s rows=%d cols=%d elapsed_ms=%.1f",
-                dataset, table.num_rows, table.num_columns, elapsed_ms,
-            )
-            return table
-        except Exception as exc:
-            err_msg = f"{type(exc).__name__}: {exc}"
-            raise
-        finally:
-            elapsed_ms = (time.perf_counter() - start) * 1000
-            audit.record(
-                op="read",
-                dataset=dataset,
-                ok=ok,
-                rows=table.num_rows if table is not None else None,
-                paths=paths[:5] if paths else None,
-                params=params or None,
-                elapsed_ms=elapsed_ms,
-                error=err_msg,
-                extra={"columns": list(columns) if columns else None},
-            )
+            query_budget=query_budget,
+            **params,
+        ).table
 
     def read_arrow_stream(
         self,
@@ -267,7 +432,8 @@ class DataAccessStore:
             params=params,
             instrument_filter=instrument_filter,
         )
-        self._ensure_schema(ds, paths)
+        self._enforce_scan_files(budget, paths)
+        self._ensure_schema(ds, paths, params)
         sql, sql_params = self._build_select_sql(
             ds=ds,
             paths=paths,
@@ -377,9 +543,8 @@ class DataAccessStore:
             instrument_filter=instrument_filter,
         )
         # scan_polars 也走 schema 自检：发现声明漂移尽早报。
-        # Polars 自己读 parquet 不经 DuckDB，但 DESCRIBE 用共享 engine 跑，一次性
-        # 开销 < 50ms（只读 footer），比跑完一次 collect 才炸便宜得多。
-        self._ensure_schema(ds, paths)
+        self._enforce_scan_files(budget, paths)
+        self._ensure_schema(ds, paths, params)
 
         # pl.scan_parquet 可以接 list[str]，也支持 glob。我们传 list 给它。
         # 跨年份列不一致时靠 union_by_name：
@@ -450,6 +615,51 @@ class DataAccessStore:
             extra={"scan_polars": True, "columns": list(columns) if columns else None},
         )
         return lf
+
+    def scan(
+        self,
+        dataset: str,
+        *,
+        columns: Sequence[str] | None = None,
+        time_range: tuple[Any, Any] | None = None,
+        instrument_filter: Sequence[str] | None = None,
+        query_budget: QueryBudget | None = None,
+        **params: Any,
+    ) -> ScanHandle:
+        """受控 Polars 扫描：``collect()`` 强制 budget + snapshot（production 推荐）。"""
+        ds = self._registry.get(dataset)
+        budget = self._resolve_read_budget(ds, query_budget)
+        lf = self.scan_polars(
+            dataset,
+            columns=columns,
+            time_range=time_range,
+            instrument_filter=instrument_filter,
+            query_budget=query_budget,
+            **params,
+        )
+        paths = self._prepare_dataset_read(
+            ds,
+            time_range=time_range,
+            params=params,
+            instrument_filter=instrument_filter,
+        )
+        snapshot = self._build_snapshot(
+            dataset=dataset, ds=ds, paths=paths, params=params
+        )
+        lineage = ReadLineage(
+            dataset=dataset,
+            columns=tuple(columns) if columns else (),
+            time_range=time_range,
+            instrument_filter=tuple(instrument_filter) if instrument_filter else (),
+            params=snapshot.params,
+        )
+        return ScanHandle(
+            _lf=lf,
+            snapshot=snapshot,
+            budget=budget,
+            lineage=lineage,
+            _store=self,
+        )
 
     def read_frame(
         self,
@@ -682,13 +892,16 @@ class DataAccessStore:
         all_cols = list(dict.fromkeys(
             [ds.time_column, ds.instrument_column, *columns]
         ))
-        table = self.read_arrow(
+        from .key_policy import resolve_key_policy
+
+        read_result = self.read_result(
             dataset,
             columns=all_cols,
             time_range=time_range,
             instrument_filter=instrument_filter,
             **params,
         )
+        table = read_result.table
 
         if table.num_rows == 0:
             raise DataError(
@@ -706,6 +919,7 @@ class DataAccessStore:
             output_names=reverse_names or None,
             normalize_timestamp=normalize_timestamp,
             timestamp_unit=timestamp_unit,
+            key_policy=resolve_key_policy(),
         )
         # output_names 映射的是 physical→logical，批量函数 key 用 target name
         if output_names:
@@ -1116,41 +1330,39 @@ class DataAccessStore:
             return None
         return {layout_policy.bucket.column: buckets}
 
-    def _ensure_schema(self, ds: Dataset, paths: list[str]) -> None:
-        """首次访问 dataset 时做一次 schema 对齐校验（PR8）。
+    def _enforce_scan_files(self, budget: QueryBudget, paths: list[str]) -> None:
+        files = build_file_manifest(paths)
+        enforce_scan_file_budget(budget, file_count=len(files))
 
-        缓存策略：同 dataset 只校验一次，无论成功失败。失败时：
-          - strict 模式：抛 ValidationError，不入缓存（下次还会再校验）
-          - warn 模式：打日志入缓存（只叫一次，不刷屏）
-          - off 模式：跳过
-
-        为什么失败 strict 下不入缓存：让调用方自己决定修不修，修了再试一次就对了；
-        不缓存失败态避免「本地修了 yaml，进程没重启 ⇒ 还是 raise」。
-        """
+    def _ensure_schema(
+        self,
+        ds: Dataset,
+        paths: list[str],
+        params: dict[str, Any] | None = None,
+    ) -> None:
+        """首次访问 (dataset, params, manifest) 时做 schema 对齐校验。"""
         if not getattr(ds, "schema", None):
             return
-        if ds.name in self._schema_checked:
+        cache_key = self._schema_fingerprint(ds, paths, params or {})
+        if cache_key in self._schema_checked:
             return
 
         result = check_schema(self._engine, ds, paths)
         if result.ok:
-            self._schema_checked.add(ds.name)
-            mark_validated(ds.name)
+            self._schema_checked.add(cache_key)
+            mark_validated(cache_key)
             return
 
-        # 失败：按模式处理。strict 会 raise；warn 只记一次。
         from .schema_validation import _resolve_mode
 
         mode = _resolve_mode()
         try:
             enforce_schema_or_raise(result, mode=mode)
         except Exception:
-            # strict: 不缓存，让调用方修好 yaml/数据后重试
             raise
-        # warn / off：把 dataset 标为已检查，避免每次读都刷日志
-        self._schema_checked.add(ds.name)
+        self._schema_checked.add(cache_key)
         if mode == "warn":
-            mark_validated(ds.name)
+            mark_validated(cache_key)
 
     def _resolve_paths(
         self,
@@ -1171,6 +1383,13 @@ class DataAccessStore:
         if read_root is None:
             env_key = f"DATA_ACCESS_READ_ROOT_{ds.name.upper().replace('-', '_')}"
             read_root = os.environ.get(env_key)
+
+        if read_root is not None and (_production_mode() or _strict_read_mode()):
+            raise ValidationError(
+                f"production/严格读模式禁止 read_root 覆盖数据集 '{ds.name}' 根路径；"
+                f"收到 read_root={read_root!r}。"
+                "灰度切读请仅在开发环境使用，或通过独立 registry 数据集登记。"
+            )
 
         if isinstance(ds, StaticDataset):
             root = Path(read_root) if read_root else ds.root
@@ -1334,6 +1553,19 @@ class DataAccessStore:
 
 _store: DataAccessStore | None = None
 _store_lock = threading.Lock()
+
+
+def _compute_registry_hash(registry: DatasetRegistry) -> str:
+    """登记表稳定指纹（dataset 名 + schema 声明）。"""
+    payload: dict[str, Any] = {}
+    for name in registry.names():
+        ds = registry.get(name)
+        payload[name] = {
+            "kind": ds.kind,
+            "schema": dict(getattr(ds, "schema", None) or {}),
+        }
+    text = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
 
 def get_store() -> DataAccessStore:

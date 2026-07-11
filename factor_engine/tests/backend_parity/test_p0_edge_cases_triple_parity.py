@@ -93,7 +93,6 @@ test_daily:
 
 def _seed_duckdb(root: Path, mem: InMemorySeriesSource) -> None:
     root.mkdir(parents=True, exist_ok=True)
-    rows = []
     mapping = {
         "close": "Close",
         "open": "Open",
@@ -105,15 +104,10 @@ def _seed_duckdb(root: Path, mem: InMemorySeriesSource) -> None:
         "grp": "Grp",
         "volume": "Volume",
     }
-    for (ts, sym), close in mem.data["close"].items():
-        row = {
-            "TradeDate": ts.date(),
-            "Symbol": sym,
-            "Close": float(close) if pd.notna(close) else None,
-        }
+    rows = []
+    for (ts, sym) in mem.data["close"].index:
+        row = {"TradeDate": ts.date(), "Symbol": sym}
         for src, dst in mapping.items():
-            if src == "close":
-                continue
             val = mem.data[src].loc[(ts, sym)]
             row[dst] = float(val) if pd.notna(val) else None
         rows.append(row)
@@ -225,6 +219,19 @@ EDGE_CASES = [
     ("c_sum", lambda: make_cleaned_call_factory("c_sum")(col("close"))),
     ("c_count", lambda: make_cleaned_call_factory("c_count")(col("close"))),
     ("log_returns", lambda: make_cleaned_call_factory("log_returns")(col("close"))),
+    ("volatility", lambda: make_cleaned_call_factory("volatility")(col("ret"), 3)),
+    ("count", lambda: make_cleaned_call_factory("count")(col("close"))),
+    ("cum_max", lambda: make_cleaned_call_factory("cum_max")(col("close"))),
+    ("cum_min", lambda: make_cleaned_call_factory("cum_min")(col("close"))),
+    ("cum_prod", lambda: make_cleaned_call_factory("cum_prod")(col("close"))),
+    ("cum_delta", lambda: make_cleaned_call_factory("cum_delta")(col("close"))),
+    ("expanding_sum", lambda: make_cleaned_call_factory("expanding_sum")(col("close"))),
+    ("expanding_mean", lambda: make_cleaned_call_factory("expanding_mean")(col("close"))),
+    ("is_null", lambda: make_cleaned_call_factory("is_null")(col("close"))),
+    ("is_not_null", lambda: make_cleaned_call_factory("is_not_null")(col("close"))),
+    ("is_infinite", lambda: make_cleaned_call_factory("is_infinite")(col("close"))),
+    ("ts_autocorr", lambda: make_cleaned_call_factory("ts_autocorr")(col("close"), 4, 1)),
+    ("ts_rank", lambda: make_cleaned_call_factory("ts_rank")(col("close"), 3)),
     ("group_rank", lambda: make_cleaned_call_factory("group_rank")(col("close"), col("grp"))),
     ("group_neutralize", lambda: make_cleaned_call_factory("group_neutralize")(col("close"), col("grp"))),
     ("clip", lambda: make_cleaned_call_factory("clip")(col("close"), 0.0, 100.0)),
@@ -237,6 +244,17 @@ EDGE_CASES = [
     ("nan_to_num", lambda: make_cleaned_call_factory("nan_to_num")(col("close"))),
     ("scale", lambda: make_cleaned_call_factory("scale")(col("close"))),
     ("normalize", lambda: make_cleaned_call_factory("normalize")(col("close"))),
+    ("is_nan", lambda: make_cleaned_call_factory("is_nan")(col("close"))),
+    ("ts_sharpe", lambda: make_cleaned_call_factory("ts_sharpe")(col("close"), 3)),
+    ("div_or_default", lambda: make_cleaned_call_factory("div_or_default")(col("numer"), col("denom"))),
+    ("log_fill_invalid", lambda: make_cleaned_call_factory("log_fill_invalid")(col("neg"))),
+    ("log_abs", lambda: make_cleaned_call_factory("log_abs")(col("neg"))),
+    ("signed_log", lambda: make_cleaned_call_factory("signed_log")(col("neg"))),
+    ("signed_sqrt", lambda: make_cleaned_call_factory("signed_sqrt")(col("neg"))),
+    ("group_sum", lambda: make_cleaned_call_factory("group_sum")(col("close"), col("grp"))),
+    ("group_min", lambda: make_cleaned_call_factory("group_min")(col("close"), col("grp"))),
+    ("group_max", lambda: make_cleaned_call_factory("group_max")(col("close"), col("grp"))),
+    ("group_count", lambda: make_cleaned_call_factory("group_count")(col("close"), col("grp"))),
 ]
 
 
@@ -278,7 +296,19 @@ DUCKDB_EDGE_CASES = [
     ("power", lambda: make_cleaned_call_factory("power")(_col("close"), _col("numer"))),
     ("scale", lambda: make_cleaned_call_factory("scale")(_col("close"))),
     ("normalize", lambda: make_cleaned_call_factory("normalize")(_col("close"))),
-    ("volatility", lambda: make_cleaned_call_factory("volatility")(_col("close"), 3)),
+    ("volatility", lambda: make_cleaned_call_factory("volatility")(_col("ret"), 3)),
+    ("count", lambda: make_cleaned_call_factory("count")(_col("close"))),
+    ("cum_max", lambda: make_cleaned_call_factory("cum_max")(_col("close"))),
+    ("cum_min", lambda: make_cleaned_call_factory("cum_min")(_col("close"))),
+    ("cum_prod", lambda: make_cleaned_call_factory("cum_prod")(_col("close"))),
+    ("cum_delta", lambda: make_cleaned_call_factory("cum_delta")(_col("close"))),
+    ("expanding_sum", lambda: make_cleaned_call_factory("expanding_sum")(_col("close"))),
+    ("expanding_mean", lambda: make_cleaned_call_factory("expanding_mean")(_col("close"))),
+    ("is_null", lambda: make_cleaned_call_factory("is_null")(_col("close"))),
+    ("is_not_null", lambda: make_cleaned_call_factory("is_not_null")(_col("close"))),
+    ("is_infinite", lambda: make_cleaned_call_factory("is_infinite")(_col("close"))),
+    ("ts_autocorr", lambda: make_cleaned_call_factory("ts_autocorr")(_col("close"), 4, 1)),
+    ("ts_rank", lambda: make_cleaned_call_factory("ts_rank")(_col("close"), 3)),
     ("ts_delta", lambda: make_cleaned_call_factory("ts_delta")(_col("close"), 1)),
     ("ts_pct", lambda: make_cleaned_call_factory("ts_pct")(_col("close"), 1)),
     ("multiply", lambda: make_cleaned_call_factory("multiply")(_col("close"), _col("open"))),
@@ -327,6 +357,16 @@ DUCKDB_EDGE_CASES = [
     ("inverse", lambda: make_cleaned_call_factory("inverse")(_col("close"))),
     ("is_finite", lambda: make_cleaned_call_factory("is_finite")(_col("close"))),
     ("nan_to_num", lambda: make_cleaned_call_factory("nan_to_num")(_col("close"))),
+    ("ts_sharpe", lambda: make_cleaned_call_factory("ts_sharpe")(_col("close"), 3)),
+    ("div_or_default", lambda: make_cleaned_call_factory("div_or_default")(_col("numer"), _col("denom"))),
+    ("log_fill_invalid", lambda: make_cleaned_call_factory("log_fill_invalid")(_col("neg"))),
+    ("log_abs", lambda: make_cleaned_call_factory("log_abs")(_col("neg"))),
+    ("signed_log", lambda: make_cleaned_call_factory("signed_log")(_col("neg"))),
+    ("signed_sqrt", lambda: make_cleaned_call_factory("signed_sqrt")(_col("neg"))),
+    ("group_sum", lambda: make_cleaned_call_factory("group_sum")(_col("close"), _col("grp"))),
+    ("group_min", lambda: make_cleaned_call_factory("group_min")(_col("close"), _col("grp"))),
+    ("group_max", lambda: make_cleaned_call_factory("group_max")(_col("close"), _col("grp"))),
+    ("group_count", lambda: make_cleaned_call_factory("group_count")(_col("close"), _col("grp"))),
 ]
 
 

@@ -82,6 +82,55 @@ def six_way_certified_names(
     )
 
 
+def build_case_registry_payload(
+    *,
+    polars_reference: CaseList,
+    polars_edge: CaseList,
+    duckdb_reference: CaseList,
+    duckdb_edge: CaseList,
+    no_fallback: CaseList,
+    duckdb_null_edge: CaseList | None = None,
+    duckdb_nan_edge: CaseList | None = None,
+    duckdb_inf_edge: CaseList | None = None,
+) -> dict:
+    """由 case 列表生成 ``primitive_case_registry.json`` 载荷（不授予 verified）。"""
+    polars_ref = case_names(polars_reference)
+    polars_ed = case_names(polars_edge)
+    duck_ref = case_names(duckdb_reference)
+    duck_ed = case_names(duckdb_edge)
+    duck_null = case_names(duckdb_null_edge) if duckdb_null_edge is not None else duck_ed
+    duck_nan = case_names(duckdb_nan_edge) if duckdb_nan_edge is not None else frozenset()
+    duck_inf = case_names(duckdb_inf_edge) if duckdb_inf_edge is not None else frozenset()
+    duck_ed_for_six = duck_ed | duck_nan
+    no_fb = case_names(no_fallback)
+    dual = six_way_certified_names(
+        polars_reference=polars_ref,
+        polars_edge=polars_ed,
+        duckdb_reference=duck_ref,
+        duckdb_real_sql=duck_ref,
+        duckdb_edge=duck_ed_for_six,
+        no_fallback=no_fb,
+    )
+    return {
+        "schema_version": 2,
+        "artifact_kind": "case_registry",
+        "description": (
+            "Primitive parity case 注册表（仅 case 名交集，"
+            "verified 须由 certify_primitive_evidence.py 在 pytest 通过后写入）"
+        ),
+        "polars_reference_parity": sorted(polars_ref),
+        "polars_edge_verified": sorted(polars_ed),
+        "duckdb_reference_parity": sorted(duck_ref),
+        "duckdb_real_sql_verified": sorted(duck_ref),
+        "duckdb_edge_verified": sorted(duck_ed),
+        "duckdb_null_edge_verified": sorted(duck_null),
+        "duckdb_nan_edge_verified": sorted(duck_nan),
+        "duckdb_inf_edge_verified": sorted(duck_inf),
+        "no_fallback_verified": sorted(no_fb),
+        "_six_way_count": len(dual),
+    }
+
+
 def build_evidence_payload(
     *,
     polars_reference: CaseList,
@@ -94,37 +143,31 @@ def build_evidence_payload(
     duckdb_inf_edge: CaseList | None = None,
     operators_meta: dict | None = None,
 ) -> dict:
-    """由 case 列表生成 ``primitive_verified.json`` 载荷。"""
-    polars_ref = case_names(polars_reference)
-    polars_ed = case_names(polars_edge)
-    duck_ref = case_names(duckdb_reference)
-    duck_ed = case_names(duckdb_edge)
-    duck_null = case_names(duckdb_null_edge) if duckdb_null_edge is not None else duck_ed
-    duck_nan = case_names(duckdb_nan_edge) if duckdb_nan_edge is not None else frozenset()
-    duck_inf = case_names(duckdb_inf_edge) if duckdb_inf_edge is not None else frozenset()
-    no_fb = case_names(no_fallback)
-    payload = {
-        "schema_version": 2,
-        "description": "Primitive production evidence（由 CI 测试 case 维护，禁止从 production 白名单反向生成）",
-        "polars_reference_parity": sorted(polars_ref),
-        "polars_edge_verified": sorted(polars_ed),
-        "duckdb_reference_parity": sorted(duck_ref),
-        "duckdb_real_sql_verified": sorted(duck_ref),
-        "duckdb_edge_verified": sorted(duck_ed),
-        "duckdb_null_edge_verified": sorted(duck_null),
-        "duckdb_nan_edge_verified": sorted(duck_nan),
-        "duckdb_inf_edge_verified": sorted(duck_inf),
-        "no_fallback_verified": sorted(no_fb),
-    }
+    """兼容旧路径：等价于 case registry + operators 元数据。"""
+    payload = build_case_registry_payload(
+        polars_reference=polars_reference,
+        polars_edge=polars_edge,
+        duckdb_reference=duckdb_reference,
+        duckdb_edge=duckdb_edge,
+        no_fallback=no_fallback,
+        duckdb_null_edge=duckdb_null_edge,
+        duckdb_nan_edge=duckdb_nan_edge,
+        duckdb_inf_edge=duckdb_inf_edge,
+    )
+    polars_ref = frozenset(payload["polars_reference_parity"])
+    polars_ed = frozenset(payload["polars_edge_verified"])
+    duck_ref = frozenset(payload["duckdb_reference_parity"])
+    duck_ed = frozenset(payload["duckdb_edge_verified"])
+    duck_nan = frozenset(payload.get("duckdb_nan_edge_verified") or [])
+    no_fb = frozenset(payload["no_fallback_verified"])
     dual = six_way_certified_names(
         polars_reference=polars_ref,
         polars_edge=polars_ed,
         duckdb_reference=duck_ref,
         duckdb_real_sql=duck_ref,
-        duckdb_edge=duck_ed,
+        duckdb_edge=duck_ed | duck_nan,
         no_fallback=no_fb,
     )
-    payload["_six_way_count"] = len(dual)
     if operators_meta is None:
         operators_meta = operator_evidence_meta(certified=dual)
     else:

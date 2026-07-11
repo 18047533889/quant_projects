@@ -102,6 +102,16 @@ class DataAccessSource(DataSource):
         self._column_cache: dict[str, Any] = {}
         self._panel_cache: dict[str, Any] = {}
         self._lazy_bundle: Any | None = None
+        self._data_snapshot_id: str | None = None
+
+    @property
+    def data_snapshot_id(self) -> str | None:
+        """最近一次读路径返回的 ``DataSnapshot.snapshot_id``（若有）。"""
+        return self._data_snapshot_id
+
+    def _record_read_snapshot(self, snapshot_id: str | None) -> None:
+        if snapshot_id:
+            self._data_snapshot_id = snapshot_id
 
     def column_cache_stats(self) -> dict[str, int]:
         """column_cache_stats。
@@ -226,7 +236,7 @@ class DataAccessSource(DataSource):
         if self.read_auto and self._lazy_scan:
             from backend.polars_lazy import scan_dataset_columns
 
-            ds = store._registry.get(self.dataset)
+            ds = store.get_dataset(self.dataset)
             from data_access.store import adapter_options_for_dataset
 
             adapter_opts = adapter_options_for_dataset(ds)
@@ -250,11 +260,13 @@ class DataAccessSource(DataSource):
                 params=dict(self.params),
                 bundle=self._lazy_bundle,
             )
+            if self._lazy_bundle and self._lazy_bundle.snapshot_id:
+                self._record_read_snapshot(self._lazy_bundle.snapshot_id)
         elif self.read_auto:
             from data_access.adapters import arrow_table_to_multiindex_columns
             from data_access.store import adapter_options_for_dataset
 
-            ds = store._registry.get(self.dataset)
+            ds = store.get_dataset(self.dataset)
             adapter_opts = adapter_options_for_dataset(ds)
             norm_ts = (
                 self.normalize_timestamp
@@ -263,14 +275,15 @@ class DataAccessSource(DataSource):
             )
             ts_unit = self.timestamp_unit or adapter_opts.get("timestamp_unit")
             all_cols = list(dict.fromkeys([ds.time_column, ds.instrument_column, *physical]))
-            table = store.read_auto(
+            read_result = store.read_result(
                 self.dataset,
                 columns=all_cols,
                 time_range=self._time_range(),
                 instrument_filter=self.instrument_filter,
-                prefer_polars=True,
                 **self.params,
             )
+            self._record_read_snapshot(read_result.snapshot.snapshot_id)
+            table = read_result.table
             reverse_names = {src: tgt for src, tgt in output_names.items()}
             fetched = arrow_table_to_multiindex_columns(
                 table,
@@ -287,16 +300,41 @@ class DataAccessSource(DataSource):
                     for src in physical
                 }
         else:
-            fetched = store.load_columns(
+            from data_access.adapters import arrow_table_to_multiindex_columns
+            from data_access.store import adapter_options_for_dataset
+
+            ds = store.get_dataset(self.dataset)
+            adapter_opts = adapter_options_for_dataset(ds)
+            norm_ts = (
+                self.normalize_timestamp
+                if self.normalize_timestamp is not None
+                else bool(adapter_opts.get("normalize_timestamp", False))
+            )
+            ts_unit = self.timestamp_unit or adapter_opts.get("timestamp_unit")
+            all_cols = list(dict.fromkeys([ds.time_column, ds.instrument_column, *physical]))
+            read_result = store.read_result(
                 self.dataset,
-                columns=physical,
-                output_names=output_names or None,
+                columns=all_cols,
                 time_range=self._time_range(),
                 instrument_filter=self.instrument_filter,
-                normalize_timestamp=self.normalize_timestamp,
-                timestamp_unit=self.timestamp_unit,
                 **self.params,
             )
+            self._record_read_snapshot(read_result.snapshot.snapshot_id)
+            reverse_names = {src: tgt for src, tgt in output_names.items()}
+            fetched = arrow_table_to_multiindex_columns(
+                read_result.table,
+                timestamp_column=ds.time_column,
+                instrument_column=ds.instrument_column,
+                value_columns=list(physical),
+                output_names=reverse_names or None,
+                normalize_timestamp=norm_ts,
+                timestamp_unit=ts_unit,
+            )
+            if output_names:
+                fetched = {
+                    output_names.get(src, src): fetched[output_names.get(src, src)]
+                    for src in physical
+                }
         for n in needed:
             self._column_cache[n] = fetched[n]
         return {n: self._column_cache[n] for n in names}
@@ -331,7 +369,7 @@ class DataAccessSource(DataSource):
             return
         physical, output_names = self._resolve_columns(needed)
         store = _get_store()
-        ds = store._registry.get(self.dataset)
+        ds = store.get_dataset(self.dataset)
         from data_access.store import adapter_options_for_dataset
         from backend.polars_lazy import build_lazy_column_bundle
 
@@ -357,6 +395,8 @@ class DataAccessSource(DataSource):
                 timestamp_unit=ts_unit,
                 params=dict(self.params),
             )
+            if self._lazy_bundle.snapshot_id:
+                self._record_read_snapshot(self._lazy_bundle.snapshot_id)
         else:
             missing = self._lazy_bundle.missing_physical(list(physical))
             if missing:
@@ -444,7 +484,7 @@ class DataAccessSource(DataSource):
         """
         physical, output_names = self._resolve_columns(columns)
         store = _get_store()
-        ds = store._registry.get(self.dataset)
+        ds = store.get_dataset(self.dataset)
         from backend.polars_lazy import build_scan_polars_long
 
         return build_scan_polars_long(
@@ -470,7 +510,7 @@ class DataAccessSource(DataSource):
             无
         """
         store = _get_store()
-        ds = store._registry.get(self.dataset)
+        ds = store.get_dataset(self.dataset)
         from backend.polars_lazy import build_scan_index_long
 
         return build_scan_index_long(

@@ -29,6 +29,7 @@ class QueryBudget:
     max_rows: int | None = None
     max_result_bytes: int | None = None
     max_elapsed_ms: float | None = None
+    max_scan_files: int | None = None
     require_columns: bool = False
     require_time_range: bool = False
 
@@ -42,6 +43,7 @@ class DatasetQueryPolicy:
     max_rows: int | None = None
     max_result_bytes: int | None = None
     max_elapsed_ms: float | None = None
+    max_scan_files: int | None = None
 
 
 def parse_dataset_query_policy(raw: object, *, context: str) -> DatasetQueryPolicy:
@@ -79,6 +81,7 @@ def parse_dataset_query_policy(raw: object, *, context: str) -> DatasetQueryPoli
         max_rows=_opt_int("max_rows"),
         max_result_bytes=_opt_int("max_result_bytes"),
         max_elapsed_ms=_opt_float("max_elapsed_ms"),
+        max_scan_files=_opt_int("max_scan_files"),
     )
 
 
@@ -109,6 +112,7 @@ def merge_dataset_policy(
         max_rows=_tighter_int(budget.max_rows, policy.max_rows),
         max_result_bytes=_tighter_int(budget.max_result_bytes, policy.max_result_bytes),
         max_elapsed_ms=_tighter_float(budget.max_elapsed_ms, policy.max_elapsed_ms),
+        max_scan_files=_tighter_int(budget.max_scan_files, policy.max_scan_files),
         require_columns=budget.require_columns or policy.require_explicit_columns,
         require_time_range=budget.require_time_range or policy.require_time_range,
     )
@@ -230,6 +234,15 @@ def enforce_stream_budget(
         raise ValidationError(
             f"查询结果累计字节 {total_bytes} 超过预算上限 {budget.max_result_bytes}。"
             "请缩小扫描范围、指定更少列，或提高 max_result_bytes。"
+        )
+
+
+def enforce_scan_file_budget(budget: QueryBudget, *, file_count: int) -> None:
+    """扫描前对匹配文件数做硬限制。"""
+    if budget.max_scan_files is not None and file_count > budget.max_scan_files:
+        raise ValidationError(
+            f"扫描匹配 {file_count} 个文件，超过预算上限 {budget.max_scan_files}。"
+            "请缩小 time_range / instrument_filter 或提高 max_scan_files。"
         )
 
 

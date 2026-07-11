@@ -5,13 +5,15 @@ import ast
 import re
 
 # 函数名直替（旧 DSL 别名 → 当前 canonical）
+# 注意：GTJA SMA(x,n,m) 由 convert 脚本译为 ts_ema(x, span)，勿在此把 SMA→ts_mean
+# （factor_engine 的 SMA 别名语义是简单 ts_mean，与 GTJA 指数平滑不同）
 _FN_RENAMES: dict[str, str] = {
     "delay": "ts_delay",
     "shift": "ts_delay",
     "EMA": "ts_ema",
     "ema": "ts_ema",
-    "SMA": "ts_mean",
     "if_else": "where",
+    "IIF": "where",
     "m_argmax": "ts_argmax",
     "m_argmin": "ts_argmin",
 }

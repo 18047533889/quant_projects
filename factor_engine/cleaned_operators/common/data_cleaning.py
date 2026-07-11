@@ -254,7 +254,22 @@ class ExpandingMean(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        return x.expanding(min_periods=1).mean()
+        import numpy as np
+
+        def _per_column(s: pd.Series) -> pd.Series:
+            run = 0.0
+            cnt = 0
+            out: list[float] = []
+            for v in s:
+                if pd.isna(v):
+                    out.append(np.nan)
+                else:
+                    run += float(v)
+                    cnt += 1
+                    out.append(run / cnt)
+            return pd.Series(out, index=s.index, dtype=float)
+
+        return x.apply(_per_column)
 
 
 
@@ -330,7 +345,20 @@ class ExpandingSum(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        return x.expanding(min_periods=1).sum()
+        import numpy as np
+
+        def _per_column(s: pd.Series) -> pd.Series:
+            run = 0.0
+            out: list[float] = []
+            for v in s:
+                if pd.isna(v):
+                    out.append(np.nan)
+                else:
+                    run += float(v)
+                    out.append(run)
+            return pd.Series(out, index=s.index, dtype=float)
+
+        return x.apply(_per_column)
 
 
 

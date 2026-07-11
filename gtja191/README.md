@@ -15,6 +15,9 @@ gtja191/
 │   └── gtja191_smoke.yaml         # factor_engine + data_access smoke 配置
 ├── lib/
 │   ├── data_source.py             # data_access 数据源配置（与 factor_engine 对齐）
+│   ├── dsl_normalize.py           # canonical 算子名归一（post-process）
+│   ├── dsl_legacy_ops.py          # 废弃别名检测（测试/审计）
+│   ├── engine_config.py           # smoke 最快路径（auto + read_auto）
 │   ├── dsl_validate.py            # 独立校验（可选接 factor_engine 完整 parse）
 │   └── paths.py
 ├── source/
@@ -87,7 +90,7 @@ python3 validate_manifests.py
 python3 export_allowlist.py    # 刷新 fe_dsl_allowlist.json（需旁边有 factor_engine）
 ```
 
-## 执行 smoke（最快引擎：read_auto + auto）
+## 执行 smoke（read_auto + pandas，191 条数值 parity）
 
 ```bash
 cd gtja191/scripts
@@ -100,8 +103,8 @@ PYTHONPATH=. python3 run_pipeline.py config ../gtja191/examples/gtja191_smoke.ya
 
 执行栈：
 - **读数据**：`data_access` + `read_auto`（Arrow 零拷贝 collect）
-- **算子**：`backend: auto` → SQL 可下推子树 + **Polars** 算子；SQL 编译/执行失败时自动降级 Polars/Pandas
-- **算子 runtime**：`operator_backend: auto`（优先 Polars）
+- **算子**：`backend: pandas` + `operator_backend: pandas_numpy`（与 factor_engine 参考结果一致）
+- **说明**：`backend: auto` 对部分 `ts_corr(rank(...), rank(...))` 嵌套式在 Polars 层暂无数值 parity；smoke 与示例 YAML 固定走 pandas
 
 见 `lib/engine_config.py`。
 

@@ -325,17 +325,34 @@ def test_local_us_parquet_smoke_if_present():
 def test_data_access_source_forwards_params_to_store(monkeypatch):
     captured: dict[str, object] = {}
 
+    class _FakeDataset:
+        time_column = "ts"
+        instrument_column = "inst"
+
+    class _FakeSnapshot:
+        snapshot_id = "snap_test"
+
+    class _FakeReadResult:
+        table = None
+        snapshot = _FakeSnapshot()
+
     class _FakeStore:
-        def load_columns(self, dataset, *, columns, **kwargs):
+        def get_dataset(self, _name):
+            return _FakeDataset()
+
+        def read_result(self, dataset, *, columns, **kwargs):
             captured["dataset"] = dataset
             captured["kwargs"] = kwargs
-            import pandas as pd
+            import pyarrow as pa
 
-            idx = pd.MultiIndex.from_tuples(
-                [(pd.Timestamp("2024-01-02"), "AAPL")],
-                names=["timestamp", "instrument"],
+            _FakeReadResult.table = pa.table(
+                {
+                    "ts": [pd.Timestamp("2024-01-02")],
+                    "inst": ["AAPL"],
+                    "price": [100.0],
+                }
             )
-            return {"price": pd.Series([100.0], index=idx, name="price")}
+            return _FakeReadResult()
 
     monkeypatch.setattr(
         "storage.data_access_source._get_store",

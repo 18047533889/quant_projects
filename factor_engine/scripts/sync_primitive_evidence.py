@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""从 parity case 注册表同步 ``evidence/primitive_verified.json``。"""
+"""同步 parity case 注册表到 ``evidence/primitive_case_registry.json``（不授予 verified）。"""
 from __future__ import annotations
 
 import argparse
@@ -24,7 +24,7 @@ def _bootstrap() -> None:
 
 
 def _collect_cases() -> dict:
-    from tests.backend_parity.evidence_case_registry import build_evidence_payload, merge_case_lists
+    from tests.backend_parity.evidence_case_registry import build_case_registry_payload, merge_case_lists
     from tests.backend_parity.duckdb_ieee_edge_cases import DUCKDB_IEEE_INF_CASES, DUCKDB_IEEE_NAN_CASES
     from tests.backend_parity.test_p0_edge_cases_triple_parity import DUCKDB_EDGE_CASES, EDGE_CASES
     from tests.backend_parity.test_polars_long_no_pandas_path import NO_PANDAS_CASES
@@ -37,13 +37,7 @@ def _collect_cases() -> dict:
     duckdb_edge = merge_case_lists(DUCKDB_EDGE_CASES)
     no_fallback = merge_case_lists(NO_PANDAS_CASES)
 
-    existing = {}
-    path = FE_ROOT / "evidence" / "primitive_verified.json"
-    if path.is_file():
-        existing = json.loads(path.read_text(encoding="utf-8"))
-    operators_meta = existing.get("operators") or {}
-
-    return build_evidence_payload(
+    return build_case_registry_payload(
         polars_reference=polars_reference,
         polars_edge=polars_edge,
         duckdb_reference=duckdb_reference,
@@ -52,7 +46,6 @@ def _collect_cases() -> dict:
         duckdb_nan_edge=merge_case_lists(DUCKDB_IEEE_NAN_CASES),
         duckdb_inf_edge=merge_case_lists(DUCKDB_IEEE_INF_CASES),
         no_fallback=no_fallback,
-        operators_meta=operators_meta,
     )
 
 
@@ -63,20 +56,22 @@ def main() -> int:
     _bootstrap()
     payload = _collect_cases()
     count = payload.pop("_six_way_count", 0)
-    out = FE_ROOT / "evidence" / "primitive_verified.json"
+    out = FE_ROOT / "evidence" / "primitive_case_registry.json"
     text = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
     if args.check:
         if not out.is_file():
-            print("missing primitive_verified.json", file=sys.stderr)
+            print("missing primitive_case_registry.json", file=sys.stderr)
             return 1
         ref = json.loads(out.read_text(encoding="utf-8"))
         if ref != payload:
-            print("primitive_verified.json 过期", file=sys.stderr)
+            print("primitive_case_registry.json 过期", file=sys.stderr)
             return 1
-        print(f"evidence fresh ({count} six-way certified)")
+        print(f"case registry fresh ({count} six-way case-list intersection)")
+        print("NOTE: case registry ≠ verified；须运行 certify_primitive_evidence.py")
         return 0
     out.write_text(text, encoding="utf-8")
-    print(f"wrote {out} (six-way certified: {count})")
+    print(f"wrote {out} (six-way case-list: {count})")
+    print("NOTE: 未授予 verified；须 pytest 通过后运行 certify_primitive_evidence.py")
     return 0
 
 

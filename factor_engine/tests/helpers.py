@@ -49,7 +49,9 @@ class InMemorySeriesSource(DataSource):
         if merged is None:
             raise ValueError("scan_polars_long: no columns")
         renamed = merged.rename(columns={tcol: "ts", icol: "inst"})
-        return pl.from_pandas(renamed).lazy()
+        from backend.long_frame import long_table_to_polars_lazy
+
+        return long_table_to_polars_lazy(renamed, float_cols=columns)
 
     def scan_index_long(self):
         """返回 ``ts / inst`` 唯一轴 LazyFrame。"""
@@ -95,7 +97,9 @@ class NoLoadColumnSource:
             merged = part if merged is None else merged.merge(part, on=[tcol, icol], how="outer")
             merged[name] = merged[name].astype("float64")
         renamed = merged.rename(columns={tcol: "ts", icol: "inst"})
-        return pl.from_pandas(renamed).lazy()
+        from backend.long_frame import long_table_to_polars_lazy
+
+        return long_table_to_polars_lazy(renamed, float_cols=columns)
 
     def scan_index_long(self):
         return self.scan_polars_long(sorted(self._data.keys())).select(["ts", "inst"]).unique()

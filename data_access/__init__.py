@@ -62,7 +62,10 @@ from __future__ import annotations
 
 from .engine import DuckDBEngine, get_shared_engine, reset_shared_engine
 from .exceptions import DataAccessError, DataError, EngineError, ValidationError
+from .key_policy import KeyPolicy
 from .query_budget import QueryBudget
+from .read_contract import DataSnapshot, ReadResult
+from .scan_handle import ScanHandle
 from .store import DataAccessStore, get_store, reset_store
 
 __all__ = [
@@ -77,6 +80,10 @@ __all__ = [
     "DataError",
     "EngineError",
     "QueryBudget",
+    "KeyPolicy",
+    "DataSnapshot",
+    "ReadResult",
+    "ScanHandle",
 ]
 
 __version__ = "0.1.0"

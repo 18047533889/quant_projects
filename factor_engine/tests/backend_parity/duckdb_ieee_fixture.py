@@ -67,3 +67,58 @@ def seed_duckdb_ieee_panel(root: Path) -> None:
         """
     )
     con.close()
+
+
+def _sql_double(val) -> str:
+    import pandas as pd
+
+    if pd.isna(val):
+        return "'NaN'::DOUBLE"
+    return f"{float(val)}::DOUBLE"
+
+
+def _sql_bigint(val) -> str:
+    import pandas as pd
+
+    if pd.isna(val):
+        return "NULL::BIGINT"
+    return f"{int(val)}::BIGINT"
+
+
+def seed_duckdb_parquet_from_memory(
+    root: Path,
+    mem: "InMemorySeriesSource",
+    *,
+    mapping: dict[str, str],
+    anchor: str = "close",
+    int_columns: frozenset[str] | None = None,
+) -> None:
+    """DuckDB COPY 写 parquet，保留 IEEE NaN（pandas ``to_parquet`` 会把 NaN 写成 NULL）。"""
+    import duckdb
+
+    int_columns = int_columns or frozenset()
+    root.mkdir(parents=True, exist_ok=True)
+    out = (root / "panel.parquet").as_posix()
+    cols = ["TradeDate", "Symbol"] + [mapping[k] for k in mapping]
+    values_sql = []
+    for (ts, sym) in mem.data[anchor].index:
+        parts = [f"'{ts.date()}'::DATE", f"'{sym}'::VARCHAR"]
+        for src in mapping:
+            val = mem.data[src].loc[(ts, sym)]
+            if src in int_columns:
+                parts.append(_sql_bigint(val))
+            else:
+                parts.append(_sql_double(val))
+        values_sql.append(f"({', '.join(parts)})")
+    col_sql = ", ".join(cols)
+    con = duckdb.connect()
+    con.execute(
+        f"""
+        COPY (
+          SELECT * FROM (VALUES
+            {', '.join(values_sql)}
+          ) AS t({col_sql})
+        ) TO '{out}' (FORMAT PARQUET)
+        """
+    )
+    con.close()

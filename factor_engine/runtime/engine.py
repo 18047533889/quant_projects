@@ -1187,10 +1187,13 @@ class FactorEngine:
         )
 
     @staticmethod
-    def _data_snapshot_id_from_config(data_source_config: dict | None) -> str | None:
-        from runtime.lineage_service import data_snapshot_id_from_config
+    def _data_snapshot_id_from_source(
+        data_source: Any | None,
+        data_source_config: dict | None,
+    ) -> str | None:
+        from runtime.lineage_service import resolve_data_snapshot_id
 
-        return data_snapshot_id_from_config(data_source_config)
+        return resolve_data_snapshot_id(data_source, data_source_config)
 
     @staticmethod
     def _resolve_parquet_write_target(write_target: str) -> str:

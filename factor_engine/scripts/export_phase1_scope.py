@@ -146,7 +146,8 @@ def build_scope_document() -> dict:
             "未经 scripts/certify_operator.py 完整证据链不得新增 production 算子。"
         ),
         "invariants": [
-            "phase1_status=certified_dual 须 primitive_verified.json 三证交集",
+            "phase1_status=certified_dual 须 primitive_verified.json 六证交集 + test artifact",
+            "generated_from_commit_sha 记录导出时 HEAD；frozen_commit_sha 为冻结基线",
             "composite 须 composite_verified.json 五证齐全才可 production_policy=allowed",
             "冻结后新增算子须先更新本文件并走 certify_operator",
         ],

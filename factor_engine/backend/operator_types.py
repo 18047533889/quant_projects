@@ -257,6 +257,10 @@ OPERATOR_SIGNATURES: dict[str, OperatorSignature] = {
     "not_": OperatorSignature("not_", (ArgSpec("x", TypeKind.SERIES_FLOAT),)),
 }
 
+from backend.operator_signatures_phase1 import phase1_operator_signatures
+
+OPERATOR_SIGNATURES.update(phase1_operator_signatures())
+
 
 def check_operator_types(node: PlanNode, *, canonical: str | None = None) -> list[str]:
     """对 plan 节点做类型/schema 校验。"""
