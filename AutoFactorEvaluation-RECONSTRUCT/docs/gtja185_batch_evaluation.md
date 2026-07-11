@@ -1,18 +1,62 @@
 # GTJA185 batch evaluation
 
-AutoFactorEvaluation ships a versioned bundle of all 185 deliverable GTJA191 factors.
-The bundle is generated from `gtja191/lib/catalog.py`, and CI rejects stale copies.
+AutoFactorEvaluation ships a versioned bundle of all **185 deliverable GTJA191 factors**.
+The bundle is generated from `gtja191/lib/catalog.py`; each formula and the complete pack
+carry SHA-256 fingerprints, and CI rejects stale or semantically drifted copies.
 
-The official path is `evaluation.gtja185_batch`: one DataAccess snapshot, the current
-FactorEngine, PIT compilation, cross-sectional MAD winsorization/z-scoring, train-only
-direction selection, validation/test IC, RankIC, ICIR, quantile long-short, turnover,
-annualized performance, drawdown, yearly stability, deterministic routing, resumable
-reports, and optional `factor_lake_staging` writes.
+## Official execution path
 
-```bash
-python -m pipeline --gtja185   --gtja-start-date 2014-01-01   --gtja-end-date 2026-06-25   --gtja-output /tmp/gtja185_eval
+`evaluation.gtja185_batch` is the only supported GTJA185 batch path:
+
+1. Resolve one immutable `DataAccess` market-data snapshot.
+2. Compile every formula with the repository-root current `FactorEngine` and PIT audit.
+3. Execute factors in bounded batches with shared-expression reuse; isolate a failed batch
+   to single-factor runs so one bad factor cannot hide the other results.
+4. Replace non-finite values, apply daily cross-sectional MAD winsorization and z-scoring.
+5. Build forward returns from the configured price field, defaulting to real `vwap`.
+6. Split dates chronologically into train, validation and test samples.
+7. Choose signal direction from **training RankIC only**. Validation and test observations
+   never participate in sign selection or parameter fitting.
+8. Report Pearson IC, RankIC, ICIR, t-statistic, positive ratio, coverage, quantile
+   long-short return, turnover, annualized return/volatility, Sharpe, max drawdown, hit
+   rate and yearly stability for every configured horizon.
+9. Produce deterministic routing recommendations (`tier3a_core`, `tier3b_satellite`,
+   `tier2_research`, `rejected`) without silently publishing a factor.
+10. Optionally upsert factor values to `factor_lake_staging`; publication remains a separate,
+    explicit action.
+
+Every run writes:
+
+```text
+<output>/
+├── run_manifest.json       # pack hash, data snapshot, config hash, split dates
+├── summary.json            # success/failure record for every requested factor
+├── ranking.csv
+├── ranking.parquet
+└── factor_reports/
+    └── gtja191_alpha_XXX.json
 ```
 
-For a data-free deterministic smoke run, append `--gtja-synthetic`. Published factor
-values are never written directly: use `--gtja-materialize-staging`; add
-`--gtja-publish` only after review.
+Resume is allowed only when the factor formula hash, DataAccess snapshot ID and evaluation
+configuration hash all match. A changed formula, dataset snapshot or metric configuration
+forces recomputation.
+
+## Full real-data run
+
+Run from the repository root so the shared `factor_engine` and `data_access` modules are
+resolved consistently:
+
+```bash
+export PYTHONPATH="$PWD:$PWD/factor_engine:$PWD/AutoFactorEvaluation-RECONSTRUCT:$PWD/gtja191"
+
+python -m pipeline --gtja185 \
+  --gtja-start-date 2014-01-01 \
+  --gtja-end-date 2026-06-25 \
+  --gtja-horizons 1,5,21 \
+  --gtja-batch-size 8 \
+  --gtja-output /tmp/gtja185_eval
+```
+
+For a deterministic data-free smoke run, append `--gtja-synthetic`. To persist calculated
+values, add `--gtja-materialize-staging`. Published factor values are never written directly;
+add `--gtja-publish` only after the staging output and evaluation report have been reviewed.
