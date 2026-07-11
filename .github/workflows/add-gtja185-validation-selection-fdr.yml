@@ -7,17 +7,23 @@ on:
     paths:
       - ".github/workflows/add-gtja185-validation-selection-fdr.yml"
       - ".github/scripts/add_gtja185_validation_selection_fdr.py"
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - ".github/workflows/add-gtja185-validation-selection-fdr.yml"
+      - ".github/scripts/add_gtja185_validation_selection_fdr.py"
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: add-gtja185-validation-selection-fdr
+  group: add-gtja185-validation-selection-fdr-${{ github.event.pull_request.number || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
   add:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
