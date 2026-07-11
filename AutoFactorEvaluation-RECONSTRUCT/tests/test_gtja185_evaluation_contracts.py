@@ -89,9 +89,10 @@ def test_point_in_time_universe_filters_by_date_and_tradability():
         }
     )
     filtered = _apply_point_in_time_universe(market, universe)
-    assert filtered[["datetime", "asset"]].to_records(index=False).tolist() == [
-        (np.datetime64("2024-01-02T00:00:00.000000000"), "A"),
-        (np.datetime64("2024-01-03T00:00:00.000000000"), "B"),
+    assert filtered["asset"].tolist() == ["A", "B"]
+    assert filtered["datetime"].dt.strftime("%Y-%m-%d").tolist() == [
+        "2024-01-02",
+        "2024-01-03",
     ]
 
 

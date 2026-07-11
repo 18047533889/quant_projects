@@ -814,6 +814,12 @@ def run_gtja185_batch_pipeline(
     horizons: tuple[int, ...] = (1, 5, 21),
     batch_size: int = 8,
     min_assets: int = 20,
+    entry_lag: int = 1,
+    cost_bps: float = 10.0,
+    universe_dataset: str | None = None,
+    universe_membership_field: str = "is_member",
+    tradability_field: str | None = "is_tradable",
+    require_point_in_time_universe: bool = False,
     limit: int | None = None,
     synthetic: bool = False,
     materialize_staging: bool = False,
@@ -834,6 +840,12 @@ def run_gtja185_batch_pipeline(
         horizons=horizons,
         batch_size=batch_size,
         min_assets=min_assets,
+        entry_lag=entry_lag,
+        cost_bps=cost_bps,
+        universe_dataset=universe_dataset,
+        universe_membership_field=universe_membership_field,
+        tradability_field=tradability_field,
+        require_point_in_time_universe=require_point_in_time_universe,
         limit=limit,
         materialize_staging=materialize_staging,
         publish=publish,
@@ -893,6 +905,12 @@ def main():
     p.add_argument("--gtja-horizons", default="1,5,21")
     p.add_argument("--gtja-batch-size", type=int, default=8)
     p.add_argument("--gtja-min-assets", type=int, default=20)
+    p.add_argument("--gtja-entry-lag", type=int, default=1)
+    p.add_argument("--gtja-cost-bps", type=float, default=10.0)
+    p.add_argument("--gtja-universe-dataset", default=None)
+    p.add_argument("--gtja-universe-membership-field", default="is_member")
+    p.add_argument("--gtja-tradability-field", default="is_tradable")
+    p.add_argument("--gtja-require-pit-universe", action="store_true")
     p.add_argument("--gtja-limit", type=int, default=None)
     p.add_argument("--gtja-synthetic", action="store_true")
     p.add_argument("--gtja-materialize-staging", action="store_true")
@@ -927,6 +945,12 @@ def main():
             horizons=horizons,
             batch_size=args.gtja_batch_size,
             min_assets=args.gtja_min_assets,
+            entry_lag=args.gtja_entry_lag,
+            cost_bps=args.gtja_cost_bps,
+            universe_dataset=args.gtja_universe_dataset,
+            universe_membership_field=args.gtja_universe_membership_field,
+            tradability_field=args.gtja_tradability_field or None,
+            require_point_in_time_universe=args.gtja_require_pit_universe,
             limit=args.gtja_limit,
             synthetic=args.gtja_synthetic,
             materialize_staging=args.gtja_materialize_staging,

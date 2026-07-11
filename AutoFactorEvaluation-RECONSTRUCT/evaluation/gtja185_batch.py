@@ -249,21 +249,6 @@ def _split_boundaries(frame: pd.DataFrame, config: BatchEvaluationConfig) -> Spl
     )
 
 
-def _split_mask(index: pd.MultiIndex, split: str, bounds: SplitBoundaries) -> np.ndarray:
-    dates = pd.to_datetime(index.get_level_values(0)).normalize()
-    train_end = pd.Timestamp(bounds.train_end)
-    valid_end = pd.Timestamp(bounds.valid_end)
-    if split == "train":
-        return np.asarray(dates <= train_end)
-    if split == "valid":
-        return np.asarray((dates > train_end) & (dates <= valid_end))
-    if split == "test":
-        return np.asarray(dates > valid_end)
-    if split == "all":
-        return np.ones(len(index), dtype=bool)
-    raise ValueError(f"unknown split: {split}")
-
-
 def _frame_source(frame: pd.DataFrame) -> InMemoryFrameSource:
     return InMemoryFrameSource(frame, time_column="datetime", instrument_column="asset")
 
@@ -620,17 +605,6 @@ def _performance_stats(returns: pd.Series, *, annualization: float) -> dict[str,
         "max_drawdown": float(drawdown.min()),
         "hit_rate": float((clean > 0).mean()),
     }
-
-
-def _subset_by_split(series: pd.Series, split: str, bounds: SplitBoundaries) -> pd.Series:
-    if series.empty:
-        return series
-    idx = pd.MultiIndex.from_arrays(
-        [pd.to_datetime(series.index), np.repeat("series", len(series))],
-        names=["datetime", "asset"],
-    )
-    mask = _split_mask(idx, split, bounds)
-    return series.iloc[np.flatnonzero(mask)]
 
 
 def _route_factor(metrics: Mapping[str, Any], *, coverage: float) -> str:
