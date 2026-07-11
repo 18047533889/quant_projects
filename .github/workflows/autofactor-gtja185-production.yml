@@ -47,21 +47,56 @@ jobs:
           python AutoFactorEvaluation-RECONSTRUCT/scripts/generate_gtja185_pack.py
           git diff --exit-code -- AutoFactorEvaluation-RECONSTRUCT/factor_packs/gtja185_pack.json
       - name: Static contracts and complete test collection
+        id: collection
+        continue-on-error: true
         shell: bash
         run: |
-          set -euo pipefail
-          test ! -d AutoFactorEvaluation-RECONSTRUCT/factor_engine
-          python -m compileall -q AutoFactorEvaluation-RECONSTRUCT gtja191
-          pytest --collect-only -q AutoFactorEvaluation-RECONSTRUCT
+          set -o pipefail
+          mkdir -p gtja185-ci
+          {
+            test ! -d AutoFactorEvaluation-RECONSTRUCT/factor_engine
+            python -m compileall -q AutoFactorEvaluation-RECONSTRUCT gtja191
+            pytest --collect-only -q AutoFactorEvaluation-RECONSTRUCT
+          } 2>&1 | tee gtja185-ci/collection.txt
       - name: GTJA185 full synthetic evaluation
+        id: full_evaluation
+        continue-on-error: true
+        shell: bash
         run: |
-          pytest -q AutoFactorEvaluation-RECONSTRUCT/tests/test_gtja185_batch_evaluation.py
+          set -o pipefail
+          pytest -q AutoFactorEvaluation-RECONSTRUCT/tests/test_gtja185_batch_evaluation.py \
+            2>&1 | tee gtja185-ci/full-evaluation.txt
       - name: Platform and catalog regression
+        id: regression
+        continue-on-error: true
+        shell: bash
         run: |
+          set -o pipefail
           pytest -q \
             AutoFactorEvaluation-RECONSTRUCT/tests/test_quant_platform_integration.py \
             gtja191/tests/test_full_catalog_factor_engine.py \
             gtja191/tests/test_gtja191.py \
             data_access/tests/unit/test_params_validation_strict.py \
             factor_engine/tests/test_data_scope_stability.py \
-            factor_engine/tests/test_gtja_compat_semantics.py
+            factor_engine/tests/test_gtja_compat_semantics.py \
+            2>&1 | tee gtja185-ci/regression.txt
+      - name: Upload GTJA185 diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: autofactor-gtja185-ci
+          path: gtja185-ci/
+          if-no-files-found: error
+      - name: Enforce GTJA185 gate
+        if: always()
+        shell: bash
+        env:
+          COLLECTION: ${{ steps.collection.outcome }}
+          FULL_EVALUATION: ${{ steps.full_evaluation.outcome }}
+          REGRESSION: ${{ steps.regression.outcome }}
+        run: |
+          set -euo pipefail
+          echo "collection=$COLLECTION full_evaluation=$FULL_EVALUATION regression=$REGRESSION"
+          test "$COLLECTION" = success
+          test "$FULL_EVALUATION" = success
+          test "$REGRESSION" = success
