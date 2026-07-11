@@ -37,10 +37,12 @@ __all__ = [
     "microstructure",
 ]
 
-# 加载顺序：common 子模块 → 领域模块 → 别名/dedupe
+# 加载顺序：common 子模块 → GTJA 严格覆盖 → 领域模块 → dedupe。
+# gtja_compat 必须位于 common.time_series 之后，以同 canonical 覆盖历史 pandas 实现。
 _LOAD_MODULES = (
     "cleaned_operators.common.elementwise",
     "cleaned_operators.common.time_series",
+    "cleaned_operators.common.gtja_compat",
     "cleaned_operators.common.shift_cum",
     "cleaned_operators.common.cross_sectional",
     "cleaned_operators.common.group",
@@ -67,14 +69,7 @@ _LOAD_MODULES = (
 
 
 def load_all() -> None:
-    """Import 全部算子子模块并完成注册与去重。
-
-    按 ``_LOAD_MODULES`` 顺序加载各子模块，末尾执行 ``_dedupe`` 别名合并。
-    ``cleaned_bridge`` 首次执行前会自动调用；也可手动调用以预热 registry。
-
-    返回:
-        None
-    """
+    """Import 全部算子子模块并完成注册与去重。"""
     for mod in _LOAD_MODULES:
         __import__(mod, fromlist=["*"])
     from cleaned_operators._dedupe import apply_operator_deduplication
