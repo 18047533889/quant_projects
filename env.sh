@@ -42,3 +42,8 @@ export FACTOR_ENGINE_USE_NUMBA="${FACTOR_ENGINE_USE_NUMBA:-1}"
 
 # 关闭读前 COS 自动拉取（离线包分发时建议开启）
 # export DATA_ACCESS_SKIP_COS_MIRROR=1
+
+# GitHub（GITHUB_TOKEN 写在同目录 .env，供 git push / gh 使用）
+if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+  export GH_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN}}"
+fi
