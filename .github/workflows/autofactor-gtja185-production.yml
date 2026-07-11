@@ -22,10 +22,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: autofactor-gtja185-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   gtja185:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 45
     env:
       PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/AutoFactorEvaluation-RECONSTRUCT:${{ github.workspace }}/gtja191
       FACTOR_ENGINE_DISABLE_NUMBA: "1"
@@ -56,6 +60,9 @@ jobs:
           mkdir -p gtja185-ci
           {
             test ! -d AutoFactorEvaluation-RECONSTRUCT/factor_engine
+            test -f AutoFactorEvaluation-RECONSTRUCT/evaluation/gtja185_models.py
+            test -f AutoFactorEvaluation-RECONSTRUCT/evaluation/gtja185_metrics.py
+            test -f AutoFactorEvaluation-RECONSTRUCT/evaluation/gtja185_runner.py
             grep -q 'ashare_universe_daily:' data_access/config/datasets.yaml
             python -m compileall -q AutoFactorEvaluation-RECONSTRUCT gtja191
             pytest --collect-only -q AutoFactorEvaluation-RECONSTRUCT
@@ -81,6 +88,7 @@ jobs:
             pytest -q gtja191/tests/test_full_catalog_factor_engine.py gtja191/tests/test_gtja191.py
             pytest -q \
               data_access/tests/unit/test_params_validation_strict.py \
+              data_access/tests/unit/test_key_policy_deterministic.py \
               factor_engine/tests/test_data_scope_stability.py \
               factor_engine/tests/test_gtja_compat_semantics.py
           } 2>&1 | tee gtja185-ci/regression.txt
