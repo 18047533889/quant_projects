@@ -354,28 +354,44 @@ def _execute_pack(
 
 
 def _purify_series(series: pd.Series, *, mad_multiplier: float, min_assets: int) -> pd.Series:
+    """Vectorized daily cross-sectional MAD winsorization and z-scoring."""
     values = pd.to_numeric(series, errors="coerce").replace([np.inf, -np.inf], np.nan)
+    if not isinstance(values.index, pd.MultiIndex) or values.index.nlevels != 2:
+        raise ValueError("factor purification requires MultiIndex(datetime, asset)")
+    if values.index.has_duplicates:
+        raise ValueError("factor purification requires unique (datetime, asset) keys")
+    panel = values.unstack("asset").sort_index()
+    counts = panel.notna().sum(axis=1)
+    medians = panel.median(axis=1, skipna=True)
+    absolute_deviation = panel.sub(medians, axis=0).abs()
+    mad = absolute_deviation.median(axis=1, skipna=True)
+    robust_scale = 1.4826 * mad
+    valid_scale = np.isfinite(robust_scale) & (robust_scale > 0)
+    lower = medians - float(mad_multiplier) * robust_scale
+    upper = medians + float(mad_multiplier) * robust_scale
+    lower = lower.where(valid_scale, -np.inf)
+    upper = upper.where(valid_scale, np.inf)
+    clipped = panel.clip(lower=lower, upper=upper, axis=0)
+    means = clipped.mean(axis=1, skipna=True)
+    stds = clipped.std(axis=1, skipna=True, ddof=1)
+    eligible = (counts >= int(min_assets)) & np.isfinite(stds) & (stds > 1e-12)
+    standardized = clipped.sub(means, axis=0).div(stds, axis=0)
+    standardized.loc[~eligible, :] = np.nan
 
-    def transform(group: pd.Series) -> pd.Series:
-        valid = group.dropna()
-        if len(valid) < min_assets:
-            return pd.Series(np.nan, index=group.index, dtype=float)
-        median = float(valid.median())
-        mad = float((valid - median).abs().median())
-        if math.isfinite(mad) and mad > 0:
-            scale = 1.4826 * mad
-            clipped = group.clip(median - mad_multiplier * scale, median + mad_multiplier * scale)
-        else:
-            clipped = group.copy()
-        mean = float(clipped.mean(skipna=True))
-        std = float(clipped.std(skipna=True, ddof=1))
-        if not math.isfinite(std) or std <= 1e-12:
-            return pd.Series(np.nan, index=group.index, dtype=float)
-        return (clipped - mean) / std
-
-    purified = values.groupby(level="datetime", group_keys=False).transform(transform)
-    purified.index = purified.index.set_names(["datetime", "asset"])
-    return purified.sort_index().rename(series.name)
+    datetimes = pd.DatetimeIndex(values.index.get_level_values("datetime"))
+    assets = pd.Index(values.index.get_level_values("asset").astype(str))
+    row_positions = standardized.index.get_indexer(datetimes)
+    column_positions = standardized.columns.astype(str).get_indexer(assets)
+    if (row_positions < 0).any() or (column_positions < 0).any():
+        raise RuntimeError("purified panel could not map back to the original factor index")
+    matrix = standardized.to_numpy(dtype=float)
+    result = pd.Series(
+        matrix[row_positions, column_positions],
+        index=values.index.set_names(["datetime", "asset"]),
+        name=series.name,
+        dtype=float,
+    )
+    return result.sort_index()
 
 
 def _price_forward_returns(
@@ -457,22 +473,63 @@ def _safe_corr(x: pd.Series, y: pd.Series, method: str) -> float:
     return float(valid.iloc[:, 0].corr(valid.iloc[:, 1], method=method))
 
 
+def _matrix_row_correlation(
+    left: pd.DataFrame,
+    right: pd.DataFrame,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Vectorized pairwise-finite row correlation and valid observation counts."""
+    left, right = left.align(right, join="outer", axis=0)
+    left, right = left.align(right, join="outer", axis=1)
+    x = left.to_numpy(dtype=float)
+    y = right.to_numpy(dtype=float)
+    valid = np.isfinite(x) & np.isfinite(y)
+    counts = valid.sum(axis=1).astype(np.int64)
+    safe_counts = np.maximum(counts, 1)
+    x_mean = np.where(valid, x, 0.0).sum(axis=1) / safe_counts
+    y_mean = np.where(valid, y, 0.0).sum(axis=1) / safe_counts
+    x_centered = np.where(valid, x - x_mean[:, None], 0.0)
+    y_centered = np.where(valid, y - y_mean[:, None], 0.0)
+    numerator = (x_centered * y_centered).sum(axis=1)
+    denominator = np.sqrt(
+        (x_centered * x_centered).sum(axis=1)
+        * (y_centered * y_centered).sum(axis=1)
+    )
+    correlations = np.full(len(counts), np.nan, dtype=float)
+    np.divide(
+        numerator,
+        denominator,
+        out=correlations,
+        where=(counts >= 2) & np.isfinite(denominator) & (denominator > 0),
+    )
+    return correlations, counts
+
+
 def _daily_ic(signal: pd.Series, returns: pd.Series, *, min_assets: int) -> pd.DataFrame:
-    joined = pd.concat([signal.rename("signal"), returns.rename("return")], axis=1)
-    rows: list[dict[str, Any]] = []
-    for date, group in joined.groupby(level="datetime", sort=True):
-        valid = group.dropna()
-        if len(valid) < min_assets:
-            continue
-        rows.append(
-            {
-                "datetime": pd.Timestamp(date),
-                "n": int(len(valid)),
-                "ic": _safe_corr(valid["signal"], valid["return"], "pearson"),
-                "rank_ic": _safe_corr(valid["signal"], valid["return"], "spearman"),
-            }
-        )
-    return pd.DataFrame(rows)
+    """Vectorized daily Pearson IC and average-tie RankIC."""
+    joined = pd.concat(
+        [
+            pd.to_numeric(signal, errors="coerce").rename("signal"),
+            pd.to_numeric(returns, errors="coerce").rename("return"),
+        ],
+        axis=1,
+    ).replace([np.inf, -np.inf], np.nan)
+    signal_panel = joined["signal"].unstack("asset").sort_index()
+    return_panel = joined["return"].unstack("asset").reindex(signal_panel.index)
+    ic, counts = _matrix_row_correlation(signal_panel, return_panel)
+    rank_signal = signal_panel.rank(axis=1, method="average", na_option="keep")
+    rank_return = return_panel.rank(axis=1, method="average", na_option="keep")
+    rank_ic, _ = _matrix_row_correlation(rank_signal, rank_return)
+    eligible = counts >= int(min_assets)
+    if not eligible.any():
+        return pd.DataFrame(columns=["datetime", "n", "ic", "rank_ic"])
+    return pd.DataFrame(
+        {
+            "datetime": pd.DatetimeIndex(signal_panel.index[eligible]),
+            "n": counts[eligible].astype(int),
+            "ic": ic[eligible],
+            "rank_ic": rank_ic[eligible],
+        }
+    )
 
 
 def _summary_stats(
@@ -534,60 +591,75 @@ def _long_short_series(
     n_quantiles: int,
     cost_bps: float,
 ) -> tuple[pd.Series, pd.Series, pd.Series]:
-    """Build equal-weight gross/net long-short returns and weight turnover."""
-    joined = pd.concat([signal.rename("signal"), returns.rename("return")], axis=1)
-    gross_returns: dict[pd.Timestamp, float] = {}
-    net_returns: dict[pd.Timestamp, float] = {}
-    turnovers: dict[pd.Timestamp, float] = {}
-    previous_weights: dict[str, float] = {}
-    for date, group in joined.groupby(level="datetime", sort=True):
-        valid = group.dropna()
-        if len(valid) < max(min_assets, n_quantiles * 2):
-            continue
-        ranked = valid["signal"].rank(method="average", pct=True)
-        low_cut = 1.0 / n_quantiles
-        high_cut = 1.0 - low_cut
-        bottom_mask = np.asarray(ranked <= low_cut, dtype=bool)
-        top_mask = np.asarray(ranked > high_cut, dtype=bool)
-        if not bottom_mask.any() or not top_mask.any():
-            continue
-        assets = valid.index.get_level_values("asset").astype(str)
-        top_assets = list(assets[top_mask])
-        bottom_assets = list(assets[bottom_mask])
-        weights = {
-            **{asset: 1.0 / len(top_assets) for asset in top_assets},
-            **{asset: -1.0 / len(bottom_assets) for asset in bottom_assets},
-        }
-        return_by_asset = {
-            str(asset): float(value)
-            for asset, value in zip(
-                assets,
-                valid["return"].to_numpy(dtype=float),
-                strict=True,
-            )
-        }
-        gross = float(
-            sum(weight * return_by_asset[asset] for asset, weight in weights.items())
+    """Vectorized equal-weight gross/net long-short returns and weight turnover."""
+    joined = pd.concat(
+        [
+            pd.to_numeric(signal, errors="coerce").rename("signal"),
+            pd.to_numeric(returns, errors="coerce").rename("return"),
+        ],
+        axis=1,
+    ).replace([np.inf, -np.inf], np.nan)
+    signal_panel = joined["signal"].unstack("asset").sort_index()
+    return_panel = joined["return"].unstack("asset").reindex(signal_panel.index)
+    valid = signal_panel.notna() & return_panel.notna()
+    counts = valid.sum(axis=1)
+    ranked = signal_panel.where(valid).rank(
+        axis=1,
+        method="average",
+        pct=True,
+        na_option="keep",
+    )
+    low_cut = 1.0 / int(n_quantiles)
+    high_cut = 1.0 - low_cut
+    bottom = (ranked <= low_cut) & valid
+    top = (ranked > high_cut) & valid
+    top_counts = top.sum(axis=1)
+    bottom_counts = bottom.sum(axis=1)
+    eligible = (
+        (counts >= max(int(min_assets), int(n_quantiles) * 2))
+        & (top_counts > 0)
+        & (bottom_counts > 0)
+    )
+    if not bool(eligible.any()):
+        empty_index = pd.DatetimeIndex([], name="datetime")
+        return (
+            pd.Series(index=empty_index, dtype=float, name="long_short_gross"),
+            pd.Series(index=empty_index, dtype=float, name="long_short_net"),
+            pd.Series(index=empty_index, dtype=float, name="turnover"),
         )
-        all_assets = set(weights) | set(previous_weights)
-        turnover = 0.5 * sum(
-            abs(weights.get(asset, 0.0) - previous_weights.get(asset, 0.0))
-            for asset in all_assets
-        )
-        transaction_cost = turnover * float(cost_bps) / 10_000.0
-        timestamp = pd.Timestamp(date)
-        gross_returns[timestamp] = gross
-        net_returns[timestamp] = gross - transaction_cost
-        turnovers[timestamp] = float(turnover)
-        previous_weights = weights
+    weights = top.astype(float).div(top_counts.replace(0, np.nan), axis=0)
+    weights -= bottom.astype(float).div(bottom_counts.replace(0, np.nan), axis=0)
+    weights = weights.loc[eligible].fillna(0.0)
+    realized = return_panel.reindex(index=weights.index, columns=weights.columns).fillna(0.0)
+    gross = (weights * realized).sum(axis=1).astype(float)
+    weight_changes = weights.diff()
+    weight_changes.iloc[0] = weights.iloc[0]
+    turnover = 0.5 * weight_changes.abs().sum(axis=1)
+    net = gross - turnover * float(cost_bps) / 10_000.0
+    gross.index.name = "datetime"
+    net.index.name = "datetime"
+    turnover.index.name = "datetime"
     return (
-        pd.Series(gross_returns, name="long_short_gross").sort_index(),
-        pd.Series(net_returns, name="long_short_net").sort_index(),
-        pd.Series(turnovers, name="turnover").sort_index(),
+        gross.rename("long_short_gross"),
+        net.rename("long_short_net"),
+        turnover.rename("turnover"),
     )
 
 
-def _performance_stats(returns: pd.Series, *, annualization: float) -> dict[str, float | int | None]:
+def _performance_stats(
+    returns: pd.Series,
+    *,
+    annualization: float,
+    hac_lags: int = 0,
+    holding_period: int = 1,
+) -> dict[str, float | int | None]:
+    """Performance metrics robust to overlapping holding-period observations.
+
+    ``annualization`` is the non-overlapping observation count (for an h-day
+    holding return, normally 252/h). The HAC denominator includes positive
+    overlap autocovariance and therefore cannot be used with a second daily
+    sqrt(252) multiplier without double-counting observation frequency.
+    """
     clean = pd.to_numeric(returns, errors="coerce").dropna().astype(float)
     if clean.empty:
         return {
@@ -596,7 +668,10 @@ def _performance_stats(returns: pd.Series, *, annualization: float) -> dict[str,
             "annual_return": None,
             "annual_volatility": None,
             "sharpe": None,
+            "hac_sharpe": None,
+            "hac_long_run_volatility": None,
             "max_drawdown": None,
+            "max_drawdown_non_overlapping_worst": None,
             "hit_rate": None,
         }
     mean = float(clean.mean())
@@ -604,15 +679,47 @@ def _performance_stats(returns: pd.Series, *, annualization: float) -> dict[str,
     annual_return = mean * annualization
     annual_vol = std * math.sqrt(annualization) if math.isfinite(std) else float("nan")
     sharpe = annual_return / annual_vol if math.isfinite(annual_vol) and annual_vol > 0 else float("nan")
-    wealth = (1.0 + clean.clip(lower=-0.999999)).cumprod()
-    drawdown = wealth / wealth.cummax() - 1.0
+
+    values = clean.to_numpy(dtype=float)
+    demeaned = values - mean
+    n = len(values)
+    max_lag = min(max(int(hac_lags), 0), max(n - 1, 0))
+    long_run_variance = float(np.dot(demeaned, demeaned) / n)
+    for lag in range(1, max_lag + 1):
+        weight = 1.0 - lag / (max_lag + 1.0)
+        gamma = float(np.dot(demeaned[lag:], demeaned[:-lag]) / n)
+        long_run_variance += 2.0 * weight * gamma
+    long_run_variance = max(long_run_variance, 0.0)
+    long_run_std = math.sqrt(long_run_variance)
+    hac_sharpe = (
+        mean / long_run_std * math.sqrt(float(annualization))
+        if math.isfinite(long_run_std) and long_run_std > 0
+        else float("nan")
+    )
+    hac_long_run_vol = long_run_std * math.sqrt(float(annualization))
+
+    period = max(int(holding_period), 1)
+    sleeve_drawdowns: list[float] = []
+    for offset in range(min(period, n)):
+        sleeve = clean.iloc[offset::period]
+        if sleeve.empty:
+            continue
+        wealth = (1.0 + sleeve.clip(lower=-0.999999)).cumprod()
+        drawdown = wealth / wealth.cummax() - 1.0
+        sleeve_drawdowns.append(float(drawdown.min()))
+    worst_drawdown = min(sleeve_drawdowns) if sleeve_drawdowns else float("nan")
     return {
         "count": int(len(clean)),
         "mean": mean,
         "annual_return": annual_return,
         "annual_volatility": annual_vol if math.isfinite(annual_vol) else None,
         "sharpe": sharpe if math.isfinite(sharpe) else None,
-        "max_drawdown": float(drawdown.min()),
+        "hac_sharpe": hac_sharpe if math.isfinite(hac_sharpe) else None,
+        "hac_long_run_volatility": hac_long_run_vol if math.isfinite(hac_long_run_vol) else None,
+        "max_drawdown": worst_drawdown if math.isfinite(worst_drawdown) else None,
+        "max_drawdown_non_overlapping_worst": worst_drawdown
+        if math.isfinite(worst_drawdown)
+        else None,
         "hit_rate": float((clean > 0).mean()),
     }
 
@@ -623,7 +730,7 @@ def _route_factor(metrics: Mapping[str, Any], *, coverage: float) -> str:
     validation = primary.get("valid", {})
     rank_ic = ((validation.get("rank_ic") or {}).get("mean"))
     icir = ((validation.get("rank_ic") or {}).get("ir"))
-    sharpe = ((validation.get("long_short_net") or {}).get("sharpe"))
+    sharpe = ((validation.get("long_short_net") or {}).get("hac_sharpe"))
     positive = ((validation.get("rank_ic") or {}).get("positive_ratio"))
     if coverage < 0.35 or rank_ic is None or rank_ic <= 0:
         return "rejected"
@@ -707,14 +814,20 @@ def _evaluate_one(
                 "long_short_gross": _performance_stats(
                     long_short_gross,
                     annualization=annualization,
+                    hac_lags=max(int(horizon) - 1, 0),
+                    holding_period=int(horizon),
                 ),
                 "long_short_net": _performance_stats(
                     long_short_net,
                     annualization=annualization,
+                    hac_lags=max(int(horizon) - 1, 0),
+                    holding_period=int(horizon),
                 ),
                 "long_short": _performance_stats(
                     long_short_net,
                     annualization=annualization,
+                    hac_lags=max(int(horizon) - 1, 0),
+                    holding_period=int(horizon),
                 ),
                 "cost_bps": float(config.cost_bps),
                 "turnover_mean": float(turnover.mean()) if not turnover.empty else None,
@@ -815,11 +928,13 @@ def _ranking_rows(records: Sequence[FactorRunRecord]) -> list[dict[str, Any]]:
                 "validation_rank_ic_hac_t": ((validation.get("rank_ic") or {}).get("hac_t_stat")),
                 "validation_rank_ic_q_value": multiple_testing.get("validation_rank_ic_q_value"),
                 "validation_long_short_net_sharpe": ((validation.get("long_short_net") or {}).get("sharpe")),
+                "validation_long_short_net_hac_sharpe": ((validation.get("long_short_net") or {}).get("hac_sharpe")),
                 "test_rank_ic": ((test.get("rank_ic") or {}).get("mean")),
                 "test_rank_ic_ir": ((test.get("rank_ic") or {}).get("ir")),
                 "test_rank_ic_positive_ratio": ((test.get("rank_ic") or {}).get("positive_ratio")),
                 "test_long_short_gross_sharpe": ((test.get("long_short_gross") or {}).get("sharpe")),
                 "test_long_short_net_sharpe": ((test.get("long_short_net") or {}).get("sharpe")),
+                "test_long_short_net_hac_sharpe": ((test.get("long_short_net") or {}).get("hac_sharpe")),
                 "test_long_short_net_annual_return": ((test.get("long_short_net") or {}).get("annual_return")),
                 "test_long_short_net_max_drawdown": ((test.get("long_short_net") or {}).get("max_drawdown")),
                 "turnover_mean": test.get("turnover_mean"),
@@ -837,8 +952,8 @@ def _ranking_rows(records: Sequence[FactorRunRecord]) -> list[dict[str, Any]]:
             row.get("validation_rank_ic_ir")
             if row.get("validation_rank_ic_ir") is not None
             else -999,
-            row.get("validation_long_short_net_sharpe")
-            if row.get("validation_long_short_net_sharpe") is not None
+            row.get("validation_long_short_net_hac_sharpe")
+            if row.get("validation_long_short_net_hac_sharpe") is not None
             else -999,
         ),
         reverse=True,
@@ -883,6 +998,17 @@ def _load_point_in_time_universe(
     ]
     if config.tradability_field:
         columns.append(config.tradability_field)
+    read_params: dict[str, Any] = {}
+    parameter_names = set(getattr(dataset, "params_schema", {}) or {})
+    if "universe_id" in parameter_names:
+        if not str(config.universe_id or "").strip():
+            raise ValueError("parameterized universe dataset requires universe_id")
+        read_params["universe_id"] = str(config.universe_id)
+    elif parameter_names:
+        raise ValueError(
+            f"universe dataset {config.universe_dataset} has unsupported parameters: "
+            f"{sorted(parameter_names)}"
+        )
     result = store.read_result(
         config.universe_dataset,
         columns=list(dict.fromkeys(columns)),
@@ -892,6 +1018,7 @@ def _load_point_in_time_universe(
         instrument_filter=list(config.instrument_filter)
         if config.instrument_filter
         else None,
+        **read_params,
     )
     frame = result.table.to_pandas().rename(
         columns={
@@ -998,41 +1125,54 @@ def run_gtja185_evaluation(
     config_hash = _canonical_hash(config_payload)
     run_id = f"gtja185_{started_at.strftime('%Y%m%dT%H%M%SZ')}_{snapshot_id[:8]}_{config_hash[:8]}"
 
-    engine, parsed, compile_timings = _compile_pack(
-        selected,
-        market_frame,
-        backend=config.backend,
-        run_mode=config.run_mode,
-    )
-    raw_results, execute_timings, execution_errors = _execute_pack(
-        engine,
-        parsed,
-        batch_size=config.batch_size,
-        market=config.market,
-    )
-    forward_returns = _price_forward_returns(
-        market_frame,
-        config.horizons,
-        config.forward_price_field,
-        entry_lag=config.entry_lag,
-    )
-
-    records: list[FactorRunRecord] = []
-    purified_signals: dict[str, pd.Series] = {}
-    skipped = 0
+    resumed_records: dict[str, FactorRunRecord] = {}
+    pending_factors: list[FactorDefinition] = []
     for factor in selected:
-        record_path = report_dir / f"{factor.name}.json"
+        resumed = None
         if config.resume:
             resumed = _resume_record(
-                record_path,
+                report_dir / f"{factor.name}.json",
                 formula_hash=factor.formula_hash,
                 snapshot_id=snapshot_id,
                 config_hash=config_hash,
             )
-            if resumed is not None:
-                records.append(resumed)
-                skipped += 1
-                continue
+        if resumed is not None:
+            resumed_records[factor.name] = resumed
+        else:
+            pending_factors.append(factor)
+
+    compile_timings: dict[str, float] = {}
+    execute_timings: dict[str, float] = {}
+    raw_results: dict[str, pd.Series] = {}
+    execution_errors: dict[str, str] = {}
+    forward_returns: dict[int, pd.Series] = {}
+    if pending_factors:
+        engine, parsed, compile_timings = _compile_pack(
+            pending_factors,
+            market_frame,
+            backend=config.backend,
+            run_mode=config.run_mode,
+        )
+        raw_results, execute_timings, execution_errors = _execute_pack(
+            engine,
+            parsed,
+            batch_size=config.batch_size,
+            market=config.market,
+        )
+        forward_returns = _price_forward_returns(
+            market_frame,
+            config.horizons,
+            config.forward_price_field,
+            entry_lag=config.entry_lag,
+        )
+
+    records: list[FactorRunRecord] = []
+    skipped = len(resumed_records)
+    for factor in selected:
+        record_path = report_dir / f"{factor.name}.json"
+        if factor.name in resumed_records:
+            records.append(resumed_records[factor.name])
+            continue
         if factor.name in execution_errors or factor.name not in raw_results:
             record = FactorRunRecord(
                 factor_name=factor.name,
@@ -1074,7 +1214,6 @@ def run_gtja185_evaluation(
                     publish=config.publish,
                 )
             records.append(record)
-            purified_signals[factor.name] = purified
         except Exception as exc:
             record = FactorRunRecord(
                 factor_name=factor.name,

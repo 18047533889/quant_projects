@@ -72,9 +72,17 @@ resolved consistently:
 export PYTHONPATH="$PWD:$PWD/factor_engine:$PWD/AutoFactorEvaluation-RECONSTRUCT:$PWD/gtja191"
 
 python -m pipeline --gtja185 \
+  --gtja-run-mode production \
+  --gtja-dataset ashare_stock_daily \
+  --gtja-universe-id A_SHARE_ALL_A_EX_ST \
+  --gtja-require-pit-universe \
+  --gtja-universe-dataset ashare_universe_daily \
   --gtja-start-date 2014-01-01 \
   --gtja-end-date 2026-06-25 \
   --gtja-horizons 1,5,21 \
+  --gtja-entry-lag 1 \
+  --gtja-cost-bps 10 \
+  --gtja-fdr-alpha 0.10 \
   --gtja-batch-size 8 \
   --gtja-output /tmp/gtja185_eval
 ```
@@ -82,3 +90,11 @@ python -m pipeline --gtja185 \
 For a deterministic data-free smoke run, append `--gtja-synthetic`. To persist calculated
 values, add `--gtja-materialize-staging`. Published factor values are never written directly;
 add `--gtja-publish` only after the staging output and evaluation report have been reviewed.
+
+
+## Point-in-time universe dataset
+
+`ashare_universe_daily` is parameterized by `universe_id`; each universe is stored under
+`universe_daily/universe_id=<id>/date=<date>/`. Required columns are `TradeDate`, `Symbol`,
+`is_member`, and `is_tradable`. The evaluator passes the requested universe ID through
+DataAccess, so path identity, snapshot lineage and caches cannot mix different universes.

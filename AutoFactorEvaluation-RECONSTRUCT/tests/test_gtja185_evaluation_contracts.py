@@ -12,6 +12,7 @@ from evaluation.gtja185_batch import (
     _apply_validation_fdr,
     _long_short_series,
     _route_factor,
+    _performance_stats,
     _price_forward_returns,
     _purged_split_mask,
 )
@@ -154,3 +155,55 @@ def test_benjamini_hochberg_controls_185_factor_family():
     assert records[0].route == "tier3a_core"
     assert records[1].route == "tier2_research"
     assert records[2].route == "tier2_research"
+
+
+def test_hac_sharpe_penalizes_positive_overlap_autocorrelation():
+    rng = np.random.default_rng(7)
+    innovations = rng.normal(0.001, 0.01, size=400)
+    values = np.zeros_like(innovations)
+    for index in range(1, len(values)):
+        values[index] = 0.8 * values[index - 1] + innovations[index]
+    stats = _performance_stats(
+        pd.Series(values),
+        annualization=252 / 5,
+        hac_lags=4,
+        holding_period=5,
+    )
+    assert stats["hac_sharpe"] is not None
+    assert stats["sharpe"] is not None
+    assert abs(stats["hac_sharpe"]) < abs(stats["sharpe"])
+    assert stats["max_drawdown"] == stats["max_drawdown_non_overlapping_worst"]
+
+
+def test_resume_skips_factor_compile_and_execute(tmp_path, monkeypatch):
+    import evaluation.gtja185_batch as batch
+
+    frame = batch.build_synthetic_market_frame(periods=260, symbols=8, seed=99)
+    config = BatchEvaluationConfig(
+        horizons=(1,),
+        min_assets=6,
+        n_quantiles=4,
+        limit=1,
+        strict=True,
+        resume=True,
+    )
+    first = batch.run_gtja185_evaluation(
+        config,
+        output_dir=tmp_path,
+        market_frame=frame,
+        snapshot_id="synthetic:resume-contract",
+    )
+    assert first.succeeded == 1
+
+    def should_not_compile(*args, **kwargs):
+        raise AssertionError("resume should not compile a valid cached factor")
+
+    monkeypatch.setattr(batch, "_compile_pack", should_not_compile)
+    second = batch.run_gtja185_evaluation(
+        config,
+        output_dir=tmp_path,
+        market_frame=frame,
+        snapshot_id="synthetic:resume-contract",
+    )
+    assert second.succeeded == 1
+    assert second.skipped == 1

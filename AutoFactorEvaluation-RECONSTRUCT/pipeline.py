@@ -809,6 +809,9 @@ def _archive_empty_campaigns(pool_dir: Path, record_dir: Path) -> list[str]:
 def run_gtja185_batch_pipeline(
     *,
     output_dir: str | Path,
+    dataset: str | None = None,
+    run_mode: str = "research",
+    universe_id: str = "A_SHARE_ALL_A_EX_ST",
     start_date: str | None = None,
     end_date: str | None = None,
     horizons: tuple[int, ...] = (1, 5, 21),
@@ -820,6 +823,7 @@ def run_gtja185_batch_pipeline(
     universe_membership_field: str = "is_member",
     tradability_field: str | None = "is_tradable",
     require_point_in_time_universe: bool = False,
+    fdr_alpha: float = 0.10,
     limit: int | None = None,
     synthetic: bool = False,
     materialize_staging: bool = False,
@@ -833,8 +837,14 @@ def run_gtja185_batch_pipeline(
         run_gtja185_evaluation,
     )
 
+    resolved_universe_dataset = universe_dataset
+    if require_point_in_time_universe and not resolved_universe_dataset:
+        resolved_universe_dataset = "ashare_universe_daily"
     config = BatchEvaluationConfig(
         market="ashare",
+        dataset=dataset,
+        run_mode=run_mode,
+        universe_id=universe_id,
         start_date=start_date,
         end_date=end_date,
         horizons=horizons,
@@ -842,7 +852,8 @@ def run_gtja185_batch_pipeline(
         min_assets=min_assets,
         entry_lag=entry_lag,
         cost_bps=cost_bps,
-        universe_dataset=universe_dataset,
+        fdr_alpha=fdr_alpha,
+        universe_dataset=resolved_universe_dataset,
         universe_membership_field=universe_membership_field,
         tradability_field=tradability_field,
         require_point_in_time_universe=require_point_in_time_universe,
@@ -900,6 +911,9 @@ def main():
     p = argparse.ArgumentParser(description="AutoFactorEvaluation 全流程管道")
     p.add_argument("--gtja185", action="store_true", help="评估完整 GTJA185 内置因子包")
     p.add_argument("--gtja-output", default="AutoFactorEvaluation-RECONSTRUCT/output/gtja185")
+    p.add_argument("--gtja-dataset", default=None)
+    p.add_argument("--gtja-run-mode", choices=["research", "production"], default="research")
+    p.add_argument("--gtja-universe-id", default="A_SHARE_ALL_A_EX_ST")
     p.add_argument("--gtja-start-date", default=None)
     p.add_argument("--gtja-end-date", default=None)
     p.add_argument("--gtja-horizons", default="1,5,21")
@@ -907,6 +921,7 @@ def main():
     p.add_argument("--gtja-min-assets", type=int, default=20)
     p.add_argument("--gtja-entry-lag", type=int, default=1)
     p.add_argument("--gtja-cost-bps", type=float, default=10.0)
+    p.add_argument("--gtja-fdr-alpha", type=float, default=0.10)
     p.add_argument("--gtja-universe-dataset", default=None)
     p.add_argument("--gtja-universe-membership-field", default="is_member")
     p.add_argument("--gtja-tradability-field", default="is_tradable")
@@ -940,6 +955,9 @@ def main():
         horizons = tuple(int(part.strip()) for part in args.gtja_horizons.split(",") if part.strip())
         summary = run_gtja185_batch_pipeline(
             output_dir=args.gtja_output,
+            dataset=args.gtja_dataset,
+            run_mode=args.gtja_run_mode,
+            universe_id=args.gtja_universe_id,
             start_date=args.gtja_start_date,
             end_date=args.gtja_end_date,
             horizons=horizons,
@@ -947,6 +965,7 @@ def main():
             min_assets=args.gtja_min_assets,
             entry_lag=args.gtja_entry_lag,
             cost_bps=args.gtja_cost_bps,
+            fdr_alpha=args.gtja_fdr_alpha,
             universe_dataset=args.gtja_universe_dataset,
             universe_membership_field=args.gtja_universe_membership_field,
             tradability_field=args.gtja_tradability_field or None,
