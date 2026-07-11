@@ -213,16 +213,18 @@ def patch_requirements() -> None:
         else:
             output.append(line)
     joined = "\n".join(output).rstrip() + "\n"
-    additions = []
+    additions: list[str] = []
     if "duckdb>=" not in joined:
         additions.append("duckdb>=1.0.0")
     if "polars>=" not in joined:
         additions.append("polars>=1.0.0")
     if additions:
-        joined = joined.replace(
-            "# --- 配置 ---",
-            "# --- 统一计算/数据平台 ---\n" + "\n".join(additions) + "\n\n# --- 配置 ---",
-        )
+        marker = "# --- 配置 ---"
+        addition_block = "# --- 统一计算/数据平台 ---\n" + "\n".join(additions) + "\n\n"
+        if marker in joined:
+            joined = joined.replace(marker, addition_block + marker, 1)
+        else:
+            joined += "\n" + addition_block
     path.write_text(joined, encoding="utf-8")
 
 
@@ -253,19 +255,21 @@ def add_gateway_compatibility() -> None:
 
 def add_documentation() -> None:
     path = PROJECT / "docs" / "quant_platform_integration.md"
-    path.write_text(
-        """# Quant platform integration\n\n"
-        "`AutoFactorEvaluation-RECONSTRUCT` 不再携带私有 FactorEngine 副本。\n\n"
-        "- DSL parser、IR、planner、算子和执行后端：仓库根 `factor_engine/`。\n"
-        "- 行情、快照、schema、查询预算和因子 staging：仓库根 `data_access/`。\n"
-        "- 唯一适配入口：`integrations/quant_platform.py`。\n"
-        "- A 股默认数据集：`ashare_stock_daily`；美股默认：`us_stock_daily`。\n"
-        "- 因子产物先写 `factor_lake_staging`，只有显式 `publish=True` 才晋升。\n"
-        "- `expression_type=python/code` 在生产接入中 fail-closed，必须转换为 DSL。\n\n"
-        "运行时需令仓库根和 `factor_engine/` 可导入。根 CI 已设置对应 `PYTHONPATH`；"
-        "服务器脚本可从仓库根启动，或设置 `QUANT_PROJECTS_ROOT`。\n",
-        encoding="utf-8",
-    )
+    content = """# Quant platform integration
+
+`AutoFactorEvaluation-RECONSTRUCT` 不再携带私有 FactorEngine 副本。
+
+- DSL parser、IR、planner、算子和执行后端：仓库根 `factor_engine/`。
+- 行情、快照、schema、查询预算和因子 staging：仓库根 `data_access/`。
+- 唯一适配入口：`integrations/quant_platform.py`。
+- A 股默认数据集：`ashare_stock_daily`；美股默认：`us_stock_daily`。
+- 因子产物先写 `factor_lake_staging`，只有显式 `publish=True` 才晋升。
+- `expression_type=python/code` 在生产接入中 fail-closed，必须转换为 DSL。
+
+运行时需令仓库根和 `factor_engine/` 可导入。根 CI 已设置对应 `PYTHONPATH`；
+服务器脚本可从仓库根启动，或设置 `QUANT_PROJECTS_ROOT`。
+"""
+    path.write_text(content, encoding="utf-8")
 
 
 def cleanup() -> None:
