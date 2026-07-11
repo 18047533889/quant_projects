@@ -44,6 +44,7 @@ factor_engine/util/workspace_data/
 .env
 *.pem
 *_token*
+**/lqtp_platform_full_response.json
 
 # 文档构建产物
 docs/team_docs/node_modules/

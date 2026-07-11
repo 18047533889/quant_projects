@@ -1,0 +1,24 @@
+Standards:
+  - Name: baseline
+    AlwaysPass: true
+    MinTimePoints: 0
+    MinValueRows: 0
+    MinCoverage: 0
+    MinAbsMeanIc: 0
+    MinAbsIcir: 0
+    MinAbsLongShortSharpe: 0
+    Tags:
+      source: auto-validation
+      tier: baseline
+
+  # - Name: strict
+  #   MinTimePoints: 500
+  #   MinValueRows: 500000
+  #   MinCoverage: 0.90
+  #   MinAbsMeanIc: 0.04
+  #   MinAbsIcir: 0.30
+  #   MinAbsLongShortSharpe: 1.00
+  #   Tags:
+  #     source: auto-validation
+  #     group: selection
+  #     tier: strict

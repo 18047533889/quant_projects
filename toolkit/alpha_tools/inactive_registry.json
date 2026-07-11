@@ -1,0 +1,45 @@
+{
+  "inactive_tools": {
+    "robust_volume_zscore": {
+      "code": "def robust_volume_zscore(volume, window=20, clip=3.0):\n    \"\"\"Compute robust z-score of volume relative to trailing median and MAD.\n\n    Economic meaning:\n        Measures how many MADs the current volume deviates from the trailing median,\n        using a robust normalization that resists outliers. High absolute values \n        indicate unusual volume, which may signal informed trading or regime shifts.\n    Args:\n        volume: pd.Series of daily trading volume for one stock.\n        window: Trailing lookback window for median and MAD calculation.\n        clip: Max absolute value for clipping; values beyond are capped.\n    Returns:\n        pd.Series of robust z-scores, aligned to the input index.\n    Required columns:\n        volume.\n    Leakage notes:\n        Uses only past observations via rolling median and MAD; no future data.\n    \"\"\"\n    rolling_median = volume.rolling(window, min_periods=window).median()\n    mad = (volume - rolling_median).abs().rolling(window, min_periods=window).median()\n    mad = mad.replace(0, np.nan)\n    z = (volume - rolling_median) / mad\n    z = z.clip(-clip, clip)\n    return z\n",
+      "compared_active_tools": [
+        "classify_volume_regime",
+        "directional_volatility_ratio"
+      ],
+      "deactivated_at": "2026-07-07T13:57:13.964028+00:00",
+      "economic_module": "volume_anomaly",
+      "hash": "a0d8906245970781",
+      "input_contract": [
+        "series"
+      ],
+      "parameters": {
+        "clip": {
+          "default": 3.0,
+          "max": 10.0,
+          "min": 0.5,
+          "type": "float"
+        },
+        "window": {
+          "default": 20,
+          "max": 252,
+          "min": 2,
+          "type": "int"
+        }
+      },
+      "replacement_reason": null,
+      "return_contract": {
+        "kind": "series",
+        "name": "robust_volume_zscore"
+      },
+      "similarity_reason": "classify_volume_regime categorizes volume into discrete regimes using simple mean and thresholds, while robust_volume_zscore provides a continuous robust measure of deviation from median; directional_volatility_ratio measures asymmetry in price ranges, not volume levels.",
+      "source": "tool_retriever",
+      "source_factor_ids": [
+        403,
+        405,
+        407
+      ],
+      "status": "inactive",
+      "version": 1
+    }
+  }
+}

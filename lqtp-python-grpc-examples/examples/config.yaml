@@ -1,0 +1,158 @@
+Address: "0.0.0.0:50051"
+ClickHouseURL: "clickhouse://default:password@127.0.0.1:8123/marketdb"
+ClickHouseInternalURL: "clickhouse://default:password@127.0.0.1:8123/lqtp"
+PostgreSQLURL: "postgres://postgres:password@127.0.0.1:5432/lqtp_auth"
+FunctionsFile: "examples/functions.yaml"
+FactorDefinitionCriteriaFile: "examples/factor_definition_criteria.yaml"
+FrontendDist: "frontend/dist"
+
+Trading:
+  AllowShort: false
+
+Factor:
+  BatchRunDefaultSize: 4
+  BatchRunMaxSize: 64
+
+Auth:
+  JwtSecret: "replace-with-at-least-32-random-bytes"
+  AccessTokenSeconds: 1800
+  RefreshTokenSeconds: 2592000
+  BootstrapAdminUsername: "admin"
+  BootstrapAdminPassword: "change-me-before-first-start"
+
+DataTables:
+  TradeDatesSQL: |
+    SELECT TradeDate
+    FROM marketdb.Calendar
+    WHERE IsTradeDay = 1
+    ORDER BY TradeDate
+  DailyBarsSQL: |
+    SELECT TradeDate, Symbol, Open, High, Low, Close, PreClose,
+           Volume, Amount, HighLimit, LowLimit, Return, Factor, Vwap, IsSuspend,
+           0.0 AS OpenInterest
+    FROM marketdb.StockDailyBar
+    WHERE TradeDate >= ? AND TradeDate <= ?
+    ORDER BY TradeDate, Symbol
+  MinuteBarsSQL: |
+    SELECT TradeDate, QuoteTime, Symbol, Open, High, Low, Close, Volume, Amount, Vwap
+    FROM marketdb.StockMinuteBar
+    WHERE TradeDate >= ? AND TradeDate <= ?
+    ORDER BY TradeDate, QuoteTime, Symbol
+  DividendsSQL: |
+    SELECT TradeDate, Symbol, CashDividend, StockDividend, StockTransfer
+    FROM marketdb.StockDividend
+    WHERE TradeDate >= ? AND TradeDate <= ?
+  AnalysisCalendarSQL: |
+    SELECT TradeDate
+    FROM marketdb.Calendar
+    WHERE IsTradeDay = 1
+      AND TradeDate >= ?
+      AND TradeDate <= ?
+    ORDER BY TradeDate
+  FactorReturnsSQL: |
+    SELECT TradeDate,
+           Symbol,
+           Vwap * Factor AS Price
+    FROM marketdb.StockDailyBar
+    WHERE TradeDate >= ? AND TradeDate <= ?
+      AND Vwap * Factor > 0
+      AND isFinite(Vwap * Factor)
+    ORDER BY TradeDate, Symbol
+  MinuteAnalysisPricesSQL: |
+    SELECT
+      m.Symbol AS Symbol,
+      m.TradeDate AS TradeDate,
+      toYYYYMMDD(m.TradeDate) AS TradeDate_int,
+      max(toHour(m.QuoteTime) * 100 + toMinute(m.QuoteTime)) AS QuoteMinute,
+      if(sum(m.Volume) = 0, NULL, sum(m.Amount * d.Factor) / sum(m.Volume)) AS Vwap,
+      intDiv(if(toHour(m.QuoteTime) * 60 + toMinute(m.QuoteTime) < 720,
+               toHour(m.QuoteTime) * 60 + toMinute(m.QuoteTime) - 570,
+               toHour(m.QuoteTime) * 60 + toMinute(m.QuoteTime) - 660), {interval_minutes}) AS _minute_bucket
+    FROM marketdb.StockMinuteBar AS m
+    INNER JOIN marketdb.StockDailyBar AS d
+      ON d.TradeDate = m.TradeDate AND d.Symbol = m.Symbol
+    WHERE m.TradeDate >= ? AND m.TradeDate <= ?
+      AND isFinite(d.Factor)
+    GROUP BY m.Symbol, m.TradeDate, _minute_bucket
+  StockDailyBarSQL: |
+    SELECT TradeDate, Symbol, Open, High, Low, Close, PreClose,
+           Volume, Amount, HighLimit, LowLimit, Return, Factor, Vwap, IsSuspend,
+           0.0 AS OpenInterest
+    FROM marketdb.StockDailyBar
+  StockMinuteBarSQL: |
+    SELECT TradeDate, QuoteTime, Symbol, Open, High, Low, Close, Volume, Amount, Vwap
+    FROM marketdb.StockMinuteBar
+  StockCapitalDailySQL: |
+    SELECT TradeDate, Symbol, TotalCapital, CirculatingCapital, UpdateTime
+    FROM marketdb.StockCapitalDaily
+  StockEffectiveFloatDailySQL: |
+    SELECT
+      v.TradeDate AS TradeDate,
+      v.Symbol AS Symbol,
+      greatest(
+        argMax(v.CirculatingCap, v.UpdateTime) - ifNull(any(l.LockedFloatShares), 0),
+        0
+      ) AS EffectiveFloatShares
+    FROM marketdb.StockValuationDaily AS v
+    LEFT JOIN (
+      SELECT
+        m.TradeDate AS TradeDate,
+        m.Symbol AS Symbol,
+        sum(f.ShareNumber) AS LockedFloatShares
+      FROM marketdb.StockTopTenShareholder AS m
+      INNER JOIN marketdb.StockTopTenFloatShareholder AS f
+        ON f.Symbol = m.Symbol
+       AND f.TradeDate = m.TradeDate
+       AND f.ReportPeriodEndDate = m.ReportPeriodEndDate
+       AND (
+          (
+            isNotNull(m.ShareholderId)
+            AND isNotNull(f.ShareholderId)
+            AND m.ShareholderId = f.ShareholderId
+          )
+          OR m.ShareholderName = f.ShareholderName
+       )
+      WHERE ifNull(m.ShareRatio, 0) > 5
+      GROUP BY m.TradeDate, m.Symbol
+    ) AS l
+      ON l.TradeDate = v.TradeDate
+     AND l.Symbol = v.Symbol
+    GROUP BY v.TradeDate, v.Symbol
+  StockIndustrySQL: |
+    SELECT TradeDate, Symbol, IndustryCode, UpdateTime
+    FROM marketdb.StockIndustry
+    WHERE IndustrySource = 'sw_l1'
+  IndexConstituentSQL: |
+    SELECT TradeDate, Symbol, IndexSymbol
+    FROM marketdb.IndexConstituent
+  BenchmarkIndexDailyBarSQL: |
+    SELECT
+      c.TradeDate AS TradeDate,
+      c.Symbol AS Symbol,
+      b.Close AS Close,
+      b.PreClose AS PreClose
+    FROM marketdb.IndexConstituent AS c
+    INNER JOIN marketdb.IndexDailyBar AS b
+      ON b.TradeDate = c.TradeDate
+     AND b.Symbol = c.IndexSymbol
+    WHERE c.IndexSymbol = ${index}
+  StockIncomeSQL: |
+    SELECT *
+    FROM marketdb.StockIncome
+  StockCashFlowSQL: |
+    SELECT *
+    FROM marketdb.StockCashFlow
+  StockBalanceSQL: |
+    SELECT *
+    FROM marketdb.StockBalance
+  StockIndicatorSQL: |
+    SELECT *
+    FROM marketdb.StockIndicator
+  StockTransactionSQL: |
+    SELECT TradeDate, QuoteTime, Symbol, Price, Volume, TransactionBSFlag
+    FROM marketdb.StockTransaction
+  StockSnapshotSQL: |
+    SELECT TradeDate, QuoteTime, Symbol, LastPrice AS Price
+    FROM marketdb.StockSnapshot
+BeginDate: 20240101
+EndDate: 20240131

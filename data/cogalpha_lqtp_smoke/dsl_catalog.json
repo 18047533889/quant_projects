@@ -1,0 +1,1586 @@
+[
+  {
+    "factor_id": "factor_1",
+    "function_name": "factor_volatility_regime_momentum",
+    "dsl": "-where(ts_std(ts_pct(close, 1), 20) > ts_median(ts_std(ts_pct(close, 1), 20), 60), 1, -1) * ts_pct(close, 12)",
+    "lqtp_formula": "-where(ts_std(close / delay(close, 1) - 1, 20) > ts_median(ts_std(close / delay(close, 1) - 1, 20), 60), 1, -1) * (close / delay(close, 12) - 1)",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_11",
+    "function_name": "factor_volatility_scaled_deviation",
+    "dsl": "tanh(protected_div(close - ts_mean(close, 20), ts_std(ts_pct(close, 1), 20) * ts_mean(close, 20) + 1e-8))",
+    "lqtp_formula": "tanh(safe_div(close - ts_mean(close, 20), ts_std(close / delay(close, 1) - 1, 20) * ts_mean(close, 20)))",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_12",
+    "function_name": "factor_roughness_drawdown_interaction",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_24",
+    "function_name": "factor_persistence",
+    "dsl": "-ts_mean(abs(ts_delta(ts_pct(close, 1), 1)), 10)",
+    "lqtp_formula": "-ts_mean(abs(ts_delta(close / delay(close, 1) - 1, 1)), 10)",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_25",
+    "function_name": "factor_persistence_ewma",
+    "dsl": "-ewm_mean(abs(ts_delta(ts_pct(close, 1), 1)), 10)",
+    "lqtp_formula": "-ema(abs(ts_delta(close / delay(close, 1) - 1, 1)), 10)",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_26",
+    "function_name": "factor_vol_regime_volume",
+    "dsl": "(2 * where(ts_std(ts_pct(close, 1), 20) < ts_median(ts_std(ts_pct(close, 1), 20), 60), 1, 0) - 1) * ts_pct(close, 10) * protected_div(volume, ts_median(volume, 60))",
+    "lqtp_formula": "",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_27",
+    "function_name": "factor_price_impact_stable_5d",
+    "dsl": "protected_div(ts_median(abs(ts_pct(close, 1)), 5), ts_mean(log(add(volume, 1)), 5))",
+    "lqtp_formula": "safe_div(ts_quantile(abs(close / delay(close, 1) - 1), 5, 0.5), ts_mean(log(volume + 1), 5))",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_28",
+    "function_name": "factor_imbalance_volume_interaction",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_30",
+    "function_name": "factor_imbalance_volume_mutation",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_40",
+    "function_name": "factor_vol_regime_smoothed_trend",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_41",
+    "function_name": "factor_vol_volume_regime",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_43",
+    "function_name": "factor_smooth_vol_regime",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_45",
+    "function_name": "factor_vol_volume_asym_ewma",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_57",
+    "function_name": "factor_volume_confirmed_return",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_58",
+    "function_name": "factor_volume_abnormality_range_interaction",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_70",
+    "function_name": "factor_adaptive_vol_volume_asym",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_71",
+    "function_name": "factor_drawdown_volume_complexity",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_72",
+    "function_name": "factor_abnormality_asymmetry",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_74",
+    "function_name": "factor_drawdown_volume_geometry",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_76",
+    "function_name": "factor_drawdown_volume_modulated",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_87",
+    "function_name": "factor_volume_abnormality_price_amp",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_88",
+    "function_name": "factor_order_imbalance_volume_flow_ema",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_89",
+    "function_name": "factor_volume_trend_adjusted_impact",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_90",
+    "function_name": "factor_smooth_abs_return_volume",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_91",
+    "function_name": "factor_shadow_volume_confirmed",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_103",
+    "function_name": "factor_drawdown_volume_geometry",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_104",
+    "function_name": "factor_herding_pressure",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_106",
+    "function_name": "factor_stability_crash_guard",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_118",
+    "function_name": "factor_volume_weighted_pressure_mut1",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_119",
+    "function_name": "factor_asymmetry_index_rolling",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_120",
+    "function_name": "factor_smooth_asymmetry_persistence",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_122",
+    "function_name": "factor_range_volume_trend",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_133",
+    "function_name": "factor_stable_symmetry_reinforced",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_135",
+    "function_name": "factor_direction_volume_shape_mut2",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_138",
+    "function_name": "factor_volume_confirmed_dir_mut_v4",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_140",
+    "function_name": "factor_crossover_hybrid_magnitude",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_142",
+    "function_name": "factor_mutation_dir_vol_shape_zscore",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_145",
+    "function_name": "factor_rank_tanh_volume_shape_crossover",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_149",
+    "function_name": "factor_mut_vol_weighted_shape_dir",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_167",
+    "function_name": "factor_volume_gated_momentum_mutated_v3",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_170",
+    "function_name": "factor_herding_vol_gated_momentum",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_174",
+    "function_name": "factor_vol_gated_herding_crossover",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_179",
+    "function_name": "factor_vol_gated_herding_mutated",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_200",
+    "function_name": "factor_volume_confirmed_momentum",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_201",
+    "function_name": "factor_volume_confirmed_momentum_v3",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_202",
+    "function_name": "factor_trend_volume_tanh_rank",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_203",
+    "function_name": "factor_pressure_compression_simplified_v3",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_207",
+    "function_name": "factor_volume_confirmed_momentum_crossover_v1",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_208",
+    "function_name": "factor_volume_confirmed_momentum_crossover_v2",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_209",
+    "function_name": "factor_liquidity_range_gated_momentum_v5",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_215",
+    "function_name": "factor_liquidity_range_gated_momentum_v6",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_231",
+    "function_name": "factor_volume_confirmed_return",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_232",
+    "function_name": "factor_volume_confirmed_return_ema",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_233",
+    "function_name": "factor_volume_confirmed_return_ewm",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_234",
+    "function_name": "factor_volume_price_divergence_cross_mut",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_247",
+    "function_name": "factor_volume_pressure_reversal",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_248",
+    "function_name": "factor_crash_volume_rank",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_250",
+    "function_name": "factor_vol_gated_momentum_v2",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_251",
+    "function_name": "factor_crash_volume_gate",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_263",
+    "function_name": "factor_ewma_net_range_volume_ratio",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_264",
+    "function_name": "factor_crash_vol_ratio_asym",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_266",
+    "function_name": "factor_crash_vol_body_asym",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_268",
+    "function_name": "factor_roughness_trend_vol_short",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_279",
+    "function_name": "factor_volume_reversal_direct",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_281",
+    "function_name": "factor_volume_reversal_rank",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_284",
+    "function_name": "factor_volume_reversal_rank",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_287",
+    "function_name": "factor_intraday_reversal_zscore_volume_short",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_299",
+    "function_name": "factor_volume_confirmed_intraday_mean_reversion",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_302",
+    "function_name": "factor_simplified_intraday_mean_reversion",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_314",
+    "function_name": "factor_volatility_adjusted_dollar_pressure",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_315",
+    "function_name": "factor_fear_adjusted_dollar_pressure_short_ema",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_317",
+    "function_name": "factor_simplified_fear_pressure",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_331",
+    "function_name": "factor_dollar_pressure_range_zscore",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_332",
+    "function_name": "factor_liquidity_mom_simple_2_mutated",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_343",
+    "function_name": "factor_reversal_volume_gated",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_345",
+    "function_name": "factor_reversal_volume_volregime",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_349",
+    "function_name": "factor_reversal_volume_simple",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_364",
+    "function_name": "factor_range_asym_log_short",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_365",
+    "function_name": "factor_range_asym_vol_smooth",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_366",
+    "function_name": "factor_range_asym_log_vol",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_375",
+    "function_name": "factor_downside_vol_asymmetry_smoothed",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_389",
+    "function_name": "factor_regime_switch_zscore_momentum",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_390",
+    "function_name": "factor_drawdown_normalized",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_392",
+    "function_name": "factor_regime_switch_simple",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_402",
+    "function_name": "factor_volume_confirmed_momentum_simple_volume_deviation",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_403",
+    "function_name": "factor_volume_stress_adjusted_momentum_robust",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_405",
+    "function_name": "factor_simplified_robust_volume_momentum",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_407",
+    "function_name": "factor_volume_persistence_momentum_robust",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_427",
+    "function_name": "factor_window_adjusted_momentum",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_428",
+    "function_name": "factor_asym_vol_volume_confirmed",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_432",
+    "function_name": "factor_asym_vol_high_volume_confirmed",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_445",
+    "function_name": "factor_drawdown_atr_normalized_20",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_446",
+    "function_name": "factor_drawdown_std60_normalized",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_448",
+    "function_name": "factor_drawdown_atr_normalized_v2",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_450",
+    "function_name": "factor_drawdown_atr_20_normalized",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_467",
+    "function_name": "factor_volume_adjusted_breakout_v3",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_468",
+    "function_name": "factor_volume_adjusted_breakout_window_001",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_470",
+    "function_name": "factor_volume_adjusted_breakout_with_vol_filter_v2",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_474",
+    "function_name": "factor_volume_adjusted_breakout_v3",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_488",
+    "function_name": "factor_asym_vol_volume_cont_30",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_489",
+    "function_name": "factor_asym_vol_cont_gate_30",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_491",
+    "function_name": "factor_asym_vol_30",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_501",
+    "function_name": "factor_vol_regime_vol_ratio",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_503",
+    "function_name": "factor_vol_asym_confirmed_range",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_505",
+    "function_name": "factor_vol_asym_confirmed_range_v2",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_517",
+    "function_name": "factor_asym_ratio_pure",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_519",
+    "function_name": "factor_asym_vol_regime",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_521",
+    "function_name": "factor_asym_vol_gated",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_522",
+    "function_name": "factor_asym_vol_attenuate",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_543",
+    "function_name": "factor_volume_regime_intraday_momentum",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_544",
+    "function_name": "factor_intraday_pressure_ema",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_546",
+    "function_name": "factor_volume_abnormality_liquidity_gated",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_558",
+    "function_name": "factor_asym_vol_down_up_volatility_gated",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_559",
+    "function_name": "factor_smoothed_atr_ratio_gated",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_570",
+    "function_name": "factor_pressure_ema_mutation",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_571",
+    "function_name": "factor_drawdown_vol_simple",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_572",
+    "function_name": "factor_squared_range_volume_rank_smoothed_no_cuberoot",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_573",
+    "function_name": "factor_squared_range_close_ema_cuberoot",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_576",
+    "function_name": "factor_asym_vol_gated_by_volume_pressure",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_586",
+    "function_name": "factor_drawdown_volume_geometry_rolling",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_587",
+    "function_name": "factor_resvol_volume_momentum",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_589",
+    "function_name": "factor_regime_vol_adjusted_momentum_deviation",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_601",
+    "function_name": "factor_persistent_volume_sum_momentum",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_603",
+    "function_name": "factor_ewma_smoothness_volume",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_604",
+    "function_name": "factor_volume_confirmed_return_tool",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_606",
+    "function_name": "factor_smoothed_persistent_momentum_smoothness_weighted",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_620",
+    "function_name": "factor_resvol_smoothed_trend",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_631",
+    "function_name": "factor_simplified_volume_lag",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_632",
+    "function_name": "factor_vol_adjusted_lag_log_coherence",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_643",
+    "function_name": "factor_volume_adjusted_lag_return_v3",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_644",
+    "function_name": "factor_volume_adjusted_lag_simple",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_646",
+    "function_name": "factor_volume_adjusted_lag_consensus_v2",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_656",
+    "function_name": "factor_smoothed_vol_adj_volume_momentum_10",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_658",
+    "function_name": "factor_vol_price_coherence_v2",
+    "dsl": "ts_corr(ts_pct(close, 1), ts_pct(volume, 1), 20) * protected_div(volume, ewm_mean(volume, 20))",
+    "lqtp_formula": "ts_corr(close / delay(close, 1) - 1, volume / delay(volume, 1) - 1, 20) * safe_div(volume, ema(volume, 20))",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_676",
+    "function_name": "factor_vwap_adjusted_range_tanh_smooth",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_678",
+    "function_name": "factor_vwap_adjusted_range_tanh_mutated_v2",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_692",
+    "function_name": "factor_asym_intraday_sma",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_693",
+    "function_name": "factor_liquidity_adaptive_asym_momentum",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_695",
+    "function_name": "factor_liquidity_adaptive_momentum",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_697",
+    "function_name": "factor_downside_vol_liquidity_momentum",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_708",
+    "function_name": "factor_adx_trend_vol_ema",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_718",
+    "function_name": "factor_corr_volume_regime",
+    "dsl": "ts_corr(ts_pct(close, 1), ts_pct(volume, 1), 20) * protected_div(volume, ewm_mean(volume, 20))",
+    "lqtp_formula": "ts_corr(close / delay(close, 1) - 1, volume / delay(volume, 1) - 1, 20) * safe_div(volume, ema(volume, 20))",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_719",
+    "function_name": "factor_lag_volume_ratio_regime_adaptive",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_733",
+    "function_name": "factor_volume_adaptive_momentum_scaled_vol",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_735",
+    "function_name": "factor_volume_adaptive_momentum_smoothed_v3",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_737",
+    "function_name": "factor_volume_adaptive_momentum_fast_vol",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_747",
+    "function_name": "factor_vol_regime_impact_ema",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_749",
+    "function_name": "factor_adaptive_volume_smoothness",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_761",
+    "function_name": "factor_lag_vol_ratio_smoothed_v2",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_763",
+    "function_name": "factor_lag_vol_robust_volratio",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_777",
+    "function_name": "factor_lag_vol_volatility_adjusted",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_778",
+    "function_name": "factor_lag_vol_volatility_adjusted_gate",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_779",
+    "function_name": "factor_lag_response_vol_tool_adaptive",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_780",
+    "function_name": "factor_lag_volatility_regime_adapted",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_790",
+    "function_name": "factor_drawdown_vol_norm_clean",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_805",
+    "function_name": "factor_negative_skew_stress_gated",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_806",
+    "function_name": "factor_negative_skew_volume_raw_smoothed",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_809",
+    "function_name": "factor_lagret_volratio_gated_smooth",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_825",
+    "function_name": "factor_vol_lag_ret_smoothed",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_826",
+    "function_name": "factor_lagret_vol_trend_gated",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_828",
+    "function_name": "factor_lagret_vol_trend_gated_v2",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_830",
+    "function_name": "factor_vol_lag_ret_resvol_gated",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_853",
+    "function_name": "factor_smoothed_trend_vol_contraction_simplified",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_865",
+    "function_name": "factor_ema_trend_simple",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_879",
+    "function_name": "factor_crossover_vol_impact_trend_gated",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_881",
+    "function_name": "factor_volratio_resvol_trend_gated",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_892",
+    "function_name": "factor_regime_vol_adaptive_trend_v4",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_894",
+    "function_name": "factor_regime_vol_adaptive_trend_v4",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_907",
+    "function_name": "factor_rsi_volume_confirmed_reversal",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_911",
+    "function_name": "factor_rsi_reversal_resvol_volume",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_935",
+    "function_name": "factor_drawdown_depth_duration_range_vol",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_987",
+    "function_name": "factor_drawdown_depth_normalized",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_1038",
+    "function_name": "factor_drawdown_recovery",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_1040",
+    "function_name": "factor_drawdown_vol_persistence",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_1042",
+    "function_name": "factor_drawdown_atr_recovery",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  },
+  {
+    "factor_id": "factor_1044",
+    "function_name": "factor_drawdown_normalized",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "needs_review",
+    "source": "none",
+    "notes": "complex python; requires manual DSL or panel-python fallback"
+  }
+]

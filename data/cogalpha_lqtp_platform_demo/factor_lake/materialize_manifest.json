@@ -1,0 +1,9 @@
+[
+  {
+    "factor_id": "factor_24",
+    "function_name": "factor_persistence",
+    "dsl": "-ts_mean(abs(ts_delta(ts_pct(close, 1), 1)), 10)",
+    "values_path": "/home/sunhaiwei/Projects/quant_projects/data/cogalpha_lqtp_platform_demo/factor_lake/factor_persistence/values.parquet",
+    "rows": 200
+  }
+]

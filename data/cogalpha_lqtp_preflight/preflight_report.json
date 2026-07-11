@@ -1,0 +1,198 @@
+{
+  "factors": [
+    "factor_persistence",
+    "factor_persistence_ewma",
+    "factor_price_impact_stable_5d"
+  ],
+  "date_range": [
+    "2024-01-02",
+    "2024-03-29"
+  ],
+  "n_symbols": 50,
+  "all_passed": true,
+  "passed": [
+    "factor_persistence",
+    "factor_persistence_ewma",
+    "factor_price_impact_stable_5d"
+  ],
+  "failed": [],
+  "results": [
+    {
+      "function_name": "factor_persistence",
+      "dsl": "-ts_mean(abs(ts_delta(ts_pct(close, 1), 1)), 10)",
+      "passed": true,
+      "checks": [
+        {
+          "name": "catalog_ready",
+          "ok": true,
+          "detail": "ready"
+        },
+        {
+          "name": "dsl_validate",
+          "ok": true,
+          "detail": "ok"
+        },
+        {
+          "name": "materialize",
+          "ok": true,
+          "detail": "rows=3100"
+        },
+        {
+          "name": "value_sanity",
+          "ok": true,
+          "detail": "rows=3100, symbols=50, dates=62, finite=1.000, std=0.00712836"
+        },
+        {
+          "name": "python_parity",
+          "ok": true,
+          "detail": "overlap=3100, spearman=1.0000, daily_rank=1.0000, max_diff=0"
+        },
+        {
+          "name": "lqtp_eval",
+          "ok": true,
+          "detail": "mode=local_values_lqtp_returns, ic=-0.003149534835515577, bt_days=58"
+        }
+      ],
+      "compare": {
+        "overlap_rows": 3100,
+        "pearson": 1.0,
+        "spearman": 0.9999999999999999,
+        "mean_daily_rank_corr": 0.9999999999999999,
+        "max_abs_diff": 0.0
+      },
+      "materialize": {
+        "values_path": "/home/sunhaiwei/Projects/quant_projects/data/cogalpha_lqtp_preflight/factor_lake/factor_persistence/values.parquet",
+        "rows": 3100,
+        "symbols": 50,
+        "date_min": "2024-01-04 00:00:00",
+        "date_max": "2024-03-29 00:00:00"
+      },
+      "lqtp": {
+        "eval_mode": "local_values_lqtp_returns",
+        "mean_ic": -0.003149534835515577,
+        "icir": -0.018958509142293196,
+        "coverage": 0.009793872573883314,
+        "backtest_days": 58,
+        "backtest_id": ""
+      }
+    },
+    {
+      "function_name": "factor_persistence_ewma",
+      "dsl": "-ewm_mean(abs(ts_delta(ts_pct(close, 1), 1)), 10)",
+      "passed": true,
+      "checks": [
+        {
+          "name": "catalog_ready",
+          "ok": true,
+          "detail": "ready"
+        },
+        {
+          "name": "dsl_validate",
+          "ok": true,
+          "detail": "ok"
+        },
+        {
+          "name": "materialize",
+          "ok": true,
+          "detail": "rows=3100"
+        },
+        {
+          "name": "value_sanity",
+          "ok": true,
+          "detail": "rows=3100, symbols=50, dates=62, finite=1.000, std=0.0071635"
+        },
+        {
+          "name": "python_parity",
+          "ok": true,
+          "detail": "overlap=3100, spearman=1.0000, daily_rank=1.0000, max_diff=0"
+        },
+        {
+          "name": "lqtp_eval",
+          "ok": true,
+          "detail": "mode=local_values_lqtp_returns, ic=0.0026736812253224914, bt_days=58"
+        }
+      ],
+      "compare": {
+        "overlap_rows": 3100,
+        "pearson": 1.0,
+        "spearman": 0.9999999999999999,
+        "mean_daily_rank_corr": 0.9999999999999999,
+        "max_abs_diff": 0.0
+      },
+      "materialize": {
+        "values_path": "/home/sunhaiwei/Projects/quant_projects/data/cogalpha_lqtp_preflight/factor_lake/factor_persistence_ewma/values.parquet",
+        "rows": 3100,
+        "symbols": 50,
+        "date_min": "2024-01-04 00:00:00",
+        "date_max": "2024-03-29 00:00:00"
+      },
+      "lqtp": {
+        "eval_mode": "local_values_lqtp_returns",
+        "mean_ic": 0.0026736812253224914,
+        "icir": 0.014302867902505453,
+        "coverage": 0.009793872573883314,
+        "backtest_days": 58,
+        "backtest_id": ""
+      }
+    },
+    {
+      "function_name": "factor_price_impact_stable_5d",
+      "dsl": "protected_div(ts_median(abs(ts_pct(close, 1)), 5), ts_mean(log(add(volume, 1)), 5))",
+      "passed": true,
+      "checks": [
+        {
+          "name": "catalog_ready",
+          "ok": true,
+          "detail": "ready"
+        },
+        {
+          "name": "dsl_validate",
+          "ok": true,
+          "detail": "ok"
+        },
+        {
+          "name": "materialize",
+          "ok": true,
+          "detail": "rows=3150"
+        },
+        {
+          "name": "value_sanity",
+          "ok": true,
+          "detail": "rows=3150, symbols=50, dates=63, finite=1.000, std=0.000450978"
+        },
+        {
+          "name": "python_parity",
+          "ok": true,
+          "detail": "overlap=3050, spearman=1.0000, daily_rank=1.0000, max_diff=0"
+        },
+        {
+          "name": "lqtp_eval",
+          "ok": true,
+          "detail": "mode=local_values_lqtp_returns, ic=0.03496546378083305, bt_days=58"
+        }
+      ],
+      "compare": {
+        "overlap_rows": 3050,
+        "pearson": 1.0,
+        "spearman": 1.0,
+        "mean_daily_rank_corr": 0.9999999999999999,
+        "max_abs_diff": 0.0
+      },
+      "materialize": {
+        "values_path": "/home/sunhaiwei/Projects/quant_projects/data/cogalpha_lqtp_preflight/factor_lake/factor_price_impact_stable_5d/values.parquet",
+        "rows": 3150,
+        "symbols": 50,
+        "date_min": "2024-01-03 00:00:00",
+        "date_max": "2024-03-29 00:00:00"
+      },
+      "lqtp": {
+        "eval_mode": "local_values_lqtp_returns",
+        "mean_ic": 0.03496546378083305,
+        "icir": 0.22270286884150925,
+        "coverage": 0.009794155063200971,
+        "backtest_days": 58,
+        "backtest_id": ""
+      }
+    }
+  ]
+}

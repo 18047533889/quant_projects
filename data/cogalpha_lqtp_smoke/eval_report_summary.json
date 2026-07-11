@@ -1,0 +1,15 @@
+{
+  "pipeline": "factor_engine_materialize → lqtp_evaluate → html_report",
+  "eval_note": "DSL uses factor_engine operators; LQTP never re-computes our factor formula.",
+  "ok": [
+    {
+      "factor_name": "factor_persistence",
+      "report": "factor_persistence.html",
+      "eval_mode": "local_values_lqtp_returns",
+      "mean_ic": "0.002711",
+      "icir": "0.016282",
+      "backtest_id": ""
+    }
+  ],
+  "failures": []
+}

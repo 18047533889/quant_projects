@@ -1,0 +1,994 @@
+{
+  "tested": 141,
+  "ok": 134,
+  "fail": 7,
+  "results": [
+    {
+      "function_name": "factor_volatility_regime_momentum",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volatility_regime_momentum/values.parquet"
+    },
+    {
+      "function_name": "factor_volatility_scaled_deviation",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volatility_scaled_deviation/values.parquet"
+    },
+    {
+      "function_name": "factor_roughness_drawdown_interaction",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_roughness_drawdown_interaction/values.parquet"
+    },
+    {
+      "function_name": "factor_persistence",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_persistence/values.parquet"
+    },
+    {
+      "function_name": "factor_persistence_ewma",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_persistence_ewma/values.parquet"
+    },
+    {
+      "function_name": "factor_vol_regime_volume",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_vol_regime_volume/values.parquet"
+    },
+    {
+      "function_name": "factor_price_impact_stable_5d",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_price_impact_stable_5d/values.parquet"
+    },
+    {
+      "function_name": "factor_vol_regime_smoothed_trend",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_vol_regime_smoothed_trend/values.parquet"
+    },
+    {
+      "function_name": "factor_vol_volume_regime",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_vol_volume_regime/values.parquet"
+    },
+    {
+      "function_name": "factor_smooth_vol_regime",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_smooth_vol_regime/values.parquet"
+    },
+    {
+      "function_name": "factor_vol_volume_asym_ewma",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_vol_volume_asym_ewma/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_confirmed_return",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_confirmed_return/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_abnormality_range_interaction",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_abnormality_range_interaction/values.parquet"
+    },
+    {
+      "function_name": "factor_adaptive_vol_volume_asym",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_adaptive_vol_volume_asym/values.parquet"
+    },
+    {
+      "function_name": "factor_drawdown_volume_complexity",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_volume_complexity/values.parquet"
+    },
+    {
+      "function_name": "factor_drawdown_volume_geometry",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_volume_geometry/values.parquet"
+    },
+    {
+      "function_name": "factor_drawdown_volume_modulated",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_volume_modulated/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_abnormality_price_amp",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_abnormality_price_amp/values.parquet"
+    },
+    {
+      "function_name": "factor_order_imbalance_volume_flow_ema",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_order_imbalance_volume_flow_ema/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_trend_adjusted_impact",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_trend_adjusted_impact/values.parquet"
+    },
+    {
+      "function_name": "factor_smooth_abs_return_volume",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_smooth_abs_return_volume/values.parquet"
+    },
+    {
+      "function_name": "factor_shadow_volume_confirmed",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_shadow_volume_confirmed/values.parquet"
+    },
+    {
+      "function_name": "factor_drawdown_volume_geometry",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_volume_geometry/values.parquet"
+    },
+    {
+      "function_name": "factor_herding_pressure",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_herding_pressure/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_weighted_pressure_mut1",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_weighted_pressure_mut1/values.parquet"
+    },
+    {
+      "function_name": "factor_asymmetry_index_rolling",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_asymmetry_index_rolling/values.parquet"
+    },
+    {
+      "function_name": "factor_smooth_asymmetry_persistence",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "fail",
+      "error": "'int' object has no attribute 'ewm'"
+    },
+    {
+      "function_name": "factor_range_volume_trend",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_range_volume_trend/values.parquet"
+    },
+    {
+      "function_name": "factor_direction_volume_shape_mut2",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_direction_volume_shape_mut2/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_confirmed_dir_mut_v4",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_confirmed_dir_mut_v4/values.parquet"
+    },
+    {
+      "function_name": "factor_mutation_dir_vol_shape_zscore",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_mutation_dir_vol_shape_zscore/values.parquet"
+    },
+    {
+      "function_name": "factor_rank_tanh_volume_shape_crossover",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_rank_tanh_volume_shape_crossover/values.parquet"
+    },
+    {
+      "function_name": "factor_mut_vol_weighted_shape_dir",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_mut_vol_weighted_shape_dir/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_gated_momentum_mutated_v3",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_gated_momentum_mutated_v3/values.parquet"
+    },
+    {
+      "function_name": "factor_vol_gated_herding_mutated",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_vol_gated_herding_mutated/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_confirmed_momentum",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_confirmed_momentum/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_confirmed_momentum_v3",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_confirmed_momentum_v3/values.parquet"
+    },
+    {
+      "function_name": "factor_trend_volume_tanh_rank",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_trend_volume_tanh_rank/values.parquet"
+    },
+    {
+      "function_name": "factor_pressure_compression_simplified_v3",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_pressure_compression_simplified_v3/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_confirmed_momentum_crossover_v1",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_confirmed_momentum_crossover_v1/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_confirmed_momentum_crossover_v2",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_confirmed_momentum_crossover_v2/values.parquet"
+    },
+    {
+      "function_name": "factor_liquidity_range_gated_momentum_v5",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_liquidity_range_gated_momentum_v5/values.parquet"
+    },
+    {
+      "function_name": "factor_liquidity_range_gated_momentum_v6",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_liquidity_range_gated_momentum_v6/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_confirmed_return",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_confirmed_return/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_confirmed_return_ema",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_confirmed_return_ema/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_confirmed_return_ewm",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_confirmed_return_ewm/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_price_divergence_cross_mut",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_price_divergence_cross_mut/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_pressure_reversal",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_pressure_reversal/values.parquet"
+    },
+    {
+      "function_name": "factor_crash_volume_rank",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_crash_volume_rank/values.parquet"
+    },
+    {
+      "function_name": "factor_vol_gated_momentum_v2",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_vol_gated_momentum_v2/values.parquet"
+    },
+    {
+      "function_name": "factor_crash_volume_gate",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_crash_volume_gate/values.parquet"
+    },
+    {
+      "function_name": "factor_ewma_net_range_volume_ratio",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_ewma_net_range_volume_ratio/values.parquet"
+    },
+    {
+      "function_name": "factor_crash_vol_ratio_asym",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_crash_vol_ratio_asym/values.parquet"
+    },
+    {
+      "function_name": "factor_crash_vol_body_asym",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_crash_vol_body_asym/values.parquet"
+    },
+    {
+      "function_name": "factor_roughness_trend_vol_short",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "fail",
+      "error": "FlexMax._calculate_series() takes 3 positional arguments but 4 were given"
+    },
+    {
+      "function_name": "factor_volume_reversal_direct",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_reversal_direct/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_reversal_rank",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_reversal_rank/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_reversal_rank",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_reversal_rank/values.parquet"
+    },
+    {
+      "function_name": "factor_intraday_reversal_zscore_volume_short",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_intraday_reversal_zscore_volume_short/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_confirmed_intraday_mean_reversion",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_confirmed_intraday_mean_reversion/values.parquet"
+    },
+    {
+      "function_name": "factor_simplified_intraday_mean_reversion",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_simplified_intraday_mean_reversion/values.parquet"
+    },
+    {
+      "function_name": "factor_volatility_adjusted_dollar_pressure",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volatility_adjusted_dollar_pressure/values.parquet"
+    },
+    {
+      "function_name": "factor_fear_adjusted_dollar_pressure_short_ema",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_fear_adjusted_dollar_pressure_short_ema/values.parquet"
+    },
+    {
+      "function_name": "factor_simplified_fear_pressure",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_simplified_fear_pressure/values.parquet"
+    },
+    {
+      "function_name": "factor_dollar_pressure_range_zscore",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_dollar_pressure_range_zscore/values.parquet"
+    },
+    {
+      "function_name": "factor_liquidity_mom_simple_2_mutated",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_liquidity_mom_simple_2_mutated/values.parquet"
+    },
+    {
+      "function_name": "factor_reversal_volume_gated",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_reversal_volume_gated/values.parquet"
+    },
+    {
+      "function_name": "factor_reversal_volume_volregime",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_reversal_volume_volregime/values.parquet"
+    },
+    {
+      "function_name": "factor_reversal_volume_simple",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_reversal_volume_simple/values.parquet"
+    },
+    {
+      "function_name": "factor_regime_switch_zscore_momentum",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_regime_switch_zscore_momentum/values.parquet"
+    },
+    {
+      "function_name": "factor_drawdown_normalized",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_normalized/values.parquet"
+    },
+    {
+      "function_name": "factor_regime_switch_simple",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_regime_switch_simple/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_confirmed_momentum_simple_volume_deviation",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_confirmed_momentum_simple_volume_deviation/values.parquet"
+    },
+    {
+      "function_name": "factor_window_adjusted_momentum",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_window_adjusted_momentum/values.parquet"
+    },
+    {
+      "function_name": "factor_asym_vol_volume_confirmed",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_asym_vol_volume_confirmed/values.parquet"
+    },
+    {
+      "function_name": "factor_asym_vol_high_volume_confirmed",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_asym_vol_high_volume_confirmed/values.parquet"
+    },
+    {
+      "function_name": "factor_drawdown_atr_normalized_20",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_atr_normalized_20/values.parquet"
+    },
+    {
+      "function_name": "factor_drawdown_std60_normalized",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_std60_normalized/values.parquet"
+    },
+    {
+      "function_name": "factor_drawdown_atr_normalized_v2",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_atr_normalized_v2/values.parquet"
+    },
+    {
+      "function_name": "factor_drawdown_atr_20_normalized",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_atr_20_normalized/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_adjusted_breakout_v3",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_adjusted_breakout_v3/values.parquet"
+    },
+    {
+      "function_name": "factor_asym_vol_cont_gate_30",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_asym_vol_cont_gate_30/values.parquet"
+    },
+    {
+      "function_name": "factor_asym_vol_30",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_asym_vol_30/values.parquet"
+    },
+    {
+      "function_name": "factor_vol_regime_vol_ratio",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_vol_regime_vol_ratio/values.parquet"
+    },
+    {
+      "function_name": "factor_vol_asym_confirmed_range",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_vol_asym_confirmed_range/values.parquet"
+    },
+    {
+      "function_name": "factor_vol_asym_confirmed_range_v2",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_vol_asym_confirmed_range_v2/values.parquet"
+    },
+    {
+      "function_name": "factor_asym_ratio_pure",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_asym_ratio_pure/values.parquet"
+    },
+    {
+      "function_name": "factor_asym_vol_regime",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_asym_vol_regime/values.parquet"
+    },
+    {
+      "function_name": "factor_asym_vol_gated",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "fail",
+      "error": "could not convert string to float: 'high'"
+    },
+    {
+      "function_name": "factor_asym_vol_attenuate",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_asym_vol_attenuate/values.parquet"
+    },
+    {
+      "function_name": "factor_intraday_pressure_ema",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_intraday_pressure_ema/values.parquet"
+    },
+    {
+      "function_name": "factor_smoothed_atr_ratio_gated",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_smoothed_atr_ratio_gated/values.parquet"
+    },
+    {
+      "function_name": "factor_pressure_ema_mutation",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_pressure_ema_mutation/values.parquet"
+    },
+    {
+      "function_name": "factor_drawdown_vol_simple",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_vol_simple/values.parquet"
+    },
+    {
+      "function_name": "factor_asym_vol_gated_by_volume_pressure",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_asym_vol_gated_by_volume_pressure/values.parquet"
+    },
+    {
+      "function_name": "factor_drawdown_volume_geometry_rolling",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_volume_geometry_rolling/values.parquet"
+    },
+    {
+      "function_name": "factor_resvol_volume_momentum",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_resvol_volume_momentum/values.parquet"
+    },
+    {
+      "function_name": "factor_regime_vol_adjusted_momentum_deviation",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "fail",
+      "error": "comparison requires at least one DataFrame input"
+    },
+    {
+      "function_name": "factor_persistent_volume_sum_momentum",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_persistent_volume_sum_momentum/values.parquet"
+    },
+    {
+      "function_name": "factor_ewma_smoothness_volume",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_ewma_smoothness_volume/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_confirmed_return_tool",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_confirmed_return_tool/values.parquet"
+    },
+    {
+      "function_name": "factor_smoothed_persistent_momentum_smoothness_weighted",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_smoothed_persistent_momentum_smoothness_weighted/values.parquet"
+    },
+    {
+      "function_name": "factor_resvol_smoothed_trend",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_resvol_smoothed_trend/values.parquet"
+    },
+    {
+      "function_name": "factor_simplified_volume_lag",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_simplified_volume_lag/values.parquet"
+    },
+    {
+      "function_name": "factor_vol_adjusted_lag_log_coherence",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_vol_adjusted_lag_log_coherence/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_adjusted_lag_return_v3",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_adjusted_lag_return_v3/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_adjusted_lag_simple",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_adjusted_lag_simple/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_adjusted_lag_consensus_v2",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_adjusted_lag_consensus_v2/values.parquet"
+    },
+    {
+      "function_name": "factor_smoothed_vol_adj_volume_momentum_10",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_smoothed_vol_adj_volume_momentum_10/values.parquet"
+    },
+    {
+      "function_name": "factor_vol_price_coherence_v2",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_vol_price_coherence_v2/values.parquet"
+    },
+    {
+      "function_name": "factor_vwap_adjusted_range_tanh_smooth",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_vwap_adjusted_range_tanh_smooth/values.parquet"
+    },
+    {
+      "function_name": "factor_vwap_adjusted_range_tanh_mutated_v2",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_vwap_adjusted_range_tanh_mutated_v2/values.parquet"
+    },
+    {
+      "function_name": "factor_asym_intraday_sma",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_asym_intraday_sma/values.parquet"
+    },
+    {
+      "function_name": "factor_liquidity_adaptive_asym_momentum",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_liquidity_adaptive_asym_momentum/values.parquet"
+    },
+    {
+      "function_name": "factor_adx_trend_vol_ema",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_adx_trend_vol_ema/values.parquet"
+    },
+    {
+      "function_name": "factor_corr_volume_regime",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_corr_volume_regime/values.parquet"
+    },
+    {
+      "function_name": "factor_lag_volume_ratio_regime_adaptive",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_lag_volume_ratio_regime_adaptive/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_adaptive_momentum_scaled_vol",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_adaptive_momentum_scaled_vol/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_adaptive_momentum_smoothed_v3",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_adaptive_momentum_smoothed_v3/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_adaptive_momentum_fast_vol",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_adaptive_momentum_fast_vol/values.parquet"
+    },
+    {
+      "function_name": "factor_vol_regime_impact_ema",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_vol_regime_impact_ema/values.parquet"
+    },
+    {
+      "function_name": "factor_lag_vol_volatility_adjusted",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_lag_vol_volatility_adjusted/values.parquet"
+    },
+    {
+      "function_name": "factor_lag_response_vol_tool_adaptive",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "fail",
+      "error": "comparison requires at least one DataFrame input"
+    },
+    {
+      "function_name": "factor_lag_volatility_regime_adapted",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "fail",
+      "error": "comparison requires at least one DataFrame input"
+    },
+    {
+      "function_name": "factor_drawdown_vol_norm_clean",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_vol_norm_clean/values.parquet"
+    },
+    {
+      "function_name": "factor_negative_skew_stress_gated",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "fail",
+      "error": "comparison requires at least one DataFrame input"
+    },
+    {
+      "function_name": "factor_negative_skew_volume_raw_smoothed",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_negative_skew_volume_raw_smoothed/values.parquet"
+    },
+    {
+      "function_name": "factor_vol_lag_ret_smoothed",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_vol_lag_ret_smoothed/values.parquet"
+    },
+    {
+      "function_name": "factor_lagret_vol_trend_gated",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_lagret_vol_trend_gated/values.parquet"
+    },
+    {
+      "function_name": "factor_lagret_vol_trend_gated_v2",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_lagret_vol_trend_gated_v2/values.parquet"
+    },
+    {
+      "function_name": "factor_vol_lag_ret_resvol_gated",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_vol_lag_ret_resvol_gated/values.parquet"
+    },
+    {
+      "function_name": "factor_smoothed_trend_vol_contraction_simplified",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_smoothed_trend_vol_contraction_simplified/values.parquet"
+    },
+    {
+      "function_name": "factor_ema_trend_simple",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_ema_trend_simple/values.parquet"
+    },
+    {
+      "function_name": "factor_rsi_volume_confirmed_reversal",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_rsi_volume_confirmed_reversal/values.parquet"
+    },
+    {
+      "function_name": "factor_rsi_reversal_resvol_volume",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_rsi_reversal_resvol_volume/values.parquet"
+    },
+    {
+      "function_name": "factor_drawdown_depth_duration_range_vol",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_depth_duration_range_vol/values.parquet"
+    },
+    {
+      "function_name": "factor_drawdown_depth_normalized",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_depth_normalized/values.parquet"
+    },
+    {
+      "function_name": "factor_drawdown_recovery",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_recovery/values.parquet"
+    },
+    {
+      "function_name": "factor_drawdown_vol_persistence",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_vol_persistence/values.parquet"
+    },
+    {
+      "function_name": "factor_drawdown_atr_recovery",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_atr_recovery/values.parquet"
+    },
+    {
+      "function_name": "factor_drawdown_normalized",
+      "status": "ready",
+      "validate": "ok",
+      "materialize": "ok",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_normalized/values.parquet"
+    }
+  ]
+}

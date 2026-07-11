@@ -1,0 +1,143 @@
+# Factor formula aliases and reusable templates.
+#
+# Usage:
+#   close
+#   momentum(field=close, window=20)
+#   safe_div(numerator=close, denominator=pre_close)
+#
+# Formula aliases are expanded before parsing. sql_expr entries are rendered
+# during SQL generation, after their arguments have been converted to SQL.
+
+functions:
+  # Stock daily fields, adjusted where the field is price-like.
+  open:       "StockDailyBar.Open * StockDailyBar.Factor"
+  high:       "StockDailyBar.High * StockDailyBar.Factor"
+  low:        "StockDailyBar.Low * StockDailyBar.Factor"
+  close:      "StockDailyBar.Close * StockDailyBar.Factor"
+  pre_close:  "StockDailyBar.PreClose * StockDailyBar.Factor"
+  high_limit: "StockDailyBar.HighLimit * StockDailyBar.Factor"
+  low_limit:  "StockDailyBar.LowLimit * StockDailyBar.Factor"
+  vwap:       "StockDailyBar.Vwap * StockDailyBar.Factor"
+  volume:     "StockDailyBar.Volume / StockDailyBar.Factor"
+  amount:     "StockDailyBar.Amount"
+  ret:        "StockDailyBar.Return"
+  factor:     "StockDailyBar.Factor"
+  is_suspend: "StockDailyBar.IsSuspend"
+  public_status_code: "StockStatus.PublicStatusCode"
+  benchmark_index:
+    parameterized_source: BenchmarkIndexDailyBar
+    params: [index]
+
+  # ETF daily fields.
+  etf_open:      "EtfDailyBar.Open * EtfDailyBar.Factor"
+  etf_high:      "EtfDailyBar.High * EtfDailyBar.Factor"
+  etf_low:       "EtfDailyBar.Low * EtfDailyBar.Factor"
+  etf_close:     "EtfDailyBar.Close * EtfDailyBar.Factor"
+  etf_pre_close: "EtfDailyBar.PreClose * EtfDailyBar.Factor"
+  etf_vwap:      "EtfDailyBar.Vwap * EtfDailyBar.Factor"
+  etf_volume:    "EtfDailyBar.Volume / EtfDailyBar.Factor"
+  etf_amount:    "EtfDailyBar.Amount"
+  etf_ret:       "EtfDailyBar.Return"
+
+  # Futures daily fields. These are unadjusted by convention.
+  futures_open:          "FuturesDailyBar.Open"
+  futures_high:          "FuturesDailyBar.High"
+  futures_low:           "FuturesDailyBar.Low"
+  futures_close:         "FuturesDailyBar.Close"
+  futures_pre_close:     "FuturesDailyBar.PreClose"
+  futures_vwap:          "FuturesDailyBar.Vwap"
+  futures_volume:        "FuturesDailyBar.Volume"
+  futures_amount:        "FuturesDailyBar.Amount"
+  futures_ret:           "FuturesDailyBar.Return"
+  futures_open_interest: "FuturesDailyBar.OpenInterest"
+
+  # Minute fields. Use minute_bar(field, period, index) to aggregate them in
+  # daily formulas, or use them directly in minute/intraday formulas.
+  minute_open:   "StockMinuteBar.Open"
+  minute_high:   "StockMinuteBar.High"
+  minute_low:    "StockMinuteBar.Low"
+  minute_close:  "StockMinuteBar.Close"
+  minute_vwap:   "StockMinuteBar.Vwap"
+  minute_volume: "StockMinuteBar.Volume"
+  minute_amount: "StockMinuteBar.Amount"
+
+  # L2 transaction fields for intraday formulas.
+  tick_price:  "StockTransaction.Price"
+  tick_volume: "StockTransaction.Volume"
+  tick_amount: "StockTransaction.Price * StockTransaction.Volume"
+  tick_side:   "StockTransaction.TransactionBSFlag"
+
+  # Safe scalar helpers.
+  safe_div:
+    sql_expr: "if(isNull(${denominator}) OR ${denominator} = 0, NULL, ${numerator} / ${denominator})"
+
+  nullif_zero:
+    sql_expr: "nullIf(${value}, 0)"
+
+  safe_log:
+    sql_expr: "if(isNull(${value}) OR ${value} <= 0, NULL, log(${value}))"
+
+  clean:
+    sql_expr: "if(isNull(${value}) OR isNaN(ifNull(${value}, 0.0)), ${replacement}, ${value})"
+
+  # Generic reusable templates.
+  ma: "ts_mean(${field}, ${window})"
+  sum_n: "ts_sum(${field}, ${window})"
+  std_n: "ts_std(${field}, ${window})"
+  delta: "ts_delta(${field}, ${window})"
+  pct_change: "ts_pct(${field}, ${window})"
+  cs_rank_of: "rank(${field})"
+  cs_zscore_of: "zscore(${field})"
+  ts_zscore: "safe_div(numerator=${field} - ts_mean(${field}, ${window}), denominator=ts_std(${field}, ${window}))"
+  ts_minmax_pos: "safe_div(numerator=${field} - ts_min(${field}, ${window}), denominator=ts_max(${field}, ${window}) - ts_min(${field}, ${window}))"
+
+  # Return and trend factors.
+  daily_return: "safe_div(numerator=close, denominator=pre_close) - 1"
+  log_return: "safe_log(value=safe_div(numerator=close, denominator=pre_close))"
+  gap_return: "safe_div(numerator=open, denominator=pre_close) - 1"
+  intraday_return: "safe_div(numerator=close, denominator=open) - 1"
+  overnight_return: "safe_div(numerator=open, denominator=delay(close, 1)) - 1"
+  momentum: "safe_div(numerator=${field}, denominator=delay(${field}, ${window})) - 1"
+  momentum_ma: "ts_mean(safe_div(numerator=${field}, denominator=delay(${field}, 1)) - 1, ${window})"
+  reversal: "-ts_rank(${field}, ${window})"
+  ma_gap: "safe_div(numerator=${field}, denominator=ts_mean(${field}, ${window})) - 1"
+  trend_strength: "safe_div(numerator=ts_mean(${field}, ${short}), denominator=ts_mean(${field}, ${long})) - 1"
+
+  # Price range and volatility factors.
+  amplitude: "safe_div(numerator=high - low, denominator=pre_close)"
+  body_return: "safe_div(numerator=close - open, denominator=open)"
+  upper_shadow: "safe_div(numerator=high - where(close > open, close, open), denominator=pre_close)"
+  lower_shadow: "safe_div(numerator=where(close < open, close, open) - low, denominator=pre_close)"
+  true_range: "where(high - low > abs(high - pre_close), where(high - low > abs(low - pre_close), high - low, abs(low - pre_close)), where(abs(high - pre_close) > abs(low - pre_close), abs(high - pre_close), abs(low - pre_close)))"
+  atr: "ts_mean(true_range, ${window})"
+  realized_vol: "ts_std(daily_return, ${window})"
+  downside_vol: "ts_std(where(daily_return < 0, daily_return, 0), ${window})"
+
+  # Liquidity and volume-price factors.
+  amount_ma: "ts_mean(amount, ${window})"
+  volume_ma: "ts_mean(volume, ${window})"
+  volume_ratio: "safe_div(numerator=volume, denominator=ts_mean(volume, ${window}))"
+  amount_ratio: "safe_div(numerator=amount, denominator=ts_mean(amount, ${window}))"
+  vwap_gap: "safe_div(numerator=close - vwap, denominator=vwap)"
+  illiquidity: "safe_div(numerator=abs(daily_return), denominator=amount)"
+  price_volume_corr: "ts_corr(daily_return, safe_log(value=volume), ${window})"
+  price_amount_corr: "ts_corr(daily_return, safe_log(value=amount), ${window})"
+
+  # Cross-sectional signals.
+  return_rank: "rank(daily_return)"
+  volume_rank: "rank(volume)"
+  amount_rank: "rank(amount)"
+  volatility_rank: "rank(realized_vol(window=${window}))"
+  price_volume_divergence: "return_rank - volume_rank"
+  normal_listed_stock: "StockStatus.PublicStatusCode == 38857"
+  quality_mask: "not is_suspend and volume > 0 and amount > 0 and close > 0 and pre_close > 0"
+  clean_return_rank: "where(quality_mask, rank(daily_return), 0)"
+  industry_neutral_return: "industry_neutralize(daily_return)"
+  size_neutral_return: "size_neutralize(daily_return)"
+  neutral_return: "neutralize(daily_return)"
+
+  # Common L2 intraday templates.
+  large_trade_amount: "l2_sum_if(tick_amount, tick_amount >= ${threshold})"
+  buy_trade_amount: "l2_sum_if(tick_amount, tick_side == 2)"
+  sell_trade_amount: "l2_sum_if(tick_amount, tick_side == 1)"
+  buy_sell_imbalance: "safe_div(numerator=buy_trade_amount - sell_trade_amount, denominator=buy_trade_amount + sell_trade_amount)"

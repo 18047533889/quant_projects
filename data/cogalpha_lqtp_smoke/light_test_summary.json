@@ -1,0 +1,24 @@
+{
+  "server": "118.89.191.220:50051",
+  "factors": [
+    {
+      "factor_name": "factor_persistence",
+      "report": "factor_persistence.html",
+      "mean_ic": "0.041450",
+      "icir": "0.183503"
+    },
+    {
+      "factor_name": "factor_persistence_ewma",
+      "report": "factor_persistence_ewma.html",
+      "mean_ic": "0.038505",
+      "icir": "0.171297"
+    },
+    {
+      "factor_name": "factor_price_impact_stable_5d",
+      "report": "factor_price_impact_stable_5d.html",
+      "mean_ic": "-0.037727",
+      "icir": "-0.154052"
+    }
+  ],
+  "report_index": "/home/sunhaiwei/Projects/quant_projects/data/cogalpha_lqtp_smoke/reports/index.html"
+}

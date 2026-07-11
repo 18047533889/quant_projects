@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+package LQTP;
+
+message LoginRequest {
+  string username = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  int64 expires_in_seconds = 3;
+  User user = 4;
+}
+
+message RefreshTokenRequest {
+  string refresh_token = 1;
+}
+
+message LogoutRequest {
+  string refresh_token = 1;
+}
+
+message EmptyResponse {}
+
+message User {
+  string user_id = 1;
+  string username = 2;
+  bool is_admin = 3;
+  string status = 4;
+}
+
+message ListUsersResponse {
+  repeated User users = 1;
+}
+
+message CreateUserRequest {
+  string username = 1;
+  string password = 2;
+  bool is_admin = 3;
+}
+
+message ChangePasswordRequest {
+  string old_password = 1;
+  string new_password = 2;
+}
+
+message ResetUserPasswordRequest {
+  string user_id = 1;
+  string new_password = 2;
+}
+
+message GrantFactorPermissionRequest {
+  string user_id = 1;
+  string definition_id = 2; // UUID or "*" for global/ad-hoc actions
+  repeated string actions = 3;
+}
+
+message GrantFactorPermissionResponse {
+  string user_id = 1;
+  string definition_id = 2;
+  repeated string actions = 3;
+}
+
+service AuthService {
+  rpc Login (LoginRequest) returns (LoginResponse);
+  rpc RefreshToken (RefreshTokenRequest) returns (LoginResponse);
+  rpc Logout (LogoutRequest) returns (EmptyResponse);
+  rpc GetCurrentUser (EmptyResponse) returns (User);
+  rpc ListUsers (EmptyResponse) returns (ListUsersResponse);
+  rpc CreateUser (CreateUserRequest) returns (User);
+  rpc ChangePassword (ChangePasswordRequest) returns (EmptyResponse);
+  rpc ResetUserPassword (ResetUserPasswordRequest) returns (EmptyResponse);
+  rpc GrantFactorPermission (GrantFactorPermissionRequest) returns (GrantFactorPermissionResponse);
+  rpc RevokeFactorPermission (GrantFactorPermissionRequest) returns (GrantFactorPermissionResponse);
+}

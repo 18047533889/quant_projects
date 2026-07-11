@@ -1,0 +1,394 @@
+{
+  "active_tools": {
+    "asymmetric_volatility_ratio": {
+      "code": "def asymmetric_volatility_ratio(df, window=20, min_periods=10):\n    \"\"\"Compute log ratio of downside to upside volatility in returns.\n\n    Economic meaning:\n        Measures asymmetry in return volatility. A high positive value indicates\n        that downside volatility is larger than upside volatility, often associated\n        with crash risk or the leverage effect. A negative value indicates the\n        opposite.\n    Args:\n        df: Single-stock OHLCV DataFrame.\n        window: Rolling window length.\n        min_periods: Minimum number of observations required.\n    Returns:\n        pd.Series aligned to df.index, log(neg_vol / pos_vol).\n    Required columns:\n        close.\n    Leakage notes:\n        Uses trailing rolling statistics only; no future data.\n    \"\"\"\n    close = df['close']\n    returns = close.pct_change()\n    pos_returns = returns.where(returns > 0, 0.0)\n    neg_returns = returns.where(returns < 0, 0.0).abs()\n    pos_vol = pos_returns.rolling(window, min_periods=min_periods).std()\n    neg_vol = neg_returns.rolling(window, min_periods=min_periods).std()\n    ratio = neg_vol / pos_vol.replace(0, np.nan)\n    log_ratio = np.log(ratio.clip(lower=1e-12))\n    return log_ratio\n",
+      "compared_active_tools": [
+        "directional_volatility_ratio",
+        "decompose_overnight_intraday",
+        "classify_volume_regime",
+        "robust_volume_zscore"
+      ],
+      "economic_module": "volatility_asymmetry",
+      "hash": "496b2d51b94462bc",
+      "input_contract": [
+        "df"
+      ],
+      "parameters": {
+        "min_periods": {
+          "default": 10,
+          "max": 252,
+          "min": 2,
+          "type": "int"
+        },
+        "window": {
+          "default": 20,
+          "max": 252,
+          "min": 2,
+          "type": "int"
+        }
+      },
+      "replacement_reason": null,
+      "return_contract": {
+        "kind": "series",
+        "name": "asymmetric_volatility_ratio"
+      },
+      "similarity_reason": "directional_volatility_ratio measures asymmetry in price range direction, not return volatility; decompose_overnight_intraday decomposes returns into overnight/intraday; the others are volume-based. No active tool captures return-volatility asymmetry.",
+      "source": "tool_retriever",
+      "source_factor_ids": [
+        428,
+        432
+      ],
+      "status": "active",
+      "version": 1
+    },
+    "average_true_range": {
+      "code": "def average_true_range(df, window=20):\n    \"\"\"Compute the average true range (ATR) over a trailing window.\n\n    Economic meaning:\n        Measures the trailing average of true range, providing a volatility estimate\n        based on price extremes. Higher values indicate greater volatility.\n    Args:\n        df: Single-stock OHLCV DataFrame.\n        window: Rolling window length for averaging true range.\n    Returns:\n        pd.Series of ATR values, aligned to df.index.\n    Required columns:\n        high, low, close.\n    Leakage notes:\n        Uses only past observations via rolling window. Uses shifted close to compute\n        true range, which is a lagged value, so no future data.\n    \"\"\"\n    tr = pd.DataFrame({\n        'hl': df['high'] - df['low'],\n        'hc': (df['high'] - df['close'].shift()).abs(),\n        'lc': (df['low'] - df['close'].shift()).abs()\n    }).max(axis=1)\n    atr = tr.rolling(window, min_periods=window).mean()\n    return atr.rename('average_true_range')\n",
+      "compared_active_tools": [
+        "directional_volatility_ratio",
+        "asymmetric_volatility_ratio"
+      ],
+      "economic_module": "volatility_estimate",
+      "hash": "145c5d1e8d28aba0",
+      "input_contract": [
+        "df"
+      ],
+      "parameters": {
+        "window": {
+          "default": 20,
+          "max": 252,
+          "min": 2,
+          "type": "int"
+        }
+      },
+      "replacement_reason": null,
+      "return_contract": {
+        "kind": "series",
+        "name": "average_true_range"
+      },
+      "similarity_reason": "directional_volatility_ratio measures directional asymmetry of range, not the average range level. asymmetric_volatility_ratio focuses on return volatility asymmetry. ATR measures the trailing average true range, which is pure volatility magnitude without direction. No active tool computes this standard metric.",
+      "source": "tool_retriever",
+      "source_factor_ids": [
+        825,
+        826,
+        828,
+        830
+      ],
+      "status": "active",
+      "version": 1
+    },
+    "directional_volatility_ratio": {
+      "code": "def directional_volatility_ratio(df, window=20, min_periods=5):\n    \"\"\"Compute the ratio of average up-range to average down-range.\n\n    Economic meaning:\n        Measures asymmetry in volatility: a high ratio indicates that on up days,\n        the price range is larger than on down days, suggesting bullish momentum\n        or positive skewness in volatility.\n    Args:\n        df: Single-stock OHLCV DataFrame.\n        window: Rolling window length.\n        min_periods: Minimum number of observations required.\n    Returns:\n        pd.Series aligned to df.index, ratio = up_avg_range / down_avg_range.\n    Required columns:\n        high, low, close.\n    Leakage notes:\n        Uses shifted close to determine direction, so only past and present\n        observations are used.\n    \"\"\"\n    up_close = df['close'] > df['close'].shift(1)\n    down_close = ~up_close\n    range_ = df['high'] - df['low']\n    up_sum = range_.where(up_close, 0).rolling(window, min_periods=min_periods).sum()\n    down_sum = range_.where(down_close, 0).rolling(window, min_periods=min_periods).sum()\n    up_count = up_close.rolling(window, min_periods=min_periods).sum()\n    down_count = down_close.rolling(window, min_periods=min_periods).sum()\n    up_avg = up_sum / up_count.replace(0, np.nan)\n    down_avg = down_sum / down_count.replace(0, np.nan)\n    ratio = up_avg / down_avg.replace(0, np.nan)\n    return ratio\n",
+      "compared_active_tools": [
+        "decompose_overnight_intraday",
+        "classify_volume_regime"
+      ],
+      "economic_module": "volatility_asymmetry",
+      "hash": "4f11be0dbedfc151",
+      "input_contract": [
+        "df"
+      ],
+      "parameters": {
+        "min_periods": {
+          "default": 5,
+          "max": 252,
+          "min": 2,
+          "type": "int"
+        },
+        "window": {
+          "default": 20,
+          "max": 252,
+          "min": 2,
+          "type": "int"
+        }
+      },
+      "replacement_reason": null,
+      "return_contract": {
+        "kind": "series",
+        "name": "directional_volatility_ratio"
+      },
+      "similarity_reason": "decompose_overnight_intraday decomposes returns, not ranges; classify_volume_regime categorizes volume levels. Neither captures directional volatility asymmetry.",
+      "source": "tool_retriever",
+      "source_factor_ids": [
+        364,
+        365,
+        366
+      ],
+      "status": "active",
+      "version": 1
+    },
+    "drawdown_depth": {
+      "code": "def drawdown_depth(df, window=252):\n    \"\"\"Compute trailing drawdown depth from peak close.\n\n    Economic meaning:\n        Measures how far the current close has fallen from its trailing maximum close,\n        expressed as a fraction of the peak. A higher value indicates a deeper drawdown,\n        signaling increased risk or mean reversion potential.\n    Args:\n        df: Single-stock OHLCV DataFrame.\n        window: Trailing lookback window for rolling maximum.\n    Returns:\n        pd.Series of drawdown depth (positive values between 0 and 1), aligned to df.index.\n    Required columns:\n        close.\n    Leakage notes:\n        Uses only trailing rolling maximum; no future data.\n    \"\"\"\n    rolling_max = df['close'].rolling(window, min_periods=window).max()\n    depth = (rolling_max - df['close']) / rolling_max.replace(0, np.nan)\n    return depth.rename('drawdown_depth')\n",
+      "compared_active_tools": [
+        "intraday_close_location",
+        "robust_zscore",
+        "average_true_range"
+      ],
+      "economic_module": "drawdown_depth",
+      "hash": "dd6661b154ce2531",
+      "input_contract": [
+        "df"
+      ],
+      "parameters": {
+        "window": {
+          "default": 252,
+          "max": 1000,
+          "min": 10,
+          "type": "int"
+        }
+      },
+      "replacement_reason": null,
+      "return_contract": {
+        "kind": "series",
+        "name": "drawdown_depth"
+      },
+      "similarity_reason": "intraday_close_location measures daily intraday close position, not multi-day peak decline; robust_zscore is a general normalization tool, not a drawdown measure; average_true_range estimates volatility range, not drawdown. No active tool computes trailing drawdown depth.",
+      "source": "tool_retriever",
+      "source_factor_ids": [
+        987
+      ],
+      "status": "active",
+      "version": 1
+    },
+    "intraday_close_location": {
+      "code": "def intraday_close_location(df):\n    \"\"\"Compute the relative position of close within the day's high-low range.\n\n    Economic meaning:\n        Measures where the closing price falls within the day's high-low range,\n        from 0 (close equals low) to 1 (close equals high). Values near 1 indicate\n        bullish intraday pressure; near 0 indicate bearish pressure.\n    Args:\n        df: Single-stock OHLCV DataFrame.\n    Returns:\n        pd.Series aligned to df.index, with values between 0 and 1.\n    Required columns:\n        high, low, close.\n    Leakage notes:\n        Uses only same-day high, low, and close; no future data.\n    \"\"\"\n    range_ = df['high'] - df['low']\n    range_ = range_.replace(0, np.nan)\n    close_loc = (df['close'] - df['low']) / range_\n    return close_loc.rename('intraday_close_location')",
+      "compared_active_tools": [
+        "directional_volatility_ratio",
+        "average_true_range"
+      ],
+      "economic_module": "price_location",
+      "hash": "32a790e205a8fcd1",
+      "input_contract": [
+        "df"
+      ],
+      "parameters": {},
+      "replacement_reason": null,
+      "return_contract": {
+        "kind": "series",
+        "name": "intraday_close_location"
+      },
+      "similarity_reason": "directional_volatility_ratio measures directional asymmetry of range magnitude, not the position of close within range; average_true_range measures average range size, not location. No active tool computes intraday close location.",
+      "source": "tool_retriever",
+      "source_factor_ids": [
+        881
+      ],
+      "status": "active",
+      "version": 1
+    },
+    "intraday_return_ratio": {
+      "code": "def intraday_return_ratio(df):\n    \"\"\"Compute the open-to-close return normalized by the daily high-low range.\n\n    Economic meaning:\n        Measures the direction and magnitude of intraday price movement relative to the day's volatility range. Positive values indicate bullish pressure (close above open), negative values indicate bearish pressure (close below open). The ratio is bounded between -1 and 1 for days where close stays within the range, but can exceed these bounds if close is outside the range (e.g., gap moves).\n    Args:\n        df: Single-stock OHLCV DataFrame.\n    Returns:\n        pd.Series of intraday return ratios, aligned to df.index.\n    Required columns:\n        open, high, low, close.\n    Leakage notes:\n        Uses only same-day open, high, low, close; no future data.\n    \"\"\"\n    range_ = df['high'] - df['low']\n    range_ = range_.replace(0, np.nan)\n    ratio = (df['close'] - df['open']) / range_\n    return ratio.rename('intraday_return_ratio')",
+      "compared_active_tools": [
+        "intraday_close_location"
+      ],
+      "economic_module": "intraday_return_ratio",
+      "hash": "b6ce393dc0e3743c",
+      "input_contract": [
+        "df"
+      ],
+      "parameters": {},
+      "replacement_reason": null,
+      "return_contract": {
+        "kind": "series",
+        "name": "intraday_return_ratio"
+      },
+      "similarity_reason": "intraday_close_location measures close position relative to low within the range, while this tool measures open-to-close return relative to range. They capture different economic aspects of intraday price action.",
+      "source": "tool_retriever",
+      "source_factor_ids": [
+        892,
+        894
+      ],
+      "status": "active",
+      "version": 1
+    },
+    "price_volume_correlation": {
+      "code": "def price_volume_correlation(df, window=20, min_periods=10):\n    \"\"\"Compute rolling correlation between daily returns and volume percent change.\n\n    Economic meaning:\n        Measures the degree to which price and volume move together over a trailing window.\n        Positive correlation indicates volume confirms price trends; negative may indicate divergence.\n    Args:\n        df: Single-stock OHLCV DataFrame including 'close' and 'volume'.\n        window: Rolling window length for correlation.\n        min_periods: Minimum observations required.\n    Returns:\n        pd.Series of rolling correlation values, aligned to df.index.\n    Required columns:\n        close, volume.\n    Leakage notes:\n        Uses only past observations via rolling windows; no future data.\n    \"\"\"\n    ret = df['close'].pct_change()\n    vol_pct = df['volume'].pct_change()\n    corr = ret.rolling(window, min_periods=min_periods).corr(vol_pct)\n    return corr.rename('price_volume_correlation')\n",
+      "compared_active_tools": [
+        "asymmetric_volatility_ratio",
+        "directional_volatility_ratio",
+        "robust_volume_zscore",
+        "volume_variability"
+      ],
+      "economic_module": "price_volume_coherence",
+      "hash": "6de9e129f881d527",
+      "input_contract": [
+        "df"
+      ],
+      "parameters": {
+        "min_periods": {
+          "default": 10,
+          "max": 252,
+          "min": 2,
+          "type": "int"
+        },
+        "window": {
+          "default": 20,
+          "max": 252,
+          "min": 2,
+          "type": "int"
+        }
+      },
+      "replacement_reason": null,
+      "return_contract": {
+        "kind": "series",
+        "name": "price_volume_correlation"
+      },
+      "similarity_reason": "None of the active tools measure price-volume correlation; they focus on volatility asymmetry, volume level deviation, or volume variability.",
+      "source": "tool_retriever",
+      "source_factor_ids": [
+        632
+      ],
+      "status": "active",
+      "version": 1
+    },
+    "price_volume_direction_agreement": {
+      "code": "def price_volume_direction_agreement(intraday_ret, volume_diff, window=10):\n    \"\"\"Compute rolling proportion of days where intraday return sign matches volume change sign.\n\n    Economic meaning:\n        Measures the degree of directional confirmation between price and volume.\n        High values indicate consistent agreement, suggesting informed trading or trend continuation.\n        Low values indicate divergence, which may signal weakness or reversal.\n    Args:\n        intraday_ret: pd.Series of intraday returns (close/open - 1) for one stock.\n        volume_diff: pd.Series of daily volume changes (volume.diff()) for one stock.\n        window: Rolling window length for averaging agreement.\n    Returns:\n        pd.Series of agreement proportion, between 0 and 1, aligned to input index.\n    Required columns:\n        None (both inputs are precomputed series).\n    Leakage notes:\n        Uses only past observations via rolling window. No future data.\n    \"\"\"\n    price_dir = np.sign(intraday_ret)\n    vol_dir = np.sign(volume_diff)\n    agreement = (price_dir == vol_dir).astype(float)\n    avg_agreement = agreement.rolling(window, min_periods=window).mean()\n    return avg_agreement.rename('price_volume_direction_agreement')",
+      "compared_active_tools": [
+        "price_volume_correlation",
+        "classify_volume_regime"
+      ],
+      "economic_module": "pressure_confirmation",
+      "hash": "b06556d72e11c6bb",
+      "input_contract": [
+        "series",
+        "series"
+      ],
+      "parameters": {
+        "window": {
+          "default": 10,
+          "max": 252,
+          "min": 2,
+          "type": "int"
+        }
+      },
+      "replacement_reason": null,
+      "return_contract": {
+        "kind": "series",
+        "name": "price_volume_direction_agreement"
+      },
+      "similarity_reason": "price_volume_correlation measures the magnitude of covariance between returns and volume changes, while this tool measures the directional agreement (sign match). classify_volume_regime categorizes volume levels only, not price-volume interaction. Thus, no duplicate.",
+      "source": "tool_retriever",
+      "source_factor_ids": [
+        646
+      ],
+      "status": "active",
+      "version": 1
+    },
+    "range_ratio": {
+      "code": "def range_ratio(df, short_window=5, long_window=30):\n    \"\"\"Compute ratio of short-term average range to long-term average range.\n\n    Economic meaning:\n        Measures the trailing ratio of short-term volatility (average daily range)\n        to long-term volatility. Values > 1 indicate short-term volatility expansion,\n        values < 1 indicate contraction. Useful for regime detection.\n    Args:\n        df: Single-stock OHLCV DataFrame.\n        short_window: Window for short-term average range.\n        long_window: Window for long-term average range.\n    Returns:\n        pd.Series of range ratios, aligned to df.index.\n    Required columns:\n        high, low.\n    Leakage notes:\n        Uses only past observations via rolling windows; no future data.\n    \"\"\"\n    range_ = df['high'] - df['low']\n    short_avg = range_.rolling(short_window, min_periods=short_window).mean()\n    long_avg = range_.rolling(long_window, min_periods=long_window).mean()\n    ratio = short_avg / long_avg.replace(0, np.nan)\n    return ratio.rename('range_ratio')\n",
+      "compared_active_tools": [
+        "average_true_range",
+        "directional_volatility_ratio",
+        "intraday_close_location",
+        "intraday_return_ratio"
+      ],
+      "economic_module": "volatility_ratio",
+      "hash": "ec46b06fe41b6f44",
+      "input_contract": [
+        "df"
+      ],
+      "parameters": {
+        "long_window": {
+          "default": 30,
+          "max": 252,
+          "min": 2,
+          "type": "int"
+        },
+        "short_window": {
+          "default": 5,
+          "max": 252,
+          "min": 2,
+          "type": "int"
+        }
+      },
+      "replacement_reason": null,
+      "return_contract": {
+        "kind": "series",
+        "name": "range_ratio"
+      },
+      "similarity_reason": "average_true_range measures absolute volatility level; directional_volatility_ratio measures directional asymmetry; intraday_close_location and intraday_return_ratio are intraday measures. None compute the ratio of short-term to long-term average range.",
+      "source": "tool_retriever",
+      "source_factor_ids": [
+        935
+      ],
+      "status": "active",
+      "version": 1
+    },
+    "robust_zscore": {
+      "code": "def robust_zscore(series, window=20, clip=3.0):\n    \"\"\"Compute robust z-score of series relative to trailing median and MAD.\n\n    Economic meaning:\n        Measures how many MADs the current value deviates from the trailing median,\n        using robust normalization that resists outliers. High absolute values\n        indicate unusual activity, which may signal informed trading or regime shifts.\n    Args:\n        series: pd.Series of daily values for one stock.\n        window: Trailing lookback window for median and MAD calculation.\n        clip: Max absolute value for clipping; values beyond are capped.\n    Returns:\n        pd.Series of robust z-scores, aligned to the input index.\n    Required columns:\n        None (input is a series).\n    Leakage notes:\n        Uses only past observations via rolling median and MAD; no future data.\n    \"\"\"\n    rolling_median = series.rolling(window, min_periods=window).median()\n    mad = (series - rolling_median).abs().rolling(window, min_periods=window).median()\n    mad = mad.replace(0, np.nan)\n    z = (series - rolling_median) / mad\n    z = z.clip(-clip, clip)\n    return z",
+      "compared_active_tools": [
+        "robust_volume_zscore",
+        "classify_volume_regime",
+        "directional_volatility_ratio"
+      ],
+      "economic_module": "robust_normalization",
+      "hash": "5d4cca0b567083c3",
+      "input_contract": [
+        "series"
+      ],
+      "parameters": {
+        "clip": {
+          "default": 3.0,
+          "max": 10.0,
+          "min": 0.5,
+          "type": "float"
+        },
+        "window": {
+          "default": 20,
+          "max": 252,
+          "min": 2,
+          "type": "int"
+        }
+      },
+      "replacement_reason": "More general: can be applied to any numeric series, not just volume, enabling reuse across range, returns, etc., and reducing the need for a separate volume-specific normalization.",
+      "return_contract": {
+        "kind": "series",
+        "name": "robust_zscore"
+      },
+      "similarity_reason": "This general robust z-score subsumes the volume-specific robust_volume_zscore. It is meaningfully different from other active tools (e.g., classify_volume_regime, directional_volatility_ratio) which measure volume state or directional asymmetry.",
+      "source": "tool_retriever",
+      "source_factor_ids": [
+        761,
+        763
+      ],
+      "status": "active",
+      "version": 1
+    },
+    "volume_variability": {
+      "code": "def volume_variability(df, median_window=20, std_window=15):\n    \"\"\"Compute rolling standard deviation of volume relative to its trailing median.\n\n    Economic meaning:\n        Measures the time-series variability of volume relative to its median level.\n        High values indicate erratic volume patterns, which may signal informed trading\n        or regime instability.\n    Args:\n        df: Single-stock OHLCV DataFrame.\n        median_window: Trailing window for median of volume.\n        std_window: Trailing window for standard deviation of volume/median ratio.\n    Returns:\n        pd.Series aligned to df.index, representing volume variability.\n    Required columns:\n        volume.\n    Leakage notes:\n        Uses only past observations via trailing rolling windows.\n    \"\"\"\n    vol = df['volume']\n    median_vol = vol.rolling(median_window, min_periods=median_window).median()\n    ratio = vol / median_vol.replace(0, np.nan)\n    variability = ratio.rolling(std_window, min_periods=std_window).std()\n    return variability.rename('volume_variability')\n",
+      "compared_active_tools": [
+        "robust_volume_zscore",
+        "classify_volume_regime"
+      ],
+      "economic_module": "volume_anomaly",
+      "hash": "a65e1ea1a1e28cb7",
+      "input_contract": [
+        "df"
+      ],
+      "parameters": {
+        "median_window": {
+          "default": 20,
+          "max": 252,
+          "min": 2,
+          "type": "int"
+        },
+        "std_window": {
+          "default": 15,
+          "max": 252,
+          "min": 2,
+          "type": "int"
+        }
+      },
+      "replacement_reason": null,
+      "return_contract": {
+        "kind": "series",
+        "name": "volume_variability"
+      },
+      "similarity_reason": "robust_volume_zscore measures deviation in level from median; classify_volume_regime categorizes volume state. Neither captures time-series variability of volume ratio.",
+      "source": "tool_retriever",
+      "source_factor_ids": [
+        546
+      ],
+      "status": "active",
+      "version": 1
+    }
+  }
+}

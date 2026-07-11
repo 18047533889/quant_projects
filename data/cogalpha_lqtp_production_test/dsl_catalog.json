@@ -1,0 +1,1586 @@
+[
+  {
+    "factor_id": "factor_1",
+    "function_name": "factor_volatility_regime_momentum",
+    "dsl": "-where(ts_std(ts_pct(close, 1), 20) > ts_median(ts_std(ts_pct(close, 1), 20), 60), 1, -1) * ts_pct(close, 12)",
+    "lqtp_formula": "-where(ts_std((close / delay(close, 1) - 1), 20) > ts_quantile(ts_std((close / delay(close, 1, 0.5) - 1), 20), 60), 1, -1) * (close / delay(close, 12) - 1)",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_11",
+    "function_name": "factor_volatility_scaled_deviation",
+    "dsl": "tanh(protected_div(close - ts_mean(close, 20), ts_std(ts_pct(close, 1), 20) * ts_mean(close, 20) + 1e-8))",
+    "lqtp_formula": "tanh(safe_div(close - ts_mean(close, 20), ts_std((close / delay(close, 1) - 1), 20) * ts_mean(close, 20) + 1e-8))",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_12",
+    "function_name": "factor_roughness_drawdown_interaction",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "hard",
+    "source": "ast",
+    "notes": "uses groupby/cumcount/concat/cummax"
+  },
+  {
+    "factor_id": "factor_24",
+    "function_name": "factor_persistence",
+    "dsl": "-ts_mean(abs(ts_delta(ts_pct(close, 1), 1)), 10)",
+    "lqtp_formula": "-ts_mean(abs(ts_delta((close / delay(close, 1) - 1), 1)), 10)",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_25",
+    "function_name": "factor_persistence_ewma",
+    "dsl": "-ewm_mean(abs(ts_delta(ts_pct(close, 1), 1)), 10)",
+    "lqtp_formula": "-ema(abs(ts_delta((close / delay(close, 1) - 1), 1)), 10)",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_26",
+    "function_name": "factor_vol_regime_volume",
+    "dsl": "(2 * where(ts_std(ts_pct(close, 1), 20) < ts_median(ts_std(ts_pct(close, 1), 20), 60), 1, 0) - 1) * ts_pct(close, 10) * protected_div(volume, ts_median(volume, 60))",
+    "lqtp_formula": "(2 * where(ts_std(close / delay(close, 1) - 1, 20) < ts_quantile(ts_std(close / delay(close, 1) - 1, 60, 0.5), 1, 0) - 1) * (close / delay(close, 10) - 1) * safe_div(volume, ts_quantile(volume, 60, 0.5))",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_27",
+    "function_name": "factor_price_impact_stable_5d",
+    "dsl": "protected_div(ts_median(abs(ts_pct(close, 1)), 5), ts_mean(log(add(volume, 1)), 5))",
+    "lqtp_formula": "safe_div(ts_quantile(abs((close / delay(close, 1, 0.5) - 1)), 5), ts_mean(log((volume + 1)), 5))",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_28",
+    "function_name": "factor_imbalance_volume_interaction",
+    "dsl": "((ts_sum((where(0, 0, 0) * volume), 20)) * (((volume - (ts_mean(volume, 20))) / ((ts_std(volume, 20)) + 1e-8)) * ((high - low) / (close + 1e-8)))",
+    "lqtp_formula": "((ts_sum((where(0, 0, 0) * volume), 20)) * (((volume - (ts_mean(volume, 20))) / ((ts_std(volume, 20)) + 1e-8)) * ((high - low) / (close + 1e-8)))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Invalid expression syntax: ((ts_sum((where(0, 0, 0) * volume), 20)) * (((volume - (ts_mean(volume, 20))) / ((ts_std(volume, 20)) + 1e-8)) * ((high - low) / (close + 1e-8)))"
+  },
+  {
+    "factor_id": "factor_30",
+    "function_name": "factor_imbalance_volume_mutation",
+    "dsl": "((ts_sum((where(0, 0, 0) * volume), 10)) * ((volume / ((ts_mean(volume, 10)) + 1e-8)) * ((high - low) / (close + 1e-8)))",
+    "lqtp_formula": "((ts_sum((where(0, 0, 0) * volume), 10)) * ((volume / ((ts_mean(volume, 10)) + 1e-8)) * ((high - low) / (close + 1e-8)))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Invalid expression syntax: ((ts_sum((where(0, 0, 0) * volume), 10)) * ((volume / ((ts_mean(volume, 10)) + 1e-8)) * ((high - low) / (close + 1e-8)))"
+  },
+  {
+    "factor_id": "factor_40",
+    "function_name": "factor_vol_regime_smoothed_trend",
+    "dsl": "((((ts_std((ts_pct(close, 1)), 20)) > (ts_median((ts_std((ts_pct(close, 1)), 20)), 60))) * 2) - 1) * (close - ewm_mean(close, 10))",
+    "lqtp_formula": "((((ts_std(((close / delay(close, 1) - 1)), 20)) > (ts_quantile((ts_std(((close / delay(close, 1, 0.5) - 1)), 20)), 60))) * 2) - 1) * (close - ema(close, 10))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_41",
+    "function_name": "factor_vol_volume_regime",
+    "dsl": "(((((ts_std((ts_pct(close, 1)), 20)) > (ts_median((ts_std((ts_pct(close, 1)), 20)), 60))) * 2) - 1) * (close - delay(close, 10)) * (1 + 0.5 * ((volume / (ts_median(volume, 20))) - 1)))",
+    "lqtp_formula": "(((((ts_std(((close / delay(close, 1) - 1)), 20)) > (ts_quantile((ts_std(((close / delay(close, 1, 0.5) - 1)), 20)), 60))) * 2) - 1) * (close - delay(close, 10)) * (1 + 0.5 * ((volume / (ts_quantile(volume, 20, 0.5))) - 1)))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_43",
+    "function_name": "factor_smooth_vol_regime",
+    "dsl": "(((((ts_std((ts_pct(close, 1)), 20)) > (ts_median((ts_std((ts_pct(close, 1)), 20)), 60))) * 2) - 1) * (ts_pct(close, 10)) * (1 + 0.5 * (log(volume / (ts_median(volume, 20))))))",
+    "lqtp_formula": "(((((ts_std(((close / delay(close, 1) - 1)), 20)) > (ts_quantile((ts_std(((close / delay(close, 1, 0.5) - 1)), 20)), 60))) * 2) - 1) * ((close / delay(close, 10) - 1)) * (1 + 0.5 * (log(volume / (ts_quantile(volume, 20, 0.5))))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_45",
+    "function_name": "factor_vol_volume_asym_ewma",
+    "dsl": "(delay(((ewm_mean((high - low), 10)) / (ewm_mean((high - low), 40)) - 1), 1) * delay(((ewm_mean(volume, 10)) / (ewm_mean(volume, 40)) - 1), 1) * delay((((ewm_mean((where(((ts_pct(close, 1)) > 0), (high - low), 0)), 20)) / ((ewm_mean((where(((ts_pct(close, 1)) < 0), (high - low), 0)), 20))))), 1))",
+    "lqtp_formula": "(delay(((ema((high - low), 10)) / (ema((high - low), 40)) - 1), 1) * delay(((ema(volume, 10)) / (ema(volume, 40)) - 1), 1) * delay((((ema((where((((close / delay(close, 1) - 1)) > 0), (high - low), 0)), 20)) / ((ema((where((((close / delay(close, 1) - 1)) < 0), (high - low), 0)), 20))))), 1))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_57",
+    "function_name": "factor_volume_confirmed_return",
+    "dsl": "(close / delay(close, 1) - 1) * (volume / (ts_mean(volume, 20)) - 1) * 10000",
+    "lqtp_formula": "(close / delay(close, 1) - 1) * (volume / (ts_mean(volume, 20)) - 1) * 10000",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_58",
+    "function_name": "factor_volume_abnormality_range_interaction",
+    "dsl": "(where(is_nan(((where((ts_std((log(volume + 1)), 20)) > 0, ((log(volume + 1)) - (ts_median((log(volume + 1)), 20))) / (ts_std((log(volume + 1)), 20)), 0.0)) * (((high - low) + 1e-8) / ((ts_mean((high - low), 20)) + 1e-8)))), 0.0, ((where((ts_std((log(volume + 1)), 20)) > 0, ((log(volume + 1)) - (ts_median((log(volume + 1)), 20))) / (ts_std((log(volume + 1)), 20)), 0.0)) * (((high - low) + 1e-8) / ((ts_mean((high - low), 20)) + 1e-8)))))",
+    "lqtp_formula": "(where(is_nan(((where((ts_std((log(volume + 1)), 20)) > 0, ((log(volume + 1)) - (ts_quantile((log(volume + 1)), 20, 0.5))) / (ts_std((log(volume + 1)), 20)), 0.0)) * (((high - low) + 1e-8) / ((ts_mean((high - low), 20)) + 1e-8)))), 0.0, ((where((ts_std((log(volume + 1)), 20)) > 0, ((log(volume + 1)) - (ts_quantile((log(volume + 1)), 20, 0.5))) / (ts_std((log(volume + 1)), 20)), 0.0)) * (((high - low) + 1e-8) / ((ts_mean((high - low), 20)) + 1e-8)))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_70",
+    "function_name": "factor_adaptive_vol_volume_asym",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "hard",
+    "source": "ast",
+    "notes": "uses groupby/cumcount/concat/cummax"
+  },
+  {
+    "factor_id": "factor_71",
+    "function_name": "factor_drawdown_volume_complexity",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "hard",
+    "source": "ast",
+    "notes": "uses groupby/cumcount/concat/cummax"
+  },
+  {
+    "factor_id": "factor_72",
+    "function_name": "factor_abnormality_asymmetry",
+    "dsl": "(((abs((((log(volume + 1)) - (ts_mean((log(volume + 1)), 20))) / (ts_std((log(volume + 1)), 20))))) * ((high - low) / close)) * (where(((where(not_((close >= open)), volume, 0)).ewm((10)=(10)).mean()) > 0, ((where((close >= open), volume, 0)).ewm((10)=(10)).mean()) / ((where(not_((close >= open)), volume, 0)).ewm((10)=(10)).mean()), 1.0)))",
+    "lqtp_formula": "(((abs((((log(volume + 1)) - (ts_mean((log(volume + 1)), 20))) / (ts_std((log(volume + 1)), 20))))) * ((high - low) / close)) * (where(((where(not_((close >= open)), volume, 0)).ewm((10)=(10)).mean()) > 0, ((where((close >= open), volume, 0)).ewm((10)=(10)).mean()) / ((where(not_((close >= open)), volume, 0)).ewm((10)=(10)).mean()), 1.0)))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Invalid expression syntax: (((abs((((log(volume + 1)) - (ts_mean((log(volume + 1)), 20))) / (ts_std((log(volume + 1)), 20))))) * ((high - low) / close)) * (where(((where(not_((close >= open)), volume, 0)).ewm((10)=(10)).mean()) > 0, ((where((close >= open), volume, 0)).ewm((10)=(10)).mean()) / ((where(not_((close >= open)), volume, 0)).ewm((10)=(10)).mean()), 1.0)))"
+  },
+  {
+    "factor_id": "factor_74",
+    "function_name": "factor_drawdown_volume_geometry",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "hard",
+    "source": "ast",
+    "notes": "uses groupby/cumcount/concat/cummax"
+  },
+  {
+    "factor_id": "factor_76",
+    "function_name": "factor_drawdown_volume_modulated",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "hard",
+    "source": "ast",
+    "notes": "uses groupby/cumcount/concat/cummax"
+  },
+  {
+    "factor_id": "factor_87",
+    "function_name": "factor_volume_abnormality_price_amp",
+    "dsl": "((((volume) - (ts_mean((volume), 20))) / (ts_std((volume), 20))) * ((ts_mean((volume), 5)) / (ts_mean((volume), 20)) - 1) * (1 + (abs((ts_pct(((((close)))), 1))))))",
+    "lqtp_formula": "((((volume) - (ts_mean((volume), 20))) / (ts_std((volume), 20))) * ((ts_mean((volume), 5)) / (ts_mean((volume), 20)) - 1) * (1 + (abs(((((((close)))) / delay(((((close)))), 1) - 1))))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_88",
+    "function_name": "factor_order_imbalance_volume_flow_ema",
+    "dsl": "ewm_mean((((2 * close - high - low) / ((high - low))) * volume), 10)",
+    "lqtp_formula": "ema((((2 * close - high - low) / ((high - low))) * volume), 10)",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_89",
+    "function_name": "factor_volume_trend_adjusted_impact",
+    "dsl": "(ewm_mean(((close - open) * (volume / ((ts_mean(volume, 20)) + 1e-10))), 21))",
+    "lqtp_formula": "(ema(((close - open) * (volume / ((ts_mean(volume, 20)) + 1e-10))), 21))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_90",
+    "function_name": "factor_smooth_abs_return_volume",
+    "dsl": "(((ewm_mean((abs(ts_pct(close, 1))), 20)) * (volume / (ts_mean(volume, 20)))))",
+    "lqtp_formula": "(((ema((abs((close / delay(close, 1) - 1))), 20)) * (volume / (ts_mean(volume, 20)))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_91",
+    "function_name": "factor_shadow_volume_confirmed",
+    "dsl": "protected_div(protected_div(min(open, close) - low, min(open, close) - low + high - max(open, close) + 1e-8) - ts_mean(protected_div(min(open, close) - low, min(open, close) - low + high - max(open, close) + 1e-8), 20), ts_std(protected_div(min(open, close) - low, min(open, close) - low + high - max(open, close) + 1e-8), 20) + 1e-8) * protected_div(volume, ts_mean(volume, 20) + 1e-8)",
+    "lqtp_formula": "safe_div(safe_div(min(open, close) - low, min(open, close) - low + high - max(open, close) + 1e-8) - ts_mean(safe_div(min(open, close) - low, min(open, close) - low + high - max(open, close) + 1e-8), 20), ts_std(safe_div(min(open, close) - low, min(open, close) - low + high - max(open, close) + 1e-8), 20) + 1e-8) * safe_div(volume, ts_mean(volume, 20) + 1e-8)",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_103",
+    "function_name": "factor_drawdown_volume_geometry",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "hard",
+    "source": "ast",
+    "notes": "uses groupby/cumcount/concat/cummax"
+  },
+  {
+    "factor_id": "factor_104",
+    "function_name": "factor_herding_pressure",
+    "dsl": "(ts_corr((ts_rank((ts_pct(close, 1)), 20)), (ts_rank((ts_pct(volume, 1)), 20)))) * (ts_rank(((ewm_mean(((close - open) * volume), 5)) / ((ts_std(((close - open) * volume), 20)) + 1e-10)), 20))",
+    "lqtp_formula": "(ts_corr((ts_rank(((close / delay(close, 1) - 1)), 20)), (ts_rank(((volume / delay(volume, 1) - 1)), 20)))) * (ts_rank(((ema(((close - open) * volume), 5)) / ((ts_std(((close - open) * volume), 20)) + 1e-10)), 20))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_106",
+    "function_name": "factor_stability_crash_guard",
+    "dsl": "(((((ewm_mean((ts_pct(((((close)))), 1)), 21)) / (ewm_mean(abs((ts_pct(((((close)))), 1))), 21))) * (((volume)) / (ts_mean((((volume))), 21)))) * (1 - (ts_rank((-(((((ts_pct((((((((close))))))), 1)pow(), 3)).rolling((20)).mean()) - 3*((ts_pct((((((((close))))))), 1)).rolling((20)).mean())*((pow((ts_pct((((((((close))))))), 1)), 2)).rolling((20)).mean()) + 2*((ts_pct((((((((close))))))), 1)).rolling((20)).mean()pow(), 3)) / ((((ts_pct((((((((close))))))), 1)).rolling((20)).var(ddof=0)pow(), 0).5pow(), 3)))), 20)))))",
+    "lqtp_formula": "(((((ema(((((((close)))) / delay(((((close)))), 1) - 1)), 21)) / (ema(abs(((((((close)))) / delay(((((close)))), 1) - 1))), 21))) * (((volume)) / (ts_mean((((volume))), 21)))) * (1 - (ts_rank((-(((((((((((((close))))))) / delay((((((((close))))))), 1) - 1)pow(), 3)).rolling((20)).mean()) - 3*((((((((((close))))))) / delay((((((((close))))))), 1) - 1)).rolling((20)).mean())*((pow((((((((((close))))))) / delay((((((((close))))))), 1) - 1)), 2)).rolling((20)).mean()) + 2*((((((((((close))))))) / delay((((((((close))))))), 1) - 1)).rolling((20)).mean()pow(), 3)) / ((((((((((((close))))))) / delay((((((((close))))))), 1) - 1)).rolling((20)).var(ddof=0)pow(), 0).5pow(), 3)))), 20)))))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Invalid expression syntax: (((((ewm_mean((ts_pct(((((close)))), 1)), 21)) / (ewm_mean(abs((ts_pct(((((close)))), 1))), 21))) * (((volume)) / (ts_mean((((volume))), 21)))) * (1 - (ts_rank((-(((((ts_pct((((((((close))))))), 1)pow(), 3)).rolling((20)).mean()) - 3*((ts_pct((((((((close))))))), 1)).rolling((20)).mean())*((pow((ts_pct((((((((close))))))), 1)), 2)).rolling((20)).mean()) + 2*((ts_pct((((((((close))))))), 1)).rolling((20)).mean()pow(), 3)) / ((((ts_pct((((((((close))))))), 1)).rolling((20)).var(ddof=0)pow(), 0).5pow(), 3)))), 20)))))"
+  },
+  {
+    "factor_id": "factor_118",
+    "function_name": "factor_volume_weighted_pressure_mut1",
+    "dsl": "((((close - open) * volume) * (volume / (ewm_mean(volume, 10)))) / ((ts_std((((close - open) * volume) * (volume / (ewm_mean(volume, 10)))), 20)) + 1e-10))",
+    "lqtp_formula": "((((close - open) * volume) * (volume / (ema(volume, 10)))) / ((ts_std((((close - open) * volume) * (volume / (ema(volume, 10)))), 20)) + 1e-10))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_119",
+    "function_name": "factor_asymmetry_index_rolling",
+    "dsl": "(((ts_mean((where((close > open), (high - low), 0)), 20)) - (ts_mean((where((not_((close > open))), (high - low), 0)), 20))) / ((ts_mean((where((close > open), (high - low), 0)), 20)) + (ts_mean((where((not_((close > open))), (high - low), 0)), 20)) + (1e-8)))",
+    "lqtp_formula": "(((ts_mean((where((close > open), (high - low), 0)), 20)) - (ts_mean((where((not_((close > open))), (high - low), 0)), 20))) / ((ts_mean((where((close > open), (high - low), 0)), 20)) + (ts_mean((where((not_((close > open))), (high - low), 0)), 20)) + (1e-8)))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_120",
+    "function_name": "factor_smooth_asymmetry_persistence",
+    "dsl": "((ewm_mean((abs(ts_pct(close, 1))), 10)) * (volume / ts_mean(volume, 20)) * (1 + ((ewm_mean((where((close > open), (high - low), 0)), 20)) / ((ewm_mean((0), 20)) + (1e-8)))))",
+    "lqtp_formula": "((ema((abs((close / delay(close, 1) - 1))), 10)) * (volume / ts_mean(volume, 20)) * (1 + ((ema((where((close > open), (high - low), 0)), 20)) / ((ema((0), 20)) + (1e-8)))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_122",
+    "function_name": "factor_range_volume_trend",
+    "dsl": "(((high - low) / (delay(ts_mean((high - low), 20), 1))) * ((volume - (delay(ts_mean(volume, 20), 1))) / ((delay(ts_std(volume, 20), 1)) + 1e-8)) * (volume / ((delay(ts_mean(volume, 200), 1)) + 1e-8)))",
+    "lqtp_formula": "(((high - low) / (delay(ts_mean((high - low), 20), 1))) * ((volume - (delay(ts_mean(volume, 20), 1))) / ((delay(ts_std(volume, 20), 1)) + 1e-8)) * (volume / ((delay(ts_mean(volume, 200), 1)) + 1e-8)))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_133",
+    "function_name": "factor_stable_symmetry_reinforced",
+    "dsl": "(((ewm_mean((abs((ts_pct((((close))), 1)))), 21)) * ((ts_rank(((((min((open), (((((((close))))))))) - ((((((low))))))) - (((((((high)))))) - (max((open), (((((((close))))))))))) / (((min((open), (((((((close))))))))) - ((((((low))))))) + (((((((high)))))) - (max((open), (((((((close)))))))))) + 1e-10)), 20)) * (((volume)) / (ts_mean(((volume)), 20)))))).rename('factor_stable_symmetry_reinforced')",
+    "lqtp_formula": "(((ema((abs((((((close))) / delay((((close))), 1) - 1)))), 21)) * ((ts_rank(((((min((open), (((((((close))))))))) - ((((((low))))))) - (((((((high)))))) - (max((open), (((((((close))))))))))) / (((min((open), (((((((close))))))))) - ((((((low))))))) + (((((((high)))))) - (max((open), (((((((close)))))))))) + 1e-10)), 20)) * (((volume)) / (ts_mean(((volume)), 20)))))).rename('factor_stable_symmetry_reinforced')",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Unsupported syntax node: Attribute"
+  },
+  {
+    "factor_id": "factor_135",
+    "function_name": "factor_direction_volume_shape_mut2",
+    "dsl": "(((ewm_mean((ts_pct(close, 1)), 10)) * ((tanh(((volume - (ts_mean(volume, 20))) / (ts_std(volume, 20))))) * (tanh(((((high - low) / (ts_mean((high - low), 20))) - (ts_mean(((high - low) / (ts_mean((high - low), 20))), 20))) / (ts_std(((high - low) / (ts_mean((high - low), 20))), 20)))))) + 0.2 * ((ts_rank(((((min(open, close)) - low) - (high - (max(open, close)))) / (((min(open, close)) - low) + (high - (max(open, close))) + 1e-10)), 20)) * (volume / (ts_mean(volume, 20))))))",
+    "lqtp_formula": "(((ema(((close / delay(close, 1) - 1)), 10)) * ((tanh(((volume - (ts_mean(volume, 20))) / (ts_std(volume, 20))))) * (tanh(((((high - low) / (ts_mean((high - low), 20))) - (ts_mean(((high - low) / (ts_mean((high - low), 20))), 20))) / (ts_std(((high - low) / (ts_mean((high - low), 20))), 20)))))) + 0.2 * ((ts_rank(((((min(open, close)) - low) - (high - (max(open, close)))) / (((min(open, close)) - low) + (high - (max(open, close))) + 1e-10)), 20)) * (volume / (ts_mean(volume, 20))))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_138",
+    "function_name": "factor_volume_confirmed_dir_mut_v4",
+    "dsl": "((((ts_sum((sign((ts_pct(close, 1)))), 5)) * (close / delay(close, 20) - 1)) * (tanh(((((ts_rank(volume, 20)) - 0.5) * 2) * (((ts_rank((high - low), 20)) - 0.5) * 2))))))",
+    "lqtp_formula": "((((ts_sum((sign(((close / delay(close, 1) - 1)))), 5)) * (close / delay(close, 20) - 1)) * (tanh(((((ts_rank(volume, 20)) - 0.5) * 2) * (((ts_rank((high - low), 20)) - 0.5) * 2))))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_140",
+    "function_name": "factor_crossover_hybrid_magnitude",
+    "dsl": "(((0.5 * (ewm_mean((abs((ts_pct((((close))), 1)))), 21)) + 0.5 * (ts_rank((abs((ts_pct((((close))), 1)))), 21))) * ((ts_rank(((((min((open), (((((((close))))))))) - ((((((low))))))) - (((((((high)))))) - (max((open), (((((((close))))))))))) / (((min((open), (((((((close))))))))) - ((((((low))))))) + (((((((high)))))) - (max((open), (((((((close)))))))))) + 1e-10)), 20)) * (((volume)) / (ts_mean(((volume)), 20)))))).rename('factor_crossover_hybrid_magnitude')",
+    "lqtp_formula": "(((0.5 * (ema((abs((((((close))) / delay((((close))), 1) - 1)))), 21)) + 0.5 * (ts_rank((abs((((((close))) / delay((((close))), 1) - 1)))), 21))) * ((ts_rank(((((min((open), (((((((close))))))))) - ((((((low))))))) - (((((((high)))))) - (max((open), (((((((close))))))))))) / (((min((open), (((((((close))))))))) - ((((((low))))))) + (((((((high)))))) - (max((open), (((((((close)))))))))) + 1e-10)), 20)) * (((volume)) / (ts_mean(((volume)), 20)))))).rename('factor_crossover_hybrid_magnitude')",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Unsupported syntax node: Attribute"
+  },
+  {
+    "factor_id": "factor_142",
+    "function_name": "factor_mutation_dir_vol_shape_zscore",
+    "dsl": "((((ts_sum((sign((ts_pct((((close))), 1)))), 5)) * ((((close))) / delay((((close))), 20) - 1)) * ((ts_mean((abs((ts_pct(((((close)))), 1)))), 20)) * (1 + (tanh((((volume) - (ts_mean((volume), 20))) / (ts_std((volume), 20)))))) * (1 + (tanh(((((((min((open), ((((((((close)))))))))) - ((((((((low))))))))) - (((((((((high)))))))) - (max((open), ((((((((close)))))))))))) / (((min((open), ((((((((close)))))))))) - ((((((((low))))))))) + (((((((((high)))))))) - (max((open), ((((((((close))))))))))) + 1e-10)) - (ts_mean(((((min((open), (((((((((close))))))))))) - (((((((((low)))))))))) - ((((((((((high))))))))) - (max((open), (((((((((close))))))))))))) / (((min((open), (((((((((close))))))))))) - (((((((((low)))))))))) + ((((((((((high))))))))) - (max((open), (((((((((close)))))))))))) + 1e-10)), 20))) / (ts_std(((((min((open), (((((((((close))))))))))) - (((((((((low)))))))))) - ((((((((((high))))))))) - (max((open), (((((((((close))))))))))))) / (((min((open), (((((((((close))))))))))) - (((((((((low)))))))))) + ((((((((((high))))))))) - (max((open), (((((((((close)))))))))))) + 1e-10)), 20)))))))))",
+    "lqtp_formula": "((((ts_sum((sign((((((close))) / delay((((close))), 1) - 1)))), 5)) * ((((close))) / delay((((close))), 20) - 1)) * ((ts_mean((abs(((((((close)))) / delay(((((close)))), 1) - 1)))), 20)) * (1 + (tanh((((volume) - (ts_mean((volume), 20))) / (ts_std((volume), 20)))))) * (1 + (tanh(((((((min((open), ((((((((close)))))))))) - ((((((((low))))))))) - (((((((((high)))))))) - (max((open), ((((((((close)))))))))))) / (((min((open), ((((((((close)))))))))) - ((((((((low))))))))) + (((((((((high)))))))) - (max((open), ((((((((close))))))))))) + 1e-10)) - (ts_mean(((((min((open), (((((((((close))))))))))) - (((((((((low)))))))))) - ((((((((((high))))))))) - (max((open), (((((((((close))))))))))))) / (((min((open), (((((((((close))))))))))) - (((((((((low)))))))))) + ((((((((((high))))))))) - (max((open), (((((((((close)))))))))))) + 1e-10)), 20))) / (ts_std(((((min((open), (((((((((close))))))))))) - (((((((((low)))))))))) - ((((((((((high))))))))) - (max((open), (((((((((close))))))))))))) / (((min((open), (((((((((close))))))))))) - (((((((((low)))))))))) + ((((((((((high))))))))) - (max((open), (((((((((close)))))))))))) + 1e-10)), 20)))))))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_145",
+    "function_name": "factor_rank_tanh_volume_shape_crossover",
+    "dsl": "((((ts_sum((sign((ts_pct(close, 1)))), 5)) * (close / delay(close, 20) - 1)) * (((ts_rank(((volume - (ts_mean(volume, 20))) / (ts_std(volume, 20))), 20)) * (ts_rank(((high - low) / (ts_mean((high - low), 20))), 20))) + 0.5 * (tanh((((volume - (ts_mean(volume, 20))) / (ts_std(volume, 20))) * ((high - low) / (ts_mean((high - low), 20))))))) * (1 + 0.25 * (tanh(((((min(open, close)) - low) - (high - (max(open, close)))) / (((min(open, close)) - low) + (high - (max(open, close))) + 1e-10)))))))",
+    "lqtp_formula": "((((ts_sum((sign(((close / delay(close, 1) - 1)))), 5)) * (close / delay(close, 20) - 1)) * (((ts_rank(((volume - (ts_mean(volume, 20))) / (ts_std(volume, 20))), 20)) * (ts_rank(((high - low) / (ts_mean((high - low), 20))), 20))) + 0.5 * (tanh((((volume - (ts_mean(volume, 20))) / (ts_std(volume, 20))) * ((high - low) / (ts_mean((high - low), 20))))))) * (1 + 0.25 * (tanh(((((min(open, close)) - low) - (high - (max(open, close)))) / (((min(open, close)) - low) + (high - (max(open, close))) + 1e-10)))))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_149",
+    "function_name": "factor_mut_vol_weighted_shape_dir",
+    "dsl": "((((ts_sum((sign((ts_pct(close, 1)))), 5)) * (close / delay(close, 20) - 1)) * (((ts_rank(((volume - (ts_mean(volume, 20))) / (ts_std(volume, 20))), 20)) * (ts_rank(((high - low) / (ts_mean((high - low), 20))), 20))) + 0.5 * (tanh((((volume - (ts_mean(volume, 20))) / (ts_std(volume, 20))) * ((high - low) / (ts_mean((high - low), 20))))))) * (1 + 0.25 * (tanh(((((min(open, close)) - low) - (high - (max(open, close)))) / (((min(open, close)) - low) + (high - (max(open, close))) + 1e-10)))) * tanh((volume / (ts_mean(volume, 20))) - 1))))",
+    "lqtp_formula": "((((ts_sum((sign(((close / delay(close, 1) - 1)))), 5)) * (close / delay(close, 20) - 1)) * (((ts_rank(((volume - (ts_mean(volume, 20))) / (ts_std(volume, 20))), 20)) * (ts_rank(((high - low) / (ts_mean((high - low), 20))), 20))) + 0.5 * (tanh((((volume - (ts_mean(volume, 20))) / (ts_std(volume, 20))) * ((high - low) / (ts_mean((high - low), 20))))))) * (1 + 0.25 * (tanh(((((min(open, close)) - low) - (high - (max(open, close)))) / (((min(open, close)) - low) + (high - (max(open, close))) + 1e-10)))) * tanh((volume / (ts_mean(volume, 20))) - 1))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_167",
+    "function_name": "factor_volume_gated_momentum_mutated_v3",
+    "dsl": "(((((((close))) / delay((((close))), 5) - 1) / (1 + abs((cap((((ts_std((((((((((high))))))) - ((((((((low))))))))) / ((((((close))))))), 10)) - (ts_mean((ts_std(((((((((((high)))))))) - (((((((((low)))))))))) / (((((((close)))))))), 10)), 20))) / (ts_std((ts_std(((((((((((high)))))))) - (((((((((low)))))))))) / (((((((close)))))))), 10)), 20))), -2, 2)))) * (1 + (cap((ewm_mean((ts_pct((((((close))))), 1)), 10)) * 3, -1, 1)))) * (1 + tanh((ts_rank((((volume))), 20)) * (ts_mean((((volume))), 5) / (ts_mean(((((volume)))), 20)))))))",
+    "lqtp_formula": "(((((((close))) / delay((((close))), 5) - 1) / (1 + abs((cap((((ts_std((((((((((high))))))) - ((((((((low))))))))) / ((((((close))))))), 10)) - (ts_mean((ts_std(((((((((((high)))))))) - (((((((((low)))))))))) / (((((((close)))))))), 10)), 20))) / (ts_std((ts_std(((((((((((high)))))))) - (((((((((low)))))))))) / (((((((close)))))))), 10)), 20))), -2, 2)))) * (1 + (cap((ema((((((((close))))) / delay((((((close))))), 1) - 1)), 10)) * 3, -1, 1)))) * (1 + tanh((ts_rank((((volume))), 20)) * (ts_mean((((volume))), 5) / (ts_mean(((((volume)))), 20)))))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_170",
+    "function_name": "factor_herding_vol_gated_momentum",
+    "dsl": "((((((ts_rank((ts_pct(close, 1)), 20)) - 0.5) * ((ts_rank((ts_pct(volume, 1)), 20)) - 0.5)) / (1 + (ts_std((ts_pct(close, 1)), 20)))) * (1 + 0.5 * (ts_corr((ts_pct(close, 1)), (ts_pct(volume, 1))))) * (1 + 0.5 * (((ewm_mean((ts_pct(close, 1)), 20)) - (ts_mean((ewm_mean((ts_pct(close, 1)), 20)), 40))) / (ts_std((ewm_mean((ts_pct(close, 1)), 20)), 40)).replace(0, 1)))))",
+    "lqtp_formula": "((((((ts_rank(((close / delay(close, 1) - 1)), 20)) - 0.5) * ((ts_rank(((volume / delay(volume, 1) - 1)), 20)) - 0.5)) / (1 + (ts_std(((close / delay(close, 1) - 1)), 20)))) * (1 + 0.5 * (ts_corr(((close / delay(close, 1) - 1)), ((volume / delay(volume, 1) - 1))))) * (1 + 0.5 * (((ema(((close / delay(close, 1) - 1)), 20)) - (ts_mean((ema(((close / delay(close, 1) - 1)), 20)), 40))) / (ts_std((ema(((close / delay(close, 1) - 1)), 20)), 40)).replace(0, 1)))))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Unsupported syntax node: Attribute"
+  },
+  {
+    "factor_id": "factor_174",
+    "function_name": "factor_vol_gated_herding_crossover",
+    "dsl": "(((((((((close)))) / delay(((((close)))), 5) - 1) / (1 + abs((cap(((((ts_mean((max((((((((high))))))) - (((((((low))))))), max(abs(((((((((high))))))) - delay(((((((close)))))), 1))), abs(((((((((low))))))) - delay(((((((close)))))), 1)))))), 20)) / ((((((close))))))) - (ts_mean(((ts_mean((max(((((((((high)))))))) - ((((((((low)))))))), max(abs((((((((((high)))))))) - delay((((((((close))))))), 1))), abs((((((((((low)))))))) - delay((((((((close))))))), 1)))))), 20)) / (((((((close)))))))), 20))) / (ts_std(((ts_mean((max(((((((((high)))))))) - ((((((((low)))))))), max(abs((((((((((high)))))))) - delay((((((((close))))))), 1))), abs((((((((((low)))))))) - delay((((((((close))))))), 1)))))), 20)) / (((((((close)))))))), 20))), -2, 2))))) * (1 + (tanh((ewm_mean((ts_pct(((((((close)))))), 1)), 7)) * 5)))) * (1 + tanh(((ts_corr((ts_pct((((((close))))), 1)), (ts_pct(((((volume)), 30)), 1)))) * (tanh((((ts_pct((((((close))))), 1)) - (ts_mean((ts_pct(((((((close)))))), 1)), 40))) / (ts_std((ts_pct(((((((close)))))), 1)), 40)))))))) * (1 + tanh((ts_rank((((volume))), 20)) * (ts_mean((((volume))), 5) / (ts_mean(((((volume)))), 20)))))))",
+    "lqtp_formula": "(((((((((close)))) / delay(((((close)))), 5) - 1) / (1 + abs((cap(((((ts_mean((max((((((((high))))))) - (((((((low))))))), max(abs(((((((((high))))))) - delay(((((((close)))))), 1))), abs(((((((((low))))))) - delay(((((((close)))))), 1)))))), 20)) / ((((((close))))))) - (ts_mean(((ts_mean((max(((((((((high)))))))) - ((((((((low)))))))), max(abs((((((((((high)))))))) - delay((((((((close))))))), 1))), abs((((((((((low)))))))) - delay((((((((close))))))), 1)))))), 20)) / (((((((close)))))))), 20))) / (ts_std(((ts_mean((max(((((((((high)))))))) - ((((((((low)))))))), max(abs((((((((((high)))))))) - delay((((((((close))))))), 1))), abs((((((((((low)))))))) - delay((((((((close))))))), 1)))))), 20)) / (((((((close)))))))), 20))), -2, 2))))) * (1 + (tanh((ema(((((((((close)))))) / delay(((((((close)))))), 1) - 1)), 7)) * 5)))) * (1 + tanh(((ts_corr((((((((close))))) / delay((((((close))))), 1) - 1)), ((((((volume)) / delay(((((volume)), 30) - 1)), 1)))) * (tanh((((((((((close))))) / delay((((((close))))), 1) - 1)) - (ts_mean(((((((((close)))))) / delay(((((((close)))))), 1) - 1)), 40))) / (ts_std(((((((((close)))))) / delay(((((((close)))))), 1) - 1)), 40)))))))) * (1 + tanh((ts_rank((((volume))), 20)) * (ts_mean((((volume))), 5) / (ts_mean(((((volume)))), 20)))))))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Unsupported syntax node: Tuple"
+  },
+  {
+    "factor_id": "factor_179",
+    "function_name": "factor_vol_gated_herding_mutated",
+    "dsl": "(((((((((close)))) / delay(((((close)))), 5) - 1) / (1 + abs((cap(((((ts_mean((max((((((((high))))))) - (((((((low))))))), max(abs(((((((((high))))))) - delay(((((((close)))))), 1))), abs(((((((((low))))))) - delay(((((((close)))))), 1)))))), 20)) / ((((((close))))))) - (ts_mean(((ts_mean((max(((((((((high)))))))) - ((((((((low)))))))), max(abs((((((((((high)))))))) - delay((((((((close))))))), 1))), abs((((((((((low)))))))) - delay((((((((close))))))), 1)))))), 20)) / (((((((close)))))))), 20))) / (ts_std(((ts_mean((max(((((((((high)))))))) - ((((((((low)))))))), max(abs((((((((((high)))))))) - delay((((((((close))))))), 1))), abs((((((((((low)))))))) - delay((((((((close))))))), 1)))))), 20)) / (((((((close)))))))), 20))), -2, 2))))) * (1 + (tanh((ewm_mean((ts_pct(((((((close)))))), 1)), 7)) * 5)))) * (1 + tanh((sign((ts_pct(((((close)))), 1))) * tanh((((((volume))) - (ts_mean(((((volume)))), 20))) / (ts_mean(((((volume)))), 20))) * 3)))) * (1 + tanh((ts_rank((((volume))), 12)) * (ts_mean((((volume))), 3) / (ts_mean(((((volume)))), 10)))))))",
+    "lqtp_formula": "(((((((((close)))) / delay(((((close)))), 5) - 1) / (1 + abs((cap(((((ts_mean((max((((((((high))))))) - (((((((low))))))), max(abs(((((((((high))))))) - delay(((((((close)))))), 1))), abs(((((((((low))))))) - delay(((((((close)))))), 1)))))), 20)) / ((((((close))))))) - (ts_mean(((ts_mean((max(((((((((high)))))))) - ((((((((low)))))))), max(abs((((((((((high)))))))) - delay((((((((close))))))), 1))), abs((((((((((low)))))))) - delay((((((((close))))))), 1)))))), 20)) / (((((((close)))))))), 20))) / (ts_std(((ts_mean((max(((((((((high)))))))) - ((((((((low)))))))), max(abs((((((((((high)))))))) - delay((((((((close))))))), 1))), abs((((((((((low)))))))) - delay((((((((close))))))), 1)))))), 20)) / (((((((close)))))))), 20))), -2, 2))))) * (1 + (tanh((ema(((((((((close)))))) / delay(((((((close)))))), 1) - 1)), 7)) * 5)))) * (1 + tanh((sign(((((((close)))) / delay(((((close)))), 1) - 1))) * tanh((((((volume))) - (ts_mean(((((volume)))), 20))) / (ts_mean(((((volume)))), 20))) * 3)))) * (1 + tanh((ts_rank((((volume))), 12)) * (ts_mean((((volume))), 3) / (ts_mean(((((volume)))), 10)))))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_200",
+    "function_name": "factor_volume_confirmed_momentum",
+    "dsl": "(ts_pct(close, 5)) * (ts_rank((volume / (ts_mean(volume, 20))), 20))",
+    "lqtp_formula": "((close / delay(close, 5) - 1)) * (ts_rank((volume / (ts_mean(volume, 20))), 20))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_201",
+    "function_name": "factor_volume_confirmed_momentum_v3",
+    "dsl": "(ts_pct(close, 5)) * (ts_rank((volume / (ts_mean(volume, 20))), 20))",
+    "lqtp_formula": "((close / delay(close, 5) - 1)) * (ts_rank((volume / (ts_mean(volume, 20))), 20))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_202",
+    "function_name": "factor_trend_volume_tanh_rank",
+    "dsl": "((((ts_rank((((((((close))))) - (open)) * (((volume)))), 40)) - 0.5) * 2) * (tanh(((((close))) / delay((((close))), 5) - 1))))",
+    "lqtp_formula": "((((ts_rank((((((((close))))) - (open)) * (((volume)))), 40)) - 0.5) * 2) * (tanh(((((close))) / delay((((close))), 5) - 1))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_203",
+    "function_name": "factor_pressure_compression_simplified_v3",
+    "dsl": "protected_div((close - open) * volume, ts_mean(abs((close - open) * volume), 21)) * tanh(protected_div(volume, ts_mean(volume, 21))) * tanh(protected_div(ATR(high, low, close, 21), close))",
+    "lqtp_formula": "safe_div((close - open) * volume, ts_mean(abs((close - open) * volume), 21)) * tanh(safe_div(volume, ts_mean(volume, 21))) * tanh(safe_div(ATR(high, low, close, 21), close))",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_207",
+    "function_name": "factor_volume_confirmed_momentum_crossover_v1",
+    "dsl": "(ts_pct(close, 5)) * (ts_rank((volume / (ts_mean(volume, 20))), 10))",
+    "lqtp_formula": "((close / delay(close, 5) - 1)) * (ts_rank((volume / (ts_mean(volume, 20))), 10))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_208",
+    "function_name": "factor_volume_confirmed_momentum_crossover_v2",
+    "dsl": "(ts_pct(close, 5)) * (ts_rank((volume / (ts_mean(volume, 30))), 10))",
+    "lqtp_formula": "((close / delay(close, 5) - 1)) * (ts_rank((volume / (ts_mean(volume, 30))), 10))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_209",
+    "function_name": "factor_liquidity_range_gated_momentum_v5",
+    "dsl": "((ts_pct(((close)), 5)) * (ts_rank((((((((high))))) - (((((low)))))) * (((((volume)))) / (ts_median((((((volume))))), 20)))), 20)) * (tanh((((ATR((((((high))))), (((((low))))), (((((close))))), 14))) / ((((close))))))))",
+    "lqtp_formula": "(((((close)) / delay(((close)), 5) - 1)) * (ts_rank((((((((high))))) - (((((low)))))) * (((((volume)))) / (ts_quantile((((((volume))))), 20, 0.5)))), 20)) * (tanh((((ATR((((((high))))), (((((low))))), (((((close))))), 14))) / ((((close))))))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_215",
+    "function_name": "factor_liquidity_range_gated_momentum_v6",
+    "dsl": "((ts_pct(((close)), 5)) * (ts_rank((((((((high))))) - (((((low)))))) * (((((volume)))) / (ts_median((((((volume))))), 20)))), 20)) * (tanh((((ATR((((((high))))), (((((low))))), (((((close))))), 20))) / ((((close))))))))",
+    "lqtp_formula": "(((((close)) / delay(((close)), 5) - 1)) * (ts_rank((((((((high))))) - (((((low)))))) * (((((volume)))) / (ts_quantile((((((volume))))), 20, 0.5)))), 20)) * (tanh((((ATR((((((high))))), (((((low))))), (((((close))))), 20))) / ((((close))))))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_231",
+    "function_name": "factor_volume_confirmed_return",
+    "dsl": "(ts_pct(close, 5)) * (ts_rank((volume / ts_mean(volume, 20)), 20))",
+    "lqtp_formula": "((close / delay(close, 5) - 1)) * (ts_rank((volume / ts_mean(volume, 20)), 20))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_232",
+    "function_name": "factor_volume_confirmed_return_ema",
+    "dsl": "(ts_pct(close, 5)) * (ts_rank((volume / (ewm_mean(volume, 20))), 20))",
+    "lqtp_formula": "((close / delay(close, 5) - 1)) * (ts_rank((volume / (ema(volume, 20))), 20))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_233",
+    "function_name": "factor_volume_confirmed_return_ewm",
+    "dsl": "(ts_pct(close, 5)) * (ts_rank((volume / (ewm_mean(volume, 20))), 20))",
+    "lqtp_formula": "((close / delay(close, 5) - 1)) * (ts_rank((volume / (ema(volume, 20))), 20))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_234",
+    "function_name": "factor_volume_price_divergence_cross_mut",
+    "dsl": "(tanh((-(close - delay(close, 5)) * (volume / (ewm_mean(volume, 20))))))",
+    "lqtp_formula": "(tanh((-(close - delay(close, 5)) * (volume / (ema(volume, 20))))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_247",
+    "function_name": "factor_volume_pressure_reversal",
+    "dsl": "(-(ts_pct(close, 5)) * (volume / (ts_mean(volume, 20))))",
+    "lqtp_formula": "(-((close / delay(close, 5) - 1)) * (volume / (ts_mean(volume, 20))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_248",
+    "function_name": "factor_crash_volume_rank",
+    "dsl": "(-(ts_pct(close, 5)) * (ts_rank((volume / (ts_mean(volume, 20))), 20)))",
+    "lqtp_formula": "(-((close / delay(close, 5) - 1)) * (ts_rank((volume / (ts_mean(volume, 20))), 20)))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_250",
+    "function_name": "factor_vol_gated_momentum_v2",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "hard",
+    "source": "ast",
+    "notes": "uses groupby/cumcount/concat/cummax"
+  },
+  {
+    "factor_id": "factor_251",
+    "function_name": "factor_crash_volume_gate",
+    "dsl": "(where((ts_rank((volume / (ts_mean(volume, 20))), 20)) > 0.5, -(ts_pct(close, 5)) * (volume / (ts_mean(volume, 20))), 0.0))",
+    "lqtp_formula": "(where((ts_rank((volume / (ts_mean(volume, 20))), 20)) > 0.5, -((close / delay(close, 5) - 1)) * (volume / (ts_mean(volume, 20))), 0.0))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_263",
+    "function_name": "factor_ewma_net_range_volume_ratio",
+    "dsl": "(((ewm_mean((close - open), 5)) / (ewm_mean((high - low), 5))) * (volume / ts_mean(volume, 10)))",
+    "lqtp_formula": "(((ema((close - open), 5)) / (ema((high - low), 5))) * (volume / ts_mean(volume, 10)))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_264",
+    "function_name": "factor_crash_vol_ratio_asym",
+    "dsl": "(-(volume / ts_mean(volume, 10)) * (((ewm_mean((max(0, close - open)), 10)) - (ewm_mean((max(0, open - close)), 10))) / (ewm_mean((high - low), 10))))",
+    "lqtp_formula": "(-(volume / ts_mean(volume, 10)) * (((ema((max(0, close - open)), 10)) - (ema((max(0, open - close)), 10))) / (ema((high - low), 10))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_266",
+    "function_name": "factor_crash_vol_body_asym",
+    "dsl": "(-(volume / ts_mean(volume, 10)) * ((close - open) / (high - low)))",
+    "lqtp_formula": "(-(volume / ts_mean(volume, 10)) * ((close - open) / (high - low)))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_268",
+    "function_name": "factor_roughness_trend_vol_short",
+    "dsl": "(((ts_mean((max(high - low, abs(high - delay(close, 1)), abs(low - delay(close, 1)))), 5)) / (ts_mean((max(high - low, abs(high - delay(close, 1)), abs(low - delay(close, 1)))), 20))) * ((close / (ts_mean(close, 20))) - 1) * (volume / (ts_mean(volume, 10))))",
+    "lqtp_formula": "(((ts_mean((max(high - low, abs(high - delay(close, 1)), abs(low - delay(close, 1)))), 5)) / (ts_mean((max(high - low, abs(high - delay(close, 1)), abs(low - delay(close, 1)))), 20))) * ((close / (ts_mean(close, 20))) - 1) * (volume / (ts_mean(volume, 10))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_279",
+    "function_name": "factor_volume_reversal_direct",
+    "dsl": "((-(((((((close)))) - ((((low))))) / ((((((high))))) - (((((low))))))) - 0.5)) * (ts_rank((volume / ts_mean(volume, 20)), 20)))",
+    "lqtp_formula": "((-(((((((close)))) - ((((low))))) / ((((((high))))) - (((((low))))))) - 0.5)) * (ts_rank((volume / ts_mean(volume, 20)), 20)))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_281",
+    "function_name": "factor_volume_reversal_rank",
+    "dsl": "((-((ts_mean((((((((close))))) - (((((low)))))) / (((((((high)))))) - ((((((low)))))))), 5)) - 0.5)) * (ts_rank(volume, 20)))",
+    "lqtp_formula": "((-((ts_mean((((((((close))))) - (((((low)))))) / (((((((high)))))) - ((((((low)))))))), 5)) - 0.5)) * (ts_rank(volume, 20)))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_284",
+    "function_name": "factor_volume_reversal_rank",
+    "dsl": "((-(((((((close)))) - ((((low))))) / ((((((high))))) - (((((low))))))) - 0.5)) * (ts_rank(volume, 20)))",
+    "lqtp_formula": "((-(((((((close)))) - ((((low))))) / ((((((high))))) - (((((low))))))) - 0.5)) * (ts_rank(volume, 20)))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_287",
+    "function_name": "factor_intraday_reversal_zscore_volume_short",
+    "dsl": "((-(((((((close)))) - ((((low))))) / ((((((high))))) - (((((low))))))) - 0.5) / (ts_std((((((close))) - ((((low))))) / (((((high)))) - (((((low))))))), 10))) * (ts_rank(((((volume))) / ts_mean((((volume))), 20)), 20)))",
+    "lqtp_formula": "((-(((((((close)))) - ((((low))))) / ((((((high))))) - (((((low))))))) - 0.5) / (ts_std((((((close))) - ((((low))))) / (((((high)))) - (((((low))))))), 10))) * (ts_rank(((((volume))) / ts_mean((((volume))), 20)), 20)))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_299",
+    "function_name": "factor_volume_confirmed_intraday_mean_reversion",
+    "dsl": "(-(ts_mean(((close - ((high + low) / 2)) / (high - low)), 5)) * (volume / (ts_mean(volume, 20))))",
+    "lqtp_formula": "(-(ts_mean(((close - ((high + low) / 2)) / (high - low)), 5)) * (volume / (ts_mean(volume, 20))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_302",
+    "function_name": "factor_simplified_intraday_mean_reversion",
+    "dsl": "(-(ts_mean(((close - ((high + low) / 2)) / (high - low)), 5)))",
+    "lqtp_formula": "(-(ts_mean(((close - ((high + low) / 2)) / (high - low)), 5)))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_314",
+    "function_name": "factor_volatility_adjusted_dollar_pressure",
+    "dsl": "ts_rank(((ewm_mean((((close) - open) * volume), 21)) / ((ATR(((high)), ((low)), ((close)), 21)))), 20) * 2 - 1",
+    "lqtp_formula": "ts_rank(((ema((((close) - open) * volume), 21)) / ((ATR(((high)), ((low)), ((close)), 21)))), 20) * 2 - 1",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_315",
+    "function_name": "factor_fear_adjusted_dollar_pressure_short_ema",
+    "dsl": "ts_rank((((ewm_mean((((close) - open) * volume), 10)) * (1 + ((delay((close), 1) - (close)) / delay((close), 1)))) / ((ATR(((high)), ((low)), ((close)), 21)))), 20) * 2 - 1",
+    "lqtp_formula": "ts_rank((((ema((((close) - open) * volume), 10)) * (1 + ((delay((close), 1) - (close)) / delay((close), 1)))) / ((ATR(((high)), ((low)), ((close)), 21)))), 20) * 2 - 1",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_317",
+    "function_name": "factor_simplified_fear_pressure",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "hard",
+    "source": "ast",
+    "notes": "uses groupby/cumcount/concat/cummax"
+  },
+  {
+    "factor_id": "factor_331",
+    "function_name": "factor_dollar_pressure_range_zscore",
+    "dsl": "((((((((close))) - ((((((high)))) + ((((low)))) + ((((close))))) / 3)) * ((volume))) / (ts_mean((((((high)))) - ((((low))))), 20))) - (ts_mean((((((((close)))) - (((((((high))))) + (((((low))))) + (((((close)))))) / 3)) * (((volume)))) / (ts_mean(((((((high))))) - (((((low)))))), 20))), 20))) / (ts_std((((((((close)))) - (((((((high))))) + (((((low))))) + (((((close)))))) / 3)) * (((volume)))) / (ts_mean(((((((high))))) - (((((low)))))), 20))), 20)))",
+    "lqtp_formula": "((((((((close))) - ((((((high)))) + ((((low)))) + ((((close))))) / 3)) * ((volume))) / (ts_mean((((((high)))) - ((((low))))), 20))) - (ts_mean((((((((close)))) - (((((((high))))) + (((((low))))) + (((((close)))))) / 3)) * (((volume)))) / (ts_mean(((((((high))))) - (((((low)))))), 20))), 20))) / (ts_std((((((((close)))) - (((((((high))))) + (((((low))))) + (((((close)))))) / 3)) * (((volume)))) / (ts_mean(((((((high))))) - (((((low)))))), 20))), 20)))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_332",
+    "function_name": "factor_liquidity_mom_simple_2_mutated",
+    "dsl": "((((close)) - delay(((close)), 5)) * (((volume)) / ts_mean(((volume)), 20)))",
+    "lqtp_formula": "((((close)) - delay(((close)), 5)) * (((volume)) / ts_mean(((volume)), 20)))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_343",
+    "function_name": "factor_reversal_volume_gated",
+    "dsl": "((0.5 - (ewm_mean(((close - low) / ((high - low))), 5))) * (volume / ts_mean(volume, 20)))",
+    "lqtp_formula": "((0.5 - (ema(((close - low) / ((high - low))), 5))) * (volume / ts_mean(volume, 20)))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_345",
+    "function_name": "factor_reversal_volume_volregime",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "hard",
+    "source": "ast",
+    "notes": "uses groupby/cumcount/concat/cummax"
+  },
+  {
+    "factor_id": "factor_349",
+    "function_name": "factor_reversal_volume_simple",
+    "dsl": "(((0.5 - (ewm_mean(((close - low) / ((high - low))), 3))) * (ts_rank((volume / (ts_mean(volume, 21))), 21))))",
+    "lqtp_formula": "(((0.5 - (ema(((close - low) / ((high - low))), 3))) * (ts_rank((volume / (ts_mean(volume, 21))), 21))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_364",
+    "function_name": "factor_range_asym_log_short",
+    "dsl": "((log((cap((((where((close > delay(close, 1)), (high - low), 0).rolling((10), min_periods=(5)).sum()) / ((close > delay(close, 1)).rolling((10), min_periods=(5)).sum())) / ((where((not_((close > delay(close, 1)))), (high - low), 0).rolling((10), min_periods=(5)).sum()) / ((not_((close > delay(close, 1)))).rolling((10), min_periods=(5)).sum()))), 1e-12, None)))))",
+    "lqtp_formula": "((log((cap((((where((close > delay(close, 1)), (high - low), 0).rolling((10), min_periods=(5)).sum()) / ((close > delay(close, 1)).rolling((10), min_periods=(5)).sum())) / ((where((not_((close > delay(close, 1)))), (high - low), 0).rolling((10), min_periods=(5)).sum()) / ((not_((close > delay(close, 1)))).rolling((10), min_periods=(5)).sum()))), 1e-12, None)))))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Unsupported syntax node: Attribute"
+  },
+  {
+    "factor_id": "factor_365",
+    "function_name": "factor_range_asym_vol_smooth",
+    "dsl": "((ewm_mean((((((where((close > delay(close, 1)), (high - low), 0).rolling((20), min_periods=(5)).sum()) / ((close > delay(close, 1)).rolling((20), min_periods=(5)).sum())) - ((where((not_((close > delay(close, 1)))), (high - low), 0).rolling((20), min_periods=(5)).sum()) / ((not_((close > delay(close, 1)))).rolling((20), min_periods=(5)).sum()))) / (((where((close > delay(close, 1)), (high - low), 0).rolling((20), min_periods=(5)).sum()) / ((close > delay(close, 1)).rolling((20), min_periods=(5)).sum())) + ((where((not_((close > delay(close, 1)))), (high - low), 0).rolling((20), min_periods=(5)).sum()) / ((not_((close > delay(close, 1)))).rolling((20), min_periods=(5)).sum())) + 1e-10)) * ((ts_mean(volume, 20)) / (ts_max((ts_mean(volume, 20)), 20)))), 5)))",
+    "lqtp_formula": "((ema((((((where((close > delay(close, 1)), (high - low), 0).rolling((20), min_periods=(5)).sum()) / ((close > delay(close, 1)).rolling((20), min_periods=(5)).sum())) - ((where((not_((close > delay(close, 1)))), (high - low), 0).rolling((20), min_periods=(5)).sum()) / ((not_((close > delay(close, 1)))).rolling((20), min_periods=(5)).sum()))) / (((where((close > delay(close, 1)), (high - low), 0).rolling((20), min_periods=(5)).sum()) / ((close > delay(close, 1)).rolling((20), min_periods=(5)).sum())) + ((where((not_((close > delay(close, 1)))), (high - low), 0).rolling((20), min_periods=(5)).sum()) / ((not_((close > delay(close, 1)))).rolling((20), min_periods=(5)).sum())) + 1e-10)) * ((ts_mean(volume, 20)) / (ts_max((ts_mean(volume, 20)), 20)))), 5)))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Unsupported syntax node: Attribute"
+  },
+  {
+    "factor_id": "factor_366",
+    "function_name": "factor_range_asym_log_vol",
+    "dsl": "(((log((((where((close > delay(close, 1)), (high - low), 0).rolling((20), min_periods=(5)).sum()) / ((close > delay(close, 1)).rolling((20), min_periods=(5)).sum())) + 1e-12) / (((where((not_((close > delay(close, 1)))), (high - low), 0).rolling((20), min_periods=(5)).sum()) / ((not_((close > delay(close, 1)))).rolling((20), min_periods=(5)).sum())) + 1e-12))) * ((ts_mean(volume, 20)) / (ts_max((ts_mean(volume, 20)), 20)))))",
+    "lqtp_formula": "(((log((((where((close > delay(close, 1)), (high - low), 0).rolling((20), min_periods=(5)).sum()) / ((close > delay(close, 1)).rolling((20), min_periods=(5)).sum())) + 1e-12) / (((where((not_((close > delay(close, 1)))), (high - low), 0).rolling((20), min_periods=(5)).sum()) / ((not_((close > delay(close, 1)))).rolling((20), min_periods=(5)).sum())) + 1e-12))) * ((ts_mean(volume, 20)) / (ts_max((ts_mean(volume, 20)), 20)))))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Unsupported syntax node: Attribute"
+  },
+  {
+    "factor_id": "factor_375",
+    "function_name": "factor_downside_vol_asymmetry_smoothed",
+    "dsl": "log((ts_mean((sqrt(((where((ts_pct(close, 1)) < 0, (ts_pct(close, 1)), 0pow())).rolling(20, min_periods=(20)).mean())) / sqrt(((where((ts_pct(close, 1)) > 0, (ts_pct(close, 1)), 0pow())).rolling(20, min_periods=(20)).mean()))), 5)) + 1e-10)",
+    "lqtp_formula": "log((ts_mean((sqrt(((where(((close / delay(close, 1) - 1)) < 0, ((close / delay(close, 1) - 1)), 0pow())).rolling(20, min_periods=(20)).mean())) / sqrt(((where(((close / delay(close, 1) - 1)) > 0, ((close / delay(close, 1) - 1)), 0pow())).rolling(20, min_periods=(20)).mean()))), 5)) + 1e-10)",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Invalid expression syntax: log((ts_mean((sqrt(((where((ts_pct(close, 1)) < 0, (ts_pct(close, 1)), 0pow())).rolling(20, min_periods=(20)).mean())) / sqrt(((where((ts_pct(close, 1)) > 0, (ts_pct(close, 1)), 0pow())).rolling(20, min_periods=(20)).mean()))), 5)) + 1e-10)"
+  },
+  {
+    "factor_id": "factor_389",
+    "function_name": "factor_regime_switch_zscore_momentum",
+    "dsl": "(where((close > (ts_mean(close, 20))), (((close / delay(close, 10) - 1) - (ts_mean((close / delay(close, 10) - 1), 60))) / (ts_std((close / delay(close, 10) - 1), 60))), ((open - close) / open)))",
+    "lqtp_formula": "(where((close > (ts_mean(close, 20))), (((close / delay(close, 10) - 1) - (ts_mean((close / delay(close, 10) - 1), 60))) / (ts_std((close / delay(close, 10) - 1), 60))), ((open - close) / open)))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_390",
+    "function_name": "factor_drawdown_normalized",
+    "dsl": "rank(((- ((close - (ts_max(close, 60))) / (ts_max(close, 60))) / ((ts_std(close, 20))))))",
+    "lqtp_formula": "rank(((- ((close - (ts_max(close, 60))) / (ts_max(close, 60))) / ((ts_std(close, 20))))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_392",
+    "function_name": "factor_regime_switch_simple",
+    "dsl": "(where((close > (ts_mean(close, 20))), (close / delay(close, 10) - 1), ((open - close) / open)))",
+    "lqtp_formula": "(where((close > (ts_mean(close, 20))), (close / delay(close, 10) - 1), ((open - close) / open)))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_402",
+    "function_name": "factor_volume_confirmed_momentum_simple_volume_deviation",
+    "dsl": "(ts_pct(close, 10)) * (volume / (ts_mean(volume, 20)) - 1)",
+    "lqtp_formula": "((close / delay(close, 10) - 1)) * (volume / (ts_mean(volume, 20)) - 1)",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_403",
+    "function_name": "factor_volume_stress_adjusted_momentum_robust",
+    "dsl": "(ts_pct(close, 10)) * (((volume - (ts_median(volume, 20))) / (((volume - (ts_median(volume, 20))).ts_median(abs(), 20)) * 1.4826))) * (1 - (((ts_std(((ts_pct(close, 1))), 20)) / (ts_std((ts_pct(close, 1)), 20)))))",
+    "lqtp_formula": "((close / delay(close, 10) - 1)) * (((volume - (ts_quantile(volume, 20, 0.5))) / (((volume - (ts_quantile(volume, 20, 0.5))).ts_quantile(abs(), 20, 0.5)) * 1.4826))) * (1 - (((ts_std((((close / delay(close, 1) - 1))), 20)) / (ts_std(((close / delay(close, 1) - 1)), 20)))))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Unsupported syntax node: Attribute"
+  },
+  {
+    "factor_id": "factor_405",
+    "function_name": "factor_simplified_robust_volume_momentum",
+    "dsl": "(ts_pct(close, 10)) * (((volume - (ts_median(volume, 20))) / ((volume - (ts_median(volume, 20))).ts_median(abs(), 20))))",
+    "lqtp_formula": "((close / delay(close, 10) - 1)) * (((volume - (ts_quantile(volume, 20, 0.5))) / ((volume - (ts_quantile(volume, 20, 0.5))).ts_quantile(abs(), 20, 0.5))))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Unsupported syntax node: Attribute"
+  },
+  {
+    "factor_id": "factor_407",
+    "function_name": "factor_volume_persistence_momentum_robust",
+    "dsl": "((ts_pct(close, 10)) * (((volume - (ts_median(volume, 20))) / ((volume - (ts_median(volume, 20))).ts_median(abs(), 20)))) * (ts_sum(((ts_pct(close, 1)) > 0), 10) / 10))",
+    "lqtp_formula": "(((close / delay(close, 10) - 1)) * (((volume - (ts_quantile(volume, 20, 0.5))) / ((volume - (ts_quantile(volume, 20, 0.5))).ts_quantile(abs(), 20, 0.5)))) * (ts_sum((((close / delay(close, 1) - 1)) > 0), 10) / 10))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Unsupported syntax node: Attribute"
+  },
+  {
+    "factor_id": "factor_427",
+    "function_name": "factor_window_adjusted_momentum",
+    "dsl": "zscore(((ewm_mean((((((((close))))) / delay((((((close))))), 15) - 1) * (((((volume)))) / (ts_mean((((((volume))))), 15)))), 5))))",
+    "lqtp_formula": "zscore(((ema((((((((close))))) / delay((((((close))))), 15) - 1) * (((((volume)))) / (ts_mean((((((volume))))), 15)))), 5))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_428",
+    "function_name": "factor_asym_vol_volume_confirmed",
+    "dsl": "((ewm_mean((log(((ts_std((abs(where((ts_pct((((((((close))))))), 1)) < 0, (ts_pct((((((((close))))))), 1)), 0.0))), 20)) / (ts_std((where((ts_pct((((((((close))))))), 1)) > 0, (ts_pct((((((((close))))))), 1)), 0.0)), 20))))), 5)) * (((volume)) / ts_mean(((volume)), 20)))",
+    "lqtp_formula": "((ema((log(((ts_std((abs(where((((((((((close))))))) / delay((((((((close))))))), 1) - 1)) < 0, (((((((((close))))))) / delay((((((((close))))))), 1) - 1)), 0.0))), 20)) / (ts_std((where((((((((((close))))))) / delay((((((((close))))))), 1) - 1)) > 0, (((((((((close))))))) / delay((((((((close))))))), 1) - 1)), 0.0)), 20))))), 5)) * (((volume)) / ts_mean(((volume)), 20)))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_432",
+    "function_name": "factor_asym_vol_high_volume_confirmed",
+    "dsl": "((ewm_mean((log(((ts_std((abs(where((ts_pct((((((((close))))))), 1)) < 0, (ts_pct((((((((close))))))), 1)), 0.0))), 20)) / (ts_std((where((ts_pct((((((((close))))))), 1)) > 0, (ts_pct((((((((close))))))), 1)), 0.0)), 20))))), 5)) * (where(((volume)) > (ts_mean(((volume)), 20)), 1.0, 0.5)))",
+    "lqtp_formula": "((ema((log(((ts_std((abs(where((((((((((close))))))) / delay((((((((close))))))), 1) - 1)) < 0, (((((((((close))))))) / delay((((((((close))))))), 1) - 1)), 0.0))), 20)) / (ts_std((where((((((((((close))))))) / delay((((((((close))))))), 1) - 1)) > 0, (((((((((close))))))) / delay((((((((close))))))), 1) - 1)), 0.0)), 20))))), 5)) * (where(((volume)) > (ts_mean(((volume)), 20)), 1.0, 0.5)))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_445",
+    "function_name": "factor_drawdown_atr_normalized_20",
+    "dsl": "-protected_div(protected_div(close - ts_max(close, 60), ts_max(close, 60)), ATR(high, low, close, 20))",
+    "lqtp_formula": "-safe_div(safe_div(close - ts_max(close, 60), ts_max(close, 60)), ATR(high, low, close, 20))",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_446",
+    "function_name": "factor_drawdown_std60_normalized",
+    "dsl": "rank((((close - (ts_max(close, 60))) / (ts_max(close, 60))) / (ts_std(close, 60))))",
+    "lqtp_formula": "rank((((close - (ts_max(close, 60))) / (ts_max(close, 60))) / (ts_std(close, 60))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_448",
+    "function_name": "factor_drawdown_atr_normalized_v2",
+    "dsl": "-protected_div(protected_div(close - ts_max(close, 60), ts_max(close, 60)), ATR(high, low, close, 60))",
+    "lqtp_formula": "-safe_div(safe_div(close - ts_max(close, 60), ts_max(close, 60)), ATR(high, low, close, 60))",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_450",
+    "function_name": "factor_drawdown_atr_20_normalized",
+    "dsl": "-protected_div(protected_div(close - ts_max(close, 60), ts_max(close, 60)), ATR(high, low, close, 20))",
+    "lqtp_formula": "-safe_div(safe_div(close - ts_max(close, 60), ts_max(close, 60)), ATR(high, low, close, 20))",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_467",
+    "function_name": "factor_volume_adjusted_breakout_v3",
+    "dsl": "rank(ts_mean(((close > (delay(ts_max(high, 10), 1))) * (close / delay(close, 1) - 1) * (volume / ts_mean(volume, 10))), 5))",
+    "lqtp_formula": "rank(ts_mean(((close > (delay(ts_max(high, 10), 1))) * (close / delay(close, 1) - 1) * (volume / ts_mean(volume, 10))), 5))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_468",
+    "function_name": "factor_volume_adjusted_breakout_window_001",
+    "dsl": "rank(ts_sum((((close > (delay(ts_max(high, 20), 1))) & ((volume / ts_mean(volume, 20)) > 1) & ((log(((ts_std((where((ts_pct(close, 1)) < 0, (ts_pct(close, 1)), 0)), 10)) / (ts_std((where((ts_pct(close, 1)) > 0, (ts_pct(close, 1)), 0)), 10))))) < (ts_median((log(((ts_std((where((ts_pct(close, 1)) < 0, (ts_pct(close, 1)), 0)), 10)) / (ts_std((where((ts_pct(close, 1)) > 0, (ts_pct(close, 1)), 0)), 10))))), 20)))) * (ts_pct(close, 1)) * (volume / ts_mean(volume, 20))), 5))",
+    "lqtp_formula": "rank(ts_sum((((close > (delay(ts_max(high, 20), 1))) & ((volume / ts_mean(volume, 20)) > 1) & ((log(((ts_std((where(((close / delay(close, 1) - 1)) < 0, ((close / delay(close, 1) - 1)), 0)), 10)) / (ts_std((where(((close / delay(close, 1) - 1)) > 0, ((close / delay(close, 1) - 1)), 0)), 10))))) < (ts_quantile((log(((ts_std((where(((close / delay(close, 1, 0.5) - 1)) < 0, ((close / delay(close, 1) - 1)), 0)), 10)) / (ts_std((where(((close / delay(close, 1) - 1)) > 0, ((close / delay(close, 1) - 1)), 0)), 10))))), 20)))) * ((close / delay(close, 1) - 1)) * (volume / ts_mean(volume, 20))), 5))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Unsupported binary operator: BitAnd"
+  },
+  {
+    "factor_id": "factor_470",
+    "function_name": "factor_volume_adjusted_breakout_with_vol_filter_v2",
+    "dsl": "rank(ts_sum((((close > (delay(ts_max(high, 20), 1))) & ((volume / ts_mean(volume, 20)) > 1) & ((log(((ts_std((where((ts_pct(close, 1)) < 0, (ts_pct(close, 1)), 0)), 20)) / (ts_std((where((ts_pct(close, 1)) > 0, (ts_pct(close, 1)), 0)), 20))))) < (ts_median((log(((ts_std((where((ts_pct(close, 1)) < 0, (ts_pct(close, 1)), 0)), 20)) / (ts_std((where((ts_pct(close, 1)) > 0, (ts_pct(close, 1)), 0)), 20))))), 20)))) * (ts_pct(close, 10)) * (volume / ts_mean(volume, 20))), 5))",
+    "lqtp_formula": "rank(ts_sum((((close > (delay(ts_max(high, 20), 1))) & ((volume / ts_mean(volume, 20)) > 1) & ((log(((ts_std((where(((close / delay(close, 1) - 1)) < 0, ((close / delay(close, 1) - 1)), 0)), 20)) / (ts_std((where(((close / delay(close, 1) - 1)) > 0, ((close / delay(close, 1) - 1)), 0)), 20))))) < (ts_quantile((log(((ts_std((where(((close / delay(close, 1, 0.5) - 1)) < 0, ((close / delay(close, 1) - 1)), 0)), 20)) / (ts_std((where(((close / delay(close, 1) - 1)) > 0, ((close / delay(close, 1) - 1)), 0)), 20))))), 20)))) * ((close / delay(close, 10) - 1)) * (volume / ts_mean(volume, 20))), 5))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Unsupported binary operator: BitAnd"
+  },
+  {
+    "factor_id": "factor_474",
+    "function_name": "factor_volume_adjusted_breakout_v3",
+    "dsl": "rank(ts_sum((((close > (delay(ts_max(high, 10), 1))) & ((volume / ts_mean(volume, 10)) > 1) & ((log(((ts_std((where((ts_pct(close, 1)) < 0, (ts_pct(close, 1)), 0)), 20)) / (ts_std((where((ts_pct(close, 1)) > 0, (ts_pct(close, 1)), 0)), 20))))) < (ts_median((log(((ts_std((where((ts_pct(close, 1)) < 0, (ts_pct(close, 1)), 0)), 20)) / (ts_std((where((ts_pct(close, 1)) > 0, (ts_pct(close, 1)), 0)), 20))))), 20)))) * (ts_pct(close, 5)) * (volume / ts_mean(volume, 10))), 5))",
+    "lqtp_formula": "rank(ts_sum((((close > (delay(ts_max(high, 10), 1))) & ((volume / ts_mean(volume, 10)) > 1) & ((log(((ts_std((where(((close / delay(close, 1) - 1)) < 0, ((close / delay(close, 1) - 1)), 0)), 20)) / (ts_std((where(((close / delay(close, 1) - 1)) > 0, ((close / delay(close, 1) - 1)), 0)), 20))))) < (ts_quantile((log(((ts_std((where(((close / delay(close, 1, 0.5) - 1)) < 0, ((close / delay(close, 1) - 1)), 0)), 20)) / (ts_std((where(((close / delay(close, 1) - 1)) > 0, ((close / delay(close, 1) - 1)), 0)), 20))))), 20)))) * ((close / delay(close, 5) - 1)) * (volume / ts_mean(volume, 10))), 5))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Unsupported binary operator: BitAnd"
+  },
+  {
+    "factor_id": "factor_488",
+    "function_name": "factor_asym_vol_volume_cont_30",
+    "dsl": "rank((((log((ts_std(abs(((ts_pct(((((((close)))))), 1)).copy())), 30)) / (ts_std(((ts_pct(((((((close)))))), 1)).copy()), 30)))) * (((volume)) / (ts_mean(((volume)), 20))))))",
+    "lqtp_formula": "rank((((log((ts_std(abs((((((((((close)))))) / delay(((((((close)))))), 1) - 1)).copy())), 30)) / (ts_std((((((((((close)))))) / delay(((((((close)))))), 1) - 1)).copy()), 30)))) * (((volume)) / (ts_mean(((volume)), 20))))))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Unsupported syntax node: Attribute"
+  },
+  {
+    "factor_id": "factor_489",
+    "function_name": "factor_asym_vol_cont_gate_30",
+    "dsl": "zscore((((log((ts_std(((ts_pct(close, 1))), 60)) / (ts_std(((ts_pct(close, 1))), 60)))) * ((volume / (ts_mean(volume, 20)))))))",
+    "lqtp_formula": "zscore((((log((ts_std((((close / delay(close, 1) - 1))), 60)) / (ts_std((((close / delay(close, 1) - 1))), 60)))) * ((volume / (ts_mean(volume, 20)))))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_491",
+    "function_name": "factor_asym_vol_30",
+    "dsl": "rank((log((ts_std(((ts_pct(close, 1))), 30)) / (ts_std(((ts_pct(close, 1))), 30)))))",
+    "lqtp_formula": "rank((log((ts_std((((close / delay(close, 1) - 1))), 30)) / (ts_std((((close / delay(close, 1) - 1))), 30)))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_501",
+    "function_name": "factor_vol_regime_vol_ratio",
+    "dsl": "rank((-((ts_mean((high - low), 5)) / (ts_mean((high - low), 20))) * ((volume > (ts_mean(volume, 30)) * 1.5))))",
+    "lqtp_formula": "rank((-((ts_mean((high - low), 5)) / (ts_mean((high - low), 20))) * ((volume > (ts_mean(volume, 30)) * 1.5))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_503",
+    "function_name": "factor_vol_asym_confirmed_range",
+    "dsl": "(log(1 + sqrt(ts_mean(pow(where(ts_pct(close, 1) < 0, ts_pct(close, 1), 0), 2), 60))) - log(1 + sqrt(ts_mean(pow(where(ts_pct(close, 1) > 0, ts_pct(close, 1), 0), 2), 60)))) * protected_div(volume, ts_mean(volume, 60)) * protected_div(high - low, close)",
+    "lqtp_formula": "(log(1 + sqrt(ts_mean(pow(where((close / delay(close, 1) - 1) < 0, (close / delay(close, 1) - 1), 0), 2), 60))) - log(1 + sqrt(ts_mean(pow(where((close / delay(close, 1) - 1) > 0, (close / delay(close, 1) - 1), 0), 2), 60)))) * safe_div(volume, ts_mean(volume, 60)) * safe_div(high - low, close)",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_505",
+    "function_name": "factor_vol_asym_confirmed_range_v2",
+    "dsl": "(log(1 + sqrt(ts_mean(pow(where(ts_pct(close, 1) < 0, ts_pct(close, 1), 0), 2), 60))) - log(1 + sqrt(ts_mean(pow(where(ts_pct(close, 1) > 0, ts_pct(close, 1), 0), 2), 60)))) * protected_div(volume, ts_mean(volume, 40)) * protected_div(high - low, (high + low + close) / 3)",
+    "lqtp_formula": "(log(1 + sqrt(ts_mean(pow(where((close / delay(close, 1) - 1) < 0, (close / delay(close, 1) - 1), 0), 2), 60))) - log(1 + sqrt(ts_mean(pow(where((close / delay(close, 1) - 1) > 0, (close / delay(close, 1) - 1), 0), 2), 60)))) * safe_div(volume, ts_mean(volume, 40)) * safe_div(high - low, (high + low + close) / 3)",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_517",
+    "function_name": "factor_asym_ratio_pure",
+    "dsl": "rank((log((((ts_sum((where(((ts_pct(close, 1)) < 0), (high - low), 0)), 20)) / (ts_sum(((ts_pct(close, 1)) < 0), 20))) / ((ts_sum((where(((ts_pct(close, 1)) >= 0), (high - low), 0)), 20)) / (ts_sum(((ts_pct(close, 1)) >= 0), 20)))))))",
+    "lqtp_formula": "rank((log((((ts_sum((where((((close / delay(close, 1) - 1)) < 0), (high - low), 0)), 20)) / (ts_sum((((close / delay(close, 1) - 1)) < 0), 20))) / ((ts_sum((where((((close / delay(close, 1) - 1)) >= 0), (high - low), 0)), 20)) / (ts_sum((((close / delay(close, 1) - 1)) >= 0), 20)))))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_519",
+    "function_name": "factor_asym_vol_regime",
+    "dsl": "rank((where((protected_div(volume, ewm_mean(volume, 20))) == 1, (log((((ts_sum((where(((ts_pct(close, 1)) < 0), (high - low), 0)), 15)) / (ts_sum(((ts_pct(close, 1)) < 0), 15))) / ((ts_sum((where(((ts_pct(close, 1)) >= 0), (high - low), 0)), 15)) / (ts_sum(((ts_pct(close, 1)) >= 0), 15)))))) * 1.2, (log((((ts_sum((where(((ts_pct(close, 1)) < 0), (high - low), 0)), 15)) / (ts_sum(((ts_pct(close, 1)) < 0), 15))) / ((ts_sum((where(((ts_pct(close, 1)) >= 0), (high - low), 0)), 15)) / (ts_sum(((ts_pct(close, 1)) >= 0), 15)))))))))",
+    "lqtp_formula": "rank((where((safe_div(volume, ema(volume, 20))) == 1, (log((((ts_sum((where((((close / delay(close, 1) - 1)) < 0), (high - low), 0)), 15)) / (ts_sum((((close / delay(close, 1) - 1)) < 0), 15))) / ((ts_sum((where((((close / delay(close, 1) - 1)) >= 0), (high - low), 0)), 15)) / (ts_sum((((close / delay(close, 1) - 1)) >= 0), 15)))))) * 1.2, (log((((ts_sum((where((((close / delay(close, 1) - 1)) < 0), (high - low), 0)), 15)) / (ts_sum((((close / delay(close, 1) - 1)) < 0), 15))) / ((ts_sum((where((((close / delay(close, 1) - 1)) >= 0), (high - low), 0)), 15)) / (ts_sum((((close / delay(close, 1) - 1)) >= 0), 15)))))))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_521",
+    "function_name": "factor_asym_vol_gated",
+    "dsl": "rank((where(((protected_div(volume, ewm_mean(volume, 20))) == \"high\"), (log(((ts_sum((where(((ts_pct(close, 1)) < 0), (high - low), 0)), 20) / ts_sum(((ts_pct(close, 1)) < 0), 20)) / (ts_sum((where(((ts_pct(close, 1)) >= 0), (high - low), 0)), 20) / ts_sum(((ts_pct(close, 1)) >= 0), 20))))) * 1.5, where(((protected_div(volume, ewm_mean(volume, 20))) == \"low\"), (log(((ts_sum((where(((ts_pct(close, 1)) < 0), (high - low), 0)), 20) / ts_sum(((ts_pct(close, 1)) < 0), 20)) / (ts_sum((where(((ts_pct(close, 1)) >= 0), (high - low), 0)), 20) / ts_sum(((ts_pct(close, 1)) >= 0), 20))))) * 0.5, (log(((ts_sum((where(((ts_pct(close, 1)) < 0), (high - low), 0)), 20) / ts_sum(((ts_pct(close, 1)) < 0), 20)) / (ts_sum((where(((ts_pct(close, 1)) >= 0), (high - low), 0)), 20) / ts_sum(((ts_pct(close, 1)) >= 0), 20)))))))))",
+    "lqtp_formula": "rank((where(((safe_div(volume, ema(volume, 20))) == \"high\"), (log(((ts_sum((where((((close / delay(close, 1) - 1)) < 0), (high - low), 0)), 20) / ts_sum((((close / delay(close, 1) - 1)) < 0), 20)) / (ts_sum((where((((close / delay(close, 1) - 1)) >= 0), (high - low), 0)), 20) / ts_sum((((close / delay(close, 1) - 1)) >= 0), 20))))) * 1.5, where(((safe_div(volume, ema(volume, 20))) == \"low\"), (log(((ts_sum((where((((close / delay(close, 1) - 1)) < 0), (high - low), 0)), 20) / ts_sum((((close / delay(close, 1) - 1)) < 0), 20)) / (ts_sum((where((((close / delay(close, 1) - 1)) >= 0), (high - low), 0)), 20) / ts_sum((((close / delay(close, 1) - 1)) >= 0), 20))))) * 0.5, (log(((ts_sum((where((((close / delay(close, 1) - 1)) < 0), (high - low), 0)), 20) / ts_sum((((close / delay(close, 1) - 1)) < 0), 20)) / (ts_sum((where((((close / delay(close, 1) - 1)) >= 0), (high - low), 0)), 20) / ts_sum((((close / delay(close, 1) - 1)) >= 0), 20)))))))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_522",
+    "function_name": "factor_asym_vol_attenuate",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "hard",
+    "source": "ast",
+    "notes": "uses groupby/cumcount/concat/cummax"
+  },
+  {
+    "factor_id": "factor_543",
+    "function_name": "factor_volume_regime_intraday_momentum",
+    "dsl": "((where((where(protected_div(volume, ewm_mean(volume, 20)) < 0.6, 1, 0)) > 0, (ewm_mean((((close - open) / open) * volume), 10)) * 0.5, (ewm_mean((((close - open) / open) * volume), 10))))).rename(\"factor_volume_regime_intraday_momentum\")",
+    "lqtp_formula": "((where((where(safe_div(volume, ema(volume, 20)) < 0.6, 1, 0)) > 0, (ema((((close - open) / open) * volume), 10)) * 0.5, (ema((((close - open) / open) * volume), 10))))).rename(\"factor_volume_regime_intraday_momentum\")",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Unsupported syntax node: Attribute"
+  },
+  {
+    "factor_id": "factor_544",
+    "function_name": "factor_intraday_pressure_ema",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "hard",
+    "source": "ast",
+    "notes": "uses groupby/cumcount/concat/cummax"
+  },
+  {
+    "factor_id": "factor_546",
+    "function_name": "factor_volume_abnormality_liquidity_gated",
+    "dsl": "((ts_std(((volume) / (ts_median((volume))), 15)), (ts_std(((volume) / (ts_median((volume), 20))), 15)) * 0.7))",
+    "lqtp_formula": "((ts_std(((volume) / (ts_quantile((volume))), 15, 0.5)), (ts_std(((volume) / (ts_quantile((volume), 20, 0.5))), 15)) * 0.7))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Unsupported syntax node: Tuple"
+  },
+  {
+    "factor_id": "factor_558",
+    "function_name": "factor_asym_vol_down_up_volatility_gated",
+    "dsl": "rank((((log(((where((ts_pct(close) < 0, pow((ts_pct(close, 1)), 2), 0)).ewm(span=window).mean()) / ((where((ts_pct(close, 1)) > 0, pow((ts_pct(close, 1)), 2), 0)).ewm(span=window).mean())))), 0.0)))",
+    "lqtp_formula": "rank((((log(((where((ts_pct(close) < 0, pow(((close / delay(close, 1) - 1)), 2), 0)).ewm(span=window).mean()) / ((where(((close / delay(close, 1) - 1)) > 0, pow(((close / delay(close, 1) - 1)), 2), 0)).ewm(span=window).mean())))), 0.0)))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Unsupported syntax node: Tuple"
+  },
+  {
+    "factor_id": "factor_559",
+    "function_name": "factor_smoothed_atr_ratio_gated",
+    "dsl": "EMA(protected_div(ATR(high, low, close, 20), ATR(high, low, close, 60)), 5)",
+    "lqtp_formula": "EMA(safe_div(ATR(high, low, close, 20), ATR(high, low, close, 60)), 5)",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_570",
+    "function_name": "factor_pressure_ema_mutation",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "hard",
+    "source": "ast",
+    "notes": "uses groupby/cumcount/concat/cummax"
+  },
+  {
+    "factor_id": "factor_571",
+    "function_name": "factor_drawdown_vol_simple",
+    "dsl": "(ts_rank((((ts_max(((((close)))), 252)) - (((close)))) / (ts_max(((((close)))), 252))), 20)) * (ts_rank(((((volume))) / (ts_mean((((volume))), 20))), 20))",
+    "lqtp_formula": "(ts_rank((((ts_max(((((close)))), 252)) - (((close)))) / (ts_max(((((close)))), 252))), 20)) * (ts_rank(((((volume))) / (ts_mean((((volume))), 20))), 20))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_572",
+    "function_name": "factor_squared_range_volume_rank_smoothed_no_cuberoot",
+    "dsl": "rank(ewm_mean(((((high - lowpow(), 2)) / close) * (ts_rank(volume, 20))), 10))",
+    "lqtp_formula": "rank(ema(((((high - lowpow(), 2)) / close) * (ts_rank(volume, 20))), 10))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Unsupported syntax node: Tuple"
+  },
+  {
+    "factor_id": "factor_573",
+    "function_name": "factor_squared_range_close_ema_cuberoot",
+    "dsl": "rank((sign((ewm_mean((((high - lowpow(), 2)) / close), 10))) * abs((ewm_mean((((high - lowpow(), 2)) / close), 10))) ** (1/3)))",
+    "lqtp_formula": "rank((sign((ema((((high - lowpow(), 2)) / close), 10))) * abs((ema((((high - lowpow(), 2)) / close), 10))) ** (1/3)))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Unsupported syntax node: Tuple"
+  },
+  {
+    "factor_id": "factor_576",
+    "function_name": "factor_asym_vol_gated_by_volume_pressure",
+    "dsl": "log(cap(protected_div(sqrt(ewm_mean(pow(where(ts_pct(close, 1) < 0, ts_pct(close, 1), 0), 2), 20)), sqrt(ewm_mean(pow(where(ts_pct(close, 1) > 0, ts_pct(close, 1), 0), 2), 20))), 1e-6, 1e6)) * protected_div(volume, ewm_mean(volume, 20))",
+    "lqtp_formula": "log(cap(safe_div(sqrt(ema(pow(where((close / delay(close, 1) - 1) < 0, (close / delay(close, 1) - 1), 0), 2), 20)), sqrt(ema(pow(where((close / delay(close, 1) - 1) > 0, (close / delay(close, 1) - 1), 0), 2), 20))), 1e-6, 1e6)) * safe_div(volume, ema(volume, 20))",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_586",
+    "function_name": "factor_drawdown_volume_geometry_rolling",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "hard",
+    "source": "ast",
+    "notes": "uses groupby/cumcount/concat/cummax"
+  },
+  {
+    "factor_id": "factor_587",
+    "function_name": "factor_resvol_volume_momentum",
+    "dsl": "ROC(close, 20) * protected_div(volume, ewm_mean(volume, 20))",
+    "lqtp_formula": "ROC(close, 20) * safe_div(volume, ema(volume, 20))",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_589",
+    "function_name": "factor_regime_vol_adjusted_momentum_deviation",
+    "dsl": "((where((1) > 0, ((ROC(close, 20)) / (ts_std((ROC(close, 20)), 20))), ((ROC(close, 10)) / (ts_std((ROC(close, 10)), 20))))) * ((protected_div(volume, ewm_mean(volume, 20))) - 1))",
+    "lqtp_formula": "((where((1) > 0, ((ROC(close, 20)) / (ts_std((ROC(close, 20)), 20))), ((ROC(close, 10)) / (ts_std((ROC(close, 10)), 20))))) * ((safe_div(volume, ema(volume, 20))) - 1))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_601",
+    "function_name": "factor_persistent_volume_sum_momentum",
+    "dsl": "((close / delay(close, 10) - 1) * (ts_sum((where((ts_pct(close, 1)) > 0, (ts_pct(close, 1)), 0.0)), 10)) * (1 + 0.3 * (protected_div(volume, ewm_mean(volume, 20)))))",
+    "lqtp_formula": "((close / delay(close, 10) - 1) * (ts_sum((where(((close / delay(close, 1) - 1)) > 0, ((close / delay(close, 1) - 1)), 0.0)), 10)) * (1 + 0.3 * (safe_div(volume, ema(volume, 20)))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_603",
+    "function_name": "factor_ewma_smoothness_volume",
+    "dsl": "(-(ewm_mean((abs(((ts_pct(close, 1)) - delay((ts_pct(close, 1)), 1)))), 10)) * ((protected_div(volume, ewm_mean(volume, 20)))))",
+    "lqtp_formula": "(-(ema((abs((((close / delay(close, 1) - 1)) - delay(((close / delay(close, 1) - 1)), 1)))), 10)) * ((safe_div(volume, ema(volume, 20)))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_604",
+    "function_name": "factor_volume_confirmed_return_tool",
+    "dsl": "((close / delay(close, 10) - 1) * (cap((protected_div(volume, ewm_mean(volume, 20))), 0.5, 2.0)))",
+    "lqtp_formula": "((close / delay(close, 10) - 1) * (cap((safe_div(volume, ema(volume, 20))), 0.5, 2.0)))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_606",
+    "function_name": "factor_smoothed_persistent_momentum_smoothness_weighted",
+    "dsl": "((close / delay(close, 10) - 1) * (ts_sum((ts_pct(close, 1) > 0), 10)) * (1 + 0.5 * (protected_div(volume, ewm_mean(volume, 20)))) * (1.0 / (1.0 + (ts_mean((abs(((ts_pct(close, 1)) - delay((ts_pct(close, 1)), 1)))), 10)))))",
+    "lqtp_formula": "((close / delay(close, 10) - 1) * (ts_sum(((close / delay(close, 1) - 1) > 0), 10)) * (1 + 0.5 * (safe_div(volume, ema(volume, 20)))) * (1.0 / (1.0 + (ts_mean((abs((((close / delay(close, 1) - 1)) - delay(((close / delay(close, 1) - 1)), 1)))), 10)))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_620",
+    "function_name": "factor_resvol_smoothed_trend",
+    "dsl": "(((close - delay(close, 10)) / (ts_std(close, 20))) * (1.0))",
+    "lqtp_formula": "(((close - delay(close, 10)) / (ts_std(close, 20))) * (1.0))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_631",
+    "function_name": "factor_simplified_volume_lag",
+    "dsl": "(ewm_mean(((ts_pct(close, 1)) * (log((protected_div(volume, ewm_mean(volume, 10)))))), 5))",
+    "lqtp_formula": "(ema((((close / delay(close, 1) - 1)) * (log((safe_div(volume, ema(volume, 10)))))), 5))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_632",
+    "function_name": "factor_vol_adjusted_lag_log_coherence",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "hard",
+    "source": "ast",
+    "notes": "uses groupby/cumcount/concat/cummax"
+  },
+  {
+    "factor_id": "factor_643",
+    "function_name": "factor_volume_adjusted_lag_return_v3",
+    "dsl": "ewm_mean(((delay((ts_pct(((close)), 1)), 1)) * (log(((((volume))) / (ewm_mean(((((volume)))), 10)))))), 8)",
+    "lqtp_formula": "ema(((delay(((((close)) / delay(((close)), 1) - 1)), 1)) * (log(((((volume))) / (ema(((((volume)))), 10)))))), 8)",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_644",
+    "function_name": "factor_volume_adjusted_lag_simple",
+    "dsl": "(ewm_mean(((delay((ts_pct((((close))), 1)), 1)) * (log(((((volume))) / ts_mean((((volume))), 10))))), 8))",
+    "lqtp_formula": "(ema(((delay((((((close))) / delay((((close))), 1) - 1)), 1)) * (log(((((volume))) / ts_mean((((volume))), 10))))), 8))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_646",
+    "function_name": "factor_volume_adjusted_lag_consensus_v2",
+    "dsl": "(ewm_mean((((delay((ts_pct(((((close)))), 1)), 1)) * (log(((((volume))) / ts_mean((((volume))), 10))))) * (ts_mean((((sign((protected_div((((((((close))))))), (open)) - 1))) == (sign((ts_delta((((((volume))))), 1)))))), 10))), 8))",
+    "lqtp_formula": "(ema((((delay(((((((close)))) / delay(((((close)))), 1) - 1)), 1)) * (log(((((volume))) / ts_mean((((volume))), 10))))) * (ts_mean((((sign((safe_div((((((((close))))))), (open)) - 1))) == (sign((ts_delta((((((volume))))), 1)))))), 10))), 8))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_656",
+    "function_name": "factor_smoothed_vol_adj_volume_momentum_10",
+    "dsl": "(ewm_mean((((close / delay(close, 10) - 1) * (log((volume / (ewm_mean(volume, 20)))))) / (ts_std((close / delay(close, 10) - 1), 20))), 5))",
+    "lqtp_formula": "(ema((((close / delay(close, 10) - 1) * (log((volume / (ema(volume, 20)))))) / (ts_std((close / delay(close, 10) - 1), 20))), 5))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_658",
+    "function_name": "factor_vol_price_coherence_v2",
+    "dsl": "ts_corr(ts_pct(close, 1), ts_pct(volume, 1), 20) * protected_div(volume, ewm_mean(volume, 20))",
+    "lqtp_formula": "ts_corr(close / delay(close, 1) - 1, volume / delay(volume, 1) - 1, 20) * safe_div(volume, ema(volume, 20))",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_676",
+    "function_name": "factor_vwap_adjusted_range_tanh_smooth",
+    "dsl": "",
+    "lqtp_formula": "",
+    "status": "hard",
+    "source": "ast",
+    "notes": "uses groupby/cumcount/concat/cummax"
+  },
+  {
+    "factor_id": "factor_678",
+    "function_name": "factor_vwap_adjusted_range_tanh_mutated_v2",
+    "dsl": "(tanh((((ATR(high, low, close, 14)) / (ts_sum((close * volume), 14) / ts_sum(volume, 14))) * (volume / (EMA(volume, 30))))))",
+    "lqtp_formula": "(tanh((((ATR(high, low, close, 14)) / (ts_sum((close * volume), 14) / ts_sum(volume, 14))) * (volume / (EMA(volume, 30))))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_692",
+    "function_name": "factor_asym_intraday_sma",
+    "dsl": "protected_div(SMA(open - low, 40), SMA(high - open, 40))",
+    "lqtp_formula": "safe_div(SMA(open - low, 40), SMA(high - open, 40))",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_693",
+    "function_name": "factor_liquidity_adaptive_asym_momentum",
+    "dsl": "protected_div(protected_div(close, delay(close, 21)) - 1, ts_std(where(ts_pct(close, 1) < 0, ts_pct(close, 1), 0), 21)) / (1 + protected_div(EMA(open - low, 20), EMA(high - open, 20)))",
+    "lqtp_formula": "safe_div(safe_div(close, delay(close, 21)) - 1, ts_std(where((close / delay(close, 1) - 1) < 0, (close / delay(close, 1) - 1), 0), 21)) / (1 + safe_div(EMA(open - low, 20), EMA(high - open, 20)))",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_695",
+    "function_name": "factor_liquidity_adaptive_momentum",
+    "dsl": "((((close)) / delay(((close)), 21) - 1.0) / (where(((ts_std(((where((ts_pct(((((((close))))))) < 0, (ts_pct(((((((close)))))), 1)), 0))), 21)), (ts_std(((where((ts_pct(((((((close)))))), 1)) < 0, (ts_pct(((((((close)))))), 1)), 0))), 63)))) == 0.0, 0, ((ts_std(((where((ts_pct(((((((close))))))) < 0, (ts_pct(((((((close)))))), 1)), 0))), 21)), (ts_std(((where((ts_pct(((((((close)))))), 1)) < 0, (ts_pct(((((((close)))))), 1)), 0))), 63)))))))",
+    "lqtp_formula": "((((close)) / delay(((close)), 21) - 1.0) / (where(((ts_std(((where((ts_pct(((((((close))))))) < 0, ((((((((close)))))) / delay(((((((close)))))), 1) - 1)), 0))), 21)), (ts_std(((where(((((((((close)))))) / delay(((((((close)))))), 1) - 1)) < 0, ((((((((close)))))) / delay(((((((close)))))), 1) - 1)), 0))), 63)))) == 0.0, 0, ((ts_std(((where((ts_pct(((((((close))))))) < 0, ((((((((close)))))) / delay(((((((close)))))), 1) - 1)), 0))), 21)), (ts_std(((where(((((((((close)))))) / delay(((((((close)))))), 1) - 1)) < 0, ((((((((close)))))) / delay(((((((close)))))), 1) - 1)), 0))), 63)))))))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Unsupported syntax node: Tuple"
+  },
+  {
+    "factor_id": "factor_697",
+    "function_name": "factor_downside_vol_liquidity_momentum",
+    "dsl": "(((((close))) / delay((((close))), 21) - 1.0) / (where(((ts_std((where((ts_pct((((((close)))))) < 0, (ts_pct((((((close))))), 1)), 0)), 21)), (ts_std((where((ts_pct((((((close))))), 1)) < 0, (ts_pct((((((close))))), 1)), 0)), 63)))) == 0.0, 0, ((ts_std((where((ts_pct((((((close)))))) < 0, (ts_pct((((((close))))), 1)), 0)), 21)), (ts_std((where((ts_pct((((((close))))), 1)) < 0, (ts_pct((((((close))))), 1)), 0)), 63)))))))",
+    "lqtp_formula": "(((((close))) / delay((((close))), 21) - 1.0) / (where(((ts_std((where((ts_pct((((((close)))))) < 0, (((((((close))))) / delay((((((close))))), 1) - 1)), 0)), 21)), (ts_std((where((((((((close))))) / delay((((((close))))), 1) - 1)) < 0, (((((((close))))) / delay((((((close))))), 1) - 1)), 0)), 63)))) == 0.0, 0, ((ts_std((where((ts_pct((((((close)))))) < 0, (((((((close))))) / delay((((((close))))), 1) - 1)), 0)), 21)), (ts_std((where((((((((close))))) / delay((((((close))))), 1) - 1)) < 0, (((((((close))))) / delay((((((close))))), 1) - 1)), 0)), 63)))))))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Unsupported syntax node: Tuple"
+  },
+  {
+    "factor_id": "factor_708",
+    "function_name": "factor_adx_trend_vol_ema",
+    "dsl": "ADX(high, low, close, 14) * sign(ts_pct(close, 10)) * cap(protected_div(volume, ewm_mean(volume, 20)), 0.5, 2.0)",
+    "lqtp_formula": "ADX(high, low, close, 14) * sign((close / delay(close, 10) - 1)) * cap(safe_div(volume, ema(volume, 20)), 0.5, 2.0)",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_718",
+    "function_name": "factor_corr_volume_regime",
+    "dsl": "ts_corr(ts_pct(close, 1), ts_pct(volume, 1), 20) * protected_div(volume, ewm_mean(volume, 20))",
+    "lqtp_formula": "ts_corr(close / delay(close, 1) - 1, volume / delay(volume, 1) - 1, 20) * safe_div(volume, ema(volume, 20))",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_719",
+    "function_name": "factor_lag_volume_ratio_regime_adaptive",
+    "dsl": "ts_mean((((delay((ts_pct((((close))), 1)), 1)) * ((log((((volume))) / (ts_mean(((((volume)))), 20)))))) * (where((where(protected_div(((volume)), ewm_mean(((volume)), 20)) < 0.6, 1, 0)) > 0, 0.3, (where((where(protected_div(((volume)), ewm_mean(((volume)), 20)) > 1.5, 1, 0)) > 0, (protected_div(((volume)), ewm_mean(((volume)), 20))), 1.0))))), 5)",
+    "lqtp_formula": "ts_mean((((delay((((((close))) / delay((((close))), 1) - 1)), 1)) * ((log((((volume))) / (ts_mean(((((volume)))), 20)))))) * (where((where(safe_div(((volume)), ema(((volume)), 20)) < 0.6, 1, 0)) > 0, 0.3, (where((where(safe_div(((volume)), ema(((volume)), 20)) > 1.5, 1, 0)) > 0, (safe_div(((volume)), ema(((volume)), 20))), 1.0))))), 5)",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_733",
+    "function_name": "factor_volume_adaptive_momentum_scaled_vol",
+    "dsl": "(ewm_mean((((close / delay(close, 5) - 1) / (ts_std((ts_pct(close, 1)), 20))) * (log((protected_div(volume, ewm_mean(volume, 20)))))), 10))",
+    "lqtp_formula": "(ema((((close / delay(close, 5) - 1) / (ts_std(((close / delay(close, 1) - 1)), 20))) * (log((safe_div(volume, ema(volume, 20)))))), 10))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_735",
+    "function_name": "factor_volume_adaptive_momentum_smoothed_v3",
+    "dsl": "(ewm_mean(((close / delay(close, 5) - 1) * (log((protected_div(volume, ewm_mean(volume, 20)))))), 15))",
+    "lqtp_formula": "(ema(((close / delay(close, 5) - 1) * (log((safe_div(volume, ema(volume, 20)))))), 15))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_737",
+    "function_name": "factor_volume_adaptive_momentum_fast_vol",
+    "dsl": "(ewm_mean(((close / delay(close, 5) - 1) * (log((protected_div(volume, ewm_mean(volume, 10)))))), 10))",
+    "lqtp_formula": "(ema(((close / delay(close, 5) - 1) * (log((safe_div(volume, ema(volume, 10)))))), 10))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_747",
+    "function_name": "factor_vol_regime_impact_ema",
+    "dsl": "(ewm_mean((abs((protected_div(close, open) - 1)) * (protected_div(volume, ewm_mean(volume, 20)))), 10))",
+    "lqtp_formula": "(ema((abs((safe_div(close, open) - 1)) * (safe_div(volume, ema(volume, 20)))), 10))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_749",
+    "function_name": "factor_adaptive_volume_smoothness",
+    "dsl": "(-(ts_std(volume / ts_mean(volume, 20)), (ts_std(volume, 10) / ts_mean(volume, 10))))",
+    "lqtp_formula": "(-(ts_std(volume / ts_mean(volume, 20)), (ts_std(volume, 10) / ts_mean(volume, 10))))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Unsupported syntax node: Tuple"
+  },
+  {
+    "factor_id": "factor_761",
+    "function_name": "factor_lag_vol_ratio_smoothed_v2",
+    "dsl": "(EMA(((close / delay(close, 5) - 1) * (((high - low) - (ts_median((high - low), 30))) / (((high - low) - (ts_median((high - low), 30))).ts_mean(abs(), 30))) * (protected_div(volume, ewm_mean(volume, 20)))), 15))",
+    "lqtp_formula": "(EMA(((close / delay(close, 5) - 1) * (((high - low) - (ts_quantile((high - low), 30, 0.5))) / (((high - low) - (ts_quantile((high - low), 30, 0.5))).ts_mean(abs(), 30))) * (safe_div(volume, ema(volume, 20)))), 15))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Unsupported syntax node: Attribute"
+  },
+  {
+    "factor_id": "factor_763",
+    "function_name": "factor_lag_vol_robust_volratio",
+    "dsl": "(EMA(((close / delay(close, 5) - 1) * (((high - low) - (ts_median((high - low), 20))) / (((high - low) - (ts_median((high - low), 20))).ts_mean(abs(), 20))) * (protected_div(volume, ewm_mean(volume, 20)))), 10))",
+    "lqtp_formula": "(EMA(((close / delay(close, 5) - 1) * (((high - low) - (ts_quantile((high - low), 20, 0.5))) / (((high - low) - (ts_quantile((high - low), 20, 0.5))).ts_mean(abs(), 20))) * (safe_div(volume, ema(volume, 20)))), 10))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Unsupported syntax node: Attribute"
+  },
+  {
+    "factor_id": "factor_777",
+    "function_name": "factor_lag_vol_volatility_adjusted",
+    "dsl": "(ewm_mean(((close / delay(close, 5) - 1) * (log(volume / (ewm_mean(volume, 30)))) * ((ATR(high, low, close, 20)) / close)), 5))",
+    "lqtp_formula": "(ema(((close / delay(close, 5) - 1) * (log(volume / (ema(volume, 30)))) * ((ATR(high, low, close, 20)) / close)), 5))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_778",
+    "function_name": "factor_lag_vol_volatility_adjusted_gate",
+    "dsl": "(ewm_mean(((close / delay(close - 1) * (log(volume / (ewm_mean(volume, 30)))) * ((ATR(high, low, close, 20)) / close)), 10), ewm_mean(((close / delay(close, 5) - 1) * (log(volume / (ewm_mean(volume, 30)))) * ((ATR(high, low, close, 20)) / close)), 5)))",
+    "lqtp_formula": "(ema(((close / delay(close - 1) * (log(volume / (ema(volume, 30)))) * ((ATR(high, low, close, 20)) / close)), 10), ema(((close / delay(close, 5) - 1) * (log(volume / (ema(volume, 30)))) * ((ATR(high, low, close, 20)) / close)), 5)))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Unsupported syntax node: Tuple"
+  },
+  {
+    "factor_id": "factor_779",
+    "function_name": "factor_lag_response_vol_tool_adaptive",
+    "dsl": "(where((1) > 0, (ewm_mean(((close / delay(close, 5) - 1) * (log(cap((protected_div(volume, ewm_mean(volume, 30))), 1e-12, None))) * ((ATR(high, low, close, 20)) / close)), 10)), (ewm_mean(((close / delay(close, 5) - 1) * (log(cap((protected_div(volume, ewm_mean(volume, 30))), 1e-12, None))) * ((ATR(high, low, close, 20)) / close)), 5))))",
+    "lqtp_formula": "(where((1) > 0, (ema(((close / delay(close, 5) - 1) * (log(cap((safe_div(volume, ema(volume, 30))), 1e-12, None))) * ((ATR(high, low, close, 20)) / close)), 10)), (ema(((close / delay(close, 5) - 1) * (log(cap((safe_div(volume, ema(volume, 30))), 1e-12, None))) * ((ATR(high, low, close, 20)) / close)), 5))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_780",
+    "function_name": "factor_lag_volatility_regime_adapted",
+    "dsl": "(ewm_mean(((close / delay(close, 5) - 1) * (log(volume / (ewm_mean(volume, 30)))) * (where((1) > 0, ((ATR(high, low, close, 10)) / close), ((ATR(high, low, close, 20)) / close)))), 5))",
+    "lqtp_formula": "(ema(((close / delay(close, 5) - 1) * (log(volume / (ema(volume, 30)))) * (where((1) > 0, ((ATR(high, low, close, 10)) / close), ((ATR(high, low, close, 20)) / close)))), 5))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_790",
+    "function_name": "factor_drawdown_vol_norm_clean",
+    "dsl": "rank(((((ts_max(high, 21)) - close) / (ts_max(high, 21))) / (ts_std(close, 21))))",
+    "lqtp_formula": "rank(((((ts_max(high, 21)) - close) / (ts_max(high, 21))) / (ts_std(close, 21))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_805",
+    "function_name": "factor_negative_skew_stress_gated",
+    "dsl": "((-(ts_skew((ts_pct(close, 1)), 40))) * (volume / ts_mean(volume, 20))) * (where((1) > 0, 1.2, 0.8))",
+    "lqtp_formula": "((-(ts_skew(((close / delay(close, 1) - 1)), 40))) * (volume / ts_mean(volume, 20))) * (where((1) > 0, 1.2, 0.8))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_806",
+    "function_name": "factor_negative_skew_volume_raw_smoothed",
+    "dsl": "ewm_mean(((-(ts_skew((ts_pct(close, 1)), 30))) * (volume / (ewm_mean(volume, 20)))), 3)",
+    "lqtp_formula": "ema(((-(ts_skew(((close / delay(close, 1) - 1)), 30))) * (volume / (ema(volume, 20)))), 3)",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_809",
+    "function_name": "factor_lagret_volratio_gated_smooth",
+    "dsl": "(where(((1)), (ewm_mean(((close.delay(pct_change(5), 1)) * (log((volume / (ewm_mean(volume, 15)))))), 10)), (ewm_mean(((close.delay(pct_change(5), 1)) * (log((volume / (ewm_mean(volume, 15)))))), 5))))",
+    "lqtp_formula": "(where(((1)), (ema(((close.delay(pct_change(5), 1)) * (log((volume / (ema(volume, 15)))))), 10)), (ema(((close.delay(pct_change(5), 1)) * (log((volume / (ema(volume, 15)))))), 5))))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Unsupported syntax node: Attribute"
+  },
+  {
+    "factor_id": "factor_825",
+    "function_name": "factor_vol_lag_ret_smoothed",
+    "dsl": "ewm_mean((protected_div(close, delay(close, 5)) - 1) * log(protected_div(volume, ewm_mean(volume, 20))) * (1 + protected_div(ATR(high, low, close, 20), close)), 5)",
+    "lqtp_formula": "ema((safe_div(close, delay(close, 5)) - 1) * log(safe_div(volume, ema(volume, 20))) * (1 + safe_div(ATR(high, low, close, 20), close)), 5)",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_826",
+    "function_name": "factor_lagret_vol_trend_gated",
+    "dsl": "ewm_mean((protected_div(close, delay(close, 5)) - 1) * log(protected_div(volume, ewm_mean(volume, 20))), 5) * where(ts_std(ts_pct(close, 1), 20) > ts_median(ts_std(ts_pct(close, 1), 20), 60), 1, -1)",
+    "lqtp_formula": "ema((safe_div(close, delay(close, 5)) - 1) * log(safe_div(volume, ema(volume, 20))), 5) * where(ts_std((close / delay(close, 1) - 1), 20) > ts_quantile(ts_std((close / delay(close, 1, 0.5) - 1), 20), 60), 1, -1)",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_828",
+    "function_name": "factor_lagret_vol_trend_gated_v2",
+    "dsl": "ewm_mean((protected_div(close, delay(close, 5)) - 1) * log(protected_div(volume, ewm_mean(volume, 20))), 5) * where(ts_std(ts_pct(close, 1), 20) > ts_median(ts_std(ts_pct(close, 1), 20), 60), 1, -1)",
+    "lqtp_formula": "ema((safe_div(close, delay(close, 5)) - 1) * log(safe_div(volume, ema(volume, 20))), 5) * where(ts_std((close / delay(close, 1) - 1), 20) > ts_quantile(ts_std((close / delay(close, 1, 0.5) - 1), 20), 60), 1, -1)",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_830",
+    "function_name": "factor_vol_lag_ret_resvol_gated",
+    "dsl": "ewm_mean((protected_div(close, delay(close, 5)) - 1) * log(protected_div(volume, ewm_mean(volume, 20))), 5)",
+    "lqtp_formula": "ema((safe_div(close, delay(close, 5)) - 1) * log(safe_div(volume, ema(volume, 20))), 5)",
+    "status": "ready",
+    "source": "manual",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_853",
+    "function_name": "factor_smoothed_trend_vol_contraction_simplified",
+    "dsl": "((EMA((ts_pct(close, 1)), 10)) * (cap((1 - (ATR(high, low, close, 5)) / (ATR(high, low, close, 20))), -1, 1)))",
+    "lqtp_formula": "((EMA(((close / delay(close, 1) - 1)), 10)) * (cap((1 - (ATR(high, low, close, 5)) / (ATR(high, low, close, 20))), -1, 1)))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_865",
+    "function_name": "factor_ema_trend_simple",
+    "dsl": "((((ewm_mean(((((close)))), 20)) - (ewm_mean(((((close)))), 40))) / (ewm_mean(((((close)))), 40))))",
+    "lqtp_formula": "((((ema(((((close)))), 20)) - (ema(((((close)))), 40))) / (ema(((((close)))), 40))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_879",
+    "function_name": "factor_crossover_vol_impact_trend_gated",
+    "dsl": "(abs(((protected_div(open) - 1) + (protected_div(close, open) - 1))) * (protected_div(volume, ewm_mean(volume, 20)))), ((((ewm_mean(close, 10)) - (ewm_mean(close, 30))) / (ewm_mean(close, 30))) * ((protected_div(volume, ewm_mean(volume, 20))))))",
+    "lqtp_formula": "(abs(((safe_div(open) - 1) + (safe_div(close, open) - 1))) * (safe_div(volume, ema(volume, 20)))), ((((ema(close, 10)) - (ema(close, 30))) / (ema(close, 30))) * ((safe_div(volume, ema(volume, 20))))))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Invalid expression syntax: (abs(((protected_div(open) - 1) + (protected_div(close, open) - 1))) * (protected_div(volume, ewm_mean(volume, 20)))), ((((ewm_mean(close, 10)) - (ewm_mean(close, 30))) / (ewm_mean(close, 30))) * ((protected_div(volume, ewm_mean(volume, 20))))))"
+  },
+  {
+    "factor_id": "factor_881",
+    "function_name": "factor_volratio_resvol_trend_gated",
+    "dsl": "(((close - ((high + low) / 2)) / (high - low + 1e-8)) * (volume / (ewm_mean(volume))), (((ewm_mean(close, 20)) - (ewm_mean(close, 50))) / (ewm_mean(close, 50))))",
+    "lqtp_formula": "(((close - ((high + low) / 2)) / (high - low + 1e-8)) * (volume / (ema(volume))), (((ema(close, 20)) - (ema(close, 50))) / (ema(close, 50))))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Unsupported syntax node: Tuple"
+  },
+  {
+    "factor_id": "factor_892",
+    "function_name": "factor_regime_vol_adaptive_trend_v4",
+    "dsl": "((((ts_mean(((close - open) / (high - low + 1e-8))) * (protected_div(volume, ewm_mean(volume, 20))), (close / delay(close, 10) - 1) * (protected_div(volume, ewm_mean(volume, 20)))))))",
+    "lqtp_formula": "((((ts_mean(((close - open) / (high - low + 1e-8))) * (safe_div(volume, ema(volume, 20))), (close / delay(close, 10) - 1) * (safe_div(volume, ema(volume, 20)))))))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Unsupported syntax node: Tuple"
+  },
+  {
+    "factor_id": "factor_894",
+    "function_name": "factor_regime_vol_adaptive_trend_v4",
+    "dsl": "((((ts_mean(((close - open) / (high - low + 1e-8))) * (protected_div(volume, ewm_mean(volume, 20))), (ts_mean((close / delay(close, 10) - 1), 5)) * (protected_div(volume, ewm_mean(volume, 20)))))))",
+    "lqtp_formula": "((((ts_mean(((close - open) / (high - low + 1e-8))) * (safe_div(volume, ema(volume, 20))), (ts_mean((close / delay(close, 10) - 1), 5)) * (safe_div(volume, ema(volume, 20)))))))",
+    "status": "converted",
+    "source": "ast",
+    "notes": "Unsupported syntax node: Tuple"
+  },
+  {
+    "factor_id": "factor_907",
+    "function_name": "factor_rsi_volume_confirmed_reversal",
+    "dsl": "((50 - ((RSI((close), 14)))) * (protected_div(volume, ewm_mean(volume, 20))))",
+    "lqtp_formula": "((50 - ((RSI((close), 14)))) * (safe_div(volume, ema(volume, 20))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_911",
+    "function_name": "factor_rsi_reversal_resvol_volume",
+    "dsl": "(((50 - ((RSI((close), 14)))) * 1.5) * (protected_div(volume, ewm_mean(volume, 20))))",
+    "lqtp_formula": "(((50 - ((RSI((close), 14)))) * 1.5) * (safe_div(volume, ema(volume, 20))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_935",
+    "function_name": "factor_drawdown_depth_duration_range_vol",
+    "dsl": "rank(((1.0 - (((ts_max(close, 20)) - close) / (ts_max(close, 20)))) * (1.0 - (ts_sum((close < (ts_max(close, 20))), 20) / 20.0)) * ((ts_mean((high - low), 5)) / (ts_mean((high - low), 30))) * (volume / ts_mean(volume, 20))))",
+    "lqtp_formula": "rank(((1.0 - (((ts_max(close, 20)) - close) / (ts_max(close, 20)))) * (1.0 - (ts_sum((close < (ts_max(close, 20))), 20) / 20.0)) * ((ts_mean((high - low), 5)) / (ts_mean((high - low), 30))) * (volume / ts_mean(volume, 20))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_987",
+    "function_name": "factor_drawdown_depth_normalized",
+    "dsl": "(((-(close / (ts_max(close, 252)) - 1)) / (ts_std((ts_pct(close, 1)), 20))))",
+    "lqtp_formula": "(((-(close / (ts_max(close, 252)) - 1)) / (ts_std(((close / delay(close, 1) - 1)), 20))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_1038",
+    "function_name": "factor_drawdown_recovery",
+    "dsl": "((close / (ts_max(close, 60)) - 1.0) / (ts_std((ts_pct(close, 1)), 20)))",
+    "lqtp_formula": "((close / (ts_max(close, 60)) - 1.0) / (ts_std(((close / delay(close, 1) - 1)), 20)))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_1040",
+    "function_name": "factor_drawdown_vol_persistence",
+    "dsl": "(((((close)) / (ts_max(((close)), 60)) - 1.0) / (ts_std((ts_pct(((close)), 1)), 20))) * ((((ATR(((((((high)))))), ((((((low)))))), ((((close)))), 40))) / ((ATR(((((((high)))))), ((((((low)))))), ((((close)))), 10))))))",
+    "lqtp_formula": "(((((close)) / (ts_max(((close)), 60)) - 1.0) / (ts_std(((((close)) / delay(((close)), 1) - 1)), 20))) * ((((ATR(((((((high)))))), ((((((low)))))), ((((close)))), 40))) / ((ATR(((((((high)))))), ((((((low)))))), ((((close)))), 10))))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_1042",
+    "function_name": "factor_drawdown_atr_recovery",
+    "dsl": "((((close)) / (ts_max(((close)), 60)) - 1.0) / ((ATR(((((high)))), ((((low)))), ((close)), 20))))",
+    "lqtp_formula": "((((close)) / (ts_max(((close)), 60)) - 1.0) / ((ATR(((((high)))), ((((low)))), ((close)), 20))))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  },
+  {
+    "factor_id": "factor_1044",
+    "function_name": "factor_drawdown_normalized",
+    "dsl": "((close / (ts_max(close, 60)) - 1.0) / (ts_std((ts_pct(close, 1)), 20)))",
+    "lqtp_formula": "((close / (ts_max(close, 60)) - 1.0) / (ts_std(((close / delay(close, 1) - 1)), 20)))",
+    "status": "ready",
+    "source": "ast",
+    "notes": ""
+  }
+]

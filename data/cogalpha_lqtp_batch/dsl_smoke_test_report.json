@@ -1,0 +1,1387 @@
+{
+  "data_root": "data/cogalpha_lqtp_batch/smoke_StockDailyBar",
+  "date_range": [
+    "2024-01-02",
+    "2024-03-29"
+  ],
+  "catalog_stats": {
+    "ready": 126,
+    "hard": 15,
+    "converted": 35
+  },
+  "ready_count": 126,
+  "smoke_pass": 119,
+  "smoke_fail": 7,
+  "not_tested": 50,
+  "passed_factors": [
+    "factor_volatility_regime_momentum",
+    "factor_volatility_scaled_deviation",
+    "factor_persistence",
+    "factor_persistence_ewma",
+    "factor_vol_regime_volume",
+    "factor_price_impact_stable_5d",
+    "factor_vol_regime_smoothed_trend",
+    "factor_vol_volume_regime",
+    "factor_smooth_vol_regime",
+    "factor_vol_volume_asym_ewma",
+    "factor_volume_confirmed_return",
+    "factor_volume_abnormality_range_interaction",
+    "factor_volume_abnormality_price_amp",
+    "factor_order_imbalance_volume_flow_ema",
+    "factor_volume_trend_adjusted_impact",
+    "factor_smooth_abs_return_volume",
+    "factor_shadow_volume_confirmed",
+    "factor_herding_pressure",
+    "factor_volume_weighted_pressure_mut1",
+    "factor_asymmetry_index_rolling",
+    "factor_range_volume_trend",
+    "factor_direction_volume_shape_mut2",
+    "factor_volume_confirmed_dir_mut_v4",
+    "factor_mutation_dir_vol_shape_zscore",
+    "factor_rank_tanh_volume_shape_crossover",
+    "factor_mut_vol_weighted_shape_dir",
+    "factor_volume_gated_momentum_mutated_v3",
+    "factor_vol_gated_herding_mutated",
+    "factor_volume_confirmed_momentum",
+    "factor_volume_confirmed_momentum_v3",
+    "factor_trend_volume_tanh_rank",
+    "factor_pressure_compression_simplified_v3",
+    "factor_volume_confirmed_momentum_crossover_v1",
+    "factor_volume_confirmed_momentum_crossover_v2",
+    "factor_liquidity_range_gated_momentum_v5",
+    "factor_liquidity_range_gated_momentum_v6",
+    "factor_volume_confirmed_return",
+    "factor_volume_confirmed_return_ema",
+    "factor_volume_confirmed_return_ewm",
+    "factor_volume_price_divergence_cross_mut",
+    "factor_volume_pressure_reversal",
+    "factor_crash_volume_rank",
+    "factor_crash_volume_gate",
+    "factor_ewma_net_range_volume_ratio",
+    "factor_crash_vol_ratio_asym",
+    "factor_crash_vol_body_asym",
+    "factor_volume_reversal_direct",
+    "factor_volume_reversal_rank",
+    "factor_volume_reversal_rank",
+    "factor_intraday_reversal_zscore_volume_short",
+    "factor_volume_confirmed_intraday_mean_reversion",
+    "factor_simplified_intraday_mean_reversion",
+    "factor_volatility_adjusted_dollar_pressure",
+    "factor_fear_adjusted_dollar_pressure_short_ema",
+    "factor_dollar_pressure_range_zscore",
+    "factor_liquidity_mom_simple_2_mutated",
+    "factor_reversal_volume_gated",
+    "factor_reversal_volume_simple",
+    "factor_regime_switch_zscore_momentum",
+    "factor_drawdown_normalized",
+    "factor_regime_switch_simple",
+    "factor_volume_confirmed_momentum_simple_volume_deviation",
+    "factor_window_adjusted_momentum",
+    "factor_asym_vol_volume_confirmed",
+    "factor_asym_vol_high_volume_confirmed",
+    "factor_drawdown_atr_normalized_20",
+    "factor_drawdown_std60_normalized",
+    "factor_drawdown_atr_normalized_v2",
+    "factor_drawdown_atr_20_normalized",
+    "factor_volume_adjusted_breakout_v3",
+    "factor_asym_vol_cont_gate_30",
+    "factor_asym_vol_30",
+    "factor_vol_regime_vol_ratio",
+    "factor_vol_asym_confirmed_range",
+    "factor_vol_asym_confirmed_range_v2",
+    "factor_asym_ratio_pure",
+    "factor_asym_vol_regime",
+    "factor_smoothed_atr_ratio_gated",
+    "factor_drawdown_vol_simple",
+    "factor_asym_vol_gated_by_volume_pressure",
+    "factor_resvol_volume_momentum",
+    "factor_persistent_volume_sum_momentum",
+    "factor_ewma_smoothness_volume",
+    "factor_volume_confirmed_return_tool",
+    "factor_smoothed_persistent_momentum_smoothness_weighted",
+    "factor_resvol_smoothed_trend",
+    "factor_simplified_volume_lag",
+    "factor_volume_adjusted_lag_return_v3",
+    "factor_volume_adjusted_lag_simple",
+    "factor_volume_adjusted_lag_consensus_v2",
+    "factor_smoothed_vol_adj_volume_momentum_10",
+    "factor_vol_price_coherence_v2",
+    "factor_vwap_adjusted_range_tanh_mutated_v2",
+    "factor_asym_intraday_sma",
+    "factor_liquidity_adaptive_asym_momentum",
+    "factor_adx_trend_vol_ema",
+    "factor_corr_volume_regime",
+    "factor_lag_volume_ratio_regime_adaptive",
+    "factor_volume_adaptive_momentum_scaled_vol",
+    "factor_volume_adaptive_momentum_smoothed_v3",
+    "factor_volume_adaptive_momentum_fast_vol",
+    "factor_vol_regime_impact_ema",
+    "factor_lag_vol_volatility_adjusted",
+    "factor_drawdown_vol_norm_clean",
+    "factor_negative_skew_volume_raw_smoothed",
+    "factor_vol_lag_ret_smoothed",
+    "factor_lagret_vol_trend_gated",
+    "factor_lagret_vol_trend_gated_v2",
+    "factor_vol_lag_ret_resvol_gated",
+    "factor_smoothed_trend_vol_contraction_simplified",
+    "factor_ema_trend_simple",
+    "factor_rsi_volume_confirmed_reversal",
+    "factor_rsi_reversal_resvol_volume",
+    "factor_drawdown_depth_duration_range_vol",
+    "factor_drawdown_depth_normalized",
+    "factor_drawdown_recovery",
+    "factor_drawdown_vol_persistence",
+    "factor_drawdown_atr_recovery",
+    "factor_drawdown_normalized"
+  ],
+  "failed_factors": [
+    "factor_smooth_asymmetry_persistence",
+    "factor_roughness_trend_vol_short",
+    "factor_asym_vol_gated",
+    "factor_regime_vol_adjusted_momentum_deviation",
+    "factor_lag_response_vol_tool_adaptive",
+    "factor_lag_volatility_regime_adapted",
+    "factor_negative_skew_stress_gated"
+  ],
+  "results": [
+    {
+      "function_name": "factor_volatility_regime_momentum",
+      "catalog_status": "ready",
+      "source": "manual",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volatility_regime_momentum/values.parquet"
+    },
+    {
+      "function_name": "factor_volatility_scaled_deviation",
+      "catalog_status": "ready",
+      "source": "manual",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volatility_scaled_deviation/values.parquet"
+    },
+    {
+      "function_name": "factor_roughness_drawdown_interaction",
+      "catalog_status": "hard",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_persistence",
+      "catalog_status": "ready",
+      "source": "manual",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_persistence/values.parquet"
+    },
+    {
+      "function_name": "factor_persistence_ewma",
+      "catalog_status": "ready",
+      "source": "manual",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_persistence_ewma/values.parquet"
+    },
+    {
+      "function_name": "factor_vol_regime_volume",
+      "catalog_status": "ready",
+      "source": "manual",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_vol_regime_volume/values.parquet"
+    },
+    {
+      "function_name": "factor_price_impact_stable_5d",
+      "catalog_status": "ready",
+      "source": "manual",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_price_impact_stable_5d/values.parquet"
+    },
+    {
+      "function_name": "factor_imbalance_volume_interaction",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_imbalance_volume_mutation",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_vol_regime_smoothed_trend",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_vol_regime_smoothed_trend/values.parquet"
+    },
+    {
+      "function_name": "factor_vol_volume_regime",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_vol_volume_regime/values.parquet"
+    },
+    {
+      "function_name": "factor_smooth_vol_regime",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_smooth_vol_regime/values.parquet"
+    },
+    {
+      "function_name": "factor_vol_volume_asym_ewma",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_vol_volume_asym_ewma/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_confirmed_return",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_confirmed_return/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_abnormality_range_interaction",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_abnormality_range_interaction/values.parquet"
+    },
+    {
+      "function_name": "factor_adaptive_vol_volume_asym",
+      "catalog_status": "hard",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_drawdown_volume_complexity",
+      "catalog_status": "hard",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_abnormality_asymmetry",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_drawdown_volume_geometry",
+      "catalog_status": "hard",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_drawdown_volume_modulated",
+      "catalog_status": "hard",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_volume_abnormality_price_amp",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_abnormality_price_amp/values.parquet"
+    },
+    {
+      "function_name": "factor_order_imbalance_volume_flow_ema",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_order_imbalance_volume_flow_ema/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_trend_adjusted_impact",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_trend_adjusted_impact/values.parquet"
+    },
+    {
+      "function_name": "factor_smooth_abs_return_volume",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_smooth_abs_return_volume/values.parquet"
+    },
+    {
+      "function_name": "factor_shadow_volume_confirmed",
+      "catalog_status": "ready",
+      "source": "manual",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_shadow_volume_confirmed/values.parquet"
+    },
+    {
+      "function_name": "factor_drawdown_volume_geometry",
+      "catalog_status": "hard",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_herding_pressure",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_herding_pressure/values.parquet"
+    },
+    {
+      "function_name": "factor_stability_crash_guard",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_volume_weighted_pressure_mut1",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_weighted_pressure_mut1/values.parquet"
+    },
+    {
+      "function_name": "factor_asymmetry_index_rolling",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_asymmetry_index_rolling/values.parquet"
+    },
+    {
+      "function_name": "factor_smooth_asymmetry_persistence",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "fail",
+      "stage": "materialize",
+      "error": "'int' object has no attribute 'ewm'"
+    },
+    {
+      "function_name": "factor_range_volume_trend",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_range_volume_trend/values.parquet"
+    },
+    {
+      "function_name": "factor_stable_symmetry_reinforced",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_direction_volume_shape_mut2",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_direction_volume_shape_mut2/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_confirmed_dir_mut_v4",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_confirmed_dir_mut_v4/values.parquet"
+    },
+    {
+      "function_name": "factor_crossover_hybrid_magnitude",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_mutation_dir_vol_shape_zscore",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_mutation_dir_vol_shape_zscore/values.parquet"
+    },
+    {
+      "function_name": "factor_rank_tanh_volume_shape_crossover",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_rank_tanh_volume_shape_crossover/values.parquet"
+    },
+    {
+      "function_name": "factor_mut_vol_weighted_shape_dir",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_mut_vol_weighted_shape_dir/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_gated_momentum_mutated_v3",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_gated_momentum_mutated_v3/values.parquet"
+    },
+    {
+      "function_name": "factor_herding_vol_gated_momentum",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_vol_gated_herding_crossover",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_vol_gated_herding_mutated",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_vol_gated_herding_mutated/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_confirmed_momentum",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_confirmed_momentum/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_confirmed_momentum_v3",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_confirmed_momentum_v3/values.parquet"
+    },
+    {
+      "function_name": "factor_trend_volume_tanh_rank",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_trend_volume_tanh_rank/values.parquet"
+    },
+    {
+      "function_name": "factor_pressure_compression_simplified_v3",
+      "catalog_status": "ready",
+      "source": "manual",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_pressure_compression_simplified_v3/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_confirmed_momentum_crossover_v1",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_confirmed_momentum_crossover_v1/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_confirmed_momentum_crossover_v2",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_confirmed_momentum_crossover_v2/values.parquet"
+    },
+    {
+      "function_name": "factor_liquidity_range_gated_momentum_v5",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_liquidity_range_gated_momentum_v5/values.parquet"
+    },
+    {
+      "function_name": "factor_liquidity_range_gated_momentum_v6",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_liquidity_range_gated_momentum_v6/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_confirmed_return",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_confirmed_return/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_confirmed_return_ema",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_confirmed_return_ema/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_confirmed_return_ewm",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_confirmed_return_ewm/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_price_divergence_cross_mut",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_price_divergence_cross_mut/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_pressure_reversal",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_pressure_reversal/values.parquet"
+    },
+    {
+      "function_name": "factor_crash_volume_rank",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_crash_volume_rank/values.parquet"
+    },
+    {
+      "function_name": "factor_vol_gated_momentum_v2",
+      "catalog_status": "hard",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_crash_volume_gate",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_crash_volume_gate/values.parquet"
+    },
+    {
+      "function_name": "factor_ewma_net_range_volume_ratio",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_ewma_net_range_volume_ratio/values.parquet"
+    },
+    {
+      "function_name": "factor_crash_vol_ratio_asym",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_crash_vol_ratio_asym/values.parquet"
+    },
+    {
+      "function_name": "factor_crash_vol_body_asym",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_crash_vol_body_asym/values.parquet"
+    },
+    {
+      "function_name": "factor_roughness_trend_vol_short",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "fail",
+      "stage": "materialize",
+      "error": "FlexMax._calculate_series() takes 3 positional arguments but 4 were given"
+    },
+    {
+      "function_name": "factor_volume_reversal_direct",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_reversal_direct/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_reversal_rank",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_reversal_rank/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_reversal_rank",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_reversal_rank/values.parquet"
+    },
+    {
+      "function_name": "factor_intraday_reversal_zscore_volume_short",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_intraday_reversal_zscore_volume_short/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_confirmed_intraday_mean_reversion",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_confirmed_intraday_mean_reversion/values.parquet"
+    },
+    {
+      "function_name": "factor_simplified_intraday_mean_reversion",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_simplified_intraday_mean_reversion/values.parquet"
+    },
+    {
+      "function_name": "factor_volatility_adjusted_dollar_pressure",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volatility_adjusted_dollar_pressure/values.parquet"
+    },
+    {
+      "function_name": "factor_fear_adjusted_dollar_pressure_short_ema",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_fear_adjusted_dollar_pressure_short_ema/values.parquet"
+    },
+    {
+      "function_name": "factor_simplified_fear_pressure",
+      "catalog_status": "hard",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_dollar_pressure_range_zscore",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_dollar_pressure_range_zscore/values.parquet"
+    },
+    {
+      "function_name": "factor_liquidity_mom_simple_2_mutated",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_liquidity_mom_simple_2_mutated/values.parquet"
+    },
+    {
+      "function_name": "factor_reversal_volume_gated",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_reversal_volume_gated/values.parquet"
+    },
+    {
+      "function_name": "factor_reversal_volume_volregime",
+      "catalog_status": "hard",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_reversal_volume_simple",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_reversal_volume_simple/values.parquet"
+    },
+    {
+      "function_name": "factor_range_asym_log_short",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_range_asym_vol_smooth",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_range_asym_log_vol",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_downside_vol_asymmetry_smoothed",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_regime_switch_zscore_momentum",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_regime_switch_zscore_momentum/values.parquet"
+    },
+    {
+      "function_name": "factor_drawdown_normalized",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_normalized/values.parquet"
+    },
+    {
+      "function_name": "factor_regime_switch_simple",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_regime_switch_simple/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_confirmed_momentum_simple_volume_deviation",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_confirmed_momentum_simple_volume_deviation/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_stress_adjusted_momentum_robust",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_simplified_robust_volume_momentum",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_volume_persistence_momentum_robust",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_window_adjusted_momentum",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_window_adjusted_momentum/values.parquet"
+    },
+    {
+      "function_name": "factor_asym_vol_volume_confirmed",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_asym_vol_volume_confirmed/values.parquet"
+    },
+    {
+      "function_name": "factor_asym_vol_high_volume_confirmed",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_asym_vol_high_volume_confirmed/values.parquet"
+    },
+    {
+      "function_name": "factor_drawdown_atr_normalized_20",
+      "catalog_status": "ready",
+      "source": "manual",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_atr_normalized_20/values.parquet"
+    },
+    {
+      "function_name": "factor_drawdown_std60_normalized",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_std60_normalized/values.parquet"
+    },
+    {
+      "function_name": "factor_drawdown_atr_normalized_v2",
+      "catalog_status": "ready",
+      "source": "manual",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_atr_normalized_v2/values.parquet"
+    },
+    {
+      "function_name": "factor_drawdown_atr_20_normalized",
+      "catalog_status": "ready",
+      "source": "manual",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_atr_20_normalized/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_adjusted_breakout_v3",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_adjusted_breakout_v3/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_adjusted_breakout_window_001",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_volume_adjusted_breakout_with_vol_filter_v2",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_volume_adjusted_breakout_v3",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_asym_vol_volume_cont_30",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_asym_vol_cont_gate_30",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_asym_vol_cont_gate_30/values.parquet"
+    },
+    {
+      "function_name": "factor_asym_vol_30",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_asym_vol_30/values.parquet"
+    },
+    {
+      "function_name": "factor_vol_regime_vol_ratio",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_vol_regime_vol_ratio/values.parquet"
+    },
+    {
+      "function_name": "factor_vol_asym_confirmed_range",
+      "catalog_status": "ready",
+      "source": "manual",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_vol_asym_confirmed_range/values.parquet"
+    },
+    {
+      "function_name": "factor_vol_asym_confirmed_range_v2",
+      "catalog_status": "ready",
+      "source": "manual",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_vol_asym_confirmed_range_v2/values.parquet"
+    },
+    {
+      "function_name": "factor_asym_ratio_pure",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_asym_ratio_pure/values.parquet"
+    },
+    {
+      "function_name": "factor_asym_vol_regime",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_asym_vol_regime/values.parquet"
+    },
+    {
+      "function_name": "factor_asym_vol_gated",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "fail",
+      "stage": "materialize",
+      "error": "could not convert string to float: 'high'"
+    },
+    {
+      "function_name": "factor_asym_vol_attenuate",
+      "catalog_status": "hard",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_volume_regime_intraday_momentum",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_intraday_pressure_ema",
+      "catalog_status": "hard",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_volume_abnormality_liquidity_gated",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_asym_vol_down_up_volatility_gated",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_smoothed_atr_ratio_gated",
+      "catalog_status": "ready",
+      "source": "manual",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_smoothed_atr_ratio_gated/values.parquet"
+    },
+    {
+      "function_name": "factor_pressure_ema_mutation",
+      "catalog_status": "hard",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_drawdown_vol_simple",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_vol_simple/values.parquet"
+    },
+    {
+      "function_name": "factor_squared_range_volume_rank_smoothed_no_cuberoot",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_squared_range_close_ema_cuberoot",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_asym_vol_gated_by_volume_pressure",
+      "catalog_status": "ready",
+      "source": "manual",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_asym_vol_gated_by_volume_pressure/values.parquet"
+    },
+    {
+      "function_name": "factor_drawdown_volume_geometry_rolling",
+      "catalog_status": "hard",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_resvol_volume_momentum",
+      "catalog_status": "ready",
+      "source": "manual",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_resvol_volume_momentum/values.parquet"
+    },
+    {
+      "function_name": "factor_regime_vol_adjusted_momentum_deviation",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "fail",
+      "stage": "materialize",
+      "error": "comparison requires at least one DataFrame input"
+    },
+    {
+      "function_name": "factor_persistent_volume_sum_momentum",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_persistent_volume_sum_momentum/values.parquet"
+    },
+    {
+      "function_name": "factor_ewma_smoothness_volume",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_ewma_smoothness_volume/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_confirmed_return_tool",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_confirmed_return_tool/values.parquet"
+    },
+    {
+      "function_name": "factor_smoothed_persistent_momentum_smoothness_weighted",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_smoothed_persistent_momentum_smoothness_weighted/values.parquet"
+    },
+    {
+      "function_name": "factor_resvol_smoothed_trend",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_resvol_smoothed_trend/values.parquet"
+    },
+    {
+      "function_name": "factor_simplified_volume_lag",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_simplified_volume_lag/values.parquet"
+    },
+    {
+      "function_name": "factor_vol_adjusted_lag_log_coherence",
+      "catalog_status": "hard",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_volume_adjusted_lag_return_v3",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_adjusted_lag_return_v3/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_adjusted_lag_simple",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_adjusted_lag_simple/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_adjusted_lag_consensus_v2",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_adjusted_lag_consensus_v2/values.parquet"
+    },
+    {
+      "function_name": "factor_smoothed_vol_adj_volume_momentum_10",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_smoothed_vol_adj_volume_momentum_10/values.parquet"
+    },
+    {
+      "function_name": "factor_vol_price_coherence_v2",
+      "catalog_status": "ready",
+      "source": "manual",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_vol_price_coherence_v2/values.parquet"
+    },
+    {
+      "function_name": "factor_vwap_adjusted_range_tanh_smooth",
+      "catalog_status": "hard",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_vwap_adjusted_range_tanh_mutated_v2",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_vwap_adjusted_range_tanh_mutated_v2/values.parquet"
+    },
+    {
+      "function_name": "factor_asym_intraday_sma",
+      "catalog_status": "ready",
+      "source": "manual",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_asym_intraday_sma/values.parquet"
+    },
+    {
+      "function_name": "factor_liquidity_adaptive_asym_momentum",
+      "catalog_status": "ready",
+      "source": "manual",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_liquidity_adaptive_asym_momentum/values.parquet"
+    },
+    {
+      "function_name": "factor_liquidity_adaptive_momentum",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_downside_vol_liquidity_momentum",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_adx_trend_vol_ema",
+      "catalog_status": "ready",
+      "source": "manual",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_adx_trend_vol_ema/values.parquet"
+    },
+    {
+      "function_name": "factor_corr_volume_regime",
+      "catalog_status": "ready",
+      "source": "manual",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_corr_volume_regime/values.parquet"
+    },
+    {
+      "function_name": "factor_lag_volume_ratio_regime_adaptive",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_lag_volume_ratio_regime_adaptive/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_adaptive_momentum_scaled_vol",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_adaptive_momentum_scaled_vol/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_adaptive_momentum_smoothed_v3",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_adaptive_momentum_smoothed_v3/values.parquet"
+    },
+    {
+      "function_name": "factor_volume_adaptive_momentum_fast_vol",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_volume_adaptive_momentum_fast_vol/values.parquet"
+    },
+    {
+      "function_name": "factor_vol_regime_impact_ema",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_vol_regime_impact_ema/values.parquet"
+    },
+    {
+      "function_name": "factor_adaptive_volume_smoothness",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_lag_vol_ratio_smoothed_v2",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_lag_vol_robust_volratio",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_lag_vol_volatility_adjusted",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_lag_vol_volatility_adjusted/values.parquet"
+    },
+    {
+      "function_name": "factor_lag_vol_volatility_adjusted_gate",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_lag_response_vol_tool_adaptive",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "fail",
+      "stage": "materialize",
+      "error": "comparison requires at least one DataFrame input"
+    },
+    {
+      "function_name": "factor_lag_volatility_regime_adapted",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "fail",
+      "stage": "materialize",
+      "error": "comparison requires at least one DataFrame input"
+    },
+    {
+      "function_name": "factor_drawdown_vol_norm_clean",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_vol_norm_clean/values.parquet"
+    },
+    {
+      "function_name": "factor_negative_skew_stress_gated",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "fail",
+      "stage": "materialize",
+      "error": "comparison requires at least one DataFrame input"
+    },
+    {
+      "function_name": "factor_negative_skew_volume_raw_smoothed",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_negative_skew_volume_raw_smoothed/values.parquet"
+    },
+    {
+      "function_name": "factor_lagret_volratio_gated_smooth",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_vol_lag_ret_smoothed",
+      "catalog_status": "ready",
+      "source": "manual",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_vol_lag_ret_smoothed/values.parquet"
+    },
+    {
+      "function_name": "factor_lagret_vol_trend_gated",
+      "catalog_status": "ready",
+      "source": "manual",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_lagret_vol_trend_gated/values.parquet"
+    },
+    {
+      "function_name": "factor_lagret_vol_trend_gated_v2",
+      "catalog_status": "ready",
+      "source": "manual",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_lagret_vol_trend_gated_v2/values.parquet"
+    },
+    {
+      "function_name": "factor_vol_lag_ret_resvol_gated",
+      "catalog_status": "ready",
+      "source": "manual",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_vol_lag_ret_resvol_gated/values.parquet"
+    },
+    {
+      "function_name": "factor_smoothed_trend_vol_contraction_simplified",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_smoothed_trend_vol_contraction_simplified/values.parquet"
+    },
+    {
+      "function_name": "factor_ema_trend_simple",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_ema_trend_simple/values.parquet"
+    },
+    {
+      "function_name": "factor_crossover_vol_impact_trend_gated",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_volratio_resvol_trend_gated",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_regime_vol_adaptive_trend_v4",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_regime_vol_adaptive_trend_v4",
+      "catalog_status": "converted",
+      "source": "ast",
+      "smoke_test": "skipped",
+      "reason": "no_valid_dsl"
+    },
+    {
+      "function_name": "factor_rsi_volume_confirmed_reversal",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_rsi_volume_confirmed_reversal/values.parquet"
+    },
+    {
+      "function_name": "factor_rsi_reversal_resvol_volume",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_rsi_reversal_resvol_volume/values.parquet"
+    },
+    {
+      "function_name": "factor_drawdown_depth_duration_range_vol",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_depth_duration_range_vol/values.parquet"
+    },
+    {
+      "function_name": "factor_drawdown_depth_normalized",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_depth_normalized/values.parquet"
+    },
+    {
+      "function_name": "factor_drawdown_recovery",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_recovery/values.parquet"
+    },
+    {
+      "function_name": "factor_drawdown_vol_persistence",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_vol_persistence/values.parquet"
+    },
+    {
+      "function_name": "factor_drawdown_atr_recovery",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_atr_recovery/values.parquet"
+    },
+    {
+      "function_name": "factor_drawdown_normalized",
+      "catalog_status": "ready",
+      "source": "ast",
+      "smoke_test": "pass",
+      "values_path": "data/cogalpha_lqtp_batch/factor_lake/factor_drawdown_normalized/values.parquet"
+    }
+  ]
+}
