@@ -8,17 +8,20 @@ import sys
 import time
 from pathlib import Path
 
+import pandas as pd
+
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = Path(__file__).resolve().parent
-if str(PACKAGE_ROOT) not in sys.path:
-    sys.path.insert(0, str(PACKAGE_ROOT))
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
+for path in (PACKAGE_ROOT, SCRIPTS_DIR):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
 
+from generate_materialize_configs import generate_configs  # noqa: E402
 from lib.catalog import deliverable_names  # noqa: E402
+from lib.data_source import production_date_range  # noqa: E402
 from lib.materialize_config import CONFIG_DIR, default_lake_root, materialize_config_path  # noqa: E402
 from lib.paths import resolve_factor_engine_root  # noqa: E402
-from generate_materialize_configs import generate_configs  # noqa: E402
+from validate_factor_engine_coverage import validate_catalog  # noqa: E402
 
 
 def _ensure_factor_engine() -> Path:
@@ -32,11 +35,18 @@ def _ensure_factor_engine() -> Path:
     return fe_root
 
 
-def _collect_config_paths(
-    *,
-    factor: str | None,
-    limit: int | None,
-) -> list[Path]:
+def _preflight_catalog() -> None:
+    """任何真实写入前，先确保 185 条公式都能被当前 FactorEngine 编译。"""
+    report = validate_catalog(execute=False, periods=420, symbols=4)
+    if not report["ok"] or report["compiled"] != 185:
+        sample = report.get("errors", [])[:10]
+        raise RuntimeError(
+            "GTJA191 FactorEngine preflight failed: "
+            + json.dumps(sample, ensure_ascii=False)
+        )
+
+
+def _collect_config_paths(*, factor: str | None, limit: int | None) -> list[Path]:
     names = deliverable_names()
     if factor:
         if factor not in names:
@@ -47,11 +57,31 @@ def _collect_config_paths(
     return [materialize_config_path(name) for name in names]
 
 
-def _factor_already_materialized(factor_name: str, lake_root: Path) -> bool:
+def _expected_years(start_date: str | None, end_date: str | None) -> tuple[int, ...]:
+    start, end = production_date_range(start_date=start_date, end_date=end_date)
+    start_year = int(pd.Timestamp(start).year)
+    end_year = int(pd.Timestamp(end).year)
+    if end_year < start_year:
+        raise ValueError(f"end_date {end!r} is before start_date {start!r}")
+    return tuple(range(start_year, end_year + 1))
+
+
+def _factor_already_materialized(
+    factor_name: str,
+    lake_root: Path,
+    *,
+    expected_years: tuple[int, ...],
+) -> bool:
+    """只有请求区间的每个年份都有非空 parquet 才允许 resume 跳过。"""
     factor_dir = lake_root / "factors" / factor_name
     if not factor_dir.is_dir():
         return False
-    return any(factor_dir.glob("year=*/data.parquet"))
+    for year in expected_years:
+        year_dir = factor_dir / f"year={year}"
+        files = [p for p in year_dir.glob("*.parquet") if p.is_file() and p.stat().st_size > 0]
+        if not files:
+            return False
+    return True
 
 
 def run_materialize_sequential(
@@ -64,14 +94,16 @@ def run_materialize_sequential(
     resume: bool = False,
     stop_on_error: bool = False,
 ) -> dict:
-    """逐因子落值，避免 batch_run 同时持有多因子中间结果导致 OOM。"""
+    """逐因子落值，避免 batch 同时持有多因子中间结果导致 OOM。"""
     _ensure_factor_engine()
+    _preflight_catalog()
     from runtime.engine import FactorEngine  # noqa: WPS433
 
     root = Path(lake_root or default_lake_root())
     names = deliverable_names()
     if limit is not None:
         names = names[:limit]
+    years = _expected_years(start_date, end_date)
 
     generate_configs(
         start_date=start_date,
@@ -86,7 +118,7 @@ def run_materialize_sequential(
     skipped: list[str] = []
 
     for idx, name in enumerate(names, start=1):
-        if resume and _factor_already_materialized(name, root):
+        if resume and _factor_already_materialized(name, root, expected_years=years):
             skipped.append(name)
             continue
         path = materialize_config_path(name)
@@ -94,10 +126,13 @@ def run_materialize_sequential(
             print(f"[{idx}/{len(names)}] materializing {name}...", flush=True)
             out = FactorEngine.materialize_from_config(path, lake_root=str(root))
             mat = out["materialization"]
+            rows_written = int(mat.get("rows_written") or 0)
+            if rows_written <= 0:
+                raise RuntimeError(f"{name} wrote no rows")
             rec = {
                 "factor": name,
                 "factor_id": mat.get("factor_id"),
-                "rows_written": mat.get("rows_written"),
+                "rows_written": rows_written,
                 "partitions": mat.get("partitions"),
                 "lake_root": mat.get("lake_root"),
                 "index": idx,
@@ -121,7 +156,9 @@ def run_materialize_sequential(
                 encoding="utf-8",
             )
         except Exception as exc:
-            failed.append({"factor": name, "error": str(exc), "index": idx})
+            failed.append(
+                {"factor": name, "error": f"{type(exc).__name__}: {exc}", "index": idx}
+            )
             if stop_on_error:
                 break
 
@@ -135,6 +172,7 @@ def run_materialize_sequential(
         "skipped": len(skipped),
         "elapsed_seconds": round(elapsed, 3),
         "lake_root": str(root),
+        "expected_years": list(years),
         "results": succeeded,
         "errors": failed,
         "skipped_factors": skipped,
@@ -153,6 +191,7 @@ def run_materialize(
     stop_on_error: bool = False,
 ) -> dict:
     _ensure_factor_engine()
+    _preflight_catalog()
     from runtime.engine import FactorEngine  # noqa: WPS433
 
     generate_configs(
@@ -169,29 +208,23 @@ def run_materialize(
 
     t0 = time.perf_counter()
     if len(paths) == 1:
-        out = FactorEngine.materialize_from_config(
-            paths[0],
-            lake_root=lake_root,
-        )
+        out = FactorEngine.materialize_from_config(paths[0], lake_root=lake_root)
         materializations = {out["factor"].name: out}
     else:
-        batch = FactorEngine.materialize_many_from_config(
-            paths,
-            batch_run=batch_run,
-        )
+        batch = FactorEngine.materialize_many_from_config(paths, batch_run=batch_run)
         materializations = batch.get("materializations", batch)
 
-    elapsed = time.perf_counter() - t0
     succeeded: list[dict] = []
     failed: list[dict] = []
     for name, out in materializations.items():
         mat = out.get("materialization") if isinstance(out, dict) else None
-        if mat and mat.get("rows_written", 0) >= 0 and "error" not in out:
+        rows_written = int(mat.get("rows_written") or 0) if mat else 0
+        if mat and rows_written > 0 and "error" not in out:
             succeeded.append(
                 {
                     "factor": name,
                     "factor_id": mat.get("factor_id"),
-                    "rows_written": mat.get("rows_written"),
+                    "rows_written": rows_written,
                     "partitions": mat.get("partitions"),
                     "lake_root": mat.get("lake_root"),
                 }
@@ -207,7 +240,7 @@ def run_materialize(
         "factor_count": len(paths),
         "succeeded": len(succeeded),
         "failed": len(failed),
-        "elapsed_seconds": round(elapsed, 3),
+        "elapsed_seconds": round(time.perf_counter() - t0, 3),
         "lake_root": str(lake_root or default_lake_root()),
         "config_dir": str(CONFIG_DIR),
         "results": succeeded,
@@ -217,30 +250,18 @@ def run_materialize(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Materialize GTJA-191 deliverable factors (185)")
-    parser.add_argument("--start-date", default=None, help="override data_source.start_date")
-    parser.add_argument("--end-date", default=None, help="override data_source.end_date")
-    parser.add_argument("--lake-root", default=None, help="factor lake root (default ../data/factors/lake/gtja191)")
-    parser.add_argument("--write-target", default="local", help="local|staging|both|clickhouse|staging_clickhouse")
-    parser.add_argument("--factor", default=None, help="single factor e.g. gtja191_alpha_001")
-    parser.add_argument("--limit", type=int, default=None, help="only first N deliverable factors")
-    parser.add_argument(
-        "--smoke",
-        action="store_true",
-        help="short window 2016-01-04..2016-01-10 + limit 3 (quick parity check)",
-    )
-    parser.add_argument("--no-batch-run", action="store_true", help="disable shared run_many batch")
-    parser.add_argument(
-        "--sequential",
-        action="store_true",
-        help="one factor at a time (low memory; recommended for full 185 run)",
-    )
-    parser.add_argument(
-        "--resume",
-        action="store_true",
-        help="with --sequential: skip factors already in lake with all expected partitions",
-    )
+    parser.add_argument("--start-date", default=None)
+    parser.add_argument("--end-date", default=None)
+    parser.add_argument("--lake-root", default=None)
+    parser.add_argument("--write-target", default="local")
+    parser.add_argument("--factor", default=None)
+    parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--smoke", action="store_true")
+    parser.add_argument("--no-batch-run", action="store_true")
+    parser.add_argument("--sequential", action="store_true")
+    parser.add_argument("--resume", action="store_true")
     parser.add_argument("--stop-on-error", action="store_true")
-    parser.add_argument("--report", default=None, help="write JSON summary path")
+    parser.add_argument("--report", default=None)
     args = parser.parse_args()
 
     start_date = args.start_date
@@ -277,7 +298,7 @@ def main() -> int:
                 stop_on_error=args.stop_on_error,
             )
     except Exception as exc:
-        print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False))
+        print(json.dumps({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, ensure_ascii=False))
         return 1
 
     report_path = Path(args.report) if args.report else PACKAGE_ROOT / "dsl" / "materialize_report.json"
