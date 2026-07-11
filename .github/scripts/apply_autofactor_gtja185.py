@@ -9,7 +9,10 @@ PROJECT = ROOT / "AutoFactorEvaluation-RECONSTRUCT"
 
 
 def generate_pack() -> None:
-    runpy.run_path(str(PROJECT / "scripts" / "generate_gtja185_pack.py"), run_name="__main__")
+    namespace = runpy.run_path(str(PROJECT / "scripts" / "generate_gtja185_pack.py"))
+    result = namespace["main"]()
+    if result not in (None, 0):
+        raise RuntimeError(f"GTJA185 pack generator failed with code {result}")
 
 
 def add_gateway_wrappers() -> None:
@@ -31,7 +34,7 @@ def add_gateway_wrappers() -> None:
             encoding="utf-8",
         )
     (gateway / "gateway_core.py").write_text(
-        '"""Compatibility façade for both Gateway APIs."""\n'
+        '"""Compatibility facade for both Gateway APIs."""\n'
         'from gateway.gateway.gateway_core import *  # noqa: F401,F403\n'
         'from gateway.scripts.gateway_core import run_gateway  # noqa: F401\n',
         encoding="utf-8",
@@ -52,21 +55,98 @@ def patch_pipeline_cli() -> None:
     text = path.read_text(encoding="utf-8")
     if "def run_gtja185_batch_pipeline(" not in text:
         anchor = "# ============================================================\n# CLI\n# ============================================================\n"
-        addition = '''def run_gtja185_batch_pipeline(\n    *,\n    output_dir: str | Path,\n    start_date: str | None = None,\n    end_date: str | None = None,\n    horizons: tuple[int, ...] = (1, 5, 21),\n    batch_size: int = 8,\n    min_assets: int = 20,\n    limit: int | None = None,\n    synthetic: bool = False,\n    materialize_staging: bool = False,\n    publish: bool = False,\n    strict: bool = True,\n):\n    """Run the canonical 185-factor pack through the new batch evaluator."""\n    from evaluation.gtja185_batch import (\n        BatchEvaluationConfig,\n        build_synthetic_market_frame,\n        run_gtja185_evaluation,\n    )\n\n    config = BatchEvaluationConfig(\n        market="ashare",\n        start_date=start_date,\n        end_date=end_date,\n        horizons=horizons,\n        batch_size=batch_size,\n        min_assets=min_assets,\n        limit=limit,\n        materialize_staging=materialize_staging,\n        publish=publish,\n        strict=strict,\n    )\n    frame = build_synthetic_market_frame(periods=420, symbols=max(8, min_assets)) if synthetic else None\n    snapshot_id = "synthetic:gtja185-cli" if synthetic else None\n    return run_gtja185_evaluation(\n        config,\n        output_dir=output_dir,\n        market_frame=frame,\n        snapshot_id=snapshot_id,\n    )\n\n\n'''
+        addition = '''def run_gtja185_batch_pipeline(
+    *,
+    output_dir: str | Path,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    horizons: tuple[int, ...] = (1, 5, 21),
+    batch_size: int = 8,
+    min_assets: int = 20,
+    limit: int | None = None,
+    synthetic: bool = False,
+    materialize_staging: bool = False,
+    publish: bool = False,
+    strict: bool = True,
+):
+    """Run the canonical 185-factor pack through the new batch evaluator."""
+    from evaluation.gtja185_batch import (
+        BatchEvaluationConfig,
+        build_synthetic_market_frame,
+        run_gtja185_evaluation,
+    )
+
+    config = BatchEvaluationConfig(
+        market="ashare",
+        start_date=start_date,
+        end_date=end_date,
+        horizons=horizons,
+        batch_size=batch_size,
+        min_assets=min_assets,
+        limit=limit,
+        materialize_staging=materialize_staging,
+        publish=publish,
+        strict=strict,
+    )
+    frame = build_synthetic_market_frame(periods=420, symbols=max(8, min_assets)) if synthetic else None
+    snapshot_id = "synthetic:gtja185-cli" if synthetic else None
+    return run_gtja185_evaluation(
+        config,
+        output_dir=output_dir,
+        market_frame=frame,
+        snapshot_id=snapshot_id,
+    )
+
+
+'''
         if anchor not in text:
             raise RuntimeError("pipeline CLI anchor not found")
         text = text.replace(anchor, addition + anchor, 1)
 
     parser_anchor = '    p.add_argument("--gateway-only", action="store_true", help="仅 Gateway 审查+路由")\n'
     if "--gtja185" not in text:
-        parser_args = '''    p.add_argument("--gtja185", action="store_true", help="评估完整 GTJA185 内置因子包")\n    p.add_argument("--gtja-output", default="AutoFactorEvaluation-RECONSTRUCT/output/gtja185")\n    p.add_argument("--gtja-start-date", default=None)\n    p.add_argument("--gtja-end-date", default=None)\n    p.add_argument("--gtja-horizons", default="1,5,21")\n    p.add_argument("--gtja-batch-size", type=int, default=8)\n    p.add_argument("--gtja-min-assets", type=int, default=20)\n    p.add_argument("--gtja-limit", type=int, default=None)\n    p.add_argument("--gtja-synthetic", action="store_true")\n    p.add_argument("--gtja-materialize-staging", action="store_true")\n    p.add_argument("--gtja-publish", action="store_true")\n    p.add_argument("--gtja-allow-partial", action="store_true")\n'''
+        parser_args = '''    p.add_argument("--gtja185", action="store_true", help="评估完整 GTJA185 内置因子包")
+    p.add_argument("--gtja-output", default="AutoFactorEvaluation-RECONSTRUCT/output/gtja185")
+    p.add_argument("--gtja-start-date", default=None)
+    p.add_argument("--gtja-end-date", default=None)
+    p.add_argument("--gtja-horizons", default="1,5,21")
+    p.add_argument("--gtja-batch-size", type=int, default=8)
+    p.add_argument("--gtja-min-assets", type=int, default=20)
+    p.add_argument("--gtja-limit", type=int, default=None)
+    p.add_argument("--gtja-synthetic", action="store_true")
+    p.add_argument("--gtja-materialize-staging", action="store_true")
+    p.add_argument("--gtja-publish", action="store_true")
+    p.add_argument("--gtja-allow-partial", action="store_true")
+'''
         if parser_anchor not in text:
             raise RuntimeError("pipeline parser anchor not found")
         text = text.replace(parser_anchor, parser_args + parser_anchor, 1)
 
     execute_anchor = "    args = p.parse_args()\n\n"
     if "if args.gtja185:" not in text:
-        execute = '''    args = p.parse_args()\n\n    if args.gtja185:\n        from dataclasses import asdict\n\n        horizons = tuple(int(part.strip()) for part in args.gtja_horizons.split(",") if part.strip())\n        summary = run_gtja185_batch_pipeline(\n            output_dir=args.gtja_output,\n            start_date=args.gtja_start_date,\n            end_date=args.gtja_end_date,\n            horizons=horizons,\n            batch_size=args.gtja_batch_size,\n            min_assets=args.gtja_min_assets,\n            limit=args.gtja_limit,\n            synthetic=args.gtja_synthetic,\n            materialize_staging=args.gtja_materialize_staging,\n            publish=args.gtja_publish,\n            strict=not args.gtja_allow_partial,\n        )\n        print(json.dumps(asdict(summary), ensure_ascii=False, indent=2, default=str))\n        return\n\n'''
+        execute = '''    args = p.parse_args()
+
+    if args.gtja185:
+        from dataclasses import asdict
+
+        horizons = tuple(int(part.strip()) for part in args.gtja_horizons.split(",") if part.strip())
+        summary = run_gtja185_batch_pipeline(
+            output_dir=args.gtja_output,
+            start_date=args.gtja_start_date,
+            end_date=args.gtja_end_date,
+            horizons=horizons,
+            batch_size=args.gtja_batch_size,
+            min_assets=args.gtja_min_assets,
+            limit=args.gtja_limit,
+            synthetic=args.gtja_synthetic,
+            materialize_staging=args.gtja_materialize_staging,
+            publish=args.gtja_publish,
+            strict=not args.gtja_allow_partial,
+        )
+        print(json.dumps(asdict(summary), ensure_ascii=False, indent=2, default=str))
+        return
+
+'''
         if execute_anchor not in text:
             raise RuntimeError("pipeline parse_args anchor not found")
         text = text.replace(execute_anchor, execute, 1)
@@ -76,27 +156,38 @@ def patch_pipeline_cli() -> None:
 def patch_assetization_worker_bug() -> None:
     path = PROJECT / "assetization" / "scripts" / "worker.py"
     text = path.read_text(encoding="utf-8")
-    text = text.replace("mdp, len(market_df), len(market_df.columns)", "bar_dir, len(market_df), len(market_df.columns)")
+    text = text.replace(
+        "mdp, len(market_df), len(market_df.columns)",
+        "bar_dir, len(market_df), len(market_df.columns)",
+    )
     path.write_text(text, encoding="utf-8")
 
 
 def add_docs() -> None:
     path = PROJECT / "docs" / "gtja185_batch_evaluation.md"
     path.write_text(
-        """# GTJA185 batch evaluation\n\n"
-        "AutoFactorEvaluation now ships a versioned bundle of all 185 deliverable GTJA191 factors. "
-        "The bundle is generated from `gtja191/lib/catalog.py` and CI rejects stale copies.\n\n"
-        "The official path is `evaluation.gtja185_batch`: one DataAccess snapshot, current FactorEngine, "
-        "PIT compilation, cross-sectional MAD winsorization/z-scoring, train-only direction selection, "
-        "validation/test IC, RankIC, ICIR, quantile long-short, turnover, annualized performance, drawdown, "
-        "year stability, routing, resumable reports, and optional factor_lake_staging writes.\n\n"
-        "```bash\n"
-        "python -m pipeline --gtja185 --gtja-start-date 2014-01-01 --gtja-end-date 2026-06-25 "
-        "--gtja-output /tmp/gtja185_eval\n"
-        "```\n\n"
-        "For a data-free deterministic smoke run, append `--gtja-synthetic`. Published factor values are "
-        "never written directly: use `--gtja-materialize-staging`; add `--gtja-publish` only after review.\n"
-        """,
+        """# GTJA185 batch evaluation
+
+AutoFactorEvaluation ships a versioned bundle of all 185 deliverable GTJA191 factors.
+The bundle is generated from `gtja191/lib/catalog.py`, and CI rejects stale copies.
+
+The official path is `evaluation.gtja185_batch`: one DataAccess snapshot, the current
+FactorEngine, PIT compilation, cross-sectional MAD winsorization/z-scoring, train-only
+direction selection, validation/test IC, RankIC, ICIR, quantile long-short, turnover,
+annualized performance, drawdown, yearly stability, deterministic routing, resumable
+reports, and optional `factor_lake_staging` writes.
+
+```bash
+python -m pipeline --gtja185 \
+  --gtja-start-date 2014-01-01 \
+  --gtja-end-date 2026-06-25 \
+  --gtja-output /tmp/gtja185_eval
+```
+
+For a data-free deterministic smoke run, append `--gtja-synthetic`. Published factor
+values are never written directly: use `--gtja-materialize-staging`; add
+`--gtja-publish` only after review.
+""",
         encoding="utf-8",
     )
 
