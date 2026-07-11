@@ -1,12 +1,11 @@
-"""GTJA DSL → factor_engine 最新 canonical 算子命名。"""
+"""GTJA DSL → factor_engine 最新 canonical 算子命名与字段语义。"""
 from __future__ import annotations
 
 import ast
 import re
 
 # 函数名直替（旧 DSL 别名 → 当前 canonical）
-# 注意：GTJA SMA(x,n,m) 由 convert 脚本译为 ts_ema(x, span)，勿在此把 SMA→ts_mean
-# （factor_engine 的 SMA 别名语义是简单 ts_mean，与 GTJA 指数平滑不同）
+# 注意：GTJA SMA(x,n,m) 由 convert 脚本译为 ts_ema(x, span)，勿在此把 SMA→ts_mean。
 _FN_RENAMES: dict[str, str] = {
     "delay": "ts_delay",
     "shift": "ts_delay",
@@ -16,6 +15,8 @@ _FN_RENAMES: dict[str, str] = {
     "IIF": "where",
     "m_argmax": "ts_argmax",
     "m_argmin": "ts_argmin",
+    "Slope": "ts_time_slope",
+    "slope": "ts_time_slope",
 }
 
 
@@ -39,7 +40,46 @@ def _is_rolling_max_min(call: ast.Call) -> bool:
     return True
 
 
+def _flatten_add_names(node: ast.AST) -> list[str] | None:
+    """识别 ``high + low + close``，忽略括号但不忽略系数。"""
+    names: list[str] = []
+
+    def walk(cur: ast.AST) -> bool:
+        if isinstance(cur, ast.BinOp) and isinstance(cur.op, ast.Add):
+            return walk(cur.left) and walk(cur.right)
+        if isinstance(cur, ast.Name):
+            names.append(cur.id)
+            return True
+        return False
+
+    return names if walk(node) else None
+
+
+def _is_legacy_vwap_proxy(node: ast.AST) -> bool:
+    """识别旧转换器生成的 ``(high + low + close) / 3``。"""
+    if not isinstance(node, ast.BinOp) or not isinstance(node.op, ast.Div):
+        return False
+    if not isinstance(node.right, ast.Constant) or node.right.value not in (3, 3.0):
+        return False
+    names = _flatten_add_names(node.left)
+    return names is not None and sorted(names) == ["close", "high", "low"]
+
+
 class _CanonicalRenamer(ast.NodeTransformer):
+    def visit_BinOp(self, node: ast.BinOp) -> ast.AST:
+        self.generic_visit(node)
+        if _is_legacy_vwap_proxy(node):
+            # vwap 同时是算子名，必须用显式 col() 引用数据列。
+            return ast.copy_location(
+                ast.Call(
+                    func=ast.Name(id="col", ctx=ast.Load()),
+                    args=[ast.Constant(value="vwap")],
+                    keywords=[],
+                ),
+                node,
+            )
+        return node
+
     def visit_Call(self, node: ast.Call) -> ast.AST:
         self.generic_visit(node)
         if not isinstance(node.func, ast.Name):
@@ -54,7 +94,7 @@ class _CanonicalRenamer(ast.NodeTransformer):
 
 
 def normalize_operator_names(formula: str) -> str:
-    """将 DSL 字符串中的算子名规范为 factor_engine 最新 canonical。"""
+    """将 DSL 字符串规范为当前 FactorEngine canonical 语义。"""
     text = str(formula or "").strip()
     if not text:
         return text
