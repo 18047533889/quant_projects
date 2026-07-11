@@ -28,9 +28,14 @@ def patch_evaluator() -> None:
     annualization: float,
     hac_lags: int = 0,
     holding_period: int = 1,
-    observation_annualization: float = 252.0,
 ) -> dict[str, float | int | None]:
-    """Performance metrics robust to overlapping holding-period observations."""
+    """Performance metrics robust to overlapping holding-period observations.
+
+    ``annualization`` is the non-overlapping observation count (for an h-day
+    holding return, normally 252/h). The HAC denominator includes positive
+    overlap autocovariance and therefore cannot be used with a second daily
+    sqrt(252) multiplier without double-counting observation frequency.
+    """
     clean = pd.to_numeric(returns, errors="coerce").dropna().astype(float)
     if clean.empty:
         return {
@@ -63,11 +68,11 @@ def patch_evaluator() -> None:
     long_run_variance = max(long_run_variance, 0.0)
     long_run_std = math.sqrt(long_run_variance)
     hac_sharpe = (
-        mean / long_run_std * math.sqrt(float(observation_annualization))
+        mean / long_run_std * math.sqrt(float(annualization))
         if math.isfinite(long_run_std) and long_run_std > 0
         else float("nan")
     )
-    hac_long_run_vol = long_run_std * math.sqrt(float(observation_annualization))
+    hac_long_run_vol = long_run_std * math.sqrt(float(annualization))
 
     period = max(int(holding_period), 1)
     sleeve_drawdowns: list[float] = []
@@ -121,21 +126,18 @@ def patch_evaluator() -> None:
                     annualization=annualization,
                     hac_lags=max(int(horizon) - 1, 0),
                     holding_period=int(horizon),
-                    observation_annualization=config.annualization,
                 ),
                 "long_short_net": _performance_stats(
                     long_short_net,
                     annualization=annualization,
                     hac_lags=max(int(horizon) - 1, 0),
                     holding_period=int(horizon),
-                    observation_annualization=config.annualization,
                 ),
                 "long_short": _performance_stats(
                     long_short_net,
                     annualization=annualization,
                     hac_lags=max(int(horizon) - 1, 0),
                     holding_period=int(horizon),
-                    observation_annualization=config.annualization,
                 ),
 ''',
         1,
@@ -191,7 +193,6 @@ def test_hac_sharpe_penalizes_positive_overlap_autocorrelation():
         annualization=252 / 5,
         hac_lags=4,
         holding_period=5,
-        observation_annualization=252,
     )
     assert stats["hac_sharpe"] is not None
     assert stats["sharpe"] is not None
@@ -204,12 +205,13 @@ def test_hac_sharpe_penalizes_positive_overlap_autocorrelation():
 def patch_docs() -> None:
     text = DOCS.read_text(encoding="utf-8")
     text = text.replace(
-        '''   net returns, weight turnover, annualized return/volatility, Sharpe, max drawdown, hit
-   rate and yearly stability for every configured horizon. Routing uses net performance.
-''',
         '''   net returns, weight turnover, annualized return/volatility, ordinary and HAC-adjusted
    Sharpe, non-overlapping worst-sleeve drawdown, hit rate and yearly stability for every
    configured horizon. Routing uses net HAC-adjusted performance.
+''',
+        '''   net returns, weight turnover, annualized return/volatility, ordinary and conservative
+   HAC-adjusted Sharpe, non-overlapping worst-sleeve drawdown, hit rate and yearly stability
+   for every configured horizon. Routing uses net HAC-adjusted performance.
 ''',
         1,
     )
