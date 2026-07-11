@@ -29,7 +29,9 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf /tmp/AutoFactorEvaluation
-          git clone --depth 1 --branch RECONSTRUCT \
+          git -c http.https://github.com/.extraheader= clone \
+            --depth 1 \
+            --branch RECONSTRUCT \
             https://github.com/HKUST-QUANT-SOCIETY/AutoFactorEvaluation.git \
             /tmp/AutoFactorEvaluation
           git -C /tmp/AutoFactorEvaluation submodule update --init --recursive --depth 1 || true
