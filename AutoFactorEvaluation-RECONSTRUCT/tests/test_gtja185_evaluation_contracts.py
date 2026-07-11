@@ -1,20 +1,22 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
 
 from evaluation.gtja185_batch import (
     BatchEvaluationConfig,
+    FactorRunRecord,
     SplitBoundaries,
     _apply_point_in_time_universe,
-    FactorRunRecord,
     _apply_validation_fdr,
     _long_short_series,
-    _route_factor,
     _performance_stats,
     _price_forward_returns,
     _purged_split_mask,
+    _route_factor,
 )
 
 
@@ -32,9 +34,13 @@ def _price_frame() -> pd.DataFrame:
 def test_forward_return_enters_on_next_bar():
     frame = _price_frame()
     result = _price_forward_returns(frame, (2,), "vwap", entry_lag=1)[2]
-    # signal at t0 enters at t1=101 and exits at t3=103
     assert result.iloc[0] == pytest.approx(103.0 / 101.0 - 1.0)
     assert result.iloc[-3:].isna().all()
+
+
+def test_same_bar_entry_is_rejected():
+    with pytest.raises(ValueError, match="entry_lag"):
+        _price_forward_returns(_price_frame(), (1,), "vwap", entry_lag=0)
 
 
 def test_purged_split_never_crosses_boundary():
@@ -76,7 +82,7 @@ def test_turnover_uses_weights_and_costs_net_returns():
     assert net.iloc[1] == pytest.approx(gross.iloc[1])
 
 
-def test_point_in_time_universe_filters_by_date_and_tradability():
+def test_point_in_time_universe_filters_date_membership_tradability_and_id():
     market = pd.DataFrame(
         {
             "datetime": pd.to_datetime(["2024-01-02"] * 2 + ["2024-01-03"] * 2),
@@ -88,19 +94,22 @@ def test_point_in_time_universe_filters_by_date_and_tradability():
         {
             "datetime": market["datetime"],
             "asset": market["asset"],
+            "universe_id": ["U1", "U1", "U1", "U1"],
             "is_member": [True, False, True, True],
             "is_tradable": [True, True, False, True],
         }
     )
-    filtered = _apply_point_in_time_universe(market, universe)
+    filtered = _apply_point_in_time_universe(market, universe, universe_id="U1")
     assert filtered["asset"].tolist() == ["A", "B"]
     assert filtered["datetime"].dt.strftime("%Y-%m-%d").tolist() == [
         "2024-01-02",
         "2024-01-03",
     ]
+    with pytest.raises(ValueError, match="removed all"):
+        _apply_point_in_time_universe(market, universe, universe_id="OTHER")
 
 
-def test_production_requires_registered_point_in_time_universe():
+def test_production_requires_point_in_time_universe():
     with pytest.raises(ValueError, match="require_point_in_time_universe"):
         BatchEvaluationConfig(run_mode="production").validate()
     BatchEvaluationConfig(
@@ -118,7 +127,7 @@ def _selection_metrics(valid_rank_ic: float, test_rank_ic: float) -> dict:
                 "positive_ratio": 0.6,
                 "hac_p_value": 0.01,
             },
-            "long_short_net": {"sharpe": 1.0},
+            "long_short_net": {"sharpe": 1.0, "hac_sharpe": 1.0},
         }
 
     return {"21": {"valid": split(valid_rank_ic), "test": split(test_rank_ic)}}
@@ -129,17 +138,17 @@ def test_routing_uses_validation_not_test():
     assert _route_factor(metrics, coverage=0.8) == "tier3a_core"
 
 
-def test_benjamini_hochberg_controls_185_factor_family():
+def test_benjamini_hochberg_controls_factor_family():
     records = [
         FactorRunRecord(
-            factor_name=f"f{i}",
-            formula_hash=str(i),
+            factor_name=f"f{index}",
+            formula_hash=str(index),
             status="success",
             coverage=0.8,
             metrics=_selection_metrics(0.04, 0.04),
             route="tier3a_core",
         )
-        for i in range(3)
+        for index in range(3)
     ]
     records[0].metrics["21"]["valid"]["rank_ic"]["hac_p_value"] = 0.001
     records[1].metrics["21"]["valid"]["rank_ic"]["hac_p_value"] = 0.04
@@ -175,10 +184,10 @@ def test_hac_sharpe_penalizes_positive_overlap_autocorrelation():
     assert stats["max_drawdown"] == stats["max_drawdown_non_overlapping_worst"]
 
 
-def test_resume_skips_factor_compile_and_execute(tmp_path, monkeypatch):
-    import evaluation.gtja185_batch as batch
+def test_resume_skips_factor_compile_and_execute(tmp_path: Path, monkeypatch):
+    import evaluation.gtja185_runner as runner
 
-    frame = batch.build_synthetic_market_frame(periods=260, symbols=8, seed=99)
+    frame = runner.build_synthetic_market_frame(periods=260, symbols=8, seed=99)
     config = BatchEvaluationConfig(
         horizons=(1,),
         min_assets=6,
@@ -187,7 +196,7 @@ def test_resume_skips_factor_compile_and_execute(tmp_path, monkeypatch):
         strict=True,
         resume=True,
     )
-    first = batch.run_gtja185_evaluation(
+    first = runner.run_gtja185_evaluation(
         config,
         output_dir=tmp_path,
         market_frame=frame,
@@ -198,8 +207,8 @@ def test_resume_skips_factor_compile_and_execute(tmp_path, monkeypatch):
     def should_not_compile(*args, **kwargs):
         raise AssertionError("resume should not compile a valid cached factor")
 
-    monkeypatch.setattr(batch, "_compile_pack", should_not_compile)
-    second = batch.run_gtja185_evaluation(
+    monkeypatch.setattr(runner, "_compile_pack", should_not_compile)
+    second = runner.run_gtja185_evaluation(
         config,
         output_dir=tmp_path,
         market_frame=frame,
