@@ -12,19 +12,21 @@ UNIVERSE = "ASHARE_ALL"
 FREQUENCY = "1d"
 CONFIG_DIR = PACKAGE_ROOT / "examples" / "materialize"
 
+# Generated YAML files are committed artifacts. Their default paths must therefore be
+# repository-relative and independent of the machine that generated them. Runtime jobs
+# may still override lake_root through the CLI/config orchestration layer.
+_DEFAULT_LAKE_ROOT = Path("data/factors/lake/gtja191")
+_DEFAULT_PLAN_CACHE_DIR = Path("data/factors/plan_cache/gtja191")
+
 
 def default_lake_root() -> Path:
-    env = __import__("os").environ.get("GTJA191_LAKE_ROOT", "").strip()
-    if env:
-        return Path(env).expanduser().resolve()
-    return (PACKAGE_ROOT.parent / "data" / "factors" / "lake" / "gtja191").resolve()
+    """Return the portable repository-relative default factor-lake path."""
+    return _DEFAULT_LAKE_ROOT
 
 
 def default_plan_cache_dir() -> Path:
-    env = __import__("os").environ.get("GTJA191_PLAN_CACHE_DIR", "").strip()
-    if env:
-        return Path(env).expanduser().resolve()
-    return (PACKAGE_ROOT.parent / "data" / "factors" / "plan_cache" / "gtja191").resolve()
+    """Return the portable repository-relative default plan-cache path."""
+    return _DEFAULT_PLAN_CACHE_DIR
 
 
 def build_materialize_config(
@@ -37,9 +39,9 @@ def build_materialize_config(
     factor_id: str | None = None,
     write_target: str = "local",
 ) -> dict[str, Any]:
-    """单因子 factor_engine 落值 YAML 配置体。"""
+    """Build one portable FactorEngine materialization configuration."""
     start, end = production_date_range(start_date=start_date, end_date=end_date)
-    lake = str(lake_root or default_lake_root())
+    lake = str(Path(lake_root) if lake_root is not None else default_lake_root())
     fid = factor_id or factor_name
     data_source: dict[str, Any] = {
         "type": "data_access",

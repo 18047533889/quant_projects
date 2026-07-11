@@ -1,13 +1,13 @@
 factor:
   name: gtja191_alpha_190
   expr: log(flex_max((ts_sum(where(close / ts_delay(close, 1) - 1 > power(close /
-    ts_delay(close, 19), 1 / 20) - 1, 1, 0), 20) - 1) * ts_sum(where(close / ts_delay(close,
-    1) - 1 < power(close / ts_delay(close, 19), 1 / 20) - 1, power(close / ts_delay(close,
-    1) - 1 - (power(close / ts_delay(close, 19), 1 / 20) - 1), 2), 0), 20) / ((ts_sum(where(close
-    / ts_delay(close, 1) - 1 < power(close / ts_delay(close, 19), 1 / 20) - 1, 1,
-    0), 20) + 1e-08) * (ts_sum(where(close / ts_delay(close, 1) - 1 > power(close
-    / ts_delay(close, 19), 1 / 20) - 1, power(close / ts_delay(close, 1) - 1 - (power(close
-    / ts_delay(close, 19), 1 / 20) - 1), 2), 0), 20) + 1e-08)), 1e-08))
+    ts_delay(close, 19), 0.05) - 1, 1, 0), 20) - 1) * ts_sum(where(close / ts_delay(close,
+    1) - 1 < power(close / ts_delay(close, 19), 0.05) - 1, power(close / ts_delay(close,
+    1) - 1 - (power(close / ts_delay(close, 19), 0.05) - 1), 2), 0), 20) / ((ts_sum(where(close
+    / ts_delay(close, 1) - 1 < power(close / ts_delay(close, 19), 0.05) - 1, 1, 0),
+    20) + 1e-08) * (ts_sum(where(close / ts_delay(close, 1) - 1 > power(close / ts_delay(close,
+    19), 0.05) - 1, power(close / ts_delay(close, 1) - 1 - (power(close / ts_delay(close,
+    19), 0.05) - 1), 2), 0), 20) + 1e-08)), 1e-08))
   freq: 1d
   universe: ASHARE_ALL
   description: GTJA-191 gtja191_alpha_190
@@ -31,20 +31,20 @@ backend:
   type: pandas
 engine:
   enable_cache: true
-  plan_cache_dir: /home/shw/quant_projects/data/factors/plan_cache/gtja191
+  plan_cache_dir: data/factors/plan_cache/gtja191
 materialization:
-  lake_root: /home/shw/quant_projects/data/factors/lake/gtja191
+  lake_root: data/factors/lake/gtja191
   factor_id: gtja191_alpha_190
   author: gtja191
   frequency: 1d
   expression: log(flex_max((ts_sum(where(close / ts_delay(close, 1) - 1 > power(close
-    / ts_delay(close, 19), 1 / 20) - 1, 1, 0), 20) - 1) * ts_sum(where(close / ts_delay(close,
-    1) - 1 < power(close / ts_delay(close, 19), 1 / 20) - 1, power(close / ts_delay(close,
-    1) - 1 - (power(close / ts_delay(close, 19), 1 / 20) - 1), 2), 0), 20) / ((ts_sum(where(close
-    / ts_delay(close, 1) - 1 < power(close / ts_delay(close, 19), 1 / 20) - 1, 1,
-    0), 20) + 1e-08) * (ts_sum(where(close / ts_delay(close, 1) - 1 > power(close
-    / ts_delay(close, 19), 1 / 20) - 1, power(close / ts_delay(close, 1) - 1 - (power(close
-    / ts_delay(close, 19), 1 / 20) - 1), 2), 0), 20) + 1e-08)), 1e-08))
+    / ts_delay(close, 19), 0.05) - 1, 1, 0), 20) - 1) * ts_sum(where(close / ts_delay(close,
+    1) - 1 < power(close / ts_delay(close, 19), 0.05) - 1, power(close / ts_delay(close,
+    1) - 1 - (power(close / ts_delay(close, 19), 0.05) - 1), 2), 0), 20) / ((ts_sum(where(close
+    / ts_delay(close, 1) - 1 < power(close / ts_delay(close, 19), 0.05) - 1, 1, 0),
+    20) + 1e-08) * (ts_sum(where(close / ts_delay(close, 1) - 1 > power(close / ts_delay(close,
+    19), 0.05) - 1, power(close / ts_delay(close, 1) - 1 - (power(close / ts_delay(close,
+    19), 0.05) - 1), 2), 0), 20) + 1e-08)), 1e-08))
   target: local
   preserve_invalid_rows: true
   value_dtype: float32

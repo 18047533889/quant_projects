@@ -72,7 +72,7 @@ def _load_factor_data(factor_dir: Path) -> pd.DataFrame:
     dfs = []
     for f in parquet_files:
         try:
-            df = pd.read_parquet(f, engine="fastparquet")
+            df = pd.read_parquet(f)
             dfs.append(df)
         except Exception as e:
             logger.warning("读取 %s 失败: %s", f, e)

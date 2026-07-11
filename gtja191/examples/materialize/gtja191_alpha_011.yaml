@@ -24,9 +24,9 @@ backend:
   type: pandas
 engine:
   enable_cache: true
-  plan_cache_dir: /home/shw/quant_projects/data/factors/plan_cache/gtja191
+  plan_cache_dir: data/factors/plan_cache/gtja191
 materialization:
-  lake_root: /home/shw/quant_projects/data/factors/lake/gtja191
+  lake_root: data/factors/lake/gtja191
   factor_id: gtja191_alpha_011
   author: gtja191
   frequency: 1d

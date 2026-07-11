@@ -1,9 +1,8 @@
 factor:
   name: gtja191_alpha_128
-  expr: 100 - 100 / (1 + ts_sum(where((high + low + close) / 3 > ts_delay((high +
-    low + close) / 3, 1), (high + low + close) / 3 * volume, 0), 14) / (ts_sum(where((high
-    + low + close) / 3 < ts_delay((high + low + close) / 3, 1), (high + low + close)
-    / 3 * volume, 0), 14) + 1e-08))
+  expr: 100 - 100 / (1 + ts_sum(where(col('vwap') > ts_delay(col('vwap'), 1), col('vwap')
+    * volume, 0), 14) / (ts_sum(where(col('vwap') < ts_delay(col('vwap'), 1), col('vwap')
+    * volume, 0), 14) + 1e-08))
   freq: 1d
   universe: ASHARE_ALL
   description: GTJA-191 gtja191_alpha_128
@@ -27,16 +26,15 @@ backend:
   type: pandas
 engine:
   enable_cache: true
-  plan_cache_dir: /home/shw/quant_projects/data/factors/plan_cache/gtja191
+  plan_cache_dir: data/factors/plan_cache/gtja191
 materialization:
-  lake_root: /home/shw/quant_projects/data/factors/lake/gtja191
+  lake_root: data/factors/lake/gtja191
   factor_id: gtja191_alpha_128
   author: gtja191
   frequency: 1d
-  expression: 100 - 100 / (1 + ts_sum(where((high + low + close) / 3 > ts_delay((high
-    + low + close) / 3, 1), (high + low + close) / 3 * volume, 0), 14) / (ts_sum(where((high
-    + low + close) / 3 < ts_delay((high + low + close) / 3, 1), (high + low + close)
-    / 3 * volume, 0), 14) + 1e-08))
+  expression: 100 - 100 / (1 + ts_sum(where(col('vwap') > ts_delay(col('vwap'), 1),
+    col('vwap') * volume, 0), 14) / (ts_sum(where(col('vwap') < ts_delay(col('vwap'),
+    1), col('vwap') * volume, 0), 14) + 1e-08))
   target: local
   preserve_invalid_rows: true
   value_dtype: float32

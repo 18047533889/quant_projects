@@ -269,6 +269,34 @@ ashare_stock_status:
     Symbol: string
     ListedState: string
 
+# Point-in-time research universe and tradability mask used by production factor evaluation.
+# This is a curated clean-data contract, not a current-security-master snapshot. Each row
+# must describe what was knowable and tradable on TradeDate; missing rows mean ineligible.
+ashare_universe_daily:
+  kind: parametric
+  access_mode: published
+  layout: hive
+  root_template: ${ASHARE_CLEAN_ROOT:-/home/shw/quant_projects/data/a_share/clean_data}/universe_daily/universe_id={universe_id}
+  glob_template: "date=*/*.parquet"
+  params_schema:
+    universe_id:
+      type: str
+      pattern: "^[A-Za-z0-9_.-]+$"
+      path_segment: true
+  partition_columns: [date]
+  time_column: TradeDate
+  instrument_column: Symbol
+  hive_partitioning: true
+  union_by_name: true
+  query_policy:
+    require_explicit_columns: true
+    max_rows: 20_000_000
+  schema:
+    TradeDate: date
+    Symbol: string
+    is_member: bool
+    is_tradable: bool
+
 ashare_stock_topten_shareholder:
   <<: *ashare_lqtp_defaults
   root: ${ASHARE_PARQUET_ROOT:-/home/shw/quant_projects/data/a_share/lqtp_data}/StockTopTenShareholder

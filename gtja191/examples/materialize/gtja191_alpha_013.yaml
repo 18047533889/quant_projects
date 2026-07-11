@@ -1,6 +1,6 @@
 factor:
   name: gtja191_alpha_013
-  expr: power(high * low, 0.5) - (high + low + close) / 3
+  expr: power(high * low, 0.5) - col('vwap')
   freq: 1d
   universe: ASHARE_ALL
   description: GTJA-191 gtja191_alpha_013
@@ -24,13 +24,13 @@ backend:
   type: pandas
 engine:
   enable_cache: true
-  plan_cache_dir: /home/shw/quant_projects/data/factors/plan_cache/gtja191
+  plan_cache_dir: data/factors/plan_cache/gtja191
 materialization:
-  lake_root: /home/shw/quant_projects/data/factors/lake/gtja191
+  lake_root: data/factors/lake/gtja191
   factor_id: gtja191_alpha_013
   author: gtja191
   frequency: 1d
-  expression: power(high * low, 0.5) - (high + low + close) / 3
+  expression: power(high * low, 0.5) - col('vwap')
   target: local
   preserve_invalid_rows: true
   value_dtype: float32

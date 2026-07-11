@@ -806,9 +806,6 @@ def _archive_empty_campaigns(pool_dir: Path, record_dir: Path) -> list[str]:
     return archived
 
 
-# ============================================================
-# CLI
-# ============================================================
 
 def _validate_all_paths(cfg) -> None:
     """启动前验证所有本地必需路径是否存在。缺失则自动创建。

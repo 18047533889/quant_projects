@@ -1,7 +1,7 @@
 factor:
   name: gtja191_alpha_052
-  expr: ts_sum(flex_max(0, high - ts_delay((high + low + close) / 3, 1)), 26) / (ts_sum(flex_max(0,
-    ts_delay((high + low + close) / 3, 1) - low), 26) + 1e-08) * 100
+  expr: ts_sum(flex_max(0, high - ts_delay(col('vwap'), 1)), 26) / (ts_sum(flex_max(0,
+    ts_delay(col('vwap'), 1) - low), 26) + 1e-08) * 100
   freq: 1d
   universe: ASHARE_ALL
   description: GTJA-191 gtja191_alpha_052
@@ -25,15 +25,14 @@ backend:
   type: pandas
 engine:
   enable_cache: true
-  plan_cache_dir: /home/shw/quant_projects/data/factors/plan_cache/gtja191
+  plan_cache_dir: data/factors/plan_cache/gtja191
 materialization:
-  lake_root: /home/shw/quant_projects/data/factors/lake/gtja191
+  lake_root: data/factors/lake/gtja191
   factor_id: gtja191_alpha_052
   author: gtja191
   frequency: 1d
-  expression: ts_sum(flex_max(0, high - ts_delay((high + low + close) / 3, 1)), 26)
-    / (ts_sum(flex_max(0, ts_delay((high + low + close) / 3, 1) - low), 26) + 1e-08)
-    * 100
+  expression: ts_sum(flex_max(0, high - ts_delay(col('vwap'), 1)), 26) / (ts_sum(flex_max(0,
+    ts_delay(col('vwap'), 1) - low), 26) + 1e-08) * 100
   target: local
   preserve_invalid_rows: true
   value_dtype: float32

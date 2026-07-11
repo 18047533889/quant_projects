@@ -1,7 +1,6 @@
 factor:
   name: gtja191_alpha_026
-  expr: ts_sum(close, 7) / 7 - close + ts_corr((high + low + close) / 3, ts_delay(close,
-    5), 230)
+  expr: ts_sum(close, 7) / 7 - close + ts_corr(col('vwap'), ts_delay(close, 5), 230)
   freq: 1d
   universe: ASHARE_ALL
   description: GTJA-191 gtja191_alpha_026
@@ -25,13 +24,13 @@ backend:
   type: pandas
 engine:
   enable_cache: true
-  plan_cache_dir: /home/shw/quant_projects/data/factors/plan_cache/gtja191
+  plan_cache_dir: data/factors/plan_cache/gtja191
 materialization:
-  lake_root: /home/shw/quant_projects/data/factors/lake/gtja191
+  lake_root: data/factors/lake/gtja191
   factor_id: gtja191_alpha_026
   author: gtja191
   frequency: 1d
-  expression: ts_sum(close, 7) / 7 - close + ts_corr((high + low + close) / 3, ts_delay(close,
+  expression: ts_sum(close, 7) / 7 - close + ts_corr(col('vwap'), ts_delay(close,
     5), 230)
   target: local
   preserve_invalid_rows: true
