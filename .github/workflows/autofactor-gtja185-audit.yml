@@ -1,0 +1,138 @@
+name: AutoFactor GTJA185 Audit
+
+on:
+  push:
+    branches:
+      - agent/autofactor-gtja185-evaluation
+    paths:
+      - ".github/workflows/autofactor-gtja185-audit.yml"
+      - "AutoFactorEvaluation-RECONSTRUCT/**"
+      - "gtja191/**"
+      - "factor_engine/**"
+      - "data_access/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/AutoFactorEvaluation-RECONSTRUCT
+      FACTOR_ENGINE_DISABLE_NUMBA: "1"
+      FACTOR_ENGINE_RUN_MODE: research
+      QUANT_PRODUCTION_MODE: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install audit dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyyaml pytest numpy pandas scipy statsmodels pyarrow polars duckdb pydantic requests
+      - name: Build inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p autofactor-audit
+          {
+            echo '# GTJA191 FILE TREE'
+            find gtja191 -type f | sort
+            echo
+            echo '# AUTOFACTOR FILE TREE'
+            find AutoFactorEvaluation-RECONSTRUCT -type f | sort
+            echo
+            echo '# PIPELINE / EVALUATION SYMBOLS'
+            grep -RInE 'def (run_|process_|evaluate|purif|route|pipeline|main|materialize)|class .*Evaluator|class .*Pipeline' AutoFactorEvaluation-RECONSTRUCT --include='*.py' || true
+            echo
+            echo '# FACTOR ENGINE / DATA ACCESS USAGE'
+            grep -RInE 'factor_engine|data_access|quant_platform|read_parquet|to_parquet|scan_parquet' AutoFactorEvaluation-RECONSTRUCT --include='*.py' || true
+          } > autofactor-audit/inventory.txt
+
+          python - <<'PY'
+          from __future__ import annotations
+          import ast, json, re
+          from pathlib import Path
+          import yaml
+
+          root = Path('gtja191')
+          records = []
+          for p in sorted(root.rglob('*')):
+              if not p.is_file() or p.suffix.lower() not in {'.yaml', '.yml', '.json', '.py', '.md'}:
+                  continue
+              text = p.read_text(encoding='utf-8', errors='replace')
+              formulas = []
+              ids = []
+              if p.suffix.lower() in {'.yaml', '.yml'}:
+                  try:
+                      obj = yaml.safe_load(text)
+                  except Exception:
+                      obj = None
+                  def walk(x):
+                      if isinstance(x, dict):
+                          for k, v in x.items():
+                              lk = str(k).lower()
+                              if lk in {'expr', 'formula', 'expression'} and isinstance(v, str):
+                                  formulas.append(v)
+                              if lk in {'id', 'factor_id', 'name'} and isinstance(v, (str, int)):
+                                  ids.append(str(v))
+                              walk(v)
+                      elif isinstance(x, list):
+                          for v in x: walk(v)
+                  walk(obj)
+              elif p.suffix.lower() == '.json':
+                  try:
+                      obj = json.loads(text)
+                  except Exception:
+                      obj = None
+                  def walkj(x):
+                      if isinstance(x, dict):
+                          for k, v in x.items():
+                              lk = str(k).lower()
+                              if lk in {'expr', 'formula', 'expression'} and isinstance(v, str): formulas.append(v)
+                              if lk in {'id', 'factor_id', 'name'} and isinstance(v, (str, int)): ids.append(str(v))
+                              walkj(v)
+                      elif isinstance(x, list):
+                          for v in x: walkj(v)
+                  walkj(obj)
+              else:
+                  formulas.extend(re.findall(r'(?i)(?:expr|formula)\s*[:=]\s*[\"\']([^\"\']+)', text))
+              if formulas or re.search(r'(?i)gtja|alpha[_-]?\d+', p.name):
+                  records.append({'path': str(p), 'ids': ids[:20], 'formulas': formulas[:20]})
+          Path('autofactor-audit/gtja_records.json').write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding='utf-8')
+
+          src = Path('AutoFactorEvaluation-RECONSTRUCT')
+          py = []
+          for p in sorted(src.rglob('*.py')):
+              row = {'path': str(p), 'functions': [], 'classes': [], 'imports': []}
+              try:
+                  tree = ast.parse(p.read_text(encoding='utf-8', errors='replace'))
+              except Exception as exc:
+                  row['parse_error'] = f'{type(exc).__name__}: {exc}'
+                  py.append(row); continue
+              for n in tree.body:
+                  if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)): row['functions'].append(n.name)
+                  elif isinstance(n, ast.ClassDef): row['classes'].append(n.name)
+                  elif isinstance(n, ast.Import): row['imports'].extend(a.name for a in n.names)
+                  elif isinstance(n, ast.ImportFrom): row['imports'].append(n.module or '')
+              py.append(row)
+          Path('autofactor-audit/autofactor_symbols.json').write_text(json.dumps(py, ensure_ascii=False, indent=2), encoding='utf-8')
+          PY
+      - name: Baseline compile and tests
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          {
+            python -m compileall -q AutoFactorEvaluation-RECONSTRUCT gtja191
+            pytest --collect-only -q AutoFactorEvaluation-RECONSTRUCT gtja191
+            pytest -q AutoFactorEvaluation-RECONSTRUCT/tests/test_quant_platform_integration.py
+          } 2>&1 | tee autofactor-audit/baseline.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: autofactor-gtja185-audit
+          path: autofactor-audit/
+          if-no-files-found: error
