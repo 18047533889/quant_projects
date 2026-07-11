@@ -14,7 +14,7 @@ from lib.dsl_normalize import normalize_operator_names
 from validate_factor_engine_coverage import validate_catalog
 
 
-def test_catalog_count_and_audited_vwap_semantics():
+def test_catalog_count_and_audited_semantics():
     catalog = deliverable_catalog()
     assert len(catalog) == DELIVERABLE_COUNT == 185
     for name, item in catalog.items():
@@ -23,6 +23,14 @@ def test_catalog_count_and_audited_vwap_semantics():
         assert formula == normalize_operator_names(formula), name
         if "VWAP" in source:
             assert "col('vwap')" in formula or 'col("vwap")' in formula, name
+
+    alpha056 = catalog["gtja191_alpha_056"]["dsl_formula"]
+    assert "ts_corr" in alpha056 and ", 13)" in alpha056
+    assert "power(rank(" in alpha056 and ", 5)" in alpha056
+    assert "power(13)" not in alpha056
+
+    alpha166 = catalog["gtja191_alpha_166"]["dsl_formula"]
+    assert "power(19, 1.5)" not in alpha166
 
 
 def test_all_185_compile_and_execute_on_synthetic_panel():
