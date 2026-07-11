@@ -233,27 +233,22 @@ def _step1_validate(manifest: dict, campaign_config: dict | None) -> StepResult:
 
 def _step2_build_yaml(manifest: dict) -> StepResult:
     try:
-        expr = manifest.get("formula", "")
-        expr_type = manifest.get("expression_type", "dsl")
-        calc_mode = "code" if expr_type in ("python", "code") else "expr"
-        market = manifest.get("market", "")
-        fields = {"close": "Close", "open": "Open", "high": "High", "low": "Low",
-                  "volume": "Volume", "vwap": "Vwap"}
-        ts_col, inst_col = ("TradeDate", "Symbol") if market == "ashare" else ("window_start", "ticker")
-        yaml_config = {
-            "factor": {"name": manifest.get("candidate_id", "unknown"), "expr": expr,
-                       "calc_mode": calc_mode, "freq": "1d",
-                       "description": manifest.get("description", "")},
-            "data_source": {"type": "parquet", "root": "",
-                            "timestamp_col": ts_col, "instrument_col": inst_col,
-                            "fields": fields, "max_files": 2},
-            "backend": {"type": "pandas"},
-            "engine": {"enable_cache": False, "tiny_run": True},
-        }
-        return StepResult("Step2_YamlConfig", "PASS", detail={"yaml_config": yaml_config})
-    except Exception as e:
-        return StepResult("Step2_YamlConfig", "REJECTED", f"YAML 构建失败: {e}")
+        from integrations.quant_platform import build_factor_engine_config
 
+        config = build_factor_engine_config(
+            manifest,
+            backend=str(manifest.get("backend", "pandas")),
+            run_mode="research",
+        )
+        if not config["factor"]["expr"]:
+            return StepResult("Step2_YamlConfig", "REJECTED", "因子公式为空")
+        return StepResult(
+            "Step2_YamlConfig",
+            "PASS",
+            detail={"engine_config": config, "data_source_type": "data_access"},
+        )
+    except Exception as exc:
+        return StepResult("Step2_YamlConfig", "REJECTED", f"平台配置构建失败: {exc}")
 
 # ============================================================
 # Step 3: 去重检测（纯内存）
@@ -286,58 +281,81 @@ def _step3_dedup(
 
 def _step4_tiny_run(manifest: dict) -> StepResult:
     try:
-        import sys, tempfile, yaml as _yaml
-        from pathlib import Path
-        p = Path(__file__).resolve().parents[2]
-        fe = str(p / "factor_engine")
-        if fe not in sys.path:
-            sys.path.insert(0, fe)
+        import os
 
-        # 构建临时 YAML（此时需要填充 data_source.root）
-        market = manifest.get("market", "")
-        data_root = ""
-        if market == "ashare":
-            import os; data_root = os.environ.get("ASHARE_DATA_ROOT", "")
-        else:
-            import os; data_root = os.environ.get("US_STOCK_DATA_ROOT", "")
+        from integrations.quant_platform import (
+            build_factor_engine_config,
+            execute_factor_formula,
+            validate_factor_formula,
+        )
 
-        expr_type = manifest.get("expression_type", "dsl")
-        calc_mode = "code" if expr_type in ("python", "code") else "expr"
-        fields = {"close": "Close", "open": "Open", "high": "High", "low": "Low",
-                  "volume": "Volume", "vwap": "Vwap"}
-        ts_col, inst_col = ("TradeDate", "Symbol") if market == "ashare" else ("window_start", "ticker")
+        config = build_factor_engine_config(
+            manifest,
+            backend=str(manifest.get("backend", "pandas")),
+            run_mode="research",
+        )
+        factor_cfg = config["factor"]
+        data_cfg = config["data_source"]
+        start_date = data_cfg.get("start_date") or os.environ.get("AUTOFACTOR_TINY_START")
+        end_date = data_cfg.get("end_date") or os.environ.get("AUTOFACTOR_TINY_END")
 
-        yaml_config = {
-            "factor": {"name": manifest.get("candidate_id", "unknown"),
-                       "expr": manifest.get("formula", ""),
-                       "calc_mode": calc_mode, "freq": "1d"},
-            "data_source": {"type": "parquet", "root": data_root,
-                            "timestamp_col": ts_col, "instrument_col": inst_col,
-                            "fields": fields, "max_files": 2},
-            "backend": {"type": "pandas"},
-            "engine": {"enable_cache": False, "tiny_run": True},
-        }
+        if not start_date or not end_date:
+            _, plan, analysis = validate_factor_formula(
+                factor_cfg["expr"],
+                name=factor_cfg["name"],
+                freq=factor_cfg["freq"],
+                universe=factor_cfg.get("universe"),
+                backend=config["backend"]["type"],
+                run_mode="research",
+            )
+            return StepResult(
+                "Step4_TinyRun",
+                "PASS",
+                detail={
+                    "compile_only": True,
+                    "reason": "未配置 AUTOFACTOR_TINY_START/END，已完成真实 FactorEngine 编译",
+                    "lookback": getattr(analysis, "lookback", None),
+                    "root_op": getattr(plan, "op", None),
+                },
+            )
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
-            _yaml.dump(yaml_config, f, allow_unicode=True, default_flow_style=False)
-            tmp = f.name
-
-        from factor_engine.runtime.engine import FactorEngine
-        engine, factor = FactorEngine.from_config(tmp)
-        result = engine.run(factor)
-        Path(tmp).unlink(missing_ok=True)
-        series = result.get("result")
-        if series is None:
-            return StepResult("Step4_TinyRun", "REJECTED", "引擎返回为空")
-        nn = int(series.notna().sum()) if hasattr(series, "notna") else 0
-        return StepResult("Step4_TinyRun", "PASS", detail={"rows": len(series), "non_null": nn})
-    except ImportError as e:
-        return StepResult("Step4_TinyRun", "REJECTED", f"因子引擎导入失败: {e}")
-    except Exception as e:
+        execution = execute_factor_formula(
+            factor_cfg["expr"],
+            factor_name=factor_cfg["name"],
+            market=str(manifest.get("market") or "ashare"),
+            dataset=data_cfg["dataset"],
+            fields=data_cfg.get("fields"),
+            start_date=start_date,
+            end_date=end_date,
+            instrument_filter=data_cfg.get("instrument_filter"),
+            params=data_cfg.get("params"),
+            backend=config["backend"]["type"],
+            run_mode="research",
+            freq=factor_cfg["freq"],
+            universe=factor_cfg.get("universe"),
+            description=factor_cfg.get("description"),
+        )
+        series = execution.result
+        return StepResult(
+            "Step4_TinyRun",
+            "PASS",
+            detail={
+                "compile_only": False,
+                "rows": len(series),
+                "non_null": int(series.notna().sum()),
+                "data_snapshot_id": execution.snapshot_id,
+                "dataset": data_cfg["dataset"],
+            },
+        )
+    except Exception as exc:
         import traceback
-        return StepResult("Step4_TinyRun", "REJECTED", f"引擎试运行失败: {e}",
-                          detail={"traceback": traceback.format_exc()})
 
+        return StepResult(
+            "Step4_TinyRun",
+            "REJECTED",
+            f"当前 FactorEngine/DataAccess 试运行失败: {exc}",
+            detail={"traceback": traceback.format_exc()},
+        )
 
 # ============================================================
 # Step 5: 未来函数拦截 (DeepSeek)

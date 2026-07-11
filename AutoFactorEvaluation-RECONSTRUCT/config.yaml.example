@@ -53,21 +53,16 @@ local_tmp: /tmp/auto_factor_evaluation_tmp
 # ════════════════════════════════════════════════════════════
 
 market_data:
-  path: cos://qs-cold/clean_data/ashare/lqtp_data/StockDailyBar/
-    # 行情数据表路径
-    # 支持 COS 路径（cos://...）或本地绝对路径（/data/...）
-    # A 股样例：已包含 StockDailyBar 表的完整路径
-  forward_return_field: Vwap
-    # 用于计算 forward return（前向收益率）的字段名
-    # A 股样例：Vwap（成交量加权均价）
+  market: ashare
+  dataset: ashare_stock_daily
+    # 正式行情由 data_access/config/datasets.yaml 管理；禁止业务代码直接扫描路径
+  start_date: null
+  end_date: null
+  forward_return_field: vwap
   adjustment_field: Factor
-    # 后复权调整使用的字段名
-    # A 股样例：Factor（复权因子）
 
 industry_data:
-  path: cos://qs-cold/clean_data/ashare/lqtp_data/StockIndustry/
-    # 行业分类数据表路径
-    # 支持 COS 路径或本地绝对路径
+  dataset: ashare_stock_industry
   source_field: IndustrySource
     # 表中用于识别行业分类口径的字段名
     # A 股样例：IndustrySource（如 "sws2021"）

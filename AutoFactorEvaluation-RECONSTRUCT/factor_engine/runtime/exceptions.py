@@ -1,2 +1,0 @@
-class FactorEngineError(Exception):
-    pass
