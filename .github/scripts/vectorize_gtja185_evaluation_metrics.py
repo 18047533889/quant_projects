@@ -15,6 +15,52 @@ def replace_exact(text: str, old: str, new: str, label: str) -> str:
 
 def main() -> None:
     text = EVALUATOR.read_text(encoding="utf-8")
+    start = text.find("def _purify_series(")
+    end = text.find("\n\ndef _price_forward_returns", start)
+    if start < 0 or end < 0:
+        raise RuntimeError("purification function anchors not found")
+    purification = '''def _purify_series(series: pd.Series, *, mad_multiplier: float, min_assets: int) -> pd.Series:
+    """Vectorized daily cross-sectional MAD winsorization and z-scoring."""
+    values = pd.to_numeric(series, errors="coerce").replace([np.inf, -np.inf], np.nan)
+    if not isinstance(values.index, pd.MultiIndex) or values.index.nlevels != 2:
+        raise ValueError("factor purification requires MultiIndex(datetime, asset)")
+    if values.index.has_duplicates:
+        raise ValueError("factor purification requires unique (datetime, asset) keys")
+    panel = values.unstack("asset").sort_index()
+    counts = panel.notna().sum(axis=1)
+    medians = panel.median(axis=1, skipna=True)
+    absolute_deviation = panel.sub(medians, axis=0).abs()
+    mad = absolute_deviation.median(axis=1, skipna=True)
+    robust_scale = 1.4826 * mad
+    valid_scale = np.isfinite(robust_scale) & (robust_scale > 0)
+    lower = medians - float(mad_multiplier) * robust_scale
+    upper = medians + float(mad_multiplier) * robust_scale
+    lower = lower.where(valid_scale, -np.inf)
+    upper = upper.where(valid_scale, np.inf)
+    clipped = panel.clip(lower=lower, upper=upper, axis=0)
+    means = clipped.mean(axis=1, skipna=True)
+    stds = clipped.std(axis=1, skipna=True, ddof=1)
+    eligible = (counts >= int(min_assets)) & np.isfinite(stds) & (stds > 1e-12)
+    standardized = clipped.sub(means, axis=0).div(stds, axis=0)
+    standardized.loc[~eligible, :] = np.nan
+
+    datetimes = pd.DatetimeIndex(values.index.get_level_values("datetime"))
+    assets = pd.Index(values.index.get_level_values("asset").astype(str))
+    row_positions = standardized.index.get_indexer(datetimes)
+    column_positions = standardized.columns.astype(str).get_indexer(assets)
+    if (row_positions < 0).any() or (column_positions < 0).any():
+        raise RuntimeError("purified panel could not map back to the original factor index")
+    matrix = standardized.to_numpy(dtype=float)
+    result = pd.Series(
+        matrix[row_positions, column_positions],
+        index=values.index.set_names(["datetime", "asset"]),
+        name=series.name,
+        dtype=float,
+    )
+    return result.sort_index()
+'''
+    text = text[:start] + purification + text[end:]
+
     text = replace_exact(
         text,
         '''def _daily_ic(signal: pd.Series, returns: pd.Series, *, min_assets: int) -> pd.DataFrame:
@@ -162,7 +208,7 @@ def _daily_ic(signal: pd.Series, returns: pd.Series, *, min_assets: int) -> pd.D
 '''
     text = text[:start] + replacement + text[end:]
     EVALUATOR.write_text(text, encoding="utf-8")
-    print("GTJA185 IC, RankIC, quantile portfolios and turnover vectorized")
+    print("GTJA185 purification, IC, RankIC, portfolios and turnover vectorized")
 
 
 if __name__ == "__main__":
