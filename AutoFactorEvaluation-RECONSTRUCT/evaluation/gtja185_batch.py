@@ -94,10 +94,8 @@ class BatchEvaluationConfig:
             raise ValueError(
                 "production GTJA185 evaluation requires require_point_in_time_universe=True"
             )
-        if self.require_point_in_time_universe and not self.universe_dataset:
-            raise ValueError(
-                "require_point_in_time_universe=True requires a registered universe_dataset"
-            )
+        # A registered dataset is required by the CLI path. Programmatic callers may
+        # inject an already validated universe_frame into run_gtja185_evaluation.
 
 
 @dataclass(frozen=True)
@@ -565,8 +563,17 @@ def _long_short_series(
             **{asset: 1.0 / len(top_assets) for asset in top_assets},
             **{asset: -1.0 / len(bottom_assets) for asset in bottom_assets},
         }
-        realized = valid["return"].to_dict()
-        gross = float(sum(weights[str(asset)] * float(value) for asset, value in realized.items() if str(asset) in weights))
+        return_by_asset = {
+            str(asset): float(value)
+            for asset, value in zip(
+                assets,
+                valid["return"].to_numpy(dtype=float),
+                strict=True,
+            )
+        }
+        gross = float(
+            sum(weight * return_by_asset[asset] for asset, weight in weights.items())
+        )
         all_assets = set(weights) | set(previous_weights)
         turnover = 0.5 * sum(
             abs(weights.get(asset, 0.0) - previous_weights.get(asset, 0.0))

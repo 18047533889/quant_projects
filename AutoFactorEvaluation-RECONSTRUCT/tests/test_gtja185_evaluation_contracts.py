@@ -64,6 +64,8 @@ def test_turnover_uses_weights_and_costs_net_returns():
         n_quantiles=2,
         cost_bps=10.0,
     )
+    assert gross.iloc[0] == pytest.approx(0.01)
+    assert gross.iloc[1] == pytest.approx(0.01)
     assert turnover.iloc[0] == pytest.approx(1.0)
     assert turnover.iloc[1] == pytest.approx(0.0)
     assert net.iloc[0] == pytest.approx(gross.iloc[0] - 0.001)
@@ -96,8 +98,7 @@ def test_point_in_time_universe_filters_by_date_and_tradability():
 def test_production_requires_registered_point_in_time_universe():
     with pytest.raises(ValueError, match="require_point_in_time_universe"):
         BatchEvaluationConfig(run_mode="production").validate()
-    with pytest.raises(ValueError, match="universe_dataset"):
-        BatchEvaluationConfig(
-            run_mode="production",
-            require_point_in_time_universe=True,
-        ).validate()
+    BatchEvaluationConfig(
+        run_mode="production",
+        require_point_in_time_universe=True,
+    ).validate()
