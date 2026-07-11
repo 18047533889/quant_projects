@@ -178,18 +178,35 @@ class DataQualityChecker:
             overall_quality_score=overall,
         )
 
-    def _load_data(self, path: str) -> Optional[pd.DataFrame]:
+    def _load_data(self, source: str) -> Optional[pd.DataFrame]:
+        """从 DataAccess 登记数据集读取质量检测样本，不再直接扫描 Parquet。"""
         try:
-            p = Path(path)
-            if p.is_file() and p.suffix == '.parquet':
-                return pd.read_parquet(p)
-            elif p.is_dir():
-                files = list(p.glob("*.parquet"))
-                if files:
-                    return pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
-            return None
-        except Exception as e:
-            self.logger.error(f"Load failed: {e}")
+            import os
+
+            from integrations.quant_platform import load_market_frame
+
+            known = {"ashare_stock_daily", "us_stock_daily", "us_stocks_sip_day_aggs"}
+            dataset = source if source in known else os.environ.get("AUTOFACTOR_MARKET_DATASET")
+            market = "us" if str(dataset or source).startswith("us_") else os.environ.get(
+                "AUTOFACTOR_MARKET", "ashare"
+            )
+            frame, snapshot = load_market_frame(
+                market=market,
+                dataset=dataset,
+                fields=["close", "high", "low", "volume", "vwap"],
+                start_date=os.environ.get("AUTOFACTOR_DQ_START"),
+                end_date=os.environ.get("AUTOFACTOR_DQ_END"),
+            )
+            frame["timestamp"] = frame["datetime"]
+            self.logger.info(
+                "DataAccess DQ input dataset=%s rows=%d snapshot=%s",
+                dataset,
+                len(frame),
+                snapshot.snapshot_id,
+            )
+            return frame
+        except Exception as exc:
+            self.logger.error("DataAccess load failed: %s", exc)
             return None
 
     def _calc_score(self, drift: float, liq: float, clock: float) -> float:
