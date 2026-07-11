@@ -57,6 +57,7 @@ class BatchEvaluationConfig:
     forward_price_field: str = "vwap"
     entry_lag: int = 1
     cost_bps: float = 10.0
+    fdr_alpha: float = 0.10
     universe_dataset: str | None = None
     universe_membership_field: str = "is_member"
     tradability_field: str | None = "is_tradable"
@@ -88,6 +89,8 @@ class BatchEvaluationConfig:
             raise ValueError("entry_lag must be >= 1 to prevent same-bar execution bias")
         if not math.isfinite(float(self.cost_bps)) or self.cost_bps < 0:
             raise ValueError("cost_bps must be a finite non-negative number")
+        if not 0 < float(self.fdr_alpha) <= 1:
+            raise ValueError("fdr_alpha must be in (0, 1]")
         if self.publish and not self.materialize_staging:
             raise ValueError("publish=True requires materialize_staging=True")
         if str(self.run_mode).lower() == "production" and not self.require_point_in_time_universe:
@@ -486,6 +489,7 @@ def _summary_stats(
             "ir": None,
             "t_stat": None,
             "hac_t_stat": None,
+            "hac_p_value": None,
             "positive_ratio": None,
         }
     mean = float(clean.mean())
@@ -505,6 +509,11 @@ def _summary_stats(
     long_run_variance = max(long_run_variance, 0.0)
     hac_se = math.sqrt(long_run_variance / n) if n else float("nan")
     hac_t_stat = mean / hac_se if math.isfinite(hac_se) and hac_se > 0 else float("nan")
+    hac_p_value = (
+        math.erfc(abs(hac_t_stat) / math.sqrt(2.0))
+        if math.isfinite(hac_t_stat)
+        else float("nan")
+    )
     return {
         "count": int(len(clean)),
         "mean": mean,
@@ -512,6 +521,7 @@ def _summary_stats(
         "ir": ir if math.isfinite(ir) else None,
         "t_stat": t_stat if math.isfinite(t_stat) else None,
         "hac_t_stat": hac_t_stat if math.isfinite(hac_t_stat) else None,
+        "hac_p_value": hac_p_value if math.isfinite(hac_p_value) else None,
         "positive_ratio": float((clean > 0).mean()),
     }
 
@@ -608,12 +618,13 @@ def _performance_stats(returns: pd.Series, *, annualization: float) -> dict[str,
 
 
 def _route_factor(metrics: Mapping[str, Any], *, coverage: float) -> str:
+    """Route using validation only; test remains a locked final holdout."""
     primary = metrics.get("21") or metrics.get("5") or metrics.get("1") or {}
-    test = primary.get("test", {})
-    rank_ic = ((test.get("rank_ic") or {}).get("mean"))
-    icir = ((test.get("rank_ic") or {}).get("ir"))
-    sharpe = ((test.get("long_short_net") or {}).get("sharpe"))
-    positive = ((test.get("rank_ic") or {}).get("positive_ratio"))
+    validation = primary.get("valid", {})
+    rank_ic = ((validation.get("rank_ic") or {}).get("mean"))
+    icir = ((validation.get("rank_ic") or {}).get("ir"))
+    sharpe = ((validation.get("long_short_net") or {}).get("sharpe"))
+    positive = ((validation.get("rank_ic") or {}).get("positive_ratio"))
     if coverage < 0.35 or rank_ic is None or rank_ic <= 0:
         return "rejected"
     if rank_ic >= 0.03 and (icir or 0) >= 0.45 and (sharpe or 0) >= 0.8 and (positive or 0) >= 0.55:
@@ -736,12 +747,61 @@ def _evaluate_one(
     return record, signal.rename(factor.name)
 
 
+def _primary_horizon_metrics(record: FactorRunRecord) -> Mapping[str, Any]:
+    return record.metrics.get("21") or record.metrics.get("5") or record.metrics.get("1") or {}
+
+
+def _apply_validation_fdr(
+    records: Sequence[FactorRunRecord],
+    *,
+    alpha: float,
+) -> None:
+    """Benjamini-Hochberg correction over validation RankIC HAC p-values."""
+    candidates: list[tuple[int, float]] = []
+    for index, record in enumerate(records):
+        if record.status != "success":
+            continue
+        validation = _primary_horizon_metrics(record).get("valid", {})
+        p_value = ((validation.get("rank_ic") or {}).get("hac_p_value"))
+        if p_value is None:
+            continue
+        p_float = float(p_value)
+        if math.isfinite(p_float) and 0 <= p_float <= 1:
+            candidates.append((index, p_float))
+    ordered = sorted(candidates, key=lambda item: item[1])
+    m = len(ordered)
+    q_values: dict[int, float] = {}
+    running = 1.0
+    for reverse_rank, (record_index, p_value) in enumerate(reversed(ordered), start=1):
+        rank = m - reverse_rank + 1
+        adjusted = min(1.0, p_value * m / max(rank, 1))
+        running = min(running, adjusted)
+        q_values[record_index] = running
+    for index, record in enumerate(records):
+        q_value = q_values.get(index)
+        record.metrics["multiple_testing"] = {
+            "method": "benjamini_hochberg",
+            "family_size": m,
+            "alpha": float(alpha),
+            "validation_rank_ic_q_value": q_value,
+            "passed": q_value is not None and q_value <= alpha,
+        }
+        if (
+            record.status == "success"
+            and record.route in {"tier3a_core", "tier3b_satellite"}
+            and (q_value is None or q_value > alpha)
+        ):
+            record.route = "tier2_research"
+
+
 def _ranking_rows(records: Sequence[FactorRunRecord]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     route_score = {"tier3a_core": 3, "tier3b_satellite": 2, "tier2_research": 1, "rejected": 0}
     for record in records:
-        primary = record.metrics.get("21") or record.metrics.get("5") or record.metrics.get("1") or {}
+        primary = _primary_horizon_metrics(record)
+        validation = primary.get("valid", {})
         test = primary.get("test", {})
+        multiple_testing = record.metrics.get("multiple_testing", {})
         rows.append(
             {
                 "factor_name": record.factor_name,
@@ -750,6 +810,11 @@ def _ranking_rows(records: Sequence[FactorRunRecord]) -> list[dict[str, Any]]:
                 "route_score": route_score.get(record.route, -1),
                 "coverage": record.coverage,
                 "direction": record.direction,
+                "validation_rank_ic": ((validation.get("rank_ic") or {}).get("mean")),
+                "validation_rank_ic_ir": ((validation.get("rank_ic") or {}).get("ir")),
+                "validation_rank_ic_hac_t": ((validation.get("rank_ic") or {}).get("hac_t_stat")),
+                "validation_rank_ic_q_value": multiple_testing.get("validation_rank_ic_q_value"),
+                "validation_long_short_net_sharpe": ((validation.get("long_short_net") or {}).get("sharpe")),
                 "test_rank_ic": ((test.get("rank_ic") or {}).get("mean")),
                 "test_rank_ic_ir": ((test.get("rank_ic") or {}).get("ir")),
                 "test_rank_ic_positive_ratio": ((test.get("rank_ic") or {}).get("positive_ratio")),
@@ -766,8 +831,15 @@ def _ranking_rows(records: Sequence[FactorRunRecord]) -> list[dict[str, Any]]:
     rows.sort(
         key=lambda row: (
             row.get("route_score", -1),
-            row.get("test_rank_ic_ir") if row.get("test_rank_ic_ir") is not None else -999,
-            row.get("test_long_short_net_sharpe") if row.get("test_long_short_net_sharpe") is not None else -999,
+            -row.get("validation_rank_ic_q_value")
+            if row.get("validation_rank_ic_q_value") is not None
+            else -999,
+            row.get("validation_rank_ic_ir")
+            if row.get("validation_rank_ic_ir") is not None
+            else -999,
+            row.get("validation_long_short_net_sharpe")
+            if row.get("validation_long_short_net_sharpe") is not None
+            else -999,
         ),
         reverse=True,
     )
@@ -1024,6 +1096,18 @@ def run_gtja185_evaluation(
             },
         )
 
+    _apply_validation_fdr(records, alpha=config.fdr_alpha)
+    for record in records:
+        _json_dump(
+            report_dir / f"{record.factor_name}.json",
+            {
+                "factor_name": record.factor_name,
+                "formula_hash": record.formula_hash,
+                "snapshot_id": snapshot_id,
+                "config_hash": config_hash,
+                "record": asdict(record),
+            },
+        )
     ranking = _ranking_rows(records)
     pd.DataFrame(ranking).to_csv(output / "ranking.csv", index=False)
     pd.DataFrame(ranking).to_parquet(output / "ranking.parquet", index=False)
@@ -1098,6 +1182,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--n-quantiles", type=int, default=5)
     parser.add_argument("--entry-lag", type=int, default=1)
     parser.add_argument("--cost-bps", type=float, default=10.0)
+    parser.add_argument("--fdr-alpha", type=float, default=0.10)
     parser.add_argument("--universe-dataset", default=None)
     parser.add_argument("--universe-membership-field", default="is_member")
     parser.add_argument("--tradability-field", default="is_tradable")
@@ -1126,6 +1211,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         n_quantiles=args.n_quantiles,
         entry_lag=args.entry_lag,
         cost_bps=args.cost_bps,
+        fdr_alpha=args.fdr_alpha,
         universe_dataset=args.universe_dataset,
         universe_membership_field=args.universe_membership_field,
         tradability_field=args.tradability_field or None,

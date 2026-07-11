@@ -8,7 +8,10 @@ from evaluation.gtja185_batch import (
     BatchEvaluationConfig,
     SplitBoundaries,
     _apply_point_in_time_universe,
+    FactorRunRecord,
+    _apply_validation_fdr,
     _long_short_series,
+    _route_factor,
     _price_forward_returns,
     _purged_split_mask,
 )
@@ -103,3 +106,51 @@ def test_production_requires_registered_point_in_time_universe():
         run_mode="production",
         require_point_in_time_universe=True,
     ).validate()
+
+
+def _selection_metrics(valid_rank_ic: float, test_rank_ic: float) -> dict:
+    def split(rank_ic: float) -> dict:
+        return {
+            "rank_ic": {
+                "mean": rank_ic,
+                "ir": 0.6,
+                "positive_ratio": 0.6,
+                "hac_p_value": 0.01,
+            },
+            "long_short_net": {"sharpe": 1.0},
+        }
+
+    return {"21": {"valid": split(valid_rank_ic), "test": split(test_rank_ic)}}
+
+
+def test_routing_uses_validation_not_test():
+    metrics = _selection_metrics(valid_rank_ic=0.04, test_rank_ic=-0.20)
+    assert _route_factor(metrics, coverage=0.8) == "tier3a_core"
+
+
+def test_benjamini_hochberg_controls_185_factor_family():
+    records = [
+        FactorRunRecord(
+            factor_name=f"f{i}",
+            formula_hash=str(i),
+            status="success",
+            coverage=0.8,
+            metrics=_selection_metrics(0.04, 0.04),
+            route="tier3a_core",
+        )
+        for i in range(3)
+    ]
+    records[0].metrics["21"]["valid"]["rank_ic"]["hac_p_value"] = 0.001
+    records[1].metrics["21"]["valid"]["rank_ic"]["hac_p_value"] = 0.04
+    records[2].metrics["21"]["valid"]["rank_ic"]["hac_p_value"] = 0.8
+    _apply_validation_fdr(records, alpha=0.05)
+    q_values = [
+        record.metrics["multiple_testing"]["validation_rank_ic_q_value"]
+        for record in records
+    ]
+    assert q_values[0] == pytest.approx(0.003)
+    assert q_values[1] == pytest.approx(0.06)
+    assert q_values[2] == pytest.approx(0.8)
+    assert records[0].route == "tier3a_core"
+    assert records[1].route == "tier2_research"
+    assert records[2].route == "tier2_research"

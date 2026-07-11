@@ -28,9 +28,13 @@ regenerated from the same canonical source. Formulas that reference VWAP use the
    rate and yearly stability for every configured horizon. Routing uses net performance.
 9. Production mode requires a registered point-in-time universe dataset with explicit
    membership and optional tradability flags; missing membership fails closed.
-10. Produce deterministic routing recommendations (`tier3a_core`, `tier3b_satellite`,
+10. Route factors using **validation only**. The test sample remains a locked final holdout
+    and is never used for direction, thresholds, routing or ranking order.
+11. Apply Benjamini-Hochberg false-discovery-rate control across the complete validation
+    family before a factor may enter core or satellite tiers.
+12. Produce deterministic routing recommendations (`tier3a_core`, `tier3b_satellite`,
    `tier2_research`, `rejected`) without silently publishing a factor.
-11. Optionally upsert factor values to `factor_lake_staging`; publication remains a separate,
+13. Optionally upsert factor values to `factor_lake_staging`; publication remains a separate,
     explicit action.
 
 Every run writes:
