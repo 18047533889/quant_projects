@@ -1,8 +1,7 @@
 factor:
   name: gtja191_alpha_170
   expr: rank(1 / close) * volume / ts_mean(volume, 20) * (high * rank(high - close)
-    / (ts_sum(high, 5) / 5)) - rank((high + low + close) / 3 - ts_delay((high + low
-    + close) / 3, 5))
+    / (ts_sum(high, 5) / 5)) - rank(col('vwap') - ts_delay(col('vwap'), 5))
   freq: 1d
   universe: ASHARE_ALL
   description: GTJA-191 gtja191_alpha_170
@@ -26,15 +25,14 @@ backend:
   type: pandas
 engine:
   enable_cache: true
-  plan_cache_dir: /home/shw/quant_projects/data/factors/plan_cache/gtja191
+  plan_cache_dir: /home/runner/work/quant_projects/quant_projects/data/factors/plan_cache/gtja191
 materialization:
-  lake_root: /home/shw/quant_projects/data/factors/lake/gtja191
+  lake_root: /home/runner/work/quant_projects/quant_projects/data/factors/lake/gtja191
   factor_id: gtja191_alpha_170
   author: gtja191
   frequency: 1d
   expression: rank(1 / close) * volume / ts_mean(volume, 20) * (high * rank(high -
-    close) / (ts_sum(high, 5) / 5)) - rank((high + low + close) / 3 - ts_delay((high
-    + low + close) / 3, 5))
+    close) / (ts_sum(high, 5) / 5)) - rank(col('vwap') - ts_delay(col('vwap'), 5))
   target: local
   preserve_invalid_rows: true
   value_dtype: float32

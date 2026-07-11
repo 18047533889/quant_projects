@@ -1,7 +1,7 @@
 factor:
   name: gtja191_alpha_074
-  expr: rank(ts_corr(ts_sum(low * 0.35 + (high + low + close) / 3 * 0.65, 20), ts_sum(ts_mean(volume,
-    40), 20), 7)) + rank(ts_corr(rank((high + low + close) / 3), rank(volume), 6))
+  expr: rank(ts_corr(ts_sum(low * 0.35 + col('vwap') * 0.65, 20), ts_sum(ts_mean(volume,
+    40), 20), 7)) + rank(ts_corr(rank(col('vwap')), rank(volume), 6))
   freq: 1d
   universe: ASHARE_ALL
   description: GTJA-191 gtja191_alpha_074
@@ -25,15 +25,14 @@ backend:
   type: pandas
 engine:
   enable_cache: true
-  plan_cache_dir: /home/shw/quant_projects/data/factors/plan_cache/gtja191
+  plan_cache_dir: /home/runner/work/quant_projects/quant_projects/data/factors/plan_cache/gtja191
 materialization:
-  lake_root: /home/shw/quant_projects/data/factors/lake/gtja191
+  lake_root: /home/runner/work/quant_projects/quant_projects/data/factors/lake/gtja191
   factor_id: gtja191_alpha_074
   author: gtja191
   frequency: 1d
-  expression: rank(ts_corr(ts_sum(low * 0.35 + (high + low + close) / 3 * 0.65, 20),
-    ts_sum(ts_mean(volume, 40), 20), 7)) + rank(ts_corr(rank((high + low + close)
-    / 3), rank(volume), 6))
+  expression: rank(ts_corr(ts_sum(low * 0.35 + col('vwap') * 0.65, 20), ts_sum(ts_mean(volume,
+    40), 20), 7)) + rank(ts_corr(rank(col('vwap')), rank(volume), 6))
   target: local
   preserve_invalid_rows: true
   value_dtype: float32

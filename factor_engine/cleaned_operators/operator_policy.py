@@ -677,6 +677,8 @@ _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
     "inverse": {"scope": "elementwise", "pit_safe": True},
     "maximum": {"scope": "elementwise", "pit_safe": True},
     "minimum": {"scope": "elementwise", "pit_safe": True},
+    "flex_max": {"scope": "elementwise", "pit_safe": True},
+    "flex_min": {"scope": "elementwise", "pit_safe": True},
     "gt": {"scope": "elementwise", "pit_safe": True},
     "lt": {"scope": "elementwise", "pit_safe": True},
     "ge": {"scope": "elementwise", "pit_safe": True},

@@ -104,8 +104,9 @@ class TestTranslationRegression(unittest.TestCase):
 
     def test_alpha_007_rolling_max_min(self) -> None:
         dsl = self.catalog["gtja191_alpha_007"]["dsl_formula"]
-        self.assertIn("ts_max((high + low + close) / 3 - close, 3)", dsl)
-        self.assertIn("ts_min((high + low + close) / 3 - close, 3)", dsl)
+        self.assertIn("ts_max(col('vwap') - close, 3)", dsl)
+        self.assertIn("ts_min(col('vwap') - close, 3)", dsl)
+        self.assertNotIn("(high + low + close) / 3", dsl)
 
     def test_alpha_052_no_typo_field_l(self) -> None:
         dsl = self.catalog["gtja191_alpha_052"]["dsl_formula"]

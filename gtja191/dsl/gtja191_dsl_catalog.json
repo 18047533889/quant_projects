@@ -62,7 +62,7 @@
   "gtja191_alpha_007": {
     "factor_name": "gtja191_alpha_007",
     "source_formula": "((RANK(MAX((VWAP - CLOSE), 3)) + RANK(MIN((VWAP - CLOSE), 3))) * RANK(DELTA(VOLUME, 3)))",
-    "dsl_formula": "(rank(ts_max((high + low + close) / 3 - close, 3)) + rank(ts_min((high + low + close) / 3 - close, 3))) * rank(ts_delta(volume, 3))",
+    "dsl_formula": "(rank(ts_max(col('vwap') - close, 3)) + rank(ts_min(col('vwap') - close, 3))) * rank(ts_delta(volume, 3))",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -72,7 +72,7 @@
   "gtja191_alpha_008": {
     "factor_name": "gtja191_alpha_008",
     "source_formula": "RANK(DELTA(((((HIGH + LOW) / 2) * 0.2) + (VWAP * 0.8)), 4) * -1)",
-    "dsl_formula": "rank(ts_delta((high + low) / 2 * 0.2 + (high + low + close) / 3 * 0.8, 4) * -1)",
+    "dsl_formula": "rank(ts_delta((high + low) / 2 * 0.2 + col('vwap') * 0.8, 4) * -1)",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -112,7 +112,7 @@
   "gtja191_alpha_012": {
     "factor_name": "gtja191_alpha_012",
     "source_formula": "(RANK((OPEN - (SUM(VWAP, 10) / 10)))) * (-1 * (RANK(ABS((CLOSE - VWAP)))))",
-    "dsl_formula": "rank(open - ts_sum((high + low + close) / 3, 10) / 10) * (-1 * rank(abs(close - (high + low + close) / 3)))",
+    "dsl_formula": "rank(open - ts_sum(col('vwap'), 10) / 10) * (-1 * rank(abs(close - col('vwap'))))",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -122,7 +122,7 @@
   "gtja191_alpha_013": {
     "factor_name": "gtja191_alpha_013",
     "source_formula": "(((HIGH * LOW)^0.5) - VWAP)",
-    "dsl_formula": "power(high * low, 0.5) - (high + low + close) / 3",
+    "dsl_formula": "power(high * low, 0.5) - col('vwap')",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -152,7 +152,7 @@
   "gtja191_alpha_016": {
     "factor_name": "gtja191_alpha_016",
     "source_formula": "(-1 * TSMAX(RANK(CORR(RANK(VOLUME), RANK(VWAP), 5)), 5))",
-    "dsl_formula": "-1 * ts_max(rank(ts_corr(rank(volume), rank((high + low + close) / 3), 5)), 5)",
+    "dsl_formula": "-1 * ts_max(rank(ts_corr(rank(volume), rank(col('vwap')), 5)), 5)",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -162,7 +162,7 @@
   "gtja191_alpha_017": {
     "factor_name": "gtja191_alpha_017",
     "source_formula": "RANK((VWAP - MAX(VWAP, 15)))^DELTA(CLOSE, 5)",
-    "dsl_formula": "power(rank((high + low + close) / 3 - ts_max((high + low + close) / 3, 15)), ts_delta(close, 5))",
+    "dsl_formula": "power(rank(col('vwap') - ts_max(col('vwap'), 15)), ts_delta(close, 5))",
     "conversion": "manual_dsl",
     "valid": true,
     "validation": "OK",
@@ -252,7 +252,7 @@
   "gtja191_alpha_026": {
     "factor_name": "gtja191_alpha_026",
     "source_formula": "((((SUM(CLOSE, 7) / 7) - CLOSE)) + ((CORR(VWAP, DELAY(CLOSE, 5), 230))))",
-    "dsl_formula": "ts_sum(close, 7) / 7 - close + ts_corr((high + low + close) / 3, ts_delay(close, 5), 230)",
+    "dsl_formula": "ts_sum(close, 7) / 7 - close + ts_corr(col('vwap'), ts_delay(close, 5), 230)",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -352,7 +352,7 @@
   "gtja191_alpha_036": {
     "factor_name": "gtja191_alpha_036",
     "source_formula": "RANK(SUM(CORR(RANK(VOLUME), RANK(VWAP)), 6), 2)",
-    "dsl_formula": "ts_rank(ts_sum(ts_corr(rank(volume), rank((high + low + close) / 3), 6), 2))",
+    "dsl_formula": "ts_rank(ts_sum(ts_corr(rank(volume), rank(col('vwap')), 6), 2))",
     "conversion": "manual_dsl",
     "valid": true,
     "validation": "OK",
@@ -382,7 +382,7 @@
   "gtja191_alpha_039": {
     "factor_name": "gtja191_alpha_039",
     "source_formula": "((RANK(DECAYLINEAR(DELTA((CLOSE), 2),8)) - RANK(DECAYLINEAR(CORR(((VWAP * 0.3) + (OPEN * 0.7)), SUM(MEAN(VOLUME,180), 37), 14), 12))) * -1)",
-    "dsl_formula": "(rank(ts_decay_linear(ts_delta(close, 2), 8)) - rank(ts_decay_linear(ts_corr((high + low + close) / 3 * 0.3 + open * 0.7, ts_sum(ts_mean(volume, 180), 37), 14), 12))) * -1",
+    "dsl_formula": "(rank(ts_decay_linear(ts_delta(close, 2), 8)) - rank(ts_decay_linear(ts_corr(col('vwap') * 0.3 + open * 0.7, ts_sum(ts_mean(volume, 180), 37), 14), 12))) * -1",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -402,7 +402,7 @@
   "gtja191_alpha_041": {
     "factor_name": "gtja191_alpha_041",
     "source_formula": "(RANK(MAX(DELTA((VWAP), 3), 5))* -1)",
-    "dsl_formula": "rank(ts_max(ts_delta((high + low + close) / 3, 3), 5)) * -1",
+    "dsl_formula": "rank(ts_max(ts_delta(col('vwap'), 3), 5)) * -1",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -432,7 +432,7 @@
   "gtja191_alpha_044": {
     "factor_name": "gtja191_alpha_044",
     "source_formula": "(TSRANK(DECAYLINEAR(CORR(((LOW )), MEAN(VOLUME,10), 7), 6),4) + TSRANK(DECAYLINEAR(DELTA((VWAP), 3), 10), 15))",
-    "dsl_formula": "ts_rank(ts_decay_linear(ts_corr(low, ts_mean(volume, 10), 7), 6), 4) + ts_rank(ts_decay_linear(ts_delta((high + low + close) / 3, 3), 10), 15)",
+    "dsl_formula": "ts_rank(ts_decay_linear(ts_corr(low, ts_mean(volume, 10), 7), 6), 4) + ts_rank(ts_decay_linear(ts_delta(col('vwap'), 3), 10), 15)",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -442,7 +442,7 @@
   "gtja191_alpha_045": {
     "factor_name": "gtja191_alpha_045",
     "source_formula": "(RANK(DELTA((((CLOSE * 0.6) + (OPEN *0.4))), 1)) * RANK(CORR(VWAP, MEAN(VOLUME,150), 15)))",
-    "dsl_formula": "rank(ts_delta(close * 0.6 + open * 0.4, 1)) * rank(ts_corr((high + low + close) / 3, ts_mean(volume, 150), 15))",
+    "dsl_formula": "rank(ts_delta(close * 0.6 + open * 0.4, 1)) * rank(ts_corr(col('vwap'), ts_mean(volume, 150), 15))",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -512,7 +512,7 @@
   "gtja191_alpha_052": {
     "factor_name": "gtja191_alpha_052",
     "source_formula": "SUM(MAX(0,HIGH-DELAY((HIGH+LOW+CLOSE)/3,1)),26)/SUM(MAX(0,DELAY((HIGH+LOW+CLOSE)/3,1)-LOW),26)* 100",
-    "dsl_formula": "ts_sum(flex_max(0, high - ts_delay((high + low + close) / 3, 1)), 26) / (ts_sum(flex_max(0, ts_delay((high + low + close) / 3, 1) - low), 26) + 1e-08) * 100",
+    "dsl_formula": "ts_sum(flex_max(0, high - ts_delay(col('vwap'), 1)), 26) / (ts_sum(flex_max(0, ts_delay(col('vwap'), 1) - low), 26) + 1e-08) * 100",
     "conversion": "manual_dsl",
     "valid": true,
     "validation": "OK",
@@ -602,7 +602,7 @@
   "gtja191_alpha_061": {
     "factor_name": "gtja191_alpha_061",
     "source_formula": "(MAX(RANK(DECAYLINEAR(DELTA(VWAP, 1), 12)), RANK(DECAYLINEAR(RANK(CORR((LOW),MEAN(VOLUME,80), 8)), 17))) * -1)",
-    "dsl_formula": "flex_max(rank(ts_decay_linear(ts_delta((high + low + close) / 3, 1), 12)), rank(ts_decay_linear(rank(ts_corr(low, ts_mean(volume, 80), 8)), 17))) * -1",
+    "dsl_formula": "flex_max(rank(ts_decay_linear(ts_delta(col('vwap'), 1), 12)), rank(ts_decay_linear(rank(ts_corr(low, ts_mean(volume, 80), 8)), 17))) * -1",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -632,7 +632,7 @@
   "gtja191_alpha_064": {
     "factor_name": "gtja191_alpha_064",
     "source_formula": "(MAX(RANK(DECAYLINEAR(CORR(RANK(VWAP), RANK(VOLUME), 4), 4)), RANK(DECAYLINEAR(MAX(CORR(RANK(CLOSE), RANK(MEAN(VOLUME,60)), 4), 13), 14))) * -1)",
-    "dsl_formula": "flex_max(rank(ts_decay_linear(ts_corr(rank((high + low + close) / 3), rank(volume), 4), 4)), rank(ts_decay_linear(ts_max(ts_corr(rank(close), rank(ts_mean(volume, 60)), 4), 13), 14))) * -1",
+    "dsl_formula": "flex_max(rank(ts_decay_linear(ts_corr(rank(col('vwap')), rank(volume), 4), 4)), rank(ts_decay_linear(ts_max(ts_corr(rank(close), rank(ts_mean(volume, 60)), 4), 13), 14))) * -1",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -722,7 +722,7 @@
   "gtja191_alpha_073": {
     "factor_name": "gtja191_alpha_073",
     "source_formula": "((TSRANK(DECAYLINEAR(DECAYLINEAR(CORR((CLOSE), VOLUME, 10), 16), 4), 5) - RANK(DECAYLINEAR(CORR(VWAP, MEAN(VOLUME,30), 4),3))) * -1)",
-    "dsl_formula": "(ts_rank(ts_decay_linear(ts_decay_linear(ts_corr(close, volume, 10), 16), 4), 5) - rank(ts_decay_linear(ts_corr((high + low + close) / 3, ts_mean(volume, 30), 4), 3))) * -1",
+    "dsl_formula": "(ts_rank(ts_decay_linear(ts_decay_linear(ts_corr(close, volume, 10), 16), 4), 5) - rank(ts_decay_linear(ts_corr(col('vwap'), ts_mean(volume, 30), 4), 3))) * -1",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -732,7 +732,7 @@
   "gtja191_alpha_074": {
     "factor_name": "gtja191_alpha_074",
     "source_formula": "(RANK(CORR(SUM(((LOW * 0.35) + (VWAP * 0.65)), 20), SUM(MEAN(VOLUME,40), 20), 7)) + RANK(CORR(RANK(VWAP), RANK(VOLUME), 6)))",
-    "dsl_formula": "rank(ts_corr(ts_sum(low * 0.35 + (high + low + close) / 3 * 0.65, 20), ts_sum(ts_mean(volume, 40), 20), 7)) + rank(ts_corr(rank((high + low + close) / 3), rank(volume), 6))",
+    "dsl_formula": "rank(ts_corr(ts_sum(low * 0.35 + col('vwap') * 0.65, 20), ts_sum(ts_mean(volume, 40), 20), 7)) + rank(ts_corr(rank(col('vwap')), rank(volume), 6))",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -762,7 +762,7 @@
   "gtja191_alpha_077": {
     "factor_name": "gtja191_alpha_077",
     "source_formula": "MIN(RANK(DECAYLINEAR(((((HIGH + LOW) / 2) + HIGH) - (VWAP + HIGH)), 20)), RANK(DECAYLINEAR(CORR(((HIGH + LOW) / 2), MEAN(VOLUME,40), 3), 6)))",
-    "dsl_formula": "flex_min(rank(ts_decay_linear((high + low) / 2 + high - ((high + low + close) / 3 + high), 20)), rank(ts_decay_linear(ts_corr((high + low) / 2, ts_mean(volume, 40), 3), 6)))",
+    "dsl_formula": "flex_min(rank(ts_decay_linear((high + low) / 2 + high - (col('vwap') + high), 20)), rank(ts_decay_linear(ts_corr((high + low) / 2, ts_mean(volume, 40), 3), 6)))",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -772,7 +772,7 @@
   "gtja191_alpha_078": {
     "factor_name": "gtja191_alpha_078",
     "source_formula": "((HIGH+LOW+CLOSE)/3-MA((HIGH+LOW+CLOSE)/3,12))/(0.015*MEAN(ABS(CLOSE-MEAN((HIGH+LOW+CLOSE)/3,12)),12))",
-    "dsl_formula": "((high + low + close) / 3 - ts_mean((high + low + close) / 3, 12)) / (0.015 * ts_mean(abs(close - ts_mean((high + low + close) / 3, 12)), 12))",
+    "dsl_formula": "(col('vwap') - ts_mean(col('vwap'), 12)) / (0.015 * ts_mean(abs(close - ts_mean(col('vwap'), 12)), 12))",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -862,7 +862,7 @@
   "gtja191_alpha_087": {
     "factor_name": "gtja191_alpha_087",
     "source_formula": "((RANK(DECAYLINEAR(DELTA(VWAP, 4), 7)) + TSRANK(DECAYLINEAR(((((LOW * 0.9) + (LOW * 0.1)) - VWAP) / (OPEN - ((HIGH + LOW) / 2))), 11), 7)) * -1)",
-    "dsl_formula": "(rank(ts_decay_linear(ts_delta((high + low + close) / 3, 4), 7)) + ts_rank(ts_decay_linear((low * 0.9 + low * 0.1 - (high + low + close) / 3) / (open - (high + low) / 2), 11), 7)) * -1",
+    "dsl_formula": "(rank(ts_decay_linear(ts_delta(col('vwap'), 4), 7)) + ts_rank(ts_decay_linear((low * 0.9 + low * 0.1 - col('vwap')) / (open - (high + low) / 2), 11), 7)) * -1",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -892,7 +892,7 @@
   "gtja191_alpha_090": {
     "factor_name": "gtja191_alpha_090",
     "source_formula": "( RANK(CORR(RANK(VWAP), RANK(VOLUME), 5)) * -1)",
-    "dsl_formula": "rank(ts_corr(rank((high + low + close) / 3), rank(volume), 5)) * -1",
+    "dsl_formula": "rank(ts_corr(rank(col('vwap')), rank(volume), 5)) * -1",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -912,7 +912,7 @@
   "gtja191_alpha_092": {
     "factor_name": "gtja191_alpha_092",
     "source_formula": "(MAX(RANK(DECAYLINEAR(DELTA(((CLOSE * 0.35) + (VWAP *0.65)), 2), 3)), TSRANK(DECAYLINEAR(ABS(CORR((MEAN(VOLUME,180)), CLOSE, 13)), 5), 15)) * -1)",
-    "dsl_formula": "flex_max(rank(ts_decay_linear(ts_delta(close * 0.35 + (high + low + close) / 3 * 0.65, 2), 3)), ts_rank(ts_decay_linear(abs(ts_corr(ts_mean(volume, 180), close, 13)), 5), 15)) * -1",
+    "dsl_formula": "flex_max(rank(ts_decay_linear(ts_delta(close * 0.35 + col('vwap') * 0.65, 2), 3)), ts_rank(ts_decay_linear(abs(ts_corr(ts_mean(volume, 180), close, 13)), 5), 15)) * -1",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -1002,7 +1002,7 @@
   "gtja191_alpha_101": {
     "factor_name": "gtja191_alpha_101",
     "source_formula": "((RANK(CORR(CLOSE, SUM(MEAN(VOLUME,30), 37), 15)) < RANK(CORR(RANK(((HIGH * 0.1) + (VWAP * 0.9))), RANK(VOLUME), 11))) * -1)",
-    "dsl_formula": "(rank(ts_corr(close, ts_sum(ts_mean(volume, 30), 37), 15)) < rank(ts_corr(rank(high * 0.1 + (high + low + close) / 3 * 0.9), rank(volume), 11))) * -1",
+    "dsl_formula": "(rank(ts_corr(close, ts_sum(ts_mean(volume, 30), 37), 15)) < rank(ts_corr(rank(high * 0.1 + col('vwap') * 0.9), rank(volume), 11))) * -1",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -1072,7 +1072,7 @@
   "gtja191_alpha_108": {
     "factor_name": "gtja191_alpha_108",
     "source_formula": "((RANK((HIGH - MIN(HIGH, 2)))^RANK(CORR((VWAP), (MEAN(VOLUME,120)), 6))) * -1)",
-    "dsl_formula": "power(rank(high - ts_min(high, 2)), rank(ts_corr((high + low + close) / 3, ts_mean(volume, 120), 6))) * -1",
+    "dsl_formula": "power(rank(high - ts_min(high, 2)), rank(ts_corr(col('vwap'), ts_mean(volume, 120), 6))) * -1",
     "conversion": "manual_dsl",
     "valid": true,
     "validation": "OK",
@@ -1132,7 +1132,7 @@
   "gtja191_alpha_114": {
     "factor_name": "gtja191_alpha_114",
     "source_formula": "((RANK(DELAY(((HIGH - LOW) / (SUM(CLOSE, 5) / 5)), 2)) * RANK(RANK(VOLUME))) / (((HIGH - LOW) / (SUM(CLOSE, 5) / 5)) / (VWAP - CLOSE)))",
-    "dsl_formula": "rank(ts_delay((high - low) / (ts_sum(close, 5) / 5), 2)) * rank(rank(volume)) / ((high - low) / (ts_sum(close, 5) / 5) / ((high + low + close) / 3 - close))",
+    "dsl_formula": "rank(ts_delay((high - low) / (ts_sum(close, 5) / 5), 2)) * rank(rank(volume)) / ((high - low) / (ts_sum(close, 5) / 5) / (col('vwap') - close))",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -1182,7 +1182,7 @@
   "gtja191_alpha_119": {
     "factor_name": "gtja191_alpha_119",
     "source_formula": "(RANK(DECAYLINEAR(CORR(VWAP, SUM(MEAN(VOLUME,5), 26), 5), 7)) - RANK(DECAYLINEAR(TSRANK(MIN(CORR(RANK(OPEN), RANK(MEAN(VOLUME,15)), 21), 9), 7), 8)))",
-    "dsl_formula": "rank(ts_decay_linear(ts_corr((high + low + close) / 3, ts_sum(ts_mean(volume, 5), 26), 5), 7)) - rank(ts_decay_linear(ts_rank(ts_min(ts_corr(rank(open), rank(ts_mean(volume, 15)), 21), 9), 7), 8))",
+    "dsl_formula": "rank(ts_decay_linear(ts_corr(col('vwap'), ts_sum(ts_mean(volume, 5), 26), 5), 7)) - rank(ts_decay_linear(ts_rank(ts_min(ts_corr(rank(open), rank(ts_mean(volume, 15)), 21), 9), 7), 8))",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -1192,7 +1192,7 @@
   "gtja191_alpha_120": {
     "factor_name": "gtja191_alpha_120",
     "source_formula": "(RANK((VWAP - CLOSE)) / RANK((VWAP + CLOSE)))",
-    "dsl_formula": "rank((high + low + close) / 3 - close) / rank((high + low + close) / 3 + close)",
+    "dsl_formula": "rank(col('vwap') - close) / rank(col('vwap') + close)",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -1202,7 +1202,7 @@
   "gtja191_alpha_121": {
     "factor_name": "gtja191_alpha_121",
     "source_formula": "((RANK((VWAP - MIN(VWAP, 12)))^TSRANK(CORR(TSRANK(VWAP, 20), TSRANK(MEAN(VOLUME,60), 2), 18), 3)) * -1)",
-    "dsl_formula": "power(rank((high + low + close) / 3 - ts_min((high + low + close) / 3, 12)), ts_rank(ts_corr(ts_rank((high + low + close) / 3, 20), ts_rank(ts_mean(volume, 60), 2), 18), 3)) * -1",
+    "dsl_formula": "power(rank(col('vwap') - ts_min(col('vwap'), 12)), ts_rank(ts_corr(ts_rank(col('vwap'), 20), ts_rank(ts_mean(volume, 60), 2), 18), 3)) * -1",
     "conversion": "manual_dsl",
     "valid": true,
     "validation": "OK",
@@ -1232,7 +1232,7 @@
   "gtja191_alpha_124": {
     "factor_name": "gtja191_alpha_124",
     "source_formula": "(CLOSE - VWAP) / DECAYLINEAR(RANK(TSMAX(CLOSE, 30)),2)",
-    "dsl_formula": "(close - (high + low + close) / 3) / ts_decay_linear(rank(ts_max(close, 30)), 2)",
+    "dsl_formula": "(close - col('vwap')) / ts_decay_linear(rank(ts_max(close, 30)), 2)",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -1242,7 +1242,7 @@
   "gtja191_alpha_125": {
     "factor_name": "gtja191_alpha_125",
     "source_formula": "(RANK(DECAYLINEAR(CORR((VWAP), MEAN(VOLUME,80),17), 20)) / RANK(DECAYLINEAR(DELTA(((CLOSE * 0.5) + (VWAP * 0.5)), 3), 16)))",
-    "dsl_formula": "rank(ts_decay_linear(ts_corr((high + low + close) / 3, ts_mean(volume, 80), 17), 20)) / rank(ts_decay_linear(ts_delta(close * 0.5 + (high + low + close) / 3 * 0.5, 3), 16))",
+    "dsl_formula": "rank(ts_decay_linear(ts_corr(col('vwap'), ts_mean(volume, 80), 17), 20)) / rank(ts_decay_linear(ts_delta(close * 0.5 + col('vwap') * 0.5, 3), 16))",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -1252,7 +1252,7 @@
   "gtja191_alpha_126": {
     "factor_name": "gtja191_alpha_126",
     "source_formula": "(CLOSE+HIGH+LOW)/3",
-    "dsl_formula": "(close + high + low) / 3",
+    "dsl_formula": "col('vwap')",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -1272,7 +1272,7 @@
   "gtja191_alpha_128": {
     "factor_name": "gtja191_alpha_128",
     "source_formula": "100-(100/(1+SUM(((HIGH+LOW+CLOSE)/3>DELAY((HIGH+LOW+CLOSE)/3,1)?(HIGH+LOW+CLOSE)/3*VOLUME:0),14)/SUM(((HIGH+LOW+CLOSE)/3<DELAY((HIGH+LOW+CLOSE)/3,1)?(HIGH+LOW+CLOSE)/3*VOLUME:0),14)))",
-    "dsl_formula": "100 - 100 / (1 + ts_sum(where((high + low + close) / 3 > ts_delay((high + low + close) / 3, 1), (high + low + close) / 3 * volume, 0), 14) / (ts_sum(where((high + low + close) / 3 < ts_delay((high + low + close) / 3, 1), (high + low + close) / 3 * volume, 0), 14) + 1e-08))",
+    "dsl_formula": "100 - 100 / (1 + ts_sum(where(col('vwap') > ts_delay(col('vwap'), 1), col('vwap') * volume, 0), 14) / (ts_sum(where(col('vwap') < ts_delay(col('vwap'), 1), col('vwap') * volume, 0), 14) + 1e-08))",
     "conversion": "manual_dsl",
     "valid": true,
     "validation": "OK",
@@ -1292,7 +1292,7 @@
   "gtja191_alpha_130": {
     "factor_name": "gtja191_alpha_130",
     "source_formula": "(RANK(DECAYLINEAR(CORR(((HIGH + LOW) / 2), MEAN(VOLUME,40), 9), 10)) / RANK(DECAYLINEAR(CORR(RANK(VWAP), RANK(VOLUME), 7),3)))",
-    "dsl_formula": "rank(ts_decay_linear(ts_corr((high + low) / 2, ts_mean(volume, 40), 9), 10)) / rank(ts_decay_linear(ts_corr(rank((high + low + close) / 3), rank(volume), 7), 3))",
+    "dsl_formula": "rank(ts_decay_linear(ts_corr((high + low) / 2, ts_mean(volume, 40), 9), 10)) / rank(ts_decay_linear(ts_corr(rank(col('vwap')), rank(volume), 7), 3))",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -1302,7 +1302,7 @@
   "gtja191_alpha_131": {
     "factor_name": "gtja191_alpha_131",
     "source_formula": "(RANK(DELAT(VWAP, 1))^TSRANK(CORR(CLOSE,MEAN(VOLUME,50), 18), 18))",
-    "dsl_formula": "power(rank(ts_delta((high + low + close) / 3, 1)), ts_rank(ts_corr(close, ts_mean(volume, 50), 18), 18))",
+    "dsl_formula": "power(rank(ts_delta(col('vwap'), 1)), ts_rank(ts_corr(close, ts_mean(volume, 50), 18), 18))",
     "conversion": "manual_dsl",
     "valid": true,
     "validation": "OK",
@@ -1372,7 +1372,7 @@
   "gtja191_alpha_138": {
     "factor_name": "gtja191_alpha_138",
     "source_formula": "((RANK(DECAYLINEAR(DELTA((((LOW * 0.7) + (VWAP *0.3))), 3), 20)) - TSRANK(DECAYLINEAR(TSRANK(CORR(TSRANK(LOW, 8), TSRANK(MEAN(VOLUME,60), 17), 5), 19), 16), 7)) * -1)",
-    "dsl_formula": "(rank(ts_decay_linear(ts_delta(low * 0.7 + (high + low + close) / 3 * 0.3, 3), 20)) - ts_rank(ts_decay_linear(ts_rank(ts_corr(ts_rank(low, 8), ts_rank(ts_mean(volume, 60), 17), 5), 19), 16), 7)) * -1",
+    "dsl_formula": "(rank(ts_decay_linear(ts_delta(low * 0.7 + col('vwap') * 0.3, 3), 20)) - ts_rank(ts_decay_linear(ts_rank(ts_corr(ts_rank(low, 8), ts_rank(ts_mean(volume, 60), 17), 5), 19), 16), 7)) * -1",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -1492,7 +1492,7 @@
   "gtja191_alpha_150": {
     "factor_name": "gtja191_alpha_150",
     "source_formula": "(CLOSE+HIGH+LOW)/3*VOLUME",
-    "dsl_formula": "(close + high + low) / 3 * volume",
+    "dsl_formula": "col('vwap') * volume",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -1532,7 +1532,7 @@
   "gtja191_alpha_154": {
     "factor_name": "gtja191_alpha_154",
     "source_formula": "(((VWAP - MIN(VWAP, 16))) < (CORR(VWAP, MEAN(VOLUME,180), 18)))",
-    "dsl_formula": "(high + low + close) / 3 - ts_min((high + low + close) / 3, 16) < ts_corr((high + low + close) / 3, ts_mean(volume, 180), 18)",
+    "dsl_formula": "col('vwap') - ts_min(col('vwap'), 16) < ts_corr(col('vwap'), ts_mean(volume, 180), 18)",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -1552,7 +1552,7 @@
   "gtja191_alpha_156": {
     "factor_name": "gtja191_alpha_156",
     "source_formula": "(MAX(RANK(DECAYLINEAR(DELTA(VWAP, 5), 3)), RANK(DECAYLINEAR(((DELTA(((OPEN * 0.15) + (LOW *0.85)), 2) / ((OPEN * 0.15) + (LOW * 0.85))) * -1), 3))) * -1)",
-    "dsl_formula": "flex_max(rank(ts_decay_linear(ts_delta((high + low + close) / 3, 5), 3)), rank(ts_decay_linear(ts_delta(open * 0.15 + low * 0.85, 2) / (open * 0.15 + low * 0.85) * -1, 3))) * -1",
+    "dsl_formula": "flex_max(rank(ts_decay_linear(ts_delta(col('vwap'), 5), 3)), rank(ts_decay_linear(ts_delta(open * 0.15 + low * 0.85, 2) / (open * 0.15 + low * 0.85) * -1, 3))) * -1",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -1582,7 +1582,7 @@
   "gtja191_alpha_159": {
     "factor_name": "gtja191_alpha_159",
     "source_formula": "((CLOSE-SUM(MIN(LOW,DELAY(CLOSE,1)),6))/SUM(MAX(HGIH,DELAY(CLOSE,1))-MIN(LOW,DELAY(CLOSE,1)),6)*12*24+(CLOSE-SUM(MIN(LOW,DELAY(CLOSE,1)),12))/SUM(MAX(HGIH,DELAY(CLOSE,1))-MIN(LOW,DELAY(CLOSE,1)),12)*6*24+(CLOSE-SUM(MIN(LOW,DELAY(CLOSE,1)),24))/SUM(MAX(HGIH,DELAY(CLOSE,1))-MIN(LOW,DELAY(CLOSE,1)),24)*6*24)*100/(6*12+6*24+12*24)",
-    "dsl_formula": "((close - ts_sum(flex_min(low, ts_delay(close, 1)), 6)) / ts_sum(flex_max(high, ts_delay(close, 1)) - flex_min(low, ts_delay(close, 1)), 6) * 12 * 24 + (close - ts_sum(flex_min(low, ts_delay(close, 1)), 12)) / ts_sum(flex_max(high, ts_delay(close, 1)) - flex_min(low, ts_delay(close, 1)), 12) * 6 * 24 + (close - ts_sum(flex_min(low, ts_delay(close, 1)), 24)) / ts_sum(flex_max(high, ts_delay(close, 1)) - flex_min(low, ts_delay(close, 1)), 24) * 6 * 24) * 100 / (6 * 12 + 6 * 24 + 12 * 24)",
+    "dsl_formula": "((close - ts_sum(flex_min(low, ts_delay(close, 1)), 6)) / ts_sum(flex_max(high, ts_delay(close, 1)) - flex_min(low, ts_delay(close, 1)), 6) * 12 * 24 + (close - ts_sum(flex_min(low, ts_delay(close, 1)), 12)) / ts_sum(flex_max(high, ts_delay(close, 1)) - flex_min(low, ts_delay(close, 1)), 12) * 6 * 24 + (close - ts_sum(flex_min(low, ts_delay(close, 1)), 24)) / ts_sum(flex_max(high, ts_delay(close, 1)) - flex_min(low, ts_delay(close, 1)), 24) * 6 * 24) * 100 / 504",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -1622,7 +1622,7 @@
   "gtja191_alpha_163": {
     "factor_name": "gtja191_alpha_163",
     "source_formula": "RANK(((((-1 * RET) * MEAN(VOLUME,20)) * VWAP) * (HIGH - CLOSE)))",
-    "dsl_formula": "rank(-1 * ret * ts_mean(volume, 20) * ((high + low + close) / 3) * (high - close))",
+    "dsl_formula": "rank(-1 * ret * ts_mean(volume, 20) * col('vwap') * (high - close))",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -1652,7 +1652,7 @@
   "gtja191_alpha_166": {
     "factor_name": "gtja191_alpha_166",
     "source_formula": "-20* (20-1)^1.5*SUM(CLOSE/DELAY(CLOSE,1)-1-MEAN(CLOSE/DELAY(CLOSE,1)-1,20),20)/((20-1)*(20-2)(SUM((CLOSE/DELAY(CLOSE,1),20)^2,20))^1.5)",
-    "dsl_formula": "-20 * power(20 - 1, 1.5) * ts_sum(close / ts_delay(close, 1) - 1 - ts_mean(close / ts_delay(close, 1) - 1, 20), 20) / ((20 - 1) * (20 - 2) * power(ts_sum(power(close / ts_delay(close, 1), 20), 20), 1.5) + 1e-08)",
+    "dsl_formula": "-1656.381598545456 * ts_sum(close / ts_delay(close, 1) - 1 - ts_mean(close / ts_delay(close, 1) - 1, 20), 20) / (342 * power(ts_sum(power(close / ts_delay(close, 1), 20), 20), 1.5) + 1e-08)",
     "conversion": "manual_dsl",
     "valid": true,
     "validation": "OK",
@@ -1692,7 +1692,7 @@
   "gtja191_alpha_170": {
     "factor_name": "gtja191_alpha_170",
     "source_formula": "((((RANK((1 / CLOSE)) * VOLUME) / MEAN(VOLUME,20)) * ((HIGH * RANK((HIGH - CLOSE))) / (SUM(HIGH, 5) / 5))) - RANK((VWAP - DELAY(VWAP, 5))))",
-    "dsl_formula": "rank(1 / close) * volume / ts_mean(volume, 20) * (high * rank(high - close) / (ts_sum(high, 5) / 5)) - rank((high + low + close) / 3 - ts_delay((high + low + close) / 3, 5))",
+    "dsl_formula": "rank(1 / close) * volume / ts_mean(volume, 20) * (high * rank(high - close) / (ts_sum(high, 5) / 5)) - rank(col('vwap') - ts_delay(col('vwap'), 5))",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -1782,7 +1782,7 @@
   "gtja191_alpha_179": {
     "factor_name": "gtja191_alpha_179",
     "source_formula": "(RANK(CORR(VWAP, VOLUME, 4)) *RANK(CORR(RANK(LOW), RANK(MEAN(VOLUME,50)), 12)))",
-    "dsl_formula": "rank(ts_corr((high + low + close) / 3, volume, 4)) * rank(ts_corr(rank(low), rank(ts_mean(volume, 50)), 12))",
+    "dsl_formula": "rank(ts_corr(col('vwap'), volume, 4)) * rank(ts_corr(rank(low), rank(ts_mean(volume, 50)), 12))",
     "conversion": "converted",
     "valid": true,
     "validation": "OK",
@@ -1892,7 +1892,7 @@
   "gtja191_alpha_190": {
     "factor_name": "gtja191_alpha_190",
     "source_formula": "LOG((COUNT(CLOSE/DELAY(CLOSE)-1>((CLOSE/DELAY(CLOSE,19))^(1/20)-1),20)-1)*(SUMIF(((CLOSE/DELAY(CLOSE)-1-(CLOSE/DELAY(CLOSE,19))^(1/20)-1))^2,20,CLOSE/DELAY(CLOSE)-1<(CLOSE/DELAY(CLOSE,19))^(1/20)-1))/((COUNT((CLOSE/DELAY(CLOSE)-1<(CLOSE/DELAY(CLOSE,19))^(1/20)-1),20))*(SUMIF((CLOSE/DELAY(CLOSE)-1-((CLOSE/DELAY(CLOSE,19))^(1/20)-1))^2,20,CLOSE/DELAY(CLOSE)-1>(CLOSE/DELAY(CLOSE,19))^(1/20)-1))))",
-    "dsl_formula": "log(flex_max((ts_sum(where(close / ts_delay(close, 1) - 1 > power(close / ts_delay(close, 19), 1 / 20) - 1, 1, 0), 20) - 1) * ts_sum(where(close / ts_delay(close, 1) - 1 < power(close / ts_delay(close, 19), 1 / 20) - 1, power(close / ts_delay(close, 1) - 1 - (power(close / ts_delay(close, 19), 1 / 20) - 1), 2), 0), 20) / ((ts_sum(where(close / ts_delay(close, 1) - 1 < power(close / ts_delay(close, 19), 1 / 20) - 1, 1, 0), 20) + 1e-08) * (ts_sum(where(close / ts_delay(close, 1) - 1 > power(close / ts_delay(close, 19), 1 / 20) - 1, power(close / ts_delay(close, 1) - 1 - (power(close / ts_delay(close, 19), 1 / 20) - 1), 2), 0), 20) + 1e-08)), 1e-08))",
+    "dsl_formula": "log(flex_max((ts_sum(where(close / ts_delay(close, 1) - 1 > power(close / ts_delay(close, 19), 0.05) - 1, 1, 0), 20) - 1) * ts_sum(where(close / ts_delay(close, 1) - 1 < power(close / ts_delay(close, 19), 0.05) - 1, power(close / ts_delay(close, 1) - 1 - (power(close / ts_delay(close, 19), 0.05) - 1), 2), 0), 20) / ((ts_sum(where(close / ts_delay(close, 1) - 1 < power(close / ts_delay(close, 19), 0.05) - 1, 1, 0), 20) + 1e-08) * (ts_sum(where(close / ts_delay(close, 1) - 1 > power(close / ts_delay(close, 19), 0.05) - 1, power(close / ts_delay(close, 1) - 1 - (power(close / ts_delay(close, 19), 0.05) - 1), 2), 0), 20) + 1e-08)), 1e-08))",
     "conversion": "manual_dsl",
     "valid": true,
     "validation": "OK",

@@ -1,7 +1,7 @@
 factor:
   name: gtja191_alpha_061
-  expr: flex_max(rank(ts_decay_linear(ts_delta((high + low + close) / 3, 1), 12)),
-    rank(ts_decay_linear(rank(ts_corr(low, ts_mean(volume, 80), 8)), 17))) * -1
+  expr: flex_max(rank(ts_decay_linear(ts_delta(col('vwap'), 1), 12)), rank(ts_decay_linear(rank(ts_corr(low,
+    ts_mean(volume, 80), 8)), 17))) * -1
   freq: 1d
   universe: ASHARE_ALL
   description: GTJA-191 gtja191_alpha_061
@@ -25,15 +25,14 @@ backend:
   type: pandas
 engine:
   enable_cache: true
-  plan_cache_dir: /home/shw/quant_projects/data/factors/plan_cache/gtja191
+  plan_cache_dir: /home/runner/work/quant_projects/quant_projects/data/factors/plan_cache/gtja191
 materialization:
-  lake_root: /home/shw/quant_projects/data/factors/lake/gtja191
+  lake_root: /home/runner/work/quant_projects/quant_projects/data/factors/lake/gtja191
   factor_id: gtja191_alpha_061
   author: gtja191
   frequency: 1d
-  expression: flex_max(rank(ts_decay_linear(ts_delta((high + low + close) / 3, 1),
-    12)), rank(ts_decay_linear(rank(ts_corr(low, ts_mean(volume, 80), 8)), 17))) *
-    -1
+  expression: flex_max(rank(ts_decay_linear(ts_delta(col('vwap'), 1), 12)), rank(ts_decay_linear(rank(ts_corr(low,
+    ts_mean(volume, 80), 8)), 17))) * -1
   target: local
   preserve_invalid_rows: true
   value_dtype: float32

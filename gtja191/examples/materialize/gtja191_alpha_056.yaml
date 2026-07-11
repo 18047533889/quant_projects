@@ -1,7 +1,7 @@
 factor:
   name: gtja191_alpha_056
-  expr: rank(open - ts_min(open, 12)) < rank(rank(ts_corr(ts_sum((high + low) / 2,
-    19), ts_sum(ts_mean(volume, 40), 19), power(13)), 5))
+  expr: rank(open - ts_min(open, 12)) < rank(power(rank(ts_corr(ts_sum((high + low)
+    / 2, 19), ts_sum(ts_mean(volume, 40), 19), 13)), 5))
   freq: 1d
   universe: ASHARE_ALL
   description: GTJA-191 gtja191_alpha_056
@@ -25,14 +25,14 @@ backend:
   type: pandas
 engine:
   enable_cache: true
-  plan_cache_dir: /home/shw/quant_projects/data/factors/plan_cache/gtja191
+  plan_cache_dir: /home/runner/work/quant_projects/quant_projects/data/factors/plan_cache/gtja191
 materialization:
-  lake_root: /home/shw/quant_projects/data/factors/lake/gtja191
+  lake_root: /home/runner/work/quant_projects/quant_projects/data/factors/lake/gtja191
   factor_id: gtja191_alpha_056
   author: gtja191
   frequency: 1d
-  expression: rank(open - ts_min(open, 12)) < rank(rank(ts_corr(ts_sum((high + low)
-    / 2, 19), ts_sum(ts_mean(volume, 40), 19), power(13)), 5))
+  expression: rank(open - ts_min(open, 12)) < rank(power(rank(ts_corr(ts_sum((high
+    + low) / 2, 19), ts_sum(ts_mean(volume, 40), 19), 13)), 5))
   target: local
   preserve_invalid_rows: true
   value_dtype: float32
