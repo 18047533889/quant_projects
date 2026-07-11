@@ -1,9 +1,8 @@
 name: Import AutoFactorEvaluation RECONSTRUCT
 
 on:
-  push:
-    branches:
-      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
     paths:
       - ".github/workflows/import-autofactor-evaluation.yml"
 
@@ -11,7 +10,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: import-autofactor-evaluation
+  group: import-autofactor-evaluation-${{ github.event.pull_request.number }}
   cancel-in-progress: false
 
 jobs:
@@ -19,9 +18,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Checkout quant_projects
+      - name: Checkout import branch
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
 
       - name: Clone upstream RECONSTRUCT branch
@@ -44,10 +44,7 @@ jobs:
         run: |
           set -euo pipefail
           target="AutoFactorEvaluation"
-          if [ -e "$target" ]; then
-            echo "Target directory already exists: $target" >&2
-            exit 1
-          fi
+          rm -rf "$target"
 
           large_files=$(find /tmp/AutoFactorEvaluation -type f -size +95M -print)
           if [ -n "$large_files" ]; then
@@ -84,7 +81,7 @@ jobs:
           Local integration changes should be tracked separately from upstream synchronization.
           EOF
 
-      - name: Commit directly to main
+      - name: Commit import to PR branch
         shell: bash
         run: |
           set -euo pipefail
@@ -93,4 +90,4 @@ jobs:
           git add AutoFactorEvaluation
           git rm .github/workflows/import-autofactor-evaluation.yml
           git commit -m "Vendor AutoFactorEvaluation RECONSTRUCT"
-          git push origin HEAD:main
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
