@@ -806,6 +806,49 @@ def _archive_empty_campaigns(pool_dir: Path, record_dir: Path) -> list[str]:
     return archived
 
 
+def run_gtja185_batch_pipeline(
+    *,
+    output_dir: str | Path,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    horizons: tuple[int, ...] = (1, 5, 21),
+    batch_size: int = 8,
+    min_assets: int = 20,
+    limit: int | None = None,
+    synthetic: bool = False,
+    materialize_staging: bool = False,
+    publish: bool = False,
+    strict: bool = True,
+):
+    """Run the canonical 185-factor pack through the new batch evaluator."""
+    from evaluation.gtja185_batch import (
+        BatchEvaluationConfig,
+        build_synthetic_market_frame,
+        run_gtja185_evaluation,
+    )
+
+    config = BatchEvaluationConfig(
+        market="ashare",
+        start_date=start_date,
+        end_date=end_date,
+        horizons=horizons,
+        batch_size=batch_size,
+        min_assets=min_assets,
+        limit=limit,
+        materialize_staging=materialize_staging,
+        publish=publish,
+        strict=strict,
+    )
+    frame = build_synthetic_market_frame(periods=420, symbols=max(8, min_assets)) if synthetic else None
+    snapshot_id = "synthetic:gtja185-cli" if synthetic else None
+    return run_gtja185_evaluation(
+        config,
+        output_dir=output_dir,
+        market_frame=frame,
+        snapshot_id=snapshot_id,
+    )
+
+
 # ============================================================
 # CLI
 # ============================================================
@@ -843,6 +886,18 @@ def main():
     _setup_logging()
 
     p = argparse.ArgumentParser(description="AutoFactorEvaluation 全流程管道")
+    p.add_argument("--gtja185", action="store_true", help="评估完整 GTJA185 内置因子包")
+    p.add_argument("--gtja-output", default="AutoFactorEvaluation-RECONSTRUCT/output/gtja185")
+    p.add_argument("--gtja-start-date", default=None)
+    p.add_argument("--gtja-end-date", default=None)
+    p.add_argument("--gtja-horizons", default="1,5,21")
+    p.add_argument("--gtja-batch-size", type=int, default=8)
+    p.add_argument("--gtja-min-assets", type=int, default=20)
+    p.add_argument("--gtja-limit", type=int, default=None)
+    p.add_argument("--gtja-synthetic", action="store_true")
+    p.add_argument("--gtja-materialize-staging", action="store_true")
+    p.add_argument("--gtja-publish", action="store_true")
+    p.add_argument("--gtja-allow-partial", action="store_true")
     p.add_argument("--gateway-only", action="store_true", help="仅 Gateway 审查+路由")
     p.add_argument("--assetization-only", action="store_true", help="仅 Assetization 计算+路由")
     p.add_argument("--all", action="store_true", help="全流程（Gateway → Assetization → Purification → Evaluation）")
@@ -860,6 +915,26 @@ def main():
     p.add_argument("--no-preload", action="store_false", dest="preload",
                     help="禁用进程内存预加载")
     args = p.parse_args()
+
+    if args.gtja185:
+        from dataclasses import asdict
+
+        horizons = tuple(int(part.strip()) for part in args.gtja_horizons.split(",") if part.strip())
+        summary = run_gtja185_batch_pipeline(
+            output_dir=args.gtja_output,
+            start_date=args.gtja_start_date,
+            end_date=args.gtja_end_date,
+            horizons=horizons,
+            batch_size=args.gtja_batch_size,
+            min_assets=args.gtja_min_assets,
+            limit=args.gtja_limit,
+            synthetic=args.gtja_synthetic,
+            materialize_staging=args.gtja_materialize_staging,
+            publish=args.gtja_publish,
+            strict=not args.gtja_allow_partial,
+        )
+        print(json.dumps(asdict(summary), ensure_ascii=False, indent=2, default=str))
+        return
 
     # 全流程启动前验证所有路径已就绪
     if not any([args.gateway_only, args.assetization_only, args.purification_only, args.evaluation_only]):

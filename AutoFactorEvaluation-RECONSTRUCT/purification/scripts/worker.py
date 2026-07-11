@@ -82,7 +82,7 @@ def _load_industry_data(
         file_path = industry_path / f"{date_str}.parquet"
         if file_path.exists():
             try:
-                df = pd.read_parquet(file_path, engine="fastparquet")
+                df = pd.read_parquet(file_path)
                 # 筛选指定分类口径
                 df_zjw = df[df.get("IndustrySource", "") == standard]
                 if not df_zjw.empty:
@@ -123,7 +123,7 @@ def _load_factor_data(factor_dir: Path) -> pd.DataFrame:
     dfs = []
     for f in parquet_files:
         try:
-            df = pd.read_parquet(f, engine="fastparquet")
+            df = pd.read_parquet(f)
             dfs.append(df)
         except Exception as e:
             logger.warning("读取 %s 失败: %s", f, e)
@@ -255,7 +255,7 @@ def process_factor_dir(
             risk_file = lib_path / "risk_exposures" / "data.parquet"
             if risk_file.exists():
                 try:
-                    extra_exposures = pd.read_parquet(risk_file, engine="fastparquet")
+                    extra_exposures = pd.read_parquet(risk_file)
                     extra_idx = extra_exposures.set_index(extra_exposures.columns[0])
                     logger.info("  加载因子池暴露: %d 个资产, %d 个因子",
                                  len(extra_idx), extra_idx.shape[1])

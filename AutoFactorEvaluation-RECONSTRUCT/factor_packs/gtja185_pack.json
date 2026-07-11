@@ -1,0 +1,2420 @@
+{
+  "schema_version": "autofactor.factor_pack.v1",
+  "name": "gtja185",
+  "version": "1",
+  "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+  "factors": [
+    {
+      "name": "gtja191_alpha_001",
+      "formula": "-1 * ts_corr(rank(ts_delta(log(volume), 1)), rank((close - open) / open), 6)",
+      "source_formula": "(-1 * CORR(RANK(DELTA(LOG(VOLUME), 1)), RANK(((CLOSE - OPEN) / OPEN)), 6))",
+      "description": "GTJA191 canonical factor gtja191_alpha_001; source: (-1 * CORR(RANK(DELTA(LOG(VOLUME), 1)), RANK(((CLOSE - OPEN) / OPEN)), 6))",
+      "formula_hash": "b6b1baf328bd7270d5ee4286370656dd6ad98e6813d2af29ebcb46c78ef86a0c",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_002",
+      "formula": "-1 * ts_delta((close - low - (high - close)) / (high - low), 1)",
+      "source_formula": "(-1 * DELTA((((CLOSE - LOW) - (HIGH - CLOSE)) / (HIGH - LOW)), 1))",
+      "description": "GTJA191 canonical factor gtja191_alpha_002; source: (-1 * DELTA((((CLOSE - LOW) - (HIGH - CLOSE)) / (HIGH - LOW)), 1))",
+      "formula_hash": "572ea57032635c238929ca6b88adec7f7b94e5e77622ef17562f1356a87bf3bc",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_003",
+      "formula": "ts_sum(where(close == ts_delay(close, 1), 0, close - where(close > ts_delay(close, 1), flex_min(low, ts_delay(close, 1)), flex_max(high, ts_delay(close, 1)))), 6)",
+      "source_formula": "SUM((CLOSE=DELAY(CLOSE,1)?0:CLOSE-(CLOSE>DELAY(CLOSE,1)?MIN(LOW,DELAY(CLOSE,1)):MAX(HIGH,DELAY(CLOSE,1)))),6)",
+      "description": "GTJA191 canonical factor gtja191_alpha_003; source: SUM((CLOSE=DELAY(CLOSE,1)?0:CLOSE-(CLOSE>DELAY(CLOSE,1)?MIN(LOW,DELAY(CLOSE,1)):MAX(HIGH,DELAY(CLOSE,1)))),6)",
+      "formula_hash": "c40ef7687fcc7d50d4daae2151b529dba20120a4019ee90ac27558015eb7587d",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_004",
+      "formula": "where(ts_sum(close, 8) / 8 + ts_std(close, 8) < ts_sum(close, 2) / 2, -1, where(ts_sum(close, 2) / 2 < ts_sum(close, 8) / 8 - ts_std(close, 8), 1, where(or_(1 < volume / ts_mean(volume, 20), volume / ts_mean(volume, 20) == 1), 1, -1)))",
+      "source_formula": "((((SUM(CLOSE, 8) / 8) + STD(CLOSE, 8)) < (SUM(CLOSE, 2) / 2)) ? (-1 * 1) : (((SUM(CLOSE, 2) / 2) < ((SUM(CLOSE, 8) / 8) - STD(CLOSE, 8))) ? 1 : (((1 < (VOLUME / MEAN(VOLUME,20))) || ((VOLUME / MEAN(VOLUME,20)) == 1)) ? 1 : (-1 * 1))))",
+      "description": "GTJA191 canonical factor gtja191_alpha_004; source: ((((SUM(CLOSE, 8) / 8) + STD(CLOSE, 8)) < (SUM(CLOSE, 2) / 2)) ? (-1 * 1) : (((SUM(CLOSE, 2) / 2) < ((SUM(CLOSE, 8) / 8) - STD(CLOSE, 8))) ? 1 : (((1 < (VOLUME / MEAN(VOLUME,20))) || ((VOLUME / MEAN(VOLUME,20)) == 1)) ? 1 : (-1 * 1))))",
+      "formula_hash": "1ca6aa1dc7c77b90ccb1fa5895f504c20c300f721523efca09a7a6faecd8c78c",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_005",
+      "formula": "-1 * ts_max(ts_corr(ts_rank(volume, 5), ts_rank(high, 5), 5), 3)",
+      "source_formula": "(-1 * TSMAX(CORR(TSRANK(VOLUME, 5), TSRANK(HIGH, 5), 5), 3))",
+      "description": "GTJA191 canonical factor gtja191_alpha_005; source: (-1 * TSMAX(CORR(TSRANK(VOLUME, 5), TSRANK(HIGH, 5), 5), 3))",
+      "formula_hash": "0c77f9615c4efd602531ed6444d45b8d17c89642b6b536f0e6a03348c31a192f",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_006",
+      "formula": "rank(sign(ts_delta(open * 0.85 + high * 0.15, 4))) * -1",
+      "source_formula": "(RANK(SIGN(DELTA((((OPEN * 0.85) + (HIGH * 0.15))), 4)))* -1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_006; source: (RANK(SIGN(DELTA((((OPEN * 0.85) + (HIGH * 0.15))), 4)))* -1)",
+      "formula_hash": "6ceff395b524eb1a640a513f487aa7abe1d7e76682c89e2a1b5b89e630720dee",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_007",
+      "formula": "(rank(ts_max(col('vwap') - close, 3)) + rank(ts_min(col('vwap') - close, 3))) * rank(ts_delta(volume, 3))",
+      "source_formula": "((RANK(MAX((VWAP - CLOSE), 3)) + RANK(MIN((VWAP - CLOSE), 3))) * RANK(DELTA(VOLUME, 3)))",
+      "description": "GTJA191 canonical factor gtja191_alpha_007; source: ((RANK(MAX((VWAP - CLOSE), 3)) + RANK(MIN((VWAP - CLOSE), 3))) * RANK(DELTA(VOLUME, 3)))",
+      "formula_hash": "03f4db2922e0ca7ddd4f4353891048ba5d530eee4eb6d52ede1a2d186a304ef9",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_008",
+      "formula": "rank(ts_delta((high + low) / 2 * 0.2 + col('vwap') * 0.8, 4) * -1)",
+      "source_formula": "RANK(DELTA(((((HIGH + LOW) / 2) * 0.2) + (VWAP * 0.8)), 4) * -1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_008; source: RANK(DELTA(((((HIGH + LOW) / 2) * 0.2) + (VWAP * 0.8)), 4) * -1)",
+      "formula_hash": "00b5a820baed0a71150ff36ec7fb1dcabeeb5d180117ddd985742ffdf77199fc",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_009",
+      "formula": "ts_ema(((high + low) / 2 - (ts_delay(high, 1) + ts_delay(low, 1)) / 2) * (high - low) / volume, 6)",
+      "source_formula": "SMA(((HIGH+LOW)/2-(DELAY(HIGH,1)+DELAY(LOW,1))/2)*(HIGH-LOW)/VOLUME,7,2)",
+      "description": "GTJA191 canonical factor gtja191_alpha_009; source: SMA(((HIGH+LOW)/2-(DELAY(HIGH,1)+DELAY(LOW,1))/2)*(HIGH-LOW)/VOLUME,7,2)",
+      "formula_hash": "2581ee8336332716e3fed4b6ba880942a607dd219e690fc2c1241050360471b5",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_010",
+      "formula": "rank(ts_max(power(where(ret < 0, ts_std(ret, 20), close), 2), 5))",
+      "source_formula": "(RANK(MAX(((RET < 0) ? STD(RET, 20) : CLOSE)^2),5))",
+      "description": "GTJA191 canonical factor gtja191_alpha_010; source: (RANK(MAX(((RET < 0) ? STD(RET, 20) : CLOSE)^2),5))",
+      "formula_hash": "ef36d6057a2f6c65f6465ead6224415b4f63a7ee23c1fe1894f11814491ffa4c",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_011",
+      "formula": "ts_sum((close - low - (high - close)) / (high - low) * volume, 6)",
+      "source_formula": "SUM(((CLOSE-LOW)-(HIGH-CLOSE))./(HIGH-LOW).*VOLUME,6)",
+      "description": "GTJA191 canonical factor gtja191_alpha_011; source: SUM(((CLOSE-LOW)-(HIGH-CLOSE))./(HIGH-LOW).*VOLUME,6)",
+      "formula_hash": "19ad841f3ce4703a7e956011316fc339fe9165c2dcd66b2ff7c7eabffc2f635d",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_012",
+      "formula": "rank(open - ts_sum(col('vwap'), 10) / 10) * (-1 * rank(abs(close - col('vwap'))))",
+      "source_formula": "(RANK((OPEN - (SUM(VWAP, 10) / 10)))) * (-1 * (RANK(ABS((CLOSE - VWAP)))))",
+      "description": "GTJA191 canonical factor gtja191_alpha_012; source: (RANK((OPEN - (SUM(VWAP, 10) / 10)))) * (-1 * (RANK(ABS((CLOSE - VWAP)))))",
+      "formula_hash": "275936696cee881195c8c8cc55e3159410867037352eabcc86f8556c37b9bc6b",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_013",
+      "formula": "power(high * low, 0.5) - col('vwap')",
+      "source_formula": "(((HIGH * LOW)^0.5) - VWAP)",
+      "description": "GTJA191 canonical factor gtja191_alpha_013; source: (((HIGH * LOW)^0.5) - VWAP)",
+      "formula_hash": "081d921c0e1320fda7a6ec65b3ec202298f8e640f9c1112925cbcd391e70b363",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_014",
+      "formula": "close - ts_delay(close, 5)",
+      "source_formula": "CLOSE-DELAY(CLOSE,5)",
+      "description": "GTJA191 canonical factor gtja191_alpha_014; source: CLOSE-DELAY(CLOSE,5)",
+      "formula_hash": "46e62357526bdd1914fce653d9d426b7c413e2c266351230a03e9cba11a5618d",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_015",
+      "formula": "open / ts_delay(close, 1) - 1",
+      "source_formula": "OPEN/DELAY(CLOSE,1)-1",
+      "description": "GTJA191 canonical factor gtja191_alpha_015; source: OPEN/DELAY(CLOSE,1)-1",
+      "formula_hash": "ff40f05ebb165b5205339116978765017abcfe9102a6ec547e405528ccb7468d",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_016",
+      "formula": "-1 * ts_max(rank(ts_corr(rank(volume), rank(col('vwap')), 5)), 5)",
+      "source_formula": "(-1 * TSMAX(RANK(CORR(RANK(VOLUME), RANK(VWAP), 5)), 5))",
+      "description": "GTJA191 canonical factor gtja191_alpha_016; source: (-1 * TSMAX(RANK(CORR(RANK(VOLUME), RANK(VWAP), 5)), 5))",
+      "formula_hash": "f5ed0fb01a8aeae783ded60ebcb497f9fc4b8aca43c421a6e45e99370e1fd6b8",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_017",
+      "formula": "power(rank(col('vwap') - ts_max(col('vwap'), 15)), ts_delta(close, 5))",
+      "source_formula": "RANK((VWAP - MAX(VWAP, 15)))^DELTA(CLOSE, 5)",
+      "description": "GTJA191 canonical factor gtja191_alpha_017; source: RANK((VWAP - MAX(VWAP, 15)))^DELTA(CLOSE, 5)",
+      "formula_hash": "ce1d95e395448afc33edfc5bbdb0b61f6fe125f4aa654b7a63d254811c7322fb",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_018",
+      "formula": "close / ts_delay(close, 5)",
+      "source_formula": "CLOSE/DELAY(CLOSE,5)",
+      "description": "GTJA191 canonical factor gtja191_alpha_018; source: CLOSE/DELAY(CLOSE,5)",
+      "formula_hash": "698d71c7325f483f1a246610ace0f81cae9867a89d68febeae8340e8af20f3f1",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_019",
+      "formula": "where(close < ts_delay(close, 5), (close - ts_delay(close, 5)) / (ts_delay(close, 5) + 1e-08), where(close == ts_delay(close, 5), 0, (close - ts_delay(close, 5)) / (close + 1e-08)))",
+      "source_formula": "(CLOSE<DELAY(CLOSE,5)?(CLOSE-DELAY(CLOSE,5))/DELAY(CLOSE,5):(CLOSE=DELAY(CLOSE,5)?0:(CLOSE-DELAY(CLOSE,5))/CLOSE))",
+      "description": "GTJA191 canonical factor gtja191_alpha_019; source: (CLOSE<DELAY(CLOSE,5)?(CLOSE-DELAY(CLOSE,5))/DELAY(CLOSE,5):(CLOSE=DELAY(CLOSE,5)?0:(CLOSE-DELAY(CLOSE,5))/CLOSE))",
+      "formula_hash": "47a441b7a8bc0e6c5bb131d361f768638eed796d67b0a11198ea3e6ced118406",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_020",
+      "formula": "(close - ts_delay(close, 6)) / ts_delay(close, 6) * 100",
+      "source_formula": "(CLOSE-DELAY(CLOSE,6))/DELAY(CLOSE,6)*100",
+      "description": "GTJA191 canonical factor gtja191_alpha_020; source: (CLOSE-DELAY(CLOSE,6))/DELAY(CLOSE,6)*100",
+      "formula_hash": "804a7d9d62bc8d7f6e8d294ce6655417618fd7dcad86ea4bf42c8a8a8207fbb0",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_021",
+      "formula": "ts_time_slope(ts_mean(close, 6), 6)",
+      "source_formula": "REGBETA(MEAN(CLOSE,6),SEQUENCE(6))",
+      "description": "GTJA191 canonical factor gtja191_alpha_021; source: REGBETA(MEAN(CLOSE,6),SEQUENCE(6))",
+      "formula_hash": "52eb1081ab4e4390beae7af48c26288cd03aaea607a3d593744134e274c9d843",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_022",
+      "formula": "ts_ema((close - ts_mean(close, 6)) / ts_mean(close, 6) - ts_delay((close - ts_mean(close, 6)) / ts_mean(close, 6), 3), 23)",
+      "source_formula": "SMEAN(((CLOSE-MEAN(CLOSE,6))/MEAN(CLOSE,6)-DELAY((CLOSE-MEAN(CLOSE,6))/MEAN(CLOSE,6),3)),12,1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_022; source: SMEAN(((CLOSE-MEAN(CLOSE,6))/MEAN(CLOSE,6)-DELAY((CLOSE-MEAN(CLOSE,6))/MEAN(CLOSE,6),3)),12,1)",
+      "formula_hash": "68adf494932ade90c431d7087bd28f2aabe492e6558e6e5adaac54f08b508021",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_023",
+      "formula": "ts_ema(where(close > ts_delay(close, 1), ts_std(close, 20), 0), 19) / (ts_ema(where(close > ts_delay(close, 1), ts_std(close, 20), 0), 19) + ts_ema(where(close <= ts_delay(close, 1), ts_std(close, 20), 0), 19) + 1e-08) * 100",
+      "source_formula": "SMA((CLOSE>DELAY(CLOSE,1)?STD(CLOSE:20),0),20,1)/(SMA((CLOSE>DELAY(CLOSE,1)?STD(CLOSE,20):0),20,1)+SMA((CLOSE<=DELAY(CLOSE,1)?STD(CLOSE,20):0),20,1))*100",
+      "description": "GTJA191 canonical factor gtja191_alpha_023; source: SMA((CLOSE>DELAY(CLOSE,1)?STD(CLOSE:20),0),20,1)/(SMA((CLOSE>DELAY(CLOSE,1)?STD(CLOSE,20):0),20,1)+SMA((CLOSE<=DELAY(CLOSE,1)?STD(CLOSE,20):0),20,1))*100",
+      "formula_hash": "eb46ef8ec7fbccda60c97c66f256c9c4e61bc750354aa9ce45a07e17ab4453c3",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_024",
+      "formula": "ts_ema(close - ts_delay(close, 5), 9)",
+      "source_formula": "SMA(CLOSE-DELAY(CLOSE,5),5,1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_024; source: SMA(CLOSE-DELAY(CLOSE,5),5,1)",
+      "formula_hash": "c7eada4b8c5a3e879c333c2e472593a9f28446d03cdd1795c1a7e59bd6b8c720",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_025",
+      "formula": "-1 * rank(ts_delta(close, 7) * (1 - rank(ts_decay_linear(volume / ts_mean(volume, 20), 9)))) * (1 + rank(ts_sum(ret, 250)))",
+      "source_formula": "((-1 * RANK((DELTA(CLOSE, 7) * (1 - RANK(DECAYLINEAR((VOLUME / MEAN(VOLUME,20)), 9)))))) * (1 + RANK(SUM(RET, 250))))",
+      "description": "GTJA191 canonical factor gtja191_alpha_025; source: ((-1 * RANK((DELTA(CLOSE, 7) * (1 - RANK(DECAYLINEAR((VOLUME / MEAN(VOLUME,20)), 9)))))) * (1 + RANK(SUM(RET, 250))))",
+      "formula_hash": "47c9c32bdb8b93e77d8167d18e8c5d0c04d696a57211188202e62982c0afb80a",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_026",
+      "formula": "ts_sum(close, 7) / 7 - close + ts_corr(col('vwap'), ts_delay(close, 5), 230)",
+      "source_formula": "((((SUM(CLOSE, 7) / 7) - CLOSE)) + ((CORR(VWAP, DELAY(CLOSE, 5), 230))))",
+      "description": "GTJA191 canonical factor gtja191_alpha_026; source: ((((SUM(CLOSE, 7) / 7) - CLOSE)) + ((CORR(VWAP, DELAY(CLOSE, 5), 230))))",
+      "formula_hash": "5e2402ad235149912c6686b077fea96b30361f3b8cce936621a8abb0f5d5cdbe",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_027",
+      "formula": "WMA((close - ts_delay(close, 3)) / (ts_delay(close, 3) + 1e-08) * 100 + (close - ts_delay(close, 6)) / (ts_delay(close, 6) + 1e-08) * 100, 12)",
+      "source_formula": "WMA((CLOSE-DELAY(CLOSE,3))/DELAY(CLOSE,3)*100+(CLOSE-DELAY(CLOSE,6))/DELAY(CLOSE,6)*100,12)",
+      "description": "GTJA191 canonical factor gtja191_alpha_027; source: WMA((CLOSE-DELAY(CLOSE,3))/DELAY(CLOSE,3)*100+(CLOSE-DELAY(CLOSE,6))/DELAY(CLOSE,6)*100,12)",
+      "formula_hash": "369d8019e17f595bd43764f71d268b071e87c6a68b17fda0250c8a188b364ca5",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_028",
+      "formula": "3 * ts_ema((close - ts_min(low, 9)) / (ts_max(high, 9) - ts_min(low, 9)) * 100, 5) - 2 * ts_ema(ts_ema((close - ts_min(low, 9)) / (ts_max(high, 9) - ts_max(low, 9)) * 100, 5), 5)",
+      "source_formula": "3*SMA((CLOSE-TSMIN(LOW,9))/(TSMAX(HIGH,9)-TSMIN(LOW,9))*100,3,1)-2*SMA(SMA((CLOSE-TSMIN(LOW,9))/(MAX(HIGH,9)-TSMAX(LOW,9))*100,3,1),3,1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_028; source: 3*SMA((CLOSE-TSMIN(LOW,9))/(TSMAX(HIGH,9)-TSMIN(LOW,9))*100,3,1)-2*SMA(SMA((CLOSE-TSMIN(LOW,9))/(MAX(HIGH,9)-TSMAX(LOW,9))*100,3,1),3,1)",
+      "formula_hash": "09478a28c30435a5a5a894f4a307b9e5257c60713f17597146c10c26328a02db",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_029",
+      "formula": "(close - ts_delay(close, 6)) / ts_delay(close, 6) * volume",
+      "source_formula": "(CLOSE-DELAY(CLOSE,6))/DELAY(CLOSE,6)*VOLUME",
+      "description": "GTJA191 canonical factor gtja191_alpha_029; source: (CLOSE-DELAY(CLOSE,6))/DELAY(CLOSE,6)*VOLUME",
+      "formula_hash": "7a1bf74b709149163ebb45e49d92978999a95dccbb2b26e0ce910f125455ee3a",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_031",
+      "formula": "(close - ts_mean(close, 12)) / ts_mean(close, 12) * 100",
+      "source_formula": "(CLOSE-MEAN(CLOSE,12))/MEAN(CLOSE,12)*100",
+      "description": "GTJA191 canonical factor gtja191_alpha_031; source: (CLOSE-MEAN(CLOSE,12))/MEAN(CLOSE,12)*100",
+      "formula_hash": "19aef65950f85a9d9ce0dd4e560405ecf454e97cd8efa3bf33503ca13aeab341",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_032",
+      "formula": "-1 * ts_sum(rank(ts_corr(rank(high), rank(volume), 3)), 3)",
+      "source_formula": "(-1 * SUM(RANK(CORR(RANK(HIGH), RANK(VOLUME), 3)), 3))",
+      "description": "GTJA191 canonical factor gtja191_alpha_032; source: (-1 * SUM(RANK(CORR(RANK(HIGH), RANK(VOLUME), 3)), 3))",
+      "formula_hash": "00b6ee006a18f99cad274fabd3a1756e6690d3bec9343eab2464419a6937836a",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_033",
+      "formula": "(-1 * ts_min(low, 5) + ts_delay(ts_min(low, 5), 5)) * rank((ts_sum(ret, 240) - ts_sum(ret, 20)) / 220) * ts_rank(volume, 5)",
+      "source_formula": "((((-1 * TSMIN(LOW, 5)) + DELAY(TSMIN(LOW, 5), 5)) * RANK(((SUM(RET, 240) - SUM(RET, 20)) / 220))) * TSRANK(VOLUME, 5))",
+      "description": "GTJA191 canonical factor gtja191_alpha_033; source: ((((-1 * TSMIN(LOW, 5)) + DELAY(TSMIN(LOW, 5), 5)) * RANK(((SUM(RET, 240) - SUM(RET, 20)) / 220))) * TSRANK(VOLUME, 5))",
+      "formula_hash": "c98ee5bad3b06dbe6771cdff38c8b9aca91c24ffe306141bd1f5d068651d210d",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_034",
+      "formula": "ts_mean(close, 12) / close",
+      "source_formula": "MEAN(CLOSE,12)/CLOSE",
+      "description": "GTJA191 canonical factor gtja191_alpha_034; source: MEAN(CLOSE,12)/CLOSE",
+      "formula_hash": "dc1d6259772bc136e49a09bec979a942da5725f06458a877f387e87ac878af29",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_035",
+      "formula": "flex_min(rank(ts_decay_linear(ts_delta(open, 1), 15)), rank(ts_decay_linear(ts_corr(volume, open * 0.65 + open * 0.35, 17), 7))) * -1",
+      "source_formula": "(MIN(RANK(DECAYLINEAR(DELTA(OPEN, 1), 15)), RANK(DECAYLINEAR(CORR((VOLUME), ((OPEN * 0.65) + (OPEN *0.35)), 17),7))) * -1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_035; source: (MIN(RANK(DECAYLINEAR(DELTA(OPEN, 1), 15)), RANK(DECAYLINEAR(CORR((VOLUME), ((OPEN * 0.65) + (OPEN *0.35)), 17),7))) * -1)",
+      "formula_hash": "769b5b7151482c356541ea6d1d0e9efd0f6bd4ba93b2cc5b1b19abd3d972c305",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_036",
+      "formula": "ts_rank(ts_sum(ts_corr(rank(volume), rank(col('vwap')), 6), 2))",
+      "source_formula": "RANK(SUM(CORR(RANK(VOLUME), RANK(VWAP)), 6), 2)",
+      "description": "GTJA191 canonical factor gtja191_alpha_036; source: RANK(SUM(CORR(RANK(VOLUME), RANK(VWAP)), 6), 2)",
+      "formula_hash": "644893b1704666e0a9818ba4e68c6b9bdf1a13adc2104ddf206accba8359519a",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_037",
+      "formula": "-1 * rank(ts_sum(open, 5) * ts_sum(ret, 5) - ts_delay(ts_sum(open, 5) * ts_sum(ret, 5), 10))",
+      "source_formula": "(-1 * RANK(((SUM(OPEN, 5) * SUM(RET, 5)) - DELAY((SUM(OPEN, 5) * SUM(RET, 5)), 10))))",
+      "description": "GTJA191 canonical factor gtja191_alpha_037; source: (-1 * RANK(((SUM(OPEN, 5) * SUM(RET, 5)) - DELAY((SUM(OPEN, 5) * SUM(RET, 5)), 10))))",
+      "formula_hash": "9b7d05f8b5daa0b778f5473e1a5cb41c3e764c2152c72789b67cf8df1fbe421e",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_038",
+      "formula": "where(ts_sum(high, 20) / 20 < high, -1 * ts_delta(high, 2), 0)",
+      "source_formula": "(((SUM(HIGH, 20) / 20) < HIGH) ? (-1 * DELTA(HIGH, 2)) : 0)",
+      "description": "GTJA191 canonical factor gtja191_alpha_038; source: (((SUM(HIGH, 20) / 20) < HIGH) ? (-1 * DELTA(HIGH, 2)) : 0)",
+      "formula_hash": "d17e808d0cfae2cff9537012b36a5da9d402bdf39630640caa4681fcb9583ebb",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_039",
+      "formula": "(rank(ts_decay_linear(ts_delta(close, 2), 8)) - rank(ts_decay_linear(ts_corr(col('vwap') * 0.3 + open * 0.7, ts_sum(ts_mean(volume, 180), 37), 14), 12))) * -1",
+      "source_formula": "((RANK(DECAYLINEAR(DELTA((CLOSE), 2),8)) - RANK(DECAYLINEAR(CORR(((VWAP * 0.3) + (OPEN * 0.7)), SUM(MEAN(VOLUME,180), 37), 14), 12))) * -1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_039; source: ((RANK(DECAYLINEAR(DELTA((CLOSE), 2),8)) - RANK(DECAYLINEAR(CORR(((VWAP * 0.3) + (OPEN * 0.7)), SUM(MEAN(VOLUME,180), 37), 14), 12))) * -1)",
+      "formula_hash": "7e94597735aec97a6cf88dcb16f5949db50ffbd08facc32644ff8395f5faf0af",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_040",
+      "formula": "ts_sum(where(close > ts_delay(close, 1), volume, 0), 26) / (ts_sum(where(close <= ts_delay(close, 1), volume, 0), 26) + 1e-08) * 100",
+      "source_formula": "SUM((CLOSE>DELAY(CLOSE,1)?VOLUME:0),26)/SUM((CLOSE<=DELAY(CLOSE,1)?VOLUME:0),26)*100",
+      "description": "GTJA191 canonical factor gtja191_alpha_040; source: SUM((CLOSE>DELAY(CLOSE,1)?VOLUME:0),26)/SUM((CLOSE<=DELAY(CLOSE,1)?VOLUME:0),26)*100",
+      "formula_hash": "b5eb222044a7cef80deb88ddf870fe8bed7d67be470a3f92414215c74913023b",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_041",
+      "formula": "rank(ts_max(ts_delta(col('vwap'), 3), 5)) * -1",
+      "source_formula": "(RANK(MAX(DELTA((VWAP), 3), 5))* -1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_041; source: (RANK(MAX(DELTA((VWAP), 3), 5))* -1)",
+      "formula_hash": "9dd79d1c4c80dd2d562924edd3de670322c86b5165f14c7c1f2e3b1d93e0e4bb",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_042",
+      "formula": "-1 * rank(ts_std(high, 10)) * ts_corr(high, volume, 10)",
+      "source_formula": "((-1 * RANK(STD(HIGH, 10))) * CORR(HIGH, VOLUME, 10))",
+      "description": "GTJA191 canonical factor gtja191_alpha_042; source: ((-1 * RANK(STD(HIGH, 10))) * CORR(HIGH, VOLUME, 10))",
+      "formula_hash": "5b19854b2c813c9778fd35f0b3c84d7857a9ce560cd21888c0e37f33aa9cbbe7",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_043",
+      "formula": "ts_sum(where(close > ts_delay(close, 1), volume, where(close < ts_delay(close, 1), -volume, 0)), 6)",
+      "source_formula": "SUM((CLOSE>DELAY(CLOSE,1)?VOLUME:(CLOSE<DELAY(CLOSE,1)?-VOLUME:0)),6)",
+      "description": "GTJA191 canonical factor gtja191_alpha_043; source: SUM((CLOSE>DELAY(CLOSE,1)?VOLUME:(CLOSE<DELAY(CLOSE,1)?-VOLUME:0)),6)",
+      "formula_hash": "0e5625e3cfe8a5a9abe7804727263813c3c0e8e7466d430feeb7df58c0766444",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_044",
+      "formula": "ts_rank(ts_decay_linear(ts_corr(low, ts_mean(volume, 10), 7), 6), 4) + ts_rank(ts_decay_linear(ts_delta(col('vwap'), 3), 10), 15)",
+      "source_formula": "(TSRANK(DECAYLINEAR(CORR(((LOW )), MEAN(VOLUME,10), 7), 6),4) + TSRANK(DECAYLINEAR(DELTA((VWAP), 3), 10), 15))",
+      "description": "GTJA191 canonical factor gtja191_alpha_044; source: (TSRANK(DECAYLINEAR(CORR(((LOW )), MEAN(VOLUME,10), 7), 6),4) + TSRANK(DECAYLINEAR(DELTA((VWAP), 3), 10), 15))",
+      "formula_hash": "de1925ba4ca795a347f5ee0e5e4772cf7aaaf17b3fc79e46283f87252dd263ef",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_045",
+      "formula": "rank(ts_delta(close * 0.6 + open * 0.4, 1)) * rank(ts_corr(col('vwap'), ts_mean(volume, 150), 15))",
+      "source_formula": "(RANK(DELTA((((CLOSE * 0.6) + (OPEN *0.4))), 1)) * RANK(CORR(VWAP, MEAN(VOLUME,150), 15)))",
+      "description": "GTJA191 canonical factor gtja191_alpha_045; source: (RANK(DELTA((((CLOSE * 0.6) + (OPEN *0.4))), 1)) * RANK(CORR(VWAP, MEAN(VOLUME,150), 15)))",
+      "formula_hash": "7ca4ca90b11f20c9ae35a90d50d70e50215ef6f0d72ef262d3858313e74cd98d",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_046",
+      "formula": "(ts_mean(close, 3) + ts_mean(close, 6) + ts_mean(close, 12) + ts_mean(close, 24)) / (4 * close)",
+      "source_formula": "(MEAN(CLOSE,3)+MEAN(CLOSE,6)+MEAN(CLOSE,12)+MEAN(CLOSE,24))/(4*CLOSE)",
+      "description": "GTJA191 canonical factor gtja191_alpha_046; source: (MEAN(CLOSE,3)+MEAN(CLOSE,6)+MEAN(CLOSE,12)+MEAN(CLOSE,24))/(4*CLOSE)",
+      "formula_hash": "2072aa89fb817b3635ce0a1b2d955a7f00a77212a8e11a9760fcffa2ba0cab58",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_047",
+      "formula": "ts_ema((ts_max(high, 6) - close) / (ts_max(high, 6) - ts_min(low, 6)) * 100, 17)",
+      "source_formula": "SMA((TSMAX(HIGH,6)-CLOSE)/(TSMAX(HIGH,6)-TSMIN(LOW,6))*100,9,1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_047; source: SMA((TSMAX(HIGH,6)-CLOSE)/(TSMAX(HIGH,6)-TSMIN(LOW,6))*100,9,1)",
+      "formula_hash": "dc4c7896941c73d7281762145ecbc14946ba7ee261e94ef3b1dbb2c02b6dc0db",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_048",
+      "formula": "-1 * (rank(sign(close - ts_delay(close, 1)) + sign(ts_delay(close, 1) - ts_delay(close, 2)) + sign(ts_delay(close, 2) - ts_delay(close, 3))) * ts_sum(volume, 5)) / ts_sum(volume, 20)",
+      "source_formula": "(-1*((RANK(((SIGN((CLOSE - DELAY(CLOSE, 1))) + SIGN((DELAY(CLOSE, 1) - DELAY(CLOSE, 2)))) + SIGN((DELAY(CLOSE, 2) - DELAY(CLOSE, 3)))))) * SUM(VOLUME, 5)) / SUM(VOLUME, 20))",
+      "description": "GTJA191 canonical factor gtja191_alpha_048; source: (-1*((RANK(((SIGN((CLOSE - DELAY(CLOSE, 1))) + SIGN((DELAY(CLOSE, 1) - DELAY(CLOSE, 2)))) + SIGN((DELAY(CLOSE, 2) - DELAY(CLOSE, 3)))))) * SUM(VOLUME, 5)) / SUM(VOLUME, 20))",
+      "formula_hash": "b1a6512f6ad23f393dee7fc63b39812b7e42d1e2b7c5ffb9f8892dea9d761344",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_049",
+      "formula": "ts_sum(where(high + low >= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 12) / (ts_sum(where(high + low >= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 12) + ts_sum(where(high + low <= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 12) + 1e-08)",
+      "source_formula": "SUM(((HIGH+LOW)>=(DELAY(HIGH,1)+DELAY(LOW,1))?0:MAX(ABS(HIGH-DELAY(HIGH,1)),ABS(LOW-DELAY(LOW,1)))),12)/(SUM(((HIGH+LOW)>=(DELAY(HIGH,1)+DELAY(LOW,1))?0:MAX (ABS(HIGH-DELAY(HIGH,1)),ABS(LOW-DELAY(LOW,1)))),12)+SUM(((HIGH+LOW)<=(DELAY(HIGH,1)+DELAY(LOW,1))?0:MAX(ABS(HIGH-DELAY(HIGH,1)),ABS(LOW-DELAY(LOW,1)))),12))",
+      "description": "GTJA191 canonical factor gtja191_alpha_049; source: SUM(((HIGH+LOW)>=(DELAY(HIGH,1)+DELAY(LOW,1))?0:MAX(ABS(HIGH-DELAY(HIGH,1)),ABS(LOW-DELAY(LOW,1)))),12)/(SUM(((HIGH+LOW)>=(DELAY(HIGH,1)+DELAY(LOW,1))?0:MAX (ABS(HIGH-DELAY(HIGH,1)),ABS(LOW-DELAY(LOW,1)))),12)+SUM(((HIGH+LOW)<=(DELAY(HIGH,1)+DELAY(LOW,1))?0:MAX(ABS(HIGH-DELAY(HIGH,1)),ABS(LOW-DELAY(LOW,1)))),12))",
+      "formula_hash": "eb64e7f1def7a622b6c630985b8c4ff7e577e271702cccb87c8946c6fbceea09",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_050",
+      "formula": "ts_sum(where(high + low <= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 12) / (ts_sum(where(high + low <= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 12) + ts_sum(where(high + low >= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 12) + 1e-08) - ts_sum(where(high + low >= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 12) / (ts_sum(where(high + low >= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 12) + ts_sum(where(high + low <= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 12) + 1e-08)",
+      "source_formula": "SUM(((HIGH+LOW)<=(DELAY(HIGH,1)+DELAY(LOW,1))?0:MAX(ABS(HIGH-DELAY(HIGH,1)),ABS(LOW-DELAY(LOW,1)))),12)/(SUM(((HIGH+LOW)<=(DELAY(HIGH,1)+DELAY(LOW,1))?0:MAX (ABS(HIGH-DELAY(HIGH,1)),ABS(LOW-DELAY(LOW,1)))),12)+SUM(((HIGH+LOW)>=(DELAY(HIGH,1)+DELAY(LOW,1))?0:MAX(ABS(HIGH-DELAY(HIGH,1)),ABS(LOW-DELAY(LOW,1)))),12))-SUM(((HIGH+LOW)>=(DELAY(HIGH,1)+DELAY(LOW,1))?0:MAX(ABS(HIGH-DELAY(HIGH,1)),ABS(LOW-DELAY(LOW,1)))),12)/(SUM(((HIGH+LOW)>=(DELAY(HIGH,1)+DELAY(LOW,1))?0:MAX(ABS(HIGH-DELAY(HIGH,1)),ABS(LOW-DELAY(LOW,1)))),12)+SUM(((HIGH+LOW)<=(DELAY(HIGH,1)+DELAY(LOW,1))?0:MAX(ABS(HIGH-DELAY(HIGH,1)),ABS(LOW-DELAY(LOW,1)))),12))",
+      "description": "GTJA191 canonical factor gtja191_alpha_050; source: SUM(((HIGH+LOW)<=(DELAY(HIGH,1)+DELAY(LOW,1))?0:MAX(ABS(HIGH-DELAY(HIGH,1)),ABS(LOW-DELAY(LOW,1)))),12)/(SUM(((HIGH+LOW)<=(DELAY(HIGH,1)+DELAY(LOW,1))?0:MAX (ABS(HIGH-DELAY(HIGH,1)),ABS(LOW-DELAY(LOW,1)))),12)+SUM(((HIGH+LOW)>=(DELAY(HIGH,1)+DELAY(LOW,1))?0:MAX(ABS(HIGH-DELAY(HIGH,1)),ABS(LOW-DELAY(LOW,1)))),12))-SUM(((HIGH+LOW)>=(DELAY(HIGH,1)+DELAY(LOW,1))?0:MAX(ABS(HIGH-DELAY(HIGH,1)),ABS(LOW-DELAY(LOW,1)))),12)/(SUM(((HIGH+LOW)>=(DELAY(HIGH,1)+DELAY(LOW,1))?0:MAX(ABS(HIGH-DELAY(HIGH,1)),ABS(LOW-DELAY(LOW,1)))),12)+SUM(((HIGH+LOW)<=(DELAY(HIGH,1)+DELAY(LOW,1))?0:MAX(ABS(HIGH-DELAY(HIGH,1)),ABS(LOW-DELAY(LOW,1)))),12))",
+      "formula_hash": "929bb44ddc0fbe617ae3521649c3110c912e03cc3d918085688946588f2bce1f",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_051",
+      "formula": "ts_sum(where(high + low <= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 12) / (ts_sum(where(high + low <= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 12) + ts_sum(where(high + low >= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 12) + 1e-08)",
+      "source_formula": "SUM(((HIGH+LOW)<=(DELAY(HIGH,1)+DELAY(LOW,1))?0:MAX(ABS(HIGH-DELAY(HIGH,1)),ABS(LOW-DELAY(LOW,1)))),12)/(SUM(((HIGH+LOW)<=(DELAY(HIGH,1)+DELAY(LOW,1))?0:MAX(ABS(HIGH-DELAY(HIGH,1)),ABS(LOW-DELAY(LOW,1)))),12)+SUM(((HIGH+LOW)>=(DELAY(HIGH,1)+DELAY(LOW,1))?0:MAX(ABS(HIGH-DELAY(HIGH,1)),ABS(LOW-DELAY(LOW,1)))),12))",
+      "description": "GTJA191 canonical factor gtja191_alpha_051; source: SUM(((HIGH+LOW)<=(DELAY(HIGH,1)+DELAY(LOW,1))?0:MAX(ABS(HIGH-DELAY(HIGH,1)),ABS(LOW-DELAY(LOW,1)))),12)/(SUM(((HIGH+LOW)<=(DELAY(HIGH,1)+DELAY(LOW,1))?0:MAX(ABS(HIGH-DELAY(HIGH,1)),ABS(LOW-DELAY(LOW,1)))),12)+SUM(((HIGH+LOW)>=(DELAY(HIGH,1)+DELAY(LOW,1))?0:MAX(ABS(HIGH-DELAY(HIGH,1)),ABS(LOW-DELAY(LOW,1)))),12))",
+      "formula_hash": "7e3c98cc54f579799bbd719d03aa695d62af690aa803c2721c33602a70217161",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_052",
+      "formula": "ts_sum(flex_max(0, high - ts_delay(col('vwap'), 1)), 26) / (ts_sum(flex_max(0, ts_delay(col('vwap'), 1) - low), 26) + 1e-08) * 100",
+      "source_formula": "SUM(MAX(0,HIGH-DELAY((HIGH+LOW+CLOSE)/3,1)),26)/SUM(MAX(0,DELAY((HIGH+LOW+CLOSE)/3,1)-LOW),26)* 100",
+      "description": "GTJA191 canonical factor gtja191_alpha_052; source: SUM(MAX(0,HIGH-DELAY((HIGH+LOW+CLOSE)/3,1)),26)/SUM(MAX(0,DELAY((HIGH+LOW+CLOSE)/3,1)-LOW),26)* 100",
+      "formula_hash": "11495bc03b5699afc66a83883bf4dbab0e0fe7172741e0f4d943360282ca298f",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_053",
+      "formula": "ts_sum(where(close > ts_delay(close, 1), 1, 0), 12) / 12 * 100",
+      "source_formula": "COUNT(CLOSE>DELAY(CLOSE,1),12)/12*100",
+      "description": "GTJA191 canonical factor gtja191_alpha_053; source: COUNT(CLOSE>DELAY(CLOSE,1),12)/12*100",
+      "formula_hash": "5ad94c69cc6917cf689fa31d145284ce470d829a82bca9cc8d25ba6514027aed",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_054",
+      "formula": "-1 * rank(ts_std(abs(close - open)) + (close - open) + ts_corr(close, open, 10))",
+      "source_formula": "(-1 * RANK((STD(ABS(CLOSE - OPEN)) + (CLOSE - OPEN)) + CORR(CLOSE, OPEN,10)))",
+      "description": "GTJA191 canonical factor gtja191_alpha_054; source: (-1 * RANK((STD(ABS(CLOSE - OPEN)) + (CLOSE - OPEN)) + CORR(CLOSE, OPEN,10)))",
+      "formula_hash": "b92f694d7b3578b6e83cc4f505b3f35443c6c26c0771d70b6815443bdfb468c5",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_055",
+      "formula": "ts_sum(16 * (close - ts_delay(close, 1) + (close - open) / 2 + ts_delay(close, 1) - ts_delay(open, 1)) / (abs(high - ts_delay(close, 1)) + abs(low - ts_delay(close, 1)) + 1e-08) * flex_max(abs(high - ts_delay(close, 1)), abs(low - ts_delay(close, 1))), 20)",
+      "source_formula": "SUM(16*(CLOSE-DELAY(CLOSE,1)+(CLOSE-OPEN)/2+DELAY(CLOSE,1)-DELAY(OPEN,1))/((ABS(HIGH-DELAY(CLOSE,1))>ABS(LOW-DELAY(CLOSE,1)) & ABS(HIGH-DELAY(CLOSE,1))>ABS (HIGH-DELAY(LOW,1))?ABS(HIGH-DELAY(CLOSE,1))+ABS(LOW-DELAY(CLOSE,1))/2+ABS(DELAY(CLOSE,1)-DELAY(OPEN,1))/4:(ABS(LOW-DELAY(CLOSE,1))>ABS(HIGH-DELAY(LOW,1)) & ABS(LOW-DELAY(CLOSE,1))>ABS(HIGH-DELAY(CLOSE,1))?ABS(LOW-DELAY(CLOSE,1))+ABS(HIGH-DELAY(CLOSE,1))/2+ABS(DELAY(CLOSE,1)-DELAY(OPEN,1))/4:ABS(HIGH-DELAY(LOW,1))+ABS(DELAY(CLOSE,1)-DELAY(OPEN,1))/4)))*MAX(ABS(HIGH-DELAY(CLOSE,1)),ABS(LOW-DELAY(CLOSE,1))),20)",
+      "description": "GTJA191 canonical factor gtja191_alpha_055; source: SUM(16*(CLOSE-DELAY(CLOSE,1)+(CLOSE-OPEN)/2+DELAY(CLOSE,1)-DELAY(OPEN,1))/((ABS(HIGH-DELAY(CLOSE,1))>ABS(LOW-DELAY(CLOSE,1)) & ABS(HIGH-DELAY(CLOSE,1))>ABS (HIGH-DELAY(LOW,1))?ABS(HIGH-DELAY(CLOSE,1))+ABS(LOW-DELAY(CLOSE,1))/2+ABS(DELAY(CLOSE,1)-DELAY(OPEN,1))/4:(ABS(LOW-DELAY(CLOSE,1))>ABS(HIGH-DELAY(LOW,1)) & ABS(LOW-DELAY(CLOSE,1))>ABS(HIGH-DELAY(CLOSE,1))?ABS(LOW-DELAY(CLOSE,1))+ABS(HIGH-DELAY(CLOSE,1))/2+ABS(DELAY(CLOSE,1)-DELAY(OPEN,1))/4:ABS(HIGH-DELAY(LOW,1))+ABS(DELAY(CLOSE,1)-DELAY(OPEN,1))/4)))*MAX(ABS(HIGH-DELAY(CLOSE,1)),ABS(LOW-DELAY(CLOSE,1))),20)",
+      "formula_hash": "be1431b02cb65def00b4a29a9e5f52720eb2e70669b16f2daae039b5563d7768",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_056",
+      "formula": "rank(open - ts_min(open, 12)) < rank(power(rank(ts_corr(ts_sum((high + low) / 2, 19), ts_sum(ts_mean(volume, 40), 19), 13)), 5))",
+      "source_formula": "(RANK((OPEN - TSMIN(OPEN, 12))) < RANK((RANK(CORR(SUM(((HIGH + LOW) / 2), 19), SUM(MEAN(VOLUME,40), 19), 13))^5)))",
+      "description": "GTJA191 canonical factor gtja191_alpha_056; source: (RANK((OPEN - TSMIN(OPEN, 12))) < RANK((RANK(CORR(SUM(((HIGH + LOW) / 2), 19), SUM(MEAN(VOLUME,40), 19), 13))^5)))",
+      "formula_hash": "2cdfbc3bae8a4735447526b90f24088c16e5adeae16c135201f837b0d47d861a",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_057",
+      "formula": "ts_ema((close - ts_min(low, 9)) / (ts_max(high, 9) - ts_min(low, 9)) * 100, 5)",
+      "source_formula": "SMA((CLOSE-TSMIN(LOW,9))/(TSMAX(HIGH,9)-TSMIN(LOW,9))*100,3,1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_057; source: SMA((CLOSE-TSMIN(LOW,9))/(TSMAX(HIGH,9)-TSMIN(LOW,9))*100,3,1)",
+      "formula_hash": "8e8cce9e8a600c099999e450774577270ca4dda3ae2579283ffb4740e4c858fc",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_058",
+      "formula": "ts_sum(where(close > ts_delay(close, 1), 1, 0), 20) / 20 * 100",
+      "source_formula": "COUNT(CLOSE>DELAY(CLOSE,1),20)/20*100",
+      "description": "GTJA191 canonical factor gtja191_alpha_058; source: COUNT(CLOSE>DELAY(CLOSE,1),20)/20*100",
+      "formula_hash": "fcc2f9a0bc3dd677d6acd079e533c434010b102209454ef38c00e5880062ccae",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_059",
+      "formula": "ts_sum(where(close == ts_delay(close, 1), 0, close - where(close > ts_delay(close, 1), flex_min(low, ts_delay(close, 1)), flex_max(high, ts_delay(close, 1)))), 20)",
+      "source_formula": "SUM((CLOSE=DELAY(CLOSE,1)?0:CLOSE-(CLOSE>DELAY(CLOSE,1)?MIN(LOW,DELAY(CLOSE,1)):MAX(HIGH,DELAY(CLOSE,1)))),20)",
+      "description": "GTJA191 canonical factor gtja191_alpha_059; source: SUM((CLOSE=DELAY(CLOSE,1)?0:CLOSE-(CLOSE>DELAY(CLOSE,1)?MIN(LOW,DELAY(CLOSE,1)):MAX(HIGH,DELAY(CLOSE,1)))),20)",
+      "formula_hash": "dff156b3ed9c6b96a66efcc959bcfa5c92075bb52a38fc2a4b26d996f3e58e51",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_060",
+      "formula": "ts_sum((close - low - (high - close)) / (high - low) * volume, 20)",
+      "source_formula": "SUM(((CLOSE-LOW)-(HIGH-CLOSE))./(HIGH-LOW).*VOLUME,20)",
+      "description": "GTJA191 canonical factor gtja191_alpha_060; source: SUM(((CLOSE-LOW)-(HIGH-CLOSE))./(HIGH-LOW).*VOLUME,20)",
+      "formula_hash": "8dfd874e608d91eba7efc038495cd3f7c27b4ee130939302519a215f62384e41",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_061",
+      "formula": "flex_max(rank(ts_decay_linear(ts_delta(col('vwap'), 1), 12)), rank(ts_decay_linear(rank(ts_corr(low, ts_mean(volume, 80), 8)), 17))) * -1",
+      "source_formula": "(MAX(RANK(DECAYLINEAR(DELTA(VWAP, 1), 12)), RANK(DECAYLINEAR(RANK(CORR((LOW),MEAN(VOLUME,80), 8)), 17))) * -1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_061; source: (MAX(RANK(DECAYLINEAR(DELTA(VWAP, 1), 12)), RANK(DECAYLINEAR(RANK(CORR((LOW),MEAN(VOLUME,80), 8)), 17))) * -1)",
+      "formula_hash": "49fa00c3a550f9c1aa2b1782688fdca0a7f818ed2858a4d34234dc126c5e071a",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_062",
+      "formula": "-1 * ts_corr(high, rank(volume), 5)",
+      "source_formula": "(-1 * CORR(HIGH, RANK(VOLUME), 5))",
+      "description": "GTJA191 canonical factor gtja191_alpha_062; source: (-1 * CORR(HIGH, RANK(VOLUME), 5))",
+      "formula_hash": "026d39262b7091b4a0177541047377b201efc09cf8aee94bd4cba740029a68e3",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_063",
+      "formula": "ts_ema(flex_max(close - ts_delay(close, 1), 0), 11) / ts_ema(abs(close - ts_delay(close, 1)), 11) * 100",
+      "source_formula": "SMA(MAX(CLOSE-DELAY(CLOSE,1),0),6,1)/SMA(ABS(CLOSE-DELAY(CLOSE,1)),6,1)*100",
+      "description": "GTJA191 canonical factor gtja191_alpha_063; source: SMA(MAX(CLOSE-DELAY(CLOSE,1),0),6,1)/SMA(ABS(CLOSE-DELAY(CLOSE,1)),6,1)*100",
+      "formula_hash": "2753af2866f04f45ce4328226dad7dceb25151b0487c26889fa105160c15b1e1",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_064",
+      "formula": "flex_max(rank(ts_decay_linear(ts_corr(rank(col('vwap')), rank(volume), 4), 4)), rank(ts_decay_linear(ts_max(ts_corr(rank(close), rank(ts_mean(volume, 60)), 4), 13), 14))) * -1",
+      "source_formula": "(MAX(RANK(DECAYLINEAR(CORR(RANK(VWAP), RANK(VOLUME), 4), 4)), RANK(DECAYLINEAR(MAX(CORR(RANK(CLOSE), RANK(MEAN(VOLUME,60)), 4), 13), 14))) * -1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_064; source: (MAX(RANK(DECAYLINEAR(CORR(RANK(VWAP), RANK(VOLUME), 4), 4)), RANK(DECAYLINEAR(MAX(CORR(RANK(CLOSE), RANK(MEAN(VOLUME,60)), 4), 13), 14))) * -1)",
+      "formula_hash": "89a7df20c1533132dc904e258754393549f621a3915cb363d52978678667fc67",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_065",
+      "formula": "ts_mean(close, 6) / close",
+      "source_formula": "MEAN(CLOSE,6)/CLOSE",
+      "description": "GTJA191 canonical factor gtja191_alpha_065; source: MEAN(CLOSE,6)/CLOSE",
+      "formula_hash": "bf941b473eb9363e0254f8e73bf50a136fc5b426603a0ff224d73396a1dac0d4",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_066",
+      "formula": "(close - ts_mean(close, 6)) / ts_mean(close, 6) * 100",
+      "source_formula": "(CLOSE-MEAN(CLOSE,6))/MEAN(CLOSE,6)*100",
+      "description": "GTJA191 canonical factor gtja191_alpha_066; source: (CLOSE-MEAN(CLOSE,6))/MEAN(CLOSE,6)*100",
+      "formula_hash": "078a943a87bb6ae03eac94fe71dd6749f283dd3cd25f4c545a8d582d957cad23",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_067",
+      "formula": "ts_ema(flex_max(close - ts_delay(close, 1), 0), 47) / ts_ema(abs(close - ts_delay(close, 1)), 47) * 100",
+      "source_formula": "SMA(MAX(CLOSE-DELAY(CLOSE,1),0),24,1)/SMA(ABS(CLOSE-DELAY(CLOSE,1)),24,1)*100",
+      "description": "GTJA191 canonical factor gtja191_alpha_067; source: SMA(MAX(CLOSE-DELAY(CLOSE,1),0),24,1)/SMA(ABS(CLOSE-DELAY(CLOSE,1)),24,1)*100",
+      "formula_hash": "d7e616bf1b7df2f3a7555c17b1a30d5a4047ea1d0bce8b4fbd4a5109b11ba2a8",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_068",
+      "formula": "ts_ema(((high + low) / 2 - (ts_delay(high, 1) + ts_delay(low, 1)) / 2) * (high - low) / volume, 14)",
+      "source_formula": "SMA(((HIGH+LOW)/2-(DELAY(HIGH,1)+DELAY(LOW,1))/2)*(HIGH-LOW)/VOLUME,15,2)",
+      "description": "GTJA191 canonical factor gtja191_alpha_068; source: SMA(((HIGH+LOW)/2-(DELAY(HIGH,1)+DELAY(LOW,1))/2)*(HIGH-LOW)/VOLUME,15,2)",
+      "formula_hash": "49a423387045f1293aa4edbf4a1d324abf7d84459c1902ba115b3ae0a9403553",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_069",
+      "formula": "where(ts_sum(where(high + low <= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 20) > ts_sum(where(high + low >= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 20), (ts_sum(where(high + low <= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 20) - ts_sum(where(high + low >= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 20)) / (ts_sum(where(high + low <= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 20) + 1e-08), where(ts_sum(where(high + low <= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 20) == ts_sum(where(high + low >= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 20), 0, (ts_sum(where(high + low <= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 20) - ts_sum(where(high + low >= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 20)) / (ts_sum(where(high + low >= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 20) + 1e-08)))",
+      "source_formula": "(SUM(DTM,20)>SUM(DBM,20)?(SUM(DTM,20)-SUM(DBM,20))/SUM(DTM,20):(SUM(DTM,20)=SUM(DBM,20)?0:(SUM(DTM,20)-SUM(DBM,20))/SUM(DBM,20)))",
+      "description": "GTJA191 canonical factor gtja191_alpha_069; source: (SUM(DTM,20)>SUM(DBM,20)?(SUM(DTM,20)-SUM(DBM,20))/SUM(DTM,20):(SUM(DTM,20)=SUM(DBM,20)?0:(SUM(DTM,20)-SUM(DBM,20))/SUM(DBM,20)))",
+      "formula_hash": "05b63f0ab435ee979ce39d9a6a9d1a9a66f25bef5dca1e6243dcc6feeebe5f93",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_070",
+      "formula": "ts_std(amount, 6)",
+      "source_formula": "STD(AMOUNT,6)",
+      "description": "GTJA191 canonical factor gtja191_alpha_070; source: STD(AMOUNT,6)",
+      "formula_hash": "9ffac00ad1161839e57ec219c3a2647471d2618fbc9817b1d1a1610d454abc26",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_071",
+      "formula": "(close - ts_mean(close, 24)) / ts_mean(close, 24) * 100",
+      "source_formula": "(CLOSE-MEAN(CLOSE,24))/MEAN(CLOSE,24)*100",
+      "description": "GTJA191 canonical factor gtja191_alpha_071; source: (CLOSE-MEAN(CLOSE,24))/MEAN(CLOSE,24)*100",
+      "formula_hash": "534de52f5ac48d02b480e1504ba79351477e1884d9bc343232c6a566c52b91eb",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_072",
+      "formula": "ts_ema((ts_max(high, 6) - close) / (ts_max(high, 6) - ts_min(low, 6)) * 100, 29)",
+      "source_formula": "SMA((TSMAX(HIGH,6)-CLOSE)/(TSMAX(HIGH,6)-TSMIN(LOW,6))*100,15,1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_072; source: SMA((TSMAX(HIGH,6)-CLOSE)/(TSMAX(HIGH,6)-TSMIN(LOW,6))*100,15,1)",
+      "formula_hash": "e9c6cba739f745c760c67a1c482781e0ff0b92b4f6d8c7e9140899dab8e83b41",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_073",
+      "formula": "(ts_rank(ts_decay_linear(ts_decay_linear(ts_corr(close, volume, 10), 16), 4), 5) - rank(ts_decay_linear(ts_corr(col('vwap'), ts_mean(volume, 30), 4), 3))) * -1",
+      "source_formula": "((TSRANK(DECAYLINEAR(DECAYLINEAR(CORR((CLOSE), VOLUME, 10), 16), 4), 5) - RANK(DECAYLINEAR(CORR(VWAP, MEAN(VOLUME,30), 4),3))) * -1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_073; source: ((TSRANK(DECAYLINEAR(DECAYLINEAR(CORR((CLOSE), VOLUME, 10), 16), 4), 5) - RANK(DECAYLINEAR(CORR(VWAP, MEAN(VOLUME,30), 4),3))) * -1)",
+      "formula_hash": "2ddd3c3b0502fa72d11ad5fb3496e4ec964e39e718f1829712603877f901ed1b",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_074",
+      "formula": "rank(ts_corr(ts_sum(low * 0.35 + col('vwap') * 0.65, 20), ts_sum(ts_mean(volume, 40), 20), 7)) + rank(ts_corr(rank(col('vwap')), rank(volume), 6))",
+      "source_formula": "(RANK(CORR(SUM(((LOW * 0.35) + (VWAP * 0.65)), 20), SUM(MEAN(VOLUME,40), 20), 7)) + RANK(CORR(RANK(VWAP), RANK(VOLUME), 6)))",
+      "description": "GTJA191 canonical factor gtja191_alpha_074; source: (RANK(CORR(SUM(((LOW * 0.35) + (VWAP * 0.65)), 20), SUM(MEAN(VOLUME,40), 20), 7)) + RANK(CORR(RANK(VWAP), RANK(VOLUME), 6)))",
+      "formula_hash": "fe51a4a2396edc796e71dd92237093962d9f4d967fb7129a76f44e7953f724a9",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_076",
+      "formula": "ts_std(abs(close / ts_delay(close, 1) - 1) / volume, 20) / ts_mean(abs(close / ts_delay(close, 1) - 1) / volume, 20)",
+      "source_formula": "STD(ABS((CLOSE/DELAY(CLOSE,1)-1))/VOLUME,20)/MEAN(ABS((CLOSE/DELAY(CLOSE,1)-1))/VOLUME,20)",
+      "description": "GTJA191 canonical factor gtja191_alpha_076; source: STD(ABS((CLOSE/DELAY(CLOSE,1)-1))/VOLUME,20)/MEAN(ABS((CLOSE/DELAY(CLOSE,1)-1))/VOLUME,20)",
+      "formula_hash": "3a67262a3b17da5b7a7f21e0e92c68447a6d3aa2171aad5a56a5770acb02304b",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_077",
+      "formula": "flex_min(rank(ts_decay_linear((high + low) / 2 + high - (col('vwap') + high), 20)), rank(ts_decay_linear(ts_corr((high + low) / 2, ts_mean(volume, 40), 3), 6)))",
+      "source_formula": "MIN(RANK(DECAYLINEAR(((((HIGH + LOW) / 2) + HIGH) - (VWAP + HIGH)), 20)), RANK(DECAYLINEAR(CORR(((HIGH + LOW) / 2), MEAN(VOLUME,40), 3), 6)))",
+      "description": "GTJA191 canonical factor gtja191_alpha_077; source: MIN(RANK(DECAYLINEAR(((((HIGH + LOW) / 2) + HIGH) - (VWAP + HIGH)), 20)), RANK(DECAYLINEAR(CORR(((HIGH + LOW) / 2), MEAN(VOLUME,40), 3), 6)))",
+      "formula_hash": "f9c262cdfe774762424cae2842d8e35102df0fe4a13252d97f585770e038d1c6",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_078",
+      "formula": "(col('vwap') - ts_mean(col('vwap'), 12)) / (0.015 * ts_mean(abs(close - ts_mean(col('vwap'), 12)), 12))",
+      "source_formula": "((HIGH+LOW+CLOSE)/3-MA((HIGH+LOW+CLOSE)/3,12))/(0.015*MEAN(ABS(CLOSE-MEAN((HIGH+LOW+CLOSE)/3,12)),12))",
+      "description": "GTJA191 canonical factor gtja191_alpha_078; source: ((HIGH+LOW+CLOSE)/3-MA((HIGH+LOW+CLOSE)/3,12))/(0.015*MEAN(ABS(CLOSE-MEAN((HIGH+LOW+CLOSE)/3,12)),12))",
+      "formula_hash": "2cb41731b5f30eea43b0e14425255674a70b4efda5bf5f6242a37a2e244d6b69",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_079",
+      "formula": "ts_ema(flex_max(close - ts_delay(close, 1), 0), 23) / ts_ema(abs(close - ts_delay(close, 1)), 23) * 100",
+      "source_formula": "SMA(MAX(CLOSE-DELAY(CLOSE,1),0),12,1)/SMA(ABS(CLOSE-DELAY(CLOSE,1)),12,1)*100",
+      "description": "GTJA191 canonical factor gtja191_alpha_079; source: SMA(MAX(CLOSE-DELAY(CLOSE,1),0),12,1)/SMA(ABS(CLOSE-DELAY(CLOSE,1)),12,1)*100",
+      "formula_hash": "4eae6ee9e6fb14f19dae615a76ebf7d5c6e891ed3d170d0eaeca4e2b33e81104",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_080",
+      "formula": "(volume - ts_delay(volume, 5)) / ts_delay(volume, 5) * 100",
+      "source_formula": "(VOLUME-DELAY(VOLUME,5))/DELAY(VOLUME,5)*100",
+      "description": "GTJA191 canonical factor gtja191_alpha_080; source: (VOLUME-DELAY(VOLUME,5))/DELAY(VOLUME,5)*100",
+      "formula_hash": "0bdfbd7abeedbfecc3464d77c6866bcf7711d78412af4223c2d7fc52dc78a010",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_081",
+      "formula": "ts_ema(volume, 20)",
+      "source_formula": "SMA(VOLUME,21,2)",
+      "description": "GTJA191 canonical factor gtja191_alpha_081; source: SMA(VOLUME,21,2)",
+      "formula_hash": "e75a3701f8e4863b20f843e4c233156c4a2129da59d68006740d1e8672f7062d",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_082",
+      "formula": "ts_ema((ts_max(high, 6) - close) / (ts_max(high, 6) - ts_min(low, 6)) * 100, 39)",
+      "source_formula": "SMA((TSMAX(HIGH,6)-CLOSE)/(TSMAX(HIGH,6)-TSMIN(LOW,6))*100,20,1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_082; source: SMA((TSMAX(HIGH,6)-CLOSE)/(TSMAX(HIGH,6)-TSMIN(LOW,6))*100,20,1)",
+      "formula_hash": "de0ae610afdc6a1a01f7029c152498ee8ace09e737eabe187f90928905ad07e3",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_083",
+      "formula": "-1 * rank(ts_cov(rank(high), rank(volume), 5))",
+      "source_formula": "(-1 * RANK(COVIANCE(RANK(HIGH), RANK(VOLUME), 5)))",
+      "description": "GTJA191 canonical factor gtja191_alpha_083; source: (-1 * RANK(COVIANCE(RANK(HIGH), RANK(VOLUME), 5)))",
+      "formula_hash": "2fb4ab2e2b197113889441ea8a17ff8e283c5058431bb00d6308fc75a2dd1b59",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_084",
+      "formula": "ts_sum(where(close > ts_delay(close, 1), volume, where(close < ts_delay(close, 1), -volume, 0)), 20)",
+      "source_formula": "SUM((CLOSE>DELAY(CLOSE,1)?VOLUME:(CLOSE<DELAY(CLOSE,1)?-VOLUME:0)),20)",
+      "description": "GTJA191 canonical factor gtja191_alpha_084; source: SUM((CLOSE>DELAY(CLOSE,1)?VOLUME:(CLOSE<DELAY(CLOSE,1)?-VOLUME:0)),20)",
+      "formula_hash": "579f3f506de69446b561012dca9a66763c1e1e555b03f619de04e7528ef927f5",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_085",
+      "formula": "ts_rank(volume / ts_mean(volume, 20), 20) * ts_rank(-1 * ts_delta(close, 7), 8)",
+      "source_formula": "(TSRANK((VOLUME / MEAN(VOLUME,20)), 20) * TSRANK((-1 * DELTA(CLOSE, 7)), 8))",
+      "description": "GTJA191 canonical factor gtja191_alpha_085; source: (TSRANK((VOLUME / MEAN(VOLUME,20)), 20) * TSRANK((-1 * DELTA(CLOSE, 7)), 8))",
+      "formula_hash": "ca0c99d05f0884d5fa639389358fb72fbed6bc929e94066f453c3298636bf164",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_086",
+      "formula": "where(0.25 < (ts_delay(close, 20) - ts_delay(close, 10)) / 10 - (ts_delay(close, 10) - close) / 10, -1, where((ts_delay(close, 20) - ts_delay(close, 10)) / 10 - (ts_delay(close, 10) - close) / 10 < 0, 1, -1 * (close - ts_delay(close, 1))))",
+      "source_formula": "((0.25 < (((DELAY(CLOSE, 20) - DELAY(CLOSE, 10)) / 10) - ((DELAY(CLOSE, 10) - CLOSE) / 10))) ? (-1 * 1) : (((((DELAY(CLOSE, 20) - DELAY(CLOSE, 10)) / 10) - ((DELAY(CLOSE, 10) - CLOSE) / 10)) < 0) ? 1 : ((-1 * 1) * (CLOSE - DELAY(CLOSE, 1)))))",
+      "description": "GTJA191 canonical factor gtja191_alpha_086; source: ((0.25 < (((DELAY(CLOSE, 20) - DELAY(CLOSE, 10)) / 10) - ((DELAY(CLOSE, 10) - CLOSE) / 10))) ? (-1 * 1) : (((((DELAY(CLOSE, 20) - DELAY(CLOSE, 10)) / 10) - ((DELAY(CLOSE, 10) - CLOSE) / 10)) < 0) ? 1 : ((-1 * 1) * (CLOSE - DELAY(CLOSE, 1)))))",
+      "formula_hash": "fe630bfe9095ff064f985e11c62721cbd27fb5a4d62708be7fe0cb8e4be9e8d5",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_087",
+      "formula": "(rank(ts_decay_linear(ts_delta(col('vwap'), 4), 7)) + ts_rank(ts_decay_linear((low * 0.9 + low * 0.1 - col('vwap')) / (open - (high + low) / 2), 11), 7)) * -1",
+      "source_formula": "((RANK(DECAYLINEAR(DELTA(VWAP, 4), 7)) + TSRANK(DECAYLINEAR(((((LOW * 0.9) + (LOW * 0.1)) - VWAP) / (OPEN - ((HIGH + LOW) / 2))), 11), 7)) * -1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_087; source: ((RANK(DECAYLINEAR(DELTA(VWAP, 4), 7)) + TSRANK(DECAYLINEAR(((((LOW * 0.9) + (LOW * 0.1)) - VWAP) / (OPEN - ((HIGH + LOW) / 2))), 11), 7)) * -1)",
+      "formula_hash": "b77eb2c8f953802fe1867bd2610acb20a971641f0d2328726ff4efb4b6c90ff7",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_088",
+      "formula": "(close - ts_delay(close, 20)) / ts_delay(close, 20) * 100",
+      "source_formula": "(CLOSE-DELAY(CLOSE,20))/DELAY(CLOSE,20)*100",
+      "description": "GTJA191 canonical factor gtja191_alpha_088; source: (CLOSE-DELAY(CLOSE,20))/DELAY(CLOSE,20)*100",
+      "formula_hash": "9b41ee0f6d5685c3146ba4039c8158c278f27dbfe0741b740fe4ce09328b9ce2",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_089",
+      "formula": "2 * (ts_ema(close, 12) - ts_ema(close, 26) - ts_ema(ts_ema(close, 12) - ts_ema(close, 26), 9))",
+      "source_formula": "2*(SMA(CLOSE,13,2)-SMA(CLOSE,27,2)-SMA(SMA(CLOSE,13,2)-SMA(CLOSE,27,2),10,2))",
+      "description": "GTJA191 canonical factor gtja191_alpha_089; source: 2*(SMA(CLOSE,13,2)-SMA(CLOSE,27,2)-SMA(SMA(CLOSE,13,2)-SMA(CLOSE,27,2),10,2))",
+      "formula_hash": "2d7835b7b80f5f9891aa33974326e10cfccbe8cdf71a9d11f6612c3833422fb9",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_090",
+      "formula": "rank(ts_corr(rank(col('vwap')), rank(volume), 5)) * -1",
+      "source_formula": "( RANK(CORR(RANK(VWAP), RANK(VOLUME), 5)) * -1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_090; source: ( RANK(CORR(RANK(VWAP), RANK(VOLUME), 5)) * -1)",
+      "formula_hash": "9e6ae066abc04274517ff8a913904fe0e88afee76c03c3e0c65c0878dba520d1",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_091",
+      "formula": "rank(close - ts_max(close, 5)) * rank(ts_corr(ts_mean(volume, 40), low, 5)) * -1",
+      "source_formula": "((RANK((CLOSE - MAX(CLOSE, 5)))*RANK(CORR((MEAN(VOLUME,40)), LOW, 5))) * -1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_091; source: ((RANK((CLOSE - MAX(CLOSE, 5)))*RANK(CORR((MEAN(VOLUME,40)), LOW, 5))) * -1)",
+      "formula_hash": "e3fd00840df16fe38953518a4e5fa560bf30110e160ccd5e25996f290be7faec",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_092",
+      "formula": "flex_max(rank(ts_decay_linear(ts_delta(close * 0.35 + col('vwap') * 0.65, 2), 3)), ts_rank(ts_decay_linear(abs(ts_corr(ts_mean(volume, 180), close, 13)), 5), 15)) * -1",
+      "source_formula": "(MAX(RANK(DECAYLINEAR(DELTA(((CLOSE * 0.35) + (VWAP *0.65)), 2), 3)), TSRANK(DECAYLINEAR(ABS(CORR((MEAN(VOLUME,180)), CLOSE, 13)), 5), 15)) * -1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_092; source: (MAX(RANK(DECAYLINEAR(DELTA(((CLOSE * 0.35) + (VWAP *0.65)), 2), 3)), TSRANK(DECAYLINEAR(ABS(CORR((MEAN(VOLUME,180)), CLOSE, 13)), 5), 15)) * -1)",
+      "formula_hash": "7c0c8def7ccd43bb8aff517b4a98be65fb3e408f2b3426aa698ddadde755248b",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_093",
+      "formula": "ts_sum(where(open >= ts_delay(open, 1), 0, flex_max(open - low, open - ts_delay(open, 1))), 20)",
+      "source_formula": "SUM((OPEN>=DELAY(OPEN,1)?0:MAX((OPEN-LOW),(OPEN-DELAY(OPEN,1)))),20)",
+      "description": "GTJA191 canonical factor gtja191_alpha_093; source: SUM((OPEN>=DELAY(OPEN,1)?0:MAX((OPEN-LOW),(OPEN-DELAY(OPEN,1)))),20)",
+      "formula_hash": "b27b8f4512f331c34d9f82c0515f5a5a3852c122fd602e9194feaec1a8efec6e",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_094",
+      "formula": "ts_sum(where(close > ts_delay(close, 1), volume, where(close < ts_delay(close, 1), -volume, 0)), 30)",
+      "source_formula": "SUM((CLOSE>DELAY(CLOSE,1)?VOLUME:(CLOSE<DELAY(CLOSE,1)?-VOLUME:0)),30)",
+      "description": "GTJA191 canonical factor gtja191_alpha_094; source: SUM((CLOSE>DELAY(CLOSE,1)?VOLUME:(CLOSE<DELAY(CLOSE,1)?-VOLUME:0)),30)",
+      "formula_hash": "033eaa8f2dfef3fc095eba61e2ee681b95f463adf67353a96a4dce6457eb907b",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_095",
+      "formula": "ts_std(amount, 20)",
+      "source_formula": "STD(AMOUNT,20)",
+      "description": "GTJA191 canonical factor gtja191_alpha_095; source: STD(AMOUNT,20)",
+      "formula_hash": "aebc80fff4fc22ba424f8aafd6c03a0e6085bc2ce581e8c260b2470cc3e09b7e",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_096",
+      "formula": "ts_ema(ts_ema((close - ts_min(low, 9)) / (ts_max(high, 9) - ts_min(low, 9)) * 100, 5), 5)",
+      "source_formula": "SMA(SMA((CLOSE-TSMIN(LOW,9))/(TSMAX(HIGH,9)-TSMIN(LOW,9))*100,3,1),3,1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_096; source: SMA(SMA((CLOSE-TSMIN(LOW,9))/(TSMAX(HIGH,9)-TSMIN(LOW,9))*100,3,1),3,1)",
+      "formula_hash": "895912ff990f25bcc73b383d96d4d8b980486408b891bff873d921ab3c1b9a35",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_097",
+      "formula": "ts_std(volume, 10)",
+      "source_formula": "STD(VOLUME,10)",
+      "description": "GTJA191 canonical factor gtja191_alpha_097; source: STD(VOLUME,10)",
+      "formula_hash": "771adeccf2e4db4156570baf5275b123f166c5605c788907e1036595ed09e7d5",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_098",
+      "formula": "where(or_(ts_delta(ts_sum(close, 100) / 100, 100) / (ts_delay(close, 100) + 1e-08) < 0.05, ts_delta(ts_sum(close, 100) / 100, 100) / (ts_delay(close, 100) + 1e-08) == 0.05), -1 * (close - ts_min(close, 100)), -1 * ts_delta(close, 3))",
+      "source_formula": "((((DELTA((SUM(CLOSE, 100) / 100), 100) / DELAY(CLOSE, 100)) < 0.05) || ((DELTA((SUM(CLOSE, 100) / 100), 100) / DELAY(CLOSE, 100)) == 0.05)) ? (-1 * (CLOSE - TSMIN(CLOSE, 100))) : (-1 * DELTA(CLOSE, 3)))",
+      "description": "GTJA191 canonical factor gtja191_alpha_098; source: ((((DELTA((SUM(CLOSE, 100) / 100), 100) / DELAY(CLOSE, 100)) < 0.05) || ((DELTA((SUM(CLOSE, 100) / 100), 100) / DELAY(CLOSE, 100)) == 0.05)) ? (-1 * (CLOSE - TSMIN(CLOSE, 100))) : (-1 * DELTA(CLOSE, 3)))",
+      "formula_hash": "437e843fe763d75c1f270d4c1433c94db61c6c513b175ac57e081ea24eea8812",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_099",
+      "formula": "-1 * rank(ts_cov(rank(close), rank(volume), 5))",
+      "source_formula": "(-1 * RANK(COVIANCE(RANK(CLOSE), RANK(VOLUME), 5)))",
+      "description": "GTJA191 canonical factor gtja191_alpha_099; source: (-1 * RANK(COVIANCE(RANK(CLOSE), RANK(VOLUME), 5)))",
+      "formula_hash": "b4ecb05d4688047496c6648dd2a503956463788f09d964d7675763926abec3a1",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_100",
+      "formula": "ts_std(volume, 20)",
+      "source_formula": "STD(VOLUME,20)",
+      "description": "GTJA191 canonical factor gtja191_alpha_100; source: STD(VOLUME,20)",
+      "formula_hash": "34d2158798aaf7925f2414fdf5101f4506600548eedb15c9bd65d8753809b9fc",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_101",
+      "formula": "(rank(ts_corr(close, ts_sum(ts_mean(volume, 30), 37), 15)) < rank(ts_corr(rank(high * 0.1 + col('vwap') * 0.9), rank(volume), 11))) * -1",
+      "source_formula": "((RANK(CORR(CLOSE, SUM(MEAN(VOLUME,30), 37), 15)) < RANK(CORR(RANK(((HIGH * 0.1) + (VWAP * 0.9))), RANK(VOLUME), 11))) * -1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_101; source: ((RANK(CORR(CLOSE, SUM(MEAN(VOLUME,30), 37), 15)) < RANK(CORR(RANK(((HIGH * 0.1) + (VWAP * 0.9))), RANK(VOLUME), 11))) * -1)",
+      "formula_hash": "397312aad9a9bed5d90cd66120eb7d26f8eaa21fde4f9794b9b8eb4832b16516",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_102",
+      "formula": "ts_ema(flex_max(volume - ts_delay(volume, 1), 0), 11) / ts_ema(abs(volume - ts_delay(volume, 1)), 11) * 100",
+      "source_formula": "SMA(MAX(VOLUME-DELAY(VOLUME,1),0),6,1)/SMA(ABS(VOLUME-DELAY(VOLUME,1)),6,1)*100",
+      "description": "GTJA191 canonical factor gtja191_alpha_102; source: SMA(MAX(VOLUME-DELAY(VOLUME,1),0),6,1)/SMA(ABS(VOLUME-DELAY(VOLUME,1)),6,1)*100",
+      "formula_hash": "704224c06e4c6bf0d7533a908766b146afa3284130fc8500b5e86772702d57f5",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_103",
+      "formula": "(20 - (20 - ts_argmin(low, 20))) / 20 * 100",
+      "source_formula": "((20-LOWDAY(LOW,20))/20)*100",
+      "description": "GTJA191 canonical factor gtja191_alpha_103; source: ((20-LOWDAY(LOW,20))/20)*100",
+      "formula_hash": "294e5802a4ac9337271a7a387cfe6ba72711aadc3659e0a225309ac67a993415",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_104",
+      "formula": "-1 * (ts_delta(ts_corr(high, volume, 5), 5) * rank(ts_std(close, 20)))",
+      "source_formula": "(-1 * (DELTA(CORR(HIGH, VOLUME, 5), 5) * RANK(STD(CLOSE, 20))))",
+      "description": "GTJA191 canonical factor gtja191_alpha_104; source: (-1 * (DELTA(CORR(HIGH, VOLUME, 5), 5) * RANK(STD(CLOSE, 20))))",
+      "formula_hash": "6627e6a9498c86655635b70fd54cd11e5623829ca27344126952d2be534670cf",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_105",
+      "formula": "-1 * ts_corr(rank(open), rank(volume), 10)",
+      "source_formula": "(-1 * CORR(RANK(OPEN), RANK(VOLUME), 10))",
+      "description": "GTJA191 canonical factor gtja191_alpha_105; source: (-1 * CORR(RANK(OPEN), RANK(VOLUME), 10))",
+      "formula_hash": "bfdab0a07cdcb93390e3c50ef3919f203658b6f6a059f4662e183faa2f5933c1",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_106",
+      "formula": "close - ts_delay(close, 20)",
+      "source_formula": "CLOSE-DELAY(CLOSE,20)",
+      "description": "GTJA191 canonical factor gtja191_alpha_106; source: CLOSE-DELAY(CLOSE,20)",
+      "formula_hash": "88fab00953bc50198da209603235b066db14bc287788323c9e78be0aa0fce954",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_107",
+      "formula": "-1 * rank(open - ts_delay(high, 1)) * rank(open - ts_delay(close, 1)) * rank(open - ts_delay(low, 1))",
+      "source_formula": "(((-1 * RANK((OPEN - DELAY(HIGH, 1)))) * RANK((OPEN - DELAY(CLOSE, 1)))) * RANK((OPEN - DELAY(LOW, 1))))",
+      "description": "GTJA191 canonical factor gtja191_alpha_107; source: (((-1 * RANK((OPEN - DELAY(HIGH, 1)))) * RANK((OPEN - DELAY(CLOSE, 1)))) * RANK((OPEN - DELAY(LOW, 1))))",
+      "formula_hash": "8b0b311cfcb80cafa2476708a393454cbd1c137e2f23f8c0943dd585dd5b8c25",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_108",
+      "formula": "power(rank(high - ts_min(high, 2)), rank(ts_corr(col('vwap'), ts_mean(volume, 120), 6))) * -1",
+      "source_formula": "((RANK((HIGH - MIN(HIGH, 2)))^RANK(CORR((VWAP), (MEAN(VOLUME,120)), 6))) * -1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_108; source: ((RANK((HIGH - MIN(HIGH, 2)))^RANK(CORR((VWAP), (MEAN(VOLUME,120)), 6))) * -1)",
+      "formula_hash": "7b37b0ec0d015f96fa4d3d254305613a0b761027310e30d7b079a7a8fcef4ce7",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_109",
+      "formula": "ts_ema(high - low, 9) / ts_ema(ts_ema(high - low, 9), 9)",
+      "source_formula": "SMA(HIGH-LOW,10,2)/SMA(SMA(HIGH-LOW,10,2),10,2)",
+      "description": "GTJA191 canonical factor gtja191_alpha_109; source: SMA(HIGH-LOW,10,2)/SMA(SMA(HIGH-LOW,10,2),10,2)",
+      "formula_hash": "575326c1bd20176689813105aea7524df12edc4c2bc25c16050f0ced8af96578",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_110",
+      "formula": "ts_sum(flex_max(0, high - ts_delay(close, 1)), 20) / ts_sum(flex_max(0, ts_delay(close, 1) - low), 20) * 100",
+      "source_formula": "SUM(MAX(0,HIGH-DELAY(CLOSE,1)),20)/SUM(MAX(0,DELAY(CLOSE,1)-LOW),20)*100",
+      "description": "GTJA191 canonical factor gtja191_alpha_110; source: SUM(MAX(0,HIGH-DELAY(CLOSE,1)),20)/SUM(MAX(0,DELAY(CLOSE,1)-LOW),20)*100",
+      "formula_hash": "8b3a45c7f0f0b57122ceaeced79380d4bbf911d19df59c7eb163de8c1f9c3754",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_111",
+      "formula": "ts_ema(volume * (close - low - (high - close)) / (high - low), 10) - ts_ema(volume * (close - low - (high - close)) / (high - low), 3)",
+      "source_formula": "SMA(VOL*((CLOSE-LOW)-(HIGH-CLOSE))/(HIGH-LOW),11,2)-SMA(VOL*((CLOSE-LOW)-(HIGH-CLOSE))/(HIGH-LOW),4,2)",
+      "description": "GTJA191 canonical factor gtja191_alpha_111; source: SMA(VOL*((CLOSE-LOW)-(HIGH-CLOSE))/(HIGH-LOW),11,2)-SMA(VOL*((CLOSE-LOW)-(HIGH-CLOSE))/(HIGH-LOW),4,2)",
+      "formula_hash": "3c7fb9c492c9d001049fa6c7a1e2bcafca3994274d4e9c7e79b13e9029319d07",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_112",
+      "formula": "(ts_sum(where(close - ts_delay(close, 1) > 0, close - ts_delay(close, 1), 0), 12) - ts_sum(where(close - ts_delay(close, 1) < 0, abs(close - ts_delay(close, 1)), 0), 12)) / (ts_sum(where(close - ts_delay(close, 1) > 0, close - ts_delay(close, 1), 0), 12) + ts_sum(where(close - ts_delay(close, 1) < 0, abs(close - ts_delay(close, 1)), 0), 12) + 1e-08) * 100",
+      "source_formula": "(SUM((CLOSE-DELAY(CLOSE,1)>0?CLOSE-DELAY(CLOSE,1):0),12)-SUM((CLOSE-DELAY(CLOSE,1)<0?ABS(CLOSE-DELAY(CLOSE,1)):0),12))/(SUM((CLOSE-DELAY(CLOSE,1)>0?CLOSE-DELAY(CLOSE,1):0),12)+SUM((CLOSE-DELAY(CLOSE,1)<0?ABS(CLOSE-DELAY(CLOSE,1)):0),12))*100",
+      "description": "GTJA191 canonical factor gtja191_alpha_112; source: (SUM((CLOSE-DELAY(CLOSE,1)>0?CLOSE-DELAY(CLOSE,1):0),12)-SUM((CLOSE-DELAY(CLOSE,1)<0?ABS(CLOSE-DELAY(CLOSE,1)):0),12))/(SUM((CLOSE-DELAY(CLOSE,1)>0?CLOSE-DELAY(CLOSE,1):0),12)+SUM((CLOSE-DELAY(CLOSE,1)<0?ABS(CLOSE-DELAY(CLOSE,1)):0),12))*100",
+      "formula_hash": "afd6bf1034499ebdb5b54ebd7127e3808430dcb89247fc5bdb2d9ea58840cbd0",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_113",
+      "formula": "-1 * (rank(ts_sum(ts_delay(close, 5), 20) / 20) * ts_corr(close, volume, 2) * rank(ts_corr(ts_sum(close, 5), ts_sum(close, 20), 2)))",
+      "source_formula": "(-1 * ((RANK((SUM(DELAY(CLOSE, 5), 20) / 20)) * CORR(CLOSE, VOLUME, 2)) * RANK(CORR(SUM(CLOSE, 5), SUM(CLOSE, 20), 2))))",
+      "description": "GTJA191 canonical factor gtja191_alpha_113; source: (-1 * ((RANK((SUM(DELAY(CLOSE, 5), 20) / 20)) * CORR(CLOSE, VOLUME, 2)) * RANK(CORR(SUM(CLOSE, 5), SUM(CLOSE, 20), 2))))",
+      "formula_hash": "42754e6846a541a4b760f5eac0d9f49c5cb0f81a1e4accdd76d40500d412dc5b",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_114",
+      "formula": "rank(ts_delay((high - low) / (ts_sum(close, 5) / 5), 2)) * rank(rank(volume)) / ((high - low) / (ts_sum(close, 5) / 5) / (col('vwap') - close))",
+      "source_formula": "((RANK(DELAY(((HIGH - LOW) / (SUM(CLOSE, 5) / 5)), 2)) * RANK(RANK(VOLUME))) / (((HIGH - LOW) / (SUM(CLOSE, 5) / 5)) / (VWAP - CLOSE)))",
+      "description": "GTJA191 canonical factor gtja191_alpha_114; source: ((RANK(DELAY(((HIGH - LOW) / (SUM(CLOSE, 5) / 5)), 2)) * RANK(RANK(VOLUME))) / (((HIGH - LOW) / (SUM(CLOSE, 5) / 5)) / (VWAP - CLOSE)))",
+      "formula_hash": "9e54afcea457c7bbb9f45a60d417faaac1023795f11447e27de16368c9125c86",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_115",
+      "formula": "power(rank(ts_corr(high * 0.9 + close * 0.1, ts_mean(volume, 30), 10)), rank(ts_corr(ts_rank((high + low) / 2, 4), ts_rank(volume, 10), 7)))",
+      "source_formula": "(RANK(CORR(((HIGH * 0.9) + (CLOSE * 0.1)), MEAN(VOLUME,30), 10))^RANK(CORR(TSRANK(((HIGH + LOW) / 2), 4), TSRANK(VOLUME, 10), 7)))",
+      "description": "GTJA191 canonical factor gtja191_alpha_115; source: (RANK(CORR(((HIGH * 0.9) + (CLOSE * 0.1)), MEAN(VOLUME,30), 10))^RANK(CORR(TSRANK(((HIGH + LOW) / 2), 4), TSRANK(VOLUME, 10), 7)))",
+      "formula_hash": "fc21d3fa349c212cd007d136dcc38c187dce665e7117cc17146717ea98dcbc5e",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_116",
+      "formula": "ts_time_slope(close, 20)",
+      "source_formula": "REGBETA(CLOSE,SEQUENCE,20)",
+      "description": "GTJA191 canonical factor gtja191_alpha_116; source: REGBETA(CLOSE,SEQUENCE,20)",
+      "formula_hash": "ea86b28c268d4f375b3ac18a97d44142afcc84ce271773736e3cb68c401231f9",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_117",
+      "formula": "ts_rank(volume, 32) * (1 - ts_rank(close + high - low, 16)) * (1 - ts_rank(ret, 32))",
+      "source_formula": "((TSRANK(VOLUME, 32) * (1 - TSRANK(((CLOSE + HIGH) - LOW), 16))) * (1 - TSRANK(RET, 32)))",
+      "description": "GTJA191 canonical factor gtja191_alpha_117; source: ((TSRANK(VOLUME, 32) * (1 - TSRANK(((CLOSE + HIGH) - LOW), 16))) * (1 - TSRANK(RET, 32)))",
+      "formula_hash": "cab54b9570dc2e66540bfa01ed8db4e36e8c002164de1c7172f4d1d4d5167ec3",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_118",
+      "formula": "ts_sum(high - open, 20) / ts_sum(open - low, 20) * 100",
+      "source_formula": "SUM(HIGH-OPEN,20)/SUM(OPEN-LOW,20)*100",
+      "description": "GTJA191 canonical factor gtja191_alpha_118; source: SUM(HIGH-OPEN,20)/SUM(OPEN-LOW,20)*100",
+      "formula_hash": "9412b68e00d008dec3148b882ec7671c1f9214a28725a1f8f86da52e71f203c1",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_119",
+      "formula": "rank(ts_decay_linear(ts_corr(col('vwap'), ts_sum(ts_mean(volume, 5), 26), 5), 7)) - rank(ts_decay_linear(ts_rank(ts_min(ts_corr(rank(open), rank(ts_mean(volume, 15)), 21), 9), 7), 8))",
+      "source_formula": "(RANK(DECAYLINEAR(CORR(VWAP, SUM(MEAN(VOLUME,5), 26), 5), 7)) - RANK(DECAYLINEAR(TSRANK(MIN(CORR(RANK(OPEN), RANK(MEAN(VOLUME,15)), 21), 9), 7), 8)))",
+      "description": "GTJA191 canonical factor gtja191_alpha_119; source: (RANK(DECAYLINEAR(CORR(VWAP, SUM(MEAN(VOLUME,5), 26), 5), 7)) - RANK(DECAYLINEAR(TSRANK(MIN(CORR(RANK(OPEN), RANK(MEAN(VOLUME,15)), 21), 9), 7), 8)))",
+      "formula_hash": "e7e2d201dc3146210c3d1d7e24883128a29a7e9affe2c16777465a301087e865",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_120",
+      "formula": "rank(col('vwap') - close) / rank(col('vwap') + close)",
+      "source_formula": "(RANK((VWAP - CLOSE)) / RANK((VWAP + CLOSE)))",
+      "description": "GTJA191 canonical factor gtja191_alpha_120; source: (RANK((VWAP - CLOSE)) / RANK((VWAP + CLOSE)))",
+      "formula_hash": "02255ea5dc5ecc613e6387ad0e34dd7bb3761c16e1a2a068e8b46dfc77178a7c",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_121",
+      "formula": "power(rank(col('vwap') - ts_min(col('vwap'), 12)), ts_rank(ts_corr(ts_rank(col('vwap'), 20), ts_rank(ts_mean(volume, 60), 2), 18), 3)) * -1",
+      "source_formula": "((RANK((VWAP - MIN(VWAP, 12)))^TSRANK(CORR(TSRANK(VWAP, 20), TSRANK(MEAN(VOLUME,60), 2), 18), 3)) * -1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_121; source: ((RANK((VWAP - MIN(VWAP, 12)))^TSRANK(CORR(TSRANK(VWAP, 20), TSRANK(MEAN(VOLUME,60), 2), 18), 3)) * -1)",
+      "formula_hash": "1b4b272901392b59b5093c39f1a9ca8d52a4aeda7722fdeb4056e7fdc0e9708d",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_122",
+      "formula": "(ts_ema(ts_ema(ts_ema(log(close), 12), 12), 12) - ts_delay(ts_ema(ts_ema(ts_ema(log(close), 12), 12), 12), 1)) / ts_delay(ts_ema(ts_ema(ts_ema(log(close), 12), 12), 12), 1)",
+      "source_formula": "(SMA(SMA(SMA(LOG(CLOSE),13,2),13,2),13,2)-DELAY(SMA(SMA(SMA(LOG(CLOSE),13,2),13,2),13,2),1))/DELAY(SMA(SMA(SMA(LOG(CLOSE),13,2),13,2),13,2),1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_122; source: (SMA(SMA(SMA(LOG(CLOSE),13,2),13,2),13,2)-DELAY(SMA(SMA(SMA(LOG(CLOSE),13,2),13,2),13,2),1))/DELAY(SMA(SMA(SMA(LOG(CLOSE),13,2),13,2),13,2),1)",
+      "formula_hash": "2d2abe68b0d9372acc6c1001fc687a9f99c11c96a6a6a85eee9110aeb819b6f9",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_123",
+      "formula": "(rank(ts_corr(ts_sum((high + low) / 2, 20), ts_sum(ts_mean(volume, 60), 20), 9)) < rank(ts_corr(low, volume, 6))) * -1",
+      "source_formula": "((RANK(CORR(SUM(((HIGH + LOW) / 2), 20), SUM(MEAN(VOLUME,60), 20), 9)) < RANK(CORR(LOW, VOLUME, 6))) * -1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_123; source: ((RANK(CORR(SUM(((HIGH + LOW) / 2), 20), SUM(MEAN(VOLUME,60), 20), 9)) < RANK(CORR(LOW, VOLUME, 6))) * -1)",
+      "formula_hash": "11a4c1e14f48ef467acfe71e2c00a7780811b91e4adb756f69952e1be950d92c",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_124",
+      "formula": "(close - col('vwap')) / ts_decay_linear(rank(ts_max(close, 30)), 2)",
+      "source_formula": "(CLOSE - VWAP) / DECAYLINEAR(RANK(TSMAX(CLOSE, 30)),2)",
+      "description": "GTJA191 canonical factor gtja191_alpha_124; source: (CLOSE - VWAP) / DECAYLINEAR(RANK(TSMAX(CLOSE, 30)),2)",
+      "formula_hash": "e806d8c77b6eae2749ec949ab09fbca4cbf7e45fb8bfe371dfee3d4150d85623",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_125",
+      "formula": "rank(ts_decay_linear(ts_corr(col('vwap'), ts_mean(volume, 80), 17), 20)) / rank(ts_decay_linear(ts_delta(close * 0.5 + col('vwap') * 0.5, 3), 16))",
+      "source_formula": "(RANK(DECAYLINEAR(CORR((VWAP), MEAN(VOLUME,80),17), 20)) / RANK(DECAYLINEAR(DELTA(((CLOSE * 0.5) + (VWAP * 0.5)), 3), 16)))",
+      "description": "GTJA191 canonical factor gtja191_alpha_125; source: (RANK(DECAYLINEAR(CORR((VWAP), MEAN(VOLUME,80),17), 20)) / RANK(DECAYLINEAR(DELTA(((CLOSE * 0.5) + (VWAP * 0.5)), 3), 16)))",
+      "formula_hash": "ed05981b3281a0192c966715ac6b2a986949191a23b3415454671d31579ad2c1",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_126",
+      "formula": "col('vwap')",
+      "source_formula": "(CLOSE+HIGH+LOW)/3",
+      "description": "GTJA191 canonical factor gtja191_alpha_126; source: (CLOSE+HIGH+LOW)/3",
+      "formula_hash": "d488b2fd3eb75f8f892aac1728296f7df7c4114696f7079dc28c6c684cef41e0",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_127",
+      "formula": "power(ts_mean(power(100 * (close - ts_max(close, 12)) / (ts_max(close, 12) + 1e-08), 2), 20), 0.5)",
+      "source_formula": "(MEAN((100*(CLOSE-MAX(CLOSE,12))/(MAX(CLOSE,12)))^2))^(1/2)",
+      "description": "GTJA191 canonical factor gtja191_alpha_127; source: (MEAN((100*(CLOSE-MAX(CLOSE,12))/(MAX(CLOSE,12)))^2))^(1/2)",
+      "formula_hash": "8541af50aaacc3929625a6df9faa0c81c6c8954d8d95ba420c930857ae66cdac",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_128",
+      "formula": "100 - 100 / (1 + ts_sum(where(col('vwap') > ts_delay(col('vwap'), 1), col('vwap') * volume, 0), 14) / (ts_sum(where(col('vwap') < ts_delay(col('vwap'), 1), col('vwap') * volume, 0), 14) + 1e-08))",
+      "source_formula": "100-(100/(1+SUM(((HIGH+LOW+CLOSE)/3>DELAY((HIGH+LOW+CLOSE)/3,1)?(HIGH+LOW+CLOSE)/3*VOLUME:0),14)/SUM(((HIGH+LOW+CLOSE)/3<DELAY((HIGH+LOW+CLOSE)/3,1)?(HIGH+LOW+CLOSE)/3*VOLUME:0),14)))",
+      "description": "GTJA191 canonical factor gtja191_alpha_128; source: 100-(100/(1+SUM(((HIGH+LOW+CLOSE)/3>DELAY((HIGH+LOW+CLOSE)/3,1)?(HIGH+LOW+CLOSE)/3*VOLUME:0),14)/SUM(((HIGH+LOW+CLOSE)/3<DELAY((HIGH+LOW+CLOSE)/3,1)?(HIGH+LOW+CLOSE)/3*VOLUME:0),14)))",
+      "formula_hash": "bee198215c7dc36b32df725817e82dcea3939b65bed1b511dc946c0cf2551465",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_129",
+      "formula": "ts_sum(where(close - ts_delay(close, 1) < 0, abs(close - ts_delay(close, 1)), 0), 12)",
+      "source_formula": "SUM((CLOSE-DELAY(CLOSE,1)<0?ABS(CLOSE-DELAY(CLOSE,1)):0),12)",
+      "description": "GTJA191 canonical factor gtja191_alpha_129; source: SUM((CLOSE-DELAY(CLOSE,1)<0?ABS(CLOSE-DELAY(CLOSE,1)):0),12)",
+      "formula_hash": "3111561344bc69915feedb3778e662419d7362da134d66d6f4d3dd6efa766e7a",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_130",
+      "formula": "rank(ts_decay_linear(ts_corr((high + low) / 2, ts_mean(volume, 40), 9), 10)) / rank(ts_decay_linear(ts_corr(rank(col('vwap')), rank(volume), 7), 3))",
+      "source_formula": "(RANK(DECAYLINEAR(CORR(((HIGH + LOW) / 2), MEAN(VOLUME,40), 9), 10)) / RANK(DECAYLINEAR(CORR(RANK(VWAP), RANK(VOLUME), 7),3)))",
+      "description": "GTJA191 canonical factor gtja191_alpha_130; source: (RANK(DECAYLINEAR(CORR(((HIGH + LOW) / 2), MEAN(VOLUME,40), 9), 10)) / RANK(DECAYLINEAR(CORR(RANK(VWAP), RANK(VOLUME), 7),3)))",
+      "formula_hash": "b974fcb2bbfb907a0e77e4ea3b3738f9e26705c7fa510115a45d93cde7f6b136",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_131",
+      "formula": "power(rank(ts_delta(col('vwap'), 1)), ts_rank(ts_corr(close, ts_mean(volume, 50), 18), 18))",
+      "source_formula": "(RANK(DELAT(VWAP, 1))^TSRANK(CORR(CLOSE,MEAN(VOLUME,50), 18), 18))",
+      "description": "GTJA191 canonical factor gtja191_alpha_131; source: (RANK(DELAT(VWAP, 1))^TSRANK(CORR(CLOSE,MEAN(VOLUME,50), 18), 18))",
+      "formula_hash": "09e5c428af400319d263233addf9a19b06f29ed95482d8c29bea3085867ea172",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_132",
+      "formula": "ts_mean(amount, 20)",
+      "source_formula": "MEAN(AMOUNT,20)",
+      "description": "GTJA191 canonical factor gtja191_alpha_132; source: MEAN(AMOUNT,20)",
+      "formula_hash": "84256861bfee2c05dd37e28974edecb11a67de9579e5562fd3ce5426c20a431e",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_133",
+      "formula": "(20 - (20 - ts_argmax(high, 20))) / 20 * 100 - (20 - (20 - ts_argmin(low, 20))) / 20 * 100",
+      "source_formula": "((20-HIGHDAY(HIGH,20))/20)*100-((20-LOWDAY(LOW,20))/20)*100",
+      "description": "GTJA191 canonical factor gtja191_alpha_133; source: ((20-HIGHDAY(HIGH,20))/20)*100-((20-LOWDAY(LOW,20))/20)*100",
+      "formula_hash": "3a1d150c0f8b07d8b764171410f32cd272ad3d082807cd4afac804fdc1b16daa",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_134",
+      "formula": "(close - ts_delay(close, 12)) / ts_delay(close, 12) * volume",
+      "source_formula": "(CLOSE-DELAY(CLOSE,12))/DELAY(CLOSE,12)*VOLUME",
+      "description": "GTJA191 canonical factor gtja191_alpha_134; source: (CLOSE-DELAY(CLOSE,12))/DELAY(CLOSE,12)*VOLUME",
+      "formula_hash": "27c8021b9cf2434ffaa1f0b2ae757e0d2fc07ebe188f03464d954e352d9b0c23",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_135",
+      "formula": "ts_ema(ts_delay(close / ts_delay(close, 20), 1), 39)",
+      "source_formula": "SMA(DELAY(CLOSE/DELAY(CLOSE,20),1),20,1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_135; source: SMA(DELAY(CLOSE/DELAY(CLOSE,20),1),20,1)",
+      "formula_hash": "b4e788d3a583b9fe37c2297f004ff9251636da819aa7ce9a26529fd7c4c327f2",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_136",
+      "formula": "-1 * rank(ts_delta(ret, 3)) * ts_corr(open, volume, 10)",
+      "source_formula": "((-1 * RANK(DELTA(RET, 3))) * CORR(OPEN, VOLUME, 10))",
+      "description": "GTJA191 canonical factor gtja191_alpha_136; source: ((-1 * RANK(DELTA(RET, 3))) * CORR(OPEN, VOLUME, 10))",
+      "formula_hash": "344e86c04e0c56b22966fcb8143b4f36a970ff6375d6d391e4aa2b5d64a73adf",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_137",
+      "formula": "16 * (close - ts_delay(close, 1) + (close - open) / 2 + ts_delay(close, 1) - ts_delay(open, 1)) / (abs(high - ts_delay(close, 1)) + abs(low - ts_delay(close, 1)) + 1e-08) * flex_max(abs(high - ts_delay(close, 1)), abs(low - ts_delay(close, 1)))",
+      "source_formula": "16*(CLOSE-DELAY(CLOSE,1)+(CLOSE-OPEN)/2+DELAY(CLOSE,1)-DELAY(OPEN,1))/((ABS(HIGH-DELAY(CLOSE,1))>ABS(LOW-DELAY(CLOSE,1)) & ABS(HIGH-DELAY(CLOSE,1))>ABS(HIGH-DELAY(LOW,1))?ABS(HIGH-DELAY(CLOSE,1))+ABS(LOW-DELAY(CLOSE,1))/2+ABS(DELAY(CLOSE,1)-DELAY(OPEN,1))/4:(ABS(LOW-DELAY(CLOSE,1))>ABS(HIGH-DELAY(LOW,1)) & ABS(LOW-DELAY(CLOSE,1))>ABS(HIGH-DELAY(CLOSE,1))?ABS(LOW-DELAY(CLOSE,1))+ABS(HIGH-DELAY(CLOSE,1))/2+ABS(DELAY(CLOSE,1)-DELAY(OPEN,1))/4:ABS(HIGH-DELAY(LOW,1))+ABS(DELAY(CLOSE,1)-DELAY(OPEN,1))/4)))*MAX(ABS(HIGH-DELAY(CLOSE,1)),ABS(LOW-DELAY(CLOSE,1)))",
+      "description": "GTJA191 canonical factor gtja191_alpha_137; source: 16*(CLOSE-DELAY(CLOSE,1)+(CLOSE-OPEN)/2+DELAY(CLOSE,1)-DELAY(OPEN,1))/((ABS(HIGH-DELAY(CLOSE,1))>ABS(LOW-DELAY(CLOSE,1)) & ABS(HIGH-DELAY(CLOSE,1))>ABS(HIGH-DELAY(LOW,1))?ABS(HIGH-DELAY(CLOSE,1))+ABS(LOW-DELAY(CLOSE,1))/2+ABS(DELAY(CLOSE,1)-DELAY(OPEN,1))/4:(ABS(LOW-DELAY(CLOSE,1))>ABS(HIGH-DELAY(LOW,1)) & ABS(LOW-DELAY(CLOSE,1))>ABS(HIGH-DELAY(CLOSE,1))?ABS(LOW-DELAY(CLOSE,1))+ABS(HIGH-DELAY(CLOSE,1))/2+ABS(DELAY(CLOSE,1)-DELAY(OPEN,1))/4:ABS(HIGH-DELAY(LOW,1))+ABS(DELAY(CLOSE,1)-DELAY(OPEN,1))/4)))*MAX(ABS(HIGH-DELAY(CLOSE,1)),ABS(LOW-DELAY(CLOSE,1)))",
+      "formula_hash": "045d717932e47094c7c1fa18e9cfcfd55934d125d0178ca90109657ad2fd97e0",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_138",
+      "formula": "(rank(ts_decay_linear(ts_delta(low * 0.7 + col('vwap') * 0.3, 3), 20)) - ts_rank(ts_decay_linear(ts_rank(ts_corr(ts_rank(low, 8), ts_rank(ts_mean(volume, 60), 17), 5), 19), 16), 7)) * -1",
+      "source_formula": "((RANK(DECAYLINEAR(DELTA((((LOW * 0.7) + (VWAP *0.3))), 3), 20)) - TSRANK(DECAYLINEAR(TSRANK(CORR(TSRANK(LOW, 8), TSRANK(MEAN(VOLUME,60), 17), 5), 19), 16), 7)) * -1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_138; source: ((RANK(DECAYLINEAR(DELTA((((LOW * 0.7) + (VWAP *0.3))), 3), 20)) - TSRANK(DECAYLINEAR(TSRANK(CORR(TSRANK(LOW, 8), TSRANK(MEAN(VOLUME,60), 17), 5), 19), 16), 7)) * -1)",
+      "formula_hash": "34a7ebeba444a2de02d402354c36612eb5bffa281ba1f9ca5fea77be56607249",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_139",
+      "formula": "-1 * ts_corr(open, volume, 10)",
+      "source_formula": "(-1 * CORR(OPEN, VOLUME, 10))",
+      "description": "GTJA191 canonical factor gtja191_alpha_139; source: (-1 * CORR(OPEN, VOLUME, 10))",
+      "formula_hash": "ddd52be09872c01559b01a5a44c4977710fbb94c0b6bc858ace3c0776eef26b4",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_140",
+      "formula": "flex_min(rank(ts_decay_linear(rank(open) + rank(low) - (rank(high) + rank(close)), 8)), ts_rank(ts_decay_linear(ts_corr(ts_rank(close, 8), ts_rank(ts_mean(volume, 60), 20), 8), 7), 3))",
+      "source_formula": "MIN(RANK(DECAYLINEAR(((RANK(OPEN) + RANK(LOW)) - (RANK(HIGH) + RANK(CLOSE))), 8)), TSRANK(DECAYLINEAR(CORR(TSRANK(CLOSE, 8), TSRANK(MEAN(VOLUME,60), 20), 8), 7), 3))",
+      "description": "GTJA191 canonical factor gtja191_alpha_140; source: MIN(RANK(DECAYLINEAR(((RANK(OPEN) + RANK(LOW)) - (RANK(HIGH) + RANK(CLOSE))), 8)), TSRANK(DECAYLINEAR(CORR(TSRANK(CLOSE, 8), TSRANK(MEAN(VOLUME,60), 20), 8), 7), 3))",
+      "formula_hash": "face7757c248d29152ba65fdd630e4370ec5fe336f07e9ba6de586626335f128",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_141",
+      "formula": "rank(ts_corr(rank(high), rank(ts_mean(volume, 15)), 9)) * -1",
+      "source_formula": "(RANK(CORR(RANK(HIGH), RANK(MEAN(VOLUME,15)), 9))* -1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_141; source: (RANK(CORR(RANK(HIGH), RANK(MEAN(VOLUME,15)), 9))* -1)",
+      "formula_hash": "fb7cb71128eb4bd7f42ebe31a2a4a4e8da82872cb74e63b2147f829d76e4adb3",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_142",
+      "formula": "-1 * rank(ts_rank(close, 10)) * rank(ts_delta(ts_delta(close, 1), 1)) * rank(ts_rank(volume / ts_mean(volume, 20), 5))",
+      "source_formula": "(((-1 * RANK(TSRANK(CLOSE, 10))) * RANK(DELTA(DELTA(CLOSE, 1), 1))) * RANK(TSRANK((VOLUME /MEAN(VOLUME,20)), 5)))",
+      "description": "GTJA191 canonical factor gtja191_alpha_142; source: (((-1 * RANK(TSRANK(CLOSE, 10))) * RANK(DELTA(DELTA(CLOSE, 1), 1))) * RANK(TSRANK((VOLUME /MEAN(VOLUME,20)), 5)))",
+      "formula_hash": "564f24f8d384d59e457abc480dae86922c4f2920c4f172e806a42b7c74be4952",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_143",
+      "formula": "where(close > ts_delay(close, 1), (close - ts_delay(close, 1)) / (ts_delay(close, 1) + 1e-08), 0)",
+      "source_formula": "CLOSE>DELAY(CLOSE,1)?(CLOSE-DELAY(CLOSE,1))/DELAY(CLOSE,1)*SELF:SELF",
+      "description": "GTJA191 canonical factor gtja191_alpha_143; source: CLOSE>DELAY(CLOSE,1)?(CLOSE-DELAY(CLOSE,1))/DELAY(CLOSE,1)*SELF:SELF",
+      "formula_hash": "96801b812dcf3f501f0d6f9ad174727865f5275b620eb71691be10c01b3ba9f0",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_144",
+      "formula": "ts_sum(where(close < ts_delay(close, 1), abs(close / ts_delay(close, 1) - 1) / (amount + 1e-08), 0), 20) / (ts_sum(where(close < ts_delay(close, 1), 1, 0), 20) + 1e-08)",
+      "source_formula": "SUMIF(ABS(CLOSE/DELAY(CLOSE,1)-1)/AMOUNT,20,CLOSE<DELAY(CLOSE,1))/COUNT(CLOSE<DELAY(CLOSE,1),20)",
+      "description": "GTJA191 canonical factor gtja191_alpha_144; source: SUMIF(ABS(CLOSE/DELAY(CLOSE,1)-1)/AMOUNT,20,CLOSE<DELAY(CLOSE,1))/COUNT(CLOSE<DELAY(CLOSE,1),20)",
+      "formula_hash": "357ea5fa260c33c783b1c772e043989f78971fa0bb01d086ca39ea4878d27be6",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_145",
+      "formula": "(ts_mean(volume, 9) - ts_mean(volume, 26)) / ts_mean(volume, 12) * 100",
+      "source_formula": "(MEAN(VOLUME,9)-MEAN(VOLUME,26))/MEAN(VOLUME,12)*100",
+      "description": "GTJA191 canonical factor gtja191_alpha_145; source: (MEAN(VOLUME,9)-MEAN(VOLUME,26))/MEAN(VOLUME,12)*100",
+      "formula_hash": "804f42e807a80571506fc42594e87fa4d4a92e8cdf662fbcb854ce2ab77186f6",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_146",
+      "formula": "ts_mean((close - ts_delay(close, 1)) / (ts_delay(close, 1) + 1e-08) - ts_ema((close - ts_delay(close, 1)) / (ts_delay(close, 1) + 1e-08), 30), 20) * ((close - ts_delay(close, 1)) / (ts_delay(close, 1) + 1e-08) - ts_ema((close - ts_delay(close, 1)) / (ts_delay(close, 1) + 1e-08), 30))",
+      "source_formula": "MEAN((CLOSE-DELAY(CLOSE,1))/DELAY(CLOSE,1)-SMA((CLOSE-DELAY(CLOSE,1))/DELAY(CLOSE,1),61,2),20)*((CLOSE-DELAY(CLOSE,1))/DELAY(CLOSE,1)-SMA((CLOSE-DELAY(CLOSE,1))/DELAY(CLOSE,1),61,2))/SMA(((CLOSE-DELAY(CLOSE,1))/DELAY(CLOSE,1)-((CLOSE-DELAY(CLOSE,1))/DELAY(CLOSE,1)-SMA((CLOSE-DELAY(CLOSE,1))/DELAY(CLOSE,1),61,2)))^2,60)",
+      "description": "GTJA191 canonical factor gtja191_alpha_146; source: MEAN((CLOSE-DELAY(CLOSE,1))/DELAY(CLOSE,1)-SMA((CLOSE-DELAY(CLOSE,1))/DELAY(CLOSE,1),61,2),20)*((CLOSE-DELAY(CLOSE,1))/DELAY(CLOSE,1)-SMA((CLOSE-DELAY(CLOSE,1))/DELAY(CLOSE,1),61,2))/SMA(((CLOSE-DELAY(CLOSE,1))/DELAY(CLOSE,1)-((CLOSE-DELAY(CLOSE,1))/DELAY(CLOSE,1)-SMA((CLOSE-DELAY(CLOSE,1))/DELAY(CLOSE,1),61,2)))^2,60)",
+      "formula_hash": "9bb2c23c45540c7511a968431659f77ebd5a4ddcef8ab5ead77994bbe8d83ec0",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_147",
+      "formula": "ts_time_slope(ts_mean(close, 12), 12)",
+      "source_formula": "REGBETA(MEAN(CLOSE,12),SEQUENCE(12))",
+      "description": "GTJA191 canonical factor gtja191_alpha_147; source: REGBETA(MEAN(CLOSE,12),SEQUENCE(12))",
+      "formula_hash": "2e7d4aa0e354f5dcfa950608edbcc984f30c4e34f2ae9736c7f629d9d7a885eb",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_148",
+      "formula": "(rank(ts_corr(open, ts_sum(ts_mean(volume, 60), 9), 6)) < rank(open - ts_min(open, 14))) * -1",
+      "source_formula": "((RANK(CORR((OPEN), SUM(MEAN(VOLUME,60), 9), 6)) < RANK((OPEN - TSMIN(OPEN, 14)))) * -1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_148; source: ((RANK(CORR((OPEN), SUM(MEAN(VOLUME,60), 9), 6)) < RANK((OPEN - TSMIN(OPEN, 14)))) * -1)",
+      "formula_hash": "b7398bb2a8f0e28a39ab3312a5dc0d8eb55d4bd7c326c1484db84ae5c2b3384e",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_150",
+      "formula": "col('vwap') * volume",
+      "source_formula": "(CLOSE+HIGH+LOW)/3*VOLUME",
+      "description": "GTJA191 canonical factor gtja191_alpha_150; source: (CLOSE+HIGH+LOW)/3*VOLUME",
+      "formula_hash": "5e649eb7c39ed4a9a72fe8687b0f73763d97d92d963ffb83e6c57c3beef8a71b",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_151",
+      "formula": "ts_ema(close - ts_delay(close, 20), 39)",
+      "source_formula": "SMA(CLOSE-DELAY(CLOSE,20),20,1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_151; source: SMA(CLOSE-DELAY(CLOSE,20),20,1)",
+      "formula_hash": "880758e1c1d07e3ac2388401add7103af5fc5be05e9db2e9881453f35fcd8d46",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_152",
+      "formula": "ts_ema(ts_mean(ts_delay(ts_ema(ts_delay(close / ts_delay(close, 9), 1), 17), 1), 12) - ts_mean(ts_delay(ts_ema(ts_delay(close / ts_delay(close, 9), 1), 17), 1), 26), 17)",
+      "source_formula": "SMA(MEAN(DELAY(SMA(DELAY(CLOSE/DELAY(CLOSE,9),1),9,1),1),12)-MEAN(DELAY(SMA(DELAY(CLOSE/DELAY(CLOSE,9),1),9,1),1),26),9,1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_152; source: SMA(MEAN(DELAY(SMA(DELAY(CLOSE/DELAY(CLOSE,9),1),9,1),1),12)-MEAN(DELAY(SMA(DELAY(CLOSE/DELAY(CLOSE,9),1),9,1),1),26),9,1)",
+      "formula_hash": "186b981790e2e8a2a03b866e0007f5a3be8adf4cc56b4b3760341f80e51666b7",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_153",
+      "formula": "(ts_mean(close, 3) + ts_mean(close, 6) + ts_mean(close, 12) + ts_mean(close, 24)) / 4",
+      "source_formula": "(MEAN(CLOSE,3)+MEAN(CLOSE,6)+MEAN(CLOSE,12)+MEAN(CLOSE,24))/4",
+      "description": "GTJA191 canonical factor gtja191_alpha_153; source: (MEAN(CLOSE,3)+MEAN(CLOSE,6)+MEAN(CLOSE,12)+MEAN(CLOSE,24))/4",
+      "formula_hash": "fcb5f61e37eb62cafd5051e7320b076edce85313b00fa4298133272f66fc974d",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_154",
+      "formula": "col('vwap') - ts_min(col('vwap'), 16) < ts_corr(col('vwap'), ts_mean(volume, 180), 18)",
+      "source_formula": "(((VWAP - MIN(VWAP, 16))) < (CORR(VWAP, MEAN(VOLUME,180), 18)))",
+      "description": "GTJA191 canonical factor gtja191_alpha_154; source: (((VWAP - MIN(VWAP, 16))) < (CORR(VWAP, MEAN(VOLUME,180), 18)))",
+      "formula_hash": "e0106c87352457df0b19cc52184ca00a70914eba42c5837bf2dc3c58972f3746",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_155",
+      "formula": "ts_ema(volume, 12) - ts_ema(volume, 26) - ts_ema(ts_ema(volume, 12) - ts_ema(volume, 26), 9)",
+      "source_formula": "SMA(VOLUME,13,2)-SMA(VOLUME,27,2)-SMA(SMA(VOLUME,13,2)-SMA(VOLUME,27,2),10,2)",
+      "description": "GTJA191 canonical factor gtja191_alpha_155; source: SMA(VOLUME,13,2)-SMA(VOLUME,27,2)-SMA(SMA(VOLUME,13,2)-SMA(VOLUME,27,2),10,2)",
+      "formula_hash": "f2c2006495445930bdb2ac2700cf8c42df18aa9a65f8615059413299ab2cb0f4",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_156",
+      "formula": "flex_max(rank(ts_decay_linear(ts_delta(col('vwap'), 5), 3)), rank(ts_decay_linear(ts_delta(open * 0.15 + low * 0.85, 2) / (open * 0.15 + low * 0.85) * -1, 3))) * -1",
+      "source_formula": "(MAX(RANK(DECAYLINEAR(DELTA(VWAP, 5), 3)), RANK(DECAYLINEAR(((DELTA(((OPEN * 0.15) + (LOW *0.85)), 2) / ((OPEN * 0.15) + (LOW * 0.85))) * -1), 3))) * -1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_156; source: (MAX(RANK(DECAYLINEAR(DELTA(VWAP, 5), 3)), RANK(DECAYLINEAR(((DELTA(((OPEN * 0.15) + (LOW *0.85)), 2) / ((OPEN * 0.15) + (LOW * 0.85))) * -1), 3))) * -1)",
+      "formula_hash": "4eeb65e6961be0dde5f8619c5119329225e33a49993f43fffc0f6953afa5402a",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_157",
+      "formula": "ts_min(ts_product(rank(rank(log(ts_sum(ts_min(rank(rank(-1 * rank(ts_delta(close - 1, 5)))), 2), 1))))), 5) + ts_rank(ts_delay(-1 * ret, 6), 5)",
+      "source_formula": "(MIN(PROD(RANK(RANK(LOG(SUM(TSMIN(RANK(RANK((-1 * RANK(DELTA((CLOSE - 1), 5))))), 2), 1)))), 1), 5) + TSRANK(DELAY((-1 * RET), 6), 5))",
+      "description": "GTJA191 canonical factor gtja191_alpha_157; source: (MIN(PROD(RANK(RANK(LOG(SUM(TSMIN(RANK(RANK((-1 * RANK(DELTA((CLOSE - 1), 5))))), 2), 1)))), 1), 5) + TSRANK(DELAY((-1 * RET), 6), 5))",
+      "formula_hash": "231d03e411188e00509718658df25970938df738496f635f3b0a8f769f90cb85",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_158",
+      "formula": "(high - ts_ema(close, 14) - (low - ts_ema(close, 14))) / close",
+      "source_formula": "((HIGH-SMA(CLOSE,15,2))-(LOW-SMA(CLOSE,15,2)))/CLOSE",
+      "description": "GTJA191 canonical factor gtja191_alpha_158; source: ((HIGH-SMA(CLOSE,15,2))-(LOW-SMA(CLOSE,15,2)))/CLOSE",
+      "formula_hash": "01fd65ead4441a21d4a675b90ccccb51eb1ea12f794db7ed0294da54dc110dd6",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_159",
+      "formula": "((close - ts_sum(flex_min(low, ts_delay(close, 1)), 6)) / ts_sum(flex_max(high, ts_delay(close, 1)) - flex_min(low, ts_delay(close, 1)), 6) * 12 * 24 + (close - ts_sum(flex_min(low, ts_delay(close, 1)), 12)) / ts_sum(flex_max(high, ts_delay(close, 1)) - flex_min(low, ts_delay(close, 1)), 12) * 6 * 24 + (close - ts_sum(flex_min(low, ts_delay(close, 1)), 24)) / ts_sum(flex_max(high, ts_delay(close, 1)) - flex_min(low, ts_delay(close, 1)), 24) * 6 * 24) * 100 / 504",
+      "source_formula": "((CLOSE-SUM(MIN(LOW,DELAY(CLOSE,1)),6))/SUM(MAX(HGIH,DELAY(CLOSE,1))-MIN(LOW,DELAY(CLOSE,1)),6)*12*24+(CLOSE-SUM(MIN(LOW,DELAY(CLOSE,1)),12))/SUM(MAX(HGIH,DELAY(CLOSE,1))-MIN(LOW,DELAY(CLOSE,1)),12)*6*24+(CLOSE-SUM(MIN(LOW,DELAY(CLOSE,1)),24))/SUM(MAX(HGIH,DELAY(CLOSE,1))-MIN(LOW,DELAY(CLOSE,1)),24)*6*24)*100/(6*12+6*24+12*24)",
+      "description": "GTJA191 canonical factor gtja191_alpha_159; source: ((CLOSE-SUM(MIN(LOW,DELAY(CLOSE,1)),6))/SUM(MAX(HGIH,DELAY(CLOSE,1))-MIN(LOW,DELAY(CLOSE,1)),6)*12*24+(CLOSE-SUM(MIN(LOW,DELAY(CLOSE,1)),12))/SUM(MAX(HGIH,DELAY(CLOSE,1))-MIN(LOW,DELAY(CLOSE,1)),12)*6*24+(CLOSE-SUM(MIN(LOW,DELAY(CLOSE,1)),24))/SUM(MAX(HGIH,DELAY(CLOSE,1))-MIN(LOW,DELAY(CLOSE,1)),24)*6*24)*100/(6*12+6*24+12*24)",
+      "formula_hash": "a2d3c14b5f8c9e4c3a9a4359b87b8661e3f80680fa264e088f17411d9bd4284a",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_160",
+      "formula": "ts_ema(where(close <= ts_delay(close, 1), ts_std(close, 20), 0), 19)",
+      "source_formula": "SMA((CLOSE<=DELAY(CLOSE,1)?STD(CLOSE,20):0),20,1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_160; source: SMA((CLOSE<=DELAY(CLOSE,1)?STD(CLOSE,20):0),20,1)",
+      "formula_hash": "37a09c8c7e2eff0fd76fc95fc4f006ec064d38120ab701bbedbaf6d70331d41c",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_161",
+      "formula": "ts_mean(flex_max(flex_max(high - low, abs(ts_delay(close, 1) - high)), abs(ts_delay(close, 1) - low)), 12)",
+      "source_formula": "MEAN(MAX(MAX((HIGH-LOW),ABS(DELAY(CLOSE,1)-HIGH)),ABS(DELAY(CLOSE,1)-LOW)),12)",
+      "description": "GTJA191 canonical factor gtja191_alpha_161; source: MEAN(MAX(MAX((HIGH-LOW),ABS(DELAY(CLOSE,1)-HIGH)),ABS(DELAY(CLOSE,1)-LOW)),12)",
+      "formula_hash": "376a30b46bea65902b9b3c78c14ed8af581e1332e1984b5e0c994bccb94b9bed",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_162",
+      "formula": "(ts_ema(flex_max(close - ts_delay(close, 1), 0), 23) / (ts_ema(abs(close - ts_delay(close, 1)), 23) + 1e-08) * 100 - ts_min(ts_ema(flex_max(close - ts_delay(close, 1), 0), 23) / (ts_ema(abs(close - ts_delay(close, 1)), 23) + 1e-08) * 100, 12)) / (ts_max(ts_ema(flex_max(close - ts_delay(close, 1), 0), 23) / (ts_ema(abs(close - ts_delay(close, 1)), 23) + 1e-08) * 100, 12) - ts_min(ts_ema(flex_max(close - ts_delay(close, 1), 0), 23) / (ts_ema(abs(close - ts_delay(close, 1)), 23) + 1e-08) * 100, 12) + 1e-08)",
+      "source_formula": "(SMA(MAX(CLOSE-DELAY(CLOSE,1),0),12,1)/SMA(ABS(CLOSE-DELAY(CLOSE,1)),12,1)*100-MIN(SMA(MAX(CLOSE-DELAY(CLOSE,1),0),12,1)/SMA(ABS(CLOSE-DELAY(CLOSE,1)),12,1) *100,12))/(MAX(SMA(MAX(CLOSE-DELAY(CLOSE,1),0),12,1)/SMA(ABS(CLOSE-DELAY(CLOSE,1)),12,1)*100,12)-MIN(SMA(MAX(CLOSE-DELAY(CLOSE,1),0),12,1)/SMA(ABS(CLOSE-DELAY(CLOSE,1)),12,1)*100,12))",
+      "description": "GTJA191 canonical factor gtja191_alpha_162; source: (SMA(MAX(CLOSE-DELAY(CLOSE,1),0),12,1)/SMA(ABS(CLOSE-DELAY(CLOSE,1)),12,1)*100-MIN(SMA(MAX(CLOSE-DELAY(CLOSE,1),0),12,1)/SMA(ABS(CLOSE-DELAY(CLOSE,1)),12,1) *100,12))/(MAX(SMA(MAX(CLOSE-DELAY(CLOSE,1),0),12,1)/SMA(ABS(CLOSE-DELAY(CLOSE,1)),12,1)*100,12)-MIN(SMA(MAX(CLOSE-DELAY(CLOSE,1),0),12,1)/SMA(ABS(CLOSE-DELAY(CLOSE,1)),12,1)*100,12))",
+      "formula_hash": "5ba7caf2ac0e257dbe7dc349fad0c3f577c5a7f404ba48a2bf2d50ae1db561b9",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_163",
+      "formula": "rank(-1 * ret * ts_mean(volume, 20) * col('vwap') * (high - close))",
+      "source_formula": "RANK(((((-1 * RET) * MEAN(VOLUME,20)) * VWAP) * (HIGH - CLOSE)))",
+      "description": "GTJA191 canonical factor gtja191_alpha_163; source: RANK(((((-1 * RET) * MEAN(VOLUME,20)) * VWAP) * (HIGH - CLOSE)))",
+      "formula_hash": "303a80194005cc0e62842aa5d3ef2ad7d886a157c08b89f2ead2067beeb78719",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_164",
+      "formula": "ts_ema((where(close > ts_delay(close, 1), 1 / (close - ts_delay(close, 1) + 1e-08), 1) - ts_min(where(close > ts_delay(close, 1), 1 / (close - ts_delay(close, 1) + 1e-08), 1), 12)) / (high - low + 1e-08) * 100, 12)",
+      "source_formula": "SMA((((CLOSE>DELAY(CLOSE,1))?1/(CLOSE-DELAY(CLOSE,1)):1)-MIN(((CLOSE>DELAY(CLOSE,1))?1/(CLOSE-DELAY(CLOSE,1)):1),12))/(HIGH-LOW)*100,13,2)",
+      "description": "GTJA191 canonical factor gtja191_alpha_164; source: SMA((((CLOSE>DELAY(CLOSE,1))?1/(CLOSE-DELAY(CLOSE,1)):1)-MIN(((CLOSE>DELAY(CLOSE,1))?1/(CLOSE-DELAY(CLOSE,1)):1),12))/(HIGH-LOW)*100,13,2)",
+      "formula_hash": "7d6593bb4d9ac129f271b8d7f61f4ea715fd4560d9debc884590dba6509a4d3d",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_165",
+      "formula": "(ts_max(ts_sum(close - ts_mean(close, 48), 48), 48) - ts_min(ts_sum(close - ts_mean(close, 48), 48), 48)) / (ts_std(close, 48) + 1e-08)",
+      "source_formula": "MAX(SUMAC(CLOSE-MEAN(CLOSE,48)))-MIN(SUMAC(CLOSE-MEAN(CLOSE,48)))/STD(CLOSE,48)",
+      "description": "GTJA191 canonical factor gtja191_alpha_165; source: MAX(SUMAC(CLOSE-MEAN(CLOSE,48)))-MIN(SUMAC(CLOSE-MEAN(CLOSE,48)))/STD(CLOSE,48)",
+      "formula_hash": "724692a77665c006144d3c04f8557e700ce196dd164ffa4a50c5487e20b04f1a",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_166",
+      "formula": "-1656.381598545456 * ts_sum(close / ts_delay(close, 1) - 1 - ts_mean(close / ts_delay(close, 1) - 1, 20), 20) / (342 * power(ts_sum(power(close / ts_delay(close, 1), 20), 20), 1.5) + 1e-08)",
+      "source_formula": "-20* (20-1)^1.5*SUM(CLOSE/DELAY(CLOSE,1)-1-MEAN(CLOSE/DELAY(CLOSE,1)-1,20),20)/((20-1)*(20-2)(SUM((CLOSE/DELAY(CLOSE,1),20)^2,20))^1.5)",
+      "description": "GTJA191 canonical factor gtja191_alpha_166; source: -20* (20-1)^1.5*SUM(CLOSE/DELAY(CLOSE,1)-1-MEAN(CLOSE/DELAY(CLOSE,1)-1,20),20)/((20-1)*(20-2)(SUM((CLOSE/DELAY(CLOSE,1),20)^2,20))^1.5)",
+      "formula_hash": "e8f72fc9171024ac59b582c08879017727696bc9c9a171941c9a65f772b15558",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_167",
+      "formula": "ts_sum(where(close - ts_delay(close, 1) > 0, close - ts_delay(close, 1), 0), 12)",
+      "source_formula": "SUM((CLOSE-DELAY(CLOSE,1)>0?CLOSE-DELAY(CLOSE,1):0),12)",
+      "description": "GTJA191 canonical factor gtja191_alpha_167; source: SUM((CLOSE-DELAY(CLOSE,1)>0?CLOSE-DELAY(CLOSE,1):0),12)",
+      "formula_hash": "18be871b3247e409ac576426004431121b5abe6b274cfdfa91b800b936f4949a",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_168",
+      "formula": "-1 * volume / ts_mean(volume, 20)",
+      "source_formula": "(-1*VOLUME/MEAN(VOLUME,20))",
+      "description": "GTJA191 canonical factor gtja191_alpha_168; source: (-1*VOLUME/MEAN(VOLUME,20))",
+      "formula_hash": "6975ae4ee3be0b176a511cb055307fb73e77ea3df4194d1ac4eeb393147c5491",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_169",
+      "formula": "ts_ema(ts_mean(ts_delay(ts_ema(ts_delay(close / ts_delay(close, 1), 1), 17), 1), 12) - ts_mean(ts_delay(ts_ema(ts_delay(close / ts_delay(close, 1), 1), 17), 1), 26), 19)",
+      "source_formula": "SMA(MEAN(DELAY(SMA(DELAY(CLOSE/DELAY(CLOSE,1),9,1),1),12)-MEAN(DELAY(SMA(DELAY(CLOSE/DELAY(CLOSE,1),9,1),1),26),10,1))",
+      "description": "GTJA191 canonical factor gtja191_alpha_169; source: SMA(MEAN(DELAY(SMA(DELAY(CLOSE/DELAY(CLOSE,1),9,1),1),12)-MEAN(DELAY(SMA(DELAY(CLOSE/DELAY(CLOSE,1),9,1),1),26),10,1))",
+      "formula_hash": "cf00333b908d5196ea1c4520c7b1800d87166c3c8229dbdb76b9f8d80ef61262",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_170",
+      "formula": "rank(1 / close) * volume / ts_mean(volume, 20) * (high * rank(high - close) / (ts_sum(high, 5) / 5)) - rank(col('vwap') - ts_delay(col('vwap'), 5))",
+      "source_formula": "((((RANK((1 / CLOSE)) * VOLUME) / MEAN(VOLUME,20)) * ((HIGH * RANK((HIGH - CLOSE))) / (SUM(HIGH, 5) / 5))) - RANK((VWAP - DELAY(VWAP, 5))))",
+      "description": "GTJA191 canonical factor gtja191_alpha_170; source: ((((RANK((1 / CLOSE)) * VOLUME) / MEAN(VOLUME,20)) * ((HIGH * RANK((HIGH - CLOSE))) / (SUM(HIGH, 5) / 5))) - RANK((VWAP - DELAY(VWAP, 5))))",
+      "formula_hash": "a4611cc7e4f0d00babe8b0e5cee663fa9e045bb75515221f5d4446471f9cc8a1",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_171",
+      "formula": "-1 * ((low - close) * power(open, 5)) / ((close - high) * power(close, 5))",
+      "source_formula": "((-1 * ((LOW - CLOSE) * (OPEN^5))) / ((CLOSE - HIGH) * (CLOSE^5)))",
+      "description": "GTJA191 canonical factor gtja191_alpha_171; source: ((-1 * ((LOW - CLOSE) * (OPEN^5))) / ((CLOSE - HIGH) * (CLOSE^5)))",
+      "formula_hash": "453917236541ce406115704bed22945bb720d703f0580ae7eea7342316bcc330",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_172",
+      "formula": "ts_mean(abs((high - low) / (close + 1e-08)), 6)",
+      "source_formula": "MEAN(ABS(SUM((LD>0 & LD>HD)?LD:0,14)*100/SUM(TR,14)-SUM((HD>0 & HD>LD)?HD:0,14)*100/SUM(TR,14))/(SUM((LD>0 & LD>HD)?LD:0,14)*100/SUM(TR,14)+SUM((HD>0 & HD>LD)? HD:0,14)*100/SUM(TR,14))*100,6)",
+      "description": "GTJA191 canonical factor gtja191_alpha_172; source: MEAN(ABS(SUM((LD>0 & LD>HD)?LD:0,14)*100/SUM(TR,14)-SUM((HD>0 & HD>LD)?HD:0,14)*100/SUM(TR,14))/(SUM((LD>0 & LD>HD)?LD:0,14)*100/SUM(TR,14)+SUM((HD>0 & HD>LD)? HD:0,14)*100/SUM(TR,14))*100,6)",
+      "formula_hash": "13bf19ee9ae2f99b75271cc4bea2646f705bd3956852d3766bb9163db564b58d",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_173",
+      "formula": "3 * ts_ema(close, 12) - 2 * ts_ema(ts_ema(close, 12), 12) + ts_ema(ts_ema(ts_ema(log(close), 12), 12), 12)",
+      "source_formula": "3*SMA(CLOSE,13,2)-2*SMA(SMA(CLOSE,13,2),13,2)+SMA(SMA(SMA(LOG(CLOSE),13,2),13,2),13,2)",
+      "description": "GTJA191 canonical factor gtja191_alpha_173; source: 3*SMA(CLOSE,13,2)-2*SMA(SMA(CLOSE,13,2),13,2)+SMA(SMA(SMA(LOG(CLOSE),13,2),13,2),13,2)",
+      "formula_hash": "20c9be5e9c8db34750326ae86a2d50a842069e62eb220f55c5f8e5dabdc0c308",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_174",
+      "formula": "ts_ema(where(close > ts_delay(close, 1), ts_std(close, 20), 0), 19)",
+      "source_formula": "SMA((CLOSE>DELAY(CLOSE,1)?STD(CLOSE,20):0),20,1)",
+      "description": "GTJA191 canonical factor gtja191_alpha_174; source: SMA((CLOSE>DELAY(CLOSE,1)?STD(CLOSE,20):0),20,1)",
+      "formula_hash": "55d7378c0f39fe4a0164847ecc3eddfb242078eeedb255442bdd387e2a0fc96f",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_175",
+      "formula": "ts_mean(flex_max(flex_max(high - low, abs(ts_delay(close, 1) - high)), abs(ts_delay(close, 1) - low)), 6)",
+      "source_formula": "MEAN(MAX(MAX((HIGH-LOW),ABS(DELAY(CLOSE,1)-HIGH)),ABS(DELAY(CLOSE,1)-LOW)),6)",
+      "description": "GTJA191 canonical factor gtja191_alpha_175; source: MEAN(MAX(MAX((HIGH-LOW),ABS(DELAY(CLOSE,1)-HIGH)),ABS(DELAY(CLOSE,1)-LOW)),6)",
+      "formula_hash": "e988f9029e00bdbaf4a12cb32178bf3950258bf631e012d9f41679686ecb4a73",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_176",
+      "formula": "ts_corr(rank((close - ts_min(low, 12)) / (ts_max(high, 12) - ts_min(low, 12))), rank(volume), 6)",
+      "source_formula": "CORR(RANK(((CLOSE - TSMIN(LOW, 12)) / (TSMAX(HIGH, 12) - TSMIN(LOW,12)))), RANK(VOLUME), 6)",
+      "description": "GTJA191 canonical factor gtja191_alpha_176; source: CORR(RANK(((CLOSE - TSMIN(LOW, 12)) / (TSMAX(HIGH, 12) - TSMIN(LOW,12)))), RANK(VOLUME), 6)",
+      "formula_hash": "b12c802700de6a4d8c24a91f17618ea66103eb45c1b409a899209d65bb06c47e",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_177",
+      "formula": "(20 - (20 - ts_argmax(high, 20))) / 20 * 100",
+      "source_formula": "((20-HIGHDAY(HIGH,20))/20)*100",
+      "description": "GTJA191 canonical factor gtja191_alpha_177; source: ((20-HIGHDAY(HIGH,20))/20)*100",
+      "formula_hash": "a0b98060c581b654dce5e18d75ec96cdca5c6ddc92a87563f81a3ecc9fad9800",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_178",
+      "formula": "(close - ts_delay(close, 1)) / ts_delay(close, 1) * volume",
+      "source_formula": "(CLOSE-DELAY(CLOSE,1))/DELAY(CLOSE,1)*VOLUME",
+      "description": "GTJA191 canonical factor gtja191_alpha_178; source: (CLOSE-DELAY(CLOSE,1))/DELAY(CLOSE,1)*VOLUME",
+      "formula_hash": "7936058e9129a03fcb93bd000ca097bd732839bc36908e5de02dc53ec08ef9e3",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_179",
+      "formula": "rank(ts_corr(col('vwap'), volume, 4)) * rank(ts_corr(rank(low), rank(ts_mean(volume, 50)), 12))",
+      "source_formula": "(RANK(CORR(VWAP, VOLUME, 4)) *RANK(CORR(RANK(LOW), RANK(MEAN(VOLUME,50)), 12)))",
+      "description": "GTJA191 canonical factor gtja191_alpha_179; source: (RANK(CORR(VWAP, VOLUME, 4)) *RANK(CORR(RANK(LOW), RANK(MEAN(VOLUME,50)), 12)))",
+      "formula_hash": "cf196eba04d79eb1aa9c16dd67ae141c65004eb25fdd17c4d4b8a40eee868905",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_180",
+      "formula": "where(ts_mean(volume, 20) < volume, -1 * ts_rank(abs(ts_delta(close, 7)), 60) * sign(ts_delta(close, 7)), -1 * volume)",
+      "source_formula": "((MEAN(VOLUME,20) < VOLUME) ? ((-1 * TSRANK(ABS(DELTA(CLOSE, 7)), 60)) * SIGN(DELTA(CLOSE, 7))) : (-1 * VOLUME))",
+      "description": "GTJA191 canonical factor gtja191_alpha_180; source: ((MEAN(VOLUME,20) < VOLUME) ? ((-1 * TSRANK(ABS(DELTA(CLOSE, 7)), 60)) * SIGN(DELTA(CLOSE, 7))) : (-1 * VOLUME))",
+      "formula_hash": "673c23b8e4f51b8ce462a0174236c5682d86c76db03c01e4abb1d1b8c0e93454",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_184",
+      "formula": "rank(ts_corr(ts_delay(open - close, 1), close, 200)) + rank(open - close)",
+      "source_formula": "rank(ts_corr(delay(open - close, 1), close, 200)) + rank(open - close)",
+      "description": "GTJA191 canonical factor gtja191_alpha_184; source: rank(ts_corr(delay(open - close, 1), close, 200)) + rank(open - close)",
+      "formula_hash": "b75ed5fd80b43a67bc36709628eb0eea4c65757ae16f07d07b141eb5a7899982",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_185",
+      "formula": "rank(-1 * power(1 - open / close, 2))",
+      "source_formula": "rank(-1 * power(1 - open / close, 2))",
+      "description": "GTJA191 canonical factor gtja191_alpha_185; source: rank(-1 * power(1 - open / close, 2))",
+      "formula_hash": "cde46606acd80265f6852109880b24bfaa0a8d85aeb60ab295f9c5cddad85ba8",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_186",
+      "formula": "(ts_mean(abs((ts_sum(where(and_(ts_delay(low, 1) - low > 0, ts_delay(low, 1) - low > high - ts_delay(high, 1)), ts_delay(low, 1) - low, 0), 14) * 100 / (ts_sum(flex_max(flex_max(high - low, abs(high - ts_delay(close, 1))), abs(low - ts_delay(close, 1))), 14) + 1e-08) - ts_sum(where(and_(high - ts_delay(high, 1) > 0, high - ts_delay(high, 1) > ts_delay(low, 1) - low), high - ts_delay(high, 1), 0), 14) * 100 / (ts_sum(flex_max(flex_max(high - low, abs(high - ts_delay(close, 1))), abs(low - ts_delay(close, 1))), 14) + 1e-08)) / (ts_sum(where(and_(ts_delay(low, 1) - low > 0, ts_delay(low, 1) - low > high - ts_delay(high, 1)), ts_delay(low, 1) - low, 0), 14) * 100 / (ts_sum(flex_max(flex_max(high - low, abs(high - ts_delay(close, 1))), abs(low - ts_delay(close, 1))), 14) + 1e-08) + ts_sum(where(and_(high - ts_delay(high, 1) > 0, high - ts_delay(high, 1) > ts_delay(low, 1) - low), high - ts_delay(high, 1), 0), 14) * 100 / (ts_sum(flex_max(flex_max(high - low, abs(high - ts_delay(close, 1))), abs(low - ts_delay(close, 1))), 14) + 1e-08) + 1e-08) * 100), 6) + ts_delay(ts_mean(abs((ts_sum(where(and_(ts_delay(low, 1) - low > 0, ts_delay(low, 1) - low > high - ts_delay(high, 1)), ts_delay(low, 1) - low, 0), 14) * 100 / (ts_sum(flex_max(flex_max(high - low, abs(high - ts_delay(close, 1))), abs(low - ts_delay(close, 1))), 14) + 1e-08) - ts_sum(where(and_(high - ts_delay(high, 1) > 0, high - ts_delay(high, 1) > ts_delay(low, 1) - low), high - ts_delay(high, 1), 0), 14) * 100 / (ts_sum(flex_max(flex_max(high - low, abs(high - ts_delay(close, 1))), abs(low - ts_delay(close, 1))), 14) + 1e-08)) / (ts_sum(where(and_(ts_delay(low, 1) - low > 0, ts_delay(low, 1) - low > high - ts_delay(high, 1)), ts_delay(low, 1) - low, 0), 14) * 100 / (ts_sum(flex_max(flex_max(high - low, abs(high - ts_delay(close, 1))), abs(low - ts_delay(close, 1))), 14) + 1e-08) + ts_sum(where(and_(high - ts_delay(high, 1) > 0, high - ts_delay(high, 1) > ts_delay(low, 1) - low), high - ts_delay(high, 1), 0), 14) * 100 / (ts_sum(flex_max(flex_max(high - low, abs(high - ts_delay(close, 1))), abs(low - ts_delay(close, 1))), 14) + 1e-08) + 1e-08) * 100), 6), 6)) / 2",
+      "source_formula": "(ts_mean(abs((ts_sum(if_else(and_(ld_gt_0, ld_gt_hd), ld, 0), 14) * 100 / ts_sum(tr, 14) - ts_sum(if_else(and_(hd_gt_0, hd_gt_ld), hd, 0), 14) * 100 / ts_sum(tr, 14)) / (ts_sum(if_else(and_(ld_gt_0, ld_gt_hd), ld, 0), 14) * 100 / ts_sum(tr, 14) + ts_sum(if_else(and_(hd_gt_0, hd_gt_ld), hd, 0), 14) * 100 / ts_sum(tr, 14)) * 100), 6) + delay(ts_mean(abs((ts_sum(if_else(and_(ld_gt_0, ld_gt_hd), ld, 0), 14) * 100 / ts_sum(tr, 14) - ts_sum(if_else(and_(hd_gt_0, hd_gt_ld), hd, 0), 14) * 100 / ts_sum(tr, 14)) / (ts_sum(if_else(and_(ld_gt_0, ld_gt_hd), ld, 0), 14) * 100 / ts_sum(tr, 14) + ts_sum(if_else(and_(hd_gt_0, hd_gt_ld), hd, 0), 14) * 100 / ts_sum(tr, 14)) * 100), 6), 6)) / 2",
+      "description": "GTJA191 canonical factor gtja191_alpha_186; source: (ts_mean(abs((ts_sum(if_else(and_(ld_gt_0, ld_gt_hd), ld, 0), 14) * 100 / ts_sum(tr, 14) - ts_sum(if_else(and_(hd_gt_0, hd_gt_ld), hd, 0), 14) * 100 / ts_sum(tr, 14)) / (ts_sum(if_else(and_(ld_gt_0, ld_gt_hd), ld, 0), 14) * 100 / ts_sum(tr, 14) + ts_sum(if_else(and_(hd_gt_0, hd_gt_ld), hd, 0), 14) * 100 / ts_sum(tr, 14)) * 100), 6) + delay(ts_mean(abs((ts_sum(if_else(and_(ld_gt_0, ld_gt_hd), ld, 0), 14) * 100 / ts_sum(tr, 14) - ts_sum(if_else(and_(hd_gt_0, hd_gt_ld), hd, 0), 14) * 100 / ts_sum(tr, 14)) / (ts_sum(if_else(and_(ld_gt_0, ld_gt_hd), ld, 0), 14) * 100 / ts_sum(tr, 14) + ts_sum(if_else(and_(hd_gt_0, hd_gt_ld), hd, 0), 14) * 100 / ts_sum(tr, 14)) * 100), 6), 6)) / 2",
+      "formula_hash": "e3dd3f47f2977b02e7b63a7abd8f4f4ff54d19ca11e44adc7bae60064384a238",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_187",
+      "formula": "ts_sum(where(open <= ts_delay(open, 1), 0, flex_max(high - open, open - ts_delay(open, 1))), 20)",
+      "source_formula": "SUM((OPEN<=DELAY(OPEN,1)?0:MAX((HIGH-OPEN),(OPEN-DELAY(OPEN,1)))),20)",
+      "description": "GTJA191 canonical factor gtja191_alpha_187; source: SUM((OPEN<=DELAY(OPEN,1)?0:MAX((HIGH-OPEN),(OPEN-DELAY(OPEN,1)))),20)",
+      "formula_hash": "f617ec4bf7b03631fd20c720cdf7e4b3e41f7975272393b4d999042771e10190",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_188",
+      "formula": "(high - low - ts_ema(high - low, 10)) / ts_ema(high - low, 10) * 100",
+      "source_formula": "((HIGH-LOW–SMA(HIGH-LOW,11,2))/SMA(HIGH-LOW,11,2))*100",
+      "description": "GTJA191 canonical factor gtja191_alpha_188; source: ((HIGH-LOW–SMA(HIGH-LOW,11,2))/SMA(HIGH-LOW,11,2))*100",
+      "formula_hash": "bc4c089175ed232582418329899d9b4a927b7a46f687144f19b985999dffc4ed",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_189",
+      "formula": "ts_mean(abs(close - ts_mean(close, 6)), 6)",
+      "source_formula": "MEAN(ABS(CLOSE-MEAN(CLOSE,6)),6)",
+      "description": "GTJA191 canonical factor gtja191_alpha_189; source: MEAN(ABS(CLOSE-MEAN(CLOSE,6)),6)",
+      "formula_hash": "57e5ab30f44fad8754d4bf00055be01b97cc9cdc05929b3ab56b5ec256023a5b",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_190",
+      "formula": "log(flex_max((ts_sum(where(close / ts_delay(close, 1) - 1 > power(close / ts_delay(close, 19), 0.05) - 1, 1, 0), 20) - 1) * ts_sum(where(close / ts_delay(close, 1) - 1 < power(close / ts_delay(close, 19), 0.05) - 1, power(close / ts_delay(close, 1) - 1 - (power(close / ts_delay(close, 19), 0.05) - 1), 2), 0), 20) / ((ts_sum(where(close / ts_delay(close, 1) - 1 < power(close / ts_delay(close, 19), 0.05) - 1, 1, 0), 20) + 1e-08) * (ts_sum(where(close / ts_delay(close, 1) - 1 > power(close / ts_delay(close, 19), 0.05) - 1, power(close / ts_delay(close, 1) - 1 - (power(close / ts_delay(close, 19), 0.05) - 1), 2), 0), 20) + 1e-08)), 1e-08))",
+      "source_formula": "LOG((COUNT(CLOSE/DELAY(CLOSE)-1>((CLOSE/DELAY(CLOSE,19))^(1/20)-1),20)-1)*(SUMIF(((CLOSE/DELAY(CLOSE)-1-(CLOSE/DELAY(CLOSE,19))^(1/20)-1))^2,20,CLOSE/DELAY(CLOSE)-1<(CLOSE/DELAY(CLOSE,19))^(1/20)-1))/((COUNT((CLOSE/DELAY(CLOSE)-1<(CLOSE/DELAY(CLOSE,19))^(1/20)-1),20))*(SUMIF((CLOSE/DELAY(CLOSE)-1-((CLOSE/DELAY(CLOSE,19))^(1/20)-1))^2,20,CLOSE/DELAY(CLOSE)-1>(CLOSE/DELAY(CLOSE,19))^(1/20)-1))))",
+      "description": "GTJA191 canonical factor gtja191_alpha_190; source: LOG((COUNT(CLOSE/DELAY(CLOSE)-1>((CLOSE/DELAY(CLOSE,19))^(1/20)-1),20)-1)*(SUMIF(((CLOSE/DELAY(CLOSE)-1-(CLOSE/DELAY(CLOSE,19))^(1/20)-1))^2,20,CLOSE/DELAY(CLOSE)-1<(CLOSE/DELAY(CLOSE,19))^(1/20)-1))/((COUNT((CLOSE/DELAY(CLOSE)-1<(CLOSE/DELAY(CLOSE,19))^(1/20)-1),20))*(SUMIF((CLOSE/DELAY(CLOSE)-1-((CLOSE/DELAY(CLOSE,19))^(1/20)-1))^2,20,CLOSE/DELAY(CLOSE)-1>(CLOSE/DELAY(CLOSE,19))^(1/20)-1))))",
+      "formula_hash": "c64fa1710ec0b9922279de47110c50fbcfe4def430e20c2dbf7b59b0fa762260",
+      "metadata": {
+        "conversion": "manual_dsl",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    },
+    {
+      "name": "gtja191_alpha_191",
+      "formula": "ts_corr(ts_mean(volume, 20), low, 5) + (high + low) / 2 - close",
+      "source_formula": "((CORR(MEAN(VOLUME,20), LOW, 5) + ((HIGH + LOW) / 2)) - CLOSE)",
+      "description": "GTJA191 canonical factor gtja191_alpha_191; source: ((CORR(MEAN(VOLUME,20), LOW, 5) + ((HIGH + LOW) / 2)) - CLOSE)",
+      "formula_hash": "96478fc6741b93afb0489343018dbe6dfe31bacc457c52c9f69ae27eafdbac36",
+      "metadata": {
+        "conversion": "converted",
+        "validation": "OK",
+        "source_catalog_hash": "711d4fb7e217c603bffcca9d7c325f4dafc6621890e29dd91d492fba8aa029f5",
+        "pack_version": "1"
+      }
+    }
+  ],
+  "pack_hash": "b152ab8f05e3a02a1082ac51bc32a09ea59a7172d79d62819d8cd1793407f56e",
+  "metadata": {
+    "generated_at": "2026-07-11T11:40:45.075307+00:00",
+    "generator": "AutoFactorEvaluation-RECONSTRUCT/scripts/generate_gtja185_pack.py",
+    "source_catalog": "gtja191/dsl/gtja191_dsl_catalog.json",
+    "factor_count": 185
+  }
+}
