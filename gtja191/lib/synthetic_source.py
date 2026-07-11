@@ -73,7 +73,6 @@ class SyntheticGTJADataSource:
         ret = close / preclose - 1.0
         ret[0, :] = np.nan
 
-        # 注入少量可控缺失/零值，覆盖 pairwise 与安全除法，不破坏整列可计算性。
         for col in range(self.symbols):
             for row in range(37 + col, self.periods, 113):
                 close[row, col] = np.nan
@@ -105,7 +104,11 @@ class SyntheticGTJADataSource:
     def load_column(self, name: str) -> pd.Series:
         if name not in self._series:
             panel = self.load_column_panel(name)
-            series = panel.stack(dropna=False)
+            # pandas 3 的新 stack 实现不允许再显式传 dropna=False，且默认保留 NA 行。
+            try:
+                series = panel.stack(future_stack=True)
+            except TypeError:  # pandas 2.0/2.1 compatibility
+                series = panel.stack(dropna=False)
             series.index = series.index.set_names(["timestamp", "instrument"])
             series.name = name
             self._series[name] = series
