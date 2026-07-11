@@ -1,4 +1,4 @@
-"""独立包内 DSL 校验：优先 factor_engine.parse_expr，否则 AST + 本地白名单。"""
+"""GTJA DSL 校验：FactorEngine 可用时必须以真实 parser 为准。"""
 from __future__ import annotations
 
 import ast
@@ -20,8 +20,7 @@ def load_allowlist() -> set[str]:
         if isinstance(raw, list):
             return set(raw)
         if isinstance(raw, dict):
-            ops = raw.get("operators", [])
-            return set(ops)
+            return set(raw.get("operators", []))
     raw = PACKAGE_ROOT / "dsl" / "dsl_allowlist.json"
     data = json.loads(raw.read_text(encoding="utf-8"))
     return {op.lower() for op in data.get("operators", [])}
@@ -44,19 +43,30 @@ FIELD_NAMES = {
 }
 
 
-def _parse_with_factor_engine(formula: str) -> None:
+def _parse_with_factor_engine(formula: str) -> bool:
+    """真实 FactorEngine 可用时解析；不可用时返回 False。
+
+    关键点：真实 parser 一旦加载成功，公式解析失败必须直接失败，不能再退回较宽松的
+    本地 AST 检查，否则“投递校验通过、运行时失败”。
+    """
     fe_root = resolve_factor_engine_root()
     if fe_root is None:
-        raise DSLParseError("factor_engine not available")
+        return False
     if str(fe_root) not in sys.path:
         sys.path.insert(0, str(fe_root))
-    from api.dsl_parser import DSLParseError as FEError  # noqa: WPS433
-    from api.dsl_parser import parse_expr  # noqa: WPS433
+    try:
+        from api.dsl_parser import DSLParseError as FEError  # noqa: WPS433
+        from api.dsl_parser import parse_expr as fe_parse_expr  # noqa: WPS433
+    except (ImportError, ModuleNotFoundError):
+        return False
 
     try:
-        parse_expr(formula)
+        fe_parse_expr(formula)
     except FEError as exc:
         raise DSLParseError(str(exc)) from exc
+    except Exception as exc:
+        raise DSLParseError(f"FactorEngine parser failed: {type(exc).__name__}: {exc}") from exc
+    return True
 
 
 class _Validator(ast.NodeVisitor):
@@ -68,7 +78,12 @@ class _Validator(ast.NodeVisitor):
             op = node.func.id
             if op not in ALLOW:
                 self.errors.append(f"unknown_op: {op}")
+        else:
+            self.errors.append("only direct function calls are allowed")
         self.generic_visit(node)
+
+    def visit_Attribute(self, node: ast.Attribute) -> None:
+        self.errors.append("attribute access is forbidden")
 
     def visit_Name(self, node: ast.Name) -> None:
         if node.id not in ALLOW and node.id not in FIELD_NAMES:
@@ -81,21 +96,19 @@ def parse_expr(formula: str) -> None:
     if formula.count("(") != formula.count(")"):
         raise DSLParseError("parenthesis mismatch")
 
-    try:
-        _parse_with_factor_engine(formula)
+    if _parse_with_factor_engine(formula):
         return
-    except DSLParseError:
-        pass
 
+    # 独立投递包没有 FactorEngine 时才使用本地白名单快照。
     try:
         tree = ast.parse(formula, mode="eval")
     except SyntaxError as exc:
         raise DSLParseError(f"Invalid expression syntax: {formula}") from exc
 
-    v = _Validator()
-    v.visit(tree)
-    if v.errors:
-        raise DSLParseError("; ".join(v.errors[:3]))
+    validator = _Validator()
+    validator.visit(tree)
+    if validator.errors:
+        raise DSLParseError("; ".join(validator.errors[:3]))
 
 
 def validate_formula(formula: str) -> tuple[bool, str]:

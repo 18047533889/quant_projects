@@ -1,0 +1,65 @@
+name: GTJA191 Production Gate
+
+on:
+  push:
+    branches:
+      - main
+      - agent/gtja191-production-complete
+  pull_request:
+    paths:
+      - "gtja191/**"
+      - "factor_engine/**"
+      - "data_access/**"
+      - ".github/workflows/gtja191-production-gate.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  gtja191-factor-engine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/gtja191
+      FACTOR_ENGINE_DISABLE_NUMBA: "1"
+      QUANT_PRODUCTION_MODE: "0"
+      FACTOR_ENGINE_RUN_MODE: research
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install numpy scipy pytest
+      - name: DataAccess production contract tests
+        run: |
+          pytest -q \
+            data_access/tests/unit/test_params_validation_strict.py \
+            data_access/tests/unit/test_key_policy_deterministic.py \
+            data_access/tests/unit/test_scan_handle_guard.py
+      - name: FactorEngine data scope, cache, and GTJA operator semantics
+        run: |
+          pytest -q \
+            factor_engine/tests/test_data_scope_stability.py \
+            factor_engine/tests/test_data_access_source_snapshot_cache.py \
+            factor_engine/tests/test_gtja_compat_semantics.py \
+            factor_engine/tests/test_scalar_comparison_semantics.py
+      - name: Compile and execute all 185 GTJA factors
+        run: |
+          python gtja191/scripts/validate_factor_engine_coverage.py \
+            --periods 420 \
+            --symbols 6 \
+            --report gtja191_validation_report.json
+      - name: GTJA catalog tests
+        run: pytest -q gtja191/tests/test_full_catalog_factor_engine.py
+      - name: Upload validation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gtja191-validation-report
+          path: gtja191_validation_report.json
+          if-no-files-found: ignore
