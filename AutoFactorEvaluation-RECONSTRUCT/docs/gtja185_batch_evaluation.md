@@ -1,100 +1,106 @@
 # GTJA185 batch evaluation
 
-AutoFactorEvaluation ships a versioned bundle of all **185 deliverable GTJA191 factors**.
-The bundle is generated from `gtja191/lib/catalog.py`; each formula and the complete pack
-carry SHA-256 fingerprints, and CI rejects stale or semantically drifted copies. GTJA catalog,
-candidate manifests, formula files, materialization YAML and the AutoFactorEvaluation pack are
-regenerated from the same canonical source. Formulas that reference VWAP use the actual
-`col('vwap')` market field rather than a typical-price proxy.
+AutoFactorEvaluation contains a versioned pack of all **185 deliverable GTJA191 factors**.
+The pack is generated from `gtja191/lib/catalog.py`; every formula and the whole pack carry
+SHA-256 fingerprints. CI rejects missing factors, duplicate formulas, stale generated files,
+and VWAP formulas that substitute a typical-price proxy for the real `col('vwap')` field.
 
-## Official execution path
+## Architecture
 
-`evaluation.gtja185_batch` is the only supported GTJA185 batch path:
+The public entry point remains `evaluation.gtja185_batch`, while implementation is separated:
 
-1. Resolve one immutable `DataAccess` market-data snapshot.
-2. Compile every formula with the repository-root current `FactorEngine` and PIT audit.
-3. Execute factors in bounded batches with shared-expression reuse; isolate a failed batch
-   to single-factor runs so one bad factor cannot hide the other results.
-4. Replace non-finite values, apply daily cross-sectional MAD winsorization and z-scoring.
-5. Build forward returns from the configured price field, defaulting to real `vwap`.
-   A signal observed at `t` enters no earlier than `t+1`; same-bar execution is forbidden.
-6. Split dates chronologically into train, validation and test samples and purge any row
-   whose label exit date crosses the next split boundary.
-7. Choose signal direction from **training RankIC only**. Validation and test observations
-   never participate in sign selection or parameter fitting.
-8. Report Pearson IC, RankIC, ICIR, ordinary and Newey-West/HAC t-statistics, positive
-   ratio, coverage, equal-weight quantile long-short gross and transaction-cost-adjusted
-   net returns, weight turnover, annualized return/volatility, Sharpe, max drawdown, hit
-   rate and yearly stability for every configured horizon. Routing uses net performance.
-9. Production mode requires a registered point-in-time universe dataset with explicit
-   membership and optional tradability flags; missing membership fails closed.
-10. Route factors using **validation only**. The test sample remains a locked final holdout
-    and is never used for direction, thresholds, routing or ranking order.
-11. Apply Benjamini-Hochberg false-discovery-rate control across the complete validation
-    family before a factor may enter core or satellite tiers.
-12. Produce deterministic routing recommendations (`tier3a_core`, `tier3b_satellite`,
-   `tier2_research`, `rejected`) without silently publishing a factor.
-13. Optionally upsert factor values to `factor_lake_staging`; publication remains a separate,
-    explicit action.
+```text
+evaluation/
+├── gtja185_models.py   # immutable configuration and audit records
+├── gtja185_metrics.py  # vectorized, leakage-safe statistics
+├── gtja185_runner.py   # FactorEngine, DataAccess, resume and reports
+└── gtja185_batch.py    # backward-compatible facade
+```
 
-Every run writes:
+All formulas use the repository-root current `factor_engine`. Market data, snapshots, universe
+membership and optional factor-lake writes use the repository-root `data_access`.
+
+## Methodology contract
+
+1. Resolve one immutable market-data snapshot.
+2. In production, require point-in-time universe membership and tradability. Missing membership
+   means ineligible; the evaluator never substitutes the current security master.
+3. Compile every formula with the current FactorEngine and PIT audit.
+4. Execute in bounded batches with shared-expression reuse. A failed batch is isolated to
+   single-factor runs so one error cannot hide the status of the remaining factors.
+5. Replace non-finite values, then apply vectorized daily cross-sectional MAD winsorization and
+   z-scoring.
+6. A signal observed at `t` enters no earlier than `t+1`. Forward labels are purged when their
+   exit date crosses a train/validation/test boundary.
+7. Choose factor direction from **training RankIC only**.
+8. Use **validation only** for routing and ranking. The test sample is a locked final holdout and
+   never influences sign, thresholds, routing or order.
+9. Correct the validation family with Benjamini-Hochberg FDR before a factor may enter core or
+   satellite tiers.
+10. Report Pearson IC, RankIC, ICIR, ordinary and Newey-West/HAC t-statistics, positive ratio,
+    coverage, equal-weight quantile long-short gross and transaction-cost-adjusted net returns,
+    weight turnover, ordinary and HAC-adjusted Sharpe, non-overlapping worst-sleeve drawdown,
+    hit rate and yearly stability.
+11. Routing uses validation RankIC and **net HAC-adjusted performance**.
+12. Optional materialization writes to `factor_lake_staging`; publication remains explicit.
+
+## Outputs and reproducibility
 
 ```text
 <output>/
-├── run_manifest.json       # pack hash, data snapshot, config hash, split dates
-├── summary.json            # success/failure record for every requested factor
+├── run_manifest.json
+├── summary.json
 ├── ranking.csv
 ├── ranking.parquet
 └── factor_reports/
     └── gtja191_alpha_XXX.json
 ```
 
-Resume is allowed only when the factor formula hash, DataAccess snapshot ID and evaluation
-configuration hash all match. A changed formula, dataset snapshot or metric configuration
-forces recomputation.
+The run manifest records the pack hash, DataAccess snapshot identity, configuration hash and split
+boundaries. Resume is accepted only when formula hash, data snapshot and configuration hash all
+match. Valid resumed factors skip compilation and execution, then participate in the current run's
+FDR family with newly computed factors.
 
-The committed GTJA materialization YAML files use repository-relative defaults:
+## Deterministic smoke run
 
-```text
-data/factors/plan_cache/gtja191
-data/factors/lake/gtja191
-```
-
-They therefore remain portable across CI, research servers and developer workstations; runtime
-orchestration may override the output root without regenerating the formulas.
-
-## Full real-data run
-
-Run from the repository root so the shared `factor_engine` and `data_access` modules are
-resolved consistently:
+From the repository root:
 
 ```bash
 export PYTHONPATH="$PWD:$PWD/factor_engine:$PWD/AutoFactorEvaluation-RECONSTRUCT:$PWD/gtja191"
 
-python -m pipeline --gtja185 \
-  --gtja-run-mode production \
-  --gtja-dataset ashare_stock_daily \
-  --gtja-universe-id A_SHARE_ALL_A_EX_ST \
-  --gtja-require-pit-universe \
-  --gtja-universe-dataset ashare_universe_daily \
-  --gtja-start-date 2014-01-01 \
-  --gtja-end-date 2026-06-25 \
-  --gtja-horizons 1,5,21 \
-  --gtja-entry-lag 1 \
-  --gtja-cost-bps 10 \
-  --gtja-fdr-alpha 0.10 \
-  --gtja-batch-size 8 \
-  --gtja-output /tmp/gtja185_eval
+python -m evaluation.gtja185_batch \
+  --synthetic \
+  --horizons 1,5 \
+  --min-assets 6 \
+  --n-quantiles 4 \
+  --output-dir /tmp/gtja185_smoke
 ```
 
-For a deterministic data-free smoke run, append `--gtja-synthetic`. To persist calculated
-values, add `--gtja-materialize-staging`. Published factor values are never written directly;
-add `--gtja-publish` only after the staging output and evaluation report have been reviewed.
+## Real production run
 
+```bash
+export PYTHONPATH="$PWD:$PWD/factor_engine:$PWD/AutoFactorEvaluation-RECONSTRUCT:$PWD/gtja191"
 
-## Point-in-time universe dataset
+python -m evaluation.gtja185_batch \
+  --run-mode production \
+  --dataset ashare_stock_daily \
+  --universe-id A_SHARE_ALL_A_EX_ST \
+  --require-point-in-time-universe \
+  --universe-dataset ashare_universe_daily \
+  --start-date 2014-01-01 \
+  --end-date 2026-06-25 \
+  --horizons 1,5,21 \
+  --entry-lag 1 \
+  --cost-bps 10 \
+  --fdr-alpha 0.10 \
+  --batch-size 8 \
+  --output-dir /tmp/gtja185_eval
+```
 
-`ashare_universe_daily` is parameterized by `universe_id`; each universe is stored under
-`universe_daily/universe_id=<id>/date=<date>/`. Required columns are `TradeDate`, `Symbol`,
-`is_member`, and `is_tradable`. The evaluator passes the requested universe ID through
-DataAccess, so path identity, snapshot lineage and caches cannot mix different universes.
+The registered universe dataset must contain `TradeDate`, `Symbol`, `is_member` and
+`is_tradable`; a static dataset may additionally contain `universe_id`, while a parameterized
+dataset may use `universe_id` as a path parameter. Both forms are supported and become part of the
+snapshot/config identity.
+
+To persist values, add `--materialize-staging`. Add `--publish` only after reviewing staging and
+the evaluation report. Production code never writes directly to the published factor lake.
