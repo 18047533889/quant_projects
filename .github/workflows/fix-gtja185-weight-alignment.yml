@@ -1,0 +1,50 @@
+name: Fix GTJA185 Weight Alignment
+
+on:
+  push:
+    branches:
+      - agent/autofactor-gtja185-evaluation
+    paths:
+      - ".github/workflows/fix-gtja185-weight-alignment.yml"
+      - ".github/scripts/fix_gtja185_weight_alignment.py"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fix-gtja185-weight-alignment
+  cancel-in-progress: false
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/autofactor-gtja185-evaluation
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Apply asset-aligned portfolio return fix
+        run: python .github/scripts/fix_gtja185_weight_alignment.py
+      - name: Verify patch shape
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m compileall -q AutoFactorEvaluation-RECONSTRUCT/evaluation/gtja185_batch.py
+          grep -q 'return_by_asset' AutoFactorEvaluation-RECONSTRUCT/evaluation/gtja185_batch.py
+          grep -q 'gross.iloc\[0\] == pytest.approx(0.01)' AutoFactorEvaluation-RECONSTRUCT/tests/test_gtja185_evaluation_contracts.py
+      - name: Commit fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/scripts/fix_gtja185_weight_alignment.py
+          rm -f .github/workflows/fix-gtja185-weight-alignment.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Fix GTJA185 portfolio return weight alignment"
+          git push origin HEAD:agent/autofactor-gtja185-evaluation
