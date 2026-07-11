@@ -167,6 +167,9 @@ MEMORY_CASES = [
     ("ts_median", lambda: make_cleaned_call_factory("ts_median")(col("close"), 3)),
     ("rank_pct", lambda: make_cleaned_call_factory("rank_pct")(col("close"))),
     ("add", lambda: make_cleaned_call_factory("add")(col("close"), col("open"))),
+    ("ts_rank", lambda: make_cleaned_call_factory("ts_rank")(col("close"), 3)),
+    ("ts_sharpe", lambda: make_cleaned_call_factory("ts_sharpe")(col("close"), 3)),
+    ("ts_autocorr", lambda: make_cleaned_call_factory("ts_autocorr")(col("close"), 4, 1)),
     ("where", lambda: make_cleaned_call_factory("where")(col("grp"), col("close"), col("open"))),
 ]
 

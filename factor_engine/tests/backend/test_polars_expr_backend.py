@@ -62,7 +62,7 @@ def test_polars_expr_capable_subset_of_production_ops():
 
     # native expr 已实现但 production 门禁尚未同步的算子
     # native long path 已有；panel production parity 以 ``where`` 别名代表
-    pending_production = {"bfill", "if_else"}
+    pending_production = {"bfill", "if_else", "is_infinite", "div_or_default", "log_fill_invalid", "div_or_null"}
     native_ops = POLARS_LONG_NATIVE - {
         "column",
         "literal",

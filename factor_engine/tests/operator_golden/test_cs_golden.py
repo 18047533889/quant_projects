@@ -30,12 +30,13 @@ def test_rank_matches_cs_rank_01(golden_panel, loaded):
     assert np.isnan(out.loc["2024-01-01", "C"])
 
 
-def test_rank_single_valid_row_all_half(golden_panel, loaded):
+def test_rank_single_valid_row_singleton_half(golden_panel, loaded):
     row = golden_panel.loc[["2024-01-01"]].copy()
     row.loc["2024-01-01", "B"] = np.nan
     out = _run("rank", row)
     assert out.loc["2024-01-01", "A"] == 0.5
-    assert out.loc["2024-01-01", "C"] == 0.5
+    assert np.isnan(out.loc["2024-01-01", "B"])
+    assert np.isnan(out.loc["2024-01-01", "C"])
 
 
 def test_rank_pct_two_valid_values(golden_panel, loaded):

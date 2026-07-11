@@ -102,6 +102,8 @@ def composite_production_safe(canon: str) -> bool:
         return False
     if is_production_denied(canon):
         return False
+    if not composite_structurally_capable(canon):
+        return False
     backends_map = OperatorRegistry._operators.get(canon)
     if not backends_map:
         return False
@@ -116,4 +118,4 @@ def composite_production_safe(canon: str) -> bool:
     policy = infer_operator_policy(op, canonical=canon)
     if not policy.pit_safe or not policy.shape_preserving:
         return False
-    return composite_evidence_complete(canon) and composite_structurally_capable(canon)
+    return composite_evidence_complete(canon)

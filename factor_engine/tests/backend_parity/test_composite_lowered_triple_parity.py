@@ -96,6 +96,11 @@ COMPOSITE_TRIPLE_PARITY_CASES: tuple[dict, ...] = (
         "mem": lambda: F("micro_spread")(_col_mem("high"), _col_mem("low"), _col_mem("close")),
         "duck": lambda: F("micro_spread")(_col_duck("high"), _col_duck("low"), _col_duck("close")),
     },
+    {
+        "canon": "ts_ratio",
+        "mem": lambda: F("ts_ratio")(_col_mem("close")),
+        "duck": lambda: F("ts_ratio")(_col_duck("close")),
+    },
 )
 
 

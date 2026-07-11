@@ -127,9 +127,11 @@ class MinimumPolars(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, y: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        from backend.elementwise_semantics import min_horizontal_polars
+
         cols = [c for c in _numeric_cols(x) if c in y.columns]
         return x.with_columns([
-            pl.min_horizontal(pl.col(c), y[c]).alias(c) for c in cols
+            min_horizontal_polars(pl.col(c), y[c]).alias(c) for c in cols
         ])
 
 
@@ -142,11 +144,12 @@ class MaximumPolars(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, y: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        from backend.elementwise_semantics import max_horizontal_polars
+
         cols = [c for c in _numeric_cols(x) if c in y.columns]
-        out = x.with_columns([
-            pl.max_horizontal(pl.col(c), y[c]).alias(c) for c in cols
+        return x.with_columns([
+            max_horizontal_polars(pl.col(c), y[c]).alias(c) for c in cols
         ])
-        return out
 
 
 @register_operator(name="if_else", category="signal", business_category="technical_signal", canonical="if_else", source="factor_dsl_polars")

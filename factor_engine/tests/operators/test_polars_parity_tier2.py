@@ -70,6 +70,7 @@ def _parity_exprs():
         "ts_rank": make_cleaned_call_factory("ts_rank")(x, 2),
         "coalesce": make_cleaned_call_factory("coalesce")(x, y),
         "protected_div": make_cleaned_call_factory("protected_div")(x, y),
+        "safe_div_null": make_cleaned_call_factory("safe_div_null")(x, y),
         "protected_log": make_cleaned_call_factory("protected_log")(x),
         "where": make_cleaned_call_factory("where")(x, x, y),
         "cs_demean": make_cleaned_call_factory("cs_demean")(x),

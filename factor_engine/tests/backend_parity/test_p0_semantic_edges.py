@@ -213,8 +213,8 @@ def test_is_nan_is_finite_nan_to_num(edge_source, duckdb_edge_source):
     _assert_triple_backends(
         edge_source,
         duckdb_edge_source,
-        lambda: F("is_nan")(col("close")),
-        lambda: F("is_nan")(_col("close")),
+        lambda: F("is_null")(col("close")),
+        lambda: F("is_null")(_col("close")),
     )
     _assert_triple_backends(
         edge_source,

@@ -41,6 +41,7 @@ COMPOSITE_REFERENCE_CASES: tuple[CompositeReferenceCase, ...] = (
     CompositeReferenceCase("debt_to_equity", ("total_debt", "total_equity")),
     CompositeReferenceCase("real_turnover_rate", ("volume", "float_shares")),
     CompositeReferenceCase("micro_spread", ("high", "low", "close")),
+    CompositeReferenceCase("ts_ratio", ("close",), window=1),
 )
 
 

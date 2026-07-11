@@ -78,10 +78,8 @@ def test_protected_log_small_value_uses_log_epsilon(edge_source):
     assert out.loc[idx[2]] == pytest.approx(math.log(eps), rel=1e-6)
 
 
-def test_protected_log_null_matches_pandas_log_epsilon(edge_source):
-    """Pandas ``protected_log``：NaN 视为 <= epsilon → log(eps)（与 PolarsLong/SQL 一致）。"""
-    import math
-
+def test_protected_log_null_stays_null(edge_source):
+    """``protected_log``：NULL 保持 NULL（不填充 log(eps)）。"""
     import numpy as np
 
     idx = edge_source.data["z"].index
@@ -89,12 +87,9 @@ def test_protected_log_null_matches_pandas_log_epsilon(edge_source):
     expr = make_cleaned_call_factory("protected_log")(col("z"))
     pd_out = _run(edge_source, expr, "pandas")
     long_out = _run(edge_source, expr, "polars_long")
-    eps = 1e-12
     assert np.isnan(edge_source.data["z"].loc[nan_idx])
-    assert pd_out.loc[nan_idx] == pytest.approx(math.log(eps), rel=1e-6)
-    assert long_out.loc[nan_idx] == pytest.approx(math.log(eps), rel=1e-6)
-    assert "ts_rank" in POLARS_LONG_NATIVE
-    assert "ts_rank" not in POLARS_LONG_MAP_GROUPS
+    assert np.isnan(pd_out.loc[nan_idx])
+    assert np.isnan(long_out.loc[nan_idx])
 
 
 def test_require_native_accepts_ts_rank(edge_source):

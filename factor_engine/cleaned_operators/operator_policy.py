@@ -294,6 +294,8 @@ POLARS_PARITY_VERIFIED_TIER9: frozenset[str] = frozenset({
     "signed_log",
     "log_abs",
     "is_nan",
+    "is_null",
+    "is_not_null",
     "gt",
     "lt",
     "ge",
@@ -461,6 +463,9 @@ INTENTIONALLY_PANDAS_ONLY: frozenset[str] = frozenset(
         "ttm_from_quarterly",
         "ttm_from_cumulative",
         "yoy_by_period",
+        "div_or_default",
+        "log_fill_invalid",
+        "div_or_null",
     }
 )
 
@@ -682,6 +687,8 @@ _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
     "or_": {"scope": "elementwise", "pit_safe": True},
     "not_": {"scope": "elementwise", "pit_safe": True},
     "is_nan": {"scope": "elementwise", "pit_safe": True},
+    "is_null": {"scope": "elementwise", "pit_safe": True},
+    "is_not_null": {"scope": "elementwise", "pit_safe": True},
     "is_finite": {"scope": "elementwise", "pit_safe": True},
     "nan_to_num": {"scope": "elementwise", "pit_safe": True},
     "fillna": {"scope": "elementwise", "pit_safe": True},

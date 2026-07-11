@@ -72,7 +72,11 @@ def test_group_rank_clickhouse_uses_average_rank():
     q = _ch_sql(plan)
     assert "countIf" in q
     assert "cnt_le" in q or "countIf(p._v IS NOT NULL AND p._v <=" in q
-    assert "isNull(b._v)" in q or "if(b._v IS NULL" in q
+    assert (
+        "isNull(b._v)" in q
+        or "if(b._v IS NULL" in q
+        or "isNaN(b._v)" in q
+    )
 
 
 def test_group_zscore_clickhouse_stddev():
@@ -89,7 +93,7 @@ def test_group_percentile_clickhouse_dialect():
     )
     q = _ch_sql(plan)
     assert "countIf" in q
-    assert "WHEN b._oval IS NULL THEN 0.0" in q or "if(b._oval IS NULL" in q
+    assert "WHEN b._oval IS NULL THEN NULL" in q or "if(b._oval IS NULL, NULL" in q
     assert "<= 0.5" in q
 
 

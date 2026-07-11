@@ -275,7 +275,7 @@ class GroupPercentile(SeriesOperator):
         返回:
             布尔值DataFrame，表示是否在指定分位内
         """
-        result = pd.DataFrame(0.0, index=x.index, columns=x.columns)
+        result = pd.DataFrame(np.nan, index=x.index, columns=x.columns)
 
         for date in x.index:
             x_slice = x.loc[date]

@@ -446,7 +446,9 @@ class IsInf(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        return np.isinf(x)
+        from backend.elementwise_semantics import is_infinite_pandas
+
+        return is_infinite_pandas(x)
 
 
 
@@ -466,9 +468,70 @@ class IsNaN(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
+        import numpy as np
+
+        arr = x.to_numpy(dtype=np.float64, copy=False)
+        out = np.isnan(arr).astype(np.float64)
+        return pd.DataFrame(out, index=x.index, columns=x.columns)
+
+
+# canonical=is_null backend=pandas_numpy
+@register_operator(name="is_null", category="data_handling", business_category="data_cleaning", canonical="is_null", source="factor_dsl_np")
+class IsNull(SeriesOperator):
+    """判断是否为 NULL/缺失。"""
+
+    metadata = OperatorMetadata(
+        name="is_null",
+        category="data_handling",
+        description="判断是否为 NULL/缺失",
+        examples=["is_null(close)"],
+        param_names=["x"],
+        return_type="series",
+        tags=["data_handling", "missing", "check"],
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
         return x.isna().astype(float)
 
-# aliases: IS_NAN, IS_NULL, is_null
+
+# canonical=is_not_null backend=pandas_numpy
+@register_operator(name="is_not_null", category="data_handling", business_category="data_cleaning", canonical="is_not_null", source="factor_dsl_np")
+class IsNotNull(SeriesOperator):
+    """判断是否非 NULL。"""
+
+    metadata = OperatorMetadata(
+        name="is_not_null",
+        category="data_handling",
+        description="判断是否非 NULL",
+        examples=["is_not_null(close)"],
+        param_names=["x"],
+        return_type="series",
+        tags=["data_handling", "missing", "check"],
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
+        return x.notna().astype(float)
+
+
+# canonical=is_infinite backend=pandas_numpy
+@register_operator(name="is_infinite", category="data_handling", business_category="data_cleaning", canonical="is_infinite", source="factor_dsl_np")
+class IsInfinite(SeriesOperator):
+    """判断是否为 ±Inf（NULL/NaN/有限 → 0）。"""
+
+    metadata = OperatorMetadata(
+        name="is_infinite",
+        category="data_handling",
+        description="判断是否为 ±Inf",
+        examples=["is_infinite(value)"],
+        param_names=["x"],
+        return_type="series",
+        tags=["data_handling", "check"],
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
+        from backend.elementwise_semantics import is_infinite_pandas
+
+        return is_infinite_pandas(x)
 
 
 
@@ -609,9 +672,9 @@ class ProtectedDivOp(TwoVarOperator):
     )
 
     def _calculate_series(self, x, y, epsilon=1e-12, default=0.0, **kwargs):
-        denom = y.where(y.abs() > epsilon)
-        out = x / denom
-        return out.replace([np.inf, -np.inf], default).fillna(default)
+        from backend.elementwise_semantics import protected_div_pandas
+
+        return protected_div_pandas(x, y, epsilon=float(epsilon), default=float(default))
 
 
 # canonical=safe_div_null backend=pandas_numpy selected=safe_div_null source=basic_runtime
@@ -647,8 +710,66 @@ class ProtectedLogOp(SeriesOperator):
     )
 
     def _calculate_series(self, x, epsilon=1e-12, **kwargs):
-        safe = x.where(x > epsilon, other=epsilon)
-        return np.log(safe)
+        from backend.elementwise_semantics import protected_log_pandas
+
+        return protected_log_pandas(x, epsilon=float(epsilon))
+
+
+# canonical=div_or_null backend=pandas_numpy
+@register_operator(name="div_or_null", category="data_cleaning", business_category="data_cleaning", canonical="div_or_null", source="basic_runtime")
+class DivOrNullOp(TwoVarOperator):
+    """比率除法：NULL 保持 NULL（同 protected_div 新语义）。"""
+    metadata = OperatorMetadata(
+        name="div_or_null",
+        category="data_cleaning",
+        description="NULL 保持 NULL 的安全除法",
+        param_names=["x", "y", "epsilon", "default"],
+        return_type="series",
+        tags=["data_cleaning", "pit_safe"],
+    )
+
+    def _calculate_series(self, x, y, epsilon=1e-12, default=0.0, **kwargs):
+        from backend.elementwise_semantics import protected_div_pandas
+
+        return protected_div_pandas(x, y, epsilon=float(epsilon), default=float(default))
+
+
+# canonical=div_or_default backend=pandas_numpy
+@register_operator(name="div_or_default", category="data_cleaning", business_category="data_cleaning", canonical="div_or_default", source="basic_runtime")
+class DivOrDefaultOp(TwoVarOperator):
+    """除法：NULL/小分母 → default。"""
+    metadata = OperatorMetadata(
+        name="div_or_default",
+        category="data_cleaning",
+        description="NULL 或 |denom|<=epsilon 时返回 default",
+        param_names=["x", "y", "epsilon", "default"],
+        return_type="series",
+        tags=["data_cleaning"],
+    )
+
+    def _calculate_series(self, x, y, epsilon=1e-12, default=0.0, **kwargs):
+        from backend.elementwise_semantics import div_or_default_pandas
+
+        return div_or_default_pandas(x, y, epsilon=float(epsilon), default=float(default))
+
+
+# canonical=log_fill_invalid backend=pandas_numpy
+@register_operator(name="log_fill_invalid", category="data_cleaning", business_category="data_cleaning", canonical="log_fill_invalid", source="basic_runtime")
+class LogFillInvalidOp(SeriesOperator):
+    """对数：NULL/非法域 → log(epsilon)。"""
+    metadata = OperatorMetadata(
+        name="log_fill_invalid",
+        category="data_cleaning",
+        description="NULL/非法域填充 log(epsilon)",
+        param_names=["x", "epsilon"],
+        return_type="series",
+        tags=["data_cleaning"],
+    )
+
+    def _calculate_series(self, x, epsilon=1e-12, **kwargs):
+        from backend.elementwise_semantics import log_fill_invalid_pandas
+
+        return log_fill_invalid_pandas(x, epsilon=float(epsilon))
 
 
 # canonical=protected_sqrt backend=pandas_numpy selected=protected_sqrt source=basic_runtime

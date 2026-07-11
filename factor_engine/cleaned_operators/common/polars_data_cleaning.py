@@ -228,18 +228,62 @@ class ExpandingRankPolars(SeriesOperator):
 
 @register_operator(name="is_nan", category="data_handling", business_category="data_cleaning", canonical="is_nan", source="factor_dsl_polars")
 class IsNaNPolars(SeriesOperator):
-    """Polars 是否为 NaN/null"""
+    """Polars 是否为 IEEE NaN（NULL → 0）。"""
     metadata = OperatorMetadata(
-        name="is_nan", category="data_handling", description="是否为 NaN/null",
+        name="is_nan", category="data_handling", description="是否为 IEEE NaN",
         param_names=["x"], return_type="series", tags=["data_handling", "polars"],
     )
 
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        from backend.logical_semantics import is_nan_polars_expr
+
         cols = _numeric_cols(x)
-        return x.with_columns([
-            # Polars 区分 null 与 NaN；与 pandas isna() 对齐需二者皆判
-            (pl.col(c).is_null() | pl.col(c).is_nan()).cast(pl.Float64).alias(c) for c in cols
-        ])
+        return x.with_columns([is_nan_polars_expr(c).alias(c) for c in cols])
+
+
+@register_operator(name="is_null", category="data_handling", business_category="data_cleaning", canonical="is_null", source="factor_dsl_polars")
+class IsNullPolars(SeriesOperator):
+    """Polars 是否为缺失（NULL 或 IEEE NaN，与 Pandas ``isna`` 对齐）。"""
+    metadata = OperatorMetadata(
+        name="is_null", category="data_handling", description="是否为 NULL",
+        param_names=["x"], return_type="series", tags=["data_handling", "polars"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        from backend.logical_semantics import is_null_polars_expr
+
+        cols = _numeric_cols(x)
+        return x.with_columns([is_null_polars_expr(c).alias(c) for c in cols])
+
+
+@register_operator(name="is_not_null", category="data_handling", business_category="data_cleaning", canonical="is_not_null", source="factor_dsl_polars")
+class IsNotNullPolars(SeriesOperator):
+    """Polars 是否为非缺失（与 Pandas ``notna`` 对齐）。"""
+    metadata = OperatorMetadata(
+        name="is_not_null", category="data_handling", description="是否为非 NULL",
+        param_names=["x"], return_type="series", tags=["data_handling", "polars"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        from backend.logical_semantics import is_not_null_polars_expr
+
+        cols = _numeric_cols(x)
+        return x.with_columns([is_not_null_polars_expr(c).alias(c) for c in cols])
+
+
+@register_operator(name="is_infinite", category="data_handling", business_category="data_cleaning", canonical="is_infinite", source="factor_dsl_polars")
+class IsInfinitePolars(SeriesOperator):
+    """Polars 是否为 ±Inf（NULL/NaN/有限 → 0）。"""
+    metadata = OperatorMetadata(
+        name="is_infinite", category="data_handling", description="是否为 ±Inf",
+        param_names=["x"], return_type="series", tags=["data_handling", "polars"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        from backend.elementwise_semantics import is_infinite_polars_expr
+
+        cols = _numeric_cols(x)
+        return x.with_columns([is_infinite_polars_expr(c).alias(c) for c in cols])
 
 
 @register_operator(name="is_inf", category="data_handling", business_category="data_cleaning", canonical="is_inf", source="factor_dsl_polars")
@@ -251,8 +295,10 @@ class IsInfPolars(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        from backend.elementwise_semantics import is_infinite_polars_expr
+
         cols = _numeric_cols(x)
-        return x.with_columns([pl.col(c).is_infinite().cast(pl.Float64).alias(c) for c in cols])
+        return x.with_columns([is_infinite_polars_expr(c).alias(c) for c in cols])
 
 
 @register_operator(

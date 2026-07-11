@@ -17,11 +17,11 @@ def _loaded():
     yield
 
 
-def test_c_sum_all_nan_row_is_zero(_loaded):
+def test_c_sum_all_nan_row_is_null(_loaded):
     op = OperatorRegistry.get("c_sum")
     x = pd.DataFrame({"A": [np.nan, 1.0], "B": [np.nan, 2.0]})
     out = op.calculate(x)
-    assert out.iloc[0, 0] == pytest.approx(0.0)
+    assert pd.isna(out.iloc[0, 0])
     assert out.iloc[1, 0] == pytest.approx(3.0)
 
 

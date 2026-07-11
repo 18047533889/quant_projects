@@ -133,6 +133,47 @@ def _quantile_capability(node: PlanNode, *, production: bool) -> CapabilityResul
     return CapabilityResult(CapabilityLevel.RESEARCH, f"quantile interpolation={interp!r}")
 
 
+def _scale_capability(node: PlanNode, *, backend: BackendName, production: bool) -> CapabilityResult:
+    from backend.operator_evidence_schema import operator_evidence_record, supported_calls_match
+
+    to_val = _literal_at(node, 1)
+    if to_val is None:
+        for key in ("to",):
+            if key in (node.attrs or {}) and node.attrs[key] is not None:
+                to_val = node.attrs[key]
+                break
+    if to_val is None:
+        to_val = 1.0
+    try:
+        to_f = float(to_val)
+    except (TypeError, ValueError):
+        return CapabilityResult(CapabilityLevel.FORBIDDEN, f"scale(to={to_val!r}) 须为数值 literal")
+    if production and to_f != 1.0:
+        rec = operator_evidence_record("scale")
+        supported = (rec or {}).get("supported_calls") if rec else None
+        if not supported or not supported_calls_match(node, supported):
+            return CapabilityResult(
+                CapabilityLevel.RESEARCH,
+                f"scale(to={to_f}) 未在 evidence supported_calls 中认证",
+            )
+    _ = backend
+    return CapabilityResult(CapabilityLevel.PRODUCTION, f"scale(to={to_f})")
+
+
+def _backend_evidence_ok(canon: str, backend: BackendName) -> bool:
+    from backend.primitive_evidence import (
+        DUCKDB_REAL_SQL_VERIFIED,
+        NO_FALLBACK_VERIFIED,
+        POLARS_REFERENCE_PARITY_VERIFIED,
+    )
+
+    if backend in {"polars_long", "polars", "polars_panel"}:
+        return canon in POLARS_REFERENCE_PARITY_VERIFIED and canon in NO_FALLBACK_VERIFIED
+    if backend in {"duckdb_sql", "sql", "duckdb"}:
+        return canon in DUCKDB_REAL_SQL_VERIFIED
+    return True
+
+
 def check_operator_call_capability(
     canonical: str,
     *,
@@ -142,13 +183,27 @@ def check_operator_call_capability(
     backend: BackendName = "any",
     production: bool = False,
 ) -> CapabilityResult:
-    """按 canonical + 具体调用判定 capability（production gate 须调用此函数）。"""
-    _ = (args, kwargs, backend)
+    """按 canonical + 具体调用 + backend 判定 capability。"""
+    _ = (args, kwargs)
     canon = _resolve_canon(node, canonical)
+    if canon == "ts_mad":
+        return CapabilityResult(
+            CapabilityLevel.RESEARCH,
+            "ts_mad 为非标准双重滚动实现，请使用 ts_median_abs_deviation / ts_mean_abs_deviation",
+        )
+    if canon == "ts_product":
+        return CapabilityResult(
+            CapabilityLevel.RESEARCH,
+            "ts_product 尚未完成 dual-backend 证据认证",
+        )
     if canon == "fillna":
         if node is None:
             return CapabilityResult(CapabilityLevel.FORBIDDEN, "fillna 需要 plan 节点解析 method")
         return _fillna_capability(node, production=production)
+    if canon == "scale":
+        if node is None:
+            return CapabilityResult(CapabilityLevel.RESEARCH, "scale 需要 plan 节点")
+        return _scale_capability(node, backend=backend, production=production)
     if canon == "cs_regression":
         if node is None:
             return CapabilityResult(CapabilityLevel.RESEARCH, "cs_regression 需要 plan 节点解析 mode")
@@ -168,6 +223,11 @@ def check_operator_call_capability(
             return CapabilityResult(
                 CapabilityLevel.RESEARCH,
                 f"{canon} 不在第一阶段 dual-backend 证据认证集",
+            )
+        if backend not in {"any", ""} and not _backend_evidence_ok(canon, backend):
+            return CapabilityResult(
+                CapabilityLevel.RESEARCH,
+                f"{canon} 未通过 {backend} 证据认证",
             )
     return CapabilityResult(CapabilityLevel.PRODUCTION)
 

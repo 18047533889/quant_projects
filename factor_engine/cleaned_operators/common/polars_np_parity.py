@@ -34,9 +34,11 @@ if not _has_pandas("maximum"):
         )
 
         def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, **kwargs) -> pd.DataFrame:
+            from backend.elementwise_semantics import max_horizontal_pandas
+
             cols = [c for c in x.columns if c in y.columns]
             return pd.DataFrame(
-                {c: np.maximum(x[c].values, y[c].values) for c in cols},
+                {c: max_horizontal_pandas(x[c], y[c]) for c in cols},
                 index=x.index,
             )
 
@@ -62,8 +64,10 @@ if not _has_pandas("minimum"):
         )
 
         def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, **kwargs) -> pd.DataFrame:
+            from backend.elementwise_semantics import min_horizontal_pandas
+
             cols = [c for c in x.columns if c in y.columns]
             return pd.DataFrame(
-                {c: np.minimum(x[c].values, y[c].values) for c in cols},
+                {c: min_horizontal_pandas(x[c], y[c]) for c in cols},
                 index=x.index,
             )

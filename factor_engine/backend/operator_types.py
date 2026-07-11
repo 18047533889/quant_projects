@@ -174,6 +174,87 @@ OPERATOR_SIGNATURES: dict[str, OperatorSignature] = {
         "ts_argmin",
         (ArgSpec("x", TypeKind.SERIES_FLOAT), ArgSpec("window", TypeKind.WINDOW)),
     ),
+    "add": OperatorSignature(
+        "add",
+        (
+            ArgSpec("a", TypeKind.SERIES_FLOAT),
+            ArgSpec("b", TypeKind.SERIES_FLOAT),
+        ),
+    ),
+    "subtract": OperatorSignature(
+        "subtract",
+        (
+            ArgSpec("a", TypeKind.SERIES_FLOAT),
+            ArgSpec("b", TypeKind.SERIES_FLOAT),
+        ),
+    ),
+    "multiply": OperatorSignature(
+        "multiply",
+        (
+            ArgSpec("a", TypeKind.SERIES_FLOAT),
+            ArgSpec("b", TypeKind.SERIES_FLOAT),
+        ),
+    ),
+    "divide": OperatorSignature(
+        "divide",
+        (
+            ArgSpec("a", TypeKind.SERIES_FLOAT),
+            ArgSpec("b", TypeKind.SERIES_FLOAT),
+        ),
+    ),
+    "ts_delay": OperatorSignature(
+        "ts_delay",
+        (ArgSpec("x", TypeKind.SERIES_FLOAT), ArgSpec("window", TypeKind.WINDOW)),
+    ),
+    "ts_delta": OperatorSignature(
+        "ts_delta",
+        (ArgSpec("x", TypeKind.SERIES_FLOAT), ArgSpec("window", TypeKind.WINDOW)),
+    ),
+    "ts_pct": OperatorSignature(
+        "ts_pct",
+        (ArgSpec("x", TypeKind.SERIES_FLOAT), ArgSpec("window", TypeKind.WINDOW)),
+    ),
+    "ts_sum": OperatorSignature(
+        "ts_sum",
+        (ArgSpec("x", TypeKind.SERIES_FLOAT), ArgSpec("window", TypeKind.WINDOW)),
+    ),
+    "ts_max": OperatorSignature(
+        "ts_max",
+        (ArgSpec("x", TypeKind.SERIES_FLOAT), ArgSpec("window", TypeKind.WINDOW)),
+    ),
+    "ts_min": OperatorSignature(
+        "ts_min",
+        (ArgSpec("x", TypeKind.SERIES_FLOAT), ArgSpec("window", TypeKind.WINDOW)),
+    ),
+    "coalesce": OperatorSignature(
+        "coalesce",
+        (
+            ArgSpec("a", TypeKind.SERIES_FLOAT),
+            ArgSpec("b", TypeKind.SERIES_FLOAT),
+        ),
+    ),
+    "fillna_const": OperatorSignature(
+        "fillna_const",
+        (
+            ArgSpec("x", TypeKind.SERIES_FLOAT),
+            ArgSpec("value", TypeKind.SCALAR_FLOAT, allow_scalar_broadcast=True),
+        ),
+    ),
+    "and_": OperatorSignature(
+        "and_",
+        (
+            ArgSpec("a", TypeKind.SERIES_FLOAT),
+            ArgSpec("b", TypeKind.SERIES_FLOAT),
+        ),
+    ),
+    "or_": OperatorSignature(
+        "or_",
+        (
+            ArgSpec("a", TypeKind.SERIES_FLOAT),
+            ArgSpec("b", TypeKind.SERIES_FLOAT),
+        ),
+    ),
+    "not_": OperatorSignature("not_", (ArgSpec("x", TypeKind.SERIES_FLOAT),)),
 }
 
 

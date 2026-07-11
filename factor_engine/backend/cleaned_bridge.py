@@ -513,19 +513,11 @@ def build_cleaned_dsl_allowlist(skip: set[str] | None = None) -> dict[str, Any]:
 
 
 def build_production_dsl_allowlist(skip: set[str] | None = None) -> dict[str, Any]:
-    """构建 production 投递白名单：仅 ``OperatorSpec.allow_in_production`` 为真的算子。
+    """构建 production 投递白名单：仅 ``PRODUCTION_CORE`` 内且 ``allow_in_production`` 为真的算子。
 
-    参数
-    ----
-    skip : set[str] | None
-        需要排除的算子名集合，默认空集。
-
-    返回
-    ----
-    dict[str, Any]
-        通过 production 策略过滤后的 DSL 白名单。
+    composite 虽可在 execution gate 放行，但不得进入 DSL 投递白名单（fail-closed）。
     """
-    from cleaned_operators.operator_spec import build_operator_spec
+    from cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS, build_operator_spec
 
     full = build_cleaned_dsl_allowlist(skip)
     from cleaned_operators.registry import OperatorRegistry
@@ -533,6 +525,8 @@ def build_production_dsl_allowlist(skip: set[str] | None = None) -> dict[str, An
     out: dict[str, Any] = {}
     for name, factory in full.items():
         canon = OperatorRegistry._aliases.get(name, name)
+        if canon not in PRODUCTION_CORE_CANONICALS:
+            continue
         spec = build_operator_spec(canon)
         if spec is not None and spec.allow_in_production:
             out[name] = factory

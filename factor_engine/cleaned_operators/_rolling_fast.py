@@ -262,9 +262,12 @@ def rolling_beta(
 返回:
     Beta 系数 panel。
 """
-    cov = y.rolling(window=window, min_periods=min_periods).cov(x)
-    var = x.rolling(window=window, min_periods=min_periods).var()
-    return cov / var
+    valid = y.notna() & x.notna()
+    y_m = y.where(valid)
+    x_m = x.where(valid)
+    cov = y_m.rolling(window=window, min_periods=min_periods).cov(x_m)
+    var = x_m.rolling(window=window, min_periods=min_periods).var()
+    return (cov / var.replace(0, np.nan)).where(valid)
 
 
 def _rolling_top_bottom_1d_numpy(

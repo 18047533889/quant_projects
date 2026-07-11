@@ -7,7 +7,7 @@ from backend.numeric_semantics import semantics_for, std_ddof_value
 
 def test_protected_div_semantics():
     sem = semantics_for("protected_div")
-    assert sem.div_zero == "default"
+    assert sem.div_zero == "null"
 
 
 def test_ts_std_sample_ddof():

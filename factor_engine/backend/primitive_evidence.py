@@ -26,6 +26,9 @@ POLARS_EDGE_VERIFIED: frozenset[str] = _set("polars_edge_verified")
 DUCKDB_REFERENCE_PARITY_VERIFIED: frozenset[str] = _set("duckdb_reference_parity")
 DUCKDB_REAL_SQL_VERIFIED: frozenset[str] = _set("duckdb_real_sql_verified")
 DUCKDB_EDGE_VERIFIED: frozenset[str] = _set("duckdb_edge_verified")
+DUCKDB_NULL_EDGE_VERIFIED: frozenset[str] = _set("duckdb_null_edge_verified")
+DUCKDB_NAN_EDGE_VERIFIED: frozenset[str] = _set("duckdb_nan_edge_verified")
+DUCKDB_INF_EDGE_VERIFIED: frozenset[str] = _set("duckdb_inf_edge_verified")
 # PolarsLong no-Pandas fallback（DuckDB 无 fallback 隐含于 real-SQL parity helper）
 POLARS_NO_FALLBACK_VERIFIED: frozenset[str] = _set("no_fallback_verified")
 NO_FALLBACK_VERIFIED: frozenset[str] = POLARS_NO_FALLBACK_VERIFIED

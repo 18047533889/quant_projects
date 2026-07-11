@@ -17,7 +17,8 @@
     "quick_ratio",
     "debt_to_equity",
     "real_turnover_rate",
-    "micro_spread"
+    "micro_spread",
+    "ts_ratio"
   ],
   "lowered_polars_native": [
     "MOM",
@@ -35,7 +36,8 @@
     "quick_ratio",
     "debt_to_equity",
     "real_turnover_rate",
-    "micro_spread"
+    "micro_spread",
+    "ts_ratio"
   ],
   "lowered_duckdb_real_sql": [
     "MOM",
@@ -53,7 +55,8 @@
     "quick_ratio",
     "debt_to_equity",
     "real_turnover_rate",
-    "micro_spread"
+    "micro_spread",
+    "ts_ratio"
   ],
   "edge_verified": [
     "MOM",

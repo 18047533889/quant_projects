@@ -134,10 +134,22 @@ def _load_evidence(path: Path) -> dict[str, list[str]]:
 
 
 def _write_primitive_evidence(canon: str, stage: CertStage) -> None:
+    from backend.operator_evidence_schema import compute_implementation_hash
+
     data = _load_evidence(EVIDENCE_JSON)
     key = stage.value
     items = sorted(set(data.get(key, [])) | {canon})
     data[key] = items
+    operators = data.setdefault("operators", {})
+    rec = operators.setdefault(canon, {"semantic_version": "1.0.0"})
+    if stage in {CertStage.POLARS_REFERENCE, CertStage.POLARS_EDGE, CertStage.NO_FALLBACK}:
+        emitter = FE_ROOT / "backend" / "polars_expr_emitter.py"
+        if emitter.is_file():
+            rec["implementation_hash_polars"] = compute_implementation_hash(emitter.read_text(encoding="utf-8"))
+    if stage in {CertStage.DUCKDB_REFERENCE, CertStage.DUCKDB_REAL_SQL, CertStage.DUCKDB_EDGE}:
+        emitter = FE_ROOT / "backend" / "sql_pushdown" / "emitter.py"
+        if emitter.is_file():
+            rec["implementation_hash_duckdb"] = compute_implementation_hash(emitter.read_text(encoding="utf-8"))
     EVIDENCE_JSON.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 

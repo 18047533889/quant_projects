@@ -51,4 +51,4 @@ def test_production_allowed_equals_core_plus_composites():
     composites = production_allowed_composite_canonicals()
     expected = PRODUCTION_CORE_CANONICALS | composites
     assert production_allowed_canonicals() == expected
-    assert composites <= {"BollingerBands"}, "composite production 须 lowering primitive 全部六证后才放行"
+    assert len(composites) >= 9, "composite production 须 lowering primitive 全部六证后才放行"

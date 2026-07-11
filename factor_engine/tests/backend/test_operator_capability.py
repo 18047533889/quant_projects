@@ -79,7 +79,7 @@ def test_production_fast_path_whitelist(loaded):
     assert is_production_fast_path("ts_mean")
     assert not is_production_fast_path("RSI_WILDER")
     assert not is_production_fast_path("cs_resid")
-    assert not is_production_fast_path("ffill")
+    assert not is_production_fast_path("ts_sharpe")
     summary = summarize_production_fast_path()
     assert summary["primitive_dual_backend_evidence_count"] >= 5
     assert "rank" in summary["production_fast_path"]

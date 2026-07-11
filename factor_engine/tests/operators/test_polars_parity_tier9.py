@@ -109,6 +109,8 @@ def _parity_exprs():
         "signed_log": make_cleaned_call_factory("signed_log")(x),
         "log_abs": make_cleaned_call_factory("log_abs")(x),
         "is_nan": make_cleaned_call_factory("is_nan")(z),
+        "is_null": make_cleaned_call_factory("is_null")(z),
+        "is_not_null": make_cleaned_call_factory("is_not_null")(z),
         "gt": gt(x, y),
         "lt": make_cleaned_call_factory("lt")(x, y),
         "ge": make_cleaned_call_factory("ge")(x, y),

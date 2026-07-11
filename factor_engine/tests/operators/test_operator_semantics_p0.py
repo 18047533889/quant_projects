@@ -82,6 +82,7 @@ def test_cs_rank_01_single_value_row():
     x = pd.DataFrame({"A": [5.0], "B": [np.nan]})
     out = cs_rank_01(x)
     assert out.loc[0, "A"] == pytest.approx(0.5)
+    assert pd.isna(out.loc[0, "B"])
 
 
 def test_vwap_zero_volume_is_nan(_loaded):

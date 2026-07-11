@@ -709,8 +709,10 @@ class IsFinitePolars(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        from backend.elementwise_semantics import is_finite_polars_expr
+
         cols = _numeric_cols(x)
-        return x.with_columns([pl.col(c).is_finite().cast(pl.Float64).alias(c) for c in cols])
+        return x.with_columns([is_finite_polars_expr(c).alias(c) for c in cols])
 
 
 @register_operator(name="saturate", category="signal", business_category="technical_signal", canonical="saturate", source="factor_dsl_polars")

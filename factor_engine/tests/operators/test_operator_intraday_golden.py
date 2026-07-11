@@ -30,11 +30,11 @@ def test_ts_sharpe_insufficient_window(_loaded):
     assert out.isna().all().all()
 
 
-def test_ts_sharpe_positive_when_stable_positive_returns(_loaded):
+def test_ts_sharpe_zero_std_is_null_for_constant_returns(_loaded):
     op = OperatorRegistry.get("ts_sharpe")
     ret = pd.DataFrame({"A": [0.01] * 30})
     out = op.calculate(ret, window=20, min_periods=5)
-    assert out.iloc[-1, 0] > 0
+    assert pd.isna(out.iloc[-1, 0])
 
 
 def test_ts_autocorr_perfect_for_monotonic_series(_loaded):

@@ -23,28 +23,28 @@ def _row(canon: str):
 
 
 ACCEPTANCE_DUAL_BACKEND = [
+    "add",
+    "cs_pct_rank",
     "group_zscore",
+    "multiply",
+    "power",
     "protected_div",
     "protected_log",
     "rank",
+    "subtract",
+    "ts_delta",
     "ts_std",
-    "zscore",
-]
-
-ACCEPTANCE_POLARS_ONLY = [
-    "add",
-    "where",
     "vwap",
+    "where",
+    "zscore",
     "c_mean",
-    "cs_pct_rank",
-    "power",
     "ts_zscore",
 ]
 
+ACCEPTANCE_POLARS_ONLY: list[str] = []
+
 ACCEPTANCE_P1_NOT_PRODUCTION = [
-    "ts_rank",
     "ts_sharpe",
-    "ts_autocorr",
     "cs_resid",
     "cs_regression",
     "rolling_beta",

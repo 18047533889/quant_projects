@@ -8,6 +8,7 @@ from tests.backend_parity.test_production_core_triple_parity import (
     DUCKDB_CASES,
     _col,
     _memory_source,
+    _result_series,
     _run,
     _seed_duckdb_panel,
     _write_duckdb_registry,
@@ -41,7 +42,7 @@ EXTRA_DUCKDB_CASES = [
     (
         "where",
         lambda: make_cleaned_call_factory("where")(
-            make_cleaned_call_factory("gt")(_col("close"), 0),
+            make_cleaned_call_factory("gt")(_col("close"), 0.0),
             _col("close"),
             _col("volume"),
         ),
@@ -58,7 +59,7 @@ def test_duckdb_real_dataset_pushdown_matches_pandas(duckdb_source, name, expr_b
     from runtime.engine import FactorEngine
 
     expr = expr_builder()
-    pd_out = _run(duckdb_source, expr, "pandas")
+    pd_out = _result_series(_run(duckdb_source, expr, "pandas"))
     from backend.factory import build_backend
 
     out = FactorEngine(
@@ -98,7 +99,7 @@ def test_auto_long_hybrid_matches_pandas(duckdb_source):
         "polars_long_native",
         "polars_long",
     }, route
-    pd_out = _run(duckdb_source, expr, "pandas")
+    pd_out = _result_series(_run(duckdb_source, expr, "pandas"))
     import pandas as pd
 
     pd.testing.assert_series_equal(

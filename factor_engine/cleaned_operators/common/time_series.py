@@ -277,7 +277,13 @@ class MovingBeta(SeriesOperator):
     )
 
     def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
-        return y.rolling(window=window, min_periods=1).cov(x) / x.rolling(window=window, min_periods=1).var()
+        mp = max(int(kwargs.get("min_periods", 2)), 2)
+        valid = y.notna() & x.notna()
+        y_m = y.where(valid)
+        x_m = x.where(valid)
+        cov = y_m.rolling(window=window, min_periods=mp).cov(x_m)
+        var = x_m.rolling(window=window, min_periods=mp).var()
+        return (cov / var.replace(0, np.nan)).where(valid)
 
 
 
@@ -432,8 +438,13 @@ class TSSharpe(SeriesOperator):
         std = x.rolling(window=w, min_periods=mp).std(ddof=1)
         zero_vol = std.eq(0) | std.isna()
         sharpe = mean / std.replace(0, np.nan)
-        sharpe = sharpe.mask(zero_vol & mean.gt(0), np.inf)
-        sharpe = sharpe.mask(zero_vol & mean.le(0), 0.0)
+        from backend.numeric_semantics import ts_sharpe_zero_std_is_null
+
+        if ts_sharpe_zero_std_is_null():
+            sharpe = sharpe.mask(zero_vol, np.nan)
+        else:
+            sharpe = sharpe.mask(zero_vol & mean.gt(0), np.inf)
+            sharpe = sharpe.mask(zero_vol & mean.le(0), 0.0)
         return sharpe * np.sqrt(float(ann_factor))
 
 
@@ -661,7 +672,8 @@ class TSCorrelation(SeriesOperator):
                     return pd.DataFrame(fast, index=x.index, columns=x.columns)
             except Exception:
                 pass
-        return x.rolling(window=window, min_periods=2).corr(y)
+        valid = x.notna() & y.notna()
+        return x.rolling(window=window, min_periods=2).corr(y).where(valid)
 
 @register_operator(name="ts_corr", category="time_series", business_category="time_series", canonical="ts_corr", source="factor_dsl_np")
 class TSCorr(TSCorrelation):
@@ -692,7 +704,8 @@ class TSCov(SeriesOperator):
         tags=["time_series", "ts_", "cov"]
     )
     def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
-        return x.rolling(window=window, min_periods=2).cov(y)
+        valid = x.notna() & y.notna()
+        return x.rolling(window=window, min_periods=2).cov(y).where(valid)
 
 # aliases: TS_COV, m_cov, ts_covariance
 
@@ -898,16 +911,19 @@ class TSRank(SeriesOperator):
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
         from backend.routing import numba_enabled_for_op
 
+        min_periods = max(int(kwargs.get("min_periods", 1)), 1)
         if numba_enabled_for_op("ts_rank", window=int(window)):
             try:
                 from backend.numba_kernels import rolling_rank_pct_panel
 
-                fast = rolling_rank_pct_panel(x.to_numpy(dtype=float), int(window), min_count=1)
+                fast = rolling_rank_pct_panel(
+                    x.to_numpy(dtype=float), int(window), min_count=min_periods
+                )
                 if fast is not None:
                     return pd.DataFrame(fast, index=x.index, columns=x.columns)
             except Exception:
                 pass
-        return x.rolling(window=window, min_periods=1).rank(pct=True)
+        return x.rolling(window=window, min_periods=min_periods).rank(pct=True)
 
 # aliases: TS_RANK, m_rank
 

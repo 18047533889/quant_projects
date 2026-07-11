@@ -37,4 +37,4 @@ def test_p1_extended_tier(_loaded):
         elif canon in P1_EXTENDED_CUM_PRODUCTION_SAFE:
             assert tier == "native", canon
         else:
-            assert tier in {"native", "python_rolling"}, canon
+            assert tier in {"native", "python_rolling", "nonstandard_alg", "stateful", "map_groups"}, canon

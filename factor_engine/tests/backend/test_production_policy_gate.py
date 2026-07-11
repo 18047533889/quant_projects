@@ -62,15 +62,25 @@ def test_formula_gate_rejects_current_ratio_even_if_lowered(_loaded):
     assert any("current_ratio" in v for v in result.violations)
 
 
-def test_formula_gate_rejects_mom_until_primitives_certified(_loaded):
-    """MOM 证据齐全但 lowering primitive 未全部 production 认证，不得放行。"""
+def test_formula_gate_accepts_mom_when_primitives_certified(_loaded):
+    """MOM lowering primitive 已全部六证后应放行。"""
     result = check_production_fastpath_formula_ops(
         "MOM(col('close'), 5)",
         use_real_plan=True,
         check_full_plan=False,
     )
+    assert result.ok, result.violations
+
+
+def test_formula_gate_rejects_pending_fundamental_composite(_loaded):
+    """基本面 composite 在 production_policy=pending 时不得放行。"""
+    result = check_production_fastpath_formula_ops(
+        "current_ratio(col('close'), col('open'))",
+        use_real_plan=True,
+        check_full_plan=False,
+    )
     assert not result.ok
-    assert any("MOM" in v for v in result.violations)
+    assert any("current_ratio" in v for v in result.violations)
 
 
 def test_formula_gate_accepts_rank_primitive(_loaded):

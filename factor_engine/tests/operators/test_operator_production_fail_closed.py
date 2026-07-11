@@ -46,12 +46,14 @@ def test_research_core_micro_not_production(_loaded):
 
 
 def test_production_allowed_subset_of_core(_loaded):
+    from cleaned_operators.operator_spec import production_allowed_composite_canonicals
+
     allowed = production_allowed_canonicals()
-    assert allowed <= PRODUCTION_CORE_CANONICALS
+    composites = production_allowed_composite_canonicals()
+    assert allowed <= PRODUCTION_CORE_CANONICALS | composites
     assert "ts_mean" in allowed
     assert "rank" in allowed
     assert "MACD" not in allowed
-    assert len(allowed) <= len(PRODUCTION_CORE_CANONICALS)
 
 
 def test_production_dsl_allowlist_is_core_only(_loaded):

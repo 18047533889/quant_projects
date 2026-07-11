@@ -92,9 +92,10 @@ def _ensure_lowerings_loaded() -> None:
         fundamental,
         microstructure,
         technical,
+        timeseries,
     )
 
-    _ = fundamental, microstructure, technical
+    _ = fundamental, microstructure, technical, timeseries
     _LOWERINGS_LOADED = True
 
 

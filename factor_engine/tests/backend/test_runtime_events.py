@@ -58,9 +58,12 @@ def test_rollup_runtime_fields_merges_latest():
     assert rolled.get("runtime_event_count") == 1
 
 
-def test_winsorize_native_tier_implemented():
-    assert polars_long_production_tier("winsorize") == "implemented"
-    assert not is_polars_long_native_production_safe("winsorize")
+def test_winsorize_native_tier_production_safe():
+    from backend.polars_long_production import polars_long_production_tier
+
+    tier = polars_long_production_tier("winsorize")
+    assert tier == "production_safe"
+    assert is_polars_long_native_production_safe("winsorize")
 
 
 def test_ts_std_native_tier_production_safe():

@@ -31,7 +31,7 @@ def test_p0_not_auto_production_without_evidence(_loaded):
     from backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
 
     p0_only = P0_PRODUCTION_FASTPATH_CANONICALS - PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
-    assert len(p0_only) > 10
+    assert len(p0_only) >= 3
     assert not is_polars_long_native_production_safe("fillna")
 
 
@@ -43,7 +43,8 @@ def test_p1_group_dual_backend_subset(_loaded):
     assert is_polars_long_native_production_safe("group_zscore")
     assert "group_mean" in PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
     assert is_polars_long_native_production_safe("group_mean")
-    assert not is_polars_long_native_production_safe("group_rank")
+    assert "group_rank" in PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+    assert is_polars_long_native_production_safe("group_rank")
 
 
 def test_p1_robust_winsorize_dual_backend(_loaded):
@@ -57,8 +58,8 @@ def test_p1_robust_winsorize_dual_backend(_loaded):
     assert "group_winsorize" in DUCKDB_REAL_SQL_VERIFIED
     assert "group_winsorize" in PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
     assert is_polars_long_native_production_safe("group_winsorize")
-    assert not effective_sql_production_safe("winsorize")
-    assert not is_polars_long_native_production_safe("winsorize")
+    assert effective_sql_production_safe("winsorize")
+    assert is_polars_long_native_production_safe("winsorize")
 
 
 def test_p1_regression_not_production_safe(_loaded):

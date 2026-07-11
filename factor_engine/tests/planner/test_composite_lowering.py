@@ -84,7 +84,7 @@ def test_composite_dual_backend_capable_mom():
     from cleaned_operators import load_all
 
     load_all()
-    assert composite_dual_backend_capable("MOM") is False
+    assert composite_dual_backend_capable("MOM") is True
 
 
 def test_collect_plan_ops_after_lowering():
@@ -206,4 +206,4 @@ def test_composite_dual_backend_capable_obv():
     from cleaned_operators import load_all
 
     load_all()
-    assert composite_dual_backend_capable("OBV") is False
+    assert composite_dual_backend_capable("OBV") is True

@@ -2332,17 +2332,18 @@ class Coalesce(SeriesOperator):
     )
 
     def _calculate_series(self, *args, **kwargs) -> pd.DataFrame:
-        from cleaned_operators._numpy_kernels import coalesce_
-
         if len(args) < 2:
-            raise ValueError("coalesce 至少需要两个 panel 参数")
-        base = args[0]
-        result = base.copy()
+            raise ValueError("coalesce 至少需要两个参数")
+        result = args[0].copy()
         for other in args[1:]:
-            for idx in result.index:
-                for col in result.columns:
-                    if col in other.columns and pd.isna(result.at[idx, col]):
-                        result.at[idx, col] = other.at[idx, col]
+            if isinstance(other, pd.DataFrame):
+                for idx in result.index:
+                    for col in result.columns:
+                        if col in other.columns and pd.isna(result.at[idx, col]):
+                            result.at[idx, col] = other.at[idx, col]
+            else:
+                fill = np.nan if other is None else float(other)
+                result = result.fillna(fill)
         return result
 
 # canonical=add backend=pandas_numpy selected=add source=basic_runtime
@@ -2437,7 +2438,9 @@ class LtOp(TwoVarOperator):
     )
 
     def _calculate_series(self, x, y, **kwargs):
-        return (x < y).astype(float)
+        from backend.elementwise_semantics import compare_pandas
+
+        return compare_pandas("lt", x, y)
 
 
 # canonical=le backend=pandas_numpy selected=le source=basic_runtime
@@ -2453,7 +2456,9 @@ class LeOp(TwoVarOperator):
     )
 
     def _calculate_series(self, x, y, **kwargs):
-        return (x <= y).astype(float)
+        from backend.elementwise_semantics import compare_pandas
+
+        return compare_pandas("le", x, y)
 
 
 # canonical=eq backend=pandas_numpy selected=eq source=basic_runtime
@@ -2469,7 +2474,9 @@ class EqOp(TwoVarOperator):
     )
 
     def _calculate_series(self, x, y, **kwargs):
-        return (x == y).astype(float)
+        from backend.elementwise_semantics import compare_pandas
+
+        return compare_pandas("eq", x, y)
 
 
 # canonical=gt backend=pandas_numpy selected=gt source=basic_runtime
@@ -2485,7 +2492,9 @@ class GtOp(TwoVarOperator):
     )
 
     def _calculate_series(self, x, y, **kwargs):
-        return (x > y).astype(float)
+        from backend.elementwise_semantics import compare_pandas
+
+        return compare_pandas("gt", x, y)
 
 
 # canonical=ge backend=pandas_numpy selected=ge source=basic_runtime
@@ -2501,7 +2510,9 @@ class GeOp(TwoVarOperator):
     )
 
     def _calculate_series(self, x, y, **kwargs):
-        return (x >= y).astype(float)
+        from backend.elementwise_semantics import compare_pandas
+
+        return compare_pandas("ge", x, y)
 
 
 # canonical=ne backend=pandas_numpy selected=ne source=basic_runtime
@@ -2517,12 +2528,20 @@ class NeOp(TwoVarOperator):
     )
 
     def _calculate_series(self, x, y, **kwargs):
-        return (x != y).astype(float)
+        from backend.elementwise_semantics import compare_pandas
+
+        return compare_pandas("ne", x, y)
 
 
 def _truthy_series(x: pd.Series | pd.DataFrame) -> pd.Series | pd.DataFrame:
-    """非空且非零为真；NULL/NaN 视为 false（与 Polars/SQL fast path 一致）。"""
-    return x.notna() & (x != 0)
+    """非空、非 NaN、非零为真（与 Polars/SQL fast path 一致）。"""
+    import numpy as np
+
+    not_null = x.notna()
+    if isinstance(x, pd.Series) and pd.api.types.is_float_dtype(x.dtype):
+        not_nan = ~np.isnan(x.to_numpy())
+        return not_null & pd.Series(not_nan, index=x.index) & (x != 0)
+    return not_null & (x != 0)
 
 
 # canonical=and_ backend=pandas_numpy selected=and_ source=basic_runtime

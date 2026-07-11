@@ -201,10 +201,10 @@ def _build_call_args(
 
 
 def _join_series_frames(frames: list[pl.LazyFrame], col_names: list[str]) -> pl.LazyFrame:
-    """按 ``(ts, inst)`` 内连接多路子节点 LazyFrame，列重命名为 ``_a0, _a1, ...``。"""
+    """按 ``(ts, inst)`` anchor LEFT JOIN 多路子节点 LazyFrame。"""
     out = frames[0].rename({_VAL: col_names[0]})
     for lf, name in zip(frames[1:], col_names[1:]):
-        out = out.join(lf.rename({_VAL: name}), on=[_TS, _INST], how="inner")
+        out = out.join(lf.rename({_VAL: name}), on=[_TS, _INST], how="left")
     return out
 
 

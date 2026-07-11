@@ -148,6 +148,7 @@ _COSTS: dict[str, OperatorCost] = {
     "ts_sharpe": OperatorCost("O(NW)", "medium", True, 1, True, True),
     "ts_autocorr": OperatorCost("O(NW)", "medium", True, 1, True, True),
     "protected_div": OperatorCost("O(N)", "low", True, 2, True, False),
+    "safe_div_null": OperatorCost("O(N)", "low", True, 2, True, False),
     "protected_log": OperatorCost("O(N)", "low", True, 2, True, False),
     "protected_sqrt": OperatorCost("O(N)", "low", True, 2, True, False),
     "ts_zscore": OperatorCost("O(NW)", "medium", True, 1, True, True),

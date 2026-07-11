@@ -286,7 +286,11 @@ def test_rank_skips_null_in_sql():
         dialect=SqlDialect.DUCKDB,
     )
     assert compiled is not None
-    assert "WHEN b._v IS NULL THEN NULL" in compiled.query or "isNull(b._v)" in compiled.query
+    assert (
+        "WHEN b._v IS NULL THEN NULL" in compiled.query
+        or "isNull(b._v)" in compiled.query
+        or "(b._v IS NULL OR isnan(b._v))" in compiled.query
+    )
     assert "cnt_le" in compiled.query or "countIf" in compiled.query
 
 
@@ -305,7 +309,11 @@ def test_group_rank_skips_null_in_sql():
         dialect=SqlDialect.DUCKDB,
     )
     assert compiled is not None
-    assert "CASE WHEN b._v IS NULL THEN NULL" in compiled.query
+    assert (
+        "CASE WHEN b._v IS NULL THEN NULL" in compiled.query
+        or "(b._v IS NULL OR isnan(b._v))" in compiled.query
+        or "isNull(b._v)" in compiled.query
+    )
     assert "_grp" in compiled.query
 
 
@@ -410,7 +418,7 @@ def test_protected_div_sql():
         dialect=SqlDialect.DUCKDB,
     )
     assert compiled is not None
-    assert "COALESCE" in compiled.query
+    assert "CASE WHEN l._v IS NULL OR r._v IS NULL THEN NULL" in compiled.query
     assert "CASE WHEN l._v IS NULL" in compiled.query
 
 
@@ -512,6 +520,23 @@ def test_is_nan_sql():
     )
     assert compiled is not None
     assert "isnan(_v)" in compiled.query
+    assert "IS NULL THEN 0.0" in compiled.query
+
+
+def test_is_null_sql():
+    from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+
+    plan = PlanNode(op="is_null", inputs=[_col("close")])
+    assert plan_is_sql_capable(plan)
+    compiled = compile_plan_to_sql(
+        plan,
+        dataset="d",
+        time_column="t",
+        instrument_column="i",
+        dialect=SqlDialect.DUCKDB,
+    )
+    assert compiled is not None
+    assert "IS NULL OR isnan(_v) THEN 1.0" in compiled.query
 
 
 def test_is_finite_sql():
@@ -568,7 +593,7 @@ def test_where_numeric_condition_sql():
         dialect=SqlDialect.DUCKDB,
     )
     assert compiled is not None
-    assert "c._v IS NOT NULL AND c._v <> 0" in compiled.query
+    assert "isnan(c._v)" in compiled.query or "NOT isnan(c._v)" in compiled.query
 
 
 def test_normalize_sql():
@@ -640,7 +665,7 @@ def test_group_percentile_sql():
         dialect=SqlDialect.DUCKDB,
     )
     assert compiled is not None
-    assert "WHEN b._oval IS NULL THEN 0.0" in compiled.query
+    assert "WHEN b._oval IS NULL THEN NULL" in compiled.query
     assert "cnt_le" in compiled.query or "COUNT(*) FILTER" in compiled.query
 
 

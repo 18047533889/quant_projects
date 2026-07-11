@@ -17,7 +17,12 @@
 """
 from __future__ import annotations
 
-from cleaned_operators.common.cs_broadcast import broadcast_row_stat, cs_rank_01, cs_rank_pct
+from cleaned_operators.common.cs_broadcast import (
+    broadcast_row_stat,
+    broadcast_row_stat_all_null_null,
+    cs_rank_01,
+    cs_rank_pct,
+)
 from cleaned_operators.base import (
     Operator,
     OperatorMetadata,
@@ -74,7 +79,7 @@ class CrossSectionalMean(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        return broadcast_row_stat(x, x.mean(axis=1))
+        return broadcast_row_stat_all_null_null(x, x.mean(axis=1))
 
 
 
@@ -115,7 +120,7 @@ class CrossSectionalStd(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        return broadcast_row_stat(x, x.std(axis=1))
+        return broadcast_row_stat_all_null_null(x, x.std(axis=1))
 
 
 @register_operator(name="cs_mad", category="cross_sectional", business_category="cross_sectional", canonical="cs_mad", source="factor_dsl_np")
@@ -172,7 +177,7 @@ class CrossSectionalSum(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        return broadcast_row_stat(x, x.sum(axis=1))
+        return broadcast_row_stat_all_null_null(x, x.sum(axis=1))
 
 
 

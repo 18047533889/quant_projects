@@ -41,16 +41,19 @@ def _git_sha() -> str:
 
 
 def _default_semantics(canon: str, policy_row: dict) -> dict:
+    from backend.numeric_semantics import rank_tie_method, semantics_for
+
     scope = str(policy_row.get("scope") or "elementwise")
+    sem = semantics_for(canon)
     return {
         "scope": scope,
         "null_policy": "propagate",
         "nan_policy": "propagate",
-        "inf_policy": "domain_specific",
+        "inf_policy": "to_nan" if sem.output_inf_to_nan else "propagate",
         "min_periods": policy_row.get("min_periods", 1 if scope == "ts" else None),
-        "ddof": 1 if canon in {"ts_std", "ts_var", "group_std"} else None,
-        "tie_policy": "average" if "rank" in canon else None,
-        "zero_denominator": "null" if "div" in canon or canon.endswith("_beta") else None,
+        "ddof": 1 if sem.std_ddof == "sample" and canon in {"ts_std", "ts_var", "group_std"} else None,
+        "tie_policy": rank_tie_method(canon) if "rank" in canon or canon in {"ts_rank", "ts_argmax", "ts_argmin"} else None,
+        "zero_denominator": sem.div_zero if "div" in canon or canon.endswith("_beta") else None,
         "return_type": "float64",
     }
 

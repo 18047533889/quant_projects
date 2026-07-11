@@ -68,10 +68,22 @@ def _window_spec(node: PlanNode, default: int = 3):
 
 
 def _float_attr(node: PlanNode, *keys: str, default: float) -> float:
-    """从 attrs 中按候选键读取浮点参数。"""
+    """从 attrs 中按候选键读取有限浮点参数。"""
+    from backend.plan_params import PlanParamError, parse_finite_float, parse_unit_interval
+
     for key in keys:
-        if key in node.attrs and node.attrs[key] is not None:
-            return float(node.attrs[key])
+        if key in (node.attrs or {}) and node.attrs[key] is not None:
+            raw = node.attrs[key]
+            if key in {"p", "q", "lo", "hi", "min_pct", "max_pct", "lower", "upper"}:
+                try:
+                    return parse_unit_interval(raw, label=key)
+                except PlanParamError:
+                    return default
+            try:
+                need_pos = key in {"epsilon", "eps", "to", "ann_factor"}
+                return parse_finite_float(raw, label=key, gt=0.0 if need_pos else None)
+            except PlanParamError:
+                return default
     return default
 
 
@@ -114,9 +126,12 @@ def _clip_bounds(node: PlanNode, *, default_lo: float = -3.0, default_hi: float 
     return lo, hi
 
 
-def _truthy_sql(value_col: str) -> str:
-    """浮点条件真值（对齐 pandas ``bool(0.0)==False``）。"""
-    return f"({value_col} IS NOT NULL AND {value_col} <> 0)"
+def _truthy_sql(value_col: str, *, dialect: SqlDialect | None = None) -> str:
+    """浮点条件真值：NULL/NaN/0 → false。"""
+    from backend.logical_semantics import truthy_sql
+
+    is_ch = dialect == SqlDialect.CLICKHOUSE if dialect is not None else False
+    return truthy_sql(value_col, dialect_is_clickhouse=is_ch)
 
 
 def _const_fill_value(node: PlanNode, *, default: float | None = None) -> float | None:
@@ -383,31 +398,47 @@ def _average_rank_frac_correlated(
     numbered_sql: str,
     row_alias: str,
     dialect: SqlDialect,
+    exclude_nan: bool = True,
 ) -> str:
     """pandas ``rank(method='average', pct=True)`` 相关子查询表达式。"""
+    from backend.stat_valid import row_stat_invalid_sql, stat_valid_sql
+
     match = " AND ".join(f"p.{k} = {row_alias}.{k}" for k in partition_keys)
+    valid = stat_valid_sql("p._v", dialect=dialect, exclude_nan=exclude_nan)
+    invalid_row = row_stat_invalid_sql(row_value_col, dialect=dialect, exclude_nan=exclude_nan)
+    cnt_subq = (
+        f"(SELECT COUNT(*) FILTER (WHERE {valid}) "
+        f"FROM ({numbered_sql}) p WHERE {match})"
+    )
     if dialect == SqlDialect.CLICKHOUSE:
+        valid_ch = valid.replace("p._v", "p._v")
         return (
-            f"if({row_value_col} IS NULL, NULL, ("
+            f"multiIf("
+            f"{invalid_row}, NULL, "
+            f"{cnt_subq} = 0, NULL, "
+            f"("
             f"SELECT if(s.cnt = 0, NULL, (s.cnt_le - (s.cnt_eq - 1) / 2.0) / s.cnt) "
             f"FROM ("
             f"SELECT "
-            f"countIf(p._v IS NOT NULL) AS cnt, "
-            f"countIf(p._v IS NOT NULL AND p._v <= {row_value_col}) AS cnt_le, "
-            f"countIf(p._v IS NOT NULL AND p._v = {row_value_col}) AS cnt_eq "
+            f"countIf({valid_ch}) AS cnt, "
+            f"countIf({valid_ch} AND p._v <= {row_value_col}) AS cnt_le, "
+            f"countIf({valid_ch} AND p._v = {row_value_col}) AS cnt_eq "
             f"FROM ({numbered_sql}) p WHERE {match}"
             f") s"
-            f"))"
+            f")"
+            f")"
         )
     return (
-        f"CASE WHEN {row_value_col} IS NULL THEN NULL ELSE ("
+        f"CASE WHEN {invalid_row} THEN NULL "
+        f"WHEN {cnt_subq} = 0 THEN NULL "
+        f"ELSE ("
         f"SELECT CASE WHEN s.cnt = 0 THEN NULL "
         f"ELSE (s.cnt_le - (s.cnt_eq - 1) / 2.0) / s.cnt END "
         f"FROM ("
         f"SELECT "
-        f"COUNT(*) FILTER (WHERE p._v IS NOT NULL) AS cnt, "
-        f"COUNT(*) FILTER (WHERE p._v IS NOT NULL AND p._v <= {row_value_col}) AS cnt_le, "
-        f"COUNT(*) FILTER (WHERE p._v IS NOT NULL AND p._v = {row_value_col}) AS cnt_eq "
+        f"COUNT(*) FILTER (WHERE {valid}) AS cnt, "
+        f"COUNT(*) FILTER (WHERE {valid} AND p._v <= {row_value_col}) AS cnt_le, "
+        f"COUNT(*) FILTER (WHERE {valid} AND p._v = {row_value_col}) AS cnt_eq "
         f"FROM ({numbered_sql}) p WHERE {match}"
         f") s"
         f") END"
@@ -421,39 +452,48 @@ def _average_rank_01_correlated(
     numbered_sql: str,
     row_alias: str,
     dialect: SqlDialect,
+    exclude_nan: bool = True,
 ) -> str:
     """截面 0-1 average rank，对齐 ``cs_rank_01``。"""
+    from backend.stat_valid import row_stat_invalid_sql, stat_valid_sql
+
     match = " AND ".join(f"p.{k} = {row_alias}.{k}" for k in partition_keys)
+    valid = stat_valid_sql("p._v", dialect=dialect, exclude_nan=exclude_nan)
+    invalid_row = row_stat_invalid_sql(row_value_col, dialect=dialect, exclude_nan=exclude_nan)
+    cnt_subq = (
+        f"(SELECT COUNT(*) FILTER (WHERE {valid}) "
+        f"FROM ({numbered_sql}) p WHERE {match})"
+    )
     if dialect == SqlDialect.CLICKHOUSE:
+        valid_ch = valid
         return (
             f"multiIf("
-            f"(SELECT countIf(p._v IS NOT NULL) FROM ({numbered_sql}) p WHERE {match}) <= 1, 0.5, "
-            f"isNull({row_value_col}), NULL, "
+            f"{invalid_row}, NULL, "
+            f"{cnt_subq} = 0, NULL, "
+            f"{cnt_subq} = 1, 0.5, "
             f"("
             f"SELECT (s.cnt_le - (s.cnt_eq - 1) / 2.0 - 1) / nullIf(s.cnt - 1, 0) "
             f"FROM ("
             f"SELECT "
-            f"countIf(p._v IS NOT NULL) AS cnt, "
-            f"countIf(p._v IS NOT NULL AND p._v <= {row_value_col}) AS cnt_le, "
-            f"countIf(p._v IS NOT NULL AND p._v = {row_value_col}) AS cnt_eq "
+            f"countIf({valid_ch}) AS cnt, "
+            f"countIf({valid_ch} AND p._v <= {row_value_col}) AS cnt_le, "
+            f"countIf({valid_ch} AND p._v = {row_value_col}) AS cnt_eq "
             f"FROM ({numbered_sql}) p WHERE {match}"
             f") s"
             f")"
             f")"
         )
     return (
-        f"CASE WHEN ("
-        f"SELECT COUNT(*) FILTER (WHERE p._v IS NOT NULL) "
-        f"FROM ({numbered_sql}) p WHERE {match}"
-        f") <= 1 THEN 0.5 "
-        f"WHEN {row_value_col} IS NULL THEN NULL "
+        f"CASE WHEN {invalid_row} THEN NULL "
+        f"WHEN {cnt_subq} = 0 THEN NULL "
+        f"WHEN {cnt_subq} = 1 THEN 0.5 "
         f"ELSE ("
         f"SELECT (s.cnt_le - (s.cnt_eq - 1) / 2.0 - 1.0) / NULLIF(s.cnt - 1, 0) "
         f"FROM ("
         f"SELECT "
-        f"COUNT(*) FILTER (WHERE p._v IS NOT NULL) AS cnt, "
-        f"COUNT(*) FILTER (WHERE p._v IS NOT NULL AND p._v <= {row_value_col}) AS cnt_le, "
-        f"COUNT(*) FILTER (WHERE p._v IS NOT NULL AND p._v = {row_value_col}) AS cnt_eq "
+        f"COUNT(*) FILTER (WHERE {valid}) AS cnt, "
+        f"COUNT(*) FILTER (WHERE {valid} AND p._v <= {row_value_col}) AS cnt_le, "
+        f"COUNT(*) FILTER (WHERE {valid} AND p._v = {row_value_col}) AS cnt_eq "
         f"FROM ({numbered_sql}) p WHERE {match}"
         f") s"
         f") END"
@@ -520,7 +560,7 @@ def _group_partition_wrap(
     if grp_sql is not None:
         wrapped = (
             f"SELECT x.ts, x.inst, x._v AS {value_alias}, g._v AS _grp "
-            f"FROM ({inner_sql}) x INNER JOIN ({grp_sql}) g USING (ts, inst)"
+            f"FROM ({inner_sql}) x LEFT JOIN ({grp_sql}) g USING (ts, inst)"
         )
         return wrapped, ["ts", "_grp"]
     wrapped = f"SELECT ts, inst, _v AS {value_alias}, 1.0 AS _grp FROM ({inner_sql}) x"
@@ -547,38 +587,61 @@ def _cs_pct_rank_sql(inner_sql: str, *, partition: str, dialect: SqlDialect) -> 
     )
 
 
-def _ts_pct_rank_sql(inner_sql: str, *, window: int, dialect: SqlDialect) -> str:
+def _ts_pct_rank_sql(
+    inner_sql: str,
+    *,
+    window: int,
+    dialect: SqlDialect,
+    min_periods: int = 1,
+    exclude_nan: bool = True,
+) -> str:
     """滚动百分位 rank，对齐 ``pandas rolling.rank(pct=True, method='average')``。"""
+    from backend.stat_valid import row_stat_invalid_sql, stat_valid_sql
+
     w = max(int(window), 1)
+    mp = max(int(min_periods), 1)
+    valid = stat_valid_sql("p._v", dialect=dialect, exclude_nan=exclude_nan)
+    invalid_row = row_stat_invalid_sql("b._v", dialect=dialect, exclude_nan=exclude_nan)
     numbered = (
         f"SELECT ts, inst, _v, ROW_NUMBER() OVER (PARTITION BY inst ORDER BY ts) AS rn "
         f"FROM ({inner_sql}) t0"
     )
     if dialect == SqlDialect.CLICKHOUSE:
+        valid_ch = valid
         rank_expr = (
-            f"if(b._v IS NULL, NULL, ("
-            f"SELECT if(s.cnt = 0, NULL, if(s.cnt <= 1, 1.0, "
-            f"(s.cnt_le - (s.cnt_eq - 1) / 2.0) / s.cnt)) "
+            f"multiIf("
+            f"{invalid_row}, NULL, "
+            f"("
+            f"SELECT multiIf("
+            f"s.cnt < {mp}, NULL, "
+            f"s.cnt = 0, NULL, "
+            f"s.cnt <= 1, 1.0, "
+            f"(s.cnt_le - (s.cnt_eq - 1) / 2.0) / s.cnt"
+            f") "
             f"FROM ("
             f"SELECT "
-            f"countIf(p._v IS NOT NULL) AS cnt, "
-            f"countIf(p._v IS NOT NULL AND p._v <= b._v) AS cnt_le, "
-            f"countIf(p._v IS NOT NULL AND p._v = b._v) AS cnt_eq "
+            f"countIf({valid_ch}) AS cnt, "
+            f"countIf({valid_ch} AND p._v <= b._v) AS cnt_le, "
+            f"countIf({valid_ch} AND p._v = b._v) AS cnt_eq "
             f"FROM ({numbered}) p "
             f"WHERE p.inst = b.inst AND p.rn BETWEEN b.rn - {w - 1} AND b.rn"
             f") s"
-            f"))"
+            f")"
+            f")"
         )
     else:
         rank_expr = (
-            f"CASE WHEN b._v IS NULL THEN NULL ELSE ("
-            f"SELECT CASE WHEN s.cnt = 0 THEN NULL WHEN s.cnt <= 1 THEN 1.0 "
+            f"CASE WHEN {invalid_row} THEN NULL ELSE ("
+            f"SELECT CASE "
+            f"WHEN s.cnt < {mp} THEN NULL "
+            f"WHEN s.cnt = 0 THEN NULL "
+            f"WHEN s.cnt <= 1 THEN 1.0 "
             f"ELSE (s.cnt_le - (s.cnt_eq - 1) / 2.0) / s.cnt END "
             f"FROM ("
             f"SELECT "
-            f"COUNT(*) FILTER (WHERE p._v IS NOT NULL) AS cnt, "
-            f"COUNT(*) FILTER (WHERE p._v IS NOT NULL AND p._v <= b._v) AS cnt_le, "
-            f"COUNT(*) FILTER (WHERE p._v IS NOT NULL AND p._v = b._v) AS cnt_eq "
+            f"COUNT(*) FILTER (WHERE {valid}) AS cnt, "
+            f"COUNT(*) FILTER (WHERE {valid} AND p._v <= b._v) AS cnt_le, "
+            f"COUNT(*) FILTER (WHERE {valid} AND p._v = b._v) AS cnt_eq "
             f"FROM ({numbered}) p "
             f"WHERE p.inst = b.inst AND p.rn BETWEEN b.rn - {w - 1} AND b.rn"
             f") s"
@@ -761,10 +824,11 @@ def _rolling_std_min_periods_sql(
     scale_expr: str,
     dialect: SqlDialect,
     min_periods: int | None = None,
+    std_fn_name: str = "stddev",
 ) -> str:
     """带 min_periods 的 rolling std 表达式。"""
     mp = _rolling_min_periods(window, default_mp=min_periods)
-    std_fn = _dialect_fn(dialect, "stddev")
+    std_fn = _dialect_fn(dialect, std_fn_name)
     cnt = f"COUNT({value_col}) OVER ({over})"
     stdv = f"{std_fn}({value_col}) OVER ({over})"
     return (
@@ -814,15 +878,12 @@ def _scalar_from_plan(node: PlanNode, *, default: float | None = None) -> float 
 
 
 def _compare_binary_sql(op: str, left_sql: str, right_sql: str, *, dialect: SqlDialect) -> str:
-    """二元比较算子 SQL（输出 1.0/0.0；NULL 视为 false，对齐 Polars when/otherwise）。"""
-    sym = {"gt": ">", "lt": "<", "eq": "=", "ge": ">=", "le": "<=", "ne": "<>"}[op]
-    if dialect == SqlDialect.CLICKHOUSE and op == "ne":
-        sym = "!="
-    return (
-        f"SELECT l.ts, l.inst, "
-        f"CASE WHEN l._v {sym} r._v THEN 1.0 ELSE 0.0 END AS _v "
-        f"FROM ({left_sql}) l INNER JOIN ({right_sql}) r USING (ts, inst)"
-    )
+    """二元比较算子 SQL（NULL/NaN → NULL）。"""
+    from backend.elementwise_semantics import compare_sql
+    from backend.long_alignment import anchor_join_sql
+
+    expr = compare_sql(op, "l._v", "r._v", dialect_is_clickhouse=dialect == SqlDialect.CLICKHOUSE)
+    return f"SELECT l.ts, l.inst, {expr} AS _v {anchor_join_sql(left_sql, right_sql)}"
 
 
 def _rolling_ols_partition(w: int, *, prefix: str = "l") -> str:
@@ -833,21 +894,50 @@ def _rolling_ols_partition(w: int, *, prefix: str = "l") -> str:
     )
 
 
-def _inst_cum_agg(dialect: SqlDialect, agg: str, inner_sql: str) -> str:
-    """按 instrument 的累积窗口聚合 SQL。"""
+def _inst_cum_sum_sql(inner_sql: str) -> str:
+    """pandas 对齐 cumsum：NULL 行输出 NULL，累计和跳过 NULL 输入。"""
+    return _inst_cum_agg("SUM", inner_sql, sum_skip_null=True)
+
+
+def _inst_cum_agg(
+    agg: str,
+    inner_sql: str,
+    *,
+    sum_skip_null: bool = False,
+    null_guard: bool = True,
+) -> str:
+    """按 instrument 的累积窗口聚合 SQL；默认当前行 NULL → 输出 NULL。"""
     over = "PARTITION BY inst ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"
+    agg_u = agg.upper()
+    if sum_skip_null or agg_u == "SUM":
+        rolled = f"SUM(CASE WHEN _v IS NULL THEN 0 ELSE _v END) OVER ({over})"
+    elif agg_u == "COUNT":
+        rolled = f"SUM(CASE WHEN _v IS NOT NULL THEN 1 ELSE 0 END) OVER ({over})"
+        null_guard = False
+    else:
+        rolled = f"{agg}(_v) OVER ({over})"
+    if null_guard:
+        body = f"CASE WHEN _v IS NULL THEN NULL ELSE {rolled} END"
+    else:
+        body = rolled
     return (
-        f"SELECT ts, inst, "
-        f"{agg}(_v) OVER ({over}) AS _v "
+        f"SELECT ts, inst, {body} AS _v "
         f"FROM ({inner_sql}) t"
     )
 
 
-def _cs_broadcast_agg(agg: str, inner_sql: str) -> str:
+def _cs_broadcast_agg(agg: str, inner_sql: str, *, all_null_null: bool = False) -> str:
     """截面广播聚合：按 ts 分区将聚合值广播到各行。"""
+    rolled = f"{agg}(_v) OVER (PARTITION BY ts)"
+    if not all_null_null:
+        return (
+            f"SELECT ts, inst, {rolled} AS _v "
+            f"FROM ({inner_sql}) t"
+        )
+    valid = "COUNT(_v) OVER (PARTITION BY ts)"
+    body = f"CASE WHEN {valid} = 0 THEN NULL ELSE {rolled} END"
     return (
-        f"SELECT ts, inst, "
-        f"{agg}(_v) OVER (PARTITION BY ts) AS _v "
+        f"SELECT ts, inst, {body} AS _v "
         f"FROM ({inner_sql}) t"
     )
 
@@ -1073,7 +1163,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             expr = f"(l._v {sym} r._v)"
         return _Layer(
             f"SELECT l.ts, l.inst, {expr} AS _v "
-            f"FROM ({left.sql}) l INNER JOIN ({right.sql}) r USING (ts, inst)",
+            f"FROM ({left.sql}) l LEFT JOIN ({right.sql}) r USING (ts, inst)",
             has_inst_window=left.has_inst_window or right.has_inst_window,
             has_ts_partition=left.has_ts_partition or right.has_ts_partition,
         )
@@ -1085,19 +1175,16 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         right = _compile_layer(node.inputs[1], dialect=dialect)
         if left is None or right is None:
             return None
+        from backend.elementwise_semantics import protected_div_sql
         from backend.numeric_semantics import protected_div_default, protected_epsilon_default
 
         eps = _float_attr(node, "epsilon", default=protected_epsilon_default())
         default = _float_attr(node, "default", default=protected_div_default())
         abs_fn = _dialect_fn(dialect, "abs")
-        coalesce_fn = "coalesce" if dialect == SqlDialect.CLICKHOUSE else "COALESCE"
-        lit = _sql_literal(default)
+        expr = protected_div_sql("l._v", "r._v", eps=eps, default=default, abs_fn=abs_fn)
         return _Layer(
-            f"SELECT l.ts, l.inst, "
-            f"{coalesce_fn}(CASE WHEN l._v IS NULL OR r._v IS NULL THEN NULL "
-            f"WHEN {abs_fn}(r._v) <= {eps} THEN NULL "
-            f"ELSE l._v / r._v END, {lit}) AS _v "
-            f"FROM ({left.sql}) l INNER JOIN ({right.sql}) r USING (ts, inst)",
+            f"SELECT l.ts, l.inst, {expr} AS _v "
+            f"FROM ({left.sql}) l LEFT JOIN ({right.sql}) r USING (ts, inst)",
             has_inst_window=left.has_inst_window or right.has_inst_window,
             has_ts_partition=left.has_ts_partition or right.has_ts_partition,
         )
@@ -1118,7 +1205,28 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             f"CASE WHEN l._v IS NULL OR r._v IS NULL THEN NULL "
             f"WHEN {abs_fn}(r._v) <= {eps} THEN NULL "
             f"ELSE l._v / r._v END AS _v "
-            f"FROM ({left.sql}) l INNER JOIN ({right.sql}) r USING (ts, inst)",
+            f"FROM ({left.sql}) l LEFT JOIN ({right.sql}) r USING (ts, inst)",
+            has_inst_window=left.has_inst_window or right.has_inst_window,
+            has_ts_partition=left.has_ts_partition or right.has_ts_partition,
+        )
+
+    if op == "div_or_default":
+        if len(node.inputs) != 2:
+            return None
+        left = _compile_layer(node.inputs[0], dialect=dialect)
+        right = _compile_layer(node.inputs[1], dialect=dialect)
+        if left is None or right is None:
+            return None
+        from backend.elementwise_semantics import div_or_default_sql
+        from backend.numeric_semantics import protected_div_default, protected_epsilon_default
+
+        eps = _float_attr(node, "epsilon", default=protected_epsilon_default())
+        default = _float_attr(node, "default", default=protected_div_default())
+        abs_fn = _dialect_fn(dialect, "abs")
+        expr = div_or_default_sql("l._v", "r._v", eps=eps, default=default, abs_fn=abs_fn)
+        return _Layer(
+            f"SELECT l.ts, l.inst, {expr} AS _v "
+            f"FROM ({left.sql}) l LEFT JOIN ({right.sql}) r USING (ts, inst)",
             has_inst_window=left.has_inst_window or right.has_inst_window,
             has_ts_partition=left.has_ts_partition or right.has_ts_partition,
         )
@@ -1127,11 +1235,27 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
+        from backend.elementwise_semantics import protected_log_sql
+
         eps = _float_attr(node, "epsilon", default=1e-12)
-        lit = _sql_literal(eps)
+        expr = protected_log_sql("_v", eps=eps, ln_fn=ln)
         return _Layer(
-            f"SELECT ts, inst, "
-            f"{ln}(CASE WHEN _v IS NULL OR _v <= {lit} THEN {lit} ELSE _v END) AS _v "
+            f"SELECT ts, inst, {expr} AS _v "
+            f"FROM ({inner.sql}) t",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=inner.has_ts_partition,
+        )
+
+    if op == "log_fill_invalid":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        from backend.elementwise_semantics import log_fill_invalid_sql
+
+        eps = _float_attr(node, "epsilon", default=1e-12)
+        expr = log_fill_invalid_sql("_v", eps=eps, ln_fn=ln)
+        return _Layer(
+            f"SELECT ts, inst, {expr} AS _v "
             f"FROM ({inner.sql}) t",
             has_inst_window=inner.has_inst_window,
             has_ts_partition=inner.has_ts_partition,
@@ -1232,17 +1356,40 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_ts_partition=inner.has_ts_partition,
         )
 
+    if op == "is_null":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        from backend.logical_semantics import is_null_sql
+
+        return _Layer(
+            f"SELECT ts, inst, {is_null_sql('_v')} AS _v FROM ({inner.sql}) t",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=inner.has_ts_partition,
+        )
+
+    if op == "is_not_null":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        from backend.logical_semantics import is_null_sql
+
+        return _Layer(
+            f"SELECT ts, inst, CASE WHEN {is_null_sql('_v')} = 1.0 THEN 0.0 ELSE 1.0 END AS _v "
+            f"FROM ({inner.sql}) t",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=inner.has_ts_partition,
+        )
+
     if op == "is_nan":
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        if dialect == SqlDialect.CLICKHOUSE:
-            pred = "isNaN(_v) OR _v IS NULL"
-        else:
-            pred = "_v IS NULL OR isnan(_v)"
+        from backend.logical_semantics import is_nan_sql
+
+        expr = is_nan_sql("_v", dialect_is_clickhouse=dialect == SqlDialect.CLICKHOUSE)
         return _Layer(
-            f"SELECT ts, inst, CASE WHEN {pred} THEN 1.0 ELSE 0.0 END AS _v "
-            f"FROM ({inner.sql}) t",
+            f"SELECT ts, inst, {expr} AS _v FROM ({inner.sql}) t",
             has_inst_window=inner.has_inst_window,
             has_ts_partition=inner.has_ts_partition,
         )
@@ -1252,10 +1399,25 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if inner is None:
             return None
         finite_fn = "isFinite" if dialect == SqlDialect.CLICKHOUSE else "isfinite"
+        isnan_fn = "isNaN" if dialect == SqlDialect.CLICKHOUSE else "isnan"
         return _Layer(
             f"SELECT ts, inst, "
-            f"CASE WHEN _v IS NOT NULL AND {finite_fn}(_v) THEN 1.0 ELSE 0.0 END AS _v "
+            f"CASE WHEN _v IS NULL OR {isnan_fn}(_v) THEN 0.0 "
+            f"WHEN {finite_fn}(_v) THEN 1.0 ELSE 0.0 END AS _v "
             f"FROM ({inner.sql}) t",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=inner.has_ts_partition,
+        )
+
+    if op == "is_infinite":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        from backend.elementwise_semantics import is_infinite_sql
+
+        expr = is_infinite_sql("_v", dialect_is_clickhouse=dialect == SqlDialect.CLICKHOUSE)
+        return _Layer(
+            f"SELECT ts, inst, {expr} AS _v FROM ({inner.sql}) t",
             has_inst_window=inner.has_inst_window,
             has_ts_partition=inner.has_ts_partition,
         )
@@ -1278,6 +1440,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         over = (
             f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
         )
+        std_key = "stddev_pop" if spec.ddof == 0 else "stddev"
         expr = _rolling_std_min_periods_sql(
             value_col="_v",
             over=over,
@@ -1285,6 +1448,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             scale_expr="1",
             dialect=dialect,
             min_periods=spec.min_periods,
+            std_fn_name=std_key,
         )
         return _Layer(
             f"SELECT ts, inst, {expr} AS _v FROM ({inner.sql}) t",
@@ -1305,9 +1469,9 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        w = _window_int(node)
+        spec = _window_spec(node)
         return _Layer(
-            _inst_window(dialect, w, "MAX", inner.sql),
+            _inst_window(dialect, spec.size, "MAX", inner.sql, min_periods=spec.min_periods),
             has_inst_window=True,
         )
 
@@ -1315,9 +1479,9 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        w = _window_int(node)
+        spec = _window_spec(node)
         return _Layer(
-            _inst_window(dialect, w, "MIN", inner.sql),
+            _inst_window(dialect, spec.size, "MIN", inner.sql, min_periods=spec.min_periods),
             has_inst_window=True,
         )
 
@@ -1329,10 +1493,12 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         over = (
             f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
         )
+        std_key = "stddev_pop" if spec.ddof == 0 else "stddev"
         expr = _zscore_window_expr(
             value_col="_v",
             partition=over,
             dialect=dialect,
+            std_fn_name=std_key,
             min_periods=spec.min_periods,
         )
         return _Layer(
@@ -1356,8 +1522,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             f"SELECT ts, inst, "
             f"CASE "
             f"WHEN {cnt} < {mp} THEN NULL "
-            f"WHEN {std}(_v) OVER ({over}) = 0 AND AVG(_v) OVER ({over}) > 0 THEN 1e308 "
-            f"WHEN {std}(_v) OVER ({over}) = 0 THEN 0 "
+            f"WHEN {std}(_v) OVER ({over}) = 0 THEN NULL "
             f"ELSE AVG(_v) OVER ({over}) / {nf}({std}(_v) OVER ({over}), 0) "
             f"END * {sqrt_af} AS _v "
             f"FROM ({inner.sql}) t",
@@ -1425,7 +1590,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if inner is None:
             return None
         p = _float_attr(node, "p", default=0.5)
-        pos_p = _literal_positional(node, 1)
+        pos_p = _literal_positional(node, 0)
         if pos_p is not None:
             p = pos_p
         qexpr = _quantile_over(dialect, "_v", p, "PARTITION BY ts")
@@ -1477,18 +1642,21 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         vol = _compile_layer(node.inputs[1], dialect=dialect)
         if price is None or vol is None:
             return None
+        from backend.pairwise_rolling import sql_pairwise_vwap_expr
+
         spec = _window_spec(node, default=20)
         over = (
             f"PARTITION BY p.inst ORDER BY p.ts ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
         )
-        cnt = f"COUNT(v._v) OVER ({over})"
-        mp = spec.min_periods
+        vwap_expr = sql_pairwise_vwap_expr(
+            price_col="p._v",
+            volume_col="v._v",
+            over=over,
+            min_periods=spec.min_periods,
+        )
         return _Layer(
-            f"SELECT p.ts, p.inst, "
-            f"CASE WHEN {cnt} < {mp} THEN NULL "
-            f"ELSE SUM(p._v * v._v) OVER ({over}) / "
-            f"{nf}(SUM(v._v) OVER ({over}), 0) END AS _v "
-            f"FROM ({price.sql}) p INNER JOIN ({vol.sql}) v USING (ts, inst)",
+            f"SELECT p.ts, p.inst, {vwap_expr} AS _v "
+            f"FROM ({price.sql}) p LEFT JOIN ({vol.sql}) v USING (ts, inst)",
             has_inst_window=True,
         )
 
@@ -1551,7 +1719,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if inner is None:
             return None
         return _Layer(
-            _cs_broadcast_agg("AVG", inner.sql),
+            _cs_broadcast_agg("AVG", inner.sql, all_null_null=True),
             has_inst_window=inner.has_inst_window,
             has_ts_partition=True,
         )
@@ -1561,7 +1729,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if inner is None:
             return None
         return _Layer(
-            _cs_broadcast_agg("SUM", inner.sql),
+            _cs_broadcast_agg("SUM", inner.sql, all_null_null=True),
             has_inst_window=inner.has_inst_window,
             has_ts_partition=True,
         )
@@ -1582,7 +1750,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             return None
         std_fn = _dialect_fn(dialect, "stddev")
         return _Layer(
-            _cs_broadcast_agg(std_fn, inner.sql),
+            _cs_broadcast_agg(std_fn, inner.sql, all_null_null=True),
             has_inst_window=inner.has_inst_window,
             has_ts_partition=True,
         )
@@ -1615,7 +1783,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         )
         return _Layer(
             f"SELECT y.ts, y.inst, {expr} AS _v "
-            f"FROM ({y_layer.sql}) y INNER JOIN ({x_layer.sql}) x USING (ts, inst)",
+            f"FROM ({y_layer.sql}) y LEFT JOIN ({x_layer.sql}) x USING (ts, inst)",
             has_inst_window=y_layer.has_inst_window or x_layer.has_inst_window,
             has_ts_partition=True,
         )
@@ -1625,6 +1793,14 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if inner is None:
             return None
         to_val = _float_attr(node, "to", default=1.0)
+        if "to" not in (node.attrs or {}):
+            for idx in range(1, len(node.inputs)):
+                child = node.inputs[idx]
+                if child.op == "literal":
+                    val = child.attrs.get("value")
+                    if val is not None and isinstance(val, (int, float)) and not isinstance(val, bool):
+                        to_val = float(val)
+                        break
         expr = _scale_window_expr(
             value_col="_v", partition="PARTITION BY ts", to_val=to_val, dialect=dialect
         )
@@ -1647,7 +1823,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             return _Layer(
                 f"SELECT x.ts, x.inst, (x._v - AVG(x._v) OVER (PARTITION BY x.ts, g._v)) AS _v "
                 f"FROM ({inner.sql}) x "
-                f"INNER JOIN ({grp.sql}) g USING (ts, inst)",
+                f"LEFT JOIN ({grp.sql}) g USING (ts, inst)",
                 has_inst_window=inner.has_inst_window or grp.has_inst_window,
                 has_ts_partition=True,
             )
@@ -1671,8 +1847,10 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         )
         corr_fn = "corr" if dialect == SqlDialect.DUCKDB else "corrStable"
         return _Layer(
-            f"SELECT l.ts, l.inst, {corr_fn}(l._v, r._v) OVER ({over}) AS _v "
-            f"FROM ({left.sql}) l INNER JOIN ({right.sql}) r USING (ts, inst)",
+            f"SELECT l.ts, l.inst, "
+            f"CASE WHEN l._v IS NULL OR r._v IS NULL THEN NULL "
+            f"ELSE {corr_fn}(l._v, r._v) OVER ({over}) END AS _v "
+            f"FROM ({left.sql}) l LEFT JOIN ({right.sql}) r USING (ts, inst)",
             has_inst_window=True,
         )
 
@@ -1767,7 +1945,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             if grp_layer is None:
                 return None
             part = "PARTITION BY x.ts, g._v"
-            join = f"FROM ({inner.sql}) x INNER JOIN ({grp_layer.sql}) g USING (ts, inst)"
+            join = f"FROM ({inner.sql}) x LEFT JOIN ({grp_layer.sql}) g USING (ts, inst)"
         else:
             part = "PARTITION BY x.ts"
             join = f"FROM ({inner.sql}) x"
@@ -1785,7 +1963,14 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             expr = f"AVG(x._v) OVER ({part})"
         elif op == "group_std":
             std_fn = _dialect_fn(dialect, "stddev")
-            expr = f"{std_fn}(x._v) OVER ({part})"
+            cnt = f"COUNT(x._v) OVER ({part})"
+            std_val = f"{std_fn}(x._v) OVER ({part})"
+            expr = (
+                f"CASE WHEN x._v IS NULL THEN NULL "
+                f"WHEN {cnt} < 2 THEN 0.0 "
+                f"WHEN {std_val} IS NULL THEN 0.0 "
+                f"ELSE {std_val} END"
+            )
         elif op == "group_zscore":
             expr = _group_zscore_expr(value_col="x._v", partition=part, dialect=dialect)
         elif op == "group_normalize":
@@ -1831,7 +2016,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             dialect=dialect,
         )
         expr = (
-            f"CASE WHEN b._oval IS NULL THEN 0.0 "
+            f"CASE WHEN b._oval IS NULL THEN NULL "
             f"WHEN ({rank_frac}) <= {p} THEN 1.0 ELSE 0.0 END"
         )
         return _Layer(
@@ -1851,7 +2036,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             if grp is None:
                 return None
             part = "PARTITION BY x.ts, g._v"
-            join = f"FROM ({inner.sql}) x INNER JOIN ({grp.sql}) g USING (ts, inst)"
+            join = f"FROM ({inner.sql}) x LEFT JOIN ({grp.sql}) g USING (ts, inst)"
         else:
             part = "PARTITION BY x.ts"
             join = f"FROM ({inner.sql}) x"
@@ -1866,10 +2051,10 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        w = _window_int(node)
+        spec = _window_spec(node)
         med = "median" if dialect == SqlDialect.DUCKDB else "median"
         return _Layer(
-            _inst_window(dialect, w, med, inner.sql),
+            _inst_window(dialect, spec.size, med, inner.sql, min_periods=spec.min_periods),
             has_inst_window=True,
         )
 
@@ -1877,10 +2062,13 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        w = _window_int(node)
-        var_fn = "VAR_SAMP" if dialect == SqlDialect.DUCKDB else "varSamp"
+        spec = _window_spec(node)
+        if spec.ddof == 0:
+            var_fn = "VAR_POP" if dialect == SqlDialect.DUCKDB else "varPop"
+        else:
+            var_fn = "VAR_SAMP" if dialect == SqlDialect.DUCKDB else "varSamp"
         return _Layer(
-            _inst_window(dialect, w, var_fn, inner.sql),
+            _inst_window(dialect, spec.size, var_fn, inner.sql, min_periods=spec.min_periods),
             has_inst_window=True,
         )
 
@@ -1919,7 +2107,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             if grp is None:
                 return None
             part = "PARTITION BY x.ts, g._v"
-            join = f"FROM ({inner.sql}) x INNER JOIN ({grp.sql}) g USING (ts, inst)"
+            join = f"FROM ({inner.sql}) x LEFT JOIN ({grp.sql}) g USING (ts, inst)"
         else:
             part = "PARTITION BY x.ts"
             join = f"FROM ({inner.sql}) x"
@@ -1941,22 +2129,25 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         right = _compile_layer(node.inputs[1], dialect=dialect)
         if left is None or right is None:
             return None
-        w = _window_int(node)
+        from backend.pair_window_spec import PairWindowSpec
+        from backend.pairwise_rolling import sql_pairwise_beta_expr
+
+        pspec = PairWindowSpec.from_plan_node(node)
+        w = pspec.size
         over = (
             f"PARTITION BY l.inst ORDER BY l.ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
         )
-        if dialect == SqlDialect.DUCKDB:
-            cov_fn = "covar_samp"
-            var_fn = "var_samp"
-        else:
-            cov_fn = "covarSamp"
-            var_fn = "varSamp"
-        nf = _dialect_fn(dialect, "nullif")
+        beta_expr = sql_pairwise_beta_expr(
+            left_col="l._v",
+            right_col="r._v",
+            over=over,
+            dialect_is_duckdb=dialect == SqlDialect.DUCKDB,
+            min_periods=pspec.min_periods,
+        )
         return _Layer(
             f"SELECT l.ts, l.inst, "
-            f"({cov_fn}(l._v, r._v) OVER ({over})) / "
-            f"{nf}({var_fn}(r._v) OVER ({over}), 0) AS _v "
-            f"FROM ({left.sql}) l INNER JOIN ({right.sql}) r USING (ts, inst)",
+            f"CASE WHEN l._v IS NULL OR r._v IS NULL THEN NULL ELSE ({beta_expr}) END AS _v "
+            f"FROM ({left.sql}) l LEFT JOIN ({right.sql}) r USING (ts, inst)",
             has_inst_window=True,
         )
 
@@ -2023,9 +2214,14 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        w = _window_int(node)
+        spec = _window_spec(node)
         return _Layer(
-            _ts_pct_rank_sql(inner.sql, window=w, dialect=dialect),
+            _ts_pct_rank_sql(
+                inner.sql,
+                window=spec.size,
+                dialect=dialect,
+                min_periods=spec.min_periods,
+            ),
             has_inst_window=True,
         )
 
@@ -2120,7 +2316,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             f"WHEN l._v < 0 AND r._v <> FLOOR(r._v) THEN NULL "
             f"WHEN l._v = 0 AND r._v < 0 THEN NULL "
             f"ELSE {pow_fn}(l._v, r._v) END AS _v "
-            f"FROM ({left.sql}) l INNER JOIN ({right.sql}) r USING (ts, inst)",
+            f"FROM ({left.sql}) l LEFT JOIN ({right.sql}) r USING (ts, inst)",
             has_inst_window=left.has_inst_window or right.has_inst_window,
             has_ts_partition=left.has_ts_partition or right.has_ts_partition,
         )
@@ -2148,7 +2344,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         return _Layer(
             f"SELECT l.ts, l.inst, "
             f"CASE WHEN {_truthy_sql('l._v')} AND {_truthy_sql('r._v')} THEN 1.0 ELSE 0.0 END AS _v "
-            f"FROM ({left.sql}) l INNER JOIN ({right.sql}) r USING (ts, inst)",
+            f"FROM ({left.sql}) l LEFT JOIN ({right.sql}) r USING (ts, inst)",
             has_inst_window=left.has_inst_window or right.has_inst_window,
             has_ts_partition=left.has_ts_partition or right.has_ts_partition,
         )
@@ -2163,7 +2359,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         return _Layer(
             f"SELECT l.ts, l.inst, "
             f"CASE WHEN {_truthy_sql('l._v')} OR {_truthy_sql('r._v')} THEN 1.0 ELSE 0.0 END AS _v "
-            f"FROM ({left.sql}) l INNER JOIN ({right.sql}) r USING (ts, inst)",
+            f"FROM ({left.sql}) l LEFT JOIN ({right.sql}) r USING (ts, inst)",
             has_inst_window=left.has_inst_window or right.has_inst_window,
             has_ts_partition=left.has_ts_partition or right.has_ts_partition,
         )
@@ -2192,8 +2388,10 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         over = _rolling_ols_partition(w, prefix="l")
         cov_fn = "covar_samp" if dialect == SqlDialect.DUCKDB else "covarSamp"
         return _Layer(
-            f"SELECT l.ts, l.inst, {cov_fn}(l._v, r._v) OVER ({over}) AS _v "
-            f"FROM ({left.sql}) l INNER JOIN ({right.sql}) r USING (ts, inst)",
+            f"SELECT l.ts, l.inst, "
+            f"CASE WHEN l._v IS NULL OR r._v IS NULL THEN NULL "
+            f"ELSE {cov_fn}(l._v, r._v) OVER ({over}) END AS _v "
+            f"FROM ({left.sql}) l LEFT JOIN ({right.sql}) r USING (ts, inst)",
             has_inst_window=True,
         )
 
@@ -2277,7 +2475,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         )
         return _Layer(
             f"SELECT y.ts, y.inst, {expr} AS _v "
-            f"FROM ({y_layer.sql}) y INNER JOIN ({x_layer.sql}) x USING (ts, inst)",
+            f"FROM ({y_layer.sql}) y LEFT JOIN ({x_layer.sql}) x USING (ts, inst)",
             has_inst_window=True,
         )
 
@@ -2286,7 +2484,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if inner is None:
             return None
         return _Layer(
-            _inst_cum_agg(dialect, "SUM", inner.sql),
+            _inst_cum_sum_sql(inner.sql),
             has_inst_window=True,
         )
 
@@ -2295,7 +2493,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if inner is None:
             return None
         return _Layer(
-            _inst_cum_agg(dialect, "MAX", inner.sql),
+            _inst_cum_agg("MAX", inner.sql),
             has_inst_window=True,
         )
 
@@ -2304,7 +2502,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if inner is None:
             return None
         return _Layer(
-            _inst_cum_agg(dialect, "MIN", inner.sql),
+            _inst_cum_agg("MIN", inner.sql),
             has_inst_window=True,
         )
 
@@ -2314,7 +2512,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             return None
         prod_fn = "product"
         return _Layer(
-            _inst_cum_agg(dialect, prod_fn, inner.sql),
+            _inst_cum_agg(prod_fn, inner.sql),
             has_inst_window=True,
         )
 
@@ -2332,7 +2530,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if inner is None:
             return None
         return _Layer(
-            _inst_cum_agg(dialect, "AVG", inner.sql),
+            _inst_cum_agg("AVG", inner.sql),
             has_inst_window=True,
         )
 
@@ -2341,7 +2539,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if inner is None:
             return None
         return _Layer(
-            _inst_cum_agg(dialect, "SUM", inner.sql),
+            _inst_cum_agg("SUM", inner.sql, sum_skip_null=True),
             has_inst_window=True,
         )
 
@@ -2351,7 +2549,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             return None
         std_fn = _dialect_fn(dialect, "stddev")
         return _Layer(
-            _inst_cum_agg(dialect, std_fn, inner.sql),
+            _inst_cum_agg(std_fn, inner.sql),
             has_inst_window=True,
         )
 
@@ -2360,7 +2558,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if inner is None:
             return None
         return _Layer(
-            _inst_cum_agg(dialect, "COUNT", inner.sql),
+            _inst_cum_agg("COUNT", inner.sql),
             has_inst_window=True,
         )
 

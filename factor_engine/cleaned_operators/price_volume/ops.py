@@ -211,9 +211,12 @@ class VWAP(SeriesOperator):
     )
 
     def _calculate_series(self, price: pd.DataFrame, volume: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
-        pv = price * volume
-        den = volume.rolling(window=window, min_periods=1).sum().replace(0, np.nan)
-        return pv.rolling(window=window, min_periods=1).sum() / den
+        mp = int(kwargs.get("min_periods", 1))
+        valid = price.notna() & volume.notna()
+        pv = (price * volume).where(valid)
+        vol = volume.where(valid)
+        den = vol.rolling(window=window, min_periods=mp).sum().replace(0, np.nan)
+        return pv.rolling(window=window, min_periods=mp).sum() / den
 
 
 @register_operator(

@@ -54,19 +54,19 @@ class WindowSpec:
             found_window = False
             for idx in range(1, len(node.inputs)):
                 child = node.inputs[idx]
-                if child.op != "literal":
-                    if child.op not in {"column", "materialized_series", "plan_ref"}:
-                        raise PlanParamError(
-                            f"window 必须为整数 literal，收到动态输入 {child.op!r}"
-                        )
+                if child.op in {"column", "materialized_series", "plan_ref"}:
                     continue
+                if child.op != "literal":
+                    raise PlanParamError(
+                        f"window 必须为整数 literal，收到动态输入 {child.op!r}"
+                    )
                 val = child.attrs.get("value")
                 if val is None:
                     continue
                 size = parse_positive_int_literal(val, label="window")
                 found_window = True
                 break
-            if not found_window and default_size == default_size:
+            if not found_window:
                 size = default_size
 
         min_periods = default_min_periods
@@ -78,6 +78,8 @@ class WindowSpec:
             raw = attrs["ddof"]
             if isinstance(raw, bool) or not isinstance(raw, (int, float)):
                 raise PlanParamError("window.ddof 必须为整数 literal")
+            if isinstance(raw, float) and raw != int(raw):
+                raise PlanParamError(f"window.ddof 必须为整数 literal，收到 {raw}")
             ddof = int(raw)
 
         closed = str(attrs.get("closed", "right"))

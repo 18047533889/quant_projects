@@ -68,7 +68,7 @@ def test_composite_reference_cases_cover_all_registered_lowerings():
     extra = sorted(covered - registered)
     assert not missing, f"reference cases 缺少: {missing}"
     assert not extra, f"reference cases 多余: {extra}"
-    assert len(covered) >= 16
+    assert len(covered) >= 17
 
 
 @pytest.mark.parametrize("case", COMPOSITE_REFERENCE_CASES, ids=lambda c: c.canon)

@@ -48,7 +48,7 @@ def test_tier4_ops_in_registry():
         ("expanding_std", "STDDEV"),
         ("floor", "floor("),
         ("inverse", "1.0 /"),
-        ("count", "COUNT("),
+        ("count", "SUM(CASE WHEN _v IS NOT NULL"),
         ("Slope", "LAG(_v"),
         ("ts_argmax", "w_ext"),
         ("ts_argmin", "w_ext"),

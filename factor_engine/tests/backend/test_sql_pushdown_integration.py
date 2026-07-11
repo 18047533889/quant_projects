@@ -425,7 +425,7 @@ def test_sql_fillna_is_nan_scale_match_pandas(tmp_path, monkeypatch):
     df.loc[(df["Symbol"] == "A") & (df["TradeDate"] == df["TradeDate"].iloc[1]), "Close"] = float("nan")
     df.to_parquet(root / "panel.parquet", index=False)
 
-    from api import fillna, is_nan, is_finite, scale, rank
+    from api import fillna, is_null, is_finite, scale, rank
 
     source = build_data_source(
         {
@@ -438,7 +438,7 @@ def test_sql_fillna_is_nan_scale_match_pandas(tmp_path, monkeypatch):
     for expr, name in (
         (fillna(col("Close"), 0), "fillna0"),
         (fillna(col("Close"), "zero"), "fillna_zero"),
-        (is_nan(col("Close")), "is_nan"),
+        (is_null(col("Close")), "is_null"),
         (is_finite(col("Close")), "is_finite"),
         (rank(scale(col("Close"))), "scale_rank"),
     ):

@@ -109,7 +109,7 @@ def test_minimal_plan_hint_differs_from_real_plan(_loaded):
     assert not hint.ok
 
 
-def test_real_plan_gate_rejects_mom_until_primitives_certified(_loaded):
+def test_real_plan_gate_accepts_mom_when_primitives_certified(_loaded):
     from backend.production_fastpath_gate import check_production_fastpath_formula_ops
 
     result = check_production_fastpath_formula_ops(
@@ -117,8 +117,7 @@ def test_real_plan_gate_rejects_mom_until_primitives_certified(_loaded):
         use_real_plan=True,
         check_full_plan=False,
     )
-    assert not result.ok
-    assert any("MOM" in v for v in result.violations)
+    assert result.ok, result.violations
 
 
 def test_gate_rejects_unlowered_composite_in_strict(_loaded):

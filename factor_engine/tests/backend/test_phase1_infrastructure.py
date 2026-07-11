@@ -28,11 +28,10 @@ def test_phase1_scope_loaded(_loaded):
 def test_phase1_rank_six_way_certified(_loaded):
     from backend.phase1_scope import get_phase1_entry, phase1_production_certified
 
-    entry = get_phase1_entry("ts_mean")
-    assert entry is not None
-    assert entry["phase1_status"] != "certified_dual" or phase1_production_certified("ts_mean") is False
     assert phase1_production_certified("rank")
-    assert get_phase1_entry("rank") is not None or True
+    assert phase1_production_certified("ts_mean")
+    assert get_phase1_entry("rank") is not None
+    assert get_phase1_entry("ts_mean") is not None
 
 
 def test_fillna_bfill_forbidden_capability(_loaded):

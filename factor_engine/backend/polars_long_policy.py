@@ -80,6 +80,9 @@ POLARS_LONG_NATIVE: frozenset[str] = frozenset(
         "fillna_const",
         "fillna",
         "nan_to_num",
+        "div_or_default",
+        "log_fill_invalid",
+        "div_or_null",
         "gt",
         "lt",
         "eq",
@@ -90,7 +93,10 @@ POLARS_LONG_NATIVE: frozenset[str] = frozenset(
         "or_",
         "not_",
         "is_finite",
+        "is_infinite",
         "is_nan",
+        "is_null",
+        "is_not_null",
         "winsorize",
         "c_mean",
         "c_std",
@@ -108,12 +114,6 @@ POLARS_LONG_NATIVE: frozenset[str] = frozenset(
         "cs_mad_zscore",
         "cs_resid",
         "cs_regression",
-        "RSI_WILDER",
-        "ATR_WILDER",
-        "rolling_beta",
-        "ts_mad",
-        "ts_product",
-        "ts_regression",
         "ts_ratio",
         "log_abs",
         "signed_log",
@@ -121,15 +121,30 @@ POLARS_LONG_NATIVE: frozenset[str] = frozenset(
         "group_decay_linear",
         "cum_delta",
         "expanding_mean",
-        "expanding_std",
         "expanding_sum",
         "count",
+    }
+)
+
+POLARS_LONG_STATEFUL: frozenset[str] = frozenset(
+    {
+        "RSI_WILDER",
+        "ATR_WILDER",
+    }
+)
+
+# 算法语义未冻结 / 非标准实现：仍可走 long path，但不得标为 native production
+POLARS_LONG_NONSTANDARD_ALG: frozenset[str] = frozenset(
+    {
+        "ts_mad",
+        "ts_regression",
     }
 )
 
 # rolling_map + NumPy/pandas callback（LazyFrame 内仍含 Python UDF）
 POLARS_LONG_PYTHON_ROLLING: frozenset[str] = frozenset(
     {
+        "expanding_std",
         "ts_decay_linear",
         "WMA",
         "Slope",
@@ -137,6 +152,9 @@ POLARS_LONG_PYTHON_ROLLING: frozenset[str] = frozenset(
         "ts_quantile",
         "ts_argmax",
         "ts_argmin",
+        "ts_product",
+        "ts_median_abs_deviation",
+        "ts_mean_abs_deviation",
     }
 )
 
@@ -161,6 +179,8 @@ POLARS_LONG_PASSTHROUGH: frozenset[str] = frozenset()
 
 POLARS_LONG_COMPATIBLE: frozenset[str] = (
     POLARS_LONG_NATIVE
+    | POLARS_LONG_NONSTANDARD_ALG
+    | POLARS_LONG_STATEFUL
     | POLARS_LONG_PYTHON_ROLLING
     | POLARS_LONG_MAP_GROUPS
     | POLARS_LONG_PASSTHROUGH
@@ -207,6 +227,10 @@ def classify_plan_op(op: str) -> str:
         return "meta"
     if canon in POLARS_LONG_BLOCKED_CAUSAL:
         return "blocked_causal"
+    if canon in POLARS_LONG_NONSTANDARD_ALG:
+        return "nonstandard_alg"
+    if canon in POLARS_LONG_STATEFUL:
+        return "stateful"
     if canon in POLARS_LONG_PASSTHROUGH:
         return "passthrough"
     if canon in POLARS_LONG_NATIVE:
@@ -227,7 +251,7 @@ def infer_polars_long_tier(op: str) -> str:
         return "meta"
     if kind == "blocked_causal":
         return "blocked_causal"
-    if kind in {"native", "python_rolling", "map_groups", "passthrough", "registry"}:
+    if kind in {"native", "nonstandard_alg", "stateful", "python_rolling", "map_groups", "passthrough", "registry"}:
         return kind
     return "unsupported"
 
@@ -242,6 +266,8 @@ def collect_plan_op_stats(plan: PlanNode) -> dict[str, list[str]]:
         含 ``polars_long_native_ops`` 等各 tier 算子列表的字典。
     """
     native: set[str] = set()
+    nonstandard: set[str] = set()
+    stateful: set[str] = set()
     python_rolling: set[str] = set()
     map_groups: set[str] = set()
     passthrough: set[str] = set()
@@ -255,6 +281,10 @@ def collect_plan_op_stats(plan: PlanNode) -> dict[str, list[str]]:
         kind = classify_plan_op(canon)
         if kind == "native" and canon not in {"column", "literal", "materialized_series", "plan_ref"}:
             native.add(canon)
+        elif kind == "nonstandard_alg":
+            nonstandard.add(canon)
+        elif kind == "stateful":
+            stateful.add(canon)
         elif kind == "python_rolling":
             python_rolling.add(canon)
         elif kind == "map_groups":
@@ -278,6 +308,8 @@ def collect_plan_op_stats(plan: PlanNode) -> dict[str, list[str]]:
     _walk(plan)
     return {
         "polars_long_native_ops": sorted(native),
+        "polars_long_nonstandard_alg_ops": sorted(nonstandard),
+        "polars_long_stateful_ops": sorted(stateful),
         "polars_long_python_rolling_ops": sorted(python_rolling),
         "polars_long_map_group_ops": sorted(map_groups),
         "polars_long_passthrough_ops": sorted(passthrough),

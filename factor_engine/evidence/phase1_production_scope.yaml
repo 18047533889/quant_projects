@@ -1,7 +1,7 @@
 schema_version: 1
 freeze_id: phase1-dual-backend-primitives-v1
-frozen_at: '2026-07-10T18:08:30.855536+00:00'
-frozen_commit_sha: 97e3e1d4783a1070b9e2fa8bc30be9d89c607a2a
+frozen_at: '2026-07-10T19:18:44.195554+00:00'
+frozen_commit_sha: 17da67d94a5e83c701c7c649ee96144fd6d65c66
 description: 第一阶段 production 范围冻结：约 90 primitive + 16 composite。未经 scripts/certify_operator.py
   完整证据链不得新增 production 算子。
 invariants:
@@ -36,8 +36,8 @@ primitives:
     phase1_status: deferred
     production_policy: allowed
     polars_long:
-      tier: native
-      production_tier: implemented
+      tier: stateful
+      production_tier: stateful
     duckdb_sql:
       implemented: true
       production_safe: false
@@ -48,7 +48,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -60,8 +60,8 @@ primitives:
     phase1_status: deferred
     production_policy: allowed
     polars_long:
-      tier: native
-      production_tier: implemented
+      tier: stateful
+      production_tier: stateful
     duckdb_sql:
       implemented: true
       production_safe: false
@@ -72,7 +72,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -81,22 +81,22 @@ primitives:
   abs:
     kind: primitive
     tier: p0
-    phase1_status: structural_candidate
+    phase1_status: certified_dual
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: production_safe
     duckdb_sql:
       implemented: true
-      production_safe: false
+      production_safe: true
     certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
     semantics:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -105,22 +105,22 @@ primitives:
   add:
     kind: primitive
     tier: p0
-    phase1_status: structural_candidate
+    phase1_status: certified_dual
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: parity_verified
+      production_tier: production_safe
     duckdb_sql:
       implemented: true
-      production_safe: false
+      production_safe: true
     certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
     semantics:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -133,7 +133,7 @@ primitives:
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: parity_verified
     duckdb_sql:
       implemented: true
       production_safe: false
@@ -144,37 +144,13 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
       zero_denominator: null
       return_type: float64
   c_count:
-    kind: primitive
-    tier: p0
-    phase1_status: structural_candidate
-    production_policy: allowed
-    polars_long:
-      tier: native
-      production_tier: implemented
-    duckdb_sql:
-      implemented: true
-      production_safe: false
-    certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
-    semantics:
-      scope: unknown
-      null_policy: propagate
-      nan_policy: propagate
-      inf_policy: domain_specific
-      min_periods: null
-      ddof: null
-      tie_policy: null
-      zero_denominator: null
-      return_type: float64
-  c_mean:
     kind: primitive
     tier: p0
     phase1_status: structural_candidate
@@ -192,7 +168,31 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
+      min_periods: null
+      ddof: null
+      tie_policy: null
+      zero_denominator: null
+      return_type: float64
+  c_mean:
+    kind: primitive
+    tier: p0
+    phase1_status: certified_dual
+    production_policy: allowed
+    polars_long:
+      tier: native
+      production_tier: production_safe
+    duckdb_sql:
+      implemented: true
+      production_safe: true
+    certification:
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
+    semantics:
+      scope: unknown
+      null_policy: propagate
+      nan_policy: propagate
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -205,7 +205,7 @@ primitives:
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: parity_verified
     duckdb_sql:
       implemented: true
       production_safe: false
@@ -216,7 +216,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -229,7 +229,7 @@ primitives:
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: parity_verified
     duckdb_sql:
       implemented: true
       production_safe: false
@@ -240,7 +240,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -253,7 +253,7 @@ primitives:
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: parity_verified
     duckdb_sql:
       implemented: true
       production_safe: false
@@ -264,7 +264,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -277,7 +277,7 @@ primitives:
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: parity_verified
     duckdb_sql:
       implemented: true
       production_safe: false
@@ -288,7 +288,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -297,22 +297,22 @@ primitives:
   coalesce:
     kind: primitive
     tier: p0
-    phase1_status: structural_candidate
+    phase1_status: certified_dual
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: production_safe
     duckdb_sql:
       implemented: true
-      production_safe: false
+      production_safe: true
     certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
     semantics:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -321,22 +321,22 @@ primitives:
   cs_demean:
     kind: primitive
     tier: p0
-    phase1_status: structural_candidate
+    phase1_status: certified_dual
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: production_safe
     duckdb_sql:
       implemented: true
-      production_safe: false
+      production_safe: true
     certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
     semantics:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -360,7 +360,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -384,7 +384,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -408,7 +408,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: average
@@ -421,7 +421,7 @@ primitives:
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: parity_verified
     duckdb_sql:
       implemented: true
       production_safe: false
@@ -432,11 +432,11 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: propagate
       min_periods: null
       ddof: null
       tie_policy: null
-      zero_denominator: 'null'
+      zero_denominator: inf
       return_type: float64
   eq:
     kind: primitive
@@ -445,7 +445,7 @@ primitives:
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: parity_verified
     duckdb_sql:
       implemented: true
       production_safe: false
@@ -456,7 +456,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -469,7 +469,7 @@ primitives:
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: parity_verified
     duckdb_sql:
       implemented: true
       production_safe: false
@@ -480,7 +480,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -493,7 +493,7 @@ primitives:
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: parity_verified
     duckdb_sql:
       implemented: true
       production_safe: false
@@ -504,7 +504,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -513,22 +513,22 @@ primitives:
   fillna_const:
     kind: primitive
     tier: p0
-    phase1_status: structural_candidate
+    phase1_status: certified_dual
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: production_safe
     duckdb_sql:
       implemented: true
-      production_safe: false
+      production_safe: true
     certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
     semantics:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -541,7 +541,7 @@ primitives:
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: parity_verified
     duckdb_sql:
       implemented: true
       production_safe: false
@@ -552,7 +552,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -565,7 +565,7 @@ primitives:
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: parity_verified
     duckdb_sql:
       implemented: true
       production_safe: false
@@ -576,7 +576,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -600,7 +600,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -609,22 +609,22 @@ primitives:
   group_neutralize:
     kind: primitive
     tier: p1_core
-    phase1_status: structural_candidate
+    phase1_status: certified_dual
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: production_safe
     duckdb_sql:
       implemented: true
-      production_safe: false
+      production_safe: true
     certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
     semantics:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -637,7 +637,7 @@ primitives:
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: parity_verified
     duckdb_sql:
       implemented: true
       production_safe: false
@@ -648,7 +648,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -672,13 +672,37 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
       zero_denominator: null
       return_type: float64
   group_rank:
+    kind: primitive
+    tier: p1_core
+    phase1_status: certified_dual
+    production_policy: allowed
+    polars_long:
+      tier: native
+      production_tier: production_safe
+    duckdb_sql:
+      implemented: true
+      production_safe: true
+    certification:
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
+    semantics:
+      scope: unknown
+      null_policy: propagate
+      nan_policy: propagate
+      inf_policy: to_nan
+      min_periods: null
+      ddof: null
+      tie_policy: average
+      zero_denominator: null
+      return_type: float64
+  group_std:
     kind: primitive
     tier: p1_core
     phase1_status: structural_candidate
@@ -696,31 +720,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
-      min_periods: null
-      ddof: null
-      tie_policy: average
-      zero_denominator: null
-      return_type: float64
-  group_std:
-    kind: primitive
-    tier: p1_core
-    phase1_status: structural_candidate
-    production_policy: allowed
-    polars_long:
-      tier: native
-      production_tier: implemented
-    duckdb_sql:
-      implemented: true
-      production_safe: false
-    certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
-    semantics:
-      scope: unknown
-      null_policy: propagate
-      nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: 1
       tie_policy: null
@@ -744,7 +744,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -768,13 +768,37 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
       zero_denominator: null
       return_type: float64
   gt:
+    kind: primitive
+    tier: p0
+    phase1_status: certified_dual
+    production_policy: allowed
+    polars_long:
+      tier: native
+      production_tier: production_safe
+    duckdb_sql:
+      implemented: true
+      production_safe: true
+    certification:
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
+    semantics:
+      scope: unknown
+      null_policy: propagate
+      nan_policy: propagate
+      inf_policy: to_nan
+      min_periods: null
+      ddof: null
+      tie_policy: null
+      zero_denominator: null
+      return_type: float64
+  inverse:
     kind: primitive
     tier: p0
     phase1_status: structural_candidate
@@ -792,31 +816,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
-      min_periods: null
-      ddof: null
-      tie_policy: null
-      zero_denominator: null
-      return_type: float64
-  inverse:
-    kind: primitive
-    tier: p0
-    phase1_status: structural_candidate
-    production_policy: allowed
-    polars_long:
-      tier: native
-      production_tier: implemented
-    duckdb_sql:
-      implemented: true
-      production_safe: false
-    certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
-    semantics:
-      scope: unknown
-      null_policy: propagate
-      nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -829,7 +829,7 @@ primitives:
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: parity_verified
     duckdb_sql:
       implemented: true
       production_safe: false
@@ -840,7 +840,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -864,7 +864,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -877,7 +877,7 @@ primitives:
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: parity_verified
     duckdb_sql:
       implemented: true
       production_safe: false
@@ -888,7 +888,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -912,13 +912,37 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: propagate
       min_periods: null
       ddof: null
       tie_policy: null
       zero_denominator: null
       return_type: float64
   log_returns:
+    kind: primitive
+    tier: p0
+    phase1_status: certified_dual
+    production_policy: allowed
+    polars_long:
+      tier: native
+      production_tier: production_safe
+    duckdb_sql:
+      implemented: true
+      production_safe: true
+    certification:
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
+    semantics:
+      scope: unknown
+      null_policy: propagate
+      nan_policy: propagate
+      inf_policy: to_nan
+      min_periods: null
+      ddof: null
+      tie_policy: null
+      zero_denominator: null
+      return_type: float64
+  lt:
     kind: primitive
     tier: p0
     phase1_status: structural_candidate
@@ -936,31 +960,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
-      min_periods: null
-      ddof: null
-      tie_policy: null
-      zero_denominator: null
-      return_type: float64
-  lt:
-    kind: primitive
-    tier: p0
-    phase1_status: structural_candidate
-    production_policy: allowed
-    polars_long:
-      tier: native
-      production_tier: implemented
-    duckdb_sql:
-      implemented: true
-      production_safe: false
-    certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
-    semantics:
-      scope: unknown
-      null_policy: propagate
-      nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -969,22 +969,22 @@ primitives:
   maximum:
     kind: primitive
     tier: p0
-    phase1_status: structural_candidate
+    phase1_status: certified_dual
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: production_safe
     duckdb_sql:
       implemented: true
-      production_safe: false
+      production_safe: true
     certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
     semantics:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -993,22 +993,22 @@ primitives:
   minimum:
     kind: primitive
     tier: p0
-    phase1_status: structural_candidate
+    phase1_status: certified_dual
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: production_safe
     duckdb_sql:
       implemented: true
-      production_safe: false
+      production_safe: true
     certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
     semantics:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1017,22 +1017,22 @@ primitives:
   multiply:
     kind: primitive
     tier: p0
-    phase1_status: structural_candidate
+    phase1_status: certified_dual
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: production_safe
     duckdb_sql:
       implemented: true
-      production_safe: false
+      production_safe: true
     certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
     semantics:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1045,7 +1045,7 @@ primitives:
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: parity_verified
     duckdb_sql:
       implemented: true
       production_safe: false
@@ -1056,7 +1056,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: propagate
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1069,7 +1069,7 @@ primitives:
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: parity_verified
     duckdb_sql:
       implemented: true
       production_safe: false
@@ -1080,7 +1080,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1089,22 +1089,22 @@ primitives:
   neg:
     kind: primitive
     tier: p0
-    phase1_status: structural_candidate
+    phase1_status: certified_dual
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: production_safe
     duckdb_sql:
       implemented: true
-      production_safe: false
+      production_safe: true
     certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
     semantics:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1117,7 +1117,7 @@ primitives:
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: parity_verified
     duckdb_sql:
       implemented: true
       production_safe: false
@@ -1128,7 +1128,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1141,7 +1141,7 @@ primitives:
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: parity_verified
     duckdb_sql:
       implemented: true
       production_safe: false
@@ -1152,7 +1152,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1165,7 +1165,7 @@ primitives:
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: parity_verified
     duckdb_sql:
       implemented: true
       production_safe: false
@@ -1176,7 +1176,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1200,7 +1200,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1224,7 +1224,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1248,7 +1248,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1261,7 +1261,7 @@ primitives:
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: parity_verified
     duckdb_sql:
       implemented: true
       production_safe: false
@@ -1272,7 +1272,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1296,13 +1296,85 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: average
       zero_denominator: null
       return_type: float64
   rank_pct:
+    kind: primitive
+    tier: p0
+    phase1_status: certified_dual
+    production_policy: allowed
+    polars_long:
+      tier: native
+      production_tier: production_safe
+    duckdb_sql:
+      implemented: true
+      production_safe: true
+    certification:
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
+    semantics:
+      scope: unknown
+      null_policy: propagate
+      nan_policy: propagate
+      inf_policy: to_nan
+      min_periods: null
+      ddof: null
+      tie_policy: average
+      zero_denominator: null
+      return_type: float64
+  rolling_beta:
+    kind: primitive
+    tier: p1_core
+    phase1_status: implemented_single_backend
+    production_policy: allowed
+    polars_long:
+      tier: native
+      production_tier: production_safe
+    duckdb_sql:
+      implemented: true
+      production_safe: false
+    certification:
+      dual_backend_production_safe: false
+      effective_dual_backend_fastpath: false
+    semantics:
+      scope: unknown
+      null_policy: propagate
+      nan_policy: propagate
+      inf_policy: to_nan
+      min_periods: null
+      ddof: null
+      tie_policy: null
+      zero_denominator: protected
+      return_type: float64
+  safe_div_null:
+    kind: primitive
+    tier: p0
+    phase1_status: certified_dual
+    production_policy: allowed
+    polars_long:
+      tier: native
+      production_tier: production_safe
+    duckdb_sql:
+      implemented: true
+      production_safe: true
+    certification:
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
+    semantics:
+      scope: unknown
+      null_policy: propagate
+      nan_policy: propagate
+      inf_policy: to_nan
+      min_periods: null
+      ddof: null
+      tie_policy: null
+      zero_denominator: 'null'
+      return_type: float64
+  scale:
     kind: primitive
     tier: p0
     phase1_status: structural_candidate
@@ -1320,79 +1392,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
-      min_periods: null
-      ddof: null
-      tie_policy: average
-      zero_denominator: null
-      return_type: float64
-  rolling_beta:
-    kind: primitive
-    tier: p1_core
-    phase1_status: structural_candidate
-    production_policy: allowed
-    polars_long:
-      tier: native
-      production_tier: production_safe
-    duckdb_sql:
-      implemented: true
-      production_safe: false
-    certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
-    semantics:
-      scope: unknown
-      null_policy: propagate
-      nan_policy: propagate
-      inf_policy: domain_specific
-      min_periods: null
-      ddof: null
-      tie_policy: null
-      zero_denominator: 'null'
-      return_type: float64
-  safe_div_null:
-    kind: primitive
-    tier: p0
-    phase1_status: structural_candidate
-    production_policy: allowed
-    polars_long:
-      tier: native
-      production_tier: implemented
-    duckdb_sql:
-      implemented: true
-      production_safe: false
-    certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
-    semantics:
-      scope: unknown
-      null_policy: propagate
-      nan_policy: propagate
-      inf_policy: domain_specific
-      min_periods: null
-      ddof: null
-      tie_policy: null
-      zero_denominator: 'null'
-      return_type: float64
-  scale:
-    kind: primitive
-    tier: p0
-    phase1_status: structural_candidate
-    production_policy: allowed
-    polars_long:
-      tier: native
-      production_tier: implemented
-    duckdb_sql:
-      implemented: true
-      production_safe: false
-    certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
-    semantics:
-      scope: unknown
-      null_policy: propagate
-      nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1401,22 +1401,22 @@ primitives:
   sign:
     kind: primitive
     tier: p0
-    phase1_status: structural_candidate
+    phase1_status: certified_dual
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: production_safe
     duckdb_sql:
       implemented: true
-      production_safe: false
+      production_safe: true
     certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
     semantics:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1440,7 +1440,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1449,22 +1449,22 @@ primitives:
   subtract:
     kind: primitive
     tier: p0
-    phase1_status: structural_candidate
+    phase1_status: certified_dual
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: production_safe
     duckdb_sql:
       implemented: true
-      production_safe: false
+      production_safe: true
     certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
     semantics:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1488,10 +1488,10 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
-      tie_policy: null
+      tie_policy: first
       zero_denominator: null
       return_type: float64
   ts_argmin:
@@ -1512,10 +1512,10 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
-      tie_policy: null
+      tie_policy: first
       zero_denominator: null
       return_type: float64
   ts_autocorr:
@@ -1536,7 +1536,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1560,11 +1560,11 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
-      zero_denominator: 'null'
+      zero_denominator: protected
       return_type: float64
   ts_corr:
     kind: primitive
@@ -1584,7 +1584,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1608,7 +1608,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1632,7 +1632,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1641,22 +1641,22 @@ primitives:
   ts_delay:
     kind: primitive
     tier: p0
-    phase1_status: structural_candidate
+    phase1_status: certified_dual
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: production_safe
     duckdb_sql:
       implemented: true
-      production_safe: false
+      production_safe: true
     certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
     semantics:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1665,22 +1665,22 @@ primitives:
   ts_delta:
     kind: primitive
     tier: p0
-    phase1_status: structural_candidate
+    phase1_status: certified_dual
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: production_safe
     duckdb_sql:
       implemented: true
-      production_safe: false
+      production_safe: true
     certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
     semantics:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1704,7 +1704,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1713,22 +1713,22 @@ primitives:
   ts_max:
     kind: primitive
     tier: p0
-    phase1_status: structural_candidate
+    phase1_status: certified_dual
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: production_safe
     duckdb_sql:
       implemented: true
-      production_safe: false
+      production_safe: true
     certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
     semantics:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1752,7 +1752,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1761,22 +1761,22 @@ primitives:
   ts_median:
     kind: primitive
     tier: p0
-    phase1_status: structural_candidate
+    phase1_status: certified_dual
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: parity_verified
+      production_tier: production_safe
     duckdb_sql:
       implemented: true
-      production_safe: false
+      production_safe: true
     certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
     semantics:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1785,22 +1785,22 @@ primitives:
   ts_min:
     kind: primitive
     tier: p0
-    phase1_status: structural_candidate
+    phase1_status: certified_dual
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: production_safe
     duckdb_sql:
       implemented: true
-      production_safe: false
+      production_safe: true
     certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
     semantics:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1809,22 +1809,22 @@ primitives:
   ts_pct:
     kind: primitive
     tier: p0
-    phase1_status: structural_candidate
+    phase1_status: certified_dual
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: production_safe
     duckdb_sql:
       implemented: true
-      production_safe: false
+      production_safe: true
     certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
     semantics:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1848,10 +1848,10 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
-      tie_policy: average
+      tie_policy: first
       zero_denominator: null
       return_type: float64
   ts_sharpe:
@@ -1872,7 +1872,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1896,7 +1896,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: 1
       tie_policy: null
@@ -1905,22 +1905,22 @@ primitives:
   ts_sum:
     kind: primitive
     tier: p0
-    phase1_status: structural_candidate
+    phase1_status: certified_dual
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: production_safe
     duckdb_sql:
       implemented: true
-      production_safe: false
+      production_safe: true
     certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
     semantics:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1929,22 +1929,22 @@ primitives:
   ts_var:
     kind: primitive
     tier: p0
-    phase1_status: structural_candidate
+    phase1_status: certified_dual
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: production_safe
     duckdb_sql:
       implemented: true
-      production_safe: false
+      production_safe: true
     certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
     semantics:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: 1
       tie_policy: null
@@ -1953,22 +1953,22 @@ primitives:
   ts_zscore:
     kind: primitive
     tier: p0
-    phase1_status: structural_candidate
+    phase1_status: certified_dual
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: parity_verified
+      production_tier: production_safe
     duckdb_sql:
       implemented: true
-      production_safe: false
+      production_safe: true
     certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
     semantics:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -1981,7 +1981,7 @@ primitives:
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: parity_verified
     duckdb_sql:
       implemented: true
       production_safe: false
@@ -1992,7 +1992,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -2001,22 +2001,22 @@ primitives:
   vwap:
     kind: primitive
     tier: p0
-    phase1_status: structural_candidate
+    phase1_status: certified_dual
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: parity_verified
+      production_tier: production_safe
     duckdb_sql:
       implemented: true
-      production_safe: false
+      production_safe: true
     certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
     semantics:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -2025,22 +2025,22 @@ primitives:
   where:
     kind: primitive
     tier: p0
-    phase1_status: structural_candidate
+    phase1_status: certified_dual
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: parity_verified
+      production_tier: production_safe
     duckdb_sql:
       implemented: true
-      production_safe: false
+      production_safe: true
     certification:
-      dual_backend_production_safe: false
-      effective_dual_backend_fastpath: false
+      dual_backend_production_safe: true
+      effective_dual_backend_fastpath: true
     semantics:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -2053,7 +2053,7 @@ primitives:
     production_policy: allowed
     polars_long:
       tier: native
-      production_tier: implemented
+      production_tier: parity_verified
     duckdb_sql:
       implemented: true
       production_safe: false
@@ -2064,7 +2064,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -2088,7 +2088,7 @@ primitives:
       scope: unknown
       null_policy: propagate
       nan_policy: propagate
-      inf_policy: domain_specific
+      inf_policy: to_nan
       min_periods: null
       ddof: null
       tie_policy: null
@@ -2097,5 +2097,5 @@ primitives:
 counts:
   primitives: 86
   composites: 16
-  certified_dual: 14
-  composite_certified: 1
+  certified_dual: 43
+  composite_certified: 10
