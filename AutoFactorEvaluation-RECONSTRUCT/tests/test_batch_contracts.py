@@ -1,0 +1,112 @@
+from __future__ import annotations
+
+import hashlib
+
+import numpy as np
+import pandas as pd
+import pytest
+
+from evaluation.batch import BatchEvaluationConfig, FactorDefinition, FactorPack
+from evaluation.batch_metrics import (
+    apply_point_in_time_universe,
+    long_short_series,
+    price_forward_returns,
+    purged_split_mask,
+)
+from evaluation.batch_models import SplitBoundaries
+
+
+def _factor(name: str = "demo") -> FactorDefinition:
+    formula = "close"
+    return FactorDefinition(
+        name=name,
+        formula=formula,
+        source_formula=formula,
+        description="demo",
+        formula_hash=hashlib.sha256(formula.encode()).hexdigest(),
+        metadata={},
+    )
+
+
+def test_provider_neutral_factor_pack_contract():
+    factor = _factor()
+    pack = FactorPack(
+        name="demo_pack",
+        version="1",
+        source_hash="source",
+        pack_hash="pack",
+        factors=(factor,),
+        metadata={},
+    )
+    assert pack.select()[0].name == "demo"
+    assert pack.select(["demo"])[0].formula == "close"
+
+
+def test_forward_return_enters_after_signal_bar():
+    dates = pd.bdate_range("2024-01-02", periods=8)
+    frame = pd.DataFrame(
+        {"datetime": dates, "asset": "A", "vwap": np.arange(100.0, 108.0)}
+    )
+    result = price_forward_returns(frame, (2,), "vwap", entry_lag=1)[2]
+    assert result.iloc[0] == pytest.approx(103.0 / 101.0 - 1.0)
+    assert result.iloc[-3:].isna().all()
+
+
+def test_purged_split_never_crosses_boundary():
+    dates = pd.bdate_range("2024-01-02", periods=10)
+    index = pd.MultiIndex.from_product([dates, ["A"]], names=["datetime", "asset"])
+    bounds = SplitBoundaries(
+        train_end=str(dates[4].date()),
+        valid_end=str(dates[7].date()),
+        first_date=str(dates[0].date()),
+        last_date=str(dates[-1].date()),
+    )
+    train = purged_split_mask(index, "train", bounds, dates, entry_lag=1, horizon=2)
+    assert list(np.flatnonzero(train)) == [0, 1]
+
+
+def test_turnover_uses_weights_and_costs_net_returns():
+    index = pd.MultiIndex.from_product(
+        [pd.to_datetime(["2024-01-02", "2024-01-03"]), ["A", "B", "C", "D"]],
+        names=["datetime", "asset"],
+    )
+    signal = pd.Series([-2, -1, 1, 2] * 2, index=index, dtype=float)
+    returns = pd.Series([0.0, 0.0, 0.01, 0.01] * 2, index=index, dtype=float)
+    gross, net, turnover = long_short_series(
+        signal,
+        returns,
+        min_assets=4,
+        n_quantiles=2,
+        cost_bps=10.0,
+    )
+    assert gross.iloc[0] == pytest.approx(0.01)
+    assert turnover.iloc[0] == pytest.approx(1.0)
+    assert net.iloc[0] == pytest.approx(0.009)
+
+
+def test_pit_universe_filters_by_date_and_tradability():
+    market = pd.DataFrame(
+        {
+            "datetime": pd.to_datetime(["2024-01-02"] * 2 + ["2024-01-03"] * 2),
+            "asset": ["A", "B", "A", "B"],
+            "close": [1.0, 2.0, 1.1, 2.1],
+        }
+    )
+    universe = pd.DataFrame(
+        {
+            "datetime": market["datetime"],
+            "asset": market["asset"],
+            "is_member": [True, False, True, True],
+            "is_tradable": [True, True, False, True],
+        }
+    )
+    filtered = apply_point_in_time_universe(market, universe)
+    assert filtered[["datetime", "asset"]].astype(str).values.tolist() == [
+        ["2024-01-02", "A"],
+        ["2024-01-03", "B"],
+    ]
+
+
+def test_production_requires_point_in_time_universe():
+    with pytest.raises(ValueError, match="require_point_in_time_universe"):
+        BatchEvaluationConfig(run_mode="production").validate()
