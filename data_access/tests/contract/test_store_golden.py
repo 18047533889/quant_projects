@@ -15,7 +15,7 @@ import pyarrow.parquet as pq
 import pytest
 
 from data_access import reset_store
-from data_access.engine import DuckDBEngine
+from data_access.core.engine import DuckDBEngine
 from data_access.registry import load_registry
 from data_access.store import DataAccessStore
 
@@ -218,19 +218,19 @@ def test_parametric_hive_partition_prune(golden_store):
 
 
 def test_parametric_missing_param_raises(golden_store):
-    from data_access.exceptions import ValidationError
+    from data_access.core.exceptions import ValidationError
     with pytest.raises(ValidationError, match="缺参数"):
         golden_store.read_arrow("demo_factor", columns=["datetime"])
 
 
 def test_unknown_dataset_raises(golden_store):
-    from data_access.exceptions import ValidationError
+    from data_access.core.exceptions import ValidationError
     with pytest.raises(ValidationError, match="未注册"):
         golden_store.read_arrow("no_such_dataset")
 
 
 def test_load_columns_empty_result_raises_data_error(golden_store):
-    from data_access.exceptions import DataError
+    from data_access.core.exceptions import DataError
     with pytest.raises(DataError, match="0 行"):
         golden_store.load_columns(
             "demo_day",

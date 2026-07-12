@@ -460,6 +460,26 @@ def render_factor_report(
     out_path.write_text(html, encoding="utf-8")
 
 
+def load_analysis_from_factor_report(report_path: Path) -> dict[str, Any] | None:
+    """Load RankIC/LS payload embedded in an existing factor HTML appendix."""
+    if not report_path.is_file():
+        return None
+    text = report_path.read_text(encoding="utf-8", errors="replace")
+    marker = '<summary>Raw Analysis JSON</summary>'
+    idx = text.find(marker)
+    if idx < 0:
+        return None
+    start = text.find("<pre>", idx)
+    end = text.find("</pre>", start)
+    if start < 0 or end < 0:
+        return None
+    blob = text[start + 5 : end].strip()
+    try:
+        return json.loads(blob)
+    except json.JSONDecodeError:
+        return None
+
+
 def render_index(reports: list[dict[str, str]], out_path: Path) -> None:
     rows = "\n".join(
         f'<li><a href="{item["report"]}">{item["factor_name"]}</a> '

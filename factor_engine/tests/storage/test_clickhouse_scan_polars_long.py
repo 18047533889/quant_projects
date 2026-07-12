@@ -39,8 +39,8 @@ def test_clickhouse_scan_polars_long_renames_columns():
     )
     mock_cfg = MagicMock()
 
-    with patch("data_access.clickhouse_panel.ClickHouseConfig.from_env", return_value=mock_cfg):
-        with patch("data_access.clickhouse_panel.execute_query", return_value=table) as mock_eq:
+    with patch("data_access.clickhouse.panel.ClickHouseConfig.from_env", return_value=mock_cfg):
+        with patch("data_access.clickhouse.panel.execute_query", return_value=table) as mock_eq:
             lf = src.scan_polars_long(["close"])
 
     mock_eq.assert_called_once()

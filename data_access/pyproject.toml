@@ -32,11 +32,28 @@ all = [
 data-access-server = "data_access.service.__main__:main"
 
 [tool.setuptools]
-packages = ["data_access", "data_access.service", "data_access.clickhouse"]
-package-dir = { "data_access" = ".", "data_access.service" = "service", "data_access.clickhouse" = "clickhouse" }
+packages = [
+    "data_access",
+    "data_access.core",
+    "data_access.registry",
+    "data_access.read",
+    "data_access.write",
+    "data_access.cos",
+    "data_access.service",
+    "data_access.clickhouse",
+]
+[tool.setuptools.package-dir]
+"data_access" = "."
+"data_access.core" = "core"
+"data_access.registry" = "registry"
+"data_access.read" = "read"
+"data_access.write" = "write"
+"data_access.cos" = "cos"
+"data_access.service" = "service"
+"data_access.clickhouse" = "clickhouse"
 
 [tool.setuptools.package-data]
-data_access = ["config/*.yaml", "config/README.md", "用户使用手册.md"]
+data_access = ["config/*.yaml", "config/README.md", "docs/README.md", "docs/用户使用手册.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

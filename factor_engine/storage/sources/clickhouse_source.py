@@ -163,7 +163,7 @@ class ClickHouseSource(DataSource):
             return {n: self._column_cache[n] for n in names}
 
         _ensure_data_access_importable()
-        from data_access.clickhouse_panel import ClickHouseConfig, read_columns
+        from data_access.clickhouse.panel import ClickHouseConfig, read_columns
 
         physical, output_names = self._resolve_columns(needed)
         config = ClickHouseConfig.from_env(**self._ch_overrides)
@@ -254,7 +254,7 @@ class ClickHouseSource(DataSource):
         """
         physical, output_names = self._resolve_columns(columns)
         _ensure_data_access_importable()
-        from data_access.clickhouse_panel import ClickHouseConfig
+        from data_access.clickhouse.panel import ClickHouseConfig
         from backend.polars_lazy import scan_clickhouse_long
 
         config = ClickHouseConfig.from_env(**self._ch_overrides)

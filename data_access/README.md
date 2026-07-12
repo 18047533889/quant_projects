@@ -2,7 +2,7 @@
 
 > **一句话定位**：所有读写 parquet 的代码，都应该走这里。
 >
-> **对外使用说明（随包分发）**：**[用户使用手册.md](用户使用手册.md)** — 只看这一份即可。
+> **对外使用说明（随包分发）**：**[docs/用户使用手册.md](docs/用户使用手册.md)** — 只看这一份即可。文档索引见 **[docs/README.md](docs/README.md)**。
 >
 > 维护人：量化基础平台组｜最后更新：2026-07-12｜当前版本：PR8+（读/写/publish/upsert/sql/stream/polars/CH/QueryBudget/自选路径）
 
@@ -21,12 +21,33 @@
 5. **写与发布**：`write_arrow` / `upsert` / `publish_from_staging` / `delete_rows`（支持 dry_run）
 6. **有限 SQL**：`sql()` 只读 SELECT + 审计 + QueryBudget
 7. **读审计**：生产模式（`QUANT_PRODUCTION_MODE=1`）默认记录 read；也可 `QUANT_AUDIT_READS=true`
-8. **ClickHouse**：`clickhouse_panel` / `clickhouse_write` / 写后 `verify_factor_write`
+8. **ClickHouse**：`clickhouse.panel` / `clickhouse.write` / 写后 `verify_factor_write`
 9. **Schema 首访自检** + **instrument_filter 守卫**
 
 **与 factor_engine 的配合**：读 parquet 一律 `data_source.type: data_access`；计算默认 `backend.type: auto`（DuckDB SQL 子树 + Polars/Pandas fallback）。纯 SQL 因子可用 `duckdb_sql`；ClickHouse panel 用 `clickhouse` + `clickhouse_sql`。详见 [`factor_engine/README.md`](../factor_engine/README.md)「底层栈与 backend 选择」。
 
-PR4 及以前的分阶段说明见本目录 `README.md` 历史与 `用户使用手册.md`。
+PR4 及以前的分阶段说明见本目录 `README.md` 历史与 `docs/用户使用手册.md`。
+
+## 目录结构
+
+```
+data_access/
+├── store.py              # 对外唯一 API 门面
+├── __init__.py           # get_store / QueryBudget 等公开导出
+├── core/                 # 引擎、异常、命名空间、审计、重试
+├── registry/             # datasets.yaml 加载、路径白名单、schema 校验
+├── read/                 # 读契约、谓词、预算、适配、SQL 逃生口、统计
+├── write/                # publish / upsert / manifest
+├── cos/                  # COS 镜像同步与远程直读
+├── clickhouse/           # ClickHouse panel 读 / 因子写
+├── service/              # HTTP 只读服务 + client
+├── ops/                  # 运维脚本（如 refresh_dataset_stats）
+├── config/datasets.yaml  # 数据集登记真源
+├── docs/                 # 用户使用手册
+└── tests/
+```
+
+入口永远是 `from data_access import get_store`；子包仅供内部实现或进阶 import。
 
 ---
 
@@ -355,24 +376,20 @@ my_new_dataset:
 
 ---
 
-## 模块文件速览
+## 模块速览
 
-| 文件 | 作用 | 何时读它 |
-|---|---|---|
-| `store.py` | 对外 API 本体：`read_arrow / read_frame / load_columns / write_arrow / publish_from_staging` | 调用方看这个就够 |
-| `engine.py` | DuckDB 连接单例 + PRAGMA | 调优线程/内存时 |
-| `registry.py` | YAML → Dataset 对象，解析路径模板 | 加数据集字段、改 schema 时 |
-| `predicate.py` | time_range / instrument_filter 编译成参数化 SQL | 想加新谓词时 |
-| `adapters.py` | Arrow Table → `(timestamp, instrument)` MultiIndex Series | 因子引擎兼容层 |
-| `paths.py` | `${VAR:-default}` 展开 + 路径白名单 + 自选根 | debug 路径不对时 |
-| `namespace.py` | `QUANT_RUN_NAMESPACE` / `QUANT_OPERATOR` 解析 | 定位是谁在跑什么 |
-| `audit.py` | JSONL 审计日志（PR2） | 想查谁什么时候写了啥 |
-| `retry.py` | `@retry_io` — 只对 IO 错误重试 | 不轻易改，改了测试会挂 |
-| `exceptions.py` | `ValidationError / DataError / EngineError` | 写 try/except 时 |
-| `cos_remote.py` / `cos_mirror.py` | COS 远程直读 / 本地镜像 | `DATA_ACCESS_COS_READ_MODE` |
-| `query_budget.py` | 生产读配额 / columns 强制 | 排查「必须指定 columns」 |
-| `service/` | HTTP 读数服务 + client | `data-access-server` / `DataAccessClient` |
-| `用户使用手册.md` | 对外使用说明（随 wheel 分发） | 外部同事首选 |
+| 目录 | 作用 |
+|---|---|
+| `store.py` | 对外 API：`read_*` / `write_*` / `publish_*` / `sql` / `compute_and_write` |
+| `core/` | DuckDB 引擎、异常、namespace、审计 JSONL、IO 重试 |
+| `registry/` | YAML → Dataset；路径展开与白名单；layout/schema 策略 |
+| `read/` | 读契约与 snapshot；谓词编译；QueryBudget；Arrow 适配；有限 SQL |
+| `write/` | staging 发布；upsert 合并；publish manifest |
+| `cos/` | COS 按需镜像 + httpfs/cli 远程直读 |
+| `clickhouse/` | 长表只读查询与因子写入 |
+| `service/` | FastAPI 读数服务 + `DataAccessClient` |
+| `ops/` | 数据集 stats 刷新等运维脚本 | [`ops/README.md`](ops/README.md) |
+| `docs/用户使用手册.md` | 对外使用说明（随 wheel 分发） |
 
 ## PR2 新增的环境变量
 
@@ -386,7 +403,7 @@ my_new_dataset:
 
 ## 延伸阅读
 
-- **[用户使用手册](用户使用手册.md)** — **外部使用者首选**（功能、数据、COS、自选路径、写发布、HTTP 服务）；随本包分发
+- **[用户使用手册](docs/用户使用手册.md)** — **外部使用者首选**（功能、数据、COS、自选路径、写发布、HTTP 服务）；随本包分发
 - [`config/datasets.yaml`](config/datasets.yaml) — 数据集登记表本体
 - [`factor_engine/README.md`](../factor_engine/README.md) — 因子引擎批量 YAML（`run_many_from_config` / `materialize_many_from_config`）与 `staging_clickhouse` 物化
 

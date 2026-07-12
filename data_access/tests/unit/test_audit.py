@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from data_access import audit
+from data_access.core import audit
 
 
 @pytest.fixture

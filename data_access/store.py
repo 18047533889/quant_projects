@@ -39,12 +39,12 @@ import pyarrow as pa
 if TYPE_CHECKING:
     import polars as pl
 
-from . import audit
-from .adapters import arrow_table_to_multiindex_columns
-from .engine import DuckDBEngine, get_shared_engine, reset_shared_engine
-from .exceptions import DataError, ValidationError
-from .params_validation import ParamSpec, params_fingerprint, validate_params
-from .query_budget import (
+from data_access.core import audit
+from data_access.read.adapters import arrow_table_to_multiindex_columns
+from data_access.core.engine import DuckDBEngine, get_shared_engine, reset_shared_engine
+from data_access.core.exceptions import DataError, ValidationError
+from data_access.registry.params_validation import ParamSpec, params_fingerprint, validate_params
+from data_access.read.query_budget import (
     QueryBudget,
     enforce_arrow_budget,
     enforce_scan_file_budget,
@@ -56,7 +56,7 @@ from .query_budget import (
     _production_mode,
     _strict_read_mode,
 )
-from .read_contract import (
+from data_access.read.read_contract import (
     DataSnapshot,
     FileVersion,
     ReadLineage,
@@ -69,30 +69,30 @@ from .read_contract import (
     file_manifest_hash,
     merge_sql_data_snapshots,
 )
-from .scan_handle import ScanHandle
-from .namespace import is_namespace_explicit, resolve_namespace
-from .paths import (
+from data_access.read.scan_handle import ScanHandle
+from data_access.core.namespace import is_namespace_explicit, resolve_namespace
+from data_access.registry.paths import (
     PathAuthorizer,
     canonicalize,
     dataset_env_root,
     extra_allowed_roots_from_env,
 )
-from .predicate import Predicate, compile_predicate
-from .registry import (
+from data_access.read.predicate import Predicate, compile_predicate
+from data_access.registry import (
     Dataset,
     DatasetRegistry,
     ParametricDataset,
     StaticDataset,
     load_registry,
 )
-from .schema_validation import (
+from data_access.registry.schema_validation import (
     check_schema,
     enforce_schema_or_raise,
     mark_validated,
     reset_validated_cache,
     schema_cache_key,
 )
-from .telemetry import record_polars_scan
+from data_access.read.telemetry import record_polars_scan
 
 
 logger = logging.getLogger("data_access.store")
@@ -822,7 +822,7 @@ class DataAccessStore:
 
         大结果且需保持低内存峰值时，优先 ``read_auto_stream()``。
         """
-        from .read_auto_router import resolve_read_auto_mode
+        from data_access.read.read_auto_router import resolve_read_auto_mode
 
         ds = self._registry.get(dataset)
         budget = self._resolve_read_budget(ds, query_budget)
@@ -849,7 +849,7 @@ class DataAccessStore:
             **params,
         )
         if resolved_mode == "polars":
-            from .query_budget import collect_polars_with_budget
+            from data_access.read.query_budget import collect_polars_with_budget
 
             lf = self.scan_polars(dataset, **read_kwargs)
             table = collect_polars_with_budget(lf, query_budget=budget)
@@ -897,7 +897,7 @@ class DataAccessStore:
         ``mode="auto"`` 仅影响路由日志；polars 路由会 fallback 到
         ``read_arrow_stream`` 并打 warning。需要 LazyFrame 时用 ``scan_polars``。
         """
-        from .read_auto_router import resolve_read_auto_mode
+        from data_access.read.read_auto_router import resolve_read_auto_mode
 
         ds = self._registry.get(dataset)
         budget = self._resolve_read_budget(ds, query_budget)
@@ -951,7 +951,7 @@ class DataAccessStore:
         **params: Any,
     ):
         """返回 ``DatasetReadStats``（footer 行数估算 + 建议读路径）。"""
-        from .stats import dataset_read_stats as _dataset_read_stats
+        from data_access.read.stats import dataset_read_stats as _dataset_read_stats
 
         return _dataset_read_stats(
             self,
@@ -1009,7 +1009,7 @@ class DataAccessStore:
         all_cols = list(dict.fromkeys(
             [ds.time_column, ds.instrument_column, *columns]
         ))
-        from .key_policy import resolve_key_policy
+        from data_access.read.key_policy import resolve_key_policy
 
         read_result = self.read_result(
             dataset,
@@ -1229,7 +1229,7 @@ class DataAccessStore:
 
         target_dir = self._resolve_write_dir(ds, params)
 
-        from . import upsert as upsert_mod
+        from data_access.write import upsert as upsert_mod
 
         return upsert_mod.upsert_table(
             ds=ds,
@@ -1263,7 +1263,7 @@ class DataAccessStore:
             )
         tc = time_column or ds.time_column
         target_dir = self._resolve_write_dir(ds, params)
-        from . import upsert as upsert_mod
+        from data_access.write import upsert as upsert_mod
 
         return upsert_mod.delete_rows_from_dataset(
             ds=ds,
@@ -1282,7 +1282,7 @@ class DataAccessStore:
 
     def resolve_dataset_path(self, dataset: str, **params: Any) -> Path:
         """解析已登记数据集在当前 params 下的物理目录。"""
-        from .publish import _resolve_dataset_dir
+        from data_access.write.publish import _resolve_dataset_dir
 
         ds = self._registry.get(dataset)
         return _resolve_dataset_dir(ds, params)
@@ -1323,7 +1323,7 @@ class DataAccessStore:
             ...     factor_id="mom_3d",
             ... )
         """
-        from . import publish
+        from data_access.write import publish
 
         return publish.publish_from_staging(
             registry=self._registry,
@@ -1375,7 +1375,7 @@ class DataAccessStore:
             配额限流就没着落了。这里通过 TEMP VIEW 收敛：你能读的表仅限 registry
             注册的，路径照旧走 PathAuthorizer，每次执行都记审计。
         """
-        from . import sql_escape
+        from data_access.read import sql_escape
 
         merged_budget = self._resolve_sql_budget(read_datasets, query_budget)
         return sql_escape.run_sql(
@@ -1473,7 +1473,7 @@ class DataAccessStore:
         query_budget: QueryBudget | None = None,
     ) -> SqlReadResult:
         """与 ``sql()`` 相同，但返回带合并 ``DataSnapshot`` 的 ``SqlReadResult``。"""
-        from . import sql_escape
+        from data_access.read import sql_escape
 
         params_map = dict(read_params or {})
         time_ranges = dict(read_time_ranges or {})
@@ -1569,7 +1569,7 @@ class DataAccessStore:
         batch_size: int = 100_000,
     ) -> Iterator[pa.RecordBatch]:
         """流式有限 SQL：与 ``sql()`` 相同约束，按 RecordBatch 返回。"""
-        from . import sql_escape
+        from data_access.read import sql_escape
 
         merged_budget = self._resolve_sql_budget(read_datasets, query_budget)
         return sql_escape.run_sql_stream(
@@ -1619,8 +1619,8 @@ class DataAccessStore:
         若调用方显式传了 ``read_root``（或环境变量 DATA_ACCESS_READ_ROOT_*），
         则优先用本地覆盖路径，跳过 COS remote（适合「数据已在自选目录」）。
         """
-        from .cos_mirror import ensure_local_mirror_for_dataset
-        from .cos_remote import should_read_cos_remote
+        from data_access.cos.mirror import ensure_local_mirror_for_dataset
+        from data_access.cos.remote import should_read_cos_remote
 
         peek = dict(params)
         explicit_read_root = (
@@ -1632,7 +1632,7 @@ class DataAccessStore:
             return self._resolve_paths(ds, params, instrument_filter=instrument_filter)
 
         if should_read_cos_remote(ds, time_range=time_range):
-            from .cos_remote import prepare_cos_remote_paths
+            from data_access.cos.remote import prepare_cos_remote_paths
 
             paths, backend = prepare_cos_remote_paths(ds.name, time_range=time_range)
             read_params = dict(params)
@@ -1645,7 +1645,7 @@ class DataAccessStore:
                 bucket_values=explicit_buckets,
             )
             if hive_filters:
-                from .layout_policy import prune_glob_paths_for_buckets
+                from data_access.registry.layout_policy import prune_glob_paths_for_buckets
 
                 bucket_col = next(iter(hive_filters))
                 paths = prune_glob_paths_for_buckets(
@@ -1669,8 +1669,8 @@ class DataAccessStore:
 
     def _authorize_read_paths(self, glob_paths: list[str]) -> list[str]:
         """本地/远程读路径白名单校验。"""
-        from .cos_remote import authorize_s3_path, cos_cache_root
-        from .paths import path_is_under
+        from data_access.cos.remote import authorize_s3_path, cos_cache_root
+        from data_access.registry.paths import path_is_under
 
         cache_root = cos_cache_root()
         for g in glob_paths:
@@ -1692,7 +1692,7 @@ class DataAccessStore:
         instrument_filter: Sequence[str] | None,
         bucket_values: Sequence[int] | None = None,
     ) -> dict[str, list[Any]] | None:
-        from .layout_policy import bucket_values_for_instruments
+        from data_access.registry.layout_policy import bucket_values_for_instruments
 
         layout_policy = getattr(ds, "layout_policy", None)
         if bucket_values is not None and layout_policy is not None and layout_policy.bucket is not None:
@@ -1738,7 +1738,7 @@ class DataAccessStore:
             mark_validated(cache_key)
             return
 
-        from .schema_validation import _resolve_mode
+        from data_access.registry.schema_validation import _resolve_mode
 
         mode = _resolve_mode()
         try:
@@ -1762,7 +1762,7 @@ class DataAccessStore:
         - static：``read_root / glob``
         - parametric：用 read_root 替换 ``static_root`` 前缀，保留参数后缀
         """
-        from .layout_policy import prune_glob_paths_for_buckets
+        from data_access.registry.layout_policy import prune_glob_paths_for_buckets
 
         read_params = dict(params)
         explicit_buckets = read_params.pop("bucket_values", None)

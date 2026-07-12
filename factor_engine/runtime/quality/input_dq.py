@@ -196,7 +196,7 @@ def load_dataset_stats_for_source(data_source: Any) -> Any | None:
     if not dataset:
         return None
     try:
-        from data_access.stats import load_stats_sidecar
+        from data_access.read.stats import load_stats_sidecar
     except ImportError:
         return None
     root = getattr(data_source, "dataset_root", None)

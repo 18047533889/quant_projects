@@ -9,9 +9,9 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from data_access.exceptions import ValidationError
-from data_access.params_validation import validate_params, ParamSpec
-from data_access.read_contract import build_data_snapshot, canonicalize_params
+from data_access.core.exceptions import ValidationError
+from data_access.registry.params_validation import validate_params, ParamSpec
+from data_access.read.read_contract import build_data_snapshot, canonicalize_params
 
 
 def test_canonicalize_params_stable():
@@ -31,7 +31,7 @@ def test_build_data_snapshot_accepts_prebuilt_files(tmp_path: Path):
     root.mkdir()
     path = root / "a.parquet"
     pq.write_table(pa.table({"x": [1]}), path)
-    from data_access.read_contract import build_file_manifest
+    from data_access.read.read_contract import build_file_manifest
 
     files = build_file_manifest([str(path)])
     snap = build_data_snapshot(
@@ -91,7 +91,7 @@ ds:
         encoding="utf-8",
     )
 
-    from data_access.engine import DuckDBEngine
+    from data_access.core.engine import DuckDBEngine
     from data_access.registry import load_registry
     from data_access.store import DataAccessStore
 
@@ -125,7 +125,7 @@ ds:
         encoding="utf-8",
     )
 
-    from data_access.engine import DuckDBEngine
+    from data_access.core.engine import DuckDBEngine
     from data_access.registry import load_registry
     from data_access.store import DataAccessStore
 

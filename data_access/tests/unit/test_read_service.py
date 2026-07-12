@@ -13,7 +13,7 @@ fastapi = pytest.importorskip("fastapi")
 httpx = pytest.importorskip("httpx")
 from fastapi.testclient import TestClient
 
-from data_access.read_contract import (
+from data_access.read.read_contract import (
     DataSnapshot,
     ReadLineage,
     ReadResult,

@@ -5,8 +5,8 @@ from __future__ import annotations
 import pyarrow as pa
 import pytest
 
-from data_access.exceptions import ValidationError
-from data_access.query_budget import (
+from data_access.core.exceptions import ValidationError
+from data_access.read.query_budget import (
     QueryBudget,
     apply_sql_row_limit,
     enforce_arrow_budget,

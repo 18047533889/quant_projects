@@ -288,7 +288,7 @@ class ParquetSource(DataSource):
         paths = [str(p) for p in files]
 
         try:
-            from data_access.engine import get_shared_engine
+            from data_access.core.engine import get_shared_engine
 
             engine = get_shared_engine()
             sql = f"SELECT {col_clause} FROM read_parquet(?, union_by_name=true)"
@@ -330,7 +330,7 @@ class ParquetSource(DataSource):
         """
         import pandas as pd
         try:
-            from data_access.engine import get_shared_engine
+            from data_access.core.engine import get_shared_engine
         except ModuleNotFoundError:
             return self._pandas_read_files(files, [ts_col, inst_col, *value_cols], skip_errors=True)
 

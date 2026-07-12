@@ -2,7 +2,7 @@
 """ClickHouse panel SQL 组装测试（不连真实 CH）。"""
 from __future__ import annotations
 
-from data_access.clickhouse_panel import ClickHouseConfig, _build_select_sql
+from data_access.clickhouse.panel import ClickHouseConfig, _build_select_sql
 
 
 def test_build_select_sql_with_filters():

@@ -71,8 +71,8 @@ def test_try_execute_sql_pushdown_clickhouse_ts_mean():
     )
     mock_cfg = MagicMock()
 
-    with patch("data_access.clickhouse_panel.ClickHouseConfig.from_env", return_value=mock_cfg):
-        with patch("data_access.clickhouse_panel.execute_query", return_value=table) as mock_eq:
+    with patch("data_access.clickhouse.panel.ClickHouseConfig.from_env", return_value=mock_cfg):
+        with patch("data_access.clickhouse.panel.execute_query", return_value=table) as mock_eq:
             series = try_execute_sql_pushdown(plan, ctx)
 
     mock_eq.assert_called_once()
@@ -101,8 +101,8 @@ def test_try_execute_sql_pushdown_clickhouse_ffill():
     )
     mock_cfg = MagicMock()
 
-    with patch("data_access.clickhouse_panel.ClickHouseConfig.from_env", return_value=mock_cfg):
-        with patch("data_access.clickhouse_panel.execute_query", return_value=table) as mock_eq:
+    with patch("data_access.clickhouse.panel.ClickHouseConfig.from_env", return_value=mock_cfg):
+        with patch("data_access.clickhouse.panel.execute_query", return_value=table) as mock_eq:
             series = try_execute_sql_pushdown(plan, ctx)
 
     mock_eq.assert_called_once()
@@ -135,8 +135,8 @@ def test_try_execute_sql_pushdown_clickhouse_coalesce():
     )
     mock_cfg = MagicMock()
 
-    with patch("data_access.clickhouse_panel.ClickHouseConfig.from_env", return_value=mock_cfg):
-        with patch("data_access.clickhouse_panel.execute_query", return_value=table) as mock_eq:
+    with patch("data_access.clickhouse.panel.ClickHouseConfig.from_env", return_value=mock_cfg):
+        with patch("data_access.clickhouse.panel.execute_query", return_value=table) as mock_eq:
             series = try_execute_sql_pushdown(plan, ctx)
 
     mock_eq.assert_called_once()
@@ -168,8 +168,8 @@ def test_try_execute_sql_pushdown_clickhouse_protected_div():
     )
     mock_cfg = MagicMock()
 
-    with patch("data_access.clickhouse_panel.ClickHouseConfig.from_env", return_value=mock_cfg):
-        with patch("data_access.clickhouse_panel.execute_query", return_value=table) as mock_eq:
+    with patch("data_access.clickhouse.panel.ClickHouseConfig.from_env", return_value=mock_cfg):
+        with patch("data_access.clickhouse.panel.execute_query", return_value=table) as mock_eq:
             series = try_execute_sql_pushdown(plan, ctx)
 
     mock_eq.assert_called_once()
@@ -198,8 +198,8 @@ def test_try_execute_sql_pushdown_clickhouse_nan_to_num():
     )
     mock_cfg = MagicMock()
 
-    with patch("data_access.clickhouse_panel.ClickHouseConfig.from_env", return_value=mock_cfg):
-        with patch("data_access.clickhouse_panel.execute_query", return_value=table) as mock_eq:
+    with patch("data_access.clickhouse.panel.ClickHouseConfig.from_env", return_value=mock_cfg):
+        with patch("data_access.clickhouse.panel.execute_query", return_value=table) as mock_eq:
             series = try_execute_sql_pushdown(plan, ctx)
 
     mock_eq.assert_called_once()
@@ -239,8 +239,8 @@ def test_try_execute_sql_pushdown_clickhouse_where_is_finite():
     )
     mock_cfg = MagicMock()
 
-    with patch("data_access.clickhouse_panel.ClickHouseConfig.from_env", return_value=mock_cfg):
-        with patch("data_access.clickhouse_panel.execute_query", return_value=table) as mock_eq:
+    with patch("data_access.clickhouse.panel.ClickHouseConfig.from_env", return_value=mock_cfg):
+        with patch("data_access.clickhouse.panel.execute_query", return_value=table) as mock_eq:
             series = try_execute_sql_pushdown(plan, ctx)
 
     mock_eq.assert_called_once()

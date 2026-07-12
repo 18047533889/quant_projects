@@ -70,7 +70,7 @@ def test_execute_duckdb_table_passes_view_columns():
     mock_store = MagicMock()
     mock_store.sql.return_value = MagicMock(num_rows=1)
 
-    from data_access.query_budget import QueryBudget
+    from data_access.read.query_budget import QueryBudget
 
     with patch("data_access.get_store", return_value=mock_store):
         _execute_duckdb_table(

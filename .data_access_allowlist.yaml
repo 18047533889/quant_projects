@@ -24,20 +24,26 @@
 # ============================================================================
 # A. data_access 自己的实现：不迁（自循环）
 # ============================================================================
-- path: data_access/engine.py
+- path: data_access/core/engine.py
   reason: "DuckDB 引擎封装本体，`import duckdb` + `duckdb.connect` 的唯一合法落点"
-- path: data_access/duckdb_config.py
+- path: data_access/core/duckdb_config.py
   reason: "DuckDB PRAGMA 配置模块，供 engine 与 isolated connection 复用"
 - path: data_access/store.py
   reason: "data_access 实现本体，内部 build SQL + 调 DuckDB"
-- path: data_access/publish.py
+- path: data_access/write/publish.py
   reason: "publish 流程要直读 parquet 做行数校验，不能递归自己调 read_arrow"
-- path: data_access/stats.py
+- path: data_access/read/stats.py
   reason: "dataset footer 行数估算需 pq.read_metadata，与 publish 同类只读 footer"
-- path: data_access/upsert.py
+- path: data_access/write/upsert.py
   reason: "upsert 需要读已有 partition 做 merge，调 store.read_arrow 会绕一大圈"
-- path: data_access/sql_escape.py
+- path: data_access/read/sql_escape.py
   reason: "有限 SQL 逃生口的实现本体"
+- path: data_access/cos/remote.py
+  reason: "COS remote 模式用 isolated DuckDB 连接做 S3 路径探测，不走 store 读路径"
+- path: data_access/service/app.py
+  reason: "HTTP 读数服务：Arrow IPC / Parquet 序列化响应体"
+- path: data_access/service/client.py
+  reason: "HTTP 客户端：解析远程 Parquet 响应为 Arrow Table"
 - path: data_access/__init__.py
   reason: "docstring 里解释禁令本身"
 - path: data_access/tests/**
@@ -122,12 +128,8 @@
   reason: "因子湖 metadata 列迁移 CLI；读写 materializer 落盘路径 factors/<id>/year=*/data.parquet，非 registry dataset"
 - path: factor_engine/scripts/migrate_factor_lake_schema.py
   reason: "因子湖 schema 迁移 CLI 入口；委托 schema_migration 读改写本地 lake 分区"
-- path: data_access/clickhouse_write.py
-  reason: "Parquet→ClickHouse ETL（load_parquet_to_panel_table）读用户指定单文件；写 CH 专用路径"
 - path: data_access/clickhouse/write.py
   reason: "ClickHouse 物化读本地 parquet 单文件；CH ETL 专用路径，非 registry dataset"
-- path: data_access/scripts/execute_bucket_migration.py
-  reason: "bucket 分区迁移运维脚本；逐文件读改写 parquet，一次性数据布局变更"
 - path: scripts/verify_gtja191_factor_lake.py
   reason: "GTJA191 factor lake 结构审计 + 重算对比；按 factors/<id>/year=*/data.parquet 逐分区读，非 registry dataset"
 - path: factor_engine/backend/fastpath_plan_probe.py
@@ -273,3 +275,17 @@
 #   - strategy_layer/portfolio_alpha/multiple_factor_composite/factor_reader.py  # 同上
 #   - strategy_layer/data/factor_panel.py           # load_factor_long 本体 → get_shared_engine()
 #   - strategy_layer/data/market_data.py            # aggregate_bars_daily_summary → get_shared_engine()
+
+
+# ============================================================================
+# L. cogalpha_lqtp 生产脚本：读写 pipeline 中间产物 / 本地 cache，非 registry dataset
+# ============================================================================
+- path: scripts/cogalpha_lqtp/**
+  reason: "LQTP 生产 pipeline：物化 long parquet、eval cache、bootstrap mock 数据到用户自选 output_dir；中间产物不进 data_access registry"
+
+
+# ============================================================================
+# M. AutoFactorEvaluation-RECONSTRUCT：独立评估栈，staging/worker 直读写中间 parquet
+# ============================================================================
+- path: AutoFactorEvaluation-RECONSTRUCT/**
+  reason: "因子评估重构实验栈：assetization/evaluation/purification worker 按任务目录读写 staging parquet，非 data_access registry dataset"

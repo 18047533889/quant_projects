@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 
-from data_access.clickhouse_panel import ClickHouseConfig
-from data_access.clickhouse_write import (
+from data_access.clickhouse.panel import ClickHouseConfig
+from data_access.clickhouse.write import (
     _assert_select_only,
     ensure_factor_table,
     ensure_panel_table,

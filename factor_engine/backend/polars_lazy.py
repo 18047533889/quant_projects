@@ -8,8 +8,8 @@ from typing import Any
 
 def _collect_arrow_table(lf: Any, *, select_cols: list[str]) -> Any:
     """ScanHandle / LazyFrame 统一 collect → Arrow Table。"""
-    from data_access.query_budget import collect_polars_with_budget
-    from data_access.scan_handle import ScanHandle
+    from data_access.read.query_budget import collect_polars_with_budget
+    from data_access.read.scan_handle import ScanHandle
 
     selected = lf.select(select_cols)
     if isinstance(selected, ScanHandle):
@@ -25,6 +25,23 @@ def _store_scan(store: Any, dataset: str, read_kwargs: dict[str, Any]) -> Any:
     if callable(scan_fn):
         return scan_fn(dataset, **read_kwargs)
     return store.scan_polars(dataset, **read_kwargs)
+
+
+def _ensure_polars_lazyframe(lf: Any) -> Any:
+    """Polars 原生 long 路径需要裸 ``LazyFrame``，不能链式 ``.collect()`` 得到 ``ReadResult``。"""
+    from data_access.read.scan_handle import ScanHandle
+
+    if isinstance(lf, ScanHandle):
+        return lf._lf
+    return lf
+
+
+def _store_scan_polars_native(store: Any, dataset: str, read_kwargs: dict[str, Any]) -> Any:
+    """Polars long 原生路径：优先 ``scan_polars``，避免 ``ScanHandle.collect()`` 返回 ``ReadResult``。"""
+    scan_fn = getattr(store, "scan_polars", None)
+    if callable(scan_fn):
+        return scan_fn(dataset, **read_kwargs)
+    return _ensure_polars_lazyframe(_store_scan(store, dataset, read_kwargs))
 
 
 def _snapshot_id_from_scan(scan_obj: Any) -> str | None:
@@ -60,7 +77,7 @@ class LazyColumnBundle:
         output_names: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """从 bundle 物化列（已 collect 的列走缓存）。"""
-        from data_access.adapters import arrow_table_to_multiindex_columns
+        from data_access.read.adapters import arrow_table_to_multiindex_columns
 
         names = list(dict.fromkeys(physical_columns))
         pending = [c for c in names if c not in self._materialized]
@@ -164,7 +181,7 @@ def scan_dataset_columns(
             output_names=output_names,
         )
 
-    from data_access.adapters import arrow_table_to_multiindex_columns
+    from data_access.read.adapters import arrow_table_to_multiindex_columns
 
     all_cols = list(
         dict.fromkeys([time_column, instrument_column, *physical_columns])
@@ -219,7 +236,7 @@ def build_scan_polars_long(
     }
     if params:
         read_kwargs.update(params)
-    lf = _store_scan(store, dataset, read_kwargs)
+    lf = _store_scan_polars_native(store, dataset, read_kwargs)
     rename: dict[str, str] = {time_column: "ts", instrument_column: "inst"}
     for phys in physical_columns:
         logical = output_names.get(phys, phys)
@@ -248,7 +265,7 @@ def build_scan_index_long(
     }
     if params:
         read_kwargs.update(params)
-    lf = _store_scan(store, dataset, read_kwargs)
+    lf = _store_scan_polars_native(store, dataset, read_kwargs)
     rename = {time_column: "ts", instrument_column: "inst"}
     return lf.rename(rename).select(["ts", "inst"]).unique()
 
@@ -312,7 +329,7 @@ def scan_clickhouse_long(
     """ClickHouse SQL → Polars LazyFrame（``ts / inst / logical cols``）。"""
     import polars as pl
 
-    from data_access.clickhouse_panel import execute_query
+    from data_access.clickhouse.panel import execute_query
 
     sql = build_clickhouse_scan_sql(
         table,

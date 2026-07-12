@@ -31,7 +31,7 @@ def test_data_access_scan_polars_long_renames_axes():
             "Volume": [100.0, 200.0],
         }
     )
-    mock_store.scan.return_value = base
+    mock_store.scan_polars.return_value = base
 
     with patch("storage.sources.data_access_source._get_store", return_value=mock_store):
         lf = src.scan_polars_long(["close", "volume"])
@@ -41,6 +41,6 @@ def test_data_access_scan_polars_long_renames_axes():
     row = lf.collect().row(0)
     assert row[0] == "2024-01-01"
     assert row[1] == "A"
-    mock_store.scan.assert_called_once()
-    call_cols = mock_store.scan.call_args.kwargs.get("columns")
+    mock_store.scan_polars.assert_called_once()
+    call_cols = mock_store.scan_polars.call_args.kwargs.get("columns")
     assert "Close" in call_cols

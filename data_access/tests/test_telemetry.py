@@ -16,7 +16,7 @@ import os
 import pytest
 
 from data_access import get_shared_engine, reset_shared_engine
-from data_access.telemetry import (
+from data_access.read.telemetry import (
     get_counters_snapshot,
     record_query,
     reset_counters,
@@ -95,7 +95,7 @@ def test_telemetry_hook_invoked_via_engine(monkeypatch):
 def test_record_query_swallows_errors(monkeypatch):
     """telemetry 内部失败不能把业务查询搞挂。"""
     # 故意注入一个会 boom 的 operator resolver
-    import data_access.telemetry as tele
+    import data_access.read.telemetry as tele
 
     def boom() -> str:
         raise RuntimeError("operator resolver 挂了")
@@ -106,7 +106,7 @@ def test_record_query_swallows_errors(monkeypatch):
 
 
 def test_record_polars_scan_counts(monkeypatch):
-    from data_access.telemetry import record_polars_scan
+    from data_access.read.telemetry import record_polars_scan
 
     monkeypatch.setenv("QUANT_OPERATOR", "test_operator")
     record_polars_scan(dataset="us_stock_daily", elapsed_ms=12.5, paths_count=3)
@@ -116,8 +116,8 @@ def test_record_polars_scan_counts(monkeypatch):
 
 
 def test_slow_query_explain_when_enabled(monkeypatch, caplog):
-    from data_access.engine import DuckDBEngine
-    from data_access.telemetry import maybe_log_slow_query_plan
+    from data_access.core.engine import DuckDBEngine
+    from data_access.read.telemetry import maybe_log_slow_query_plan
 
     monkeypatch.setenv("QUANT_EXPLAIN_SLOW_QUERY", "1")
     monkeypatch.setenv("QUANT_EXPLAIN_QUERY_MS", "50")

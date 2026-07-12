@@ -25,7 +25,7 @@ def _iso_to_unix_nano(value: str | None) -> str:
 def collect_data_access_telemetry() -> dict[str, Any]:
     """读取 data_access 进程内 telemetry 快照（可选依赖）。"""
     try:
-        from data_access.telemetry import get_counters_snapshot
+        from data_access.read.telemetry import get_counters_snapshot
     except ImportError:
         return {"available": False, "operators": {}}
 

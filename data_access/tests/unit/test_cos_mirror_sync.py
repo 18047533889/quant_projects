@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from data_access.cos_mirror import (
+from data_access.cos.mirror import (
     MirrorSpec,
     ensure_local_mirror,
     skip_cos_mirror,
@@ -26,11 +26,11 @@ def mirror_env(tmp_path, monkeypatch):
     )
     registry = {"test_ashare_daily": spec}
     monkeypatch.setattr(
-        "data_access.cos_mirror.DATASET_MIRROR_REGISTRY",
+        "data_access.cos.mirror.DATASET_MIRROR_REGISTRY",
         registry,
     )
     monkeypatch.setattr(
-        "data_access.cos_mirror.mirror_spec_for_dataset",
+        "data_access.cos.mirror.mirror_spec_for_dataset",
         lambda name: registry.get(name),
     )
     return spec
@@ -50,7 +50,7 @@ def test_sync_daily_file_invokes_cos_cli(mirror_env, tmp_path):
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(b"PAR1")
 
-    with patch("data_access.cos_mirror.subprocess.run", side_effect=fake_run):
+    with patch("data_access.cos.mirror.subprocess.run", side_effect=fake_run):
         sync_dataset(
             "test_ashare_daily",
             time_range=("2024-01-02", "2024-01-02"),
@@ -73,7 +73,7 @@ def test_missing_cos_object_is_skipped(mirror_env):
             stderr="cos object not found: test",
         )
 
-    with patch("data_access.cos_mirror.subprocess.run", side_effect=fake_run):
+    with patch("data_access.cos.mirror.subprocess.run", side_effect=fake_run):
         sync_dataset(
             "test_ashare_daily",
             time_range=("2024-01-07", "2024-01-07"),
@@ -81,7 +81,7 @@ def test_missing_cos_object_is_skipped(mirror_env):
 
 
 def test_ensure_local_mirror_raises_without_local_data_or_time_range(mirror_env):
-    from data_access.exceptions import ValidationError
+    from data_access.core.exceptions import ValidationError
 
     with pytest.raises(ValidationError, match="未指定 time_range"):
         ensure_local_mirror("test_ashare_daily", time_range=None)
@@ -101,7 +101,7 @@ def test_ensure_local_mirror_pulls_missing_range(mirror_env):
     existing.parent.mkdir(parents=True)
     existing.write_bytes(b"PAR1")
 
-    with patch("data_access.cos_mirror.subprocess.run", side_effect=fake_run):
+    with patch("data_access.cos.mirror.subprocess.run", side_effect=fake_run):
         ensure_local_mirror(
             "test_ashare_daily",
             time_range=("2024-01-02", "2024-01-03"),
@@ -120,9 +120,9 @@ def test_hive_date_sync_layout(tmp_path, monkeypatch):
         file_name="data.parquet",
     )
     registry = {"test_adj": spec}
-    monkeypatch.setattr("data_access.cos_mirror.DATASET_MIRROR_REGISTRY", registry)
+    monkeypatch.setattr("data_access.cos.mirror.DATASET_MIRROR_REGISTRY", registry)
     monkeypatch.setattr(
-        "data_access.cos_mirror.mirror_spec_for_dataset",
+        "data_access.cos.mirror.mirror_spec_for_dataset",
         lambda name: registry.get(name),
     )
 
@@ -134,7 +134,7 @@ def test_hive_date_sync_layout(tmp_path, monkeypatch):
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(b"PAR1")
 
-    with patch("data_access.cos_mirror.subprocess.run", side_effect=fake_run):
+    with patch("data_access.cos.mirror.subprocess.run", side_effect=fake_run):
         sync_dataset("test_adj", time_range=("2024-01-02", "2024-01-02"))
 
     assert calls[0].endswith("date=2024-01-02/data.parquet")
@@ -150,9 +150,9 @@ def test_iter_years_for_hive_year(tmp_path, monkeypatch):
         file_name="data.parquet",
     )
     registry = {"test_uni": spec}
-    monkeypatch.setattr("data_access.cos_mirror.DATASET_MIRROR_REGISTRY", registry)
+    monkeypatch.setattr("data_access.cos.mirror.DATASET_MIRROR_REGISTRY", registry)
     monkeypatch.setattr(
-        "data_access.cos_mirror.mirror_spec_for_dataset",
+        "data_access.cos.mirror.mirror_spec_for_dataset",
         lambda name: registry.get(name),
     )
 
@@ -164,7 +164,7 @@ def test_iter_years_for_hive_year(tmp_path, monkeypatch):
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(b"PAR1")
 
-    with patch("data_access.cos_mirror.subprocess.run", side_effect=fake_run):
+    with patch("data_access.cos.mirror.subprocess.run", side_effect=fake_run):
         sync_dataset("test_uni", time_range=("2023-12-31", "2024-01-02"))
 
     assert sorted(calls) == [

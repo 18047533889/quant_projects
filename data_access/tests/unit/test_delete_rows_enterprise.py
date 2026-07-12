@@ -6,9 +6,9 @@ import pandas as pd
 import pyarrow.parquet as pq
 import pytest
 
-from data_access.paths import PathAuthorizer
+from data_access.registry.paths import PathAuthorizer
 from data_access.registry import ParametricDataset
-from data_access.upsert import delete_rows_from_dataset
+from data_access.write.upsert import delete_rows_from_dataset
 
 
 @pytest.fixture

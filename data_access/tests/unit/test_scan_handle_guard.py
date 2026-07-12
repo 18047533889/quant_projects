@@ -4,10 +4,10 @@ from datetime import datetime, timezone
 
 import pytest
 
-from data_access.exceptions import ValidationError
-from data_access.query_budget import QueryBudget
-from data_access.read_contract import DataSnapshot, ReadLineage
-from data_access.scan_handle import ScanHandle
+from data_access.core.exceptions import ValidationError
+from data_access.read.query_budget import QueryBudget
+from data_access.read.read_contract import DataSnapshot, ReadLineage
+from data_access.read.scan_handle import ScanHandle
 
 
 class _FakeLazyFrame:

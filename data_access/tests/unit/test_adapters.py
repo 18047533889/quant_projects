@@ -7,7 +7,7 @@ from __future__ import annotations
 import pandas as pd
 import pyarrow as pa
 
-from data_access.adapters import arrow_table_to_multiindex_columns, arrow_to_multiindex_series
+from data_access.read.adapters import arrow_table_to_multiindex_columns, arrow_to_multiindex_series
 
 
 def _make_table(data: dict) -> pa.Table:

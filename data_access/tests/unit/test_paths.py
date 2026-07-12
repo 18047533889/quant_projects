@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from data_access.exceptions import ValidationError
-from data_access.paths import (
+from data_access.core.exceptions import ValidationError
+from data_access.registry.paths import (
     PathAuthorizer,
     canonicalize,
     expand_env,

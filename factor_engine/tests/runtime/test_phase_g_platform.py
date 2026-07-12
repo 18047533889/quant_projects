@@ -79,7 +79,7 @@ def test_lazy_bundle_materialize_uses_single_collect():
     )
     with patch.object(pl.LazyFrame, "collect", counted_collect):
         with patch(
-            "data_access.adapters.arrow_table_to_multiindex_columns",
+            "data_access.read.adapters.arrow_table_to_multiindex_columns",
             return_value={
                 "close": pd.Series([1.0, 2.0, 3.0], index=idx),
                 "open": pd.Series([0.5, 1.5, 2.5], index=idx),

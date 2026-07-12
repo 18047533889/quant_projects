@@ -105,7 +105,7 @@ def extract_pushdown_context(ctx: ExecutionContext) -> PushdownContext | None:
 
 def _series_from_sql_table(table, *, timestamp_col: str, instrument_col: str) -> pd.Series:
     """将 Arrow/SQL 查询结果转为 MultiIndex (ts, inst) Series。"""
-    from data_access.adapters import arrow_to_multiindex_series
+    from data_access.read.adapters import arrow_to_multiindex_series
 
     return arrow_to_multiindex_series(
         table,
@@ -154,7 +154,7 @@ def _series_from_batch_table(
     value_column: str,
 ) -> pd.Series:
     """批量查询结果中按列别名提取 MultiIndex Series。"""
-    from data_access.adapters import arrow_to_multiindex_series
+    from data_access.read.adapters import arrow_to_multiindex_series
 
     return arrow_to_multiindex_series(
         table,
@@ -213,7 +213,7 @@ def _build_duckdb_store_kwargs(
             read_params[name] = ds_params
 
     _ensure_data_access()
-    from data_access.query_budget import QueryBudget, resolve_query_budget
+    from data_access.read.query_budget import QueryBudget, resolve_query_budget
 
     explicit = query_budget
     if explicit is None:
@@ -248,7 +248,7 @@ def _execute_duckdb_table(
 def _execute_clickhouse_table(compiled: CompiledSql | BatchCompiledSql, ctx: PushdownContext):
     """在 ClickHouse 上执行 SQL，返回查询结果表。"""
     _ensure_data_access()
-    from data_access.clickhouse_panel import ClickHouseConfig, execute_query
+    from data_access.clickhouse.panel import ClickHouseConfig, execute_query
 
     config = ClickHouseConfig.from_env(**(ctx.ch_config or {}))
     return execute_query(config=config, sql=compiled.query)

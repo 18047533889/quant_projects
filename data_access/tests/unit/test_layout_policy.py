@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from data_access.layout_policy import (
+from data_access.registry.layout_policy import (
     bucket_partition_predicate,
     instrument_buckets,
     prune_glob_paths_for_buckets,

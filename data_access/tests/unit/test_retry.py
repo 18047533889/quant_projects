@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import pytest
 
-from data_access.exceptions import DataError, ValidationError
-from data_access.retry import retry_io
+from data_access.core.exceptions import DataError, ValidationError
+from data_access.core.retry import retry_io
 
 
 def test_no_retry_on_success():

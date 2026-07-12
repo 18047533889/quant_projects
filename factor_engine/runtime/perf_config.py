@@ -93,7 +93,7 @@ class PerfConfig:
             ``QueryBudget`` 实例，或 ``data_access`` 不可导入时返回 ``None``。
         """
         try:
-            from data_access.query_budget import QueryBudget, resolve_query_budget
+            from data_access.read.query_budget import QueryBudget, resolve_query_budget
         except ImportError:
             return None
         explicit: QueryBudget | None = None

@@ -16,12 +16,11 @@ sudo journalctl -u fe-queue-worker -f
 
 见 [`fe-queue-worker-job.yaml`](fe-queue-worker-job.yaml)。部署前替换镜像、PVC 与代码挂载路径。
 
-## Bucket 切读 YAML 补丁
+## 数据集 stats 刷新（data_access）
 
 ```bash
-python3 data_access/scripts/emit_bucket_cutover_patch.py \
-  --dataset ashare_stock_minute \
-  --target-root /data/bucket/minute
+cd quant_projects
+PYTHONPATH=. python3 data_access/ops/refresh_dataset_stats.py --dataset ashare_stock_daily
 ```
 
 ## 生产严格 Polars
@@ -30,22 +29,10 @@ python3 data_access/scripts/emit_bucket_cutover_patch.py \
 export FACTOR_ENGINE_PRODUCTION_STRICT_POLARS=1  # pandas fallback → fail
 ```
 
-## Bucket 迁移 Playbook
+## 读路径灰度（不改 datasets.yaml）
 
 ```bash
-python3 data_access/scripts/run_bucket_migration.py \
-  --dataset ashare_stock_minute \
-  --target-root /path/to/bucket_layout \
-  --json
-
-# 实际迁移 + 校验
-python3 data_access/scripts/run_bucket_migration.py \
-  --dataset ashare_stock_minute \
-  --target-root /path/to/bucket_layout \
-  --execute
-
-# 灰度切读（不改 yaml）
-export DATA_ACCESS_READ_ROOT_ASHARE_STOCK_MINUTE=/path/to/bucket_layout
+export DATA_ACCESS_READ_ROOT_ASHARE_STOCK_MINUTE=/path/to/alternate_layout
 ```
 
 ## 事件驱动增量

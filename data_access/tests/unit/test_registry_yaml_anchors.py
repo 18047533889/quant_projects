@@ -5,7 +5,7 @@ from pathlib import Path
 
 import yaml
 
-from data_access.cos_mirror import DATASET_MIRROR_REGISTRY
+from data_access.cos.mirror import DATASET_MIRROR_REGISTRY
 from data_access.registry import load_registry
 
 
@@ -30,7 +30,7 @@ def test_mirror_registry_datasets_are_registered():
 
 def test_cos_eligible_datasets_have_mirror_specs():
     """反向：落在 COS 镜像根下的静态数据集都应在 DATASET_MIRROR_REGISTRY 登记。"""
-    from data_access.cos_mirror import datasets_requiring_cos_mirror
+    from data_access.cos.mirror import datasets_requiring_cos_mirror
 
     config_path = Path(__file__).resolve().parents[2] / "config" / "datasets.yaml"
     reg = load_registry(config_path)

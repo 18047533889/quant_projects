@@ -85,7 +85,7 @@ def test_pipeline_config_batched_engine():
 
 def test_store_production_requires_columns(monkeypatch):
     monkeypatch.setenv("FACTOR_ENGINE_RUN_MODE", "production")
-    from data_access.query_budget import resolve_query_budget, validate_query_request
+    from data_access.read.query_budget import resolve_query_budget, validate_query_request
 
     budget = resolve_query_budget(None)
     assert budget.require_columns is True

@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from data_access import reset_store
-from data_access.engine import DuckDBEngine
+from data_access.core.engine import DuckDBEngine
 from data_access.registry import load_registry
 from data_access.store import DataAccessStore, adapter_options_for_dataset
 
@@ -93,7 +93,7 @@ us_stock_daily:
         calls.append(ds.name)
 
     monkeypatch.setattr(
-        "data_access.cos_mirror.ensure_local_mirror_for_dataset",
+        "data_access.cos.mirror.ensure_local_mirror_for_dataset",
         _fake_mirror,
     )
 

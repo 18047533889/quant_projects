@@ -10,9 +10,9 @@ import pyarrow.parquet as pq
 import pytest
 
 from data_access import reset_store
-from data_access.engine import DuckDBEngine
+from data_access.core.engine import DuckDBEngine
 from data_access.registry import load_registry
-from data_access.stats import (
+from data_access.read.stats import (
     DatasetReadStats,
     estimate_parquet_rows,
     expand_parquet_paths,

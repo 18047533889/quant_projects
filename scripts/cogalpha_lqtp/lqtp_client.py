@@ -25,7 +25,8 @@ import Struct_pb2_grpc  # noqa: E402
 
 
 DEFAULT_SERVER = os.getenv("LQTP_SERVER", "118.89.191.220:50051")
-DEFAULT_TOKEN_REFRESH_SECONDS = 20 * 60
+DEFAULT_TOKEN_REFRESH_SECONDS = 10 * 60
+DEFAULT_BACKTEST_AUTH_RETRIES = 12
 DEFAULT_BACKTEST_CASH = 10_000_000.0  # 1000万本金；图中 NAV 另归一化到 start=1
 DEFAULT_LQTP_LOGIN_RETRIES = 12
 DEFAULT_LQTP_LOGIN_WAIT_SEC = 15.0
@@ -235,6 +236,76 @@ class LqtpTokenManager:
             if self._auth is None:
                 raise RuntimeError("LQTP token manager is not authenticated")
             return self._auth.access_token
+
+
+def is_lqtp_auth_error(exc: BaseException) -> bool:
+    """True when LQTP rejected the call due to an expired/invalid access token."""
+    if isinstance(exc, grpc.RpcError):
+        try:
+            if exc.code() == grpc.StatusCode.UNAUTHENTICATED:
+                return True
+        except Exception:  # noqa: BLE001
+            pass
+    msg = str(exc).lower()
+    needles = (
+        "unauthenticated",
+        "authorization token",
+        "token 无效",
+        "token 已过期",
+        "无效或已过期",
+        "invalid token",
+        "expired token",
+    )
+    return any(n in msg for n in needles)
+
+
+def run_backtest_auth_safe(
+    token_mgr: LqtpTokenManager,
+    *,
+    max_auth_retries: int = DEFAULT_BACKTEST_AUTH_RETRIES,
+    **kwargs: Any,
+) -> tuple[list[dict[str, Any]], str]:
+    """Run backtest; on token expiry refresh/re-login and retry (never skip auth errors)."""
+    last_err = ""
+    for attempt in range(max_auth_retries):
+        token_mgr.maybe_refresh(force=(attempt > 0))
+        try:
+            return run_backtest_from_weights(token=token_mgr.token, **kwargs)
+        except Exception as exc:  # noqa: BLE001
+            if not is_lqtp_auth_error(exc):
+                raise
+            last_err = str(exc)
+            print(f"  LQTP token expired → refresh & retry ({attempt + 1}/{max_auth_retries})")
+            token_mgr.maybe_refresh(force=True)
+    raise RuntimeError(f"LQTP backtest auth failed after {max_auth_retries} refresh retries: {last_err}")
+
+
+def safe_backtest(
+    *,
+    token_mgr: LqtpTokenManager | None = None,
+    token: str | None = None,
+    **kwargs: Any,
+) -> tuple[list[dict[str, Any]], str]:
+    """Backtest wrapper: auto-refresh token via *token_mgr*; skip only non-auth failures."""
+    if token_mgr is not None:
+        try:
+            return run_backtest_auth_safe(token_mgr, **kwargs)
+        except Exception as exc:  # noqa: BLE001
+            if is_lqtp_auth_error(exc):
+                raise
+            print(f"  backtest skipped: {exc}")
+            return [], ""
+    if token is None:
+        raise ValueError("safe_backtest requires token_mgr or token")
+    try:
+        return run_backtest_from_weights(token=token, **kwargs)
+    except Exception as exc:  # noqa: BLE001
+        if is_lqtp_auth_error(exc):
+            raise RuntimeError(
+                "LQTP token expired; pass token_mgr=LqtpTokenManager for auto-refresh"
+            ) from exc
+        print(f"  backtest skipped: {exc}")
+        return [], ""
 
 
 def _to_lqtp_symbol(symbol: str) -> str:

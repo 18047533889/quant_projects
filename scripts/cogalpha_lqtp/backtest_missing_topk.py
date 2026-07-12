@@ -27,10 +27,12 @@ from scripts.cogalpha_lqtp.eval_lake_fast import (  # noqa: E402
 )
 from scripts.cogalpha_lqtp.lqtp_client import (  # noqa: E402
     DEFAULT_SERVER,
+    DEFAULT_TOKEN_REFRESH_SECONDS,
     LqtpTokenManager,
     factor_values_to_long_df,
     fetch_lqtp_universe,
     long_df_to_daily_values,
+    run_backtest_auth_safe,
     summarize_backtest,
     top_quantile_weights,
 )
@@ -43,7 +45,6 @@ from scripts.cogalpha_lqtp.report_html import (  # noqa: E402
 from scripts.cogalpha_lqtp.run_production_batch import (  # noqa: E402
     LOOKAHEAD_DEFERRED_FACTORS,
     _apply_flip_state_to_catalog,
-    _safe_backtest,
     _save_progress,
     _upsert_index_row,
 )
@@ -63,13 +64,70 @@ def _needs_backtest(row: dict[str, Any]) -> bool:
 _WORKER: dict[str, Any] = {}
 
 
-def _init_worker(fwd_path: str, server: str, username: str, password: str) -> None:
-    from scripts.cogalpha_lqtp.eval_lake_fast import _init_worker as _init_fwd
+def _analysis_from_prev(prev: dict[str, Any]) -> dict[str, Any]:
+    """Reuse RankIC/LS summary from prior eval; skip heavy DuckDB re-scan."""
+    return {
+        "mean_rank_ic": prev.get("mean_rank_ic"),
+        "mean_ic": prev.get("mean_ic"),
+        "std_rank_ic": prev.get("std_rank_ic", 0.0),
+        "std_ic": prev.get("std_ic", 0.0),
+        "rank_icir": prev.get("rank_icir"),
+        "icir": prev.get("icir"),
+        "rank_ic_positive_ratio": prev.get("rank_ic_positive_ratio"),
+        "ic_positive_ratio": prev.get("rank_ic_positive_ratio"),
+        "long_short_sharpe": prev.get("long_short_sharpe"),
+        "long_short_return": prev.get("long_short_return"),
+        "return_kind": "close_to_close_T_plus_1",
+        "return_mode": "close_to_close",
+        "signal_lag_note": (
+            "TopK-only pass: RankIC/LS from prior DuckDB eval; LQTP OPEN TopK backtest added here."
+        ),
+        "daily_rank_ic": [],
+        "daily_ls_returns": [],
+        "trade_dates": [],
+        "group_pnls": [],
+        "n_groups": 10,
+    }
 
-    _init_fwd(fwd_path)
-    auth = LqtpTokenManager.login(server, username, password)
-    _WORKER["token"] = auth.token
+
+def _init_worker(
+    fwd_path: str,
+    server: str,
+    username: str,
+    password: str,
+    topk_only: bool,
+) -> None:
+    _WORKER.clear()
+    if not topk_only:
+        from scripts.cogalpha_lqtp.eval_lake_fast import _init_worker as _init_fwd
+
+        _init_fwd(fwd_path)
+    # Refresh every 15 min; property .token also refreshes on access after interval.
+    _WORKER["token_mgr"] = LqtpTokenManager.login(
+        server,
+        username,
+        password,
+        refresh_interval_seconds=DEFAULT_TOKEN_REFRESH_SECONDS,
+    )
     _WORKER["server"] = server
+    _WORKER["topk_only"] = topk_only
+
+
+def _ensure_duckdb(fwd_path: str) -> None:
+    if _WORKER.get("con") is None:
+        from scripts.cogalpha_lqtp.eval_lake_fast import _init_worker as _init_fwd
+
+        _init_fwd(fwd_path)
+
+
+def _full_panel_analysis(payload: dict[str, Any], factor_path: Path) -> dict[str, Any]:
+    """DuckDB RankIC / deciles / LS with daily series (required for report charts)."""
+    _ensure_duckdb(str(payload["fwd_path"]))
+    return analyze_factor_parquet_duckdb(
+        factor_path=factor_path,
+        fwd_returns_path=Path(payload["fwd_path"]),
+        con=_WORKER.get("con"),
+    )
 
 
 def _backtest_one(payload: dict[str, Any]) -> dict[str, Any]:
@@ -86,6 +144,7 @@ def _backtest_one(payload: dict[str, Any]) -> dict[str, Any]:
         entry = dict(payload["entry"])
         py_code = payload.get("python_code") or ""
         prev = payload.get("prev_row") or {}
+        topk_only = bool(payload.get("topk_only", True))
 
         dsl_used = (entry.get("dsl") or "").strip() or "(python only)"
         route = _eval_route(entry)
@@ -93,12 +152,10 @@ def _backtest_one(payload: dict[str, Any]) -> dict[str, Any]:
         if route == "lqtp_dsl":
             engine = "lqtp_dsl"
 
-        fwd = Path(payload["fwd_path"])
-        analysis = analyze_factor_parquet_duckdb(
-            factor_path=out_path,
-            fwd_returns_path=fwd,
-            con=_WORKER.get("con"),
-        )
+        if topk_only:
+            analysis = _analysis_from_prev(prev)
+        else:
+            analysis = _full_panel_analysis(payload, out_path)
 
         long_df = _normalize_factor_long(pd.read_parquet(out_path))
         daily_values = long_df_to_daily_values(long_df)
@@ -107,13 +164,13 @@ def _backtest_one(payload: dict[str, Any]) -> dict[str, Any]:
         if allowed:
             lqtp_long = lqtp_long[lqtp_long["symbol"].isin(allowed)]
         weights = top_quantile_weights(lqtp_long, allowed_symbols=allowed or None)
-        backtest_rows, backtest_id = _safe_backtest(
-            token=_WORKER["token"],
+        backtest_rows, backtest_id = run_backtest_auth_safe(
+            _WORKER["token_mgr"],
             weights=weights,
             begin_date=int(payload["begin_i"]),
             end_date=int(payload["end_i"]),
             server=_WORKER.get("server", DEFAULT_SERVER),
-            max_quote_retries=150,
+            max_quote_retries=int(payload.get("max_quote_retries", 150)),
         )
         topk_summary = summarize_backtest(backtest_rows)
 
@@ -132,18 +189,35 @@ def _backtest_one(payload: dict[str, Any]) -> dict[str, Any]:
         }
 
         report_path = report_dir / f"{name}.html"
-        render_factor_report(
-            factor_name=name,
-            dsl=dsl_used,
-            analysis=analysis,
-            backtest_rows=backtest_rows,
-            out_path=report_path,
-            eval_mode=eval_mode,
-            materialize_meta=meta,
-            topk_summary=topk_summary,
-            python_code=py_code,
-            work_dir=work,
-        )
+        if backtest_rows:
+            # Keep RankIC / 分层 / 多空 charts: appendix JSON omits daily series.
+            report_analysis = _full_panel_analysis(payload, out_path)
+            render_factor_report(
+                factor_name=name,
+                dsl=dsl_used,
+                analysis=report_analysis,
+                backtest_rows=backtest_rows,
+                out_path=report_path,
+                eval_mode=eval_mode,
+                materialize_meta=meta,
+                topk_summary=topk_summary,
+                python_code=py_code,
+                work_dir=work,
+            )
+            analysis = report_analysis
+        elif not topk_only:
+            render_factor_report(
+                factor_name=name,
+                dsl=dsl_used,
+                analysis=analysis,
+                backtest_rows=backtest_rows,
+                out_path=report_path,
+                eval_mode=eval_mode,
+                materialize_meta=meta,
+                topk_summary=topk_summary,
+                python_code=py_code,
+                work_dir=work,
+            )
 
         row = {
             "factor_name": name,
@@ -188,8 +262,20 @@ def main() -> int:
     parser.add_argument("--server", default=DEFAULT_SERVER)
     parser.add_argument("--username", default=os.getenv("LQTP_USERNAME", "james.gd.luo@gmail.com"))
     parser.add_argument("--password", default=os.getenv("LQTP_PASSWORD", "3213709208"))
-    parser.add_argument("--workers", type=int, default=2)
+    parser.add_argument("--workers", type=int, default=3)
+    parser.add_argument(
+        "--topk-only",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="skip DuckDB re-analysis; only run LQTP TopK (default: true, much faster)",
+    )
+    parser.add_argument("--max-quote-retries", type=int, default=150)
     parser.add_argument("--only", nargs="*", default=None)
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="re-run TopK even if backtest_sharpe already set (refresh HTML report)",
+    )
     args = parser.parse_args()
 
     work = args.work_dir
@@ -211,12 +297,23 @@ def main() -> int:
             continue
         if not (work / "factor_lake" / name / "values.parquet").exists():
             continue
-        if _needs_backtest(row):
+        if args.force and args.only and name in set(args.only):
+            targets.append(name)
+        elif _needs_backtest(row):
             targets.append(name)
     if args.only:
         only = set(args.only)
         targets = [n for n in targets if n in only]
-    targets.sort()
+
+    def _rank_ic(name: str) -> float:
+        row = index_by_name.get(name, {})
+        try:
+            v = float(row.get("mean_rank_ic", row.get("mean_ic", float("-inf"))))
+            return v if v == v else float("-inf")
+        except (TypeError, ValueError):
+            return float("-inf")
+
+    targets.sort(key=_rank_ic, reverse=True)
 
     if not targets:
         print("no factors need TopK backtest")
@@ -232,7 +329,13 @@ def main() -> int:
         work / "lqtp_close_returns_cache.parquet",
         work / "lqtp_fwd_close_returns_cache.parquet",
     )
-    print(f"LQTP ok universe={len(backtest_symbols)} targets={len(targets)} workers={args.workers}")
+    print(
+        f"LQTP ok universe={len(backtest_symbols)} targets={len(targets)} "
+        f"workers={args.workers} topk_only={args.topk_only} order=rankic_desc"
+    )
+    if targets:
+        top3 = ", ".join(f"{n}({ _rank_ic(n):.4f})" for n in targets[:3])
+        print(f"  first: {top3}")
 
     payloads = []
     for name in targets:
@@ -255,6 +358,8 @@ def main() -> int:
                 "start": args.start,
                 "end": args.end,
                 "backtest_symbols": backtest_symbols,
+                "topk_only": args.topk_only,
+                "max_quote_retries": args.max_quote_retries,
             }
         )
 
@@ -266,7 +371,7 @@ def main() -> int:
     with ProcessPoolExecutor(
         max_workers=max(1, args.workers),
         initializer=_init_worker,
-        initargs=(str(fwd), args.server, args.username, args.password),
+        initargs=(str(fwd), args.server, args.username, args.password, args.topk_only),
     ) as pool:
         futures = {pool.submit(_backtest_one, p): p["name"] for p in payloads}
         done_n = 0

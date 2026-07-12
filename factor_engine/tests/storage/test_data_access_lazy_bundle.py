@@ -31,7 +31,8 @@ def test_prefetch_lazy_bundle_single_collect():
     mock_ds = MagicMock()
     mock_ds.time_column = "align_time"
     mock_ds.instrument_column = "ticker"
-    mock_store._registry.get.return_value = mock_ds
+    mock_store.get_dataset.return_value = mock_ds
+    mock_store.describe_dataset.return_value = MagicMock(snapshot_id="snap_lazy")
 
     mock_lf = MagicMock()
     mock_store.scan_polars.return_value = mock_lf
@@ -58,6 +59,7 @@ def test_prefetch_lazy_bundle_single_collect():
                 "backend.polars_lazy.build_lazy_column_bundle",
             ) as build_bundle:
                 bundle = MagicMock()
+                bundle.snapshot_id = "snap_lazy"
                 bundle.missing_physical.return_value = []
                 bundle.materialize_columns.side_effect = fake_materialize
                 build_bundle.return_value = bundle

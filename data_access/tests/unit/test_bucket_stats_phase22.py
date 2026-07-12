@@ -10,11 +10,11 @@ import pyarrow.parquet as pq
 import pytest
 
 from data_access import reset_store
-from data_access.engine import DuckDBEngine
-from data_access.layout_policy import prune_glob_paths_for_buckets
-from data_access.predicate import Predicate, compile_predicate
+from data_access.core.engine import DuckDBEngine
+from data_access.registry.layout_policy import prune_glob_paths_for_buckets
+from data_access.read.predicate import Predicate, compile_predicate
 from data_access.registry import load_registry
-from data_access.stats import (
+from data_access.read.stats import (
     build_dataset_stats_snapshot,
     load_stats_sidecar,
     write_stats_sidecar,

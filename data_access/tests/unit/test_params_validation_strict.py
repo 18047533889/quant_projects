@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from data_access.exceptions import ValidationError
-from data_access.params_validation import ParamSpec, parse_params_schema, validate_params
+from data_access.core.exceptions import ValidationError
+from data_access.registry.params_validation import ParamSpec, parse_params_schema, validate_params
 
 
 def test_int_parameter_rejects_fractional_values() -> None:

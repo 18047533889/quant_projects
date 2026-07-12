@@ -3,7 +3,7 @@
 ClickHouse 写入：因子长表 / panel 长表落盘。
 
 与 ``ParquetMaterializer`` 长表格式对齐：``(timestamp, instrument, value)`` +
-可选元数据列。读路径见 ``clickhouse_panel.py``。
+可选元数据列。读路径见 ``data_access.clickhouse.panel``。
 """
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import re
 from typing import Any, Mapping, Sequence
 
 from .panel import ClickHouseConfig, _quote_ident
-from ..exceptions import ValidationError
+from data_access.core.exceptions import ValidationError
 
 _FORBIDDEN_DML = re.compile(
     r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE|ATTACH|DETACH|RENAME|GRANT|REVOKE)\b",

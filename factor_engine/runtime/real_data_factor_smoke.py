@@ -156,7 +156,7 @@ class MultiParquetSeriesSource(DataSource):
     def load_column(self, name: str):
         """通过 DuckDB 读取列并规范为 ``(timestamp, instrument)`` MultiIndex Series。"""
         import pandas as pd
-        from data_access.engine import get_shared_engine
+        from data_access.core.engine import get_shared_engine
 
         if name in self._column_cache:
             return self._column_cache[name]

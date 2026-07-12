@@ -17,7 +17,7 @@ def test_perf_config_build_query_budget(monkeypatch):
 
 
 def test_execution_context_accepts_query_budget():
-    from data_access.query_budget import QueryBudget
+    from data_access.read.query_budget import QueryBudget
 
     budget = QueryBudget(max_rows=100)
     ctx = ExecutionContext(data_source=object(), query_budget=budget)

@@ -77,27 +77,3 @@ def test_run_many_includes_cost_summary():
     out = eng.run_many(factors)
     assert "cost_summary" in out
     assert out["cost_summary"]["factor_count"] == 2
-
-
-def test_emit_cutover_patch_script():
-    import sys
-    from pathlib import Path
-
-    script = (
-        Path(__file__).resolve().parents[2].parent
-        / "data_access"
-        / "scripts"
-        / "emit_bucket_cutover_patch.py"
-    )
-    if not script.exists():
-        pytest.skip("emit script missing")
-    sys.path.insert(0, str(script.parents[1].parent))
-    from data_access.scripts.emit_bucket_cutover_patch import build_cutover_patch
-
-    patch = build_cutover_patch(
-        dataset="ashare_stock_minute",
-        config=None,
-        target_root="/data/bucket/minute",
-    )
-    assert "partition_columns" in patch
-    assert "bucket" in patch["yaml_snippet"]

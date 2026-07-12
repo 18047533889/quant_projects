@@ -37,12 +37,12 @@ require_dir_tracked "factor_engine" 200
 # P0/P1 关键文件（审计清单）
 REQUIRED_FILES=(
   data_access/store.py
-  data_access/read_contract.py
-  data_access/scan_handle.py
-  data_access/params_validation.py
-  data_access/publish_manifest.py
-  data_access/key_policy.py
-  data_access/cos_mirror.py
+  data_access/read/read_contract.py
+  data_access/read/scan_handle.py
+  data_access/registry/params_validation.py
+  data_access/write/publish_manifest.py
+  data_access/read/key_policy.py
+  data_access/cos/mirror.py
   data_access/config/datasets.yaml
   factor_engine/storage/data_scope.py
   factor_engine/storage/sources/data_access_source.py

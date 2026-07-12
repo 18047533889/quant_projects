@@ -9,10 +9,10 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from data_access.adapters import arrow_table_to_multiindex_columns
-from data_access.key_policy import KeyPolicy
-from data_access.publish_manifest import read_publish_manifest, write_publish_manifest
-from data_access.read_contract import merge_sql_data_snapshots, build_data_snapshot
+from data_access.read.adapters import arrow_table_to_multiindex_columns
+from data_access.read.key_policy import KeyPolicy
+from data_access.write.publish_manifest import read_publish_manifest, write_publish_manifest
+from data_access.read.read_contract import merge_sql_data_snapshots, build_data_snapshot
 
 
 def test_write_publish_manifest_atomic(tmp_path: Path):

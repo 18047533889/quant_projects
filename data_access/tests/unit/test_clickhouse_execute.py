@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pyarrow as pa
 
-from data_access.clickhouse_panel import ClickHouseConfig, execute_query
+from data_access.clickhouse.panel import ClickHouseConfig, execute_query
 
 
 def test_execute_query_returns_arrow():

@@ -9,7 +9,7 @@ from textwrap import dedent
 import pytest
 import yaml
 
-from data_access.exceptions import ValidationError
+from data_access.core.exceptions import ValidationError
 from data_access.registry import (
     ParametricDataset,
     StaticDataset,
@@ -144,7 +144,7 @@ def test_namespaced_root_expands_run_namespace(tmp_path, monkeypatch):
     """${RUN_NAMESPACE} 占位符要替换成 resolve_namespace() 的值。"""
     monkeypatch.setenv("QUANT_RUN_NAMESPACE", "testuser")
     # 清 namespace cache
-    from data_access import namespace as ns_mod
+    from data_access.core import namespace as ns_mod
     ns_mod._git_branch.cache_clear()
 
     yaml_path = _write_yaml(tmp_path / "datasets.yaml", """

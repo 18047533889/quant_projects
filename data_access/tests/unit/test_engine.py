@@ -5,8 +5,8 @@ from __future__ import annotations
 import duckdb
 import pytest
 
-from data_access.duckdb_config import DuckDBConfig, _sql_string, apply_pragmas, resolve_duckdb_config
-from data_access.engine import DuckDBEngine
+from data_access.core.duckdb_config import DuckDBConfig, _sql_string, apply_pragmas, resolve_duckdb_config
+from data_access.core.engine import DuckDBEngine
 
 
 def test_resolve_duckdb_config_from_env(monkeypatch):
@@ -105,7 +105,7 @@ def test_scoped_sql_configures_s3_when_specs_contain_s3(monkeypatch):
         calls.append(conn)
 
     monkeypatch.setattr(
-        "data_access.s3_duckdb.configure_fresh_duckdb_s3",
+        "data_access.cos.s3_duckdb.configure_fresh_duckdb_s3",
         _fake_configure,
     )
     try:
@@ -126,7 +126,7 @@ def test_scoped_sql_skips_s3_for_local_specs(monkeypatch):
     engine = DuckDBEngine(threads=2)
     calls: list[object] = []
     monkeypatch.setattr(
-        "data_access.s3_duckdb.configure_fresh_duckdb_s3",
+        "data_access.cos.s3_duckdb.configure_fresh_duckdb_s3",
         lambda conn: calls.append(conn),
     )
     try:

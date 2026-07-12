@@ -87,8 +87,13 @@ def test_data_access_source_read_auto_flag():
     mock_ds = MagicMock()
     mock_ds.time_column = "trade_date"
     mock_ds.instrument_column = "instrument"
-    mock_store._registry.get.return_value = mock_ds
-    mock_store.read_auto.return_value = table
+    mock_store.get_dataset.return_value = mock_ds
+    mock_store.describe_dataset.return_value = MagicMock(snapshot_id="snap_test")
+
+    mock_result = MagicMock()
+    mock_result.table = table
+    mock_result.snapshot = MagicMock(snapshot_id="snap_test")
+    mock_store.read_result.return_value = mock_result
 
     idx = pd.MultiIndex.from_product(
         [pd.to_datetime(["2024-01-01", "2024-01-02"]), ["A"]],
@@ -102,14 +107,14 @@ def test_data_access_source_read_auto_flag():
             return_value={"normalize_timestamp": False},
         ):
             with patch(
-                "data_access.adapters.arrow_table_to_multiindex_columns",
+                "data_access.read.adapters.arrow_table_to_multiindex_columns",
                 return_value={"close": expected},
             ):
                 got = src.load_columns(["close"])
 
     assert "close" in got
-    mock_store.read_auto.assert_called_once()
-    mock_store.load_columns.assert_not_called()
+    mock_store.read_result.assert_called_once()
+    mock_store.read_auto.assert_not_called()
 
 
 def test_polars_backend_enables_read_auto_on_data_access_source():
@@ -147,28 +152,3 @@ def test_ts_rank_numba_optional(use_numba, monkeypatch):
     fast = op._calculate_series(panel, window=5)
     ref = panel.rolling(window=5, min_periods=1).rank(pct=True)
     pd.testing.assert_frame_equal(fast, ref)
-
-
-def test_plan_bucket_migration_script():
-    from workspace_paths import quant_projects_root
-
-    script = quant_projects_root() / "data_access" / "scripts" / "plan_bucket_migration.py"
-    proc = subprocess.run(
-        [
-            sys.executable,
-            str(script),
-            "--dataset",
-            "ashare_stock_minute",
-            "--sample-instruments",
-            "600000.SH,000001.SZ",
-            "--json",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert proc.returncode == 0, proc.stderr
-    payload = json.loads(proc.stdout)
-    assert payload["dataset"] == "ashare_stock_minute"
-    assert payload["layout_policy"]["bucket_count"] == 64
-    assert len(payload["sample_instrument_buckets"]) == 2

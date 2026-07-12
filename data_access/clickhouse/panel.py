@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
 
-from ..exceptions import ValidationError
+from data_access.core.exceptions import ValidationError
 
 _ENV_BOOTSTRAPPED = False
 
@@ -129,7 +129,7 @@ def read_columns(
             "ClickHouse 读取需要 clickhouse-connect。pip install clickhouse-connect 后重试。"
         ) from exc
 
-    from .adapters import arrow_table_to_multiindex_columns
+    from data_access.read.adapters import arrow_table_to_multiindex_columns
 
     sql, params = _build_select_sql(
         table=table,

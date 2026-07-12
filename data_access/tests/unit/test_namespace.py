@@ -7,7 +7,7 @@ import os
 
 import pytest
 
-from data_access import namespace as ns
+from data_access.core import namespace as ns
 
 
 @pytest.fixture(autouse=True)

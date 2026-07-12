@@ -33,8 +33,8 @@ def test_materializer_delegates_to_insert():
     mock_insert = MagicMock(return_value=2)
     mock_cfg = MagicMock()
 
-    with patch("data_access.clickhouse_panel.ClickHouseConfig.from_env", return_value=mock_cfg):
-        with patch("data_access.clickhouse_write.insert_factor_dataframe", mock_insert):
+    with patch("data_access.clickhouse.panel.ClickHouseConfig.from_env", return_value=mock_cfg):
+        with patch("data_access.clickhouse.write.insert_factor_dataframe", mock_insert):
             mat = ClickHouseMaterializer(table="fv")
             summary = mat.materialize("fid", series, ensure_table=False)
 
@@ -55,8 +55,8 @@ def test_materializer_preserve_invalid_rows_propagates_reason():
     mock_insert = MagicMock(return_value=3)
     mock_cfg = MagicMock()
 
-    with patch("data_access.clickhouse_panel.ClickHouseConfig.from_env", return_value=mock_cfg):
-        with patch("data_access.clickhouse_write.insert_factor_dataframe", mock_insert):
+    with patch("data_access.clickhouse.panel.ClickHouseConfig.from_env", return_value=mock_cfg):
+        with patch("data_access.clickhouse.write.insert_factor_dataframe", mock_insert):
             mat = ClickHouseMaterializer(table="fv")
             summary = mat.materialize(
                 "fid_invalid",

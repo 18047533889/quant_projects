@@ -248,7 +248,7 @@ class DataAccessSource(DataSource):
             if self._lazy_bundle is not None:
                 self._record_read_snapshot(self._lazy_bundle.snapshot_id)
         else:
-            from data_access.adapters import arrow_table_to_multiindex_columns
+            from data_access.read.adapters import arrow_table_to_multiindex_columns
 
             all_columns = list(
                 dict.fromkeys([ds.time_column, ds.instrument_column, *physical])

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from data_access.cos_remote import (
+from data_access.cos.remote import (
     authorize_s3_path,
     build_remote_paths,
     cos_read_mode,
@@ -12,7 +12,7 @@ from data_access.cos_remote import (
     local_mirror_complete_for_range,
     should_read_cos_remote,
 )
-from data_access.exceptions import ValidationError
+from data_access.core.exceptions import ValidationError
 
 
 def test_cos_uri_to_s3_uri():
@@ -69,7 +69,7 @@ def test_should_read_cos_remote_modes(monkeypatch, tmp_path):
 
 
 def test_resolve_s3_credentials_missing(monkeypatch):
-    from data_access.cos_remote import resolve_s3_credentials
+    from data_access.cos.remote import resolve_s3_credentials
 
     monkeypatch.delenv("COS_SECRET_ID", raising=False)
     monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)

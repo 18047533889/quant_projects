@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from data_access.exceptions import ValidationError
-from data_access.query_budget import (
+from data_access.core.exceptions import ValidationError
+from data_access.read.query_budget import (
     DatasetQueryPolicy,
     QueryBudget,
     merge_dataset_policy,
@@ -62,7 +62,7 @@ def test_registry_loads_query_policy(tmp_path):
 
 
 def test_store_rejects_select_star_for_restricted_dataset(tmp_path, monkeypatch):
-    from data_access.engine import DuckDBEngine
+    from data_access.core.engine import DuckDBEngine
     from data_access.store import DataAccessStore
 
     root = tmp_path / "tick"

@@ -340,6 +340,9 @@ def test_data_access_source_forwards_params_to_store(monkeypatch):
         def get_dataset(self, _name):
             return _FakeDataset()
 
+        def describe_dataset(self, _dataset, **kwargs):
+            return _FakeSnapshot()
+
         def read_result(self, dataset, *, columns, **kwargs):
             captured["dataset"] = dataset
             captured["kwargs"] = kwargs

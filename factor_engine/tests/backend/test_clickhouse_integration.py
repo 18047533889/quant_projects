@@ -17,7 +17,7 @@ def _ch_available() -> bool:
     if root not in sys.path:
         sys.path.insert(0, root)
     try:
-        from data_access.clickhouse_panel import ClickHouseConfig, execute_query
+        from data_access.clickhouse.panel import ClickHouseConfig, execute_query
 
         cfg = ClickHouseConfig.from_env()
         table = execute_query(config=cfg, sql="SELECT 1 AS value")
@@ -42,7 +42,7 @@ def _path():
 
 @pytest.mark.integration
 def test_clickhouse_config_from_env():
-    from data_access.clickhouse_panel import ClickHouseConfig
+    from data_access.clickhouse.panel import ClickHouseConfig
 
     cfg = ClickHouseConfig.from_env()
     assert cfg.host
@@ -85,7 +85,7 @@ def test_clickhouse_materialize_engine_path(tmp_path):
     ch = mat.get("clickhouse") or {}
     assert ch.get("rows_written", mat.get("rows_written", 0)) >= 4
 
-    from data_access.clickhouse_panel import ClickHouseConfig, execute_query
+    from data_access.clickhouse.panel import ClickHouseConfig, execute_query
 
     cfg = ClickHouseConfig.from_env()
     result = execute_query(
@@ -105,8 +105,8 @@ def test_clickhouse_panel_read_sql_pushdown():
     from api.columns import col
     from api.factor import Factor
     from backend.factory import build_backend
-    from data_access.clickhouse_panel import ClickHouseConfig, execute_query
-    from data_access.clickhouse_write import ensure_panel_table, insert_dataframe
+    from data_access.clickhouse.panel import ClickHouseConfig, execute_query
+    from data_access.clickhouse.write import ensure_panel_table, insert_dataframe
     from runtime.engine import FactorEngine
     from storage.factory import build_data_source
 

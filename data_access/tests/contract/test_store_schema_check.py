@@ -20,10 +20,10 @@ import pandas as pd
 import pytest
 
 from data_access import reset_store
-from data_access.engine import DuckDBEngine
-from data_access.exceptions import ValidationError
+from data_access.core.engine import DuckDBEngine
+from data_access.core.exceptions import ValidationError
 from data_access.registry import load_registry
-from data_access.schema_validation import reset_validated_cache
+from data_access.registry.schema_validation import reset_validated_cache
 from data_access.store import DataAccessStore
 
 

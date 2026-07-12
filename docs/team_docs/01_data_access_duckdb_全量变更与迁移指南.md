@@ -128,7 +128,7 @@ tbl: pa.Table = store.sql(
 | 职责 | 谁负责 | 说明 |
 |------|--------|------|
 | 数据集**登记**、路径**白名单**、审计 | `data_access` + `datasets.yaml` | 新数据先登记，业务**只传 dataset 名和参数** |
-| 扫 Parquet、单例 `DuckDBEngine`、可选 SQL | **DuckDB**（见 `data_access/engine.py`） | in-memory 连接，**不**当长期持久化数仓文件用 |
+| 扫 Parquet、单例 `DuckDBEngine`、可选 SQL | **DuckDB**（见 `data_access/core/engine.py`） | in-memory 连接，**不**当长期持久化数仓文件用 |
 | **读/写/发布** 对外 API | `get_store()` → `DataAccessStore` | `read_*`、`write_arrow`、`publish_from_staging`、`sql` 等 |
 | 因子/回测/训练 **业务逻辑** | 各子系统 Python 代码 | 见 [02](02_量化团队企业级研发规范.md)、[03](03_量化团队_模型与实验规范.md) |
 
@@ -172,7 +172,7 @@ tbl: pa.Table = store.sql(
 
 1. 本文 §3～§9（概念与流程）  
 2. `data_access/config/datasets.yaml`（本环境真实数据集名与路径）  
-3. `data_access/用户使用手册.md` 与 `data_access/README.md`（细节）  
+3. `data_access/docs/用户使用手册.md` 与 `data_access/README.md`（细节）  
 4. 本层代码：在 `backtest_layer` / `strategy_layer` / `factor_layer` 中搜索 `get_store`、`read_arrow` 等引用
 
 ### 2.2 实习生 / 无内网权限读者
@@ -303,7 +303,7 @@ df = store.read_frame("YOUR_DATASET_NAME", columns=["a", "b"], time_range=(None,
 ```
 
 - **DuckDB（在本包中的角色）**  
-  - **含义**：内嵌的 **OLAP 引擎**（`data_access/engine.py` 中 `DuckDBEngine`），`duckdb.connect(":memory:")`。  
+  - **含义**：内嵌的 **OLAP 引擎**（`data_access/core/engine.py` 中 `DuckDBEngine`），`duckdb.connect(":memory:")`。  
   - **作用**：对 **Parquet** 执行**扫描**和（通过 `Store` 拼好的或 `sql()` 里写的）**查询**；**不是**本仓库的「回测/训练运行时」。**是否算「有计算」** 见 **§0.2**。  
   - **小例**：下例在**应用代码里不出现** `import duckdb`，但读路径在内部会用到引擎：
 
@@ -384,7 +384,7 @@ flowchart LR
 - 文件：[`data_access/config/datasets.yaml`](../data_access/config/datasets.yaml)  
 - 说明：[`data_access/config/README.md`](../data_access/config/README.md)
 
-**access_mode 要点**（与 `data_access/用户使用手册.md` 一致）：
+**access_mode 要点**（与 `data_access/docs/用户使用手册.md` 一致）：
 
 - **published**：全员可读；**禁止** `write_arrow` 直写；更新须 **staging → `publish_from_staging`**。  
 - **namespaced**：个人/实验隔离，路径含 `RUN_NAMESPACE` 等。  
@@ -623,7 +623,7 @@ if __name__ == "__main__":
 
 - 任何 `rmtree` / 清空目录：目标必须是**显式、窄**的 `Path`，禁止用无参 `Path()` 作哨兵。  
 - 测试中使用 **`tmp_path`** 或专用临时目录，避免对项目根无界删除。  
-- 详见 `data_access/publish.py` 内注释、**文档一 [§14](#14-测试与安全网)** 与 [02 第 5.1 节](02_量化团队企业级研发规范.md#51-强制)。
+- 详见 `data_access/write/publish.py` 内注释、**文档一 [§14](#14-测试与安全网)** 与 [02 第 5.1 节](02_量化团队企业级研发规范.md#51-强制)。
 
 ---
 
@@ -653,7 +653,7 @@ if __name__ == "__main__":
 
 ## 18. 新成员与迁移检查清单
 
-- [ ] 已读 `data_access/用户使用手册.md`  
+- [ ] 已读 `data_access/docs/用户使用手册.md`  
 - [ ] 能解释 `get_store().read_frame` 与 `datasets.yaml` 的关系  
 - [ ] 能说明为何不能 `pd.read_parquet` 直读生产路径  
 - [ ] 知道 `published` 不可直写、发布须 `publish_from_staging`（若岗位涉及）  
@@ -668,7 +668,7 @@ if __name__ == "__main__":
 
 - [00_主材料阅读指引.md](00_主材料阅读指引.md)  
 - `data_access/README.md`  
-- `data_access/用户使用手册.md`  
-- `data_access/用户使用手册.md`  
+- `data_access/docs/用户使用手册.md`  
+- `data_access/docs/用户使用手册.md`  
 - `data_access/README.md`  
-- `data_access/store.py` `data_access/engine.py` `data_access/publish.py`
+- `data_access/store.py` · `data_access/core/` · `data_access/registry/` · `data_access/read/` · `data_access/write/`

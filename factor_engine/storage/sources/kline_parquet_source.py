@@ -161,7 +161,7 @@ class KlineParquetSource(DataSource):
             无
         """
         try:
-            from data_access.engine import get_shared_engine
+            from data_access.core.engine import get_shared_engine
         except ModuleNotFoundError:
             return self._pandas_read_files(files, read_columns)
 
@@ -183,7 +183,7 @@ class KlineParquetSource(DataSource):
         """
         import pandas as pd
         try:
-            from data_access.engine import get_shared_engine
+            from data_access.core.engine import get_shared_engine
         except ModuleNotFoundError:
             return self._pandas_read_files(files, read_columns, skip_errors=True)
 

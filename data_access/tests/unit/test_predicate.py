@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import pytest
 
-from data_access.exceptions import ValidationError
-from data_access.predicate import Predicate, compile_predicate
+from data_access.core.exceptions import ValidationError
+from data_access.read.predicate import Predicate, compile_predicate
 
 
 def test_empty_predicate():

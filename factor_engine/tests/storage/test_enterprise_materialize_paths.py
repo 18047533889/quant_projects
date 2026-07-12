@@ -116,8 +116,8 @@ def test_materialize_incremental_staging_clickhouse_dual_write(tmp_path, monkeyp
     mock_insert = MagicMock(return_value=5)
     mock_cfg = MagicMock()
 
-    with patch("data_access.clickhouse_panel.ClickHouseConfig.from_env", return_value=mock_cfg):
-        with patch("data_access.clickhouse_write.insert_factor_dataframe", mock_insert):
+    with patch("data_access.clickhouse.panel.ClickHouseConfig.from_env", return_value=mock_cfg):
+        with patch("data_access.clickhouse.write.insert_factor_dataframe", mock_insert):
             engine.materialize(
                 factor,
                 factor_id=fid,
@@ -130,8 +130,8 @@ def test_materialize_incremental_staging_clickhouse_dual_write(tmp_path, monkeyp
         backend=PandasBackend(),
         data_source=InMemorySeriesSource(data={"close": close_all}),
     )
-    with patch("data_access.clickhouse_panel.ClickHouseConfig.from_env", return_value=mock_cfg):
-        with patch("data_access.clickhouse_write.insert_factor_dataframe", mock_insert):
+    with patch("data_access.clickhouse.panel.ClickHouseConfig.from_env", return_value=mock_cfg):
+        with patch("data_access.clickhouse.write.insert_factor_dataframe", mock_insert):
             out = engine2.materialize_incremental(
                 factor,
                 factor_id=fid,
@@ -204,8 +204,8 @@ def test_dual_write_clickhouse_failure_raises_with_partial_summary(tmp_path, mon
         backend=PandasBackend(),
         data_source=InMemorySeriesSource(data={"close": close}),
     )
-    with patch("data_access.clickhouse_panel.ClickHouseConfig.from_env", return_value=mock_cfg):
-        with patch("data_access.clickhouse_write.insert_factor_dataframe", side_effect=_boom):
+    with patch("data_access.clickhouse.panel.ClickHouseConfig.from_env", return_value=mock_cfg):
+        with patch("data_access.clickhouse.write.insert_factor_dataframe", side_effect=_boom):
             with pytest.raises(DualWriteError) as excinfo:
                 engine.materialize(
                     factor,
@@ -249,8 +249,8 @@ def test_defer_watermark_commits_after_ch_success(tmp_path, monkeypatch):
         backend=PandasBackend(),
         data_source=InMemorySeriesSource(data={"close": close}),
     )
-    with patch("data_access.clickhouse_panel.ClickHouseConfig.from_env", return_value=mock_cfg):
-        with patch("data_access.clickhouse_write.insert_factor_dataframe", return_value=3):
+    with patch("data_access.clickhouse.panel.ClickHouseConfig.from_env", return_value=mock_cfg):
+        with patch("data_access.clickhouse.write.insert_factor_dataframe", return_value=3):
             out = engine.materialize(
                 factor,
                 factor_id="dual_ok",
@@ -276,8 +276,8 @@ def test_clickhouse_materializer_uses_insert_dataframe(tmp_path):
     mock_insert = MagicMock(return_value=2)
     mock_cfg = MagicMock()
 
-    with patch("data_access.clickhouse_panel.ClickHouseConfig.from_env", return_value=mock_cfg):
-        with patch("data_access.clickhouse_write.insert_factor_dataframe", mock_insert):
+    with patch("data_access.clickhouse.panel.ClickHouseConfig.from_env", return_value=mock_cfg):
+        with patch("data_access.clickhouse.write.insert_factor_dataframe", mock_insert):
             mat = ClickHouseMaterializer(table="fv")
             summary = mat.materialize("fid", series, ensure_table=False)
 

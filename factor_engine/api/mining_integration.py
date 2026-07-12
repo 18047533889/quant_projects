@@ -284,14 +284,14 @@ def default_ashare_pv_valuation_data_source_config(
 
 def ashare_dataset_registry() -> dict[str, str]:
     """已登记的 A 股 lqtp 数据集名 → COS 子目录名。"""
-    from data_access.cos_mirror import ASHARE_DATASET_TABLE_MAP
+    from data_access.cos.mirror import ASHARE_DATASET_TABLE_MAP
 
     return dict(ASHARE_DATASET_TABLE_MAP)
 
 
 def us_dataset_registry() -> dict[str, str]:
     """已登记的美股数据集名 → COS 子目录名（massive_data 部分）。"""
-    from data_access.cos_mirror import DATASET_MIRROR_REGISTRY
+    from data_access.cos.mirror import DATASET_MIRROR_REGISTRY
 
     return {
         name: spec.table

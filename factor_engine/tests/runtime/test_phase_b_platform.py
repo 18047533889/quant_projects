@@ -13,7 +13,7 @@ from api.columns import col
 from api.factor import Factor
 from backend.pandas_backend import PandasBackend
 from backend.routing_env import routing_execution_scope
-from data_access.stats import DatasetStatsSnapshot, estimate_column_null_ratios
+from data_access.read.stats import DatasetStatsSnapshot, estimate_column_null_ratios
 from runtime.engine import FactorEngine
 from runtime.perf_config import PerfConfig
 from runtime.quality.input_dq import (

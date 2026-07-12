@@ -71,8 +71,8 @@ def test_store_delete_rows(tmp_path):
     import pyarrow as pa
 
     from data_access.registry import ParametricDataset
-    from data_access.upsert import delete_rows_from_dataset
-    from data_access.paths import PathAuthorizer
+    from data_access.write.upsert import delete_rows_from_dataset
+    from data_access.registry.paths import PathAuthorizer
 
     root = tmp_path / "staging" / "f1"
     part = root / "year=2024"

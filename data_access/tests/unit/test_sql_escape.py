@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from data_access.exceptions import ValidationError
-from data_access.sql_escape import _rewrite_query_tables
+from data_access.core.exceptions import ValidationError
+from data_access.read.sql_escape import _rewrite_query_tables
 
 
 def test_rewrite_query_tables_placeholder_syntax():

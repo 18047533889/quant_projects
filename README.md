@@ -198,7 +198,7 @@ cd factor_engine && pytest tests/ -q
 
 ## 更多文档
 
-- **[data_access 用户使用手册](data_access/用户使用手册.md)** — 给外部使用者（随 `data_access` 包分发）：功能、数据集、COS、自选路径、运算、写发布、HTTP
+- **[data_access 用户使用手册](data_access/docs/用户使用手册.md)** — 给外部使用者（随 `data_access` 包分发）：功能、数据集、COS、自选路径、运算、写发布、HTTP
 - [data_access/README.md](data_access/README.md) — 模块说明与 API 摘要
 - [STRUCTURE.md](STRUCTURE.md) — 目录结构
 - [docs/REPO_SYNC.md](docs/REPO_SYNC.md) — Git 同步与 GitHub 可见性

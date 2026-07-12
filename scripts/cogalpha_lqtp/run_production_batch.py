@@ -42,9 +42,12 @@ from scripts.cogalpha_lqtp.lqtp_client import (  # noqa: E402
     evaluate_factor,
     factor_values_to_long_df,
     fetch_lqtp_universe,
+    is_lqtp_auth_error,
     long_df_to_daily_values,
     long_short_decile_weights,
+    run_backtest_auth_safe,
     run_backtest_from_weights,
+    safe_backtest,
     summarize_backtest,
     top_quantile_weights,
 )
@@ -352,7 +355,7 @@ def _eval_local_parquet(
     )
     lqtp_long = factor_values_to_long_df(daily_values)
     backtest_rows, backtest_id, topk_summary, ls_rows, ls_id, ls_summary = _run_platform_backtests(
-        token=auth.token,
+        auth=auth,
         lqtp_long=lqtp_long,
         backtest_symbols=backtest_symbols,
         begin_date=job.begin_i,
@@ -386,7 +389,7 @@ def _eval_lqtp_and_backtest(
     rows = sum(len(point.values) for point in daily_values)
     lqtp_long = factor_values_to_long_df(daily_values)
     backtest_rows, backtest_id, topk_summary, ls_rows, ls_id, ls_summary = _run_platform_backtests(
-        token=auth.token,
+        auth=auth,
         lqtp_long=lqtp_long,
         backtest_symbols=backtest_symbols,
         begin_date=job.begin_i,
@@ -498,7 +501,7 @@ def _backtest_total_ret(rows: list[dict[str, Any]]) -> float:
 
 def _run_platform_backtests(
     *,
-    token: str,
+    auth: LqtpTokenManager,
     lqtp_long: pd.DataFrame,
     backtest_symbols: set[str],
     begin_date: int,
@@ -508,7 +511,7 @@ def _run_platform_backtests(
     """TopK long-only + optional long-short platform backtests at OPEN."""
     weights = top_quantile_weights(lqtp_long, allowed_symbols=backtest_symbols)
     backtest_rows, backtest_id = _safe_backtest(
-        token=token,
+        token_mgr=auth,
         weights=weights,
         begin_date=begin_date,
         end_date=end_date,
@@ -522,8 +525,8 @@ def _run_platform_backtests(
     ls_summary: dict[str, Any] = {}
     try:
         ls_weights = long_short_decile_weights(lqtp_long, allowed_symbols=backtest_symbols)
-        ls_rows, ls_id = run_backtest_from_weights(
-            token=token,
+        ls_rows, ls_id = run_backtest_auth_safe(
+            auth,
             weights=ls_weights,
             begin_date=begin_date,
             end_date=end_date,
@@ -533,6 +536,8 @@ def _run_platform_backtests(
         release_memory(ls_weights)
         ls_summary = summarize_backtest(ls_rows)
     except Exception as exc:  # noqa: BLE001
+        if is_lqtp_auth_error(exc):
+            raise
         print(f"  long-short platform backtest skipped: {exc}")
         ls_rows, ls_id, ls_summary = [], "", {}
 
@@ -692,12 +697,8 @@ def _lqtp_run_factor_should_fallback(exc: BaseException) -> bool:
 
 
 def _safe_backtest(**kwargs: Any) -> tuple[list[dict[str, Any]], str]:
-    """Run backtest; on failure keep eval results and continue."""
-    try:
-        return run_backtest_from_weights(**kwargs)
-    except Exception as exc:  # noqa: BLE001
-        print(f"  backtest skipped: {exc}")
-        return [], ""
+    """Run backtest; auto-refresh token when *token_mgr* is provided."""
+    return safe_backtest(**kwargs)
 
 
 def _job_mem_need_gb(job: FactorJob) -> float:
@@ -913,7 +914,7 @@ def _process_one_factor(job: FactorJob) -> dict[str, Any]:
                         _ls_id,
                         ls_summary,
                     ) = _run_platform_backtests(
-                        token=auth.token,
+                        auth=auth,
                         lqtp_long=lqtp_long,
                         backtest_symbols=backtest_symbols,
                         begin_date=job.begin_i,
@@ -987,7 +988,7 @@ def _process_one_factor(job: FactorJob) -> dict[str, Any]:
                     _ls_id,
                     ls_summary,
                 ) = _run_platform_backtests(
-                    token=auth.token,
+                    auth=auth,
                     lqtp_long=lqtp_long,
                     backtest_symbols=backtest_symbols,
                     begin_date=job.begin_i,

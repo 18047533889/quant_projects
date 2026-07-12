@@ -21,11 +21,11 @@ import pyarrow as pa
 import pytest
 
 from data_access import reset_store
-from data_access.engine import DuckDBEngine
-from data_access.exceptions import DataError, ValidationError
+from data_access.core.engine import DuckDBEngine
+from data_access.core.exceptions import DataError, ValidationError
 from data_access.registry import load_registry
 from data_access.store import DataAccessStore
-from data_access import publish as publish_mod
+from data_access.write import publish as publish_mod
 
 
 @pytest.fixture
@@ -136,7 +136,7 @@ def test_publish_basic_flow(publish_store):
     assert result["archive_path"] is None   # 首次发布，没有旧版本可归档
     assert Path(result["target_path"]).exists()
     assert "manifest_path" in result
-    from data_access.publish_manifest import read_publish_manifest
+    from data_access.write.publish_manifest import read_publish_manifest
 
     manifest = read_publish_manifest(Path(result["target_path"]))
     assert manifest is not None

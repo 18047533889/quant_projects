@@ -33,8 +33,8 @@ def _setup_env() -> None:
 def main() -> None:
     _setup_env()
     from data_access import get_store, reset_store
-    from data_access.cos_mirror import DATASET_MIRROR_REGISTRY
-    from data_access.cos_remote import cos_cache_root, cos_remote_backend, load_cos_cli_credentials_into_env
+    from data_access.cos.mirror import DATASET_MIRROR_REGISTRY
+    from data_access.cos.remote import cos_cache_root, cos_remote_backend, load_cos_cli_credentials_into_env
 
     reset_store()
     load_cos_cli_credentials_into_env()

@@ -160,7 +160,7 @@ def delete_staging_rows(
                 after=after,
             )
     except Exception as exc:
-        from data_access.exceptions import ValidationError
+        from data_access.core.exceptions import ValidationError
 
         if isinstance(exc, ValidationError) or "未注册" in str(exc):
             logger.warning(

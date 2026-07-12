@@ -64,19 +64,19 @@ data_access —— 团队统一数据读写入口（PR1：读；PR2：写；PR3�
     直接写 published 数据集 —— 永远必须走 staging → publish_from_staging
 
 更多：
-    - 用户使用手册：data_access/用户使用手册.md（对外分发首选）
+    - 用户使用手册：data_access/docs/用户使用手册.md（对外分发首选）
     - 数据集登记：data_access/config/datasets.yaml
     - 模块说明：data_access/README.md
 """
 
 from __future__ import annotations
 
-from .engine import DuckDBEngine, get_shared_engine, reset_shared_engine
-from .exceptions import DataAccessError, DataError, EngineError, ValidationError
-from .key_policy import KeyPolicy
-from .query_budget import QueryBudget
-from .read_contract import DataSnapshot, ReadResult, SqlReadResult
-from .scan_handle import ScanHandle
+from data_access.core.engine import DuckDBEngine, get_shared_engine, reset_shared_engine
+from data_access.core.exceptions import DataAccessError, DataError, EngineError, ValidationError
+from data_access.read.key_policy import KeyPolicy
+from data_access.read.query_budget import QueryBudget
+from data_access.read.read_contract import DataSnapshot, ReadResult, SqlReadResult
+from data_access.read.scan_handle import ScanHandle
 from .store import DataAccessStore, get_store, reset_store
 
 __all__ = [

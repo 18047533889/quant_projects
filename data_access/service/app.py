@@ -14,8 +14,8 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from data_access import QueryBudget, get_store
-from data_access.exceptions import DataAccessError, ValidationError
-from data_access.query_budget import resolve_query_budget
+from data_access.core.exceptions import DataAccessError, ValidationError
+from data_access.read.query_budget import resolve_query_budget
 
 from .models import DatasetInfo, ReadRequest, ReadResponseMeta
 

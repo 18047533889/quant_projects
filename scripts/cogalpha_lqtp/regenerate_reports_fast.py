@@ -32,7 +32,7 @@ from scripts.cogalpha_lqtp.lqtp_client import (  # noqa: E402
     _to_lqtp_symbol,
     factor_values_to_long_df,
     long_df_to_daily_values,
-    run_backtest_from_weights,
+    safe_backtest,
     summarize_backtest,
     top_quantile_weights,
 )
@@ -68,7 +68,6 @@ from scripts.cogalpha_lqtp.run_production_batch import (  # noqa: E402
     _negate_formula,
     _negate_python_code,
     _negate_values_parquet,
-    _safe_backtest,
     _save_progress,
     _upsert_index_row,
 )
@@ -79,6 +78,20 @@ def _json_float(value: Any) -> float:
         return float(value)
     except (TypeError, ValueError):
         return float("nan")
+
+
+_TOKEN_MGR: LqtpTokenManager | None = None
+
+
+def _token_mgr_for(payload: dict[str, Any]) -> LqtpTokenManager:
+    global _TOKEN_MGR
+    if _TOKEN_MGR is None:
+        _TOKEN_MGR = LqtpTokenManager.login(
+            payload.get("server", DEFAULT_SERVER),
+            payload["username"],
+            payload["password"],
+        )
+    return _TOKEN_MGR
 
 
 def _regen_one(payload: dict[str, Any]) -> dict[str, Any]:
@@ -170,15 +183,15 @@ def _regen_one(payload: dict[str, Any]) -> dict[str, Any]:
         backtest_rows: list[dict[str, Any]] = []
         backtest_id = ""
         topk_summary: dict[str, Any] = {}
-        if payload.get("with_backtest") and payload.get("token"):
+        if payload.get("with_backtest"):
             daily_values = long_df_to_daily_values(long_df)
             lqtp_long = factor_values_to_long_df(daily_values)
             allowed = set(payload.get("backtest_symbols") or [])
             if allowed:
                 lqtp_long = lqtp_long[lqtp_long["symbol"].isin(allowed)]
             weights = top_quantile_weights(lqtp_long, allowed_symbols=allowed or None)
-            backtest_rows, backtest_id = _safe_backtest(
-                token=payload["token"],
+            backtest_rows, backtest_id = safe_backtest(
+                token_mgr=_token_mgr_for(payload),
                 weights=weights,
                 begin_date=begin_i,
                 end_date=end_i,
@@ -305,7 +318,8 @@ def main() -> int:
                 "start": args.start,
                 "end": args.end,
                 "server": args.server,
-                "token": token,
+                "username": args.username,
+                "password": args.password,
                 "backtest_symbols": backtest_symbols,
                 "with_backtest": bool(token),
                 "flip_negative_ic": args.flip_negative_ic,

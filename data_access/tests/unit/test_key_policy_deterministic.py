@@ -5,9 +5,9 @@ from datetime import datetime
 import pyarrow as pa
 import pytest
 
-from data_access.adapters import arrow_table_to_multiindex_columns
-from data_access.exceptions import ValidationError
-from data_access.key_policy import KeyPolicy
+from data_access.read.adapters import arrow_table_to_multiindex_columns
+from data_access.core.exceptions import ValidationError
+from data_access.read.key_policy import KeyPolicy
 
 
 def _table(revisions: list[int], values: list[float]) -> pa.Table:

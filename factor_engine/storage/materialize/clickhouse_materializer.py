@@ -138,8 +138,8 @@ class ClickHouseMaterializer:
             ClickHouseMaterializeSummary
         """
         _ensure_data_access()
-        from data_access.clickhouse_panel import ClickHouseConfig
-        from data_access.clickhouse_write import insert_factor_dataframe
+        from data_access.clickhouse.panel import ClickHouseConfig
+        from data_access.clickhouse.write import insert_factor_dataframe
         from storage.factor_frame import prepare_factor_dataframe
 
         version_key = str(factor_version) if factor_version else None
@@ -200,7 +200,7 @@ class ClickHouseMaterializer:
             "true",
             "yes",
         }:
-            from data_access.clickhouse_write import verify_factor_write
+            from data_access.clickhouse.write import verify_factor_write
 
             verify_factor_write(
                 config=config,

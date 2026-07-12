@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
-from data_access.cos_mirror import (
+from data_access.cos.mirror import (
     ASHARE_DATASET_TABLE_MAP,
     DATASET_MIRROR_REGISTRY,
     US_DATASET_TABLE_MAP,

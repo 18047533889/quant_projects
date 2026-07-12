@@ -11,10 +11,18 @@ quant_projects/
 ├── .data_access_allowlist.yaml     # data_access 直读 API 豁免清单
 │
 ├── data_access/                    # 统一数据读写（DuckDB + Parquet + COS 镜像）
-│   ├── config/datasets.yaml        # 数据集登记表（A 股 20 + 美股 23 + 因子湖）
-│   ├── cos_mirror.py               # COS 按需本地镜像
 │   ├── store.py                    # 对外主 API
-│   └── tests/                      # 单元 / 契约测试
+│   ├── core/                       # 引擎、异常、namespace、审计
+│   ├── registry/                   # datasets.yaml 加载、路径白名单
+│   ├── read/                       # 读契约、预算、适配、SQL
+│   ├── write/                      # publish / upsert
+│   ├── cos/                        # COS 镜像与远程直读
+│   ├── clickhouse/                 # ClickHouse 读/写
+│   ├── service/                    # HTTP 读数服务
+│   ├── ops/                        # 运维脚本（stats 刷新等）
+│   ├── config/datasets.yaml        # 数据集登记表
+│   ├── docs/                       # 用户使用手册
+│   └── tests/
 │
 ├── factor_engine/                  # 因子计算引擎（DSL → 执行 → 落盘）
 │   ├── api/                        # DSL 解析、mining_integration
@@ -58,7 +66,7 @@ quant_projects/
 │   └── factors/lake/               # 因子落盘湖
 │
 ├── docs/
-│   └── data_access/                # data_access 团队文档
+│   └── team_docs/                  # 团队规范与 data_access 迁移指南
 │
 └── logs/  output/  notebooks/      # 运行时产出
 ```
@@ -67,7 +75,7 @@ quant_projects/
 
 ```mermaid
 flowchart LR
-  COS[COS Parquet] --> Mirror[cos_mirror]
+  COS[COS Parquet] --> Mirror[cos/]
   Mirror --> DA[data_access]
   DA --> FES[DataAccessSource]
   FES --> FE[factor_engine]

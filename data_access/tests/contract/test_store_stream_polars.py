@@ -25,7 +25,7 @@ import pyarrow as pa
 import pytest
 
 from data_access import reset_store
-from data_access.engine import DuckDBEngine
+from data_access.core.engine import DuckDBEngine
 from data_access.registry import load_registry
 from data_access.store import DataAccessStore
 
@@ -318,7 +318,7 @@ def test_scan_polars_missing_raises_importerror(streaming_store, monkeypatch):
 
 
 def test_scan_polars_records_telemetry(streaming_store, monkeypatch):
-    from data_access.telemetry import get_counters_snapshot, reset_counters
+    from data_access.read.telemetry import get_counters_snapshot, reset_counters
 
     monkeypatch.setenv("QUANT_OPERATOR", "polars_test_op")
     reset_counters()

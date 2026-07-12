@@ -15,10 +15,10 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from data_access.engine import DuckDBEngine
-from data_access.exceptions import ValidationError
+from data_access.core.engine import DuckDBEngine
+from data_access.core.exceptions import ValidationError
 from data_access.registry import StaticDataset
-from data_access.schema_validation import (
+from data_access.registry.schema_validation import (
     SchemaCheckResult,
     check_schema,
     enforce_schema_or_raise,
