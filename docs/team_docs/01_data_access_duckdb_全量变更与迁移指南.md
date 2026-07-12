@@ -15,7 +15,7 @@
 | **查本仓库除 `data_access` 外各层怎么接、责任在哪** | **§4.1.1～§4.1.5**；按 PR/版本对照见 **§4.2** |
 | 从旧代码/随便读 Parquet 迁到统一写法 | **§4 改造前 vs 后**、**§10** 里抄一段 |
 | **登记**新数据或新路径 | **§8** + 本机 [`datasets.yaml`](../data_access/config/datasets.yaml) |
-| 大表/流式/SQL/多表 | **§10.1～10.6**、**§7** 选 API；拿不准再看 [`docs/data_access/10_架构设计.md`](../data_access/10_架构设计.md) |
+| 大表/流式/SQL/多表 | **§10.1～10.6**、**§7** 选 API；拿不准再看 [`data_access/README.md`](../../data_access/README.md) |
 | 写入实验结果、**发布**到全员可读区 | **§9**、**§10.7～10.8**（权限以岗位为准） |
 | Code Review 或**别在删路径上翻车** | **§13** 禁止项、**§14** 测试网、**§15** 事故教训 |
 | 实习生/无内网、只能本地样例 | **§2、§3、§11、§16** |
@@ -158,7 +158,7 @@ tbl: pa.Table = store.sql(
 
 | 角色 | 如何使用本文 |
 |------|----------------|
-| 内部开发 | 通读；结合 `docs/data_access/10_架构设计.md` 做深入修改 |
+| 内部开发 | 通读；结合 `data_access/README.md` 做深入修改 |
 | 实习生 / 外部协作 | 先读 **§0**；再重点 **§2、§3、§4、§10、§11**；其余作参考；**不依赖**未提供的内部业务代码仓库 |
 | Code Review | 对照 **§13**、**§14**（测试与边界）、**§15 事故**（及 **§0** 职责边界） |
 
@@ -172,7 +172,7 @@ tbl: pa.Table = store.sql(
 
 1. 本文 §3～§9（概念与流程）  
 2. `data_access/config/datasets.yaml`（本环境真实数据集名与路径）  
-3. `docs/data_access/02_快速上手.md` 与 `10_架构设计.md`（细节）  
+3. `data_access/用户使用手册.md` 与 `data_access/README.md`（细节）  
 4. 本层代码：在 `backtest_layer` / `strategy_layer` / `factor_layer` 中搜索 `get_store`、`read_arrow` 等引用
 
 ### 2.2 实习生 / 无内网权限读者
@@ -192,7 +192,7 @@ tbl: pa.Table = store.sql(
 | 项目 | 说明 | 没有时怎么办 |
 |------|------|----------------|
 | 允许的 `dataset` 名 | 在 `datasets.yaml` 中已存在、且该实习生有权读的条目名 | 使用占位名 `YOUR_DATASET_NAME`，在本地用 **§11.1** 登记自己的样例数据 |
-| 环境变量 | 如 `QUANT_RUN_NAMESPACE`、`QUANTSOCIETY_WORKSPACE_DATA_ROOT` 等含义与是否必须设置 | 只读 `published` 时 often 可省略 namespace；**写** namespaced/staging 时必须理解 `namespace`（见 `docs/data_access/10_架构设计.md` §3） |
+| 环境变量 | 如 `QUANT_RUN_NAMESPACE`、`QUANTSOCIETY_WORKSPACE_DATA_ROOT` 等含义与是否必须设置 | 只读 `published` 时 often 可省略 namespace；**写** namespaced/staging 时必须理解 `namespace`（见 `data_access/README.md` §3） |
 | 样例数据 | 小批量 Parquet 目录或样例库路径 | 用 `pytest` 的 `tmp_path` 自造最小表，或只跑单元测试式脚本 |
 | 数据接口 | 统一使用 `from data_access import get_store` | **禁止**在业务中 `import duckdb` / `pd.read_parquet`（见 allowlist） |
 | 权限边界 | 是否允许 `write_arrow` / `publish_from_staging` | 一般实习生默认**只读**；生产 **published** 直写**禁止**（代码层也会拦） |
@@ -219,7 +219,7 @@ tbl: pa.Table = store.sql(
 |------|------------------|
 | **`data_access/`** + `data_access/config/datasets.yaml` | **核心库**：`DuckDBEngine` / `get_store()`、读写、发布、审计、测试。 |
 | **`.data_access_allowlist.yaml`** + `scripts/check_data_access_allowlist.py` | 仍须**直读 Parquet/duckdb** 的**显式豁免**与静态检查（合规章见 [02 §2.3](02_量化团队企业级研发规范.md#23-allowlist-与-data_access-静态检查强制--建议)）。 |
-| **`docs/data_access/`**、**`data_access/README.md`**、**`docs/team_docs/`** 下 01/02/03 | 与实现配套的设计/上手/团队总览。 |
+| **`data_access/`**、**`data_access/README.md`**、**`docs/team_docs/`** 下 01/02/03 | 与实现配套的设计/上手/团队总览。 |
 | **`factor_layer/.../storage/**`、**`strategy_layer/data/**`、**`streaming/**`、**`raw_data_layer/.../cleaning/**` | 业务与数据管线的**接法**与边界（分节下详）。 |
 
 #### 4.1.1 `data_access` 包与 `datasets.yaml`
@@ -272,7 +272,7 @@ tbl: pa.Table = store.sql(
 | PR | 主分支代表提交 | 主要解决什么 | 涉及路径/能力 | 是否含业务层 |
 |----|----------------|-------------|--------------|-------------|
 | **PR1～PR3** | `afa949a` 等 + `bde5269` / `83eb63c` 测试 | 读路径**单例**与 Arrow 主路径；**写** + 审计；**`upsert` / `store.sql` / `publish_from_staging`** 及 contract 测 | `data_access/**`、`publish.py`、`sql_escape.py`、合同测试 | 否（仅库+测） |
-| **PR4** | `acc3133` | 扩充 **`datasets.yaml`**；streaming/ raw 与**登记**对齐；`docs/data_access` 与 **allowlist 骨架** | `data_access/config/datasets.yaml`、**streaming**、**raw** 注释、`.data_access_allowlist.yaml` | 是（配置+文档+少量流式） |
+| **PR4** | `acc3133` | 扩充 **`datasets.yaml`**；streaming/ raw 与**登记**对齐；文档与 **allowlist 骨架** | `data_access/config/datasets.yaml`、**streaming**、**raw** 注释、`.data_access_allowlist.yaml` | 是（配置+文档+少量流式） |
 | **PR5** | `e6cfce7` | 策略**读端**用 **`get_shared_engine()`** 单条 SQL；登记 **daily_market_summary**、**stocks_floats**；allowlist 分节 | `strategy_layer/data/factor_panel.py`、`market_data.py`、**allowlist**、**`data_access/__init__.py` 出口** | 是 |
 | **PR6** | `741c64a` | **静态检查** `check_data_access_allowlist.py`；**per-operator 遥测**（慢查/配额） | `data_access/telemetry.py`、**脚本**、**allowlist**、PR 相关测试 | 否（工程化） |
 | **PR7** | `9fd599c` | **`read_arrow_stream`**、**`scan_polars`** 与 DuckDB/Arrow 列投影衔接 | `data_access/store.py`、adapters/contract 测 | 否 |
@@ -313,7 +313,7 @@ from data_access import get_store
 t = get_store().read_arrow("YOUR_DATASET_NAME", columns=["c1", "c2"])
 ```
 
-**为何进程内常共用一个 `DuckDB` 连接**：多路读同一批 Parquet 时，共享 **object cache / buffer pool** 等，减少重复 IO（详见 [`docs/data_access/10_架构设计.md`](../data_access/10_架构设计.md) §1.1–1.2）。
+**为何进程内常共用一个 `DuckDB` 连接**：多路读同一批 Parquet 时，共享 **object cache / buffer pool** 等，减少重复 IO（详见 [`data_access/README.md`](../../data_access/README.md) §1.1–1.2）。
 
 ---
 
@@ -384,7 +384,7 @@ flowchart LR
 - 文件：[`data_access/config/datasets.yaml`](../data_access/config/datasets.yaml)  
 - 说明：[`data_access/config/README.md`](../data_access/config/README.md)
 
-**access_mode 要点**（与 `10_架构设计.md` 一致）：
+**access_mode 要点**（与 `data_access/用户使用手册.md` 一致）：
 
 - **published**：全员可读；**禁止** `write_arrow` 直写；更新须 **staging → `publish_from_staging`**。  
 - **namespaced**：个人/实验隔离，路径含 `RUN_NAMESPACE` 等。  
@@ -653,7 +653,7 @@ if __name__ == "__main__":
 
 ## 18. 新成员与迁移检查清单
 
-- [ ] 已读 `docs/data_access/02_快速上手.md`  
+- [ ] 已读 `data_access/用户使用手册.md`  
 - [ ] 能解释 `get_store().read_frame` 与 `datasets.yaml` 的关系  
 - [ ] 能说明为何不能 `pd.read_parquet` 直读生产路径  
 - [ ] 知道 `published` 不可直写、发布须 `publish_from_staging`（若岗位涉及）  
@@ -668,7 +668,7 @@ if __name__ == "__main__":
 
 - [00_主材料阅读指引.md](00_主材料阅读指引.md)  
 - `data_access/README.md`  
-- `docs/data_access/01_团队使用规范.md`  
-- `docs/data_access/02_快速上手.md`  
-- `docs/data_access/10_架构设计.md`  
+- `data_access/用户使用手册.md`  
+- `data_access/用户使用手册.md`  
+- `data_access/README.md`  
 - `data_access/store.py` `data_access/engine.py` `data_access/publish.py`

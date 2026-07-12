@@ -133,9 +133,7 @@ def main() -> int:
                 "ready": catalog_stats.get("ready", 0),
                 "smoke_pass": len(passed),
                 "smoke_fail": len(failed_ready),
-                "hard_or_unconverted": catalog_stats.get("hard", 0)
-                + catalog_stats.get("needs_review", 0)
-                + catalog_stats.get("converted", 0),
+                "hard_or_python": catalog_stats.get("python", 0),
             },
             ensure_ascii=False,
         )

@@ -1,9 +1,12 @@
 """
 data_access.cos_mirror —— COS 清洗数据本地镜像按需同步（A 股 / 美股）
 
-读数据前由 store 调用 ``ensure_local_mirror_for_dataset``：
+读数据前由 store 调用 ``ensure_local_mirror_for_dataset``（``DATA_ACCESS_COS_READ_MODE=mirror`` 时）：
   - 本地缺文件时按 ``time_range`` 从 COS 增量拉取
-  - ``DATA_ACCESS_SKIP_COS_MIRROR=1`` 可关闭
+  - ``DATA_ACCESS_SKIP_COS_MIRROR=1`` 可关闭拉取
+
+远程直读（``DATA_ACCESS_COS_READ_MODE=remote|auto``）见 ``cos_remote.py``：
+  DuckDB httpfs 读 ``s3://``，不落地；需 ``DATA_ACCESS_COS_S3_ENDPOINT`` 与 COS 凭证。
 """
 
 from __future__ import annotations
@@ -457,9 +460,16 @@ def ensure_local_mirror(
         return
 
     local_dir = _local_table_dir(spec) if spec.layout == "daily_parquet" else spec.local_root
-    existing = list(local_dir.rglob("*.parquet")) if local_dir.exists() else []
+    # 只判断目录是否非空：完整 rglob 在大镜像上很贵，后续按 time_range 做增量存在性检查
+    has_local = False
+    if local_dir.exists() and local_dir.is_dir():
+        try:
+            next(local_dir.iterdir())
+            has_local = True
+        except StopIteration:
+            has_local = False
 
-    if not existing:
+    if not has_local:
         if time_range is not None:
             logger.info("cos_mirror: 本地无 %s，按 time_range 增量拉取", dataset_name)
             sync_dataset(dataset_name, time_range=time_range)

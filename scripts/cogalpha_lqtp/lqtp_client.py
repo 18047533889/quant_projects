@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import os
+import re
 import sys
-from dataclasses import dataclass
-from pathlib import Path
+import threading
+import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
 import grpc
+import numpy as np
 import pandas as pd
 
 LQTP_ROOT = Path(__file__).resolve().parents[2] / "lqtp-python-grpc-examples"
@@ -22,6 +25,11 @@ import Struct_pb2_grpc  # noqa: E402
 
 
 DEFAULT_SERVER = os.getenv("LQTP_SERVER", "118.89.191.220:50051")
+DEFAULT_TOKEN_REFRESH_SECONDS = 20 * 60
+DEFAULT_BACKTEST_CASH = 10_000_000.0  # 1000万本金；图中 NAV 另归一化到 start=1
+DEFAULT_LQTP_LOGIN_RETRIES = 12
+DEFAULT_LQTP_LOGIN_WAIT_SEC = 15.0
+_MISSING_QUOTE_RE = re.compile(r"行情不存在:\s*(\S+)")
 SAFE_LQTP_SYMBOLS_LIST = [
     "000001.SZ", "000004.SZ", "000006.SZ", "000008.SZ", "000011.SZ",
     "000014.SZ", "000016.SZ", "000021.SZ", "000023.SZ", "000026.SZ",
@@ -75,6 +83,45 @@ def _channel(server: str) -> grpc.Channel:
     )
 
 
+def _is_transient_grpc_error(error: BaseException) -> bool:
+    if isinstance(error, grpc.RpcError):
+        code = error.code()
+        return code in {
+            grpc.StatusCode.UNAVAILABLE,
+            grpc.StatusCode.DEADLINE_EXCEEDED,
+            grpc.StatusCode.RESOURCE_EXHAUSTED,
+            grpc.StatusCode.INTERNAL,
+        }
+    text = str(error).lower()
+    return "connection refused" in text or "failed to connect" in text or "socket closed" in text
+
+
+def login_with_retry(
+    server: str,
+    username: str,
+    password: str,
+    *,
+    max_attempts: int = DEFAULT_LQTP_LOGIN_RETRIES,
+    wait_sec: float = DEFAULT_LQTP_LOGIN_WAIT_SEC,
+) -> LqtpAuth:
+    """Login with backoff when LQTP gRPC is temporarily down (Connection refused / UNAVAILABLE)."""
+    last_error: BaseException | None = None
+    for attempt in range(1, max(1, max_attempts) + 1):
+        try:
+            return login(server, username, password)
+        except Exception as exc:  # noqa: BLE001
+            last_error = exc
+            if attempt >= max_attempts or not _is_transient_grpc_error(exc):
+                raise
+            delay = min(wait_sec * attempt, 120.0)
+            print(
+                f"LQTP login attempt {attempt}/{max_attempts} failed ({exc}); "
+                f"retry in {delay:.0f}s ..."
+            )
+            time.sleep(delay)
+    raise RuntimeError(f"LQTP login failed after {max_attempts} attempts: {last_error}")
+
+
 def login(server: str, username: str, password: str) -> LqtpAuth:
     import Auth_pb2  # noqa: E402
     import Auth_pb2_grpc  # noqa: E402
@@ -92,6 +139,104 @@ def login(server: str, username: str, password: str) -> LqtpAuth:
     )
 
 
+def refresh_access_token(server: str, refresh_token: str) -> LqtpAuth:
+    """Exchange refresh_token for a new access/refresh token pair."""
+    import Auth_pb2  # noqa: E402
+    import Auth_pb2_grpc  # noqa: E402
+
+    stub = Auth_pb2_grpc.AuthServiceStub(_channel(server))
+    resp = stub.RefreshToken(
+        Auth_pb2.RefreshTokenRequest(refresh_token=refresh_token),
+        timeout=60,
+    )
+    return LqtpAuth(
+        access_token=resp.access_token,
+        refresh_token=resp.refresh_token,
+        user_id=resp.user.user_id,
+        username=resp.user.username,
+    )
+
+
+@dataclass
+class LqtpTokenManager:
+    """Proactively refresh LQTP access tokens before they expire."""
+
+    server: str
+    username: str
+    password: str
+    refresh_interval_seconds: int = DEFAULT_TOKEN_REFRESH_SECONDS
+    _auth: LqtpAuth | None = None
+    _last_refresh_monotonic: float = 0.0
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
+
+    @classmethod
+    def login(
+        cls,
+        server: str,
+        username: str,
+        password: str,
+        *,
+        refresh_interval_seconds: int = DEFAULT_TOKEN_REFRESH_SECONDS,
+        login_retries: int = DEFAULT_LQTP_LOGIN_RETRIES,
+        login_wait_sec: float = DEFAULT_LQTP_LOGIN_WAIT_SEC,
+    ) -> LqtpTokenManager:
+        mgr = cls(
+            server=server,
+            username=username,
+            password=password,
+            refresh_interval_seconds=refresh_interval_seconds,
+        )
+        mgr._login_retries = login_retries
+        mgr._login_wait_sec = login_wait_sec
+        mgr._do_login()
+        return mgr
+
+    def _do_login(self) -> None:
+        retries = getattr(self, "_login_retries", DEFAULT_LQTP_LOGIN_RETRIES)
+        wait_sec = getattr(self, "_login_wait_sec", DEFAULT_LQTP_LOGIN_WAIT_SEC)
+        self._auth = login_with_retry(
+            self.server,
+            self.username,
+            self.password,
+            max_attempts=retries,
+            wait_sec=wait_sec,
+        )
+        self._last_refresh_monotonic = time.monotonic()
+        print(f"LQTP login ok user={self._auth.username}")
+
+    def _do_refresh(self) -> None:
+        if self._auth is None:
+            self._do_login()
+            return
+        try:
+            self._auth = refresh_access_token(self.server, self._auth.refresh_token)
+            self._last_refresh_monotonic = time.monotonic()
+            print(f"LQTP token refreshed user={self._auth.username}")
+        except grpc.RpcError as error:
+            print(f"LQTP refresh failed ({error.code()}), re-login ...")
+            self._do_login()
+
+    def maybe_refresh(self, *, force: bool = False) -> None:
+        with self._lock:
+            if self._auth is None:
+                self._do_login()
+                return
+            elapsed = time.monotonic() - self._last_refresh_monotonic
+            if force or elapsed >= self.refresh_interval_seconds:
+                self._do_refresh()
+
+    @property
+    def token(self) -> str:
+        with self._lock:
+            if self._auth is None:
+                self._do_login()
+            elif time.monotonic() - self._last_refresh_monotonic >= self.refresh_interval_seconds:
+                self._do_refresh()
+            if self._auth is None:
+                raise RuntimeError("LQTP token manager is not authenticated")
+            return self._auth.access_token
+
+
 def _to_lqtp_symbol(symbol: str) -> str:
     text = str(symbol).strip()
     if "." in text:
@@ -103,10 +248,18 @@ def _to_lqtp_symbol(symbol: str) -> str:
 
 def long_df_to_daily_values(long_df: pd.DataFrame) -> list[Factor_pb2.FactorDailyValues]:
     work = long_df.copy()
-    work["datetime"] = pd.to_datetime(work["datetime"])
-    work["trade_date"] = work["datetime"].dt.strftime("%Y%m%d").astype(int)
-    work["quote_time"] = 0
-    work["symbol"] = work["asset"].map(_to_lqtp_symbol)
+    if "trade_date" in work.columns:
+        work["trade_date"] = work["trade_date"].astype(int)
+        work["quote_time"] = 0
+        if "symbol" not in work.columns:
+            work["symbol"] = work["asset"].astype(str).map(_to_lqtp_symbol)
+        else:
+            work["symbol"] = work["symbol"].astype(str).map(_to_lqtp_symbol)
+    else:
+        work["datetime"] = pd.to_datetime(work["datetime"])
+        work["trade_date"] = work["datetime"].dt.strftime("%Y%m%d").astype(int)
+        work["quote_time"] = 0
+        work["symbol"] = work["asset"].map(_to_lqtp_symbol)
 
     points: list[Factor_pb2.FactorDailyValues] = []
     for (trade_date, quote_time), group in work.groupby(["trade_date", "quote_time"], sort=True):
@@ -183,6 +336,8 @@ def run_factor_formula(
     warmup: int = 1,
     analyze: bool = True,
     server: str = DEFAULT_SERVER,
+    factor_name: str = "",
+    value_limit: int = 0,
 ) -> Factor_pb2.RunFactorResponse:
     stub = Factor_pb2_grpc.FactorServiceStub(_channel(server))
     request = Factor_pb2.RunFactorRequest(
@@ -192,9 +347,10 @@ def run_factor_formula(
         warmup=warmup,
         analyze=analyze,
         value_return_mode=Factor_pb2.FACTOR_VALUE_RETURN_MODE_ALL,
-        value_limit=50000,
+        value_limit=value_limit,
+        factor_name=factor_name,
     )
-    return stub.RunFactor(request, metadata=_metadata(token), timeout=300)
+    return stub.RunFactor(request, metadata=_metadata(token), timeout=600)
 
 
 def analysis_to_dict(analysis: Factor_pb2.FactorAnalysis) -> dict[str, Any]:
@@ -240,32 +396,110 @@ def factor_values_to_long_df(values: Iterable[Factor_pb2.FactorDailyValues]) -> 
     return pd.DataFrame(rows)
 
 
+# Modern low broker fee: 0.01 = 0.01% each side (LQTP unit: 0.1 = 0.1%).
+DEFAULT_COMMISSION_BUY = 0.01
+DEFAULT_COMMISSION_SELL = 0.01
+
+
+def _trade_date_shift_map(dates: Iterable[int], shift: int = 1) -> dict[int, int]:
+    ordered = sorted({int(d) for d in dates})
+    out: dict[int, int] = {}
+    for i, d in enumerate(ordered):
+        j = i + shift
+        if j < len(ordered):
+            out[d] = ordered[j]
+    return out
+
+
 def top_quantile_weights(
     long_df: pd.DataFrame,
     *,
     top_frac: float = 0.1,
+    max_picks_per_day: int = 50,
     allowed_symbols: set[str] | None = SAFE_LQTP_SYMBOLS,
+    signal_to_trade_lag: int = 1,
 ) -> list[Struct_pb2.Weight]:
+    """Build TopK long-only weights.
+
+    Factor known after close on signal date T cannot trade at T close.
+    With *signal_to_trade_lag*=1 and OPEN price backtest, weights are placed on T+1
+    so LQTP trades at open(T+1).
+    """
     work = long_df.copy()
     work["trade_date"] = work["trade_date"].astype(int)
     if allowed_symbols is not None:
         work["symbol"] = work["symbol"].astype(str).map(_to_lqtp_symbol)
         work = work[work["symbol"].isin(allowed_symbols)]
+    shift_map = _trade_date_shift_map(work["trade_date"], shift=signal_to_trade_lag)
     weights: list[Struct_pb2.Weight] = []
     for trade_date, group in work.groupby("trade_date", sort=True):
+        exec_date = shift_map.get(int(trade_date))
+        if exec_date is None:
+            continue
         valid = group.dropna(subset=["value"])
         if valid.empty:
             continue
-        n = max(1, int(len(valid) * top_frac))
+        n = max(1, min(max_picks_per_day, int(len(valid) * top_frac)))
         picks = valid.nlargest(n, "value")
         w = 1.0 / len(picks)
         for row in picks.itertuples(index=False):
             weights.append(
                 Struct_pb2.Weight(
-                    trade_date=int(trade_date),
+                    trade_date=int(exec_date),
                     quote_time=0,
                     symbol=str(row.symbol),
                     value=w,
+                )
+            )
+    return weights
+
+
+def long_short_decile_weights(
+    long_df: pd.DataFrame,
+    *,
+    top_frac: float = 0.1,
+    bottom_frac: float = 0.1,
+    max_picks_per_side: int = 50,
+    allowed_symbols: set[str] | None = SAFE_LQTP_SYMBOLS,
+    signal_to_trade_lag: int = 1,
+) -> list[Struct_pb2.Weight]:
+    """Equal-weight long top / short bottom decile; negative weight = short."""
+    work = long_df.copy()
+    work["trade_date"] = work["trade_date"].astype(int)
+    if allowed_symbols is not None:
+        work["symbol"] = work["symbol"].astype(str).map(_to_lqtp_symbol)
+        work = work[work["symbol"].isin(allowed_symbols)]
+    shift_map = _trade_date_shift_map(work["trade_date"], shift=signal_to_trade_lag)
+    weights: list[Struct_pb2.Weight] = []
+    for trade_date, group in work.groupby("trade_date", sort=True):
+        exec_date = shift_map.get(int(trade_date))
+        if exec_date is None:
+            continue
+        valid = group.dropna(subset=["value"])
+        if len(valid) < 20:
+            continue
+        n_long = max(1, min(max_picks_per_side, int(len(valid) * top_frac)))
+        n_short = max(1, min(max_picks_per_side, int(len(valid) * bottom_frac)))
+        longs = valid.nlargest(n_long, "value")
+        shorts = valid.nsmallest(n_short, "value")
+        w_l = 0.5 / len(longs)
+        w_s = -0.5 / len(shorts)
+        for row in longs.itertuples(index=False):
+            weights.append(
+                Struct_pb2.Weight(
+                    trade_date=int(exec_date),
+                    quote_time=0,
+                    symbol=str(row.symbol),
+                    value=w_l,
+                )
+            )
+        for row in shorts.itertuples(index=False):
+            weights.append(
+                Struct_pb2.Weight(
+                    trade_date=int(exec_date),
+                    quote_time=0,
+                    symbol=str(row.symbol),
+                    value=w_s,
                 )
             )
     return weights
@@ -299,34 +533,140 @@ def backtest_result_to_dict(result: Struct_pb2.Result) -> dict[str, Any]:
     }
 
 
+def summarize_backtest(rows: list[dict[str, Any]], *, initial_cash: float = DEFAULT_BACKTEST_CASH) -> dict[str, Any]:
+    """Extra metrics from LQTP daily backtest stream.
+
+    LQTP ``Result.ret`` is in basis points (10000 = 100%); ``turnover_rate`` is in percent
+    (100 = 100%).
+    """
+    if not rows:
+        return {
+            "total_return": float("nan"),
+            "annualized_return": float("nan"),
+            "max_drawdown": float("nan"),
+            "sharpe": float("nan"),
+            "volatility": float("nan"),
+            "calmar": float("nan"),
+            "win_rate": float("nan"),
+            "avg_turnover": float("nan"),
+            "total_commission": float("nan"),
+            "trading_days": 0,
+            "final_nav": float("nan"),
+        }
+    frame = pd.DataFrame(rows).sort_values("trade_date")
+    nav = pd.to_numeric(frame["eod_net_asset"], errors="coerce")
+    # Prefer NAV-implied daily returns (robust); fall back to ret/10000 (bps → decimal)
+    if len(nav) >= 2:
+        rets = nav.pct_change().fillna(0.0)
+    else:
+        rets = pd.to_numeric(frame["ret"], errors="coerce").fillna(0.0) / 10000.0
+    turnover = pd.to_numeric(frame.get("turnover_rate", 0.0), errors="coerce").fillna(0.0) / 100.0
+    commission = pd.to_numeric(frame.get("commission", 0.0), errors="coerce").fillna(0.0)
+
+    final_nav = float(nav.iloc[-1]) if len(nav) else float("nan")
+    start_nav = float(nav.iloc[0]) if len(nav) else initial_cash
+    if "bod_net_asset" in frame.columns and pd.notna(frame["bod_net_asset"].iloc[0]):
+        bod0 = float(frame["bod_net_asset"].iloc[0])
+        if bod0 > 0:
+            start_nav = bod0
+    total_return = final_nav / start_nav - 1.0 if start_nav else float("nan")
+    n = max(len(frame), 1)
+    years = n / 252.0
+    annualized = (1.0 + total_return) ** (1.0 / years) - 1.0 if years > 0 and total_return > -1 else float("nan")
+
+    peak = nav.cummax()
+    dd = nav / peak - 1.0
+    max_dd = float(dd.min()) if len(dd) else float("nan")
+    vol = float(rets.std(ddof=1) * np.sqrt(252)) if len(rets) > 1 else float("nan")
+    sharpe = (
+        float(rets.mean() / rets.std(ddof=1) * np.sqrt(252))
+        if len(rets) > 1 and rets.std(ddof=1) > 1e-12
+        else 0.0
+    )
+    calmar = float(annualized / abs(max_dd)) if max_dd == max_dd and abs(max_dd) > 1e-12 else float("nan")
+    win_rate = float((rets > 0).mean()) if len(rets) else float("nan")
+
+    return {
+        "total_return": float(total_return),
+        "annualized_return": float(annualized) if annualized == annualized else float("nan"),
+        "max_drawdown": max_dd,
+        "sharpe": sharpe,
+        "volatility": vol,
+        "calmar": calmar,
+        "win_rate": win_rate,
+        "avg_turnover": float(turnover.mean()) if len(turnover) else float("nan"),
+        "total_commission": float(commission.sum()) if len(commission) else float("nan"),
+        "trading_days": int(n),
+        "final_nav": final_nav,
+        "initial_cash": float(start_nav),
+    }
+
+
 def run_backtest_from_weights(
     *,
     token: str,
     weights: list[Struct_pb2.Weight],
     begin_date: int,
     end_date: int,
-    cash: float = 1_000_000.0,
+    cash: float = DEFAULT_BACKTEST_CASH,
     server: str = DEFAULT_SERVER,
+    return_details: bool = False,
+    max_quote_retries: int = 32,
+    commission_buy: float = DEFAULT_COMMISSION_BUY,
+    commission_sell: float = DEFAULT_COMMISSION_SELL,
+    price_type: int | None = None,
+    enable_short_selling: bool = False,
 ) -> tuple[list[dict[str, Any]], str]:
-    request = Struct_pb2.Request(
-        begin_date=begin_date,
-        end_date=end_date,
-        weights=weights,
-        cash=cash,
-        commission_buy=0.03,
-        commission_sell=0.03,
-        return_orders=True,
-        return_targets=True,
-        return_positions=True,
-        persistence_mode=Struct_pb2.BACKTEST_PERSISTENCE_MODE_NONE,
-        price_type=Struct_pb2.CLOSE,
-    )
-    stub = Struct_pb2_grpc.BacktestServiceStub(_channel(server))
-    rows: list[dict[str, Any]] = []
-    backtest_id = ""
-    for resp in stub.Backtest(request, metadata=_metadata(token), timeout=300):
-        if resp.error:
-            raise RuntimeError(resp.error)
-        backtest_id = resp.backtest_id or backtest_id
-        rows.append(backtest_result_to_dict(resp.result))
-    return rows, backtest_id
+    """Run LQTP backtest at OPEN by default (signal lagged to next open).
+
+    Commission unit: 0.01 = 0.01%. Drops missing-quote symbols and retries.
+    """
+    work = list(weights)
+    excluded: set[str] = set()
+    last_error = ""
+    if price_type is None:
+        price_type = Struct_pb2.OPEN
+
+    for _attempt in range(max_quote_retries + 1):
+        if not work:
+            raise RuntimeError("no backtest weights left after excluding missing-quote symbols")
+
+        request = Struct_pb2.Request(
+            begin_date=begin_date,
+            end_date=end_date,
+            weights=work,
+            cash=cash,
+            commission_buy=commission_buy,
+            commission_sell=commission_sell,
+            return_orders=return_details,
+            return_targets=return_details,
+            return_positions=return_details,
+            persistence_mode=Struct_pb2.BACKTEST_PERSISTENCE_MODE_NONE,
+            price_type=price_type,
+            enable_short_selling=enable_short_selling,
+        )
+        stub = Struct_pb2_grpc.BacktestServiceStub(_channel(server))
+        rows: list[dict[str, Any]] = []
+        backtest_id = ""
+        try:
+            for resp in stub.Backtest(request, metadata=_metadata(token), timeout=300):
+                if resp.error:
+                    raise RuntimeError(resp.error)
+                backtest_id = resp.backtest_id or backtest_id
+                rows.append(backtest_result_to_dict(resp.result))
+            if excluded:
+                print(f"  backtest ok after excluding symbols: {sorted(excluded)}")
+            return rows, backtest_id
+        except RuntimeError as exc:
+            last_error = str(exc)
+            match = _MISSING_QUOTE_RE.search(last_error)
+            if not match:
+                raise
+            bad = _to_lqtp_symbol(match.group(1))
+            if bad in excluded:
+                raise RuntimeError(f"backtest retry loop on repeated missing symbol {bad}: {last_error}") from exc
+            excluded.add(bad)
+            work = [w for w in work if _to_lqtp_symbol(w.symbol) != bad]
+            print(f"  backtest retry excluding missing quote symbol {bad}")
+
+    raise RuntimeError(last_error or "backtest failed")

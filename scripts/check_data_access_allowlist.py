@@ -308,7 +308,7 @@ def main(argv: list[str]) -> int:
         "——————\n"
         "要么换成 data_access.get_store() / get_shared_engine() 的正式 API，\n"
         "要么在 .data_access_allowlist.yaml 里加 `- path: xxx` + reason 登记豁免。\n"
-        "细节参考 docs/data_access/01_团队使用规范.md §1.1\n"
+        "细节参考 data_access/用户使用手册.md 与 data_access/README.md\n"
     )
     return 1
 

@@ -127,14 +127,16 @@ def _symbol_panel(parquet_path: Path) -> dict[str, pd.DataFrame]:
 
 
 def _run_python_factor(code: str, function_name: str, panels: dict[str, pd.DataFrame]) -> pd.DataFrame:
-    namespace: dict[str, Any] = {"pd": pd, "np": np}
+    from scripts.cogalpha_lqtp.python_runtime import build_python_exec_namespace, prepare_factor_dataframe
+
+    namespace = build_python_exec_namespace()
     exec(code, namespace)  # noqa: S102
     if function_name not in namespace:
         raise RuntimeError(f"{function_name} not defined in python_code")
     func = namespace[function_name]
     rows: list[dict[str, Any]] = []
     for symbol, frame in panels.items():
-        out = func(frame.copy())
+        out = func(prepare_factor_dataframe(frame.copy()))
         if isinstance(out, pd.DataFrame):
             if out.shape[1] != 1:
                 raise RuntimeError(f"{function_name} returned DataFrame with {out.shape[1]} cols")

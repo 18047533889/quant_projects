@@ -60,6 +60,7 @@ def materialize_factor(
     dsl: str,
     data_source_cfg: dict[str, Any],
     lake_root: Path,
+    allowed_symbols: set[str] | None = None,
 ) -> Path:
     ok, msg = validate_factor_engine_dsl(dsl)
     if not ok:
@@ -77,6 +78,10 @@ def materialize_factor(
     long_df = series_to_long_table(series)
     long_df["asset"] = long_df["asset"].map(_normalize_symbol)
     long_df = long_df.dropna(subset=["value"])
+    if allowed_symbols:
+        long_df = long_df[long_df["asset"].isin(allowed_symbols)]
+        if long_df.empty:
+            raise RuntimeError(f"{factor_id}: no rows after LQTP universe filter")
 
     out_dir = lake_root / factor_id
     out_dir.mkdir(parents=True, exist_ok=True)

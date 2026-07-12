@@ -23,6 +23,8 @@ data/factors/lake/_runs/**
 data/factors/lake/factors/**
 data/factors/lake/gtja191/factors/**
 data/cache/**
+data/.cos_remote_cache*/
+data/staging/**
 logs/**
 output/**
 *.nohup

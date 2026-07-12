@@ -34,6 +34,13 @@ export DUCKDB_THREADS="${DUCKDB_THREADS:-$(nproc 2>/dev/null || echo 4)}"
 # data_access：首次读跳过 schema 校验（已登记数据集可信；调试可改为 warn/strict）
 export QUANT_SCHEMA_CHECK="${QUANT_SCHEMA_CHECK:-off}"
 
+# 可选：自选读/写根（其他服务器落盘位置不同时用）
+# 自定义路径必须先加入白名单，否则 PathAuthorizer 会拒：
+# export DATA_ACCESS_EXTRA_ALLOWED_ROOTS=/data/my_ws,/data/my_cache
+# 按数据集覆盖读根 / 写根（也可用 API 参数 read_root= / write_root= / write_dir=）：
+# export DATA_ACCESS_READ_ROOT_ASHARE_STOCK_DAILY=/data/my_ws/a_share/lqtp_data/StockDailyBar
+# export DATA_ACCESS_WRITE_ROOT_FACTOR_LAKE_STAGING=/data/my_ws/staging/factors
+
 # factor_engine 性能默认（最快路径；调试时可显式关闭）
 # CSE + panel_native 默认开启（见 PerfConfig.from_env）
 # export FACTOR_ENGINE_DISABLE_CSE=1
@@ -42,6 +49,18 @@ export FACTOR_ENGINE_USE_NUMBA="${FACTOR_ENGINE_USE_NUMBA:-1}"
 
 # 关闭读前 COS 自动拉取（离线包分发时建议开启）
 # export DATA_ACCESS_SKIP_COS_MIRROR=1
+
+# COS 读模式：mirror（默认，先拉本地）| remote（按需从 COS 读）| auto（本地有则本地）
+# export DATA_ACCESS_COS_READ_MODE=mirror
+# remote 后端：auto（优先 httpfs，否则 clean-cos-ro cache）| httpfs | cli
+# export DATA_ACCESS_COS_REMOTE_BACKEND=auto
+# export DATA_ACCESS_COS_CACHE_ROOT=${QUANTSOCIETY_WORKSPACE_DATA_ROOT}/.cos_remote_cache
+# httpfs 直连时需要：
+# export DATA_ACCESS_COS_S3_ENDPOINT=cos.ap-guangzhou.myqcloud.com
+# export DATA_ACCESS_COS_S3_REGION=ap-guangzhou
+# export COS_SECRET_ID=你的SecretId
+# export COS_SECRET_KEY=你的SecretKey
+# 也可把凭证放在 ~/.cos.yaml（与 clean-cos-ro 相同）；httpfs 不可用时自动走 cli
 
 # GitHub（GITHUB_TOKEN 写在同目录 .env，供 git push / gh 使用）
 if [[ -n "${GITHUB_TOKEN:-}" ]]; then

@@ -43,7 +43,7 @@ from . import audit
 from .adapters import arrow_table_to_multiindex_columns
 from .engine import DuckDBEngine, get_shared_engine, reset_shared_engine
 from .exceptions import DataError, ValidationError
-from .params_validation import params_fingerprint
+from .params_validation import ParamSpec, params_fingerprint, validate_params
 from .query_budget import (
     QueryBudget,
     enforce_arrow_budget,
@@ -58,6 +58,7 @@ from .query_budget import (
 )
 from .read_contract import (
     DataSnapshot,
+    FileVersion,
     ReadLineage,
     ReadResult,
     ReadStats,
@@ -70,7 +71,12 @@ from .read_contract import (
 )
 from .scan_handle import ScanHandle
 from .namespace import is_namespace_explicit, resolve_namespace
-from .paths import PathAuthorizer
+from .paths import (
+    PathAuthorizer,
+    canonicalize,
+    dataset_env_root,
+    extra_allowed_roots_from_env,
+)
 from .predicate import Predicate, compile_predicate
 from .registry import (
     Dataset,
@@ -93,6 +99,10 @@ logger = logging.getLogger("data_access.store")
 
 
 _VALID_WRITE_MODES = {"overwrite", "append"}
+
+# 读写路径元参数：不进 params_schema，不进 snapshot params
+_READ_PATH_META_KEYS = ("read_root", "_read_root", "bucket_values", "read_auto", "lazy_scan")
+_WRITE_PATH_META_KEYS = ("write_root", "_write_root", "write_dir", "_write_dir")
 
 
 def _assert_instrument_filter_supported(
@@ -120,7 +130,10 @@ class DataAccessStore:
     ) -> None:
         self._registry = registry
         self._engine = engine
-        self._authorizer = PathAuthorizer(registry.allowed_roots())
+        # 登记表根 + 环境额外根（其他服务器自选读/写目录时用）
+        self._authorizer = PathAuthorizer(
+            list(registry.allowed_roots()) + extra_allowed_roots_from_env()
+        )
         # PR8 + P0：首访 schema 自检缓存 key = dataset + params + manifest
         self._schema_checked: set[str] = set()
         self._registry_hash = _compute_registry_hash(registry)
@@ -147,31 +160,46 @@ class DataAccessStore:
     ) -> DataSnapshot:
         """解析路径并构建数据快照（不读数据）。"""
         ds = self._registry.get(dataset)
-        read_params = self._split_read_params(dict(params or {}))
+        raw_params = dict(params or {})
         paths = self._resolve_paths(
             ds,
-            read_params,
+            raw_params,
             instrument_filter=instrument_filter,
         )
+        snap_params = self._split_read_params(raw_params)
         return build_data_snapshot(
             dataset=dataset,
             registry_hash=self._registry_hash,
             schema=getattr(ds, "schema", None),
             paths=paths,
-            params=read_params if isinstance(ds, ParametricDataset) else None,
+            params=snap_params if isinstance(ds, ParametricDataset) else None,
         )
 
     def build_sql_snapshot(
         self,
         read_datasets: Sequence[str],
         read_params: Mapping[str, Mapping[str, Any]] | None = None,
+        read_time_ranges: Mapping[str, tuple[Any, Any] | None] | None = None,
     ) -> DataSnapshot:
-        """为 sql() 多 dataset 读路径构建合并 DataSnapshot。"""
+        """为 sql() 多 dataset 读路径构建合并 DataSnapshot（含 COS remote）。"""
         params_map = dict(read_params or {})
-        snapshots = [
-            self.describe_dataset(name, params=params_map.get(name, {}))
-            for name in sorted(read_datasets)
-        ]
+        time_ranges = dict(read_time_ranges or {})
+        snapshots: list[DataSnapshot] = []
+        for name in sorted(read_datasets):
+            ds = self._registry.get(name)
+            paths = self._prepare_dataset_read(
+                ds,
+                time_range=time_ranges.get(name),
+                params=dict(params_map.get(name, {})),
+            )
+            snapshots.append(
+                self._build_snapshot(
+                    dataset=name,
+                    ds=ds,
+                    paths=paths,
+                    params=dict(params_map.get(name, {})),
+                )
+            )
         return merge_sql_data_snapshots(
             snapshots,
             registry_hash=self._registry_hash,
@@ -187,10 +215,69 @@ class DataAccessStore:
 
     @staticmethod
     def _split_read_params(params: dict[str, Any]) -> dict[str, Any]:
-        """剥离读路径元参数（不进 params_schema / snapshot params）。"""
+        """剥离读/写路径元参数（不进 params_schema / snapshot params）。"""
         out = dict(params)
-        for key in ("read_root", "_read_root", "bucket_values", "read_auto", "lazy_scan"):
+        for key in _READ_PATH_META_KEYS + _WRITE_PATH_META_KEYS:
             out.pop(key, None)
+        return out
+
+    @staticmethod
+    def _split_write_params(params: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+        """拆出写路径元参数与数据集参数。
+
+        返回 ``(path_meta, clean_params)``：
+            - ``write_root``：替换数据集根（参数化数据集仍拼接 factor_id 等后缀）
+            - ``write_dir``：最终写入目录（完全覆盖模板解析结果）
+        """
+        out = dict(params)
+        meta: dict[str, Any] = {}
+        wr = out.pop("write_root", None) or out.pop("_write_root", None)
+        wd = out.pop("write_dir", None) or out.pop("_write_dir", None)
+        if wr is not None:
+            meta["write_root"] = wr
+        if wd is not None:
+            meta["write_dir"] = wd
+        return meta, out
+
+    def _pop_read_root(self, ds: Dataset, params: dict[str, Any]) -> str | None:
+        """从 params / 环境变量取出可选读根覆盖。"""
+        read_root = params.pop("read_root", None) or params.pop("_read_root", None)
+        if read_root is None:
+            read_root = dataset_env_root(ds.name, "read")
+        return str(read_root) if read_root is not None else None
+
+    def _assert_path_override_allowed(self, ds: Dataset, *, kind: str, value: str) -> None:
+        """production/严格模式下禁止路径覆盖（写目录 write_dir/write_root 例外：staging 需要可选落盘）。"""
+        if kind == "read" and (_production_mode() or _strict_read_mode()):
+            raise ValidationError(
+                f"production/严格读模式禁止 read_root 覆盖数据集 '{ds.name}' 根路径；"
+                f"收到 read_root={value!r}。"
+                "灰度切读请仅在开发环境使用，或通过独立 registry 数据集登记。"
+            )
+
+    @staticmethod
+    def _rewrite_root_prefix(
+        glob_paths: list[str],
+        *,
+        old_static_root: Path,
+        new_root: Path,
+    ) -> list[str]:
+        """把解析出的 glob 路径中 static_root 前缀替换为 new_root。"""
+        old = str(canonicalize(old_static_root)).rstrip("/")
+        new = str(canonicalize(new_root)).rstrip("/")
+        out: list[str] = []
+        for g in glob_paths:
+            if g == old or g.startswith(old + "/"):
+                out.append(new + g[len(old):])
+            else:
+                # 解析结果不在 static_root 下时，退化为 new_root + 相对尾缀
+                # （例如模板展开后路径略有差异）
+                rel = Path(g)
+                try:
+                    suffix = rel.relative_to(old_static_root)
+                    out.append(str(new_root / suffix))
+                except ValueError:
+                    out.append(str(new_root / rel.name))
         return out
 
     def _build_snapshot(
@@ -200,6 +287,7 @@ class DataAccessStore:
         ds: Dataset,
         paths: list[str],
         params: dict[str, Any],
+        files: Sequence[FileVersion] | None = None,
     ) -> DataSnapshot:
         read_params = self._split_read_params(params)
         return build_data_snapshot(
@@ -208,6 +296,7 @@ class DataAccessStore:
             schema=getattr(ds, "schema", None),
             paths=paths,
             params=read_params if isinstance(ds, ParametricDataset) else None,
+            files=files,
         )
 
     def _schema_fingerprint(
@@ -215,10 +304,13 @@ class DataAccessStore:
         ds: Dataset,
         paths: list[str],
         params: dict[str, Any],
+        *,
+        files: Sequence[FileVersion] | None = None,
     ) -> str:
         read_params = self._split_read_params(params)
         pf = params_fingerprint(read_params if isinstance(ds, ParametricDataset) else None)
-        manifest = file_manifest_hash(build_file_manifest(paths))
+        file_versions = files if files is not None else build_file_manifest(paths)
+        manifest = file_manifest_hash(file_versions)
         return schema_cache_key(ds.name, params_fingerprint=pf, manifest_hash=manifest)
 
     def read_result(
@@ -245,10 +337,11 @@ class DataAccessStore:
             params=params,
             instrument_filter=instrument_filter,
         )
-        self._enforce_scan_files(budget, paths)
-        self._ensure_schema(ds, paths, params)
+        files = build_file_manifest(paths)
+        self._enforce_scan_files(budget, paths, files=files)
+        self._ensure_schema(ds, paths, params, files=files)
         snapshot = self._build_snapshot(
-            dataset=dataset, ds=ds, paths=paths, params=params
+            dataset=dataset, ds=ds, paths=paths, params=params, files=files
         )
         lineage = ReadLineage(
             dataset=dataset,
@@ -451,8 +544,9 @@ class DataAccessStore:
             params=params,
             instrument_filter=instrument_filter,
         )
-        self._enforce_scan_files(budget, paths)
-        self._ensure_schema(ds, paths, params)
+        files = build_file_manifest(paths)
+        self._enforce_scan_files(budget, paths, files=files)
+        self._ensure_schema(ds, paths, params, files=files)
         sql, sql_params = self._build_select_sql(
             ds=ds,
             paths=paths,
@@ -504,7 +598,7 @@ class DataAccessStore:
         )
         return _iter_batches()
 
-    def scan_polars(
+    def _scan_polars_with_paths(
         self,
         dataset: str,
         *,
@@ -513,34 +607,8 @@ class DataAccessStore:
         instrument_filter: Sequence[str] | None = None,
         query_budget: QueryBudget | None = None,
         **params: Any,
-    ) -> "pl.LazyFrame":
-        """返回 Polars LazyFrame，惰性扫描已注册数据集（PR7）。
-
-        为什么提供：Polars 的 lazy engine 是 Rust 实现的 pushdown（列/谓词/
-        partition 剪枝全套），对「多表 join + 窗口函数 + 大量复杂变换」远优于
-        DuckDB 的 Arrow 结果 → pandas → polars 路径。尤其是跑复杂因子 pipeline
-        时用 LazyFrame 能让 Polars 自己决定什么时候物化。
-
-        我们做什么 / 不做什么：
-            我们做：解析 registry 路径 + PathAuthorizer + 传 hive_partitioning
-                    给 Polars；把 time_range / instrument_filter 转成 lazy
-                    `.filter(...)` 附在 LazyFrame 上，供下游 pushdown 使用。
-            我们不做：不替 Polars 做执行计划（LazyFrame 还没 .collect() 前不读数据）。
-            遥测：记录 scan 建图 + schema 自检耗时（不含下游 .collect()）。
-
-        参数：
-            columns: 传给 pl.scan_parquet 的 n_rows / columns 优化；
-                     None 表示不提前选列，完全交给 Polars optimizer
-            time_range / instrument_filter: 转成 LazyFrame.filter 附加上
-
-        示例：
-            >>> lf = store.scan_polars("factor_lake", factor_id="mom_3d",
-            ...                         time_range=("2024-01-01", None))
-            >>> df = lf.filter(pl.col("asset").is_in(["AAPL"])).collect()
-
-        依赖：
-            需要 `polars` 已安装；没装会 raise ImportError 并提示 `pip install polars`。
-        """
+    ) -> tuple[Any, list[str]]:
+        """内部：构建 Polars LazyFrame，同时返回已解析 paths（避免 scan 二次准备）。"""
         try:
             import polars as pl_mod
         except ImportError as exc:
@@ -562,8 +630,9 @@ class DataAccessStore:
             instrument_filter=instrument_filter,
         )
         # scan_polars 也走 schema 自检：发现声明漂移尽早报。
-        self._enforce_scan_files(budget, paths)
-        self._ensure_schema(ds, paths, params)
+        files = build_file_manifest(paths)
+        self._enforce_scan_files(budget, paths, files=files)
+        self._ensure_schema(ds, paths, params, files=files)
 
         # pl.scan_parquet 可以接 list[str]，也支持 glob。我们传 list 给它。
         # 跨年份列不一致时靠 union_by_name：
@@ -633,6 +702,41 @@ class DataAccessStore:
             elapsed_ms=(time.perf_counter() - scan_start) * 1000,
             extra={"scan_polars": True, "columns": list(columns) if columns else None},
         )
+        return lf, paths
+
+    def scan_polars(
+        self,
+        dataset: str,
+        *,
+        columns: Sequence[str] | None = None,
+        time_range: tuple[Any, Any] | None = None,
+        instrument_filter: Sequence[str] | None = None,
+        query_budget: QueryBudget | None = None,
+        **params: Any,
+    ):
+        """返回 Polars LazyFrame，惰性扫描已注册数据集（PR7）。
+
+        为什么提供：Polars 的 lazy engine 是 Rust 实现的 pushdown（列/谓词/
+        partition 剪枝全套），对「多表 join + 窗口函数 + 大量复杂变换」远优于
+        DuckDB 的 Arrow 结果 → pandas → polars 路径。尤其是跑复杂因子 pipeline
+        时用 LazyFrame 能让 Polars 自己决定什么时候物化。
+
+        示例：
+            >>> lf = store.scan_polars("factor_lake", factor_id="mom_3d",
+            ...                         time_range=("2024-01-01", None))
+            >>> df = lf.filter(pl.col("asset").is_in(["AAPL"])).collect()
+
+        依赖：
+            需要 `polars` 已安装；没装会 raise ImportError 并提示 `pip install polars`。
+        """
+        lf, _paths = self._scan_polars_with_paths(
+            dataset,
+            columns=columns,
+            time_range=time_range,
+            instrument_filter=instrument_filter,
+            query_budget=query_budget,
+            **params,
+        )
         return lf
 
     def scan(
@@ -648,19 +752,13 @@ class DataAccessStore:
         """受控 Polars 扫描：``collect()`` 强制 budget + snapshot（production 推荐）。"""
         ds = self._registry.get(dataset)
         budget = self._resolve_read_budget(ds, query_budget)
-        lf = self.scan_polars(
+        lf, paths = self._scan_polars_with_paths(
             dataset,
             columns=columns,
             time_range=time_range,
             instrument_filter=instrument_filter,
             query_budget=query_budget,
             **params,
-        )
-        paths = self._prepare_dataset_read(
-            ds,
-            time_range=time_range,
-            params=params,
-            instrument_filter=instrument_filter,
         )
         snapshot = self._build_snapshot(
             dataset=dataset, ds=ds, paths=paths, params=params
@@ -966,7 +1064,10 @@ class DataAccessStore:
             table: 要写入的 Arrow Table
             mode: "overwrite"（先清目标目录再写）| "append"（加新文件不动旧的）
             partition_by: 分区列，如 ["year"]。传了之后用 hive 布局落盘
-            **params: 参数化数据集的参数（如 factor_id=）
+            **params: 参数化数据集参数（如 factor_id=）；可选路径覆盖：
+                - write_root=：替换数据集根，参数后缀仍保留
+                - write_dir=：最终写入目录（完全指定落盘位置）
+                也可设环境变量 DATA_ACCESS_WRITE_ROOT_<数据集大写名>
 
         返回：
             {"rows": int, "path": str, "mode": str}，同时写一行审计日志
@@ -985,6 +1086,11 @@ class DataAccessStore:
             ...     strategy_id="mom_3d",
             ...     version="v1",
             ...     mode="overwrite",
+            ... )
+            >>> # 自定义落盘目录（需在 DATA_ACCESS_EXTRA_ALLOWED_ROOTS 白名单内）
+            >>> store.write_arrow(
+            ...     "factor_lake_staging", tbl, factor_id="x",
+            ...     write_dir="/data/my_out/factor_x",
             ... )
         """
         if mode not in _VALID_WRITE_MODES:
@@ -1233,6 +1339,7 @@ class DataAccessStore:
         *,
         read_datasets: Sequence[str],
         read_params: Mapping[str, Mapping[str, Any]] | None = None,
+        read_time_ranges: Mapping[str, tuple[Any, Any] | None] | None = None,
         view_columns: Mapping[str, Sequence[str]] | None = None,
         params: Sequence[Any] | None = None,
         query_budget: QueryBudget | None = None,
@@ -1246,6 +1353,8 @@ class DataAccessStore:
                 每个数据集会以其注册名作为 TEMP VIEW 暴露给 query 的 FROM。
             read_params: 参数化数据集的参数 {dataset_name: {param: value}}，
                 例如 {"factor_lake": {"factor_id": "mom_3d"}}
+            read_time_ranges: {dataset_name: (start, end)}，COS remote 按日选文件
+                并在 view 上做 time_column 过滤；强烈建议对行情表传入。
             params: query 自身的 ? 绑定参数（用户层面的查询参数，不是路径）
 
         返回：
@@ -1276,12 +1385,81 @@ class DataAccessStore:
             query=query,
             read_datasets=read_datasets,
             read_params=read_params,
+            read_time_ranges=read_time_ranges,
             view_columns=view_columns,
             params=params,
             query_budget=merged_budget,
             build_select_sql=self._build_select_sql,
-            resolve_paths=self._resolve_paths,
+            resolve_paths=self._resolve_paths_for_sql,
         )
+
+    def compute_and_write(
+        self,
+        query: str,
+        *,
+        read_datasets: Sequence[str],
+        write_dataset: str,
+        read_params: Mapping[str, Mapping[str, Any]] | None = None,
+        read_time_ranges: Mapping[str, tuple[Any, Any] | None] | None = None,
+        view_columns: Mapping[str, Sequence[str]] | None = None,
+        params: Sequence[Any] | None = None,
+        query_budget: QueryBudget | None = None,
+        mode: str = "overwrite",
+        partition_by: Sequence[str] | None = None,
+        **write_params: Any,
+    ) -> dict[str, Any]:
+        """读源数据（可 COS remote）→ SQL 运算 → 写入 staging/namespaced。
+
+        **不修改** published / COS 源数据；结果只能落到 ``access_mode`` 为
+        ``staging`` 或 ``namespaced`` 的登记数据集（例如 ``factor_lake_staging``）。
+
+        典型用法（COS 直读 + 聚合 + 落 staging）::
+
+            export DATA_ACCESS_COS_READ_MODE=remote
+            # + COS 凭证 / endpoint
+
+            store.compute_and_write(
+                '''
+                SELECT TradeDate AS datetime, Symbol AS asset, Close AS value
+                FROM {{ashare_stock_daily}}
+                ''',
+                read_datasets=["ashare_stock_daily"],
+                read_time_ranges={"ashare_stock_daily": ("2024-01-01", "2024-01-31")},
+                write_dataset="factor_lake_staging",
+                factor_id="close_raw_v1",
+                mode="overwrite",
+                partition_by=["year"],
+                # 可选：自定义结果落盘根（或 write_dir= 指定最终目录）
+                # write_root="/data/my_workspace/staging/factors",
+            )
+        """
+        target = self._registry.get(write_dataset)
+        if target.access_mode == "published":
+            raise ValidationError(
+                f"compute_and_write 禁止写 published 数据集 '{write_dataset}'；"
+                f"请写 staging/namespaced（如 factor_lake_staging），"
+                f"需要正式发布时再 publish_from_staging。"
+            )
+        table = self.sql(
+            query,
+            read_datasets=read_datasets,
+            read_params=read_params,
+            read_time_ranges=read_time_ranges,
+            view_columns=view_columns,
+            params=params,
+            query_budget=query_budget,
+        )
+        result = self.write_arrow(
+            write_dataset,
+            table,
+            mode=mode,
+            partition_by=partition_by,
+            **write_params,
+        )
+        result = dict(result)
+        result["source_datasets"] = list(read_datasets)
+        result["rows_computed"] = table.num_rows
+        return result
 
     def sql_result(
         self,
@@ -1289,23 +1467,73 @@ class DataAccessStore:
         *,
         read_datasets: Sequence[str],
         read_params: Mapping[str, Mapping[str, Any]] | None = None,
+        read_time_ranges: Mapping[str, tuple[Any, Any] | None] | None = None,
         view_columns: Mapping[str, Sequence[str]] | None = None,
         params: Sequence[Any] | None = None,
         query_budget: QueryBudget | None = None,
     ) -> SqlReadResult:
         """与 ``sql()`` 相同，但返回带合并 ``DataSnapshot`` 的 ``SqlReadResult``。"""
-        snapshot = self.build_sql_snapshot(read_datasets, read_params)
+        from . import sql_escape
+
+        params_map = dict(read_params or {})
+        time_ranges = dict(read_time_ranges or {})
+        path_by_ds: dict[str, list[str]] = {}
+        snapshots: list[DataSnapshot] = []
+        for name in sorted(read_datasets):
+            ds = self._registry.get(name)
+            paths = self._prepare_dataset_read(
+                ds,
+                time_range=time_ranges.get(name),
+                params=dict(params_map.get(name, {})),
+            )
+            path_by_ds[name] = paths
+            snapshots.append(
+                self._build_snapshot(
+                    dataset=name,
+                    ds=ds,
+                    paths=paths,
+                    params=dict(params_map.get(name, {})),
+                )
+            )
+        snapshot = merge_sql_data_snapshots(
+            snapshots,
+            registry_hash=self._registry_hash,
+        )
+
+        def _resolve_cached(
+            ds: Dataset,
+            ds_params: dict[str, Any],
+            *,
+            time_range: tuple[Any, Any] | None = None,
+            instrument_filter: Sequence[str] | None = None,
+        ) -> list[str]:
+            cached = path_by_ds.get(ds.name)
+            if cached is not None:
+                return cached
+            return self._prepare_dataset_read(
+                ds,
+                time_range=time_range,
+                params=ds_params,
+                instrument_filter=instrument_filter,
+            )
+
+        merged_budget = self._resolve_sql_budget(read_datasets, query_budget)
         start = time.perf_counter()
-        table = self.sql(
-            query,
+        table = sql_escape.run_sql(
+            registry=self._registry,
+            authorizer=self._authorizer,
+            engine=self._engine,
+            query=query,
             read_datasets=read_datasets,
             read_params=read_params,
+            read_time_ranges=read_time_ranges,
             view_columns=view_columns,
             params=params,
-            query_budget=query_budget,
+            query_budget=merged_budget,
+            build_select_sql=self._build_select_sql,
+            resolve_paths=_resolve_cached,
         )
         elapsed_ms = (time.perf_counter() - start) * 1000
-        params_map = dict(read_params or {})
         lineage = SqlReadLineage(
             datasets=tuple(sorted(read_datasets)),
             read_params=tuple(
@@ -1334,6 +1562,7 @@ class DataAccessStore:
         *,
         read_datasets: Sequence[str],
         read_params: Mapping[str, Mapping[str, Any]] | None = None,
+        read_time_ranges: Mapping[str, tuple[Any, Any] | None] | None = None,
         view_columns: Mapping[str, Sequence[str]] | None = None,
         params: Sequence[Any] | None = None,
         query_budget: QueryBudget | None = None,
@@ -1350,15 +1579,32 @@ class DataAccessStore:
             query=query,
             read_datasets=read_datasets,
             read_params=read_params,
+            read_time_ranges=read_time_ranges,
             view_columns=view_columns,
             params=params,
             query_budget=merged_budget,
             batch_size=batch_size,
             build_select_sql=self._build_select_sql,
-            resolve_paths=self._resolve_paths,
+            resolve_paths=self._resolve_paths_for_sql,
         )
 
     # ---- 内部 helpers ----
+
+    def _resolve_paths_for_sql(
+        self,
+        ds: Dataset,
+        params: dict[str, Any],
+        *,
+        time_range: tuple[Any, Any] | None = None,
+        instrument_filter: Sequence[str] | None = None,
+    ) -> list[str]:
+        """sql()/sql_stream 路径解析：走 COS remote/mirror 与白名单。"""
+        return self._prepare_dataset_read(
+            ds,
+            time_range=time_range,
+            params=params,
+            instrument_filter=instrument_filter,
+        )
 
     def _prepare_dataset_read(
         self,
@@ -1368,11 +1614,77 @@ class DataAccessStore:
         params: dict[str, Any],
         instrument_filter: Sequence[str] | None = None,
     ) -> list[str]:
-        """COS 镜像 + 路径解析（read_arrow / stream / scan_polars 共用）。"""
+        """COS 镜像 / 远程直读 + 路径解析（read_arrow / stream / scan 共用）。
+
+        若调用方显式传了 ``read_root``（或环境变量 DATA_ACCESS_READ_ROOT_*），
+        则优先用本地覆盖路径，跳过 COS remote（适合「数据已在自选目录」）。
+        """
         from .cos_mirror import ensure_local_mirror_for_dataset
+        from .cos_remote import should_read_cos_remote
+
+        peek = dict(params)
+        explicit_read_root = (
+            peek.get("read_root")
+            or peek.get("_read_root")
+            or dataset_env_root(ds.name, "read")
+        )
+        if explicit_read_root:
+            return self._resolve_paths(ds, params, instrument_filter=instrument_filter)
+
+        if should_read_cos_remote(ds, time_range=time_range):
+            from .cos_remote import prepare_cos_remote_paths
+
+            paths, backend = prepare_cos_remote_paths(ds.name, time_range=time_range)
+            read_params = dict(params)
+            explicit_buckets = read_params.pop("bucket_values", None)
+            for k in _READ_PATH_META_KEYS + _WRITE_PATH_META_KEYS:
+                read_params.pop(k, None)
+            hive_filters = self._bucket_hive_filters(
+                ds,
+                instrument_filter,
+                bucket_values=explicit_buckets,
+            )
+            if hive_filters:
+                from .layout_policy import prune_glob_paths_for_buckets
+
+                bucket_col = next(iter(hive_filters))
+                paths = prune_glob_paths_for_buckets(
+                    paths,
+                    bucket_col,
+                    hive_filters[bucket_col],
+                )
+            paths = self._authorize_read_paths(paths)
+            if backend == "httpfs":
+                self._engine.ensure_s3_configured()
+            logger.info(
+                "cos_remote: dataset=%s paths=%d backend=%s",
+                ds.name,
+                len(paths),
+                backend,
+            )
+            return paths
 
         ensure_local_mirror_for_dataset(ds, time_range=time_range)
         return self._resolve_paths(ds, params, instrument_filter=instrument_filter)
+
+    def _authorize_read_paths(self, glob_paths: list[str]) -> list[str]:
+        """本地/远程读路径白名单校验。"""
+        from .cos_remote import authorize_s3_path, cos_cache_root
+        from .paths import path_is_under
+
+        cache_root = cos_cache_root()
+        for g in glob_paths:
+            static_part = g.split("*", 1)[0].rstrip("/")
+            if not static_part:
+                continue
+            if static_part.startswith("s3://"):
+                authorize_s3_path(static_part)
+                continue
+            resolved = canonicalize(static_part)
+            if path_is_under(resolved, cache_root):
+                continue
+            self._authorizer.resolve_and_authorize(resolved)
+        return glob_paths
 
     @staticmethod
     def _bucket_hive_filters(
@@ -1394,20 +1706,29 @@ class DataAccessStore:
             return None
         return {layout_policy.bucket.column: buckets}
 
-    def _enforce_scan_files(self, budget: QueryBudget, paths: list[str]) -> None:
-        files = build_file_manifest(paths)
-        enforce_scan_file_budget(budget, file_count=len(files))
+    def _enforce_scan_files(
+        self,
+        budget: QueryBudget,
+        paths: list[str],
+        *,
+        files: Sequence[FileVersion] | None = None,
+    ) -> tuple[FileVersion, ...]:
+        file_versions = tuple(files) if files is not None else build_file_manifest(paths)
+        enforce_scan_file_budget(budget, file_count=len(file_versions))
+        return file_versions
 
     def _ensure_schema(
         self,
         ds: Dataset,
         paths: list[str],
         params: dict[str, Any] | None = None,
+        *,
+        files: Sequence[FileVersion] | None = None,
     ) -> None:
         """首次访问 (dataset, params, manifest) 时做 schema 对齐校验。"""
         if not getattr(ds, "schema", None):
             return
-        cache_key = self._schema_fingerprint(ds, paths, params or {})
+        cache_key = self._schema_fingerprint(ds, paths, params or {}, files=files)
         if cache_key in self._schema_checked:
             return
 
@@ -1435,31 +1756,33 @@ class DataAccessStore:
         *,
         instrument_filter: Sequence[str] | None = None,
     ) -> list[str]:
-        """把 dataset + params 解析成传给 DuckDB 的 path glob 列表，并做白名单校验。"""
-        import os
+        """把 dataset + params 解析成传给 DuckDB 的 path glob 列表，并做白名单校验。
 
+        可选 ``read_root`` / ``DATA_ACCESS_READ_ROOT_<NAME>``：覆盖数据集根路径。
+        - static：``read_root / glob``
+        - parametric：用 read_root 替换 ``static_root`` 前缀，保留参数后缀
+        """
         from .layout_policy import prune_glob_paths_for_buckets
-        from .registry import StaticDataset
 
         read_params = dict(params)
         explicit_buckets = read_params.pop("bucket_values", None)
-        read_root = read_params.pop("read_root", None) or read_params.pop("_read_root", None)
-        if read_root is None:
-            env_key = f"DATA_ACCESS_READ_ROOT_{ds.name.upper().replace('-', '_')}"
-            read_root = os.environ.get(env_key)
-
-        if read_root is not None and (_production_mode() or _strict_read_mode()):
-            raise ValidationError(
-                f"production/严格读模式禁止 read_root 覆盖数据集 '{ds.name}' 根路径；"
-                f"收到 read_root={read_root!r}。"
-                "灰度切读请仅在开发环境使用，或通过独立 registry 数据集登记。"
-            )
+        for k in _WRITE_PATH_META_KEYS:
+            read_params.pop(k, None)
+        read_root = self._pop_read_root(ds, read_params)
+        if read_root is not None:
+            self._assert_path_override_allowed(ds, kind="read", value=read_root)
 
         if isinstance(ds, StaticDataset):
             root = Path(read_root) if read_root else ds.root
             glob_paths = [str(root / ds.glob)]
         else:
             glob_paths = ds.resolve_paths(**read_params)
+            if read_root is not None:
+                glob_paths = self._rewrite_root_prefix(
+                    glob_paths,
+                    old_static_root=ds.static_root,
+                    new_root=Path(read_root),
+                )
 
         hive_filters = self._bucket_hive_filters(
             ds,
@@ -1473,22 +1796,48 @@ class DataAccessStore:
                 bucket_col,
                 hive_filters[bucket_col],
             )
-        for g in glob_paths:
-            static_part = g.split("*", 1)[0].rstrip("/")
-            if static_part:
-                self._authorizer.resolve_and_authorize(static_part)
-        return glob_paths
+        return self._authorize_read_paths(glob_paths)
 
     def _resolve_write_dir(self, ds: Dataset, params: dict[str, Any]) -> Path:
-        """write 的目标目录 = 把 glob 按 '/' 分段，取第一个含 '*' 的段之前的所有段。
+        """解析写入目标目录。
+
+        优先级：
+            1. ``write_dir`` / ``_write_dir`` —— 最终目录，完全覆盖
+            2. ``write_root`` / ``DATA_ACCESS_WRITE_ROOT_<NAME>`` —— 替换数据集根
+            3. datasets.yaml 模板默认路径
 
         例子：
-            '/xx/runs/mom_3d/**/*.parquet'      → '/xx/runs/mom_3d'
+            '/xx/runs/mom_3d/**/*.parquet'       → '/xx/runs/mom_3d'
             '/xx/factors/mom_3d/year=*/*.parquet' → '/xx/factors/mom_3d'
-                （hive 分区 year= 由 pyarrow.dataset 写入时生成，不属于写入根）
-            '/xx/factors/mom_3d/*.parquet'       → '/xx/factors/mom_3d'
+            write_dir='/data/out/x'               → '/data/out/x'
+            write_root='/data/alt' + factor_id    → '/data/alt/<factor_id>'
         """
-        glob_paths = ds.resolve_paths(**params)
+        path_meta, clean = self._split_write_params(dict(params))
+        write_dir = path_meta.get("write_dir")
+        write_root = path_meta.get("write_root") or dataset_env_root(ds.name, "write")
+
+        if write_dir is not None:
+            # write_dir 跳过路径模板，但仍校验 params_schema（如 factor_id）
+            if isinstance(ds, ParametricDataset):
+                specs = ds.param_specs or {
+                    k: ParamSpec(name=k, type=t) for k, t in ds.params_schema.items()
+                }
+                validate_params(ds.name, specs, clean)
+            return canonicalize(write_dir)
+
+        if isinstance(ds, StaticDataset):
+            if write_root is not None:
+                return canonicalize(write_root)
+            glob_paths = ds.resolve_paths()
+        else:
+            glob_paths = ds.resolve_paths(**clean)
+            if write_root is not None:
+                glob_paths = self._rewrite_root_prefix(
+                    glob_paths,
+                    old_static_root=ds.static_root,
+                    new_root=Path(write_root),
+                )
+
         if len(glob_paths) != 1:
             raise ValidationError(
                 f"数据集 '{ds.name}' 解析出 {len(glob_paths)} 个 glob，"
@@ -1496,7 +1845,6 @@ class DataAccessStore:
             )
         glob = glob_paths[0]
         segments = glob.split("/")
-        # 找第一个含通配符的段
         clean_segments: list[str] = []
         for seg in segments:
             if "*" in seg or "?" in seg:
@@ -1552,8 +1900,8 @@ class DataAccessStore:
                 existing_data_behavior="overwrite_or_ignore",
                 basename_template=f"part-{prefix}-{{i}}.parquet",
             )
-            # 返回新写入的文件列表
-            return sorted(target_dir.rglob("*.parquet"))
+            # 只返回本轮写入的文件（按 uuid 前缀），避免 append 时把旧文件算进来
+            return sorted(target_dir.rglob(f"part-{prefix}-*.parquet"))
 
         # 单文件写：先写 .tmp 再 rename，保证原子
         out_name = f"part-{uuid.uuid4().hex[:8]}.parquet"

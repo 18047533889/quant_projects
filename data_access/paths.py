@@ -75,6 +75,33 @@ def path_is_under(child: Path, parent: Path) -> bool:
         return False
 
 
+def extra_allowed_roots_from_env() -> list[Path]:
+    """``DATA_ACCESS_EXTRA_ALLOWED_ROOTS``：逗号分隔的额外白名单根。
+
+    其他服务器自选读/写目录时，把自定义根加到这里，否则 PathAuthorizer 会拒越界。
+    例：``export DATA_ACCESS_EXTRA_ALLOWED_ROOTS=/data/my_ws,/data/my_cache``
+    """
+    raw = os.environ.get("DATA_ACCESS_EXTRA_ALLOWED_ROOTS", "")
+    roots: list[Path] = []
+    for part in raw.split(","):
+        part = part.strip()
+        if part:
+            roots.append(canonicalize(part))
+    return roots
+
+
+def dataset_env_root(dataset_name: str, kind: str) -> str | None:
+    """按数据集名读环境变量覆盖根。
+
+    kind=read → ``DATA_ACCESS_READ_ROOT_<NAME>``
+    kind=write → ``DATA_ACCESS_WRITE_ROOT_<NAME>``
+    名称里 ``-`` 会变成 ``_``，并转大写。
+    """
+    key = f"DATA_ACCESS_{kind.upper()}_ROOT_{dataset_name.upper().replace('-', '_')}"
+    val = os.environ.get(key)
+    return val if val else None
+
+
 class PathAuthorizer:
     """按一组允许的根目录做前缀校验；registry 加载时构造一次，store 内部用。"""
 

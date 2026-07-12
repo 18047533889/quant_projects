@@ -127,6 +127,11 @@ def build_file_manifest(paths: Sequence[str]) -> tuple[FileVersion, ...]:
     versions: list[FileVersion] = []
     seen: set[str] = set()
     for pattern in paths:
+        if str(pattern).startswith("s3://"):
+            if pattern not in seen:
+                seen.add(str(pattern))
+                versions.append(FileVersion(path=str(pattern)))
+            continue
         expanded = sorted(glob_mod.glob(pattern, recursive=True))
         if not expanded:
             if pattern not in seen:
@@ -164,10 +169,11 @@ def build_data_snapshot(
     schema: Mapping[str, str] | None,
     paths: Sequence[str],
     params: Mapping[str, Any] | None = None,
+    files: Sequence[FileVersion] | None = None,
 ) -> DataSnapshot:
     canon = canonicalize_params(params)
-    files = build_file_manifest(paths)
-    manifest_hash = file_manifest_hash(files)
+    file_versions = tuple(files) if files is not None else build_file_manifest(paths)
+    manifest_hash = file_manifest_hash(file_versions)
     schema_hash = schema_hash_from_decl(schema)
     identity = json.dumps(
         {
@@ -188,7 +194,7 @@ def build_data_snapshot(
         registry_hash=registry_hash,
         schema_hash=schema_hash,
         file_manifest_hash=manifest_hash,
-        files=files,
+        files=file_versions,
         params=tuple(sorted(canon.items())),
     )
 

@@ -15,7 +15,7 @@ data_access.sql_escape —— 有限的 SQL 逃生口
     - 不做结果分页、流式返回 —— 一次性返回 Arrow Table；大结果靠 time_range 切
 
 设计参考：
-    docs/data_access/10_架构设计.md §1.4 给出的"为什么不无限制开 sql":
+    docs/data_access 历史设计说明已收敛到 data_access/用户使用手册.md 与 README.md。
     路径白名单、审计日志、未来的预算/限流都要靠这条收敛。所以这个模块的口子
     只开到「能覆盖 80% 的临时分析需求，但绝不让用户碰到裸 read_parquet」。
 
@@ -111,20 +111,31 @@ def _prepare_sql_views(
     scope_id: str,
     build_select_sql,
     resolve_paths,
+    read_time_ranges: Mapping[str, tuple[Any, Any] | None] | None = None,
 ) -> tuple[dict[str, str], list[tuple[str, str]]]:
-    """返回 (view_map, register_specs)；register_specs = [(view_name, inlined_sql), ...]。"""
+    """返回 (view_map, register_specs)；register_specs = [(view_name, inlined_sql), ...]。
+
+    ``resolve_paths`` 签名兼容：
+      ``(ds, params)`` 或 ``(ds, params, *, time_range=...)``
+    后者用于 COS remote：按 time_range 生成 ``s3://`` 日文件列表。
+    """
     view_map = _build_view_map(read_datasets, scope_id)
+    time_ranges = dict(read_time_ranges or {})
     register_specs: list[tuple[str, str]] = []
     for name in read_datasets:
         ds = registry.get(name)
-        ds_params = read_params.get(name, {})
-        paths = resolve_paths(ds, ds_params)
+        ds_params = dict(read_params.get(name, {}))
+        time_range = time_ranges.get(name)
+        try:
+            paths = resolve_paths(ds, ds_params, time_range=time_range)
+        except TypeError:
+            paths = resolve_paths(ds, ds_params)
         cols = list(view_columns[name]) if view_columns and name in view_columns else None
         sql, sql_params = build_select_sql(
             ds=ds,
             paths=paths,
             columns=cols,
-            time_range=None,
+            time_range=time_range,
             instrument_filter=None,
         )
         inlined_sql = _inline_path_params(sql, sql_params)
@@ -140,11 +151,12 @@ def run_sql(
     query: str,
     read_datasets: Sequence[str],
     read_params: Mapping[str, Mapping[str, Any]] | None = None,
+    read_time_ranges: Mapping[str, tuple[Any, Any] | None] | None = None,
     view_columns: Mapping[str, Sequence[str]] | None = None,
     params: Sequence[Any] | None = None,
     query_budget: QueryBudget | None = None,
     build_select_sql,  # store._build_select_sql，避开循环 import
-    resolve_paths,     # store._resolve_paths，同上
+    resolve_paths,     # store._prepare_dataset_read 包装，同上
 ) -> pa.Table:
     """执行一条只读 SELECT；只能 FROM 预先声明的数据集。
 
@@ -153,6 +165,8 @@ def run_sql(
         read_datasets: 本次查询会用到的数据集名列表（必填非空）
         read_params: {dataset_name: {**param}}，给参数化数据集（如 factor_lake
             要传 factor_id）。缺 dataset 的参数会在注册 view 时 raise
+        read_time_ranges: {dataset_name: (start, end)}，用于 COS remote 按日
+            选文件，以及 view 级 time_column 过滤
         params: 用户 SQL 里的 ? 绑定参数
         build_select_sql / resolve_paths: 从 store.DataAccessStore 注入；
             两个内部方法分别负责组装"合规 SELECT"和"路径白名单校验"
@@ -188,6 +202,7 @@ def run_sql(
         scope_id=scope_id,
         build_select_sql=build_select_sql,
         resolve_paths=resolve_paths,
+        read_time_ranges=read_time_ranges,
     )
     bounded_query = apply_sql_row_limit(
         _rewrite_query_tables(query, view_map),
@@ -247,6 +262,7 @@ def run_sql_stream(
     query: str,
     read_datasets: Sequence[str],
     read_params: Mapping[str, Mapping[str, Any]] | None = None,
+    read_time_ranges: Mapping[str, tuple[Any, Any] | None] | None = None,
     view_columns: Mapping[str, Sequence[str]] | None = None,
     params: Sequence[Any] | None = None,
     query_budget: QueryBudget | None = None,
@@ -274,6 +290,7 @@ def run_sql_stream(
         scope_id=scope_id,
         build_select_sql=build_select_sql,
         resolve_paths=resolve_paths,
+        read_time_ranges=read_time_ranges,
     )
     bounded_query = apply_sql_row_limit(
         _rewrite_query_tables(query, view_map),

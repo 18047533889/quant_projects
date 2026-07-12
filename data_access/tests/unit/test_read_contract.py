@@ -26,6 +26,25 @@ def test_validate_params_rejects_path_traversal():
         validate_params("factor_lake", specs, {"factor_id": "../escape"})
 
 
+def test_build_data_snapshot_accepts_prebuilt_files(tmp_path: Path):
+    root = tmp_path / "lake"
+    root.mkdir()
+    path = root / "a.parquet"
+    pq.write_table(pa.table({"x": [1]}), path)
+    from data_access.read_contract import build_file_manifest
+
+    files = build_file_manifest([str(path)])
+    snap = build_data_snapshot(
+        dataset="ds",
+        registry_hash="reg1",
+        schema={"x": "int"},
+        paths=["/unused/glob/*.parquet"],
+        files=files,
+    )
+    assert snap.files == files
+    assert snap.file_manifest_hash
+
+
 def test_build_data_snapshot_differs_by_params(tmp_path: Path):
     root = tmp_path / "lake"
     root.mkdir()

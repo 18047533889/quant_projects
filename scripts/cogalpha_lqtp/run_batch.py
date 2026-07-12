@@ -35,21 +35,20 @@ import pandas as pd
 
 def validate_catalog(catalog_path: Path) -> dict[str, int]:
     catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
-    stats = {"ready": 0, "heuristic": 0, "needs_review": 0, "dsl_invalid": 0}
+    stats = {"ready": 0, "python": 0, "dsl_invalid": 0}
     for item in catalog:
-        status = item.get("status", "needs_review")
+        status = item.get("status", "python")
         if status == "ready":
             stats["ready"] += 1
-        elif status == "heuristic":
-            stats["heuristic"] += 1
         else:
-            stats["needs_review"] += 1
+            stats["python"] += 1
         dsl = item.get("dsl", "")
         if dsl:
             ok, _ = validate_factor_engine_dsl(dsl)
             if not ok:
                 stats["dsl_invalid"] += 1
-                item["status"] = "dsl_invalid"
+                item["status"] = "python"
+                item["dsl"] = ""
     catalog_path.write_text(json.dumps(catalog, ensure_ascii=False, indent=2), encoding="utf-8")
     return stats
 

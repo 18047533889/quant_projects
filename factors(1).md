@@ -414,7 +414,7 @@ def factor_adaptive_vol_volume_asym(df):
     # Range
     range_ = df_copy['high'] - df_copy['low']
     # Rank-normalize range to preserve rank stability
-    range_rank = range_.rank(pct=True)
+    range_rank = range_.rolling(252, min_periods=20).rank(pct=True)
     factor = log_ratio * range_rank
     df_copy['factor_adaptive_vol_volume_asym'] = factor
     return df_copy['factor_adaptive_vol_volume_asym']
@@ -440,10 +440,10 @@ def factor_drawdown_volume_complexity(df):
     recovery = -drawdown.diff(5)
     vol_ma = df_copy["volume"].rolling(window=20).mean()
     rel_volume = df_copy["volume"] / vol_ma
-    rank_dd = drawdown.rank(pct=True)
-    rank_dur = duration.rank(pct=True)
-    rank_rec = recovery.rank(pct=True)
-    rank_vol = rel_volume.rank(pct=True)
+    rank_dd = drawdown.rolling(252, min_periods=20).rank(pct=True)
+    rank_dur = duration.rolling(252, min_periods=20).rank(pct=True)
+    rank_rec = recovery.rolling(252, min_periods=20).rank(pct=True)
+    rank_vol = rel_volume.rolling(252, min_periods=20).rank(pct=True)
     confirmed_recovery = rank_rec * rank_vol
     df_copy["factor_drawdown_volume_complexity"] = rank_dd + rank_dur + confirmed_recovery
     return df_copy["factor_drawdown_volume_complexity"]
@@ -501,10 +501,10 @@ def factor_drawdown_volume_geometry(df):
     recovery = -drawdown.diff(5)
     vol_ma = df_copy["volume"].rolling(20).mean()
     vol_ratio = df_copy["volume"] / vol_ma
-    rank_dd = drawdown.rank(pct=True)
-    rank_dur = duration.rank(pct=True)
-    rank_rec = recovery.rank(pct=True)
-    rank_vol = vol_ratio.rank(pct=True)
+    rank_dd = drawdown.rolling(252, min_periods=20).rank(pct=True)
+    rank_dur = duration.rolling(252, min_periods=20).rank(pct=True)
+    rank_rec = recovery.rolling(252, min_periods=20).rank(pct=True)
+    rank_vol = vol_ratio.rolling(252, min_periods=20).rank(pct=True)
     df_copy["factor_drawdown_volume_geometry"] = rank_dd + rank_dur + rank_rec + rank_vol
     return df_copy["factor_drawdown_volume_geometry"]
 ```
@@ -528,10 +528,10 @@ def factor_drawdown_volume_modulated(df):
     recovery = -drawdown.diff(5)
     vol_ma = df_copy["volume"].rolling(20).mean()
     vol_ratio = df_copy["volume"] / vol_ma
-    rank_dd = drawdown.rank(pct=True)
-    rank_dur = duration.rank(pct=True)
-    rank_rec = recovery.rank(pct=True)
-    rank_vol = vol_ratio.rank(pct=True)
+    rank_dd = drawdown.rolling(252, min_periods=20).rank(pct=True)
+    rank_dur = duration.rolling(252, min_periods=20).rank(pct=True)
+    rank_rec = recovery.rolling(252, min_periods=20).rank(pct=True)
+    rank_vol = vol_ratio.rolling(252, min_periods=20).rank(pct=True)
     drawdown_score = (rank_dd + rank_dur + rank_rec) / 3.0
     df_copy["factor_drawdown_volume_modulated"] = drawdown_score * (1 + rank_vol)
     return df_copy["factor_drawdown_volume_modulated"]
@@ -674,10 +674,10 @@ def factor_drawdown_volume_geometry(df):
     depth_chg = depth.diff(10).fillna(0)
     vol_ma = volume.rolling(20).mean()
     vol_ratio = volume / vol_ma
-    rank_depth = depth.rank()
-    rank_duration = duration.rank()
-    rank_recovery = depth_chg.rank()
-    rank_vol = vol_ratio.rank()
+    rank_depth = depth.rolling(252, min_periods=20).rank()
+    rank_duration = duration.rolling(252, min_periods=20).rank()
+    rank_recovery = depth_chg.rolling(252, min_periods=20).rank()
+    rank_vol = vol_ratio.rolling(252, min_periods=20).rank()
     depth_vol = rank_depth * rank_vol
     factor = depth_vol + rank_duration + rank_recovery
     df_copy['factor_drawdown_volume_geometry'] = factor
@@ -697,14 +697,14 @@ def factor_herding_pressure(df):
     df_copy = df.copy()
     ret = df_copy['close'].pct_change()
     vol_chg = df_copy['volume'].pct_change()
-    rank_ret = ret.rank()
-    rank_vol = vol_chg.rank()
+    rank_ret = ret.rolling(252, min_periods=20).rank()
+    rank_vol = vol_chg.rolling(252, min_periods=20).rank()
     rank_corr = rank_ret.rolling(20).corr(rank_vol)
     imbalance = (df_copy['close'] - df_copy['open']) * df_copy['volume']
     ema_imb = imbalance.ewm(span=5).mean()
     std_imb = imbalance.rolling(20).std()
     dp = ema_imb / (std_imb + 1e-10)
-    rank_dp = dp.rank()
+    rank_dp = dp.rolling(252, min_periods=20).rank()
     factor = rank_corr * rank_dp
     factor.name = 'factor_herding_pressure'
     return factor
@@ -742,7 +742,7 @@ def factor_stability_crash_guard(df):
     skewness = central_m3 / (rolling_std_pop**3).replace(0, np.nan)
     cs = -skewness
     # Normalize cs to [0,1] using rank
-    cs_rank = cs.rank(pct=True).fillna(0.5)
+    cs_rank = cs.rolling(252, min_periods=20).rank(pct=True).fillna(0.5)
     # Combine: reduce SDC when crash risk is high
     factor = sdc * (1 - cs_rank)
     factor = factor.fillna(0)
@@ -1967,7 +1967,7 @@ def factor_volatility_adjusted_dollar_pressure(df):
     atr = talib.ATR(high, low, close, timeperiod=21)
     atr_series = pd.Series(atr, index=df_copy.index)
     raw = smoothed_imb / atr_series.replace(0, np.nan)
-    df_copy['factor_volatility_adjusted_dollar_pressure'] = raw.rank(pct=True) * 2 - 1
+    df_copy['factor_volatility_adjusted_dollar_pressure'] = raw.rolling(252, min_periods=20).rank(pct=True) * 2 - 1
     return df_copy['factor_volatility_adjusted_dollar_pressure']
 ```
 
@@ -1994,7 +1994,7 @@ def factor_fear_adjusted_dollar_pressure_short_ema(df):
     atr = talib.ATR(high, low, close, timeperiod=21)
     atr_series = pd.Series(atr, index=df_copy.index)
     raw = fear_adj_imb / atr_series.replace(0, np.nan)
-    df_copy['factor_fear_adjusted_dollar_pressure_short_ema'] = raw.rank(pct=True) * 2 - 1
+    df_copy['factor_fear_adjusted_dollar_pressure_short_ema'] = raw.rolling(252, min_periods=20).rank(pct=True) * 2 - 1
     return df_copy['factor_fear_adjusted_dollar_pressure_short_ema']
 ```
 
@@ -2027,7 +2027,7 @@ def factor_simplified_fear_pressure(df):
     atr_series = pd.Series(atr, index=df_copy.index)
     raw = fear_adj_imb / atr_series.replace(0, np.nan)
     # Rank transform for cross-sectional stability
-    df_copy['factor_simplified_fear_pressure'] = raw.rank(pct=True) * 2 - 1
+    df_copy['factor_simplified_fear_pressure'] = raw.rolling(252, min_periods=20).rank(pct=True) * 2 - 1
     return df_copy['factor_simplified_fear_pressure']
 ```
 
@@ -3189,7 +3189,7 @@ def factor_pressure_ema_mutation(df):
     atr_series = pd.Series(atr, index=df_copy.index)
     raw = fear_adj_imb / atr_series.replace(0, np.nan)
     # Rank transform for cross-sectional stability
-    df_copy['factor_pressure_ema_mutation'] = raw.rank(pct=True) * 2 - 1
+    df_copy['factor_pressure_ema_mutation'] = raw.rolling(252, min_periods=20).rank(pct=True) * 2 - 1
     return df_copy['factor_pressure_ema_mutation']
 ```
 
@@ -3210,8 +3210,8 @@ def factor_drawdown_vol_simple(df):
     drawdown = (running_max - close) / running_max
     vol_ma = volume.rolling(20).mean()
     vol_ratio = volume / vol_ma
-    rank_dd = drawdown.rank(pct=True)
-    rank_vol = vol_ratio.rank(pct=True)
+    rank_dd = drawdown.rolling(252, min_periods=20).rank(pct=True)
+    rank_vol = vol_ratio.rolling(252, min_periods=20).rank(pct=True)
     factor = rank_dd * rank_vol
     factor.name = "factor_drawdown_vol_simple"
     return factor
@@ -3313,10 +3313,10 @@ def factor_drawdown_volume_geometry_rolling(df):
     depth_chg = depth.diff(10).fillna(0)
     vol_ma = volume.rolling(20).mean()
     vol_ratio = volume / vol_ma
-    rank_depth = depth.rank()
-    rank_duration = duration.rank()
-    rank_recovery = depth_chg.rank()
-    rank_vol = vol_ratio.rank()
+    rank_depth = depth.rolling(252, min_periods=20).rank()
+    rank_duration = duration.rolling(252, min_periods=20).rank()
+    rank_recovery = depth_chg.rolling(252, min_periods=20).rank()
+    rank_vol = vol_ratio.rolling(252, min_periods=20).rank()
     depth_vol = rank_depth * rank_vol
     factor = depth_vol + rank_duration + rank_recovery
     df_copy['factor_drawdown_volume_geometry_rolling'] = factor

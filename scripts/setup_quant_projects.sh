@@ -21,6 +21,7 @@ source "${ROOT}/env.sh"
 if [[ "${VERIFY_ONLY}" != true ]]; then
   log "安装 Python 依赖"
   python3 -m pip install -q -r "${ROOT}/requirements-dev.txt"
+  python3 -m pip install -q -e "${ROOT}/data_access" 2>/dev/null || true
   python3 -m pip install -q -e "${ROOT}/factor_engine" 2>/dev/null || true
 fi
 

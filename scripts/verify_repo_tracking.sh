@@ -64,7 +64,7 @@ done
 
 echo ""
 echo "==> 检查未跟踪的新文件（应在 git add 白名单内）"
-untracked="$(git ls-files --others --exclude-standard data_access/ factor_engine/ .github/ scripts/ docs/data_access/ 2>/dev/null | head -50 || true)"
+untracked="$(git ls-files --others --exclude-standard data_access/ factor_engine/ .github/ scripts/ 2>/dev/null | head -50 || true)"
 if [[ -n "${untracked}" ]]; then
   echo "⚠ 以下公共路径文件尚未 git add："
   echo "${untracked}"

@@ -91,6 +91,13 @@ class DuckDBEngine:
     def config(self) -> DuckDBConfig:
         return self._config
 
+    def ensure_s3_configured(self) -> None:
+        """COS 远程直读前配置 DuckDB httpfs（进程内一次）。"""
+        from .s3_duckdb import ensure_duckdb_s3
+
+        with self._write_lock:
+            ensure_duckdb_s3(self._conn)
+
     # ---- catalog 写（短锁） ----
 
     def register_temp_views(self, views: Sequence[tuple[str, str]]) -> None:
@@ -249,6 +256,18 @@ class DuckDBEngine:
         finally:
             conn.close()
 
+    @staticmethod
+    def _configure_scoped_s3_if_needed(
+        conn,
+        register_specs: Sequence[tuple[str, str]],
+    ) -> None:
+        """scoped 连接是全新 :memory:，共享 engine 上的 S3 配置不会继承。"""
+        if not any("s3://" in inlined for _, inlined in register_specs):
+            return
+        from .s3_duckdb import configure_fresh_duckdb_s3
+
+        configure_fresh_duckdb_s3(conn)
+
     def execute_scoped_sql_arrow(
         self,
         register_specs: Sequence[tuple[str, str]],
@@ -260,6 +279,7 @@ class DuckDBEngine:
         conn = duckdb.connect(":memory:")
         try:
             apply_pragmas(conn, self._config)
+            self._configure_scoped_s3_if_needed(conn, register_specs)
             for view_name, inlined_sql in register_specs:
                 conn.execute(f"CREATE TEMP VIEW {view_name} AS {inlined_sql}")
             if params is not None:
@@ -298,6 +318,7 @@ class DuckDBEngine:
         conn = duckdb.connect(":memory:")
         try:
             apply_pragmas(conn, self._config)
+            self._configure_scoped_s3_if_needed(conn, register_specs)
             for view_name, inlined_sql in register_specs:
                 conn.execute(f"CREATE TEMP VIEW {view_name} AS {inlined_sql}")
             if params is not None:
@@ -361,7 +382,10 @@ def get_shared_engine() -> DuckDBEngine:
 def reset_shared_engine() -> None:
     """主要给测试用，重置共享 engine。"""
     global _shared_engine
+    from .s3_duckdb import reset_duckdb_s3_state
+
     with _shared_lock:
         if _shared_engine is not None:
             _shared_engine.close()
         _shared_engine = None
+        reset_duckdb_s3_state()

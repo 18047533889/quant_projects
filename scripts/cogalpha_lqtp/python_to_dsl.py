@@ -24,6 +24,7 @@ from scripts.cogalpha_lqtp.ast_translator import (  # noqa: E402
     translate_python,
 )
 from scripts.cogalpha_lqtp.dsl_sanitize import sanitize_dsl  # noqa: E402
+from scripts.cogalpha_lqtp.lqtp_dsl_compat import eval_route_for_entry, fe_only_operators  # noqa: E402
 
 # Hand-tuned DSL for patterns the AST translator still mishandles.
 EXTRA_MANUAL_DSL: dict[str, str] = {
@@ -111,6 +112,18 @@ MANUAL_DSL: dict[str, str] = {
     "factor_price_impact_stable_5d": (
         "protected_div(ts_median(abs(ts_pct(close, 1)), 5), ts_mean(log(add(volume, 1)), 5))"
     ),
+    "factor_smooth_asymmetry_persistence": (
+        "ewm_mean(abs(ts_pct(close, 1)), 10)"
+        " * protected_div(volume, ts_mean(volume, 20))"
+        " * (1 + protected_div("
+        "ewm_mean(where(close > open, high - low, 0), 20),"
+        " ewm_mean(where(close <= open, high - low, 0), 20) + 1e-8))"
+    ),
+    "factor_roughness_trend_vol_short": (
+        "protected_div(ATR(high, low, close, 5), ATR(high, low, close, 20))"
+        " * (protected_div(close, ts_mean(close, 20)) - 1)"
+        " * protected_div(volume, ts_mean(volume, 10))"
+    ),
     "factor_volatility_regime_momentum": (
         "-where(ts_std(ts_pct(close, 1), 20) > ts_median(ts_std(ts_pct(close, 1), 20), 60), 1, -1)"
         " * ts_pct(close, 12)"
@@ -159,6 +172,71 @@ class DslEntry:
     status: str
     source: str
     notes: str = ""
+    eval_route: str = "local_python"
+    lqtp_native: bool = False
+    fe_only_ops: str = ""
+
+
+def _needs_python_route(record: dict[str, Any], *, ast_status: str = "") -> str:
+    """Return a reason string when the factor should use Python materialization."""
+    tools = record.get("tools", "")
+    code = record.get("python_code", "")
+    function_name = record.get("function_name", "")
+
+    if ast_status == "hard":
+        return "hard_python_pattern"
+    if function_name in MANUAL_DSL:
+        return ""
+    if "style_gates=" in tools:
+        return "style_gate_column"
+    if "alpha_tools.classify_volume_regime" in code and (
+        '== "high"' in code or "== 'high'" in code or '== "low"' in code or "== 'low'" in code
+    ):
+        return "volume_regime_string_compare"
+    if "groupby" in code or "maximum.accumulate" in code or "cumcount" in code:
+        return "hard_python_pattern"
+    return ""
+
+
+def _python_entry(
+    *,
+    factor_id: str,
+    function_name: str,
+    source: str,
+    notes: str,
+) -> DslEntry:
+    return DslEntry(
+        factor_id=factor_id,
+        function_name=function_name,
+        dsl="",
+        lqtp_formula="",
+        status="python",
+        source=source,
+        notes=notes,
+        eval_route="local_python",
+        lqtp_native=False,
+        fe_only_ops="",
+    )
+
+
+def _annotate_eval_route(entry: DslEntry) -> DslEntry:
+    route = eval_route_for_entry(status=entry.status, dsl=entry.dsl)
+    ops = fe_only_operators(entry.dsl) if entry.dsl else []
+    entry.eval_route = route
+    entry.lqtp_native = route == "lqtp_dsl"
+    entry.fe_only_ops = ",".join(ops)
+    return entry
+
+
+def _dsl_is_broken(dsl: str) -> bool:
+    text = dsl.strip()
+    if not text:
+        return True
+    if text in {"rank()", "rank(x)"}:
+        return True
+    if text.startswith("rank(") and text.endswith(")") and len(text) <= 8:
+        return True
+    return False
 
 
 def _finalize_entry(
@@ -171,14 +249,23 @@ def _finalize_entry(
 ) -> DslEntry:
     dsl = sanitize_dsl(dsl)
     ok, msg = validate_factor_engine_dsl(dsl)
-    return DslEntry(
-        factor_id=factor_id,
-        function_name=function_name,
-        dsl=dsl,
-        lqtp_formula=MANUAL_LQTP_FORMULA.get(function_name, dsl_to_lqtp(dsl)),
-        status="ready" if ok else "converted",
-        source=source,
-        notes="" if ok else msg or notes,
+    if not ok:
+        return _python_entry(
+            factor_id=factor_id,
+            function_name=function_name,
+            source=source,
+            notes=msg or notes or "dsl_invalid",
+        )
+    return _annotate_eval_route(
+        DslEntry(
+            factor_id=factor_id,
+            function_name=function_name,
+            dsl=dsl,
+            lqtp_formula=MANUAL_LQTP_FORMULA.get(function_name, dsl_to_lqtp(dsl)),
+            status="ready",
+            source=source,
+            notes=notes,
+        )
     )
 
 
@@ -196,15 +283,21 @@ def convert_record(record: dict[str, Any]) -> DslEntry:
         )
 
     result: TranslateResult = translate_python(record["python_code"], tools=tools)
-    if not result.dsl:
-        return DslEntry(
+    py_reason = _needs_python_route(record, ast_status=result.status)
+    if py_reason:
+        return _python_entry(
             factor_id=factor_id,
             function_name=function_name,
-            dsl="",
-            lqtp_formula="",
-            status=result.status if result.status != "ready" else "needs_review",
+            source=result.source or "python_route",
+            notes=py_reason if py_reason != "hard_python_pattern" else (result.notes or py_reason),
+        )
+
+    if not result.dsl:
+        return _python_entry(
+            factor_id=factor_id,
+            function_name=function_name,
             source=result.source,
-            notes=result.notes,
+            notes=result.notes or "ast_no_dsl",
         )
 
     entry = _finalize_entry(
@@ -215,6 +308,14 @@ def convert_record(record: dict[str, Any]) -> DslEntry:
         notes=result.notes,
     )
     if "cs_rank" in tools or "cross_sectional_transform=cs_rank" in tools:
+        inner = entry.dsl.strip()
+        if _dsl_is_broken(inner):
+            return _python_entry(
+                factor_id=factor_id,
+                function_name=function_name,
+                source=result.source,
+                notes="cs_rank_without_inner",
+            )
         entry = _finalize_entry(
             factor_id=factor_id,
             function_name=function_name,
@@ -222,6 +323,13 @@ def convert_record(record: dict[str, Any]) -> DslEntry:
             source=result.source,
             notes=result.notes,
         )
+        if entry.status == "ready" and "rank(ts_mean" in entry.dsl and ">" in entry.dsl:
+            return _python_entry(
+                factor_id=factor_id,
+                function_name=function_name,
+                source=result.source,
+                notes="rank_of_boolean_window",
+            )
     elif "cs_zscore" in tools or "cross_sectional_transform=cs_zscore" in tools:
         entry = _finalize_entry(
             factor_id=factor_id,
@@ -252,11 +360,15 @@ def main() -> int:
     )
 
     stats: dict[str, int] = {}
+    route_stats: dict[str, int] = {}
     for item in catalog:
         stats[item.status] = stats.get(item.status, 0) + 1
+        route_stats[item.eval_route] = route_stats.get(item.eval_route, 0) + 1
     print(
         f"catalog: total={len(catalog)} "
         + " ".join(f"{k}={v}" for k, v in sorted(stats.items()))
+        + " routes="
+        + " ".join(f"{k}={v}" for k, v in sorted(route_stats.items()))
         + f" -> {args.out}"
     )
     return 0

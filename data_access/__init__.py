@@ -42,6 +42,18 @@ data_access —— 团队统一数据读写入口（PR1：读；PR2：写；PR3�
         read_params={"factor_lake": {"factor_id": "mom_3d"}},
     )
 
+读 COS / 行情 → SQL 运算 → 写到别处（不改源）：
+    store.compute_and_write(
+        "SELECT TradeDate AS datetime, Symbol AS asset, Close AS value, "
+        "CAST(strftime(TradeDate, '%Y') AS INTEGER) AS year "
+        "FROM {{ashare_stock_daily}}",
+        read_datasets=["ashare_stock_daily"],
+        read_time_ranges={"ashare_stock_daily": ("2024-01-01", "2024-01-31")},
+        write_dataset="factor_lake_staging",
+        factor_id="close_raw_v1",
+        partition_by=["year"],
+    )
+
 进阶：
     tbl = store.read_arrow(...)          # 零拷贝 Arrow Table，大表首选
     cols = store.load_columns(...)       # 批量多列 → dict[name, Series]
@@ -52,10 +64,9 @@ data_access —— 团队统一数据读写入口（PR1：读；PR2：写；PR3�
     直接写 published 数据集 —— 永远必须走 staging → publish_from_staging
 
 更多：
-    - 团队规范：docs/data_access/01_团队使用规范.md
-    - 快速上手：docs/data_access/02_快速上手.md
+    - 用户使用手册：data_access/用户使用手册.md（对外分发首选）
     - 数据集登记：data_access/config/datasets.yaml
-    - 本模块设计：docs/data_access/10_架构设计.md
+    - 模块说明：data_access/README.md
 """
 
 from __future__ import annotations

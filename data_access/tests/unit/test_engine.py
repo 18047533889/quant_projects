@@ -95,3 +95,46 @@ def test_execute_isolated_arrow_does_not_touch_shared_catalog():
         assert engine.execute_arrow("SELECT 1 AS ok").column("ok")[0].as_py() == 1
     finally:
         engine.close()
+
+
+def test_scoped_sql_configures_s3_when_specs_contain_s3(monkeypatch):
+    engine = DuckDBEngine(threads=2)
+    calls: list[object] = []
+
+    def _fake_configure(conn):
+        calls.append(conn)
+
+    monkeypatch.setattr(
+        "data_access.s3_duckdb.configure_fresh_duckdb_s3",
+        _fake_configure,
+    )
+    try:
+        # s3 路径在 view SQL 中：应触发 configure；随后 SELECT 不真正读 s3
+        specs = [("__v", "SELECT 1 AS x FROM read_parquet('s3://bucket/x.parquet')")]
+        # DuckDB 会在 CREATE VIEW 时校验——若 httpfs 未真正配置可能失败。
+        # 我们只断言 configure 被调用；若执行失败也接受（无真实凭证）。
+        try:
+            engine.execute_scoped_sql_arrow(specs, "SELECT 1 AS ok")
+        except Exception:
+            pass
+        assert len(calls) == 1
+    finally:
+        engine.close()
+
+
+def test_scoped_sql_skips_s3_for_local_specs(monkeypatch):
+    engine = DuckDBEngine(threads=2)
+    calls: list[object] = []
+    monkeypatch.setattr(
+        "data_access.s3_duckdb.configure_fresh_duckdb_s3",
+        lambda conn: calls.append(conn),
+    )
+    try:
+        table = engine.execute_scoped_sql_arrow(
+            [("__v", "SELECT 7 AS n")],
+            "SELECT n FROM __v",
+        )
+        assert table.column("n")[0].as_py() == 7
+        assert calls == []
+    finally:
+        engine.close()
