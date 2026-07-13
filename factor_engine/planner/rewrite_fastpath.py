@@ -55,7 +55,7 @@ def _try_rewrite_ts_zscore(node: PlanNode, inputs: list[PlanNode]) -> PlanNode |
 
 
 def _try_rewrite_log_returns(node: PlanNode, inputs: list[PlanNode]) -> PlanNode | None:
-    """``log(divide(col, ts_delay(col,d)))`` → ``log_returns(col,d)``。
+    """``log(divide(col, delay(col,d)))`` → ``log_returns(col,d)``。
 
     参数：
         node: 当前待匹配节点
@@ -73,7 +73,7 @@ def _try_rewrite_log_returns(node: PlanNode, inputs: list[PlanNode]) -> PlanNode
     if num.op != "column":
         return None
     col_name = str(num.attrs.get("name") or "")
-    if den.op not in {"ts_delay", "delay"} or len(den.inputs) != 1:
+    if den.op not in {"delay", "delay"} or len(den.inputs) != 1:
         return None
     if not _same_column(num, den.inputs[0]):
         return None

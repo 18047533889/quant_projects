@@ -9,9 +9,9 @@ from planner.lowerings import _helpers as H
 
 @register_lowering("ts_ratio")
 def lower_ts_ratio(node: PlanNode) -> PlanNode:
-    """``safe_div_null(x, ts_delay(x, lag))``；默认 lag=1。"""
+    """``safe_div(x, delay(x, lag))``；默认 lag=1。"""
     if not node.inputs:
         return node
     x = node.inputs[0]
     lag = H.window_int(node, default=1, input_index=1)
-    return H.safe_div_null(x, H.ts_delay(x, lag))
+    return H.safe_div(x, H.delay(x, lag))

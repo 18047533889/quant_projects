@@ -54,14 +54,14 @@ def lower_bollinger_lower(node: PlanNode) -> PlanNode:
 
 @register_lowering("DPO")
 def lower_dpo(node: PlanNode) -> PlanNode:
-    """``close - ts_delay(ts_mean(close, w), w//2 + 1)``"""
+    """``close - delay(ts_mean(close, w), w//2 + 1)``"""
     if not node.inputs:
         return node
     close = node.inputs[0]
     w = H.window_int(node, default=20, input_index=1)
     shift = (w // 2) + 1
     mean = H.ts_mean(close, w)
-    delayed_mean = H.ts_delay(mean, shift)
+    delayed_mean = H.delay(mean, shift)
     return H.binop("subtract", close, delayed_mean)
 
 
@@ -76,7 +76,7 @@ def lower_williams_r(node: PlanNode) -> PlanNode:
     ll = H.ts_min(low, w)
     num = H.binop("subtract", hh, close)
     den = H.binop("subtract", hh, ll)
-    ratio = H.safe_div_null(num, den)
+    ratio = H.safe_div(num, den)
     return H.binop("multiply", ratio, H.literal(-100.0))
 
 
@@ -85,7 +85,7 @@ def _stochastic_k(high: PlanNode, low: PlanNode, close: PlanNode, window: int) -
     hh = H.ts_max(high, window)
     num = H.binop("subtract", close, ll)
     den = H.binop("subtract", hh, ll)
-    return H.binop("multiply", H.safe_div_null(num, den), H.literal(100.0))
+    return H.binop("multiply", H.safe_div(num, den), H.literal(100.0))
 
 
 @register_lowering("BollingerBands")

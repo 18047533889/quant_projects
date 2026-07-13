@@ -49,9 +49,9 @@ def float_attr(
     return float(default)
 
 
-def ts_delay(x: PlanNode, window: int) -> PlanNode:
+def delay(x: PlanNode, window: int) -> PlanNode:
     w = int(window)
-    return PlanNode(op="ts_delay", inputs=[x, literal(float(w))], attrs={})
+    return PlanNode(op="delay", inputs=[x, literal(float(w))], attrs={})
 
 
 def ts_mean(x: PlanNode, window: int) -> PlanNode:
@@ -104,8 +104,8 @@ def protected_div(left: PlanNode, right: PlanNode) -> PlanNode:
     return binop("protected_div", left, right)
 
 
-def safe_div_null(left: PlanNode, right: PlanNode) -> PlanNode:
-    return binop("safe_div_null", left, right)
+def safe_div(left: PlanNode, right: PlanNode) -> PlanNode:
+    return binop("safe_div", left, right)
 
 
 def coalesce(*values: PlanNode) -> PlanNode:

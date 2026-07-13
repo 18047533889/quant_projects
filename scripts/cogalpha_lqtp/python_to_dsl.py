@@ -21,146 +21,151 @@ from api.mining_integration import validate_factor_engine_dsl  # noqa: E402
 from scripts.cogalpha_lqtp.ast_translator import (  # noqa: E402
     TranslateResult,
     dsl_to_lqtp,
+    lqtp_to_fe_dsl,
     translate_python,
 )
 from scripts.cogalpha_lqtp.dsl_sanitize import sanitize_dsl  # noqa: E402
-from scripts.cogalpha_lqtp.lqtp_dsl_compat import eval_route_for_entry, fe_only_operators  # noqa: E402
+from scripts.cogalpha_lqtp.lqtp_dsl_compat import fe_only_operators, is_lqtp_native_dsl  # noqa: E402
 
-# Hand-tuned DSL for patterns the AST translator still mishandles.
+# Hand-tuned DSL. Prefer LQTP operator names when equivalent (safe_div/ema/ts_quantile/ts_mean).
+# Keep factor_engine-only ops (ATR/ADX/RSI/ROC/tanh/...) when LQTP has no counterpart.
 EXTRA_MANUAL_DSL: dict[str, str] = {
     "factor_shadow_volume_confirmed": (
-        "protected_div("
-        "protected_div(min(open, close) - low, min(open, close) - low + high - max(open, close) + 1e-8)"
-        " - ts_mean(protected_div(min(open, close) - low, min(open, close) - low + high - max(open, close) + 1e-8), 20),"
-        " ts_std(protected_div(min(open, close) - low, min(open, close) - low + high - max(open, close) + 1e-8), 20) + 1e-8)"
-        " * protected_div(volume, ts_mean(volume, 20) + 1e-8)"
+        "safe_div("
+        "safe_div(min(open, close) - low, min(open, close) - low + high - max(open, close) + 1e-8)"
+        " - ts_mean(safe_div(min(open, close) - low, min(open, close) - low + high - max(open, close) + 1e-8), 20),"
+        " ts_std(safe_div(min(open, close) - low, min(open, close) - low + high - max(open, close) + 1e-8), 20) + 1e-8)"
+        " * safe_div(volume, ts_mean(volume, 20) + 1e-8)"
     ),
     "factor_vol_asym_confirmed_range": (
         "(log(1 + sqrt(ts_mean(pow(where(ts_pct(close, 1) < 0, ts_pct(close, 1), 0), 2), 60)))"
         " - log(1 + sqrt(ts_mean(pow(where(ts_pct(close, 1) > 0, ts_pct(close, 1), 0), 2), 60))))"
-        " * protected_div(volume, ts_mean(volume, 60))"
-        " * protected_div(high - low, close)"
+        " * safe_div(volume, ts_mean(volume, 60))"
+        " * safe_div(high - low, close)"
     ),
     "factor_vol_asym_confirmed_range_v2": (
         "(log(1 + sqrt(ts_mean(pow(where(ts_pct(close, 1) < 0, ts_pct(close, 1), 0), 2), 60)))"
         " - log(1 + sqrt(ts_mean(pow(where(ts_pct(close, 1) > 0, ts_pct(close, 1), 0), 2), 60))))"
-        " * protected_div(volume, ts_mean(volume, 40))"
-        " * protected_div(high - low, (high + low + close) / 3)"
+        " * safe_div(volume, ts_mean(volume, 40))"
+        " * safe_div(high - low, (high + low + close) / 3)"
+    ),
+    "factor_asym_vol_30": (
+        "rank(log(safe_div("
+        "ts_std(where(ts_pct(close, 1) < 0, ts_pct(close, 1), 0), 30),"
+        "ts_std(where(ts_pct(close, 1) > 0, ts_pct(close, 1), 0), 30)"
+        ")))"
+    ),
+    "factor_asym_vol_cont_gate_30": (
+        "zscore("
+        "log(safe_div("
+        "ts_std(where(ts_pct(close, 1) < 0, ts_pct(close, 1), 0), 60),"
+        "ts_std(where(ts_pct(close, 1) > 0, ts_pct(close, 1), 0), 60)"
+        "))"
+        " * cap(safe_div(volume, ts_mean(volume, 20)), 0, 3)"
+        ")"
     ),
     "factor_adx_trend_vol_ema": (
         "ADX(high, low, close, 14) * sign(ts_pct(close, 10))"
-        " * cap(protected_div(volume, ewm_mean(volume, 20)), 0.5, 2.0)"
+        " * cap(safe_div(volume, ema(volume, 20)), 0.5, 2.0)"
     ),
     "factor_pressure_compression_simplified_v3": (
-        "protected_div((close - open) * volume, ts_mean(abs((close - open) * volume), 21))"
-        " * tanh(protected_div(volume, ts_mean(volume, 21)))"
-        " * tanh(protected_div(ATR(high, low, close, 21), close))"
+        "safe_div((close - open) * volume, ts_mean(abs((close - open) * volume), 21))"
+        " * tanh(safe_div(volume, ts_mean(volume, 21)))"
+        " * tanh(safe_div(ATR(high, low, close, 21), close))"
     ),
     "factor_drawdown_atr_normalized_20": (
-        "-protected_div(protected_div(close - ts_max(close, 60), ts_max(close, 60)), ATR(high, low, close, 20))"
+        "-safe_div(safe_div(close - ts_max(close, 60), ts_max(close, 60)), ATR(high, low, close, 20))"
     ),
     "factor_drawdown_atr_normalized_v2": (
-        "-protected_div(protected_div(close - ts_max(close, 60), ts_max(close, 60)), ATR(high, low, close, 60))"
+        "-safe_div(safe_div(close - ts_max(close, 60), ts_max(close, 60)), ATR(high, low, close, 60))"
     ),
     "factor_drawdown_atr_20_normalized": (
-        "-protected_div(protected_div(close - ts_max(close, 60), ts_max(close, 60)), ATR(high, low, close, 20))"
+        "-safe_div(safe_div(close - ts_max(close, 60), ts_max(close, 60)), ATR(high, low, close, 20))"
     ),
     "factor_smoothed_atr_ratio_gated": (
-        "EMA(protected_div(ATR(high, low, close, 20), ATR(high, low, close, 60)), 5)"
+        "EMA(safe_div(ATR(high, low, close, 20), ATR(high, low, close, 60)), 5)"
     ),
     "factor_resvol_volume_momentum": (
-        "ROC(close, 20) * protected_div(volume, ewm_mean(volume, 20))"
+        "ROC(close, 20) * safe_div(volume, ema(volume, 20))"
     ),
     "factor_vol_lag_ret_smoothed": (
-        "ewm_mean("
-        "(protected_div(close, delay(close, 5)) - 1)"
-        " * log(protected_div(volume, ewm_mean(volume, 20)))"
-        " * (1 + protected_div(ATR(high, low, close, 20), close)),"
+        "ema("
+        "(safe_div(close, delay(close, 5)) - 1)"
+        " * log(safe_div(volume, ema(volume, 20)))"
+        " * (1 + safe_div(ATR(high, low, close, 20), close)),"
         " 5)"
     ),
     "factor_lagret_vol_trend_gated": (
-        "ewm_mean((protected_div(close, delay(close, 5)) - 1) * log(protected_div(volume, ewm_mean(volume, 20))), 5)"
-        " * where(ts_std(ts_pct(close, 1), 20) > ts_median(ts_std(ts_pct(close, 1), 20), 60), 1, -1)"
+        "ema((safe_div(close, delay(close, 5)) - 1) * log(safe_div(volume, ema(volume, 20))), 5)"
+        " * where(ts_std(ts_pct(close, 1), 20) > ts_quantile(ts_std(ts_pct(close, 1), 20), 60, 0.5), 1, -1)"
     ),
     "factor_lagret_vol_trend_gated_v2": (
-        "ewm_mean((protected_div(close, delay(close, 5)) - 1) * log(protected_div(volume, ewm_mean(volume, 20))), 5)"
-        " * where(ts_std(ts_pct(close, 1), 20) > ts_median(ts_std(ts_pct(close, 1), 20), 60), 1, -1)"
+        "ema((safe_div(close, delay(close, 5)) - 1) * log(safe_div(volume, ema(volume, 20))), 5)"
+        " * where(ts_std(ts_pct(close, 1), 20) > ts_quantile(ts_std(ts_pct(close, 1), 20), 60, 0.5), 1, -1)"
     ),
     "factor_vol_lag_ret_resvol_gated": (
-        "ewm_mean((protected_div(close, delay(close, 5)) - 1) * log(protected_div(volume, ewm_mean(volume, 20))), 5)"
+        "ema((safe_div(close, delay(close, 5)) - 1) * log(safe_div(volume, ema(volume, 20))), 5)"
     ),
     "factor_asym_vol_gated_by_volume_pressure": (
-        "log(cap(protected_div("
-        "sqrt(ewm_mean(pow(where(ts_pct(close, 1) < 0, ts_pct(close, 1), 0), 2), 20)),"
-        " sqrt(ewm_mean(pow(where(ts_pct(close, 1) > 0, ts_pct(close, 1), 0), 2), 20))),"
+        "log(cap(safe_div("
+        "sqrt(ema(pow(where(ts_pct(close, 1) < 0, ts_pct(close, 1), 0), 2), 20)),"
+        " sqrt(ema(pow(where(ts_pct(close, 1) > 0, ts_pct(close, 1), 0), 2), 20))),"
         " 1e-6, 1e6))"
-        " * protected_div(volume, ewm_mean(volume, 20))"
+        " * safe_div(volume, ema(volume, 20))"
     ),
     "factor_asym_intraday_sma": (
-        "protected_div(SMA(open - low, 40), SMA(high - open, 40))"
+        "safe_div(ts_mean(open - low, 40), ts_mean(high - open, 40))"
     ),
     "factor_liquidity_adaptive_asym_momentum": (
-        "protected_div(protected_div(close, delay(close, 21)) - 1,"
+        "safe_div(safe_div(close, delay(close, 21)) - 1,"
         " ts_std(where(ts_pct(close, 1) < 0, ts_pct(close, 1), 0), 21))"
-        " / (1 + protected_div(EMA(open - low, 20), EMA(high - open, 20)))"
+        " / (1 + safe_div(EMA(open - low, 20), EMA(high - open, 20)))"
     ),
 }
 
 MANUAL_DSL: dict[str, str] = {
     "factor_persistence": "-ts_mean(abs(ts_delta(ts_pct(close, 1), 1)), 10)",
-    "factor_persistence_ewma": "-ewm_mean(abs(ts_delta(ts_pct(close, 1), 1)), 10)",
+    "factor_persistence_ewma": "-ema(abs(ts_delta(ts_pct(close, 1), 1)), 10)",
     "factor_price_impact_stable_5d": (
-        "protected_div(ts_median(abs(ts_pct(close, 1)), 5), ts_mean(log(add(volume, 1)), 5))"
+        "safe_div(ts_quantile(abs(ts_pct(close, 1)), 5, 0.5), ts_mean(log(volume + 1), 5))"
     ),
     "factor_smooth_asymmetry_persistence": (
-        "ewm_mean(abs(ts_pct(close, 1)), 10)"
-        " * protected_div(volume, ts_mean(volume, 20))"
-        " * (1 + protected_div("
-        "ewm_mean(where(close > open, high - low, 0), 20),"
-        " ewm_mean(where(close <= open, high - low, 0), 20) + 1e-8))"
+        "ema(abs(ts_pct(close, 1)), 10)"
+        " * safe_div(volume, ts_mean(volume, 20))"
+        " * (1 + safe_div("
+        "ema(where(close > open, high - low, 0), 20),"
+        " ema(where(close <= open, high - low, 0), 20) + 1e-8))"
     ),
     "factor_roughness_trend_vol_short": (
-        "protected_div(ATR(high, low, close, 5), ATR(high, low, close, 20))"
-        " * (protected_div(close, ts_mean(close, 20)) - 1)"
-        " * protected_div(volume, ts_mean(volume, 10))"
+        "safe_div(ATR(high, low, close, 5), ATR(high, low, close, 20))"
+        " * (safe_div(close, ts_mean(close, 20)) - 1)"
+        " * safe_div(volume, ts_mean(volume, 10))"
     ),
     "factor_volatility_regime_momentum": (
-        "-where(ts_std(ts_pct(close, 1), 20) > ts_median(ts_std(ts_pct(close, 1), 20), 60), 1, -1)"
+        "-where(ts_std(ts_pct(close, 1), 20) > ts_quantile(ts_std(ts_pct(close, 1), 20), 60, 0.5), 1, -1)"
         " * ts_pct(close, 12)"
     ),
     "factor_volatility_scaled_deviation": (
-        "tanh(protected_div(close - ts_mean(close, 20),"
+        "tanh(safe_div(close - ts_mean(close, 20),"
         " ts_std(ts_pct(close, 1), 20) * ts_mean(close, 20) + 1e-8))"
     ),
     "factor_vol_regime_volume": (
-        "(2 * where(ts_std(ts_pct(close, 1), 20) < ts_median(ts_std(ts_pct(close, 1), 20), 60), 1, 0) - 1)"
-        " * ts_pct(close, 10) * protected_div(volume, ts_median(volume, 60))"
+        "(2 * where(ts_std(ts_pct(close, 1), 20) < ts_quantile(ts_std(ts_pct(close, 1), 20), 60, 0.5), 1, 0) - 1)"
+        " * ts_pct(close, 10) * safe_div(volume, ts_quantile(volume, 60, 0.5))"
     ),
     "factor_corr_volume_regime": (
         "ts_corr(ts_pct(close, 1), ts_pct(volume, 1), 20)"
-        " * protected_div(volume, ewm_mean(volume, 20))"
+        " * safe_div(volume, ema(volume, 20))"
     ),
     "factor_vol_price_coherence_v2": (
         "ts_corr(ts_pct(close, 1), ts_pct(volume, 1), 20)"
-        " * protected_div(volume, ewm_mean(volume, 20))"
+        " * safe_div(volume, ema(volume, 20))"
     ),
     **EXTRA_MANUAL_DSL,
 }
 
-MANUAL_LQTP_FORMULA: dict[str, str] = {
-    "factor_vol_regime_volume": (
-        "(2 * where(ts_std(close / delay(close, 1) - 1, 20) < ts_quantile(ts_std(close / delay(close, 1) - 1, 60, 0.5), 1, 0) - 1)"
-        " * (close / delay(close, 10) - 1) * safe_div(volume, ts_quantile(volume, 60, 0.5))"
-    ),
-    "factor_corr_volume_regime": (
-        "ts_corr(close / delay(close, 1) - 1, volume / delay(volume, 1) - 1, 20)"
-        " * safe_div(volume, ema(volume, 20))"
-    ),
-    "factor_vol_price_coherence_v2": (
-        "ts_corr(close / delay(close, 1) - 1, volume / delay(volume, 1) - 1, 20)"
-        " * safe_div(volume, ema(volume, 20))"
-    ),
-}
+# Optional hand overrides when auto dsl_to_lqtp is insufficient.
+MANUAL_LQTP_FORMULA: dict[str, str] = {}
 
 
 @dataclass
@@ -220,11 +225,23 @@ def _python_entry(
 
 
 def _annotate_eval_route(entry: DslEntry) -> DslEntry:
-    route = eval_route_for_entry(status=entry.status, dsl=entry.dsl)
-    ops = fe_only_operators(entry.dsl) if entry.dsl else []
-    entry.eval_route = route
-    entry.lqtp_native = route == "lqtp_dsl"
+    """Route on LQTP formula when rename-compatible; keep FE-only ops from materialize DSL."""
+    lqtp = (entry.lqtp_formula or entry.dsl or "").strip()
+    fe = lqtp_to_fe_dsl(entry.dsl or lqtp)
+    ops = fe_only_operators(fe) if fe else []
     entry.fe_only_ops = ",".join(ops)
+    if entry.status == "ready" and is_lqtp_native_dsl(lqtp):
+        entry.eval_route = "lqtp_dsl"
+        entry.lqtp_native = True
+        # Canonical catalog formula uses LQTP naming when fully compatible.
+        entry.dsl = lqtp
+        entry.lqtp_formula = lqtp
+    else:
+        # Keep factor_engine naming for local materialize; store best-effort LQTP text.
+        entry.dsl = fe
+        entry.lqtp_formula = lqtp
+        entry.eval_route = "local_dsl" if entry.status == "ready" and entry.dsl else "local_python"
+        entry.lqtp_native = False
     return entry
 
 
@@ -248,7 +265,9 @@ def _finalize_entry(
     notes: str = "",
 ) -> DslEntry:
     dsl = sanitize_dsl(dsl)
-    ok, msg = validate_factor_engine_dsl(dsl)
+    # Accept either FE or LQTP naming; validate against factor_engine form.
+    fe_dsl = lqtp_to_fe_dsl(dsl)
+    ok, msg = validate_factor_engine_dsl(fe_dsl)
     if not ok:
         return _python_entry(
             factor_id=factor_id,
@@ -256,12 +275,13 @@ def _finalize_entry(
             source=source,
             notes=msg or notes or "dsl_invalid",
         )
+    lqtp = MANUAL_LQTP_FORMULA.get(function_name) or dsl_to_lqtp(fe_dsl)
     return _annotate_eval_route(
         DslEntry(
             factor_id=factor_id,
             function_name=function_name,
-            dsl=dsl,
-            lqtp_formula=MANUAL_LQTP_FORMULA.get(function_name, dsl_to_lqtp(dsl)),
+            dsl=fe_dsl,
+            lqtp_formula=lqtp,
             status="ready",
             source=source,
             notes=notes,

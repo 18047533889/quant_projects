@@ -26,7 +26,7 @@ BATCH_A_CERTIFICATION_ONLY: frozenset[str] = frozenset(
     """
     add subtract multiply neg abs sign exp floor ceil maximum minimum
     gt lt eq ge le ne and_ or_ not_ where coalesce fillna_const
-    ts_delay ts_delta ts_pct ts_sum ts_min ts_max ts_var ts_median ts_zscore
+    delay ts_delta ts_pct ts_sum ts_min ts_max ts_var ts_median ts_zscore
     rank_pct cs_pct_rank cs_demean c_mean c_std c_sum c_count
     log_returns volatility vwap group_rank group_std group_neutralize
     """.split()
@@ -38,14 +38,14 @@ BATCH_B_SEMANTIC_FIX: frozenset[str] = frozenset(
     gt lt eq ge le ne and_ or_ not_ where if_else
     maximum minimum scale protected_div protected_log protected_sqrt
     is_null is_nan is_finite is_infinite is_not_null
-    ts_sharpe safe_div_null divide log exp
+    ts_sharpe safe_div divide log exp
     """.split()
 )
 
 # Batch C：伪 native / Python rolling callback
 BATCH_C_PYTHON_ROLLING: frozenset[str] = frozenset(
     """
-    ts_argmax ts_argmin ts_quantile ts_skew ts_decay_linear WMA Slope
+    ts_argmax ts_argmin ts_quantile ts_skew decay_linear WMA Slope
     ts_product ts_median_abs_deviation ts_mean_abs_deviation
     """.split()
 )
@@ -53,7 +53,7 @@ BATCH_C_PYTHON_ROLLING: frozenset[str] = frozenset(
 # Batch D：缺底层 primitive 或 stable kernel
 BATCH_D_MISSING_PRIMITIVE: frozenset[str] = frozenset(
     """
-    ts_regression Slope rolling_beta cs_regression cs_resid
+    ts_regression_slope Slope rolling_beta cs_regression cs_resid
     expanding_std ts_product AROON CCI Donchian
     """.split()
 )
@@ -61,7 +61,7 @@ BATCH_D_MISSING_PRIMITIVE: frozenset[str] = frozenset(
 # Batch E：Stateful / EWM / Wilder
 BATCH_E_STATEFUL: frozenset[str] = frozenset(
     """
-    ts_ema ewm_mean ewm_std ewm_var ewm_corr ewm_cov
+    ema ema ewm_std ewm_var ewm_corr ewm_cov
     RSI_WILDER ATR_WILDER MACD TRIX ADX KAMA
     """.split()
 )

@@ -121,6 +121,54 @@ def _factor_cte_sql(factor_path: Path) -> str:
     """
 
 
+def analyze_factor_long_df_duckdb(
+    long_df: pd.DataFrame,
+    *,
+    fwd_returns_path: Path,
+    n_groups: int = _N_GROUPS,
+    commission_buy: float = DEFAULT_COMMISSION_BPS,
+    commission_sell: float = DEFAULT_COMMISSION_BPS,
+    min_names: int = 30,
+    con: duckdb.DuckDBPyConnection | None = None,
+) -> dict[str, Any]:
+    """RankIC / deciles / LS from an in-memory long factor frame (trade_date, symbol, value)."""
+    work = long_df.copy()
+    if "trade_date" not in work.columns or "symbol" not in work.columns:
+        raise ValueError("long_df needs trade_date, symbol, value")
+    if "value" not in work.columns:
+        raise ValueError("long_df needs value column")
+    work = work[["trade_date", "symbol", "value"]].dropna(subset=["value"])
+    work["trade_date"] = work["trade_date"].astype(int)
+    work["symbol"] = work["symbol"].astype(str)
+    # DuckDB can scan a registered DataFrame without a temp parquet.
+    owns_con = con is None
+    if con is None:
+        con = duckdb.connect()
+    try:
+        con.register("_factor_long_df", work)
+        return analyze_factor_parquet_duckdb(
+            factor_path=Path("__dataframe__"),
+            fwd_returns_path=fwd_returns_path,
+            n_groups=n_groups,
+            commission_buy=commission_buy,
+            commission_sell=commission_sell,
+            min_names=min_names,
+            con=con,
+            factor_sql=(
+                "SELECT trade_date::INTEGER AS trade_date, "
+                "symbol::VARCHAR AS symbol, value::DOUBLE AS value "
+                "FROM _factor_long_df"
+            ),
+        )
+    finally:
+        try:
+            con.unregister("_factor_long_df")
+        except Exception:
+            pass
+        if owns_con:
+            con.close()
+
+
 def analyze_factor_parquet_duckdb(
     *,
     factor_path: Path,
@@ -130,9 +178,10 @@ def analyze_factor_parquet_duckdb(
     commission_sell: float = DEFAULT_COMMISSION_BPS,
     min_names: int = 30,
     con: duckdb.DuckDBPyConnection | None = None,
+    factor_sql: str | None = None,
 ) -> dict[str, Any]:
     """Vectorized RankIC / deciles / G10−G1 via DuckDB (average-rank Spearman)."""
-    fac_sql = _factor_cte_sql(factor_path)
+    fac_sql = factor_sql if factor_sql else _factor_cte_sql(factor_path)
     fwd = fwd_returns_path.as_posix().replace("'", "''")
     roundtrip = float(commission_buy) + float(commission_sell)
     owns_con = con is None
@@ -397,6 +446,8 @@ def _eval_one(payload: dict[str, Any]) -> dict[str, Any]:
             topk_summary={},
             python_code=py_code,
             work_dir=work,
+            engine=engine,
+            eval_route=route,
         )
         row = {
             "factor_name": name,

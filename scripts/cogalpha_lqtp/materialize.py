@@ -29,6 +29,8 @@ from storage.cache import CacheManager  # noqa: E402
 from storage.factory import build_data_source  # noqa: E402
 from storage.factor_format import series_to_long_table  # noqa: E402
 
+from scripts.cogalpha_lqtp.ast_translator import lqtp_to_fe_dsl  # noqa: E402
+
 
 def _ashare_smoke_data_source(
     *,
@@ -62,7 +64,9 @@ def materialize_factor(
     lake_root: Path,
     allowed_symbols: set[str] | None = None,
 ) -> Path:
-    ok, msg = validate_factor_engine_dsl(dsl)
+    # Catalog may store LQTP naming (safe_div/ema); factor_engine needs FE names.
+    fe_dsl = lqtp_to_fe_dsl(dsl)
+    ok, msg = validate_factor_engine_dsl(fe_dsl)
     if not ok:
         raise RuntimeError(f"DSL invalid for {factor_id}: {msg}")
 
@@ -72,7 +76,7 @@ def materialize_factor(
         data_source=data_source,
         cache=CacheManager(),
     )
-    factor = parse_factor(dsl, name=factor_id, freq="1d", universe="A_SHARE_ALL_A_EX_ST")
+    factor = parse_factor(fe_dsl, name=factor_id, freq="1d", universe="A_SHARE_ALL_A_EX_ST")
     out = engine.run(factor)
     series = out["result"]
     long_df = series_to_long_table(series)

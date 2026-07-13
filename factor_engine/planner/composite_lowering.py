@@ -63,13 +63,13 @@ STATEFUL_DEFERRED_CANONICALS: frozenset[str] = frozenset(
         "KAMA",
         "RSI_WILDER",
         "ATR_WILDER",
-        "ts_ema",
-        "ewm_mean",
+        "ema",
+        "ema",
         "ewm_std",
         "ewm_var",
         "ewm_cov",
         "ewm_corr",
-        "ts_decay_linear",
+        "decay_linear",
     }
 )
 

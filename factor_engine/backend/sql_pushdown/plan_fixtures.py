@@ -42,8 +42,8 @@ def minimal_plan(op: str) -> PlanNode:
         "ewm_corr",
         "ewm_cov",
         "protected_div",
-        "safe_div_null",
-        "ts_regression",
+        "safe_div",
+        "ts_regression_slope",
         "Slope",
         "power",
         "rolling_beta",
@@ -57,7 +57,7 @@ def minimal_plan(op: str) -> PlanNode:
         return PlanNode(op=op, inputs=[close, industry], attrs={"d": 3, "window": 3, "p": 0.5})
     if op in {"where", "if_else", "coalesce"}:
         return PlanNode(op=op, inputs=[close, volume, literal(0.0)], attrs={})
-    if op == "clip":
+    if op == "cap":
         return PlanNode(op=op, inputs=[close], attrs={"min": 0.0, "max": 1.0})
     if op in {"winsorize"}:
         return PlanNode(op=op, inputs=[close], attrs={"lower": 0.01, "upper": 0.99, "a": 0.05})
@@ -75,7 +75,7 @@ def minimal_plan(op: str) -> PlanNode:
         return PlanNode(op=op, inputs=[close], attrs={"d": 3, "q": 0.5})
     if op in {"ts_sharpe", "ts_autocorr"}:
         return PlanNode(op=op, inputs=[close], attrs={"d": 20, "window": 20})
-    if op in {"ewm_mean", "ewm_std", "ewm_var", "WMA", "ts_decay_linear"}:
+    if op in {"ema", "ewm_std", "ewm_var", "WMA", "decay_linear"}:
         return PlanNode(op=op, inputs=[close], attrs={"span": 5, "window": 5, "d": 5})
     if op == "ATR_WILDER":
         return PlanNode(op=op, inputs=[high, low, close], attrs={"d": 14, "window": 14})

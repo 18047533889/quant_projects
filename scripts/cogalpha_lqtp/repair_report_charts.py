@@ -27,11 +27,23 @@ def _has_panel_charts(html: str) -> bool:
 
 
 def _topk_summary_from_row(row: dict) -> dict:
-    return {
-        "total_return": row.get("backtest_total_ret"),
-        "sharpe": row.get("backtest_sharpe"),
-        "max_drawdown": row.get("backtest_max_drawdown"),
-    }
+    from scripts.cogalpha_lqtp.report_html import _enrich_topk_summary
+
+    return _enrich_topk_summary(
+        {
+            "total_return": row.get("backtest_total_ret"),
+            "annualized_return": row.get("backtest_ann_ret"),
+            "max_drawdown": row.get("backtest_max_drawdown"),
+            "sharpe": row.get("backtest_sharpe"),
+            "volatility": row.get("backtest_volatility"),
+            "calmar": row.get("backtest_calmar"),
+            "win_rate": row.get("backtest_win_rate"),
+            "avg_turnover": row.get("backtest_avg_turnover"),
+            "total_commission": row.get("backtest_total_commission"),
+            "trading_days": row.get("backtest_trading_days"),
+            "final_nav": row.get("backtest_final_nav"),
+        }
+    )
 
 
 def main() -> int:
@@ -88,9 +100,15 @@ def main() -> int:
             backtest_rows=[],
             out_path=report_path,
             eval_mode=row.get("eval_mode", ""),
+            materialize_meta={
+                "engine": row.get("engine", ""),
+                "eval_route": row.get("eval_route", ""),
+            },
             topk_summary=_topk_summary_from_row(row),
             python_code=py,
             work_dir=work,
+            engine=str(row.get("engine") or ""),
+            eval_route=str(row.get("eval_route") or ""),
         )
         fixed += 1
 

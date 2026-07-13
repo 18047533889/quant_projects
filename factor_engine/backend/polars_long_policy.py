@@ -25,18 +25,18 @@ POLARS_LONG_NATIVE: frozenset[str] = frozenset(
         "log",
         "exp",
         "sqrt",
-        "clip",
+        "cap",
         "power",
         "floor",
         "ceil",
         "protected_div",
-        "safe_div_null",
+        "safe_div",
         "protected_log",
         "protected_sqrt",
         "inverse",
         "maximum",
         "minimum",
-        "ts_delay",
+        "delay",
         "ts_delta",
         "ts_pct",
         "ts_mean",
@@ -50,7 +50,7 @@ POLARS_LONG_NATIVE: frozenset[str] = frozenset(
         "ts_corr",
         "ts_cov",
         "ts_beta",
-        "ts_ema",
+        "ema",
         "ts_rank",
         "ts_sharpe",
         "ts_autocorr",
@@ -71,7 +71,7 @@ POLARS_LONG_NATIVE: frozenset[str] = frozenset(
         "cum_max",
         "cum_min",
         "cum_prod",
-        "ewm_mean",
+        "ema",
         "ewm_std",
         "ewm_var",
         "coalesce",
@@ -141,7 +141,7 @@ POLARS_LONG_STATEFUL: frozenset[str] = frozenset(
 POLARS_LONG_NONSTANDARD_ALG: frozenset[str] = frozenset(
     {
         "ts_mad",
-        "ts_regression",
+        "ts_regression_slope",
     }
 )
 
@@ -149,8 +149,9 @@ POLARS_LONG_NONSTANDARD_ALG: frozenset[str] = frozenset(
 POLARS_LONG_PYTHON_ROLLING: frozenset[str] = frozenset(
     {
         "expanding_std",
-        "ts_decay_linear",
+        "decay_linear",
         "WMA",
+        "ts_time_slope",
         "Slope",
         "ts_skew",
         "ts_quantile",

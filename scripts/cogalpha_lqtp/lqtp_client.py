@@ -2,6 +2,7 @@
 """LQTP gRPC client helpers for auth, factor analysis, and backtest."""
 from __future__ import annotations
 
+import json
 import os
 import re
 import sys
@@ -482,12 +483,29 @@ def _trade_date_shift_map(dates: Iterable[int], shift: int = 1) -> dict[int, int
     return out
 
 
+def build_tradable_by_exec_date(returns_long: pd.DataFrame) -> dict[int, set[str]]:
+    """Map exec trade_date -> symbols with LQTP open bar on that date (point-in-time).
+
+    Used for TopK: signal on T → trade open(T+1); only pick names quoteable on exec date.
+    """
+    if returns_long.empty:
+        return {}
+    work = returns_long.copy()
+    work["trade_date"] = work["trade_date"].astype(int)
+    work["symbol"] = work["symbol"].astype(str).map(_to_lqtp_symbol)
+    return {
+        int(d): set(g["symbol"].astype(str))
+        for d, g in work.groupby("trade_date", sort=True)
+    }
+
+
 def top_quantile_weights(
     long_df: pd.DataFrame,
     *,
     top_frac: float = 0.1,
     max_picks_per_day: int = 50,
     allowed_symbols: set[str] | None = SAFE_LQTP_SYMBOLS,
+    tradable_by_exec_date: dict[int, set[str]] | None = None,
     signal_to_trade_lag: int = 1,
 ) -> list[Struct_pb2.Weight]:
     """Build TopK long-only weights.
@@ -508,6 +526,10 @@ def top_quantile_weights(
         if exec_date is None:
             continue
         valid = group.dropna(subset=["value"])
+        if tradable_by_exec_date is not None:
+            ok = tradable_by_exec_date.get(int(exec_date))
+            if ok is not None:
+                valid = valid[valid["symbol"].isin(ok)]
         if valid.empty:
             continue
         n = max(1, min(max_picks_per_day, int(len(valid) * top_frac)))
@@ -523,6 +545,72 @@ def top_quantile_weights(
                 )
             )
     return weights
+
+
+def run_topk_backtest_for_long_df(
+    token_mgr: LqtpTokenManager,
+    long_df: pd.DataFrame,
+    *,
+    begin_date: int,
+    end_date: int,
+    server: str = DEFAULT_SERVER,
+    allowed_symbols: set[str] | None = None,
+    open_returns_long: pd.DataFrame | None = None,
+    pre_excluded: set[str] | None = None,
+    max_symbol_excludes: int = 200,
+) -> tuple[list[dict[str, Any]], str, dict[str, Any], set[str]]:
+    """TopK OPEN backtest on LQTP BacktestService.
+
+    Weights are rebuilt after each missing-quote exclusion. When *open_returns_long* is
+    provided, TopK picks are filtered point-in-time: only symbols with an open bar on
+    the exec date (T+1 open) are eligible — no global retroactive delisting filter.
+    """
+    tradable_by_exec = (
+        build_tradable_by_exec_date(open_returns_long) if open_returns_long is not None else None
+    )
+    excluded: set[str] = set(pre_excluded or ())
+    for _ in range(max_symbol_excludes + 1):
+        ok_symbols = None if allowed_symbols is None else (allowed_symbols - excluded)
+        weights = top_quantile_weights(
+            long_df,
+            allowed_symbols=ok_symbols,
+            tradable_by_exec_date=tradable_by_exec,
+        )
+        if not weights:
+            return [], "", summarize_backtest([]), excluded
+        try:
+            rows, bt_id = run_backtest_auth_safe(
+                token_mgr,
+                weights=weights,
+                begin_date=begin_date,
+                end_date=end_date,
+                server=server,
+                max_quote_retries=0,
+            )
+            if excluded:
+                print(f"  backtest ok after excluding {len(excluded)} missing-quote symbols")
+            health = diagnose_backtest_nav_health(rows)
+            if not health.get("healthy"):
+                print(
+                    f"  WARNING: backtest has {health['frozen_tail_days']} frozen tail days "
+                    f"(last active {health.get('last_active_trade_date')}); {health.get('hint', '')}"
+                )
+            return rows, bt_id, summarize_backtest(rows), excluded
+        except Exception as exc:  # noqa: BLE001
+            if is_lqtp_auth_error(exc):
+                raise
+            match = _MISSING_QUOTE_RE.search(str(exc))
+            if not match:
+                print(f"  backtest skipped: {exc}")
+                return [], "", summarize_backtest([]), excluded
+            bad = _to_lqtp_symbol(match.group(1))
+            if bad in excluded:
+                print(f"  backtest skipped: {exc}")
+                return [], "", summarize_backtest([]), excluded
+            excluded.add(bad)
+            print(f"  backtest exclude missing quote {bad}")
+    print("  backtest skipped: too many missing-quote symbols")
+    return [], "", summarize_backtest([]), excluded
 
 
 def long_short_decile_weights(
@@ -602,6 +690,43 @@ def backtest_result_to_dict(result: Struct_pb2.Result) -> dict[str, Any]:
         "net_asset_diff": result.net_asset_diff,
         "ret": result.ret,
     }
+
+
+def diagnose_backtest_nav_health(
+    rows: list[dict[str, Any]], *, min_frozen_days: int = 20
+) -> dict[str, Any]:
+    """Detect LQTP zombie-portfolio tail: flat NAV with zero turnover at end of stream."""
+    if len(rows) < min_frozen_days + 1:
+        return {"healthy": True, "frozen_tail_days": 0, "last_active_trade_date": None}
+    frame = pd.DataFrame(rows).sort_values("trade_date")
+    nav = pd.to_numeric(frame["eod_net_asset"], errors="coerce")
+    turnover = pd.to_numeric(frame.get("turnover_rate", 0), errors="coerce").fillna(0)
+    frozen = 0
+    for i in range(len(frame) - 1, 0, -1):
+        if abs(float(nav.iloc[i]) - float(nav.iloc[i - 1])) < 1e-4 and float(turnover.iloc[i]) == 0.0:
+            frozen += 1
+        else:
+            break
+    last_active_idx = max(0, len(frame) - frozen - 1)
+    return {
+        "healthy": frozen < min_frozen_days,
+        "frozen_tail_days": int(frozen),
+        "last_active_trade_date": int(frame["trade_date"].iloc[last_active_idx]),
+        "hint": (
+            "TopK weights were not rebuilt after excluding missing-quote symbols; "
+            "use run_topk_backtest_for_long_df instead of run_backtest_auth_safe on raw weights."
+            if frozen >= min_frozen_days
+            else ""
+        ),
+    }
+
+
+def save_backtest_rows(path: Path, rows: list[dict[str, Any]]) -> None:
+    """Persist daily TopK backtest stream for debugging / report regen."""
+    if not rows:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(rows, ensure_ascii=False), encoding="utf-8")
 
 
 def summarize_backtest(rows: list[dict[str, Any]], *, initial_cash: float = DEFAULT_BACKTEST_CASH) -> dict[str, Any]:

@@ -197,7 +197,7 @@ class OperatorRegistry:
 
         参数:
             old: 旧 canonical 名。
-            new: 新 canonical 名；若已存在则仅注销 ``old``。
+            new: 新 canonical 名；若已存在则把 ``old`` 的 backend **合并**进 ``new`` 再注销 ``old``。
 
         返回:
             None
@@ -205,11 +205,36 @@ class OperatorRegistry:
         if old == new or old not in cls._operators:
             return
         if new in cls._operators:
-            cls.unregister(old)
+            # Merge backends (e.g. sql placeholder registered under new name before
+            # pandas/polars were renamed onto it).
+            for backend, op in list(cls._operators.get(old, {}).items()):
+                if backend not in cls._operators[new]:
+                    cls._operators[new][backend] = op
+            old_cat = cls._catalog.pop(old, {})
+            new_cat = cls._catalog.get(new, {})
+            new_cat["backends"] = sorted(cls._operators[new].keys())
+            new_cat["canonical"] = new
+            # Prefer non-empty description / params from either side.
+            if not new_cat.get("description") and old_cat.get("description"):
+                new_cat["description"] = old_cat.get("description", "")
+            if not new_cat.get("param_names") and old_cat.get("param_names"):
+                new_cat["param_names"] = old_cat.get("param_names", [])
+            aliases = set(new_cat.get("aliases") or []) | set(old_cat.get("aliases") or [])
+            aliases.add(old)
+            new_cat["aliases"] = sorted(a for a in aliases if a != new)
+            cls._catalog[new] = new_cat
+            cls._operators.pop(old, None)
+            for alias, canon in list(cls._aliases.items()):
+                if canon == old:
+                    cls._aliases[alias] = new
+            cls._aliases[old] = new
             return
         cls._operators[new] = cls._operators.pop(old)
         meta = cls._catalog.pop(old, {})
         meta["canonical"] = new
+        aliases = set(meta.get("aliases") or [])
+        aliases.add(old)
+        meta["aliases"] = sorted(a for a in aliases if a != new)
         cls._catalog[new] = meta
         for op in cls._operators[new].values():
             if hasattr(op, "metadata"):
@@ -217,6 +242,7 @@ class OperatorRegistry:
         for alias, canon in list(cls._aliases.items()):
             if canon == old:
                 cls._aliases[alias] = new
+        cls._aliases[old] = new
 
     @classmethod
     def backends_for(cls, name: str) -> List[str]:

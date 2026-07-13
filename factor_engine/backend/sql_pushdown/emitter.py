@@ -1124,7 +1124,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
     nf = _dialect_fn(dialect, "nullif")
 
     if op == "WMA":
-        wma_node = PlanNode(op="ts_decay_linear", inputs=list(node.inputs), attrs=dict(node.attrs))
+        wma_node = PlanNode(op="decay_linear", inputs=list(node.inputs), attrs=dict(node.attrs))
         return _compile_layer(wma_node, dialect=dialect)
 
     if op == "column":
@@ -1189,7 +1189,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_ts_partition=left.has_ts_partition or right.has_ts_partition,
         )
 
-    if op == "safe_div_null":
+    if op == "safe_div":
         if len(node.inputs) != 2:
             return None
         left = _compile_layer(node.inputs[0], dialect=dialect)
@@ -1343,7 +1343,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_ts_partition=inner.has_ts_partition,
         )
 
-    if op == "clip":
+    if op == "cap":
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
@@ -1531,7 +1531,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_inst_window=True,
         )
 
-    if op == "ts_delay":
+    if op == "delay":
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
@@ -2193,7 +2193,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_inst_window=True,
         )
 
-    if op == "ts_ema":
+    if op == "ema":
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
@@ -2223,15 +2223,6 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             f") t",
             has_inst_window=True,
         )
-
-    if op == "ewm_mean":
-        span = _window_int(node, default=20)
-        ema_node = PlanNode(
-            op="ts_ema",
-            inputs=list(node.inputs),
-            attrs={**node.attrs, "d": span, "window": span, "span": span},
-        )
-        return _compile_layer(ema_node, dialect=dialect)
 
     if op == "ts_rank":
         inner = _compile_layer(node.inputs[0], dialect=dialect)
@@ -2314,7 +2305,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_ts_partition=any(layer.has_ts_partition for layer in layers),
         )
 
-    if op == "ts_decay_linear":
+    if op == "decay_linear":
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
@@ -2468,7 +2459,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_inst_window=True,
         )
 
-    if op == "ts_regression":
+    if op == "ts_regression_slope":
         if len(node.inputs) < 2:
             return None
         y_layer = _compile_layer(node.inputs[0], dialect=dialect)

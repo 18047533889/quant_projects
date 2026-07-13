@@ -33,6 +33,7 @@ __all__ = [
 ]
 
 _SQL_MARKERS_REGISTERED = False
+_SQL_MARKERS_INCOMPLETE = False
 
 
 @dataclass(frozen=True)
@@ -56,22 +57,38 @@ class SqlCapableOperator:
 
 
 def register_sql_backends() -> None:
-    """为 SQL 可编译 canonical 登记 ``backend='sql'`` 元数据。"""
-    global _SQL_MARKERS_REGISTERED
-    if _SQL_MARKERS_REGISTERED:
+    """为 SQL 可编译 canonical 登记 ``backend='sql'`` 元数据。
+
+    可在 ``load_all()`` 之前被 ``sql_pushdown`` 包 import 触发；若当时尚无
+    runtime 实现，会标记 incomplete，并在后续再次调用时补登记。
+    """
+    global _SQL_MARKERS_REGISTERED, _SQL_MARKERS_INCOMPLETE
+    if _SQL_MARKERS_REGISTERED and not _SQL_MARKERS_INCOMPLETE:
         return
+    incomplete = False
     for canon in SQL_CAPABLE_CANONICALS:
         if canon in {"column", "literal"}:
             continue
-        if "sql" in OperatorRegistry.backends_for(canon):
+        # Attach sql marker to the resolved runtime canonical when possible, so we
+        # never create an empty new primary name that later blocks rename merges.
+        resolved = OperatorRegistry._aliases.get(canon, canon)
+        if resolved in OperatorRegistry._operators:
+            target = resolved
+        elif canon in OperatorRegistry._operators:
+            target = canon
+        else:
+            incomplete = True
+            continue
+        if "sql" in OperatorRegistry.backends_for(target):
             continue
         OperatorRegistry.register(
-            SqlCapableOperator(canon),
-            canonical=canon,
+            SqlCapableOperator(target),
+            canonical=target,
             backend="sql",
             source="backend/sql_pushdown",
         )
     _SQL_MARKERS_REGISTERED = True
+    _SQL_MARKERS_INCOMPLETE = incomplete
 
 
 def resolve_canonical(op: str) -> str:

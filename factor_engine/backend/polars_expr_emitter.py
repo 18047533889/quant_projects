@@ -409,7 +409,7 @@ def _rolling_time_slope_expr(w: int) -> pl.Expr:
             return np.nan
         return float(np.dot(arr[valid], ww[valid]))
 
-    return pl.col(_VAL).rolling_map(_dot, window_size=w, min_samples=1).over(_INST, order_by=_TS)
+    return pl.col(_VAL).rolling_map(_dot, window_size=w, min_samples=w).over(_INST, order_by=_TS)
 
 
 def _rolling_argext_expr(w: int, *, pick: str) -> pl.Expr:
@@ -792,7 +792,7 @@ _FUSABLE_TS_ON_COLUMN: frozenset[str] = frozenset(
         "ts_max",
         "ts_std",
         "ts_var",
-        "ts_delay",
+        "delay",
         "ts_delta",
         "ts_pct",
     }
@@ -836,7 +836,7 @@ def _ts_rolling_expr_on_column(op: str, col_name: str, spec) -> pl.Expr:
     if op == "ts_std":
         ddof = spec.ddof if hasattr(spec, "ddof") else std_ddof_value(op)
         return c.rolling_std(window_size=w, min_samples=mp, ddof=ddof).over(_INST, order_by=_TS)
-    if op == "ts_delay":
+    if op == "delay":
         return c.shift(w).over(_INST, order_by=_TS)
     if op == "ts_delta":
         return c - c.shift(w).over(_INST, order_by=_TS)
@@ -866,7 +866,7 @@ def _binary_fused_expr(op: str, left: pl.Expr, right: pl.Expr, node: PlanNode) -
         return _protected_div_expr(left, right, node)
     if op == "div_or_default":
         return _div_or_default_expr(left, right, node)
-    if op == "safe_div_null":
+    if op == "safe_div":
         return _safe_div_null_expr(left, right, node)
     if op == "divide":
         from backend.inf_sanitize import apply_inf_policy_polars_fast
@@ -1021,7 +1021,7 @@ def _try_binary_from_base_columns(
         expr = _protected_div_expr(lcol, rcol, node)
     elif op == "div_or_default":
         expr = _div_or_default_expr(lcol, rcol, node)
-    elif op == "safe_div_null":
+    elif op == "safe_div":
         expr = _safe_div_null_expr(lcol, rcol, node)
     elif op == "divide":
         from backend.inf_sanitize import apply_inf_policy_polars_fast
@@ -1153,7 +1153,7 @@ _BINARY_FUSION_OPS = frozenset(
         "divide",
         "protected_div",
         "div_or_default",
-        "safe_div_null",
+        "safe_div",
         "maximum",
         "minimum",
         "power",
@@ -1351,7 +1351,7 @@ def _compile_polars_impl(
         return None
     op = _resolve(node.op)
     if op == "WMA":
-        op = "ts_decay_linear"
+        op = "decay_linear"
     elif op == "rolling_beta":
         op = "ts_beta"
     elif op == "cum_std":
@@ -1424,7 +1424,7 @@ def _compile_polars_impl(
             expr = _protected_div_expr(pl.col(_VAL), pl.col("_y"), node)
         elif op == "div_or_default":
             expr = _div_or_default_expr(pl.col(_VAL), pl.col("_y"), node)
-        elif op == "safe_div_null":
+        elif op == "safe_div":
             expr = _safe_div_null_expr(pl.col(_VAL), pl.col("_y"), node)
         elif op == "divide":
             from backend.inf_sanitize import apply_inf_policy_polars_fast
@@ -1581,7 +1581,7 @@ def _compile_polars_impl(
             pl.when(pl.col(_VAL).is_null()).then(None).otherwise(clipped.sqrt()).alias(_VAL)
         )
 
-    if op == "clip":
+    if op == "cap":
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
@@ -1784,12 +1784,12 @@ def _compile_polars_impl(
             ).alias(_VAL)
         )
 
-    if op in {"ewm_mean", "ewm_std", "ewm_var"}:
+    if op in {"ema", "ewm_std", "ewm_var"}:
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         alpha = _ewm_alpha(node)
-        if op == "ewm_mean":
+        if op == "ema":
             expr = pl.col(_VAL).ewm_mean(alpha=alpha, adjust=False)
         elif op == "ewm_std":
             expr = pl.col(_VAL).ewm_std(alpha=alpha, adjust=False)
@@ -2128,7 +2128,7 @@ def _compile_polars_impl(
         )
         return inner.with_columns(expr.alias(_VAL))
 
-    if op == "ts_delay":
+    if op == "delay":
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
@@ -2174,15 +2174,6 @@ def _compile_polars_impl(
 
         raise UnsupportedCausalOperatorError(
             "polars_long 不支持 bfill/causal_bfill（因果占位，非传统 backward fill）；请改用 ffill 或 pandas 研究路径"
-        )
-
-    if op in {"ts_ema", "ewm_mean"}:
-        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
-        if inner is None:
-            return None
-        alpha = _ewm_alpha(node)
-        return inner.with_columns(
-            pl.col(_VAL).ewm_mean(alpha=alpha, adjust=False).over(_INST, order_by=_TS).alias(_VAL)
         )
 
     if op == "rank":
@@ -2330,7 +2321,7 @@ def _compile_polars_impl(
             (pl.col(_VAL).sign() * pl.col(_VAL).abs().sqrt()).alias(_VAL)
         )
 
-    if op == "ts_decay_linear":
+    if op == "decay_linear":
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
@@ -2409,14 +2400,14 @@ def _compile_polars_impl(
         w = _window_int(node)
         return inner.with_columns(_rolling_argext_expr(w, pick="min").alias(_VAL))
 
-    if op == "Slope":
+    if op in {"Slope", "ts_time_slope"}:
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
         return inner.with_columns(_rolling_time_slope_expr(w).alias(_VAL))
 
-    if op == "ts_regression":
+    if op == "ts_regression_slope":
         if len(node.inputs) < 2:
             return None
         y_layer = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)

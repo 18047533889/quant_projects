@@ -51,6 +51,12 @@ def _refresh_reports(work_dir: Path, names: list[str] | None = None) -> int:
             eval_mode=row.get("eval_mode", ""),
             python_code=py,
             work_dir=work_dir,
+            engine=str(row.get("engine") or ""),
+            eval_route=str(row.get("eval_route") or ""),
+            materialize_meta={
+                "engine": row.get("engine", ""),
+                "eval_route": row.get("eval_route", ""),
+            },
         )
         n += 1
         if n % 20 == 0:

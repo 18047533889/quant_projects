@@ -95,7 +95,7 @@ def audit_lookahead(*, name: str, python_code: str, dsl: str) -> LookaheadAudit:
     parts: list[str] = []
     if risk == "low":
         parts.append("未发现典型未来函数模式（全样本时序 rank、center=True、负 shift 等）。")
-        parts.append("因子仅使用 T 日及以前 OHLCV；RankIC 对齐 close(T)→close(T+1)，因果链完整。")
+        parts.append("因子仅使用 T 日及以前 OHLCV；RankIC 对齐 T 日因子与 T+1 日收益，因果链完整。")
     elif risk == "pending_fix":
         parts.append("该因子在 deferred 列表中：代码里存在全历史时序 .rank()，需改为 rolling rank 后重算。")
         parts.append("当前生产 RankIC 可能偏高，暂不应作为实盘依据。")
@@ -256,10 +256,6 @@ def _design_intent_zh(name: str, code: str, formula: str, rationale_en: str) -> 
     theme = _infer_theme(name)
     lead = f"属于{theme}，"
     body = "，".join(dict.fromkeys(hints)) + "。"
-    if rationale_en and len(rationale_en) > 40:
-        extra = _paraphrase_rationale_en(rationale_en)
-        if extra and any("\u4e00" <= c <= "\u9fff" for c in extra):
-            return lead + body + " 原文要点：" + extra[:280]
     return lead + body
 
 
@@ -272,11 +268,22 @@ def build_rationale_zh(
     audit: LookaheadAudit,
     python_code: str = "",
 ) -> str:
-    lines = [
-        f"【主题】{theme}（{name}）",
-        f"【公式要点】{formula_primary[:500]}{'…' if len(formula_primary) > 500 else ''}",
-        f"【设计意图】{_design_intent_zh(name, python_code, formula_primary, rationale_en)}",
-    ]
+    try:
+        from scripts.cogalpha_lqtp.factor_report_zh import get_factor_guide
+
+        guide = get_factor_guide(name, ann={"theme": theme, "formula_display": formula_primary}, dsl=formula_primary, python_code=python_code)
+        lines = [
+            f"【主题】{guide.get('theme', theme)}",
+            f"【一句话】{guide.get('summary', '')}",
+            "【计算步骤】" + "；".join(guide.get("steps") or []),
+            f"【因子值含义】{guide.get('direction', '')}",
+        ]
+    except Exception:  # noqa: BLE001
+        lines = [
+            f"【主题】{theme}（{name}）",
+            f"【公式要点】{formula_primary[:500]}{'…' if len(formula_primary) > 500 else ''}",
+            f"【设计意图】{_design_intent_zh(name, python_code, formula_primary, rationale_en)}",
+        ]
     risk_zh = RISK_LABEL.get(audit.risk, audit.risk)
     lines.append(f"【未来函数判断·{risk_zh}】{audit.judgment_zh}")
     return "\n".join(lines)

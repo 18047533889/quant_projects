@@ -21,11 +21,11 @@ ORDERING_SPEC = OrderingSpec()
 
 ORDER_DEPENDENT_OPS: frozenset[str] = frozenset(
     """
-    ts_delay ts_delta ts_pct ffill bfill
+    delay ts_delta ts_pct ffill bfill
     cum_sum cum_max cum_min cum_prod cum_delta
     expanding_sum expanding_mean expanding_std expanding_rank count
     ts_argmax ts_argmin ts_rank
-    ts_ema ewm_mean ewm_std ewm_var
+    ema ema ewm_std ewm_var
     first last
     """.split()
 )

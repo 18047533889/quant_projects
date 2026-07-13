@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from scripts.cogalpha_lqtp.factor_report_zh import render_chart_guide, render_interpretation_block, signal_note_zh
 from scripts.cogalpha_lqtp.lqtp_client import summarize_backtest
 
 DEFAULT_WORK_DIR = Path(__file__).resolve().parents[2] / "data/cogalpha_lqtp_production"
@@ -73,26 +74,86 @@ def _fmt_pct(value: Any) -> str:
     except (TypeError, ValueError):
         return "—"
     if v != v:
-        return "nan"
+        return "—"
     return f"{v:.2%}"
+
+
+def _enrich_topk_summary(summary: dict[str, Any] | None) -> dict[str, Any]:
+    """Fill annualized_return / calmar when only total_return (+ days) is known."""
+    out = dict(summary or {})
+    try:
+        total = float(out.get("total_return"))
+    except (TypeError, ValueError):
+        total = float("nan")
+    try:
+        ann = float(out.get("annualized_return"))
+    except (TypeError, ValueError):
+        ann = float("nan")
+    try:
+        days = int(out.get("trading_days") or 0)
+    except (TypeError, ValueError):
+        days = 0
+    if (ann != ann or out.get("annualized_return") is None) and total == total and total > -1.0:
+        years = (days / 252.0) if days > 0 else (1815 / 252.0)
+        if years > 0:
+            ann = (1.0 + total) ** (1.0 / years) - 1.0
+            out["annualized_return"] = ann
+    try:
+        max_dd = float(out.get("max_drawdown"))
+    except (TypeError, ValueError):
+        max_dd = float("nan")
+    try:
+        calmar = float(out.get("calmar"))
+    except (TypeError, ValueError):
+        calmar = float("nan")
+    if (calmar != calmar or out.get("calmar") is None) and ann == ann and max_dd == max_dd and abs(max_dd) > 1e-12:
+        out["calmar"] = float(ann / abs(max_dd))
+    return out
+
+
+def _has_topk_metrics(summary: dict[str, Any] | None) -> bool:
+    if not summary:
+        return False
+    try:
+        sh = float(summary.get("sharpe"))
+        tr = float(summary.get("total_return"))
+        return (sh == sh) or (tr == tr)
+    except (TypeError, ValueError):
+        return False
+
+
+def _sanitize_eval_mode_label(eval_mode: str) -> str:
+    s = str(eval_mode or "").strip()
+    if not s:
+        return "unknown"
+    s = s.replace("duckdb_panel_close_to_close", "duckdb_panel")
+    while "+topk_open+topk_open" in s:
+        s = s.replace("+topk_open+topk_open", "+topk_open")
+    return s
 
 
 def _rankic_chart_title(payload: dict[str, Any]) -> str:
     kind = payload.get("return_kind") or ""
     if kind == "close_to_close_T_plus_1":
-        return "Daily RankIC (factor T → close(T+1)/close(T)-1)"
+        return "Daily RankIC (factor T -> T+1 forward return)"
     if kind == "open_to_open_T_plus_2":
-        return "Daily RankIC (factor T → open(T+1)→open(T+2))"
+        return "Daily RankIC (factor T -> open(T+1)->open(T+2))"
     return "Daily RankIC"
 
 
 def _ls_chart_title(payload: dict[str, Any]) -> str:
     kind = payload.get("return_kind") or ""
     if kind == "close_to_close_T_plus_1":
-        return "Cumulative Long−Short (G10−G1, close-to-close, net costs)"
+        return "Cumulative Long-Short (G10-G1, net)"
     if kind == "open_to_open_T_plus_2":
-        return "Cumulative Long−Short (G10−G1, open-to-open, net costs)"
-    return "Cumulative Long−Short (G10−G1, net costs)"
+        return "Cumulative Long-Short (G10-G1, open-to-open, net)"
+    return "Cumulative Long-Short (G10-G1, net)"
+
+
+def _img_b64(b64: str, alt: str) -> str:
+    if not b64:
+        return ""
+    return f'<img alt="{html_lib.escape(alt)}" src="data:image/png;base64,{b64}"/>'
 
 
 def _plot_daily_rank_ic(payload: dict[str, Any]) -> str:
@@ -117,7 +178,23 @@ def _plot_cumulative_ls(payload: dict[str, Any]) -> str:
         return ""
     frame = pd.DataFrame({"trade_date": dates, "ls": ls})
     frame["dt"] = pd.to_datetime(frame["trade_date"].astype(str))
-    # Net G10−G1 daily return after turnover costs; cumprod is portfolio-style
+    mean_abs = float(pd.Series(ls).abs().mean())
+    if mean_abs > 0.02 or payload.get("return_kind") == "lqtp_platform_analyze":
+        fig, ax = plt.subplots(figsize=(10, 3))
+        ax.text(
+            0.5,
+            0.5,
+            f"LS series discarded (mean |daily LS|={mean_abs:.3%}, platform analyze).\n"
+            "Recompute with local DuckDB panel.",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+            fontsize=11,
+            color="#991b1b",
+        )
+        ax.set_axis_off()
+        ax.set_title(_ls_chart_title(payload))
+        return _fig_to_base64(fig)
     frame["cum"] = (1.0 + frame["ls"].clip(-0.5, 0.5)).cumprod() - 1.0
     fig, ax = plt.subplots(figsize=(10, 3))
     ax.plot(frame["dt"], frame["cum"], linewidth=1.2, color="#1b7a4b")
@@ -131,7 +208,6 @@ def _plot_group_returns(payload: dict[str, Any]) -> str:
     groups = payload.get("group_pnls", [])
     if not groups:
         return ""
-    fig, ax = plt.subplots(figsize=(8, 3.2))
     labels = []
     finals = []
     for item in groups:
@@ -142,21 +218,47 @@ def _plot_group_returns(payload: dict[str, Any]) -> str:
         finals.append(float(pd.Series(pnl).iloc[-1]))
     if not labels:
         return ""
+    if payload.get("return_kind") == "lqtp_platform_analyze" or max(abs(x) for x in finals) > 100.0:
+        means = payload.get("group_mean_returns") or []
+        fig, ax = plt.subplots(figsize=(8, 3.2))
+        if len(means) == len(labels):
+            colors = [
+                "#c0392b" if i == 0 else "#27ae60" if i == len(labels) - 1 else "#5d6d7e"
+                for i in range(len(labels))
+            ]
+            ax.bar(labels, means, color=colors)
+            ax.axhline(0.0, color="gray", linewidth=0.8)
+            ax.set_title("Decile Mean Daily Return (platform cum-PnL discarded)")
+            ax.set_ylabel("Mean Daily Return")
+        else:
+            ax.text(
+                0.5,
+                0.5,
+                "Group cum-PnL discarded (explosive / platform analyze).\n"
+                "Recompute with local DuckDB panel.",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+                fontsize=11,
+                color="#991b1b",
+            )
+            ax.set_axis_off()
+        return _fig_to_base64(fig)
+    fig, ax = plt.subplots(figsize=(8, 3.2))
     colors = ["#c0392b" if i == 0 else "#27ae60" if i == len(labels) - 1 else "#5d6d7e" for i in range(len(labels))]
     ax.bar(labels, finals, color=colors)
     ax.axhline(0.0, color="gray", linewidth=0.8)
-    ax.set_title("Decile Cumulative Return (G1=low factor … G10=high factor)")
-    ax.set_ylabel("Cum Return")
+    ax.set_title("Decile Cumulative Return (G1=low factor ... G10=high factor)")
+    ax.set_ylabel("Cumulative Return")
     return _fig_to_base64(fig)
 
 
-def _plot_backtest_nav(rows: list[dict[str, Any]], title: str = "TopK Backtest NAV (OPEN)") -> str:
+def _plot_backtest_nav(rows: list[dict[str, Any]], title: str = "TopK Backtest NAV (LQTP OPEN)") -> str:
     if not rows:
         return ""
     frame = pd.DataFrame(rows).copy()
     frame["dt"] = pd.to_datetime(frame["trade_date"].astype(str))
     nav = pd.to_numeric(frame["eod_net_asset"], errors="coerce")
-    # Normalize to 1.0 so the chart is readable (no matplotlib 1e6 offset).
     if "bod_net_asset" in frame.columns and pd.notna(frame["bod_net_asset"].iloc[0]):
         start = float(frame["bod_net_asset"].iloc[0])
     else:
@@ -184,6 +286,74 @@ def _metrics_cards(items: list[tuple[str, Any]]) -> str:
 def _kv_table(rows: list[tuple[str, str]], title: str) -> str:
     body = "".join(f"<tr><th>{k}</th><td>{v}</td></tr>" for k, v in rows)
     return f"<h3>{title}</h3><table class='kv'><tbody>{body}</tbody></table>"
+
+
+# 算值路径：因子值怎么来的（与 RankIC/TopK 评估口径分开）
+_COMPUTE_PATH: dict[str, tuple[str, str, str]] = {
+    # key -> (短标签, 徽章色, 说明)
+    "local_dsl": (
+        "自研 factor_engine DSL 落值",
+        "#0f766e",
+        "Python 已转换成自研 DSL（ts_mean / protected_div / ema 等命名），"
+        "用本地 factor_engine + COS A 股数据落因子值；不是 LQTP 平台直算。",
+    ),
+    "lqtp_dsl": (
+        "LQTP 原生 DSL 直算",
+        "#1d4ed8",
+        "公式直接提交 LQTP RunFactor，用平台原生 DSL 在线上计算因子值；"
+        "未走本地 factor_engine 落值。",
+    ),
+    "local_python": (
+        "纯 Python 落值",
+        "#a16207",
+        "未转换成可执行 DSL（或仅有阅读用公式），直接跑 Python 因子函数落值。",
+    ),
+}
+
+
+def resolve_compute_path(
+    *,
+    engine: str = "",
+    eval_route: str = "",
+    eval_mode: str = "",
+    materialize_meta: dict[str, Any] | None = None,
+) -> tuple[str, str, str, str]:
+    """Return (route_key, short_label, color, detail)."""
+    meta = materialize_meta or {}
+    route = (
+        str(eval_route or meta.get("eval_route") or "").strip()
+        or str(engine or meta.get("engine") or "").strip()
+    )
+    if route in {"factor_engine", "local_dsl"}:
+        key = "local_dsl"
+    elif route in {"lqtp_dsl", "lqtp"}:
+        key = "lqtp_dsl"
+    elif route in {"python", "local_python"}:
+        key = "local_python"
+    elif "lqtp_values_duckdb" in str(eval_mode) or "lqtp_run_factor" in str(eval_mode):
+        key = "lqtp_dsl"
+    elif "duckdb" in str(eval_mode) or "local_values" in str(eval_mode):
+        # Prefer engine when mode is ambiguous
+        eng = str(engine or meta.get("engine") or "")
+        if eng == "lqtp_dsl":
+            key = "lqtp_dsl"
+        elif eng == "python":
+            key = "local_python"
+        else:
+            key = "local_dsl"
+    else:
+        key = "local_python" if route else "local_dsl"
+    label, color, detail = _COMPUTE_PATH[key]
+    return key, label, color, detail
+
+
+def _compute_path_badge(label: str, color: str, detail: str) -> str:
+    return (
+        f'<div class="path-badge" style="border-color:{color};">'
+        f'<span class="path-tag" style="background:{color};">{html_lib.escape(label)}</span>'
+        f'<span class="path-detail">{html_lib.escape(detail)}</span>'
+        f"</div>"
+    )
 
 
 def _series_table_collapsed(payload: dict[str, Any]) -> str:
@@ -217,18 +387,28 @@ def render_factor_report(
     python_code: str = "",
     work_dir: Path | None = None,
     annotation: dict[str, Any] | None = None,
+    engine: str = "",
+    eval_route: str = "",
 ) -> None:
     ann = _load_annotation(work_dir, factor_name, annotation)
+    path_key, path_label, path_color, path_detail = resolve_compute_path(
+        engine=engine,
+        eval_route=eval_route,
+        eval_mode=eval_mode,
+        materialize_meta=materialize_meta,
+    )
+    path_badge = _compute_path_badge(path_label, path_color, path_detail)
     ic_img = _plot_daily_rank_ic(analysis)
     ls_img = _plot_cumulative_ls(analysis)
     group_img = _plot_group_returns(analysis)
     topk_rows = backtest_rows or []
     topk_img = _plot_backtest_nav(topk_rows, "TopK Long-Only Backtest NAV (LQTP OPEN)")
     ls_bt_rows = ls_backtest_rows or []
-    ls_bt_img = _plot_backtest_nav(ls_bt_rows, "Long−Short Backtest NAV (LQTP OPEN, if available)")
+    ls_bt_img = _plot_backtest_nav(ls_bt_rows, "Long-Short Backtest NAV (LQTP OPEN)")
 
-    topk_summary = topk_summary or summarize_backtest(topk_rows)
+    topk_summary = _enrich_topk_summary(topk_summary or summarize_backtest(topk_rows))
     ls_summary = ls_summary or (summarize_backtest(ls_bt_rows) if ls_bt_rows else {})
+    ls_summary = _enrich_topk_summary(ls_summary) if ls_summary else {}
 
     mean_rank_ic = analysis.get("mean_rank_ic", analysis.get("mean_ic"))
     std_rank_ic = analysis.get("std_rank_ic", analysis.get("std_ic"))
@@ -237,67 +417,87 @@ def render_factor_report(
 
     rank_cards = _metrics_cards(
         [
-            ("Mean RankIC", mean_rank_ic),
-            ("Std RankIC", std_rank_ic),
+            ("Mean RankIC（均值）", mean_rank_ic),
+            ("Std RankIC（标准差）", std_rank_ic),
             ("RankICIR", rank_icir),
             ("RankIC 胜率", rank_ic_pos),
-            ("LS Cum (G10−G1 net)", analysis.get("long_short_return")),
-            ("LS Sharpe (net)", analysis.get("long_short_sharpe")),
+            ("多空累计（G10−G1 净）", analysis.get("long_short_return")),
+            ("多空 Sharpe（净）", analysis.get("long_short_sharpe")),
         ]
     )
 
     topk_cards = _metrics_cards(
         [
-            ("Total Return", topk_summary.get("total_return")),
-            ("Ann. Return", topk_summary.get("annualized_return")),
-            ("Max Drawdown", topk_summary.get("max_drawdown")),
-            ("Sharpe", topk_summary.get("sharpe")),
-            ("Volatility", topk_summary.get("volatility")),
-            ("Calmar", topk_summary.get("calmar")),
-            ("Win Rate", topk_summary.get("win_rate")),
-            ("Avg Turnover", topk_summary.get("avg_turnover")),
-            ("Total Commission", topk_summary.get("total_commission")),
-            ("Trading Days", topk_summary.get("trading_days")),
+            ("累计收益", topk_summary.get("total_return")),
+            ("年化收益", topk_summary.get("annualized_return")),
+            ("最大回撤", topk_summary.get("max_drawdown")),
+            ("Sharpe 比率", topk_summary.get("sharpe")),
+            ("波动率", topk_summary.get("volatility")),
+            ("Calmar 比率", topk_summary.get("calmar")),
+            ("胜率", topk_summary.get("win_rate")),
+            ("平均换手", topk_summary.get("avg_turnover")),
+            ("总佣金", topk_summary.get("total_commission")),
+            ("交易天数", topk_summary.get("trading_days")),
         ]
     )
 
     meta_block = ""
     if materialize_meta:
-        title = (
-            "本地落值 (factor_engine)"
-            if materialize_meta.get("engine") != "lqtp_dsl"
-            else "LQTP 平台计算 (RunFactor)"
-        )
+        title = f"落值元信息 · {path_label}"
         meta_block = f"""
   <div class="card">
-    <h2>{title}</h2>
+    <h2>{html_lib.escape(title)}</h2>
     <pre>{json.dumps(materialize_meta, ensure_ascii=False, indent=2)}</pre>
   </div>"""
 
+    # eval_mode may be "duckdb_panel_close_to_close+topk_open"
+    mode_base = str(eval_mode or "").split("+", 1)[0]
     mode_note = {
         "analyze_factor_upload": "官方 AnalyzeFactor：上传落值，平台计算指标。",
         "local_values_lqtp_returns": (
-            "本地 RankIC / 分层 / 多空：因子 T 日收盘后可得 → 前瞻收益 "
-            "close(T+1)/close(T)-1（市面标准 close-to-close RankIC）。"
+            "本地 RankIC / 分层 / 多空：因子 T 日收盘后可得 → 与 T+1 日前瞻收益对齐。"
         ),
-        "lqtp_run_factor": "DSL 与 LQTP 一致，RunFactor(analyze=True) 平台评估。",
-    }.get(eval_mode, eval_mode or "unknown")
+        "duckdb_panel_close_to_close": (
+            "RankIC / 分层 / 多空：本地 DuckDB 面板。"
+        ),
+        "lqtp_run_factor": (
+            "DSL 由 LQTP RunFactor 算值；若仍显示本模式，分层/多空可能来自平台 analyze（已知不可靠）。"
+        ),
+        "lqtp_values_duckdb_panel": (
+            "因子值来自 LQTP RunFactor；RankIC / 分层 / 多空用本地 DuckDB "
+            "面板重算（已丢弃平台 analyze 的 LS/groups）。"
+        ),
+    }.get(mode_base, _sanitize_eval_mode_label(eval_mode) if eval_mode else "unknown")
 
-    signal_note = analysis.get("signal_lag_note") or ""
-    return_kind = analysis.get("return_kind") or ""
+    signal_note = signal_note_zh(analysis.get("signal_lag_note") or "")
+    eval_mode_display = _sanitize_eval_mode_label(eval_mode)
     n_groups = analysis.get("n_groups") or 10
     comm_buy = analysis.get("commission_buy", 0.01)
     comm_sell = analysis.get("commission_sell", 0.01)
 
     formula_display = ann.get("formula_display") or ""
     formula_note = ann.get("formula_note") or ""
-    rationale_zh = ann.get("rationale_zh") or ""
     lookahead_risk = ann.get("lookahead_risk") or ""
     lookahead_judgment = ann.get("lookahead_judgment_zh") or ""
+
+    interpretation_block = render_interpretation_block(
+        factor_name,
+        ann=ann,
+        dsl=dsl,
+        python_code=python_code,
+        lookahead_risk=lookahead_risk,
+        lookahead_judgment=lookahead_judgment,
+    )
 
     formula_block = ""
     dsl_clean = (dsl or "").strip()
     has_dsl = bool(dsl_clean and dsl_clean not in {"(python only)"})
+    if path_key == "lqtp_dsl":
+        dsl_heading = "DSL（LQTP 平台直算）"
+    elif path_key == "local_dsl":
+        dsl_heading = "DSL（自研 factor_engine）"
+    else:
+        dsl_heading = "DSL（阅读用 / 未用于落值）"
     if formula_display or has_dsl or (python_code or "").strip():
         primary = formula_display if formula_display else dsl_clean
         src_note = ""
@@ -307,35 +507,32 @@ def render_factor_report(
             src_note = "（来自 formula_text 文档）"
         elif ann.get("is_python_only") and formula_display:
             src_note = "（Python-only 因子 · 公式化表示）"
+        show_fe_dsl = has_dsl and (
+            path_key == "local_dsl"
+            or (formula_display and formula_display.strip() != dsl_clean.strip())
+            or path_key == "lqtp_dsl"
+        )
         formula_block = f"""
   <div class="card">
     <h2>公式 / 代码</h2>
+    <p class="note">下方为可读公式与可执行代码。若同时出现「公式化表示」与 DSL，以 DSL 为准用于落值。</p>
     {f'<p class="note">{_lookahead_badge(lookahead_risk)} {html_lib.escape(formula_note or src_note)}</p>' if (lookahead_risk or formula_note or src_note) else ""}
-    {f'<h3>公式化表示{html_lib.escape(src_note)}</h3><pre>{html_lib.escape(primary.strip())}</pre>' if primary.strip() else ""}
-    {f'<h3>DSL（factor_engine）</h3><pre>{html_lib.escape(dsl_clean)}</pre>' if has_dsl and formula_display and formula_display.strip() != dsl_clean.strip() else ""}
+    {f'<h3>公式化表示{html_lib.escape(src_note)}</h3><pre>{html_lib.escape(primary.strip())}</pre>' if primary.strip() and primary.strip() != dsl_clean else ""}
+    {f'<h3>{html_lib.escape(dsl_heading)}</h3><pre>{html_lib.escape(dsl_clean)}</pre>' if show_fe_dsl else ""}
     {f'<h3>Python 源码</h3><pre>{html_lib.escape((python_code or "").strip())}</pre>' if (python_code or "").strip() else ""}
     {"" if (primary.strip() or has_dsl or (python_code or "").strip()) else "<pre>（无公式/代码）</pre>"}
-  </div>"""
-
-    rationale_block = ""
-    if rationale_zh or lookahead_judgment:
-        rationale_block = f"""
-  <div class="card">
-    <h2>因子解读（中文）</h2>
-    {f'<pre class="rationale">{html_lib.escape(rationale_zh)}</pre>' if rationale_zh else ""}
-    {f'<p class="note"><b>未来函数审查</b>：{html_lib.escape(lookahead_judgment)}</p>' if lookahead_judgment and not rationale_zh else ""}
   </div>"""
 
     ls_bt_section = ""
     if ls_bt_rows:
         ls_cards = _metrics_cards(
             [
-                ("Total Return", ls_summary.get("total_return")),
-                ("Ann. Return", ls_summary.get("annualized_return")),
-                ("Max Drawdown", ls_summary.get("max_drawdown")),
-                ("Sharpe", ls_summary.get("sharpe")),
-                ("Win Rate", ls_summary.get("win_rate")),
-                ("Avg Turnover", ls_summary.get("avg_turnover")),
+                ("累计收益", ls_summary.get("total_return")),
+                ("年化收益", ls_summary.get("annualized_return")),
+                ("最大回撤", ls_summary.get("max_drawdown")),
+                ("Sharpe 比率", ls_summary.get("sharpe")),
+                ("胜率", ls_summary.get("win_rate")),
+                ("平均换手", ls_summary.get("avg_turnover")),
             ]
         )
         ls_bt_section = f"""
@@ -366,78 +563,94 @@ def render_factor_report(
     table.kv th {{ width: 280px; background: #f8fafc; }}
     .note {{ color: #4b5563; font-size: 14px; }}
     pre.rationale {{ white-space: pre-wrap; line-height: 1.55; font-size: 13px; }}
+    ol.steps {{ margin: 8px 0 12px 22px; padding: 0; }}
+    ol.steps li {{ margin: 6px 0; }}
+    ul.op-list {{ margin: 8px 0 12px 22px; font-size: 14px; }}
+    .theme-line {{ color: #1e3a5f; font-size: 16px; margin: 0 0 10px; }}
+    .chart-guide {{ background: #f8fafc; padding: 10px 12px; border-radius: 6px; font-size: 14px; margin: 0 0 12px; }}
     .hl {{ background: #eef6ff; border: 1px solid #c9def5; padding: 10px 12px; border-radius: 6px; }}
+    .path-badge {{ display:flex; gap:12px; align-items:flex-start; border:2px solid; border-radius:8px; padding:12px 14px; margin:12px 0 16px; background:#fff; }}
+    .path-tag {{ flex:0 0 auto; color:#fff; font-weight:700; font-size:13px; padding:4px 10px; border-radius:4px; }}
+    .path-detail {{ color:#374151; font-size:13px; line-height:1.5; }}
     details {{ margin-top: 12px; }}
-    @media (max-width: 900px) {{ .metrics {{ grid-template-columns: 1fr 1fr; }} }}
+    @media (max-width: 900px) {{ .metrics {{ grid-template-columns: 1fr 1fr; }} .path-badge {{ flex-direction:column; }} }}
   </style>
 </head>
 <body>
   <h1>{factor_name}</h1>
+  {path_badge}
   <div class="hl note">
     <b>评估口径</b>：{mode_note}<br/>
-    {signal_note}<br/>
-    return_kind=<code>{return_kind}</code>
+    {html_lib.escape(signal_note)}<br/>
+    算值路径=<code>{html_lib.escape(path_key)}</code>
+    · 评估模式=<code>{html_lib.escape(eval_mode_display)}</code>
   </div>
 
   {formula_block or f'''
   <div class="card">
     <h2>公式 / 代码</h2>
     {f'<h3>Python 源码</h3><pre>{html_lib.escape((python_code or "").strip())}</pre>' if (python_code or "").strip() else ""}
-    {f'<h3>DSL</h3><pre>{html_lib.escape((dsl or "").strip())}</pre>' if (dsl or "").strip() and (dsl or "").strip() not in {{"(python only)", ""}} else ""}
+    {f'<h3>{html_lib.escape(dsl_heading)}</h3><pre>{html_lib.escape((dsl or "").strip())}</pre>' if (dsl or "").strip() and (dsl or "").strip() not in {{"(python only)", ""}} else ""}
     {"" if ((python_code or "").strip() or ((dsl or "").strip() and (dsl or "").strip() not in {{"(python only)", ""}})) else "<pre>（无公式/代码）</pre>"}
   </div>'''}
-  {rationale_block}
+  {interpretation_block}
   {meta_block}
 
   <div class="card">
-    <h2>① RankIC</h2>
-    <p class="note">Spearman 秩相关；T 日因子 vs 次日 close-to-close 收益（标准 RankIC 口径）。</p>
+    <h2>① RankIC（因子预测力）</h2>
+    {render_chart_guide("rankic")}
     <div class="metrics">{rank_cards}</div>
-    {f'<img alt="Daily RankIC" src="data:image/png;base64,{ic_img}"/>' if ic_img else ''}
+    {_img_b64(ic_img, "Daily RankIC")}
   </div>
 
   <div class="card">
-    <h2>② 分层（十分位 G1…G10）</h2>
-    <p class="note">G1=因子最低，G10=因子最高；累计收益为各组 close-to-close 复利净值−1。</p>
-    {f'<img alt="Group PnL" src="data:image/png;base64,{group_img}"/>' if group_img else ''}
+    <h2>② 分层回测（十分位 G1…G10）</h2>
+    {render_chart_guide("decile")}
+    {_img_b64(group_img, "Decile cumulative return")}
   </div>
 
   <div class="card">
     <h2>③ 多空（G10 做多 − G1 做空）</h2>
+    {render_chart_guide("ls")}
     <p class="note">
       <b>计算步骤（DuckDB 面板，非 LQTP 平台回测）：</b><br/>
       1) 每个交易日 T，对全市场股票按因子值升序分成 {n_groups} 组（G1 最低 … G10 最高）；<br/>
-      2) 各组内股票等权，组收益 = 组内个股 forward 收益均值，forward 收益 = close(T+1)/close(T)−1；<br/>
+      2) 各组内股票等权，组收益 = 组内个股 T+1 相对 T 的前瞻收益均值；<br/>
       3) 当日多空 gross = mean(G10 收益) − mean(G1 收益)；<br/>
       4) 扣费：假设每日单边换手 40%，日成本 = 2 × 40% × (买{comm_buy}% + 卖{comm_sell}%) = {2 * 0.4 * (float(comm_buy) + float(comm_sell)):.4f}% ；net = gross − 日成本；<br/>
-      5) LS Sharpe = mean(日 net) / std(日 net) × √252；LS Cum = ∏(1+日 net) − 1。<br/>
-      <b>注意</b>：这是研究用十分位多空，不是可交易的 TopK 组合；TopK 见下方 LQTP OPEN 回测。
+      5) 多空 Sharpe = mean(日 net) / std(日 net) × √252；多空累计 = ∏(1+日 net) − 1。<br/>
+      <b>注意</b>：这是研究用十分位多空，不是可交易的 TopK 组合；TopK 见下方。
     </p>
-    {f'<img alt="Cumulative LS" src="data:image/png;base64,{ls_img}"/>' if ls_img else ''}
+    {_img_b64(ls_img, "Cumulative long-short")}
   </div>
 
   <div class="card">
-    <h2>④ TopK 回测（LQTP 平台 · OPEN）</h2>
+    <h2>④ TopK 回测（LQTP 平台 · 开盘价）</h2>
+    {render_chart_guide("topk")}
     <p class="note">
       每天取因子 Top 10%（最多 50 只）等权做多；信号日 T 的权重落到 T+1，
       以开盘价成交；买卖手续费各 0.01%；初始本金 1000 万。
       下图 NAV 已归一化到起点=1（平台原始净值为绝对金额）。
     </p>
     <div class="metrics">{topk_cards}</div>
-    {f'<img alt="TopK NAV" src="data:image/png;base64,{topk_img}"/>' if topk_img else '<p class="note">无 TopK 回测结果（可能被跳过）。</p>'}
+    {_img_b64(topk_img, "TopK NAV") if topk_img else (
+        '<p class="note">有 TopK 指标摘要，但净值曲线未缓存（需重新跑 LQTP TopK 回测才会出现 NAV 图）。</p>'
+        if _has_topk_metrics(topk_summary)
+        else '<p class="note">无 TopK 回测结果（尚未跑或被跳过）。</p>'
+    )}
     {_kv_table(
         [
-            ("total_return", _fmt_pct(topk_summary.get("total_return"))),
-            ("annualized_return", _fmt_pct(topk_summary.get("annualized_return"))),
-            ("max_drawdown", _fmt_pct(topk_summary.get("max_drawdown"))),
-            ("sharpe", _fmt(topk_summary.get("sharpe"))),
-            ("volatility", _fmt_pct(topk_summary.get("volatility"))),
-            ("calmar", _fmt(topk_summary.get("calmar"))),
-            ("win_rate", _fmt_pct(topk_summary.get("win_rate"))),
-            ("avg_turnover", _fmt_pct(topk_summary.get("avg_turnover"))),
-            ("total_commission", _fmt(topk_summary.get("total_commission"))),
-            ("final_nav", _fmt(topk_summary.get("final_nav"))),
-            ("trading_days", _fmt(topk_summary.get("trading_days"))),
+            ("累计收益", _fmt_pct(topk_summary.get("total_return"))),
+            ("年化收益", _fmt_pct(topk_summary.get("annualized_return"))),
+            ("最大回撤", _fmt_pct(topk_summary.get("max_drawdown"))),
+            ("Sharpe 比率", _fmt(topk_summary.get("sharpe"))),
+            ("波动率", _fmt_pct(topk_summary.get("volatility"))),
+            ("Calmar 比率", _fmt(topk_summary.get("calmar"))),
+            ("胜率", _fmt_pct(topk_summary.get("win_rate"))),
+            ("平均换手", _fmt_pct(topk_summary.get("avg_turnover"))),
+            ("总佣金", _fmt(topk_summary.get("total_commission"))),
+            ("期末净值", _fmt(topk_summary.get("final_nav"))),
+            ("交易天数", _fmt(topk_summary.get("trading_days"))),
         ],
         "TopK 回测指标明细",
     )}
@@ -450,7 +663,7 @@ def render_factor_report(
     {_series_table_collapsed(analysis)}
     <details>
       <summary>Raw Analysis JSON</summary>
-      <pre>{json.dumps({k: v for k, v in analysis.items() if k not in {"daily_ic", "daily_rank_ic", "daily_ls_returns", "daily_ls_gross", "group_pnls", "coverages", "sample_counts", "trade_dates", "quote_times"}}, ensure_ascii=False, indent=2)}</pre>
+      <pre>{json.dumps(_analysis_json_export(analysis), ensure_ascii=False, indent=2)}</pre>
     </details>
   </div>
 </body>
@@ -458,6 +671,31 @@ def render_factor_report(
 """
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(html, encoding="utf-8")
+
+
+def _analysis_json_export(analysis: dict[str, Any]) -> dict[str, Any]:
+    skip = {
+        "daily_ic",
+        "daily_rank_ic",
+        "daily_ls_returns",
+        "daily_ls_gross",
+        "group_pnls",
+        "coverages",
+        "sample_counts",
+        "trade_dates",
+        "quote_times",
+        "return_kind",
+        "return_mode",
+    }
+    out: dict[str, Any] = {}
+    for k, v in analysis.items():
+        if k in skip:
+            continue
+        if k == "signal_lag_note":
+            out[k] = signal_note_zh(str(v or ""))
+        else:
+            out[k] = v
+    return out
 
 
 def load_analysis_from_factor_report(report_path: Path) -> dict[str, Any] | None:
@@ -481,19 +719,29 @@ def load_analysis_from_factor_report(report_path: Path) -> dict[str, Any] | None
 
 
 def render_index(reports: list[dict[str, str]], out_path: Path) -> None:
-    rows = "\n".join(
-        f'<li><a href="{item["report"]}">{item["factor_name"]}</a> '
-        f'· mode={item.get("eval_mode", "?")} '
-        f'· RankIC={item.get("mean_ic", item.get("mean_rank_ic", "n/a"))} '
-        f'· RankICIR={item.get("icir", item.get("rank_icir", "n/a"))}</li>'
-        for item in reports
-    )
+    rows = []
+    for item in reports:
+        _, label, _, _ = resolve_compute_path(
+            engine=str(item.get("engine") or ""),
+            eval_route=str(item.get("eval_route") or ""),
+            eval_mode=str(item.get("eval_mode") or ""),
+        )
+        rows.append(
+            f'<li><a href="{item["report"]}">{item["factor_name"]}</a> '
+            f'· <b>{label}</b> '
+            f'· mode={_sanitize_eval_mode_label(str(item.get("eval_mode", "?")))} '
+            f'· RankIC={item.get("mean_ic", item.get("mean_rank_ic", "n/a"))} '
+            f'· RankICIR={item.get("icir", item.get("rank_icir", "n/a"))}</li>'
+        )
     html = f"""<!DOCTYPE html>
-<html lang="zh-CN"><head><meta charset="utf-8"/><title>CogAlpha → LQTP</title></head>
+<html lang="zh-CN"><head><meta charset="utf-8"/>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+<title>CogAlpha → LQTP</title></head>
 <body>
   <h1>CogAlpha 因子评估索引</h1>
-  <p>RankIC / 分层 / 多空 / TopK（开盘成交，无收盘当日成交）。</p>
-  <ul>{rows}</ul>
+  <p>算值路径分三类：<b>自研 factor_engine DSL 落值</b> / <b>LQTP 原生 DSL 直算</b> / <b>纯 Python 落值</b>。
+  RankIC / 分层 / 多空 / TopK（开盘成交）。</p>
+  <ul>{chr(10).join(rows)}</ul>
 </body></html>"""
     out_path.write_text(html, encoding="utf-8")
 
@@ -526,19 +774,34 @@ def render_production_summary(
 
     table_rows = []
     for i, item in enumerate(ranked, 1):
+        _, path_label, _, _ = resolve_compute_path(
+            engine=str(item.get("engine") or ""),
+            eval_route=str(item.get("eval_route") or ""),
+            eval_mode=str(item.get("eval_mode") or ""),
+        )
+        topk = _enrich_topk_summary(
+            {
+                "total_return": item.get("backtest_total_ret"),
+                "annualized_return": item.get("backtest_ann_ret"),
+                "max_drawdown": item.get("backtest_max_drawdown"),
+                "sharpe": item.get("backtest_sharpe"),
+                "trading_days": item.get("backtest_trading_days"),
+            }
+        )
         table_rows.append(
             "<tr>"
             f"<td>{i}</td>"
             f'<td><a href="{item.get("report", "#")}">{item.get("factor_name", "")}</a></td>'
-            f'<td>{item.get("eval_mode", "")}</td>'
+            f"<td>{path_label}</td>"
+            f'<td>{_sanitize_eval_mode_label(str(item.get("eval_mode", "")))}</td>'
             f'<td>{_safe_float(item.get("mean_rank_ic", item.get("mean_ic"))):.4f}</td>'
             f'<td>{_safe_float(item.get("rank_icir", item.get("icir"))):.4f}</td>'
             f'<td>{_safe_float(item.get("rank_ic_positive_ratio", item.get("ic_positive_ratio"))):.2%}</td>'
             f'<td>{_safe_float(item.get("long_short_sharpe")):.3f}</td>'
-            f'<td>{_safe_float(item.get("backtest_sharpe")):.3f}</td>'
-            f'<td>{_safe_float(item.get("backtest_total_ret")):.2%}</td>'
-            f'<td>{_safe_float(item.get("backtest_max_drawdown")):.2%}</td>'
-            f'<td>{_safe_float(item.get("backtest_ann_ret")):.2%}</td>'
+            f'<td>{_safe_float(topk.get("sharpe")):.3f}</td>'
+            f'<td>{_safe_float(topk.get("total_return")):.2%}</td>'
+            f'<td>{_safe_float(topk.get("max_drawdown")):.2%}</td>'
+            f'<td>{_safe_float(topk.get("annualized_return")):.2%}</td>'
             "</tr>"
         )
 
@@ -552,6 +815,7 @@ def render_production_summary(
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8"/>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>CogAlpha 因子生产评估汇总 · {date_range[0]} ~ {date_range[1]}</title>
   <style>
@@ -580,7 +844,7 @@ def render_production_summary(
 <body>
 <header>
   <h1>CogAlpha 因子生产评估汇总</h1>
-  <p class="muted">区间 {date_range[0]} ~ {date_range[1]} · RankIC(close) / 分层 / 多空 / TopK(OPEN)</p>
+  <p class="muted">区间 {date_range[0]} ~ {date_range[1]} · RankIC / 分层 / 多空 / TopK(OPEN)</p>
   <p class="muted">生成时间：{generated} · 进度 {completed}/{total} 完成 · {fail_n} 失败</p>
 </header>
 <main>
@@ -593,7 +857,13 @@ def render_production_summary(
       <div class="metric"><b>{fail_n}</b><span>失败/跳过</span></div>
     </div>
     <div class="notice">
-      <p><b>口径：</b>RankIC / 分层 / 多空用标准 close-to-close（T 日因子 → close(T+1)/close(T)-1）。
+      <p><b>算值路径（因子值怎么算出来的）</b></p>
+      <ul style="margin:6px 0 10px 18px;">
+        <li><b>自研 factor_engine DSL 落值</b>：Python → 自研 DSL（ts_mean/protected_div 等）→ 本地 factor_engine + COS 数据落值</li>
+        <li><b>LQTP 原生 DSL 直算</b>：公式直接丢给 LQTP RunFactor，平台线上算值</li>
+        <li><b>纯 Python 落值</b>：没有可执行 DSL，直接跑 Python 函数落值</li>
+      </ul>
+      <p><b>评估口径：</b>RankIC / 分层 / 多空基于本地 DuckDB 面板（T 日因子 → T+1 日前瞻收益）。
       TopK 回测 = LQTP 平台 OPEN 成交（Top10%≤50 只，信号 T → T+1 开盘）。</p>
     </div>
   </section>
@@ -602,7 +872,7 @@ def render_production_summary(
     <table>
       <thead>
         <tr>
-          <th>#</th><th>因子</th><th>评估模式</th>
+          <th>#</th><th>因子</th><th>算值路径</th><th>评估模式</th>
           <th>Mean RankIC</th><th>RankICIR</th><th>RankIC 胜率</th>
           <th>LS Sharpe</th><th>TopK Sharpe</th><th>TopK 累计</th><th>TopK 最大回撤</th><th>TopK 年化</th>
         </tr>

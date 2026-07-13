@@ -8,7 +8,6 @@ import re
 # When any of these appear, materialize locally and upload values instead.
 FE_ONLY_OPERATOR_PATTERNS: tuple[str, ...] = (
     r"\bprotected_div\s*\(",
-    r"\bewm_mean\s*\(",
     r"\bts_median\s*\(",
     r"\badd\s*\(",
     r"\bnot_\s*\(",

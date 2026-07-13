@@ -35,7 +35,8 @@ if str(FE_ROOT) not in sys.path:
 from api.mining_integration import default_ashare_pv_data_source_config, validate_factor_engine_dsl  # noqa: E402
 
 from scripts.cogalpha_lqtp.factor_eval import evaluate_lqtp_formula, fetch_lqtp_close_returns, fetch_lqtp_open_returns  # noqa: E402
-from scripts.cogalpha_lqtp.lqtp_dsl_compat import eval_route_for_entry  # noqa: E402
+from scripts.cogalpha_lqtp.ast_translator import dsl_to_lqtp, lqtp_to_fe_dsl  # noqa: E402
+from scripts.cogalpha_lqtp.lqtp_dsl_compat import eval_route_for_entry, is_lqtp_native_dsl  # noqa: E402
 from scripts.cogalpha_lqtp.lqtp_client import (  # noqa: E402
     DEFAULT_SERVER,
     LqtpTokenManager,
@@ -47,6 +48,7 @@ from scripts.cogalpha_lqtp.lqtp_client import (  # noqa: E402
     long_short_decile_weights,
     run_backtest_auth_safe,
     run_backtest_from_weights,
+    run_topk_backtest_for_long_df,
     safe_backtest,
     summarize_backtest,
     top_quantile_weights,
@@ -152,7 +154,24 @@ def _eval_route(entry: dict[str, Any]) -> str:
     route = entry.get("eval_route", "")
     if route:
         return route
+    # Prefer LQTP formula when rename-compatible.
+    lqtp = (entry.get("lqtp_formula") or entry.get("dsl") or "").strip()
+    if entry.get("status") == "ready" and is_lqtp_native_dsl(lqtp):
+        return "lqtp_dsl"
     return eval_route_for_entry(status=entry.get("status", ""), dsl=entry.get("dsl", ""))
+
+
+def _lqtp_run_formula(entry: dict[str, Any]) -> str:
+    """Formula sent to LQTP RunFactor (LQTP operator naming)."""
+    for key in ("lqtp_formula", "dsl"):
+        text = (entry.get(key) or "").strip()
+        if text and is_lqtp_native_dsl(text):
+            return text
+    dsl = (entry.get("dsl") or "").strip()
+    if not dsl:
+        return ""
+    converted = dsl_to_lqtp(dsl)
+    return converted if is_lqtp_native_dsl(converted) else dsl
 
 
 def _normalize_lqtp_symbol(symbol: str) -> str:
@@ -226,7 +245,23 @@ def _apply_flip_state_to_catalog(
             continue
         dsl = state.get("dsl")
         if dsl:
-            entry["dsl"] = dsl
+            converted = dsl_to_lqtp(dsl)
+            if is_lqtp_native_dsl(converted):
+                entry["dsl"] = converted
+                entry["lqtp_formula"] = converted
+                entry["eval_route"] = "lqtp_dsl"
+                entry["lqtp_native"] = True
+            else:
+                entry["dsl"] = lqtp_to_fe_dsl(dsl)
+                entry["lqtp_formula"] = state.get("lqtp_formula") or converted
+                # Keep catalog route unless flip forced a non-native formula.
+                if entry.get("eval_route") == "lqtp_dsl":
+                    entry["eval_route"] = "local_dsl"
+                    entry["lqtp_native"] = False
+            state["dsl"] = entry["dsl"]
+            state["lqtp_formula"] = entry.get("lqtp_formula", "")
+        elif state.get("lqtp_formula"):
+            entry["lqtp_formula"] = state["lqtp_formula"]
         if state.get("ic_sign_flipped"):
             entry["ic_sign_flipped"] = True
         py = state.get("python_code")
@@ -303,7 +338,9 @@ def _queue_negative_ic_retests(
         if dsl and dsl != "(python only)":
             negated = _negate_formula(dsl)
             entry["dsl"] = negated
+            entry["lqtp_formula"] = negated if is_lqtp_native_dsl(negated) else dsl_to_lqtp(negated)
             patch["dsl"] = negated
+            patch["lqtp_formula"] = entry["lqtp_formula"]
         orig_py = py_map.get(name, "") or entry.get("python_code", "")
         if orig_py.strip():
             negated_py = _negate_python_code(orig_py)
@@ -361,6 +398,7 @@ def _eval_local_parquet(
         begin_date=job.begin_i,
         end_date=job.end_i,
         server=job.server,
+        work_dir=Path(job.work_dir),
     )
     release_memory(lqtp_long)
     # stash extras on analysis for report path via caller
@@ -379,12 +417,20 @@ def _eval_lqtp_and_backtest(
     job: "FactorJob",
     backtest_symbols: set[str],
 ) -> tuple[dict[str, Any], str, Any, list[dict[str, Any]], str, int]:
+    from scripts.cogalpha_lqtp.eval_lake_fast import build_fwd_returns_cache
+
+    work = Path(job.work_dir)
+    fwd = build_fwd_returns_cache(
+        work / "lqtp_close_returns_cache.parquet",
+        work / "lqtp_fwd_close_returns_cache.parquet",
+    )
     analysis, eval_mode, daily_values = evaluate_lqtp_formula(
         token=auth.token,
         formula=dsl,
         begin_date=job.begin_i,
         end_date=job.end_i,
         server=job.server,
+        fwd_returns_path=fwd,
     )
     rows = sum(len(point.values) for point in daily_values)
     lqtp_long = factor_values_to_long_df(daily_values)
@@ -395,6 +441,7 @@ def _eval_lqtp_and_backtest(
         begin_date=job.begin_i,
         end_date=job.end_i,
         server=job.server,
+        work_dir=Path(job.work_dir),
     )
     release_memory(lqtp_long)
     analysis = dict(analysis)
@@ -455,7 +502,9 @@ def _maybe_flip_negative_ic_and_retest(
     if dsl_used and dsl_used not in {"", "(python only)"}:
         dsl_used = _negate_formula(dsl_used)
         job.entry["dsl"] = dsl_used
+        job.entry["lqtp_formula"] = dsl_used
         flip_patch["dsl"] = dsl_used
+        flip_patch["lqtp_formula"] = dsl_used
         meta["formula"] = dsl_used
     orig_py = (job.python_code or "").strip()
     if orig_py:
@@ -499,6 +548,23 @@ def _backtest_total_ret(rows: list[dict[str, Any]]) -> float:
     return float(summarize_backtest(rows).get("total_return", float("nan")))
 
 
+def _load_missing_quote_cache(work_dir: Path) -> set[str]:
+    path = work_dir / "backtest_missing_quote_symbols.json"
+    if not path.exists():
+        return set()
+    try:
+        return set(json.loads(path.read_text(encoding="utf-8")))
+    except (json.JSONDecodeError, TypeError):
+        return set()
+
+
+def _save_missing_quote_cache(work_dir: Path, excluded: set[str]) -> None:
+    if not excluded:
+        return
+    path = work_dir / "backtest_missing_quote_symbols.json"
+    path.write_text(json.dumps(sorted(excluded), ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def _run_platform_backtests(
     *,
     auth: LqtpTokenManager,
@@ -507,18 +573,24 @@ def _run_platform_backtests(
     begin_date: int,
     end_date: int,
     server: str,
+    work_dir: Path | None = None,
+    open_returns_long: pd.DataFrame | None = None,
 ) -> tuple[list[dict[str, Any]], str, dict[str, Any], list[dict[str, Any]], str, dict[str, Any]]:
     """TopK long-only + optional long-short platform backtests at OPEN."""
-    weights = top_quantile_weights(lqtp_long, allowed_symbols=backtest_symbols)
-    backtest_rows, backtest_id = _safe_backtest(
-        token_mgr=auth,
-        weights=weights,
+    if open_returns_long is None and work_dir is not None:
+        open_cache = work_dir / "lqtp_open_returns_cache.parquet"
+        if open_cache.exists():
+            open_returns_long = pd.read_parquet(open_cache)
+    backtest_rows, backtest_id, topk_summary, excluded = run_topk_backtest_for_long_df(
+        auth,
+        lqtp_long,
         begin_date=begin_date,
         end_date=end_date,
         server=server,
+        allowed_symbols=backtest_symbols,
+        open_returns_long=open_returns_long,
+        pre_excluded=set(),
     )
-    release_memory(weights)
-    topk_summary = summarize_backtest(backtest_rows)
 
     ls_rows: list[dict[str, Any]] = []
     ls_id = ""
@@ -573,7 +645,7 @@ def _materialize_entry(
         )
         return out, "python", dsl or "(python only)"
 
-    ok, msg = validate_factor_engine_dsl(dsl)
+    ok, msg = validate_factor_engine_dsl(lqtp_to_fe_dsl(dsl))
     if not ok:
         raise RuntimeError(f"DSL invalid: {msg}")
     out = materialize_factor(
@@ -883,7 +955,7 @@ def _process_one_factor(job: FactorJob) -> dict[str, Any]:
         flip_patch: dict[str, Any] | None = None
 
         if eval_route == "lqtp_dsl":
-            dsl_used = job.entry.get("dsl", "")
+            dsl_used = _lqtp_run_formula(job.entry)
             if not dsl_used:
                 raise RuntimeError("lqtp_dsl route missing dsl")
             engine = "lqtp_dsl"
@@ -896,12 +968,19 @@ def _process_one_factor(job: FactorJob) -> dict[str, Any]:
             if not job.skip_eval:
                 print(f"[{job.index}/{job.total}] {name} → LQTP RunFactor (native DSL)")
                 try:
+                    from scripts.cogalpha_lqtp.eval_lake_fast import build_fwd_returns_cache
+
+                    fwd = build_fwd_returns_cache(
+                        work / "lqtp_close_returns_cache.parquet",
+                        work / "lqtp_fwd_close_returns_cache.parquet",
+                    )
                     analysis, eval_mode, daily_values = evaluate_lqtp_formula(
                         token=auth.token,
                         formula=dsl_used,
                         begin_date=job.begin_i,
                         end_date=job.end_i,
                         server=job.server,
+                        fwd_returns_path=fwd,
                     )
                     rows = sum(len(point.values) for point in daily_values)
                     meta["rows"] = rows
@@ -920,6 +999,7 @@ def _process_one_factor(job: FactorJob) -> dict[str, Any]:
                         begin_date=job.begin_i,
                         end_date=job.end_i,
                         server=job.server,
+                        work_dir=Path(job.work_dir),
                     )
                     release_memory(lqtp_long)
                     analysis = dict(analysis)
@@ -994,6 +1074,7 @@ def _process_one_factor(job: FactorJob) -> dict[str, Any]:
                     begin_date=job.begin_i,
                     end_date=job.end_i,
                     server=job.server,
+                    work_dir=Path(job.work_dir),
                 )
                 release_memory(lqtp_long)
                 analysis = dict(analysis)
@@ -1057,6 +1138,9 @@ def _process_one_factor(job: FactorJob) -> dict[str, Any]:
             topk_summary=topk_summary,
             ls_summary=ls_summary,
             python_code=py_code,
+            work_dir=Path(job.work_dir),
+            engine=engine,
+            eval_route=actual_eval_route,
         )
         row = {
             "factor_name": name,
@@ -1282,6 +1366,7 @@ def main() -> int:
         + " ".join(f"{k}={v}" for k, v in sorted(route_stats.items()))
     )
     _write_route_summary(catalog, work / "eval_routes.json")
+    catalog_total = len(catalog)
     if args.only:
         only = set(args.only)
         catalog = [x for x in catalog if x["function_name"] in only]
@@ -1333,7 +1418,7 @@ def main() -> int:
     print(f"local materialize instrument_filter={len(lqtp_symbols)} (LQTP universe)")
     summary_meta = {
         "date_range": [args.start, args.end],
-        "catalog_total": len(catalog),
+        "catalog_total": catalog_total,
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
     _write_reports(

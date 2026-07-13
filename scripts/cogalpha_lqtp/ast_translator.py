@@ -39,14 +39,14 @@ ALPHA_TOOL_PATTERNS = [
     (
         r"(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*=\s*alpha_tools\.classify_volume_regime\(\s*([^,]+),\s*window\s*=\s*(\d+)[^)]*\)",
         lambda m: (
-            f"{m.group(3)} = protected_div({m.group(4)}, ewm_mean({m.group(4)}, {m.group(5)}))\n"
-            f"{m.group(1)} = where(protected_div({m.group(4)}, ewm_mean({m.group(4)}, {m.group(5)})) > 1.5, 1, 0)\n"
-            f"{m.group(2)} = where(protected_div({m.group(4)}, ewm_mean({m.group(4)}, {m.group(5)})) < 0.6, 1, 0)"
+            f"{m.group(3)} = protected_div({m.group(4)}, ema({m.group(4)}, {m.group(5)}))\n"
+            f"{m.group(1)} = where(protected_div({m.group(4)}, ema({m.group(4)}, {m.group(5)})) > 1.5, 1, 0)\n"
+            f"{m.group(2)} = where(protected_div({m.group(4)}, ema({m.group(4)}, {m.group(5)})) < 0.6, 1, 0)"
         ),
     ),
     (
         r"(\w+)\s*=\s*alpha_tools\.classify_volume_regime\(\s*([^,]+),\s*window\s*=\s*(\d+)[^)]*\)",
-        lambda m: f"{m.group(1)} = protected_div({m.group(2)}, ewm_mean({m.group(2)}, {m.group(3)}))",
+        lambda m: f"{m.group(1)} = protected_div({m.group(2)}, ema({m.group(2)}, {m.group(3)}))",
     ),
     (
         r"(\w+)\s*,\s*(\w+)\s*=\s*alpha_tools\.decompose_overnight_intraday\(\s*([^,]+),\s*([^)]+)\)",
@@ -299,7 +299,7 @@ def _apply_ts_passes(work: str) -> str:
         prev = work
         for suffix, op in rolling_ops:
             work = _replace_rolling_agg(work, suffix, op)
-        work = _replace_trailing_method(work, "ewm", r"^span\s*=\s*(\d+)", "ewm_mean({receiver}, {g0})", suffix=".mean()")
+        work = _replace_trailing_method(work, "ewm", r"^span\s*=\s*(\d+)", "ema({receiver}, {g0})", suffix=".mean()")
         work = _replace_trailing_method(work, "shift", r"^(\d+)$", "delay({receiver}, {g0})")
         work = _replace_trailing_method(work, "pct_change", r"^(\d+)$", "ts_pct({receiver}, {g0})")
         work = _replace_trailing_method(work, "pct_change", r"^$", "ts_pct({receiver}, 1)")
@@ -506,12 +506,102 @@ def translate_python(code: str, tools: str = "") -> TranslateResult:
     return TranslateResult(dsl, "ready", "ast")
 
 
+def _split_call_args(arg_text: str) -> list[str]:
+    """Split function-call argument text on top-level commas."""
+    args: list[str] = []
+    depth = 0
+    start = 0
+    for i, ch in enumerate(arg_text):
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            args.append(arg_text[start:i].strip())
+            start = i + 1
+    tail = arg_text[start:].strip()
+    if tail:
+        args.append(tail)
+    return args
+
+
+def _replace_func_calls(expr: str, name: str, replacer) -> str:
+    """Replace name(...) calls with balanced parentheses via *replacer(args)->str|None*."""
+    pattern = re.compile(rf"\b{re.escape(name)}\s*\(")
+    out: list[str] = []
+    i = 0
+    while True:
+        match = pattern.search(expr, i)
+        if not match:
+            out.append(expr[i:])
+            break
+        out.append(expr[i : match.start()])
+        depth = 1
+        j = match.end()
+        while j < len(expr) and depth:
+            if expr[j] == "(":
+                depth += 1
+            elif expr[j] == ")":
+                depth -= 1
+            j += 1
+        args = _split_call_args(expr[match.end() : j - 1])
+        replaced = replacer(args)
+        out.append(replaced if replaced is not None else expr[match.start() : j])
+        i = j
+    return "".join(out)
+
+
 def dsl_to_lqtp(dsl: str) -> str:
-    """Best-effort factor_engine DSL -> LQTP formula."""
-    out = dsl
-    out = re.sub(r"ts_pct\(([^,]+),\s*(\d+)\)", r"(\1 / delay(\1, \2) - 1)", out)
-    out = re.sub(r"protected_div\(", "safe_div(", out)
-    out = re.sub(r"ewm_mean\(", "ema(", out)
-    out = re.sub(r"ts_median\(([^,]+),\s*(\d+)\)", r"ts_quantile(\1, \2, 0.5)", out)
-    out = re.sub(r"add\(([^,]+),\s*1\)", r"(\1 + 1)", out)
+    """Best-effort factor_engine DSL -> LQTP formula (nested-call safe).
+
+    Keep ``ts_pct`` as-is: LQTP documents and accepts it natively.
+    """
+    out = (dsl or "").strip()
+    if not out:
+        return out
+
+    # Same-arity renames (safe even with nested commas).
+    out = out.replace("protected_div(", "safe_div(")
+    out = out.replace("ewm_mean(", "ema(")
+    out = out.replace("SMA(", "ts_mean(")
+
+    def _median(args: list[str]) -> str | None:
+        if len(args) != 2:
+            return None
+        return f"ts_quantile({args[0]}, {args[1]}, 0.5)"
+
+    def _add(args: list[str]) -> str | None:
+        if len(args) != 2:
+            return None
+        return f"({args[0]} + {args[1]})"
+
+    def _not(args: list[str]) -> str | None:
+        if len(args) != 1:
+            return None
+        return f"(not ({args[0]}))"
+
+    out = _replace_func_calls(out, "ts_median", _median)
+    out = _replace_func_calls(out, "add", _add)
+    out = _replace_func_calls(out, "not_", _not)
+    return out
+
+
+def lqtp_to_fe_dsl(dsl: str) -> str:
+    """Map LQTP names to FE where needed; LQTP-aligned names stay as-is.
+
+    ``ema`` / ``safe_div`` / ``delay`` / ``cap`` / ``decay_linear`` are now FE
+    primary names. ``protected_div`` remains FE-only (fill-default ≠ LQTP NULL).
+    """
+    out = (dsl or "").strip()
+    if not out:
+        return out
+    # Historical ewm_mean → ema (alias still works; prefer primary).
+    out = out.replace("ewm_mean(", "ema(")
+
+    def _quantile_median(args: list[str]) -> str | None:
+        if len(args) != 3 or args[2].strip() != "0.5":
+            return None
+        return f"ts_median({args[0]}, {args[1]})"
+
+    out = _replace_func_calls(out, "ts_quantile", _quantile_median)
     return out

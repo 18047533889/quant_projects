@@ -32,9 +32,12 @@ from scripts.cogalpha_lqtp.lqtp_client import (  # noqa: E402
     _to_lqtp_symbol,
     factor_values_to_long_df,
     long_df_to_daily_values,
-    safe_backtest,
+    run_topk_backtest_for_long_df,
+    save_backtest_rows,
     summarize_backtest,
-    top_quantile_weights,
+)
+from scripts.cogalpha_lqtp.run_production_batch import (  # noqa: E402
+    _upsert_index_row,
 )
 from scripts.cogalpha_lqtp.lqtp_dsl_compat import eval_route_for_entry  # noqa: E402
 
@@ -184,20 +187,23 @@ def _regen_one(payload: dict[str, Any]) -> dict[str, Any]:
         backtest_id = ""
         topk_summary: dict[str, Any] = {}
         if payload.get("with_backtest"):
-            daily_values = long_df_to_daily_values(long_df)
-            lqtp_long = factor_values_to_long_df(daily_values)
+            lqtp_long = factor_values_to_long_df(long_df_to_daily_values(long_df))
             allowed = set(payload.get("backtest_symbols") or [])
-            if allowed:
-                lqtp_long = lqtp_long[lqtp_long["symbol"].isin(allowed)]
-            weights = top_quantile_weights(lqtp_long, allowed_symbols=allowed or None)
-            backtest_rows, backtest_id = safe_backtest(
-                token_mgr=_token_mgr_for(payload),
-                weights=weights,
+            work = Path(payload["work_dir"])
+            open_cache = work / "lqtp_open_returns_cache.parquet"
+            open_returns = pd.read_parquet(open_cache) if open_cache.exists() else None
+            backtest_rows, backtest_id, topk_summary, excluded = run_topk_backtest_for_long_df(
+                _token_mgr_for(payload),
+                lqtp_long,
                 begin_date=begin_i,
                 end_date=end_i,
                 server=payload.get("server", DEFAULT_SERVER),
+                allowed_symbols=allowed or None,
+                open_returns_long=open_returns,
+                pre_excluded=set(),
             )
-            topk_summary = summarize_backtest(backtest_rows)
+            if backtest_rows:
+                save_backtest_rows(lake / name / "backtest_topk.json", backtest_rows)
 
         report_path = report_dir / f"{name}.html"
         render_factor_report(
@@ -210,6 +216,8 @@ def _regen_one(payload: dict[str, Any]) -> dict[str, Any]:
             materialize_meta=meta,
             topk_summary=topk_summary,
             python_code=py_code,
+            engine=engine,
+            eval_route=route,
         )
         row = {
             "factor_name": name,
@@ -228,8 +236,16 @@ def _regen_one(payload: dict[str, Any]) -> dict[str, Any]:
             "long_short_sharpe": _json_float(analysis.get("long_short_sharpe")),
             "long_short_return": _json_float(analysis.get("long_short_return")),
             "backtest_total_ret": _json_float(topk_summary.get("total_return")),
+            "backtest_ann_ret": _json_float(topk_summary.get("annualized_return")),
             "backtest_sharpe": _json_float(topk_summary.get("sharpe")),
             "backtest_max_drawdown": _json_float(topk_summary.get("max_drawdown")),
+            "backtest_volatility": _json_float(topk_summary.get("volatility")),
+            "backtest_calmar": _json_float(topk_summary.get("calmar")),
+            "backtest_win_rate": _json_float(topk_summary.get("win_rate")),
+            "backtest_avg_turnover": _json_float(topk_summary.get("avg_turnover")),
+            "backtest_total_commission": _json_float(topk_summary.get("total_commission")),
+            "backtest_trading_days": int(topk_summary.get("trading_days") or 0),
+            "backtest_final_nav": _json_float(topk_summary.get("final_nav")),
             "rows": int(len(long_df)),
             "backtest_id": backtest_id,
             "return_kind": str(analysis.get("return_kind", "")),

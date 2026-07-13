@@ -46,7 +46,7 @@ from scripts.cogalpha_lqtp.run_light_test import DEFAULT_FACTORS, _run_py, _yyyy
 
 PREFLIGHT_FACTORS = DEFAULT_FACTORS
 
-# factor_engine ewm_mean uses adjust=False; original CogAlpha Python often uses pandas default adjust=True.
+# factor_engine ema uses adjust=False; original CogAlpha Python often uses pandas default adjust=True.
 PYTHON_REFERENCE_OVERRIDES: dict[str, str] = {
     "factor_persistence_ewma": """
 def factor_persistence_ewma(df):

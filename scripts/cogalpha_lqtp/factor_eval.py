@@ -350,24 +350,56 @@ def evaluate_lqtp_formula(
     server: str,
     warmup: int = 1,
     factor_name: str = "",
+    fwd_returns_path: Path | None = None,
 ) -> tuple[dict[str, Any], str, list[Factor_pb2.FactorDailyValues]]:
-    """Run LQTP-native DSL on platform; return analysis + daily values for backtest."""
+    """Run LQTP-native DSL on platform; return analysis + daily values for backtest.
+
+    Important: LQTP RunFactor(analyze=True) group_pnls / daily_ls_returns are **not**
+    usable as close-to-close decile/LS research metrics (mean daily LS can be ~3%+
+    and group equity explodes to 1e26). When *fwd_returns_path* is set, panel metrics
+    are recomputed locally with DuckDB on the same factor values.
+    """
+    # analyze=False is enough for values; platform analyze LS/groups are discarded anyway.
     resp = run_factor_formula(
         token=token,
         formula=formula,
         begin_date=begin_date,
         end_date=end_date,
         warmup=warmup,
-        analyze=True,
+        analyze=bool(fwd_returns_path is None),
         server=server,
         factor_name="",
     )
     if resp.error:
         raise RuntimeError(resp.error)
+    daily_values = list(resp.values)
+    if not daily_values:
+        raise RuntimeError("RunFactor returned no factor values")
+
+    if fwd_returns_path is not None:
+        from scripts.cogalpha_lqtp.eval_lake_fast import analyze_factor_long_df_duckdb
+
+        long_df = factor_values_to_long_df(daily_values)
+        analysis = analyze_factor_long_df_duckdb(
+            long_df, fwd_returns_path=Path(fwd_returns_path)
+        )
+        if resp.analysis:
+            plat = analysis_to_dict(resp.analysis)
+            analysis["lqtp_platform_mean_ic"] = plat.get("mean_ic")
+            analysis["lqtp_platform_long_short_return"] = plat.get("long_short_return")
+            analysis["lqtp_platform_long_short_sharpe"] = plat.get("long_short_sharpe")
+        analysis["signal_lag_note"] = (
+            "Factor values from LQTP RunFactor; RankIC / 分层 / 多空 recomputed locally "
+            "(DuckDB close-to-close). Platform analyze LS/groups are not used "
+            "(platform daily LS ≈ mean return, often ~几 percent/day — not tradeable)."
+        )
+        analysis["value_source"] = "lqtp_run_factor"
+        return analysis, "lqtp_values_duckdb_panel", daily_values
+
     if not resp.analysis:
         raise RuntimeError("RunFactor returned no analysis")
     analysis = analysis_to_dict(resp.analysis)
-    # Platform analysis uses its own timing; alias RankIC names for report consistency.
+    # Legacy path (no local returns cache): keep platform metrics but mark them.
     analysis.setdefault("mean_rank_ic", analysis.get("mean_ic"))
     analysis.setdefault("std_rank_ic", analysis.get("std_ic"))
     analysis.setdefault("rank_icir", analysis.get("icir"))
@@ -375,9 +407,10 @@ def evaluate_lqtp_formula(
     analysis["daily_rank_ic"] = analysis.get("daily_ic", [])
     analysis["return_kind"] = "lqtp_platform_analyze"
     analysis["signal_lag_note"] = (
-        "LQTP RunFactor(analyze=True) platform metrics (platform-defined timing)"
+        "LQTP RunFactor(analyze=True) platform metrics — LS/groups may be wrong; "
+        "prefer DuckDB recompute with fwd_returns_path"
     )
-    return analysis, "lqtp_run_factor", list(resp.values)
+    return analysis, "lqtp_run_factor", daily_values
 
 
 def evaluate_uploaded_values(

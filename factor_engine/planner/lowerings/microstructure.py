@@ -11,14 +11,14 @@ from planner.lowerings import _helpers as H
 def lower_real_turnover_rate(node: PlanNode) -> PlanNode:
     if len(node.inputs) < 2:
         return node
-    return H.safe_div_null(node.inputs[0], node.inputs[1])
+    return H.safe_div(node.inputs[0], node.inputs[1])
 
 
 @register_lowering("micro_spread")
 def lower_micro_spread(node: PlanNode) -> PlanNode:
-    """``safe_div_null(high - low, close)``"""
+    """``safe_div(high - low, close)``"""
     if len(node.inputs) < 3:
         return node
     high, low, close = node.inputs[0], node.inputs[1], node.inputs[2]
     spread = H.binop("subtract", high, low)
-    return H.safe_div_null(spread, close)
+    return H.safe_div(spread, close)

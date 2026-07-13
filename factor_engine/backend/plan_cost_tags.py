@@ -24,7 +24,7 @@ PLAN_COST_TAGS: dict[str, PlanCostTags] = {
     "ts_corr": PlanCostTags("O(NW)", requires_sort=True),
     "add": PlanCostTags("O(N)"),
     "cum_sum": PlanCostTags("O(N)", requires_sort=True, stateful=True),
-    "ts_ema": PlanCostTags("O(N)", requires_sort=True, stateful=True),
+    "ema": PlanCostTags("O(N)", requires_sort=True, stateful=True),
 }
 
 

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""重复算子合并 + 业界标准命名（WorldQuant / pandas 惯例）。
+"""重复算子合并 + LQTP / 业界标准命名。
 
 本模块在 ``load_all()`` 末尾调用 ``apply_operator_deduplication()``，
 将历史方言名重定向到 canonical 并注销冗余主键。
@@ -9,13 +9,22 @@
 - ``CANONICAL_RENAMES``：旧 canonical → 新 canonical 重命名表；
 - ``DEDUPE_ALIASES``：别名 → 保留 canonical 映射；
 - ``REMOVED_CANONICALS``：去重后注销的冗余 canonical 列表。
+
+LQTP 对齐（仅计算逻辑一致时改主名）
+--------------------------------
+- ``ts_ema`` → ``ema``（``ewm_mean`` / ``EMA`` / ``ts_ema`` 为别名）
+- ``clip`` → ``cap``
+- ``ts_delay`` → ``delay``
+- ``ts_regression`` → ``ts_regression_slope``
+- ``ts_decay_linear`` → ``decay_linear``
+- ``safe_div_null`` → ``safe_div``（NULL-on-zero；``protected_div`` 语义不同，不改）
 """
 from __future__ import annotations
 
 from cleaned_operators.registry import OperatorRegistry
 
 CANONICAL_RENAMES: dict[str, str] = {
-    # 时序滚动：统一 ts_ 前缀
+    # 时序滚动：历史 m_* → ts_*
     "m_var": "ts_var",
     "m_median": "ts_median",
     "m_mad": "ts_mad",
@@ -24,12 +33,15 @@ CANONICAL_RENAMES: dict[str, str] = {
     "m_top_n_std": "ts_top_n_std",
     "m_bottom_n_avg": "ts_bottom_n_avg",
     "m_bottom_n_sum": "ts_bottom_n_sum",
-    "decay_linear": "ts_decay_linear",
-    "ema": "ts_ema",
     "ratios": "ts_ratio",
-    # 元素级：numpy/pandas 惯例 clip
-    "cap": "clip",
-    # 分组：业界常用 group_neutralize
+    # LQTP 主命名对齐
+    "ts_ema": "ema",
+    "clip": "cap",
+    "ts_delay": "delay",
+    "ts_regression": "ts_regression_slope",
+    "ts_decay_linear": "decay_linear",
+    "safe_div_null": "safe_div",
+    # 分组 / 扩展
     "group_demean": "group_neutralize",
     "cum_standardize": "expanding_zscore",
 }
@@ -41,12 +53,16 @@ DEDUPE_ALIASES: dict[str, str] = {
     "move": "ts_mean",
     "window_mean": "ts_mean",
     "running_mean": "ts_mean",
+    "ma": "ts_mean",
     "window_sum": "ts_sum",
+    "sum_n": "ts_sum",
     "window_max": "ts_max",
     "window_min": "ts_min",
     "window_std": "ts_std",
+    "std_n": "ts_std",
     "deltas": "ts_delta",
-    "ts_decay": "ts_decay_linear",
+    "delta": "ts_delta",
+    "ts_decay": "decay_linear",
     "Sum": "ts_sum",
     "Kurt": "ts_kurt",
     "Skew": "ts_skew",
@@ -71,11 +87,14 @@ DEDUPE_ALIASES: dict[str, str] = {
     "running_std": "ts_std",
     "running_sum": "ts_sum",
     "cum_standardize": "expanding_zscore",
-    "DECAY_LINEAR": "ts_decay_linear",
-    "TS_DECAY_LINEAR": "ts_decay_linear",
-    "decay_linear": "ts_decay_linear",
-    "EMA": "ts_ema",
-    "ema": "ts_ema",
+    "DECAY_LINEAR": "decay_linear",
+    "TS_DECAY_LINEAR": "decay_linear",
+    "ts_decay_linear": "decay_linear",
+    "decay_linear": "decay_linear",
+    "EMA": "ema",
+    "ema": "ema",
+    "ts_ema": "ema",
+    "ewm_mean": "ema",
     "ratios": "ts_ratio",
     # --- 回归统计量 ---
     "Var": "ts_var",
@@ -93,23 +112,36 @@ DEDUPE_ALIASES: dict[str, str] = {
     "kurt": "ts_kurt",
     "skew": "ts_skew",
     "sum": "ts_sum",
+    "ts_regression": "ts_regression_slope",
+    "TS_REGRESSION_SLOPE": "ts_regression_slope",
     # --- 元素 / 信号 ---
     "negate": "neg",
     "reciprocal": "inv",
     "if_else": "where",
-    "clamp": "clip",
-    "cap": "clip",
-    "CLIP": "clip",
-    "clip": "clip",
+    "clamp": "cap",
+    "cap": "cap",
+    "CLIP": "cap",
+    "clip": "cap",
     "dft": "fft",
     "idft": "ifft",
+    "safe_div_null": "safe_div",
+    "safe_div": "safe_div",
+    # --- delay ---
+    "DELAY": "delay",
+    "Delay": "delay",
+    "Ref": "delay",
+    "delay": "delay",
+    "m_delay": "delay",
+    "shift": "delay",
+    "ts_delay": "delay",
     # --- 截面 / 分组 ---
     "standardize": "zscore",
     "panel_rank": "rank",
     "panel_zscore": "zscore",
     "panel_standardize": "zscore",
-
     "industry_neutralize": "group_neutralize",
+    "industry_neutral": "group_neutralize",
+    "ind_neutralize": "group_neutralize",
     "neutralize": "group_neutralize",
     "c_neutralize": "group_neutralize",
     "panel_neutralize": "group_neutralize",
@@ -120,6 +152,8 @@ DEDUPE_ALIASES: dict[str, str] = {
     "INDUSTRY_NEUTRAL": "group_neutralize",
     "INDUSTRY_NEUTRALIZE": "group_neutralize",
     "IND_NEUTRALIZE": "group_neutralize",
+    "market_cap_neutralize": "size_neutralize",
+    "cap_neutralize": "size_neutralize",
     # --- 累计 / 扩展 ---
     "mean_agg": "avg",
     "cum_avg": "expanding_mean",
@@ -211,6 +245,8 @@ REMOVED_CANONICALS: tuple[str, ...] = (
     "Percentile",
     "running_std",
     "running_sum",
+    # LQTP 对齐：与 ema 重复的独立实现
+    "ewm_mean",
 )
 
 
@@ -236,7 +272,7 @@ def apply_operator_deduplication() -> None:
         OperatorRegistry.rename_canonical(old, new)
 
     for alias, canonical in DEDUPE_ALIASES.items():
-        if OperatorRegistry.get(canonical) is None:
+        if canonical not in OperatorRegistry._operators:
             raise RuntimeError(f"dedupe target missing: {canonical!r} (alias {alias!r})")
         OperatorRegistry.register_alias(alias, canonical)
 
