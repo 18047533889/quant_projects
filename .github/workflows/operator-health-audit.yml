@@ -10,6 +10,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: operator-health-audit
+  cancel-in-progress: true
+
 jobs:
   audit:
     runs-on: ubuntu-latest
@@ -22,123 +26,58 @@ jobs:
         run: |
           python - <<'PY'
           from __future__ import annotations
-          import json, re
+          import json
           from pathlib import Path
 
           root = Path('.')
-          catalog_path = root / 'factor_engine/cleaned_operators/docs/operators_catalog.json'
-          payload = json.loads(catalog_path.read_text(encoding='utf-8'))
+          payload = json.loads((root / 'factor_engine/cleaned_operators/docs/operators_catalog.json').read_text(encoding='utf-8'))
           ops = payload['operators']
           daily = [o for o in ops if o.get('surface') == 'daily']
+          def names(rows): return sorted(o['canonical'] for o in rows)
 
-          def names(rows):
-              return sorted(o['canonical'] for o in rows)
-
-          pit_false = [o for o in daily if o.get('pit_safe') is False]
-          scope_unknown = [o for o in daily if o.get('scope') in (None, '', 'unknown')]
-          no_polars = [o for o in daily if 'polars' not in (o.get('backends') or [])]
-          no_sql = [o for o in daily if 'sql' not in (o.get('backends') or [])]
-          pandas_only = [o for o in daily if set(o.get('backends') or []) <= {'pandas_numpy'}]
-          ts_contract_incomplete = [
-              o for o in daily
-              if (o.get('scope') in ('ts', 'unknown', None, '') or o['canonical'].startswith(('ts_', 'rolling_', 'expanding_')))
-              and (o.get('lookback') is None or o.get('min_periods') is None)
-          ]
-
-          # Discover production evidence files without relying on a fixed directory layout.
-          evidence_files = []
-          evidence_names = set()
+          evidence_files, evidence_names = [], set()
           for p in root.rglob('primitive_verified.json'):
-              if '.git' in p.parts:
-                  continue
-              try:
-                  obj = json.loads(p.read_text(encoding='utf-8'))
-              except Exception:
-                  continue
+              if '.git' in p.parts: continue
+              try: obj = json.loads(p.read_text(encoding='utf-8'))
+              except Exception: continue
               evidence_files.append(str(p))
-              list_sets = []
-              for k, v in obj.items():
-                  if isinstance(v, list) and all(isinstance(x, str) for x in v):
-                      list_sets.append(set(v))
-              if list_sets:
-                  evidence_names |= set.intersection(*list_sets)
-          daily_without_full_evidence = [o for o in daily if evidence_names and o['canonical'] not in evidence_names]
+              sets = [set(v) for v in obj.values() if isinstance(v, list) and all(isinstance(x, str) for x in v)]
+              if sets: evidence_names |= set.intersection(*sets)
 
-          # Formula-level usage outside operator implementation, docs and tests.
-          scan_roots = [p for p in root.iterdir() if p.is_dir() and p.name not in {'.git', 'factor_engine', 'data_access', 'AutoFactorEvaluation-RECONSTRUCT'}]
-          formula_files = []
-          for base in scan_roots:
-              for p in base.rglob('*'):
-                  if not p.is_file() or p.suffix.lower() not in {'.py', '.yaml', '.yml', '.json', '.toml'}:
-                      continue
-                  if any(part in {'tests', '__pycache__', '.git'} for part in p.parts):
-                      continue
-                  if p.stat().st_size > 2_000_000:
-                      continue
-                  formula_files.append(p)
-          usage = {}
-          for o in daily:
-              candidates = [o['canonical']] + list(o.get('aliases') or [])
-              total = 0
-              hit_files = set()
-              pats = [re.compile(r'(?<![A-Za-z0-9_])' + re.escape(n) + r'\s*\(') for n in candidates if n]
-              for p in formula_files:
-                  try:
-                      text = p.read_text(encoding='utf-8', errors='ignore')
-                  except Exception:
-                      continue
-                  c = sum(len(pat.findall(text)) for pat in pats)
-                  if c:
-                      total += c
-                      hit_files.add(str(p))
-              usage[o['canonical']] = {'calls': total, 'files': sorted(hit_files)[:20]}
-          zero_formula_usage = [o for o in daily if usage[o['canonical']]['calls'] == 0]
-
-          stateful_or_recursive = [o for o in daily if o['canonical'] in {
-              'ATR_WILDER','RSI_WILDER','ema','MACD','MACD_line','MACD_signal','MACD_hist',
-              'KAMA','TRIX','ADX','ADXR','vpmacd','vpmacd_signal'
-          }]
-          multi_output_overlap = {
-              'MACD': ['MACD','MACD_line','MACD_signal','MACD_hist'],
-              'AROON': ['AROON','AROON_up','AROON_down'],
-              'Bollinger': ['BollingerBands','BollingerUpper','BollingerLower'],
+          cats = {
+              'daily_pit_false': names([o for o in daily if o.get('pit_safe') is False]),
+              'daily_scope_unknown': names([o for o in daily if o.get('scope') in (None, '', 'unknown')]),
+              'daily_no_polars': names([o for o in daily if 'polars' not in (o.get('backends') or [])]),
+              'daily_no_sql': names([o for o in daily if 'sql' not in (o.get('backends') or [])]),
+              'daily_pandas_only': names([o for o in daily if set(o.get('backends') or []) <= {'pandas_numpy'}]),
+              'daily_ts_contract_incomplete': names([
+                  o for o in daily
+                  if (o.get('scope') in ('ts', 'unknown', None, '') or o['canonical'].startswith(('ts_', 'rolling_', 'expanding_')))
+                  and (o.get('lookback') is None or o.get('min_periods') is None)
+              ]),
+              'daily_without_full_evidence': names([o for o in daily if evidence_names and o['canonical'] not in evidence_names]),
+              'stateful_or_recursive': sorted(set(o['canonical'] for o in daily) & {
+                  'ATR_WILDER','RSI_WILDER','ema','MACD','MACD_line','MACD_signal','MACD_hist',
+                  'KAMA','TRIX','ADX','ADXR','vpmacd','vpmacd_signal'
+              }),
           }
-
           report = {
-              'catalog': {
-                  'canonical_count': payload.get('canonical_count'),
-                  'surface_counts': payload.get('surface_counts'),
-                  'daily_count': len(daily),
-              },
+              'catalog': {'canonical_count': payload.get('canonical_count'), 'surface_counts': payload.get('surface_counts'), 'daily_count': len(daily)},
               'evidence_files': evidence_files,
               'full_evidence_count': len(evidence_names),
-              'categories': {
-                  'daily_pit_false': names(pit_false),
-                  'daily_scope_unknown': names(scope_unknown),
-                  'daily_no_polars': names(no_polars),
-                  'daily_no_sql': names(no_sql),
-                  'daily_pandas_only': names(pandas_only),
-                  'daily_ts_contract_incomplete': names(ts_contract_incomplete),
-                  'daily_without_full_evidence': names(daily_without_full_evidence),
-                  'daily_zero_formula_usage': names(zero_formula_usage),
-                  'stateful_or_recursive': names(stateful_or_recursive),
-                  'multi_output_overlap': multi_output_overlap,
+              'categories': cats,
+              'multi_output_overlap': {
+                  'MACD': ['MACD','MACD_line','MACD_signal','MACD_hist'],
+                  'AROON': ['AROON','AROON_up','AROON_down'],
+                  'Bollinger': ['BollingerBands','BollingerUpper','BollingerLower'],
               },
-              'usage': usage,
           }
           Path('operator_health_report.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
-
-          lines = ['# Operator Health Audit', '']
-          lines += [f"- canonical: {payload.get('canonical_count')}", f"- daily: {len(daily)}", f"- full evidence intersection: {len(evidence_names)}", '']
-          for key, val in report['categories'].items():
-              lines.append(f'## {key}')
-              if isinstance(val, dict):
-                  for k, v in val.items(): lines.append(f'- {k}: {", ".join(v)}')
-              else:
-                  lines.append(f'- count: {len(val)}')
-                  lines.append('- ' + ', '.join(val))
-              lines.append('')
-          Path('operator_health_report.md').write_text('\n'.join(lines), encoding='utf-8')
+          lines = ['# Operator Health Audit', '', f"- canonical: {payload.get('canonical_count')}", f"- daily: {len(daily)}", f"- full evidence intersection: {len(evidence_names)}", '']
+          for key, val in cats.items():
+              lines += [f'## {key}', f'- count: {len(val)}', '- ' + ', '.join(val), '']
+          for key, val in report['multi_output_overlap'].items(): lines.append(f'- overlap {key}: {", ".join(val)}')
+          Path('operator_health_report.md').write_text('\n'.join(lines) + '\n', encoding='utf-8')
           print(Path('operator_health_report.md').read_text(encoding='utf-8'))
           PY
       - uses: actions/upload-artifact@v4
