@@ -1,6 +1,0 @@
-- [x] fail-closed surface migration prepared
-- [x] stateful policy migration prepared
-- [x] evidence canonicalization prepared
-- [x] IEEE edge gate prepared
-- [ ] CI green
-- [ ] merge to main
