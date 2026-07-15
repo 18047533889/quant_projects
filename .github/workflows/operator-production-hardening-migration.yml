@@ -1,0 +1,71 @@
+name: Apply Operator Production Hardening
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/scripts/apply_operator_production_hardening.py"
+      - ".github/workflows/operator-production-hardening-migration.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: operator-production-hardening
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/gtja191
+      FACTOR_ENGINE_DISABLE_NUMBA: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/operator-production-hardening
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Apply production hardening
+        run: python .github/scripts/apply_operator_production_hardening.py
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pytest pyyaml
+      - name: Regenerate operator catalogs
+        run: |
+          python factor_engine/scripts/generate_operators_catalog.py
+          python factor_engine/scripts/export_dsl_allowlist.py
+      - name: Compile
+        run: python -m compileall -q factor_engine
+      - name: Governance and capability tests
+        run: |
+          pytest -q \
+            factor_engine/tests/test_operator_surface.py \
+            factor_engine/tests/test_operator_production_hardening.py
+      - name: Validate repository formulas
+        run: python factor_engine/scripts/validate_public_factor_formulas.py
+      - name: GTJA185 compatibility
+        run: |
+          pytest -q \
+            gtja191/tests/test_full_catalog_factor_engine.py \
+            gtja191/tests/test_gtja191.py
+      - name: FactorEngine regressions
+        run: |
+          pytest -q \
+            factor_engine/tests/test_gtja_compat_semantics.py \
+            factor_engine/tests/test_data_scope_stability.py
+      - name: Commit migrated FactorEngine implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add factor_engine
+          git diff --cached --quiet && exit 0
+          git commit -m "Harden operator production governance and evidence"
+          git push origin HEAD:agent/operator-production-hardening
