@@ -19,6 +19,9 @@ jobs:
   migrate:
     runs-on: ubuntu-latest
     timeout-minutes: 75
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/gtja191
+      FACTOR_ENGINE_DISABLE_NUMBA: "1"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,25 +38,31 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
       - name: Generate public catalogs
-        env:
-          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/gtja191
-          FACTOR_ENGINE_DISABLE_NUMBA: "1"
         run: |
           python factor_engine/scripts/generate_operators_catalog.py
           python factor_engine/scripts/export_dsl_allowlist.py
-      - name: Validate surfaces and factor compatibility
-        env:
-          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/gtja191
-          FACTOR_ENGINE_DISABLE_NUMBA: "1"
-        run: |
-          python -m compileall -q factor_engine
-          pytest -q factor_engine/tests/test_operator_surface.py
-          python factor_engine/scripts/validate_public_factor_formulas.py
-          pytest -q \
-            gtja191/tests/test_full_catalog_factor_engine.py \
-            gtja191/tests/test_gtja191.py \
-            factor_engine/tests/test_gtja_compat_semantics.py \
-            factor_engine/tests/test_data_scope_stability.py
+      - name: Compile FactorEngine
+        run: python -m compileall -q factor_engine
+      - name: Operator surface tests
+        run: pytest -q factor_engine/tests/test_operator_surface.py
+      - name: Repository formula validation
+        run: python factor_engine/scripts/validate_public_factor_formulas.py
+      - name: GTJA185 compatibility
+        run: pytest -q gtja191/tests/test_full_catalog_factor_engine.py gtja191/tests/test_gtja191.py
+      - name: FactorEngine regressions
+        run: pytest -q factor_engine/tests/test_gtja_compat_semantics.py factor_engine/tests/test_data_scope_stability.py
+      - name: Upload migrated tree on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: operator-surface-migration-diagnostics
+          path: |
+            factor_engine/cleaned_operators/operator_surface.py
+            factor_engine/backend/cleaned_bridge.py
+            factor_engine/cleaned_operators/_dedupe.py
+            factor_engine/tests/test_operator_surface.py
+            factor_engine/docs/dsl_allowlist.json
+            factor_engine/cleaned_operators/docs/operators_catalog.json
       - name: Commit migrated implementation
         run: |
           rm -f .github/scripts/apply_operator_surface_cleanup.py
