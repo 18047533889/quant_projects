@@ -44,7 +44,10 @@ jobs:
       - name: Compile FactorEngine
         run: python -m compileall -q factor_engine
       - name: Operator surface tests
-        run: pytest -q factor_engine/tests/test_operator_surface.py
+        shell: bash
+        run: |
+          set -o pipefail
+          pytest -vv factor_engine/tests/test_operator_surface.py 2>&1 | tee operator_surface_test.log
       - name: Repository formula validation
         run: python factor_engine/scripts/validate_public_factor_formulas.py
       - name: GTJA185 compatibility
@@ -57,6 +60,7 @@ jobs:
         with:
           name: operator-surface-migration-diagnostics
           path: |
+            operator_surface_test.log
             factor_engine/cleaned_operators/operator_surface.py
             factor_engine/backend/cleaned_bridge.py
             factor_engine/cleaned_operators/_dedupe.py
