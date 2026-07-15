@@ -9,8 +9,8 @@
     "c_mean",
     "c_std",
     "c_sum",
+    "cap",
     "ceil",
-    "clip",
     "coalesce",
     "count",
     "cs_demean",
@@ -22,6 +22,7 @@
     "cum_min",
     "cum_prod",
     "cum_sum",
+    "delay",
     "div_or_default",
     "divide",
     "eq",
@@ -72,7 +73,7 @@
     "protected_sqrt",
     "rank",
     "rank_pct",
-    "safe_div_null",
+    "safe_div",
     "scale",
     "sign",
     "signed_log",
@@ -83,7 +84,6 @@
     "ts_beta",
     "ts_corr",
     "ts_cov",
-    "ts_delay",
     "ts_delta",
     "ts_max",
     "ts_mean",
@@ -110,8 +110,8 @@
     "c_mean",
     "c_std",
     "c_sum",
+    "cap",
     "ceil",
-    "clip",
     "coalesce",
     "count",
     "cs_demean",
@@ -123,6 +123,7 @@
     "cum_min",
     "cum_prod",
     "cum_sum",
+    "delay",
     "div_or_default",
     "divide",
     "eq",
@@ -173,7 +174,7 @@
     "protected_sqrt",
     "rank",
     "rank_pct",
-    "safe_div_null",
+    "safe_div",
     "scale",
     "sign",
     "signed_log",
@@ -184,7 +185,6 @@
     "ts_beta",
     "ts_corr",
     "ts_cov",
-    "ts_delay",
     "ts_delta",
     "ts_max",
     "ts_mean",
@@ -211,8 +211,8 @@
     "c_mean",
     "c_std",
     "c_sum",
+    "cap",
     "ceil",
-    "clip",
     "coalesce",
     "count",
     "cs_demean",
@@ -224,6 +224,7 @@
     "cum_min",
     "cum_prod",
     "cum_sum",
+    "delay",
     "div_or_default",
     "divide",
     "eq",
@@ -274,7 +275,7 @@
     "protected_sqrt",
     "rank",
     "rank_pct",
-    "safe_div_null",
+    "safe_div",
     "scale",
     "sign",
     "signed_log",
@@ -285,7 +286,6 @@
     "ts_beta",
     "ts_corr",
     "ts_cov",
-    "ts_delay",
     "ts_delta",
     "ts_max",
     "ts_mean",
@@ -312,8 +312,8 @@
     "c_mean",
     "c_std",
     "c_sum",
+    "cap",
     "ceil",
-    "clip",
     "coalesce",
     "count",
     "cs_demean",
@@ -325,6 +325,7 @@
     "cum_min",
     "cum_prod",
     "cum_sum",
+    "delay",
     "div_or_default",
     "divide",
     "eq",
@@ -375,7 +376,7 @@
     "protected_sqrt",
     "rank",
     "rank_pct",
-    "safe_div_null",
+    "safe_div",
     "scale",
     "sign",
     "signed_log",
@@ -386,7 +387,6 @@
     "ts_beta",
     "ts_corr",
     "ts_cov",
-    "ts_delay",
     "ts_delta",
     "ts_max",
     "ts_mean",
@@ -413,8 +413,8 @@
     "c_mean",
     "c_std",
     "c_sum",
+    "cap",
     "ceil",
-    "clip",
     "coalesce",
     "count",
     "cs_demean",
@@ -426,6 +426,7 @@
     "cum_min",
     "cum_prod",
     "cum_sum",
+    "delay",
     "div_or_default",
     "divide",
     "eq",
@@ -475,7 +476,7 @@
     "protected_sqrt",
     "rank",
     "rank_pct",
-    "safe_div_null",
+    "safe_div",
     "scale",
     "sign",
     "signed_log",
@@ -486,7 +487,6 @@
     "ts_beta",
     "ts_corr",
     "ts_cov",
-    "ts_delay",
     "ts_delta",
     "ts_max",
     "ts_mean",
@@ -513,8 +513,8 @@
     "c_mean",
     "c_std",
     "c_sum",
+    "cap",
     "ceil",
-    "clip",
     "coalesce",
     "count",
     "cs_demean",
@@ -526,6 +526,7 @@
     "cum_min",
     "cum_prod",
     "cum_sum",
+    "delay",
     "div_or_default",
     "divide",
     "eq",
@@ -575,7 +576,7 @@
     "protected_sqrt",
     "rank",
     "rank_pct",
-    "safe_div_null",
+    "safe_div",
     "scale",
     "sign",
     "signed_log",
@@ -586,7 +587,6 @@
     "ts_beta",
     "ts_corr",
     "ts_cov",
-    "ts_delay",
     "ts_delta",
     "ts_max",
     "ts_mean",
@@ -622,8 +622,8 @@
     "c_mean",
     "c_std",
     "c_sum",
+    "cap",
     "ceil",
-    "clip",
     "coalesce",
     "count",
     "cs_demean",
@@ -635,6 +635,7 @@
     "cum_min",
     "cum_prod",
     "cum_sum",
+    "delay",
     "div_or_default",
     "divide",
     "eq",
@@ -685,7 +686,7 @@
     "protected_sqrt",
     "rank",
     "rank_pct",
-    "safe_div_null",
+    "safe_div",
     "scale",
     "sign",
     "signed_log",
@@ -696,7 +697,6 @@
     "ts_beta",
     "ts_corr",
     "ts_cov",
-    "ts_delay",
     "ts_delta",
     "ts_max",
     "ts_mean",
@@ -912,10 +912,13 @@
       "implementation_hash_polars": "0e8f4d58089337a7",
       "implementation_hash_duckdb": "1adfea56b0df2708"
     },
-    "clip": {
+    "cap": {
       "semantic_version": 2,
       "implementation_hash_polars": "0e8f4d58089337a7",
-      "implementation_hash_duckdb": "1adfea56b0df2708"
+      "implementation_hash_duckdb": "1adfea56b0df2708",
+      "certified_aliases": [
+        "clip"
+      ]
     },
     "coalesce": {
       "semantic_version": 2,
@@ -1074,10 +1077,13 @@
       "implementation_hash_polars": "0e8f4d58089337a7",
       "implementation_hash_duckdb": "1adfea56b0df2708"
     },
-    "safe_div_null": {
+    "safe_div": {
       "semantic_version": 2,
       "implementation_hash_polars": "0e8f4d58089337a7",
-      "implementation_hash_duckdb": "1adfea56b0df2708"
+      "implementation_hash_duckdb": "1adfea56b0df2708",
+      "certified_aliases": [
+        "safe_div_null"
+      ]
     },
     "sign": {
       "semantic_version": 2,
@@ -1109,10 +1115,13 @@
       "implementation_hash_polars": "0e8f4d58089337a7",
       "implementation_hash_duckdb": "1adfea56b0df2708"
     },
-    "ts_delay": {
+    "delay": {
       "semantic_version": 2,
       "implementation_hash_polars": "0e8f4d58089337a7",
-      "implementation_hash_duckdb": "1adfea56b0df2708"
+      "implementation_hash_duckdb": "1adfea56b0df2708",
+      "certified_aliases": [
+        "ts_delay"
+      ]
     },
     "ts_delta": {
       "semantic_version": 2,
@@ -1329,5 +1338,9 @@
       "implementation_hash_polars_emitter": "0e8f4d58089337a7",
       "implementation_hash_duckdb_emitter": "1adfea56b0df2708"
     }
+  },
+  "canonicalization": {
+    "applied_after_registry_deduplication": true,
+    "legacy_names_are_metadata_only": true
   }
 }

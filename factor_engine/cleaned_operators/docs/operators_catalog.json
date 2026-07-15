@@ -2,15 +2,17 @@
   "schema_version": 2,
   "canonical_count": 379,
   "surface_counts": {
-    "daily": 307,
-    "research": 60,
-    "unsafe": 11,
-    "legacy": 1
+    "daily": 280,
+    "research": 85,
+    "unsafe": 12,
+    "legacy": 1,
+    "internal": 1,
+    "unclassified": 0
   },
   "operators": [
     {
       "canonical": "ACF",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [
         "acf"
       ],
@@ -311,7 +313,7 @@
     },
     {
       "canonical": "Mode",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [
         "mode"
       ],
@@ -648,7 +650,7 @@
     },
     {
       "canonical": "autocorr",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -850,7 +852,7 @@
     },
     {
       "canonical": "causal_bfill",
-      "surface": "daily",
+      "surface": "unsafe",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -1017,7 +1019,7 @@
     },
     {
       "canonical": "constant",
-      "surface": "daily",
+      "surface": "internal",
       "aliases": [],
       "backends": [
         "pandas_numpy"
@@ -2700,7 +2702,7 @@
     },
     {
       "canonical": "lasso",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -2980,7 +2982,7 @@
     },
     {
       "canonical": "max_drawdown",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -3345,7 +3347,7 @@
     },
     {
       "canonical": "pacf",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -3658,7 +3660,7 @@
     },
     {
       "canonical": "r_squared",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [
         "R2"
       ],
@@ -3849,7 +3851,7 @@
     },
     {
       "canonical": "regress",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -3863,7 +3865,7 @@
     },
     {
       "canonical": "residual",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [
         "Residual"
       ],
@@ -3907,7 +3909,7 @@
     },
     {
       "canonical": "ridge",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -3973,7 +3975,7 @@
     },
     {
       "canonical": "row_avg",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -3987,7 +3989,7 @@
     },
     {
       "canonical": "row_beta",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -4001,7 +4003,7 @@
     },
     {
       "canonical": "row_corr",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -4015,7 +4017,7 @@
     },
     {
       "canonical": "row_count",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -4029,7 +4031,7 @@
     },
     {
       "canonical": "row_kurt",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -4043,7 +4045,7 @@
     },
     {
       "canonical": "row_max",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -4057,7 +4059,7 @@
     },
     {
       "canonical": "row_median",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -4071,7 +4073,7 @@
     },
     {
       "canonical": "row_min",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -4085,7 +4087,7 @@
     },
     {
       "canonical": "row_prod",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -4099,7 +4101,7 @@
     },
     {
       "canonical": "row_skew",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -4113,7 +4115,7 @@
     },
     {
       "canonical": "row_std",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -4127,7 +4129,7 @@
     },
     {
       "canonical": "row_sum",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -4141,7 +4143,7 @@
     },
     {
       "canonical": "row_var",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -4233,7 +4235,7 @@
     },
     {
       "canonical": "sem",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -4247,7 +4249,7 @@
     },
     {
       "canonical": "sharpe_ratio",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
