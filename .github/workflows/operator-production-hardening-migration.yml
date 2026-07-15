@@ -38,7 +38,10 @@ jobs:
           python-version: "3.11"
           cache: pip
       - name: Apply production hardening
-        run: python .github/scripts/apply_operator_production_hardening.py
+        shell: bash
+        run: |
+          set -o pipefail
+          python .github/scripts/apply_operator_production_hardening.py 2>&1 | tee operator_hardening_migration.log
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -67,6 +70,16 @@ jobs:
           pytest -q \
             factor_engine/tests/test_gtja_compat_semantics.py \
             factor_engine/tests/test_data_scope_stability.py
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: operator-production-hardening-diagnostics
+          path: |
+            operator_hardening_migration.log
+            .github/scripts/apply_operator_production_hardening.py
+            factor_engine/cleaned_operators/operator_surface.py
+            factor_engine/backend/polars_long_policy.py
       - name: Commit migrated FactorEngine implementation
         run: |
           git config user.name "github-actions[bot]"
