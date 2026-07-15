@@ -1,0 +1,202 @@
+name: Operator Usage Audit
+
+on:
+  pull_request:
+    paths:
+      - "factor_engine/**"
+      - "gtja191/**"
+      - "AutoFactorEvaluation-RECONSTRUCT/**"
+      - "CogAlpha/**"
+      - ".github/workflows/operator-usage-audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build operator usage report
+        shell: bash
+        run: |
+          python - <<'PY'
+          from __future__ import annotations
+          import csv, json, re
+          from collections import defaultdict
+          from pathlib import Path
+
+          root = Path('.')
+          catalog = root / 'factor_engine/cleaned_operators/docs/operators_catalog.md'
+          aliases_file = root / 'factor_engine/cleaned_operators/_aliases.py'
+          dedupe_file = root / 'factor_engine/cleaned_operators/_dedupe.py'
+
+          canonical = []
+          for line in catalog.read_text(encoding='utf-8').splitlines():
+              m = re.match(r'^\|\s*([^|]+?)\s*\|', line)
+              if not m:
+                  continue
+              name = m.group(1).strip()
+              if name in {'canonical', '-----------'} or not name:
+                  continue
+              canonical.append(name)
+          canonical = sorted(set(canonical))
+
+          alias_to_canonical = {}
+          alias_re = re.compile(r'register_alias\(\s*["\']([^"\']+)["\']\s*,\s*["\']([^"\']+)["\']')
+          for path in (aliases_file, dedupe_file):
+              if path.exists():
+                  for a, c in alias_re.findall(path.read_text(encoding='utf-8')):
+                      alias_to_canonical[a] = c
+
+          # Follow alias chains and canonical renames declared by dedupe.
+          rename = {}
+          rename_re = re.compile(r'rename_canonical\(\s*["\']([^"\']+)["\']\s*,\s*["\']([^"\']+)["\']')
+          if dedupe_file.exists():
+              for old, new in rename_re.findall(dedupe_file.read_text(encoding='utf-8')):
+                  rename[old] = new
+          def resolve(name: str) -> str:
+              seen = set()
+              while name not in seen:
+                  seen.add(name)
+                  nxt = rename.get(name) or alias_to_canonical.get(name)
+                  if not nxt:
+                      break
+                  name = nxt
+              return name
+
+          names_for_canonical = defaultdict(set)
+          for name in canonical:
+              names_for_canonical[resolve(name)].add(name)
+          for alias, target in alias_to_canonical.items():
+              names_for_canonical[resolve(target)].add(alias)
+          canonical_resolved = sorted(names_for_canonical)
+
+          allowed_ext = {'.py', '.yaml', '.yml', '.json', '.toml', '.ini', '.cfg', '.md', '.txt'}
+          skip_parts = {'.git', '.venv', 'venv', '__pycache__', 'node_modules', 'data', 'logs', 'output', 'outputs', 'cache'}
+          files = []
+          for path in root.rglob('*'):
+              if not path.is_file() or path.suffix.lower() not in allowed_ext:
+                  continue
+              if any(part in skip_parts for part in path.parts):
+                  continue
+              try:
+                  if path.stat().st_size > 2_000_000:
+                      continue
+              except OSError:
+                  continue
+              files.append(path)
+
+          def category(path: Path) -> str:
+              p = path.as_posix()
+              parts = set(path.parts)
+              if 'tests' in parts or path.name.startswith('test_'):
+                  return 'tests'
+              if '/docs/' in f'/{p}' or path.suffix.lower() == '.md':
+                  return 'docs'
+              if p.startswith('factor_engine/cleaned_operators/') or p.startswith('factor_engine/api/') or p.startswith('factor_engine/backend/') or p.startswith('factor_engine/expr/') or p.startswith('factor_engine/ir/') or p.startswith('factor_engine/planner/') or p.startswith('factor_engine/evidence/') or p.startswith('factor_engine/scripts/'):
+                  return 'engine_internal'
+              if p.startswith('gtja191/') or 'candidate_pool' in parts or 'factor_packs' in parts or 'factors' in parts or 'factor_configs' in parts or 'configs' in parts or p.startswith('CogAlpha/'):
+                  return 'factor_definitions'
+              return 'production_code'
+
+          counts = {c: defaultdict(int) for c in canonical_resolved}
+          paths_by = {c: defaultdict(list) for c in canonical_resolved}
+          # Match call syntax only, reducing comments/prose false positives.
+          patterns = {}
+          for c, names in names_for_canonical.items():
+              names = sorted(names, key=len, reverse=True)
+              patterns[c] = re.compile(r'(?<![A-Za-z0-9_])(?:' + '|'.join(re.escape(n) for n in names) + r')\s*\(')
+
+          for path in files:
+              try:
+                  text = path.read_text(encoding='utf-8', errors='ignore')
+              except OSError:
+                  continue
+              cat = category(path)
+              for c, pattern in patterns.items():
+                  n = len(pattern.findall(text))
+                  if n:
+                      counts[c][cat] += n
+                      if len(paths_by[c][cat]) < 12:
+                          paths_by[c][cat].append(path.as_posix())
+
+          evidence_sets = defaultdict(set)
+          for ep in [root/'factor_engine/evidence/primitive_verified.json', root/'factor_engine/evidence/operator_upgrade_matrix.json']:
+              if not ep.exists():
+                  continue
+              try:
+                  obj = json.loads(ep.read_text(encoding='utf-8'))
+              except Exception:
+                  continue
+              def walk(value, key='root'):
+                  if isinstance(value, dict):
+                      for k, v in value.items(): walk(v, str(k))
+                  elif isinstance(value, list):
+                      for v in value:
+                          if isinstance(v, str) and resolve(v) in names_for_canonical:
+                              evidence_sets[resolve(v)].add(key)
+                          else: walk(v, key)
+              walk(obj)
+
+          rows = []
+          for c in canonical_resolved:
+              d = counts[c]
+              external = d['factor_definitions'] + d['production_code']
+              rows.append({
+                  'canonical': c,
+                  'aliases': ','.join(sorted(n for n in names_for_canonical[c] if n != c)),
+                  'factor_definition_calls': d['factor_definitions'],
+                  'production_code_calls': d['production_code'],
+                  'test_calls': d['tests'],
+                  'docs_calls': d['docs'],
+                  'engine_internal_calls': d['engine_internal'],
+                  'external_calls': external,
+                  'evidence_dimensions': len(evidence_sets[c]),
+                  'evidence_keys': ','.join(sorted(evidence_sets[c])),
+                  'classification': ('externally_used' if external else 'test_only' if d['tests'] else 'internal_only'),
+                  'factor_paths': ';'.join(paths_by[c]['factor_definitions']),
+                  'production_paths': ';'.join(paths_by[c]['production_code']),
+                  'test_paths': ';'.join(paths_by[c]['tests']),
+              })
+
+          out = Path('operator-audit')
+          out.mkdir(exist_ok=True)
+          with (out/'operator_usage.csv').open('w', newline='', encoding='utf-8') as f:
+              w = csv.DictWriter(f, fieldnames=list(rows[0]))
+              w.writeheader(); w.writerows(rows)
+          (out/'operator_usage.json').write_text(json.dumps({
+              'canonical_count': len(canonical_resolved),
+              'alias_count': len(alias_to_canonical),
+              'rows': rows,
+          }, ensure_ascii=False, indent=2), encoding='utf-8')
+
+          internal = [r for r in rows if r['classification'] == 'internal_only']
+          test_only = [r for r in rows if r['classification'] == 'test_only']
+          external = [r for r in rows if r['classification'] == 'externally_used']
+          lines = [
+              '# Operator usage audit', '',
+              f'- resolved canonical: {len(rows)}',
+              f'- aliases parsed: {len(alias_to_canonical)}',
+              f'- externally used: {len(external)}',
+              f'- test-only: {len(test_only)}',
+              f'- internal-only: {len(internal)}', '',
+              '## Internal-only candidates', '',
+              '| canonical | aliases | evidence dimensions | internal calls |',
+              '|---|---|---:|---:|',
+          ]
+          for r in sorted(internal, key=lambda x: (x['evidence_dimensions'], x['engine_internal_calls'], x['canonical'])):
+              lines.append(f"| {r['canonical']} | {r['aliases']} | {r['evidence_dimensions']} | {r['engine_internal_calls']} |")
+          lines += ['', '## Test-only candidates', '', '| canonical | aliases | tests | evidence dimensions |', '|---|---|---:|---:|']
+          for r in sorted(test_only, key=lambda x: (x['test_calls'], x['canonical'])):
+              lines.append(f"| {r['canonical']} | {r['aliases']} | {r['test_calls']} | {r['evidence_dimensions']} |")
+          (out/'README.md').write_text('\n'.join(lines), encoding='utf-8')
+          print('\n'.join(lines[:30]))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: operator-usage-audit
+          path: operator-audit/
+          if-no-files-found: error
