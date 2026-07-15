@@ -45,10 +45,17 @@ def write_fail_closed_surface() -> None:
     unsafe_add = {"causal_bfill"}
     internal_add = {"constant"}
 
-    research |= research_add & daily
-    unsafe |= unsafe_add & daily
-    internal = internal_add & daily
+    all_canonicals = set().union(*by_surface.values())
+    research |= research_add & all_canonicals
+    unsafe |= unsafe_add & all_canonicals
+    internal = internal_add & all_canonicals
+
+    # Surface sets must be mutually exclusive. Explicit migration targets win
+    # over their previous catalog classification.
     daily -= research_add | unsafe_add | internal_add
+    research -= unsafe | internal
+    unsafe -= internal
+    legacy -= research | unsafe | internal
 
     hidden_daily_names = {
         "inv",
