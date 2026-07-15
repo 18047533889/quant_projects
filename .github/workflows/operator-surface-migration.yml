@@ -33,19 +33,6 @@ jobs:
           cache: pip
       - name: Apply migration
         run: python .github/scripts/apply_operator_surface_cleanup.py
-      - name: Ensure permanent gate installs test tools
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          path = Path('.github/workflows/operator-surface-gate.yml')
-          text = path.read_text()
-          needle = '          python -m pip install -r requirements.txt\n'
-          replacement = needle + '          python -m pip install pytest pyyaml\n'
-          if replacement not in text:
-              if needle not in text:
-                  raise SystemExit('permanent workflow dependency anchor missing')
-              path.write_text(text.replace(needle, replacement, 1))
-          PY
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -81,12 +68,10 @@ jobs:
             factor_engine/tests/test_operator_surface.py
             factor_engine/docs/dsl_allowlist.json
             factor_engine/cleaned_operators/docs/operators_catalog.json
-      - name: Commit migrated implementation
+      - name: Commit migrated FactorEngine implementation
         run: |
-          rm -f .github/scripts/apply_operator_surface_cleanup.py
-          rm -f .github/workflows/operator-surface-migration.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
+          git add factor_engine
           git commit -m "Separate daily, research, unsafe, and legacy operator surfaces"
           git push origin HEAD:agent/operator-surface-cleanup
