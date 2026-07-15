@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
-"""从 OperatorRegistry + OperatorPolicy 自动生成 operators_catalog.md。"""
+"""Generate post-deduplication operator runtime and surface catalogs."""
 from __future__ import annotations
 
-from datetime import date
+import json
+import sys
 from pathlib import Path
 
 FE_ROOT = Path(__file__).resolve().parents[1]
-OUT_PATH = FE_ROOT / "cleaned_operators" / "docs" / "operators_catalog.md"
+OUT_MD = FE_ROOT / "cleaned_operators" / "docs" / "operators_catalog.md"
+OUT_JSON = FE_ROOT / "cleaned_operators" / "docs" / "operators_catalog.json"
 
 
 def _load():
-    """加载算子注册表、policy 推断器并注册 SQL backend。"""
-    import sys
-
     root = str(FE_ROOT.parent)
     if root not in sys.path:
         sys.path.insert(0, root)
@@ -20,63 +19,87 @@ def _load():
         sys.path.insert(0, str(FE_ROOT))
     from cleaned_operators import load_all
     from cleaned_operators.operator_policy import infer_operator_policy
+    from cleaned_operators.operator_surface import classify_canonical, surface_summary
     from cleaned_operators.registry import OperatorRegistry
     from backend.sql_pushdown.sql_registry import register_sql_backends
 
-    load_all()
+    load_all()  # includes apply_operator_deduplication()
     register_sql_backends()
-    return OperatorRegistry, infer_operator_policy
+    return OperatorRegistry, infer_operator_policy, classify_canonical, surface_summary
 
 
-def _render(registry, infer_policy) -> str:
-    """将注册表与 policy 渲染为 operators_catalog.md 正文。"""
-    catalog = registry._catalog
+def _payload(registry, infer_policy, classify_canonical, surface_summary) -> dict:
+    rows: list[dict] = []
+    for canonical in registry.list_canonical():
+        operator = registry.get(canonical)
+        if operator is None:
+            continue
+        meta = dict(registry.catalog().get(canonical) or {})
+        policy = infer_policy(operator, canonical=canonical)
+        rows.append(
+            {
+                "canonical": canonical,
+                "surface": classify_canonical(canonical),
+                "aliases": sorted(meta.get("aliases") or []),
+                "backends": sorted(meta.get("backends") or []),
+                "pit_safe": bool(policy.pit_safe) if policy else None,
+                "scope": str(policy.scope) if policy else None,
+                "lookback": policy.lookback_window if policy else None,
+                "min_periods": policy.min_periods if policy else None,
+                "lag": policy.lag if policy else None,
+            }
+        )
+    return {
+        "schema_version": 2,
+        "canonical_count": len(rows),
+        "surface_counts": surface_summary([row["canonical"] for row in rows]),
+        "operators": rows,
+    }
+
+
+def _render(payload: dict) -> str:
+    counts = payload["surface_counts"]
     lines = [
         "# Operators Catalog（自动生成）",
         "",
-        f"> 生成日期：{date.today().isoformat()}",
-        "> 由 `scripts/generate_operators_catalog.py` 从注册表 + OperatorPolicy 生成。",
+        "> 从 `load_all()` 去重后的最终 runtime registry 生成。",
+        "> 日常因子 DSL 仅使用 `surface=daily`；其他工具见 `research_operators/`。",
         "",
         "## 摘要",
         "",
-        f"- canonical 总数：{len(catalog)}",
+        f"- canonical 总数：{payload['canonical_count']}",
+        f"- daily：{counts['daily']}",
+        f"- research：{counts['research']}",
+        f"- unsafe：{counts['unsafe']}",
+        f"- legacy：{counts['legacy']}",
         "",
-        "## Implemented 算子",
-        "",
-        "| canonical | backends | pit_safe | scope | lookback | min_periods | lag |",
-        "|-----------|----------|----------|-------|----------|-------------|-----|",
+        "| canonical | surface | backends | aliases | pit_safe | scope | lookback | min_periods | lag |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
-
-    implemented = sorted(
-        name for name, meta in catalog.items() if meta.get("status", "implemented") != "stub"
-    )
-    for canon in implemented:
-        meta = catalog[canon]
-        backends = ", ".join(meta.get("backends") or [])
-        op = registry.get(canon)
-        policy = infer_policy(op, canonical=canon) if op else None
-        if policy:
-            lines.append(
-                f"| {canon} | {backends} | {policy.pit_safe} | {policy.scope} | "
-                f"{policy.lookback_window} | {policy.min_periods} | {policy.lag} |"
+    for row in payload["operators"]:
+        lines.append(
+            "| {canonical} | {surface} | {backends} | {aliases} | {pit_safe} | {scope} | {lookback} | {min_periods} | {lag} |".format(
+                canonical=row["canonical"],
+                surface=row["surface"],
+                backends=", ".join(row["backends"]),
+                aliases=", ".join(row["aliases"]),
+                pit_safe=row["pit_safe"],
+                scope=row["scope"],
+                lookback=row["lookback"],
+                min_periods=row["min_periods"],
+                lag=row["lag"],
             )
-        else:
-            lines.append(f"| {canon} | {backends} | — | — | — | — | — |")
-
-    lines.extend(["", "## Stub / catalog-only", ""])
-    stubs = sorted(name for name, meta in catalog.items() if meta.get("status") == "stub")
-    for canon in stubs:
-        lines.append(f"- `{canon}`")
-
+        )
     return "\n".join(lines) + "\n"
 
 
 def main() -> None:
-    """从 OperatorRegistry + OperatorPolicy 生成 operators_catalog.md。"""
-    registry, infer_policy = _load()
-    OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    OUT_PATH.write_text(_render(registry, infer_policy), encoding="utf-8")
-    print(f"Wrote {OUT_PATH}")
+    registry, infer_policy, classify_canonical, surface_summary = _load()
+    payload = _payload(registry, infer_policy, classify_canonical, surface_summary)
+    OUT_MD.parent.mkdir(parents=True, exist_ok=True)
+    OUT_MD.write_text(_render(payload), encoding="utf-8")
+    OUT_JSON.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"Wrote {OUT_MD} and {OUT_JSON}")
 
 
 if __name__ == "__main__":

@@ -1,149 +1,30 @@
-# DSL 算子白名单参考（第 31 版 cleaned）
+# DSL 算子白名单参考
 
-> **权威枚举**：[`dsl_allowlist.json`](dsl_allowlist.json)（`PYTHONPATH=. python scripts/export_dsl_allowlist.py` 生成）  
-> **运行时校验**：`build_dsl_allowlist()` / `parse_expr(formula)` / [`../api/mining_integration.py`](../api/mining_integration.py)  
-> **语义细节**：[`operators_semantics.md`](operators_semantics.md)
+> **权威枚举**：[`dsl_allowlist.json`](dsl_allowlist.json)，由 `build_dsl_allowlist()` 导出。  
+> **完整 runtime 与分类**：[`../cleaned_operators/docs/operators_catalog.md`](../cleaned_operators/docs/operators_catalog.md)。  
+> **分层说明**：[`operator_surfaces.md`](operator_surfaces.md)。
 
----
+## 日常因子 DSL
 
-## 1. 如何判断「能不能写进 manifest」
+正常 manifest 只能使用 `surface=daily` 的算子，即能够生成按
+`(date, instrument)` 对齐的因子值且默认满足因果约束的算子。代表性能力：
 
-| 条件 | 结果 |
-|------|------|
-| 名字在 `build_dsl_allowlist()` 中 | ✅ 可 `parse_expr`；美股 `expression_type: dsl` 可投递 |
-| 名字仅在 `operators_catalog.md` 且 `status=stub` | ❌ 不可 parse |
-| 名字在 catalog 标注 `api_expr_only` 或未注册 | ❌ 不可 parse（第 31 版前「能 parse 不能算」已取消） |
-| `api.operator_registry.STUB_IR_OPS` | **恒为空集** — 勿再引用为占位集合 |
+- 算术与安全数学：`add`, `subtract`, `multiply`, `divide`, `safe_div`, `log`, `sqrt`, `power`；
+- 时序：`delay`, `ts_delta`, `ts_mean`, `ts_std`, `ts_sum`, `ts_min`, `ts_max`, `ts_corr`, `ts_rank`；
+- 截面：`rank`, `zscore`, `winsorize`, `normalize`, `cs_demean`, `cs_regression`；
+- 分组：`group_rank`, `group_neutralize`, `group_zscore`, `group_mean`；
+- 技术与领域算子：保留能直接生成标量因子面板的技术、基本面和微观结构算子。
 
-本地自检：
+## 不在公共 DSL 中
+
+- 非因果/随机：`Lead`, `next`, `bfill`, `fillna_interpolate`, `shuffle`, `sample`, `rand_*`；
+- 研究诊断：假设检验、PDF/CDF、矩阵分解、PCA、复数、FFT、wavelet 和 filtering；
+- 冗余旧名：`inv`, `reciprocal`, `fmax`, `fmin`, `sqr`, `cube`, `cumulative_*`。
+
+研究工具通过 `research_operators` 显式访问，不得写入正常因子 manifest。
 
 ```bash
-cd ~/quant_projects/factor_engine
-PYTHONPATH=. python scripts/validate_delivery_formula.py "rank(ts_mean(close, 20))"
-PYTHONPATH=. python scripts/export_dsl_allowlist.py   # 刷新 docs/dsl_allowlist.json
+cd factor_engine
+PYTHONPATH=. python scripts/export_dsl_allowlist.py
+PYTHONPATH=. python scripts/generate_operators_catalog.py
 ```
-
----
-
-## 2. 白名单规模（约 512 名）
-
-含 `col`、蛇形 DSL 名、以及 **`SMA`/`EMA`/`MACD` 等大写 canonical**（经 `_aliases.py` 映射）。  
-**不要**手写穷举；投递侧以 JSON 为准。
-
----
-
-## 3. 可投递 — 代表算子（按类）
-
-### 3.1 算术 / 逻辑 / 截面
-
-`add` `subtract` `multiply` `divide` `abs` `log` `sign` `sqrt` `power` `sin` `cos` `exp`  
-`if_else` `where` `and_` `or_` `not_`  
-`rank` `zscore` `normalize` `quantile` `scale` `winsorize`  
-`cs_demean` `cs_resid(y, x)` `cs_regression(y, x, mode)` — 截面 OLS / 去均值（见 [`operators_semantics.md`](operators_semantics.md)）  
-`neutralize(x, g)` — **别名** → `group_neutralize`（组内去均值，**不是** OLS）
-
-### 3.2 时序（通用）
-
-`ts_mean` `ts_std` / `ts_std_dev` `ts_sum` `ts_max` `ts_min`  
-`delay` / `ts_delay` / `shift`（同义别名）  
-`ts_delta` `ts_corr` / `ts_correlation` `ts_cov` / `ts_covariance`  
-`ts_rank` `ts_decay_linear` `ts_regression` / `ts_regression_slope`  
-`ts_skew` / `ts_skewness` `ts_kurt` / `ts_kurtosis`
-
-### 3.3 分组
-
-`group_rank` `group_neutralize` `group_zscore` `group_mean` `group_normalize` `group_percentile` `group_decay_linear` `group_winsorize`  
-（`neutralize` / `group_demean` 等为 `group_neutralize` 别名，见 `_dedupe.py`）
-
-### 3.4 清洗 / 数值安全（已在白名单）
-
-`protected_div` `protected_log` `protected_sqrt`  
-`nan_to_num` `fillna` `ffill` `bfill` `coalesce` `winsorize`
-
-### 3.5 信号 / 条件
-
-`trade_when` — 见 [`adr_trade_when.md`](adr_trade_when.md)  
-`hump_decay` — 阈值衰减（**不是**旧名 `hump`）
-
-### 3.6 技术指标（已在白名单 — 节选）
-
-**命名注意**：均线用 **`SMA(x,d)` / `EMA(x,d)`** 或别名 `Mean`/`ts_mean`；**没有** `ts_sma` / `ts_ema` 别名。
-
-| DSL 名 | 说明 |
-|--------|------|
-| `ts_rsi` `ts_macd` `ts_atr` `ts_bbands` | 单序列 / HLC |
-| `ts_adx` `ts_adxr` `ts_aroon` | 趋势 |
-| `ts_obv` `ts_mom` `ts_roc` `ts_trix` | 量价 / 动量 |
-| `ts_cci` `ts_willr` `ts_stoch` `ts_stochf` | HLC |
-| `ts_kama` | 无 TA-Lib 时 EMA 近似 |
-
-完整 `ts_*` 列表见 `dsl_allowlist.json` 筛选前缀 `ts_`。
-
----
-
-## 4. 不可投递 — 待迁回 cleaned（第 31 版缺口）
-
-下列名字在 **旧版文档 / ADR / changelog** 中常出现，但 **当前不在** `build_dsl_allowlist()`。  
-投递前 **必须** 改写为白名单内算子组合，或等维护者在 `cleaned_operators/` 补实现。
-
-**清洗 / 变换：** `pasteurize` `tail` `bucket` `hump` `ts_step`
-
-**上下文：** `orthogonalize` `change_instrument`
-
-**分组 / 工程：** `group_backfill` `group_scale` `densify`
-
-**Overlap / 均线别名：** `ts_sma` `ts_ema` `ts_dema` `ts_wma` `ts_tema` `ts_trima` `ts_t3` `ts_ma_envelope`
-
-**通道 / 波动 / 扩展 TA：**  
-`ts_donchian` `ts_keltner` `ts_trange` `ts_natr`  
-`ts_ad` `ts_adosc` `ts_sar` `ts_mfi` `ts_ppo` `ts_apo` `ts_cmo` `ts_bop` `ts_ultosc` `ts_stochrsi`  
-`ts_linearreg_slope` `ts_rocr` `ts_rocr100`
-
-**向量 / stub：** `vec_avg` `vec_sum` 及全部 `*_stub`
-
-**替代写法示例：**
-
-| 原写法 | 替代 |
-|--------|------|
-| `pasteurize(x)` | `if_else(is_finite(x), x, 0)` 或 `nan_to_num(x)` |
-| `ts_ema(close, 20)` | `EMA(close, 20)` 或 `ts_mean` 近似 |
-| `ts_sma(close, 20)` | `SMA(close, 20)` 或 `ts_mean(close, 20)` |
-| `ts_donchian(...)` | `(high - ts_max(high,d))` 等组合 |
-| `ret` 列 | `close / delay(close, 1) - 1` |
-
----
-
-## 5. 维护者：新增算子 checklist
-
-1. 在 `cleaned_operators/*.py` 实现 `@register_operator`  
-2. 如需 DSL 蛇形名，在 [`../cleaned_operators/_aliases.py`](../cleaned_operators/_aliases.py) 登记  
-3. `PYTHONPATH=. pytest tests/test_cleaned_operators_comprehensive.py -q`  
-4. `PYTHONPATH=. python scripts/export_dsl_allowlist.py`  
-5. 更新本文 §3/§4 与 [`operators_semantics.md`](operators_semantics.md)
-
----
-
-## 6. SQL 下推（`duckdb_sql` / `clickhouse_sql`）
-
-**权威清单**：[`sql_pushdown_coverage.md`](sql_pushdown_coverage.md)（CI 由 `scripts/report_backend_coverage.py --write-doc` 生成）。
-
-| 指标 | 数量（2026-07） |
-|------|----------------|
-| canonical 已实现 | 361 |
-| Polars backend | 325（门禁 ≥ 320） |
-| SQL 可下推算子 | **58**（+ `column`/`literal` = **60**；registry **62**） |
-| intentional pandas-only | 36 |
-
-**常用已下推**：时序 `ts_mean/std/sum/max/min/median/var/delay/delta/pct/rank/corr/beta/ema/decay_linear`；截面 `rank/zscore/normalize/scale/winsorize/cs_demean/cs_resid/cs_regression`；分组 `group_*` 全簇；清洗 `fillna/ffill/bfill/coalesce/nan_to_num`；条件 `where/if_else/is_finite/is_nan`；数值安全 `protected_*`。
-
-**未下推**：技术指标 ~200+、`quantile`、非常量 `fillna`、36 个 pandas-only（FFT/矩阵/随机等）。
-
----
-
-## 7. 相关文档
-
-| 文档 | 用途 |
-|------|------|
-| [`miner_delivery_spec.md`](miner_delivery_spec.md) §4.1 | 美股公式与字段契约 |
-| [`算子与导入教程.md`](算子与导入教程.md) | 挖掘组 import / 校验 |
-| [`../cleaned_operators/docs/operators_catalog.md`](../cleaned_operators/docs/operators_catalog.md) | 全量审计（含历史 `api_expr_only` 标注） |
