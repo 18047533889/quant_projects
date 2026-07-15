@@ -197,7 +197,7 @@ backend:
 
 ## 支持的算子
 
-**第 31 版起**，算子 runtime 统一在 **`cleaned_operators/`**（约 **440+** 个已实现 canonical + **116** 个别名）。DSL 白名单由 **`api.operator_registry.build_dsl_allowlist()`** 自动生成（`col` + 全部有 pandas runtime 的名字）。
+算子 runtime 统一在 **`cleaned_operators/`**；正常 manifest 只暴露可生成日频标量因子值的 **daily DSL surface**。统计检验、矩阵/PCA、信号处理和非因果工具移至 **`research_operators/`** 显式调用。最终数量与分类以 `cleaned_operators/docs/operators_catalog.json` 为准。
 
 | 层级 | 说明 |
 |------|------|

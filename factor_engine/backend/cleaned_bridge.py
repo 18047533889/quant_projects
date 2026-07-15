@@ -475,24 +475,20 @@ def list_cleaned_ops_for_backend(skip: set[str]) -> list[str]:
     return sorted(names)
 
 
-def build_cleaned_dsl_allowlist(skip: set[str] | None = None) -> dict[str, Any]:
-    """构建 DSL 白名单：``{DSL函数名: make_cleaned_call_factory(...)}``。
+def build_cleaned_dsl_allowlist(
+    skip: set[str] | None = None,
+    *,
+    surface: str = "daily",
+) -> dict[str, Any]:
+    """Build a surface-filtered DSL mapping from the runtime registry.
 
-    仅包含 ``OperatorRegistry`` 中已有 runtime 实现的条目。
-
-    参数
-    ----
-    skip : set[str] | None
-        需要排除的算子名集合，默认空集。
-
-    返回
-    ----
-    dict[str, Any]
-        DSL 函数名到调用工厂的映射。
+    ``daily`` is the normal factor submission surface.  ``research``,
+    ``unsafe`` and ``legacy`` are explicit opt-in surfaces; ``all`` exists only
+    for compatibility tooling and runtime audits.
     """
     ensure_cleaned_loaded()
+    from cleaned_operators.operator_surface import is_dsl_name_allowed
     from cleaned_operators.registry import OperatorRegistry
-
     from api.cleaned_ops import make_cleaned_call_factory
 
     skip = skip or set()
@@ -502,15 +498,18 @@ def build_cleaned_dsl_allowlist(skip: set[str] | None = None) -> dict[str, Any]:
             continue
         if OperatorRegistry.get(canon) is None:
             continue
+        if not is_dsl_name_allowed(canon, canon, surface=surface):
+            continue
         out[canon] = make_cleaned_call_factory(canon)
     for alias, canon in OperatorRegistry._aliases.items():
         if alias in skip or alias in out:
             continue
         if OperatorRegistry.get(canon) is None:
             continue
+        if not is_dsl_name_allowed(alias, canon, surface=surface):
+            continue
         out[alias] = make_cleaned_call_factory(canon)
     return out
-
 
 def build_production_dsl_allowlist(skip: set[str] | None = None) -> dict[str, Any]:
     """构建 production 投递白名单：仅 ``PRODUCTION_CORE`` 内且 ``allow_in_production`` 为真的算子。
@@ -519,7 +518,7 @@ def build_production_dsl_allowlist(skip: set[str] | None = None) -> dict[str, An
     """
     from cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS, build_operator_spec
 
-    full = build_cleaned_dsl_allowlist(skip)
+    full = build_cleaned_dsl_allowlist(skip, surface="daily")
     from cleaned_operators.registry import OperatorRegistry
 
     out: dict[str, Any] = {}

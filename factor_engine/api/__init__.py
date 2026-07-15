@@ -69,14 +69,12 @@ def __getattr__(name: str) -> Callable[..., Any]:
     AttributeError
         算子未在 registry 中实现。
     """
-    from backend.cleaned_bridge import ensure_cleaned_loaded
+    from api.operator_registry import build_dsl_allowlist
 
-    ensure_cleaned_loaded()
-    from cleaned_operators.registry import OperatorRegistry
-
-    canon = OperatorRegistry._aliases.get(name, name)
-    if OperatorRegistry.get(canon) is None:
-        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    if name not in build_dsl_allowlist():
+        raise AttributeError(
+            f"module {__name__!r} has no public daily-factor operator {name!r}"
+        )
     factory = make_cleaned_call_factory(name)
     globals()[name] = factory
     return factory
