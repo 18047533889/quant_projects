@@ -1,11 +1,12 @@
 name: Apply Operator Production Hardening
 
 on:
-  pull_request:
-    branches: [main]
+  push:
+    branches: [agent/operator-production-hardening]
     paths:
       - ".github/scripts/apply_operator_production_hardening.py"
       - ".github/workflows/operator-production-hardening-migration.yml"
+      - "factor_engine/docs/operator_hardening_trigger*.txt"
   workflow_dispatch:
 
 permissions:
