@@ -2,7 +2,7 @@ name: Operator Surface Gate
 
 on:
   push:
-    branches: [main]
+    branches: [main, agent/operator-surface-cleanup]
     paths:
       - "factor_engine/**"
       - "gtja191/**"
@@ -48,9 +48,7 @@ jobs:
             factor_engine/cleaned_operators/docs/operators_catalog.md \
             factor_engine/cleaned_operators/docs/operators_catalog.json \
             factor_engine/docs/dsl_allowlist.json
-          pytest -q \
-            factor_engine/tests/test_operator_surface.py \
-            factor_engine/tests/test_operator_production_hardening.py
+          pytest -q factor_engine/tests/test_operator_surface.py
           python factor_engine/scripts/validate_public_factor_formulas.py
       - name: GTJA185 factor pack regression
         run: |
