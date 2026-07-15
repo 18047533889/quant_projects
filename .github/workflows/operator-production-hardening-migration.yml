@@ -54,10 +54,13 @@ jobs:
       - name: Compile
         run: python -m compileall -q factor_engine
       - name: Governance and capability tests
+        shell: bash
         run: |
-          pytest -q \
+          set -o pipefail
+          pytest -vv \
             factor_engine/tests/test_operator_surface.py \
-            factor_engine/tests/test_operator_production_hardening.py
+            factor_engine/tests/test_operator_production_hardening.py \
+            2>&1 | tee operator_hardening_tests.log
       - name: Validate repository formulas
         run: python factor_engine/scripts/validate_public_factor_formulas.py
       - name: GTJA185 compatibility
@@ -77,9 +80,11 @@ jobs:
           name: operator-production-hardening-diagnostics
           path: |
             operator_hardening_migration.log
+            operator_hardening_tests.log
             .github/scripts/apply_operator_production_hardening.py
             factor_engine/cleaned_operators/operator_surface.py
             factor_engine/backend/polars_long_policy.py
+            factor_engine/tests/test_operator_production_hardening.py
       - name: Commit migrated FactorEngine implementation
         run: |
           git config user.name "github-actions[bot]"
