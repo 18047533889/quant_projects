@@ -234,7 +234,9 @@ def _polars_status(canon: str) -> CapabilityStatus:
     if "polars" not in backends:
         return "unsupported"
     if canon in POLARS_PRODUCTION_SAFE:
-        return "production_safe"
+        from cleaned_operators.edge_requirements import production_edge_evidence_complete
+
+        return "production_safe" if production_edge_evidence_complete(canon) else "parity_verified"
     if canon in POLARS_PARITY_VERIFIED:
         return "parity_verified"
     return "implemented"
