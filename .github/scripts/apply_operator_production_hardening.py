@@ -50,7 +50,6 @@ def write_fail_closed_surface() -> None:
     internal = internal_add & daily
     daily -= research_add | unsafe_add | internal_add
 
-    # Existing compatibility-only names remain hidden from normal formula authoring.
     hidden_daily_names = {
         "inv",
         "reciprocal",
@@ -311,7 +310,17 @@ def production_edge_evidence_complete(canonical: str, evidence: dict | None = No
 
 
 def patch_backend_capability_gate() -> None:
-    path = FE / "backend" / "capabilities.py"
+    candidates: list[Path] = []
+    for path in (FE / "backend").rglob("*.py"):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        if "def _polars_status(canon" in text and "POLARS_PRODUCTION_SAFE" in text:
+            candidates.append(path)
+    if len(candidates) != 1:
+        raise RuntimeError(f"expected one backend capability registry, found {candidates}")
+    path = candidates[0]
     text = path.read_text(encoding="utf-8")
     old = '''    if canon in POLARS_PRODUCTION_SAFE:\n        return "production_safe"\n'''
     new = '''    if canon in POLARS_PRODUCTION_SAFE:\n        from cleaned_operators.edge_requirements import production_edge_evidence_complete\n\n        return "production_safe" if production_edge_evidence_complete(canon) else "parity_verified"\n'''
