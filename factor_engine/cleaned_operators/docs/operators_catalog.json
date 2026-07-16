@@ -2,8 +2,8 @@
   "schema_version": 2,
   "canonical_count": 380,
   "surface_counts": {
-    "daily": 287,
-    "research": 91,
+    "daily": 256,
+    "research": 122,
     "unsafe": 0,
     "legacy": 1,
     "internal": 1,
@@ -1068,7 +1068,7 @@
     },
     {
       "canonical": "coskewness_to_market",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -1464,7 +1464,7 @@
     },
     {
       "canonical": "current_ratio",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy"
@@ -1477,7 +1477,7 @@
     },
     {
       "canonical": "debt_to_equity",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy"
@@ -1504,7 +1504,7 @@
     },
     {
       "canonical": "digital_count",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -1535,7 +1535,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "unknown",
@@ -1560,7 +1561,7 @@
     },
     {
       "canonical": "downside_beta",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -2102,7 +2103,7 @@
     },
     {
       "canonical": "group_decay_linear",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -2353,7 +2354,7 @@
     },
     {
       "canonical": "idio_skew",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -2367,7 +2368,7 @@
     },
     {
       "canonical": "idio_vol",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -2440,7 +2441,7 @@
     },
     {
       "canonical": "intraday_vwap_deviation",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy"
@@ -2937,7 +2938,7 @@
     },
     {
       "canonical": "micro_amihud_hf",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -2951,7 +2952,7 @@
     },
     {
       "canonical": "micro_bipower_var",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -2965,7 +2966,7 @@
     },
     {
       "canonical": "micro_jump_indicator",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -2979,7 +2980,7 @@
     },
     {
       "canonical": "micro_kyle_lambda",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -2993,7 +2994,7 @@
     },
     {
       "canonical": "micro_mid_return",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -3007,7 +3008,7 @@
     },
     {
       "canonical": "micro_realized_vol",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -3021,7 +3022,7 @@
     },
     {
       "canonical": "micro_spread",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -3035,7 +3036,7 @@
     },
     {
       "canonical": "micro_trade_imbalance",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -3049,7 +3050,7 @@
     },
     {
       "canonical": "micro_vpin",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -3187,7 +3188,7 @@
     },
     {
       "canonical": "operating_margin",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy"
@@ -3530,7 +3531,7 @@
     },
     {
       "canonical": "quick_ratio",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy"
@@ -3580,7 +3581,7 @@
     },
     {
       "canonical": "rank_corr",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [
         "RANKCORR",
         "RANK_CORR",
@@ -3699,7 +3700,7 @@
     },
     {
       "canonical": "residual_momentum_capm",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -3759,7 +3760,7 @@
     },
     {
       "canonical": "rolling_beta_to_market",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [
         "FP_BETA",
         "ROLLING_BETA_TO_MARKET",
@@ -4348,7 +4349,7 @@
     },
     {
       "canonical": "tail_beta",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -4418,7 +4419,7 @@
     },
     {
       "canonical": "trade_when",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -4778,7 +4779,7 @@
         "polars",
         "sql"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "ts",
       "lookback": null,
       "min_periods": null,
@@ -4979,7 +4980,7 @@
     },
     {
       "canonical": "ts_poly2_coeff",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -4993,7 +4994,7 @@
     },
     {
       "canonical": "ts_poly2_resid",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -5208,7 +5209,7 @@
     },
     {
       "canonical": "ts_sum_decay",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -5544,7 +5545,7 @@
     },
     {
       "canonical": "vp_weighted_price",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -5558,7 +5559,7 @@
     },
     {
       "canonical": "vpmacd",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -5572,7 +5573,7 @@
     },
     {
       "canonical": "vpmacd_signal",
-      "surface": "daily",
+      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy",

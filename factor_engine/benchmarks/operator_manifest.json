@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-07-16T17:03:41.210248+00:00",
-  "generated_commit_sha": "0755148dcddaed11ca884e31b32759f298bd9763",
+  "generated_at": "2026-07-16T17:33:58.433898+00:00",
+  "generated_commit_sha": "d61a297f57fc9e591e2643c0644a14cb668a67f7",
   "operators": [
     {
       "name": "ACF",
@@ -5956,8 +5956,7 @@
       "input_fields": [
         "x",
         "y",
-        "epsilon",
-        "default"
+        "epsilon"
       ],
       "output_type": "series",
       "pit_safe": false,
@@ -5965,12 +5964,13 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "production",
       "allow_in_production": false,
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
-      "description": "NULL 保持 NULL 的安全除法",
+      "description": "安全除法：NULL 或 |denominator|<=epsilon 时返回 NULL。",
       "execution_kind": "primitive",
       "production_policy": "denied",
       "lowering_available": false,
@@ -5989,7 +5989,7 @@
       "effective_production_fastpath": false,
       "effective_dual_backend_fastpath": false,
       "pandas": "implemented",
-      "polars_panel": "unsupported",
+      "polars_panel": "implemented",
       "polars_long": "native",
       "polars_long_tier": "native",
       "polars_long_native_tier": "implemented",
@@ -8467,7 +8467,9 @@
       "input_fields": [
         "x",
         "group",
-        "p"
+        "p",
+        "side",
+        "missing_group_policy"
       ],
       "output_type": "series",
       "pit_safe": true,
@@ -8476,15 +8478,15 @@
       "min_periods": null,
       "nan_policy": "propagate",
       "status": "research",
-      "allow_in_production": true,
+      "allow_in_production": false,
       "backends": [
         "pandas_numpy",
         "polars",
         "sql"
       ],
-      "description": "判断股票在组内的分位位置，返回0或1",
+      "description": "组内 top/bottom 分位掩码；默认 top。缺失分组默认报错，不静默退化为全截面。",
       "execution_kind": "primitive",
-      "production_policy": "allowed",
+      "production_policy": "denied",
       "lowering_available": false,
       "dual_backend_target": true,
       "canonical": "group_percentile",
@@ -8494,30 +8496,30 @@
       "composite_production_safe": false,
       "composite_reference_parity": false,
       "composite_reference_to_lowered_pandas": false,
-      "polars_long_fastpath": true,
-      "duckdb_fastpath": true,
-      "dual_backend_fastpath": true,
+      "polars_long_fastpath": false,
+      "duckdb_fastpath": false,
+      "dual_backend_fastpath": false,
       "composite_dual_backend_fastpath": false,
-      "effective_production_fastpath": true,
-      "effective_dual_backend_fastpath": true,
+      "effective_production_fastpath": false,
+      "effective_dual_backend_fastpath": false,
       "pandas": "implemented",
       "polars_panel": "production_safe",
-      "polars_long": "native_production_safe",
+      "polars_long": "native",
       "polars_long_tier": "native",
-      "polars_long_native_tier": "production_safe",
-      "duckdb_sql": "production_safe",
-      "duckdb_sql_effective_production_safe": true,
+      "polars_long_native_tier": "parity_verified",
+      "duckdb_sql": "parity_verified",
+      "duckdb_sql_effective_production_safe": false,
       "clickhouse_sql": "parity_verified",
-      "production_fast_path": true,
-      "fastpath_block_reason": "",
+      "production_fast_path": false,
+      "fastpath_block_reason": "not_production_allowed",
       "parity_verified": true,
       "polars_parity_verified": true,
       "duckdb_parity_verified": true,
       "dual_backend_parity_verified": true,
       "benchmark": false,
       "research_allowed": true,
-      "production_allowed": true,
-      "production_fastpath_allowed": true
+      "production_allowed": false,
+      "production_fastpath_allowed": false
     },
     {
       "name": "group_rank",
@@ -18210,10 +18212,12 @@
       "frequency": "any",
       "input_fields": [
         "x",
-        "window"
+        "window",
+        "min_periods",
+        "scale"
       ],
       "output_type": "series",
-      "pit_safe": false,
+      "pit_safe": true,
       "includes_current": true,
       "lookback": null,
       "min_periods": null,
@@ -18225,7 +18229,7 @@
         "polars",
         "sql"
       ],
-      "description": "计算n期移动平均绝对离差",
+      "description": "滚动中位绝对偏差 median(|x-median(x)|)。",
       "execution_kind": "primitive",
       "production_policy": "denied",
       "lowering_available": false,
@@ -19029,7 +19033,9 @@
       "frequency": "any",
       "input_fields": [
         "x",
-        "window"
+        "window",
+        "min_periods",
+        "skipna"
       ],
       "output_type": "series",
       "pit_safe": true,
@@ -19044,7 +19050,7 @@
         "polars",
         "sql"
       ],
-      "description": "保留零与负号的滚动乘积",
+      "description": "滚动乘积；保留零与负号，NaN 可跳过，溢出返回 NaN。",
       "execution_kind": "primitive",
       "production_policy": "denied",
       "lowering_available": false,

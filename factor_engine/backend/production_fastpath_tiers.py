@@ -133,7 +133,6 @@ P1_GROUP_CANONICALS: frozenset[str] = frozenset(
         "group_rank",
         "group_neutralize",
         "group_normalize",
-        "group_percentile",
     }
 )
 

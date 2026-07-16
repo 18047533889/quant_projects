@@ -404,6 +404,7 @@ def _average_rank_frac_correlated(
     row_alias: str,
     dialect: SqlDialect,
     exclude_nan: bool = True,
+    descending: bool = False,
 ) -> str:
     """pandas ``rank(method='average', pct=True)`` 相关子查询表达式。"""
     from backend.stat_valid import row_stat_invalid_sql, stat_valid_sql
@@ -411,6 +412,7 @@ def _average_rank_frac_correlated(
     match = " AND ".join(f"p.{k} = {row_alias}.{k}" for k in partition_keys)
     valid = stat_valid_sql("p._v", dialect=dialect, exclude_nan=exclude_nan)
     invalid_row = row_stat_invalid_sql(row_value_col, dialect=dialect, exclude_nan=exclude_nan)
+    rank_cmp = ">=" if descending else "<="
     cnt_subq = (
         f"(SELECT COUNT(*) FILTER (WHERE {valid}) "
         f"FROM ({numbered_sql}) p WHERE {match})"
@@ -426,7 +428,7 @@ def _average_rank_frac_correlated(
             f"FROM ("
             f"SELECT "
             f"countIf({valid_ch}) AS cnt, "
-            f"countIf({valid_ch} AND p._v <= {row_value_col}) AS cnt_le, "
+            f"countIf({valid_ch} AND p._v {rank_cmp} {row_value_col}) AS cnt_le, "
             f"countIf({valid_ch} AND p._v = {row_value_col}) AS cnt_eq "
             f"FROM ({numbered_sql}) p WHERE {match}"
             f") s"
@@ -442,7 +444,7 @@ def _average_rank_frac_correlated(
         f"FROM ("
         f"SELECT "
         f"COUNT(*) FILTER (WHERE {valid}) AS cnt, "
-        f"COUNT(*) FILTER (WHERE {valid} AND p._v <= {row_value_col}) AS cnt_le, "
+        f"COUNT(*) FILTER (WHERE {valid} AND p._v {rank_cmp} {row_value_col}) AS cnt_le, "
         f"COUNT(*) FILTER (WHERE {valid} AND p._v = {row_value_col}) AS cnt_eq "
         f"FROM ({numbered_sql}) p WHERE {match}"
         f") s"
@@ -2559,11 +2561,14 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         pos_p = _literal_positional(node, 1)
         if pos_p is not None:
             p = pos_p
-        grp_layer = None
-        if len(node.inputs) >= 2:
-            grp_layer = _compile_layer(node.inputs[1], dialect=dialect)
-            if grp_layer is None:
-                return None
+        if len(node.inputs) < 2:
+            return None
+        grp_layer = _compile_layer(node.inputs[1], dialect=dialect)
+        if grp_layer is None:
+            return None
+        side = str(node.attrs.get("side", "top")).lower()
+        if side not in {"top", "bottom"}:
+            return None
         wrapped, keys = _group_partition_wrap(
             inner.sql,
             grp_layer.sql if grp_layer is not None else None,
@@ -2580,6 +2585,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             numbered_sql=numbered,
             row_alias="b",
             dialect=dialect,
+            descending=side == "top",
         )
         expr = (
             f"CASE WHEN b._oval IS NULL THEN NULL "
@@ -2721,18 +2727,40 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        w = _window_int(node)
-        med = "median" if dialect == SqlDialect.DUCKDB else "median"
+        spec = _window_spec(node)
+        w = spec.size
+        mp = spec.min_periods if node.attrs.get("min_periods") is not None else w
+        scale = _float_attr(node, "scale", default=1.0)
         over = (
             f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
         )
+        if dialect == SqlDialect.DUCKDB:
+            vals = (
+                f"list(_v) FILTER (WHERE _v IS NOT NULL AND isfinite(_v)) "
+                f"OVER ({over})"
+            )
+            inf_count = (
+                f"COUNT(*) FILTER (WHERE _v IS NOT NULL AND isinf(_v)) "
+                f"OVER ({over})"
+            )
+            return _Layer(
+                f"SELECT ts, inst, "
+                f"CASE WHEN _inf_count > 0 OR length(_vals) < {mp} THEN NULL "
+                f"ELSE {scale} * list_median(list_transform("
+                f"_vals, x -> abs(x - list_median(_vals)))) END AS _v "
+                f"FROM (SELECT ts, inst, {vals} AS _vals, "
+                f"{inf_count} AS _inf_count FROM ({inner.sql}) t0) t",
+                has_inst_window=True,
+            )
+        vals = f"groupArrayIf(_v, isFinite(_v)) OVER ({over})"
+        inf_count = f"countIf(isInfinite(_v)) OVER ({over})"
         return _Layer(
             f"SELECT ts, inst, "
-            f"AVG(ABS(_v - med)) OVER ({over}) AS _v "
-            f"FROM ("
-            f"SELECT ts, inst, _v, {med}(_v) OVER ({over}) AS med "
-            f"FROM ({inner.sql}) t0"
-            f") t",
+            f"if(_inf_count > 0 OR length(_vals) < {mp}, NULL, {scale} * "
+            f"arrayReduce('medianExact', arrayMap("
+            f"x -> abs(x - arrayReduce('medianExact', _vals)), _vals))) AS _v "
+            f"FROM (SELECT ts, inst, {vals} AS _vals, "
+            f"{inf_count} AS _inf_count FROM ({inner.sql}) t0) t",
             has_inst_window=True,
         )
 
@@ -2974,15 +3002,37 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        w = _window_int(node)
+        spec = _window_spec(node)
+        w = spec.size
+        mp = spec.min_periods if node.attrs.get("min_periods") is not None else w
         over = (
             f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
         )
-        eps = 1e-12
+        if dialect == SqlDialect.DUCKDB:
+            valid = "_v IS NOT NULL AND isfinite(_v)"
+            count_valid = f"COUNT(*) FILTER (WHERE {valid}) OVER ({over})"
+            count_zero = f"COUNT(*) FILTER (WHERE {valid} AND _v = 0) OVER ({over})"
+            count_neg = f"COUNT(*) FILTER (WHERE {valid} AND _v < 0) OVER ({over})"
+            count_inf = (
+                f"COUNT(*) FILTER (WHERE _v IS NOT NULL AND isinf(_v)) OVER ({over})"
+            )
+        else:
+            valid = "isFinite(_v)"
+            count_valid = f"countIf({valid}) OVER ({over})"
+            count_zero = f"countIf({valid} AND _v = 0) OVER ({over})"
+            count_neg = f"countIf({valid} AND _v < 0) OVER ({over})"
+            count_inf = f"countIf(isInfinite(_v)) OVER ({over})"
+        log_sum = (
+            f"SUM(CASE WHEN {valid} AND _v != 0 THEN {ln}(ABS(_v)) ELSE NULL END) "
+            f"OVER ({over})"
+        )
         return _Layer(
             f"SELECT ts, inst, "
-            f"EXP(SUM(CASE WHEN _v IS NULL OR _v <= {eps} THEN NULL ELSE {ln}(_v) END) "
-            f"OVER ({over})) AS _v "
+            f"CASE WHEN {count_inf} > 0 OR {count_valid} < {mp} THEN NULL "
+            f"WHEN {count_zero} > 0 THEN 0.0 "
+            f"WHEN {log_sum} > 709.782712893384 THEN NULL "
+            f"ELSE CASE WHEN MOD({count_neg}, 2) = 1 THEN -1.0 ELSE 1.0 END "
+            f"* EXP({log_sum}) END AS _v "
             f"FROM ({inner.sql}) t",
             has_inst_window=True,
         )

@@ -492,13 +492,20 @@ def build_cleaned_dsl_allowlist(
     from api.cleaned_ops import make_cleaned_call_factory
 
     skip = skip or set()
+    # Historical public imports remain available for formula compatibility,
+    # while operator_surface still classifies these canonicals as research.
+    # Production allowlists are independently fail-closed below.
+    legacy_daily_compat = frozenset({"group_decay_linear", "rank_corr"})
     out: dict[str, Any] = {}
     for canon in OperatorRegistry.list_canonical():
         if canon in skip or canon in out:
             continue
         if OperatorRegistry.get(canon) is None:
             continue
-        if not is_dsl_name_allowed(canon, canon, surface=surface):
+        if (
+            not is_dsl_name_allowed(canon, canon, surface=surface)
+            and not (surface == "daily" and canon in legacy_daily_compat)
+        ):
             continue
         out[canon] = make_cleaned_call_factory(canon)
     for alias, canon in OperatorRegistry._aliases.items():
@@ -506,7 +513,10 @@ def build_cleaned_dsl_allowlist(
             continue
         if OperatorRegistry.get(canon) is None:
             continue
-        if not is_dsl_name_allowed(alias, canon, surface=surface):
+        if (
+            not is_dsl_name_allowed(alias, canon, surface=surface)
+            and not (surface == "daily" and canon in legacy_daily_compat)
+        ):
             continue
         out[alias] = make_cleaned_call_factory(canon)
     return out

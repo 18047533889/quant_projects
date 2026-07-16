@@ -5,20 +5,20 @@
 ## 摘要
 
 - runtime 已实现: **378**
-- Polars 注册: **334**
+- Polars 注册: **335**
 - parity verified: **106**
 - production Polars safe: **97**
 - Polars expr long-table: **141**
 - Polars long ∩ SQL emitter: **99**
 - Polars long only (无 SQL): **243**
 - SQL only (无 Polars long): **0**
-- PRODUCTION_CORE: **84**（Polars gap: 无）
+- PRODUCTION_CORE: **83**（Polars gap: 无）
 - PolarsLong native: **110**
-- Production fast path（三后端 parity）: **30**
+- Production fast path（三后端 parity）: **29**
 - DuckDB triple parity: **14**
 - PRODUCTION_CORE fast path gap: **50**
 - production 允许但仅 pandas: **35**
-- 有 Polars 未进 production safe: **235**
+- 有 Polars 未进 production safe: **236**
 
 ## 晋级路径
 

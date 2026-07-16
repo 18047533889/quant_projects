@@ -3,7 +3,7 @@
 > 自动生成：`python scripts/report_backend_coverage.py --write-doc`
 
 - canonical implemented: **378**
-- Polars backend: **332**（CI 门禁 ≥ 315）
+- Polars backend: **333**（CI 门禁 ≥ 315）
 - SQL 可下推 canonical: **142**（含 `column`/`literal` 共 **144**）
 - Registry sql backend: **99**（CI 门禁 ≥ 95）
 
