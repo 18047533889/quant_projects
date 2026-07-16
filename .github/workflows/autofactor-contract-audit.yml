@@ -1,4 +1,4 @@
-name: AutoFactorEvaluation CI Contract Audit
+name: AutoFactorEvaluation Compatibility Patch
 
 on:
   push:
@@ -11,32 +11,48 @@ permissions:
   contents: write
 
 jobs:
-  audit:
+  patch:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: agent/autofactor-standalone-reconstruct
-      - name: Capture integration workflow and contract scripts
+      - name: Restore bridge compatibility API
         run: |
-          OUT="AutoFactorEvaluation-RECONSTRUCT/.autofactor_ci_contract.txt"
-          {
-            echo "# WORKFLOWS"
-            for f in .github/workflows/*; do
-              if grep -q "AutoFactorEvaluation Platform Integration\|Static integration contract\|Platform bridge tests" "$f" 2>/dev/null; then
-                echo
-                echo "===== $f ====="
-                cat "$f"
-              fi
-            done
-            echo
-            echo "# CONTRACT REFERENCES"
-            grep -RInE "vendored_factor_engine|vendored FactorEngine|factor_engine.*exists|AutoFactorEvaluation.*factor_engine|quant_platform" \
-              AutoFactorEvaluation-RECONSTRUCT .github scripts 2>/dev/null \
-              --include='*.py' --include='*.sh' --include='*.yml' --include='*.yaml' | head -1000 || true
-          } > "$OUT"
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("AutoFactorEvaluation-RECONSTRUCT/integrations/quant_platform.py")
+          text = path.read_text(encoding="utf-8")
+          old = "from platform_bootstrap import activate_platform\n\nPLATFORM_LAYOUT = activate_platform()\n"
+          new = '''from platform_bootstrap import PlatformLayout, activate_platform
+
+
+def bootstrap_quant_platform() -> PlatformLayout:
+    """Activate and return the reviewed AutoFactorEvaluation platform runtime.
+
+    This compatibility entrypoint is intentionally retained because Gateway,
+    Assetization and Evaluation modules call it before importing platform APIs.
+    Resolution remains bundled-first and idempotent.
+    """
+
+    return activate_platform()
+
+
+PLATFORM_LAYOUT = bootstrap_quant_platform()
+'''
+          if old in text:
+              text = text.replace(old, new, 1)
+          elif "def bootstrap_quant_platform()" not in text:
+              raise RuntimeError("platform activation block not found")
+          text = text.replace(
+              "用仓库根最新 FactorEngine 做真实 parser/analyzer/planner 编译。",
+              "用内嵌受审计 FactorEngine 做真实 parser/analyzer/planner 编译。",
+          )
+          path.write_text(text, encoding="utf-8")
+          PY
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "$OUT"
-          git commit -m "Capture AutoFactorEvaluation CI contract" || exit 0
+          git add AutoFactorEvaluation-RECONSTRUCT/integrations/quant_platform.py
+          git commit -m "Restore standalone platform bootstrap compatibility" || exit 0
           git push origin HEAD:agent/autofactor-standalone-reconstruct
