@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "data-access"
+version = "0.1.0"
+description = "Unified quantitative data read/write layer (DuckDB + YAML registry + COS mirror)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+dependencies = [
+    "PyYAML>=6.0",
+    "pandas>=2.0",
+    "pyarrow>=14.0",
+    "duckdb>=0.10",
+]
+
+[project.optional-dependencies]
+polars = ["polars>=0.20"]
+client = ["httpx>=0.27", "pydantic>=2.0"]
+service = ["fastapi>=0.110", "uvicorn[standard]>=0.27"]
+all = [
+    "polars>=0.20",
+    "httpx>=0.27",
+    "pydantic>=2.0",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+]
+
+[project.scripts]
+data-access-server = "data_access.service.__main__:main"
+
+[tool.setuptools]
+packages = [
+    "data_access",
+    "data_access.core",
+    "data_access.registry",
+    "data_access.read",
+    "data_access.write",
+    "data_access.cos",
+    "data_access.service",
+    "data_access.clickhouse",
+]
+[tool.setuptools.package-dir]
+"data_access" = "."
+"data_access.core" = "core"
+"data_access.registry" = "registry"
+"data_access.read" = "read"
+"data_access.write" = "write"
+"data_access.cos" = "cos"
+"data_access.service" = "service"
+"data_access.clickhouse" = "clickhouse"
+
+[tool.setuptools.package-data]
+data_access = ["config/*.yaml", "config/README.md", "docs/README.md", "docs/用户使用手册.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

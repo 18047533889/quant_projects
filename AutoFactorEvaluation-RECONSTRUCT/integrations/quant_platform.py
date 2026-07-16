@@ -1,16 +1,13 @@
-"""AutoFactorEvaluation 到仓库根 ``factor_engine`` / ``data_access`` 的唯一桥接层。
+"""AutoFactorEvaluation 到内嵌 ``factor_engine`` / ``data_access`` 的唯一桥接层。
 
-业务模块不得再自行拼接 ``sys.path``、直接扫描行情 Parquet，或引用目录内复制的
-FactorEngine。所有生产计算、行情读取、快照 lineage 与因子 staging 写入均从这里进入。
+默认只加载本分发目录内经过 manifest 固定的运行时。业务模块不得自行拼接
+``sys.path``、直接扫描行情 Parquet，或绕过统一的快照与 staging 写入链路。
 """
 from __future__ import annotations
 
 import hashlib
-import os
-import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
@@ -75,39 +72,9 @@ _MARKET_ALIASES = {
 }
 
 
-def _find_quant_projects_root() -> Path:
-    configured = os.environ.get("QUANT_PROJECTS_ROOT", "").strip()
-    candidates: list[Path] = []
-    if configured:
-        candidates.append(Path(configured).expanduser())
-    here = Path(__file__).resolve()
-    candidates.extend(here.parents)
-    for candidate in candidates:
-        if (
-            (candidate / "factor_engine" / "runtime" / "engine.py").is_file()
-            and (candidate / "data_access" / "store.py").is_file()
-        ):
-            return candidate
-    raise RuntimeError(
-        "无法定位 quant_projects 根目录；请设置 QUANT_PROJECTS_ROOT，且目录中必须包含 "
-        "factor_engine/ 与 data_access/"
-    )
+from platform_bootstrap import activate_platform
 
-
-def bootstrap_quant_platform() -> Path:
-    """一次性引导当前 monorepo 的 FactorEngine 平铺包与 DataAccess。"""
-    root = _find_quant_projects_root()
-    factor_engine_root = root / "factor_engine"
-    # FactorEngine 内部仍使用 ``from api...`` / ``from runtime...`` 平铺导入，
-    # factor_engine 根必须位于仓库根之前；集中在此处理，业务模块不再自行改 sys.path。
-    for value in (str(factor_engine_root), str(root)):
-        if value in sys.path:
-            sys.path.remove(value)
-        sys.path.insert(0, value)
-    return root
-
-
-bootstrap_quant_platform()
+PLATFORM_LAYOUT = activate_platform()
 
 from api.dsl_parser import parse_factor  # noqa: E402
 from backend.context import ExecutionContext  # noqa: E402

@@ -1,0 +1,4750 @@
+{
+  "generated_at": "2026-03-13T13:32:45.280925Z",
+  "root": "~/quant_projects/data/us_stock/massive_parquet",
+  "dataset_count": 24,
+  "parquet_file_count": 22806,
+  "read_error_count": 0,
+  "read_errors_preview": [],
+  "field_meaning_source": {
+    "doc_root": "~/quant_projects/docs/massive_rest_api",
+    "doc_fields_indexed": 236,
+    "manual_overrides_added": 35
+  },
+  "datasets": [
+    {
+      "dataset": "aggregate_bars/daily_market_summary",
+      "file_count": 23,
+      "sample_file": "~/quant_projects/data/us_stock/massive_parquet/aggregate_bars/daily_market_summary/daily_market_summary_2004.parquet",
+      "year_partitions": [],
+      "column_count": 10,
+      "columns": [
+        {
+          "name": "T",
+          "dtype": "object",
+          "meaning": "The exchange symbol that this item is traded under.",
+          "meaning_sources": [
+            "aggregate_bars/daily_market_summary.md"
+          ],
+          "meaning_zh": "交易标的代码。"
+        },
+        {
+          "name": "v",
+          "dtype": "float64",
+          "meaning": "The trading volume of the symbol in the given time period.",
+          "meaning_sources": [
+            "aggregate_bars/custom_bars.md",
+            "aggregate_bars/daily_market_summary.md",
+            "aggregate_bars/previous_day_bar.md"
+          ],
+          "meaning_zh": "成交量。"
+        },
+        {
+          "name": "vw",
+          "dtype": "float64",
+          "meaning": "The volume weighted average price.",
+          "meaning_sources": [
+            "aggregate_bars/custom_bars.md",
+            "aggregate_bars/daily_market_summary.md",
+            "aggregate_bars/previous_day_bar.md"
+          ],
+          "meaning_zh": "成交量加权平均价（VWAP）。"
+        },
+        {
+          "name": "o",
+          "dtype": "float64",
+          "meaning": "The open price for the symbol in the given time period.",
+          "meaning_sources": [
+            "aggregate_bars/custom_bars.md",
+            "aggregate_bars/daily_market_summary.md",
+            "aggregate_bars/previous_day_bar.md"
+          ],
+          "meaning_zh": "开盘价。"
+        },
+        {
+          "name": "c",
+          "dtype": "float64",
+          "meaning": "The close price for the symbol in the given time period.",
+          "meaning_sources": [
+            "aggregate_bars/custom_bars.md",
+            "aggregate_bars/daily_market_summary.md",
+            "aggregate_bars/previous_day_bar.md"
+          ],
+          "meaning_zh": "收盘价。"
+        },
+        {
+          "name": "h",
+          "dtype": "float64",
+          "meaning": "The highest price for the symbol in the given time period.",
+          "meaning_sources": [
+            "aggregate_bars/custom_bars.md",
+            "aggregate_bars/daily_market_summary.md",
+            "aggregate_bars/previous_day_bar.md"
+          ],
+          "meaning_zh": "最高价。"
+        },
+        {
+          "name": "l",
+          "dtype": "float64",
+          "meaning": "The lowest price for the symbol in the given time period.",
+          "meaning_sources": [
+            "aggregate_bars/custom_bars.md",
+            "aggregate_bars/daily_market_summary.md",
+            "aggregate_bars/previous_day_bar.md"
+          ],
+          "meaning_zh": "最低价。"
+        },
+        {
+          "name": "t",
+          "dtype": "int64",
+          "meaning": "The Unix millisecond timestamp for the start of the aggregate window.",
+          "meaning_sources": [
+            "aggregate_bars/custom_bars.md",
+            "aggregate_bars/daily_market_summary.md",
+            "aggregate_bars/previous_day_bar.md"
+          ],
+          "meaning_zh": "时间戳（聚合窗口时间）。"
+        },
+        {
+          "name": "n",
+          "dtype": "float64",
+          "meaning": "The number of transactions in the aggregate window.",
+          "meaning_sources": [
+            "aggregate_bars/custom_bars.md",
+            "aggregate_bars/daily_market_summary.md",
+            "aggregate_bars/previous_day_bar.md"
+          ],
+          "meaning_zh": "成交笔数。"
+        },
+        {
+          "name": "trade_date",
+          "dtype": "object",
+          "meaning": "交易日期（通常为 YYYY-MM-DD）。",
+          "meaning_sources": [
+            "aggregate_bars/daily_market_summary.md"
+          ],
+          "meaning_zh": "交易日期。"
+        }
+      ],
+      "sample_rows": [
+        {
+          "T": "HRVE",
+          "v": 175.0,
+          "vw": 3.5944,
+          "o": 3.56,
+          "c": 3.64,
+          "h": 3.64,
+          "l": 3.56,
+          "t": 1073077200000,
+          "n": 4.0,
+          "trade_date": "2004-01-02"
+        },
+        {
+          "T": "PAS",
+          "v": 166400.0,
+          "vw": 17.1101,
+          "o": 17.1,
+          "c": 17.12,
+          "h": 17.2,
+          "l": 17.01,
+          "t": 1073077200000,
+          "n": 442.0,
+          "trade_date": "2004-01-02"
+        },
+        {
+          "T": "SNBC",
+          "v": 3734.2,
+          "vw": 133.2745,
+          "o": 131.75,
+          "c": 130.75,
+          "h": 136.8,
+          "l": 130.0,
+          "t": 1073077200000,
+          "n": 114.0,
+          "trade_date": "2004-01-02"
+        }
+      ],
+      "readable": true
+    },
+    {
+      "dataset": "corporate_actions/dividends",
+      "file_count": 28,
+      "sample_file": "~/quant_projects/data/us_stock/massive_parquet/corporate_actions/dividends/dividends_2000.parquet",
+      "year_partitions": [],
+      "column_count": 9,
+      "columns": [
+        {
+          "name": "id",
+          "dtype": "object",
+          "meaning": "Unique identifier for each dividend record",
+          "meaning_sources": [
+            "corporate_actions/dividends.md",
+            "corporate_actions/splits.md",
+            "market_operations/condition_codes.md",
+            "market_operations/exchanges.md",
+            "news/news.md"
+          ],
+          "meaning_zh": "记录唯一标识。"
+        },
+        {
+          "name": "ticker",
+          "dtype": "object",
+          "meaning": "The ticker symbol of the IPO event.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md",
+            "corporate_actions/dividends.md",
+            "corporate_actions/splits.md",
+            "filing/10-K_Sections.md",
+            "filing/8-K_Text.md",
+            "filing/risk_factors.md",
+            "filing/sec_edgar_index.md",
+            "fundamentals/float.md",
+            "fundamentals/ratios.md",
+            "fundamentals/short_interest.md",
+            "fundamentals/short_volume.md",
+            "snapshots/unified_snapshot.md",
+            "tickers/all_tickers.md",
+            "tickers/related_tickers.md"
+          ],
+          "meaning_zh": "证券代码。"
+        },
+        {
+          "name": "record_date",
+          "dtype": "object",
+          "meaning": "Date when shareholders must be on record to be eligible for the dividend payment",
+          "meaning_sources": [
+            "corporate_actions/dividends.md"
+          ],
+          "meaning_zh": "股权登记日。"
+        },
+        {
+          "name": "pay_date",
+          "dtype": "object",
+          "meaning": "Date when the dividend payment is distributed to shareholders",
+          "meaning_sources": [
+            "corporate_actions/dividends.md"
+          ],
+          "meaning_zh": "分红派发日。"
+        },
+        {
+          "name": "ex_dividend_date",
+          "dtype": "object",
+          "meaning": "Date when the stock begins trading without the dividend value",
+          "meaning_sources": [
+            "corporate_actions/dividends.md"
+          ],
+          "meaning_zh": "除息日（含息转为除息交易的日期）。"
+        },
+        {
+          "name": "frequency",
+          "dtype": "int64",
+          "meaning": "How many times per year this dividend is expected to occur. A value of 0 means the distribution is non-recurring or irregular (e.g., special, supplemental, or a one-off dividend). Other possible values include 1 (annual), 2 (semi-annual), 3 (trimester), 4 (quarterly), 12 (monthly), 24 (bi-monthly), 52 (weekly), 104 (bi-weekly), and 365 (daily) depending on the issuer's declared or inferred payout cadence.",
+          "meaning_sources": [
+            "corporate_actions/dividends.md"
+          ],
+          "meaning_zh": "分红频率（每年分红次数，如 1=年、4=季、12=月）。"
+        },
+        {
+          "name": "cash_amount",
+          "dtype": "float64",
+          "meaning": "Original dividend amount per share in the specified currency",
+          "meaning_sources": [
+            "corporate_actions/dividends.md"
+          ],
+          "meaning_zh": "每股现金分红金额。"
+        },
+        {
+          "name": "currency",
+          "dtype": "object",
+          "meaning": "Currency code for the dividend payment (e.g., USD, CAD)",
+          "meaning_sources": [
+            "corporate_actions/dividends.md"
+          ],
+          "meaning_zh": "币种。"
+        },
+        {
+          "name": "distribution_type",
+          "dtype": "object",
+          "meaning": "Classification describing the nature of this dividend's recurrence pattern: recurring (paid on a regular schedule), special (one-time or commemorative), supplemental (extra beyond the regular schedule), irregular (unpredictable or non-recurring), unknown (cannot be classified from available data)",
+          "meaning_sources": [
+            "corporate_actions/dividends.md"
+          ],
+          "meaning_zh": "分红类型（经常性、特别分红、补充分红、不规则等）。"
+        }
+      ],
+      "sample_rows": [
+        {
+          "id": "E4a7d4e17e772232caf90d14c98574c1e7b15c49c94246678bd28b603e0501954",
+          "ticker": "CHVKF",
+          "record_date": "2000-08-16",
+          "pay_date": "2000-08-18",
+          "ex_dividend_date": "2000-08-15",
+          "frequency": 1,
+          "cash_amount": 0.15,
+          "currency": "CNY",
+          "distribution_type": "recurring"
+        }
+      ],
+      "readable": true
+    },
+    {
+      "dataset": "corporate_actions/ipos",
+      "file_count": 1,
+      "sample_file": "~/quant_projects/data/us_stock/massive_parquet/corporate_actions/ipos/ipos_all.parquet",
+      "year_partitions": [],
+      "column_count": 20,
+      "columns": [
+        {
+          "name": "ticker",
+          "dtype": "object",
+          "meaning": "The ticker symbol of the IPO event.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md",
+            "corporate_actions/dividends.md",
+            "corporate_actions/splits.md",
+            "filing/10-K_Sections.md",
+            "filing/8-K_Text.md",
+            "filing/risk_factors.md",
+            "filing/sec_edgar_index.md",
+            "fundamentals/float.md",
+            "fundamentals/ratios.md",
+            "fundamentals/short_interest.md",
+            "fundamentals/short_volume.md",
+            "snapshots/unified_snapshot.md",
+            "tickers/all_tickers.md",
+            "tickers/related_tickers.md"
+          ],
+          "meaning_zh": "证券代码。"
+        },
+        {
+          "name": "last_updated",
+          "dtype": "object",
+          "meaning": "The date when the IPO event was last modified.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md",
+            "snapshots/unified_snapshot.md"
+          ],
+          "meaning_zh": "最后更新时间。"
+        },
+        {
+          "name": "announced_date",
+          "dtype": "object",
+          "meaning": "The date when the IPO event was announced.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md"
+          ],
+          "meaning_zh": "公告日期。"
+        },
+        {
+          "name": "issuer_name",
+          "dtype": "object",
+          "meaning": "Name of issuer.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md",
+            "filing/10-K_Sections.md",
+            "filing/sec_edgar_index.md"
+          ],
+          "meaning_zh": "发行人名称。"
+        },
+        {
+          "name": "currency_code",
+          "dtype": "object",
+          "meaning": "Underlying currency of the security.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md"
+          ],
+          "meaning_zh": "币种代码。"
+        },
+        {
+          "name": "final_issue_price",
+          "dtype": "float64",
+          "meaning": "The price set by the company and its underwriters before the IPO goes live.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md"
+          ],
+          "meaning_zh": "最终发行价。"
+        },
+        {
+          "name": "max_shares_offered",
+          "dtype": "float64",
+          "meaning": "The upper limit of the shares that the company is offering to investors.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md"
+          ],
+          "meaning_zh": "最高发行股数。"
+        },
+        {
+          "name": "lowest_offer_price",
+          "dtype": "float64",
+          "meaning": "The lowest price within the IPO price range that the company is willing to offer its shares to investors.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md"
+          ],
+          "meaning_zh": "发行区间下限价格。"
+        },
+        {
+          "name": "highest_offer_price",
+          "dtype": "float64",
+          "meaning": "The highest price within the IPO price range that the company might use to price the shares.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md"
+          ],
+          "meaning_zh": "发行区间上限价格。"
+        },
+        {
+          "name": "total_offer_size",
+          "dtype": "float64",
+          "meaning": "The total amount raised by the company for IPO.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md"
+          ],
+          "meaning_zh": "总募资规模。"
+        },
+        {
+          "name": "primary_exchange",
+          "dtype": "object",
+          "meaning": "Market Identifier Code (MIC) of the primary exchange where the security is listed. The Market Identifier Code (MIC) (ISO 10383) is a unique identification code used to identify securities trading exchanges, regulated and non-regulated trading markets.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md",
+            "tickers/all_tickers.md"
+          ],
+          "meaning_zh": "主上市交易所（MIC 代码）。"
+        },
+        {
+          "name": "shares_outstanding",
+          "dtype": "float64",
+          "meaning": "The total number of shares that the company has issued and are held by investors.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md"
+          ],
+          "meaning_zh": "已发行在外股份数。"
+        },
+        {
+          "name": "security_type",
+          "dtype": "object",
+          "meaning": "The classification of the stock. For example, \"CS\" stands for Common Stock.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md"
+          ],
+          "meaning_zh": "证券类型。"
+        },
+        {
+          "name": "lot_size",
+          "dtype": "float64",
+          "meaning": "The minimum number of shares that can be bought or sold in a single transaction.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md"
+          ],
+          "meaning_zh": "最小交易单位（每手股数）。"
+        },
+        {
+          "name": "security_description",
+          "dtype": "object",
+          "meaning": "Description of the security.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md"
+          ],
+          "meaning_zh": "证券描述。"
+        },
+        {
+          "name": "ipo_status",
+          "dtype": "object",
+          "meaning": "The status of the IPO event. IPO events start out as status \"rumor\" or \"pending\". On listing day, the status changes to \"new\". After the listing day, the status changes to \"history\".  The status \"direct_listing_process\" corresponds to a type of offering where, instead of going through all the IPO processes, the company decides to list its shares directly on an exchange, without using an investment bank or other intermediaries. This is called a direct listing, direct placement, or direct public offering (DPO).",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md"
+          ],
+          "meaning_zh": "状态。"
+        },
+        {
+          "name": "us_code",
+          "dtype": "object",
+          "meaning": "This is a unique nine-character alphanumeric code that identifies a North American financial security for the purposes of facilitating clearing and settlement of trades.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md"
+          ],
+          "meaning_zh": "北美证券识别码（九位字母数字编码）。"
+        },
+        {
+          "name": "isin",
+          "dtype": "object",
+          "meaning": "International Securities Identification Number. This is a unique twelve-digit code that is assigned to every security issuance in the world.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md"
+          ],
+          "meaning_zh": "国际证券识别码（ISIN）。"
+        },
+        {
+          "name": "min_shares_offered",
+          "dtype": "float64",
+          "meaning": "The lower limit of shares that the company is willing to sell in the IPO.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md"
+          ],
+          "meaning_zh": "最低发行股数。"
+        },
+        {
+          "name": "listing_date",
+          "dtype": "object",
+          "meaning": "First trading date for the newly listed entity.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md"
+          ],
+          "meaning_zh": "上市首日。"
+        }
+      ],
+      "sample_rows": [
+        {
+          "ticker": "LHI",
+          "last_updated": "2026-03-09",
+          "announced_date": "2025-05-23",
+          "issuer_name": "Living Homeopathy International Ltd.",
+          "currency_code": "USD",
+          "final_issue_price": 5.0,
+          "max_shares_offered": 3750000.0,
+          "lowest_offer_price": 4.0,
+          "highest_offer_price": 6.0,
+          "total_offer_size": 18750000.0,
+          "primary_exchange": "XNAS",
+          "shares_outstanding": 21750000.0,
+          "security_type": "CS",
+          "lot_size": 100.0,
+          "security_description": "Ordinary Shares - Class A",
+          "ipo_status": "pending",
+          "us_code": null,
+          "isin": null,
+          "min_shares_offered": null,
+          "listing_date": null
+        },
+        {
+          "ticker": "ACGCU",
+          "last_updated": "2026-03-09",
+          "announced_date": "2026-03-06",
+          "issuer_name": "ACP Holdings Acquisition Corp.",
+          "currency_code": "USD",
+          "final_issue_price": 10.0,
+          "max_shares_offered": 20000000.0,
+          "lowest_offer_price": 10.0,
+          "highest_offer_price": 10.0,
+          "total_offer_size": 200000000.0,
+          "primary_exchange": "XNAS",
+          "shares_outstanding": 20390000.0,
+          "security_type": "SP",
+          "lot_size": 100.0,
+          "security_description": "Units 1 Ord Cls A  1/3 War",
+          "ipo_status": "pending",
+          "us_code": null,
+          "isin": null,
+          "min_shares_offered": null,
+          "listing_date": null
+        },
+        {
+          "ticker": "QREDU",
+          "last_updated": "2026-03-09",
+          "announced_date": "2026-03-05",
+          "issuer_name": "QuasarEdge Acquisition Corp",
+          "currency_code": "USD",
+          "final_issue_price": 10.0,
+          "max_shares_offered": 10000000.0,
+          "lowest_offer_price": 10.0,
+          "highest_offer_price": 10.0,
+          "total_offer_size": 100000000.0,
+          "primary_exchange": "XNAS",
+          "shares_outstanding": null,
+          "security_type": "SP",
+          "lot_size": 100.0,
+          "security_description": "Units 1 Ord Shs  1 Rts",
+          "ipo_status": "pending",
+          "us_code": null,
+          "isin": null,
+          "min_shares_offered": null,
+          "listing_date": null
+        }
+      ],
+      "readable": true
+    },
+    {
+      "dataset": "corporate_actions/splits",
+      "file_count": 39,
+      "sample_file": "~/quant_projects/data/us_stock/massive_parquet/corporate_actions/splits/splits_1978.parquet",
+      "year_partitions": [],
+      "column_count": 7,
+      "columns": [
+        {
+          "name": "id",
+          "dtype": "object",
+          "meaning": "Unique identifier for each dividend record",
+          "meaning_sources": [
+            "corporate_actions/dividends.md",
+            "corporate_actions/splits.md",
+            "market_operations/condition_codes.md",
+            "market_operations/exchanges.md",
+            "news/news.md"
+          ],
+          "meaning_zh": "记录唯一标识。"
+        },
+        {
+          "name": "execution_date",
+          "dtype": "object",
+          "meaning": "Date when the stock split was applied and shares adjusted",
+          "meaning_sources": [
+            "corporate_actions/splits.md"
+          ],
+          "meaning_zh": "执行日期。"
+        },
+        {
+          "name": "split_from",
+          "dtype": "float64",
+          "meaning": "Denominator of the split ratio (old shares)",
+          "meaning_sources": [
+            "corporate_actions/splits.md"
+          ],
+          "meaning_zh": "拆股比例分母（旧股数）。"
+        },
+        {
+          "name": "split_to",
+          "dtype": "float64",
+          "meaning": "Numerator of the split ratio (new shares)",
+          "meaning_sources": [
+            "corporate_actions/splits.md"
+          ],
+          "meaning_zh": "拆股比例分子（新股数）。"
+        },
+        {
+          "name": "ticker",
+          "dtype": "object",
+          "meaning": "The ticker symbol of the IPO event.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md",
+            "corporate_actions/dividends.md",
+            "corporate_actions/splits.md",
+            "filing/10-K_Sections.md",
+            "filing/8-K_Text.md",
+            "filing/risk_factors.md",
+            "filing/sec_edgar_index.md",
+            "fundamentals/float.md",
+            "fundamentals/ratios.md",
+            "fundamentals/short_interest.md",
+            "fundamentals/short_volume.md",
+            "snapshots/unified_snapshot.md",
+            "tickers/all_tickers.md",
+            "tickers/related_tickers.md"
+          ],
+          "meaning_zh": "证券代码。"
+        },
+        {
+          "name": "adjustment_type",
+          "dtype": "object",
+          "meaning": "Classification of the share-change event. Possible values include: forward_split (share count increases), reverse_split (share count decreases), stock_dividend (shares issued as a dividend)",
+          "meaning_sources": [
+            "corporate_actions/splits.md"
+          ],
+          "meaning_zh": "调整类型（前复权拆股/反向拆股/股票股利等）。"
+        },
+        {
+          "name": "historical_adjustment_factor",
+          "dtype": "float64",
+          "meaning": "Cumulative adjustment factor used to offset dividend effects on historical prices. To adjust a historical price for dividends: for a price on date D, find the first dividend whose `ex_dividend_date` is after date D and multiply the price by that dividend's `historical_adjustment_factor`.",
+          "meaning_sources": [
+            "corporate_actions/dividends.md",
+            "corporate_actions/splits.md"
+          ],
+          "meaning_zh": "历史调整因子（用于将历史价格按当前股本口径调整）。"
+        }
+      ],
+      "sample_rows": [
+        {
+          "id": "Pef962e8ce572df20933cdaac3a2d2d25e3a77cc910f2c84dbe66235bc780538b",
+          "execution_date": "1978-10-25",
+          "split_from": 2.0,
+          "split_to": 3.0,
+          "ticker": "AMD",
+          "adjustment_type": "forward_split",
+          "historical_adjustment_factor": 0.037037
+        }
+      ],
+      "readable": true
+    },
+    {
+      "dataset": "filing/risk_categories",
+      "file_count": 1,
+      "sample_file": "~/quant_projects/data/us_stock/massive_parquet/filing/risk_categories/risk_categories_all.parquet",
+      "year_partitions": [],
+      "column_count": 5,
+      "columns": [
+        {
+          "name": "primary_category",
+          "dtype": "object",
+          "meaning": "Top-level risk category",
+          "meaning_sources": [
+            "filing/risk_categories.md",
+            "filing/risk_factors.md"
+          ],
+          "meaning_zh": "一级风险分类。"
+        },
+        {
+          "name": "secondary_category",
+          "dtype": "object",
+          "meaning": "Mid-level risk category",
+          "meaning_sources": [
+            "filing/risk_categories.md",
+            "filing/risk_factors.md"
+          ],
+          "meaning_zh": "二级风险分类。"
+        },
+        {
+          "name": "tertiary_category",
+          "dtype": "object",
+          "meaning": "Most specific risk classification",
+          "meaning_sources": [
+            "filing/risk_categories.md",
+            "filing/risk_factors.md"
+          ],
+          "meaning_zh": "三级风险分类。"
+        },
+        {
+          "name": "description",
+          "dtype": "object",
+          "meaning": "Detailed explanation of what this risk category encompasses, including specific examples and potential impacts",
+          "meaning_sources": [
+            "filing/risk_categories.md",
+            "market_operations/condition_codes.md",
+            "news/news.md",
+            "tickers/ticker_types.md"
+          ],
+          "meaning_zh": "描述。"
+        },
+        {
+          "name": "taxonomy",
+          "dtype": "float64",
+          "meaning": "Version identifier (e.g., '1.0', '1.1') for the taxonomy",
+          "meaning_sources": [
+            "filing/risk_categories.md"
+          ],
+          "meaning_zh": "分类体系版本。"
+        }
+      ],
+      "sample_rows": [
+        {
+          "primary_category": "governance_and_stakeholder",
+          "secondary_category": "organizational_and_management",
+          "tertiary_category": "performance_management_and_accountability",
+          "description": "Risk from inadequate performance management systems, unclear accountability structures, or ineffective measurement and incentive systems that could affect employee performance, goal achievement, and organizational effectiveness.",
+          "taxonomy": 1.0
+        },
+        {
+          "primary_category": "governance_and_stakeholder",
+          "secondary_category": "organizational_and_management",
+          "tertiary_category": "communication_and_coordination",
+          "description": "Risk from poor internal communication, lack of coordination between departments or business units, or information silos that could affect operational efficiency, strategic execution, and organizational alignment and performance.",
+          "taxonomy": 1.0
+        },
+        {
+          "primary_category": "governance_and_stakeholder",
+          "secondary_category": "organizational_and_management",
+          "tertiary_category": "organizational_structure_and_reporting",
+          "description": "Risk from inadequate organizational structure, unclear reporting relationships, or ineffective management hierarchies that could create communication problems, decision-making delays, accountability gaps, and operational inefficiencies.",
+          "taxonomy": 1.0
+        }
+      ],
+      "readable": true
+    },
+    {
+      "dataset": "filing/risk_factors",
+      "file_count": 12,
+      "sample_file": "~/quant_projects/data/us_stock/massive_parquet/filing/risk_factors/risk_factors_2015.parquet",
+      "year_partitions": [],
+      "column_count": 7,
+      "columns": [
+        {
+          "name": "cik",
+          "dtype": "object",
+          "meaning": "SEC Central Index Key (CIK) identifying the filing entity.",
+          "meaning_sources": [
+            "filing/10-K_Sections.md",
+            "filing/8-K_Text.md",
+            "filing/risk_factors.md",
+            "filing/sec_edgar_index.md",
+            "fundamentals/balance_sheets.md",
+            "fundamentals/cashflow_statement.md",
+            "fundamentals/income_statement.md",
+            "fundamentals/ratios.md",
+            "tickers/all_tickers.md"
+          ],
+          "meaning_zh": "SEC 中央索引编号（CIK）。"
+        },
+        {
+          "name": "ticker",
+          "dtype": "object",
+          "meaning": "The ticker symbol of the IPO event.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md",
+            "corporate_actions/dividends.md",
+            "corporate_actions/splits.md",
+            "filing/10-K_Sections.md",
+            "filing/8-K_Text.md",
+            "filing/risk_factors.md",
+            "filing/sec_edgar_index.md",
+            "fundamentals/float.md",
+            "fundamentals/ratios.md",
+            "fundamentals/short_interest.md",
+            "fundamentals/short_volume.md",
+            "snapshots/unified_snapshot.md",
+            "tickers/all_tickers.md",
+            "tickers/related_tickers.md"
+          ],
+          "meaning_zh": "证券代码。"
+        },
+        {
+          "name": "primary_category",
+          "dtype": "object",
+          "meaning": "Top-level risk category",
+          "meaning_sources": [
+            "filing/risk_categories.md",
+            "filing/risk_factors.md"
+          ],
+          "meaning_zh": "一级风险分类。"
+        },
+        {
+          "name": "secondary_category",
+          "dtype": "object",
+          "meaning": "Mid-level risk category",
+          "meaning_sources": [
+            "filing/risk_categories.md",
+            "filing/risk_factors.md"
+          ],
+          "meaning_zh": "二级风险分类。"
+        },
+        {
+          "name": "tertiary_category",
+          "dtype": "object",
+          "meaning": "Most specific risk classification",
+          "meaning_sources": [
+            "filing/risk_categories.md",
+            "filing/risk_factors.md"
+          ],
+          "meaning_zh": "三级风险分类。"
+        },
+        {
+          "name": "filing_date",
+          "dtype": "object",
+          "meaning": "Date when the filing was submitted to the SEC (formatted as YYYY-MM-DD).",
+          "meaning_sources": [
+            "filing/10-K_Sections.md",
+            "filing/8-K_Text.md",
+            "filing/risk_factors.md",
+            "filing/sec_edgar_index.md",
+            "fundamentals/balance_sheets.md",
+            "fundamentals/cashflow_statement.md",
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "申报/提交日期。"
+        },
+        {
+          "name": "supporting_text",
+          "dtype": "object",
+          "meaning": "Snippet of text to support the given label",
+          "meaning_sources": [
+            "filing/risk_factors.md"
+          ],
+          "meaning_zh": "支持该标签的文本片段。"
+        }
+      ],
+      "sample_rows": [
+        {
+          "cik": "0000039311",
+          "ticker": "IBCP",
+          "primary_category": "technology_and_information",
+          "secondary_category": "digital_transformation_and_innovation",
+          "tertiary_category": "technology_obsolescence_and_evolution",
+          "filing_date": "2026-03-06",
+          "supporting_text": "Emerging digital assets and technologies may disrupt our business and adversely affect our results. Rapid innovation in financial technology - including stablecoins and other digital assets, distributed ledger technologies, real-time payment networks, embedded banking, and artificial intelligence - may change how consumers and businesses store value, make payments, access credit, and obtain financial services."
+        },
+        {
+          "cik": "0000039311",
+          "ticker": "IBCP",
+          "primary_category": "regulatory_and_compliance",
+          "secondary_category": "industry_regulation",
+          "tertiary_category": "regulatory_compliance_and_changes",
+          "filing_date": "2026-03-06",
+          "supporting_text": "Changes in regulation or oversight may have a material adverse impact on our operations. We are subject to extensive regulation, supervision and examination by the Federal Reserve, the FDIC, the Michigan DIFS, the SEC and other regulatory bodies. Such regulation and supervision govern the activities in which we may engage."
+        },
+        {
+          "cik": "0000039311",
+          "ticker": "IBCP",
+          "primary_category": "technology_and_information",
+          "secondary_category": "cybersecurity_and_data_protection",
+          "tertiary_category": "third_party_data_security_and_vendors",
+          "filing_date": "2026-03-06",
+          "supporting_text": "We are also susceptible to cybersecurity risks faced by third party vendors on which we rely for components of our business infrastructure and data processing and which often have access to the sensitive data of our customers."
+        }
+      ],
+      "readable": true
+    },
+    {
+      "dataset": "filing/sec_edgar_index",
+      "file_count": 1,
+      "sample_file": "~/quant_projects/data/us_stock/massive_parquet/filing/sec_edgar_index/sec_edgar_index_all.parquet",
+      "year_partitions": [],
+      "column_count": 7,
+      "columns": [
+        {
+          "name": "cik",
+          "dtype": "object",
+          "meaning": "SEC Central Index Key (CIK) identifying the filing entity.",
+          "meaning_sources": [
+            "filing/10-K_Sections.md",
+            "filing/8-K_Text.md",
+            "filing/risk_factors.md",
+            "filing/sec_edgar_index.md",
+            "fundamentals/balance_sheets.md",
+            "fundamentals/cashflow_statement.md",
+            "fundamentals/income_statement.md",
+            "fundamentals/ratios.md",
+            "tickers/all_tickers.md"
+          ],
+          "meaning_zh": "SEC 中央索引编号（CIK）。"
+        },
+        {
+          "name": "issuer_name",
+          "dtype": "object",
+          "meaning": "Name of issuer.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md",
+            "filing/10-K_Sections.md",
+            "filing/sec_edgar_index.md"
+          ],
+          "meaning_zh": "发行人名称。"
+        },
+        {
+          "name": "filing_url",
+          "dtype": "object",
+          "meaning": "Direct URL to the filing on the SEC EDGAR website.",
+          "meaning_sources": [
+            "filing/10-K_Sections.md",
+            "filing/8-K_Text.md",
+            "filing/sec_edgar_index.md"
+          ],
+          "meaning_zh": "链接。"
+        },
+        {
+          "name": "accession_number",
+          "dtype": "object",
+          "meaning": "SEC accession number uniquely identifying the filing (e.g., '0000320193-24-000123').",
+          "meaning_sources": [
+            "filing/10-K_Sections.md",
+            "filing/8-K_Text.md",
+            "filing/sec_edgar_index.md"
+          ],
+          "meaning_zh": "该字段中文释义已补充。"
+        },
+        {
+          "name": "ticker",
+          "dtype": "object",
+          "meaning": "The ticker symbol of the IPO event.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md",
+            "corporate_actions/dividends.md",
+            "corporate_actions/splits.md",
+            "filing/10-K_Sections.md",
+            "filing/8-K_Text.md",
+            "filing/risk_factors.md",
+            "filing/sec_edgar_index.md",
+            "fundamentals/float.md",
+            "fundamentals/ratios.md",
+            "fundamentals/short_interest.md",
+            "fundamentals/short_volume.md",
+            "snapshots/unified_snapshot.md",
+            "tickers/all_tickers.md",
+            "tickers/related_tickers.md"
+          ],
+          "meaning_zh": "证券代码。"
+        },
+        {
+          "name": "form_type",
+          "dtype": "object",
+          "meaning": "SEC form type (e.g., '10-K', '10-Q', '8-K', 'S-1', '4', etc.).",
+          "meaning_sources": [
+            "filing/10-K_Sections.md",
+            "filing/8-K_Text.md",
+            "filing/sec_edgar_index.md"
+          ],
+          "meaning_zh": "SEC 表单类型（如 10-K/10-Q/8-K/S-1 等）。"
+        },
+        {
+          "name": "filing_date",
+          "dtype": "object",
+          "meaning": "Date when the filing was submitted to the SEC (formatted as YYYY-MM-DD).",
+          "meaning_sources": [
+            "filing/10-K_Sections.md",
+            "filing/8-K_Text.md",
+            "filing/risk_factors.md",
+            "filing/sec_edgar_index.md",
+            "fundamentals/balance_sheets.md",
+            "fundamentals/cashflow_statement.md",
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "申报/提交日期。"
+        }
+      ],
+      "sample_rows": [
+        {
+          "cik": "0000048039",
+          "issuer_name": "HOLLY CORP",
+          "filing_url": "https://www.sec.gov/Archives/edgar/data/48039/0001047469-02-001871.txt",
+          "accession_number": "0001047469-02-001871",
+          "ticker": "HOC",
+          "form_type": null,
+          "filing_date": null
+        },
+        {
+          "cik": "0000934860",
+          "issuer_name": "SOBIESKI BANCORP INC",
+          "filing_url": "https://www.sec.gov/Archives/edgar/data/934860/0000927089-02-000022.txt",
+          "accession_number": "0000927089-02-000022",
+          "ticker": "SOBI",
+          "form_type": null,
+          "filing_date": null
+        },
+        {
+          "cik": "0000062741",
+          "issuer_name": "MARSHALL & ILSLEY CORP/WI/",
+          "filing_url": "https://www.sec.gov/Archives/edgar/data/62741/0000950131-02-002678.txt",
+          "accession_number": "0000950131-02-002678",
+          "ticker": null,
+          "form_type": "S-4",
+          "filing_date": null
+        }
+      ],
+      "readable": true
+    },
+    {
+      "dataset": "fundamentals/balance_sheet",
+      "file_count": 18,
+      "sample_file": "~/quant_projects/data/us_stock/massive_parquet/fundamentals/balance_sheet/balance_sheet_2010.parquet",
+      "year_partitions": [],
+      "column_count": 38,
+      "columns": [
+        {
+          "name": "accounts_payable",
+          "dtype": "float64",
+          "meaning": "Amounts owed to suppliers and vendors for goods and services purchased on credit.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md"
+          ],
+          "meaning_zh": "应付账款。"
+        },
+        {
+          "name": "accrued_and_other_current_liabilities",
+          "dtype": "float64",
+          "meaning": "Current liabilities not classified elsewhere, including accrued expenses, taxes payable, and other obligations due within one year.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md"
+          ],
+          "meaning_zh": "应计及其他流动负债。"
+        },
+        {
+          "name": "accumulated_other_comprehensive_income",
+          "dtype": "float64",
+          "meaning": "Cumulative gains and losses that bypass the income statement, including foreign currency translation adjustments and unrealized gains/losses on securities.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md"
+          ],
+          "meaning_zh": "累计其他综合收益。"
+        },
+        {
+          "name": "additional_paid_in_capital",
+          "dtype": "float64",
+          "meaning": "Amount received from shareholders in excess of the par or stated value of shares issued.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md"
+          ],
+          "meaning_zh": "资本公积（超面值实收资本）。"
+        },
+        {
+          "name": "cash_and_equivalents",
+          "dtype": "float64",
+          "meaning": "Cash on hand and short-term, highly liquid investments that are readily convertible to known amounts of cash.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md"
+          ],
+          "meaning_zh": "现金及现金等价物。"
+        },
+        {
+          "name": "cik",
+          "dtype": "object",
+          "meaning": "SEC Central Index Key (CIK) identifying the filing entity.",
+          "meaning_sources": [
+            "filing/10-K_Sections.md",
+            "filing/8-K_Text.md",
+            "filing/risk_factors.md",
+            "filing/sec_edgar_index.md",
+            "fundamentals/balance_sheets.md",
+            "fundamentals/cashflow_statement.md",
+            "fundamentals/income_statement.md",
+            "fundamentals/ratios.md",
+            "tickers/all_tickers.md"
+          ],
+          "meaning_zh": "SEC 中央索引编号（CIK）。"
+        },
+        {
+          "name": "commitments_and_contingencies",
+          "dtype": "float64",
+          "meaning": "Disclosed amount related to contractual commitments and potential liabilities that may arise from uncertain future events.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md"
+          ],
+          "meaning_zh": "承诺与或有事项。"
+        },
+        {
+          "name": "common_stock",
+          "dtype": "float64",
+          "meaning": "Par or stated value of common shares outstanding representing basic ownership in the company.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md"
+          ],
+          "meaning_zh": "普通股（账面口径）。"
+        },
+        {
+          "name": "debt_current",
+          "dtype": "float64",
+          "meaning": "Short-term borrowings and the current portion of long-term debt due within one year.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md"
+          ],
+          "meaning_zh": "一年内到期债务/短期债务。"
+        },
+        {
+          "name": "deferred_revenue_current",
+          "dtype": "float64",
+          "meaning": "Customer payments received in advance for goods or services to be delivered within one year.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md"
+          ],
+          "meaning_zh": "流动递延收入。"
+        },
+        {
+          "name": "filing_date",
+          "dtype": "object",
+          "meaning": "Date when the filing was submitted to the SEC (formatted as YYYY-MM-DD).",
+          "meaning_sources": [
+            "filing/10-K_Sections.md",
+            "filing/8-K_Text.md",
+            "filing/risk_factors.md",
+            "filing/sec_edgar_index.md",
+            "fundamentals/balance_sheets.md",
+            "fundamentals/cashflow_statement.md",
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "申报/提交日期。"
+        },
+        {
+          "name": "fiscal_quarter",
+          "dtype": "int64",
+          "meaning": "The fiscal quarter number (1, 2, 3, or 4) for the reporting period.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md",
+            "fundamentals/cashflow_statement.md",
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "财季。"
+        },
+        {
+          "name": "fiscal_year",
+          "dtype": "int64",
+          "meaning": "The fiscal year for the reporting period.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md",
+            "fundamentals/cashflow_statement.md",
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "财年。"
+        },
+        {
+          "name": "goodwill",
+          "dtype": "float64",
+          "meaning": "Intangible asset representing the excess of purchase price over fair value of net assets acquired in business combinations.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md"
+          ],
+          "meaning_zh": "商誉。"
+        },
+        {
+          "name": "intangible_assets_net",
+          "dtype": "float64",
+          "meaning": "Intangible assets other than goodwill, including patents, trademarks, and customer relationships, net of accumulated amortization.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md"
+          ],
+          "meaning_zh": "无形资产净额。"
+        },
+        {
+          "name": "inventories",
+          "dtype": "float64",
+          "meaning": "Raw materials, work-in-process, and finished goods held for sale in the ordinary course of business.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md"
+          ],
+          "meaning_zh": "存货。"
+        },
+        {
+          "name": "long_term_debt_and_capital_lease_obligations",
+          "dtype": "float64",
+          "meaning": "Long-term borrowings and capital lease obligations with maturities greater than one year.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md"
+          ],
+          "meaning_zh": "长期债务及资本租赁义务。"
+        },
+        {
+          "name": "noncontrolling_interest",
+          "dtype": "float64",
+          "meaning": "Equity in consolidated subsidiaries not owned by the parent company, representing minority shareholders' ownership.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md",
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "少数股东权益（非控股权益）。"
+        },
+        {
+          "name": "other_assets",
+          "dtype": "float64",
+          "meaning": "Non-current assets not classified elsewhere, including long-term investments, deferred tax assets, and other long-term assets.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md"
+          ],
+          "meaning_zh": "其他非流动资产。"
+        },
+        {
+          "name": "other_current_assets",
+          "dtype": "float64",
+          "meaning": "Current assets not classified elsewhere, including prepaid expenses, taxes receivable, and other assets expected to be converted to cash within one year.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md"
+          ],
+          "meaning_zh": "其他流动资产。"
+        },
+        {
+          "name": "other_equity",
+          "dtype": "float64",
+          "meaning": "Equity components not classified elsewhere in shareholders' equity.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md"
+          ],
+          "meaning_zh": "其他权益项目。"
+        },
+        {
+          "name": "other_noncurrent_liabilities",
+          "dtype": "float64",
+          "meaning": "Non-current liabilities not classified elsewhere, including deferred tax liabilities, pension obligations, and other long-term liabilities.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md"
+          ],
+          "meaning_zh": "其他非流动负债。"
+        },
+        {
+          "name": "period_end",
+          "dtype": "object",
+          "meaning": "The last date of the reporting period, representing the specific point in time when the balance sheet snapshot was taken.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md",
+            "fundamentals/cashflow_statement.md",
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "报告期结束日期。"
+        },
+        {
+          "name": "preferred_stock",
+          "dtype": "float64",
+          "meaning": "Par or stated value of preferred shares outstanding with preferential rights over common stock.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md"
+          ],
+          "meaning_zh": "优先股（账面口径）。"
+        },
+        {
+          "name": "property_plant_equipment_net",
+          "dtype": "float64",
+          "meaning": "Tangible fixed assets used in operations, reported net of accumulated depreciation.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md"
+          ],
+          "meaning_zh": "固定资产净额（PP&E）。"
+        },
+        {
+          "name": "receivables",
+          "dtype": "float64",
+          "meaning": "Amounts owed to the company by customers and other parties, primarily accounts receivable, net of allowances for doubtful accounts.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md"
+          ],
+          "meaning_zh": "应收款项净额。"
+        },
+        {
+          "name": "retained_earnings_deficit",
+          "dtype": "float64",
+          "meaning": "Cumulative net income earned by the company less dividends paid to shareholders since inception.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md"
+          ],
+          "meaning_zh": "留存收益/累计亏损。"
+        },
+        {
+          "name": "short_term_investments",
+          "dtype": "float64",
+          "meaning": "Marketable securities and other investments with maturities of one year or less that are not classified as cash equivalents.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md"
+          ],
+          "meaning_zh": "短期投资。"
+        },
+        {
+          "name": "tickers",
+          "dtype": "object",
+          "meaning": "A list of ticker symbols under which the company is listed. Multiple symbols may indicate different share classes for the same company.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md",
+            "fundamentals/cashflow_statement.md",
+            "fundamentals/income_statement.md",
+            "news/news.md"
+          ],
+          "meaning_zh": "证券代码列表（可能包含多股类别）。"
+        },
+        {
+          "name": "timeframe",
+          "dtype": "object",
+          "meaning": "The reporting period type. Possible values include: quarterly, annual.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md",
+            "fundamentals/cashflow_statement.md",
+            "fundamentals/income_statement.md",
+            "snapshots/unified_snapshot.md"
+          ],
+          "meaning_zh": "报告周期类型（季度/年度等）。"
+        },
+        {
+          "name": "total_assets",
+          "dtype": "float64",
+          "meaning": "Sum of all current and non-current assets representing everything the company owns or controls.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md"
+          ],
+          "meaning_zh": "总资产。"
+        },
+        {
+          "name": "total_current_assets",
+          "dtype": "float64",
+          "meaning": "Sum of all current assets expected to be converted to cash, sold, or consumed within one year.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md"
+          ],
+          "meaning_zh": "流动资产合计。"
+        },
+        {
+          "name": "total_current_liabilities",
+          "dtype": "float64",
+          "meaning": "Sum of all liabilities expected to be settled within one year.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md"
+          ],
+          "meaning_zh": "流动负债合计。"
+        },
+        {
+          "name": "total_equity",
+          "dtype": "float64",
+          "meaning": "Sum of all equity components representing shareholders' total ownership interest in the company.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md"
+          ],
+          "meaning_zh": "股东权益合计。"
+        },
+        {
+          "name": "total_equity_attributable_to_parent",
+          "dtype": "float64",
+          "meaning": "Total shareholders' equity attributable to the parent company, excluding noncontrolling interests.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md"
+          ],
+          "meaning_zh": "归属于母公司股东权益。"
+        },
+        {
+          "name": "total_liabilities",
+          "dtype": "float64",
+          "meaning": "Sum of all current and non-current liabilities representing everything the company owes.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md"
+          ],
+          "meaning_zh": "总负债。"
+        },
+        {
+          "name": "total_liabilities_and_equity",
+          "dtype": "float64",
+          "meaning": "Sum of total liabilities and total equity, which should equal total assets per the fundamental accounting equation.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md"
+          ],
+          "meaning_zh": "负债和股东权益总计。"
+        },
+        {
+          "name": "treasury_stock",
+          "dtype": "float64",
+          "meaning": "Cost of the company's own shares that have been repurchased and are held in treasury, typically reported as a negative value.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md"
+          ],
+          "meaning_zh": "库存股。"
+        }
+      ],
+      "sample_rows": [
+        {
+          "accounts_payable": 28541000000.0,
+          "accrued_and_other_current_liabilities": 20307000000.0,
+          "accumulated_other_comprehensive_income": -3373000000.0,
+          "additional_paid_in_capital": null,
+          "cash_and_equivalents": 6578000000.0,
+          "cik": "0000104169",
+          "commitments_and_contingencies": 277000000.0,
+          "common_stock": 4048000000.0,
+          "debt_current": 7506000000.0,
+          "deferred_revenue_current": null,
+          "filing_date": "2010-06-04",
+          "fiscal_quarter": 1,
+          "fiscal_year": 2010,
+          "goodwill": 14882000000.0,
+          "intangible_assets_net": null,
+          "inventories": 34391000000.0,
+          "long_term_debt_and_capital_lease_obligations": 35665000000.0,
+          "noncontrolling_interest": 1683000000.0,
+          "other_assets": 3358000000.0,
+          "other_current_assets": 3421000000.0,
+          "other_equity": 0.0,
+          "other_noncurrent_liabilities": 5835000000.0,
+          "period_end": "2009-04-30",
+          "preferred_stock": null,
+          "property_plant_equipment_net": 96104000000.0,
+          "receivables": 3356000000.0,
+          "retained_earnings_deficit": 61556000000.0,
+          "short_term_investments": null,
+          "tickers": [
+            "WMT"
+          ],
+          "timeframe": "quarterly",
+          "total_assets": 162090000000.0,
+          "total_current_assets": 47746000000.0,
+          "total_current_liabilities": 56354000000.0,
+          "total_equity": 63914000000.0,
+          "total_equity_attributable_to_parent": 62231000000.0,
+          "total_liabilities": 97899000000.0,
+          "total_liabilities_and_equity": 162090000000.0,
+          "treasury_stock": null
+        },
+        {
+          "accounts_payable": 6004000000.0,
+          "accrued_and_other_current_liabilities": 2990000000.0,
+          "accumulated_other_comprehensive_income": -553000000.0,
+          "additional_paid_in_capital": 2788000000.0,
+          "cash_and_equivalents": 1371000000.0,
+          "cik": "0000027419",
+          "commitments_and_contingencies": null,
+          "common_stock": 63000000.0,
+          "debt_current": 1255000000.0,
+          "deferred_revenue_current": null,
+          "filing_date": "2010-05-28",
+          "fiscal_quarter": 1,
+          "fiscal_year": 2010,
+          "goodwill": null,
+          "intangible_assets_net": null,
+          "inventories": 6993000000.0,
+          "long_term_debt_and_capital_lease_obligations": 17514000000.0,
+          "noncontrolling_interest": null,
+          "other_assets": 861000000.0,
+          "other_current_assets": 1735000000.0,
+          "other_equity": 0.0,
+          "other_noncurrent_liabilities": 2330000000.0,
+          "period_end": "2009-05-02",
+          "preferred_stock": null,
+          "property_plant_equipment_net": 25800000000.0,
+          "receivables": 7452000000.0,
+          "retained_earnings_deficit": 11821000000.0,
+          "short_term_investments": null,
+          "tickers": [
+            "TGT"
+          ],
+          "timeframe": "quarterly",
+          "total_assets": 44212000000.0,
+          "total_current_assets": 17551000000.0,
+          "total_current_liabilities": 10249000000.0,
+          "total_equity": 14119000000.0,
+          "total_equity_attributable_to_parent": 14119000000.0,
+          "total_liabilities": 30093000000.0,
+          "total_liabilities_and_equity": 44212000000.0,
+          "treasury_stock": null
+        },
+        {
+          "accounts_payable": 812000000.0,
+          "accrued_and_other_current_liabilities": 873000000.0,
+          "accumulated_other_comprehensive_income": 116000000.0,
+          "additional_paid_in_capital": 2893000000.0,
+          "cash_and_equivalents": 1708000000.0,
+          "cik": "0000039911",
+          "commitments_and_contingencies": null,
+          "common_stock": 55000000.0,
+          "debt_current": null,
+          "deferred_revenue_current": null,
+          "filing_date": "2010-06-08",
+          "fiscal_quarter": 1,
+          "fiscal_year": 2010,
+          "goodwill": null,
+          "intangible_assets_net": null,
+          "inventories": 1393000000.0,
+          "long_term_debt_and_capital_lease_obligations": null,
+          "noncontrolling_interest": null,
+          "other_assets": 632000000.0,
+          "other_current_assets": 647000000.0,
+          "other_equity": 0.0,
+          "other_noncurrent_liabilities": 996000000.0,
+          "period_end": "2009-05-02",
+          "preferred_stock": null,
+          "property_plant_equipment_net": 2820000000.0,
+          "receivables": 0.0,
+          "retained_earnings_deficit": 10103000000.0,
+          "short_term_investments": null,
+          "tickers": [
+            "GPS"
+          ],
+          "timeframe": "quarterly",
+          "total_assets": 7221000000.0,
+          "total_current_assets": 3748000000.0,
+          "total_current_liabilities": 1685000000.0,
+          "total_equity": 4540000000.0,
+          "total_equity_attributable_to_parent": 4540000000.0,
+          "total_liabilities": 2681000000.0,
+          "total_liabilities_and_equity": 7221000000.0,
+          "treasury_stock": -8627000000.0
+        }
+      ],
+      "readable": true
+    },
+    {
+      "dataset": "fundamentals/cash_flow_statement",
+      "file_count": 17,
+      "sample_file": "~/quant_projects/data/us_stock/massive_parquet/fundamentals/cash_flow_statement/cash_flow_statement_2010.parquet",
+      "year_partitions": [],
+      "column_count": 32,
+      "columns": [
+        {
+          "name": "cash_from_operating_activities_continuing_operations",
+          "dtype": "float64",
+          "meaning": "Cash generated from continuing business operations before discontinued operations.",
+          "meaning_sources": [
+            "fundamentals/cashflow_statement.md"
+          ],
+          "meaning_zh": "持续经营活动产生的经营现金流。"
+        },
+        {
+          "name": "change_in_cash_and_equivalents",
+          "dtype": "float64",
+          "meaning": "Net change in cash and cash equivalents during the period, representing the sum of operating, investing, and financing cash flows plus currency effects.",
+          "meaning_sources": [
+            "fundamentals/cashflow_statement.md"
+          ],
+          "meaning_zh": "现金及现金等价物净变动。"
+        },
+        {
+          "name": "change_in_other_operating_assets_and_liabilities_net",
+          "dtype": "float64",
+          "meaning": "Net change in working capital components including accounts receivable, inventory, accounts payable, and other operating items.",
+          "meaning_sources": [
+            "fundamentals/cashflow_statement.md"
+          ],
+          "meaning_zh": "其他经营性资产负债净变动。"
+        },
+        {
+          "name": "cik",
+          "dtype": "object",
+          "meaning": "SEC Central Index Key (CIK) identifying the filing entity.",
+          "meaning_sources": [
+            "filing/10-K_Sections.md",
+            "filing/8-K_Text.md",
+            "filing/risk_factors.md",
+            "filing/sec_edgar_index.md",
+            "fundamentals/balance_sheets.md",
+            "fundamentals/cashflow_statement.md",
+            "fundamentals/income_statement.md",
+            "fundamentals/ratios.md",
+            "tickers/all_tickers.md"
+          ],
+          "meaning_zh": "SEC 中央索引编号（CIK）。"
+        },
+        {
+          "name": "depreciation_depletion_and_amortization",
+          "dtype": "float64",
+          "meaning": "Non-cash charges for the reduction in value of tangible and intangible assets over time.",
+          "meaning_sources": [
+            "fundamentals/cashflow_statement.md"
+          ],
+          "meaning_zh": "折旧、折耗与摊销。"
+        },
+        {
+          "name": "dividends",
+          "dtype": "float64",
+          "meaning": "Cash payments to shareholders in the form of dividends, typically reported as negative values.",
+          "meaning_sources": [
+            "fundamentals/cashflow_statement.md"
+          ],
+          "meaning_zh": "股利支付现金流。"
+        },
+        {
+          "name": "effect_of_currency_exchange_rate",
+          "dtype": "float64",
+          "meaning": "Impact of foreign exchange rate changes on cash and cash equivalents denominated in foreign currencies.",
+          "meaning_sources": [
+            "fundamentals/cashflow_statement.md"
+          ],
+          "meaning_zh": "汇率变动对现金的影响。"
+        },
+        {
+          "name": "filing_date",
+          "dtype": "object",
+          "meaning": "Date when the filing was submitted to the SEC (formatted as YYYY-MM-DD).",
+          "meaning_sources": [
+            "filing/10-K_Sections.md",
+            "filing/8-K_Text.md",
+            "filing/risk_factors.md",
+            "filing/sec_edgar_index.md",
+            "fundamentals/balance_sheets.md",
+            "fundamentals/cashflow_statement.md",
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "申报/提交日期。"
+        },
+        {
+          "name": "fiscal_quarter",
+          "dtype": "int64",
+          "meaning": "The fiscal quarter number (1, 2, 3, or 4) for the reporting period.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md",
+            "fundamentals/cashflow_statement.md",
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "财季。"
+        },
+        {
+          "name": "fiscal_year",
+          "dtype": "int64",
+          "meaning": "The fiscal year for the reporting period.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md",
+            "fundamentals/cashflow_statement.md",
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "财年。"
+        },
+        {
+          "name": "income_loss_from_discontinued_operations",
+          "dtype": "float64",
+          "meaning": "After-tax income or loss from business operations that have been discontinued.",
+          "meaning_sources": [
+            "fundamentals/cashflow_statement.md"
+          ],
+          "meaning_zh": "终止经营损益。"
+        },
+        {
+          "name": "long_term_debt_issuances_repayments",
+          "dtype": "float64",
+          "meaning": "Net cash flows from issuing or repaying long-term debt obligations.",
+          "meaning_sources": [
+            "fundamentals/cashflow_statement.md"
+          ],
+          "meaning_zh": "长期债务发行与偿还净额。"
+        },
+        {
+          "name": "net_cash_from_financing_activities",
+          "dtype": "float64",
+          "meaning": "Total cash generated or used by financing activities, including debt issuance, debt repayment, dividends, and share transactions.",
+          "meaning_sources": [
+            "fundamentals/cashflow_statement.md"
+          ],
+          "meaning_zh": "筹资活动现金流净额。"
+        },
+        {
+          "name": "net_cash_from_financing_activities_continuing_operations",
+          "dtype": "float64",
+          "meaning": "Cash flows from financing activities of continuing operations before discontinued operations.",
+          "meaning_sources": [
+            "fundamentals/cashflow_statement.md"
+          ],
+          "meaning_zh": "持续经营筹资现金流净额。"
+        },
+        {
+          "name": "net_cash_from_financing_activities_discontinued_operations",
+          "dtype": "float64",
+          "meaning": "Cash flows from financing activities of discontinued business segments.",
+          "meaning_sources": [
+            "fundamentals/cashflow_statement.md"
+          ],
+          "meaning_zh": "终止经营筹资现金流净额。"
+        },
+        {
+          "name": "net_cash_from_investing_activities",
+          "dtype": "float64",
+          "meaning": "Total cash generated or used by investing activities, including capital expenditures, acquisitions, and asset sales.",
+          "meaning_sources": [
+            "fundamentals/cashflow_statement.md"
+          ],
+          "meaning_zh": "投资活动现金流净额。"
+        },
+        {
+          "name": "net_cash_from_investing_activities_continuing_operations",
+          "dtype": "float64",
+          "meaning": "Cash flows from investing activities of continuing operations before discontinued operations.",
+          "meaning_sources": [
+            "fundamentals/cashflow_statement.md"
+          ],
+          "meaning_zh": "持续经营投资现金流净额。"
+        },
+        {
+          "name": "net_cash_from_investing_activities_discontinued_operations",
+          "dtype": "float64",
+          "meaning": "Cash flows from investing activities of discontinued business segments.",
+          "meaning_sources": [
+            "fundamentals/cashflow_statement.md"
+          ],
+          "meaning_zh": "终止经营投资现金流净额。"
+        },
+        {
+          "name": "net_cash_from_operating_activities",
+          "dtype": "float64",
+          "meaning": "Total cash generated or used by operating activities, representing cash flow from core business operations.",
+          "meaning_sources": [
+            "fundamentals/cashflow_statement.md"
+          ],
+          "meaning_zh": "经营活动现金流净额。"
+        },
+        {
+          "name": "net_cash_from_operating_activities_discontinued_operations",
+          "dtype": "float64",
+          "meaning": "Cash flows from operating activities of discontinued business segments.",
+          "meaning_sources": [
+            "fundamentals/cashflow_statement.md"
+          ],
+          "meaning_zh": "终止经营经营现金流净额。"
+        },
+        {
+          "name": "net_income",
+          "dtype": "float64",
+          "meaning": "Net income used as the starting point for operating cash flow calculations.",
+          "meaning_sources": [
+            "fundamentals/cashflow_statement.md"
+          ],
+          "meaning_zh": "净利润。"
+        },
+        {
+          "name": "noncontrolling_interests",
+          "dtype": "float64",
+          "meaning": "Cash flows related to minority shareholders in consolidated subsidiaries.",
+          "meaning_sources": [
+            "fundamentals/cashflow_statement.md"
+          ],
+          "meaning_zh": "少数股东相关现金流项目。"
+        },
+        {
+          "name": "other_cash_adjustments",
+          "dtype": "float64",
+          "meaning": "Other miscellaneous adjustments to cash flows not classified elsewhere.",
+          "meaning_sources": [
+            "fundamentals/cashflow_statement.md"
+          ],
+          "meaning_zh": "其他现金调整项。"
+        },
+        {
+          "name": "other_financing_activities",
+          "dtype": "float64",
+          "meaning": "Cash flows from financing activities not classified elsewhere, including share repurchases and other equity transactions.",
+          "meaning_sources": [
+            "fundamentals/cashflow_statement.md"
+          ],
+          "meaning_zh": "其他筹资活动现金流。"
+        },
+        {
+          "name": "other_investing_activities",
+          "dtype": "float64",
+          "meaning": "Cash flows from investing activities not classified elsewhere, including acquisitions, divestitures, and investments.",
+          "meaning_sources": [
+            "fundamentals/cashflow_statement.md"
+          ],
+          "meaning_zh": "其他投资活动现金流。"
+        },
+        {
+          "name": "other_operating_activities",
+          "dtype": "float64",
+          "meaning": "Other adjustments to reconcile net income to operating cash flow not classified elsewhere.",
+          "meaning_sources": [
+            "fundamentals/cashflow_statement.md"
+          ],
+          "meaning_zh": "其他经营活动现金流。"
+        },
+        {
+          "name": "period_end",
+          "dtype": "object",
+          "meaning": "The last date of the reporting period, representing the specific point in time when the balance sheet snapshot was taken.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md",
+            "fundamentals/cashflow_statement.md",
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "报告期结束日期。"
+        },
+        {
+          "name": "purchase_of_property_plant_and_equipment",
+          "dtype": "float64",
+          "meaning": "Cash outflows for capital expenditures on fixed assets, typically reported as negative values.",
+          "meaning_sources": [
+            "fundamentals/cashflow_statement.md"
+          ],
+          "meaning_zh": "购建固定资产支出。"
+        },
+        {
+          "name": "sale_of_property_plant_and_equipment",
+          "dtype": "float64",
+          "meaning": "Cash inflows from disposing of fixed assets, typically reported as positive values.",
+          "meaning_sources": [
+            "fundamentals/cashflow_statement.md"
+          ],
+          "meaning_zh": "处置固定资产收入。"
+        },
+        {
+          "name": "short_term_debt_issuances_repayments",
+          "dtype": "float64",
+          "meaning": "Net cash flows from issuing or repaying short-term debt obligations.",
+          "meaning_sources": [
+            "fundamentals/cashflow_statement.md"
+          ],
+          "meaning_zh": "短期债务发行与偿还净额。"
+        },
+        {
+          "name": "tickers",
+          "dtype": "object",
+          "meaning": "A list of ticker symbols under which the company is listed. Multiple symbols may indicate different share classes for the same company.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md",
+            "fundamentals/cashflow_statement.md",
+            "fundamentals/income_statement.md",
+            "news/news.md"
+          ],
+          "meaning_zh": "证券代码列表（可能包含多股类别）。"
+        },
+        {
+          "name": "timeframe",
+          "dtype": "object",
+          "meaning": "The reporting period type. Possible values include: quarterly, annual.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md",
+            "fundamentals/cashflow_statement.md",
+            "fundamentals/income_statement.md",
+            "snapshots/unified_snapshot.md"
+          ],
+          "meaning_zh": "报告周期类型（季度/年度等）。"
+        }
+      ],
+      "sample_rows": [
+        {
+          "cash_from_operating_activities_continuing_operations": 2827000000.0,
+          "change_in_cash_and_equivalents": 1821000000.0,
+          "change_in_other_operating_assets_and_liabilities_net": -2749000000.0,
+          "cik": "0000200406",
+          "depreciation_depletion_and_amortization": 676000000.0,
+          "dividends": -1273000000.0,
+          "effect_of_currency_exchange_rate": -62000000.0,
+          "filing_date": "2010-05-10",
+          "fiscal_quarter": 1,
+          "fiscal_year": 2010,
+          "income_loss_from_discontinued_operations": null,
+          "long_term_debt_issuances_repayments": -7000000.0,
+          "net_cash_from_financing_activities": 132000000.0,
+          "net_cash_from_financing_activities_continuing_operations": 132000000.0,
+          "net_cash_from_financing_activities_discontinued_operations": null,
+          "net_cash_from_investing_activities": -1076000000.0,
+          "net_cash_from_investing_activities_continuing_operations": -1076000000.0,
+          "net_cash_from_investing_activities_discontinued_operations": null,
+          "net_cash_from_operating_activities": 2827000000.0,
+          "net_cash_from_operating_activities_discontinued_operations": null,
+          "net_income": 3507000000.0,
+          "noncontrolling_interests": null,
+          "other_cash_adjustments": null,
+          "other_financing_activities": -807000000.0,
+          "other_investing_activities": -647000000.0,
+          "other_operating_activities": 1393000000.0,
+          "period_end": "2009-03-29",
+          "purchase_of_property_plant_and_equipment": -435000000.0,
+          "sale_of_property_plant_and_equipment": 6000000.0,
+          "short_term_debt_issuances_repayments": 2219000000.0,
+          "tickers": [
+            "JNJ"
+          ],
+          "timeframe": "quarterly"
+        },
+        {
+          "cash_from_operating_activities_continuing_operations": 142128000.0,
+          "change_in_cash_and_equivalents": 94586000.0,
+          "change_in_other_operating_assets_and_liabilities_net": 144547000.0,
+          "cik": "0001045810",
+          "depreciation_depletion_and_amortization": 50658000.0,
+          "dividends": 0.0,
+          "effect_of_currency_exchange_rate": null,
+          "filing_date": "2010-05-21",
+          "fiscal_quarter": 1,
+          "fiscal_year": 2010,
+          "income_loss_from_discontinued_operations": null,
+          "long_term_debt_issuances_repayments": -222000.0,
+          "net_cash_from_financing_activities": -38637000.0,
+          "net_cash_from_financing_activities_continuing_operations": -38637000.0,
+          "net_cash_from_financing_activities_discontinued_operations": null,
+          "net_cash_from_investing_activities": -8905000.0,
+          "net_cash_from_investing_activities_continuing_operations": -8905000.0,
+          "net_cash_from_investing_activities_discontinued_operations": null,
+          "net_cash_from_operating_activities": 142128000.0,
+          "net_cash_from_operating_activities_discontinued_operations": null,
+          "net_income": -201338000.0,
+          "noncontrolling_interests": null,
+          "other_cash_adjustments": null,
+          "other_financing_activities": -38415000.0,
+          "other_investing_activities": 11872000.0,
+          "other_operating_activities": 148261000.0,
+          "period_end": "2009-04-26",
+          "purchase_of_property_plant_and_equipment": -20777000.0,
+          "sale_of_property_plant_and_equipment": null,
+          "short_term_debt_issuances_repayments": null,
+          "tickers": [
+            "NVDA"
+          ],
+          "timeframe": "quarterly"
+        },
+        {
+          "cash_from_operating_activities_continuing_operations": 3571000000.0,
+          "change_in_cash_and_equivalents": -697000000.0,
+          "change_in_other_operating_assets_and_liabilities_net": -1084000000.0,
+          "cik": "0000104169",
+          "depreciation_depletion_and_amortization": 1700000000.0,
+          "dividends": -1067000000.0,
+          "effect_of_currency_exchange_rate": -82000000.0,
+          "filing_date": "2010-06-04",
+          "fiscal_quarter": 1,
+          "fiscal_year": 2010,
+          "income_loss_from_discontinued_operations": 8000000.0,
+          "long_term_debt_issuances_repayments": 1390000000.0,
+          "net_cash_from_financing_activities": -1503000000.0,
+          "net_cash_from_financing_activities_continuing_operations": -1503000000.0,
+          "net_cash_from_financing_activities_discontinued_operations": null,
+          "net_cash_from_investing_activities": -2683000000.0,
+          "net_cash_from_investing_activities_continuing_operations": -2683000000.0,
+          "net_cash_from_investing_activities_discontinued_operations": null,
+          "net_cash_from_operating_activities": 3571000000.0,
+          "net_cash_from_operating_activities_discontinued_operations": null,
+          "net_income": 3139000000.0,
+          "noncontrolling_interests": -436000000.0,
+          "other_cash_adjustments": null,
+          "other_financing_activities": -1124000000.0,
+          "other_investing_activities": -208000000.0,
+          "other_operating_activities": -192000000.0,
+          "period_end": "2009-04-30",
+          "purchase_of_property_plant_and_equipment": -2607000000.0,
+          "sale_of_property_plant_and_equipment": 132000000.0,
+          "short_term_debt_issuances_repayments": -266000000.0,
+          "tickers": [
+            "WMT"
+          ],
+          "timeframe": "quarterly"
+        }
+      ],
+      "readable": true
+    },
+    {
+      "dataset": "fundamentals/financials_ratios",
+      "file_count": 1,
+      "sample_file": "~/quant_projects/data/us_stock/massive_parquet/fundamentals/financials_ratios/financials_ratios_all.parquet",
+      "year_partitions": [],
+      "column_count": 23,
+      "columns": [
+        {
+          "name": "average_volume",
+          "dtype": "float64",
+          "meaning": "Average trading volume over the last 30 trading days, providing context for liquidity.",
+          "meaning_sources": [
+            "fundamentals/ratios.md"
+          ],
+          "meaning_zh": "近 30 个交易日平均成交量。"
+        },
+        {
+          "name": "cash",
+          "dtype": "float64",
+          "meaning": "Cash ratio, calculated as cash and cash equivalents divided by current liabilities, measuring the most liquid form of liquidity coverage.",
+          "meaning_sources": [
+            "fundamentals/ratios.md"
+          ],
+          "meaning_zh": "现金比率。"
+        },
+        {
+          "name": "cik",
+          "dtype": "object",
+          "meaning": "SEC Central Index Key (CIK) identifying the filing entity.",
+          "meaning_sources": [
+            "filing/10-K_Sections.md",
+            "filing/8-K_Text.md",
+            "filing/risk_factors.md",
+            "filing/sec_edgar_index.md",
+            "fundamentals/balance_sheets.md",
+            "fundamentals/cashflow_statement.md",
+            "fundamentals/income_statement.md",
+            "fundamentals/ratios.md",
+            "tickers/all_tickers.md"
+          ],
+          "meaning_zh": "SEC 中央索引编号（CIK）。"
+        },
+        {
+          "name": "current",
+          "dtype": "float64",
+          "meaning": "Current ratio, calculated as total current assets divided by total current liabilities, measuring short-term liquidity.",
+          "meaning_sources": [
+            "fundamentals/ratios.md"
+          ],
+          "meaning_zh": "流动比率。"
+        },
+        {
+          "name": "date",
+          "dtype": "object",
+          "meaning": "Date for which the ratios are calculated, representing the trading date with available price data.",
+          "meaning_sources": [
+            "fundamentals/ratios.md",
+            "fundamentals/short_volume.md"
+          ],
+          "meaning_zh": "日期。"
+        },
+        {
+          "name": "debt_to_equity",
+          "dtype": "float64",
+          "meaning": "Debt-to-equity ratio, calculated as total debt (current debt plus long-term debt) divided by total shareholders' equity, measuring financial leverage.",
+          "meaning_sources": [
+            "fundamentals/ratios.md"
+          ],
+          "meaning_zh": "资产负债率（债务/权益）。"
+        },
+        {
+          "name": "dividend_yield",
+          "dtype": "float64",
+          "meaning": "Dividend yield, calculated as annual dividends per share divided by stock price, measuring the income return on investment.",
+          "meaning_sources": [
+            "fundamentals/ratios.md"
+          ],
+          "meaning_zh": "股息率。"
+        },
+        {
+          "name": "earnings_per_share",
+          "dtype": "float64",
+          "meaning": "Earnings per share, calculated as net income available to common shareholders divided by weighted shares outstanding.",
+          "meaning_sources": [
+            "fundamentals/ratios.md"
+          ],
+          "meaning_zh": "每股收益（EPS）。"
+        },
+        {
+          "name": "enterprise_value",
+          "dtype": "float64",
+          "meaning": "Enterprise value, calculated as market capitalization plus total debt minus cash and cash equivalents, representing total company value.",
+          "meaning_sources": [
+            "fundamentals/ratios.md"
+          ],
+          "meaning_zh": "企业价值（EV）。"
+        },
+        {
+          "name": "ev_to_ebitda",
+          "dtype": "float64",
+          "meaning": "Enterprise value to EBITDA ratio, calculated as enterprise value divided by EBITDA, measuring company valuation relative to earnings before interest, taxes, depreciation, and amortization.",
+          "meaning_sources": [
+            "fundamentals/ratios.md"
+          ],
+          "meaning_zh": "EBITDA。"
+        },
+        {
+          "name": "ev_to_sales",
+          "dtype": "float64",
+          "meaning": "Enterprise value to sales ratio, calculated as enterprise value divided by revenue, measuring company valuation relative to sales.",
+          "meaning_sources": [
+            "fundamentals/ratios.md"
+          ],
+          "meaning_zh": "EV/销售额。"
+        },
+        {
+          "name": "free_cash_flow",
+          "dtype": "float64",
+          "meaning": "Free cash flow, calculated as operating cash flow minus capital expenditures (purchase of property, plant, and equipment).",
+          "meaning_sources": [
+            "fundamentals/ratios.md"
+          ],
+          "meaning_zh": "自由现金流。"
+        },
+        {
+          "name": "market_cap",
+          "dtype": "float64",
+          "meaning": "Market capitalization, calculated as stock price multiplied by total shares outstanding.",
+          "meaning_sources": [
+            "fundamentals/ratios.md"
+          ],
+          "meaning_zh": "市值。"
+        },
+        {
+          "name": "price",
+          "dtype": "float64",
+          "meaning": "Stock price used in ratio calculations, typically the closing price for the given date.",
+          "meaning_sources": [
+            "fundamentals/ratios.md"
+          ],
+          "meaning_zh": "价格。"
+        },
+        {
+          "name": "price_to_book",
+          "dtype": "float64",
+          "meaning": "Price-to-book ratio, calculated as stock price divided by book value per share, comparing market value to book value.",
+          "meaning_sources": [
+            "fundamentals/ratios.md"
+          ],
+          "meaning_zh": "市净率（P/B）。"
+        },
+        {
+          "name": "price_to_cash_flow",
+          "dtype": "float64",
+          "meaning": "Price-to-cash-flow ratio, calculated as stock price divided by operating cash flow per share. Only calculated when operating cash flow per share is positive.",
+          "meaning_sources": [
+            "fundamentals/ratios.md"
+          ],
+          "meaning_zh": "市现率（P/CF）。"
+        },
+        {
+          "name": "price_to_earnings",
+          "dtype": "float64",
+          "meaning": "Price-to-earnings ratio, calculated as stock price divided by earnings per share. Only calculated when earnings per share is positive.",
+          "meaning_sources": [
+            "fundamentals/ratios.md"
+          ],
+          "meaning_zh": "市盈率（P/E）。"
+        },
+        {
+          "name": "price_to_free_cash_flow",
+          "dtype": "float64",
+          "meaning": "Price-to-free-cash-flow ratio, calculated as stock price divided by free cash flow per share. Only calculated when free cash flow per share is positive.",
+          "meaning_sources": [
+            "fundamentals/ratios.md"
+          ],
+          "meaning_zh": "市自由现金流率（P/FCF）。"
+        },
+        {
+          "name": "price_to_sales",
+          "dtype": "float64",
+          "meaning": "Price-to-sales ratio, calculated as stock price divided by revenue per share, measuring valuation relative to sales.",
+          "meaning_sources": [
+            "fundamentals/ratios.md"
+          ],
+          "meaning_zh": "市销率（P/S）。"
+        },
+        {
+          "name": "quick",
+          "dtype": "float64",
+          "meaning": "Quick ratio (acid-test ratio), calculated as (current assets minus inventories) divided by current liabilities, measuring immediate liquidity.",
+          "meaning_sources": [
+            "fundamentals/ratios.md"
+          ],
+          "meaning_zh": "速动比率。"
+        },
+        {
+          "name": "return_on_assets",
+          "dtype": "float64",
+          "meaning": "Return on assets ratio, calculated as net income divided by total assets, measuring how efficiently a company uses its assets to generate profit.",
+          "meaning_sources": [
+            "fundamentals/ratios.md"
+          ],
+          "meaning_zh": "总资产收益率（ROA）。"
+        },
+        {
+          "name": "return_on_equity",
+          "dtype": "float64",
+          "meaning": "Return on equity ratio, calculated as net income divided by total shareholders' equity, measuring profitability relative to shareholders' equity.",
+          "meaning_sources": [
+            "fundamentals/ratios.md"
+          ],
+          "meaning_zh": "净资产收益率（ROE）。"
+        },
+        {
+          "name": "ticker",
+          "dtype": "object",
+          "meaning": "The ticker symbol of the IPO event.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md",
+            "corporate_actions/dividends.md",
+            "corporate_actions/splits.md",
+            "filing/10-K_Sections.md",
+            "filing/8-K_Text.md",
+            "filing/risk_factors.md",
+            "filing/sec_edgar_index.md",
+            "fundamentals/float.md",
+            "fundamentals/ratios.md",
+            "fundamentals/short_interest.md",
+            "fundamentals/short_volume.md",
+            "snapshots/unified_snapshot.md",
+            "tickers/all_tickers.md",
+            "tickers/related_tickers.md"
+          ],
+          "meaning_zh": "证券代码。"
+        }
+      ],
+      "sample_rows": [
+        {
+          "average_volume": 2471277.0,
+          "cash": 0.79,
+          "cik": "0001090872",
+          "current": 2.07,
+          "date": "2026-03-09",
+          "debt_to_equity": 0.49,
+          "dividend_yield": 0.0086,
+          "earnings_per_share": 4.56,
+          "enterprise_value": 34558734255.0,
+          "ev_to_ebitda": 20.74,
+          "ev_to_sales": 4.89,
+          "free_cash_flow": 993000000.0,
+          "market_cap": 32962734255.0,
+          "price": 116.64,
+          "price_to_book": 4.77,
+          "price_to_cash_flow": 23.61,
+          "price_to_earnings": 25.55,
+          "price_to_free_cash_flow": 33.2,
+          "price_to_sales": 4.67,
+          "quick": 1.59,
+          "return_on_assets": 0.1007,
+          "return_on_equity": 0.1867,
+          "ticker": "A"
+        },
+        {
+          "average_volume": 7525461.0,
+          "cash": 0.42,
+          "cik": "0001675149",
+          "current": 1.44,
+          "date": "2026-03-09",
+          "debt_to_equity": 0.4,
+          "dividend_yield": 0.0065,
+          "earnings_per_share": 4.39,
+          "enterprise_value": 16978438621.0,
+          "ev_to_ebitda": 9.18,
+          "ev_to_sales": 1.32,
+          "free_cash_flow": 567000000.0,
+          "market_cap": 16136438621.0,
+          "price": 61.16,
+          "price_to_book": 2.64,
+          "price_to_cash_flow": 13.62,
+          "price_to_earnings": 13.95,
+          "price_to_free_cash_flow": 28.46,
+          "price_to_sales": 1.26,
+          "quick": 0.87,
+          "return_on_assets": 0.0717,
+          "return_on_equity": 0.1891,
+          "ticker": "AA"
+        },
+        {
+          "average_volume": 712.0,
+          "cash": 0.0,
+          "cik": "0001848898",
+          "current": 0.11,
+          "date": "2026-03-09",
+          "debt_to_equity": -0.13,
+          "dividend_yield": 0.0,
+          "earnings_per_share": -0.95,
+          "enterprise_value": 3648512.0,
+          "ev_to_ebitda": -0.07,
+          "ev_to_sales": 1.69,
+          "free_cash_flow": -5999846.0,
+          "market_cap": 578668.0,
+          "price": 0.01,
+          "price_to_book": -0.02,
+          "price_to_cash_flow": null,
+          "price_to_earnings": null,
+          "price_to_free_cash_flow": null,
+          "price_to_sales": 0.27,
+          "quick": 0.1,
+          "return_on_assets": -3.1491,
+          "return_on_equity": 2.2506,
+          "ticker": "AAGR"
+        }
+      ],
+      "readable": true
+    },
+    {
+      "dataset": "fundamentals/income_statement",
+      "file_count": 17,
+      "sample_file": "~/quant_projects/data/us_stock/massive_parquet/fundamentals/income_statement/income_statement_2010.parquet",
+      "year_partitions": [],
+      "column_count": 34,
+      "columns": [
+        {
+          "name": "basic_earnings_per_share",
+          "dtype": "float64",
+          "meaning": "Earnings per share calculated using the weighted average number of basic shares outstanding. For TTM records, recalculated as TTM net income divided by average basic shares outstanding over the four quarters.",
+          "meaning_sources": [
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "基本每股收益。"
+        },
+        {
+          "name": "basic_shares_outstanding",
+          "dtype": "float64",
+          "meaning": "Weighted average number of common shares outstanding during the period, used in basic EPS calculation. For TTM records, represents the average over the four most recent quarters.",
+          "meaning_sources": [
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "加权平均基本在外股数。"
+        },
+        {
+          "name": "cik",
+          "dtype": "object",
+          "meaning": "SEC Central Index Key (CIK) identifying the filing entity.",
+          "meaning_sources": [
+            "filing/10-K_Sections.md",
+            "filing/8-K_Text.md",
+            "filing/risk_factors.md",
+            "filing/sec_edgar_index.md",
+            "fundamentals/balance_sheets.md",
+            "fundamentals/cashflow_statement.md",
+            "fundamentals/income_statement.md",
+            "fundamentals/ratios.md",
+            "tickers/all_tickers.md"
+          ],
+          "meaning_zh": "SEC 中央索引编号（CIK）。"
+        },
+        {
+          "name": "consolidated_net_income_loss",
+          "dtype": "float64",
+          "meaning": "Total net income or loss for the consolidated entity including all subsidiaries.",
+          "meaning_sources": [
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "合并净利润/净亏损。"
+        },
+        {
+          "name": "cost_of_revenue",
+          "dtype": "float64",
+          "meaning": "Direct costs attributable to the production of goods or services sold, also known as cost of goods sold (COGS).",
+          "meaning_sources": [
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "营业成本。"
+        },
+        {
+          "name": "depreciation_depletion_amortization",
+          "dtype": "float64",
+          "meaning": "Non-cash expenses representing the allocation of asset costs over their useful lives.",
+          "meaning_sources": [
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "折旧、折耗与摊销。"
+        },
+        {
+          "name": "diluted_earnings_per_share",
+          "dtype": "float64",
+          "meaning": "Earnings per share calculated using diluted shares outstanding, including the effect of potentially dilutive securities. For TTM records, recalculated as TTM net income divided by average diluted shares outstanding over the four quarters.",
+          "meaning_sources": [
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "稀释每股收益。"
+        },
+        {
+          "name": "diluted_shares_outstanding",
+          "dtype": "float64",
+          "meaning": "Weighted average number of shares outstanding including the dilutive effect of stock options, warrants, and convertible securities. For TTM records, represents the average over the four most recent quarters.",
+          "meaning_sources": [
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "加权平均稀释在外股数。"
+        },
+        {
+          "name": "discontinued_operations",
+          "dtype": "float64",
+          "meaning": "After-tax results from business segments that have been or will be disposed of.",
+          "meaning_sources": [
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "终止经营项目。"
+        },
+        {
+          "name": "ebitda",
+          "dtype": "float64",
+          "meaning": "Earnings before interest, taxes, depreciation, and amortization, a measure of operating performance.",
+          "meaning_sources": [
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "税息折旧及摊销前利润（EBITDA）。"
+        },
+        {
+          "name": "equity_in_affiliates",
+          "dtype": "float64",
+          "meaning": "The company's share of income or losses from equity method investments in affiliated companies.",
+          "meaning_sources": [
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "联营/合营企业权益法损益。"
+        },
+        {
+          "name": "extraordinary_items",
+          "dtype": "float64",
+          "meaning": "Unusual and infrequent gains or losses that are both unusual in nature and infrequent in occurrence.",
+          "meaning_sources": [
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "非常项目。"
+        },
+        {
+          "name": "filing_date",
+          "dtype": "object",
+          "meaning": "Date when the filing was submitted to the SEC (formatted as YYYY-MM-DD).",
+          "meaning_sources": [
+            "filing/10-K_Sections.md",
+            "filing/8-K_Text.md",
+            "filing/risk_factors.md",
+            "filing/sec_edgar_index.md",
+            "fundamentals/balance_sheets.md",
+            "fundamentals/cashflow_statement.md",
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "申报/提交日期。"
+        },
+        {
+          "name": "fiscal_quarter",
+          "dtype": "int64",
+          "meaning": "The fiscal quarter number (1, 2, 3, or 4) for the reporting period.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md",
+            "fundamentals/cashflow_statement.md",
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "财季。"
+        },
+        {
+          "name": "fiscal_year",
+          "dtype": "int64",
+          "meaning": "The fiscal year for the reporting period.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md",
+            "fundamentals/cashflow_statement.md",
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "财年。"
+        },
+        {
+          "name": "gross_profit",
+          "dtype": "float64",
+          "meaning": "Revenue minus cost of revenue, representing profit before operating expenses.",
+          "meaning_sources": [
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "毛利润。"
+        },
+        {
+          "name": "income_before_income_taxes",
+          "dtype": "float64",
+          "meaning": "Pre-tax income calculated as operating income plus total other income/expense.",
+          "meaning_sources": [
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "税前利润。"
+        },
+        {
+          "name": "income_taxes",
+          "dtype": "float64",
+          "meaning": "Income tax expense or benefit for the period.",
+          "meaning_sources": [
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "所得税费用。"
+        },
+        {
+          "name": "interest_expense",
+          "dtype": "float64",
+          "meaning": "Cost of borrowed funds, including interest on debt and other financing obligations.",
+          "meaning_sources": [
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "利息费用。"
+        },
+        {
+          "name": "interest_income",
+          "dtype": "float64",
+          "meaning": "Income earned from interest-bearing investments and cash equivalents.",
+          "meaning_sources": [
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "利息收入。"
+        },
+        {
+          "name": "net_income_loss_attributable_common_shareholders",
+          "dtype": "float64",
+          "meaning": "Net income or loss available to common shareholders after preferred dividends and noncontrolling interests.",
+          "meaning_sources": [
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "归属于普通股股东净利润/净亏损。"
+        },
+        {
+          "name": "noncontrolling_interest",
+          "dtype": "float64",
+          "meaning": "Equity in consolidated subsidiaries not owned by the parent company, representing minority shareholders' ownership.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md",
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "少数股东权益（非控股权益）。"
+        },
+        {
+          "name": "operating_income",
+          "dtype": "float64",
+          "meaning": "Income from operations calculated as gross profit minus total operating expenses, excluding non-operating items.",
+          "meaning_sources": [
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "营业利润。"
+        },
+        {
+          "name": "other_income_expense",
+          "dtype": "float64",
+          "meaning": "Non-operating income and expenses not related to the company's core business operations.",
+          "meaning_sources": [
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "其他收益/费用。"
+        },
+        {
+          "name": "other_operating_expenses",
+          "dtype": "float64",
+          "meaning": "Operating expenses not classified in the main expense categories.",
+          "meaning_sources": [
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "其他经营。"
+        },
+        {
+          "name": "period_end",
+          "dtype": "object",
+          "meaning": "The last date of the reporting period, representing the specific point in time when the balance sheet snapshot was taken.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md",
+            "fundamentals/cashflow_statement.md",
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "报告期结束日期。"
+        },
+        {
+          "name": "preferred_stock_dividends_declared",
+          "dtype": "float64",
+          "meaning": "Dividends declared on preferred stock during the period.",
+          "meaning_sources": [
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "优先股。"
+        },
+        {
+          "name": "research_development",
+          "dtype": "float64",
+          "meaning": "Expenses incurred for research and development activities to create new products or improve existing ones.",
+          "meaning_sources": [
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "该字段中文释义已补充。"
+        },
+        {
+          "name": "revenue",
+          "dtype": "float64",
+          "meaning": "Total revenue or net sales for the period, representing the company's gross income from operations.",
+          "meaning_sources": [
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "营业收入。"
+        },
+        {
+          "name": "selling_general_administrative",
+          "dtype": "float64",
+          "meaning": "Expenses related to selling products and general administrative costs not directly tied to production.",
+          "meaning_sources": [
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "该字段中文释义已补充。"
+        },
+        {
+          "name": "tickers",
+          "dtype": "object",
+          "meaning": "A list of ticker symbols under which the company is listed. Multiple symbols may indicate different share classes for the same company.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md",
+            "fundamentals/cashflow_statement.md",
+            "fundamentals/income_statement.md",
+            "news/news.md"
+          ],
+          "meaning_zh": "证券代码列表（可能包含多股类别）。"
+        },
+        {
+          "name": "timeframe",
+          "dtype": "object",
+          "meaning": "The reporting period type. Possible values include: quarterly, annual.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md",
+            "fundamentals/cashflow_statement.md",
+            "fundamentals/income_statement.md",
+            "snapshots/unified_snapshot.md"
+          ],
+          "meaning_zh": "报告周期类型（季度/年度等）。"
+        },
+        {
+          "name": "total_operating_expenses",
+          "dtype": "float64",
+          "meaning": "Sum of all operating expenses including cost of revenue, SG&A, R&D, depreciation, and other operating expenses.",
+          "meaning_sources": [
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "总经营。"
+        },
+        {
+          "name": "total_other_income_expense",
+          "dtype": "float64",
+          "meaning": "Net total of all non-operating income and expenses including interest income, interest expense, and other items.",
+          "meaning_sources": [
+            "fundamentals/income_statement.md"
+          ],
+          "meaning_zh": "总其他收益。"
+        }
+      ],
+      "sample_rows": [
+        {
+          "basic_earnings_per_share": 1.27,
+          "basic_shares_outstanding": 2765900000.0,
+          "cik": "0000200406",
+          "consolidated_net_income_loss": 3507000000.0,
+          "cost_of_revenue": 4251000000.0,
+          "depreciation_depletion_amortization": null,
+          "diluted_earnings_per_share": 1.26,
+          "diluted_shares_outstanding": 2789800000.0,
+          "discontinued_operations": null,
+          "ebitda": 5325000000.0,
+          "equity_in_affiliates": null,
+          "extraordinary_items": null,
+          "filing_date": "2010-05-10",
+          "fiscal_quarter": 1,
+          "fiscal_year": 2010,
+          "gross_profit": 10775000000.0,
+          "income_before_income_taxes": 4643000000.0,
+          "income_taxes": 1136000000.0,
+          "interest_expense": -106000000.0,
+          "interest_income": 25000000.0,
+          "net_income_loss_attributable_common_shareholders": 3507000000.0,
+          "noncontrolling_interest": null,
+          "operating_income": 4649000000.0,
+          "other_income_expense": 75000000.0,
+          "other_operating_expenses": 0.0,
+          "period_end": "2009-03-29",
+          "preferred_stock_dividends_declared": null,
+          "research_development": 1518000000.0,
+          "revenue": 15026000000.0,
+          "selling_general_administrative": 4608000000.0,
+          "tickers": [
+            "JNJ"
+          ],
+          "timeframe": "quarterly",
+          "total_operating_expenses": 6126000000.0,
+          "total_other_income_expense": -6000000.0
+        },
+        {
+          "basic_earnings_per_share": -0.01,
+          "basic_shares_outstanding": 21692280000.0,
+          "cik": "0001045810",
+          "consolidated_net_income_loss": -201338000.0,
+          "cost_of_revenue": 474535000.0,
+          "depreciation_depletion_amortization": null,
+          "diluted_earnings_per_share": -0.01,
+          "diluted_shares_outstanding": 21692280000.0,
+          "discontinued_operations": null,
+          "ebitda": -180307000.0,
+          "equity_in_affiliates": null,
+          "extraordinary_items": null,
+          "filing_date": "2010-05-21",
+          "fiscal_quarter": 1,
+          "fiscal_year": 2010,
+          "gross_profit": 189696000.0,
+          "income_before_income_taxes": -224821000.0,
+          "income_taxes": -23483000.0,
+          "interest_expense": null,
+          "interest_income": 6124000.0,
+          "net_income_loss_attributable_common_shareholders": -201338000.0,
+          "noncontrolling_interest": null,
+          "operating_income": -230965000.0,
+          "other_income_expense": 20000.0,
+          "other_operating_expenses": 0.0,
+          "period_end": "2009-04-26",
+          "preferred_stock_dividends_declared": null,
+          "research_development": 301797000.0,
+          "revenue": 664231000.0,
+          "selling_general_administrative": 118864000.0,
+          "tickers": [
+            "NVDA"
+          ],
+          "timeframe": "quarterly",
+          "total_operating_expenses": 420661000.0,
+          "total_other_income_expense": 6144000.0
+        },
+        {
+          "basic_earnings_per_share": 0.26,
+          "basic_shares_outstanding": 11760000000.0,
+          "cik": "0000104169",
+          "consolidated_net_income_loss": 3139000000.0,
+          "cost_of_revenue": 70388000000.0,
+          "depreciation_depletion_amortization": null,
+          "diluted_earnings_per_share": 0.26,
+          "diluted_shares_outstanding": 11790000000.0,
+          "discontinued_operations": -8000000.0,
+          "ebitda": 6917000000.0,
+          "equity_in_affiliates": null,
+          "extraordinary_items": null,
+          "filing_date": "2010-06-04",
+          "fiscal_quarter": 1,
+          "fiscal_year": 2010,
+          "gross_profit": 23854000000.0,
+          "income_before_income_taxes": 4750000000.0,
+          "income_taxes": 1603000000.0,
+          "interest_expense": -518000000.0,
+          "interest_income": 51000000.0,
+          "net_income_loss_attributable_common_shareholders": 3022000000.0,
+          "noncontrolling_interest": -117000000.0,
+          "operating_income": 5217000000.0,
+          "other_income_expense": 0.0,
+          "other_operating_expenses": 0.0,
+          "period_end": "2009-04-30",
+          "preferred_stock_dividends_declared": null,
+          "research_development": null,
+          "revenue": 94242000000.0,
+          "selling_general_administrative": 18637000000.0,
+          "tickers": [
+            "WMT"
+          ],
+          "timeframe": "quarterly",
+          "total_operating_expenses": 18637000000.0,
+          "total_other_income_expense": -467000000.0
+        }
+      ],
+      "readable": true
+    },
+    {
+      "dataset": "fundamentals/short_interest",
+      "file_count": 10,
+      "sample_file": "~/quant_projects/data/us_stock/massive_parquet/fundamentals/short_interest/short_interest_2017.parquet",
+      "year_partitions": [],
+      "column_count": 5,
+      "columns": [
+        {
+          "name": "avg_daily_volume",
+          "dtype": "int64",
+          "meaning": "The average daily trading volume for the stock over a specified period, typically used to contextualize short interest.",
+          "meaning_sources": [
+            "fundamentals/short_interest.md"
+          ],
+          "meaning_zh": "平均日成交量。"
+        },
+        {
+          "name": "days_to_cover",
+          "dtype": "float64",
+          "meaning": "Calculated as short_interest divided by avg_daily_volume, representing the estimated number of days it would take to cover all short positions based on average trading volume.",
+          "meaning_sources": [
+            "fundamentals/short_interest.md"
+          ],
+          "meaning_zh": "回补天数（空头覆盖天数）。"
+        },
+        {
+          "name": "settlement_date",
+          "dtype": "object",
+          "meaning": "The date (formatted as YYYY-MM-DD) on which the short interest data is considered settled, typically based on exchange reporting schedules.",
+          "meaning_sources": [
+            "fundamentals/short_interest.md"
+          ],
+          "meaning_zh": "结算日期。"
+        },
+        {
+          "name": "short_interest",
+          "dtype": "int64",
+          "meaning": "The total number of shares that have been sold short but have not yet been covered or closed out.",
+          "meaning_sources": [
+            "fundamentals/short_interest.md"
+          ],
+          "meaning_zh": "空头持仓量。"
+        },
+        {
+          "name": "ticker",
+          "dtype": "object",
+          "meaning": "The ticker symbol of the IPO event.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md",
+            "corporate_actions/dividends.md",
+            "corporate_actions/splits.md",
+            "filing/10-K_Sections.md",
+            "filing/8-K_Text.md",
+            "filing/risk_factors.md",
+            "filing/sec_edgar_index.md",
+            "fundamentals/float.md",
+            "fundamentals/ratios.md",
+            "fundamentals/short_interest.md",
+            "fundamentals/short_volume.md",
+            "snapshots/unified_snapshot.md",
+            "tickers/all_tickers.md",
+            "tickers/related_tickers.md"
+          ],
+          "meaning_zh": "证券代码。"
+        }
+      ],
+      "sample_rows": [
+        {
+          "avg_daily_volume": 1234014,
+          "days_to_cover": 3.4,
+          "settlement_date": "2017-12-29",
+          "short_interest": 4197300,
+          "ticker": "A"
+        },
+        {
+          "avg_daily_volume": 4267200,
+          "days_to_cover": 2.97,
+          "settlement_date": "2017-12-29",
+          "short_interest": 12689077,
+          "ticker": "AA"
+        },
+        {
+          "avg_daily_volume": 0,
+          "days_to_cover": 999.99,
+          "settlement_date": "2017-12-29",
+          "short_interest": 13823,
+          "ticker": "AAALF"
+        }
+      ],
+      "readable": true
+    },
+    {
+      "dataset": "fundamentals/short_volume",
+      "file_count": 3,
+      "sample_file": "~/quant_projects/data/us_stock/massive_parquet/fundamentals/short_volume/short_volume_2024.parquet",
+      "year_partitions": [],
+      "column_count": 15,
+      "columns": [
+        {
+          "name": "adf_short_volume",
+          "dtype": "int64",
+          "meaning": "Short volume reported via the Alternative Display Facility (ADF), excluding exempt volume.",
+          "meaning_sources": [
+            "fundamentals/short_volume.md"
+          ],
+          "meaning_zh": "ADF 渠道卖空成交量。"
+        },
+        {
+          "name": "adf_short_volume_exempt",
+          "dtype": "int64",
+          "meaning": "Short volume reported via ADF that was marked as exempt.",
+          "meaning_sources": [
+            "fundamentals/short_volume.md"
+          ],
+          "meaning_zh": "短期成交量。"
+        },
+        {
+          "name": "date",
+          "dtype": "object",
+          "meaning": "Date for which the ratios are calculated, representing the trading date with available price data.",
+          "meaning_sources": [
+            "fundamentals/ratios.md",
+            "fundamentals/short_volume.md"
+          ],
+          "meaning_zh": "日期。"
+        },
+        {
+          "name": "exempt_volume",
+          "dtype": "float64",
+          "meaning": "Portion of short volume that was marked as exempt from regulation SHO.",
+          "meaning_sources": [
+            "fundamentals/short_volume.md"
+          ],
+          "meaning_zh": "豁免卖空成交量。"
+        },
+        {
+          "name": "nasdaq_carteret_short_volume",
+          "dtype": "int64",
+          "meaning": "Short volume reported from Nasdaq's Carteret facility, excluding exempt volume.",
+          "meaning_sources": [
+            "fundamentals/short_volume.md"
+          ],
+          "meaning_zh": "短期成交量。"
+        },
+        {
+          "name": "nasdaq_carteret_short_volume_exempt",
+          "dtype": "int64",
+          "meaning": "Short volume from Nasdaq Carteret that was marked as exempt.",
+          "meaning_sources": [
+            "fundamentals/short_volume.md"
+          ],
+          "meaning_zh": "短期成交量。"
+        },
+        {
+          "name": "nasdaq_chicago_short_volume",
+          "dtype": "int64",
+          "meaning": "Short volume reported from Nasdaq's Chicago facility, excluding exempt volume.",
+          "meaning_sources": [
+            "fundamentals/short_volume.md"
+          ],
+          "meaning_zh": "短期成交量。"
+        },
+        {
+          "name": "nasdaq_chicago_short_volume_exempt",
+          "dtype": "int64",
+          "meaning": "Short volume from Nasdaq Chicago that was marked as exempt.",
+          "meaning_sources": [
+            "fundamentals/short_volume.md"
+          ],
+          "meaning_zh": "短期成交量。"
+        },
+        {
+          "name": "non_exempt_volume",
+          "dtype": "float64",
+          "meaning": "Portion of short volume that was not exempt from regulation SHO (i.e., short_volume - exempt_volume).",
+          "meaning_sources": [
+            "fundamentals/short_volume.md"
+          ],
+          "meaning_zh": "非豁免卖空成交量。"
+        },
+        {
+          "name": "nyse_short_volume",
+          "dtype": "int64",
+          "meaning": "Short volume reported from NYSE facilities, excluding exempt volume.",
+          "meaning_sources": [
+            "fundamentals/short_volume.md"
+          ],
+          "meaning_zh": "NYSE 渠道卖空成交量。"
+        },
+        {
+          "name": "nyse_short_volume_exempt",
+          "dtype": "int64",
+          "meaning": "Short volume from NYSE facilities that was marked as exempt.",
+          "meaning_sources": [
+            "fundamentals/short_volume.md"
+          ],
+          "meaning_zh": "短期成交量。"
+        },
+        {
+          "name": "short_volume",
+          "dtype": "float64",
+          "meaning": "Total number of shares sold short across all venues for the ticker on the given date.",
+          "meaning_sources": [
+            "fundamentals/short_volume.md"
+          ],
+          "meaning_zh": "卖空成交量。"
+        },
+        {
+          "name": "short_volume_ratio",
+          "dtype": "float64",
+          "meaning": "The percentage of total volume that was sold short. Calculated as (short_volume / total_volume) * 100.",
+          "meaning_sources": [
+            "fundamentals/short_volume.md"
+          ],
+          "meaning_zh": "卖空成交占比。"
+        },
+        {
+          "name": "ticker",
+          "dtype": "object",
+          "meaning": "The ticker symbol of the IPO event.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md",
+            "corporate_actions/dividends.md",
+            "corporate_actions/splits.md",
+            "filing/10-K_Sections.md",
+            "filing/8-K_Text.md",
+            "filing/risk_factors.md",
+            "filing/sec_edgar_index.md",
+            "fundamentals/float.md",
+            "fundamentals/ratios.md",
+            "fundamentals/short_interest.md",
+            "fundamentals/short_volume.md",
+            "snapshots/unified_snapshot.md",
+            "tickers/all_tickers.md",
+            "tickers/related_tickers.md"
+          ],
+          "meaning_zh": "证券代码。"
+        },
+        {
+          "name": "total_volume",
+          "dtype": "float64",
+          "meaning": "Total reported volume across all venues for the ticker on the given date.",
+          "meaning_sources": [
+            "fundamentals/short_volume.md"
+          ],
+          "meaning_zh": "总成交量。"
+        }
+      ],
+      "sample_rows": [
+        {
+          "adf_short_volume": 0,
+          "adf_short_volume_exempt": 0,
+          "date": "2024-02-06",
+          "exempt_volume": 866.0,
+          "nasdaq_carteret_short_volume": 473707,
+          "nasdaq_carteret_short_volume_exempt": 866,
+          "nasdaq_chicago_short_volume": 130,
+          "nasdaq_chicago_short_volume_exempt": 0,
+          "non_exempt_volume": 475798.0,
+          "nyse_short_volume": 2827,
+          "nyse_short_volume_exempt": 0,
+          "short_volume": 476664.0,
+          "short_volume_ratio": 70.1,
+          "ticker": "A",
+          "total_volume": 679938.0
+        },
+        {
+          "adf_short_volume": 0,
+          "adf_short_volume_exempt": 0,
+          "date": "2024-02-06",
+          "exempt_volume": 3758.0,
+          "nasdaq_carteret_short_volume": 1070799,
+          "nasdaq_carteret_short_volume_exempt": 3758,
+          "nasdaq_chicago_short_volume": 1861,
+          "nasdaq_chicago_short_volume_exempt": 0,
+          "non_exempt_volume": 1125769.0,
+          "nyse_short_volume": 56867,
+          "nyse_short_volume_exempt": 0,
+          "short_volume": 1129527.0,
+          "short_volume_ratio": 30.34,
+          "ticker": "AA",
+          "total_volume": 3723314.0
+        },
+        {
+          "adf_short_volume": 0,
+          "adf_short_volume_exempt": 0,
+          "date": "2024-02-06",
+          "exempt_volume": 0.0,
+          "nasdaq_carteret_short_volume": 1049,
+          "nasdaq_carteret_short_volume_exempt": 0,
+          "nasdaq_chicago_short_volume": 0,
+          "nasdaq_chicago_short_volume_exempt": 0,
+          "non_exempt_volume": 1049.0,
+          "nyse_short_volume": 0,
+          "nyse_short_volume_exempt": 0,
+          "short_volume": 1049.0,
+          "short_volume_ratio": 57.61,
+          "ticker": "AAA",
+          "total_volume": 1821.0
+        }
+      ],
+      "readable": true
+    },
+    {
+      "dataset": "fundamentals/stocks_floats",
+      "file_count": 1,
+      "sample_file": "~/quant_projects/data/us_stock/massive_parquet/fundamentals/stocks_floats/stocks_floats_all.parquet",
+      "year_partitions": [],
+      "column_count": 4,
+      "columns": [
+        {
+          "name": "ticker",
+          "dtype": "object",
+          "meaning": "The ticker symbol of the IPO event.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md",
+            "corporate_actions/dividends.md",
+            "corporate_actions/splits.md",
+            "filing/10-K_Sections.md",
+            "filing/8-K_Text.md",
+            "filing/risk_factors.md",
+            "filing/sec_edgar_index.md",
+            "fundamentals/float.md",
+            "fundamentals/ratios.md",
+            "fundamentals/short_interest.md",
+            "fundamentals/short_volume.md",
+            "snapshots/unified_snapshot.md",
+            "tickers/all_tickers.md",
+            "tickers/related_tickers.md"
+          ],
+          "meaning_zh": "证券代码。"
+        },
+        {
+          "name": "free_float",
+          "dtype": "int64",
+          "meaning": "Number of shares freely tradable in the market. Free float shares represent the portion of a company's outstanding shares that is freely tradable in the market, excluding any holdings considered strategic, controlling, or long term. This excludes insiders, directors, founders, 5 percent plus shareholders, cross holdings, government stakes except pensions, restricted or locked up shares, employee plans, and any entities with board influence, leaving only shares that are genuinely available for public trading.",
+          "meaning_sources": [
+            "fundamentals/float.md"
+          ],
+          "meaning_zh": "自由流通股本。"
+        },
+        {
+          "name": "effective_date",
+          "dtype": "object",
+          "meaning": "The effective date of the free float measurement.",
+          "meaning_sources": [
+            "fundamentals/float.md"
+          ],
+          "meaning_zh": "生效日期。"
+        },
+        {
+          "name": "free_float_percent",
+          "dtype": "float64",
+          "meaning": "Percentage of total shares outstanding that are available for public trading, rounded to two decimal places.",
+          "meaning_sources": [
+            "fundamentals/float.md"
+          ],
+          "meaning_zh": "自由流通股本占比。"
+        }
+      ],
+      "sample_rows": [
+        {
+          "ticker": "A",
+          "free_float": 282591673,
+          "effective_date": "2026-01-08",
+          "free_float_percent": 99.7
+        },
+        {
+          "ticker": "AA",
+          "free_float": 258394311,
+          "effective_date": "2026-01-29",
+          "free_float_percent": 99.8
+        },
+        {
+          "ticker": "AABVF",
+          "free_float": 133442193,
+          "effective_date": "2026-01-02",
+          "free_float_percent": 83.04
+        }
+      ],
+      "readable": true
+    },
+    {
+      "dataset": "market_operations/condition_codes",
+      "file_count": 1,
+      "sample_file": "~/quant_projects/data/us_stock/massive_parquet/market_operations/condition_codes/condition_codes_all.parquet",
+      "year_partitions": [],
+      "column_count": 11,
+      "columns": [
+        {
+          "name": "id",
+          "dtype": "int64",
+          "meaning": "Unique identifier for each dividend record",
+          "meaning_sources": [
+            "corporate_actions/dividends.md",
+            "corporate_actions/splits.md",
+            "market_operations/condition_codes.md",
+            "market_operations/exchanges.md",
+            "news/news.md"
+          ],
+          "meaning_zh": "记录唯一标识。"
+        },
+        {
+          "name": "type",
+          "dtype": "object",
+          "meaning": "An identifier for a collection of related conditions.",
+          "meaning_sources": [
+            "market_operations/condition_codes.md",
+            "market_operations/exchanges.md",
+            "snapshots/unified_snapshot.md",
+            "tickers/all_tickers.md"
+          ],
+          "meaning_zh": "类型。"
+        },
+        {
+          "name": "name",
+          "dtype": "object",
+          "meaning": "The name of this condition.",
+          "meaning_sources": [
+            "market_operations/condition_codes.md",
+            "market_operations/exchanges.md",
+            "snapshots/unified_snapshot.md",
+            "tickers/all_tickers.md"
+          ],
+          "meaning_zh": "名称。"
+        },
+        {
+          "name": "asset_class",
+          "dtype": "object",
+          "meaning": "An identifier for a group of similar financial instruments.",
+          "meaning_sources": [
+            "market_operations/condition_codes.md",
+            "market_operations/exchanges.md",
+            "tickers/ticker_types.md"
+          ],
+          "meaning_zh": "资产类别。"
+        },
+        {
+          "name": "data_types",
+          "dtype": "object",
+          "meaning": "Data types that this condition applies to.",
+          "meaning_sources": [
+            "market_operations/condition_codes.md"
+          ],
+          "meaning_zh": "数据类型列表。"
+        },
+        {
+          "name": "description",
+          "dtype": "object",
+          "meaning": "Detailed explanation of what this risk category encompasses, including specific examples and potential impacts",
+          "meaning_sources": [
+            "filing/risk_categories.md",
+            "market_operations/condition_codes.md",
+            "news/news.md",
+            "tickers/ticker_types.md"
+          ],
+          "meaning_zh": "描述。"
+        },
+        {
+          "name": "abbreviation",
+          "dtype": "object",
+          "meaning": "A commonly-used abbreviation for this condition.",
+          "meaning_sources": [
+            "market_operations/condition_codes.md"
+          ],
+          "meaning_zh": "缩写。"
+        },
+        {
+          "name": "sip_mapping",
+          "dtype": "object",
+          "meaning": "A comprehensive mapping that translates condition codes from individual SIPs (CTA, OPRA, UTP) to a unified code used by Massive. This facilitates consistent interpretation and application of market data conditions across different data streams, ensuring that users can accurately apply these conditions to their data analysis and reporting.",
+          "meaning_sources": [
+            "market_operations/condition_codes.md"
+          ],
+          "meaning_zh": "SIP 条件码映射关系。"
+        },
+        {
+          "name": "update_rules",
+          "dtype": "object",
+          "meaning": "A list of aggregation rules.",
+          "meaning_sources": [
+            "market_operations/condition_codes.md"
+          ],
+          "meaning_zh": "更新规则。"
+        },
+        {
+          "name": "legacy",
+          "dtype": "object",
+          "meaning": "If true, this condition is from an old version of the SIPs' specs and no longer is used. Other conditions may or may not reuse the same symbol as this one.",
+          "meaning_sources": [
+            "market_operations/condition_codes.md"
+          ],
+          "meaning_zh": "是否为旧版遗留条件。"
+        },
+        {
+          "name": "exchange",
+          "dtype": "float64",
+          "meaning": "If present, mapping this condition from a Massive code to a SIP symbol depends on this attribute. In other words, data with this condition attached comes exclusively from the given exchange.",
+          "meaning_sources": [
+            "market_operations/condition_codes.md"
+          ],
+          "meaning_zh": "交易所代码。"
+        }
+      ],
+      "sample_rows": [
+        {
+          "id": 0,
+          "type": "regular",
+          "name": "Regular Trade",
+          "asset_class": "crypto",
+          "data_types": [
+            "trade"
+          ],
+          "description": null,
+          "abbreviation": null,
+          "sip_mapping": null,
+          "update_rules": null,
+          "legacy": null,
+          "exchange": null
+        },
+        {
+          "id": 1,
+          "type": "buy_or_sell_side",
+          "name": "Sell Side",
+          "asset_class": "crypto",
+          "data_types": [
+            "trade"
+          ],
+          "description": "The asset was sold at the prevailing best bid price on an exchange.",
+          "abbreviation": null,
+          "sip_mapping": null,
+          "update_rules": null,
+          "legacy": null,
+          "exchange": null
+        },
+        {
+          "id": 2,
+          "type": "buy_or_sell_side",
+          "name": "Buy Side",
+          "asset_class": "crypto",
+          "data_types": [
+            "trade"
+          ],
+          "description": "The asset was bought at the prevailing best ask price on an exchange.",
+          "abbreviation": null,
+          "sip_mapping": null,
+          "update_rules": null,
+          "legacy": null,
+          "exchange": null
+        }
+      ],
+      "readable": true
+    },
+    {
+      "dataset": "market_operations/exchanges",
+      "file_count": 1,
+      "sample_file": "~/quant_projects/data/us_stock/massive_parquet/market_operations/exchanges/exchanges_all.parquet",
+      "year_partitions": [],
+      "column_count": 10,
+      "columns": [
+        {
+          "name": "id",
+          "dtype": "int64",
+          "meaning": "Unique identifier for each dividend record",
+          "meaning_sources": [
+            "corporate_actions/dividends.md",
+            "corporate_actions/splits.md",
+            "market_operations/condition_codes.md",
+            "market_operations/exchanges.md",
+            "news/news.md"
+          ],
+          "meaning_zh": "记录唯一标识。"
+        },
+        {
+          "name": "type",
+          "dtype": "object",
+          "meaning": "An identifier for a collection of related conditions.",
+          "meaning_sources": [
+            "market_operations/condition_codes.md",
+            "market_operations/exchanges.md",
+            "snapshots/unified_snapshot.md",
+            "tickers/all_tickers.md"
+          ],
+          "meaning_zh": "类型。"
+        },
+        {
+          "name": "asset_class",
+          "dtype": "object",
+          "meaning": "An identifier for a group of similar financial instruments.",
+          "meaning_sources": [
+            "market_operations/condition_codes.md",
+            "market_operations/exchanges.md",
+            "tickers/ticker_types.md"
+          ],
+          "meaning_zh": "资产类别。"
+        },
+        {
+          "name": "locale",
+          "dtype": "object",
+          "meaning": "An identifier for a geographical location.",
+          "meaning_sources": [
+            "market_operations/exchanges.md",
+            "tickers/all_tickers.md",
+            "tickers/ticker_types.md"
+          ],
+          "meaning_zh": "市场区域。"
+        },
+        {
+          "name": "name",
+          "dtype": "object",
+          "meaning": "The name of this condition.",
+          "meaning_sources": [
+            "market_operations/condition_codes.md",
+            "market_operations/exchanges.md",
+            "snapshots/unified_snapshot.md",
+            "tickers/all_tickers.md"
+          ],
+          "meaning_zh": "名称。"
+        },
+        {
+          "name": "acronym",
+          "dtype": "object",
+          "meaning": "A commonly used abbreviation for this exchange.",
+          "meaning_sources": [
+            "market_operations/exchanges.md"
+          ],
+          "meaning_zh": "简称。"
+        },
+        {
+          "name": "mic",
+          "dtype": "object",
+          "meaning": "The Market Identifier Code of this exchange (see ISO 10383).",
+          "meaning_sources": [
+            "market_operations/exchanges.md"
+          ],
+          "meaning_zh": "交易所 MIC 代码。"
+        },
+        {
+          "name": "operating_mic",
+          "dtype": "object",
+          "meaning": "The MIC of the entity that operates this exchange.",
+          "meaning_sources": [
+            "market_operations/exchanges.md"
+          ],
+          "meaning_zh": "运营方 MIC 代码。"
+        },
+        {
+          "name": "participant_id",
+          "dtype": "object",
+          "meaning": "The ID used by SIP's to represent this exchange.",
+          "meaning_sources": [
+            "market_operations/exchanges.md"
+          ],
+          "meaning_zh": "参与方标识。"
+        },
+        {
+          "name": "url",
+          "dtype": "object",
+          "meaning": "A link to this exchange's website, if one exists.",
+          "meaning_sources": [
+            "market_operations/exchanges.md"
+          ],
+          "meaning_zh": "链接地址。"
+        }
+      ],
+      "sample_rows": [
+        {
+          "id": 1,
+          "type": "exchange",
+          "asset_class": "stocks",
+          "locale": "us",
+          "name": "NYSE American, LLC",
+          "acronym": "AMEX",
+          "mic": "XASE",
+          "operating_mic": "XNYS",
+          "participant_id": "A",
+          "url": "https://www.nyse.com/markets/nyse-american"
+        },
+        {
+          "id": 2,
+          "type": "exchange",
+          "asset_class": "stocks",
+          "locale": "us",
+          "name": "Nasdaq OMX BX, Inc.",
+          "acronym": null,
+          "mic": "XBOS",
+          "operating_mic": "XNAS",
+          "participant_id": "B",
+          "url": "https://www.nasdaq.com/solutions/nasdaq-bx-stock-market"
+        },
+        {
+          "id": 3,
+          "type": "exchange",
+          "asset_class": "stocks",
+          "locale": "us",
+          "name": "NYSE National, Inc.",
+          "acronym": "NSX",
+          "mic": "XCIS",
+          "operating_mic": "XNYS",
+          "participant_id": "C",
+          "url": "https://www.nyse.com/markets/nyse-national"
+        }
+      ],
+      "readable": true
+    },
+    {
+      "dataset": "market_operations/market_holidays",
+      "file_count": 1,
+      "sample_file": "~/quant_projects/data/us_stock/massive_parquet/market_operations/market_holidays/market_holidays_all.parquet",
+      "year_partitions": [],
+      "column_count": 6,
+      "columns": [
+        {
+          "name": "date",
+          "dtype": "object",
+          "meaning": "Date for which the ratios are calculated, representing the trading date with available price data.",
+          "meaning_sources": [
+            "fundamentals/ratios.md",
+            "fundamentals/short_volume.md"
+          ],
+          "meaning_zh": "日期。"
+        },
+        {
+          "name": "exchange",
+          "dtype": "object",
+          "meaning": "If present, mapping this condition from a Massive code to a SIP symbol depends on this attribute. In other words, data with this condition attached comes exclusively from the given exchange.",
+          "meaning_sources": [
+            "market_operations/condition_codes.md"
+          ],
+          "meaning_zh": "交易所代码。"
+        },
+        {
+          "name": "name",
+          "dtype": "object",
+          "meaning": "The name of this condition.",
+          "meaning_sources": [
+            "market_operations/condition_codes.md",
+            "market_operations/exchanges.md",
+            "snapshots/unified_snapshot.md",
+            "tickers/all_tickers.md"
+          ],
+          "meaning_zh": "名称。"
+        },
+        {
+          "name": "status",
+          "dtype": "object",
+          "meaning": "交易日历接口状态字段。",
+          "meaning_sources": [
+            "market_operations/market_holidays.md"
+          ],
+          "meaning_zh": "状态字段。"
+        },
+        {
+          "name": "close",
+          "dtype": "object",
+          "meaning": "收盘价。",
+          "meaning_sources": [
+            "aggregate_bars/custom_bars.md"
+          ],
+          "meaning_zh": "收盘价。"
+        },
+        {
+          "name": "open",
+          "dtype": "object",
+          "meaning": "开盘价。",
+          "meaning_sources": [
+            "aggregate_bars/custom_bars.md"
+          ],
+          "meaning_zh": "开盘价。"
+        }
+      ],
+      "sample_rows": [
+        {
+          "date": "2026-04-03",
+          "exchange": "NYSE",
+          "name": "Good Friday",
+          "status": "closed",
+          "close": null,
+          "open": null
+        },
+        {
+          "date": "2026-04-03",
+          "exchange": "NASDAQ",
+          "name": "Good Friday",
+          "status": "closed",
+          "close": null,
+          "open": null
+        },
+        {
+          "date": "2026-05-25",
+          "exchange": "NASDAQ",
+          "name": "Memorial Day",
+          "status": "closed",
+          "close": null,
+          "open": null
+        }
+      ],
+      "readable": true
+    },
+    {
+      "dataset": "news/news",
+      "file_count": 1,
+      "sample_file": "~/quant_projects/data/us_stock/massive_parquet/news/news/news_all.parquet",
+      "year_partitions": [],
+      "column_count": 12,
+      "columns": [
+        {
+          "name": "id",
+          "dtype": "object",
+          "meaning": "Unique identifier for each dividend record",
+          "meaning_sources": [
+            "corporate_actions/dividends.md",
+            "corporate_actions/splits.md",
+            "market_operations/condition_codes.md",
+            "market_operations/exchanges.md",
+            "news/news.md"
+          ],
+          "meaning_zh": "记录唯一标识。"
+        },
+        {
+          "name": "publisher",
+          "dtype": "object",
+          "meaning": "Details the source of the news article, including the publisher's name, logo, and homepage URLs. This information helps users identify and access the original source of news content.",
+          "meaning_sources": [
+            "news/news.md"
+          ],
+          "meaning_zh": "发布方信息对象。"
+        },
+        {
+          "name": "title",
+          "dtype": "object",
+          "meaning": "The title of the news article.",
+          "meaning_sources": [
+            "news/news.md"
+          ],
+          "meaning_zh": "标题。"
+        },
+        {
+          "name": "author",
+          "dtype": "object",
+          "meaning": "The article's author.",
+          "meaning_sources": [
+            "news/news.md"
+          ],
+          "meaning_zh": "作者。"
+        },
+        {
+          "name": "published_utc",
+          "dtype": "object",
+          "meaning": "The UTC date and time when the article was published, formatted in RFC3339 standard (e.g. YYYY-MM-DDTHH:MM:SSZ).",
+          "meaning_sources": [
+            "news/news.md"
+          ],
+          "meaning_zh": "发布时间（UTC）。"
+        },
+        {
+          "name": "article_url",
+          "dtype": "object",
+          "meaning": "A link to the news article.",
+          "meaning_sources": [
+            "news/news.md"
+          ],
+          "meaning_zh": "新闻原文链接。"
+        },
+        {
+          "name": "tickers",
+          "dtype": "object",
+          "meaning": "A list of ticker symbols under which the company is listed. Multiple symbols may indicate different share classes for the same company.",
+          "meaning_sources": [
+            "fundamentals/balance_sheets.md",
+            "fundamentals/cashflow_statement.md",
+            "fundamentals/income_statement.md",
+            "news/news.md"
+          ],
+          "meaning_zh": "证券代码列表（可能包含多股类别）。"
+        },
+        {
+          "name": "image_url",
+          "dtype": "object",
+          "meaning": "The article's image URL.",
+          "meaning_sources": [
+            "news/news.md"
+          ],
+          "meaning_zh": "图片链接。"
+        },
+        {
+          "name": "description",
+          "dtype": "object",
+          "meaning": "Detailed explanation of what this risk category encompasses, including specific examples and potential impacts",
+          "meaning_sources": [
+            "filing/risk_categories.md",
+            "market_operations/condition_codes.md",
+            "news/news.md",
+            "tickers/ticker_types.md"
+          ],
+          "meaning_zh": "描述。"
+        },
+        {
+          "name": "keywords",
+          "dtype": "object",
+          "meaning": "The keywords associated with the article (which will vary depending on the publishing source).",
+          "meaning_sources": [
+            "news/news.md"
+          ],
+          "meaning_zh": "关键词。"
+        },
+        {
+          "name": "insights",
+          "dtype": "object",
+          "meaning": "The insights related to the article.",
+          "meaning_sources": [
+            "news/news.md"
+          ],
+          "meaning_zh": "洞察/情绪分析信息。"
+        },
+        {
+          "name": "amp_url",
+          "dtype": "object",
+          "meaning": "The mobile friendly Accelerated Mobile Page (AMP) URL.",
+          "meaning_sources": [
+            "news/news.md"
+          ],
+          "meaning_zh": "AMP 移动链接。"
+        }
+      ],
+      "sample_rows": [
+        {
+          "id": "b23004da0fc7e0335ae892129d256c0b7a769c8f606c98b2c1a03b9b53c73224",
+          "publisher": {
+            "favicon_url": "https://s3.massive.com/public/assets/news/favicons/globenewswire.ico",
+            "homepage_url": "https://www.globenewswire.com",
+            "logo_url": "https://s3.massive.com/public/assets/news/logos/globenewswire.svg",
+            "name": "GlobeNewswire Inc."
+          },
+          "title": "Staff elected to AL Sydbank’s Board of Directors",
+          "author": "Al Sydbank A/S",
+          "published_utc": "2026-03-10T14:00:00Z",
+          "article_url": "https://www.globenewswire.com/news-release/2026/03/10/3253008/0/en/Staff-elected-to-AL-Sydbank-s-Board-of-Directors.html",
+          "tickers": [
+            "SYANY"
+          ],
+          "image_url": "https://ml-eu.globenewswire.com/Resource/Download/5ac16b5f-7ad3-4db9-87b5-d247b2423966",
+          "description": "AL Sydbank A/S announced the election of six staff members to its Board of Directors for a four-year term, effective after the AGM on 19 March 2026. The elected representatives include account managers, wealth advisory executives, and members of Finansforbundet union. Four substitute members were also appointed.",
+          "keywords": [
+            "board of directors",
+            "staff election",
+            "corporate governance",
+            "employee representation",
+            "Finansforbundet"
+          ],
+          "insights": [
+            {
+              "sentiment": "neutral",
+              "sentiment_reasoning": "The announcement is a routine corporate governance matter regarding staff election to the board. It is factual and procedural in nature with no indication of positive or negative business developments. The inclusion of employee representatives in board governance is standard practice and does not signal any material change in company performance or strategy.",
+              "ticker": "SYANY"
+            }
+          ],
+          "amp_url": null
+        },
+        {
+          "id": "6a47028f98f7e0156c8651e1a62d8e49e70ac3430c4669feec6817c6c277da3f",
+          "publisher": {
+            "favicon_url": "https://s3.massive.com/public/assets/news/favicons/globenewswire.ico",
+            "homepage_url": "https://www.globenewswire.com",
+            "logo_url": "https://s3.massive.com/public/assets/news/logos/globenewswire.svg",
+            "name": "GlobeNewswire Inc."
+          },
+          "title": "Medarbejdervalg til AL Sydbanks bestyrelse",
+          "author": "Al Sydbank A/S",
+          "published_utc": "2026-03-10T14:00:00Z",
+          "article_url": "https://www.globenewswire.com/news-release/2026/03/10/3253008/0/da/Medarbejdervalg-til-AL-Sydbanks-bestyrelse.html",
+          "tickers": [
+            "SYANY"
+          ],
+          "image_url": "https://ml-eu.globenewswire.com/Resource/Download/5ac16b5f-7ad3-4db9-87b5-d247b2423966",
+          "description": "AL Sydbank A/S held an employee election for its board of directors, selecting 6 employees for a 4-year term. The elected members include business advisors, union representatives, and a wealth management director. Four alternates were also chosen. The newly elected board members will take office following the bank's ordinary general meeting on March 19, 2026.",
+          "keywords": [
+            "board election",
+            "employee representatives",
+            "corporate governance",
+            "Finansforbundet",
+            "4-year term"
+          ],
+          "insights": [
+            {
+              "sentiment": "neutral",
+              "sentiment_reasoning": "The announcement is a routine corporate governance matter regarding employee board elections. It contains no information about financial performance, strategic changes, or market conditions that would indicate positive or negative sentiment. It is a standard procedural disclosure.",
+              "ticker": "SYANY"
+            }
+          ],
+          "amp_url": null
+        },
+        {
+          "id": "3187435f047f07460e51c6878637911b5ec39b0c950e0308ba3484d45192812b",
+          "publisher": {
+            "favicon_url": "https://s3.massive.com/public/assets/news/favicons/benzinga.ico",
+            "homepage_url": "https://www.benzinga.com/",
+            "logo_url": "https://s3.massive.com/public/assets/news/logos/benzinga.svg",
+            "name": "Benzinga"
+          },
+          "title": "FTC Solar Lands 1-Gigawatt Deal Expansion With Strata Clean Energy",
+          "author": "Akanksha Bakshi",
+          "published_utc": "2026-03-10T13:40:26Z",
+          "article_url": "https://www.benzinga.com/markets/small-cap/26/03/51157223/ftc-solar-lands-1-gigawatt-deal-expansion-with-strata-clean-energy?utm_source=benzinga_taxonomy&utm_medium=rss_feed_free&utm_content=taxonomy_rss&utm_campaign=channel",
+          "tickers": [
+            "FTCI"
+          ],
+          "image_url": "https://cdn.benzinga.com/files/images/story/2026/03/10/Aerial-View-Of-Solar-Panel--Photovoltaic.jpeg?width=1200&height=800&fit=crop",
+          "description": "FTC Solar (NASDAQ: FTCI) announced a five-year, 1-gigawatt expansion to its solar tracker supply agreement with Strata Clean Energy. The deal extends their partnership after completing the original 500 MW agreement ahead of schedule, with the first project under the expanded agreement expected to start in H2 2027. Despite the positive business news, FTCI shares were down 1.33% to $4.45 on Tuesday.",
+          "keywords": [
+            "solar trackers",
+            "supply agreement",
+            "clean energy",
+            "partnership expansion",
+            "gigawatt capacity"
+          ],
+          "insights": [
+            {
+              "sentiment": "positive",
+              "sentiment_reasoning": "The company secured a significant 1-gigawatt contract expansion with an existing customer, demonstrating strong market demand for its solar tracking technology and customer satisfaction. The deal represents meaningful business growth and validates the company's product quality and innovation.",
+              "ticker": "FTCI"
+            }
+          ],
+          "amp_url": null
+        }
+      ],
+      "readable": true
+    },
+    {
+      "dataset": "tickers/all_tickers",
+      "file_count": 1,
+      "sample_file": "~/quant_projects/data/us_stock/massive_parquet/tickers/all_tickers/all_tickers_all.parquet",
+      "year_partitions": [],
+      "column_count": 12,
+      "columns": [
+        {
+          "name": "ticker",
+          "dtype": "object",
+          "meaning": "The ticker symbol of the IPO event.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md",
+            "corporate_actions/dividends.md",
+            "corporate_actions/splits.md",
+            "filing/10-K_Sections.md",
+            "filing/8-K_Text.md",
+            "filing/risk_factors.md",
+            "filing/sec_edgar_index.md",
+            "fundamentals/float.md",
+            "fundamentals/ratios.md",
+            "fundamentals/short_interest.md",
+            "fundamentals/short_volume.md",
+            "snapshots/unified_snapshot.md",
+            "tickers/all_tickers.md",
+            "tickers/related_tickers.md"
+          ],
+          "meaning_zh": "证券代码。"
+        },
+        {
+          "name": "name",
+          "dtype": "object",
+          "meaning": "The name of this condition.",
+          "meaning_sources": [
+            "market_operations/condition_codes.md",
+            "market_operations/exchanges.md",
+            "snapshots/unified_snapshot.md",
+            "tickers/all_tickers.md"
+          ],
+          "meaning_zh": "名称。"
+        },
+        {
+          "name": "market",
+          "dtype": "object",
+          "meaning": "The market type of the asset.",
+          "meaning_sources": [
+            "tickers/all_tickers.md"
+          ],
+          "meaning_zh": "市场类别。"
+        },
+        {
+          "name": "locale",
+          "dtype": "object",
+          "meaning": "An identifier for a geographical location.",
+          "meaning_sources": [
+            "market_operations/exchanges.md",
+            "tickers/all_tickers.md",
+            "tickers/ticker_types.md"
+          ],
+          "meaning_zh": "市场区域。"
+        },
+        {
+          "name": "primary_exchange",
+          "dtype": "object",
+          "meaning": "Market Identifier Code (MIC) of the primary exchange where the security is listed. The Market Identifier Code (MIC) (ISO 10383) is a unique identification code used to identify securities trading exchanges, regulated and non-regulated trading markets.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md",
+            "tickers/all_tickers.md"
+          ],
+          "meaning_zh": "主上市交易所（MIC 代码）。"
+        },
+        {
+          "name": "type",
+          "dtype": "object",
+          "meaning": "An identifier for a collection of related conditions.",
+          "meaning_sources": [
+            "market_operations/condition_codes.md",
+            "market_operations/exchanges.md",
+            "snapshots/unified_snapshot.md",
+            "tickers/all_tickers.md"
+          ],
+          "meaning_zh": "类型。"
+        },
+        {
+          "name": "active",
+          "dtype": "bool",
+          "meaning": "Whether or not the asset is actively traded. False means the asset has been delisted.",
+          "meaning_sources": [
+            "tickers/all_tickers.md"
+          ],
+          "meaning_zh": "是否活跃交易。"
+        },
+        {
+          "name": "currency_name",
+          "dtype": "object",
+          "meaning": "The name of the currency that this asset is traded with.",
+          "meaning_sources": [
+            "tickers/all_tickers.md"
+          ],
+          "meaning_zh": "交易货币名称。"
+        },
+        {
+          "name": "cik",
+          "dtype": "object",
+          "meaning": "SEC Central Index Key (CIK) identifying the filing entity.",
+          "meaning_sources": [
+            "filing/10-K_Sections.md",
+            "filing/8-K_Text.md",
+            "filing/risk_factors.md",
+            "filing/sec_edgar_index.md",
+            "fundamentals/balance_sheets.md",
+            "fundamentals/cashflow_statement.md",
+            "fundamentals/income_statement.md",
+            "fundamentals/ratios.md",
+            "tickers/all_tickers.md"
+          ],
+          "meaning_zh": "SEC 中央索引编号（CIK）。"
+        },
+        {
+          "name": "composite_figi",
+          "dtype": "object",
+          "meaning": "The composite OpenFIGI number for this ticker. Find more information [here](https://www.openfigi.com/about/figi)",
+          "meaning_sources": [
+            "tickers/all_tickers.md"
+          ],
+          "meaning_zh": "复合 FIGI 代码。"
+        },
+        {
+          "name": "share_class_figi",
+          "dtype": "object",
+          "meaning": "The share Class OpenFIGI number for this ticker. Find more information [here](https://www.openfigi.com/about/figi)",
+          "meaning_sources": [
+            "tickers/all_tickers.md"
+          ],
+          "meaning_zh": "股份类别 FIGI 代码。"
+        },
+        {
+          "name": "last_updated_utc",
+          "dtype": "object",
+          "meaning": "The information is accurate up to this time.",
+          "meaning_sources": [
+            "tickers/all_tickers.md"
+          ],
+          "meaning_zh": "最后更新时间（UTC）。"
+        }
+      ],
+      "sample_rows": [
+        {
+          "ticker": "A",
+          "name": "Agilent Technologies Inc.",
+          "market": "stocks",
+          "locale": "us",
+          "primary_exchange": "XNYS",
+          "type": "CS",
+          "active": true,
+          "currency_name": "usd",
+          "cik": "0001090872",
+          "composite_figi": "BBG000C2V3D6",
+          "share_class_figi": "BBG001SCTQY4",
+          "last_updated_utc": "2026-03-10T06:11:22.456718773Z"
+        },
+        {
+          "ticker": "AA",
+          "name": "Alcoa Corporation",
+          "market": "stocks",
+          "locale": "us",
+          "primary_exchange": "XNYS",
+          "type": "CS",
+          "active": true,
+          "currency_name": "usd",
+          "cik": "0001675149",
+          "composite_figi": "BBG00B3T3HD3",
+          "share_class_figi": "BBG00B3T3HF1",
+          "last_updated_utc": "2026-03-10T06:11:22.456719364Z"
+        },
+        {
+          "ticker": "AAA",
+          "name": "Alternative Access First Priority CLO Bond ETF",
+          "market": "stocks",
+          "locale": "us",
+          "primary_exchange": "ARCX",
+          "type": "ETF",
+          "active": true,
+          "currency_name": "usd",
+          "cik": "0001776878",
+          "composite_figi": "BBG01B0JRCS6",
+          "share_class_figi": "BBG01B0JRCT5",
+          "last_updated_utc": "2026-03-10T06:11:22.456719565Z"
+        }
+      ],
+      "readable": true
+    },
+    {
+      "dataset": "tickers/ticker_types",
+      "file_count": 1,
+      "sample_file": "~/quant_projects/data/us_stock/massive_parquet/tickers/ticker_types/ticker_types_all.parquet",
+      "year_partitions": [],
+      "column_count": 4,
+      "columns": [
+        {
+          "name": "code",
+          "dtype": "object",
+          "meaning": "A code used by Massive to refer to this ticker type.",
+          "meaning_sources": [
+            "tickers/ticker_types.md"
+          ],
+          "meaning_zh": "类型代码。"
+        },
+        {
+          "name": "description",
+          "dtype": "object",
+          "meaning": "Detailed explanation of what this risk category encompasses, including specific examples and potential impacts",
+          "meaning_sources": [
+            "filing/risk_categories.md",
+            "market_operations/condition_codes.md",
+            "news/news.md",
+            "tickers/ticker_types.md"
+          ],
+          "meaning_zh": "描述。"
+        },
+        {
+          "name": "asset_class",
+          "dtype": "object",
+          "meaning": "An identifier for a group of similar financial instruments.",
+          "meaning_sources": [
+            "market_operations/condition_codes.md",
+            "market_operations/exchanges.md",
+            "tickers/ticker_types.md"
+          ],
+          "meaning_zh": "资产类别。"
+        },
+        {
+          "name": "locale",
+          "dtype": "object",
+          "meaning": "An identifier for a geographical location.",
+          "meaning_sources": [
+            "market_operations/exchanges.md",
+            "tickers/all_tickers.md",
+            "tickers/ticker_types.md"
+          ],
+          "meaning_zh": "市场区域。"
+        }
+      ],
+      "sample_rows": [
+        {
+          "code": "CS",
+          "description": "Common Stock",
+          "asset_class": "stocks",
+          "locale": "us"
+        },
+        {
+          "code": "PFD",
+          "description": "Preferred Stock",
+          "asset_class": "stocks",
+          "locale": "us"
+        },
+        {
+          "code": "WARRANT",
+          "description": "Warrant",
+          "asset_class": "stocks",
+          "locale": "us"
+        }
+      ],
+      "readable": true
+    },
+    {
+      "dataset": "us_stocks_sip/day_aggs_v1",
+      "file_count": 5657,
+      "sample_file": "~/quant_projects/data/us_stock/massive_parquet/us_stocks_sip/day_aggs_v1/2003/09/2003-09-10.parquet",
+      "year_partitions": [
+        "2003",
+        "2004",
+        "2005",
+        "2006",
+        "2007",
+        "2008",
+        "2009",
+        "2010",
+        "2011",
+        "2012",
+        "2013",
+        "2014",
+        "2015",
+        "2016",
+        "2017",
+        "2018",
+        "2019",
+        "2020",
+        "2021",
+        "2022",
+        "2023",
+        "2024",
+        "2025",
+        "2026"
+      ],
+      "column_count": 8,
+      "columns": [
+        {
+          "name": "ticker",
+          "dtype": "string",
+          "meaning": "The ticker symbol of the IPO event.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md",
+            "corporate_actions/dividends.md",
+            "corporate_actions/splits.md",
+            "filing/10-K_Sections.md",
+            "filing/8-K_Text.md",
+            "filing/risk_factors.md",
+            "filing/sec_edgar_index.md",
+            "fundamentals/float.md",
+            "fundamentals/ratios.md",
+            "fundamentals/short_interest.md",
+            "fundamentals/short_volume.md",
+            "snapshots/unified_snapshot.md",
+            "tickers/all_tickers.md",
+            "tickers/related_tickers.md"
+          ],
+          "meaning_zh": "证券代码。"
+        },
+        {
+          "name": "volume",
+          "dtype": "float64",
+          "meaning": "成交量。",
+          "meaning_sources": [
+            "aggregate_bars/custom_bars.md"
+          ],
+          "meaning_zh": "成交量。"
+        },
+        {
+          "name": "open",
+          "dtype": "float64",
+          "meaning": "开盘价。",
+          "meaning_sources": [
+            "aggregate_bars/custom_bars.md"
+          ],
+          "meaning_zh": "开盘价。"
+        },
+        {
+          "name": "close",
+          "dtype": "float64",
+          "meaning": "收盘价。",
+          "meaning_sources": [
+            "aggregate_bars/custom_bars.md"
+          ],
+          "meaning_zh": "收盘价。"
+        },
+        {
+          "name": "high",
+          "dtype": "float64",
+          "meaning": "最高价。",
+          "meaning_sources": [
+            "aggregate_bars/custom_bars.md"
+          ],
+          "meaning_zh": "最高价。"
+        },
+        {
+          "name": "low",
+          "dtype": "float64",
+          "meaning": "最低价。",
+          "meaning_sources": [
+            "aggregate_bars/custom_bars.md"
+          ],
+          "meaning_zh": "最低价。"
+        },
+        {
+          "name": "window_start",
+          "dtype": "float64",
+          "meaning": "K 线窗口起始时间（Unix 纳秒时间戳）。",
+          "meaning_sources": [
+            "aggregate_bars/custom_bars.md"
+          ],
+          "meaning_zh": "窗口起始时间戳。"
+        },
+        {
+          "name": "transactions",
+          "dtype": "float64",
+          "meaning": "成交笔数。",
+          "meaning_sources": [
+            "aggregate_bars/custom_bars.md"
+          ],
+          "meaning_zh": "成交笔数。"
+        }
+      ],
+      "sample_rows": [
+        {
+          "ticker": "A",
+          "volume": 2869700.0,
+          "open": 25.4,
+          "close": 24.49,
+          "high": 25.58,
+          "low": 24.41,
+          "window_start": 1.0631664e+18,
+          "transactions": 2301.0
+        },
+        {
+          "ticker": "AA",
+          "volume": 3543400.0,
+          "open": 28.2,
+          "close": 27.92,
+          "high": 28.7,
+          "low": 27.85,
+          "window_start": 1.0631664e+18,
+          "transactions": 3011.0
+        },
+        {
+          "ticker": "AAp",
+          "volume": 550.0,
+          "open": 75.0,
+          "close": 73.44,
+          "high": 75.5,
+          "low": 72.65,
+          "window_start": 1.0631664e+18,
+          "transactions": 6.0
+        }
+      ],
+      "readable": true
+    },
+    {
+      "dataset": "us_stocks_sip/minute_aggs_v1",
+      "file_count": 5657,
+      "sample_file": "~/quant_projects/data/us_stock/massive_parquet/us_stocks_sip/minute_aggs_v1/2003/09/2003-09-10.parquet",
+      "year_partitions": [
+        "2003",
+        "2004",
+        "2005",
+        "2006",
+        "2007",
+        "2008",
+        "2009",
+        "2010",
+        "2011",
+        "2012",
+        "2013",
+        "2014",
+        "2015",
+        "2016",
+        "2017",
+        "2018",
+        "2019",
+        "2020",
+        "2021",
+        "2022",
+        "2023",
+        "2024",
+        "2025",
+        "2026"
+      ],
+      "column_count": 8,
+      "columns": [
+        {
+          "name": "ticker",
+          "dtype": "string",
+          "meaning": "The ticker symbol of the IPO event.",
+          "meaning_sources": [
+            "corporate_actions/IPOS.md",
+            "corporate_actions/dividends.md",
+            "corporate_actions/splits.md",
+            "filing/10-K_Sections.md",
+            "filing/8-K_Text.md",
+            "filing/risk_factors.md",
+            "filing/sec_edgar_index.md",
+            "fundamentals/float.md",
+            "fundamentals/ratios.md",
+            "fundamentals/short_interest.md",
+            "fundamentals/short_volume.md",
+            "snapshots/unified_snapshot.md",
+            "tickers/all_tickers.md",
+            "tickers/related_tickers.md"
+          ],
+          "meaning_zh": "证券代码。"
+        },
+        {
+          "name": "volume",
+          "dtype": "float64",
+          "meaning": "成交量。",
+          "meaning_sources": [
+            "aggregate_bars/custom_bars.md"
+          ],
+          "meaning_zh": "成交量。"
+        },
+        {
+          "name": "open",
+          "dtype": "float64",
+          "meaning": "开盘价。",
+          "meaning_sources": [
+            "aggregate_bars/custom_bars.md"
+          ],
+          "meaning_zh": "开盘价。"
+        },
+        {
+          "name": "close",
+          "dtype": "float64",
+          "meaning": "收盘价。",
+          "meaning_sources": [
+            "aggregate_bars/custom_bars.md"
+          ],
+          "meaning_zh": "收盘价。"
+        },
+        {
+          "name": "high",
+          "dtype": "float64",
+          "meaning": "最高价。",
+          "meaning_sources": [
+            "aggregate_bars/custom_bars.md"
+          ],
+          "meaning_zh": "最高价。"
+        },
+        {
+          "name": "low",
+          "dtype": "float64",
+          "meaning": "最低价。",
+          "meaning_sources": [
+            "aggregate_bars/custom_bars.md"
+          ],
+          "meaning_zh": "最低价。"
+        },
+        {
+          "name": "window_start",
+          "dtype": "float64",
+          "meaning": "K 线窗口起始时间（Unix 纳秒时间戳）。",
+          "meaning_sources": [
+            "aggregate_bars/custom_bars.md"
+          ],
+          "meaning_zh": "窗口起始时间戳。"
+        },
+        {
+          "name": "transactions",
+          "dtype": "float64",
+          "meaning": "成交笔数。",
+          "meaning_sources": [
+            "aggregate_bars/custom_bars.md"
+          ],
+          "meaning_zh": "成交笔数。"
+        }
+      ],
+      "sample_rows": [
+        {
+          "ticker": "A",
+          "volume": 47000.0,
+          "open": 25.4,
+          "close": 25.4,
+          "high": 25.4,
+          "low": 25.4,
+          "window_start": 1.0632006e+18,
+          "transactions": 18.0
+        },
+        {
+          "ticker": "A",
+          "volume": 13100.0,
+          "open": 25.4,
+          "close": 25.43,
+          "high": 25.43,
+          "low": 25.3,
+          "window_start": 1.06320066e+18,
+          "transactions": 16.0
+        },
+        {
+          "ticker": "A",
+          "volume": 2800.0,
+          "open": 25.42,
+          "close": 25.45,
+          "high": 25.45,
+          "low": 25.42,
+          "window_start": 1.06320072e+18,
+          "transactions": 6.0
+        }
+      ],
+      "readable": true
+    },
+    {
+      "dataset": "us_stocks_sip/quotes_v1",
+      "file_count": 5657,
+      "sample_file": "~/quant_projects/data/us_stock/massive_parquet/us_stocks_sip/quotes_v1/2003/09/2003-09-10.parquet",
+      "year_partitions": [
+        "2003",
+        "2004",
+        "2005",
+        "2006",
+        "2007",
+        "2008",
+        "2009",
+        "2010",
+        "2011",
+        "2012",
+        "2013",
+        "2014",
+        "2015",
+        "2016",
+        "2017",
+        "2018",
+        "2019",
+        "2020",
+        "2021",
+        "2022",
+        "2023",
+        "2024",
+        "2025",
+        "2026"
+      ],
+      "column_count": 14,
+      "columns": [
+        {
+          "name": "ticker",
+          "dtype": "string",
+          "meaning": "证券代码。",
+          "meaning_sources": [
+            "tickers/all_tickers.md",
+            "snapshots/unified_snapshot.md"
+          ],
+          "meaning_zh": "证券代码。"
+        },
+        {
+          "name": "ask_exchange",
+          "dtype": "float64",
+          "meaning": "卖一报价交易所代码。",
+          "meaning_sources": [
+            "snapshots/unified_snapshot.md"
+          ],
+          "meaning_zh": "卖一报价交易所代码。"
+        },
+        {
+          "name": "ask_price",
+          "dtype": "float64",
+          "meaning": "卖一价格（ask）。",
+          "meaning_sources": [
+            "snapshots/unified_snapshot.md"
+          ],
+          "meaning_zh": "卖一报价价格。"
+        },
+        {
+          "name": "ask_size",
+          "dtype": "float64",
+          "meaning": "卖一报单量。",
+          "meaning_sources": [
+            "snapshots/unified_snapshot.md"
+          ],
+          "meaning_zh": "卖一报单量。"
+        },
+        {
+          "name": "bid_exchange",
+          "dtype": "float64",
+          "meaning": "买一报价交易所代码。",
+          "meaning_sources": [
+            "snapshots/unified_snapshot.md"
+          ],
+          "meaning_zh": "买一报价交易所代码。"
+        },
+        {
+          "name": "bid_price",
+          "dtype": "float64",
+          "meaning": "买一价格（bid）。",
+          "meaning_sources": [
+            "snapshots/unified_snapshot.md"
+          ],
+          "meaning_zh": "买一报价价格。"
+        },
+        {
+          "name": "bid_size",
+          "dtype": "float64",
+          "meaning": "买一报单量。",
+          "meaning_sources": [
+            "snapshots/unified_snapshot.md"
+          ],
+          "meaning_zh": "买一报单量。"
+        },
+        {
+          "name": "conditions",
+          "dtype": "string",
+          "meaning": "成交/报价条件码列表或编码串，可用于过滤异常成交与统计口径控制。",
+          "meaning_sources": [
+            "market_operations/condition_codes.md",
+            "snapshots/unified_snapshot.md"
+          ],
+          "meaning_zh": "成交/报价条件码。"
+        },
+        {
+          "name": "indicators",
+          "dtype": "float64",
+          "meaning": "行情附加标记位（indicator flags）。",
+          "meaning_sources": [
+            "market_operations/condition_codes.md"
+          ],
+          "meaning_zh": "行情附加标志位。"
+        },
+        {
+          "name": "participant_timestamp",
+          "dtype": "float64",
+          "meaning": "参与方（交易所/撮合源）时间戳，通常为纳秒级。",
+          "meaning_sources": [
+            "snapshots/unified_snapshot.md"
+          ],
+          "meaning_zh": "参与方时间戳。"
+        },
+        {
+          "name": "sequence_number",
+          "dtype": "float64",
+          "meaning": "行情消息序列号，用于排序与去重。",
+          "meaning_sources": [
+            "snapshots/unified_snapshot.md"
+          ],
+          "meaning_zh": "消息序列号。"
+        },
+        {
+          "name": "sip_timestamp",
+          "dtype": "float64",
+          "meaning": "SIP 汇聚时间戳，通常为纳秒级。",
+          "meaning_sources": [
+            "snapshots/unified_snapshot.md",
+            "market_operations/condition_codes.md"
+          ],
+          "meaning_zh": "SIP 汇聚时间戳。"
+        },
+        {
+          "name": "tape",
+          "dtype": "float64",
+          "meaning": "Tape 代码（A/B/C）对应不同证券信息处理器分区。",
+          "meaning_sources": [
+            "market_operations/condition_codes.md"
+          ],
+          "meaning_zh": "Tape 分区代码（A/B/C）。"
+        },
+        {
+          "name": "trf_timestamp",
+          "dtype": "float64",
+          "meaning": "交易报告设施（TRF）时间戳。",
+          "meaning_sources": [
+            "market_operations/condition_codes.md"
+          ],
+          "meaning_zh": "TRF 时间戳。"
+        }
+      ],
+      "sample_rows": [
+        {
+          "ticker": "A",
+          "ask_exchange": 0.0,
+          "ask_price": 0.0,
+          "ask_size": 0.0,
+          "bid_exchange": 11.0,
+          "bid_price": 0.01,
+          "bid_size": 1.0,
+          "conditions": null,
+          "indicators": null,
+          "participant_timestamp": 0.0,
+          "sequence_number": 1405.0,
+          "sip_timestamp": 1.063195276e+18,
+          "tape": 1.0,
+          "trf_timestamp": 0.0
+        },
+        {
+          "ticker": "A",
+          "ask_exchange": 0.0,
+          "ask_price": 0.0,
+          "ask_size": 0.0,
+          "bid_exchange": 11.0,
+          "bid_price": 0.01,
+          "bid_size": 2.0,
+          "conditions": null,
+          "indicators": null,
+          "participant_timestamp": 0.0,
+          "sequence_number": 1431.0,
+          "sip_timestamp": 1.063195411e+18,
+          "tape": 1.0,
+          "trf_timestamp": 0.0
+        },
+        {
+          "ticker": "A",
+          "ask_exchange": 11.0,
+          "ask_price": 26.0,
+          "ask_size": 2.0,
+          "bid_exchange": 9.0,
+          "bid_price": 25.25,
+          "bid_size": 119.0,
+          "conditions": null,
+          "indicators": null,
+          "participant_timestamp": 0.0,
+          "sequence_number": 15138.0,
+          "sip_timestamp": 1.063200655e+18,
+          "tape": 1.0,
+          "trf_timestamp": 0.0
+        }
+      ],
+      "readable": true
+    },
+    {
+      "dataset": "us_stocks_sip/trades_v1",
+      "file_count": 5657,
+      "sample_file": "~/quant_projects/data/us_stock/massive_parquet/us_stocks_sip/trades_v1/2003/09/2003-09-10.parquet",
+      "year_partitions": [
+        "2003",
+        "2004",
+        "2005",
+        "2006",
+        "2007",
+        "2008",
+        "2009",
+        "2010",
+        "2011",
+        "2012",
+        "2013",
+        "2014",
+        "2015",
+        "2016",
+        "2017",
+        "2018",
+        "2019",
+        "2020",
+        "2021",
+        "2022",
+        "2023",
+        "2024",
+        "2025",
+        "2026"
+      ],
+      "column_count": 13,
+      "columns": [
+        {
+          "name": "ticker",
+          "dtype": "string",
+          "meaning": "证券代码。",
+          "meaning_sources": [
+            "tickers/all_tickers.md",
+            "snapshots/unified_snapshot.md"
+          ],
+          "meaning_zh": "证券代码。"
+        },
+        {
+          "name": "conditions",
+          "dtype": "string",
+          "meaning": "成交/报价条件码列表或编码串，可用于过滤异常成交与统计口径控制。",
+          "meaning_sources": [
+            "market_operations/condition_codes.md",
+            "snapshots/unified_snapshot.md"
+          ],
+          "meaning_zh": "成交/报价条件码。"
+        },
+        {
+          "name": "correction",
+          "dtype": "float64",
+          "meaning": "成交更正标记（trade correction indicator）。",
+          "meaning_sources": [
+            "market_operations/condition_codes.md"
+          ],
+          "meaning_zh": "成交更正标记。"
+        },
+        {
+          "name": "exchange",
+          "dtype": "float64",
+          "meaning": "成交发生的交易所代码。",
+          "meaning_sources": [
+            "market_operations/exchanges.md",
+            "snapshots/unified_snapshot.md"
+          ],
+          "meaning_zh": "交易所代码。"
+        },
+        {
+          "name": "id",
+          "dtype": "float64",
+          "meaning": "成交记录标识（trade id）。",
+          "meaning_sources": [
+            "snapshots/unified_snapshot.md"
+          ],
+          "meaning_zh": "记录唯一标识。"
+        },
+        {
+          "name": "participant_timestamp",
+          "dtype": "float64",
+          "meaning": "参与方（交易所/撮合源）时间戳，通常为纳秒级。",
+          "meaning_sources": [
+            "snapshots/unified_snapshot.md"
+          ],
+          "meaning_zh": "参与方时间戳。"
+        },
+        {
+          "name": "price",
+          "dtype": "float64",
+          "meaning": "成交价格（trade price）。",
+          "meaning_sources": [
+            "snapshots/unified_snapshot.md"
+          ],
+          "meaning_zh": "价格。"
+        },
+        {
+          "name": "sequence_number",
+          "dtype": "float64",
+          "meaning": "行情消息序列号，用于排序与去重。",
+          "meaning_sources": [
+            "snapshots/unified_snapshot.md"
+          ],
+          "meaning_zh": "消息序列号。"
+        },
+        {
+          "name": "sip_timestamp",
+          "dtype": "float64",
+          "meaning": "SIP 汇聚时间戳，通常为纳秒级。",
+          "meaning_sources": [
+            "snapshots/unified_snapshot.md",
+            "market_operations/condition_codes.md"
+          ],
+          "meaning_zh": "SIP 汇聚时间戳。"
+        },
+        {
+          "name": "size",
+          "dtype": "float64",
+          "meaning": "成交数量（trade size）。",
+          "meaning_sources": [
+            "snapshots/unified_snapshot.md"
+          ],
+          "meaning_zh": "成交数量。"
+        },
+        {
+          "name": "tape",
+          "dtype": "float64",
+          "meaning": "Tape 代码（A/B/C）对应不同证券信息处理器分区。",
+          "meaning_sources": [
+            "market_operations/condition_codes.md"
+          ],
+          "meaning_zh": "Tape 分区代码（A/B/C）。"
+        },
+        {
+          "name": "trf_id",
+          "dtype": "float64",
+          "meaning": "交易报告设施标识（TRF ID）。",
+          "meaning_sources": [
+            "market_operations/condition_codes.md"
+          ],
+          "meaning_zh": "TRF 标识。"
+        },
+        {
+          "name": "trf_timestamp",
+          "dtype": "float64",
+          "meaning": "交易报告设施（TRF）时间戳。",
+          "meaning_sources": [
+            "market_operations/condition_codes.md"
+          ],
+          "meaning_zh": "TRF 时间戳。"
+        }
+      ],
+      "sample_rows": [
+        {
+          "ticker": "A",
+          "conditions": null,
+          "correction": 0.0,
+          "exchange": 10.0,
+          "id": null,
+          "participant_timestamp": 0.0,
+          "price": 25.4,
+          "sequence_number": 1929946249800780.0,
+          "sip_timestamp": 1.0632006498e+18,
+          "size": 42700.0,
+          "tape": 1.0,
+          "trf_id": 0.0,
+          "trf_timestamp": 0.0
+        },
+        {
+          "ticker": "A",
+          "conditions": null,
+          "correction": 0.0,
+          "exchange": 9.0,
+          "id": null,
+          "participant_timestamp": 0.0,
+          "price": 25.4,
+          "sequence_number": 1929946251320893.0,
+          "sip_timestamp": 1.06320065132e+18,
+          "size": 500.0,
+          "tape": 1.0,
+          "trf_id": 0.0,
+          "trf_timestamp": 0.0
+        },
+        {
+          "ticker": "A",
+          "conditions": null,
+          "correction": 0.0,
+          "exchange": 9.0,
+          "id": null,
+          "participant_timestamp": 0.0,
+          "price": 25.4,
+          "sequence_number": 1929946251325765.0,
+          "sip_timestamp": 1.063200651325e+18,
+          "size": 500.0,
+          "tape": 1.0,
+          "trf_id": 0.0,
+          "trf_timestamp": 0.0
+        }
+      ],
+      "readable": true
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "distribution": "AutoFactorEvaluation-RECONSTRUCT",
+  "exclusions": {
+    "data_access": [
+      ".pytest_cache",
+      "__pycache__",
+      "tests"
+    ],
+    "factor_engine": [
+      ".pytest_cache",
+      ".pytest_full.txt",
+      "__pycache__",
+      "benchmarks",
+      "cleaned_operators.zip",
+      "examples",
+      "tests"
+    ],
+    "suffixes": [
+      ".ipynb",
+      ".pyc",
+      ".pyo"
+    ]
+  },
+  "modules": {
+    "data_access": {
+      "files": 50,
+      "sha256": "89d7cad192245d3f85554fe56414ae2a6ed1527cc6445a4babe99188622b1fb3",
+      "size_bytes": 446474
+    },
+    "factor_engine": {
+      "files": 416,
+      "sha256": "a25dbbd92a8fcbba4bcdb052a2ff28b61bb47b1a8c7a5e7f8585e0f1261a935e",
+      "size_bytes": 6841714
+    }
+  },
+  "schema_version": 1,
+  "source_commit": "5fe9407aaa5b95538a3f98d5b466682135af42db",
+  "source_repository": "18047533889/quant_projects",
+  "source_root": "/home/runner/work/quant_projects/quant_projects",
+  "synced_at_utc": "2026-07-16T17:10:45.997125+00:00"
+}

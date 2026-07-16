@@ -39,6 +39,10 @@ from multiprocessing import Process, Queue, cpu_count
 from pathlib import Path
 from typing import Any, Optional
 
+from platform_bootstrap import activate_platform
+
+_PLATFORM_LAYOUT = activate_platform()
+
 # ---- 日志初始化 ----
 _PIPELINE_LOGGER_SETUP: bool = False
 
@@ -856,7 +860,16 @@ def main():
                     help="预加载行情数据到进程内存（fork 子进程继承，零 I/O 读取，默认开启）")
     p.add_argument("--no-preload", action="store_false", dest="preload",
                     help="禁用进程内存预加载")
+    p.add_argument("--skip-platform-check", action="store_true",
+                    help="跳过内嵌平台诊断（仅故障排查使用）")
     args = p.parse_args()
+
+    if not args.skip_platform_check:
+        from platform_bootstrap import platform_diagnostics
+        _platform_report = platform_diagnostics(import_runtime=True)
+        if _platform_report["status"] != "PASS":
+            print(json.dumps(_platform_report, indent=2, ensure_ascii=False))
+            raise SystemExit(2)
 
     # 全流程启动前验证所有路径已就绪
     if not any([args.gateway_only, args.assetization_only, args.purification_only, args.evaluation_only]):
