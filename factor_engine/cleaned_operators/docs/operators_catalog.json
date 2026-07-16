@@ -383,9 +383,7 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy",
-        "polars",
-        "sql"
+        "pandas_numpy"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -800,26 +798,6 @@
       "lag": 0
     },
     {
-      "canonical": "cap",
-      "surface": "daily",
-      "aliases": [
-        "CLIP",
-        "cap",
-        "clamp",
-        "clip"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars",
-        "sql"
-      ],
-      "pit_safe": true,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
       "canonical": "causal_linear_extrapolate",
       "surface": "research",
       "aliases": [],
@@ -924,6 +902,26 @@
       ],
       "pit_safe": false,
       "scope": "hypothesis",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "clip",
+      "surface": "daily",
+      "aliases": [
+        "CLIP",
+        "cap",
+        "clamp",
+        "clip"
+      ],
+      "backends": [
+        "pandas_numpy",
+        "polars",
+        "sql"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
       "lookback": null,
       "min_periods": null,
       "lag": 0
@@ -1446,27 +1444,6 @@
       "lag": 0
     },
     {
-      "canonical": "decay_linear",
-      "surface": "daily",
-      "aliases": [
-        "DECAY_LINEAR",
-        "TS_DECAY_LINEAR",
-        "decay_linear",
-        "ts_decay",
-        "ts_decay_linear"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars",
-        "sql"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
       "canonical": "decimate",
       "surface": "research",
       "aliases": [],
@@ -1479,29 +1456,6 @@
       "lookback": null,
       "min_periods": null,
       "lag": 0
-    },
-    {
-      "canonical": "delay",
-      "surface": "daily",
-      "aliases": [
-        "DELAY",
-        "Delay",
-        "Ref",
-        "delay",
-        "m_delay",
-        "shift",
-        "ts_delay"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars",
-        "sql"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 1
     },
     {
       "canonical": "digital_count",
@@ -1612,26 +1566,6 @@
       "scope": "elementwise",
       "lookback": null,
       "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "ema",
-      "surface": "daily",
-      "aliases": [
-        "EMA",
-        "ema",
-        "ewm_mean",
-        "ts_ema"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars",
-        "sql"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": 1,
       "lag": 0
     },
     {
@@ -2112,6 +2046,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": false,
@@ -2141,6 +2076,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": false,
@@ -2170,6 +2106,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": false,
@@ -2273,6 +2210,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": false,
@@ -3976,7 +3914,7 @@
       "lag": 0
     },
     {
-      "canonical": "safe_div",
+      "canonical": "safe_div_null",
       "surface": "daily",
       "aliases": [
         "safe_div",
@@ -4195,8 +4133,7 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -4606,6 +4543,50 @@
       "lag": 0
     },
     {
+      "canonical": "ts_decay_linear",
+      "surface": "daily",
+      "aliases": [
+        "DECAY_LINEAR",
+        "TS_DECAY_LINEAR",
+        "decay_linear",
+        "ts_decay",
+        "ts_decay_linear"
+      ],
+      "backends": [
+        "pandas_numpy",
+        "polars",
+        "sql"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_delay",
+      "surface": "daily",
+      "aliases": [
+        "DELAY",
+        "Delay",
+        "Ref",
+        "delay",
+        "m_delay",
+        "shift",
+        "ts_delay"
+      ],
+      "backends": [
+        "pandas_numpy",
+        "polars",
+        "sql"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 1
+    },
+    {
       "canonical": "ts_delta",
       "surface": "daily",
       "aliases": [
@@ -4625,6 +4606,26 @@
       "lookback": null,
       "min_periods": null,
       "lag": 1
+    },
+    {
+      "canonical": "ts_ema",
+      "surface": "daily",
+      "aliases": [
+        "EMA",
+        "ema",
+        "ewm_mean",
+        "ts_ema"
+      ],
+      "backends": [
+        "pandas_numpy",
+        "polars",
+        "sql"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
     },
     {
       "canonical": "ts_kurt",
@@ -4923,7 +4924,7 @@
       "pit_safe": true,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 3,
       "lag": 0
     },
     {
@@ -5034,6 +5035,7 @@
       ],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,

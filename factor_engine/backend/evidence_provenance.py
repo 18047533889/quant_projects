@@ -118,7 +118,7 @@ def load_verified_artifact() -> dict[str, Any]:
 
 
 def evidence_artifact_valid(*, require_commit_match: bool = False) -> bool:
-    """verified artifact 是否由测试通过后生成（含 provenance）。"""
+    """验证 evidence 是否仍绑定当前代码、case registry 与 emitter 实现。"""
     try:
         data = load_verified_artifact()
     except FileNotFoundError:
@@ -129,6 +129,14 @@ def evidence_artifact_valid(*, require_commit_match: bool = False) -> bool:
     if not prov.get("passed_at") or not prov.get("commit_sha"):
         return False
     if require_commit_match and prov.get("commit_sha") != current_commit_sha():
+        return False
+    try:
+        registry = load_case_registry()
+    except FileNotFoundError:
+        return False
+    if prov.get("case_registry_hash") != compute_case_registry_hash(registry):
+        return False
+    if dict(prov.get("emitter_hashes") or {}) != emitter_hashes():
         return False
     return True
 
@@ -149,7 +157,7 @@ def enrich_operator_metadata(
     merged: dict[str, dict[str, Any]] = {}
     if existing:
         for k, v in existing.items():
-            if isinstance(v, dict):
+            if k in certified and isinstance(v, dict):
                 merged[k] = dict(v)
     for name in sorted(certified):
         rec = dict(merged.get(name) or {})

@@ -35,7 +35,7 @@ CASES = [
     ("ts_skew", lambda: make_cleaned_call_factory("ts_skew")(col("close"), 3)),
     ("ts_argmax", lambda: make_cleaned_call_factory("ts_argmax")(col("close"), 3)),
     ("ts_argmin", lambda: make_cleaned_call_factory("ts_argmin")(col("close"), 3)),
-    ("ewm_mean", lambda: make_cleaned_call_factory("ewm_mean")(col("close"), 3)),
+    ("ts_ema", lambda: make_cleaned_call_factory("ewm_mean")(col("close"), 3)),
     ("cum_sum", lambda: make_cleaned_call_factory("cum_sum")(col("close"))),
     ("log_abs", lambda: make_cleaned_call_factory("log_abs")(col("close"))),
     (

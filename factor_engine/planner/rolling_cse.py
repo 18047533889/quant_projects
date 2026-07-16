@@ -20,7 +20,8 @@ ROLLING_OP_CANONICAL: dict[str, str] = {
     "ts_covariance": "ts_cov",
     "m_cor": "ts_corr",
     "m_cov": "ts_cov",
-    "delay": "delay",
+    "delay": "ts_delay",
+    "ts_delay": "ts_delay",
 }
 
 _ROLLING_ATTR_IGNORE = frozenset({"min_periods", "min_count", "ddof"})

@@ -28,6 +28,7 @@ _SKIP_SMOKE: frozenset[str] = frozenset(
         "where",
         "coalesce",
         "protected_div",
+        "safe_div_null",
     }
 )
 

@@ -161,7 +161,7 @@ def test_explicit_operator_policies_cover_core_tier1():
         "normalize",
         "ts_delay",
         "ts_rank",
-        "ewm_mean",
+        "ts_ema",
         "vp_weighted_price",
     }
     missing = sorted(core - set(_EXPLICIT_POLICIES))

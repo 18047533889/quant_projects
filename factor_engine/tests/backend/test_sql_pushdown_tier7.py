@@ -55,7 +55,7 @@ def test_tier7_in_sql_registry():
     ("minimum", "LEAST"),
     ("cum_prod", "product"),
     ("cum_delta", "FIRST_VALUE"),
-    ("expanding_mean", "AVG"),
+        ("expanding_mean", "SUM"),
     ("expanding_sum", "UNBOUNDED PRECEDING"),
     ("log_abs", "abs"),
     ("signed_log", "sign"),

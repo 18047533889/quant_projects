@@ -225,7 +225,32 @@
     "dual_backend_target": true
   },
   {
-    "name": "cap",
+    "name": "ceil",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": true,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "向上取整",
+    "execution_kind": "primitive",
+    "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "clip",
     "scope": "elementwise",
     "frequency": "any",
     "input_fields": [
@@ -246,31 +271,6 @@
       "polars"
     ],
     "description": "裁剪到 [lo, hi] 区间",
-    "execution_kind": "primitive",
-    "production_policy": "allowed",
-    "lowering_available": false,
-    "dual_backend_target": true
-  },
-  {
-    "name": "ceil",
-    "scope": "elementwise",
-    "frequency": "any",
-    "input_fields": [
-      "x"
-    ],
-    "output_type": "series",
-    "pit_safe": true,
-    "includes_current": true,
-    "lookback": null,
-    "min_periods": null,
-    "nan_policy": "propagate",
-    "status": "research",
-    "allow_in_production": true,
-    "backends": [
-      "pandas_numpy",
-      "polars"
-    ],
-    "description": "向上取整",
     "execution_kind": "primitive",
     "production_policy": "allowed",
     "lowering_available": false,
@@ -403,58 +403,6 @@
     "dual_backend_target": true
   },
   {
-    "name": "decay_linear",
-    "scope": "time_series",
-    "frequency": "any",
-    "input_fields": [
-      "x",
-      "window"
-    ],
-    "output_type": "series",
-    "pit_safe": true,
-    "includes_current": true,
-    "lookback": null,
-    "min_periods": 1,
-    "nan_policy": "propagate",
-    "status": "research",
-    "allow_in_production": true,
-    "backends": [
-      "pandas_numpy",
-      "polars"
-    ],
-    "description": "线性加权滚动平均",
-    "execution_kind": "stateful",
-    "production_policy": "allowed",
-    "lowering_available": false,
-    "dual_backend_target": true
-  },
-  {
-    "name": "delay",
-    "scope": "time_series",
-    "frequency": "any",
-    "input_fields": [
-      "x",
-      "n"
-    ],
-    "output_type": "series",
-    "pit_safe": true,
-    "includes_current": true,
-    "lookback": null,
-    "min_periods": null,
-    "nan_policy": "propagate",
-    "status": "research",
-    "allow_in_production": true,
-    "backends": [
-      "pandas_numpy",
-      "polars"
-    ],
-    "description": "n期滞后 (与Ref相同)",
-    "execution_kind": "primitive",
-    "production_policy": "allowed",
-    "lowering_available": false,
-    "dual_backend_target": true
-  },
-  {
     "name": "divide",
     "scope": "elementwise",
     "frequency": "any",
@@ -473,32 +421,6 @@
     ],
     "description": "Basic runtime operator",
     "execution_kind": "primitive",
-    "production_policy": "allowed",
-    "lowering_available": false,
-    "dual_backend_target": true
-  },
-  {
-    "name": "ema",
-    "scope": "time_series",
-    "frequency": "any",
-    "input_fields": [
-      "x",
-      "span"
-    ],
-    "output_type": "series",
-    "pit_safe": true,
-    "includes_current": true,
-    "lookback": null,
-    "min_periods": 1,
-    "nan_policy": "propagate",
-    "status": "research",
-    "allow_in_production": true,
-    "backends": [
-      "pandas_numpy",
-      "polars"
-    ],
-    "description": "计算n期指数移动平均",
-    "execution_kind": "stateful",
     "production_policy": "allowed",
     "lowering_available": false,
     "dual_backend_target": true
@@ -1473,7 +1395,7 @@
     "dual_backend_target": true
   },
   {
-    "name": "safe_div",
+    "name": "safe_div_null",
     "scope": "elementwise",
     "frequency": "any",
     "input_fields": [
@@ -1707,6 +1629,58 @@
     "dual_backend_target": true
   },
   {
+    "name": "ts_decay_linear",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": true,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "线性加权滚动平均",
+    "execution_kind": "stateful",
+    "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ts_delay",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "n"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": true,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "n期滞后 (与Ref相同)",
+    "execution_kind": "primitive",
+    "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
     "name": "ts_delta",
     "scope": "time_series",
     "frequency": "any",
@@ -1728,6 +1702,32 @@
     ],
     "description": "n期差分 (与Delta相同)",
     "execution_kind": "primitive",
+    "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ts_ema",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "span"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": true,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "计算n期指数移动平均",
+    "execution_kind": "stateful",
     "production_policy": "allowed",
     "lowering_available": false,
     "dual_backend_target": true

@@ -51,14 +51,14 @@ def _time_slope_col(col: pl.Expr, window: int) -> pl.Expr:
             return np.nan
         return float(np.dot(arr[valid], ww[valid]))
 
-    return col.rolling_map(_dot, window_size=w, min_samples=1)
+    return col.rolling_map(_dot, window_size=w, min_samples=w)
 
 
-@register_operator(name="Slope", category="statistics", business_category="statistics_regression", canonical="Slope", source="factor_dsl_polars")
+@register_operator(name="ts_time_slope", category="statistics", business_category="statistics_regression", canonical="ts_time_slope", source="factor_dsl_polars")
 class SlopePolars(SeriesOperator):
     """Polars 滚动时间斜率"""
     metadata = OperatorMetadata(
-        name="Slope", category="statistics", description="滚动时间斜率",
+        name="ts_time_slope", category="statistics", description="滚动时间斜率",
         param_names=["x", "window"], return_type="series", tags=["statistics", "polars"],
     )
 

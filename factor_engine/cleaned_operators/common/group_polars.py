@@ -77,6 +77,37 @@ def _mean_row(row_x, row_g):
     return out
 
 
+def _aggregate_row(row_x, row_g, reducer):
+    """Broadcast a group aggregate while preserving missing input positions."""
+    out = np.full_like(row_x, np.nan, dtype=float)
+    mask = ~np.isnan(row_x)
+    if row_g is None or np.all(np.isnan(row_g)):
+        value = float(reducer(row_x[mask])) if np.any(mask) else float(reducer(row_x[mask]))
+        out[:] = value
+        return out
+    for g in np.unique(row_g[~np.isnan(row_g)]):
+        gm = (row_g == g) & mask
+        if np.any(gm):
+            out[gm] = float(reducer(row_x[gm]))
+    return out
+
+
+def _sum_row(row_x, row_g):
+    return _aggregate_row(row_x, row_g, np.sum)
+
+
+def _min_row(row_x, row_g):
+    return _aggregate_row(row_x, row_g, lambda values: np.min(values) if len(values) else np.nan)
+
+
+def _max_row(row_x, row_g):
+    return _aggregate_row(row_x, row_g, lambda values: np.max(values) if len(values) else np.nan)
+
+
+def _count_row(row_x, row_g):
+    return _aggregate_row(row_x, row_g, lambda values: float(len(values)))
+
+
 def _std_row(row_x, row_g):
     out = np.full_like(row_x, np.nan)
     mask = ~np.isnan(row_x)
@@ -157,6 +188,50 @@ class GroupMeanPolars(SeriesOperator):
 
     def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, **kwargs) -> pl.DataFrame:
         return _group_rowwise(x, group, _mean_row)
+
+
+@register_operator(name="group_sum", category="cross_sectional", business_category="group_neutralization", canonical="group_sum", source="factor_dsl_polars")
+class GroupSumPolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="group_sum", category="cross_sectional", description="组内求和",
+        param_names=["x", "group"], return_type="series", tags=["cross_sectional", "polars"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, **kwargs) -> pl.DataFrame:
+        return _group_rowwise(x, group, _sum_row)
+
+
+@register_operator(name="group_min", category="cross_sectional", business_category="group_neutralization", canonical="group_min", source="factor_dsl_polars")
+class GroupMinPolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="group_min", category="cross_sectional", description="组内最小值",
+        param_names=["x", "group"], return_type="series", tags=["cross_sectional", "polars"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, **kwargs) -> pl.DataFrame:
+        return _group_rowwise(x, group, _min_row)
+
+
+@register_operator(name="group_max", category="cross_sectional", business_category="group_neutralization", canonical="group_max", source="factor_dsl_polars")
+class GroupMaxPolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="group_max", category="cross_sectional", description="组内最大值",
+        param_names=["x", "group"], return_type="series", tags=["cross_sectional", "polars"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, **kwargs) -> pl.DataFrame:
+        return _group_rowwise(x, group, _max_row)
+
+
+@register_operator(name="group_count", category="cross_sectional", business_category="group_neutralization", canonical="group_count", source="factor_dsl_polars")
+class GroupCountPolars(SeriesOperator):
+    metadata = OperatorMetadata(
+        name="group_count", category="cross_sectional", description="组内非空计数",
+        param_names=["x", "group"], return_type="series", tags=["cross_sectional", "polars"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, **kwargs) -> pl.DataFrame:
+        return _group_rowwise(x, group, _count_row)
 
 
 @register_operator(name="group_std", category="cross_sectional", business_category="group_neutralization", canonical="group_std", source="factor_dsl_polars")

@@ -165,13 +165,14 @@ def test_polars_expr_matches_polars_bridge(source, factory_name, expr_builder):
     pd.testing.assert_series_equal(base, fast, check_names=False, rtol=1e-6, atol=1e-6)
 
 
-def test_polars_expr_fallback_on_unsupported_op(source):
+def test_macd_uses_polars_expr_path(source):
     from api import MACD
 
     os.environ["FACTOR_ENGINE_POLARS_EXPR"] = "1"
     try:
         eng = FactorEngine(backend=build_backend("polars"), data_source=source)
         out = eng.run(Factor(name="t", expr=MACD(col("close"))))
-        assert not out.get("polars_expr")
+        assert out.get("polars_expr") is True
+        assert not out.get("polars_expr_fallback")
     finally:
         os.environ.pop("FACTOR_ENGINE_POLARS_EXPR", None)

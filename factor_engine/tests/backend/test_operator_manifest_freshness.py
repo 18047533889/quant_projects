@@ -37,20 +37,18 @@ def test_operator_manifest_json_fresh(_loaded):
     assert proc.returncode == 0, proc.stderr or proc.stdout
 
 
-def test_operator_manifest_commit_sha_current(_loaded):
+def test_operator_manifest_commit_sha_is_ancestor(_loaded):
     import json
     import subprocess
 
     data = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    sha = (
-        subprocess.check_output(
-            ["git", "rev-parse", "HEAD"],
-            cwd=str(ROOT),
-            stderr=subprocess.DEVNULL,
-        )
-        .decode()
-        .strip()
+    generated = str(data.get("generated_commit_sha") or "")
+    proc = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", generated, "HEAD"],
+        cwd=str(ROOT),
+        capture_output=True,
+        text=True,
     )
-    assert data.get("generated_commit_sha") == sha, (
-        f"manifest commit drift: {data.get('generated_commit_sha')!r} != {sha!r}"
+    assert generated and proc.returncode == 0, (
+        f"manifest was generated from unrelated commit: {generated!r}"
     )

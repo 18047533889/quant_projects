@@ -122,7 +122,7 @@ def test_recursive_operators_are_not_polars_native() -> None:
 
 
 def test_primitive_evidence_uses_final_canonical_names() -> None:
-    old = {"clip", "ts_delay", "safe_div_null", "ts_ema", "ts_regression", "ts_decay_linear"}
+    old = {"cap", "delay", "safe_div", "ema", "ts_regression", "decay_linear"}
     paths = sorted((Path(__file__).resolve().parents[1]).rglob("primitive_verified.json"))
     assert paths
     for path in paths:

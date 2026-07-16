@@ -33,6 +33,7 @@ def _merged_cases():
 def _case_registry_sets():
     from backend.primitive_evidence import (
         CASE_REGISTRY_DUCKDB_EDGE,
+        CASE_REGISTRY_DUCKDB_NAN_EDGE,
         CASE_REGISTRY_DUCKDB_REFERENCE,
         CASE_REGISTRY_NO_FALLBACK,
         CASE_REGISTRY_POLARS_EDGE,
@@ -45,6 +46,7 @@ def _case_registry_sets():
         "duckdb_reference": CASE_REGISTRY_DUCKDB_REFERENCE,
         "polars_edge": CASE_REGISTRY_POLARS_EDGE,
         "duckdb_edge": CASE_REGISTRY_DUCKDB_EDGE,
+        "duckdb_nan_edge": CASE_REGISTRY_DUCKDB_NAN_EDGE,
         "no_fallback": CASE_REGISTRY_NO_FALLBACK,
         "six_way": CASE_REGISTRY_SIX_WAY,
     }
@@ -68,7 +70,7 @@ def test_primitive_case_registry_six_way_intersection(_loaded):
         reg["polars_reference"]
         & reg["polars_edge"]
         & reg["duckdb_reference"]
-        & reg["duckdb_edge"]
+        & (reg["duckdb_edge"] | reg["duckdb_nan_edge"])
         & reg["no_fallback"]
     )
     assert reg["six_way"] == expected

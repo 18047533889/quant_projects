@@ -66,7 +66,9 @@ def test_protected_div_zero_denominator(golden_panel, loaded):
     op = OperatorRegistry.get("protected_div", backend="pandas_numpy")
     out = op.calculate(num, den)
     assert_panel_shape_unchanged(num, out)
-    assert (out.to_numpy() == 0.0).all()
+    expected = num.isna().to_numpy()
+    assert np.isnan(out.to_numpy())[expected].all()
+    assert (out.to_numpy()[~expected] == 0.0).all()
 
 
 def test_zscore_ddof1_two_values(golden_panel, loaded):

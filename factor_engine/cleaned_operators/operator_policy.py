@@ -58,8 +58,6 @@ RESEARCH_CORE_CANONICALS: frozenset[str] = frozenset(
         "coskewness_to_market",
         "rolling_beta_to_market",
         # 清洗 research
-        "causal_bfill",
-        "bfill",
         "causal_linear_extrapolate",
     }
 )
@@ -68,7 +66,7 @@ RESEARCH_CORE_CANONICALS: frozenset[str] = frozenset(
 _POLICY_EXTENSION_CANONICALS: frozenset[str] = frozenset(
     {
         "WMA",
-        "ema",
+        "ts_ema",
         "ewm_corr",
         "neutralize",
         "quantile",
@@ -131,15 +129,14 @@ def __getattr__(name: str):
 # Tier-1 DSL 别名 → canonical（CI / policy 校验前先 resolve）
 TIER1_ALIASES: dict[str, str] = {
     "SMA": "ts_mean",
-    "EMA": "ema",
-    "ts_ema": "ema",
-    "ewm_mean": "ema",
-    "decay_linear": "decay_linear",
-    "ts_decay_linear": "decay_linear",
-    "clip": "cap",
-    "ts_delay": "delay",
+    "EMA": "ts_ema",
+    "ema": "ts_ema",
+    "ewm_mean": "ts_ema",
+    "decay_linear": "ts_decay_linear",
+    "cap": "clip",
+    "delay": "ts_delay",
     "ts_regression": "ts_regression_slope",
-    "safe_div_null": "safe_div",
+    "safe_div": "safe_div_null",
 }
 
 # production ``auto`` backend 下允许走 Polars 的 canonical 白名单
@@ -156,14 +153,14 @@ POLARS_PRODUCTION_SAFE_CORE: frozenset[str] = frozenset({
     "ts_min",
     "ts_max",
     "ts_delta",
-    "delay",
+    "ts_delay",
     "add",
     "subtract",
     "multiply",
     "divide",
     "abs",
     "log",
-    "cap",
+    "clip",
     "neg",
     "exp",
     "sqrt",
@@ -186,7 +183,7 @@ POLARS_PARITY_VERIFIED_TIER2: frozenset[str] = frozenset({
     "ts_rank",
     "coalesce",
     "protected_div",
-    "safe_div",
+    "safe_div_null",
     "protected_log",
     "where",
     "cs_demean",
@@ -199,8 +196,8 @@ POLARS_PARITY_VERIFIED_TIER2: frozenset[str] = frozenset({
 
 # Tier-3：EMA / decay / fillna / group 统计（见 tests/operators/test_polars_parity_tier3.py）
 POLARS_PARITY_VERIFIED_TIER3: frozenset[str] = frozenset({
-    "ema",
-    "decay_linear",
+    "ts_ema",
+    "ts_decay_linear",
     "fillna_const",
     "fillna",
     "group_zscore",
@@ -241,7 +238,7 @@ POLARS_PARITY_VERIFIED_TIER8: frozenset[str] = frozenset({
     "c_std",
     "c_sum",
     "c_count",
-    "ema",
+    "ts_ema",
     "WMA",
     "nan_to_num",
     "is_finite",
@@ -399,16 +396,12 @@ def resolve_tier1_canonical(name: str) -> str:
 
 
 def tier1_policy_keys() -> frozenset[str]:
-    """获取 policy_required 在 ``_EXPLICIT_POLICIES`` 中必须存在的键集合。
+    """获取 policy_required 解析后的 canonical policy 键集合。
 
 返回:
     含 canonical 与 Tier-1 别名的 ``frozenset``。
 """
-    keys = set(policy_required_canonicals())
-    keys.update(TIER1_ALIASES.keys())
-    for alias, canon in TIER1_ALIASES.items():
-        keys.add(canon)
-    return frozenset(keys)
+    return frozenset(resolve_tier1_canonical(name) for name in policy_required_canonicals())
 
 # 不做 Polars 移植且通常非 PIT 安全（FFT/矩阵/随机/CDF-PDF 等）
 INTENTIONALLY_PANDAS_ONLY: frozenset[str] = frozenset(
@@ -507,7 +500,7 @@ NON_SHAPE_PRESERVING_CANONICALS: frozenset[str] = frozenset({"dropna"})
 
 # 显式声明的核心算子策略（Tier-1 + 特殊语义；其余由 infer_operator_policy 推断）
 _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
-    "delay": {"scope": "ts", "lag": 1, "pit_safe": True},
+    "ts_delay": {"scope": "ts", "lag": 1, "pit_safe": True},
     "ts_delta": {"scope": "ts", "lag": 1, "pit_safe": True},
     "ts_pct": {"scope": "ts", "lag": 1, "pit_safe": True},
     "ts_log_return": {"scope": "ts", "lag": 1, "pit_safe": True, "min_periods": 2},
@@ -531,11 +524,12 @@ _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
     "ts_corr": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "ts_min": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "ts_max": {"scope": "ts", "pit_safe": True, "min_periods": 1},
-    "ema": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_ema": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "SMA": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "WMA": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "ewm_corr": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "ts_beta": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_regression_slope": {"scope": "ts", "pit_safe": True, "min_periods": 3},
     "rolling_beta": {"scope": "ts", "pit_safe": True, "min_periods": 2},
     "rolling_beta_to_market": {"scope": "ts", "pit_safe": True, "min_periods": 2},
     "ts_poly2_coeff": {"scope": "ts", "pit_safe": True, "min_periods": 3},
@@ -557,8 +551,7 @@ _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
     "AROON_down": {"scope": "ts", "pit_safe": True, "min_periods": 2},
     "RSI_WILDER": {"scope": "ts", "pit_safe": True, "min_periods": 2},
     "ATR_WILDER": {"scope": "ts", "pit_safe": True, "min_periods": 2},
-    "decay_linear": {"scope": "ts", "pit_safe": True, "min_periods": 1},
-    "decay_linear": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_decay_linear": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "group_decay_linear": {"scope": "cs", "pit_safe": True},
     "hump_decay": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "ts_topk_sum": {"scope": "ts", "pit_safe": True, "min_periods": 1},
@@ -590,7 +583,7 @@ _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
     "c_sum": {"scope": "cs", "pit_safe": True},
     "c_count": {"scope": "cs", "pit_safe": True},
     "protected_div": {"scope": "elementwise", "pit_safe": True},
-    "safe_div": {"scope": "elementwise", "pit_safe": True},
+    "safe_div_null": {"scope": "elementwise", "pit_safe": True},
     "protected_log": {"scope": "elementwise", "pit_safe": True},
     "protected_sqrt": {"scope": "elementwise", "pit_safe": True},
     "vwap": {"scope": "ts", "pit_safe": True, "min_periods": 1},
@@ -677,7 +670,7 @@ _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
     "corr_test": {"scope": "hypothesis", "pit_safe": True},
     "abs": {"scope": "elementwise", "pit_safe": True},
     "log": {"scope": "elementwise", "pit_safe": True},
-    "cap": {"scope": "elementwise", "pit_safe": True},
+    "clip": {"scope": "elementwise", "pit_safe": True},
     "neg": {"scope": "elementwise", "pit_safe": True},
     "power": {"scope": "elementwise", "pit_safe": True},
     "floor": {"scope": "elementwise", "pit_safe": True},
@@ -789,6 +782,12 @@ def infer_operator_policy(op: Any, *, canonical: str | None = None) -> OperatorP
     推断或查表得到的 ``OperatorPolicy`` 对象。
 """
     canon = canonical or getattr(getattr(op, "metadata", None), "name", "") or ""
+    try:
+        from cleaned_operators.registry import OperatorRegistry
+
+        canon = OperatorRegistry._aliases.get(canon, canon)
+    except Exception:
+        pass
     if canon in _EXPLICIT_POLICIES:
         base = {"scope": "unknown", "pit_safe": True}
         if canon in NON_SHAPE_PRESERVING_CANONICALS:

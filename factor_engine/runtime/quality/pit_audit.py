@@ -51,7 +51,7 @@ _FORWARD_FILL_OPS = frozenset({
 })
 
 _POSITIVE_LAG_PARAMS: dict[str, tuple[str, int]] = {
-    "delay": ("n", 1),
+    "ts_delay": ("n", 1),
     "ts_delta": ("n", 1),
     "ts_pct": ("d", 1),
 }

@@ -1088,16 +1088,16 @@ def _rolling_slope_over_inst(w: int, inner_sql: str, *, dialect: SqlDialect) -> 
 
 
 def _ts_argext_sql(inner_sql: str, w: int, *, dialect: SqlDialect, pick: str) -> str:
-    """滚动 argmax/argmin 位置（0=窗口内最早 bar，对齐 pandas ``rolling_argmax``）。"""
+    """滚动极值距当前 bar 的距离（0=当前；并列取最近）。"""
     over = "PARTITION BY inst ORDER BY ts"
     win = f"{over} ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
     ext_fn = "MAX" if pick == "max" else "MIN"
     cases: list[str] = []
-    for lag in range(w - 1, -1, -1):
+    for lag in range(w):
         val = "_v" if lag == 0 else f"LAG(_v, {lag}) OVER ({over})"
         cases.append(
             f"WHEN {val} IS NOT NULL AND w_ext IS NOT NULL AND ABS({val} - w_ext) < 1e-9 "
-            f"THEN (w_cnt - 1.0 - {lag})"
+            f"THEN {float(lag)}"
         )
     case_expr = "CASE " + " ".join(cases) + " ELSE 0.0 END"
     return (
@@ -1124,7 +1124,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
     nf = _dialect_fn(dialect, "nullif")
 
     if op == "WMA":
-        wma_node = PlanNode(op="decay_linear", inputs=list(node.inputs), attrs=dict(node.attrs))
+        wma_node = PlanNode(op="ts_decay_linear", inputs=list(node.inputs), attrs=dict(node.attrs))
         return _compile_layer(wma_node, dialect=dialect)
 
     if op == "column":
@@ -1189,7 +1189,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_ts_partition=left.has_ts_partition or right.has_ts_partition,
         )
 
-    if op == "safe_div":
+    if op in {"safe_div_null", "safe_div"}:
         if len(node.inputs) != 2:
             return None
         left = _compile_layer(node.inputs[0], dialect=dialect)
@@ -1343,7 +1343,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_ts_partition=inner.has_ts_partition,
         )
 
-    if op == "cap":
+    if op in {"clip", "cap"}:
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
@@ -1531,7 +1531,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_inst_window=True,
         )
 
-    if op == "delay":
+    if op in {"ts_delay", "delay"}:
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
@@ -2193,7 +2193,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_inst_window=True,
         )
 
-    if op == "ema":
+    if op in {"ts_ema", "ema"}:
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
@@ -2305,7 +2305,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_ts_partition=any(layer.has_ts_partition for layer in layers),
         )
 
-    if op == "decay_linear":
+    if op in {"ts_decay_linear", "decay_linear"}:
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
@@ -2683,7 +2683,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_inst_window=True,
         )
 
-    if op == "Slope":
+    if op in {"Slope", "ts_time_slope"}:
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None

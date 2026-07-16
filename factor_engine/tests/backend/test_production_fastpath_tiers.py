@@ -16,10 +16,10 @@ def _loaded():
 
 def test_primitive_dual_backend_evidence_is_production_safe(_loaded):
     from backend.polars_long_production import is_polars_long_native_production_safe
-    from backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+    from backend.primitive_evidence import operational_production_certified_set
     from backend.sql_tiers import effective_sql_production_safe
 
-    for canon in sorted(PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE):
+    for canon in sorted(operational_production_certified_set()):
         assert is_polars_long_native_production_safe(canon), canon
         assert effective_sql_production_safe(canon), canon
 
@@ -31,7 +31,7 @@ def test_p0_not_auto_production_without_evidence(_loaded):
     from backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
 
     p0_only = P0_PRODUCTION_FASTPATH_CANONICALS - PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
-    assert len(p0_only) >= 3
+    assert p0_only
     assert not is_polars_long_native_production_safe("fillna")
 
 

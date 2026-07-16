@@ -105,6 +105,11 @@ def primitive_operational_production_certified(canon: str) -> bool:
         return False
     if not evidence_artifact_valid():
         return False
+    from cleaned_operators.operator_spec import build_operator_spec
+
+    spec = build_operator_spec(canon)
+    if spec is None or not spec.allow_in_production:
+        return False
     from backend.production_signature import operational_production_allowed
 
     return operational_production_allowed(canon)

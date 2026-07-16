@@ -72,7 +72,7 @@ def _parity_exprs():
         "ts_product": make_cleaned_call_factory("ts_product")(x, 2),
         "ts_argmax": make_cleaned_call_factory("ts_argmax")(x, 2),
         "ts_argmin": make_cleaned_call_factory("ts_argmin")(x, 2),
-        "ts_regression": make_cleaned_call_factory("ts_regression")(x, y, 3),
+        "ts_regression_slope": make_cleaned_call_factory("ts_regression")(x, y, 3),
         "ts_ratio": make_cleaned_call_factory("ts_ratio")(x),
         "ts_max_buildup": make_cleaned_call_factory("ts_max_buildup")(x, 2),
         "ts_moment": make_cleaned_call_factory("ts_moment")(x, 3, 2),

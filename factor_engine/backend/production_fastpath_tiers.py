@@ -21,7 +21,7 @@ P0_ELEMENT_CANONICALS: frozenset[str] = frozenset(
         "log",
         "exp",
         "sqrt",
-        "cap",
+        "clip",
         "floor",
         "ceil",
         "inverse",
@@ -32,7 +32,7 @@ P0_ELEMENT_CANONICALS: frozenset[str] = frozenset(
 )
 
 P0_PROTECTED_CANONICALS: frozenset[str] = frozenset(
-    {"protected_div", "protected_log", "protected_sqrt", "safe_div"}
+    {"protected_div", "protected_log", "protected_sqrt", "safe_div_null"}
 )
 
 P0_LOGIC_CANONICALS: frozenset[str] = frozenset(
@@ -60,7 +60,7 @@ P0_LOGIC_CANONICALS: frozenset[str] = frozenset(
 # 简单 rolling — 可直接 production safe
 P0_TS_SIMPLE_CANONICALS: frozenset[str] = frozenset(
     {
-        "delay",
+        "ts_delay",
         "ts_delta",
         "ts_pct",
         "ts_mean",
@@ -77,8 +77,8 @@ P0_TS_SIMPLE_CANONICALS: frozenset[str] = frozenset(
 # 复杂 TS — 须逐算子 parity + 边界测试后才可升级 production safe
 P1_TS_COMPLEX_PARITY_PENDING: frozenset[str] = frozenset(
     {
-        "ema",
-        "decay_linear",
+        "ts_ema",
+        "ts_decay_linear",
     }
 )
 
@@ -146,7 +146,7 @@ P1_BINARY_TS_CANONICALS: frozenset[str] = frozenset(
 )
 
 # 截面/滚动 OLS — 须 pairwise-null parity 后才可 production safe
-P1_REGRESSION_PARITY_PENDING: frozenset[str] = frozenset({"ts_regression_slope", "Slope", "cs_resid", "cs_regression"})
+P1_REGRESSION_PARITY_PENDING: frozenset[str] = frozenset({"ts_regression_slope", "ts_time_slope", "cs_resid", "cs_regression"})
 
 P1_GOLDEN_VERIFIED_REGRESSION: frozenset[str] = frozenset()
 
@@ -154,7 +154,7 @@ P1_GOLDEN_VERIFIED_REGRESSION: frozenset[str] = frozenset()
 P2_TECHNICAL_RESEARCH_ONLY: frozenset[str] = frozenset({"RSI_WILDER", "ATR_WILDER"})
 
 # EWM SQL 为有限窗口近似 — 暂不进 DuckDB production safe
-P1_EWM_PARITY_PENDING: frozenset[str] = frozenset({"ema", "ewm_std", "ewm_var"})
+P1_EWM_PARITY_PENDING: frozenset[str] = frozenset({"ts_ema", "ewm_std", "ewm_var"})
 
 P1_DUCKDB_PARITY_PENDING: frozenset[str] = (
     P1_TS_COMPLEX_PARITY_PENDING
@@ -173,14 +173,14 @@ P1_EXTENDED_TS_CANONICALS: frozenset[str] = frozenset(
         "ts_product",
         "ts_skew",
         "ts_regression_slope",
-        "Slope",
+        "ts_time_slope",
         "ts_argmax",
         "ts_argmin",
         "ts_ratio",
     }
 )
 
-P1_EXTENDED_EWM_CANONICALS: frozenset[str] = frozenset({"ema", "ewm_std", "ewm_var"})
+P1_EXTENDED_EWM_CANONICALS: frozenset[str] = frozenset({"ts_ema", "ewm_std", "ewm_var"})
 
 P1_EXTENDED_CUM_CANONICALS: frozenset[str] = frozenset(
     {
@@ -347,7 +347,7 @@ FORBIDDEN_PRODUCTION_FASTPATH: frozenset[str] = frozenset(
 POLARS_NATIVE_ALIASES: dict[str, str] = {
     "rolling_beta": "ts_beta",
     "cum_std": "expanding_std",
-    "WMA": "decay_linear",
+    "WMA": "ts_decay_linear",
 }
 
 

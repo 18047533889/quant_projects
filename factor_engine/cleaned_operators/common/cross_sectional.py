@@ -1033,8 +1033,11 @@ class CrossSectionalSumPolars(SeriesOperator):
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
         numeric_cols = [c for c in x.columns if c not in ['date', 'stock_code']]
 
-        # 计算每行求和
-        sum_expr = sum(pl.col(c) for c in numeric_cols)
+        valid_count = pl.sum_horizontal(
+            [pl.col(c).is_not_null().cast(pl.Int64) for c in numeric_cols]
+        )
+        raw_sum = pl.sum_horizontal([pl.col(c) for c in numeric_cols], ignore_nulls=True)
+        sum_expr = pl.when(valid_count > 0).then(raw_sum).otherwise(None)
 
         return x.with_columns([
             sum_expr.alias(c) for c in numeric_cols
@@ -1467,4 +1470,3 @@ class CSRegressionPolars(SeriesOperator):
         if "date" in y.columns:
             result_df = result_df.with_columns([y["date"]])
         return result_df
-

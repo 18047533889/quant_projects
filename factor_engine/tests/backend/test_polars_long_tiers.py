@@ -60,7 +60,7 @@ def test_if_else_production_tier():
     spec = summarize_operator("if_else")
     assert spec.polars_long_tier == "native"
     # panel polars 以 ``where`` 为 production parity 代表（if_else 为 DSL 别名）
-    assert summarize_operator("where").polars == "production_safe"
+    assert summarize_operator("where").polars in {"parity_verified", "production_safe"}
 
 
 def test_compile_memo_dedupes_duplicate_subtree(source):

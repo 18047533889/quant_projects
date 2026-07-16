@@ -18,8 +18,8 @@ NumericalStability = Literal["high", "medium", "low"]
 # stateful / deferred：允许 production 但不计入 strict dual-backend core
 PRODUCTION_ALLOWED_DEFERRED_CANONICALS: frozenset[str] = frozenset(
     {
-        "ema",
-        "decay_linear",
+        "ts_ema",
+        "ts_decay_linear",
         "RSI_WILDER",
         "ATR_WILDER",
     }

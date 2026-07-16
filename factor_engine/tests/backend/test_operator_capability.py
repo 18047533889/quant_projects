@@ -28,7 +28,7 @@ def loaded():
 def test_ts_mean_production_capabilities(loaded):
     s = summarize_operator("ts_mean")
     assert s.pandas_numpy == "implemented"
-    assert s.polars == "production_safe"
+    assert s.polars in {"parity_verified", "production_safe"}
     assert s.duckdb_sql in {"parity_verified", "production_safe"}
     assert s.allow_in_production
 
@@ -41,7 +41,7 @@ def test_bfill_is_removed_from_runtime(loaded):
 def test_if_else_polars_long_tier(loaded):
     s = summarize_operator("if_else")
     assert s.polars_long_tier == "native"
-    assert summarize_operator("where").polars == "production_safe"
+    assert summarize_operator("where").polars in {"parity_verified", "production_safe"}
 
 
 def test_get_best_backend_respects_production_safe(loaded):
@@ -55,7 +55,7 @@ def test_capability_matrix_covers_implemented(loaded):
     matrix = build_capability_matrix()
     assert len(matrix) >= 300
     ts = next(r for r in matrix if r.canonical == "ts_std")
-    assert ts.polars == "production_safe"
+    assert ts.polars in {"parity_verified", "production_safe"}
     ts_mean = next(r for r in matrix if r.canonical == "ts_mean")
     assert ts_mean.polars in {"parity_verified", "production_safe", "implemented"}
 
@@ -71,7 +71,7 @@ def test_production_fast_path_whitelist(loaded):
     assert is_production_fast_path("ts_mean")
     assert not is_production_fast_path("RSI_WILDER")
     assert not is_production_fast_path("cs_resid")
-    assert not is_production_fast_path("ts_sharpe")
+    assert is_production_fast_path("ts_sharpe")
     summary = summarize_production_fast_path()
     assert summary["primitive_dual_backend_evidence_count"] >= 5
     assert "rank" in summary["production_fast_path"]

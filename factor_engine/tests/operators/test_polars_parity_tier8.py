@@ -76,7 +76,7 @@ def _parity_exprs():
         "c_std": c_std(x),
         "c_sum": c_sum(x),
         "c_count": c_count(x),
-        "ewm_mean": ewm_mean(x, 2),
+        "ts_ema": ewm_mean(x, 2),
         "WMA": wma(x, 2),
         "nan_to_num": nan_to_num(x, 0),
         "is_finite": is_finite(x),

@@ -31,7 +31,7 @@ def test_tier4_ops_in_registry():
         "ceil",
         "inverse",
         "count",
-        "Slope",
+        "ts_time_slope",
         "ts_argmax",
         "ts_argmin",
     ):

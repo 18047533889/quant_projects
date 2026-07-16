@@ -10,14 +10,11 @@
 - ``DEDUPE_ALIASES``：别名 → 保留 canonical 映射；
 - ``REMOVED_CANONICALS``：去重后注销的冗余 canonical 列表。
 
-LQTP 对齐（仅计算逻辑一致时改主名）
---------------------------------
-- ``ts_ema`` → ``ema``（``ewm_mean`` / ``EMA`` / ``ts_ema`` 为别名）
-- ``clip`` → ``cap``
-- ``ts_delay`` → ``delay``
-- ``ts_regression`` → ``ts_regression_slope``
-- ``ts_decay_linear`` → ``decay_linear``
-- ``safe_div_null`` → ``safe_div``（NULL-on-zero；``protected_div`` 语义不同，不改）
+命名原则
+--------
+时序算子保留 ``ts_*`` canonical，元素算子保留现有生产契约中的名字。
+较短的 LQTP 名称作为 DSL 别名，不反向改写 canonical。这样 registry、
+policy、SQL/Polars evidence 和持久化 manifest 始终引用同一个稳定主键。
 """
 from __future__ import annotations
 
@@ -34,13 +31,8 @@ CANONICAL_RENAMES: dict[str, str] = {
     "m_bottom_n_avg": "ts_bottom_n_avg",
     "m_bottom_n_sum": "ts_bottom_n_sum",
     "ratios": "ts_ratio",
-    # LQTP 主命名对齐
-    "ts_ema": "ema",
-    "clip": "cap",
-    "ts_delay": "delay",
+    # 回归算子统一输出名称
     "ts_regression": "ts_regression_slope",
-    "ts_decay_linear": "decay_linear",
-    "safe_div_null": "safe_div",
     # 分组 / 扩展
     "group_demean": "group_neutralize",
     "cum_standardize": "expanding_zscore",
@@ -62,7 +54,7 @@ DEDUPE_ALIASES: dict[str, str] = {
     "std_n": "ts_std",
     "deltas": "ts_delta",
     "delta": "ts_delta",
-    "ts_decay": "decay_linear",
+    "ts_decay": "ts_decay_linear",
     "Sum": "ts_sum",
     "Kurt": "ts_kurt",
     "Skew": "ts_skew",
@@ -87,14 +79,14 @@ DEDUPE_ALIASES: dict[str, str] = {
     "running_std": "ts_std",
     "running_sum": "ts_sum",
     "cum_standardize": "expanding_zscore",
-    "DECAY_LINEAR": "decay_linear",
-    "TS_DECAY_LINEAR": "decay_linear",
-    "ts_decay_linear": "decay_linear",
-    "decay_linear": "decay_linear",
-    "EMA": "ema",
-    "ema": "ema",
-    "ts_ema": "ema",
-    "ewm_mean": "ema",
+    "DECAY_LINEAR": "ts_decay_linear",
+    "TS_DECAY_LINEAR": "ts_decay_linear",
+    "ts_decay_linear": "ts_decay_linear",
+    "decay_linear": "ts_decay_linear",
+    "EMA": "ts_ema",
+    "ema": "ts_ema",
+    "ts_ema": "ts_ema",
+    "ewm_mean": "ts_ema",
     "ratios": "ts_ratio",
     # --- 回归统计量 ---
     "Var": "ts_var",
@@ -125,22 +117,22 @@ DEDUPE_ALIASES: dict[str, str] = {
     "cumulative_max": "expanding_max",
     "cumulative_mean": "expanding_mean",
     "cumulative_min": "expanding_min",
-    "clamp": "cap",
-    "cap": "cap",
-    "CLIP": "cap",
-    "clip": "cap",
+    "clamp": "clip",
+    "cap": "clip",
+    "CLIP": "clip",
+    "clip": "clip",
     "dft": "fft",
     "idft": "ifft",
-    "safe_div_null": "safe_div",
-    "safe_div": "safe_div",
+    "safe_div_null": "safe_div_null",
+    "safe_div": "safe_div_null",
     # --- delay ---
-    "DELAY": "delay",
-    "Delay": "delay",
-    "Ref": "delay",
-    "delay": "delay",
-    "m_delay": "delay",
-    "shift": "delay",
-    "ts_delay": "delay",
+    "DELAY": "ts_delay",
+    "Delay": "ts_delay",
+    "Ref": "ts_delay",
+    "delay": "ts_delay",
+    "m_delay": "ts_delay",
+    "shift": "ts_delay",
+    "ts_delay": "ts_delay",
     # --- 截面 / 分组 ---
     "standardize": "zscore",
     "panel_rank": "rank",

@@ -26,10 +26,10 @@ def test_c_std_broadcasts_row_std(golden_panel, loaded):
         pd.testing.assert_series_equal(out[col], row_std, check_names=False)
 
 
-def test_c_sum_all_nan_row_zero(loaded):
+def test_c_sum_all_nan_row_is_null(loaded):
     panel = pd.DataFrame({"A": [np.nan, 1.0], "B": [np.nan, 2.0]})
     out = _run("c_sum", panel)
-    assert out.iloc[0, 0] == pytest.approx(0.0)
+    assert pd.isna(out.iloc[0, 0])
     assert out.iloc[1, 0] == pytest.approx(3.0)
 
 

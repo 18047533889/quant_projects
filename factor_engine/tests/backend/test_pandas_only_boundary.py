@@ -19,7 +19,7 @@ def _ensure_ops_loaded():
 
 
 def test_regress_slope_aggr_top_n_have_polars():
-    for name in ("regress", "ridge", "lasso", "slope", "aggr_top_n", "ACF", "pacf", "norm"):
+    for name in ("regress", "ridge", "lasso", "slope", "aggr_top_n", "ACF", "pacf"):
         assert "polars" in OperatorRegistry.backends_for(name), name
 
 

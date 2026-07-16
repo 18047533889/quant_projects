@@ -413,16 +413,16 @@ def _rolling_time_slope_expr(w: int) -> pl.Expr:
 
 
 def _rolling_argext_expr(w: int, *, pick: str) -> pl.Expr:
-    """构造滚动 argmax/argmin expr（窗口全无效 → NULL；tie → first）。"""
+    """滚动极值距当前 bar 的距离（0=当前；并列取最近）。"""
     from backend.numeric_semantics import ts_argmax_empty_window_is_null
 
     def _fn(arr: np.ndarray) -> float:
         arr = np.asarray(arr, dtype=np.float64)
         if arr.size == 0 or not np.isfinite(arr).any():
             return np.nan if ts_argmax_empty_window_is_null() else 0.0
-        if pick == "max":
-            return float(np.nanargmax(arr))
-        return float(np.nanargmin(arr))
+        extreme = np.nanmax(arr) if pick == "max" else np.nanmin(arr)
+        positions = np.flatnonzero(np.isfinite(arr) & (arr == extreme))
+        return float(arr.size - 1 - positions[-1])
 
     return pl.col(_VAL).rolling_map(_fn, window_size=w, min_samples=1).over(_INST, order_by=_TS)
 
@@ -792,7 +792,7 @@ _FUSABLE_TS_ON_COLUMN: frozenset[str] = frozenset(
         "ts_max",
         "ts_std",
         "ts_var",
-        "delay",
+        "ts_delay",
         "ts_delta",
         "ts_pct",
     }
@@ -836,7 +836,7 @@ def _ts_rolling_expr_on_column(op: str, col_name: str, spec) -> pl.Expr:
     if op == "ts_std":
         ddof = spec.ddof if hasattr(spec, "ddof") else std_ddof_value(op)
         return c.rolling_std(window_size=w, min_samples=mp, ddof=ddof).over(_INST, order_by=_TS)
-    if op == "delay":
+    if op in {"ts_delay", "delay"}:
         return c.shift(w).over(_INST, order_by=_TS)
     if op == "ts_delta":
         return c - c.shift(w).over(_INST, order_by=_TS)
@@ -866,7 +866,7 @@ def _binary_fused_expr(op: str, left: pl.Expr, right: pl.Expr, node: PlanNode) -
         return _protected_div_expr(left, right, node)
     if op == "div_or_default":
         return _div_or_default_expr(left, right, node)
-    if op == "safe_div":
+    if op in {"safe_div_null", "safe_div"}:
         return _safe_div_null_expr(left, right, node)
     if op == "divide":
         from backend.inf_sanitize import apply_inf_policy_polars_fast
@@ -1021,7 +1021,7 @@ def _try_binary_from_base_columns(
         expr = _protected_div_expr(lcol, rcol, node)
     elif op == "div_or_default":
         expr = _div_or_default_expr(lcol, rcol, node)
-    elif op == "safe_div":
+    elif op in {"safe_div_null", "safe_div"}:
         expr = _safe_div_null_expr(lcol, rcol, node)
     elif op == "divide":
         from backend.inf_sanitize import apply_inf_policy_polars_fast
@@ -1153,7 +1153,7 @@ _BINARY_FUSION_OPS = frozenset(
         "divide",
         "protected_div",
         "div_or_default",
-        "safe_div",
+        "safe_div_null",
         "maximum",
         "minimum",
         "power",
@@ -1351,7 +1351,7 @@ def _compile_polars_impl(
         return None
     op = _resolve(node.op)
     if op == "WMA":
-        op = "decay_linear"
+        op = "ts_decay_linear"
     elif op == "rolling_beta":
         op = "ts_beta"
     elif op == "cum_std":
@@ -1424,7 +1424,7 @@ def _compile_polars_impl(
             expr = _protected_div_expr(pl.col(_VAL), pl.col("_y"), node)
         elif op == "div_or_default":
             expr = _div_or_default_expr(pl.col(_VAL), pl.col("_y"), node)
-        elif op == "safe_div":
+        elif op in {"safe_div_null", "safe_div"}:
             expr = _safe_div_null_expr(pl.col(_VAL), pl.col("_y"), node)
         elif op == "divide":
             from backend.inf_sanitize import apply_inf_policy_polars_fast
@@ -1581,7 +1581,7 @@ def _compile_polars_impl(
             pl.when(pl.col(_VAL).is_null()).then(None).otherwise(clipped.sqrt()).alias(_VAL)
         )
 
-    if op == "cap":
+    if op in {"clip", "cap"}:
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
@@ -1784,12 +1784,12 @@ def _compile_polars_impl(
             ).alias(_VAL)
         )
 
-    if op in {"ema", "ewm_std", "ewm_var"}:
+    if op in {"ts_ema", "ema", "ewm_std", "ewm_var"}:
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         alpha = _ewm_alpha(node)
-        if op == "ema":
+        if op in {"ts_ema", "ema"}:
             expr = pl.col(_VAL).ewm_mean(alpha=alpha, adjust=False)
         elif op == "ewm_std":
             expr = pl.col(_VAL).ewm_std(alpha=alpha, adjust=False)
@@ -2128,7 +2128,7 @@ def _compile_polars_impl(
         )
         return inner.with_columns(expr.alias(_VAL))
 
-    if op == "delay":
+    if op in {"ts_delay", "delay"}:
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
@@ -2321,7 +2321,7 @@ def _compile_polars_impl(
             (pl.col(_VAL).sign() * pl.col(_VAL).abs().sqrt()).alias(_VAL)
         )
 
-    if op == "decay_linear":
+    if op in {"ts_decay_linear", "decay_linear"}:
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None

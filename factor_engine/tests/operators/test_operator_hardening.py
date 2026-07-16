@@ -56,9 +56,9 @@ def test_tier1_alias_resolves_to_canonical():
     assert "SMA" in TIER1_ALIASES
 
 
-def test_tier1_policy_keys_include_aliases():
+def test_tier1_policy_keys_are_canonical():
     keys = tier1_policy_keys()
-    assert "SMA" in keys
+    assert "SMA" not in keys
     assert "ts_mean" in keys
 
 

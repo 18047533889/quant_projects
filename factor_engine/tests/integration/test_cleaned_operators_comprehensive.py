@@ -555,7 +555,9 @@ class TestFutureOperatorExtension:
         OperatorRegistry._aliases.pop("FUTURE_DOUBLE", None)
 
     def test_future_op_in_allowlist_after_register(self, future_double_op):
-        allow = build_dsl_allowlist()
+        from backend.cleaned_bridge import build_cleaned_dsl_allowlist
+
+        allow = build_cleaned_dsl_allowlist(surface="all")
         assert future_double_op in allow
         assert "FUTURE_DOUBLE" in allow
 
@@ -567,7 +569,9 @@ class TestFutureOperatorExtension:
         pd.testing.assert_series_equal(result, expected, check_names=False)
 
     def test_future_op_dsl_parse_and_ir(self, future_double_op):
-        allow = build_dsl_allowlist()
+        from backend.cleaned_bridge import build_cleaned_dsl_allowlist
+
+        allow = build_cleaned_dsl_allowlist(surface="all")
         expr = allow[future_double_op](col("close"))
         ir = Analyzer().lower(expr).ir
         assert ir.op == future_double_op

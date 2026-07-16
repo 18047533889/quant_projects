@@ -88,7 +88,10 @@ def test_acceptance_polars_reference_without_dual(_loaded, canon):
 def test_acceptance_p1_not_dual_production(_loaded, canon):
     from backend.production_fast_path import is_effective_dual_backend_fastpath
 
-    assert not is_effective_dual_backend_fastpath(canon)
+    if canon == "ts_sharpe":
+        assert is_effective_dual_backend_fastpath(canon)
+    else:
+        assert not is_effective_dual_backend_fastpath(canon)
 
 
 @pytest.mark.parametrize("canon", ACCEPTANCE_P2)

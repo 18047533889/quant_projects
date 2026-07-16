@@ -22,9 +22,8 @@ ROLLING_OPS = frozenset(
         "ts_correlation",
         "ts_cov",
         "ts_covariance",
-        "decay_linear",
-        "delay",
-        "delay",
+        "ts_decay_linear",
+        "ts_delay",
     }
 )
 
@@ -78,7 +77,7 @@ def _window_from_attrs(op: str, attrs: dict[str, Any]) -> int | None:
                 return int(attrs[key])
             except (TypeError, ValueError):
                 continue
-    if op in {"delay", "delay", "ts_delta"}:
+    if op in {"ts_delay", "delay", "ts_delta"}:
         for key in ("periods", "lag"):
             if key in attrs and attrs[key] is not None:
                 try:

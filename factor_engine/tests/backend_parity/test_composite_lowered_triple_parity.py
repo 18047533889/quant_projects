@@ -229,6 +229,8 @@ def duckdb_composite_source(tmp_path_factory, composite_source):
     tmp = tmp_path_factory.mktemp("duckdb_composite")
     import os
 
+    old_config = os.environ.get("DATA_ACCESS_CONFIG")
+    old_skip = os.environ.get("DATA_ACCESS_SKIP_COS_MIRROR")
     os.environ["DATA_ACCESS_SKIP_COS_MIRROR"] = "1"
     reg = _write_duckdb_registry(tmp, tmp / "data")
     os.environ["DATA_ACCESS_CONFIG"] = str(reg)
@@ -239,7 +241,15 @@ def duckdb_composite_source(tmp_path_factory, composite_source):
         reset_store()
     except ImportError:
         pass
-    return build_data_source({"type": "data_access", "dataset": "test_daily"})
+    yield build_data_source({"type": "data_access", "dataset": "test_daily"})
+    if old_config is None:
+        os.environ.pop("DATA_ACCESS_CONFIG", None)
+    else:
+        os.environ["DATA_ACCESS_CONFIG"] = old_config
+    if old_skip is None:
+        os.environ.pop("DATA_ACCESS_SKIP_COS_MIRROR", None)
+    else:
+        os.environ["DATA_ACCESS_SKIP_COS_MIRROR"] = old_skip
 
 
 def _run(source, expr, backend: str):

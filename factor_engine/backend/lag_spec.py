@@ -16,7 +16,7 @@ class LagSpec:
 
 # 第一阶段：delay/ts_delta/ts_pct 均认证为 row_delay
 PHASE1_LAG_SPECS: dict[str, LagSpec] = {
-    "delay": LagSpec(kind="row_delay", requires_trading_day_aligned_input=True),
+    "ts_delay": LagSpec(kind="row_delay", requires_trading_day_aligned_input=True),
     "ts_delta": LagSpec(kind="row_delay", requires_trading_day_aligned_input=True),
     "ts_pct": LagSpec(kind="row_delay", requires_trading_day_aligned_input=True),
 }
@@ -37,7 +37,7 @@ def lag_spec_for(canon: str) -> LagSpec:
 
 
 def delay_is_row_delay() -> bool:
-    return lag_spec_for("delay").kind == "row_delay"
+    return lag_spec_for("ts_delay").kind == "row_delay"
 
 
 def ts_delay_is_row_delay() -> bool:

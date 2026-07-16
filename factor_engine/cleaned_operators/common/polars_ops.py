@@ -341,10 +341,17 @@ class TSArgmaxPolars(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, d: int = 20, **kwargs) -> pl.DataFrame:
-        from cleaned_operators._rolling_fast import rolling_argmax
+        from cleaned_operators.common.gtja_compat import _rolling_days_since_extreme_1d
 
         window = int(kwargs.get("window", d))
-        return panel_pandas_bridge(x, lambda pdf: rolling_argmax(pdf, window))
+        return panel_pandas_bridge(
+            x,
+            lambda pdf: pdf.apply(
+                lambda s: _rolling_days_since_extreme_1d(
+                    s.to_numpy(), window, maximum=True
+                )
+            ),
+        )
 
 
 @register_operator(name="ts_argmin", category="time_series", business_category="time_series", canonical="ts_argmin", source="factor_dsl_polars")
@@ -357,10 +364,17 @@ class TSArgminPolars(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, d: int = 20, **kwargs) -> pl.DataFrame:
-        from cleaned_operators._rolling_fast import rolling_argmin
+        from cleaned_operators.common.gtja_compat import _rolling_days_since_extreme_1d
 
         window = int(kwargs.get("window", d))
-        return panel_pandas_bridge(x, lambda pdf: rolling_argmin(pdf, window))
+        return panel_pandas_bridge(
+            x,
+            lambda pdf: pdf.apply(
+                lambda s: _rolling_days_since_extreme_1d(
+                    s.to_numpy(), window, maximum=False
+                )
+            ),
+        )
 
 
 @register_operator(name="ts_quantile", category="time_series", business_category="time_series", canonical="ts_quantile", source="factor_dsl_polars")
