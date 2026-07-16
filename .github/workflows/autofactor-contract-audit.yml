@@ -1,0 +1,42 @@
+name: AutoFactorEvaluation CI Contract Audit
+
+on:
+  push:
+    branches: [agent/autofactor-standalone-reconstruct]
+    paths:
+      - ".github/workflows/autofactor-contract-audit.yml"
+      - "AutoFactorEvaluation-RECONSTRUCT/.contract-audit-trigger"
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/autofactor-standalone-reconstruct
+      - name: Capture integration workflow and contract scripts
+        run: |
+          OUT="AutoFactorEvaluation-RECONSTRUCT/.autofactor_ci_contract.txt"
+          {
+            echo "# WORKFLOWS"
+            for f in .github/workflows/*; do
+              if grep -q "AutoFactorEvaluation Platform Integration\|Static integration contract\|Platform bridge tests" "$f" 2>/dev/null; then
+                echo
+                echo "===== $f ====="
+                cat "$f"
+              fi
+            done
+            echo
+            echo "# CONTRACT REFERENCES"
+            grep -RInE "vendored_factor_engine|vendored FactorEngine|factor_engine.*exists|AutoFactorEvaluation.*factor_engine|quant_platform" \
+              AutoFactorEvaluation-RECONSTRUCT .github scripts 2>/dev/null \
+              --include='*.py' --include='*.sh' --include='*.yml' --include='*.yaml' | head -1000 || true
+          } > "$OUT"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$OUT"
+          git commit -m "Capture AutoFactorEvaluation CI contract" || exit 0
+          git push origin HEAD:agent/autofactor-standalone-reconstruct
