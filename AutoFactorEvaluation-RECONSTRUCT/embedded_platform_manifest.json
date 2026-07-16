@@ -16,9 +16,14 @@
       "tests"
     ],
     "suffixes": [
+      ".docx",
       ".ipynb",
+      ".pdf",
+      ".pptx",
       ".pyc",
-      ".pyo"
+      ".pyo",
+      ".xlsx",
+      ".zip"
     ]
   },
   "modules": {
@@ -28,14 +33,14 @@
       "size_bytes": 446474
     },
     "factor_engine": {
-      "files": 416,
-      "sha256": "a25dbbd92a8fcbba4bcdb052a2ff28b61bb47b1a8c7a5e7f8585e0f1261a935e",
-      "size_bytes": 6841714
+      "files": 413,
+      "sha256": "0a7bb5df84bf63ec722e9182bd94f1942dadee5f2add1300718a198f3c258337",
+      "size_bytes": 4022774
     }
   },
   "schema_version": 1,
   "source_commit": "5fe9407aaa5b95538a3f98d5b466682135af42db",
+  "source_layout": "monorepo-root/factor_engine + data_access",
   "source_repository": "18047533889/quant_projects",
-  "source_root": "/home/runner/work/quant_projects/quant_projects",
-  "synced_at_utc": "2026-07-16T17:10:45.997125+00:00"
+  "synced_at_utc": "2026-07-16T17:14:19.530373+00:00"
 }
