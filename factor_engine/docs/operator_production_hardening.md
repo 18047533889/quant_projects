@@ -7,7 +7,8 @@ of: daily, research, unsafe, legacy, or internal. Unknown registrations are
 
 Key production rules:
 
-- `causal_bfill` is unsafe and unavailable to daily formulas.
+- `bfill`, `causal_bfill`, lead/next, random operators and full-sample norms are removed from the runtime.
+- `causal_linear_extrapolate` is research-only and unavailable to daily formulas.
 - Global diagnostics and model-fitting utilities are research-only.
 - `constant` is an internal IR/runtime helper, not a public operator.
 - Recursive indicators are stateful, not native Polars expressions.

@@ -200,15 +200,6 @@ class BlomTransformPolars(SeriesOperator):
         return bridge_registry("blom_transform", x)
 
 
-@register_operator(name="interpolate", category="math", business_category="elementwise_math", canonical="interpolate", source="factor_dsl_polars")
-class InterpolatePolars(SeriesOperator):
-    """Polars 插值"""
-    metadata = OperatorMetadata(name="interpolate", category="math", description="插值", param_names=["x", "factor"], tags=["math", "polars"])
-
-    def _calculate_series(self, x: pl.DataFrame, factor: int = 2, **kwargs) -> pl.DataFrame:
-        return bridge_registry("interpolate", x, int(kwargs.get("d", factor)))
-
-
 @register_operator(name="avg2", category="fundamental", business_category="fundamental", canonical="avg2", source="factor_dsl_polars")
 class Avg2Polars(SeriesOperator):
     """Polars 当期与上期均值"""

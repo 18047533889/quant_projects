@@ -17,7 +17,8 @@
 
 ## 不在公共 DSL 中
 
-- 非因果/随机：`Lead`, `next`, `bfill`, `fillna_interpolate`, `shuffle`, `sample`, `rand_*`；
+- 已从运行时移除：`Lead`, `next`, `bfill`, `fillna_interpolate`, `interpolate`, `shuffle`, `sample`, `rand_*`, `norm*`；
+- 研究侧因果外推：`causal_linear_extrapolate`（仅用历史两点，不在 daily DSL）；
 - 研究诊断：假设检验、PDF/CDF、矩阵分解、PCA、复数、FFT、wavelet 和 filtering；
 - 冗余旧名：`inv`, `reciprocal`, `fmax`, `fmin`, `sqr`, `cube`, `cumulative_*`。
 

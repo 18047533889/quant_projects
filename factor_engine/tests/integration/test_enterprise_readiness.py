@@ -28,7 +28,8 @@ def _boot():
 def test_polars_coverage_threshold():
     canon = [c for c in OperatorRegistry.list_canonical() if OperatorRegistry.backends_for(c)]
     polars_n = sum(1 for c in canon if "polars" in OperatorRegistry.backends_for(c))
-    assert polars_n >= 315, f"polars 覆盖 {polars_n} 低于企业门禁 315"
+    # Unsafe/random/full-sample runtimes were intentionally removed.
+    assert polars_n >= 310, f"polars 覆盖 {polars_n} 低于企业门禁 310"
 
 
 def test_sql_coverage_threshold():
@@ -64,7 +65,7 @@ def test_p0_ops_have_polars_backend():
         "cs_regression", "cs_resid", "hump_decay",
         "idio_skew", "residual_momentum_capm", "coskewness_to_market",
         "group_decay_linear", "cum_prod", "ewm_corr",
-        "fillna_const", "fillna_interpolate", "expanding_rank",
+        "fillna_const", "causal_linear_extrapolate", "expanding_rank",
         "cum_delta", "cum_first", "rank_corr",
         "add", "subtract", "multiply", "divide",
         "ts_topk_sum", "is_nan", "corr_test",

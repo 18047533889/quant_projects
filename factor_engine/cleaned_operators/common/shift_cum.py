@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from cleaned_operators._causal import causal_bfill, causal_lag
+from cleaned_operators._causal import causal_lag
 from cleaned_operators.base import (
     Operator,
     OperatorMetadata,
@@ -27,26 +27,6 @@ from cleaned_operators.base import (
 
 import numpy as np
 import pandas as pd
-
-# canonical=Lead backend=pandas_numpy selected=Lead source=time_series/shift_ops.py
-@register_operator(name="Lead", category="time_series", business_category="shift_diff_cum", canonical="Lead", source="factor_dsl_np")
-class Lead(SeriesOperator):
-    """取未来n期的值"""
-
-    metadata = OperatorMetadata(
-        name="Lead",
-        category="time_series",
-        description="取未来n期的值（因子链路中禁前视，负滞后输出 NaN）",
-        examples=["Lead(close, 1)"],
-        param_names=["x", "n"],
-        return_type="series",
-        tags=["time_series", "shift", "future"]
-    )
-
-    def _calculate_series(self, x: pd.DataFrame, n: int = 1, **kwargs) -> pd.DataFrame:
-        return causal_lag(x, -abs(int(n)))
-
-
 
 # canonical=cum_avg backend=pandas_numpy selected=cum_avg source=time_series/cum_ops.py
 @register_operator(name="cum_avg", category="time_series", business_category="shift_diff_cum", canonical="cum_avg", source="factor_dsl_np")
@@ -280,26 +260,6 @@ class CumSum(SeriesOperator):
 
 
 
-# canonical=next backend=pandas_numpy selected=next source=time_series/shift_ops.py
-@register_operator(name="next", category="time_series", business_category="shift_diff_cum", canonical="next", source="factor_dsl_np")
-class Next(SeriesOperator):
-    """后一个值"""
-
-    metadata = OperatorMetadata(
-        name="next",
-        category="time_series",
-        description="取后一个值 Lead(x, 1)",
-        examples=["next(close)"],
-        param_names=["x"],
-        return_type="series",
-        tags=["time_series", "shift"]
-    )
-
-    def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        return causal_lag(x, -1)
-
-
-
 # canonical=prev backend=pandas_numpy selected=prev source=time_series/shift_ops.py
 @register_operator(name="prev", category="time_series", business_category="shift_diff_cum", canonical="prev", source="factor_dsl_np")
 class Prev(SeriesOperator):
@@ -317,4 +277,3 @@ class Prev(SeriesOperator):
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
         return causal_lag(x, 1)
-

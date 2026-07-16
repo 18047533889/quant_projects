@@ -54,19 +54,21 @@ def test_research_tools_are_explicit_and_unsafe_is_separate() -> None:
     assert "fft" in research
     assert "ACF" in research
     assert "max_drawdown" in research
+    assert "causal_linear_extrapolate" in research
+    assert "dropna" in research
+    assert "ttm" in research
     assert "jarque_bera_test" not in public
-    assert "next" in unsafe
-    assert "bfill" in unsafe
-    assert "causal_bfill" in unsafe
-    assert "rand_normal" in unsafe
-    assert "next" not in research
+    for removed in ("next", "bfill", "causal_bfill", "rand_normal"):
+        assert removed not in unsafe
+        assert removed not in research
 
 
-def test_all_runtime_surface_remains_available_for_compatibility() -> None:
+def test_removed_unsafe_runtime_is_not_available_for_compatibility() -> None:
     all_runtime = build_cleaned_dsl_allowlist(surface="all")
     assert "fft" in all_runtime
-    assert "next" in all_runtime
     assert "cube" in all_runtime
+    for removed in ("Lead", "next", "bfill", "causal_bfill", "shuffle", "rand_normal"):
+        assert removed not in all_runtime
 
 
 def test_duplicate_canonicals_are_merged_to_one_runtime() -> None:

@@ -19,7 +19,7 @@ Polars long 后端（``polars_long_backend``）把因子计划编译成 **长表
 非职责
 ------
 - ``group_*`` 算子（需宽表分组列，long 桥不支持）→ 返回 None 走其他后端
-- ``Lead`` / ``shuffle`` 等故意跳过（前视或随机，long 路径不安全）
+- 已移除的前视/随机算子不会进入 Registry，因此不会被 long bridge 接入
 """
 from __future__ import annotations
 
@@ -38,13 +38,7 @@ _INST = "inst"
 _VAL = "_v"
 
 # 不参与 registry long-bridge 的 canonical（语义或安全原因）
-_SKIP_REGISTRY_LONG: frozenset[str] = frozenset(
-    {
-        "Lead",  # 前视
-        "next",
-        "shuffle",
-    }
-)
+_SKIP_REGISTRY_LONG: frozenset[str] = frozenset()
 
 # ``polars_registry_long_capable()`` 的进程内缓存，避免每次扫 Registry
 _REGISTRY_LONG_CACHE: frozenset[str] | None = None

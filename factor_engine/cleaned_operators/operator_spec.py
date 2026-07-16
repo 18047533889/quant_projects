@@ -89,6 +89,16 @@ PERMANENTLY_FORBIDDEN_CANONICALS: frozenset[str] = frozenset(
         "next",
         "dropna",
         "constant",
+        "interpolate",
+        "norm",
+        "norm_l1",
+        "norm_linf",
+        "rand_exp",
+        "rand_lognormal",
+        "rand_normal",
+        "rand_poisson",
+        "rand_uniform",
+        "sample",
     }
 )
 

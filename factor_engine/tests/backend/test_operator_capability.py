@@ -33,23 +33,15 @@ def test_ts_mean_production_capabilities(loaded):
     assert s.allow_in_production
 
 
-def test_bfill_not_polars_production_safe(loaded):
-    s = summarize_operator("bfill")
-    assert s.polars != "production_safe"
-    _, backend = get_best_backend("bfill", mode="production", prefer="auto")
-    assert backend == "pandas_numpy"
+def test_bfill_is_removed_from_runtime(loaded):
+    assert OperatorRegistry.backends_for("bfill") == []
+    assert OperatorRegistry.get("bfill") is None
 
 
 def test_if_else_polars_long_tier(loaded):
     s = summarize_operator("if_else")
     assert s.polars_long_tier == "native"
     assert summarize_operator("where").polars == "production_safe"
-
-
-def test_bfill_polars_long_tier(loaded):
-    s = summarize_operator("bfill")
-    assert s.polars_long_tier == "blocked_causal"
-    assert s.polars != "production_safe"
 
 
 def test_get_best_backend_respects_production_safe(loaded):
@@ -86,7 +78,7 @@ def test_production_fast_path_whitelist(loaded):
 
 
 def test_get_best_backend_matches_registry_preferred(loaded):
-    for name in ("ts_mean", "rank", "bfill", "MACD"):
+    for name in ("ts_mean", "rank", "MACD"):
         op_a, b_a = OperatorRegistry.get_preferred(name, prefer="auto")
         op_b, b_b = get_best_backend(name, mode="production", prefer="auto")
         assert b_a == b_b

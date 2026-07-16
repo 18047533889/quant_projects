@@ -379,6 +379,8 @@ class TSPctChange(SeriesOperator):
 
     def _calculate_series(self, x: pd.DataFrame, d: int = 1, **kwargs) -> pd.DataFrame:
         periods = int(kwargs.get("periods", d))
+        if periods < 1:
+            raise ValueError(f"ts_pct periods must be >= 1, got {periods}")
         prev = x.shift(periods)
         with np.errstate(divide="ignore", invalid="ignore"):
             out = x / prev - 1.0
@@ -1866,4 +1868,3 @@ class TSAutocorrPolars(SeriesOperator):
                 for c in cols
             ]
         )
-

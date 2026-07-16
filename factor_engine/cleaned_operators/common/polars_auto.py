@@ -251,11 +251,6 @@ def _register_cleaning(canonical: str, name: str, calc_fn) -> None:
     )(_CleaningPolars)
 
 
-def _bfill(self, x, **kwargs) -> pl.DataFrame:
-    """因果语义：不引用未来值，与 pandas ``causal_bfill`` 一致。"""
-    return x
-
-
 def _ffill(self, x, **kwargs) -> pl.DataFrame:
     cols = _numeric_cols(x)
     return x.with_columns([pl.col(c).forward_fill().alias(c) for c in cols])
@@ -266,8 +261,6 @@ def _dropna(self, x, **kwargs) -> pl.DataFrame:
     return x.with_columns([pl.when(pl.col(c).is_nan()).then(None).otherwise(pl.col(c)).alias(c) for c in cols])
 
 
-_register_cleaning("causal_bfill", "causal_bfill", _bfill)
-_register_cleaning("bfill", "bfill", _bfill)
 _register_cleaning("ffill", "ffill", _ffill)
 _register_cleaning("dropna", "dropna", _dropna)
 

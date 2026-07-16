@@ -52,8 +52,6 @@ OperatorRegistry.register_alias("wma", "WMA")
 # ---------------------------------------------------------------------------
 OperatorRegistry.register_alias("ABS", "abs")
 OperatorRegistry.register_alias("AVG2", "avg2")
-OperatorRegistry.register_alias("FillBackward", "bfill")
-OperatorRegistry.register_alias("fillna_backward", "bfill")
 OperatorRegistry.register_alias("ts_return", "ts_pct")
 OperatorRegistry.register_alias("COALESCE", "coalesce")
 OperatorRegistry.register_alias("CS_DEMEAN", "cs_demean")

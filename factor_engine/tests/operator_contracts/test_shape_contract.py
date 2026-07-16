@@ -45,16 +45,16 @@ def test_dropna_not_shape_preserving(_loaded):
     assert not spec.allow_in_production
 
 
-def test_bfill_deprecated_not_production(_loaded):
-    spec = build_operator_spec("bfill")
-    assert spec is not None
-    assert spec.status == "deprecated"
-    assert not spec.allow_in_production
-    assert is_production_denied("bfill")
+def test_removed_fill_operators_have_no_runtime(_loaded):
+    from cleaned_operators.registry import OperatorRegistry
+
+    for canon in ("bfill", "causal_bfill", "fillna_interpolate"):
+        assert OperatorRegistry.get(canon) is None
+        assert is_production_denied(canon)
 
 
-def test_causal_bfill_research_not_production(_loaded):
-    spec = build_operator_spec("causal_bfill")
+def test_causal_linear_extrapolate_research_not_production(_loaded):
+    spec = build_operator_spec("causal_linear_extrapolate")
     assert spec is not None
     assert spec.status == "research"
     assert not spec.allow_in_production

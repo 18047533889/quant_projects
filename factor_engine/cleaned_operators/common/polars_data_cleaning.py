@@ -6,7 +6,7 @@
 - **EWM**：``adjust=False`` 与 pandas 默认一致；``span`` 可经 kwargs ``d`` 传入。
 - **ewm_corr / ewm_cov**：Polars 暂无与 pandas 完全等价的二元 EWM API，
   故转 pandas 计算后再写回，避免 rolling 近似带来的偏差。
-- **fillna_interpolate**：必须走 ``causal_interpolate_panel``，仅使用历史点插值，禁止引用未来。
+- **causal_linear_extrapolate**：仅使用最近两个历史点外推，禁止引用未来。
 - **expanding_rank**：当前值在 **前缀窗口** 内的百分位排名（与 ``cum_rank`` 别名同义）。
 """
 from __future__ import annotations
@@ -192,22 +192,21 @@ class FillNAConstPolars(SeriesOperator):
         return x.with_columns([pl.col(c).fill_null(v).alias(c) for c in cols])
 
 
-@register_operator(name="fillna_interpolate", category="data_handling", business_category="data_cleaning", canonical="fillna_interpolate", source="factor_dsl_polars")
-class FillnaInterpolatePolars(SeriesOperator):
-    """因果插值填充：仅依据 t 之前已知点，method 支持 linear / quadratic / cubic。"""
+@register_operator(name="causal_linear_extrapolate", category="data_handling", business_category="data_cleaning", canonical="causal_linear_extrapolate", source="factor_dsl_polars", status="research")
+class CausalLinearExtrapolatePolars(SeriesOperator):
+    """仅使用最近两个历史有效点进行线性外推。"""
 
     metadata = OperatorMetadata(
-        name="fillna_interpolate", category="data_handling", description="因果插值填充",
-        param_names=["x", "method"], return_type="series", tags=["data_handling", "polars"],
+        name="causal_linear_extrapolate", category="data_handling", description="因果线性外推",
+        param_names=["x"], return_type="series", tags=["data_handling", "polars", "causal"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, method: str = "linear", **kwargs) -> pl.DataFrame:
-        from cleaned_operators._causal import causal_interpolate_panel
+    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        from cleaned_operators._causal import causal_linear_extrapolate_panel
 
         cols = _numeric_cols(x)
         pdf = x.select(cols).to_pandas()
-        # 因果插值逻辑在 _causal.py，禁止前视
-        filled = causal_interpolate_panel(pdf, method=str(kwargs.get("interp", method)))
+        filled = causal_linear_extrapolate_panel(pdf)
         return x.with_columns([pl.Series(name=c, values=filled[c].to_numpy()) for c in cols])
 
 

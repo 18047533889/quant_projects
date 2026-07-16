@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 
 from backend.cleaned_bridge import ensure_cleaned_loaded
-from cleaned_operators._causal import causal_bfill, causal_lag
+from cleaned_operators._causal import causal_lag
 from cleaned_operators.registry import OperatorRegistry
 
 pd = pytest.importorskip("pandas")
@@ -98,34 +98,16 @@ class TestCausalHelpers:
         out = causal_lag(x, -1)
         assert out.isna().all().all()
 
-    def test_causal_bfill_does_not_use_future(self):
-        x = _panel([np.nan, np.nan, 3.0, 4.0])
-        out = causal_bfill(x)
-        pd.testing.assert_frame_equal(out, x)
-
-
 # ---------------------------------------------------------------------------
 # 位移 / 填充：显式禁前视
 # ---------------------------------------------------------------------------
 
 
 class TestShiftAndFillOperators:
-    def test_lead_and_next_are_nan(self):
-        x = _panel([1.0, 2.0, 3.0, 4.0])
-        for name in ("Lead", "next"):
-            out = _op(name).calculate(x)
-            assert out.isna().all().all(), f"{name} should not expose future values"
-
-    def test_lead_with_positive_n_still_nan(self):
-        x = _panel([1.0, 2.0, 3.0])
-        out = _op("Lead").calculate(x, 2)
-        assert out.isna().all().all()
-
-    def test_bfill_keeps_nan(self):
-        x = _panel([np.nan, 1.0, np.nan, 3.0])
-        out = _op("bfill").calculate(x)
-        assert pd.isna(out.iloc[0]["A"])
-        assert pd.isna(out.iloc[2]["A"])
+    @pytest.mark.parametrize("name", ["Lead", "next", "bfill", "causal_bfill"])
+    def test_removed_future_or_misleading_operators_are_absent(self, name):
+        ensure_cleaned_loaded()
+        assert OperatorRegistry.get(name) is None
 
     def test_prev_and_ts_delay_are_causal(self):
         x = _panel([10.0, 20.0, 30.0, 40.0])
@@ -140,6 +122,23 @@ class TestShiftAndFillOperators:
     def test_ts_delta_prefix_invariant(self):
         x = _panel([1.0, 3.0, 2.0, 5.0, 8.0])
         assert_prefix_invariant(lambda df: _op("ts_delta").calculate(df, 1), x)
+
+    def test_ts_pct_rejects_negative_periods(self):
+        x = _panel([1.0, 2.0, 3.0])
+        with pytest.raises(ValueError, match="periods must be >= 1"):
+            _op("ts_pct").calculate(x, -1)
+
+    def test_ts_pct_polars_rejects_negative_periods(self):
+        pl = pytest.importorskip("polars")
+        ensure_cleaned_loaded()
+        op = OperatorRegistry.get("ts_pct", backend="polars")
+        assert op is not None
+        with pytest.raises(ValueError, match="periods must be >= 1"):
+            op.calculate(pl.DataFrame({"A": [1.0, 2.0, 3.0]}), -1)
+
+    def test_ts_pct_prefix_invariant(self):
+        x = _panel([1.0, 2.0, 4.0, 3.0, 6.0])
+        assert_prefix_invariant(lambda df: _op("ts_pct").calculate(df, 1), x)
 
 
 # ---------------------------------------------------------------------------
@@ -197,12 +196,6 @@ class TestExpandingStatistics:
         x = _panel([0.1, -0.2, 0.15, -0.05, 0.08, -0.12])
         assert_prefix_invariant(_op("durbin_watson_test").calculate, x, atol=1e-6)
 
-    def test_shuffle_disabled_returns_nan(self):
-        x = _panel([1.0, 2.0, 3.0, 4.0])
-        out = _op("shuffle").calculate(x)
-        assert out.isna().all().all()
-
-
 # ---------------------------------------------------------------------------
 # 元素级 / 信号：因果卷积与扩展统计
 # ---------------------------------------------------------------------------
@@ -258,14 +251,15 @@ class TestMiscCausalGuards:
         out = _op("ACF").calculate(x, window=5, lag=-1)
         assert out.isna().all().all()
 
-    def test_fillna_interpolate_forward_only(self):
+    def test_causal_linear_extrapolate_forward_only(self):
         x = _panel([np.nan, np.nan, 3.0, np.nan, 5.0])
-        out = _op("fillna_interpolate").calculate(x, "linear")
-        # 因果插值：不可用未来点 5 填充 index=3
+        out = _op("causal_linear_extrapolate").calculate(x)
+        # 因果外推：不可用未来点 5 填充 index=3
         assert pd.isna(out.iloc[0]["A"])
         assert out.iloc[2]["A"] == pytest.approx(3.0)
         assert out.iloc[3]["A"] == pytest.approx(3.0)
         assert out.iloc[4]["A"] == pytest.approx(5.0)
+        assert_prefix_invariant(_op("causal_linear_extrapolate").calculate, x)
 
 
 # ---------------------------------------------------------------------------
@@ -320,12 +314,10 @@ class TestEngineCausalIntegration:
                 continue
             assert f == pytest.approx(p)
 
-    def test_engine_lead_is_nan(self, engine):
-        eng, parse_expr, Factor = engine
-        out = eng.run(Factor(name="t", expr=parse_expr('Lead(col("close"), 1)')))[
-            "result"
-        ]
-        assert out.isna().all()
+    def test_engine_lead_is_not_in_daily_dsl(self, engine):
+        _, parse_expr, _ = engine
+        with pytest.raises(ValueError):
+            parse_expr('Lead(col("close"), 1)')
 
 
 class TestTier1CrossSectionalCausal:

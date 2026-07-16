@@ -60,6 +60,7 @@ RESEARCH_CORE_CANONICALS: frozenset[str] = frozenset(
         # 清洗 research
         "causal_bfill",
         "bfill",
+        "causal_linear_extrapolate",
     }
 )
 
@@ -73,7 +74,6 @@ _POLICY_EXTENSION_CANONICALS: frozenset[str] = frozenset(
         "quantile",
         "standardize",
         "group_winsorize",
-        "fillna_interpolate",
         "cum_prod",
         "cum_delta",
         "cum_first",
@@ -312,8 +312,6 @@ POLARS_PARITY_VERIFIED_TIER9: frozenset[str] = frozenset({
     "and_",
     "or_",
     "not_",
-    # 清洗 research
-    "fillna_interpolate",
 })
 
 # Tier-10：价量 / 截面百分位（见 tests/operators/test_polars_parity_tier10.py）
@@ -576,6 +574,12 @@ _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
     "ffill": {"scope": "elementwise", "pit_safe": True, "nan_policy": "ffill_only"},
     "fillna_const": {"scope": "elementwise", "pit_safe": True},
     "fillna_interpolate": {"scope": "elementwise", "pit_safe": False},
+    "causal_linear_extrapolate": {
+        "scope": "ts",
+        "pit_safe": True,
+        "min_periods": 2,
+        "nan_policy": "ffill_only",
+    },
     "rank": {"scope": "cs", "pit_safe": True},
     "rank_pct": {"scope": "cs", "pit_safe": True},
     "cs_pct_rank": {"scope": "cs", "pit_safe": True},

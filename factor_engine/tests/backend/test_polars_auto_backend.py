@@ -72,21 +72,7 @@ def test_polars_engine_matches_pandas(panel_source):
     pd.testing.assert_series_equal(a, b, check_names=False, rtol=1e-10, atol=1e-10)
 
 
-def test_polars_bfill_causal_passthrough():
-    """Polars bfill 与 pandas causal_bfill 一致：不引用未来，NaN 保持 NaN。"""
-    import numpy as np
-
+def test_removed_bfill_has_no_backend():
     load_all()
-    idx = pd.date_range("2024-01-01", periods=4, freq="D")
-    panel = pd.DataFrame({"A": [np.nan, 1.0, np.nan, 3.0]}, index=idx)
-
-    pd_op = OperatorRegistry.get("bfill", backend="pandas_numpy")
-    pl_op = OperatorRegistry.get("bfill", backend="polars")
-    _, auto_backend = OperatorRegistry.get_preferred("bfill", prefer="auto")
-    assert auto_backend == "pandas_numpy"
-
-    pd_out = pd_op.calculate(panel.copy())
-    pl_out = pl_op.calculate(panel.copy())
-    pd.testing.assert_frame_equal(pd_out, pl_out, check_names=False)
-    assert pd.isna(pd_out.iloc[0]["A"])
-    assert pd.isna(pd_out.iloc[2]["A"])
+    assert OperatorRegistry.get("bfill", backend="pandas_numpy") is None
+    assert OperatorRegistry.get("bfill", backend="polars") is None

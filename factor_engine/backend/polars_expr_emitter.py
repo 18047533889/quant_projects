@@ -2584,27 +2584,17 @@ def _compile_polars_impl(
 
         return _unary_inst_map_groups(inner, _expanding_rank)
 
-    if op == "fillna_interpolate":
+    if op == "causal_linear_extrapolate":
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        method = "linear"
-        for key in ("method", "interp"):
-            if key in node.attrs and node.attrs[key] is not None:
-                method = str(node.attrs[key])
-                break
-        else:
-            if len(node.inputs) > 1 and node.inputs[1].op == "literal":
-                raw = node.inputs[1].attrs.get("value")
-                if isinstance(raw, str):
-                    method = raw
-        from cleaned_operators._causal import causal_interpolate_panel
+        from cleaned_operators._causal import causal_linear_extrapolate_panel
 
-        def _interp(arr: np.ndarray) -> np.ndarray:
+        def _extrapolate(arr: np.ndarray) -> np.ndarray:
             pdf = pd.DataFrame({"v": arr.astype(float, copy=False)})
-            return causal_interpolate_panel(pdf, method=method)["v"].to_numpy(dtype=float)
+            return causal_linear_extrapolate_panel(pdf)["v"].to_numpy(dtype=float)
 
-        return _unary_inst_map_groups(inner, _interp)
+        return _unary_inst_map_groups(inner, _extrapolate)
 
     if op == "quantile":
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)

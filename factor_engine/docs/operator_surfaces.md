@@ -7,7 +7,7 @@
 |---|---|---|
 | `daily` | Causal scalar operators that generate daily factor panels | Yes |
 | `research` | Statistical tests, distributions, matrix/PCA and signal processing | No; import `research_operators` explicitly |
-| `unsafe` | Lead/backfill/random/non-deterministic helpers | No; explicit unsafe opt-in only |
+| `unsafe` | Reserved for explicitly reviewed unsafe compatibility tools | No; explicit unsafe opt-in only |
 | `legacy` | Redundant historical names retained for direct runtime compatibility | No; migrate to canonical names |
 
 The runtime registry still contains compatibility implementations so old
@@ -27,6 +27,7 @@ results can be reproduced.  New formulas are validated only against the
 | `cumulative_min` | `expanding_min` |
 | `cumulative_mean` | `expanding_mean` |
 
-`Lead`, `next`, `bfill`, interpolation using future observations, random
-sampling and random-number operators are never available through the normal
-factor DSL.
+`Lead`, `next`, `bfill`, misleading interpolation helpers, random sampling,
+random-number operators, and full-sample matrix norms have been removed from
+the factor runtime. `causal_linear_extrapolate` remains research-only and uses
+only historical observations.

@@ -307,6 +307,8 @@ class TSPctPolars(SeriesOperator):
 
     def _calculate_series(self, x: pl.DataFrame, d: int = 1, **kwargs) -> pl.DataFrame:
         periods = int(kwargs.get("periods", d))
+        if periods < 1:
+            raise ValueError(f"ts_pct periods must be >= 1, got {periods}")
         cols = _numeric_cols(x)
         return x.with_columns([
             (pl.col(c) / pl.col(c).shift(periods) - 1.0).alias(c) for c in cols

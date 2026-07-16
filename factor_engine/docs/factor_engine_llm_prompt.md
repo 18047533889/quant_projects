@@ -583,8 +583,8 @@ col("price") / delay(col("price"), 5)  # 5-period price momentum
 **Not in allowlist**: `group_scale`, `group_backfill`
 
 **Cleaning (in allowlist)**  
-`protected_div`, `protected_log`, `protected_sqrt`, `nan_to_num`, `fillna`, `ffill`, `bfill`, `coalesce`, `winsorize`  
-**Causal note**: `bfill` does **not** use future values (NaN stays NaN).  
+`protected_div`, `protected_log`, `protected_sqrt`, `nan_to_num`, `fillna`, `ffill`, `coalesce`, `winsorize`
+**Causal note**: `bfill` has been removed. Research-only `causal_linear_extrapolate` uses historical points only.
 **Detection ops**: `is_nan(x)`, `is_finite(x)` return **float64 0.0/1.0** (not bool).  
 **Not in allowlist**: `pasteurize`, `tail`
 
@@ -613,7 +613,7 @@ Moving averages: **`SMA(x,d)`**, **`EMA(x,d)`** — not `ts_sma` / `ts_ema`
 
 When `backend.type` is `duckdb_sql` or `clickhouse_sql`, **88 operator canonicals** compile to SQL (+ `column`/`literal` IR nodes) — see [`sql_pushdown_coverage.md`](sql_pushdown_coverage.md).
 
-**SQL-capable highlights**: `ts_mean/std/sum/max/min/delay/delta/rank/corr/beta`, `cs_resid`, `cs_regression`, `cs_demean`, `group_*` cluster, `fillna/ffill/bfill/coalesce`, `where/if_else`, `is_nan/is_finite`, `protected_*`, arithmetic.
+**SQL-capable highlights**: `ts_mean/std/sum/max/min/delay/delta/rank/corr/beta`, `cs_resid`, `cs_regression`, `cs_demean`, `group_*` cluster, `fillna/ffill/coalesce`, `where/if_else`, `is_nan/is_finite`, `protected_*`, arithmetic.
 
 **NOT SQL (falls back to pandas/polars)**: TA indicators (~200+), `quantile`, non-constant `fillna`, FFT/matrix/random pandas-only ops.
 

@@ -287,7 +287,7 @@ P2_MAP_GROUPS_CANONICALS: frozenset[str] = frozenset(
         "ts_moment",
         "ts_max_buildup",
         "expanding_rank",
-        "fillna_interpolate",
+        "causal_linear_extrapolate",
         "quantile",
     }
 )

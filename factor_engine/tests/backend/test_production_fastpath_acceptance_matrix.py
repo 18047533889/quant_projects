@@ -54,7 +54,7 @@ ACCEPTANCE_P1_NOT_PRODUCTION = [
 ACCEPTANCE_P2 = [
     "ewm_corr",
     "ts_kurt",
-    "fillna_interpolate",
+    "causal_linear_extrapolate",
     "RSI_WILDER",
     "ts_decay_linear",
 ]

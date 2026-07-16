@@ -50,6 +50,23 @@ _FORWARD_FILL_OPS = frozenset({
     "backfill",
 })
 
+_POSITIVE_LAG_PARAMS: dict[str, tuple[str, int]] = {
+    "delay": ("n", 1),
+    "ts_delta": ("n", 1),
+    "ts_pct": ("d", 1),
+}
+
+
+def _literal_number(node: IRNode, *, attr: str, input_index: int) -> float | None:
+    raw = (node.attrs or {}).get(attr)
+    if raw is None and input_index < len(node.inputs):
+        child = node.inputs[input_index]
+        if child.op == "literal":
+            raw = (child.attrs or {}).get("value")
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        return None
+    return float(raw)
+
 
 def audit_ir(
     ir: IRNode,
@@ -79,6 +96,12 @@ def audit_ir(
         policy = infer_operator_policy(op_impl, canonical=canon)
         if not policy.pit_safe or policy.lag < 0:
             violations.append(canon)
+        param_rule = _POSITIVE_LAG_PARAMS.get(canon)
+        if param_rule is not None:
+            param_name, input_index = param_rule
+            value = _literal_number(node, attr=param_name, input_index=input_index)
+            if value is not None and value < 1:
+                violations.append(f"{canon}({param_name}={value:g})")
         if forbid_forward_fill and canon in _FORWARD_FILL_OPS:
             violations.append(f"{canon}(forward_fill)")
         for child in node.inputs:

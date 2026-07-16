@@ -34,7 +34,7 @@
 
 ### 已在白名单 — 清洗 / 截面 / 分组
 
-- **数值安全**：`protected_div` / `protected_log` / `protected_sqrt`；`nan_to_num` `fillna` `ffill` `bfill` `coalesce`
+- **数值安全**：`protected_div` / `protected_log` / `protected_sqrt`；`nan_to_num` `fillna` `ffill` `coalesce`
 - **截面**：`rank` `zscore` `normalize` `quantile` `scale` `winsorize` **`cs_resid(y, x)`** / **`cs_regression(y, x, mode)`**（截面 OLS）· **`cs_demean`**
 - **分组**：`group_rank` `group_neutralize` `group_zscore` `group_mean` `group_normalize` `group_percentile` `group_decay_linear` `group_winsorize`（≈ 行业去均值用 `group_neutralize` / `neutralize` / `group_demean` 别名）
 
@@ -52,7 +52,7 @@
 - **`cs_resid(y, x)`** / **`cs_regression(y, x, mode)`**：每个 timestamp 全截面 OLS，`y ~ α + β·x`（有效样本 ≥ 3）
 - **`neutralize(x, g)`** / **`group_neutralize(x, g)`**：每个 timestamp × 组内 **去均值**（非 OLS）；DSL 别名 `neutralize` → `group_neutralize`
 
-**因果清洗**：`bfill` 在因子链路中为 **因果算子**（不引用未来值，NaN 保持 NaN）；pandas / Polars / SQL 三后端一致。`ffill` 为前向填充（因果）。
+**因果清洗**：`bfill` 已移除；`ffill` 为前向填充（因果）。研究侧可使用 `causal_linear_extrapolate`，其只依据最近两个历史有效点外推。
 
 **检测算子 dtype**：`is_nan(x)` / `is_finite(x)` 三后端均输出 **float64 的 0.0/1.0**（非 bool/int），便于与 SQL 路径对齐。
 

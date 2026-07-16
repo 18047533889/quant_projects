@@ -181,7 +181,7 @@ POLARS_LONG_MAP_GROUPS: frozenset[str] = frozenset(
         "ts_moment",
         "ts_max_buildup",
         "expanding_rank",
-        "fillna_interpolate",
+        "causal_linear_extrapolate",
         "quantile",
     }
 )

@@ -24,11 +24,11 @@ def test_audit_ir_flags_negative_lag():
     from expr.column import ColumnRef
     from expr.literal import Literal
 
-    call = CleanedCall("Lead", (ColumnRef("close"), Literal(1)))
+    call = CleanedCall("ts_pct", (ColumnRef("close"), Literal(-1)))
     ir = Analyzer().lower(call).ir
     report = audit_ir(ir)
     assert not report.passed
-    assert "Lead" in report.violations or "next" in report.violations
+    assert any(v.startswith("ts_pct(") for v in report.violations)
 
 
 def test_assert_pit_safe_raises_when_enforced():
@@ -36,7 +36,7 @@ def test_assert_pit_safe_raises_when_enforced():
     from expr.column import ColumnRef
     from expr.literal import Literal
 
-    call = CleanedCall("Lead", (ColumnRef("close"), Literal(1)))
+    call = CleanedCall("ts_pct", (ColumnRef("close"), Literal(-1)))
     ir = Analyzer().lower(call).ir
     with pytest.raises(PitSafetyError):
         assert_pit_safe(ir, enforce=True)

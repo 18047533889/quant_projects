@@ -120,7 +120,6 @@ def _parity_exprs():
         "and_": make_cleaned_call_factory("and_")(gt(x, y), gt(y, x)),
         "or_": make_cleaned_call_factory("or_")(gt(x, y), gt(y, x)),
         "not_": make_cleaned_call_factory("not_")(gt(x, y)),
-        "fillna_interpolate": make_cleaned_call_factory("fillna_interpolate")(z),
     }
 
 

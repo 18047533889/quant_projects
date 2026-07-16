@@ -1042,26 +1042,6 @@ class Imag(SeriesOperator):
 
 
 
-# canonical=interpolate backend=pandas_numpy selected=interpolate source=math/fourier_ops.py
-@register_operator(name="interpolate", category="math", business_category="elementwise_math", canonical="interpolate", source="factor_dsl_np")
-class Interpolate(SeriesOperator):
-    """上采样插值"""
-    metadata = OperatorMetadata(
-        name="interpolate",
-        category="math",
-        description="上采样插值",
-        examples=["interpolate(x, 2)"],
-        param_names=["x", "factor"],
-        return_type="series",
-        tags=["math", "fourier", "interpolate", "upsample"]
-    )
-
-    def _calculate_series(self, x: pd.DataFrame, factor: int = 2, **kwargs) -> pd.DataFrame:
-        # 全序列插值会使用未来样本；因子链路中保持原序列（仅 ffill 补缺）
-        return x.ffill()
-
-
-
 # canonical=inv backend=pandas_numpy selected=inv source=math/elementary.py
 
 # helper for inv
@@ -1413,78 +1393,6 @@ class Negate(SeriesOperator):
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
         return (-x).replace([np.inf, -np.inf], np.nan)
-
-
-
-# canonical=norm backend=pandas_numpy selected=norm source=math/matrix_ops.py
-@register_operator(name="norm", category="math", business_category="elementwise_math", canonical="norm", source="factor_dsl_np")
-class Norm(SeriesOperator):
-    """L2范数"""
-    metadata = OperatorMetadata(
-        name="norm",
-        category="math",
-        description="L2范数",
-        examples=["norm(x)"],
-        param_names=["x"],
-        return_type="series",
-        tags=["math", "matrix", "norm", "l2"]
-    )
-
-    def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        try:
-            n = np.linalg.norm(x.values, ord=2)
-            result = np.full_like(x.values, n, dtype=float)
-            return pd.DataFrame(result, index=x.index, columns=x.columns).replace([np.inf, -np.inf], np.nan)
-        except np.linalg.LinAlgError:
-            return pd.DataFrame(np.nan, index=x.index, columns=x.columns)
-
-
-
-# canonical=norm_l1 backend=pandas_numpy selected=norm_l1 source=math/matrix_ops.py
-@register_operator(name="norm_l1", category="math", business_category="elementwise_math", canonical="norm_l1", source="factor_dsl_np")
-class NormL1(SeriesOperator):
-    """L1范数"""
-    metadata = OperatorMetadata(
-        name="norm_l1",
-        category="math",
-        description="L1范数",
-        examples=["norm_l1(x)"],
-        param_names=["x"],
-        return_type="series",
-        tags=["math", "matrix", "norm", "l1"]
-    )
-
-    def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        try:
-            n = np.linalg.norm(x.values, ord=1)
-            result = np.full_like(x.values, n, dtype=float)
-            return pd.DataFrame(result, index=x.index, columns=x.columns).replace([np.inf, -np.inf], np.nan)
-        except np.linalg.LinAlgError:
-            return pd.DataFrame(np.nan, index=x.index, columns=x.columns)
-
-
-
-# canonical=norm_linf backend=pandas_numpy selected=norm_linf source=math/matrix_ops.py
-@register_operator(name="norm_linf", category="math", business_category="elementwise_math", canonical="norm_linf", source="factor_dsl_np")
-class NormLinf(SeriesOperator):
-    """L-inf范数"""
-    metadata = OperatorMetadata(
-        name="norm_linf",
-        category="math",
-        description="L-inf范数",
-        examples=["norm_linf(x)"],
-        param_names=["x"],
-        return_type="series",
-        tags=["math", "matrix", "norm", "linf"]
-    )
-
-    def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        try:
-            n = np.linalg.norm(x.values, ord=np.inf)
-            result = np.full_like(x.values, n, dtype=float)
-            return pd.DataFrame(result, index=x.index, columns=x.columns).replace([np.inf, -np.inf], np.nan)
-        except np.linalg.LinAlgError:
-            return pd.DataFrame(np.nan, index=x.index, columns=x.columns)
 
 
 

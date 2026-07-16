@@ -29,32 +29,6 @@ class PrevPolars(SeriesOperator):
         return x.with_columns([pl.col(c).shift(1).alias(c) for c in cols])
 
 
-@register_operator(name="next", category="time_series", business_category="shift_diff_cum", canonical="next", source="factor_dsl_polars")
-class NextPolars(SeriesOperator):
-    """Polars 前视禁用，输出 NaN"""
-    metadata = OperatorMetadata(
-        name="next", category="time_series", description="前视禁用，输出 NaN",
-        param_names=["x"], return_type="series", tags=["time_series", "polars"],
-    )
-
-    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        cols = _numeric_cols(x)
-        return x.with_columns([pl.lit(None).cast(pl.Float64).alias(c) for c in cols])
-
-
-@register_operator(name="Lead", category="time_series", business_category="shift_diff_cum", canonical="Lead", source="factor_dsl_polars")
-class LeadPolars(SeriesOperator):
-    """Polars 前视禁用"""
-    metadata = OperatorMetadata(
-        name="Lead", category="time_series", description="前视禁用",
-        param_names=["x", "n"], return_type="series", tags=["time_series", "polars"],
-    )
-
-    def _calculate_series(self, x: pl.DataFrame, n: int = 1, **kwargs) -> pl.DataFrame:
-        cols = _numeric_cols(x)
-        return x.with_columns([pl.lit(None).cast(pl.Float64).alias(c) for c in cols])
-
-
 @register_operator(name="expanding_mean", category="data_handling", business_category="data_cleaning", canonical="expanding_mean", source="factor_dsl_polars")
 class ExpandingMeanPolars(SeriesOperator):
     """Polars 扩展均值"""

@@ -61,16 +61,13 @@ class TestDQGates:
 
 class TestOperatorPolicy:
     def test_ts_delay_policy(self):
-        op = OperatorRegistry.get("ts_delay")
-        p = infer_operator_policy(op, canonical="ts_delay")
+        op = OperatorRegistry.get("delay")
+        p = infer_operator_policy(op, canonical="delay")
         assert p.scope == "ts"
         assert p.pit_safe
 
     def test_lead_policy(self):
-        op = OperatorRegistry.get("Lead")
-        p = infer_operator_policy(op, canonical="Lead")
-        assert p.lag == -1
-        assert not p.pit_safe  # 负 lag = 未来函数，PIT 审计应拦截
+        assert OperatorRegistry.get("Lead") is None
 
     def test_rank_is_cross_section(self):
         op = OperatorRegistry.get("rank")

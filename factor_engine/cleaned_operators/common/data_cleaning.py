@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from cleaned_operators._causal import causal_bfill, causal_interpolate_panel
+from cleaned_operators._causal import causal_linear_extrapolate_panel
 from cleaned_operators.base import (
     Operator,
     OperatorMetadata,
@@ -27,61 +27,6 @@ from cleaned_operators.base import (
 
 import numpy as np
 import pandas as pd
-
-# canonical=causal_bfill backend=pandas_numpy selected=causal_bfill source=data_handling/missing_values.py
-@register_operator(
-    name="causal_bfill",
-    category="data_handling",
-    business_category="data_cleaning",
-    canonical="causal_bfill",
-    source="factor_dsl_np",
-    status="research",
-)
-class CausalBFill(SeriesOperator):
-    """因果后向占位：不引用未来值，NaN 保持 NaN。"""
-
-    metadata = OperatorMetadata(
-        name="causal_bfill",
-        category="data_handling",
-        description="因果后向占位（非传统 bfill；不引用未来值，NaN 保持 NaN）",
-        examples=["causal_bfill(close)"],
-        param_names=["x"],
-        return_type="series",
-        tags=["data_handling", "missing", "causal", "pit_safe"],
-    )
-
-    def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        return causal_bfill(x)
-
-
-# canonical=bfill backend=pandas_numpy selected=bfill source=data_handling/missing_values.py
-@register_operator(
-    name="bfill",
-    category="data_handling",
-    business_category="data_cleaning",
-    canonical="bfill",
-    source="factor_dsl_np",
-    status="deprecated",
-)
-class FillBackward(SeriesOperator):
-    """已弃用：请使用 ``causal_bfill``（名称易误解为传统 backward fill）。"""
-
-    metadata = OperatorMetadata(
-        name="bfill",
-        category="data_handling",
-        description="[deprecated] 请改用 causal_bfill；因子链路禁前视，不引用未来值",
-        examples=["causal_bfill(close)"],
-        param_names=["x"],
-        return_type="series",
-        tags=["data_handling", "missing", "backward", "deprecated"],
-    )
-
-    def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        return causal_bfill(x)
-
-# aliases: FillBackward, fillna_backward
-
-
 
 # canonical=dropna backend=pandas_numpy selected=dropna source=data_handling/missing_values.py
 @register_operator(name="dropna", category="data_handling", business_category="data_cleaning", canonical="dropna", source="factor_dsl_np", status="research")
@@ -392,7 +337,7 @@ class FillNA(SeriesOperator):
     metadata = OperatorMetadata(
         name="fillna",
         category="data_handling",
-        description="缺失值填充（method: 'mean', 'median', 'zero', 'ffill', 'bfill'）",
+        description="缺失值填充（method: 'mean', 'median', 'zero', 'ffill'）",
         examples=["fillna(close, 'mean')", "fillna(close, 0)"],
         param_names=["x", "method"],
         return_type="series",
@@ -411,7 +356,7 @@ class FillNA(SeriesOperator):
         elif method == 'ffill':
             return x.fillna(method='ffill')
         elif method == 'bfill':
-            return causal_bfill(x)
+            raise ValueError("fillna(method='bfill') was removed because it is not point-in-time safe")
         else:
             return x.fillna(method='zero')
 
@@ -439,22 +384,22 @@ class FillNAConst(SeriesOperator):
 
 
 
-# canonical=fillna_interpolate backend=pandas_numpy selected=fillna_interpolate source=data_handling/missing_values.py
-@register_operator(name="fillna_interpolate", category="data_handling", business_category="data_cleaning", canonical="fillna_interpolate", source="factor_dsl_np")
-class FillnaInterpolate(SeriesOperator):
-    """插值填充缺失值（method: linear, quadratic, cubic）"""
+# canonical=causal_linear_extrapolate backend=pandas_numpy source=data_handling/missing_values.py
+@register_operator(name="causal_linear_extrapolate", category="data_handling", business_category="data_cleaning", canonical="causal_linear_extrapolate", source="factor_dsl_np", status="research")
+class CausalLinearExtrapolate(SeriesOperator):
+    """仅使用历史已知点做线性外推。"""
     metadata = OperatorMetadata(
-        name="fillna_interpolate",
+        name="causal_linear_extrapolate",
         category="data_handling",
-        description="插值填充缺失值（method: linear, quadratic, cubic）",
-        examples=["fillna_interpolate(close, 'linear')", "fillna_interpolate(close, 'cubic')"],
-        param_names=["x", "method"],
+        description="仅使用最近两个历史有效点线性外推缺失值",
+        examples=["causal_linear_extrapolate(close)"],
+        param_names=["x"],
         return_type="series",
-        tags=["data_handling", "missing", "interpolate"]
+        tags=["data_handling", "missing", "causal", "extrapolate", "pit_safe"]
     )
 
-    def _calculate_series(self, x: pd.DataFrame, method: str = 'linear', **kwargs) -> pd.DataFrame:
-        return causal_interpolate_panel(x, method=method)
+    def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
+        return causal_linear_extrapolate_panel(x)
 
 
 

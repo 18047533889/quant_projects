@@ -61,7 +61,7 @@ POLARS_REQUIRED = frozenset(
         "group_decay_linear",
         "cum_prod",
         "idio_skew",
-        "fillna_interpolate",
+        "causal_linear_extrapolate",
         "rank_corr",
         "add",
         "ts_topk_sum",
@@ -146,5 +146,6 @@ def test_coverage_counts():
     canon = [c for c in OperatorRegistry.list_canonical() if OperatorRegistry.backends_for(c)]
     polars_n = sum(1 for c in canon if "polars" in OperatorRegistry.backends_for(c))
     sql_n = sum(1 for c in canon if "sql" in OperatorRegistry.backends_for(c))
-    assert polars_n >= 320, f"polars 覆盖过低: {polars_n}"
+    # Removed unsafe/random/full-sample operators no longer count as coverage.
+    assert polars_n >= 310, f"polars 覆盖过低: {polars_n}"
     assert sql_n >= 60, f"sql 覆盖过低: {sql_n}"

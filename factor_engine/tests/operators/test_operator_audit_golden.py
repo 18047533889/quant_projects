@@ -82,12 +82,8 @@ def test_real_turnover_rate_zero_float_shares(_loaded):
     assert pd.isna(out.iloc[0, 0])
 
 
-def test_bfill_does_not_use_future_values(_loaded):
-    op = OperatorRegistry.get("bfill")
-    x = pd.DataFrame({"A": [np.nan, np.nan, 3.0]})
-    out = op.calculate(x)
-    assert pd.isna(out.iloc[0, 0])
-    assert pd.isna(out.iloc[1, 0])
+def test_removed_bfill_has_no_runtime(_loaded):
+    assert OperatorRegistry.get("bfill") is None
 
 
 def test_downside_beta_requires_benchmark(_loaded):

@@ -203,6 +203,24 @@ DEDUPE_ALIASES: dict[str, str] = {
 
 # 注销的冗余 canonical（实现类仍可在源码中，但不再占主键）
 REMOVED_CANONICALS: tuple[str, ...] = (
+    # Removed from the factor runtime: future-looking, misleading, random,
+    # non-shape-preserving, or full-sample operators.
+    "Lead",
+    "next",
+    "bfill",
+    "causal_bfill",
+    "fillna_interpolate",
+    "interpolate",
+    "norm",
+    "norm_l1",
+    "norm_linf",
+    "rand_exp",
+    "rand_lognormal",
+    "rand_normal",
+    "rand_poisson",
+    "rand_uniform",
+    "sample",
+    "shuffle",
     "SMA",
     "move",
     "window_mean",

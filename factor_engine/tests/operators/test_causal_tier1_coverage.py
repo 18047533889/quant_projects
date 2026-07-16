@@ -24,7 +24,7 @@ _TIER1_UNIVARIATE = frozenset(
     }
 )
 
-_SKIP = frozenset({"col", "corr_test", "bfill", "fillna_interpolate"})
+_SKIP = frozenset({"col", "corr_test", "causal_linear_extrapolate"})
 
 
 @pytest.fixture(scope="module", autouse=True)

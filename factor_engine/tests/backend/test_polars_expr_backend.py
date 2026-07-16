@@ -63,7 +63,6 @@ def test_polars_expr_capable_subset_of_production_ops():
     # native expr 已实现但 production 门禁尚未同步的算子
     # native long path 已有；panel production parity 以 ``where`` 别名代表
     pending_production = {
-        "bfill",
         "if_else",
         "is_infinite",
         "div_or_default",
@@ -144,7 +143,7 @@ def test_polars_expr_capable_subset_of_production_ops():
         ("ts_max_buildup", lambda: make_cleaned_call_factory("ts_max_buildup")(col("x"), 2)),
         ("expanding_rank", lambda: make_cleaned_call_factory("expanding_rank")(col("x"))),
         ("quantile", lambda: make_cleaned_call_factory("quantile")(col("x"), 2)),
-        ("fillna_interpolate", lambda: make_cleaned_call_factory("fillna_interpolate")(col("x"))),
+        ("causal_linear_extrapolate", lambda: make_cleaned_call_factory("causal_linear_extrapolate")(col("x"))),
         ("RSI_WILDER", lambda: make_cleaned_call_factory("RSI_WILDER")(col("close"), 2)),
     ],
 )

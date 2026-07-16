@@ -31,18 +31,6 @@ def causal_lag(x: pd.DataFrame, n: int) -> pd.DataFrame:
     return x.shift(lag)
 
 
-def causal_bfill(x: pd.DataFrame) -> pd.DataFrame:
-    """因果后向填充占位：因子链路中禁止使用未来值填充。
-
-参数:
-    x: 输入宽表 panel。
-
-返回:
-    原样返回 ``x``（不执行 bfill）。
-"""
-    return x
-
-
 def rolling_rfft_feature(
     arr: np.ndarray,
     window: int,
@@ -524,15 +512,14 @@ def expanding_bivariate(
     return out
 
 
-def causal_interpolate_panel(x: pd.DataFrame, method: str = "linear") -> pd.DataFrame:
-    """仅用历史已知点做前向填充/外推，不引用未来样本。
+def causal_linear_extrapolate_panel(x: pd.DataFrame) -> pd.DataFrame:
+    """仅用最近两个历史已知点做线性外推，不引用未来样本。
 
 参数:
     x: 输入宽表 panel。
-    method: 插值方法，``linear`` 为两点线性外推，否则为常数前向填充。
 
 返回:
-    因果插值后的 panel。
+    因果线性外推后的 panel。
 """
     out = x.copy()
     for col in x.columns:
@@ -545,15 +532,12 @@ def causal_interpolate_panel(x: pd.DataFrame, method: str = "linear") -> pd.Data
             prev_idx = next((j for j in range(i - 1, -1, -1) if np.isfinite(arr[j])), None)
             if prev_idx is None:
                 continue
-            if method == "linear":
-                prev2_idx = next(
-                    (j for j in range(prev_idx - 1, -1, -1) if np.isfinite(arr[j])), None
-                )
-                if prev2_idx is not None and prev_idx > prev2_idx:
-                    slope = (arr[prev_idx] - arr[prev2_idx]) / (prev_idx - prev2_idx)
-                    filled[i] = arr[prev_idx] + slope * (i - prev_idx)
-                else:
-                    filled[i] = arr[prev_idx]
+            prev2_idx = next(
+                (j for j in range(prev_idx - 1, -1, -1) if np.isfinite(arr[j])), None
+            )
+            if prev2_idx is not None and prev_idx > prev2_idx:
+                slope = (arr[prev_idx] - arr[prev2_idx]) / (prev_idx - prev2_idx)
+                filled[i] = arr[prev_idx] + slope * (i - prev_idx)
             else:
                 filled[i] = arr[prev_idx]
         out[col] = filled

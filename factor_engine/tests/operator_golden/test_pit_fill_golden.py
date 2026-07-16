@@ -27,16 +27,15 @@ def test_ffill_prefix_invariant(loaded):
     assert_prefix_invariant(lambda df: _run("ffill", df), panel)
 
 
-def test_causal_bfill_same_as_bfill_no_future_fill(loaded):
+def test_causal_linear_extrapolate_is_prefix_invariant(loaded):
     panel = pd.DataFrame(
-        {"A": [np.nan, np.nan, 3.0, 4.0]},
-        index=pd.date_range("2024-01-01", periods=4),
+        {"A": [np.nan, 2.0, 3.0, np.nan, 5.0]},
+        index=pd.date_range("2024-01-01", periods=5),
     )
-    bfill_out = _run("bfill", panel)
-    causal_out = _run("causal_bfill", panel)
-    pd.testing.assert_frame_equal(bfill_out, causal_out)
-    assert pd.isna(bfill_out.iloc[0, 0])
-    assert pd.isna(bfill_out.iloc[1, 0])
+    out = _run("causal_linear_extrapolate", panel)
+    assert pd.isna(out.iloc[0, 0])
+    assert out.iloc[3, 0] == pytest.approx(4.0)
+    assert_prefix_invariant(lambda df: _run("causal_linear_extrapolate", df), panel)
 
 
 def test_fillna_const_preserves_shape_with_nan(loaded, golden_panel):

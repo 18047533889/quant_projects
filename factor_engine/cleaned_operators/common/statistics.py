@@ -1161,92 +1161,6 @@ class r_squared(SeriesOperator):
 
 
 
-# canonical=rand_exp backend=pandas_numpy selected=rand_exp source=statistics/probability_ops.py
-@register_operator(name="rand_exp", category="statistics", business_category="statistics_regression", canonical="rand_exp", source="factor_dsl_np")
-class rand_exp(SeriesOperator):
-    """指数分布随机数"""
-    metadata = OperatorMetadata(
-        name="rand_exp", category="statistics",
-        description="指数分布随机数",
-        examples=["rand_exp(1.0)"],
-        param_names=["lam"], return_type="series",
-        tags=["statistics", "probability", "random", "exponential"]
-    )
-    def _calculate_series(self, lam: float = 1.0, **kwargs) -> pd.DataFrame:
-        rng = np.random.default_rng()
-        scale = 1.0 / lam if lam != 0 else 1.0
-        return pd.DataFrame(rng.exponential(scale=scale, size=(1, 1)), columns=["value"], dtype=float)
-
-
-
-# canonical=rand_lognormal backend=pandas_numpy selected=rand_lognormal source=statistics/probability_ops.py
-@register_operator(name="rand_lognormal", category="statistics", business_category="statistics_regression", canonical="rand_lognormal", source="factor_dsl_np")
-class rand_lognormal(SeriesOperator):
-    """对数正态分布随机数"""
-    metadata = OperatorMetadata(
-        name="rand_lognormal", category="statistics",
-        description="对数正态分布随机数",
-        examples=["rand_lognormal(0, 1)"],
-        param_names=["mu", "sigma"], return_type="series",
-        tags=["statistics", "probability", "random", "lognormal"]
-    )
-    def _calculate_series(self, mu: float = 0.0, sigma: float = 1.0, **kwargs) -> pd.DataFrame:
-        rng = np.random.default_rng()
-        return pd.DataFrame(rng.lognormal(mean=mu, sigma=sigma, size=(1, 1)), columns=["value"], dtype=float)
-
-
-
-# canonical=rand_normal backend=pandas_numpy selected=rand_normal source=statistics/probability_ops.py
-@register_operator(name="rand_normal", category="statistics", business_category="statistics_regression", canonical="rand_normal", source="factor_dsl_np")
-class rand_normal(SeriesOperator):
-    """正态分布随机数"""
-    metadata = OperatorMetadata(
-        name="rand_normal", category="statistics",
-        description="正态分布随机数",
-        examples=["rand_normal(0, 1)"],
-        param_names=["mu", "sigma"], return_type="series",
-        tags=["statistics", "probability", "random", "normal"]
-    )
-    def _calculate_series(self, mu: float = 0.0, sigma: float = 1.0, **kwargs) -> pd.DataFrame:
-        rng = np.random.default_rng()
-        return pd.DataFrame(rng.normal(loc=mu, scale=sigma, size=(1, 1)), columns=["value"], dtype=float)
-
-
-
-# canonical=rand_poisson backend=pandas_numpy selected=rand_poisson source=statistics/probability_ops.py
-@register_operator(name="rand_poisson", category="statistics", business_category="statistics_regression", canonical="rand_poisson", source="factor_dsl_np")
-class rand_poisson(SeriesOperator):
-    """泊松分布随机数"""
-    metadata = OperatorMetadata(
-        name="rand_poisson", category="statistics",
-        description="泊松分布随机数",
-        examples=["rand_poisson(5.0)"],
-        param_names=["lam"], return_type="series",
-        tags=["statistics", "probability", "random", "poisson"]
-    )
-    def _calculate_series(self, lam: float = 5.0, **kwargs) -> pd.DataFrame:
-        rng = np.random.default_rng()
-        return pd.DataFrame(rng.poisson(lam=lam, size=(1, 1)), columns=["value"], dtype=float)
-
-
-
-# canonical=rand_uniform backend=pandas_numpy selected=rand_uniform source=statistics/probability_ops.py
-@register_operator(name="rand_uniform", category="statistics", business_category="statistics_regression", canonical="rand_uniform", source="factor_dsl_np")
-class rand_uniform(SeriesOperator):
-    """均匀分布随机数"""
-    metadata = OperatorMetadata(
-        name="rand_uniform", category="statistics",
-        description="均匀分布随机数",
-        examples=["rand_uniform(0, 1)"],
-        param_names=["low", "high"], return_type="series",
-        tags=["statistics", "probability", "random", "uniform"]
-    )
-    def _calculate_series(self, low: float = 0.0, high: float = 1.0, **kwargs) -> pd.DataFrame:
-        rng = np.random.default_rng()
-        return pd.DataFrame(rng.uniform(low=low, high=high, size=(1, 1)), columns=["value"], dtype=float)
-
-
-
 # canonical=regress backend=pandas_numpy selected=regress source=statistics/regression_ex.py
 @register_operator(name="regress", category="statistics", business_category="statistics_regression", canonical="regress", source="factor_dsl_np")
 class regress(SeriesOperator):
@@ -1345,32 +1259,6 @@ class Ridge(SeriesOperator):
 
 
 
-# canonical=sample backend=pandas_numpy selected=sample source=statistics/probability_ops.py
-@register_operator(name="sample", category="statistics", business_category="statistics_regression", canonical="sample", source="factor_dsl_np")
-class sample(SeriesOperator):
-    """随机抽样"""
-    metadata = OperatorMetadata(
-        name="sample", category="statistics",
-        description="随机抽样",
-        examples=["sample(close, 10, False)"],
-        param_names=["x", "n", "replace"], return_type="series",
-        tags=["statistics", "probability", "random", "sample"]
-    )
-    def _calculate_series(self, x: pd.DataFrame, n: int = 10, replace: bool = False, **kwargs) -> pd.DataFrame:
-        rng = np.random.default_rng()
-        result = pd.DataFrame(index=range(n), columns=x.columns, dtype=float)
-        for col in x.columns:
-            col_data = x[col].dropna()
-            if len(col_data) == 0:
-                result[col] = np.nan
-                continue
-            sample_size = min(n, len(col_data)) if not replace else n
-            sampled = rng.choice(col_data.values, size=sample_size, replace=replace)
-            result[col] = pd.Series(sampled)
-        return result
-
-
-
 # canonical=sem backend=pandas_numpy selected=sem source=statistics/aggregate_ops.py
 @register_operator(name="sem", category="statistics", business_category="statistics_regression", canonical="sem", source="factor_dsl_np")
 class sem(SeriesOperator):
@@ -1384,22 +1272,6 @@ class sem(SeriesOperator):
     )
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
         return expanding_panel_stat(x, "sem")
-
-
-
-# canonical=shuffle backend=pandas_numpy selected=shuffle source=statistics/probability_ops.py
-@register_operator(name="shuffle", category="statistics", business_category="statistics_regression", canonical="shuffle", source="factor_dsl_np")
-class shuffle(SeriesOperator):
-    """随机打乱"""
-    metadata = OperatorMetadata(
-        name="shuffle", category="statistics",
-        description="随机打乱",
-        examples=["shuffle(close)"],
-        param_names=["x"], return_type="series",
-        tags=["statistics", "probability", "random", "shuffle"]
-    )
-    def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        return pd.DataFrame(np.nan, index=x.index, columns=x.columns, dtype=float)
 
 
 
@@ -1646,4 +1518,3 @@ class wsum(SeriesOperator):
                 lambda x_w: _wsum(x_w, w_col.loc[x_w.index].values), raw=False
             )
         return result
-

@@ -110,7 +110,7 @@ cleaned_operators/
 
 Polars 新增覆盖：`ADX/AROON/KAMA`、`Slope/ts_regression`、`sharpe_ratio`、信号算子、`group_*` 全簇、`ewm_*`、`cs_regression/cs_resid`、CAPM 簇等；**2026-07**：`polars_batch_mirror` 桥接至 **325** canonical。企业门禁 Polars ≥ **320** / SQL ≥ **62**；剩余 **36** intentional pandas-only（FFT/矩阵/随机/CDF-PDF）。
 
-SQL 白名单 **58** 个算子 + `column`/`literal`（共 **60** 可编译节点；registry **62**；完整清单见 [`docs/sql_pushdown_coverage.md`](../docs/sql_pushdown_coverage.md)，CI 自动生成）；含时序基础、截面 `cs_resid`/`cs_regression`、`group_*` 簇等；多子树 **WITH CSE 批执行**。
+SQL 白名单覆盖时序基础、截面 `cs_resid`/`cs_regression`、`group_*` 簇等；完整数量和清单见 [`docs/sql_pushdown_coverage.md`](../docs/sql_pushdown_coverage.md)，CI 自动生成。
 
 **企业级门禁**：`tests/test_enterprise_readiness.py`（覆盖阈值、dedupe 契约、P0 双 backend、env bootstrap）。
 
@@ -122,7 +122,7 @@ SQL 白名单 **58** 个算子 + `column`/`literal`（共 **60** 可编译节点
 - **ClickHouse 写入**：`FactorEngine.materialize(write_target="clickhouse"|"staging_clickhouse")`（推荐）；兼容入口 `materialize_clickhouse()` 委托同一实现
 - **Parquet → CH ETL**：`load_parquet_to_panel_table()`
 
-SQL 已支持（Tier-1）：时序 `ts_mean/std/sum/max/min/median/var/mad/delay/delta/pct/zscore/rank/corr/beta/ema/decay_linear`；截面 `rank/zscore/normalize/scale/winsorize/cs_demean/cs_resid/cs_regression`；分组 `group_rank/zscore/normalize/percentile/decay_linear/mean/neutralize/winsorize`；清洗 `fillna/ffill/bfill/coalesce/nan_to_num`；条件 `where/if_else/is_finite/is_nan`；数值安全 `protected_*`；四则与 `abs/log/exp/sqrt/clip/sign`。
+SQL 已支持（Tier-1）：时序 `ts_mean/std/sum/max/min/median/var/mad/delay/delta/pct/zscore/rank/corr/beta/ema/decay_linear`；截面 `rank/zscore/normalize/scale/winsorize/cs_demean/cs_resid/cs_regression`；分组 `group_rank/zscore/normalize/percentile/decay_linear/mean/neutralize/winsorize`；清洗 `fillna/ffill/coalesce/nan_to_num`；条件 `where/if_else/is_finite/is_nan`；数值安全 `protected_*`；四则与 `abs/log/exp/sqrt/clip/sign`。
 
 ---
 
