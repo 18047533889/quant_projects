@@ -1,4 +1,4 @@
-name: AutoFactorEvaluation Reconstruct Audit
+name: AutoFactorEvaluation Standalone Build
 
 on:
   push:
@@ -11,50 +11,130 @@ permissions:
   contents: write
 
 jobs:
-  audit:
+  build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
           ref: agent/autofactor-standalone-reconstruct
           fetch-depth: 0
-      - name: Build repository audit
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Synchronize embedded platform
+        run: |
+          python AutoFactorEvaluation-RECONSTRUCT/scripts/sync_embedded_platform.py \
+            --source-root "$GITHUB_WORKSPACE" \
+            --source-commit 5fe9407aaa5b95538a3f98d5b466682135af42db
+      - name: Patch integration boundary and tests
         shell: bash
         run: |
-          set -euo pipefail
-          ROOT="AutoFactorEvaluation-RECONSTRUCT"
-          OUT="$ROOT/.assistant_platform_audit.txt"
-          test -d "$ROOT"
-          {
-            echo "# MODULE SIZES"
-            du -sh factor_engine data_access "$ROOT" || true
-            echo
-            echo "# MODULE FILE COUNTS"
-            printf 'factor_engine\t'; find factor_engine -type f | wc -l
-            printf 'data_access\t'; find data_access -type f | wc -l
-            echo
-            echo "# FACTOR_ENGINE TOP LEVEL"
-            find factor_engine -maxdepth 2 -type f -printf '%p\t%s bytes\n' | sort
-            echo
-            echo "# DATA_ACCESS TOP LEVEL"
-            find data_access -maxdepth 3 -type f -printf '%p\t%s bytes\n' | sort
-            echo
-            echo "# DATA_ACCESS IMPORTS"
-            grep -RInE '^(from|import) ' data_access --include='*.py' | head -600 || true
-            echo
-            echo "# FACTOR_ENGINE PACKAGE IMPORT ROOTS"
-            grep -RInE '^(from|import) (api|backend|cleaned_operators|expr|ir|planner|runtime|storage|data_access)' factor_engine --include='*.py' | head -800 || true
-            echo
-            for f in data_access/__init__.py data_access/store.py data_access/config/datasets.yaml factor_engine/requirements.txt factor_engine/pyproject.toml; do
-              if [ -f "$f" ]; then
-                echo
-                echo "===== $f ====="
-                sed -n '1,320p' "$f"
-              fi
-            done
-          } > "$OUT"
+          python - <<'PY'
+          from pathlib import Path
+
+          root = Path("AutoFactorEvaluation-RECONSTRUCT")
+
+          quant = root / "integrations" / "quant_platform.py"
+          text = quant.read_text(encoding="utf-8")
+          old_doc = '''"""AutoFactorEvaluation 到仓库根 ``factor_engine`` / ``data_access`` 的唯一桥接层。
+
+          业务模块不得再自行拼接 ``sys.path``、直接扫描行情 Parquet，或引用目录内复制的
+          FactorEngine。所有生产计算、行情读取、快照 lineage 与因子 staging 写入均从这里进入。
+          """'''
+          new_doc = '''"""AutoFactorEvaluation 到内嵌 ``factor_engine`` / ``data_access`` 的唯一桥接层。
+
+          默认只加载本分发目录内经过 manifest 固定的运行时。业务模块不得自行拼接
+          ``sys.path``、直接扫描行情 Parquet，或绕过统一的快照与 staging 写入链路。
+          """'''
+          if old_doc in text:
+              text = text.replace(old_doc, new_doc, 1)
+          text = text.replace("import os\n", "", 1)
+          text = text.replace("import sys\n", "", 1)
+          text = text.replace("from pathlib import Path\n", "", 1)
+          start = text.find("def _find_quant_projects_root()")
+          marker = "bootstrap_quant_platform()\n"
+          end = text.find(marker, start)
+          if start < 0 or end < 0:
+              raise RuntimeError("quant_platform bootstrap block not found")
+          end += len(marker)
+          replacement = (
+              "from platform_bootstrap import activate_platform\n\n"
+              "PLATFORM_LAYOUT = activate_platform()\n"
+          )
+          text = text[:start] + replacement + text[end:]
+          quant.write_text(text, encoding="utf-8")
+
+          integration_test = root / "tests" / "test_quant_platform_integration.py"
+          text = integration_test.read_text(encoding="utf-8")
+          old = '''def test_vendored_factor_engine_is_removed():
+              root = Path(__file__).resolve().parents[1]
+              assert not (root / "factor_engine").exists()
+          '''
+          new = '''def test_embedded_platform_runtime_is_present():
+              root = Path(__file__).resolve().parents[1]
+              assert (root / "factor_engine" / "runtime" / "engine.py").is_file()
+              assert (root / "data_access" / "store.py").is_file()
+              assert (root / "embedded_platform_manifest.json").is_file()
+          '''
+          if old not in text:
+              raise RuntimeError("legacy vendored-factor test not found")
+          integration_test.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          pipeline = root / "pipeline.py"
+          text = pipeline.read_text(encoding="utf-8")
+          anchor = "from typing import Any, Optional\n"
+          if "from platform_bootstrap import activate_platform" not in text:
+              text = text.replace(
+                  anchor,
+                  anchor + "\nfrom platform_bootstrap import activate_platform\n\n_PLATFORM_LAYOUT = activate_platform()\n",
+                  1,
+              )
+          parser_anchor = '    p.add_argument("--no-preload", action="store_false", dest="preload",\n                    help="禁用进程内存预加载")\n'
+          if "--skip-platform-check" not in text:
+              text = text.replace(
+                  parser_anchor,
+                  parser_anchor
+                  + '    p.add_argument("--skip-platform-check", action="store_true",\n'
+                  + '                    help="跳过内嵌平台诊断（仅故障排查使用）")\n',
+                  1,
+              )
+          parse_anchor = "    args = p.parse_args()\n"
+          check_block = '''    args = p.parse_args()
+
+              if not args.skip_platform_check:
+                  from platform_bootstrap import platform_diagnostics
+                  _platform_report = platform_diagnostics(import_runtime=True)
+                  if _platform_report["status"] != "PASS":
+                      print(json.dumps(_platform_report, indent=2, ensure_ascii=False))
+                      raise SystemExit(2)
+          '''
+          if "_platform_report = platform_diagnostics" not in text:
+              text = text.replace(parse_anchor, check_block, 1)
+          pipeline.write_text(text, encoding="utf-8")
+          PY
+      - name: Install standalone dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r AutoFactorEvaluation-RECONSTRUCT/requirements-core.txt pytest
+      - name: Validate standalone distribution
+        env:
+          PYTHONPATH: ${{ github.workspace }}/AutoFactorEvaluation-RECONSTRUCT
+          FACTOR_ENGINE_DISABLE_NUMBA: "1"
+          AUTOFAC_PLATFORM_MODE: bundled
+        run: |
+          python AutoFactorEvaluation-RECONSTRUCT/scripts/sync_embedded_platform.py --check
+          python AutoFactorEvaluation-RECONSTRUCT/standalone.py doctor
+          pytest -q \
+            AutoFactorEvaluation-RECONSTRUCT/tests/test_standalone_distribution.py \
+            AutoFactorEvaluation-RECONSTRUCT/tests/test_quant_platform_integration.py \
+            AutoFactorEvaluation-RECONSTRUCT/tests/test_batch_contracts.py
+      - name: Commit standalone distribution
+        shell: bash
+        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "$OUT"
-          git commit -m "Capture embedded platform dependency audit" || exit 0
+          git add AutoFactorEvaluation-RECONSTRUCT
+          git commit -m "Embed FactorEngine and DataAccess for standalone evaluation" || exit 0
           git push origin HEAD:agent/autofactor-standalone-reconstruct
