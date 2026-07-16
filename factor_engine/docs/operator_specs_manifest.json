@@ -28,6 +28,191 @@
     "dual_backend_target": true
   },
   {
+    "name": "BollingerBands",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "price",
+      "window",
+      "std_dev"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": true,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "布林带中轨（移动平均）",
+    "execution_kind": "composite",
+    "production_policy": "allowed",
+    "lowering_available": true,
+    "dual_backend_target": true
+  },
+  {
+    "name": "BollingerLower",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "window",
+      "std_dev"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": true,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "布林带下轨",
+    "execution_kind": "composite",
+    "production_policy": "allowed",
+    "lowering_available": true,
+    "dual_backend_target": true
+  },
+  {
+    "name": "BollingerUpper",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "window",
+      "std_dev"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": true,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "布林带上轨",
+    "execution_kind": "composite",
+    "production_policy": "allowed",
+    "lowering_available": true,
+    "dual_backend_target": true
+  },
+  {
+    "name": "DPO",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "close",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": true,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "去趋势价格振荡器",
+    "execution_kind": "composite",
+    "production_policy": "allowed",
+    "lowering_available": true,
+    "dual_backend_target": true
+  },
+  {
+    "name": "MOM",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "price",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": true,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "动量指标",
+    "execution_kind": "composite",
+    "production_policy": "allowed",
+    "lowering_available": true,
+    "dual_backend_target": true
+  },
+  {
+    "name": "OBV",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "price",
+      "volume"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": true,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "能量潮",
+    "execution_kind": "composite",
+    "production_policy": "allowed",
+    "lowering_available": true,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ROC",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "price",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": true,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "变动率指标",
+    "execution_kind": "composite",
+    "production_policy": "allowed",
+    "lowering_available": true,
+    "dual_backend_target": true
+  },
+  {
     "name": "RSI_WILDER",
     "scope": "time_series",
     "frequency": "any",
@@ -51,6 +236,90 @@
     "execution_kind": "stateful",
     "production_policy": "allowed",
     "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "StochasticD",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "high",
+      "low",
+      "close",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": true,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "随机指标%D（%K的移动平均）",
+    "execution_kind": "composite",
+    "production_policy": "allowed",
+    "lowering_available": true,
+    "dual_backend_target": true
+  },
+  {
+    "name": "StochasticK",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "high",
+      "low",
+      "close",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": true,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "随机指标%K",
+    "execution_kind": "composite",
+    "production_policy": "allowed",
+    "lowering_available": true,
+    "dual_backend_target": true
+  },
+  {
+    "name": "WilliamsR",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "high",
+      "low",
+      "close",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": true,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "威廉指标%R",
+    "execution_kind": "composite",
+    "production_policy": "allowed",
+    "lowering_available": true,
     "dual_backend_target": true
   },
   {
