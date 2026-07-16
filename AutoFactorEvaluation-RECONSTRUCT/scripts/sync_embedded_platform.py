@@ -6,7 +6,8 @@ Run from the monorepo before publishing only AutoFactorEvaluation-RECONSTRUCT::
     python AutoFactorEvaluation-RECONSTRUCT/scripts/sync_embedded_platform.py
 
 The operation is deterministic, removes stale embedded files, excludes development
-artifacts, validates required runtime markers, and writes a provenance manifest.
+and reference artifacts, validates required runtime markers, and writes a provenance
+manifest without recording machine-specific absolute paths.
 """
 from __future__ import annotations
 
@@ -37,7 +38,16 @@ DATA_ACCESS_EXCLUDES = {
     "__pycache__",
     "tests",
 }
-EXCLUDED_SUFFIXES = {".pyc", ".pyo", ".ipynb"}
+EXCLUDED_SUFFIXES = {
+    ".pyc",
+    ".pyo",
+    ".ipynb",
+    ".pdf",
+    ".docx",
+    ".pptx",
+    ".xlsx",
+    ".zip",
+}
 EXCLUDED_NAMES = {".pytest_full.txt", "cleaned_operators.zip"}
 
 
@@ -48,7 +58,7 @@ def _ignore(excluded_dirs: set[str]):
             if name in excluded_dirs or name in EXCLUDED_NAMES:
                 ignored.add(name)
                 continue
-            if Path(name).suffix in EXCLUDED_SUFFIXES:
+            if Path(name).suffix.lower() in EXCLUDED_SUFFIXES:
                 ignored.add(name)
         return ignored
 
@@ -115,7 +125,7 @@ def _verify_embedded() -> None:
         raise RuntimeError(f"embedded platform validation failed; missing={missing}")
 
 
-def _write_manifest(source_root: Path, source_commit: str | None) -> dict:
+def _write_manifest(source_commit: str | None) -> dict:
     modules = {}
     for name in ("factor_engine", "data_access"):
         digest, files, size_bytes = _tree_digest(PROJECT_ROOT / name)
@@ -128,7 +138,7 @@ def _write_manifest(source_root: Path, source_commit: str | None) -> dict:
         "schema_version": 1,
         "distribution": "AutoFactorEvaluation-RECONSTRUCT",
         "source_repository": "18047533889/quant_projects",
-        "source_root": str(source_root.resolve()),
+        "source_layout": "monorepo-root/factor_engine + data_access",
         "source_commit": source_commit,
         "synced_at_utc": datetime.now(timezone.utc).isoformat(),
         "modules": modules,
@@ -178,7 +188,7 @@ def main() -> int:
     _copy_atomic(source_root / "factor_engine", PROJECT_ROOT / "factor_engine", FACTOR_ENGINE_EXCLUDES)
     _copy_atomic(source_root / "data_access", PROJECT_ROOT / "data_access", DATA_ACCESS_EXCLUDES)
     _verify_embedded()
-    manifest = _write_manifest(source_root, source_commit)
+    manifest = _write_manifest(source_commit)
     print(json.dumps({"status": "PASS", "manifest": manifest}, indent=2, ensure_ascii=False))
     return 0
 
