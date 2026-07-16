@@ -74,6 +74,8 @@ def _stable_product(values: np.ndarray, *, skipna: bool = True) -> float:
 
 def _median_abs_deviation(values: np.ndarray, *, scale: float = 1.0) -> float:
     arr = np.asarray(values, dtype=float)
+    if np.isinf(arr).any():
+        return np.nan
     arr = arr[~np.isnan(arr)]
     if arr.size == 0:
         return np.nan
@@ -108,7 +110,7 @@ def _rolling_numpy_panel(
     canonical="ts_product",
     source="semantic_hardening",
     backend="pandas_numpy",
-    status="production",
+    status="implemented",
 )
 class TimeSeriesProductAudited(SeriesOperator):
     metadata = OperatorMetadata(
@@ -146,7 +148,7 @@ class TimeSeriesProductAudited(SeriesOperator):
     canonical="ts_mad",
     source="semantic_hardening",
     backend="pandas_numpy",
-    status="production",
+    status="implemented",
 )
 class TimeSeriesMedianAbsoluteDeviationAudited(SeriesOperator):
     metadata = OperatorMetadata(
@@ -222,7 +224,7 @@ def _group_percentile_numpy(
     canonical="group_percentile",
     source="semantic_hardening",
     backend="pandas_numpy",
-    status="production",
+    status="implemented",
 )
 class GroupPercentileAudited(SeriesOperator):
     metadata = OperatorMetadata(
@@ -311,7 +313,7 @@ if pl is not None:
         business_category="time_series",
         canonical="ts_product",
         source="semantic_hardening",
-        status="production",
+        status="implemented",
     )
     class TimeSeriesProductAuditedPolars(PolarsSeriesOperator):
         metadata = PolarsOperatorMetadata(
@@ -348,7 +350,7 @@ if pl is not None:
         business_category="time_series",
         canonical="ts_mad",
         source="semantic_hardening",
-        status="production",
+        status="implemented",
     )
     class TimeSeriesMedianAbsoluteDeviationAuditedPolars(PolarsSeriesOperator):
         metadata = PolarsOperatorMetadata(
@@ -385,7 +387,7 @@ if pl is not None:
         business_category="group_neutralization",
         canonical="group_percentile",
         source="semantic_hardening",
-        status="production",
+        status="implemented",
     )
     class GroupPercentileAuditedPolars(PolarsSeriesOperator):
         metadata = PolarsOperatorMetadata(

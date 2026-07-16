@@ -174,6 +174,22 @@ _COSTS: dict[str, OperatorCost] = {
     "rolling_beta_to_market": OperatorCost("O(NW)", "high", False, 1, True, False),
     "ts_poly2_coeff": OperatorCost("O(NW)", "high", False, 1, False, False),
     "ts_poly2_resid": OperatorCost("O(NW)", "high", False, 1, False, False),
+    "ts_count_if": OperatorCost("O(N)", "low", True, 2, True, False),
+    "ts_sum_if": OperatorCost("O(N)", "low", True, 2, True, False),
+    "ts_mean_if": OperatorCost("O(N)", "low", True, 2, True, False),
+    "ts_std_if": OperatorCost("O(N)", "medium", True, 2, True, False),
+    "ts_last_if": OperatorCost("O(NW)", "medium", True, 2, True, False),
+    "ts_days_since": OperatorCost("O(N)", "low", True, 2, True, False),
+    "ts_true_streak": OperatorCost("O(N)", "low", True, 2, True, False),
+    "cs_bucket": OperatorCost("O(N log N)", "medium", False, 2, True, False),
+    "cs_multi_resid": OperatorCost("O(NK^2)", "high", False, 2, True, False),
+    "cs_wls_resid": OperatorCost("O(NK^2)", "high", False, 2, True, False),
+    "period_lag": OperatorCost("O(N)", "medium", True, 2, True, False),
+    "ts_regression_tstat": OperatorCost("O(NW)", "high", False, 2, True, False),
+    "ts_trend_tstat": OperatorCost("O(NW)", "high", False, 2, True, False),
+    "ts_max_drawdown": OperatorCost("O(NW)", "medium", True, 2, True, False),
+    "ts_partial_corr": OperatorCost("O(NW)", "high", False, 2, True, False),
+    "ts_nth_value": OperatorCost("O(NW log W)", "medium", False, 2, True, False),
 }
 
 

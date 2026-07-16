@@ -4,7 +4,7 @@ counts:
   primitives: 106
   certified_dual: 99
   backend_execution_certified: 99
-  operational_production_certified: 77
+  operational_production_certified: 76
   batch_a_total: 45
   batch_a_certified: 44
   batch_a_pending: 1
@@ -1027,8 +1027,8 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: true
-    production_status: backend_execution_certified
+    operational_production_certified: false
+    production_status: forbidden
     upgrade_batch: null
     block_reason: null
     certification_gaps: []

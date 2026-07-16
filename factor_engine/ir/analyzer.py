@@ -130,6 +130,54 @@ def _operator_lookback_increment(
     return increment
 
 
+def _legacy_single_window_lookback(expr: Expr) -> int | None:
+    """Preserve the public lookback value for one direct rolling dependency.
+
+    Internally rolling operators use the precise historical-row convention
+    (``window - 1``), which composes correctly for nested expressions. Older
+    callers, however, exposed the full window for a single rolling input under
+    zero-lookback wrappers such as ``rank(ts_mean(close, 20))``.
+    """
+    def visit(node: Expr) -> int | None:
+        if isinstance(node, (ColumnRef, Literal)):
+            return 0
+        if not isinstance(node, CleanedCall):
+            return None
+        from backend.cleaned_bridge import ensure_cleaned_loaded
+        from cleaned_operators.registry import OperatorRegistry
+
+        ensure_cleaned_loaded()
+        canon = OperatorRegistry._aliases.get(node.op, node.op)
+        op_impl = OperatorRegistry.get(canon)
+        if op_impl is None:
+            return None
+        policy = None
+        from cleaned_operators.operator_policy import infer_operator_policy
+
+        policy = infer_operator_policy(op_impl, canonical=canon)
+        increment = _operator_lookback_increment(canon, node, op_impl, policy)
+        expr_children = [arg for arg in node.args if isinstance(arg, Expr)]
+        series_children = [
+            arg for arg in expr_children if not isinstance(arg, Literal)
+        ]
+        if increment > 0:
+            if len(series_children) != 1 or not isinstance(series_children[0], ColumnRef):
+                return None
+            params = _operator_param_values(node, op_impl)
+            for name in _WINDOW_PARAM_NAMES:
+                window = _positive_int(params.get(name))
+                if window is not None:
+                    return window
+            return None
+        child_windows = [visit(child) for child in series_children]
+        if any(window is None for window in child_windows):
+            return None
+        return max((window or 0 for window in child_windows), default=0)
+
+    result = visit(expr)
+    return result if result and result > 0 else None
+
+
 @dataclass
 class AnalysisResult:
     """``Analyzer.lower`` 的返回值：IR 树 + 副作用分析摘要。"""
@@ -238,6 +286,9 @@ class Analyzer:
             raise NotImplementedError(f"Unsupported expr: {type(node).__name__}")
 
         ir, lookback = visit(expr)
+        legacy_window = _legacy_single_window_lookback(expr)
+        if legacy_window is not None:
+            lookback = max(lookback, legacy_window)
         return AnalysisResult(
             ir=ir,
             lookback=lookback,

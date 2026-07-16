@@ -45,6 +45,7 @@ cleaned_operators/
 │   ├── group.py                         # group_neutralize、group_rank …
 │   ├── data_cleaning.py                 # fillna、winsorize、window_* …
 │   ├── statistics.py                    # 相关、回归、假设检验
+│   ├── daily_panel.py                   # 同形 daily 条件/事件/回归/报告期算子
 │   └── polars_ops.py                    # polars 高频算子扩展
 ├── price_volume/ops.py                  # 收益、波动、夏普、beta …
 ├── technical/signal.py                  # MACD、RSI、trade_when …
@@ -123,6 +124,11 @@ SQL 白名单覆盖时序基础、截面 `cs_resid`/`cs_regression`、`group_*` 
 - **Parquet → CH ETL**：`load_parquet_to_panel_table()`
 
 SQL 已支持（Tier-1）：时序 `ts_mean/std/sum/max/min/median/var/mad/delay/delta/pct/zscore/rank/corr/beta/ema/decay_linear`；截面 `rank/zscore/normalize/scale/winsorize/cs_demean/cs_resid/cs_regression`；分组 `group_rank/zscore/normalize/percentile/decay_linear/mean/neutralize/winsorize`；清洗 `fillna/ffill/coalesce/nan_to_num`；条件 `where/if_else/is_finite/is_nan`；数值安全 `protected_*`；四则与 `abs/log/exp/sqrt/clip/sign`。
+
+Daily panel 扩展：条件滚动、事件状态、报告期滞后、多元/加权截面残差、趋势 t 值、
+滚动偏相关、滚动最大回撤及第 N 值见
+[`docs/daily_panel_operators.md`](../docs/daily_panel_operators.md)。这些算子均有
+Pandas、Polars panel/long 与 DuckDB 实现。
 
 ---
 
