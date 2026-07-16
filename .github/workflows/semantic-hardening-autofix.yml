@@ -5,6 +5,7 @@ on:
     branches: [agent/factor-engine-semantic-hardening]
     paths:
       - "factor_engine/cleaned_operators/semantic_hardening.py"
+      - "factor_engine/.semantic-hardening-trigger"
 
 permissions:
   contents: write
