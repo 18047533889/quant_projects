@@ -1,0 +1,557 @@
+{
+  "ashare_pv": {
+    "dataset": "ashare_stock_daily",
+    "fields": {
+      "amount": "Amount",
+      "close": "Close",
+      "high": "High",
+      "low": "Low",
+      "open": "Open",
+      "preclose": "PreClose",
+      "ret": "Return",
+      "volume": "Volume",
+      "vwap": "Vwap"
+    },
+    "read_auto": true,
+    "type": "data_access"
+  },
+  "ashare_pv_universe": {
+    "anchor": "pv",
+    "anchor_column": "close",
+    "joins": {
+      "constituent": "asof_backward",
+      "status": "asof_backward"
+    },
+    "sources": {
+      "constituent": {
+        "dataset": "ashare_index_constituent",
+        "fields": {
+          "index_symbol": "IndexSymbol",
+          "weight": "Weight"
+        },
+        "type": "data_access"
+      },
+      "pv": {
+        "dataset": "ashare_stock_daily",
+        "fields": {
+          "amount": "Amount",
+          "close": "Close",
+          "high": "High",
+          "low": "Low",
+          "open": "Open",
+          "preclose": "PreClose",
+          "ret": "Return",
+          "volume": "Volume",
+          "vwap": "Vwap"
+        },
+        "read_auto": true,
+        "type": "data_access"
+      },
+      "status": {
+        "dataset": "ashare_stock_status",
+        "fields": {
+          "listed_state": "ListedState"
+        },
+        "type": "data_access"
+      }
+    },
+    "type": "composite"
+  },
+  "ashare_pv_valuation": {
+    "aliases": {
+      "circulating_market_cap": "valuation.circulating_market_cap",
+      "market_cap": "valuation.market_cap",
+      "pb": "valuation.pb",
+      "pe": "valuation.pe",
+      "turnover_ratio": "valuation.turnover_ratio"
+    },
+    "anchor": "pv",
+    "anchor_column": "close",
+    "joins": {
+      "valuation": "asof_backward"
+    },
+    "sources": {
+      "pv": {
+        "dataset": "ashare_stock_daily",
+        "fields": {
+          "amount": "Amount",
+          "close": "Close",
+          "high": "High",
+          "low": "Low",
+          "open": "Open",
+          "preclose": "PreClose",
+          "ret": "Return",
+          "volume": "Volume",
+          "vwap": "Vwap"
+        },
+        "read_auto": true,
+        "type": "data_access"
+      },
+      "valuation": {
+        "dataset": "ashare_stock_valuation_daily",
+        "fields": {
+          "circulating_market_cap": "CirculatingMarketCap",
+          "market_cap": "MarketCap",
+          "pb": "PbRatio",
+          "pe": "PeRatio",
+          "turnover_ratio": "TurnoverRatio"
+        },
+        "type": "data_access"
+      }
+    },
+    "type": "composite"
+  },
+  "financials_ratios": {
+    "dataset": "financials_ratios",
+    "fields": {
+      "debt_to_equity": "debt_to_equity",
+      "earnings_per_share": "earnings_per_share",
+      "enterprise_value": "enterprise_value",
+      "free_cash_flow": "free_cash_flow",
+      "market_cap": "market_cap",
+      "pe": "price_to_earnings",
+      "price_to_book": "price_to_book",
+      "price_to_earnings": "price_to_earnings",
+      "price_to_sales": "price_to_sales",
+      "return_on_equity": "return_on_equity",
+      "roe": "return_on_equity"
+    },
+    "type": "data_access"
+  },
+  "fundamentals_balance_sheet": {
+    "dataset": "fundamentals_balance_sheet",
+    "fields": {
+      "total_assets": "total_assets",
+      "total_equity": "total_equity",
+      "total_liabilities": "total_liabilities"
+    },
+    "type": "data_access"
+  },
+  "fundamentals_cash_flow_statement": {
+    "dataset": "fundamentals_cash_flow_statement",
+    "fields": {
+      "investing_cf": "net_cash_from_investing_activities",
+      "net_cash_from_investing_activities": "net_cash_from_investing_activities",
+      "net_cash_from_operating_activities": "net_cash_from_operating_activities",
+      "operating_cf": "net_cash_from_operating_activities"
+    },
+    "type": "data_access"
+  },
+  "fundamentals_income_statement": {
+    "dataset": "fundamentals_income_statement",
+    "fields": {
+      "net_income": "net_income",
+      "operating_income": "operating_income",
+      "revenue": "revenue"
+    },
+    "type": "data_access"
+  },
+  "massive_ticks_quotes": {
+    "dataset": "massive_ticks",
+    "fields": {
+      "ask_price": "ask_price",
+      "bid_price": "bid_price"
+    },
+    "kind": "quotes_v1",
+    "normalize_timestamp": true,
+    "timestamp_unit": "ns",
+    "type": "data_access"
+  },
+  "massive_ticks_trades": {
+    "dataset": "massive_ticks",
+    "fields": {
+      "price": "price",
+      "size": "size"
+    },
+    "kind": "trades_v1",
+    "normalize_timestamp": true,
+    "timestamp_unit": "ns",
+    "type": "data_access"
+  },
+  "us_daily_market_summary": {
+    "dataset": "daily_market_summary",
+    "fields": {
+      "close": "c",
+      "high": "h",
+      "low": "l",
+      "open": "o",
+      "ticker": "T",
+      "volume": "v",
+      "vwap": "vw"
+    },
+    "type": "data_access"
+  },
+  "us_polygon_floats": {
+    "aliases": {
+      "free_float": "floats.free_float",
+      "free_float_percent": "floats.free_float_percent"
+    },
+    "anchor": "pv",
+    "anchor_column": "close",
+    "joins": {
+      "floats": "asof_backward"
+    },
+    "sources": {
+      "floats": {
+        "dataset": "stocks_floats",
+        "fields": {
+          "free_float": "free_float",
+          "free_float_percent": "free_float_percent"
+        },
+        "type": "data_access"
+      },
+      "pv": {
+        "dataset": "daily_market_summary",
+        "fields": {
+          "close": "c",
+          "high": "h",
+          "low": "l",
+          "open": "o",
+          "ticker": "T",
+          "volume": "v",
+          "vwap": "vw"
+        },
+        "type": "data_access"
+      }
+    },
+    "type": "composite"
+  },
+  "us_pv": {
+    "dataset": "us_stock_daily",
+    "fields": {
+      "adj_factor": "AdjFactor",
+      "amount": "Amount",
+      "close": "Close",
+      "high": "High",
+      "low": "Low",
+      "open": "Open",
+      "preclose": "PreClose",
+      "ret": "Ret",
+      "volume": "Volume",
+      "vwap": "VWAP"
+    },
+    "type": "data_access"
+  },
+  "us_pv_universe": {
+    "anchor": "pv",
+    "anchor_column": "close",
+    "joins": {
+      "universe": "exact"
+    },
+    "sources": {
+      "pv": {
+        "dataset": "us_stock_daily",
+        "fields": {
+          "adj_factor": "AdjFactor",
+          "amount": "Amount",
+          "close": "Close",
+          "high": "High",
+          "low": "Low",
+          "open": "Open",
+          "preclose": "PreClose",
+          "ret": "Ret",
+          "volume": "Volume",
+          "vwap": "VWAP"
+        },
+        "type": "data_access"
+      },
+      "universe": {
+        "dataset": "us_universe_daily",
+        "fields": {
+          "universe_ticker": "ticker"
+        },
+        "type": "data_access"
+      }
+    },
+    "type": "composite"
+  },
+  "us_pv_valuation": {
+    "aliases": {
+      "circulating_market_cap": "valuation.circulating_market_cap",
+      "market_cap": "valuation.market_cap",
+      "pb": "valuation.pb",
+      "pe": "valuation.pe",
+      "turnover_ratio": "valuation.turnover_ratio"
+    },
+    "anchor": "pv",
+    "anchor_column": "close",
+    "joins": {
+      "valuation": "asof_backward"
+    },
+    "sources": {
+      "pv": {
+        "dataset": "us_stock_daily",
+        "fields": {
+          "adj_factor": "AdjFactor",
+          "amount": "Amount",
+          "close": "Close",
+          "high": "High",
+          "low": "Low",
+          "open": "Open",
+          "preclose": "PreClose",
+          "ret": "Ret",
+          "volume": "Volume",
+          "vwap": "VWAP"
+        },
+        "type": "data_access"
+      },
+      "valuation": {
+        "dataset": "us_stock_valuation_daily",
+        "fields": {
+          "circulating_market_cap": "CirculatingMarketCap",
+          "market_cap": "MarketCap",
+          "pb": "PbRatio",
+          "pe": "PeRatio",
+          "turnover_ratio": "TurnoverRatio"
+        },
+        "type": "data_access"
+      }
+    },
+    "type": "composite"
+  },
+  "us_sip_balance_sheet": {
+    "aliases": {
+      "total_assets": "balance_sheet.total_assets",
+      "total_equity": "balance_sheet.total_equity",
+      "total_liabilities": "balance_sheet.total_liabilities"
+    },
+    "anchor": "price",
+    "anchor_column": "close",
+    "joins": {
+      "balance_sheet": "asof_backward"
+    },
+    "sources": {
+      "balance_sheet": {
+        "dataset": "fundamentals_balance_sheet",
+        "fields": {
+          "total_assets": "total_assets",
+          "total_equity": "total_equity",
+          "total_liabilities": "total_liabilities"
+        },
+        "type": "data_access"
+      },
+      "price": {
+        "dataset": "us_stocks_sip_day_aggs",
+        "fields": {
+          "close": "close",
+          "high": "high",
+          "low": "low",
+          "open": "open",
+          "volume": "volume",
+          "window_start": "window_start"
+        },
+        "type": "data_access"
+      }
+    },
+    "type": "composite"
+  },
+  "us_sip_cash_flow": {
+    "aliases": {
+      "investing_cf": "cash_flow.net_cash_from_investing_activities",
+      "operating_cf": "cash_flow.net_cash_from_operating_activities"
+    },
+    "anchor": "price",
+    "anchor_column": "close",
+    "joins": {
+      "cash_flow": "asof_backward"
+    },
+    "sources": {
+      "cash_flow": {
+        "dataset": "fundamentals_cash_flow_statement",
+        "fields": {
+          "investing_cf": "net_cash_from_investing_activities",
+          "net_cash_from_investing_activities": "net_cash_from_investing_activities",
+          "net_cash_from_operating_activities": "net_cash_from_operating_activities",
+          "operating_cf": "net_cash_from_operating_activities"
+        },
+        "type": "data_access"
+      },
+      "price": {
+        "dataset": "us_stocks_sip_day_aggs",
+        "fields": {
+          "close": "close",
+          "high": "high",
+          "low": "low",
+          "open": "open",
+          "volume": "volume",
+          "window_start": "window_start"
+        },
+        "type": "data_access"
+      }
+    },
+    "type": "composite"
+  },
+  "us_sip_day_ratios": {
+    "aliases": {
+      "pe": "ratios.price_to_earnings",
+      "price_to_earnings": "ratios.price_to_earnings",
+      "roe": "ratios.return_on_equity"
+    },
+    "anchor": "price",
+    "anchor_column": "close",
+    "joins": {
+      "ratios": "asof_backward"
+    },
+    "sources": {
+      "price": {
+        "dataset": "us_stocks_sip_day_aggs",
+        "fields": {
+          "close": "close",
+          "high": "high",
+          "low": "low",
+          "open": "open",
+          "volume": "volume",
+          "window_start": "window_start"
+        },
+        "type": "data_access"
+      },
+      "ratios": {
+        "dataset": "financials_ratios",
+        "fields": {
+          "debt_to_equity": "debt_to_equity",
+          "earnings_per_share": "earnings_per_share",
+          "enterprise_value": "enterprise_value",
+          "free_cash_flow": "free_cash_flow",
+          "market_cap": "market_cap",
+          "pe": "price_to_earnings",
+          "price_to_book": "price_to_book",
+          "price_to_earnings": "price_to_earnings",
+          "price_to_sales": "price_to_sales",
+          "return_on_equity": "return_on_equity",
+          "roe": "return_on_equity"
+        },
+        "type": "data_access"
+      }
+    },
+    "type": "composite"
+  },
+  "us_sip_floats": {
+    "aliases": {
+      "free_float": "floats.free_float",
+      "free_float_percent": "floats.free_float_percent"
+    },
+    "anchor": "price",
+    "anchor_column": "close",
+    "joins": {
+      "floats": "asof_backward"
+    },
+    "sources": {
+      "floats": {
+        "dataset": "stocks_floats",
+        "fields": {
+          "free_float": "free_float",
+          "free_float_percent": "free_float_percent",
+          "ticker": "ticker"
+        },
+        "type": "data_access"
+      },
+      "price": {
+        "dataset": "us_stocks_sip_day_aggs",
+        "fields": {
+          "close": "close",
+          "high": "high",
+          "low": "low",
+          "open": "open",
+          "volume": "volume",
+          "window_start": "window_start"
+        },
+        "type": "data_access"
+      }
+    },
+    "type": "composite"
+  },
+  "us_sip_income_statement": {
+    "aliases": {
+      "net_income": "income_statement.net_income",
+      "operating_income": "income_statement.operating_income",
+      "revenue": "income_statement.revenue"
+    },
+    "anchor": "price",
+    "anchor_column": "close",
+    "joins": {
+      "income_statement": "asof_backward"
+    },
+    "sources": {
+      "income_statement": {
+        "dataset": "fundamentals_income_statement",
+        "fields": {
+          "net_income": "net_income",
+          "operating_income": "operating_income",
+          "revenue": "revenue"
+        },
+        "type": "data_access"
+      },
+      "price": {
+        "dataset": "us_stocks_sip_day_aggs",
+        "fields": {
+          "close": "close",
+          "high": "high",
+          "low": "low",
+          "open": "open",
+          "volume": "volume",
+          "window_start": "window_start"
+        },
+        "type": "data_access"
+      }
+    },
+    "type": "composite"
+  },
+  "us_stocks_floats": {
+    "dataset": "stocks_floats",
+    "fields": {
+      "free_float": "free_float",
+      "free_float_percent": "free_float_percent",
+      "ticker": "ticker"
+    },
+    "type": "data_access"
+  },
+  "us_stocks_sip_day_aggs": {
+    "dataset": "us_stocks_sip_day_aggs",
+    "fields": {
+      "close": "close",
+      "high": "high",
+      "low": "low",
+      "open": "open",
+      "volume": "volume",
+      "window_start": "window_start"
+    },
+    "type": "data_access"
+  },
+  "us_stocks_sip_minute_aggs": {
+    "dataset": "us_stocks_sip_minute_aggs",
+    "fields": {
+      "close": "close",
+      "high": "high",
+      "low": "low",
+      "open": "open",
+      "transactions": "transactions",
+      "volume": "volume",
+      "window_start": "window_start"
+    },
+    "normalize_timestamp": true,
+    "timestamp_unit": "ns",
+    "type": "data_access"
+  },
+  "us_stocks_sip_quotes": {
+    "dataset": "us_stocks_sip_quotes",
+    "fields": {
+      "ask_price": "ask_price",
+      "ask_size": "ask_size",
+      "bid_price": "bid_price",
+      "bid_size": "bid_size"
+    },
+    "normalize_timestamp": true,
+    "timestamp_unit": "ns",
+    "type": "data_access"
+  },
+  "us_stocks_sip_trades": {
+    "dataset": "us_stocks_sip_trades",
+    "fields": {
+      "price": "price",
+      "size": "size"
+    },
+    "normalize_timestamp": true,
+    "timestamp_unit": "ns",
+    "type": "data_access"
+  }
+}

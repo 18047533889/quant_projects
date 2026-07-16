@@ -108,9 +108,11 @@ class _FakeStore:
         return {"source": source, "target": target}
 
 
-def test_vendored_factor_engine_is_removed():
+def test_embedded_platform_runtime_is_present():
     root = Path(__file__).resolve().parents[1]
-    assert not (root / "factor_engine").exists()
+    assert (root / "factor_engine" / "runtime" / "engine.py").is_file()
+    assert (root / "data_access" / "store.py").is_file()
+    assert (root / "embedded_platform_manifest.json").is_file()
 
 
 def test_current_factor_engine_executes_on_in_memory_frame():
