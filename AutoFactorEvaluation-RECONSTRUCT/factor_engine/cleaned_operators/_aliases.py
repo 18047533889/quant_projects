@@ -1,0 +1,177 @@
+# -*- coding: utf-8 -*-
+"""
+DSL 别名 → canonical 映射（**须在全部算子类注册之后**加载）。
+
+作用
+----
+让挖掘侧习惯的写法（``ts_rsi``、``CS_RANK``、``DECAY_LINEAR``）与 registry 内
+canonical 名（``RSI``、``rank``、``decay_linear``）指向同一 ``Operator`` 实例。
+
+维护
+----
+- 新增 DSL 别名：在本文件 ``register_alias``，并确保 canonical 已在对应 ``*.py`` 实现；
+- 技术指标 ``ts_*`` → 大写 canonical 见下方「§ 技术指标」段；
+- 重复算子合并见 [`_dedupe.py`](_dedupe.py)（别名重定向 + 注销冗余 canonical）。
+
+本模块无函数定义，import 时产生副作用（向 ``OperatorRegistry`` 登记别名）。
+"""
+from cleaned_operators.registry import OperatorRegistry
+
+# ---------------------------------------------------------------------------
+# § 统计 / 回归（statistics_regression.py）
+# ---------------------------------------------------------------------------
+OperatorRegistry.register_alias("acf", "ACF")
+OperatorRegistry.register_alias("mode", "Mode")
+OperatorRegistry.register_alias("percentile", "ts_quantile")
+# ---------------------------------------------------------------------------
+# § 技术指标（technical_signal.py）
+# factor_engine DSL 名 → cleaned canonical；实现见 technical_signal.py §1
+# ---------------------------------------------------------------------------
+OperatorRegistry.register_alias("ts_macd", "MACD")
+OperatorRegistry.register_alias("ts_rsi", "RSI")
+OperatorRegistry.register_alias("ts_rsi_wilder", "RSI_WILDER")
+OperatorRegistry.register_alias("ts_adx", "ADX")
+OperatorRegistry.register_alias("ts_adxr", "ADXR")
+OperatorRegistry.register_alias("ts_aroon", "AROON")
+OperatorRegistry.register_alias("ts_atr", "ATR")
+OperatorRegistry.register_alias("ts_atr_wilder", "ATR_WILDER")
+OperatorRegistry.register_alias("ts_bbands", "BollingerBands")
+OperatorRegistry.register_alias("ts_cci", "CCI")
+OperatorRegistry.register_alias("ts_mom", "MOM")
+OperatorRegistry.register_alias("ts_obv", "OBV")
+OperatorRegistry.register_alias("ts_roc", "ROC")
+OperatorRegistry.register_alias("ts_stoch", "StochasticK")
+OperatorRegistry.register_alias("ts_stochf", "StochasticD")
+OperatorRegistry.register_alias("ts_trix", "TRIX")
+OperatorRegistry.register_alias("ts_willr", "WilliamsR")
+OperatorRegistry.register_alias("ts_wma", "WMA")
+OperatorRegistry.register_alias("wma", "WMA")
+
+# ---------------------------------------------------------------------------
+# § 元素数学 / 清洗 / 截面 / 时序 / 基本面 等（其余模块）
+# ---------------------------------------------------------------------------
+OperatorRegistry.register_alias("ABS", "abs")
+OperatorRegistry.register_alias("AVG2", "avg2")
+OperatorRegistry.register_alias("ts_return", "ts_pct")
+OperatorRegistry.register_alias("COALESCE", "coalesce")
+OperatorRegistry.register_alias("CS_DEMEAN", "cs_demean")
+OperatorRegistry.register_alias("DECAY_LINEAR", "ts_decay_linear")
+OperatorRegistry.register_alias("TS_DECAY_LINEAR", "ts_decay_linear")
+OperatorRegistry.register_alias("FillForward", "ffill")
+OperatorRegistry.register_alias("fillna_forward", "ffill")
+OperatorRegistry.register_alias("FillNA", "fillna")
+OperatorRegistry.register_alias("IS_NAN", "is_nan")
+OperatorRegistry.register_alias("IS_NULL", "is_null")
+OperatorRegistry.register_alias("is_null", "is_null")
+OperatorRegistry.register_alias("IS_INFINITE", "is_infinite")
+OperatorRegistry.register_alias("log_clip_domain", "protected_log")
+OperatorRegistry.register_alias("IS_NOT_NULL", "is_not_null")
+OperatorRegistry.register_alias("is_not_null", "is_not_null")
+OperatorRegistry.register_alias("LOG", "log")
+OperatorRegistry.register_alias("ln", "log")
+OperatorRegistry.register_alias("NAN_TO_NUM", "nan_to_num")
+OperatorRegistry.register_alias("POWER", "power")
+OperatorRegistry.register_alias("QUARTER", "quarter")
+OperatorRegistry.register_alias("quarter_from_cumulative", "quarter_from_cumulative")
+OperatorRegistry.register_alias("ttm_from_quarterly", "ttm_from_quarterly")
+OperatorRegistry.register_alias("ttm_from_cumulative", "ttm_from_cumulative")
+OperatorRegistry.register_alias("yoy_by_period", "yoy_by_period")
+OperatorRegistry.register_alias("CS_RANK", "rank")
+OperatorRegistry.register_alias("RANK", "rank")
+OperatorRegistry.register_alias("c_rank", "rank")
+OperatorRegistry.register_alias("cs_rank", "rank")
+OperatorRegistry.register_alias("RANKCORR", "rank_corr")
+OperatorRegistry.register_alias("RANK_CORR", "rank_corr")
+OperatorRegistry.register_alias("rankcorr", "rank_corr")
+# log_returns 为独立 canonical，见 price_volume.py
+OperatorRegistry.register_alias("FP_BETA", "rolling_beta_to_market")
+OperatorRegistry.register_alias("ROLLING_BETA_TO_MARKET", "rolling_beta_to_market")
+OperatorRegistry.register_alias("fp_beta", "rolling_beta_to_market")
+OperatorRegistry.register_alias("ROLLING_BETA", "rolling_beta")
+OperatorRegistry.register_alias("ts_rolling_beta", "rolling_beta")
+OperatorRegistry.register_alias("ROUND", "round")
+OperatorRegistry.register_alias("SCALE", "scale")
+OperatorRegistry.register_alias("c_scale", "scale")
+OperatorRegistry.register_alias("SIGN", "sign")
+OperatorRegistry.register_alias("CAP_NEUTRALIZE", "size_neutralize")
+OperatorRegistry.register_alias("MARKET_CAP_NEUTRALIZE", "size_neutralize")
+OperatorRegistry.register_alias("SIZE_NEUTRALIZE", "size_neutralize")
+OperatorRegistry.register_alias("SQRT", "sqrt")
+OperatorRegistry.register_alias("ts_arg_max", "ts_argmax")
+OperatorRegistry.register_alias("ts_arg_min", "ts_argmin")
+OperatorRegistry.register_alias("TS_CORR", "ts_corr")
+OperatorRegistry.register_alias("correlation", "ts_corr")
+OperatorRegistry.register_alias("m_cor", "ts_corr")
+OperatorRegistry.register_alias("ts_correlation", "ts_corr")
+OperatorRegistry.register_alias("TS_COV", "ts_cov")
+OperatorRegistry.register_alias("m_cov", "ts_cov")
+OperatorRegistry.register_alias("ts_covariance", "ts_cov")
+OperatorRegistry.register_alias("DELAY", "ts_delay")
+OperatorRegistry.register_alias("Delay", "ts_delay")
+OperatorRegistry.register_alias("Ref", "ts_delay")
+OperatorRegistry.register_alias("delay", "ts_delay")
+OperatorRegistry.register_alias("m_delay", "ts_delay")
+OperatorRegistry.register_alias("shift", "ts_delay")
+OperatorRegistry.register_alias("Delta", "ts_delta")
+OperatorRegistry.register_alias("Diff", "ts_delta")
+OperatorRegistry.register_alias("TS_DELTA", "ts_delta")
+OperatorRegistry.register_alias("delta", "ts_delta")
+OperatorRegistry.register_alias("CLIP", "clip")
+OperatorRegistry.register_alias("cap", "clip")
+OperatorRegistry.register_alias("clamp", "clip")
+OperatorRegistry.register_alias("ma", "ts_mean")
+OperatorRegistry.register_alias("sum_n", "ts_sum")
+OperatorRegistry.register_alias("std_n", "ts_std")
+OperatorRegistry.register_alias("industry_neutral", "group_neutralize")
+OperatorRegistry.register_alias("ind_neutralize", "group_neutralize")
+OperatorRegistry.register_alias("market_cap_neutralize", "size_neutralize")
+OperatorRegistry.register_alias("cap_neutralize", "size_neutralize")
+# LQTP-aligned primary names are applied in _dedupe.py (ts_ema→ema, clip→cap, …).
+# Keep pre-dedupe aliases pointed at pre-rename canonicals so rename_canonical can retarget them.
+OperatorRegistry.register_alias("m_pct_change", "ts_pct")
+OperatorRegistry.register_alias("m_percentile", "ts_quantile")
+OperatorRegistry.register_alias("m_argmax", "ts_argmax")
+OperatorRegistry.register_alias("m_argmin", "ts_argmin")
+OperatorRegistry.register_alias("m_top_n_sum", "ts_topk_sum")
+OperatorRegistry.register_alias("TS_TOPK_SUM", "ts_topk_sum")
+OperatorRegistry.register_alias("TS_KURT", "ts_kurt")
+OperatorRegistry.register_alias("Max", "ts_max")
+OperatorRegistry.register_alias("TS_MAX", "ts_max")
+OperatorRegistry.register_alias("m_max", "ts_max")
+OperatorRegistry.register_alias("max", "flex_max")
+OperatorRegistry.register_alias("Mean", "ts_mean")
+OperatorRegistry.register_alias("TS_MEAN", "ts_mean")
+OperatorRegistry.register_alias("m_avg", "ts_mean")
+OperatorRegistry.register_alias("mean", "ts_mean")
+OperatorRegistry.register_alias("Min", "ts_min")
+OperatorRegistry.register_alias("TS_MIN", "ts_min")
+OperatorRegistry.register_alias("m_min", "ts_min")
+OperatorRegistry.register_alias("min", "flex_min")
+OperatorRegistry.register_alias("TS_PCT", "ts_pct")
+OperatorRegistry.register_alias("TS_QUANTILE", "ts_quantile")
+OperatorRegistry.register_alias("TS_RANK", "ts_rank")
+OperatorRegistry.register_alias("m_rank", "ts_rank")
+OperatorRegistry.register_alias("TS_REGRESSION_SLOPE", "ts_regression")
+OperatorRegistry.register_alias("ts_regression_slope", "ts_regression")
+OperatorRegistry.register_alias("TS_SKEW", "ts_skew")
+OperatorRegistry.register_alias("Std", "ts_std")
+OperatorRegistry.register_alias("TS_STD", "ts_std")
+OperatorRegistry.register_alias("m_std", "ts_std")
+OperatorRegistry.register_alias("std", "ts_std")
+OperatorRegistry.register_alias("ts_std_dev", "ts_std")
+OperatorRegistry.register_alias("ts_stddev", "ts_std")
+OperatorRegistry.register_alias("TS_SUM", "ts_sum")
+OperatorRegistry.register_alias("m_sum", "ts_sum")
+OperatorRegistry.register_alias("TTM", "ttm")
+OperatorRegistry.register_alias("IIF", "where")
+OperatorRegistry.register_alias("WHERE", "where")
+OperatorRegistry.register_alias("if", "where")
+OperatorRegistry.register_alias("iif", "where")
+OperatorRegistry.register_alias("WINSORIZE", "winsorize")
+OperatorRegistry.register_alias("YOY", "yoy")
+OperatorRegistry.register_alias("CS_ZSCORE", "zscore")
+OperatorRegistry.register_alias("ZSCORE", "zscore")
+OperatorRegistry.register_alias("c_zscore", "zscore")
+OperatorRegistry.register_alias("cs_zscore", "zscore")
+
+# dedupe 在 load_all() 全部模块加载后执行，见 cleaned_operators.__init__.load_all

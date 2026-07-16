@@ -1,0 +1,46 @@
+{
+  "distribution": "AutoFactorEvaluation-RECONSTRUCT",
+  "exclusions": {
+    "data_access": [
+      ".pytest_cache",
+      "__pycache__",
+      "tests"
+    ],
+    "factor_engine": [
+      ".pytest_cache",
+      ".pytest_full.txt",
+      "__pycache__",
+      "benchmarks",
+      "cleaned_operators.zip",
+      "examples",
+      "tests"
+    ],
+    "suffixes": [
+      ".docx",
+      ".ipynb",
+      ".pdf",
+      ".pptx",
+      ".pyc",
+      ".pyo",
+      ".xlsx",
+      ".zip"
+    ]
+  },
+  "modules": {
+    "data_access": {
+      "files": 50,
+      "sha256": "89d7cad192245d3f85554fe56414ae2a6ed1527cc6445a4babe99188622b1fb3",
+      "size_bytes": 446474
+    },
+    "factor_engine": {
+      "files": 413,
+      "sha256": "0a7bb5df84bf63ec722e9182bd94f1942dadee5f2add1300718a198f3c258337",
+      "size_bytes": 4022774
+    }
+  },
+  "schema_version": 1,
+  "source_commit": "5fe9407aaa5b95538a3f98d5b466682135af42db",
+  "source_layout": "monorepo-root/factor_engine + data_access",
+  "source_repository": "18047533889/quant_projects",
+  "synced_at_utc": "2026-07-16T17:14:19.530373+00:00"
+}
