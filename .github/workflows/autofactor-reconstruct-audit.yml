@@ -23,46 +23,38 @@ jobs:
         run: |
           set -euo pipefail
           ROOT="AutoFactorEvaluation-RECONSTRUCT"
-          OUT="$ROOT/.assistant_audit.txt"
+          OUT="$ROOT/.assistant_platform_audit.txt"
           test -d "$ROOT"
           {
-            echo "# FILE TREE"
-            find "$ROOT" -type f -not -path '*/.git/*' -printf '%p\t%s bytes\n' | sort
+            echo "# MODULE SIZES"
+            du -sh factor_engine data_access "$ROOT" || true
             echo
-            echo "# TOP-LEVEL"
-            find "$ROOT" -maxdepth 2 -type f -printf '%p\n' | sort
+            echo "# MODULE FILE COUNTS"
+            printf 'factor_engine\t'; find factor_engine -type f | wc -l
+            printf 'data_access\t'; find data_access -type f | wc -l
             echo
-            echo "# PYTHON IMPORTS FROM FACTOR_ENGINE / DATA_ACCESS"
-            grep -RInE '(^|[[:space:]])(from|import)[[:space:]]+(factor_engine|data_access)|sys\.path|PYTHONPATH' "$ROOT" --include='*.py' --include='*.toml' --include='*.yaml' --include='*.yml' --include='*.md' --include='*.txt' || true
+            echo "# FACTOR_ENGINE TOP LEVEL"
+            find factor_engine -maxdepth 2 -type f -printf '%p\t%s bytes\n' | sort
             echo
-            echo "# CONFIG AND ENTRYPOINT CONTENTS"
-            for f in \
-              "$ROOT/README.md" \
-              "$ROOT/requirements.txt" \
-              "$ROOT/pyproject.toml" \
-              "$ROOT/setup.py" \
-              "$ROOT/setup.cfg" \
-              "$ROOT/Makefile" \
-              "$ROOT/docker-compose.yml" \
-              "$ROOT/Dockerfile" \
-              "$ROOT/main.py" \
-              "$ROOT/app.py"; do
+            echo "# DATA_ACCESS TOP LEVEL"
+            find data_access -maxdepth 3 -type f -printf '%p\t%s bytes\n' | sort
+            echo
+            echo "# DATA_ACCESS IMPORTS"
+            grep -RInE '^(from|import) ' data_access --include='*.py' | head -600 || true
+            echo
+            echo "# FACTOR_ENGINE PACKAGE IMPORT ROOTS"
+            grep -RInE '^(from|import) (api|backend|cleaned_operators|expr|ir|planner|runtime|storage|data_access)' factor_engine --include='*.py' | head -800 || true
+            echo
+            for f in data_access/__init__.py data_access/store.py data_access/config/datasets.yaml factor_engine/requirements.txt factor_engine/pyproject.toml; do
               if [ -f "$f" ]; then
                 echo
                 echo "===== $f ====="
-                sed -n '1,260p' "$f"
+                sed -n '1,320p' "$f"
               fi
             done
-            echo
-            echo "# PYTHON FILE HEADERS"
-            while IFS= read -r f; do
-              echo
-              echo "===== $f ====="
-              sed -n '1,220p' "$f"
-            done < <(find "$ROOT" -maxdepth 4 -type f -name '*.py' | sort)
           } > "$OUT"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add "$OUT"
-          git commit -m "Capture AutoFactorEvaluation reconstruction audit" || exit 0
+          git commit -m "Capture embedded platform dependency audit" || exit 0
           git push origin HEAD:agent/autofactor-standalone-reconstruct
