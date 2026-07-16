@@ -1,0 +1,68 @@
+name: AutoFactorEvaluation Reconstruct Audit
+
+on:
+  push:
+    branches: [agent/autofactor-standalone-reconstruct]
+    paths:
+      - ".github/workflows/autofactor-reconstruct-audit.yml"
+      - "AutoFactorEvaluation-RECONSTRUCT/.assistant-audit-trigger"
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/autofactor-standalone-reconstruct
+          fetch-depth: 0
+      - name: Build repository audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="AutoFactorEvaluation-RECONSTRUCT"
+          OUT="$ROOT/.assistant_audit.txt"
+          test -d "$ROOT"
+          {
+            echo "# FILE TREE"
+            find "$ROOT" -type f -not -path '*/.git/*' -printf '%p\t%s bytes\n' | sort
+            echo
+            echo "# TOP-LEVEL"
+            find "$ROOT" -maxdepth 2 -type f -printf '%p\n' | sort
+            echo
+            echo "# PYTHON IMPORTS FROM FACTOR_ENGINE / DATA_ACCESS"
+            grep -RInE '(^|[[:space:]])(from|import)[[:space:]]+(factor_engine|data_access)|sys\.path|PYTHONPATH' "$ROOT" --include='*.py' --include='*.toml' --include='*.yaml' --include='*.yml' --include='*.md' --include='*.txt' || true
+            echo
+            echo "# CONFIG AND ENTRYPOINT CONTENTS"
+            for f in \
+              "$ROOT/README.md" \
+              "$ROOT/requirements.txt" \
+              "$ROOT/pyproject.toml" \
+              "$ROOT/setup.py" \
+              "$ROOT/setup.cfg" \
+              "$ROOT/Makefile" \
+              "$ROOT/docker-compose.yml" \
+              "$ROOT/Dockerfile" \
+              "$ROOT/main.py" \
+              "$ROOT/app.py"; do
+              if [ -f "$f" ]; then
+                echo
+                echo "===== $f ====="
+                sed -n '1,260p' "$f"
+              fi
+            done
+            echo
+            echo "# PYTHON FILE HEADERS"
+            while IFS= read -r f; do
+              echo
+              echo "===== $f ====="
+              sed -n '1,220p' "$f"
+            done < <(find "$ROOT" -maxdepth 4 -type f -name '*.py' | sort)
+          } > "$OUT"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$OUT"
+          git commit -m "Capture AutoFactorEvaluation reconstruction audit" || exit 0
+          git push origin HEAD:agent/autofactor-standalone-reconstruct
