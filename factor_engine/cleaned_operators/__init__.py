@@ -47,6 +47,9 @@ _LOAD_MODULES = (
     "cleaned_operators.fundamental.ops",
     "cleaned_operators.microstructure.ops",
     "cleaned_operators.microstructure.polars_microstructure",
+    # Must be imported last: audited implementations replace historical
+    # canonical/backend registrations and tighten the authoring surface.
+    "cleaned_operators.semantic_hardening",
 )
 
 
