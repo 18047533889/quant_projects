@@ -1,0 +1,39 @@
+name: AutoFactorEvaluation Standalone Resync
+
+on:
+  push:
+    branches: [agent/autofactor-standalone-reconstruct]
+    paths:
+      - ".github/workflows/autofactor-standalone-resync.yml"
+      - "AutoFactorEvaluation-RECONSTRUCT/.standalone-resync-trigger"
+
+permissions:
+  contents: write
+
+jobs:
+  resync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/autofactor-standalone-reconstruct
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Rebuild embedded platform distribution
+        run: |
+          python AutoFactorEvaluation-RECONSTRUCT/scripts/sync_embedded_platform.py \
+            --source-root "$GITHUB_WORKSPACE" \
+            --source-commit 5fe9407aaa5b95538a3f98d5b466682135af42db
+      - name: Commit rebuilt distribution
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            AutoFactorEvaluation-RECONSTRUCT/factor_engine \
+            AutoFactorEvaluation-RECONSTRUCT/data_access \
+            AutoFactorEvaluation-RECONSTRUCT/embedded_platform_manifest.json
+          git commit -m "Slim and rehash embedded quantitative platform" || exit 0
+          git push origin HEAD:agent/autofactor-standalone-reconstruct
