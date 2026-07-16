@@ -23,12 +23,13 @@ permissions:
 jobs:
   integration:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     env:
-      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/AutoFactorEvaluation-RECONSTRUCT
+      PYTHONPATH: ${{ github.workspace }}/AutoFactorEvaluation-RECONSTRUCT
       FACTOR_ENGINE_DISABLE_NUMBA: "1"
       FACTOR_ENGINE_RUN_MODE: research
       QUANT_PRODUCTION_MODE: "0"
+      AUTOFAC_PLATFORM_MODE: bundled
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -40,17 +41,37 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
           python -m pip install pytest numpy pandas scipy statsmodels pyarrow polars duckdb pyyaml pydantic requests
-      - name: Static integration contract
+      - name: Static standalone distribution contract
         shell: bash
         run: |
           set -euo pipefail
-          test ! -d AutoFactorEvaluation-RECONSTRUCT/factor_engine
-          ! grep -RInE 'AutoFactorEvaluation-RECONSTRUCT/factor_engine|parents\[[0-9]+\].*factor_engine|_FACTOR_ENGINE_ROOT.*AutoFactorEvaluation' AutoFactorEvaluation-RECONSTRUCT --include='*.py'
-          ! grep -RInE 'from factor_engine\.|import factor_engine\.' AutoFactorEvaluation-RECONSTRUCT --include='*.py'
+          test -d AutoFactorEvaluation-RECONSTRUCT/factor_engine
+          test -d AutoFactorEvaluation-RECONSTRUCT/data_access
+          test -f AutoFactorEvaluation-RECONSTRUCT/embedded_platform_manifest.json
+          test -f AutoFactorEvaluation-RECONSTRUCT/factor_engine/cleaned_operators/semantic_hardening.py
+          test -f AutoFactorEvaluation-RECONSTRUCT/data_access/config/datasets.yaml
+          python AutoFactorEvaluation-RECONSTRUCT/scripts/sync_embedded_platform.py --check
+          ! grep -RInE \
+            'parents\[[0-9]+\].*factor_engine|_FACTOR_ENGINE_ROOT.*AutoFactorEvaluation|sys\.path.*parents' \
+            AutoFactorEvaluation-RECONSTRUCT \
+            --include='*.py' \
+            --exclude-dir=factor_engine \
+            --exclude-dir=data_access
+          ! grep -RInE \
+            '^(from|import)[[:space:]]+(api|backend|runtime|storage|cleaned_operators|data_access)(\.|[[:space:]])' \
+            AutoFactorEvaluation-RECONSTRUCT \
+            --include='*.py' \
+            --exclude='quant_platform.py' \
+            --exclude='platform_bootstrap.py' \
+            --exclude-dir=factor_engine \
+            --exclude-dir=data_access
           python -m compileall -q AutoFactorEvaluation-RECONSTRUCT
-      - name: Platform bridge tests
+      - name: Standalone doctor and platform bridge tests
         run: |
-          pytest -q AutoFactorEvaluation-RECONSTRUCT/tests/test_quant_platform_integration.py
+          python AutoFactorEvaluation-RECONSTRUCT/standalone.py doctor
+          pytest -q \
+            AutoFactorEvaluation-RECONSTRUCT/tests/test_standalone_distribution.py \
+            AutoFactorEvaluation-RECONSTRUCT/tests/test_quant_platform_integration.py
       - name: Gateway and assetization import smoke
         run: |
           python - <<'PY'
@@ -60,11 +81,11 @@ jobs:
           count = load_operators()
           assert count > 0
           manifest = {
-              "schema_version": "disk.v1",
-              "candidate_id": "ci_factor",
-              "formula": "ts_mean(close, 3)",
-              "market": "ashare",
-              "frequency_bucket": "1d",
+            "schema_version": "disk.v1",
+            "candidate_id": "ci_factor",
+            "formula": "ts_mean(close, 3)",
+            "market": "ashare",
+            "frequency_bucket": "1d",
           }
           assert _step2_build_yaml(manifest).status == "PASS"
           tiny = _step4_tiny_run(manifest)
@@ -73,6 +94,10 @@ jobs:
           assert FormulaEvaluator
           PY
       - name: Root platform regression tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine
+          AUTOFAC_PLATFORM_MODE: external
+          AUTOFAC_PLATFORM_ROOT: ${{ github.workspace }}
         run: |
           pytest -q \
             data_access/tests/unit/test_params_validation_strict.py \
