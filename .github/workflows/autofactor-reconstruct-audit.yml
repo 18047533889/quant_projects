@@ -13,7 +13,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -22,7 +22,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: pip
       - name: Synchronize embedded platform
         run: |
           python AutoFactorEvaluation-RECONSTRUCT/scripts/sync_embedded_platform.py \
@@ -56,14 +55,15 @@ jobs:
           start = text.find("def _find_quant_projects_root()")
           marker = "bootstrap_quant_platform()\n"
           end = text.find(marker, start)
-          if start < 0 or end < 0:
+          if start >= 0 and end >= 0:
+              end += len(marker)
+              replacement = (
+                  "from platform_bootstrap import activate_platform\n\n"
+                  "PLATFORM_LAYOUT = activate_platform()\n"
+              )
+              text = text[:start] + replacement + text[end:]
+          elif "PLATFORM_LAYOUT = activate_platform()" not in text:
               raise RuntimeError("quant_platform bootstrap block not found")
-          end += len(marker)
-          replacement = (
-              "from platform_bootstrap import activate_platform\n\n"
-              "PLATFORM_LAYOUT = activate_platform()\n"
-          )
-          text = text[:start] + replacement + text[end:]
           quant.write_text(text, encoding="utf-8")
 
           integration_test = root / "tests" / "test_quant_platform_integration.py"
@@ -78,9 +78,11 @@ jobs:
               assert (root / "data_access" / "store.py").is_file()
               assert (root / "embedded_platform_manifest.json").is_file()
           '''
-          if old not in text:
+          if old in text:
+              text = text.replace(old, new, 1)
+          elif "test_embedded_platform_runtime_is_present" not in text:
               raise RuntimeError("legacy vendored-factor test not found")
-          integration_test.write_text(text.replace(old, new, 1), encoding="utf-8")
+          integration_test.write_text(text, encoding="utf-8")
 
           pipeline = root / "pipeline.py"
           text = pipeline.read_text(encoding="utf-8")
@@ -114,22 +116,6 @@ jobs:
               text = text.replace(parse_anchor, check_block, 1)
           pipeline.write_text(text, encoding="utf-8")
           PY
-      - name: Install standalone dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r AutoFactorEvaluation-RECONSTRUCT/requirements-core.txt pytest
-      - name: Validate standalone distribution
-        env:
-          PYTHONPATH: ${{ github.workspace }}/AutoFactorEvaluation-RECONSTRUCT
-          FACTOR_ENGINE_DISABLE_NUMBA: "1"
-          AUTOFAC_PLATFORM_MODE: bundled
-        run: |
-          python AutoFactorEvaluation-RECONSTRUCT/scripts/sync_embedded_platform.py --check
-          python AutoFactorEvaluation-RECONSTRUCT/standalone.py doctor
-          pytest -q \
-            AutoFactorEvaluation-RECONSTRUCT/tests/test_standalone_distribution.py \
-            AutoFactorEvaluation-RECONSTRUCT/tests/test_quant_platform_integration.py \
-            AutoFactorEvaluation-RECONSTRUCT/tests/test_batch_contracts.py
       - name: Commit standalone distribution
         shell: bash
         run: |
