@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -43,16 +42,16 @@ def test_optional_recipe_requires_explicit_status_opt_in() -> None:
 
 
 def test_recipe_compiler_rejects_unsafe_syntax_and_cycles() -> None:
-    unsafe = FactorRecipe("__unsafe_test", "test", "test", "__import__('os')", ())
-    first = FactorRecipe("__cycle_a", "test", "test", "__cycle_b(x)", ("x",))
-    second = FactorRecipe("__cycle_b", "test", "test", "__cycle_a(x)", ("x",))
+    unsafe = FactorRecipe("unsafe_test_recipe", "test", "test", "__import__('os')", ())
+    first = FactorRecipe("cycle_test_a", "test", "test", "cycle_test_b(x)", ("x",))
+    second = FactorRecipe("cycle_test_b", "test", "test", "cycle_test_a(x)", ("x",))
     for recipe in (unsafe, first, second):
         FactorRecipeRegistry.register(recipe)
     try:
         with pytest.raises(RecipeExpansionError):
-            RecipeCompiler().expand("__unsafe_test", {})
+            RecipeCompiler().expand("unsafe_test_recipe", {})
         with pytest.raises(RecipeExpansionError, match="cyclic"):
-            RecipeCompiler().expand("__cycle_a", {"x": "close"})
+            RecipeCompiler().expand("cycle_test_a", {"x": "close"})
     finally:
         for name in (unsafe.name, first.name, second.name):
             FactorRecipeRegistry._recipes.pop(name, None)
