@@ -58,7 +58,7 @@ class _FakeStore:
         })
 
 
-def test_runtime_enforces_filter_and_normalizes_return():
+def test_runtime_enforces_industry_filter():
     store = install_cos_contract_methods(_FakeStore())
     industry = store.read_cos_panel(
         "ashare_stock_industry",
@@ -69,6 +69,10 @@ def test_runtime_enforces_filter_and_normalizes_return():
     query, kwargs = store.sql_call
     assert '"IndustrySource" = ?' in query
     assert kwargs["params"] == ["sw_l1"]
+
+
+def test_runtime_normalizes_ashare_return():
+    store = install_cos_contract_methods(_FakeStore())
     daily = store.read_cos_panel(
         "ashare_stock_daily", columns=["Return"], normalize_returns=True
     )
