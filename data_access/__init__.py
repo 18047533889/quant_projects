@@ -9,10 +9,10 @@ from data_access.read.read_contract import DataSnapshot, ReadResult, SqlReadResu
 from data_access.read.scan_handle import ScanHandle
 from .store import DataAccessStore, get_store as _get_store, reset_store
 from .cos_contract import COSDatasetContract, COS_DATASET_CONTRACTS, get_cos_contract, normalize_return_values, require_cos_contract, validate_panel_request
-from .cos_runtime import install_cos_contract_methods
+from .cos_factor_runtime import install_cos_factor_runtime
 
 def get_store(*args: Any, **kwargs: Any) -> DataAccessStore:
-    return install_cos_contract_methods(_get_store(*args, **kwargs))
+    return install_cos_factor_runtime(_get_store(*args, **kwargs))
 
 __all__ = ["get_store", "reset_store", "get_shared_engine", "reset_shared_engine", "DataAccessStore", "DuckDBEngine", "DataAccessError", "ValidationError", "DataError", "EngineError", "QueryBudget", "KeyPolicy", "DataSnapshot", "ReadResult", "SqlReadResult", "ScanHandle", "COSDatasetContract", "COS_DATASET_CONTRACTS", "get_cos_contract", "require_cos_contract", "validate_panel_request", "normalize_return_values"]
 __version__ = "0.2.0"
