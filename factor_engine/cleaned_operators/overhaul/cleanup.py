@@ -77,6 +77,11 @@ def remove_backend(canonical: str, backend: str) -> None:
 def alias_and_remove(old: str, new: str) -> None:
     if old == new or new not in OperatorRegistry._operators:
         return
+    # Resolve every existing alias that currently targets the old canonical.
+    # Registry lookup is intentionally one-hop, so alias chains are forbidden.
+    for alias, target in list(OperatorRegistry._aliases.items()):
+        if target == old:
+            OperatorRegistry._aliases[alias] = new
     if old in OperatorRegistry._operators:
         OperatorRegistry.unregister(old)
     OperatorRegistry.register_alias(old, new)
