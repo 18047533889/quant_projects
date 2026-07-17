@@ -46,11 +46,11 @@ jobs:
       - name: Regenerate layer artifacts
         run: |
           set +e
-          {
-            python factor_engine/scripts/generate_operators_catalog.py
-            python factor_engine/scripts/export_dsl_allowlist.py
+          bash -o pipefail -c '
+            python factor_engine/scripts/generate_operators_catalog.py &&
+            python factor_engine/scripts/export_dsl_allowlist.py &&
             python factor_engine/scripts/generate_layer_manifests.py
-          } 2>&1 | tee factor_engine/layer_generation_failure.md
+          ' 2>&1 | tee factor_engine/layer_generation_failure.md
           status=${PIPESTATUS[0]}
           if [ "${status}" -ne 0 ]; then
             git config user.name "github-actions[bot]"
@@ -61,14 +61,17 @@ jobs:
             exit "${status}"
           fi
           rm -f factor_engine/layer_generation_failure.md
-          if [ -n "${GITHUB_HEAD_REF}" ] && ! git diff --quiet -- \
-            factor_engine/cleaned_operators/docs/operators_catalog.md \
-            factor_engine/cleaned_operators/docs/operators_catalog.json \
-            factor_engine/docs/dsl_allowlist.json \
-            factor_engine/docs/field_manifest.json \
-            factor_engine/docs/operator_manifest.json \
-            factor_engine/docs/factor_recipe_manifest.json \
-            factor_engine/docs/research_tool_manifest.json; then
+          if [ -n "${GITHUB_HEAD_REF}" ] && { 
+            ! git diff --quiet -- \
+              factor_engine/cleaned_operators/docs/operators_catalog.md \
+              factor_engine/cleaned_operators/docs/operators_catalog.json \
+              factor_engine/docs/dsl_allowlist.json ||
+            [ ! -f factor_engine/docs/field_manifest.json ] ||
+            [ ! -f factor_engine/docs/operator_manifest.json ] ||
+            [ ! -f factor_engine/docs/factor_recipe_manifest.json ] ||
+            [ ! -f factor_engine/docs/research_tool_manifest.json ] ||
+            [ -n "$(git status --porcelain -- factor_engine/docs/field_manifest.json factor_engine/docs/operator_manifest.json factor_engine/docs/factor_recipe_manifest.json factor_engine/docs/research_tool_manifest.json)" ];
+          }; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add \
