@@ -54,27 +54,34 @@ def _fit(y: np.ndarray, x: np.ndarray, add_intercept: bool):
 
 
 def _fingerprint(frame: pd.DataFrame) -> tuple:
-    # Object identity provides the hot-path cache; shape/index/columns protect
-    # against accidental ID reuse and in-place structural mutation.
+    # Cache is intentionally scoped to the same immutable planner input objects.
+    # Shape/axes protect against accidental object-id reuse or structural edits.
     return (
         id(frame), frame.shape,
         id(frame.index), id(frame.columns),
         frame.index[0] if len(frame.index) else None,
         frame.index[-1] if len(frame.index) else None,
+        tuple(frame.columns),
     )
 
 
 def _compute_all(y, x, window, min_periods=None, add_intercept=True):
     global _STATS_COMPUTATIONS
-    y, x = aligned_pd(y, x)
+    if not isinstance(y, pd.DataFrame) or not isinstance(x, pd.DataFrame):
+        raise TypeError("rolling OLS fusion requires pandas DataFrame inputs")
+
+    # Build the cache key before aligned_pd: alignment may allocate fresh
+    # DataFrames on every call, which would defeat cross-output reuse.
+    source_y, source_x = y, x
     w, mp = window_params(window, min_periods, default_mp=3)
-    key = (_fingerprint(y), _fingerprint(x), w, mp, bool(add_intercept))
+    key = (_fingerprint(source_y), _fingerprint(source_x), w, mp, bool(add_intercept))
     with _LOCK:
         cached = _CACHE.get(key)
-        if cached is not None and cached[0]() is y and cached[1]() is x:
+        if cached is not None and cached[0]() is source_y and cached[1]() is source_x:
             _CACHE.move_to_end(key)
             return cached[2]
 
+    y, x = aligned_pd(source_y, source_x)
     yv, xv = y.to_numpy(dtype=float), x.to_numpy(dtype=float)
     raw = np.full((5, *y.shape), np.nan, dtype=float)
     for column in range(y.shape[1]):
@@ -94,7 +101,7 @@ def _compute_all(y, x, window, min_periods=None, add_intercept=True):
     }
     with _LOCK:
         _STATS_COMPUTATIONS += 1
-        _CACHE[key] = (weakref.ref(y), weakref.ref(x), outputs)
+        _CACHE[key] = (weakref.ref(source_y), weakref.ref(source_x), outputs)
         _CACHE.move_to_end(key)
         while len(_CACHE) > _CACHE_LIMIT:
             _CACHE.popitem(last=False)
