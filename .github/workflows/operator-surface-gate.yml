@@ -16,7 +16,7 @@ on:
       - ".github/workflows/operator-surface-gate.yml"
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: operator-surface-${{ github.ref }}
@@ -31,9 +31,6 @@ jobs:
       FACTOR_ENGINE_DISABLE_NUMBA: "1"
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref || github.ref_name }}
-          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -68,24 +65,11 @@ jobs:
             gtja191/tests/test_gtja191.py
       - name: FactorEngine runtime governance regression
         run: |
-          set +e
-          pytest -q --tb=short \
+          pytest -q \
             factor_engine/tests/operators/test_layer_governance.py \
             factor_engine/tests/operators/test_composite_fastpath.py \
             factor_engine/tests/operators/test_recipe_runtime.py \
             factor_engine/tests/operators/test_stateful_checkpoint_contract.py \
             factor_engine/tests/operators/test_operator_usage.py \
             factor_engine/tests/test_gtja_compat_semantics.py \
-            factor_engine/tests/test_data_scope_stability.py \
-            2>&1 | tee factor_engine/recipe_runtime_failure.md
-          status=${PIPESTATUS[0]}
-          if [ "${status}" -ne 0 ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add -f factor_engine/recipe_runtime_failure.md
-            git commit -m "Capture recipe runtime failure [skip ci]"
-            git push origin HEAD:${GITHUB_HEAD_REF}
-          else
-            rm -f factor_engine/recipe_runtime_failure.md
-          fi
-          exit "${status}"
+            factor_engine/tests/test_data_scope_stability.py
