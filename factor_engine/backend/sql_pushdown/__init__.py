@@ -1,9 +1,5 @@
 # -*- coding: utf-8 -*-
-"""SQL 下推子包：PlanNode 编译、DuckDB/ClickHouse 执行与 registry 对齐。
-
-对外导出 ``compile_plan_to_sql``、``try_execute_sql_pushdown`` 等入口；
-导入时自动调用 ``register_sql_backends()`` 登记 SQL backend 元数据。
-"""
+"""SQL pushdown: PlanNode compilation, execution and backend registration."""
 
 from backend.sql_pushdown.emitter import (
     CompiledSql,
@@ -12,6 +8,7 @@ from backend.sql_pushdown.emitter import (
     compile_plan_to_sql,
     plan_is_sql_capable,
 )
+from backend.sql_pushdown.cos_semantic_fixes import install_sql_semantic_fixes
 from backend.sql_pushdown.executor import (
     PushdownContext,
     execute_compiled_sql,
@@ -25,6 +22,7 @@ from backend.sql_pushdown.sql_registry import (
     sql_backends_for,
 )
 
+install_sql_semantic_fixes()
 register_sql_backends()
 
 __all__ = [
