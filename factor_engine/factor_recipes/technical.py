@@ -1,0 +1,34 @@
+# -*- coding: utf-8 -*-
+"""Technical recipes composed entirely from production primitive operators."""
+from factor_recipes.registry import FactorRecipe, FactorRecipeRegistry
+
+
+_RECIPES = (
+    FactorRecipe("momentum", "technical", "N期价格动量", "ts_delta(x, window)", ("x", "window"), replacement_for=("MOM",)),
+    FactorRecipe("rate_of_change", "technical", "N期百分比变化", "100 * ts_pct(x, window)", ("x", "window"), replacement_for=("ROC",)),
+    FactorRecipe("weighted_moving_average", "technical", "线性衰减加权均值", "ts_decay_linear(x, window)", ("x", "window"), replacement_for=("WMA",)),
+    FactorRecipe("bollinger_mid", "technical", "布林中轨", "ts_mean(x, window)", ("x", "window"), replacement_for=("BollingerBands",)),
+    FactorRecipe("bollinger_upper", "technical", "布林上轨", "ts_mean(x, window) + width * ts_std(x, window)", ("x", "window", "width"), replacement_for=("BollingerUpper",)),
+    FactorRecipe("bollinger_lower", "technical", "布林下轨", "ts_mean(x, window) - width * ts_std(x, window)", ("x", "window", "width"), replacement_for=("BollingerLower",)),
+    FactorRecipe("stochastic_k", "technical", "随机指标K值", "100 * safe_div_null(close - ts_min(low, window), ts_max(high, window) - ts_min(low, window))", ("high", "low", "close", "window"), replacement_for=("StochasticK",)),
+    FactorRecipe("stochastic_d", "technical", "随机指标D值", "ts_mean(100 * safe_div_null(close - ts_min(low, window), ts_max(high, window) - ts_min(low, window)), smooth_window)", ("high", "low", "close", "window", "smooth_window"), replacement_for=("StochasticD",)),
+    FactorRecipe("williams_r", "technical", "Williams %R", "100 * safe_div_null(close - ts_max(high, window), ts_max(high, window) - ts_min(low, window))", ("high", "low", "close", "window"), replacement_for=("WilliamsR",)),
+    FactorRecipe("adxr", "technical", "ADX平均方向指数评级", "0.5 * (ADX(high, low, close, window) + ts_delay(ADX(high, low, close, window), window))", ("high", "low", "close", "window"), replacement_for=("ADXR",)),
+    FactorRecipe("trix", "technical", "三重EMA的一期变化率", "100 * ts_pct(ts_ema(ts_ema(ts_ema(close, window), window), window), 1)", ("close", "window"), replacement_for=("TRIX",)),
+    FactorRecipe("overnight_gap", "price_volume", "隔夜开盘缺口", "safe_div_null(open, ts_delay(close, 1)) - 1", ("open", "close"), replacement_for=("open_gap",)),
+    FactorRecipe("intraday_return", "price_volume", "开盘到收盘收益", "safe_div_null(close, open) - 1", ("open", "close"), replacement_for=("close_gap",)),
+    FactorRecipe("annualized_volatility", "risk", "滚动年化波动率", "ts_std(returns, window) * sqrt(ann_factor)", ("returns", "window", "ann_factor"), replacement_for=("volatility",)),
+    FactorRecipe("rolling_sharpe", "risk", "滚动年化夏普", "safe_div_null(ts_mean(returns, window), ts_std(returns, window)) * sqrt(ann_factor)", ("returns", "window", "ann_factor"), replacement_for=("sharpe_ratio",)),
+    FactorRecipe("aroon_up", "technical", "距最近窗口高点的新鲜度", "100 * (1 - safe_div_null(ts_argmax(high, window), window))", ("high", "window"), replacement_for=("AROON_up",)),
+    FactorRecipe("aroon_down", "technical", "距最近窗口低点的新鲜度", "100 * (1 - safe_div_null(ts_argmin(low, window), window))", ("low", "window"), replacement_for=("AROON_down",)),
+    FactorRecipe("aroon_oscillator", "technical", "Aroon上下轨差", "aroon_up(high, window) - aroon_down(low, window)", ("high", "low", "window"), replacement_for=("AROON",)),
+    FactorRecipe("atr_sma", "technical", "真实波幅简单移动平均", "ts_mean(true_range(high, low, close), window)", ("high", "low", "close", "window"), status="optional", replacement_for=("ATR",)),
+    FactorRecipe("rsi_sma", "technical", "简单移动平均版本RSI", "100 - 100 / (1 + safe_div_null(ts_mean(clip(ts_delta(close, 1), 0, inf), window), ts_mean(abs(clip(ts_delta(close, 1), -inf, 0)), window)))", ("close", "window"), status="optional", replacement_for=("RSI",)),
+    FactorRecipe("cci", "technical", "商品通道指数", "safe_div_null(typical_price - ts_mean(typical_price, window), constant * ts_mad(typical_price, window))", ("typical_price", "window", "constant"), status="optional", replacement_for=("CCI",)),
+    FactorRecipe("dpo_causal", "technical", "严格因果去趋势价格振荡器", "close - ts_delay(ts_mean(close, window), floor(window / 2) + 1)", ("close", "window"), status="optional", replacement_for=("DPO",)),
+    FactorRecipe("rolling_obv", "technical", "固定窗口成交量方向累计", "ts_sum(sign(ts_delta(close, 1)) * volume, window)", ("close", "volume", "window"), status="optional", replacement_for=("OBV",)),
+    FactorRecipe("vpmacd", "experimental", "量价加权MACD实验配方", "experimental_vpmacd(close, volume, open, high, low, lambda_param)", ("close", "volume", "open", "high", "low", "lambda_param"), status="experimental", replacement_for=("vp_weighted_price", "vpmacd", "vpmacd_signal")),
+)
+
+for _recipe in _RECIPES:
+    FactorRecipeRegistry.register(_recipe)

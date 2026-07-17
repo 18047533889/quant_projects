@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""可独立交付的统一算子库（唯一 runtime 层）。"""
+"""可独立交付的统一算子库（唯一 production runtime 层）。"""
 from cleaned_operators.registry import OperatorRegistry
 
 from cleaned_operators import common  # noqa: F401
@@ -18,8 +18,6 @@ __all__ = [
     "microstructure",
 ]
 
-# 审计覆盖模块放在对应历史 pandas 实现之后，以同 canonical 覆盖；
-# Polars 实现随后注册在独立 backend，不会覆盖 pandas_numpy。
 _LOAD_MODULES = (
     "cleaned_operators.common.elementwise",
     "cleaned_operators.common.time_series",
@@ -40,8 +38,6 @@ _LOAD_MODULES = (
     "cleaned_operators.common.polars_statistics",
     "cleaned_operators.common.polars_np_parity",
     "cleaned_operators.common.polars_math_extended",
-    # Historical pandas/NumPy bridges are still imported for compatibility with
-    # old modules, but the final audit removes every bridge-backed Polars entry.
     "cleaned_operators.common.polars_batch_mirror",
     "cleaned_operators.price_volume.ops",
     "cleaned_operators.price_volume.polars_price_volume",
@@ -50,14 +46,12 @@ _LOAD_MODULES = (
     "cleaned_operators.fundamental.ops",
     "cleaned_operators.microstructure.ops",
     "cleaned_operators.microstructure.polars_microstructure",
-    # Must be imported last: audited implementations replace historical
-    # canonical/backend registrations and tighten the authoring surface.
     "cleaned_operators.semantic_hardening",
     "cleaned_operators.operator_overhaul",
-    # Final performance layer: simple composites reuse primitives; recursive
-    # families share fused intermediates and native Polars kernels.
     "cleaned_operators.composite_fastpath",
     "cleaned_operators.composite_fastpath_fixes",
+    "cleaned_operators.layer_primitives",
+    "cleaned_operators.layer_composite_fixes",
 )
 
 
@@ -68,8 +62,14 @@ def load_all() -> None:
 
     apply_operator_deduplication()
 
-    # The final audit is deliberately applied after historical deduplication so
-    # aliases, backend capability and surface policy reflect the actual runtime.
     from cleaned_operators.operator_overhaul import finalize_operator_overhaul
 
     finalize_operator_overhaul()
+
+    from cleaned_operators.layer_governance import finalize_layer_governance
+
+    finalize_layer_governance()
+
+    from cleaned_operators.layer_governance_post import apply_post_governance
+
+    apply_post_governance()

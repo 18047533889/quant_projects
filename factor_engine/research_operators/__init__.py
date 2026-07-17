@@ -1,25 +1,31 @@
 """Explicit research-only operator access.
 
-This package is intentionally separate from ``api``.  Importing it is an
-explicit acknowledgement that the selected operators are not part of the
-normal daily-factor DSL and are not production-certified.
+Research implementations are physically separated from the production
+``OperatorRegistry``.  Importing this package is an explicit acknowledgement
+that the selected utility is not part of the daily Factor DSL.
 """
 from __future__ import annotations
 
 from typing import Any
 
 from backend.cleaned_bridge import build_cleaned_dsl_allowlist, ensure_cleaned_loaded
-from cleaned_operators.operator_surface import (
-    RESEARCH_ONLY_CANONICALS,
-    UNSAFE_CANONICALS,
-)
+from cleaned_operators.operator_surface import UNSAFE_CANONICALS
+from research_tools.registry import ResearchToolRegistry
 
 
 def build_research_dsl_allowlist(*, include_unsafe: bool = False) -> dict[str, Any]:
-    """Build the research utility DSL surface, optionally including unsafe tools."""
-    out = build_cleaned_dsl_allowlist(surface="research")
+    """Build the explicit research-tool surface outside production runtime."""
+    ensure_cleaned_loaded()
+    out: dict[str, Any] = {}
+    for canonical, implementations in ResearchToolRegistry._tools.items():
+        operator = implementations.get("pandas_numpy") or next(iter(implementations.values()), None)
+        if operator is None:
+            continue
+        out[canonical] = operator
+        for alias in ResearchToolRegistry._catalog.get(canonical, {}).get("aliases", []):
+            out.setdefault(alias, operator)
     if include_unsafe:
-        out.update(build_cleaned_dsl_allowlist(surface="unsafe"))
+        out.update(build_unsafe_dsl_allowlist())
     return out
 
 
@@ -29,16 +35,17 @@ def build_unsafe_dsl_allowlist() -> dict[str, Any]:
 
 
 def get_research_operator(name: str, *, backend: str = "pandas_numpy"):
-    """Return a research operator runtime after validating its surface."""
+    """Return a research implementation from the separate research registry."""
     ensure_cleaned_loaded()
-    from cleaned_operators.registry import OperatorRegistry
-
-    canonical = OperatorRegistry._aliases.get(name, name)
-    if canonical not in RESEARCH_ONLY_CANONICALS:
-        raise KeyError(f"{name!r} is not a research-only operator")
-    operator = OperatorRegistry.get(canonical, backend=backend)
+    canonical = name
+    if canonical not in ResearchToolRegistry._tools:
+        for candidate, catalog in ResearchToolRegistry._catalog.items():
+            if name in catalog.get("aliases", []):
+                canonical = candidate
+                break
+    operator = ResearchToolRegistry.get(canonical, backend=backend)
     if operator is None:
-        raise KeyError(f"research operator {name!r} has no {backend!r} runtime")
+        raise KeyError(f"research tool {name!r} has no {backend!r} runtime")
     return operator
 
 

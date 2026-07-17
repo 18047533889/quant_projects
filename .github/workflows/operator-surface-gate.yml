@@ -25,7 +25,7 @@ concurrency:
 jobs:
   public-dsl:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
     env:
       PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/gtja191
       FACTOR_ENGINE_DISABLE_NUMBA: "1"
@@ -40,14 +40,19 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
           python -m pip install pytest pyyaml
-      - name: Validate operator surfaces and generated catalogs
+      - name: Validate generated layer artifacts
         run: |
           python factor_engine/scripts/generate_operators_catalog.py
           python factor_engine/scripts/export_dsl_allowlist.py
+          python factor_engine/scripts/generate_layer_manifests.py
           git diff --exit-code -- \
             factor_engine/cleaned_operators/docs/operators_catalog.md \
             factor_engine/cleaned_operators/docs/operators_catalog.json \
-            factor_engine/docs/dsl_allowlist.json
+            factor_engine/docs/dsl_allowlist.json \
+            factor_engine/docs/field_manifest.json \
+            factor_engine/docs/operator_manifest.json \
+            factor_engine/docs/factor_recipe_manifest.json \
+            factor_engine/docs/research_tool_manifest.json
           pytest -q factor_engine/tests/test_operator_surface.py
           python factor_engine/scripts/validate_public_factor_formulas.py
       - name: GTJA185 factor pack regression
@@ -55,9 +60,10 @@ jobs:
           pytest -q \
             gtja191/tests/test_full_catalog_factor_engine.py \
             gtja191/tests/test_gtja191.py
-      - name: FactorEngine regression
+      - name: FactorEngine layer regression
         run: |
           pytest -q \
+            factor_engine/tests/operators/test_layer_governance.py \
             factor_engine/tests/operators/test_composite_fastpath.py \
             factor_engine/tests/test_gtja_compat_semantics.py \
             factor_engine/tests/test_data_scope_stability.py
