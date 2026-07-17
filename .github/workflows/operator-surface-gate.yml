@@ -45,9 +45,22 @@ jobs:
           python -m pip install pytest pyyaml
       - name: Regenerate layer artifacts
         run: |
-          python factor_engine/scripts/generate_operators_catalog.py
-          python factor_engine/scripts/export_dsl_allowlist.py
-          python factor_engine/scripts/generate_layer_manifests.py
+          set +e
+          {
+            python factor_engine/scripts/generate_operators_catalog.py
+            python factor_engine/scripts/export_dsl_allowlist.py
+            python factor_engine/scripts/generate_layer_manifests.py
+          } 2>&1 | tee factor_engine/layer_generation_failure.md
+          status=${PIPESTATUS[0]}
+          if [ "${status}" -ne 0 ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -f factor_engine/layer_generation_failure.md
+            git commit -m "Capture layer generation failure [skip ci]"
+            git push origin HEAD:${GITHUB_HEAD_REF}
+            exit "${status}"
+          fi
+          rm -f factor_engine/layer_generation_failure.md
           if [ -n "${GITHUB_HEAD_REF}" ] && ! git diff --quiet -- \
             factor_engine/cleaned_operators/docs/operators_catalog.md \
             factor_engine/cleaned_operators/docs/operators_catalog.json \
