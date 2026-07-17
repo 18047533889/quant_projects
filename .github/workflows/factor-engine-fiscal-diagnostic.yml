@@ -1,0 +1,37 @@
+name: FactorEngine Fiscal Diagnostic
+
+on:
+  pull_request:
+    paths:
+      - "factor_engine/**"
+      - ".github/workflows/factor-engine-fiscal-diagnostic.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/gtja191
+      FACTOR_ENGINE_DISABLE_NUMBA: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pytest pyyaml
+      - id: verify
+        continue-on-error: true
+        run: pytest -vv factor_engine/tests/operators/test_cos_fiscal_primitives.py > /tmp/fiscal.log 2>&1
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: factor-engine-fiscal-traceback
+          path: /tmp/fiscal.log
+      - if: steps.verify.outcome == 'failure'
+        run: exit 1
