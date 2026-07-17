@@ -79,12 +79,14 @@ def load_all() -> None:
     # therefore remain auditable in OperatorRegistry._replacement_history.
     from cleaned_operators.layer_alias_normalization import normalize_historical_aliases
     from cleaned_operators.layer_stateful_semantics import install_stateful_full_history_semantics
+    from cleaned_operators.layer_scalar_broadcast import install_scalar_broadcast_primitives
     from cleaned_operators.layer_regression_fusion import install_rolling_ols_fusion
     from cleaned_operators.layer_native_polars_final import install_final_native_polars
     from cleaned_operators.layer_final_audit import apply_final_operator_audit
 
     normalize_historical_aliases()
     install_stateful_full_history_semantics()
+    install_scalar_broadcast_primitives()
     install_rolling_ols_fusion()
     install_final_native_polars()
     apply_final_operator_audit()
