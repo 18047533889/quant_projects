@@ -62,13 +62,16 @@ def main() -> int:
             for formula in walk(payload):
                 checked += 1
                 try:
-                    parse_expr(formula)
+                    # These are already-published repository formulas, not new
+                    # authoring submissions.  Parse through the compatibility
+                    # surface while daily admission remains fail-closed.
+                    parse_expr(formula, surface="compat")
                 except Exception as exc:
                     failures.append(f"{path.relative_to(ROOT)}: {type(exc).__name__}: {exc}: {formula}")
     if failures:
         print("\n".join(failures[:100]))
         raise SystemExit(f"{len(failures)} public factor formulas failed validation")
-    print(f"validated {checked} repository factor formulas against the daily DSL")
+    print(f"validated {checked} repository factor formulas against the compatibility DSL")
     return 0
 
 

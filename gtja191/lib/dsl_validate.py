@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ast
+import inspect
 import json
 import sys
 from pathlib import Path
@@ -61,7 +62,12 @@ def _parse_with_factor_engine(formula: str) -> bool:
         return False
 
     try:
-        fe_parse_expr(formula, surface="compat")
+        if "surface" in inspect.signature(fe_parse_expr).parameters:
+            fe_parse_expr(formula, surface="compat")
+        else:
+            # Embedded/external FactorEngine releases predate surface-aware
+            # parsing and already expose their historical compatibility names.
+            fe_parse_expr(formula)
     except FEError as exc:
         raise DSLParseError(str(exc)) from exc
     except Exception as exc:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import inspect
 import json
 import sys
 import time
@@ -119,14 +120,15 @@ def validate_catalog(*, execute: bool = True, periods: int = 420, symbols: int =
             continue
 
         try:
-            factor = parse_factor(
-                formula,
-                name=name,
-                freq="1d",
-                universe="ASHARE_ALL",
-                description=f"GTJA-191 {name}",
-                surface="compat",
-            )
+            factor_kwargs = {
+                "name": name,
+                "freq": "1d",
+                "universe": "ASHARE_ALL",
+                "description": f"GTJA-191 {name}",
+            }
+            if "surface" in inspect.signature(parse_factor).parameters:
+                factor_kwargs["surface"] = "compat"
+            factor = parse_factor(formula, **factor_kwargs)
             plan, analysis = engine.compile(factor)
             compiled += 1
             missing = sorted(set(analysis.referenced_columns) - _ALLOWED_FIELDS)
