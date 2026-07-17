@@ -1,9 +1,10 @@
-name: FactorEngine Native Diagnostic
+name: FactorEngine Governance Diagnostic
 
 on:
   pull_request:
     paths:
       - "factor_engine/**"
+      - "gtja191/**"
       - ".github/workflows/factor-engine-native-diagnostic.yml"
 
 permissions:
@@ -27,11 +28,21 @@ jobs:
           python -m pip install pytest pyyaml
       - id: verify
         continue-on-error: true
-        run: pytest -vv factor_engine/tests/operators/test_final_native_and_fusion.py > /tmp/native.log 2>&1
+        run: |
+          pytest -vv \
+            factor_engine/tests/operators/test_layer_governance.py \
+            factor_engine/tests/operators/test_composite_fastpath.py \
+            factor_engine/tests/operators/test_recipe_runtime.py \
+            factor_engine/tests/operators/test_recipe_planner_bridge.py \
+            factor_engine/tests/operators/test_stateful_checkpoint_contract.py \
+            factor_engine/tests/operators/test_operator_usage.py \
+            factor_engine/tests/test_gtja_compat_semantics.py \
+            factor_engine/tests/test_data_scope_stability.py \
+            > /tmp/governance.log 2>&1
       - if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: factor-engine-native-traceback
-          path: /tmp/native.log
+          name: factor-engine-governance-traceback
+          path: /tmp/governance.log
       - if: steps.verify.outcome == 'failure'
         run: exit 1
