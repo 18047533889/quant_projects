@@ -1,0 +1,46 @@
+name: FactorEngine Evidence Diagnostic
+
+on:
+  pull_request:
+    paths:
+      - "factor_engine/**"
+      - ".github/workflows/factor-engine-evidence-diagnostic.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine
+      FACTOR_ENGINE_DISABLE_NUMBA: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pytest pyyaml
+      - run: |
+          python factor_engine/scripts/sync_primitive_evidence.py
+          python - <<'PY' > /tmp/evidence.txt
+          import json
+          from pathlib import Path
+          p=json.loads(Path('factor_engine/evidence/primitive_case_registry.json').read_text())
+          keys=['polars_reference_parity','polars_edge_verified','duckdb_reference_parity','duckdb_real_sql_verified','duckdb_edge_verified','duckdb_nan_edge_verified','no_fallback_verified']
+          sets={k:set(p.get(k,[])) for k in keys}
+          for k in keys:
+              print(k, len(sets[k]), sorted(sets[k]))
+          current=None
+          for k in keys:
+              current=sets[k] if current is None else current & sets[k]
+              print('intersection_through', k, len(current), sorted(current))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: factor-engine-evidence-intersection
+          path: /tmp/evidence.txt
