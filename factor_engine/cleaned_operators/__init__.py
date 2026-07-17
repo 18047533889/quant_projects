@@ -73,3 +73,14 @@ def load_all() -> None:
     from cleaned_operators.layer_governance_post import apply_post_governance
 
     apply_post_governance()
+
+    # Final production hardening is intentionally performed after the registry
+    # has been sealed: replacements require an explicit reason/version and
+    # therefore remain auditable in OperatorRegistry._replacement_history.
+    from cleaned_operators.layer_regression_fusion import install_rolling_ols_fusion
+    from cleaned_operators.layer_native_polars_final import install_final_native_polars
+    from cleaned_operators.layer_final_audit import apply_final_operator_audit
+
+    install_rolling_ols_fusion()
+    install_final_native_polars()
+    apply_final_operator_audit()
