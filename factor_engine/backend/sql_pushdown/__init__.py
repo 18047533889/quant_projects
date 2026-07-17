@@ -21,9 +21,7 @@ from backend.sql_pushdown.sql_registry import (
     register_sql_backends,
     sql_backends_for,
 )
-from backend.sql_pushdown.active_contracts import apply_active_sql_contracts
 
-apply_active_sql_contracts()
 install_sql_semantic_fixes()
 register_sql_backends()
 
