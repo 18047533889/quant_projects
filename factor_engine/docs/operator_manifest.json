@@ -20,6 +20,27 @@
         "polars"
       ],
       "canonical": "ADX",
+      "checkpoint_contract": {
+        "canonical": "ADX",
+        "checkpoint_fields": [
+          "atr",
+          "plus_dm",
+          "minus_dm",
+          "adx",
+          "last_high",
+          "last_low",
+          "last_close",
+          "last_timestamp"
+        ],
+        "checkpoint_required_for_segmented": true,
+        "dependencies": [
+          "ATR_WILDER"
+        ],
+        "minimum_history": 28,
+        "missing_policy": "carry_state_emit_null",
+        "semantic_version": "2.0",
+        "state_schema_version": "adx_state.v1"
+      },
       "description": "Wilder ADX with strict pandas-compatible missing seed",
       "earliest_trade_time": "next_session_open",
       "lookback_fn": "window",
@@ -33,6 +54,7 @@
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "close",
       "scope": "time_series",
+      "segmented_execution_requires_checkpoint": true,
       "selected_source": "layer_governance_native_polars",
       "semantic_version": "2.0",
       "stateful": true,
@@ -58,6 +80,20 @@
         "polars"
       ],
       "canonical": "ATR_WILDER",
+      "checkpoint_contract": {
+        "canonical": "ATR_WILDER",
+        "checkpoint_fields": [
+          "atr",
+          "last_close",
+          "last_timestamp"
+        ],
+        "checkpoint_required_for_segmented": true,
+        "dependencies": [],
+        "minimum_history": 14,
+        "missing_policy": "carry_state_emit_null",
+        "semantic_version": "2.0",
+        "state_schema_version": "atr_wilder_state.v1"
+      },
       "description": "共享真实波幅内核的 Wilder ATR",
       "earliest_trade_time": "next_session_open",
       "lookback_fn": "window",
@@ -71,6 +107,7 @@
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "close",
       "scope": "time_series",
+      "segmented_execution_requires_checkpoint": true,
       "selected_source": "composite_fastpath_native_polars",
       "semantic_version": "2.0",
       "stateful": true,
@@ -94,6 +131,24 @@
         "polars"
       ],
       "canonical": "MACD_hist",
+      "checkpoint_contract": {
+        "canonical": "MACD_hist",
+        "checkpoint_fields": [
+          "fast_ema",
+          "slow_ema",
+          "signal_ema",
+          "last_timestamp"
+        ],
+        "checkpoint_required_for_segmented": true,
+        "dependencies": [
+          "ts_ema",
+          "MACD_signal"
+        ],
+        "minimum_history": 1,
+        "missing_policy": "carry_state_emit_null",
+        "semantic_version": "2.0",
+        "state_schema_version": "macd_hist_state.v1"
+      },
       "description": "MACD 柱；复用已有基础算子",
       "earliest_trade_time": "next_session_open",
       "lookback_fn": null,
@@ -107,9 +162,10 @@
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "close",
       "scope": "time_series",
+      "segmented_execution_requires_checkpoint": true,
       "selected_source": "operator_overhaul_native_polars",
       "semantic_version": "2.0",
-      "stateful": false,
+      "stateful": true,
       "status": "production",
       "surface": "daily"
     },
@@ -132,6 +188,22 @@
         "polars"
       ],
       "canonical": "MACD_line",
+      "checkpoint_contract": {
+        "canonical": "MACD_line",
+        "checkpoint_fields": [
+          "fast_ema",
+          "slow_ema",
+          "last_timestamp"
+        ],
+        "checkpoint_required_for_segmented": true,
+        "dependencies": [
+          "ts_ema"
+        ],
+        "minimum_history": 1,
+        "missing_policy": "carry_state_emit_null",
+        "semantic_version": "2.0",
+        "state_schema_version": "macd_line_state.v1"
+      },
       "description": "快慢 EMA 之差；复用 ts_ema 与 subtract",
       "earliest_trade_time": "next_session_open",
       "lookback_fn": null,
@@ -144,9 +216,10 @@
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "close",
       "scope": "time_series",
+      "segmented_execution_requires_checkpoint": true,
       "selected_source": "operator_overhaul_native_polars",
       "semantic_version": "2.0",
-      "stateful": false,
+      "stateful": true,
       "status": "production",
       "surface": "daily"
     },
@@ -167,6 +240,24 @@
         "polars"
       ],
       "canonical": "MACD_signal",
+      "checkpoint_contract": {
+        "canonical": "MACD_signal",
+        "checkpoint_fields": [
+          "fast_ema",
+          "slow_ema",
+          "signal_ema",
+          "last_timestamp"
+        ],
+        "checkpoint_required_for_segmented": true,
+        "dependencies": [
+          "ts_ema",
+          "MACD_line"
+        ],
+        "minimum_history": 1,
+        "missing_policy": "carry_state_emit_null",
+        "semantic_version": "2.0",
+        "state_schema_version": "macd_signal_state.v1"
+      },
       "description": "MACD 信号线；复用 ts_ema",
       "earliest_trade_time": "next_session_open",
       "lookback_fn": null,
@@ -180,9 +271,10 @@
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "close",
       "scope": "time_series",
+      "segmented_execution_requires_checkpoint": true,
       "selected_source": "operator_overhaul_native_polars",
       "semantic_version": "2.0",
-      "stateful": false,
+      "stateful": true,
       "status": "production",
       "surface": "daily"
     },
@@ -205,6 +297,21 @@
         "polars"
       ],
       "canonical": "RSI_WILDER",
+      "checkpoint_contract": {
+        "canonical": "RSI_WILDER",
+        "checkpoint_fields": [
+          "avg_gain",
+          "avg_loss",
+          "last_close",
+          "last_timestamp"
+        ],
+        "checkpoint_required_for_segmented": true,
+        "dependencies": [],
+        "minimum_history": 14,
+        "missing_policy": "carry_state_emit_null",
+        "semantic_version": "2.0",
+        "state_schema_version": "rsi_wilder_state.v1"
+      },
       "description": "共享 Wilder 平滑内核的 RSI",
       "earliest_trade_time": "next_session_open",
       "lookback_fn": "window",
@@ -216,6 +323,7 @@
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "close",
       "scope": "time_series",
+      "segmented_execution_requires_checkpoint": true,
       "selected_source": "composite_fastpath_native_polars",
       "semantic_version": "2.0",
       "stateful": true,
@@ -5708,6 +5816,19 @@
         "polars"
       ],
       "canonical": "ts_ema",
+      "checkpoint_contract": {
+        "canonical": "ts_ema",
+        "checkpoint_fields": [
+          "last_ema",
+          "last_timestamp"
+        ],
+        "checkpoint_required_for_segmented": true,
+        "dependencies": [],
+        "minimum_history": 1,
+        "missing_policy": "carry_state_emit_null",
+        "semantic_version": "1.0",
+        "state_schema_version": "ema_state.v1"
+      },
       "description": "指数移动平均",
       "earliest_trade_time": "input_dependent",
       "lookback_fn": null,
@@ -5719,6 +5840,7 @@
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "input_dependent",
       "scope": "time_series",
+      "segmented_execution_requires_checkpoint": true,
       "selected_source": "factor_dsl_polars",
       "semantic_version": "1.0",
       "stateful": true,
