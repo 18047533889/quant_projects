@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Generate authoritative field/operator/recipe/research layer manifests."""
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+FACTOR_ENGINE = ROOT / "factor_engine"
+if str(FACTOR_ENGINE) not in sys.path:
+    sys.path.insert(0, str(FACTOR_ENGINE))
+
+from cleaned_operators import load_all  # noqa: E402
+from cleaned_operators.layer_governance import formula_field_names  # noqa: E402
+from cleaned_operators.registry import OperatorRegistry  # noqa: E402
+from factor_recipes.registry import FactorRecipeRegistry  # noqa: E402
+from research_tools.registry import ResearchToolRegistry  # noqa: E402
+
+
+def write_json(path: Path, payload: dict) -> None:
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def main() -> None:
+    load_all()
+    docs = FACTOR_ENGINE / "docs"
+    fields = sorted(formula_field_names())
+    operators = OperatorRegistry.catalog()
+    collisions = sorted(set(fields) & set(operators))
+    if collisions:
+        raise SystemExit(f"field/operator collisions: {collisions}")
+
+    write_json(docs / "field_manifest.json", {
+        "schema_version": "field_manifest.v1",
+        "source": "canonical_data_fields.json",
+        "field_count": len(fields),
+        "fields": fields,
+    })
+    write_json(docs / "operator_manifest.json", {
+        "schema_version": "operator_manifest.v1",
+        "operator_count": len(operators),
+        "operators": operators,
+    })
+    recipes = FactorRecipeRegistry.catalog()
+    write_json(docs / "factor_recipe_manifest.json", {
+        "schema_version": "factor_recipe_manifest.v1",
+        "recipe_count": len(recipes),
+        "recipes": recipes,
+    })
+    research = ResearchToolRegistry.catalog()
+    write_json(docs / "research_tool_manifest.json", {
+        "schema_version": "research_tool_manifest.v1",
+        "tool_count": len(research),
+        "tools": research,
+    })
+
+
+if __name__ == "__main__":
+    main()
