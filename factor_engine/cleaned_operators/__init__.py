@@ -84,3 +84,9 @@ def load_all() -> None:
     install_rolling_ols_fusion()
     install_final_native_polars()
     apply_final_operator_audit()
+
+    # Any module-level historical tier sets are narrowed to the final registry
+    # only after all canonical renames, backend replacements and surface moves.
+    from backend.active_capabilities import synchronize_active_backend_sets
+
+    synchronize_active_backend_sets()
