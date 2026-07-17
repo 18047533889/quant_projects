@@ -80,15 +80,15 @@ jobs:
             factor_engine/tests/test_data_access_source_snapshot_cache.py \
             factor_engine/tests/test_gtja_compat_semantics.py \
             factor_engine/tests/test_scalar_comparison_semantics.py \
-            2>&1 | tee factor_engine/ci_operator_failure.log
+            2>&1 | tee factor_engine/ci_operator_failure.md
           status=${PIPESTATUS[0]}
           if [ "${status}" -ne 0 ]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add factor_engine/ci_operator_failure.log
+            git add -f factor_engine/ci_operator_failure.md
             git commit -m "Capture operator CI failure [skip ci]"
             git push origin HEAD:${GITHUB_HEAD_REF}
           else
-            rm -f factor_engine/ci_operator_failure.log
+            rm -f factor_engine/ci_operator_failure.md
           fi
           exit "${status}"
