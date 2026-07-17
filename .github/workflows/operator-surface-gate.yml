@@ -16,7 +16,7 @@ on:
       - ".github/workflows/operator-surface-gate.yml"
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: operator-surface-${{ github.ref }}
@@ -31,9 +31,6 @@ jobs:
       FACTOR_ENGINE_DISABLE_NUMBA: "1"
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref || github.ref_name }}
-          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -43,12 +40,12 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
           python -m pip install pytest pyyaml
-      - name: Regenerate and commit layer artifacts
+      - name: Validate generated layer artifacts
         run: |
           python factor_engine/scripts/generate_operators_catalog.py
           python factor_engine/scripts/export_dsl_allowlist.py
           python factor_engine/scripts/generate_layer_manifests.py
-          git add \
+          git diff --exit-code -- \
             factor_engine/cleaned_operators/docs/operators_catalog.md \
             factor_engine/cleaned_operators/docs/operators_catalog.json \
             factor_engine/docs/dsl_allowlist.json \
@@ -56,12 +53,6 @@ jobs:
             factor_engine/docs/operator_manifest.json \
             factor_engine/docs/factor_recipe_manifest.json \
             factor_engine/docs/research_tool_manifest.json
-          if ! git diff --cached --quiet; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git commit -m "Normalize factor layer manifests [skip ci]"
-            git push origin HEAD:${GITHUB_HEAD_REF}
-          fi
           pytest -q factor_engine/tests/test_operator_surface.py
           python factor_engine/scripts/validate_public_factor_formulas.py
       - name: GTJA185 factor pack regression
