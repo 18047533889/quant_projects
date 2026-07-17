@@ -845,6 +845,7 @@
     },
     "expanding_max": {
       "aliases": [
+        "cum_max",
         "cumulative_max"
       ],
       "backend_meta": {
@@ -903,7 +904,6 @@
     },
     "expanding_min": {
       "aliases": [
-        "cum_min",
         "cumulative_min"
       ],
       "backend_meta": {
