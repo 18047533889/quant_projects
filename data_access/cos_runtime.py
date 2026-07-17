@@ -1,137 +1,86 @@
 # -*- coding: utf-8 -*-
-"""Runtime installation and fail-closed factor reads for COS contracts."""
+"""Install COS semantics on the public DataAccess store."""
 from __future__ import annotations
 
-from dataclasses import replace
 from types import MethodType
-from typing import Any, Mapping, Sequence
-
-import pyarrow as pa
+from typing import Any
 
 from data_access.core.exceptions import ValidationError
-from data_access.read.adapters import arrow_table_to_multiindex_columns
-from data_access.read.key_policy import resolve_key_policy
-from . import cos_contract as base
+from .cos_contract import get_cos_contract, require_cos_contract
+from .cos_event_runtime import read_cos_events, read_cos_events_asof
+from .cos_panel_runtime import guarded_load_columns, load_factor_columns, read_cos_panel
+from .cos_registry_runtime import patch_store_registry
+from .cos_storage_runtime import install_cos_storage_runtime
 
 
-for _name in ("us_stock_balance", "us_stock_income", "us_stock_cashflow"):
-    base.COS_DATASET_CONTRACTS[_name] = replace(
-        base.COS_DATASET_CONTRACTS[_name], revision_columns=()
-    )
-
-
-def _quote(name: str) -> str:
-    return '"' + str(name).replace('"', '""') + '"'
-
-
-def _read_cos_panel(self: Any, dataset: str, *, columns: Sequence[str] | None = None, time_range: tuple[Any, Any] | None = None, instrument_filter: Sequence[str] | None = None, semantic_filters: Mapping[str, Any] | None = None, normalize_returns: bool = False, return_output_column: str = "return_decimal", allow_sparse: bool = False, **params: Any) -> pa.Table:
-    contract = base.validate_panel_request(dataset, semantic_filters=semantic_filters, allow_sparse=allow_sparse)
-    selected = list(columns) if columns else None
-    if normalize_returns:
-        if contract.return_column is None:
-            raise ValidationError(f"dataset {dataset!r} has no declared return field")
-        if selected is not None and contract.return_column not in selected:
-            selected.append(contract.return_column)
-    filters = dict(semantic_filters or {})
-    if filters or instrument_filter:
-        projection = "*" if selected is None else ", ".join(_quote(c) for c in selected)
-        clauses, bind = [], []
-        for key, value in filters.items():
-            clauses.append(f"{_quote(key)} = ?")
-            bind.append(value)
-        if instrument_filter:
-            clauses.append(f"{_quote(contract.instrument_column)} IN ({', '.join('?' for _ in instrument_filter)})")
-            bind.extend(str(value) for value in instrument_filter)
-        table = self.sql(
-            f"SELECT {projection} FROM {{{{{dataset}}}}} WHERE {' AND '.join(clauses)}",
-            read_datasets=[dataset],
-            read_params={dataset: params} if params else None,
-            read_time_ranges={dataset: time_range},
-            view_columns=None,
-            params=bind,
+def guarded_read_asof(original: Any, dataset: str, kwargs: dict[str, Any]) -> Any:
+    """Prevent the legacy upper-bound reader from being mistaken for event PIT."""
+    contract = get_cos_contract(dataset)
+    if contract is not None and contract.is_event:
+        raise ValidationError(
+            f"{dataset!r} 是 {contract.temporal_model} 事件表；legacy read_asof 只做时间上界过滤，"
+            "不执行报告期版本选择。请使用 read_cos_events_asof。"
         )
-    else:
-        read_kwargs = dict(params)
-        if instrument_filter is not None:
-            read_kwargs["instrument_filter"] = instrument_filter
-        table = self.read_arrow(dataset, columns=selected, time_range=time_range, **read_kwargs)
-    if normalize_returns:
-        values = base.normalize_return_values(table[contract.return_column], dataset)
-        if return_output_column in table.column_names:
-            table = table.drop([return_output_column])
-        table = table.append_column(return_output_column, values)
-    return table
-
-
-def _load_factor_columns(self: Any, dataset: str, *, columns: Sequence[str], time_range: tuple[Any, Any] | None = None, instrument_filter: Sequence[str] | None = None, output_names: Mapping[str, str] | None = None, semantic_filters: Mapping[str, Any] | None = None, normalize_returns: bool = True, **params: Any) -> dict[str, Any]:
-    contract = base.validate_panel_request(dataset, semantic_filters=semantic_filters)
-    ds = self._registry.get(dataset)
-    requested = list(columns)
-    return_output = "__return_decimal"
-    replace_return = bool(normalize_returns and contract.return_column in requested)
-    axes = [ds.time_column, ds.instrument_column]
-    table = self.read_cos_panel(
-        dataset,
-        columns=list(dict.fromkeys([*axes, *requested])),
-        time_range=time_range,
-        instrument_filter=instrument_filter,
-        semantic_filters=semantic_filters,
-        normalize_returns=replace_return,
-        return_output_column=return_output,
-        **params,
-    )
-    value_columns = [return_output if replace_return and c == contract.return_column else c for c in requested]
-    names = dict(output_names or {})
-    if replace_return:
-        names[return_output] = names.get(contract.return_column, contract.return_column)
-    result = arrow_table_to_multiindex_columns(
-        table,
-        timestamp_column=ds.time_column,
-        instrument_column=ds.instrument_column,
-        value_columns=value_columns,
-        output_names=names or None,
-        key_policy=resolve_key_policy(),
-    )
-    return {
-        names.get(return_output if replace_return and source == contract.return_column else source,
-                  contract.return_column if replace_return and source == contract.return_column else source):
-        result[names.get(return_output if replace_return and source == contract.return_column else source,
-                         contract.return_column if replace_return and source == contract.return_column else source)]
-        for source in requested
-    }
-
-
-def _guarded_load_columns(self: Any, original: Any, dataset: str, **kwargs: Any) -> dict[str, Any]:
-    contract = base.get_cos_contract(dataset)
-    if contract is None:
-        return original(dataset, **kwargs)
-    columns = list(kwargs.get("columns") or [])
-    if contract.is_event:
-        raise ValidationError(f"{dataset!r} is {contract.time_model}; load_columns would create a false daily panel. Use read_cos_events_asof.")
-    if contract.is_sparse or contract.is_empty or contract.time_model == "STATIC":
-        raise ValidationError(f"{dataset!r} time_model={contract.time_model} cannot be loaded as a factor panel")
-    if contract.required_filters:
-        raise ValidationError(f"{dataset!r} requires semantic filters; use load_factor_columns(..., semantic_filters=...)")
-    if contract.return_column in columns and contract.return_scale != 1.0:
-        raise ValidationError(f"{dataset!r}.{contract.return_column} is not decimal return; use load_factor_columns for mandatory unit normalization")
+    if contract is not None and (contract.is_sparse or contract.is_empty):
+        raise ValidationError(
+            f"{dataset!r} temporal_model={contract.temporal_model}，不支持 legacy read_asof"
+        )
     return original(dataset, **kwargs)
 
 
-def install_cos_contract_methods(store: Any) -> Any:
-    """Install raw COS helpers on any compatible store and panel guards when available."""
+def install_cos_runtime(store: Any) -> Any:
+    """Install raw helpers on lightweight stores and factor guards on full stores."""
     if getattr(store, "_cos_runtime_installed", False):
         return store
-    base.install_cos_contract_methods(store)
-    store.read_cos_panel = MethodType(_read_cos_panel, store)
+    if hasattr(store, "_registry"):
+        install_cos_storage_runtime()
+        patch_store_registry(store)
+    store.read_cos_panel = MethodType(read_cos_panel, store)
+    store.read_cos_events = MethodType(read_cos_events, store)
+    store.read_cos_events_asof = MethodType(read_cos_events_asof, store)
+    store.get_cos_contract = MethodType(
+        lambda self, dataset: require_cos_contract(dataset), store
+    )
+    if hasattr(store, "_registry"):
+        store.load_factor_columns = MethodType(load_factor_columns, store)
     if hasattr(store, "load_columns") and hasattr(store, "_registry"):
-        original_load_columns = store.load_columns
-        store.load_factor_columns = MethodType(_load_factor_columns, store)
+        original = store.load_columns
+        store._cos_original_load_columns = original
         store.load_columns = MethodType(
-            lambda self, dataset, **kwargs: _guarded_load_columns(self, original_load_columns, dataset, **kwargs),
+            lambda self, dataset, **kwargs: guarded_load_columns(
+                original, dataset, kwargs
+            ),
+            store,
+        )
+    if hasattr(store, "read_asof"):
+        original_asof = store.read_asof
+        store._cos_original_read_asof = original_asof
+        store.read_asof = MethodType(
+            lambda self, dataset, **kwargs: guarded_read_asof(
+                original_asof, dataset, kwargs
+            ),
             store,
         )
     store._cos_runtime_installed = True
     return store
 
 
-__all__ = ["install_cos_contract_methods"]
+install_cos_contract_methods = install_cos_runtime
+
+_read_cos_panel = read_cos_panel
+_read_cos_events = read_cos_events
+_read_cos_events_asof = read_cos_events_asof
+_load_factor_columns = load_factor_columns
+_guarded_load_columns = guarded_load_columns
+_guarded_read_asof = guarded_read_asof
+
+__all__ = [
+    "install_cos_runtime",
+    "install_cos_contract_methods",
+    "_read_cos_panel",
+    "_read_cos_events",
+    "_read_cos_events_asof",
+    "_load_factor_columns",
+    "_guarded_load_columns",
+    "_guarded_read_asof",
+]
