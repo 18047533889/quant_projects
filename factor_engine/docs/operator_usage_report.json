@@ -11,6 +11,7 @@
   "operator_usage": {
     "abs": {
       "call_count": 95,
+      "direct_call_count": 95,
       "examples": [
         "rank(open - ts_sum(col('vwap'), 10) / 10) * (-1 * rank(abs(close - col('vwap'))))",
         "ts_sum(where(high + low >= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 12) / (ts_sum(where(high + low >= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 12) + ts_sum(where(high + low <= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 12) + 1e-08)",
@@ -19,20 +20,24 @@
       "kind": "operator",
       "last_seen": "2026-07-04T16:00:59+00:00",
       "manifest_count": 25,
-      "name": "abs"
+      "name": "abs",
+      "recipe_expanded_call_count": 0
     },
     "and_": {
       "call_count": 8,
+      "direct_call_count": 8,
       "examples": [
         "(ts_mean(abs((ts_sum(where(and_(ts_delay(low, 1) - low > 0, ts_delay(low, 1) - low > high - ts_delay(high, 1)), ts_delay(low, 1) - low, 0), 14) * 100 / (ts_sum(flex_max(flex_max(high - low, abs(high - ts_delay(close, 1))), abs(low - ts_delay(close, 1))), 14) + 1e-08) - ts_sum(where(and_(high - ts_delay(high, 1) > 0, high - ts_delay(high, 1) > ts_delay(low, 1) - low), high - ts_delay(high, 1), 0), 14) * 100 / (ts_sum(flex_max(flex_max(high - low, abs(high - ts_delay(close, 1))), abs(low - ts_delay(close, 1))), 14) + 1e-08)) / (ts_sum(where(and_(ts_delay(low, 1) - low > 0, ts_delay(low, 1) - low > high - ts_delay(high, 1)), ts_delay(low, 1) - low, 0), 14) * 100 / (ts_sum(flex_max(flex_max(high - low, abs(high - ts_delay(close, 1))), abs(low - ts_delay(close, 1))), 14) + 1e-08) + ts_sum(where(and_(high - ts_delay(high, 1) > 0, high - ts_delay(high, 1) > ts_delay(low, 1) - low), high - ts_delay(high, 1), 0), 14) * 100 / (ts_sum(flex_max(flex_max(high - low, abs(high - ts_delay(close, 1))), abs(low - ts_delay(close, 1))), 14) + 1e-08) + 1e-08) * 100), 6) + ts_delay(ts_mean(abs((ts_sum(where(and_(ts_delay(low, 1) - low > 0, ts_delay(low, 1) - low > high - ts_delay(high, 1)), ts_delay(low, 1) - low, 0), 14) * 100 / (ts_sum(flex_max(flex_max(high - low, abs(high - ts_delay(close, 1))), abs(low - ts_delay(close, 1))), 14) + 1e-08) - ts_sum(where(and_(high - ts_delay(high, 1) > 0, high - ts_delay(high, 1) > ts_delay(low, 1) - low), high - ts_delay(high, 1), 0), 14) * 100 / (ts_sum(flex_max(flex_max(high - low, abs(high - ts_delay(close, 1))), abs(low - ts_delay(close, 1))), 14) + 1e-08)) / (ts_sum(where(and_(ts_delay(low, 1) - low > 0, ts_delay(low, 1) - low > high - ts_delay(high, 1)), ts_delay(low, 1) - low, 0), 14) * 100 / (ts_sum(flex_max(flex_max(high - low, abs(high - ts_delay(close, 1))), abs(low - ts_delay(close, 1))), 14) + 1e-08) + ts_sum(where(and_(high - ts_delay(high, 1) > 0, high - ts_delay(high, 1) > ts_delay(low, 1) - low), high - ts_delay(high, 1), 0), 14) * 100 / (ts_sum(flex_max(flex_max(high - low, abs(high - ts_delay(close, 1))), abs(low - ts_delay(close, 1))), 14) + 1e-08) + 1e-08) * 100), 6), 6)) / 2"
       ],
       "kind": "operator",
       "last_seen": "2026-07-04T16:00:59+00:00",
       "manifest_count": 1,
-      "name": "and_"
+      "name": "and_",
+      "recipe_expanded_call_count": 0
     },
     "clip": {
       "call_count": 5,
+      "direct_call_count": 5,
       "examples": [
         "clip(ema(ts_delta(close, 1) / delay(close, 1) * ts_rank(volume, 6) * (high - low), 12), -2.5, 2.5)",
         "clip(ema((close / delay(close, 5) - 1) * ts_rank(volume, 8) * (high - low), 12), -3, 3)",
@@ -41,10 +46,12 @@
       "kind": "operator",
       "last_seen": "2026-06-30T18:00:19+00:00",
       "manifest_count": 5,
-      "name": "clip"
+      "name": "clip",
+      "recipe_expanded_call_count": 0
     },
     "divide": {
       "call_count": 14,
+      "direct_call_count": 14,
       "examples": [
         "ema((divide(close - low, high - low) - 0.5) * divide(median(high - low, 20), high - low), 5)",
         "ema((close / delay(close, 5) - 1) * ts_max(volume, 20) / volume * (divide(median(high - low, 20), high - low) - 1), 5)",
@@ -53,10 +60,12 @@
       "kind": "operator",
       "last_seen": "2026-06-30T18:00:28+00:00",
       "manifest_count": 7,
-      "name": "divide"
+      "name": "divide",
+      "recipe_expanded_call_count": 0
     },
     "flex_max": {
       "call_count": 74,
+      "direct_call_count": 74,
       "examples": [
         "ts_sum(where(close == ts_delay(close, 1), 0, close - where(close > ts_delay(close, 1), flex_min(low, ts_delay(close, 1)), flex_max(high, ts_delay(close, 1)))), 6)",
         "ts_sum(where(high + low >= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 12) / (ts_sum(where(high + low >= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 12) + ts_sum(where(high + low <= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 12) + 1e-08)",
@@ -65,10 +74,12 @@
       "kind": "operator",
       "last_seen": "2026-07-04T16:00:59+00:00",
       "manifest_count": 32,
-      "name": "flex_max"
+      "name": "flex_max",
+      "recipe_expanded_call_count": 0
     },
     "flex_min": {
       "call_count": 17,
+      "direct_call_count": 17,
       "examples": [
         "ts_sum(where(close == ts_delay(close, 1), 0, close - where(close > ts_delay(close, 1), flex_min(low, ts_delay(close, 1)), flex_max(high, ts_delay(close, 1)))), 6)",
         "flex_min(rank(ts_decay_linear(ts_delta(open, 1), 15)), rank(ts_decay_linear(ts_corr(volume, open * 0.65 + open * 0.35, 17), 7))) * -1",
@@ -77,10 +88,12 @@
       "kind": "operator",
       "last_seen": "2026-07-04T16:00:59+00:00",
       "manifest_count": 12,
-      "name": "flex_min"
+      "name": "flex_min",
+      "recipe_expanded_call_count": 0
     },
     "log": {
       "call_count": 9,
+      "direct_call_count": 9,
       "examples": [
         "-1 * ts_corr(rank(ts_delta(log(volume), 1)), rank((close - open) / open), 6)",
         "(ts_ema(ts_ema(ts_ema(log(close), 12), 12), 12) - ts_delay(ts_ema(ts_ema(ts_ema(log(close), 12), 12), 12), 1)) / ts_delay(ts_ema(ts_ema(ts_ema(log(close), 12), 12), 12), 1)",
@@ -89,10 +102,12 @@
       "kind": "operator",
       "last_seen": "2026-07-04T16:00:59+00:00",
       "manifest_count": 7,
-      "name": "log"
+      "name": "log",
+      "recipe_expanded_call_count": 0
     },
     "or_": {
       "call_count": 2,
+      "direct_call_count": 2,
       "examples": [
         "where(ts_sum(close, 8) / 8 + ts_std(close, 8) < ts_sum(close, 2) / 2, -1, where(ts_sum(close, 2) / 2 < ts_sum(close, 8) / 8 - ts_std(close, 8), 1, where(or_(1 < volume / ts_mean(volume, 20), volume / ts_mean(volume, 20) == 1), 1, -1)))",
         "where(or_(ts_delta(ts_sum(close, 100) / 100, 100) / (ts_delay(close, 100) + 1e-08) < 0.05, ts_delta(ts_sum(close, 100) / 100, 100) / (ts_delay(close, 100) + 1e-08) == 0.05), -1 * (close - ts_min(close, 100)), -1 * ts_delta(close, 3))"
@@ -100,10 +115,12 @@
       "kind": "operator",
       "last_seen": "2026-07-04T16:00:59+00:00",
       "manifest_count": 2,
-      "name": "or_"
+      "name": "or_",
+      "recipe_expanded_call_count": 0
     },
     "power": {
       "call_count": 23,
+      "direct_call_count": 23,
       "examples": [
         "rank(ts_max(power(where(ret < 0, ts_std(ret, 20), close), 2), 5))",
         "power(high * low, 0.5) - col('vwap')",
@@ -112,10 +129,12 @@
       "kind": "operator",
       "last_seen": "2026-07-04T16:00:59+00:00",
       "manifest_count": 13,
-      "name": "power"
+      "name": "power",
+      "recipe_expanded_call_count": 0
     },
     "rank": {
       "call_count": 138,
+      "direct_call_count": 138,
       "examples": [
         "-1 * ts_corr(rank(ts_delta(log(volume), 1)), rank((close - open) / open), 6)",
         "rank(sign(ts_delta(open * 0.85 + high * 0.15, 4))) * -1",
@@ -124,30 +143,36 @@
       "kind": "operator",
       "last_seen": "2026-07-04T16:00:59+00:00",
       "manifest_count": 63,
-      "name": "rank"
+      "name": "rank",
+      "recipe_expanded_call_count": 0
     },
     "safe_div_null": {
       "call_count": 2,
+      "direct_call_count": 2,
       "examples": [
         "ts_pct(close, 5) * (0.5 + 0.5 * ts_rank(safe_div_null(ts_mean(true_range(high, low, close), 14), close), 20)) * safe_div_null(volume, ts_mean(volume, 20))"
       ],
       "kind": "operator",
       "last_seen": "2026-06-30T18:00:36+00:00",
       "manifest_count": 1,
-      "name": "safe_div_null"
+      "name": "safe_div_null",
+      "recipe_expanded_call_count": 0
     },
     "sigmoid": {
       "call_count": 2,
+      "direct_call_count": 2,
       "examples": [
         "ema(close / (high - low), 8) * (sigmoid(5 * (volume - 0.85 * ts_mean(volume, 25))) * ema(volume, 10) + (1 - sigmoid(5 * (volume - 0.85 * ts_mean(volume, 25)))) * ema(volume, 30))"
       ],
       "kind": "operator",
       "last_seen": "2026-06-30T18:00:14+00:00",
       "manifest_count": 1,
-      "name": "sigmoid"
+      "name": "sigmoid",
+      "recipe_expanded_call_count": 0
     },
     "sign": {
       "call_count": 6,
+      "direct_call_count": 6,
       "examples": [
         "rank(sign(ts_delta(open * 0.85 + high * 0.15, 4))) * -1",
         "-1 * (rank(sign(close - ts_delay(close, 1)) + sign(ts_delay(close, 1) - ts_delay(close, 2)) + sign(ts_delay(close, 2) - ts_delay(close, 3))) * ts_sum(volume, 5)) / ts_sum(volume, 20)",
@@ -156,30 +181,36 @@
       "kind": "operator",
       "last_seen": "2026-07-04T16:00:59+00:00",
       "manifest_count": 4,
-      "name": "sign"
+      "name": "sign",
+      "recipe_expanded_call_count": 0
     },
     "tanh": {
       "call_count": 1,
+      "direct_call_count": 1,
       "examples": [
         "tanh(2 * (high - low) / (2 * close - high - low) * ts_mean(close, 5) / ts_mean(high - low, 5))"
       ],
       "kind": "operator",
       "last_seen": "2026-06-30T18:00:08+00:00",
       "manifest_count": 1,
-      "name": "tanh"
+      "name": "tanh",
+      "recipe_expanded_call_count": 0
     },
     "true_range": {
       "call_count": 1,
+      "direct_call_count": 1,
       "examples": [
         "ts_pct(close, 5) * (0.5 + 0.5 * ts_rank(safe_div_null(ts_mean(true_range(high, low, close), 14), close), 20)) * safe_div_null(volume, ts_mean(volume, 20))"
       ],
       "kind": "operator",
       "last_seen": "2026-06-30T18:00:36+00:00",
       "manifest_count": 1,
-      "name": "true_range"
+      "name": "true_range",
+      "recipe_expanded_call_count": 0
     },
     "ts_argmax": {
       "call_count": 2,
+      "direct_call_count": 2,
       "examples": [
         "(20 - (20 - ts_argmax(high, 20))) / 20 * 100",
         "(20 - (20 - ts_argmax(high, 20))) / 20 * 100 - (20 - (20 - ts_argmin(low, 20))) / 20 * 100"
@@ -187,10 +218,12 @@
       "kind": "operator",
       "last_seen": "2026-07-04T16:00:59+00:00",
       "manifest_count": 2,
-      "name": "ts_argmax"
+      "name": "ts_argmax",
+      "recipe_expanded_call_count": 0
     },
     "ts_argmin": {
       "call_count": 2,
+      "direct_call_count": 2,
       "examples": [
         "(20 - (20 - ts_argmax(high, 20))) / 20 * 100 - (20 - (20 - ts_argmin(low, 20))) / 20 * 100",
         "(20 - (20 - ts_argmin(low, 20))) / 20 * 100"
@@ -198,10 +231,12 @@
       "kind": "operator",
       "last_seen": "2026-07-04T16:00:59+00:00",
       "manifest_count": 2,
-      "name": "ts_argmin"
+      "name": "ts_argmin",
+      "recipe_expanded_call_count": 0
     },
     "ts_corr": {
       "call_count": 55,
+      "direct_call_count": 55,
       "examples": [
         "-1 * ts_corr(rank(ts_delta(log(volume), 1)), rank((close - open) / open), 6)",
         "-1 * ts_max(ts_corr(ts_rank(volume, 5), ts_rank(high, 5), 5), 3)",
@@ -210,10 +245,12 @@
       "kind": "operator",
       "last_seen": "2026-07-04T16:00:59+00:00",
       "manifest_count": 45,
-      "name": "ts_corr"
+      "name": "ts_corr",
+      "recipe_expanded_call_count": 0
     },
     "ts_cov": {
       "call_count": 2,
+      "direct_call_count": 2,
       "examples": [
         "-1 * rank(ts_cov(rank(high), rank(volume), 5))",
         "-1 * rank(ts_cov(rank(close), rank(volume), 5))"
@@ -221,10 +258,12 @@
       "kind": "operator",
       "last_seen": "2026-07-04T16:00:59+00:00",
       "manifest_count": 2,
-      "name": "ts_cov"
+      "name": "ts_cov",
+      "recipe_expanded_call_count": 0
     },
     "ts_decay_linear": {
       "call_count": 34,
+      "direct_call_count": 34,
       "examples": [
         "-1 * rank(ts_delta(close, 7) * (1 - rank(ts_decay_linear(volume / ts_mean(volume, 20), 9)))) * (1 + rank(ts_sum(ret, 250)))",
         "WMA((close - ts_delay(close, 3)) / (ts_delay(close, 3) + 1e-08) * 100 + (close - ts_delay(close, 6)) / (ts_delay(close, 6) + 1e-08) * 100, 12)",
@@ -233,10 +272,12 @@
       "kind": "operator",
       "last_seen": "2026-07-04T16:00:59+00:00",
       "manifest_count": 18,
-      "name": "ts_decay_linear"
+      "name": "ts_decay_linear",
+      "recipe_expanded_call_count": 0
     },
     "ts_delay": {
       "call_count": 348,
+      "direct_call_count": 348,
       "examples": [
         "ts_sum(where(close == ts_delay(close, 1), 0, close - where(close > ts_delay(close, 1), flex_min(low, ts_delay(close, 1)), flex_max(high, ts_delay(close, 1)))), 6)",
         "ts_ema(((high + low) / 2 - (ts_delay(high, 1) + ts_delay(low, 1)) / 2) * (high - low) / volume, 6)",
@@ -245,10 +286,12 @@
       "kind": "operator",
       "last_seen": "2026-07-04T16:00:59+00:00",
       "manifest_count": 89,
-      "name": "ts_delay"
+      "name": "ts_delay",
+      "recipe_expanded_call_count": 0
     },
     "ts_delta": {
       "call_count": 40,
+      "direct_call_count": 40,
       "examples": [
         "-1 * ts_corr(rank(ts_delta(log(volume), 1)), rank((close - open) / open), 6)",
         "-1 * ts_delta((close - low - (high - close)) / (high - low), 1)",
@@ -257,10 +300,12 @@
       "kind": "operator",
       "last_seen": "2026-07-04T16:00:59+00:00",
       "manifest_count": 35,
-      "name": "ts_delta"
+      "name": "ts_delta",
+      "recipe_expanded_call_count": 0
     },
     "ts_ema": {
       "call_count": 117,
+      "direct_call_count": 117,
       "examples": [
         "ts_ema(((high + low) / 2 - (ts_delay(high, 1) + ts_delay(low, 1)) / 2) * (high - low) / volume, 6)",
         "ts_ema((close - ts_mean(close, 6)) / ts_mean(close, 6) - ts_delay((close - ts_mean(close, 6)) / ts_mean(close, 6), 3), 23)",
@@ -269,10 +314,12 @@
       "kind": "operator",
       "last_seen": "2026-07-04T16:00:59+00:00",
       "manifest_count": 61,
-      "name": "ts_ema"
+      "name": "ts_ema",
+      "recipe_expanded_call_count": 0
     },
     "ts_max": {
       "call_count": 28,
+      "direct_call_count": 28,
       "examples": [
         "-1 * ts_max(ts_corr(ts_rank(volume, 5), ts_rank(high, 5), 5), 3)",
         "(rank(ts_max(col('vwap') - close, 3)) + rank(ts_min(col('vwap') - close, 3))) * rank(ts_delta(volume, 3))",
@@ -281,10 +328,12 @@
       "kind": "operator",
       "last_seen": "2026-07-04T16:00:59+00:00",
       "manifest_count": 22,
-      "name": "ts_max"
+      "name": "ts_max",
+      "recipe_expanded_call_count": 0
     },
     "ts_mean": {
       "call_count": 119,
+      "direct_call_count": 119,
       "examples": [
         "where(ts_sum(close, 8) / 8 + ts_std(close, 8) < ts_sum(close, 2) / 2, -1, where(ts_sum(close, 2) / 2 < ts_sum(close, 8) / 8 - ts_std(close, 8), 1, where(or_(1 < volume / ts_mean(volume, 20), volume / ts_mean(volume, 20) == 1), 1, -1)))",
         "ts_regression(ts_mean(close, 6), ts_delay(close, 1), 6, 0, 'slope')",
@@ -293,10 +342,12 @@
       "kind": "operator",
       "last_seen": "2026-07-04T16:00:59+00:00",
       "manifest_count": 84,
-      "name": "ts_mean"
+      "name": "ts_mean",
+      "recipe_expanded_call_count": 0
     },
     "ts_median": {
       "call_count": 7,
+      "direct_call_count": 7,
       "examples": [
         "ema(if_else((high - low) > median(high - low, 20), close / open - 1, 0) * ts_max(volume, 20) / volume, 20)",
         "ema((divide(close - low, high - low) - 0.5) * divide(median(high - low, 20), high - low), 5)",
@@ -305,10 +356,12 @@
       "kind": "operator",
       "last_seen": "2026-06-30T18:00:27+00:00",
       "manifest_count": 7,
-      "name": "ts_median"
+      "name": "ts_median",
+      "recipe_expanded_call_count": 0
     },
     "ts_min": {
       "call_count": 28,
+      "direct_call_count": 28,
       "examples": [
         "(rank(ts_max(col('vwap') - close, 3)) + rank(ts_min(col('vwap') - close, 3))) * rank(ts_delta(volume, 3))",
         "3 * ts_ema((close - ts_min(low, 9)) / (ts_max(high, 9) - ts_min(low, 9)) * 100, 5) - 2 * ts_ema(ts_ema((close - ts_min(low, 9)) / (ts_max(high, 9) - ts_max(low, 9)) * 100, 5), 5)",
@@ -317,30 +370,36 @@
       "kind": "operator",
       "last_seen": "2026-07-04T16:00:59+00:00",
       "manifest_count": 20,
-      "name": "ts_min"
+      "name": "ts_min",
+      "recipe_expanded_call_count": 0
     },
     "ts_pct": {
       "call_count": 1,
+      "direct_call_count": 1,
       "examples": [
         "ts_pct(close, 5) * (0.5 + 0.5 * ts_rank(safe_div_null(ts_mean(true_range(high, low, close), 14), close), 20)) * safe_div_null(volume, ts_mean(volume, 20))"
       ],
       "kind": "operator",
       "last_seen": "2026-06-30T18:00:36+00:00",
       "manifest_count": 1,
-      "name": "ts_pct"
+      "name": "ts_pct",
+      "recipe_expanded_call_count": 0
     },
     "ts_product": {
       "call_count": 1,
+      "direct_call_count": 1,
       "examples": [
         "ts_min(ts_product(rank(rank(log(ts_sum(ts_min(rank(rank(-1 * rank(ts_delta(close - 1, 5)))), 2), 1))))), 5) + ts_rank(ts_delay(-1 * ret, 6), 5)"
       ],
       "kind": "operator",
       "last_seen": "2026-07-04T16:00:59+00:00",
       "manifest_count": 1,
-      "name": "ts_product"
+      "name": "ts_product",
+      "recipe_expanded_call_count": 0
     },
     "ts_rank": {
       "call_count": 36,
+      "direct_call_count": 36,
       "examples": [
         "-1 * ts_max(ts_corr(ts_rank(volume, 5), ts_rank(high, 5), 5), 3)",
         "(-1 * ts_min(low, 5) + ts_delay(ts_min(low, 5), 5)) * rank((ts_sum(ret, 240) - ts_sum(ret, 20)) / 220) * ts_rank(volume, 5)",
@@ -349,10 +408,12 @@
       "kind": "operator",
       "last_seen": "2026-07-04T16:00:59+00:00",
       "manifest_count": 22,
-      "name": "ts_rank"
+      "name": "ts_rank",
+      "recipe_expanded_call_count": 0
     },
     "ts_regression_slope": {
       "call_count": 3,
+      "direct_call_count": 3,
       "examples": [
         "ts_regression(ts_mean(close, 6), ts_delay(close, 1), 6, 0, 'slope')",
         "ts_regression(close, ts_delay(close, 1), 20, 0, 'slope')",
@@ -361,10 +422,12 @@
       "kind": "operator",
       "last_seen": "2026-07-04T16:00:59+00:00",
       "manifest_count": 3,
-      "name": "ts_regression_slope"
+      "name": "ts_regression_slope",
+      "recipe_expanded_call_count": 0
     },
     "ts_std": {
       "call_count": 25,
+      "direct_call_count": 25,
       "examples": [
         "where(ts_sum(close, 8) / 8 + ts_std(close, 8) < ts_sum(close, 2) / 2, -1, where(ts_sum(close, 2) / 2 < ts_sum(close, 8) / 8 - ts_std(close, 8), 1, where(or_(1 < volume / ts_mean(volume, 20), volume / ts_mean(volume, 20) == 1), 1, -1)))",
         "rank(ts_max(power(where(ret < 0, ts_std(ret, 20), close), 2), 5))",
@@ -373,10 +436,12 @@
       "kind": "operator",
       "last_seen": "2026-07-04T16:00:59+00:00",
       "manifest_count": 22,
-      "name": "ts_std"
+      "name": "ts_std",
+      "recipe_expanded_call_count": 0
     },
     "ts_sum": {
       "call_count": 131,
+      "direct_call_count": 131,
       "examples": [
         "ts_sum(where(close == ts_delay(close, 1), 0, close - where(close > ts_delay(close, 1), flex_min(low, ts_delay(close, 1)), flex_max(high, ts_delay(close, 1)))), 6)",
         "where(ts_sum(close, 8) / 8 + ts_std(close, 8) < ts_sum(close, 2) / 2, -1, where(ts_sum(close, 2) / 2 < ts_sum(close, 8) / 8 - ts_std(close, 8), 1, where(or_(1 < volume / ts_mean(volume, 20), volume / ts_mean(volume, 20) == 1), 1, -1)))",
@@ -385,10 +450,12 @@
       "kind": "operator",
       "last_seen": "2026-07-04T16:00:59+00:00",
       "manifest_count": 55,
-      "name": "ts_sum"
+      "name": "ts_sum",
+      "recipe_expanded_call_count": 0
     },
     "where": {
       "call_count": 94,
+      "direct_call_count": 94,
       "examples": [
         "ts_sum(where(close == ts_delay(close, 1), 0, close - where(close > ts_delay(close, 1), flex_min(low, ts_delay(close, 1)), flex_max(high, ts_delay(close, 1)))), 6)",
         "where(ts_sum(close, 8) / 8 + ts_std(close, 8) < ts_sum(close, 2) / 2, -1, where(ts_sum(close, 2) / 2 < ts_sum(close, 8) / 8 - ts_std(close, 8), 1, where(or_(1 < volume / ts_mean(volume, 20), volume / ts_mean(volume, 20) == 1), 1, -1)))",
@@ -397,11 +464,12 @@
       "kind": "operator",
       "last_seen": "2026-07-04T16:00:59+00:00",
       "manifest_count": 37,
-      "name": "where"
+      "name": "where",
+      "recipe_expanded_call_count": 0
     }
   },
   "recipe_usage": {},
   "reference_timestamp": "2026-07-04T16:00:59+00:00",
   "scanned_manifest_count": 222,
-  "schema_version": "operator_usage.v1"
+  "schema_version": "operator_usage.v2"
 }

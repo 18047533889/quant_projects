@@ -1,9 +1,129 @@
 # SQL pushdown coverage
 
-Generate the current active-canonical report with:
+> Generated from exact active runtime canonicals. Historical aliases do not inherit certification.
+> ClickHouse production certification remains separate and is never inferred from DuckDB.
 
-```bash
-python factor_engine/scripts/sync_backend_docs.py
-```
+- active SQL emitter implementations: **118**
+- DuckDB reference parity: **77**
+- DuckDB production safe: **66**
 
-The report distinguishes SQL emitter implementation, real DuckDB parity verification, and DuckDB production-safe routing. ClickHouse certification is independent and is never inferred from DuckDB support.
+| canonical | implemented | reference parity | production safe |
+|---|---:|---:|---:|
+| ATR_WILDER | yes | no | no |
+| RSI_WILDER | yes | no | no |
+| abs | yes | yes | yes |
+| add | yes | yes | yes |
+| and_ | yes | yes | yes |
+| ceil | yes | yes | yes |
+| clip | yes | yes | yes |
+| coalesce | yes | yes | yes |
+| cs_bucket | yes | no | no |
+| cs_count | yes | no | no |
+| cs_demean | yes | yes | yes |
+| cs_mad | yes | yes | yes |
+| cs_mad_zscore | yes | yes | yes |
+| cs_mean | yes | no | no |
+| cs_multi_resid | yes | no | no |
+| cs_pct_rank | yes | yes | yes |
+| cs_quantile | yes | no | no |
+| cs_regression | yes | no | no |
+| cs_resid | yes | no | no |
+| cs_std | yes | no | no |
+| cs_sum | yes | no | no |
+| cs_wls_resid | yes | no | no |
+| divide | yes | yes | yes |
+| eq | yes | yes | yes |
+| exp | yes | yes | yes |
+| fillna_const | yes | yes | yes |
+| floor | yes | yes | yes |
+| ge | yes | yes | yes |
+| group_count | yes | yes | no |
+| group_decay_linear | yes | no | no |
+| group_max | yes | yes | no |
+| group_mean | yes | yes | yes |
+| group_min | yes | yes | no |
+| group_neutralize | yes | yes | yes |
+| group_normalize | yes | yes | yes |
+| group_percentile | yes | yes | no |
+| group_rank | yes | yes | yes |
+| group_std | yes | yes | yes |
+| group_sum | yes | yes | no |
+| group_winsorize | yes | yes | yes |
+| group_zscore | yes | yes | yes |
+| gt | yes | yes | yes |
+| inverse | yes | yes | yes |
+| is_finite | yes | yes | yes |
+| is_infinite | yes | yes | no |
+| is_nan | yes | yes | yes |
+| is_not_null | yes | yes | no |
+| is_null | yes | yes | no |
+| le | yes | yes | yes |
+| log | yes | yes | yes |
+| log_abs | yes | yes | no |
+| lt | yes | yes | yes |
+| maximum | yes | yes | yes |
+| minimum | yes | yes | yes |
+| multiply | yes | yes | yes |
+| ne | yes | yes | yes |
+| neg | yes | yes | yes |
+| normalize | yes | yes | yes |
+| not_ | yes | yes | yes |
+| or_ | yes | yes | yes |
+| period_lag | yes | no | no |
+| power | yes | yes | yes |
+| protected_div | yes | yes | yes |
+| rank | yes | yes | yes |
+| safe_div_null | yes | yes | yes |
+| scale | yes | yes | yes |
+| sign | yes | yes | yes |
+| signed_log | yes | yes | no |
+| signed_sqrt | yes | yes | no |
+| sqrt | yes | yes | yes |
+| subtract | yes | yes | yes |
+| ts_argmax | yes | no | no |
+| ts_argmin | yes | no | no |
+| ts_autocorr | yes | yes | yes |
+| ts_beta | yes | yes | yes |
+| ts_corr | yes | yes | yes |
+| ts_count_if | yes | no | no |
+| ts_cov | yes | yes | yes |
+| ts_days_since | yes | no | no |
+| ts_decay_linear | yes | no | no |
+| ts_delay | yes | yes | yes |
+| ts_delta | yes | yes | yes |
+| ts_ema | yes | no | no |
+| ts_ewm_corr | yes | no | no |
+| ts_ewm_cov | yes | no | no |
+| ts_ewm_std | yes | no | no |
+| ts_ewm_var | yes | no | no |
+| ts_last_if | yes | no | no |
+| ts_log_return | yes | no | no |
+| ts_mad | yes | no | no |
+| ts_max | yes | yes | yes |
+| ts_max_drawdown | yes | no | no |
+| ts_mean | yes | yes | yes |
+| ts_mean_if | yes | no | no |
+| ts_median | yes | yes | yes |
+| ts_min | yes | yes | yes |
+| ts_nth_value | yes | no | no |
+| ts_partial_corr | yes | no | no |
+| ts_pct | yes | yes | yes |
+| ts_product | yes | no | no |
+| ts_quantile | yes | no | no |
+| ts_rank | yes | yes | yes |
+| ts_regression_slope | yes | no | no |
+| ts_regression_tstat | yes | no | no |
+| ts_sharpe | yes | yes | yes |
+| ts_skew | yes | no | no |
+| ts_std | yes | yes | yes |
+| ts_std_if | yes | no | no |
+| ts_sum | yes | yes | yes |
+| ts_sum_if | yes | no | no |
+| ts_time_slope | yes | no | no |
+| ts_trend_tstat | yes | no | no |
+| ts_true_streak | yes | no | no |
+| ts_var | yes | yes | yes |
+| ts_zscore | yes | yes | yes |
+| where | yes | yes | yes |
+| winsorize | yes | yes | yes |
+| zscore | yes | yes | yes |

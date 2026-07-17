@@ -117,5 +117,5 @@
       "state_schema_version": "ema_state.v1"
     }
   },
-  "schema_version": "stateful_operator_manifest.v1"
+  "schema_version": "stateful_operator_manifest.v2"
 }

@@ -1,10 +1,11 @@
 {
-  "operator_count": 215,
+  "operator_count": 218,
   "operators": {
     "ADX": {
       "aliases": [
         "ts_adx"
       ],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": true,
@@ -73,49 +74,32 @@
         "polars": {
           "explicit": true,
           "source": "composite_fastpath_native_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ATR_WILDER",
-      "checkpoint_contract": {
-        "canonical": "ATR_WILDER",
-        "checkpoint_fields": [
-          "atr",
-          "last_close",
-          "last_timestamp"
-        ],
-        "checkpoint_required_for_segmented": true,
-        "dependencies": [],
-        "minimum_history": 14,
-        "missing_policy": "carry_state_emit_null",
-        "semantic_version": "2.0",
-        "state_schema_version": "atr_wilder_state.v1"
-      },
-      "description": "共享真实波幅内核的 Wilder ATR",
-      "earliest_trade_time": "next_session_open",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ATR_WILDER",
       "param_names": [
         "high",
         "low",
         "close",
         "window"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "close",
-      "scope": "time_series",
-      "segmented_execution_requires_checkpoint": true,
-      "selected_source": "composite_fastpath_native_polars",
-      "semantic_version": "2.0",
-      "stateful": true,
-      "status": "production",
-      "surface": "daily"
+      "selected_source": "backend/sql_pushdown",
+      "semantic_version": "1.0",
+      "status": "implemented"
     },
     "MACD_hist": {
       "aliases": [],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": true,
@@ -171,8 +155,10 @@
     },
     "MACD_line": {
       "aliases": [
-        "MACD"
+        "MACD",
+        "ts_macd"
       ],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": true,
@@ -225,6 +211,7 @@
     },
     "MACD_signal": {
       "aliases": [],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": true,
@@ -290,45 +277,26 @@
         "polars": {
           "explicit": true,
           "source": "composite_fastpath_native_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "RSI_WILDER",
-      "checkpoint_contract": {
-        "canonical": "RSI_WILDER",
-        "checkpoint_fields": [
-          "avg_gain",
-          "avg_loss",
-          "last_close",
-          "last_timestamp"
-        ],
-        "checkpoint_required_for_segmented": true,
-        "dependencies": [],
-        "minimum_history": 14,
-        "missing_policy": "carry_state_emit_null",
-        "semantic_version": "2.0",
-        "state_schema_version": "rsi_wilder_state.v1"
-      },
-      "description": "共享 Wilder 平滑内核的 RSI",
-      "earliest_trade_time": "next_session_open",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 RSI_WILDER",
       "param_names": [
         "x",
         "window"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "close",
-      "scope": "time_series",
-      "segmented_execution_requires_checkpoint": true,
-      "selected_source": "composite_fastpath_native_polars",
-      "semantic_version": "2.0",
-      "stateful": true,
-      "status": "production",
-      "surface": "daily"
+      "selected_source": "backend/sql_pushdown",
+      "semantic_version": "1.0",
+      "status": "implemented"
     },
     "abs": {
       "aliases": [
@@ -342,31 +310,29 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "abs",
-      "description": "绝对值",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 abs",
       "param_names": [
         "x"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "acos": {
       "aliases": [],
+      "authoring_default": false,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -384,6 +350,7 @@
       "canonical": "acos",
       "description": "反余弦",
       "earliest_trade_time": "input_dependent",
+      "extended_reason": "specialised or ambiguous; explicit extended surface required",
       "lookback_fn": null,
       "param_names": [
         "x"
@@ -396,7 +363,7 @@
       "semantic_version": "1.0",
       "stateful": false,
       "status": "implemented",
-      "surface": "daily"
+      "surface": "extended"
     },
     "add": {
       "aliases": [],
@@ -408,29 +375,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "add",
-      "description": "逐元素加法",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 add",
       "param_names": [
         "x",
         "y"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "and_": {
       "aliases": [],
@@ -442,32 +406,30 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars_auto"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "and_",
-      "description": "逻辑与",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 and_",
       "param_names": [
         "x",
         "y"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars_auto",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "arg": {
       "aliases": [],
+      "authoring_default": false,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -485,6 +447,7 @@
       "canonical": "arg",
       "description": "相位",
       "earliest_trade_time": "input_dependent",
+      "extended_reason": "specialised or ambiguous; explicit extended surface required",
       "lookback_fn": null,
       "param_names": [
         "x"
@@ -497,10 +460,11 @@
       "semantic_version": "1.0",
       "stateful": false,
       "status": "implemented",
-      "surface": "daily"
+      "surface": "extended"
     },
     "asin": {
       "aliases": [],
+      "authoring_default": false,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -518,6 +482,7 @@
       "canonical": "asin",
       "description": "反正弦",
       "earliest_trade_time": "input_dependent",
+      "extended_reason": "specialised or ambiguous; explicit extended surface required",
       "lookback_fn": null,
       "param_names": [
         "x"
@@ -530,10 +495,11 @@
       "semantic_version": "1.0",
       "stateful": false,
       "status": "implemented",
-      "surface": "daily"
+      "surface": "extended"
     },
     "atan": {
       "aliases": [],
+      "authoring_default": false,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -551,6 +517,7 @@
       "canonical": "atan",
       "description": "反正切",
       "earliest_trade_time": "input_dependent",
+      "extended_reason": "specialised or ambiguous; explicit extended surface required",
       "lookback_fn": null,
       "param_names": [
         "x"
@@ -563,10 +530,11 @@
       "semantic_version": "1.0",
       "stateful": false,
       "status": "implemented",
-      "surface": "daily"
+      "surface": "extended"
     },
     "atan2": {
       "aliases": [],
+      "authoring_default": false,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -584,6 +552,7 @@
       "canonical": "atan2",
       "description": "atan2",
       "earliest_trade_time": "input_dependent",
+      "extended_reason": "specialised or ambiguous; explicit extended surface required",
       "lookback_fn": null,
       "param_names": [
         "y",
@@ -597,10 +566,11 @@
       "semantic_version": "1.0",
       "stateful": false,
       "status": "implemented",
-      "surface": "daily"
+      "surface": "extended"
     },
     "cbrt": {
       "aliases": [],
+      "authoring_default": false,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -618,6 +588,7 @@
       "canonical": "cbrt",
       "description": "立方根",
       "earliest_trade_time": "input_dependent",
+      "extended_reason": "specialised or ambiguous; explicit extended surface required",
       "lookback_fn": null,
       "param_names": [
         "x"
@@ -630,7 +601,7 @@
       "semantic_version": "1.0",
       "stateful": false,
       "status": "implemented",
-      "surface": "daily"
+      "surface": "extended"
     },
     "ceil": {
       "aliases": [],
@@ -642,35 +613,31 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ceil",
-      "description": "向上取整",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 ceil",
       "param_names": [
         "x"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "clip": {
       "aliases": [
         "CLIP",
         "cap",
-        "clamp",
-        "clip"
+        "clamp"
       ],
       "backend_meta": {
         "pandas_numpy": {
@@ -680,30 +647,27 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "clip",
-      "description": "裁剪到 [lo, hi]",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 clip",
       "param_names": [
         "x",
         "lo",
         "hi"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "coalesce": {
       "aliases": [
@@ -717,29 +681,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars_auto"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "coalesce",
-      "description": "Polars coalesce",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 coalesce",
       "param_names": [
         "x",
         "y"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars_auto",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "constant": {
       "aliases": [],
@@ -767,10 +728,11 @@
       "semantic_version": "1.0",
       "stateful": false,
       "status": "implemented",
-      "surface": "research"
+      "surface": "internal"
     },
     "cos": {
       "aliases": [],
+      "authoring_default": false,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -788,6 +750,7 @@
       "canonical": "cos",
       "description": "余弦",
       "earliest_trade_time": "input_dependent",
+      "extended_reason": "specialised or ambiguous; explicit extended surface required",
       "lookback_fn": null,
       "param_names": [
         "x"
@@ -800,10 +763,11 @@
       "semantic_version": "1.0",
       "stateful": false,
       "status": "implemented",
-      "surface": "daily"
+      "surface": "extended"
     },
     "cosh": {
       "aliases": [],
+      "authoring_default": false,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -821,6 +785,7 @@
       "canonical": "cosh",
       "description": "Polars cosh",
       "earliest_trade_time": "input_dependent",
+      "extended_reason": "specialised or ambiguous; explicit extended surface required",
       "lookback_fn": null,
       "param_names": [
         "x"
@@ -833,7 +798,7 @@
       "semantic_version": "1.0",
       "stateful": false,
       "status": "implemented",
-      "surface": "daily"
+      "surface": "extended"
     },
     "coskewness_to_market": {
       "aliases": [],
@@ -872,6 +837,7 @@
     },
     "cot": {
       "aliases": [],
+      "authoring_default": false,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -889,6 +855,7 @@
       "canonical": "cot",
       "description": "Polars cot",
       "earliest_trade_time": "input_dependent",
+      "extended_reason": "specialised or ambiguous; explicit extended surface required",
       "lookback_fn": null,
       "param_names": [
         "x"
@@ -901,7 +868,7 @@
       "semantic_version": "1.0",
       "stateful": false,
       "status": "implemented",
-      "surface": "daily"
+      "surface": "extended"
     },
     "cs_bucket": {
       "aliases": [],
@@ -913,30 +880,27 @@
         "polars": {
           "explicit": true,
           "source": "operator_overhaul_native_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "cs_bucket",
-      "description": "横截面零到一排名分桶",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 cs_bucket",
       "param_names": [
         "x",
         "buckets",
         "ascending"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "cross_sectional",
-      "selected_source": "operator_overhaul_native_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "production",
-      "surface": "daily"
+      "status": "implemented"
     },
     "cs_count": {
       "aliases": [
@@ -950,28 +914,25 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_np"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "cs_count",
-      "description": "计算截面非空计数",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 cs_count",
       "param_names": [
         "x"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "cross_sectional",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "cs_demean": {
       "aliases": [
@@ -986,31 +947,29 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_np"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "cs_demean",
-      "description": "截面数据减去均值",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 cs_demean",
       "param_names": [
         "x"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "cross_sectional",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "cs_fill_mean": {
       "aliases": [],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": true,
@@ -1044,6 +1003,7 @@
     },
     "cs_fill_median": {
       "aliases": [],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": true,
@@ -1085,28 +1045,25 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_np"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "cs_mad",
-      "description": "截面中位绝对偏差（MAD，广播到各列）",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 cs_mad",
       "param_names": [
         "x"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "cross_sectional",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "cs_mad_zscore": {
       "aliases": [],
@@ -1118,28 +1075,25 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_np"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "cs_mad_zscore",
-      "description": "MAD 稳健 Z-Score：(x - median) / MAD",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 cs_mad_zscore",
       "param_names": [
         "x"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "cross_sectional",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "cs_mean": {
       "aliases": [
@@ -1153,28 +1107,25 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_np"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "cs_mean",
-      "description": "计算截面均值",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 cs_mean",
       "param_names": [
         "x"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "cross_sectional",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "cs_multi_resid": {
       "aliases": [],
@@ -1182,15 +1133,18 @@
         "pandas_numpy": {
           "explicit": true,
           "source": "operator_overhaul_audited"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "sql"
       ],
       "canonical": "cs_multi_resid",
-      "description": "多变量横截面 OLS 残差",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 cs_multi_resid",
       "param_names": [
         "y",
         "x1",
@@ -1199,18 +1153,13 @@
         "add_intercept",
         "min_obs"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "cross_sectional",
-      "selected_source": "operator_overhaul_audited",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "production",
-      "surface": "daily"
+      "status": "implemented"
     },
     "cs_neutralize": {
       "aliases": [],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": true,
@@ -1254,32 +1203,30 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "cs_pct_rank",
-      "description": "截面百分位排名（同 rank_pct）",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 cs_pct_rank",
       "param_names": [
         "x"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "cross_sectional",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "cs_quantile": {
       "aliases": [
-        "c_percentile"
+        "c_percentile",
+        "quantile"
       ],
       "backend_meta": {
         "pandas_numpy": {
@@ -1289,45 +1236,38 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "cs_quantile",
-      "description": "截面 p 分位数值（广播到各列）",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 cs_quantile",
       "param_names": [
         "x",
         "p"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "cross_sectional",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "cs_rank_gaussian": {
       "aliases": [],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": true,
           "source": "layer_governance_primitives"
-        },
-        "polars": {
-          "explicit": true,
-          "source": "layer_governance_native_polars"
         }
       },
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "canonical": "cs_rank_gaussian",
       "description": "横截面排名高斯化",
@@ -1338,6 +1278,7 @@
         "method"
       ],
       "pit_safe": true,
+      "polars_downgrade_reason": "normal inverse CDF implementation converts the full panel to NumPy",
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "input_dependent",
       "scope": "cross_sectional",
@@ -1357,30 +1298,27 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "cs_regression",
-      "description": "截面回归: mode=0 残差, 1 beta, 2 拟合值",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 cs_regression",
       "param_names": [
         "y",
         "x",
         "mode"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "cross_sectional",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "cs_resid": {
       "aliases": [],
@@ -1392,29 +1330,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "cs_resid",
-      "description": "截面线性回归残差 y - (α + βx)",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 cs_resid",
       "param_names": [
         "y",
         "x"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "cross_sectional",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "cs_std": {
       "aliases": [
@@ -1428,28 +1363,25 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_np"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "cs_std",
-      "description": "计算截面标准差",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 cs_std",
       "param_names": [
         "x"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "cross_sectional",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "cs_sum": {
       "aliases": [
@@ -1463,27 +1395,129 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_np"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars",
+        "sql"
+      ],
+      "canonical": "cs_sum",
+      "description": "SQL 下推算子 cs_sum",
+      "param_names": [
+        "x"
+      ],
+      "selected_source": "backend/sql_pushdown",
+      "semantic_version": "1.0",
+      "status": "implemented"
+    },
+    "cs_weighted_demean": {
+      "aliases": [],
+      "authoring_default": true,
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": true,
+          "source": "operator_overhaul_audited"
+        },
+        "polars": {
+          "explicit": true,
+          "source": "operator_overhaul_native_polars"
         }
       },
       "backends": [
         "pandas_numpy",
         "polars"
       ],
-      "canonical": "cs_sum",
-      "description": "计算截面求和",
+      "canonical": "cs_weighted_demean",
+      "description": "weighted cross-sectional demean",
       "earliest_trade_time": "input_dependent",
       "lookback_fn": null,
       "param_names": [
-        "x"
+        "x",
+        "weight"
       ],
       "pit_safe": true,
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "input_dependent",
       "scope": "cross_sectional",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "operator_overhaul_native_polars",
       "semantic_version": "1.0",
       "stateful": false,
-      "status": "implemented",
+      "status": "production",
+      "surface": "daily"
+    },
+    "cs_weighted_mean": {
+      "aliases": [],
+      "authoring_default": true,
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": true,
+          "source": "operator_overhaul_audited"
+        },
+        "polars": {
+          "explicit": true,
+          "source": "operator_overhaul_native_polars"
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "cs_weighted_mean",
+      "description": "weighted cross-sectional mean",
+      "earliest_trade_time": "input_dependent",
+      "lookback_fn": null,
+      "param_names": [
+        "x",
+        "weight"
+      ],
+      "pit_safe": true,
+      "replacement_policy": "sealed_after_bootstrap",
+      "required_cutoff": "input_dependent",
+      "scope": "cross_sectional",
+      "selected_source": "operator_overhaul_native_polars",
+      "semantic_version": "1.0",
+      "stateful": false,
+      "status": "production",
+      "surface": "daily"
+    },
+    "cs_weighted_zscore": {
+      "aliases": [],
+      "authoring_default": true,
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": true,
+          "source": "operator_overhaul_audited"
+        },
+        "polars": {
+          "explicit": true,
+          "source": "operator_overhaul_native_polars"
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "cs_weighted_zscore",
+      "description": "weighted cross-sectional zscore",
+      "earliest_trade_time": "input_dependent",
+      "lookback_fn": null,
+      "param_names": [
+        "x",
+        "weight"
+      ],
+      "pit_safe": true,
+      "replacement_policy": "sealed_after_bootstrap",
+      "required_cutoff": "input_dependent",
+      "scope": "cross_sectional",
+      "selected_source": "operator_overhaul_native_polars",
+      "semantic_version": "1.0",
+      "stateful": false,
+      "status": "production",
       "surface": "daily"
     },
     "cs_wls_resid": {
@@ -1492,15 +1526,18 @@
         "pandas_numpy": {
           "explicit": true,
           "source": "operator_overhaul_audited"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "sql"
       ],
       "canonical": "cs_wls_resid",
-      "description": "加权横截面回归残差",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 cs_wls_resid",
       "param_names": [
         "y",
         "x",
@@ -1508,18 +1545,13 @@
         "add_intercept",
         "min_obs"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "cross_sectional",
-      "selected_source": "operator_overhaul_audited",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "production",
-      "surface": "daily"
+      "status": "implemented"
     },
     "csc": {
       "aliases": [],
+      "authoring_default": false,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -1537,6 +1569,7 @@
       "canonical": "csc",
       "description": "Polars csc",
       "earliest_trade_time": "input_dependent",
+      "extended_reason": "specialised or ambiguous; explicit extended surface required",
       "lookback_fn": null,
       "param_names": [
         "x"
@@ -1549,7 +1582,7 @@
       "semantic_version": "1.0",
       "stateful": false,
       "status": "implemented",
-      "surface": "daily"
+      "surface": "extended"
     },
     "cube": {
       "aliases": [],
@@ -1582,7 +1615,7 @@
       "semantic_version": "1.0",
       "stateful": false,
       "status": "implemented",
-      "surface": "research"
+      "surface": "legacy"
     },
     "digital_count": {
       "aliases": [],
@@ -1620,42 +1653,6 @@
       "status": "implemented",
       "surface": "research"
     },
-    "div_or_null": {
-      "aliases": [],
-      "backend_meta": {
-        "pandas_numpy": {
-          "explicit": true,
-          "source": "semantic_hardening"
-        },
-        "polars": {
-          "explicit": true,
-          "source": "semantic_hardening"
-        }
-      },
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "canonical": "div_or_null",
-      "description": "安全除法：NULL 或近零分母返回 NULL。",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
-      "param_names": [
-        "x",
-        "y",
-        "epsilon",
-        "default"
-      ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "semantic_hardening",
-      "semantic_version": "1.0",
-      "stateful": false,
-      "status": "production",
-      "surface": "daily"
-    },
     "divide": {
       "aliases": [],
       "backend_meta": {
@@ -1666,29 +1663,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "divide",
-      "description": "逐元素除法",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 divide",
       "param_names": [
         "x",
         "y"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "downside_beta": {
       "aliases": [],
@@ -1735,201 +1729,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars_auto"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "eq",
-      "description": "Polars eq",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 eq",
       "param_names": [
         "x",
         "y"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars_auto",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
-    },
-    "ewm": {
-      "aliases": [],
-      "backend_meta": {
-        "pandas_numpy": {
-          "explicit": false,
-          "source": "factor_dsl_np"
-        },
-        "polars": {
-          "explicit": true,
-          "source": "factor_dsl_polars"
-        }
-      },
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "canonical": "ewm",
-      "description": "EWM（alpha）",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
-      "param_names": [
-        "x",
-        "alpha"
-      ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars",
-      "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
-    },
-    "ewm_corr": {
-      "aliases": [],
-      "backend_meta": {
-        "pandas_numpy": {
-          "explicit": false,
-          "source": "factor_dsl_np"
-        },
-        "polars": {
-          "explicit": true,
-          "source": "factor_dsl_polars"
-        }
-      },
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "canonical": "ewm_corr",
-      "description": "EWM 相关",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
-      "param_names": [
-        "x",
-        "y",
-        "span"
-      ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars",
-      "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
-    },
-    "ewm_cov": {
-      "aliases": [],
-      "backend_meta": {
-        "pandas_numpy": {
-          "explicit": false,
-          "source": "factor_dsl_np"
-        },
-        "polars": {
-          "explicit": true,
-          "source": "factor_dsl_polars"
-        }
-      },
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "canonical": "ewm_cov",
-      "description": "EWM 协方差",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
-      "param_names": [
-        "x",
-        "y",
-        "span"
-      ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars",
-      "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
-    },
-    "ewm_std": {
-      "aliases": [],
-      "backend_meta": {
-        "pandas_numpy": {
-          "explicit": false,
-          "source": "factor_dsl_np"
-        },
-        "polars": {
-          "explicit": true,
-          "source": "factor_dsl_polars"
-        }
-      },
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "canonical": "ewm_std",
-      "description": "EWM 标准差",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
-      "param_names": [
-        "x",
-        "span"
-      ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars",
-      "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
-    },
-    "ewm_var": {
-      "aliases": [],
-      "backend_meta": {
-        "pandas_numpy": {
-          "explicit": false,
-          "source": "factor_dsl_np"
-        },
-        "polars": {
-          "explicit": true,
-          "source": "factor_dsl_polars"
-        }
-      },
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "canonical": "ewm_var",
-      "description": "EWM 方差",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
-      "param_names": [
-        "x",
-        "span"
-      ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars",
-      "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "exp": {
       "aliases": [],
@@ -1941,31 +1760,29 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "exp",
-      "description": "指数",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 exp",
       "param_names": [
         "x"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "exp_neg": {
       "aliases": [],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -1999,6 +1816,7 @@
     },
     "ffill_limit": {
       "aliases": [],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": true,
@@ -2041,32 +1859,30 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "fillna_const",
-      "description": "常量填充",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 fillna_const",
       "param_names": [
         "x",
         "value"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "fix": {
       "aliases": [],
+      "authoring_default": false,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -2084,6 +1900,7 @@
       "canonical": "fix",
       "description": "Polars fix",
       "earliest_trade_time": "input_dependent",
+      "extended_reason": "specialised or ambiguous; explicit extended surface required",
       "lookback_fn": null,
       "param_names": [
         "x"
@@ -2096,12 +1913,13 @@
       "semantic_version": "1.0",
       "stateful": false,
       "status": "implemented",
-      "surface": "daily"
+      "surface": "extended"
     },
     "flex_max": {
       "aliases": [
         "max"
       ],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -2138,6 +1956,7 @@
       "aliases": [
         "min"
       ],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -2180,27 +1999,59 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars",
+        "sql"
+      ],
+      "canonical": "floor",
+      "description": "SQL 下推算子 floor",
+      "param_names": [
+        "x"
+      ],
+      "selected_source": "backend/sql_pushdown",
+      "semantic_version": "1.0",
+      "status": "implemented"
+    },
+    "fundamental_staleness": {
+      "aliases": [],
+      "authoring_default": true,
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": true,
+          "source": "operator_overhaul_audited"
+        },
+        "polars": {
+          "explicit": true,
+          "source": "operator_overhaul_native_polars"
         }
       },
       "backends": [
         "pandas_numpy",
         "polars"
       ],
-      "canonical": "floor",
-      "description": "向下取整",
+      "canonical": "fundamental_staleness",
+      "description": "calendar-day age of visible fundamental data",
       "earliest_trade_time": "input_dependent",
       "lookback_fn": null,
       "param_names": [
-        "x"
+        "available_at",
+        "decision_time"
       ],
       "pit_safe": true,
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "input_dependent",
       "scope": "elementwise",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "operator_overhaul_native_polars",
       "semantic_version": "1.0",
       "stateful": false,
-      "status": "implemented",
+      "status": "production",
       "surface": "daily"
     },
     "ge": {
@@ -2213,29 +2064,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars_auto"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ge",
-      "description": "Polars ge",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 ge",
       "param_names": [
         "x",
         "y"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars_auto",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "group_count": {
       "aliases": [],
@@ -2247,29 +2095,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "group_count",
-      "description": "组内非空计数",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 group_count",
       "param_names": [
         "x",
         "group"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "group",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "group_decay_linear": {
       "aliases": [],
@@ -2281,30 +2126,27 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "group_decay_linear",
-      "description": "组内线性衰减加权",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 group_decay_linear",
       "param_names": [
         "x",
         "group",
         "window"
       ],
-      "pit_safe": false,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "group",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "research"
+      "status": "implemented"
     },
     "group_max": {
       "aliases": [],
@@ -2316,29 +2158,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "group_max",
-      "description": "组内最大值",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 group_max",
       "param_names": [
         "x",
         "group"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "group",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "group_mean": {
       "aliases": [],
@@ -2350,29 +2189,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "group_mean",
-      "description": "组内均值",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 group_mean",
       "param_names": [
         "x",
         "group"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "group",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "group_min": {
       "aliases": [],
@@ -2384,29 +2220,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "group_min",
-      "description": "组内最小值",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 group_min",
       "param_names": [
         "x",
         "group"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "group",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "group_neutralize": {
       "aliases": [
@@ -2432,29 +2265,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_np"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "group_neutralize",
-      "description": "在指定分组内进行去均值处理 (x - group_mean)",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 group_neutralize",
       "param_names": [
         "x",
         "group"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "group",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "group_normalize": {
       "aliases": [],
@@ -2466,29 +2296,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "group_normalize",
-      "description": "组内 [0,1] 归一化",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 group_normalize",
       "param_names": [
         "x",
         "group"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "group",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "group_percentile": {
       "aliases": [],
@@ -2500,16 +2327,19 @@
         "polars": {
           "explicit": true,
           "source": "semantic_hardening"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "group_percentile",
-      "description": "组内 top/bottom 分位掩码；与 pandas 审计实现语义一致。",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 group_percentile",
       "param_names": [
         "x",
         "group",
@@ -2517,15 +2347,9 @@
         "side",
         "missing_group_policy"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "group",
-      "selected_source": "semantic_hardening",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "group_rank": {
       "aliases": [],
@@ -2537,29 +2361,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "group_rank",
-      "description": "组内排名 pct",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 group_rank",
       "param_names": [
         "x",
         "group"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "group",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "group_std": {
       "aliases": [],
@@ -2571,29 +2392,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "group_std",
-      "description": "组内标准差",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 group_std",
       "param_names": [
         "x",
         "group"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "group",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "group_sum": {
       "aliases": [],
@@ -2605,28 +2423,97 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars",
+        "sql"
+      ],
+      "canonical": "group_sum",
+      "description": "SQL 下推算子 group_sum",
+      "param_names": [
+        "x",
+        "group"
+      ],
+      "selected_source": "backend/sql_pushdown",
+      "semantic_version": "1.0",
+      "status": "implemented"
+    },
+    "group_weighted_mean": {
+      "aliases": [],
+      "authoring_default": true,
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": true,
+          "source": "operator_overhaul_audited"
+        },
+        "polars": {
+          "explicit": true,
+          "source": "operator_overhaul_native_polars"
         }
       },
       "backends": [
         "pandas_numpy",
         "polars"
       ],
-      "canonical": "group_sum",
-      "description": "组内求和",
+      "canonical": "group_weighted_mean",
+      "description": "within-group weighted mean",
       "earliest_trade_time": "input_dependent",
       "lookback_fn": null,
       "param_names": [
         "x",
-        "group"
+        "group",
+        "weight"
       ],
       "pit_safe": true,
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "input_dependent",
       "scope": "group",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "operator_overhaul_native_polars",
       "semantic_version": "1.0",
       "stateful": false,
-      "status": "implemented",
+      "status": "production",
+      "surface": "daily"
+    },
+    "group_weighted_zscore": {
+      "aliases": [],
+      "authoring_default": true,
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": true,
+          "source": "operator_overhaul_audited"
+        },
+        "polars": {
+          "explicit": true,
+          "source": "operator_overhaul_native_polars"
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "group_weighted_zscore",
+      "description": "within-group weighted zscore",
+      "earliest_trade_time": "input_dependent",
+      "lookback_fn": null,
+      "param_names": [
+        "x",
+        "group",
+        "weight"
+      ],
+      "pit_safe": true,
+      "replacement_policy": "sealed_after_bootstrap",
+      "required_cutoff": "input_dependent",
+      "scope": "group",
+      "selected_source": "operator_overhaul_native_polars",
+      "semantic_version": "1.0",
+      "stateful": false,
+      "status": "production",
       "surface": "daily"
     },
     "group_winsorize": {
@@ -2639,30 +2526,27 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "group_winsorize",
-      "description": "组内缩尾",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 group_winsorize",
       "param_names": [
         "x",
         "group",
         "a"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "group",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "group_zscore": {
       "aliases": [],
@@ -2674,29 +2558,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "group_zscore",
-      "description": "组内 zscore",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 group_zscore",
       "param_names": [
         "x",
         "group"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "group",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "gt": {
       "aliases": [],
@@ -2708,32 +2589,30 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars_auto"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "gt",
-      "description": "Polars gt",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 gt",
       "param_names": [
         "x",
         "y"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars_auto",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "identity": {
       "aliases": [],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -2835,43 +2714,6 @@
       "status": "experimental",
       "surface": "research"
     },
-    "intercept": {
-      "aliases": [
-        "Intercept"
-      ],
-      "backend_meta": {
-        "pandas_numpy": {
-          "explicit": false,
-          "source": "factor_dsl_np"
-        },
-        "polars": {
-          "explicit": true,
-          "source": "factor_dsl_polars"
-        }
-      },
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "canonical": "intercept",
-      "description": "滚动 OLS 截距",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
-      "param_names": [
-        "y",
-        "x",
-        "window"
-      ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars",
-      "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
-    },
     "intraday_vwap_deviation": {
       "aliases": [],
       "backend_meta": {
@@ -2915,28 +2757,25 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "inverse",
-      "description": "倒数",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 inverse",
       "param_names": [
         "x"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "is_finite": {
       "aliases": [],
@@ -2948,28 +2787,25 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "is_finite",
-      "description": "是否有限",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 is_finite",
       "param_names": [
         "x"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "is_infinite": {
       "aliases": [
@@ -2984,28 +2820,25 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "is_infinite",
-      "description": "是否为 ±Inf",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 is_infinite",
       "param_names": [
         "x"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "is_nan": {
       "aliases": [
@@ -3019,33 +2852,29 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "is_nan",
-      "description": "是否为 IEEE NaN",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 is_nan",
       "param_names": [
         "x"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "is_not_null": {
       "aliases": [
-        "IS_NOT_NULL",
-        "is_not_null"
+        "IS_NOT_NULL"
       ],
       "backend_meta": {
         "pandas_numpy": {
@@ -3055,33 +2884,29 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "is_not_null",
-      "description": "是否为非 NULL",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 is_not_null",
       "param_names": [
         "x"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "is_null": {
       "aliases": [
-        "IS_NULL",
-        "is_null"
+        "IS_NULL"
       ],
       "backend_meta": {
         "pandas_numpy": {
@@ -3091,28 +2916,25 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "is_null",
-      "description": "是否为 NULL",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 is_null",
       "param_names": [
         "x"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "le": {
       "aliases": [],
@@ -3124,32 +2946,30 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars_auto"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "le",
-      "description": "Polars le",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 le",
       "param_names": [
         "x",
         "y"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars_auto",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "lerp": {
       "aliases": [],
+      "authoring_default": false,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -3167,6 +2987,7 @@
       "canonical": "lerp",
       "description": "线性插值",
       "earliest_trade_time": "input_dependent",
+      "extended_reason": "specialised or ambiguous; explicit extended surface required",
       "lookback_fn": null,
       "param_names": [
         "a",
@@ -3181,7 +3002,7 @@
       "semantic_version": "1.0",
       "stateful": false,
       "status": "implemented",
-      "surface": "daily"
+      "surface": "extended"
     },
     "log": {
       "aliases": [
@@ -3196,31 +3017,29 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "log",
-      "description": "自然对数",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 log",
       "param_names": [
         "x"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "log10": {
       "aliases": [],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -3254,6 +3073,7 @@
     },
     "log2": {
       "aliases": [],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -3295,28 +3115,25 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars_auto"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "log_abs",
-      "description": "Polars log_abs",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 log_abs",
       "param_names": [
         "x"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars_auto",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "lt": {
       "aliases": [],
@@ -3328,29 +3145,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars_auto"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "lt",
-      "description": "Polars lt",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 lt",
       "param_names": [
         "x",
         "y"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars_auto",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "maximum": {
       "aliases": [
@@ -3364,29 +3178,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "maximum",
-      "description": "逐元素 max(x,y)",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 maximum",
       "param_names": [
         "x",
         "y"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_np_parity",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "micro_amihud_hf": {
       "aliases": [],
@@ -3710,29 +3521,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "minimum",
-      "description": "逐元素 min(x,y)",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 minimum",
       "param_names": [
         "x",
         "y"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_np_parity",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "multiply": {
       "aliases": [],
@@ -3744,29 +3552,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "multiply",
-      "description": "逐元素乘法",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 multiply",
       "param_names": [
         "x",
         "y"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ne": {
       "aliases": [],
@@ -3778,29 +3583,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars_auto"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ne",
-      "description": "Polars ne",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 ne",
       "param_names": [
         "x",
         "y"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars_auto",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "neg": {
       "aliases": [
@@ -3814,28 +3616,25 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "neg",
-      "description": "取负",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 neg",
       "param_names": [
         "x"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "normalize": {
       "aliases": [],
@@ -3847,28 +3646,25 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "normalize",
-      "description": "归一化到[0, 1]（按行 min-max）",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 normalize",
       "param_names": [
         "x"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "not_": {
       "aliases": [],
@@ -3880,28 +3676,25 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars_auto"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "not_",
-      "description": "逻辑非",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 not_",
       "param_names": [
         "x"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars_auto",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "or_": {
       "aliases": [],
@@ -3913,32 +3706,30 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars_auto"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "or_",
-      "description": "逻辑或",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 or_",
       "param_names": [
         "x",
         "y"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars_auto",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "period_average": {
       "aliases": [],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": true,
@@ -3970,6 +3761,7 @@
     },
     "period_cagr": {
       "aliases": [],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": true,
@@ -4003,6 +3795,7 @@
     },
     "period_change": {
       "aliases": [],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": true,
@@ -4040,6 +3833,35 @@
           "explicit": true,
           "source": "operator_overhaul_audited"
         },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "sql"
+      ],
+      "canonical": "period_lag",
+      "description": "SQL 下推算子 period_lag",
+      "param_names": [
+        "x",
+        "period_id",
+        "periods",
+        "revision_policy"
+      ],
+      "selected_source": "backend/sql_pushdown",
+      "semantic_version": "1.0",
+      "status": "implemented"
+    },
+    "period_stability": {
+      "aliases": [],
+      "authoring_default": true,
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": true,
+          "source": "operator_overhaul_audited"
+        },
         "polars": {
           "explicit": true,
           "source": "operator_overhaul_native_polars"
@@ -4049,22 +3871,23 @@
         "pandas_numpy",
         "polars"
       ],
-      "canonical": "period_lag",
-      "description": "按真实可见的不同财务报告期滞后",
+      "canonical": "period_stability",
+      "description": "stability over exact fiscal periods",
       "earliest_trade_time": "next_decision_time",
       "lookback_fn": "periods",
       "param_names": [
         "x",
         "period_id",
         "periods",
-        "revision_policy"
+        "method",
+        "require_consecutive"
       ],
       "pit_safe": true,
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "available_at",
       "scope": "fundamental_period",
       "selected_source": "operator_overhaul_native_polars",
-      "semantic_version": "2.0",
+      "semantic_version": "1.0",
       "stateful": false,
       "status": "production",
       "surface": "daily"
@@ -4082,32 +3905,30 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "power",
-      "description": "幂",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 power",
       "param_names": [
         "x",
         "p"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "price_spread_deviation": {
       "aliases": [],
+      "authoring_default": false,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -4120,6 +3941,7 @@
       "canonical": "price_spread_deviation",
       "description": "price_spread_deviation（Polars colwise 核）",
       "earliest_trade_time": "input_dependent",
+      "extended_reason": "specialised or ambiguous; explicit extended surface required",
       "lookback_fn": null,
       "param_names": [
         "x",
@@ -4133,7 +3955,7 @@
       "semantic_version": "1.0",
       "stateful": false,
       "status": "implemented",
-      "surface": "daily"
+      "surface": "extended"
     },
     "protected_div": {
       "aliases": [],
@@ -4141,67 +3963,31 @@
         "pandas_numpy": {
           "explicit": true,
           "source": "compiler_internal"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "sql"
       ],
       "canonical": "protected_div",
-      "description": "支持 Series/标量双向广播的安全除法",
-      "earliest_trade_time": "input_dependent",
-      "migration_reason": "not a production daily factor primitive",
+      "description": "SQL 下推算子 protected_div",
       "param_names": [
         "x",
         "y",
         "epsilon",
         "default"
       ],
-      "pit_safe": true,
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "compiler_internal",
-      "semantic_version": "2.0",
-      "status": "internal",
-      "surface": "internal"
-    },
-    "quantile": {
-      "aliases": [],
-      "backend_meta": {
-        "pandas_numpy": {
-          "explicit": false,
-          "source": "factor_dsl_np"
-        },
-        "polars": {
-          "explicit": true,
-          "source": "factor_dsl_polars"
-        }
-      },
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "canonical": "quantile",
-      "description": "截面分箱/离散化（按行 qcut）",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
-      "param_names": [
-        "x",
-        "bins"
-      ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "internal"
     },
     "quarter_from_cumulative": {
-      "aliases": [
-        "quarter_from_cumulative"
-      ],
+      "aliases": [],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": true,
@@ -4212,13 +3998,14 @@
         "pandas_numpy"
       ],
       "canonical": "quarter_from_cumulative",
-      "description": "累计流量值按报告期转单季度",
+      "description": "strict cumulative-to-quarter conversion",
       "earliest_trade_time": "next_decision_time",
       "lookback_fn": null,
       "param_names": [
         "x",
         "period_id",
-        "fiscal_quarter"
+        "fiscal_quarter",
+        "revision_policy"
       ],
       "pit_safe": true,
       "replacement_policy": "sealed_after_bootstrap",
@@ -4247,28 +4034,25 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_np"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "rank",
-      "description": "截面 0-1 排名；pandas 百分位排名见 rank_pct",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 rank",
       "param_names": [
         "x"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "cross_sectional",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "rank_corr": {
       "aliases": [
@@ -4311,6 +4095,7 @@
     },
     "real_turnover_rate": {
       "aliases": [],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": true,
@@ -4380,6 +4165,7 @@
     },
     "reverse": {
       "aliases": [],
+      "authoring_default": false,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -4397,6 +4183,7 @@
       "canonical": "reverse",
       "description": "取负",
       "earliest_trade_time": "input_dependent",
+      "extended_reason": "specialised or ambiguous; explicit extended surface required",
       "lookback_fn": null,
       "param_names": [
         "x"
@@ -4409,6 +4196,43 @@
       "semantic_version": "1.0",
       "stateful": false,
       "status": "implemented",
+      "surface": "extended"
+    },
+    "revision_delta": {
+      "aliases": [],
+      "authoring_default": true,
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": true,
+          "source": "operator_overhaul_audited"
+        },
+        "polars": {
+          "explicit": true,
+          "source": "operator_overhaul_native_polars"
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "revision_delta",
+      "description": "change between visible revisions of the same fiscal period",
+      "earliest_trade_time": "input_dependent",
+      "lookback_fn": null,
+      "param_names": [
+        "x",
+        "period_id",
+        "revision_id",
+        "mode"
+      ],
+      "pit_safe": true,
+      "replacement_policy": "sealed_after_bootstrap",
+      "required_cutoff": "input_dependent",
+      "scope": "elementwise",
+      "selected_source": "operator_overhaul_native_polars",
+      "semantic_version": "1.0",
+      "stateful": false,
+      "status": "production",
       "surface": "daily"
     },
     "rolling_beta_to_market": {
@@ -4454,6 +4278,7 @@
       "aliases": [
         "ROUND"
       ],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -4488,39 +4313,42 @@
     },
     "safe_div_null": {
       "aliases": [
-        "safe_div",
-        "safe_div_null"
+        "div_or_null",
+        "safe_div"
       ],
       "backend_meta": {
         "pandas_numpy": {
-          "explicit": false,
-          "source": "basic_runtime"
+          "explicit": true,
+          "source": "scalar_broadcast_primitives"
+        },
+        "polars": {
+          "explicit": true,
+          "source": "final_expression_native_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars",
+        "sql"
       ],
       "canonical": "safe_div_null",
-      "description": "safe_div_null（Polars 桥接）",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 safe_div_null",
       "param_names": [
         "x",
         "y",
         "epsilon"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars_bridge",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "saturate": {
       "aliases": [],
+      "authoring_default": false,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -4538,6 +4366,7 @@
       "canonical": "saturate",
       "description": "限制到 [0,1]",
       "earliest_trade_time": "input_dependent",
+      "extended_reason": "specialised or ambiguous; explicit extended surface required",
       "lookback_fn": null,
       "param_names": [
         "x"
@@ -4550,7 +4379,7 @@
       "semantic_version": "1.0",
       "stateful": false,
       "status": "implemented",
-      "surface": "daily"
+      "surface": "extended"
     },
     "scale": {
       "aliases": [
@@ -4565,32 +4394,30 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_np"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "scale",
-      "description": "缩放数据使sum(abs(x))=指定值（与c_scale相同）",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 scale",
       "param_names": [
         "x",
         "to"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "sec": {
       "aliases": [],
+      "authoring_default": false,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -4608,6 +4435,7 @@
       "canonical": "sec",
       "description": "Polars sec",
       "earliest_trade_time": "input_dependent",
+      "extended_reason": "specialised or ambiguous; explicit extended surface required",
       "lookback_fn": null,
       "param_names": [
         "x"
@@ -4620,10 +4448,11 @@
       "semantic_version": "1.0",
       "stateful": false,
       "status": "implemented",
-      "surface": "daily"
+      "surface": "extended"
     },
     "sigmoid": {
       "aliases": [],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -4667,28 +4496,25 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "sign",
-      "description": "符号函数",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 sign",
       "param_names": [
         "x"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "signed_log": {
       "aliases": [],
@@ -4700,31 +4526,29 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "signed_log",
-      "description": "符号对数",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 signed_log",
       "param_names": [
         "x"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "signed_power": {
       "aliases": [],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -4763,30 +4587,28 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "sql"
       ],
       "canonical": "signed_sqrt",
-      "description": "signed_sqrt（Polars 桥接）",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 signed_sqrt",
       "param_names": [
         "x"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars_bridge",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "sin": {
       "aliases": [],
+      "authoring_default": false,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -4804,6 +4626,7 @@
       "canonical": "sin",
       "description": "正弦",
       "earliest_trade_time": "input_dependent",
+      "extended_reason": "specialised or ambiguous; explicit extended surface required",
       "lookback_fn": null,
       "param_names": [
         "x"
@@ -4816,10 +4639,11 @@
       "semantic_version": "1.0",
       "stateful": false,
       "status": "implemented",
-      "surface": "daily"
+      "surface": "extended"
     },
     "sinh": {
       "aliases": [],
+      "authoring_default": false,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -4837,6 +4661,7 @@
       "canonical": "sinh",
       "description": "Polars sinh",
       "earliest_trade_time": "input_dependent",
+      "extended_reason": "specialised or ambiguous; explicit extended surface required",
       "lookback_fn": null,
       "param_names": [
         "x"
@@ -4849,42 +4674,7 @@
       "semantic_version": "1.0",
       "stateful": false,
       "status": "implemented",
-      "surface": "daily"
-    },
-    "size_neutralize": {
-      "aliases": [
-        "CAP_NEUTRALIZE",
-        "MARKET_CAP_NEUTRALIZE",
-        "SIZE_NEUTRALIZE",
-        "cap_neutralize",
-        "market_cap_neutralize"
-      ],
-      "backend_meta": {
-        "pandas_numpy": {
-          "explicit": false,
-          "source": "factor_dsl_np"
-        }
-      },
-      "backends": [
-        "pandas_numpy"
-      ],
-      "canonical": "size_neutralize",
-      "description": "size_neutralize（Polars 桥接）",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
-      "param_names": [
-        "x",
-        "market_cap"
-      ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars_bridge",
-      "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "surface": "extended"
     },
     "sqrt": {
       "aliases": [
@@ -4898,31 +4688,29 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "sqrt",
-      "description": "平方根",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 sqrt",
       "param_names": [
         "x"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "sqrt_abs": {
       "aliases": [],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -4953,6 +4741,7 @@
       "aliases": [
         "sqr"
       ],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -4994,29 +4783,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "subtract",
-      "description": "逐元素减法",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 subtract",
       "param_names": [
         "x",
         "y"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "tail_beta": {
       "aliases": [],
@@ -5056,6 +4842,7 @@
     },
     "tan": {
       "aliases": [],
+      "authoring_default": false,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -5073,6 +4860,7 @@
       "canonical": "tan",
       "description": "正切",
       "earliest_trade_time": "input_dependent",
+      "extended_reason": "specialised or ambiguous; explicit extended surface required",
       "lookback_fn": null,
       "param_names": [
         "x"
@@ -5085,10 +4873,11 @@
       "semantic_version": "1.0",
       "stateful": false,
       "status": "implemented",
-      "surface": "daily"
+      "surface": "extended"
     },
     "tanh": {
       "aliases": [],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -5157,14 +4946,15 @@
     },
     "true_range": {
       "aliases": [],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": true,
-          "source": "layer_governance_primitives"
+          "source": "operator_overhaul_audited"
         },
         "polars": {
           "explicit": true,
-          "source": "layer_governance_native_polars"
+          "source": "operator_overhaul_native_polars"
         }
       },
       "backends": [
@@ -5172,7 +4962,7 @@
         "polars"
       ],
       "canonical": "true_range",
-      "description": "真实波幅基础算子",
+      "description": "true range with explicit first-row high-low fallback",
       "earliest_trade_time": "next_session_open",
       "lookback_fn": null,
       "param_names": [
@@ -5184,7 +4974,7 @@
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "close",
       "scope": "time_series",
-      "selected_source": "layer_governance_native_polars",
+      "selected_source": "operator_overhaul_native_polars",
       "semantic_version": "2.0",
       "stateful": false,
       "status": "production",
@@ -5192,6 +4982,7 @@
     },
     "truncate": {
       "aliases": [],
+      "authoring_default": false,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -5209,6 +5000,7 @@
       "canonical": "truncate",
       "description": "Polars truncate",
       "earliest_trade_time": "input_dependent",
+      "extended_reason": "specialised or ambiguous; explicit extended surface required",
       "lookback_fn": null,
       "param_names": [
         "x",
@@ -5222,7 +5014,7 @@
       "semantic_version": "1.0",
       "stateful": false,
       "status": "implemented",
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_argmax": {
       "aliases": [
@@ -5236,31 +5028,28 @@
         },
         "polars": {
           "explicit": true,
-          "source": "operator_overhaul_native_polars"
+          "source": "final_expression_native_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_argmax",
-      "description": "距最近一次窗口最大值的交易行数",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_argmax",
       "param_names": [
         "x",
         "window",
         "min_periods"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "operator_overhaul_native_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "production",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_argmin": {
       "aliases": [
@@ -5274,31 +5063,28 @@
         },
         "polars": {
           "explicit": true,
-          "source": "operator_overhaul_native_polars"
+          "source": "final_expression_native_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_argmin",
-      "description": "距最近一次窗口最小值的交易行数",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_argmin",
       "param_names": [
         "x",
         "window",
         "min_periods"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "operator_overhaul_native_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "production",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_autocorr": {
       "aliases": [],
@@ -5310,36 +5096,36 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_np"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_autocorr",
-      "description": "滚动自相关 corr(x_t, x_{t-lag}) within window",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_autocorr",
       "param_names": [
         "x",
         "window",
         "lag"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_beta": {
       "aliases": [
+        "Beta",
+        "ROLLING_BETA",
         "beta",
         "m_beta",
-        "rolling_beta"
+        "rolling_beta",
+        "ts_rolling_beta"
       ],
       "backend_meta": {
         "pandas_numpy": {
@@ -5349,33 +5135,34 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_beta",
-      "description": "滚动 Beta",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_beta",
       "param_names": [
         "y",
         "x",
         "window"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_bottomk_mean": {
-      "aliases": [],
+      "aliases": [
+        "m_bottom_n_avg",
+        "ts_bottom_n_avg"
+      ],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": true,
@@ -5383,7 +5170,7 @@
         },
         "polars": {
           "explicit": true,
-          "source": "operator_overhaul_native_polars"
+          "source": "final_expression_native_polars"
         }
       },
       "backends": [
@@ -5391,27 +5178,21 @@
         "polars"
       ],
       "canonical": "ts_bottomk_mean",
-      "description": "窗口内最小 K 个值的均值",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "expression-native rolling mean of smallest K values",
       "param_names": [
         "x",
         "window",
         "k",
         "min_periods"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "operator_overhaul_native_polars",
-      "semantic_version": "1.0",
-      "stateful": false,
+      "selected_source": "final_expression_native_polars",
+      "semantic_version": "3.0",
       "status": "production",
       "surface": "daily"
     },
     "ts_bottomk_std": {
       "aliases": [],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": true,
@@ -5419,7 +5200,7 @@
         },
         "polars": {
           "explicit": true,
-          "source": "operator_overhaul_native_polars"
+          "source": "final_expression_native_polars"
         }
       },
       "backends": [
@@ -5427,27 +5208,24 @@
         "polars"
       ],
       "canonical": "ts_bottomk_std",
-      "description": "窗口内最小 K 个值的标准差",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "expression-native rolling std of smallest K values",
       "param_names": [
         "x",
         "window",
         "k",
         "min_periods"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "operator_overhaul_native_polars",
-      "semantic_version": "1.0",
-      "stateful": false,
+      "selected_source": "final_expression_native_polars",
+      "semantic_version": "3.0",
       "status": "production",
       "surface": "daily"
     },
     "ts_bottomk_sum": {
-      "aliases": [],
+      "aliases": [
+        "m_bottom_n_sum",
+        "ts_bottom_n_sum"
+      ],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": true,
@@ -5455,7 +5233,7 @@
         },
         "polars": {
           "explicit": true,
-          "source": "operator_overhaul_native_polars"
+          "source": "final_expression_native_polars"
         }
       },
       "backends": [
@@ -5463,22 +5241,15 @@
         "polars"
       ],
       "canonical": "ts_bottomk_sum",
-      "description": "窗口内最小 K 个值之和",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "expression-native rolling sum of smallest K values",
       "param_names": [
         "x",
         "window",
         "k",
         "min_periods"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "operator_overhaul_native_polars",
-      "semantic_version": "1.0",
-      "stateful": false,
+      "selected_source": "final_expression_native_polars",
+      "semantic_version": "3.0",
       "status": "production",
       "surface": "daily"
     },
@@ -5499,30 +5270,27 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_np"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_corr",
-      "description": "滚动相关系数 (ts_correlation的别名)",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_corr",
       "param_names": [
         "x",
         "y",
         "window"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_count_if": {
       "aliases": [],
@@ -5534,30 +5302,27 @@
         "polars": {
           "explicit": true,
           "source": "operator_overhaul_native_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_count_if",
-      "description": "滚动统计有限条件为真的次数",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_count_if",
       "param_names": [
         "condition",
         "window",
         "min_periods"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "operator_overhaul_native_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "production",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_cov": {
       "aliases": [
@@ -5576,30 +5341,27 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_np"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_cov",
-      "description": "滚动协方差 (与m_cov相同)",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_cov",
       "param_names": [
         "x",
         "y",
         "window"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_days_since": {
       "aliases": [],
@@ -5611,32 +5373,30 @@
         "polars": {
           "explicit": true,
           "source": "operator_overhaul_native_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_days_since",
-      "description": "距最近一次条件成立的交易行数",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 ts_days_since",
       "param_names": [
         "condition",
         "max_lookback"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "operator_overhaul_native_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "production",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_decay_exp_window": {
       "aliases": [],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -5676,8 +5436,7 @@
         "TS_DECAY_LINEAR",
         "WMA",
         "decay_linear",
-        "ts_decay",
-        "ts_decay_linear"
+        "ts_decay"
       ],
       "backend_meta": {
         "pandas_numpy": {
@@ -5687,29 +5446,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_np"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_decay_linear",
-      "description": "线性加权滚动平均",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_decay_linear",
       "param_names": [
         "x",
         "window"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_delay": {
       "aliases": [
@@ -5719,8 +5475,7 @@
         "delay",
         "m_delay",
         "prev",
-        "shift",
-        "ts_delay"
+        "shift"
       ],
       "backend_meta": {
         "pandas_numpy": {
@@ -5730,29 +5485,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_np"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_delay",
-      "description": "n期滞后 (与Ref相同)",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 ts_delay",
       "param_names": [
         "x",
         "n"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_delta": {
       "aliases": [
@@ -5770,36 +5522,66 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_np"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_delta",
-      "description": "n期差分 (与Delta相同)",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 ts_delta",
       "param_names": [
         "x",
         "n"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_ema": {
       "aliases": [
         "EMA",
         "ema",
-        "ewm_mean",
-        "ts_ema"
+        "ewm",
+        "ewm_mean"
+      ],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": true,
+          "source": "stateful_full_segment_parity"
+        },
+        "polars": {
+          "explicit": true,
+          "source": "final_expression_native_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars",
+        "sql"
+      ],
+      "canonical": "ts_ema",
+      "description": "SQL 下推算子 ts_ema",
+      "param_names": [
+        "x",
+        "span"
+      ],
+      "selected_source": "backend/sql_pushdown",
+      "semantic_version": "1.0",
+      "status": "implemented"
+    },
+    "ts_ewm_corr": {
+      "aliases": [
+        "ewm_corr"
       ],
       "backend_meta": {
         "pandas_numpy": {
@@ -5809,43 +5591,127 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
-      "canonical": "ts_ema",
-      "checkpoint_contract": {
-        "canonical": "ts_ema",
-        "checkpoint_fields": [
-          "last_ema",
-          "last_timestamp"
-        ],
-        "checkpoint_required_for_segmented": true,
-        "dependencies": [],
-        "minimum_history": 1,
-        "missing_policy": "carry_state_emit_null",
-        "semantic_version": "1.0",
-        "state_schema_version": "ema_state.v1"
+      "canonical": "ts_ewm_corr",
+      "description": "SQL 下推算子 ts_ewm_corr",
+      "param_names": [
+        "x",
+        "y",
+        "span"
+      ],
+      "selected_source": "backend/sql_pushdown",
+      "semantic_version": "1.0",
+      "status": "implemented"
+    },
+    "ts_ewm_cov": {
+      "aliases": [
+        "ewm_cov"
+      ],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "explicit": true,
+          "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
+        }
       },
-      "description": "指数移动平均",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "backends": [
+        "pandas_numpy",
+        "polars",
+        "sql"
+      ],
+      "canonical": "ts_ewm_cov",
+      "description": "SQL 下推算子 ts_ewm_cov",
+      "param_names": [
+        "x",
+        "y",
+        "span"
+      ],
+      "selected_source": "backend/sql_pushdown",
+      "semantic_version": "1.0",
+      "status": "implemented"
+    },
+    "ts_ewm_std": {
+      "aliases": [
+        "ewm_std"
+      ],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "explicit": true,
+          "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars",
+        "sql"
+      ],
+      "canonical": "ts_ewm_std",
+      "description": "SQL 下推算子 ts_ewm_std",
       "param_names": [
         "x",
         "span"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "segmented_execution_requires_checkpoint": true,
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": true,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
+    },
+    "ts_ewm_var": {
+      "aliases": [
+        "ewm_var"
+      ],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "explicit": true,
+          "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars",
+        "sql"
+      ],
+      "canonical": "ts_ewm_var",
+      "description": "SQL 下推算子 ts_ewm_var",
+      "param_names": [
+        "x",
+        "span"
+      ],
+      "selected_source": "backend/sql_pushdown",
+      "semantic_version": "1.0",
+      "status": "implemented"
     },
     "ts_kurt": {
       "aliases": [
@@ -5855,6 +5721,7 @@
         "m_kurt",
         "ts_kurtosis"
       ],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -5896,31 +5763,28 @@
         },
         "polars": {
           "explicit": true,
-          "source": "operator_overhaul_native_polars"
+          "source": "final_expression_native_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_last_if",
-      "description": "窗口内最近一次条件成立时的值",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_last_if",
       "param_names": [
         "x",
         "condition",
         "window"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "operator_overhaul_native_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "production",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_log_return": {
       "aliases": [
@@ -5930,28 +5794,25 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "sql"
       ],
       "canonical": "ts_log_return",
-      "description": "d 期对数收益率 ln(x_t / x_{t-d})",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 ts_log_return",
       "param_names": [
         "x",
         "d"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_mad": {
       "aliases": [
@@ -5967,31 +5828,28 @@
         "polars": {
           "explicit": true,
           "source": "semantic_hardening"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_mad",
-      "description": "滚动中位绝对偏差；与 pandas 审计实现语义一致。",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_mad",
       "param_names": [
         "x",
         "window",
         "min_periods",
         "scale"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "semantic_hardening",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_max": {
       "aliases": [
@@ -6008,32 +5866,30 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_np"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_max",
-      "description": "滚动最大值 (与m_max相同)",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_max",
       "param_names": [
         "x",
         "window"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_max_buildup": {
       "aliases": [],
+      "authoring_default": false,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -6046,6 +5902,7 @@
       "canonical": "ts_max_buildup",
       "description": "ts_max_buildup（Polars colwise 核）",
       "earliest_trade_time": "input_dependent",
+      "extended_reason": "specialised or ambiguous; explicit extended surface required",
       "lookback_fn": null,
       "param_names": [
         "x",
@@ -6059,7 +5916,7 @@
       "semantic_version": "1.0",
       "stateful": false,
       "status": "implemented",
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_max_drawdown": {
       "aliases": [],
@@ -6067,29 +5924,26 @@
         "pandas_numpy": {
           "explicit": true,
           "source": "operator_overhaul_audited"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "sql"
       ],
       "canonical": "ts_max_drawdown",
-      "description": "严格窗口最大回撤",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_max_drawdown",
       "param_names": [
         "x",
         "window",
         "min_periods"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "operator_overhaul_audited",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "production",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_mean": {
       "aliases": [
@@ -6101,8 +5955,6 @@
         "mean",
         "move",
         "running_mean",
-        "ts_bottom_n_avg",
-        "ts_top_n_avg",
         "window_mean"
       ],
       "backend_meta": {
@@ -6113,29 +5965,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_np"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_mean",
-      "description": "滚动均值 (与m_avg相同)",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_mean",
       "param_names": [
         "x",
         "window"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_mean_if": {
       "aliases": [],
@@ -6147,31 +5996,28 @@
         "polars": {
           "explicit": true,
           "source": "operator_overhaul_native_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_mean_if",
-      "description": "滚动条件均值",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_mean_if",
       "param_names": [
         "x",
         "condition",
         "window",
         "min_periods"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "operator_overhaul_native_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "production",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_median": {
       "aliases": [
@@ -6187,29 +6033,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_median",
-      "description": "滚动中位数",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_median",
       "param_names": [
         "x",
         "window"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_min": {
       "aliases": [
@@ -6226,32 +6069,30 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_np"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_min",
-      "description": "滚动最小值 (与m_min相同)",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_min",
       "param_names": [
         "x",
         "window"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_moment": {
       "aliases": [],
+      "authoring_default": false,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -6264,6 +6105,7 @@
       "canonical": "ts_moment",
       "description": "窗口 k 阶中心矩（pandas 核 parity）",
       "earliest_trade_time": "input_dependent",
+      "extended_reason": "specialised or ambiguous; explicit extended surface required",
       "lookback_fn": null,
       "param_names": [
         "x",
@@ -6278,7 +6120,7 @@
       "semantic_version": "1.0",
       "stateful": false,
       "status": "implemented",
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_nth_value": {
       "aliases": [],
@@ -6286,15 +6128,18 @@
         "pandas_numpy": {
           "explicit": true,
           "source": "operator_overhaul_audited"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "sql"
       ],
       "canonical": "ts_nth_value",
-      "description": "滚动第 N 大或第 N 小值",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_nth_value",
       "param_names": [
         "x",
         "window",
@@ -6302,15 +6147,9 @@
         "order",
         "min_periods"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "operator_overhaul_audited",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "production",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_partial_corr": {
       "aliases": [],
@@ -6318,15 +6157,18 @@
         "pandas_numpy": {
           "explicit": true,
           "source": "operator_overhaul_audited"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "sql"
       ],
       "canonical": "ts_partial_corr",
-      "description": "共同样本滚动偏相关",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_partial_corr",
       "param_names": [
         "x",
         "y",
@@ -6334,15 +6176,9 @@
         "window",
         "min_periods"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "operator_overhaul_audited",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "production",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_pct": {
       "aliases": [
@@ -6360,29 +6196,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_pct",
-      "description": "d 期变化率",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 ts_pct",
       "param_names": [
         "x",
         "d"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_poly2_coeff": {
       "aliases": [],
@@ -6453,31 +6286,28 @@
         "polars": {
           "explicit": true,
           "source": "semantic_hardening"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_product",
-      "description": "滚动乘积；与 pandas 审计实现语义一致。",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_product",
       "param_names": [
         "x",
         "window",
         "min_periods",
         "skipna"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "semantic_hardening",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_quantile": {
       "aliases": [
@@ -6494,30 +6324,27 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_quantile",
-      "description": "滚动窗口分位数",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 ts_quantile",
       "param_names": [
         "x",
         "d",
         "q"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_rank": {
       "aliases": [
@@ -6532,34 +6359,32 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_np"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_rank",
-      "description": "滚动排名 (与m_rank相同)",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_rank",
       "param_names": [
         "x",
         "window"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_ratio": {
       "aliases": [
         "ratios"
       ],
+      "authoring_default": false,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -6572,6 +6397,7 @@
       "canonical": "ts_ratio",
       "description": "ts_ratio（Polars 桥接）",
       "earliest_trade_time": "input_dependent",
+      "extended_reason": "specialised or ambiguous; explicit extended surface required",
       "lookback_fn": null,
       "param_names": [
         "x"
@@ -6584,23 +6410,24 @@
       "semantic_version": "1.0",
       "stateful": false,
       "status": "implemented",
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_regression_intercept": {
-      "aliases": [],
+      "aliases": [
+        "intercept"
+      ],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": true,
-          "source": "operator_overhaul_audited"
+          "source": "rolling_ols_fused_cache"
         }
       },
       "backends": [
         "pandas_numpy"
       ],
       "canonical": "ts_regression_intercept",
-      "description": "滚动 OLS 截距",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "rolling OLS output projected from a shared five-stat computation",
       "param_names": [
         "y",
         "x",
@@ -6608,31 +6435,27 @@
         "min_periods",
         "add_intercept"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "operator_overhaul_audited",
-      "semantic_version": "1.0",
-      "stateful": false,
+      "selected_source": "rolling_ols_fused_cache",
+      "semantic_version": "3.0",
       "status": "production",
       "surface": "daily"
     },
     "ts_regression_r2": {
-      "aliases": [],
+      "aliases": [
+        "r_squared"
+      ],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": true,
-          "source": "operator_overhaul_audited"
+          "source": "rolling_ols_fused_cache"
         }
       },
       "backends": [
         "pandas_numpy"
       ],
       "canonical": "ts_regression_r2",
-      "description": "滚动 OLS 决定系数",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "rolling OLS output projected from a shared five-stat computation",
       "param_names": [
         "y",
         "x",
@@ -6640,33 +6463,28 @@
         "min_periods",
         "add_intercept"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "operator_overhaul_audited",
-      "semantic_version": "1.0",
-      "stateful": false,
+      "selected_source": "rolling_ols_fused_cache",
+      "semantic_version": "3.0",
       "status": "production",
       "surface": "daily"
     },
     "ts_regression_resid": {
       "aliases": [
+        "residual",
         "rolling_residual"
       ],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": true,
-          "source": "operator_overhaul_audited"
+          "source": "rolling_ols_fused_cache"
         }
       },
       "backends": [
         "pandas_numpy"
       ],
       "canonical": "ts_regression_resid",
-      "description": "滚动 OLS 当前残差",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "rolling OLS output projected from a shared five-stat computation",
       "param_names": [
         "y",
         "x",
@@ -6674,13 +6492,8 @@
         "min_periods",
         "add_intercept"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "operator_overhaul_audited",
-      "semantic_version": "1.0",
-      "stateful": false,
+      "selected_source": "rolling_ols_fused_cache",
+      "semantic_version": "3.0",
       "status": "production",
       "surface": "daily"
     },
@@ -6692,51 +6505,51 @@
       "backend_meta": {
         "pandas_numpy": {
           "explicit": true,
-          "source": "operator_overhaul_compat"
+          "source": "rolling_ols_fused_cache"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_regression_slope",
-      "description": "滚动 OLS；兼容历史 ts_regression(lag, retval) 调用契约",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_regression_slope",
       "param_names": [
         "y",
         "x",
         "window",
-        "lag",
-        "retval",
         "min_periods",
-        "add_intercept"
+        "add_intercept",
+        "lag",
+        "retval"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "operator_overhaul_compat",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "production",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_regression_tstat": {
       "aliases": [],
       "backend_meta": {
         "pandas_numpy": {
           "explicit": true,
-          "source": "operator_overhaul_audited"
+          "source": "rolling_ols_fused_cache"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "sql"
       ],
       "canonical": "ts_regression_tstat",
-      "description": "滚动 OLS 斜率 t 值",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_regression_tstat",
       "param_names": [
         "y",
         "x",
@@ -6744,15 +6557,9 @@
         "min_periods",
         "add_intercept"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "operator_overhaul_audited",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "production",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_sharpe": {
       "aliases": [],
@@ -6764,30 +6571,27 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_np"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_sharpe",
-      "description": "滚动夏普：mean/std * sqrt(ann_factor)",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_sharpe",
       "param_names": [
         "x",
         "window",
         "ann_factor"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_skew": {
       "aliases": [
@@ -6805,29 +6609,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_np"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_skew",
-      "description": "滚动偏度 (与m_skew相同)",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_skew",
       "param_names": [
         "x",
         "window"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_std": {
       "aliases": [
@@ -6839,7 +6640,6 @@
         "std_n",
         "ts_std_dev",
         "ts_stddev",
-        "ts_top_n_std",
         "window_std"
       ],
       "backend_meta": {
@@ -6850,29 +6650,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_np"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_std",
-      "description": "滚动标准差 (ts_std_dev的别名)",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_std",
       "param_names": [
         "x",
         "window"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_std_if": {
       "aliases": [],
@@ -6884,16 +6681,19 @@
         "polars": {
           "explicit": true,
           "source": "operator_overhaul_native_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_std_if",
-      "description": "滚动条件标准差",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_std_if",
       "param_names": [
         "x",
         "condition",
@@ -6901,15 +6701,9 @@
         "min_periods",
         "ddof"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "operator_overhaul_native_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "production",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_sum": {
       "aliases": [
@@ -6919,7 +6713,6 @@
         "running_sum",
         "sum",
         "sum_n",
-        "ts_bottom_n_sum",
         "window_sum"
       ],
       "backend_meta": {
@@ -6930,29 +6723,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_np"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_sum",
-      "description": "滚动求和 (与m_sum相同)",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_sum",
       "param_names": [
         "x",
         "window"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_sum_decay": {
       "aliases": [],
@@ -6998,47 +6788,40 @@
         "polars": {
           "explicit": true,
           "source": "operator_overhaul_native_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_sum_if",
-      "description": "滚动条件求和",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_sum_if",
       "param_names": [
         "x",
         "condition",
         "window",
         "min_periods"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "operator_overhaul_native_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "production",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_tail_mean": {
       "aliases": [],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": true,
           "source": "operator_overhaul_audited"
-        },
-        "polars": {
-          "explicit": true,
-          "source": "operator_overhaul_native_polars"
         }
       },
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "canonical": "ts_tail_mean",
       "description": "当前窗口统一阈值下的尾部均值",
@@ -7052,6 +6835,7 @@
         "min_periods"
       ],
       "pit_safe": true,
+      "polars_downgrade_reason": "quantile-tail implementation uses a Python rolling callback",
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "input_dependent",
       "scope": "time_series",
@@ -7072,38 +6856,33 @@
           "explicit": true,
           "source": "operator_overhaul_audited"
         },
-        "polars": {
+        "sql": {
           "explicit": true,
-          "source": "operator_overhaul_native_polars"
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "sql"
       ],
       "canonical": "ts_time_slope",
-      "description": "缺失感知滚动时间斜率",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_time_slope",
       "param_names": [
         "x",
         "window",
         "min_periods"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "operator_overhaul_native_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "production",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_topk_mean": {
       "aliases": [
-        "tm_top_n_avg"
+        "m_top_n_avg",
+        "tm_top_n_avg",
+        "ts_top_n_avg"
       ],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": true,
@@ -7111,7 +6890,7 @@
         },
         "polars": {
           "explicit": true,
-          "source": "operator_overhaul_native_polars"
+          "source": "final_expression_native_polars"
         }
       },
       "backends": [
@@ -7119,27 +6898,24 @@
         "polars"
       ],
       "canonical": "ts_topk_mean",
-      "description": "窗口内最大 K 个值的均值",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "expression-native rolling mean of largest K values",
       "param_names": [
         "x",
         "window",
         "k",
         "min_periods"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "operator_overhaul_native_polars",
-      "semantic_version": "1.0",
-      "stateful": false,
+      "selected_source": "final_expression_native_polars",
+      "semantic_version": "3.0",
       "status": "production",
       "surface": "daily"
     },
     "ts_topk_std": {
-      "aliases": [],
+      "aliases": [
+        "m_top_n_std",
+        "ts_top_n_std"
+      ],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": true,
@@ -7147,7 +6923,7 @@
         },
         "polars": {
           "explicit": true,
-          "source": "operator_overhaul_native_polars"
+          "source": "final_expression_native_polars"
         }
       },
       "backends": [
@@ -7155,22 +6931,15 @@
         "polars"
       ],
       "canonical": "ts_topk_std",
-      "description": "窗口内最大 K 个值的标准差",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "expression-native rolling std of largest K values",
       "param_names": [
         "x",
         "window",
         "k",
         "min_periods"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "operator_overhaul_native_polars",
-      "semantic_version": "1.0",
-      "stateful": false,
+      "selected_source": "final_expression_native_polars",
+      "semantic_version": "3.0",
       "status": "production",
       "surface": "daily"
     },
@@ -7180,6 +6949,7 @@
         "m_top_n_sum",
         "tm_top_n_sum"
       ],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": true,
@@ -7187,7 +6957,7 @@
         },
         "polars": {
           "explicit": true,
-          "source": "operator_overhaul_native_polars"
+          "source": "final_expression_native_polars"
         }
       },
       "backends": [
@@ -7195,22 +6965,15 @@
         "polars"
       ],
       "canonical": "ts_topk_sum",
-      "description": "窗口内最大 K 个值之和",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "expression-native rolling sum of largest K values",
       "param_names": [
         "x",
         "window",
         "k",
         "min_periods"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "operator_overhaul_native_polars",
-      "semantic_version": "1.0",
-      "stateful": false,
+      "selected_source": "final_expression_native_polars",
+      "semantic_version": "3.0",
       "status": "production",
       "surface": "daily"
     },
@@ -7220,29 +6983,26 @@
         "pandas_numpy": {
           "explicit": true,
           "source": "operator_overhaul_audited"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "sql"
       ],
       "canonical": "ts_trend_tstat",
-      "description": "滚动时间趋势 t 值",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_trend_tstat",
       "param_names": [
         "x",
         "window",
         "min_periods"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "operator_overhaul_audited",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "production",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_true_streak": {
       "aliases": [],
@@ -7253,29 +7013,26 @@
         },
         "polars": {
           "explicit": true,
-          "source": "operator_overhaul_native_polars"
+          "source": "final_expression_native_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_true_streak",
-      "description": "截至当前连续条件成立长度",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 ts_true_streak",
       "param_names": [
         "condition"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "operator_overhaul_native_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "production",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_var": {
       "aliases": [
@@ -7291,29 +7048,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_var",
-      "description": "滚动方差",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_var",
       "param_names": [
         "x",
         "window"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "factor_dsl_polars",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ts_zscore": {
       "aliases": [
@@ -7327,34 +7081,30 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_np"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_zscore",
-      "description": "滚动Z-Score (与m_zscore相同)",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": "window",
+      "description": "SQL 下推算子 ts_zscore",
       "param_names": [
         "x",
         "window"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "time_series",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "ttm_from_cumulative": {
-      "aliases": [
-        "ttm_from_cumulative"
-      ],
+      "aliases": [],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": true,
@@ -7365,13 +7115,14 @@
         "pandas_numpy"
       ],
       "canonical": "ttm_from_cumulative",
-      "description": "累计值转单季后按报告期计算 TTM",
+      "description": "strict cumulative-to-TTM",
       "earliest_trade_time": "next_decision_time",
       "lookback_fn": null,
       "param_names": [
         "x",
         "period_id",
-        "fiscal_quarter"
+        "fiscal_quarter",
+        "revision_policy"
       ],
       "pit_safe": true,
       "replacement_policy": "sealed_after_bootstrap",
@@ -7384,33 +7135,33 @@
       "surface": "daily"
     },
     "ttm_from_quarterly": {
-      "aliases": [
-        "ttm_from_quarterly"
-      ],
+      "aliases": [],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": true,
-          "source": "layer_governance_primitives"
+          "source": "operator_overhaul_audited"
         }
       },
       "backends": [
         "pandas_numpy"
       ],
       "canonical": "ttm_from_quarterly",
-      "description": "严格连续报告期TTM",
+      "description": "strict consecutive-period TTM",
       "earliest_trade_time": "next_decision_time",
       "lookback_fn": "periods",
       "param_names": [
         "x",
         "period_id",
         "periods",
-        "require_consecutive"
+        "require_consecutive",
+        "revision_policy"
       ],
       "pit_safe": true,
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "available_at",
       "scope": "fundamental_period",
-      "selected_source": "layer_governance_primitives",
+      "selected_source": "operator_overhaul_audited",
       "semantic_version": "2.0",
       "stateful": false,
       "status": "production",
@@ -7418,6 +7169,7 @@
     },
     "unitize": {
       "aliases": [],
+      "authoring_default": false,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -7430,6 +7182,7 @@
       "canonical": "unitize",
       "description": "unitize（Polars 桥接）",
       "earliest_trade_time": "input_dependent",
+      "extended_reason": "specialised or ambiguous; explicit extended surface required",
       "lookback_fn": null,
       "param_names": [
         "x"
@@ -7442,7 +7195,7 @@
       "semantic_version": "1.0",
       "stateful": false,
       "status": "implemented",
-      "surface": "daily"
+      "surface": "extended"
     },
     "where": {
       "aliases": [
@@ -7460,30 +7213,27 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_polars"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "where",
-      "description": "条件选择（与if_else相同）",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 where",
       "param_names": [
         "condition",
         "v1",
         "v2"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "elementwise",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "winsorize": {
       "aliases": [
@@ -7498,33 +7248,31 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_np"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "winsorize",
-      "description": "缩尾处理",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 winsorize",
       "param_names": [
         "x",
         "lower",
         "upper"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "cross_sectional",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     },
     "winsorize_mean": {
       "aliases": [],
+      "authoring_default": false,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -7537,6 +7285,7 @@
       "canonical": "winsorize_mean",
       "description": "winsorize_mean（Polars 桥接）",
       "earliest_trade_time": "input_dependent",
+      "extended_reason": "specialised or ambiguous; explicit extended surface required",
       "lookback_fn": null,
       "param_names": [
         "x",
@@ -7550,23 +7299,22 @@
       "semantic_version": "1.0",
       "stateful": false,
       "status": "implemented",
-      "surface": "daily"
+      "surface": "extended"
     },
     "yoy_by_period": {
-      "aliases": [
-        "yoy_by_period"
-      ],
+      "aliases": [],
+      "authoring_default": true,
       "backend_meta": {
         "pandas_numpy": {
           "explicit": true,
-          "source": "layer_governance_primitives"
+          "source": "operator_overhaul_audited"
         }
       },
       "backends": [
         "pandas_numpy"
       ],
       "canonical": "yoy_by_period",
-      "description": "严格连续报告期同比",
+      "description": "strict fiscal-period growth",
       "earliest_trade_time": "next_decision_time",
       "lookback_fn": "periods",
       "param_names": [
@@ -7574,13 +7322,14 @@
         "period_id",
         "periods",
         "denominator",
-        "require_consecutive"
+        "require_consecutive",
+        "revision_policy"
       ],
       "pit_safe": true,
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "available_at",
       "scope": "fundamental_period",
-      "selected_source": "layer_governance_primitives",
+      "selected_source": "operator_overhaul_audited",
       "semantic_version": "2.0",
       "stateful": false,
       "status": "production",
@@ -7604,29 +7353,26 @@
         "polars": {
           "explicit": true,
           "source": "factor_dsl_np"
+        },
+        "sql": {
+          "explicit": true,
+          "source": "backend/sql_pushdown"
         }
       },
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "zscore",
-      "description": "对截面数据进行Z-Score标准化（与c_zscore相同）",
-      "earliest_trade_time": "input_dependent",
-      "lookback_fn": null,
+      "description": "SQL 下推算子 zscore",
       "param_names": [
         "x"
       ],
-      "pit_safe": true,
-      "replacement_policy": "sealed_after_bootstrap",
-      "required_cutoff": "input_dependent",
-      "scope": "cross_sectional",
-      "selected_source": "factor_dsl_np",
+      "selected_source": "backend/sql_pushdown",
       "semantic_version": "1.0",
-      "stateful": false,
-      "status": "implemented",
-      "surface": "daily"
+      "status": "implemented"
     }
   },
-  "schema_version": "operator_manifest.v1"
+  "schema_version": "operator_manifest.v2"
 }

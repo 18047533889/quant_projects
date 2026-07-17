@@ -1,7 +1,21 @@
 {
-  "recipe_count": 41,
+  "recipe_count": 42,
   "recipes": {
     "accruals": {
+      "backend_verification": {
+        "duckdb_plan_capable": false,
+        "error": null,
+        "missing_duckdb_operators": [
+          "period_average",
+          "ttm_from_quarterly"
+        ],
+        "missing_polars_operators": [
+          "period_average",
+          "ttm_from_quarterly"
+        ],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": false
+      },
       "category": "fundamental",
       "compile_status": "verified",
       "compiled_node_count": 10,
@@ -19,6 +33,16 @@
       "status": "production"
     },
     "adxr": {
+      "backend_verification": {
+        "duckdb_plan_capable": false,
+        "error": null,
+        "missing_duckdb_operators": [
+          "ADX"
+        ],
+        "missing_polars_operators": [],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": true
+      },
       "category": "technical",
       "compile_status": "verified",
       "compiled_node_count": 9,
@@ -38,6 +62,14 @@
       "status": "production"
     },
     "annualized_volatility": {
+      "backend_verification": {
+        "duckdb_plan_capable": true,
+        "error": null,
+        "missing_duckdb_operators": [],
+        "missing_polars_operators": [],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": true
+      },
       "category": "risk",
       "compile_status": "verified",
       "compiled_node_count": 6,
@@ -56,6 +88,14 @@
       "status": "production"
     },
     "aroon_down": {
+      "backend_verification": {
+        "duckdb_plan_capable": true,
+        "error": null,
+        "missing_duckdb_operators": [],
+        "missing_polars_operators": [],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": true
+      },
       "category": "technical",
       "compile_status": "verified",
       "compiled_node_count": 8,
@@ -73,6 +113,14 @@
       "status": "production"
     },
     "aroon_oscillator": {
+      "backend_verification": {
+        "duckdb_plan_capable": true,
+        "error": null,
+        "missing_duckdb_operators": [],
+        "missing_polars_operators": [],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": true
+      },
       "category": "technical",
       "compile_status": "verified",
       "compiled_node_count": 14,
@@ -91,6 +139,14 @@
       "status": "production"
     },
     "aroon_up": {
+      "backend_verification": {
+        "duckdb_plan_capable": true,
+        "error": null,
+        "missing_duckdb_operators": [],
+        "missing_polars_operators": [],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": true
+      },
       "category": "technical",
       "compile_status": "verified",
       "compiled_node_count": 8,
@@ -108,6 +164,18 @@
       "status": "production"
     },
     "asset_growth": {
+      "backend_verification": {
+        "duckdb_plan_capable": false,
+        "error": null,
+        "missing_duckdb_operators": [
+          "period_change"
+        ],
+        "missing_polars_operators": [
+          "period_change"
+        ],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": false
+      },
       "category": "fundamental",
       "compile_status": "verified",
       "compiled_node_count": 5,
@@ -123,6 +191,14 @@
       "status": "production"
     },
     "atr_sma": {
+      "backend_verification": {
+        "duckdb_plan_capable": false,
+        "error": "not certified: non-production recipe",
+        "missing_duckdb_operators": [],
+        "missing_polars_operators": [],
+        "pandas_execution_verified": false,
+        "polars_plan_capable": false
+      },
       "category": "technical",
       "compile_status": "verified",
       "compiled_node_count": 6,
@@ -142,6 +218,14 @@
       "status": "optional"
     },
     "bollinger_lower": {
+      "backend_verification": {
+        "duckdb_plan_capable": true,
+        "error": null,
+        "missing_duckdb_operators": [],
+        "missing_polars_operators": [],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": true
+      },
       "category": "technical",
       "compile_status": "verified",
       "compiled_node_count": 7,
@@ -160,6 +244,14 @@
       "status": "production"
     },
     "bollinger_mid": {
+      "backend_verification": {
+        "duckdb_plan_capable": true,
+        "error": null,
+        "missing_duckdb_operators": [],
+        "missing_polars_operators": [],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": true
+      },
       "category": "technical",
       "compile_status": "verified",
       "compiled_node_count": 3,
@@ -177,6 +269,14 @@
       "status": "production"
     },
     "bollinger_upper": {
+      "backend_verification": {
+        "duckdb_plan_capable": true,
+        "error": null,
+        "missing_duckdb_operators": [],
+        "missing_polars_operators": [],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": true
+      },
       "category": "technical",
       "compile_status": "verified",
       "compiled_node_count": 7,
@@ -195,6 +295,20 @@
       "status": "production"
     },
     "capex_intensity": {
+      "backend_verification": {
+        "duckdb_plan_capable": false,
+        "error": null,
+        "missing_duckdb_operators": [
+          "period_average",
+          "ttm_from_quarterly"
+        ],
+        "missing_polars_operators": [
+          "period_average",
+          "ttm_from_quarterly"
+        ],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": false
+      },
       "category": "fundamental",
       "compile_status": "verified",
       "compiled_node_count": 8,
@@ -211,6 +325,18 @@
       "status": "production"
     },
     "cash_conversion": {
+      "backend_verification": {
+        "duckdb_plan_capable": false,
+        "error": null,
+        "missing_duckdb_operators": [
+          "ttm_from_quarterly"
+        ],
+        "missing_polars_operators": [
+          "ttm_from_quarterly"
+        ],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": false
+      },
       "category": "fundamental",
       "compile_status": "verified",
       "compiled_node_count": 6,
@@ -227,6 +353,20 @@
       "status": "production"
     },
     "cash_profitability": {
+      "backend_verification": {
+        "duckdb_plan_capable": false,
+        "error": null,
+        "missing_duckdb_operators": [
+          "period_average",
+          "ttm_from_quarterly"
+        ],
+        "missing_polars_operators": [
+          "period_average",
+          "ttm_from_quarterly"
+        ],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": false
+      },
       "category": "fundamental",
       "compile_status": "verified",
       "compiled_node_count": 7,
@@ -243,6 +383,14 @@
       "status": "production"
     },
     "cci": {
+      "backend_verification": {
+        "duckdb_plan_capable": false,
+        "error": "not certified: non-production recipe",
+        "missing_duckdb_operators": [],
+        "missing_polars_operators": [],
+        "pandas_execution_verified": false,
+        "polars_plan_capable": false
+      },
       "category": "technical",
       "compile_status": "verified",
       "compiled_node_count": 8,
@@ -261,6 +409,14 @@
       "status": "optional"
     },
     "current_ratio": {
+      "backend_verification": {
+        "duckdb_plan_capable": true,
+        "error": null,
+        "missing_duckdb_operators": [],
+        "missing_polars_operators": [],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": true
+      },
       "category": "fundamental",
       "compile_status": "verified",
       "compiled_node_count": 3,
@@ -278,6 +434,14 @@
       "status": "production"
     },
     "debt_to_equity": {
+      "backend_verification": {
+        "duckdb_plan_capable": true,
+        "error": null,
+        "missing_duckdb_operators": [],
+        "missing_polars_operators": [],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": true
+      },
       "category": "fundamental",
       "compile_status": "verified",
       "compiled_node_count": 3,
@@ -295,6 +459,14 @@
       "status": "production"
     },
     "dpo_causal": {
+      "backend_verification": {
+        "duckdb_plan_capable": false,
+        "error": "not certified: non-production recipe",
+        "missing_duckdb_operators": [],
+        "missing_polars_operators": [],
+        "pandas_execution_verified": false,
+        "polars_plan_capable": false
+      },
       "category": "technical",
       "compile_status": "verified",
       "compiled_node_count": 10,
@@ -312,6 +484,20 @@
       "status": "optional"
     },
     "free_cash_flow_profitability": {
+      "backend_verification": {
+        "duckdb_plan_capable": false,
+        "error": null,
+        "missing_duckdb_operators": [
+          "period_average",
+          "ttm_from_quarterly"
+        ],
+        "missing_polars_operators": [
+          "period_average",
+          "ttm_from_quarterly"
+        ],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": false
+      },
       "category": "fundamental",
       "compile_status": "verified",
       "compiled_node_count": 11,
@@ -329,6 +515,20 @@
       "status": "production"
     },
     "gross_profitability": {
+      "backend_verification": {
+        "duckdb_plan_capable": false,
+        "error": null,
+        "missing_duckdb_operators": [
+          "period_average",
+          "ttm_from_quarterly"
+        ],
+        "missing_polars_operators": [
+          "period_average",
+          "ttm_from_quarterly"
+        ],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": false
+      },
       "category": "fundamental",
       "compile_status": "verified",
       "compiled_node_count": 7,
@@ -345,6 +545,18 @@
       "status": "production"
     },
     "interest_coverage": {
+      "backend_verification": {
+        "duckdb_plan_capable": false,
+        "error": null,
+        "missing_duckdb_operators": [
+          "ttm_from_quarterly"
+        ],
+        "missing_polars_operators": [
+          "ttm_from_quarterly"
+        ],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": false
+      },
       "category": "fundamental",
       "compile_status": "verified",
       "compiled_node_count": 7,
@@ -361,6 +573,14 @@
       "status": "production"
     },
     "intraday_return": {
+      "backend_verification": {
+        "duckdb_plan_capable": true,
+        "error": null,
+        "missing_duckdb_operators": [],
+        "missing_polars_operators": [],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": true
+      },
       "category": "price_volume",
       "compile_status": "verified",
       "compiled_node_count": 5,
@@ -378,6 +598,18 @@
       "status": "production"
     },
     "inventory_growth": {
+      "backend_verification": {
+        "duckdb_plan_capable": false,
+        "error": null,
+        "missing_duckdb_operators": [
+          "period_change"
+        ],
+        "missing_polars_operators": [
+          "period_change"
+        ],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": false
+      },
       "category": "fundamental",
       "compile_status": "verified",
       "compiled_node_count": 5,
@@ -393,6 +625,14 @@
       "status": "production"
     },
     "momentum": {
+      "backend_verification": {
+        "duckdb_plan_capable": true,
+        "error": null,
+        "missing_duckdb_operators": [],
+        "missing_polars_operators": [],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": true
+      },
       "category": "technical",
       "compile_status": "verified",
       "compiled_node_count": 3,
@@ -410,6 +650,14 @@
       "status": "production"
     },
     "net_debt_ratio": {
+      "backend_verification": {
+        "duckdb_plan_capable": true,
+        "error": null,
+        "missing_duckdb_operators": [],
+        "missing_polars_operators": [],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": true
+      },
       "category": "fundamental",
       "compile_status": "verified",
       "compiled_node_count": 7,
@@ -427,6 +675,14 @@
       "status": "production"
     },
     "operating_margin": {
+      "backend_verification": {
+        "duckdb_plan_capable": true,
+        "error": null,
+        "missing_duckdb_operators": [],
+        "missing_polars_operators": [],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": true
+      },
       "category": "fundamental",
       "compile_status": "verified",
       "compiled_node_count": 3,
@@ -444,6 +700,20 @@
       "status": "production"
     },
     "operating_profitability": {
+      "backend_verification": {
+        "duckdb_plan_capable": false,
+        "error": null,
+        "missing_duckdb_operators": [
+          "period_average",
+          "ttm_from_quarterly"
+        ],
+        "missing_polars_operators": [
+          "period_average",
+          "ttm_from_quarterly"
+        ],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": false
+      },
       "category": "fundamental",
       "compile_status": "verified",
       "compiled_node_count": 7,
@@ -460,6 +730,14 @@
       "status": "production"
     },
     "overnight_gap": {
+      "backend_verification": {
+        "duckdb_plan_capable": true,
+        "error": null,
+        "missing_duckdb_operators": [],
+        "missing_polars_operators": [],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": true
+      },
       "category": "price_volume",
       "compile_status": "verified",
       "compiled_node_count": 6,
@@ -477,6 +755,14 @@
       "status": "production"
     },
     "quick_ratio": {
+      "backend_verification": {
+        "duckdb_plan_capable": true,
+        "error": null,
+        "missing_duckdb_operators": [],
+        "missing_polars_operators": [],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": true
+      },
       "category": "fundamental",
       "compile_status": "verified",
       "compiled_node_count": 5,
@@ -495,6 +781,14 @@
       "status": "production"
     },
     "rate_of_change": {
+      "backend_verification": {
+        "duckdb_plan_capable": true,
+        "error": null,
+        "missing_duckdb_operators": [],
+        "missing_polars_operators": [],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": true
+      },
       "category": "technical",
       "compile_status": "verified",
       "compiled_node_count": 5,
@@ -512,6 +806,18 @@
       "status": "production"
     },
     "rd_intensity": {
+      "backend_verification": {
+        "duckdb_plan_capable": false,
+        "error": null,
+        "missing_duckdb_operators": [
+          "ttm_from_quarterly"
+        ],
+        "missing_polars_operators": [
+          "ttm_from_quarterly"
+        ],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": false
+      },
       "category": "fundamental",
       "compile_status": "verified",
       "compiled_node_count": 6,
@@ -528,6 +834,18 @@
       "status": "production"
     },
     "receivables_growth": {
+      "backend_verification": {
+        "duckdb_plan_capable": false,
+        "error": null,
+        "missing_duckdb_operators": [
+          "period_change"
+        ],
+        "missing_polars_operators": [
+          "period_change"
+        ],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": false
+      },
       "category": "fundamental",
       "compile_status": "verified",
       "compiled_node_count": 5,
@@ -543,6 +861,14 @@
       "status": "production"
     },
     "rolling_obv": {
+      "backend_verification": {
+        "duckdb_plan_capable": false,
+        "error": "not certified: non-production recipe",
+        "missing_duckdb_operators": [],
+        "missing_polars_operators": [],
+        "pandas_execution_verified": false,
+        "polars_plan_capable": false
+      },
       "category": "technical",
       "compile_status": "verified",
       "compiled_node_count": 8,
@@ -561,6 +887,14 @@
       "status": "optional"
     },
     "rolling_sharpe": {
+      "backend_verification": {
+        "duckdb_plan_capable": true,
+        "error": null,
+        "missing_duckdb_operators": [],
+        "missing_polars_operators": [],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": true
+      },
       "category": "risk",
       "compile_status": "verified",
       "compiled_node_count": 8,
@@ -579,6 +913,14 @@
       "status": "production"
     },
     "rsi_sma": {
+      "backend_verification": {
+        "duckdb_plan_capable": false,
+        "error": "not certified: non-production recipe",
+        "missing_duckdb_operators": [],
+        "missing_polars_operators": [],
+        "pandas_execution_verified": false,
+        "polars_plan_capable": false
+      },
       "category": "technical",
       "compile_status": "verified",
       "compiled_node_count": 17,
@@ -595,7 +937,44 @@
       ],
       "status": "optional"
     },
+    "size_neutralize": {
+      "backend_verification": {
+        "duckdb_plan_capable": false,
+        "error": null,
+        "missing_duckdb_operators": [
+          "cs_neutralize"
+        ],
+        "missing_polars_operators": [
+          "cs_neutralize"
+        ],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": false
+      },
+      "category": "cross_sectional",
+      "compile_status": "verified",
+      "compiled_node_count": 7,
+      "description": "对数市值暴露中性化",
+      "expanded_expression": "cs_neutralize(y, log(clip(market_cap, 1e-12, 1e+100)))",
+      "expression": "cs_neutralize(y, log(clip(market_cap, 1e-12, 1e100)))",
+      "name": "size_neutralize",
+      "parameters": [
+        "y",
+        "market_cap"
+      ],
+      "replacement_for": [
+        "size_neutralize"
+      ],
+      "status": "production"
+    },
     "stochastic_d": {
+      "backend_verification": {
+        "duckdb_plan_capable": true,
+        "error": null,
+        "missing_duckdb_operators": [],
+        "missing_polars_operators": [],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": true
+      },
       "category": "technical",
       "compile_status": "verified",
       "compiled_node_count": 13,
@@ -616,6 +995,14 @@
       "status": "production"
     },
     "stochastic_k": {
+      "backend_verification": {
+        "duckdb_plan_capable": true,
+        "error": null,
+        "missing_duckdb_operators": [],
+        "missing_polars_operators": [],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": true
+      },
       "category": "technical",
       "compile_status": "verified",
       "compiled_node_count": 11,
@@ -635,6 +1022,14 @@
       "status": "production"
     },
     "trix": {
+      "backend_verification": {
+        "duckdb_plan_capable": true,
+        "error": null,
+        "missing_duckdb_operators": [],
+        "missing_polars_operators": [],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": true
+      },
       "category": "technical",
       "compile_status": "verified",
       "compiled_node_count": 9,
@@ -652,6 +1047,14 @@
       "status": "production"
     },
     "vpmacd": {
+      "backend_verification": {
+        "duckdb_plan_capable": false,
+        "error": "not certified: non-production recipe",
+        "missing_duckdb_operators": [],
+        "missing_polars_operators": [],
+        "pandas_execution_verified": false,
+        "polars_plan_capable": false
+      },
       "category": "experimental",
       "compile_status": "verified",
       "compiled_node_count": 7,
@@ -675,6 +1078,14 @@
       "status": "experimental"
     },
     "weighted_moving_average": {
+      "backend_verification": {
+        "duckdb_plan_capable": true,
+        "error": null,
+        "missing_duckdb_operators": [],
+        "missing_polars_operators": [],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": true
+      },
       "category": "technical",
       "compile_status": "verified",
       "compiled_node_count": 3,
@@ -692,6 +1103,14 @@
       "status": "production"
     },
     "williams_r": {
+      "backend_verification": {
+        "duckdb_plan_capable": true,
+        "error": null,
+        "missing_duckdb_operators": [],
+        "missing_polars_operators": [],
+        "pandas_execution_verified": true,
+        "polars_plan_capable": true
+      },
       "category": "technical",
       "compile_status": "verified",
       "compiled_node_count": 11,
@@ -711,5 +1130,5 @@
       "status": "production"
     }
   },
-  "schema_version": "factor_recipe_manifest.v2"
+  "schema_version": "factor_recipe_manifest.v3"
 }
