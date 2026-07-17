@@ -30,23 +30,28 @@ def _collect_cases() -> dict:
     from tests.backend_parity.test_polars_long_no_pandas_path import NO_PANDAS_CASES
     from tests.backend_parity.test_production_core_triple_parity import DUCKDB_CASES, MEMORY_CASES
     from tests.backend_parity.test_production_safe_bulk_parity import DUCKDB_BULK_CASES, POLARS_BULK_CASES
+    from cleaned_operators.registry import OperatorRegistry
 
-    polars_reference = merge_case_lists(MEMORY_CASES, POLARS_BULK_CASES)
-    duckdb_reference = merge_case_lists(DUCKDB_CASES, DUCKDB_BULK_CASES)
-    polars_edge = merge_case_lists(EDGE_CASES)
-    duckdb_edge = merge_case_lists(DUCKDB_EDGE_CASES)
-    no_fallback = merge_case_lists(NO_PANDAS_CASES)
+    active = set(OperatorRegistry._operators)
 
-    return build_case_registry_payload(
-        polars_reference=polars_reference,
-        polars_edge=polars_edge,
-        duckdb_reference=duckdb_reference,
-        duckdb_edge=duckdb_edge,
-        duckdb_null_edge=duckdb_edge,
-        duckdb_nan_edge=merge_case_lists(DUCKDB_IEEE_NAN_CASES),
-        duckdb_inf_edge=merge_case_lists(DUCKDB_IEEE_INF_CASES),
-        no_fallback=no_fallback,
+    def exact_active(*case_groups):
+        # Certification never travels through an alias.  A renamed canonical
+        # must obtain a test case under its new exact name.
+        return [name for name in merge_case_lists(*case_groups) if name in active]
+
+    payload = build_case_registry_payload(
+        polars_reference=exact_active(MEMORY_CASES, POLARS_BULK_CASES),
+        polars_edge=exact_active(EDGE_CASES),
+        duckdb_reference=exact_active(DUCKDB_CASES, DUCKDB_BULK_CASES),
+        duckdb_edge=exact_active(DUCKDB_EDGE_CASES),
+        duckdb_null_edge=exact_active(DUCKDB_EDGE_CASES),
+        duckdb_nan_edge=exact_active(DUCKDB_IEEE_NAN_CASES),
+        duckdb_inf_edge=exact_active(DUCKDB_IEEE_INF_CASES),
+        no_fallback=exact_active(NO_PANDAS_CASES),
     )
+    payload["active_registry_count"] = len(active)
+    payload["exact_canonical_only"] = True
+    return payload
 
 
 def main() -> int:
