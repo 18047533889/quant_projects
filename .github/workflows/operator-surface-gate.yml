@@ -43,13 +43,13 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
           python -m pip install pytest pyyaml
-      - name: Generate runtime governance artifacts
+      - name: Validate generated runtime governance artifacts
         run: |
           python factor_engine/scripts/generate_operators_catalog.py
           python factor_engine/scripts/export_dsl_allowlist.py
           python factor_engine/scripts/generate_layer_manifests.py
           python factor_engine/scripts/generate_operator_usage_report.py
-          git add \
+          git diff --exit-code -- \
             factor_engine/cleaned_operators/docs/operators_catalog.md \
             factor_engine/cleaned_operators/docs/operators_catalog.json \
             factor_engine/docs/dsl_allowlist.json \
@@ -59,12 +59,6 @@ jobs:
             factor_engine/docs/research_tool_manifest.json \
             factor_engine/docs/stateful_operator_manifest.json \
             factor_engine/docs/operator_usage_report.json
-          if ! git diff --cached --quiet; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git commit -m "Generate recipe runtime governance artifacts [skip ci]"
-            git push origin HEAD:${GITHUB_HEAD_REF}
-          fi
           pytest -q factor_engine/tests/test_operator_surface.py
           python factor_engine/scripts/validate_public_factor_formulas.py
       - name: GTJA185 factor pack regression
@@ -74,11 +68,24 @@ jobs:
             gtja191/tests/test_gtja191.py
       - name: FactorEngine runtime governance regression
         run: |
-          pytest -q \
+          set +e
+          pytest -q --tb=short \
             factor_engine/tests/operators/test_layer_governance.py \
             factor_engine/tests/operators/test_composite_fastpath.py \
             factor_engine/tests/operators/test_recipe_runtime.py \
             factor_engine/tests/operators/test_stateful_checkpoint_contract.py \
             factor_engine/tests/operators/test_operator_usage.py \
             factor_engine/tests/test_gtja_compat_semantics.py \
-            factor_engine/tests/test_data_scope_stability.py
+            factor_engine/tests/test_data_scope_stability.py \
+            2>&1 | tee factor_engine/recipe_runtime_failure.md
+          status=${PIPESTATUS[0]}
+          if [ "${status}" -ne 0 ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -f factor_engine/recipe_runtime_failure.md
+            git commit -m "Capture recipe runtime failure [skip ci]"
+            git push origin HEAD:${GITHUB_HEAD_REF}
+          else
+            rm -f factor_engine/recipe_runtime_failure.md
+          fi
+          exit "${status}"
