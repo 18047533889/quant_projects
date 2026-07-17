@@ -57,6 +57,7 @@ _LOAD_MODULES = (
     # Final performance layer: simple composites reuse primitives; recursive
     # families share fused intermediates and native Polars kernels.
     "cleaned_operators.composite_fastpath",
+    "cleaned_operators.composite_fastpath_fixes",
 )
 
 
