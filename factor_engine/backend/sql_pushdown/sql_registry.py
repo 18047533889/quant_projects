@@ -27,6 +27,8 @@ __all__ = [
     "SQL_PRODUCTION_SAFE_CANONICALS",
     "SqlCapableOperator",
     "is_sql_capable",
+    "is_sql_parity_verified",
+    "is_sql_production_safe",
     "register_sql_backends",
     "resolve_canonical",
     "sql_backends_for",
@@ -109,6 +111,23 @@ def is_sql_capable(plan: PlanNode) -> bool:
     if canon not in SQL_CAPABLE_CANONICALS:
         return False
     return all(is_sql_capable(c) for c in plan.inputs)
+
+
+def _plan_has_tier(plan: PlanNode, allowed: frozenset[str]) -> bool:
+    canon = resolve_canonical(plan.op)
+    if canon not in allowed:
+        return False
+    return all(_plan_has_tier(child, allowed) for child in plan.inputs)
+
+
+def is_sql_parity_verified(plan: PlanNode) -> bool:
+    """Return whether every plan node has real DuckDB parity evidence."""
+    return _plan_has_tier(plan, SQL_PARITY_VERIFIED_CANONICALS)
+
+
+def is_sql_production_safe(plan: PlanNode) -> bool:
+    """Return whether every plan node is certified for production SQL."""
+    return _plan_has_tier(plan, SQL_PRODUCTION_SAFE_CANONICALS)
 
 
 def sql_backends_for(name: str) -> list[str]:

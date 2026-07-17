@@ -3256,6 +3256,41 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_ts_partition=inner.has_ts_partition,
         )
 
+    if op == "tanh":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        # Both supported dialects expose tanh. NULL remains NULL and IEEE
+        # infinities saturate to +/-1 in DuckDB, matching NumPy/Polars.
+        return _Layer(
+            f"SELECT ts, inst, tanh(_v) AS _v FROM ({inner.sql}) t",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=inner.has_ts_partition,
+        )
+
+    if op == "cbrt":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        return _Layer(
+            "SELECT ts, inst, sign(_v) * power(abs(_v), 1.0 / 3.0) AS _v "
+            f"FROM ({inner.sql}) t",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=inner.has_ts_partition,
+        )
+
+    if op == "truncate":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        decimals = int(node.attrs.get("decimals", node.attrs.get("k", node.attrs.get("d", 0))))
+        scale = 10.0 ** decimals
+        return _Layer(
+            f"SELECT ts, inst, trunc(_v * {scale!r}) / {scale!r} AS _v FROM ({inner.sql}) t",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=inner.has_ts_partition,
+        )
+
     if op == "ewm_std":
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:

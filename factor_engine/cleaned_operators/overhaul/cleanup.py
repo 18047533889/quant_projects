@@ -4,9 +4,14 @@ from __future__ import annotations
 
 from cleaned_operators.registry import OperatorRegistry
 
+PANDAS_BRIDGE_POLARS_CANONICALS = frozenset({
+    "rank", "cs_quantile", "ewm_corr", "ewm_cov", "arg", "atan2", "ts_regression_slope",
+})
+
 FAKE_POLARS_SOURCES = frozenset({"factor_dsl_polars_bridge", "daily_panel_polars"})
 
 DEDUPE = {
+    "reverse": "neg",
     "MACD": "MACD_line",
     "Slope": "ts_time_slope",
     "slope": "ts_time_slope",
@@ -79,10 +84,22 @@ def finalize() -> None:
         return
     for canonical, catalog in list(OperatorRegistry._catalog.items()):
         source = str(((catalog.get("backend_meta") or {}).get("polars") or {}).get("source", ""))
-        if source in FAKE_POLARS_SOURCES or "bridge" in source.lower():
+        if (
+            source in FAKE_POLARS_SOURCES
+            or "bridge" in source.lower()
+            or canonical in PANDAS_BRIDGE_POLARS_CANONICALS
+        ):
             remove_backend(canonical, "polars")
     for old, new in DEDUPE.items():
         alias_and_remove(old, new)
+    # These historical names claimed industry+size regression but the target
+    # only performs a group demean.  Silently resolving them is numerically
+    # wrong, so fail closed instead.
+    for misleading in ("industry_size_neutralize", "size_industry_neutralize"):
+        OperatorRegistry._aliases.pop(misleading, None)
+        for catalog in OperatorRegistry._catalog.values():
+            if misleading in (catalog.get("aliases") or []):
+                catalog["aliases"] = [a for a in catalog["aliases"] if a != misleading]
     for alias, target in {
         "MACD": "MACD_line", "rolling_beta": "ts_beta", "beta": "ts_beta",
         "Slope": "ts_time_slope", "slope": "ts_time_slope",
@@ -109,4 +126,29 @@ def finalize() -> None:
         c for c in operator_policy.POLARS_PRODUCTION_SAFE
         if "polars" in OperatorRegistry.backends_for(c)
     )
+    # Record how the surviving Polars implementation actually executes.  This
+    # is deliberately conservative: materialized NumPy/Python kernels are not
+    # advertised as expression-native or lazy/streaming capable.
+    import inspect
+    for canonical, implementations in OperatorRegistry._operators.items():
+        operator = implementations.get("polars")
+        if operator is None:
+            continue
+        try:
+            implementation = inspect.getsource(operator.__class__)
+        except (OSError, TypeError):
+            implementation = ""
+        materialized = any(token in implementation for token in ("to_numpy(", "np.", "rolling_map(", "map_elements("))
+        execution_kind = "numpy_materialized" if materialized else "expression_native"
+        entry = OperatorRegistry._catalog.get(canonical, {})
+        backend_meta = dict(entry.get("backend_meta") or {})
+        polars_meta = dict(backend_meta.get("polars") or {})
+        polars_meta.update({
+            "execution_kind": execution_kind,
+            "supports_lazy": execution_kind == "expression_native",
+            "materializes_full_panel": materialized,
+            "supports_streaming": execution_kind == "expression_native",
+        })
+        backend_meta["polars"] = polars_meta
+        entry["backend_meta"] = backend_meta
     _FINALIZED = True

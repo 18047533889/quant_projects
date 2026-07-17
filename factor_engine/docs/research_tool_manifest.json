@@ -35,8 +35,12 @@
           "source": "composite_fastpath_primitives"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "composite_fastpath_native_polars"
+          "materializes_full_panel": false,
+          "source": "composite_fastpath_native_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -64,8 +68,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "numpy_materialized",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": true,
+          "source": "factor_dsl_polars",
+          "supports_lazy": false,
+          "supports_streaming": false
         }
       },
       "backends": [
@@ -116,8 +124,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -142,8 +154,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -168,8 +184,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -217,8 +237,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -243,8 +267,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "numpy_materialized",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": true,
+          "source": "factor_dsl_polars",
+          "supports_lazy": false,
+          "supports_streaming": false
         }
       },
       "backends": [
@@ -446,8 +474,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "numpy_materialized",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": true,
+          "source": "factor_dsl_polars",
+          "supports_lazy": false,
+          "supports_streaming": false
         }
       },
       "backends": [
@@ -495,8 +527,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -522,8 +558,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -548,8 +588,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -574,8 +618,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -600,8 +648,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -626,8 +678,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -652,8 +708,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "numpy_materialized",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": true,
+          "source": "factor_dsl_polars",
+          "supports_lazy": false,
+          "supports_streaming": false
         }
       },
       "backends": [
@@ -679,8 +739,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "numpy_materialized",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": true,
+          "source": "factor_dsl_polars",
+          "supports_lazy": false,
+          "supports_streaming": false
         }
       },
       "backends": [
@@ -706,8 +770,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -778,8 +846,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars_auto"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars_auto",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -804,8 +876,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "numpy_materialized",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": true,
+          "source": "factor_dsl_polars",
+          "supports_lazy": false,
+          "supports_streaming": false
         }
       },
       "backends": [
@@ -854,8 +930,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -884,8 +964,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -913,8 +997,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -941,8 +1029,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "numpy_materialized",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": true,
+          "source": "factor_dsl_polars",
+          "supports_lazy": false,
+          "supports_streaming": false
         }
       },
       "backends": [
@@ -969,8 +1061,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -998,8 +1094,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -1026,8 +1126,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -1058,8 +1162,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars_auto"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars_auto",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -1109,8 +1217,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars_auto"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars_auto",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -1228,8 +1340,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -1254,8 +1370,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -1303,8 +1423,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -1329,8 +1453,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "numpy_materialized",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": true,
+          "source": "factor_dsl_polars",
+          "supports_lazy": false,
+          "supports_streaming": false
         }
       },
       "backends": [
@@ -1379,8 +1507,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -1406,8 +1538,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "numpy_materialized",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": true,
+          "source": "factor_dsl_polars",
+          "supports_lazy": false,
+          "supports_streaming": false
         }
       },
       "backends": [
@@ -1778,8 +1914,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -2050,8 +2190,12 @@
           "source": "basic_runtime"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -2144,8 +2288,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -2214,8 +2362,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "numpy_materialized",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": true,
+          "source": "factor_dsl_polars",
+          "supports_lazy": false,
+          "supports_streaming": false
         }
       },
       "backends": [
@@ -2266,8 +2418,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -2318,8 +2474,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -2344,8 +2504,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "numpy_materialized",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": true,
+          "source": "factor_dsl_polars",
+          "supports_lazy": false,
+          "supports_streaming": false
         }
       },
       "backends": [
@@ -2371,8 +2535,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "numpy_materialized",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": true,
+          "source": "factor_dsl_polars",
+          "supports_lazy": false,
+          "supports_streaming": false
         }
       },
       "backends": [
@@ -2398,8 +2566,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -2424,8 +2596,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "numpy_materialized",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": true,
+          "source": "factor_dsl_polars",
+          "supports_lazy": false,
+          "supports_streaming": false
         }
       },
       "backends": [
@@ -2450,8 +2626,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -2476,8 +2656,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "numpy_materialized",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": true,
+          "source": "factor_dsl_polars",
+          "supports_lazy": false,
+          "supports_streaming": false
         }
       },
       "backends": [
@@ -2502,8 +2686,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -2528,8 +2716,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "numpy_materialized",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": true,
+          "source": "factor_dsl_polars",
+          "supports_lazy": false,
+          "supports_streaming": false
         }
       },
       "backends": [
@@ -2554,8 +2746,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "numpy_materialized",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": true,
+          "source": "factor_dsl_polars",
+          "supports_lazy": false,
+          "supports_streaming": false
         }
       },
       "backends": [
@@ -2580,8 +2776,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "numpy_materialized",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": true,
+          "source": "factor_dsl_polars",
+          "supports_lazy": false,
+          "supports_streaming": false
         }
       },
       "backends": [
@@ -2606,8 +2806,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "expression_native",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
         }
       },
       "backends": [
@@ -2632,8 +2836,12 @@
           "source": "factor_dsl_np"
         },
         "polars": {
+          "execution_kind": "numpy_materialized",
           "explicit": true,
-          "source": "factor_dsl_polars"
+          "materializes_full_panel": true,
+          "source": "factor_dsl_polars",
+          "supports_lazy": false,
+          "supports_streaming": false
         }
       },
       "backends": [

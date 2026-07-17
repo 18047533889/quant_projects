@@ -69,7 +69,7 @@ class TanPolars(SeriesOperator):
 class CbrtPolars(SeriesOperator):
     """Polars 立方根"""
     metadata = OperatorMetadata(name="cbrt", category="math", description="立方根", param_names=["x"], tags=["math", "polars"])
-    _calculate_series = _unary(lambda c: c.pow(1.0 / 3.0))
+    _calculate_series = _unary(lambda c: c.sign() * c.abs().pow(1.0 / 3.0))
 
 
 @register_operator(name="ceil", category="math", business_category="elementwise_math", canonical="ceil", source="factor_dsl_polars")
@@ -99,6 +99,21 @@ class RoundPolars(SeriesOperator):
         return x.with_columns([pl.col(c).round(d).alias(c) for c in cols])
 
 
+@register_operator(name="truncate", category="math", business_category="elementwise_math", canonical="truncate", source="factor_dsl_polars")
+class TruncatePolars(SeriesOperator):
+    """Polars 向零截断到指定小数位。"""
+    metadata = OperatorMetadata(
+        name="truncate", category="math", description="向零截断",
+        param_names=["x", "decimals"], tags=["math", "polars"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, decimals: int = 0, **kwargs) -> pl.DataFrame:
+        value = int(kwargs.get("k", kwargs.get("d", decimals)))
+        scale = 10.0 ** value
+        cols = numeric_cols(x)
+        return x.with_columns([((pl.col(c) * scale).truncate() / scale).alias(c) for c in cols])
+
+
 @register_operator(name="inv", category="math", business_category="elementwise_math", canonical="inv", source="factor_dsl_polars")
 class InvPolars(SeriesOperator):
     """Polars 倒数"""
@@ -113,9 +128,13 @@ class InversePolars(SeriesOperator):
 
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
         cols = numeric_cols(x)
-        pdf = to_pandas_panel(x)
-        out = 1.0 / pdf.replace(0, np.nan)
-        return from_pandas_panel(x, out)
+        return x.with_columns([
+            pl.when(pl.col(c).is_null() | (pl.col(c) == 0))
+            .then(None)
+            .otherwise(1.0 / pl.col(c))
+            .alias(c)
+            for c in cols
+        ])
 
 
 @register_operator(name="reverse", category="elementwise_math", business_category="elementwise_math", canonical="reverse", source="factor_dsl_polars")

@@ -15,7 +15,10 @@ from typing import Any, Literal
 
 import pandas as pd
 
-Scope = Literal["ts", "cs", "elementwise", "aggregate", "hypothesis", "unknown"]
+Scope = Literal[
+    "ts", "cs", "group", "fundamental_period", "session_intraday",
+    "elementwise", "aggregate", "hypothesis", "unknown",
+]
 NanPolicy = Literal["propagate", "ignore", "zero", "ffill_only"]
 
 # research 常用：须有显式 policy，但不进 production
@@ -491,15 +494,45 @@ PANDAS_ONLY_PIT_SAFE: frozenset[str] = frozenset(
     }
 )
 
-PIT_UNSAFE_CANONICALS: frozenset[str] = INTENTIONALLY_PANDAS_ONLY | frozenset(
+# Backend availability is not a temporal-safety property.  In particular,
+# deterministic elementwise transforms must not become PIT-unsafe merely
+# because one execution backend is missing.
+PIT_UNSAFE_CANONICALS: frozenset[str] = frozenset(
     {"Lead", "next", "bfill", "causal_bfill", "fillna_interpolate", "shuffle"}
-)
+) | (INTENTIONALLY_PANDAS_ONLY - PANDAS_ONLY_PIT_SAFE)
 
 # 破坏 panel shape 的算子（即使 PIT-safe 也不进 production）
 NON_SHAPE_PRESERVING_CANONICALS: frozenset[str] = frozenset({"dropna"})
 
 # 显式声明的核心算子策略（Tier-1 + 特殊语义；其余由 infer_operator_policy 推断）
 _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
+    "tanh": {"scope": "elementwise", "pit_safe": True},
+    "sigmoid": {"scope": "elementwise", "pit_safe": True},
+    "signed_log": {"scope": "elementwise", "pit_safe": True},
+    "signed_sqrt": {"scope": "elementwise", "pit_safe": True},
+    "square": {"scope": "elementwise", "pit_safe": True},
+    "log10": {"scope": "elementwise", "pit_safe": True},
+    "log2": {"scope": "elementwise", "pit_safe": True},
+    "cs_neutralize": {"scope": "cs", "pit_safe": True},
+    "ffill_limit": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_argmax": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_argmin": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_time_slope": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_regression_intercept": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    "ts_regression_resid": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    "ts_regression_r2": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    "ts_topk_mean": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_topk_std": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_bottomk_mean": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_bottomk_sum": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_bottomk_std": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_tail_mean": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "period_average": {"scope": "fundamental_period", "pit_safe": True, "min_periods": 1},
+    "period_change": {"scope": "fundamental_period", "pit_safe": True, "min_periods": 1},
+    "period_cagr": {"scope": "fundamental_period", "pit_safe": True, "min_periods": 2},
+    "period_stability": {"scope": "fundamental_period", "pit_safe": True, "min_periods": 2},
+    "revision_delta": {"scope": "fundamental_period", "pit_safe": True, "min_periods": 1},
+    "fundamental_staleness": {"scope": "fundamental_period", "pit_safe": True, "min_periods": 1},
     "ts_delay": {"scope": "ts", "lag": 1, "pit_safe": True},
     "ts_delta": {"scope": "ts", "lag": 1, "pit_safe": True},
     "ts_pct": {"scope": "ts", "lag": 1, "pit_safe": True},
@@ -767,6 +800,9 @@ class OperatorPolicy:
     min_periods: int | None = None
     lag: int = 0
     pit_safe: bool = True
+    domain_policy: str = "all_numeric"
+    overflow_policy: str = "ieee_propagate"
+    null_policy: str = "propagate"
     nan_policy: NanPolicy = "propagate"
     includes_current_bar: bool = True
     calendar: str = "bar"  # 本引擎 bar = 每标的连续行，非自然日

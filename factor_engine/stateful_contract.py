@@ -8,6 +8,8 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
+import math
+
 
 class StatefulContractError(ValueError):
     pass
@@ -36,7 +38,19 @@ class StateCheckpoint:
     state: Mapping[str, Any]
 
     def to_json(self) -> str:
-        return json.dumps(asdict(self), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        def standard_json(value: Any) -> Any:
+            if isinstance(value, float) and not math.isfinite(value):
+                return None
+            if isinstance(value, Mapping):
+                return {str(k): standard_json(v) for k, v in value.items()}
+            if isinstance(value, (list, tuple)):
+                return [standard_json(v) for v in value]
+            return value
+
+        return json.dumps(
+            standard_json(asdict(self)), ensure_ascii=False, sort_keys=True,
+            separators=(",", ":"), allow_nan=False,
+        )
 
     @classmethod
     def from_json(cls, payload: str) -> "StateCheckpoint":
@@ -66,7 +80,9 @@ class StatefulCheckpointRegistry:
 
     @staticmethod
     def fingerprint(payload: Mapping[str, Any]) -> str:
-        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+        encoded = json.dumps(
+            payload, sort_keys=True, separators=(",", ":"), default=str, allow_nan=False
+        ).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
 
     @classmethod

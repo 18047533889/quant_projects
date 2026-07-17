@@ -1,9 +1,242 @@
 # Backend capability matrix
 
-Generate the current matrix from the final runtime registry:
+> Generated from the final `OperatorRegistry`; static policy sets are intersected with active canonicals.
+> `implemented` does not mean parity verified; `verified` does not mean production-safe.
 
-```bash
-python factor_engine/scripts/sync_backend_docs.py
-```
+## Summary
 
-The generated report separates backend registration, native non-bridge implementation, parity verification, and production-safe routing. Registration alone is not production certification. CI verifies that repeated generation is deterministic.
+- active canonical: **220**
+- daily surface: **180**
+- Polars registered: **180**
+- Polars non-bridge implementation: **158**
+- Polars parity verified: **67**
+- Polars production safe: **52**
+- DuckDB SQL emitter implemented: **116**
+- DuckDB parity verified: **77**
+- DuckDB production safe: **66**
+- Polars and DuckDB both production safe: **38**
+
+## Matrix
+
+| canonical | surface | pandas | polars | polars native | polars verified | polars safe | duckdb implemented | duckdb verified | duckdb safe |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| ADX | daily | yes | yes | yes | no | no | no | no | no |
+| ATR_WILDER | daily | yes | yes | yes | yes | yes | yes | no | no |
+| MACD_hist | daily | yes | yes | yes | no | no | no | no | no |
+| MACD_line | daily | yes | yes | yes | no | no | no | no | no |
+| MACD_signal | daily | yes | yes | yes | no | no | no | no | no |
+| RSI_WILDER | daily | yes | yes | yes | yes | yes | yes | no | no |
+| abs | daily | yes | yes | yes | no | no | yes | yes | yes |
+| acos | daily | yes | yes | yes | no | no | no | no | no |
+| add | daily | yes | yes | yes | no | no | yes | yes | yes |
+| and_ | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| arg | daily | yes | no | no | no | no | no | no | no |
+| asin | daily | yes | yes | yes | no | no | no | no | no |
+| atan | daily | yes | yes | yes | no | no | no | no | no |
+| atan2 | daily | yes | no | no | no | no | no | no | no |
+| cbrt | daily | yes | yes | yes | no | no | yes | no | no |
+| ceil | extended | yes | yes | yes | yes | yes | yes | yes | yes |
+| clip | daily | yes | yes | yes | no | no | yes | yes | yes |
+| coalesce | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| constant | internal | yes | no | no | no | no | no | no | no |
+| cos | daily | yes | yes | yes | no | no | no | no | no |
+| cosh | daily | yes | yes | yes | no | no | no | no | no |
+| coskewness_to_market | research | yes | yes | yes | no | no | no | no | no |
+| cot | daily | yes | yes | yes | no | no | no | no | no |
+| cs_bucket | daily | yes | yes | yes | no | no | yes | no | no |
+| cs_count | daily | yes | yes | yes | no | no | no | no | no |
+| cs_demean | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| cs_fill_mean | daily | yes | yes | yes | no | no | no | no | no |
+| cs_fill_median | daily | yes | yes | yes | no | no | no | no | no |
+| cs_mad | daily | yes | yes | no | yes | no | yes | yes | yes |
+| cs_mad_zscore | daily | yes | yes | no | yes | no | yes | yes | yes |
+| cs_mean | daily | yes | yes | yes | no | no | no | no | no |
+| cs_multi_resid | daily | yes | no | no | no | no | yes | no | no |
+| cs_neutralize | daily | yes | no | no | no | no | no | no | no |
+| cs_pct_rank | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| cs_quantile | daily | yes | no | no | no | no | yes | no | no |
+| cs_rank_gaussian | daily | yes | yes | yes | no | no | no | no | no |
+| cs_regression | daily | yes | yes | no | yes | no | yes | no | no |
+| cs_resid | daily | yes | yes | no | yes | no | yes | no | no |
+| cs_std | daily | yes | yes | no | no | no | no | no | no |
+| cs_sum | daily | yes | yes | yes | no | no | no | no | no |
+| cs_weighted_demean | daily | yes | yes | yes | no | no | no | no | no |
+| cs_weighted_mean | daily | yes | yes | yes | no | no | no | no | no |
+| cs_weighted_zscore | daily | yes | yes | yes | no | no | no | no | no |
+| cs_wls_resid | daily | yes | no | no | no | no | yes | no | no |
+| csc | daily | yes | yes | yes | no | no | no | no | no |
+| cube | legacy | yes | yes | yes | no | no | no | no | no |
+| digital_count | research | yes | yes | yes | no | no | no | no | no |
+| divide | daily | yes | yes | yes | no | no | yes | yes | yes |
+| downside_beta | research | yes | yes | no | no | no | no | no | no |
+| eq | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| ewm | daily | yes | yes | yes | no | no | no | no | no |
+| ewm_corr | daily | yes | no | no | no | no | yes | no | no |
+| ewm_cov | daily | yes | no | no | no | no | yes | no | no |
+| ewm_std | daily | yes | yes | yes | yes | yes | yes | no | no |
+| ewm_var | daily | yes | yes | yes | yes | yes | yes | no | no |
+| exp | daily | yes | yes | yes | no | no | yes | yes | yes |
+| exp_neg | extended | yes | yes | yes | no | no | no | no | no |
+| ffill_limit | daily | yes | yes | yes | no | no | no | no | no |
+| fillna_const | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| fix | daily | yes | yes | yes | no | no | no | no | no |
+| flex_max | extended | yes | yes | yes | no | no | no | no | no |
+| flex_min | extended | yes | yes | yes | no | no | no | no | no |
+| floor | extended | yes | yes | yes | yes | yes | yes | yes | yes |
+| fundamental_staleness | daily | yes | yes | yes | no | no | no | no | no |
+| ge | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| group_count | daily | yes | yes | yes | no | no | yes | yes | no |
+| group_decay_linear | research | yes | yes | yes | no | no | yes | no | no |
+| group_max | daily | yes | yes | yes | no | no | yes | yes | no |
+| group_mean | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| group_min | daily | yes | yes | yes | no | no | yes | yes | no |
+| group_neutralize | daily | yes | yes | no | yes | no | yes | yes | yes |
+| group_normalize | daily | yes | yes | no | yes | no | yes | yes | yes |
+| group_percentile | daily | yes | yes | no | yes | no | yes | yes | no |
+| group_rank | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| group_std | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| group_sum | daily | yes | yes | yes | no | no | yes | yes | no |
+| group_weighted_mean | daily | yes | yes | yes | no | no | no | no | no |
+| group_weighted_zscore | daily | yes | yes | yes | no | no | no | no | no |
+| group_winsorize | daily | yes | yes | no | yes | no | yes | yes | yes |
+| group_zscore | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| gt | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| identity | internal | yes | yes | yes | no | no | no | no | no |
+| idio_skew | research | yes | yes | yes | no | no | no | no | no |
+| idio_vol | research | yes | yes | no | no | no | no | no | no |
+| intercept | daily | yes | yes | yes | no | no | no | no | no |
+| intraday_vwap_deviation | research | yes | no | no | no | no | no | no | no |
+| inverse | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| is_finite | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| is_infinite | daily | yes | yes | yes | no | no | yes | yes | no |
+| is_nan | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| is_not_null | daily | yes | yes | yes | yes | yes | yes | yes | no |
+| is_null | daily | yes | yes | yes | yes | yes | yes | yes | no |
+| le | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| lerp | daily | yes | yes | yes | no | no | no | no | no |
+| log | daily | yes | yes | yes | no | no | yes | yes | yes |
+| log10 | extended | yes | yes | yes | no | no | no | no | no |
+| log2 | extended | yes | yes | yes | no | no | no | no | no |
+| log_abs | daily | yes | yes | yes | yes | yes | yes | yes | no |
+| lt | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| maximum | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| micro_amihud_hf | research | yes | yes | yes | no | no | no | no | no |
+| micro_bipower_var | research | yes | yes | yes | no | no | no | no | no |
+| micro_jump_indicator | research | yes | yes | yes | no | no | no | no | no |
+| micro_kyle_lambda | research | yes | yes | yes | no | no | no | no | no |
+| micro_mid_return | research | yes | yes | yes | no | no | no | no | no |
+| micro_realized_vol | research | yes | yes | yes | no | no | no | no | no |
+| micro_spread | research | yes | yes | yes | no | no | no | no | no |
+| micro_trade_imbalance | research | yes | yes | yes | no | no | no | no | no |
+| micro_vpin | research | yes | yes | yes | no | no | no | no | no |
+| minimum | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| multiply | daily | yes | yes | yes | no | no | yes | yes | yes |
+| ne | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| neg | daily | yes | yes | yes | no | no | yes | yes | yes |
+| normalize | daily | yes | yes | no | yes | no | yes | yes | yes |
+| not_ | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| or_ | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| period_average | daily | yes | no | no | no | no | no | no | no |
+| period_cagr | daily | yes | no | no | no | no | no | no | no |
+| period_change | daily | yes | no | no | no | no | no | no | no |
+| period_lag | daily | yes | yes | yes | no | no | yes | no | no |
+| period_stability | daily | yes | yes | yes | no | no | no | no | no |
+| power | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| price_spread_deviation | daily | yes | no | no | no | no | no | no | no |
+| protected_div | internal | yes | no | no | no | no | yes | yes | yes |
+| quarter_from_cumulative | daily | yes | no | no | no | no | no | no | no |
+| rank | daily | yes | no | no | no | no | yes | yes | yes |
+| rank_corr | research | yes | yes | no | no | no | no | no | no |
+| real_turnover_rate | daily | yes | yes | yes | no | no | no | no | no |
+| residual_momentum_capm | research | yes | yes | yes | no | no | no | no | no |
+| revision_delta | daily | yes | yes | yes | no | no | no | no | no |
+| rolling_beta_to_market | research | yes | yes | yes | no | no | no | no | no |
+| round | extended | yes | yes | yes | no | no | no | no | no |
+| safe_div_null | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| saturate | daily | yes | yes | yes | no | no | no | no | no |
+| scale | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| sec | daily | yes | yes | yes | no | no | no | no | no |
+| sigmoid | extended | yes | yes | yes | no | no | no | no | no |
+| sign | daily | yes | yes | yes | no | no | yes | yes | yes |
+| signed_log | daily | yes | yes | yes | yes | yes | yes | yes | no |
+| signed_power | daily | yes | yes | yes | no | no | no | no | no |
+| signed_sqrt | daily | yes | no | no | no | no | yes | yes | no |
+| sin | daily | yes | yes | yes | no | no | no | no | no |
+| sinh | daily | yes | yes | yes | no | no | no | no | no |
+| size_neutralize | daily | yes | no | no | no | no | no | no | no |
+| sqrt | daily | yes | yes | yes | no | no | yes | yes | yes |
+| sqrt_abs | extended | yes | no | no | no | no | no | no | no |
+| square | extended | yes | yes | yes | no | no | no | no | no |
+| subtract | daily | yes | yes | yes | no | no | yes | yes | yes |
+| tail_beta | research | yes | yes | no | no | no | no | no | no |
+| tan | daily | yes | yes | yes | no | no | no | no | no |
+| tanh | daily | yes | yes | yes | no | no | yes | no | no |
+| trade_when | research | yes | yes | yes | no | no | no | no | no |
+| true_range | daily | yes | yes | yes | no | no | no | no | no |
+| truncate | extended | yes | yes | yes | no | no | yes | no | no |
+| ts_argmax | daily | yes | yes | yes | yes | yes | yes | no | no |
+| ts_argmin | daily | yes | yes | yes | yes | yes | yes | no | no |
+| ts_autocorr | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| ts_beta | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| ts_bottomk_mean | daily | yes | yes | yes | no | no | no | no | no |
+| ts_bottomk_std | daily | yes | yes | yes | no | no | no | no | no |
+| ts_bottomk_sum | daily | yes | yes | yes | no | no | no | no | no |
+| ts_corr | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| ts_count_if | daily | yes | yes | yes | no | no | yes | no | no |
+| ts_cov | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| ts_days_since | daily | yes | yes | yes | no | no | yes | no | no |
+| ts_decay_exp_window | daily | yes | yes | no | no | no | no | no | no |
+| ts_decay_linear | daily | yes | yes | no | yes | no | yes | no | no |
+| ts_delay | daily | yes | yes | yes | no | no | yes | yes | yes |
+| ts_delta | daily | yes | yes | yes | no | no | yes | yes | yes |
+| ts_ema | daily | yes | yes | yes | yes | yes | yes | no | no |
+| ts_kurt | daily | yes | yes | yes | yes | yes | no | no | no |
+| ts_last_if | daily | yes | yes | yes | no | no | yes | no | no |
+| ts_log_return | daily | yes | no | no | no | no | no | no | no |
+| ts_mad | daily | yes | yes | no | yes | no | yes | no | no |
+| ts_max | daily | yes | yes | yes | no | no | yes | yes | yes |
+| ts_max_buildup | daily | yes | no | no | no | no | no | no | no |
+| ts_max_drawdown | daily | yes | no | no | no | no | yes | no | no |
+| ts_mean | daily | yes | yes | yes | no | no | yes | yes | yes |
+| ts_mean_if | daily | yes | yes | yes | no | no | yes | no | no |
+| ts_median | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| ts_min | daily | yes | yes | yes | no | no | yes | yes | yes |
+| ts_moment | daily | yes | no | no | no | no | no | no | no |
+| ts_nth_value | daily | yes | no | no | no | no | yes | no | no |
+| ts_partial_corr | daily | yes | no | no | no | no | yes | no | no |
+| ts_pct | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| ts_poly2_coeff | research | yes | no | no | no | no | no | no | no |
+| ts_poly2_resid | research | yes | no | no | no | no | no | no | no |
+| ts_product | daily | yes | yes | no | yes | no | yes | no | no |
+| ts_quantile | daily | yes | yes | yes | yes | yes | yes | no | no |
+| ts_rank | daily | yes | yes | no | yes | no | yes | yes | yes |
+| ts_ratio | daily | yes | no | no | no | no | no | no | no |
+| ts_regression_intercept | daily | yes | no | no | no | no | no | no | no |
+| ts_regression_r2 | daily | yes | no | no | no | no | no | no | no |
+| ts_regression_resid | daily | yes | no | no | no | no | no | no | no |
+| ts_regression_slope | daily | yes | no | no | no | no | yes | no | no |
+| ts_regression_tstat | daily | yes | no | no | no | no | yes | no | no |
+| ts_sharpe | daily | yes | yes | no | yes | no | yes | yes | yes |
+| ts_skew | daily | yes | yes | yes | yes | yes | yes | no | no |
+| ts_std | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| ts_std_if | daily | yes | yes | yes | no | no | yes | no | no |
+| ts_sum | daily | yes | yes | yes | no | no | yes | yes | yes |
+| ts_sum_decay | research | yes | yes | no | no | no | no | no | no |
+| ts_sum_if | daily | yes | yes | yes | no | no | yes | no | no |
+| ts_tail_mean | daily | yes | yes | yes | no | no | no | no | no |
+| ts_time_slope | daily | yes | yes | yes | no | no | yes | no | no |
+| ts_topk_mean | daily | yes | yes | yes | no | no | no | no | no |
+| ts_topk_std | daily | yes | yes | yes | no | no | no | no | no |
+| ts_topk_sum | daily | yes | yes | yes | no | no | no | no | no |
+| ts_trend_tstat | daily | yes | no | no | no | no | yes | no | no |
+| ts_true_streak | daily | yes | yes | yes | no | no | yes | no | no |
+| ts_var | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| ts_zscore | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| ttm_from_cumulative | daily | yes | no | no | no | no | no | no | no |
+| ttm_from_quarterly | daily | yes | no | no | no | no | no | no | no |
+| unitize | daily | yes | no | no | no | no | no | no | no |
+| where | daily | yes | yes | yes | yes | yes | yes | yes | yes |
+| winsorize | daily | yes | yes | no | yes | no | yes | yes | yes |
+| winsorize_mean | daily | yes | no | no | no | no | no | no | no |
+| yoy_by_period | daily | yes | no | no | no | no | no | no | no |
+| zscore | daily | yes | yes | yes | yes | yes | yes | yes | yes |

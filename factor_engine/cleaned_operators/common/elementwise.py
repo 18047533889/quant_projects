@@ -1640,15 +1640,18 @@ class Round(SeriesOperator):
     metadata = OperatorMetadata(
         name="round",
         category="math",
-        description="四舍五入（保留k位小数）",
+        description="四舍五入（保留 decimals 位小数）",
         examples=["round(price, 2)"],
-        param_names=["x", "k"],
+        param_names=["x", "decimals"],
         return_type="series",
         tags=["math", "rounding"]
     )
 
-    def _calculate_series(self, x: pd.DataFrame, k: int = 0, **kwargs) -> pd.DataFrame:
-        return x.round(decimals=k)
+    def _calculate_series(self, x: pd.DataFrame, decimals: int = 0, **kwargs) -> pd.DataFrame:
+        # ``k``/``d`` remain deprecated runtime keyword aliases; exported
+        # metadata and newly authored formulas use only ``decimals``.
+        value = kwargs.get("k", kwargs.get("d", decimals))
+        return x.round(decimals=int(value))
 
 # aliases: ROUND
 
@@ -1968,15 +1971,17 @@ class Truncate(SeriesOperator):
     metadata = OperatorMetadata(
         name="truncate",
         category="math",
-        description="截断（保留k位小数）",
+        description="向零截断（保留 decimals 位小数）",
         examples=["truncate(price, 2)"],
-        param_names=["x", "k"],
+        param_names=["x", "decimals"],
         return_type="series",
         tags=["math", "rounding", "truncation"]
     )
 
-    def _calculate_series(self, x: pd.DataFrame, k: int = 0, **kwargs) -> pd.DataFrame:
-        return np.trunc(x.round(decimals=k))
+    def _calculate_series(self, x: pd.DataFrame, decimals: int = 0, **kwargs) -> pd.DataFrame:
+        value = int(kwargs.get("k", kwargs.get("d", decimals)))
+        scale = 10.0 ** value
+        return np.trunc(x * scale) / scale
 
 
 

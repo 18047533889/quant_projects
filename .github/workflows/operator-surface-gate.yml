@@ -50,6 +50,7 @@ jobs:
             python factor_engine/scripts/generate_layer_manifests.py
             python factor_engine/scripts/generate_operator_usage_report.py
             python factor_engine/scripts/sync_backend_docs.py
+            python factor_engine/scripts/generate_backend_evidence_manifest.py
           }
           generated_files=(
             factor_engine/cleaned_operators/docs/operators_catalog.md
@@ -62,6 +63,7 @@ jobs:
             factor_engine/docs/stateful_operator_manifest.json
             factor_engine/docs/operator_usage_report.json
             factor_engine/docs/backend_coverage.md
+            factor_engine/docs/backend_evidence_manifest.json
             factor_engine/docs/sql_pushdown_coverage.md
           )
           generate_all

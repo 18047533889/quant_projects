@@ -10,8 +10,15 @@ from __future__ import annotations
 from typing import Iterable, Literal
 
 OperatorSurface = Literal[
-    "daily", "research", "unsafe", "legacy", "internal", "unclassified", "all"
+    "daily", "extended", "research", "unsafe", "legacy", "internal", "unclassified", "all"
 ]
+
+# Useful, supported conveniences which are intentionally hidden from the core
+# authoring/search surface.  Keeping this policy static makes manifests and
+# backend reports independent of import order.
+EXTENDED_ONLY_CANONICALS: frozenset[str] = frozenset(
+    {"ceil", "floor", "round", "truncate", "log10", "log2", "sigmoid", "square", "sqrt_abs", "exp_neg", "flex_max", "flex_min"}
+)
 
 DAILY_CANONICALS: frozenset[str] = frozenset(
     {
@@ -416,6 +423,7 @@ LEGACY_ONLY_CANONICALS: frozenset[str] = frozenset(
 INTERNAL_ONLY_CANONICALS: frozenset[str] = frozenset(
     {
         'constant',
+        'identity',
     }
 )
 
@@ -436,6 +444,10 @@ HIDDEN_DAILY_NAMES: frozenset[str] = frozenset(
 
 def classify_canonical(canonical: str) -> str:
     """Return the reviewed surface; unknown registrations fail closed."""
+    if canonical in INTERNAL_ONLY_CANONICALS:
+        return "internal"
+    if canonical in EXTENDED_ONLY_CANONICALS:
+        return "extended"
     if canonical in DAILY_CANONICALS:
         return "daily"
     if canonical in RESEARCH_ONLY_CANONICALS:
@@ -444,8 +456,6 @@ def classify_canonical(canonical: str) -> str:
         return "unsafe"
     if canonical in LEGACY_ONLY_CANONICALS:
         return "legacy"
-    if canonical in INTERNAL_ONLY_CANONICALS:
-        return "internal"
     return "unclassified"
 
 
@@ -456,6 +466,8 @@ def is_dsl_name_allowed(name: str, canonical: str, *, surface: OperatorSurface =
     category = classify_canonical(canonical)
     if surface == "daily":
         return category == "daily" and name not in HIDDEN_DAILY_NAMES
+    if surface == "extended":
+        return category == "extended"
     if surface == "research":
         return category == "research"
     if surface == "unsafe":
@@ -478,6 +490,7 @@ def surface_summary(canonicals: Iterable[str]) -> dict[str, int]:
     """Count canonical operators by reviewed surface."""
     out = {
         "daily": 0,
+        "extended": 0,
         "research": 0,
         "unsafe": 0,
         "legacy": 0,

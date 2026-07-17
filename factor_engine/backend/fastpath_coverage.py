@@ -213,6 +213,9 @@ def build_fastpath_coverage_row(canon: str) -> FastpathCoverageRow:
 
     name = resolve_canonical(canon)
     spec = build_operator_spec(name)
+    # Stale evidence/allowlist entries can outlive a runtime canonical during
+    # deduplication.  Coverage reporting must fail closed instead of crashing.
+    allow_in_production = bool(spec is not None and spec.allow_in_production)
     tier = infer_polars_long_tier(name)
     pandas_cap = capability_for(name, "pandas_numpy")
     polars_cap = capability_for(name, "polars")
@@ -245,7 +248,7 @@ def build_fastpath_coverage_row(canon: str) -> FastpathCoverageRow:
 
     block = _fastpath_block_reason(
         canon=name,
-        allow_in_production=bool(spec.allow_in_production),
+        allow_in_production=allow_in_production,
         production_policy=production_policy,
         duckdb_ok=duckdb_prod,
         polars_native_ok=polars_native_prod,
@@ -257,11 +260,11 @@ def build_fastpath_coverage_row(canon: str) -> FastpathCoverageRow:
 
     native_tier = polars_long_production_tier(name) if tier == "native" else tier
 
-    direct_any = bool(spec.allow_in_production) and (duckdb_prod or ch_prod or polars_native_prod)
-    direct_dual = bool(spec.allow_in_production) and polars_native_prod and duckdb_prod
+    direct_any = allow_in_production and (duckdb_prod or ch_prod or polars_native_prod)
+    direct_dual = allow_in_production and polars_native_prod and duckdb_prod
     production_fast_path = direct_any and not block
-    polars_long_fastpath = bool(spec.allow_in_production) and polars_native_prod and not block
-    duckdb_fastpath = bool(spec.allow_in_production) and duckdb_prod and not block
+    polars_long_fastpath = allow_in_production and polars_native_prod and not block
+    duckdb_fastpath = allow_in_production and duckdb_prod and not block
     dual_backend_fastpath = direct_dual and not block
     composite_dual_backend_fastpath = composite_prod_safe and not block
     effective_production_fastpath = production_fast_path or composite_dual_backend_fastpath
@@ -269,7 +272,7 @@ def build_fastpath_coverage_row(canon: str) -> FastpathCoverageRow:
 
     return FastpathCoverageRow(
         canonical=name,
-        allow_in_production=bool(spec.allow_in_production),
+        allow_in_production=allow_in_production,
         pandas_numpy_status=pandas_cap.status,
         polars_panel_status=polars_cap.status,
         polars_long_tier=tier,

@@ -107,7 +107,12 @@ class OperatorRegistry:
         prev = existing
         backend_meta = dict(prev.get("backend_meta") or {})
         backend_meta[backend] = {"explicit": backend_explicit, "source": source}
-        cls._catalog[canonical] = {
+        # A backend registration is additive.  Governance fields (surface,
+        # PIT/scope, checkpoint contract, deprecation reason, …) are attached
+        # by later audit layers and must survive when another backend (most
+        # commonly the SQL marker) is registered.
+        updated = dict(prev)
+        updated.update({
             "canonical": canonical,
             "backends": sorted(cls._operators[canonical].keys()),
             "selected_source": source,
@@ -119,7 +124,8 @@ class OperatorRegistry:
             ),
             "aliases": sorted(set((aliases or []) + prev.get("aliases", []))),
             "backend_meta": backend_meta,
-        }
+        })
+        cls._catalog[canonical] = updated
         for alias in aliases or []:
             if alias != canonical:
                 cls._aliases[alias] = canonical
@@ -263,6 +269,7 @@ class OperatorRegistry:
         name: str,
         *,
         prefer: str = "auto",
+        mode: str = "production",
     ) -> Tuple[Any | None, str]:
         """按策略选取最优可用 backend 及算子实例。
 
@@ -284,9 +291,22 @@ class OperatorRegistry:
                 return op, "polars"
             return backends.get("pandas_numpy"), "pandas_numpy"
         if prefer == "sql":
-            if "sql" in backends:
+            from backend.sql_tiers import (
+                is_sql_implemented,
+                is_sql_parity_verified,
+                effective_sql_production_safe,
+            )
+
+            permitted = (
+                effective_sql_production_safe(canonical)
+                if mode == "production"
+                else is_sql_parity_verified(canonical)
+                if mode == "validation"
+                else is_sql_implemented(canonical)
+            )
+            if "sql" in backends and permitted:
                 return backends["sql"], "sql"
-            return cls.get_preferred(name, prefer="auto")
+            return cls.get_preferred(name, prefer="auto", mode=mode)
         # auto：Hybrid 路由 — SQL 在 plan 层；此处 Polars safe vs Pandas fallback
         from backend.operator_capability import get_best_backend
 

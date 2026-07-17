@@ -125,6 +125,7 @@ def validate_catalog(*, execute: bool = True, periods: int = 420, symbols: int =
                 freq="1d",
                 universe="ASHARE_ALL",
                 description=f"GTJA-191 {name}",
+                surface="compat",
             )
             plan, analysis = engine.compile(factor)
             compiled += 1

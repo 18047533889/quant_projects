@@ -33,10 +33,10 @@ class DSLParseError(ValueError):
 class _ExprBuilder:
     """遍历 ``ast``，把调用/比较/四则运算还原为 ``CleanedCall`` / ``Expr`` 树。"""
 
-    def __init__(self) -> None:
+    def __init__(self, *, surface: str = "daily") -> None:
         """初始化白名单：``build_dsl_allowlist()`` 返回的 ``{函数名: 工厂}``。"""
         # 允许出现的函数名 → 工厂（来自 operator_registry + cleaned_operators）
-        self._allowed = build_dsl_allowlist()
+        self._allowed = build_dsl_allowlist(surface=surface)
 
     def build(self, text: str) -> Expr:
         """解析 DSL 字符串并返回根 ``Expr`` 节点。"""
@@ -151,7 +151,7 @@ def _is_field_identifier(name: str) -> bool:
     return all(c.isalnum() or c == "_" for c in name)
 
 
-def parse_expr(text: str) -> Expr:
+def parse_expr(text: str, *, surface: str = "daily") -> Expr:
     """解析单条表达式字符串为 ``Expr``。
 
     Parameters
@@ -169,7 +169,7 @@ def parse_expr(text: str) -> Expr:
     DSLParseError
         语法错误、未白名单函数或非法结构。
     """
-    return _ExprBuilder().build(text)
+    return _ExprBuilder(surface=surface).build(text)
 
 
 def parse_factor(
@@ -179,6 +179,7 @@ def parse_factor(
     freq: str = "1d",
     universe: str | None = None,
     description: str | None = None,
+    surface: str = "daily",
 ) -> Factor:
     """解析表达式并包成带元数据的 :class:`api.factor.Factor`。
 
@@ -202,7 +203,7 @@ def parse_factor(
     """
     return Factor(
         name=name,
-        expr=parse_expr(text),
+        expr=parse_expr(text, surface=surface),
         freq=freq,
         universe=universe,
         description=description,

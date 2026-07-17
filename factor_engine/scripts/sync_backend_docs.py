@@ -26,6 +26,7 @@ def _yes(value: bool) -> str:
 def main() -> None:
     load_all()
     from cleaned_operators.operator_policy import POLARS_PARITY_VERIFIED, POLARS_PRODUCTION_SAFE
+    from cleaned_operators.operator_surface import classify_canonical
     from backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS, SQL_PARITY_VERIFIED_CANONICALS, SQL_PRODUCTION_SAFE_CANONICALS
 
     catalog = OperatorRegistry.catalog()
@@ -34,19 +35,23 @@ def main() -> None:
     for name in active:
         item = catalog[name]
         backends = set(item.get("backends") or [])
-        polars_source = str(((item.get("backend_meta") or {}).get("polars") or {}).get("source", ""))
-        polars_native = "polars" in backends and "bridge" not in polars_source.lower() and polars_source != "daily_panel_polars"
+        polars_meta = ((item.get("backend_meta") or {}).get("polars") or {})
+        polars_native = "polars" in backends and polars_meta.get("execution_kind") == "expression_native"
+        polars_verified = "polars" in backends and name in POLARS_PARITY_VERIFIED
+        polars_safe = polars_native and polars_verified and name in POLARS_PRODUCTION_SAFE
+        sql_verified = name in SQL_PARITY_VERIFIED_CANONICALS
+        sql_safe = sql_verified and name in SQL_PRODUCTION_SAFE_CANONICALS
         rows.append((
             name,
-            item.get("surface", "unclassified"),
+            classify_canonical(name),
             "pandas_numpy" in backends,
             "polars" in backends,
             polars_native,
-            name in POLARS_PARITY_VERIFIED,
-            name in POLARS_PRODUCTION_SAFE,
+            polars_verified,
+            polars_safe,
             name in SQL_IMPLEMENTED_CANONICALS,
-            name in SQL_PARITY_VERIFIED_CANONICALS,
-            name in SQL_PRODUCTION_SAFE_CANONICALS,
+            sql_verified,
+            sql_safe,
         ))
 
     daily = sum(row[1] == "daily" for row in rows)

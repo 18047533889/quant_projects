@@ -45,6 +45,19 @@ def _ema_step(value: float, previous: float | None, alpha: float) -> float:
     return value if previous is None or not np.isfinite(previous) else alpha * value + (1.0 - alpha) * previous
 
 
+def _effective_identity(canonical, input_identity, inputs, params, spec):
+    identity = dict(input_identity)
+    identity["__stateful_runtime__"] = {
+        "canonical": canonical,
+        "semantic_version": spec.semantic_version,
+        "state_schema_version": spec.state_schema_version,
+        "missing_policy": spec.missing_policy,
+        "input_names": sorted(str(name) for name in inputs),
+        "params": {str(key): params[key] for key in sorted(params)},
+    }
+    return identity
+
+
 def _ema_segment(x, state, span):
     alpha = 2.0 / (span + 1.0)
     last = state.get("last_ema")
@@ -191,10 +204,12 @@ def execute_stateful_segment(canonical: str, inputs: Mapping[str, Sequence[Any]]
     if any(len(v) != n for v in inputs.values()):
         raise ValueError("all input arrays must have equal length")
     ts = _timestamps(timestamps, n)
-    StatefulCheckpointRegistry.require_for_segment(canonical, starts_at_dataset_origin=bool(starts_at_dataset_origin), checkpoint=checkpoint, input_identity=input_identity if checkpoint else None, expected_instrument=str(instrument) if checkpoint else None)
+    options = dict(params or {})
+    effective_identity = _effective_identity(canonical, input_identity, inputs, options, spec)
+    StatefulCheckpointRegistry.require_for_segment(canonical, starts_at_dataset_origin=bool(starts_at_dataset_origin), checkpoint=checkpoint, input_identity=effective_identity if checkpoint else None, expected_instrument=str(instrument) if checkpoint else None)
     if checkpoint is not None and pd.Timestamp(ts[0]) <= pd.Timestamp(checkpoint.as_of):
         raise ValueError("segment must start strictly after checkpoint.as_of")
-    state, options = (dict(checkpoint.state) if checkpoint else {}), dict(params or {})
+    state = dict(checkpoint.state) if checkpoint else {}
     if canonical == "ts_ema":
         values, state = _ema_segment(_array(inputs["x"], "x"), state, _positive(options.get("span", options.get("window", 20)), "span"))
     elif canonical == "RSI_WILDER":
@@ -208,7 +223,7 @@ def execute_stateful_segment(canonical: str, inputs: Mapping[str, Sequence[Any]]
     else:
         raise ValueError(f"stateful runtime not implemented for {canonical}")
     state["last_timestamp"] = ts[-1].isoformat()
-    new_checkpoint = StatefulCheckpointRegistry.create_checkpoint(canonical, instrument=str(instrument), as_of=state["last_timestamp"], state=state, input_identity=input_identity)
+    new_checkpoint = StatefulCheckpointRegistry.create_checkpoint(canonical, instrument=str(instrument), as_of=state["last_timestamp"], state=state, input_identity=effective_identity)
     return StatefulSegmentResult(values=values, checkpoint=new_checkpoint, state=state)
 
 

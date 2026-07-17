@@ -146,8 +146,6 @@ DEDUPE_ALIASES: dict[str, str] = {
     "panel_neutralize": "group_neutralize",
     "group_demean": "group_neutralize",
     "NEUTRALIZE": "group_neutralize",
-    "industry_size_neutralize": "group_neutralize",
-    "size_industry_neutralize": "group_neutralize",
     "INDUSTRY_NEUTRAL": "group_neutralize",
     "INDUSTRY_NEUTRALIZE": "group_neutralize",
     "IND_NEUTRALIZE": "group_neutralize",

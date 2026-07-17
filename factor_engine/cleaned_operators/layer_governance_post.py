@@ -72,6 +72,9 @@ def apply_post_governance() -> None:
     from cleaned_operators import operator_surface
 
     _restore_compiler_internal("protected_div")
+    if "neg" in OperatorRegistry._operators:
+        OperatorRegistry.unregister("reverse")
+        OperatorRegistry.register_alias("reverse", "neg")
     if "protected_div" in OperatorRegistry._operators:
         operator_surface.INTERNAL_ONLY_CANONICALS = frozenset(
             set(operator_surface.INTERNAL_ONLY_CANONICALS) | {"protected_div"}

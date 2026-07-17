@@ -61,7 +61,7 @@ def _parse_with_factor_engine(formula: str) -> bool:
         return False
 
     try:
-        fe_parse_expr(formula)
+        fe_parse_expr(formula, surface="compat")
     except FEError as exc:
         raise DSLParseError(str(exc)) from exc
     except Exception as exc:
