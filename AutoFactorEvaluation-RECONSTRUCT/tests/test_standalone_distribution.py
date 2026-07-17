@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -57,11 +59,34 @@ def test_embedded_manifest_has_platform_provenance():
     assert manifest["modules"]["factor_engine"]["files"] > 100
     assert manifest["modules"]["data_access"]["files"] > 20
     assert len(manifest["modules"]["factor_engine"]["sha256"]) == 64
+    assert "workspace_data" in manifest["exclusions"]["data_access"]
+    assert not (PROJECT_ROOT / "data_access" / "workspace_data").exists()
+    assert (
+        PROJECT_ROOT
+        / "factor_engine"
+        / "cleaned_operators"
+        / "common"
+        / "daily_panel.py"
+    ).is_file()
 
 
 def test_standalone_diagnostics_pass():
     report = platform_diagnostics(import_runtime=True)
     assert report["status"] == "PASS", report
+
+
+def test_manifest_remains_valid_after_runtime_imports_create_caches():
+    activate_platform(force=True)
+    import data_access  # noqa: F401
+    import runtime.engine  # noqa: F401
+
+    proc = subprocess.run(
+        [sys.executable, "scripts/sync_embedded_platform.py", "--check"],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, proc.stderr or proc.stdout
 
 
 def test_embedded_semantic_hardening_executes_signed_rolling_product():
@@ -84,3 +109,18 @@ def test_nested_lookback_uses_dependency_path():
 
     _, _, analysis = validate_factor_formula("ts_mean(ts_delay(close, 5), 20)")
     assert analysis.lookback == 24
+
+
+def test_latest_daily_panel_operator_executes_from_embedded_engine():
+    activate_platform(force=True)
+    from integrations.quant_platform import execute_factor_on_frame
+
+    execution = execute_factor_on_frame(
+        "ts_true_streak(close > 0)",
+        _frame(),
+        factor_name="positive_streak",
+    )
+    a = execution.result.xs("A", level=1).to_numpy(dtype=float)
+    b = execution.result.xs("B", level=1).to_numpy(dtype=float)
+    np.testing.assert_allclose(a, [1.0, 0.0, 0.0, 1.0, 0.0, 1.0])
+    np.testing.assert_allclose(b, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0])

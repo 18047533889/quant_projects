@@ -48,6 +48,15 @@
 
 **误用提示**：全市场截面用 `normalize`；组内相对位置用 `group_normalize`；二者零区间行为不同，不可互换。
 
+### 同形 daily 条件、事件与统计信号
+
+新增的条件滚动、事件状态、报告期滞后、多元截面回归、滚动 t 值/偏相关/最大回撤和
+第 N 值算子统一见 [`daily_panel_operators.md`](daily_panel_operators.md)。这些算子逐股票、
+逐交易日输出同形 panel，仅读取当前及历史数据。
+
+总体 t/KS/ADF 检验、总体 Sharpe、总体最大回撤及 regression summary 不属于 daily
+算子，继续保留在显式 opt-in 的 `research_operators`。
+
 **OLS vs 组内去均值**：
 - **`cs_resid(y, x)`** / **`cs_regression(y, x, mode)`**：每个 timestamp 全截面 OLS，`y ~ α + β·x`（有效样本 ≥ 3）
 - **`neutralize(x, g)`** / **`group_neutralize(x, g)`**：每个 timestamp × 组内 **去均值**（非 OLS）；DSL 别名 `neutralize` → `group_neutralize`

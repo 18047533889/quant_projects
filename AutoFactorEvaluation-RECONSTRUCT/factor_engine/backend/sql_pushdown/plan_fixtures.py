@@ -54,6 +54,38 @@ def minimal_plan(op: str) -> PlanNode:
         return PlanNode(op=op, inputs=[close, volume], attrs={"d": 3, "window": 3, "span": 3})
     if op in {"cs_resid", "cs_regression"}:
         return PlanNode(op=op, inputs=[close, volume], attrs={"d": 3})
+    if op in {"ts_sum_if", "ts_mean_if", "ts_std_if", "ts_last_if"}:
+        return PlanNode(
+            op=op,
+            inputs=[close, volume],
+            attrs={"window": 3, "min_periods": 1 if op != "ts_std_if" else 2},
+        )
+    if op == "cs_multi_resid":
+        return PlanNode(
+            op=op,
+            inputs=[close, volume, high],
+            attrs={"min_obs": 4, "add_intercept": True},
+        )
+    if op == "cs_wls_resid":
+        return PlanNode(
+            op=op,
+            inputs=[close, volume, high],
+            attrs={"min_obs": 4, "add_intercept": True},
+        )
+    if op == "period_lag":
+        return PlanNode(op=op, inputs=[close, industry], attrs={"periods": 1})
+    if op == "ts_regression_tstat":
+        return PlanNode(
+            op=op,
+            inputs=[close, volume],
+            attrs={"window": 5, "min_periods": 3, "add_intercept": True},
+        )
+    if op == "ts_partial_corr":
+        return PlanNode(
+            op=op,
+            inputs=[close, volume, high],
+            attrs={"window": 5, "min_periods": 3},
+        )
     if op.startswith("group_"):
         return PlanNode(op=op, inputs=[close, industry], attrs={"d": 3, "window": 3, "p": 0.5})
     if op in {"where", "if_else", "coalesce"}:

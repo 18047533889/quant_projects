@@ -347,34 +347,57 @@ def _rolling_linear_decay_expr(w: int) -> pl.Expr:
     return pl.col(_VAL).rolling_map(_fn, window_size=w, min_samples=1).over(_INST, order_by=_TS)
 
 
-def _rolling_product_expr(w: int) -> pl.Expr:
+def _rolling_product_expr(w: int, *, min_periods: int) -> pl.Expr:
     """滚动乘积：正确处理 0、负数符号与 NULL 跳过。"""
+
+    def _fn(arr: np.ndarray) -> float:
+        arr = np.asarray(arr, dtype=np.float64)
+        if np.isinf(arr).any():
+            return np.nan
+        valid = arr[np.isfinite(arr)]
+        if valid.size == 0:
+            return np.nan
+        if np.any(valid == 0.0):
+            if np.isinf(arr).any():
+                return np.nan
+            return 0.0
+        if np.isinf(arr).any():
+            return np.nan
+        neg_cnt = int(np.sum(valid < 0))
+        sign = -1.0 if neg_cnt % 2 else 1.0
+        log_abs = float(np.log(np.abs(valid)).sum())
+        if not np.isfinite(log_abs) or log_abs > np.log(np.finfo(np.float64).max):
+            return np.nan
+        return sign * float(np.exp(log_abs))
+
+    return (
+        pl.col(_VAL)
+        .rolling_map(_fn, window_size=w, min_samples=min_periods)
+        .over(_INST, order_by=_TS)
+    )
+
+
+def _rolling_median_abs_dev_expr(
+    w: int,
+    *,
+    min_periods: int = 1,
+    scale: float = 1.0,
+) -> pl.Expr:
+    """Median Absolute Deviation：median(|x_i - median(window)|)。"""
 
     def _fn(arr: np.ndarray) -> float:
         arr = np.asarray(arr, dtype=np.float64)
         valid = arr[np.isfinite(arr)]
         if valid.size == 0:
             return np.nan
-        if np.any(valid == 0.0):
-            return 0.0
-        neg_cnt = int(np.sum(valid < 0))
-        sign = -1.0 if neg_cnt % 2 else 1.0
-        return sign * float(np.exp(np.log(np.abs(valid)).sum()))
-
-    return pl.col(_VAL).rolling_map(_fn, window_size=w, min_samples=1).over(_INST, order_by=_TS)
-
-
-def _rolling_median_abs_dev_expr(w: int) -> pl.Expr:
-    """Median Absolute Deviation：median(|x_i - median(window)|)。"""
-
-    def _fn(arr: np.ndarray) -> float:
-        valid = arr[np.isfinite(arr)]
-        if valid.size == 0:
-            return np.nan
         med = float(np.median(valid))
-        return float(np.median(np.abs(valid - med)))
+        return float(scale) * float(np.median(np.abs(valid - med)))
 
-    return pl.col(_VAL).rolling_map(_fn, window_size=w, min_samples=1).over(_INST, order_by=_TS)
+    return (
+        pl.col(_VAL)
+        .rolling_map(_fn, window_size=w, min_samples=min_periods)
+        .over(_INST, order_by=_TS)
+    )
 
 
 def _rolling_mean_abs_dev_expr(w: int) -> pl.Expr:
@@ -2012,6 +2035,12 @@ def _compile_polars_impl(
             joined = val.join(grp.rename({_VAL: _GRP}), on=[_TS, _INST], how="left")
             over_keys = (_TS, _GRP)
         else:
+            if op == "group_percentile":
+                # Audited semantics require explicit group labels. Returning
+                # unsupported here lets the engine use the audited bridge,
+                # which raises instead of silently treating the whole cross
+                # section as one group.
+                return None
             joined = val.with_columns(pl.lit(1.0).alias(_GRP))
             over_keys = (_TS, _GRP)
         if op == "group_percentile":
@@ -2019,9 +2048,13 @@ def _compile_polars_impl(
             pos_p = _literal_value(node, 1)
             if pos_p is not None:
                 p = pos_p
+            side = str(node.attrs.get("side", "top")).lower()
+            if side not in {"top", "bottom"}:
+                return None
             n = pl.col(_VAL).count().over(*over_keys, order_by=_INST)
+            rank_input = pl.col(_VAL) if side == "bottom" else -pl.col(_VAL)
             frac = (
-                pl.col(_VAL).rank(method="average").over(*over_keys, order_by=_INST)
+                rank_input.rank(method="average").over(*over_keys, order_by=_INST)
                 / pl.when(n > 0).then(n.cast(pl.Float64)).otherwise(None)
             )
             expr = (
@@ -2332,20 +2365,16 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        w = _window_int(node)
-        tmp = inner.with_columns(
-            pl.col(_VAL)
-            .rolling_median(window_size=w, min_samples=1)
-            .over(_INST, order_by=_TS)
-            .alias("_med")
+        spec = _window_spec(node)
+        mp = spec.min_periods if node.attrs.get("min_periods") is not None else spec.size
+        scale = _float_attr(node, "scale", default=1.0)
+        return inner.with_columns(
+            _rolling_median_abs_dev_expr(
+                spec.size,
+                min_periods=mp,
+                scale=scale,
+            ).alias(_VAL)
         )
-        return tmp.with_columns(
-            (pl.col(_VAL) - pl.col("_med"))
-            .abs()
-            .rolling_mean(window_size=w, min_samples=1)
-            .over(_INST, order_by=_TS)
-            .alias(_VAL)
-        ).select(_TS, _INST, _VAL)
 
     if op == "ts_quantile":
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
@@ -2362,8 +2391,11 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        w = _window_int(node)
-        return inner.with_columns(_rolling_product_expr(w).alias(_VAL))
+        spec = _window_spec(node)
+        mp = spec.min_periods if node.attrs.get("min_periods") is not None else spec.size
+        return inner.with_columns(
+            _rolling_product_expr(spec.size, min_periods=mp).alias(_VAL)
+        )
 
     if op == "ts_median_abs_deviation":
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)

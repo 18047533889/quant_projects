@@ -362,7 +362,9 @@
 - name: eq
   scope: elementwise
   frequency: any
-  input_fields: []
+  input_fields:
+  - x
+  - y
   output_type: series
   pit_safe: true
   includes_current: true
@@ -374,7 +376,7 @@
   backends:
   - pandas_numpy
   - polars
-  description: Basic runtime operator
+  description: eq comparison with symmetric scalar broadcasting
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
@@ -467,7 +469,9 @@
 - name: ge
   scope: elementwise
   frequency: any
-  input_fields: []
+  input_fields:
+  - x
+  - y
   output_type: series
   pit_safe: true
   includes_current: true
@@ -479,7 +483,7 @@
   backends:
   - pandas_numpy
   - polars
-  description: Basic runtime operator
+  description: ge comparison with symmetric scalar broadcasting
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
@@ -546,29 +550,6 @@
   - pandas_numpy
   - polars
   description: 在指定分组内对股票进行归一化到[0,1]
-  execution_kind: primitive
-  production_policy: allowed
-  lowering_available: false
-  dual_backend_target: true
-- name: group_percentile
-  scope: cross_sectional
-  frequency: any
-  input_fields:
-  - x
-  - group
-  - p
-  output_type: series
-  pit_safe: true
-  includes_current: true
-  lookback: null
-  min_periods: null
-  nan_policy: propagate
-  status: research
-  allow_in_production: true
-  backends:
-  - pandas_numpy
-  - polars
-  description: 判断股票在组内的分位位置，返回0或1
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
@@ -665,7 +646,9 @@
 - name: gt
   scope: elementwise
   frequency: any
-  input_fields: []
+  input_fields:
+  - x
+  - y
   output_type: series
   pit_safe: true
   includes_current: true
@@ -677,7 +660,7 @@
   backends:
   - pandas_numpy
   - polars
-  description: Basic runtime operator
+  description: gt comparison with symmetric scalar broadcasting
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
@@ -747,7 +730,9 @@
 - name: le
   scope: elementwise
   frequency: any
-  input_fields: []
+  input_fields:
+  - x
+  - y
   output_type: series
   pit_safe: true
   includes_current: true
@@ -759,7 +744,7 @@
   backends:
   - pandas_numpy
   - polars
-  description: Basic runtime operator
+  description: le comparison with symmetric scalar broadcasting
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
@@ -809,7 +794,9 @@
 - name: lt
   scope: elementwise
   frequency: any
-  input_fields: []
+  input_fields:
+  - x
+  - y
   output_type: series
   pit_safe: true
   includes_current: true
@@ -821,7 +808,7 @@
   backends:
   - pandas_numpy
   - polars
-  description: Basic runtime operator
+  description: lt comparison with symmetric scalar broadcasting
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
@@ -915,7 +902,9 @@
 - name: ne
   scope: elementwise
   frequency: any
-  input_fields: []
+  input_fields:
+  - x
+  - y
   output_type: series
   pit_safe: true
   includes_current: true
@@ -927,7 +916,7 @@
   backends:
   - pandas_numpy
   - polars
-  description: Basic runtime operator
+  description: ne comparison with symmetric scalar broadcasting
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
@@ -1055,7 +1044,7 @@
   backends:
   - pandas_numpy
   - polars
-  description: 安全除法：|y|<=epsilon 时返回 default
+  description: 支持 Series/标量双向广播的安全除法
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false

@@ -73,8 +73,8 @@ def main() -> int:
         P1_BINARY_TS_CANONICALS,
         P1_GROUP_CANONICALS,
         P1_ROBUST_CANONICALS,
-        P2_COMPLEX_ROLLING_CANONICALS,
-        P2_TECHNICAL_CANONICALS,
+        P2_MAP_GROUPS_CANONICALS,
+        P2_TECHNICAL_RESEARCH_ONLY,
     )
 
     batches = {
@@ -82,8 +82,8 @@ def main() -> int:
         "P1_group": sorted(P1_GROUP_CANONICALS),
         "P1_robust": sorted(P1_ROBUST_CANONICALS),
         "P1_binary_ts": sorted(P1_BINARY_TS_CANONICALS),
-        "P2_rolling": sorted(P2_COMPLEX_ROLLING_CANONICALS),
-        "P2_technical": sorted(P2_TECHNICAL_CANONICALS),
+        "P2_rolling": sorted(P2_MAP_GROUPS_CANONICALS),
+        "P2_technical": sorted(P2_TECHNICAL_RESEARCH_ONLY),
     }
     all_canons = sorted({c for batch in batches.values() for c in batch})
     rows = _matrix_rows(all_canons)
