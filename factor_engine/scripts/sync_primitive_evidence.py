@@ -35,9 +35,13 @@ def _collect_cases() -> dict:
     active = set(OperatorRegistry._operators)
 
     def exact_active(*case_groups):
-        # Certification never travels through an alias.  A renamed canonical
-        # must obtain a test case under its new exact name.
-        return [name for name in merge_case_lists(*case_groups) if name in active]
+        # Case entries are ``(canonical, builder)`` tuples. Certification never
+        # travels through aliases, so retain only exact active canonical names.
+        return [
+            (name, builder)
+            for name, builder in merge_case_lists(*case_groups)
+            if name in active
+        ]
 
     payload = build_case_registry_payload(
         polars_reference=exact_active(MEMORY_CASES, POLARS_BULK_CASES),
@@ -49,6 +53,14 @@ def _collect_cases() -> dict:
         duckdb_inf_edge=exact_active(DUCKDB_IEEE_INF_CASES),
         no_fallback=exact_active(NO_PANDAS_CASES),
     )
+    tracked_keys = (
+        "polars_reference_parity", "polars_edge_verified",
+        "duckdb_reference_parity", "duckdb_edge_verified",
+        "no_fallback_verified",
+    )
+    if any(not payload.get(key) for key in tracked_keys):
+        empty = [key for key in tracked_keys if not payload.get(key)]
+        raise RuntimeError(f"active evidence case sets unexpectedly empty: {empty}")
     payload["active_registry_count"] = len(active)
     payload["exact_canonical_only"] = True
     return payload
