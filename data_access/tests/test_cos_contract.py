@@ -86,9 +86,3 @@ def test_event_asof_uses_publication_time_and_staleness():
     ).sort_values("decision_timestamp")
     assert result["TotalAssets"].tolist() == [100.0, 120.0]
     assert (result["fundamental_staleness_days"] >= 0).all()
-
-
-from data_access.tests.test_cos_factor_runtime import (  # noqa: E402,F401
-    test_load_columns_cannot_bypass_event_sparse_and_unit_contracts,
-    test_load_factor_columns_normalizes_ashare_return_before_panelization,
-)
