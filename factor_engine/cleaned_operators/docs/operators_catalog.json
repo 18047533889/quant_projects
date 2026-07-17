@@ -1,111 +1,20 @@
 {
   "schema_version": 2,
-  "canonical_count": 370,
+  "canonical_count": 215,
   "surface_counts": {
-    "daily": 246,
-    "research": 122,
+    "daily": 188,
+    "research": 24,
     "unsafe": 0,
     "legacy": 1,
-    "internal": 1,
+    "internal": 2,
     "unclassified": 0
   },
   "operators": [
-    {
-      "canonical": "ACF",
-      "surface": "research",
-      "aliases": [
-        "acf"
-      ],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "aggregate",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
     {
       "canonical": "ADX",
       "surface": "daily",
       "aliases": [
         "ts_adx"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "ADXR",
-      "surface": "daily",
-      "aliases": [
-        "ts_adxr"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": 2,
-      "lag": 0
-    },
-    {
-      "canonical": "AROON",
-      "surface": "daily",
-      "aliases": [
-        "ts_aroon"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": 2,
-      "lag": 0
-    },
-    {
-      "canonical": "AROON_down",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": 2,
-      "lag": 0
-    },
-    {
-      "canonical": "AROON_up",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": 2,
-      "lag": 0
-    },
-    {
-      "canonical": "ATR",
-      "surface": "daily",
-      "aliases": [
-        "ts_atr"
       ],
       "backends": [
         "pandas_numpy",
@@ -132,94 +41,6 @@
       "scope": "ts",
       "lookback": null,
       "min_periods": 2,
-      "lag": 0
-    },
-    {
-      "canonical": "BollingerBands",
-      "surface": "daily",
-      "aliases": [
-        "ts_bbands"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "BollingerLower",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "BollingerUpper",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "CCI",
-      "surface": "daily",
-      "aliases": [
-        "ts_cci"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "unknown",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "DPO",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "KAMA",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": null,
       "lag": 0
     },
     {
@@ -267,86 +88,6 @@
       "lag": 0
     },
     {
-      "canonical": "MOM",
-      "surface": "daily",
-      "aliases": [
-        "ts_mom"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "Mode",
-      "surface": "research",
-      "aliases": [
-        "mode"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "aggregate",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "OBV",
-      "surface": "daily",
-      "aliases": [
-        "ts_obv"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "ROC",
-      "surface": "daily",
-      "aliases": [
-        "ts_roc"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "RSI",
-      "surface": "daily",
-      "aliases": [
-        "ts_rsi"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "unknown",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
       "canonical": "RSI_WILDER",
       "surface": "daily",
       "aliases": [
@@ -361,88 +102,6 @@
       "scope": "ts",
       "lookback": null,
       "min_periods": 2,
-      "lag": 0
-    },
-    {
-      "canonical": "StochasticD",
-      "surface": "daily",
-      "aliases": [
-        "ts_stochf"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "StochasticK",
-      "surface": "daily",
-      "aliases": [
-        "ts_stoch"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "TRIX",
-      "surface": "daily",
-      "aliases": [
-        "ts_trix"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "WMA",
-      "surface": "daily",
-      "aliases": [
-        "ts_wma",
-        "wma"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars",
-        "sql"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "WilliamsR",
-      "surface": "daily",
-      "aliases": [
-        "ts_willr"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": 1,
       "lag": 0
     },
     {
@@ -492,19 +151,6 @@
       "lag": 0
     },
     {
-      "canonical": "aggr_top_n",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
       "canonical": "and_",
       "surface": "daily",
       "aliases": [],
@@ -548,34 +194,6 @@
       "lag": 0
     },
     {
-      "canonical": "at_imax",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "aggregate",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "at_imin",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "aggregate",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
       "canonical": "atan",
       "surface": "daily",
       "aliases": [],
@@ -604,137 +222,6 @@
       "lag": 0
     },
     {
-      "canonical": "autocorr",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "aggregate",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "avg2",
-      "surface": "research",
-      "aliases": [
-        "AVG2"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": 2,
-      "lag": 0
-    },
-    {
-      "canonical": "bartlett_test",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "hypothesis",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "blom_transform",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "c_count",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars",
-        "sql"
-      ],
-      "pit_safe": true,
-      "scope": "cs",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "c_mean",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars",
-        "sql"
-      ],
-      "pit_safe": true,
-      "scope": "cs",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "c_std",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars",
-        "sql"
-      ],
-      "pit_safe": true,
-      "scope": "cs",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "c_sum",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars",
-        "sql"
-      ],
-      "pit_safe": true,
-      "scope": "cs",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "causal_linear_extrapolate",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": 2,
-      "lag": 0
-    },
-    {
       "canonical": "cbrt",
       "surface": "daily",
       "aliases": [],
@@ -749,58 +236,6 @@
       "lag": 0
     },
     {
-      "canonical": "cdf_chi2",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "aggregate",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "cdf_f",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "aggregate",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "cdf_normal",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "aggregate",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "cdf_t",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "aggregate",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
       "canonical": "ceil",
       "surface": "daily",
       "aliases": [],
@@ -811,19 +246,6 @@
       ],
       "pit_safe": true,
       "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "chi_square_test",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "hypothesis",
       "lookback": null,
       "min_periods": null,
       "lag": 0
@@ -849,20 +271,6 @@
       "lag": 0
     },
     {
-      "canonical": "close_gap",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": true,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
       "canonical": "coalesce",
       "surface": "daily",
       "aliases": [
@@ -880,74 +288,8 @@
       "lag": 0
     },
     {
-      "canonical": "complex",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "conj",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
       "canonical": "constant",
       "surface": "internal",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "convolve",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "corr_test",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": true,
-      "scope": "hypothesis",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "correlate",
-      "surface": "research",
       "aliases": [],
       "backends": [
         "pandas_numpy"
@@ -1015,21 +357,6 @@
       "lag": 0
     },
     {
-      "canonical": "count",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars",
-        "sql"
-      ],
-      "pit_safe": false,
-      "scope": "aggregate",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
       "canonical": "cs_bucket",
       "surface": "daily",
       "aliases": [],
@@ -1042,6 +369,23 @@
       "scope": "cs",
       "lookback": null,
       "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "cs_count",
+      "surface": "daily",
+      "aliases": [
+        "c_count"
+      ],
+      "backends": [
+        "pandas_numpy",
+        "polars",
+        "sql"
+      ],
+      "pit_safe": false,
+      "scope": "cs",
+      "lookback": 0,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -1060,6 +404,34 @@
       "scope": "cs",
       "lookback": null,
       "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "cs_fill_mean",
+      "surface": "daily",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "pit_safe": true,
+      "scope": "cs",
+      "lookback": 0,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "cs_fill_median",
+      "surface": "daily",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "pit_safe": true,
+      "scope": "cs",
+      "lookback": 0,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -1090,6 +462,23 @@
       "scope": "cs",
       "lookback": null,
       "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "cs_mean",
+      "surface": "daily",
+      "aliases": [
+        "c_mean"
+      ],
+      "backends": [
+        "pandas_numpy",
+        "polars",
+        "sql"
+      ],
+      "pit_safe": false,
+      "scope": "cs",
+      "lookback": 0,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -1154,6 +543,20 @@
       "lag": 0
     },
     {
+      "canonical": "cs_rank_gaussian",
+      "surface": "daily",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "pit_safe": true,
+      "scope": "cs",
+      "lookback": 0,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
       "canonical": "cs_regression",
       "surface": "daily",
       "aliases": [],
@@ -1181,6 +584,40 @@
       "scope": "cs",
       "lookback": null,
       "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "cs_std",
+      "surface": "daily",
+      "aliases": [
+        "c_std"
+      ],
+      "backends": [
+        "pandas_numpy",
+        "polars",
+        "sql"
+      ],
+      "pit_safe": false,
+      "scope": "cs",
+      "lookback": 0,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "cs_sum",
+      "surface": "daily",
+      "aliases": [
+        "c_sum"
+      ],
+      "backends": [
+        "pandas_numpy",
+        "polars",
+        "sql"
+      ],
+      "pit_safe": false,
+      "scope": "cs",
+      "lookback": 0,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -1226,159 +663,6 @@
       "lag": 0
     },
     {
-      "canonical": "cum_count",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "cum_delta",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars",
-        "sql"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "cum_first",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "cum_positive_streak",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "cum_prod",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars",
-        "sql"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "cum_top_n_avg",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "cum_top_n_sum",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "cumulative_returns",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "unknown",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "current_ratio",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": true,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "debt_to_equity",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": true,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "decimate",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
       "canonical": "digital_count",
       "surface": "research",
       "aliases": [],
@@ -1388,20 +672,6 @@
       ],
       "pit_safe": false,
       "scope": "ts",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "div_or_default",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "sql"
-      ],
-      "pit_safe": false,
-      "scope": "unknown",
       "lookback": null,
       "min_periods": null,
       "lag": 0
@@ -1447,47 +717,6 @@
       "scope": "ts",
       "lookback": null,
       "min_periods": 3,
-      "lag": 0
-    },
-    {
-      "canonical": "dropna",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "durbin_watson_test",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "hypothesis",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "eig",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
       "lag": 0
     },
     {
@@ -1609,175 +838,15 @@
       "lag": 0
     },
     {
-      "canonical": "expanding_max",
+      "canonical": "ffill_limit",
       "surface": "daily",
-      "aliases": [
-        "cum_max",
-        "cumulative_max"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars",
-        "sql"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "expanding_mean",
-      "surface": "daily",
-      "aliases": [
-        "avg",
-        "cum_avg",
-        "cumulative_mean"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars",
-        "sql"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "expanding_min",
-      "surface": "daily",
-      "aliases": [
-        "cum_min",
-        "cumulative_min"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars",
-        "sql"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "expanding_rank",
-      "surface": "daily",
-      "aliases": [
-        "cum_rank"
-      ],
+      "aliases": [],
       "backends": [
         "pandas_numpy",
         "polars"
       ],
       "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "expanding_std",
-      "surface": "daily",
-      "aliases": [
-        "cum_std"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars",
-        "sql"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "expanding_sum",
-      "surface": "daily",
-      "aliases": [
-        "cum_sum"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars",
-        "sql"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "expanding_zscore",
-      "surface": "daily",
-      "aliases": [
-        "cum_standardize"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "ffill",
-      "surface": "daily",
-      "aliases": [
-        "FillForward",
-        "cum_last",
-        "fillna_forward",
-        "last",
-        "last_not_null"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars",
-        "sql"
-      ],
-      "pit_safe": true,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "fft",
-      "surface": "research",
-      "aliases": [
-        "dft"
-      ],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "fillna",
-      "surface": "daily",
-      "aliases": [
-        "FillNA"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars",
-        "sql"
-      ],
-      "pit_safe": true,
-      "scope": "elementwise",
+      "scope": "unknown",
       "lookback": null,
       "min_periods": null,
       "lag": 0
@@ -1795,74 +864,6 @@
       "scope": "elementwise",
       "lookback": null,
       "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "filter_bandpass",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "filter_highpass",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "filter_lowpass",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "filter_notch",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "first_not_null",
-      "surface": "daily",
-      "aliases": [
-        "first"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "aggregate",
-      "lookback": null,
-      "min_periods": 1,
       "lag": 0
     },
     {
@@ -1937,33 +938,6 @@
       ],
       "pit_safe": true,
       "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "geometric_mean",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "granger_causality",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "hypothesis",
       "lookback": null,
       "min_periods": null,
       "lag": 0
@@ -2193,34 +1167,6 @@
       "lag": 0
     },
     {
-      "canonical": "harmonic_mean",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "hump_decay",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
       "canonical": "identity",
       "surface": "daily",
       "aliases": [],
@@ -2260,49 +1206,6 @@
       "scope": "ts",
       "lookback": null,
       "min_periods": 5,
-      "lag": 0
-    },
-    {
-      "canonical": "ifft",
-      "surface": "research",
-      "aliases": [
-        "idft"
-      ],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "ifnan",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "imag",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
       "lag": 0
     },
     {
@@ -2439,71 +1342,6 @@
       "lag": 0
     },
     {
-      "canonical": "jarque_bera_test",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "hypothesis",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "kendall_corr_test",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "hypothesis",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "kpss_test",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "hypothesis",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "ks_test",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "hypothesis",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "lasso",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "aggregate",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
       "canonical": "le",
       "surface": "daily",
       "aliases": [],
@@ -2528,32 +1366,6 @@
       ],
       "pit_safe": false,
       "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "levene_test",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "hypothesis",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "lilliefors_test",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "hypothesis",
       "lookback": null,
       "min_periods": null,
       "lag": 0
@@ -2620,35 +1432,6 @@
       "lag": 0
     },
     {
-      "canonical": "log_fill_invalid",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "sql"
-      ],
-      "pit_safe": false,
-      "scope": "unknown",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "log_returns",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars",
-        "sql"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": 2,
-      "lag": 1
-    },
-    {
       "canonical": "lt",
       "surface": "daily",
       "aliases": [],
@@ -2659,124 +1442,6 @@
       ],
       "pit_safe": true,
       "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "lu_decompose",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "mat_add",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "mat_determinant",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "mat_inverse",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "mat_multiply",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "mat_rank",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "mat_subtract",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "mat_transpose",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "max_drawdown",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "unknown",
       "lookback": null,
       "min_periods": null,
       "lag": 0
@@ -2957,22 +1622,6 @@
       "lag": 0
     },
     {
-      "canonical": "nan_to_num",
-      "surface": "daily",
-      "aliases": [
-        "NAN_TO_NUM"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "sql"
-      ],
-      "pit_safe": true,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
       "canonical": "ne",
       "surface": "daily",
       "aliases": [],
@@ -3035,33 +1684,6 @@
       "lag": 0
     },
     {
-      "canonical": "open_gap",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 1
-    },
-    {
-      "canonical": "operating_margin",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": true,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
       "canonical": "or_",
       "surface": "daily",
       "aliases": [],
@@ -3077,81 +1699,42 @@
       "lag": 0
     },
     {
-      "canonical": "pacf",
-      "surface": "research",
+      "canonical": "period_average",
+      "surface": "daily",
       "aliases": [],
       "backends": [
         "pandas_numpy"
       ],
-      "pit_safe": false,
-      "scope": "aggregate",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "pca",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
+      "pit_safe": true,
+      "scope": "unknown",
       "lookback": null,
       "min_periods": null,
       "lag": 0
     },
     {
-      "canonical": "pdf_chi2",
-      "surface": "research",
+      "canonical": "period_cagr",
+      "surface": "daily",
       "aliases": [],
       "backends": [
         "pandas_numpy"
       ],
-      "pit_safe": false,
-      "scope": "aggregate",
+      "pit_safe": true,
+      "scope": "unknown",
       "lookback": null,
-      "min_periods": 1,
+      "min_periods": null,
       "lag": 0
     },
     {
-      "canonical": "pdf_f",
-      "surface": "research",
+      "canonical": "period_change",
+      "surface": "daily",
       "aliases": [],
       "backends": [
         "pandas_numpy"
       ],
-      "pit_safe": false,
-      "scope": "aggregate",
+      "pit_safe": true,
+      "scope": "unknown",
       "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "pdf_normal",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "aggregate",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "pdf_t",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "aggregate",
-      "lookback": null,
-      "min_periods": 1,
+      "min_periods": null,
       "lag": 0
     },
     {
@@ -3167,32 +1750,6 @@
       "scope": "ts",
       "lookback": null,
       "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "phase",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "polar",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
       "lag": 0
     },
     {
@@ -3227,71 +1784,14 @@
       "lag": 0
     },
     {
-      "canonical": "product",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "aggregate",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
       "canonical": "protected_div",
-      "surface": "daily",
+      "surface": "internal",
       "aliases": [],
       "backends": [
         "pandas_numpy",
         "sql"
       ],
       "pit_safe": true,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "protected_log",
-      "surface": "daily",
-      "aliases": [
-        "log_clip_domain"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "sql"
-      ],
-      "pit_safe": true,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "protected_sqrt",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars",
-        "sql"
-      ],
-      "pit_safe": true,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "qr_decompose",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
       "scope": "elementwise",
       "lookback": null,
       "min_periods": null,
@@ -3312,49 +1812,8 @@
       "lag": 0
     },
     {
-      "canonical": "quantile_normal",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "aggregate",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "quantile_t",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "aggregate",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "quarter",
-      "surface": "research",
-      "aliases": [
-        "QUARTER"
-      ],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
       "canonical": "quarter_from_cumulative",
-      "surface": "research",
+      "surface": "daily",
       "aliases": [
         "quarter_from_cumulative"
       ],
@@ -3363,35 +1822,6 @@
       ],
       "pit_safe": true,
       "scope": "ts",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "quick_ratio",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": true,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "r_squared",
-      "surface": "research",
-      "aliases": [
-        "R2"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "aggregate",
       "lookback": null,
       "min_periods": 1,
       "lag": 0
@@ -3437,46 +1867,6 @@
       "lag": 0
     },
     {
-      "canonical": "rank_transform",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "rankavg_transform",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "real",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
       "canonical": "real_turnover_rate",
       "surface": "daily",
       "aliases": [],
@@ -3488,35 +1878,6 @@
       "scope": "elementwise",
       "lookback": null,
       "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "regress",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "aggregate",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "residual",
-      "surface": "research",
-      "aliases": [
-        "Residual"
-      ],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "aggregate",
-      "lookback": null,
-      "min_periods": 1,
       "lag": 0
     },
     {
@@ -3545,19 +1906,6 @@
       "scope": "elementwise",
       "lookback": null,
       "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "ridge",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "aggregate",
-      "lookback": null,
-      "min_periods": 1,
       "lag": 0
     },
     {
@@ -3592,188 +1940,6 @@
       "scope": "elementwise",
       "lookback": null,
       "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "row_avg",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "cs",
-      "lookback": 0,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "row_beta",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "cs",
-      "lookback": 0,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "row_corr",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "cs",
-      "lookback": 0,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "row_count",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "cs",
-      "lookback": 0,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "row_kurt",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "cs",
-      "lookback": 0,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "row_max",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "cs",
-      "lookback": 0,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "row_median",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "cs",
-      "lookback": 0,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "row_min",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "cs",
-      "lookback": 0,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "row_prod",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "cs",
-      "lookback": 0,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "row_skew",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "cs",
-      "lookback": 0,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "row_std",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "cs",
-      "lookback": 0,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "row_sum",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "cs",
-      "lookback": 0,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "row_var",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": false,
-      "scope": "cs",
-      "lookback": 0,
-      "min_periods": 1,
       "lag": 0
     },
     {
@@ -3835,33 +2001,6 @@
       ],
       "pit_safe": false,
       "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "sem",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "aggregate",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "sharpe_ratio",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
       "lookback": null,
       "min_periods": null,
       "lag": 0
@@ -3988,19 +2127,6 @@
       "lag": 0
     },
     {
-      "canonical": "spearman_corr_test",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "hypothesis",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
       "canonical": "sqrt",
       "surface": "daily",
       "aliases": [
@@ -4047,45 +2173,6 @@
       "lag": 0
     },
     {
-      "canonical": "stationarity_test",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "hypothesis",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "std_agg",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "aggregate",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "stdp",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "aggregate",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
       "canonical": "subtract",
       "surface": "daily",
       "aliases": [],
@@ -4095,32 +2182,6 @@
         "sql"
       ],
       "pit_safe": true,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "sum_agg",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "aggregate",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "svd",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
       "scope": "elementwise",
       "lookback": null,
       "min_periods": null,
@@ -4177,6 +2238,20 @@
         "polars"
       ],
       "pit_safe": false,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "true_range",
+      "surface": "daily",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "pit_safe": true,
       "scope": "ts",
       "lookback": null,
       "min_periods": null,
@@ -4402,6 +2477,7 @@
       "aliases": [
         "DECAY_LINEAR",
         "TS_DECAY_LINEAR",
+        "WMA",
         "decay_linear",
         "ts_decay",
         "ts_decay_linear"
@@ -4520,9 +2596,12 @@
     {
       "canonical": "ts_log_return",
       "surface": "daily",
-      "aliases": [],
+      "aliases": [
+        "log_returns"
+      ],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "sql"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -5183,62 +3262,8 @@
       "lag": 0
     },
     {
-      "canonical": "ttest_one_sample",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "hypothesis",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "ttest_paired",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "hypothesis",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "ttest_two_samples",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "hypothesis",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "ttm",
-      "surface": "research",
-      "aliases": [
-        "TTM"
-      ],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
       "canonical": "ttm_from_cumulative",
-      "surface": "research",
+      "surface": "daily",
       "aliases": [
         "ttm_from_cumulative"
       ],
@@ -5253,7 +3278,7 @@
     },
     {
       "canonical": "ttm_from_quarterly",
-      "surface": "research",
+      "surface": "daily",
       "aliases": [
         "ttm_from_quarterly"
       ],
@@ -5267,183 +3292,7 @@
       "lag": 0
     },
     {
-      "canonical": "tukey_transform",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
       "canonical": "unitize",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "unwrap",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "van_der_waerden_transform",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "varp",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "aggregate",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "volatility",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars",
-        "sql"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": 2,
-      "lag": 0
-    },
-    {
-      "canonical": "vp_weighted_price",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "vpmacd",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "vpmacd_signal",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "vwap",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars",
-        "sql"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "wavelet",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "wavelet_denoise",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "elementwise",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "wavg",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "aggregate",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "weighted_mean",
       "surface": "daily",
       "aliases": [],
       "backends": [
@@ -5508,36 +3357,8 @@
       "lag": 0
     },
     {
-      "canonical": "wsum",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "aggregate",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "yoy",
-      "surface": "research",
-      "aliases": [
-        "YOY"
-      ],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": 5,
-      "lag": 0
-    },
-    {
       "canonical": "yoy_by_period",
-      "surface": "research",
+      "surface": "daily",
       "aliases": [
         "yoy_by_period"
       ],

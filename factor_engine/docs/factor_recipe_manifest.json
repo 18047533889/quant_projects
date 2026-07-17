@@ -1,0 +1,592 @@
+{
+  "recipe_count": 41,
+  "recipes": {
+    "accruals": {
+      "category": "fundamental",
+      "description": "总应计项",
+      "expression": "safe_div_null(ttm_from_quarterly(net_income, period_id) - ttm_from_quarterly(operating_cash_flow, period_id), period_average(total_assets, period_id, 2))",
+      "name": "accruals",
+      "parameters": [
+        "net_income",
+        "operating_cash_flow",
+        "total_assets",
+        "period_id"
+      ],
+      "replacement_for": [],
+      "status": "production"
+    },
+    "adxr": {
+      "category": "technical",
+      "description": "ADX平均方向指数评级",
+      "expression": "0.5 * (ADX(high, low, close, window) + ts_delay(ADX(high, low, close, window), window))",
+      "name": "adxr",
+      "parameters": [
+        "high",
+        "low",
+        "close",
+        "window"
+      ],
+      "replacement_for": [
+        "ADXR"
+      ],
+      "status": "production"
+    },
+    "annualized_volatility": {
+      "category": "risk",
+      "description": "滚动年化波动率",
+      "expression": "ts_std(returns, window) * sqrt(ann_factor)",
+      "name": "annualized_volatility",
+      "parameters": [
+        "returns",
+        "window",
+        "ann_factor"
+      ],
+      "replacement_for": [
+        "volatility"
+      ],
+      "status": "production"
+    },
+    "aroon_down": {
+      "category": "technical",
+      "description": "距最近窗口低点的新鲜度",
+      "expression": "100 * (1 - safe_div_null(ts_argmin(low, window), window))",
+      "name": "aroon_down",
+      "parameters": [
+        "low",
+        "window"
+      ],
+      "replacement_for": [
+        "AROON_down"
+      ],
+      "status": "production"
+    },
+    "aroon_oscillator": {
+      "category": "technical",
+      "description": "Aroon上下轨差",
+      "expression": "aroon_up(high, window) - aroon_down(low, window)",
+      "name": "aroon_oscillator",
+      "parameters": [
+        "high",
+        "low",
+        "window"
+      ],
+      "replacement_for": [
+        "AROON"
+      ],
+      "status": "production"
+    },
+    "aroon_up": {
+      "category": "technical",
+      "description": "距最近窗口高点的新鲜度",
+      "expression": "100 * (1 - safe_div_null(ts_argmax(high, window), window))",
+      "name": "aroon_up",
+      "parameters": [
+        "high",
+        "window"
+      ],
+      "replacement_for": [
+        "AROON_up"
+      ],
+      "status": "production"
+    },
+    "asset_growth": {
+      "category": "fundamental",
+      "description": "资产同比增长",
+      "expression": "period_change(total_assets, period_id, 4, 'ratio')",
+      "name": "asset_growth",
+      "parameters": [
+        "total_assets",
+        "period_id"
+      ],
+      "replacement_for": [],
+      "status": "production"
+    },
+    "atr_sma": {
+      "category": "technical",
+      "description": "真实波幅简单移动平均",
+      "expression": "ts_mean(true_range(high, low, close), window)",
+      "name": "atr_sma",
+      "parameters": [
+        "high",
+        "low",
+        "close",
+        "window"
+      ],
+      "replacement_for": [
+        "ATR"
+      ],
+      "status": "optional"
+    },
+    "bollinger_lower": {
+      "category": "technical",
+      "description": "布林下轨",
+      "expression": "ts_mean(x, window) - width * ts_std(x, window)",
+      "name": "bollinger_lower",
+      "parameters": [
+        "x",
+        "window",
+        "width"
+      ],
+      "replacement_for": [
+        "BollingerLower"
+      ],
+      "status": "production"
+    },
+    "bollinger_mid": {
+      "category": "technical",
+      "description": "布林中轨",
+      "expression": "ts_mean(x, window)",
+      "name": "bollinger_mid",
+      "parameters": [
+        "x",
+        "window"
+      ],
+      "replacement_for": [
+        "BollingerBands"
+      ],
+      "status": "production"
+    },
+    "bollinger_upper": {
+      "category": "technical",
+      "description": "布林上轨",
+      "expression": "ts_mean(x, window) + width * ts_std(x, window)",
+      "name": "bollinger_upper",
+      "parameters": [
+        "x",
+        "window",
+        "width"
+      ],
+      "replacement_for": [
+        "BollingerUpper"
+      ],
+      "status": "production"
+    },
+    "capex_intensity": {
+      "category": "fundamental",
+      "description": "资本开支强度",
+      "expression": "safe_div_null(abs(ttm_from_quarterly(capex, period_id)), period_average(total_assets, period_id, 2))",
+      "name": "capex_intensity",
+      "parameters": [
+        "capex",
+        "total_assets",
+        "period_id"
+      ],
+      "replacement_for": [],
+      "status": "production"
+    },
+    "cash_conversion": {
+      "category": "fundamental",
+      "description": "现金利润转化率",
+      "expression": "safe_div_null(ttm_from_quarterly(operating_cash_flow, period_id), ttm_from_quarterly(net_income, period_id))",
+      "name": "cash_conversion",
+      "parameters": [
+        "operating_cash_flow",
+        "net_income",
+        "period_id"
+      ],
+      "replacement_for": [],
+      "status": "production"
+    },
+    "cash_profitability": {
+      "category": "fundamental",
+      "description": "经营现金流资产收益",
+      "expression": "safe_div_null(ttm_from_quarterly(operating_cash_flow, period_id), period_average(total_assets, period_id, 2))",
+      "name": "cash_profitability",
+      "parameters": [
+        "operating_cash_flow",
+        "total_assets",
+        "period_id"
+      ],
+      "replacement_for": [],
+      "status": "production"
+    },
+    "cci": {
+      "category": "technical",
+      "description": "商品通道指数",
+      "expression": "safe_div_null(typical_price - ts_mean(typical_price, window), constant * ts_mad(typical_price, window))",
+      "name": "cci",
+      "parameters": [
+        "typical_price",
+        "window",
+        "constant"
+      ],
+      "replacement_for": [
+        "CCI"
+      ],
+      "status": "optional"
+    },
+    "current_ratio": {
+      "category": "fundamental",
+      "description": "流动比率",
+      "expression": "safe_div_null(current_assets, current_liabilities)",
+      "name": "current_ratio",
+      "parameters": [
+        "current_assets",
+        "current_liabilities"
+      ],
+      "replacement_for": [
+        "current_ratio"
+      ],
+      "status": "production"
+    },
+    "debt_to_equity": {
+      "category": "fundamental",
+      "description": "负债权益比",
+      "expression": "safe_div_null(total_debt, total_equity)",
+      "name": "debt_to_equity",
+      "parameters": [
+        "total_debt",
+        "total_equity"
+      ],
+      "replacement_for": [
+        "debt_to_equity"
+      ],
+      "status": "production"
+    },
+    "dpo_causal": {
+      "category": "technical",
+      "description": "严格因果去趋势价格振荡器",
+      "expression": "close - ts_delay(ts_mean(close, window), floor(window / 2) + 1)",
+      "name": "dpo_causal",
+      "parameters": [
+        "close",
+        "window"
+      ],
+      "replacement_for": [
+        "DPO"
+      ],
+      "status": "optional"
+    },
+    "free_cash_flow_profitability": {
+      "category": "fundamental",
+      "description": "自由现金流资产收益",
+      "expression": "safe_div_null(ttm_from_quarterly(operating_cash_flow, period_id) - abs(ttm_from_quarterly(capex, period_id)), period_average(total_assets, period_id, 2))",
+      "name": "free_cash_flow_profitability",
+      "parameters": [
+        "operating_cash_flow",
+        "capex",
+        "total_assets",
+        "period_id"
+      ],
+      "replacement_for": [],
+      "status": "production"
+    },
+    "gross_profitability": {
+      "category": "fundamental",
+      "description": "毛利润资产收益",
+      "expression": "safe_div_null(ttm_from_quarterly(gross_profit, period_id), period_average(total_assets, period_id, 2))",
+      "name": "gross_profitability",
+      "parameters": [
+        "gross_profit",
+        "total_assets",
+        "period_id"
+      ],
+      "replacement_for": [],
+      "status": "production"
+    },
+    "interest_coverage": {
+      "category": "fundamental",
+      "description": "利息保障倍数",
+      "expression": "safe_div_null(ttm_from_quarterly(operating_income, period_id), abs(ttm_from_quarterly(interest_expense, period_id)))",
+      "name": "interest_coverage",
+      "parameters": [
+        "operating_income",
+        "interest_expense",
+        "period_id"
+      ],
+      "replacement_for": [],
+      "status": "production"
+    },
+    "intraday_return": {
+      "category": "price_volume",
+      "description": "开盘到收盘收益",
+      "expression": "safe_div_null(close, open) - 1",
+      "name": "intraday_return",
+      "parameters": [
+        "open",
+        "close"
+      ],
+      "replacement_for": [
+        "close_gap"
+      ],
+      "status": "production"
+    },
+    "inventory_growth": {
+      "category": "fundamental",
+      "description": "存货同比增长",
+      "expression": "period_change(inventory, period_id, 4, 'ratio')",
+      "name": "inventory_growth",
+      "parameters": [
+        "inventory",
+        "period_id"
+      ],
+      "replacement_for": [],
+      "status": "production"
+    },
+    "momentum": {
+      "category": "technical",
+      "description": "N期价格动量",
+      "expression": "ts_delta(x, window)",
+      "name": "momentum",
+      "parameters": [
+        "x",
+        "window"
+      ],
+      "replacement_for": [
+        "MOM"
+      ],
+      "status": "production"
+    },
+    "net_debt_ratio": {
+      "category": "fundamental",
+      "description": "净债务资产比",
+      "expression": "safe_div_null(short_debt + long_debt - cash, total_assets)",
+      "name": "net_debt_ratio",
+      "parameters": [
+        "short_debt",
+        "long_debt",
+        "cash",
+        "total_assets"
+      ],
+      "replacement_for": [],
+      "status": "production"
+    },
+    "operating_margin": {
+      "category": "fundamental",
+      "description": "营业利润率",
+      "expression": "safe_div_null(operating_income, revenue)",
+      "name": "operating_margin",
+      "parameters": [
+        "operating_income",
+        "revenue"
+      ],
+      "replacement_for": [
+        "operating_margin"
+      ],
+      "status": "production"
+    },
+    "operating_profitability": {
+      "category": "fundamental",
+      "description": "营业利润资产收益",
+      "expression": "safe_div_null(ttm_from_quarterly(operating_income, period_id), period_average(total_assets, period_id, 2))",
+      "name": "operating_profitability",
+      "parameters": [
+        "operating_income",
+        "total_assets",
+        "period_id"
+      ],
+      "replacement_for": [],
+      "status": "production"
+    },
+    "overnight_gap": {
+      "category": "price_volume",
+      "description": "隔夜开盘缺口",
+      "expression": "safe_div_null(open, ts_delay(close, 1)) - 1",
+      "name": "overnight_gap",
+      "parameters": [
+        "open",
+        "close"
+      ],
+      "replacement_for": [
+        "open_gap"
+      ],
+      "status": "production"
+    },
+    "quick_ratio": {
+      "category": "fundamental",
+      "description": "速动比率",
+      "expression": "safe_div_null(current_assets - inventory, current_liabilities)",
+      "name": "quick_ratio",
+      "parameters": [
+        "current_assets",
+        "inventory",
+        "current_liabilities"
+      ],
+      "replacement_for": [
+        "quick_ratio"
+      ],
+      "status": "production"
+    },
+    "rate_of_change": {
+      "category": "technical",
+      "description": "N期百分比变化",
+      "expression": "100 * ts_pct(x, window)",
+      "name": "rate_of_change",
+      "parameters": [
+        "x",
+        "window"
+      ],
+      "replacement_for": [
+        "ROC"
+      ],
+      "status": "production"
+    },
+    "rd_intensity": {
+      "category": "fundamental",
+      "description": "研发强度",
+      "expression": "safe_div_null(ttm_from_quarterly(research_development, period_id), ttm_from_quarterly(revenue, period_id))",
+      "name": "rd_intensity",
+      "parameters": [
+        "research_development",
+        "revenue",
+        "period_id"
+      ],
+      "replacement_for": [],
+      "status": "production"
+    },
+    "receivables_growth": {
+      "category": "fundamental",
+      "description": "应收账款同比增长",
+      "expression": "period_change(receivables, period_id, 4, 'ratio')",
+      "name": "receivables_growth",
+      "parameters": [
+        "receivables",
+        "period_id"
+      ],
+      "replacement_for": [],
+      "status": "production"
+    },
+    "rolling_obv": {
+      "category": "technical",
+      "description": "固定窗口成交量方向累计",
+      "expression": "ts_sum(sign(ts_delta(close, 1)) * volume, window)",
+      "name": "rolling_obv",
+      "parameters": [
+        "close",
+        "volume",
+        "window"
+      ],
+      "replacement_for": [
+        "OBV"
+      ],
+      "status": "optional"
+    },
+    "rolling_sharpe": {
+      "category": "risk",
+      "description": "滚动年化夏普",
+      "expression": "safe_div_null(ts_mean(returns, window), ts_std(returns, window)) * sqrt(ann_factor)",
+      "name": "rolling_sharpe",
+      "parameters": [
+        "returns",
+        "window",
+        "ann_factor"
+      ],
+      "replacement_for": [
+        "sharpe_ratio"
+      ],
+      "status": "production"
+    },
+    "rsi_sma": {
+      "category": "technical",
+      "description": "简单移动平均版本RSI",
+      "expression": "100 - 100 / (1 + safe_div_null(ts_mean(clip(ts_delta(close, 1), 0, inf), window), ts_mean(abs(clip(ts_delta(close, 1), -inf, 0)), window)))",
+      "name": "rsi_sma",
+      "parameters": [
+        "close",
+        "window"
+      ],
+      "replacement_for": [
+        "RSI"
+      ],
+      "status": "optional"
+    },
+    "stochastic_d": {
+      "category": "technical",
+      "description": "随机指标D值",
+      "expression": "ts_mean(100 * safe_div_null(close - ts_min(low, window), ts_max(high, window) - ts_min(low, window)), smooth_window)",
+      "name": "stochastic_d",
+      "parameters": [
+        "high",
+        "low",
+        "close",
+        "window",
+        "smooth_window"
+      ],
+      "replacement_for": [
+        "StochasticD"
+      ],
+      "status": "production"
+    },
+    "stochastic_k": {
+      "category": "technical",
+      "description": "随机指标K值",
+      "expression": "100 * safe_div_null(close - ts_min(low, window), ts_max(high, window) - ts_min(low, window))",
+      "name": "stochastic_k",
+      "parameters": [
+        "high",
+        "low",
+        "close",
+        "window"
+      ],
+      "replacement_for": [
+        "StochasticK"
+      ],
+      "status": "production"
+    },
+    "trix": {
+      "category": "technical",
+      "description": "三重EMA的一期变化率",
+      "expression": "100 * ts_pct(ts_ema(ts_ema(ts_ema(close, window), window), window), 1)",
+      "name": "trix",
+      "parameters": [
+        "close",
+        "window"
+      ],
+      "replacement_for": [
+        "TRIX"
+      ],
+      "status": "production"
+    },
+    "vpmacd": {
+      "category": "experimental",
+      "description": "量价加权MACD实验配方",
+      "expression": "experimental_vpmacd(close, volume, open, high, low, lambda_param)",
+      "name": "vpmacd",
+      "parameters": [
+        "close",
+        "volume",
+        "open",
+        "high",
+        "low",
+        "lambda_param"
+      ],
+      "replacement_for": [
+        "vp_weighted_price",
+        "vpmacd",
+        "vpmacd_signal"
+      ],
+      "status": "experimental"
+    },
+    "weighted_moving_average": {
+      "category": "technical",
+      "description": "线性衰减加权均值",
+      "expression": "ts_decay_linear(x, window)",
+      "name": "weighted_moving_average",
+      "parameters": [
+        "x",
+        "window"
+      ],
+      "replacement_for": [
+        "WMA"
+      ],
+      "status": "production"
+    },
+    "williams_r": {
+      "category": "technical",
+      "description": "Williams %R",
+      "expression": "100 * safe_div_null(close - ts_max(high, window), ts_max(high, window) - ts_min(low, window))",
+      "name": "williams_r",
+      "parameters": [
+        "high",
+        "low",
+        "close",
+        "window"
+      ],
+      "replacement_for": [
+        "WilliamsR"
+      ],
+      "status": "production"
+    }
+  },
+  "schema_version": "factor_recipe_manifest.v1"
+}
