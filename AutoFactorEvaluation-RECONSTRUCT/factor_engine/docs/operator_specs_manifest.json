@@ -1,5 +1,194 @@
 [
   {
+    "name": "ACF",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "window",
+      "lag"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "自相关系数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ADX",
+    "scope": "unknown",
+    "frequency": "any",
+    "input_fields": [
+      "high",
+      "low",
+      "close",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "平均趋向指数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ADXR",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "high",
+      "low",
+      "close",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 2,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "平滑平均趋向指数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "AROON",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "close",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 2,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "Aroon指标（Aroon Up - Aroon Down）",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "AROON_down",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "close",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 2,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "Aroon下降指标",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "AROON_up",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "close",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 2,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "Aroon上升指标",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ATR",
+    "scope": "unknown",
+    "frequency": "any",
+    "input_fields": [
+      "high",
+      "low",
+      "close",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "平均真实波幅（SMA 平滑；Wilder 版见 ATR_WILDER）",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
     "name": "ATR_WILDER",
     "scope": "time_series",
     "frequency": "any",
@@ -24,6 +213,408 @@
     "description": "Wilder 平均真实波幅",
     "execution_kind": "stateful",
     "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "BollingerBands",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "price",
+      "window",
+      "std_dev"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": true,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "布林带中轨（移动平均）",
+    "execution_kind": "composite",
+    "production_policy": "allowed",
+    "lowering_available": true,
+    "dual_backend_target": true
+  },
+  {
+    "name": "BollingerLower",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "window",
+      "std_dev"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": true,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "布林带下轨",
+    "execution_kind": "composite",
+    "production_policy": "allowed",
+    "lowering_available": true,
+    "dual_backend_target": true
+  },
+  {
+    "name": "BollingerUpper",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "window",
+      "std_dev"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": true,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "布林带上轨",
+    "execution_kind": "composite",
+    "production_policy": "allowed",
+    "lowering_available": true,
+    "dual_backend_target": true
+  },
+  {
+    "name": "CCI",
+    "scope": "unknown",
+    "frequency": "any",
+    "input_fields": [
+      "high",
+      "low",
+      "close",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "商品通道指数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "DPO",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "close",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": true,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "去趋势价格振荡器",
+    "execution_kind": "composite",
+    "production_policy": "allowed",
+    "lowering_available": true,
+    "dual_backend_target": true
+  },
+  {
+    "name": "KAMA",
+    "scope": "unknown",
+    "frequency": "any",
+    "input_fields": [
+      "close",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "考夫曼自适应移动平均",
+    "execution_kind": "stateful",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "MACD",
+    "scope": "unknown",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "fast",
+      "slow",
+      "signal"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "MACD指标 (快线-慢线)",
+    "execution_kind": "stateful",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "MACD_hist",
+    "scope": "unknown",
+    "frequency": "any",
+    "input_fields": [
+      "price",
+      "fast",
+      "slow",
+      "signal"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "MACD柱状图（MACD线 - 信号线）",
+    "execution_kind": "stateful",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "MACD_line",
+    "scope": "unknown",
+    "frequency": "any",
+    "input_fields": [
+      "price",
+      "fast",
+      "slow"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "MACD线（快线EMA - 慢线EMA）",
+    "execution_kind": "stateful",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "MACD_signal",
+    "scope": "unknown",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "fast",
+      "slow",
+      "signal"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "MACD信号线",
+    "execution_kind": "stateful",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "MOM",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "price",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": true,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "动量指标",
+    "execution_kind": "composite",
+    "production_policy": "allowed",
+    "lowering_available": true,
+    "dual_backend_target": true
+  },
+  {
+    "name": "Mode",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "众数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "OBV",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "price",
+      "volume"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": true,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "能量潮",
+    "execution_kind": "composite",
+    "production_policy": "allowed",
+    "lowering_available": true,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ROC",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "price",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": true,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "变动率指标",
+    "execution_kind": "composite",
+    "production_policy": "allowed",
+    "lowering_available": true,
+    "dual_backend_target": true
+  },
+  {
+    "name": "RSI",
+    "scope": "unknown",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "相对强弱指数（SMA 平滑；Wilder 版见 RSI_WILDER）",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
     "lowering_available": false,
     "dual_backend_target": true
   },
@@ -54,6 +645,168 @@
     "dual_backend_target": true
   },
   {
+    "name": "ts_time_slope",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "窗口内序列对时间位置的 OLS 斜率",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "StochasticD",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "high",
+      "low",
+      "close",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": true,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "随机指标%D（%K的移动平均）",
+    "execution_kind": "composite",
+    "production_policy": "allowed",
+    "lowering_available": true,
+    "dual_backend_target": true
+  },
+  {
+    "name": "StochasticK",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "high",
+      "low",
+      "close",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": true,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "随机指标%K",
+    "execution_kind": "composite",
+    "production_policy": "allowed",
+    "lowering_available": true,
+    "dual_backend_target": true
+  },
+  {
+    "name": "TRIX",
+    "scope": "unknown",
+    "frequency": "any",
+    "input_fields": [
+      "close",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "三重指数平滑移动平均变化率",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "WMA",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "计算n期加权移动平均",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "WilliamsR",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "high",
+      "low",
+      "close",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": true,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "威廉指标%R",
+    "execution_kind": "composite",
+    "production_policy": "allowed",
+    "lowering_available": true,
+    "dual_backend_target": true
+  },
+  {
     "name": "abs",
     "scope": "elementwise",
     "frequency": "any",
@@ -75,6 +828,31 @@
     "description": "计算绝对值",
     "execution_kind": "primitive",
     "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "acos",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "计算反余弦值（返回弧度）",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
     "lowering_available": false,
     "dual_backend_target": true
   },
@@ -102,6 +880,35 @@
     "dual_backend_target": true
   },
   {
+    "name": "aggr_top_n",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "aggr_func",
+      "x",
+      "sort_col",
+      "top",
+      "asc"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "自定义Top-N聚合",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
     "name": "and_",
     "scope": "elementwise",
     "frequency": "any",
@@ -121,6 +928,312 @@
     "description": "Basic runtime operator",
     "execution_kind": "primitive",
     "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "arg",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "复数相位（弧度）",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "asin",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "计算反正弦值（返回弧度）",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "at_imax",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "列最大值索引",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "at_imin",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "列最小值索引",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "atan",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "计算反正切值（返回弧度）",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "atan2",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "y",
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "计算坐标(y,x)的反正切值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "autocorr",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "lag"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "自相关系数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "avg",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "列平均值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "avg2",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "fiscal_quarter"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 2,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "当期与上期均值；可选 fiscal_quarter 限制连续报告期",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "bartlett_test",
+    "scope": "hypothesis",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "y"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "Bartlett方差齐性检验",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "beta",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "y",
+      "x",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "小写beta回归系数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "blom_transform",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "Blom变换（秩的逆正态CDF）",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
     "lowering_available": false,
     "dual_backend_target": true
   },
@@ -175,6 +1288,32 @@
     "dual_backend_target": true
   },
   {
+    "name": "c_percentile",
+    "scope": "cross_sectional",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "p"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "截面 p 分位数值（广播到各列，非百分位排名）",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
     "name": "c_std",
     "scope": "cross_sectional",
     "frequency": "any",
@@ -225,6 +1364,158 @@
     "dual_backend_target": true
   },
   {
+    "name": "causal_linear_extrapolate",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 2,
+    "nan_policy": "ffill_only",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "仅使用最近两个历史有效点线性外推缺失值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "cbrt",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "计算立方根",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "cdf_chi2",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "df"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "卡方分布累积分布函数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "cdf_f",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "d1",
+      "d2"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "F分布累积分布函数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "cdf_normal",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "mu",
+      "sigma"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "正态分布累积分布函数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "cdf_t",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "df"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "t分布累积分布函数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
     "name": "ceil",
     "scope": "elementwise",
     "frequency": "any",
@@ -246,6 +1537,32 @@
     "description": "向上取整",
     "execution_kind": "primitive",
     "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "chi_square_test",
+    "scope": "hypothesis",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "y"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "卡方检验",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
     "lowering_available": false,
     "dual_backend_target": true
   },
@@ -277,6 +1594,31 @@
     "dual_backend_target": true
   },
   {
+    "name": "close_gap",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "close",
+      "open"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "日内收益率：close / open - 1",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
     "name": "coalesce",
     "scope": "elementwise",
     "frequency": "any",
@@ -299,6 +1641,312 @@
     "description": "返回第一个非 NaN 值",
     "execution_kind": "primitive",
     "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "complex",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "real",
+      "imag"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "构造复数DataFrame",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "conj",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "复数共轭",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "constant",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "c"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "返回常量值",
+    "execution_kind": "primitive",
+    "production_policy": "permanently_forbidden",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "convolve",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "y"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "卷积",
+    "execution_kind": "external_kernel",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": false
+  },
+  {
+    "name": "corr_test",
+    "scope": "hypothesis",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "y"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "Pearson相关性检验",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "correlate",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "y"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "互相关",
+    "execution_kind": "external_kernel",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": false
+  },
+  {
+    "name": "cos",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "计算余弦值（弧度）",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "cosh",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "计算双曲余弦值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "coskewness_to_market",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "ret",
+      "benchmark_ret",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 5,
+    "nan_policy": "propagate",
+    "status": "experimental",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "相对市场的协偏度",
+    "execution_kind": "external_kernel",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": false
+  },
+  {
+    "name": "cot",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "计算余切值 (1/tan)",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "count",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "非空值计数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "cs_bucket",
+    "scope": "cross_sectional",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "buckets",
+      "ascending"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "按交易日横截面平均排名分桶",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
     "lowering_available": false,
     "dual_backend_target": true
   },
@@ -378,6 +2026,36 @@
     "dual_backend_target": true
   },
   {
+    "name": "cs_multi_resid",
+    "scope": "cross_sectional",
+    "frequency": "any",
+    "input_fields": [
+      "y",
+      "x1",
+      "x2",
+      "...",
+      "add_intercept",
+      "min_obs"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "多变量横截面 OLS 残差",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
     "name": "cs_pct_rank",
     "scope": "cross_sectional",
     "frequency": "any",
@@ -399,6 +2077,623 @@
     "description": "截面百分位排名（同 rank_pct）",
     "execution_kind": "primitive",
     "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "cs_quantile",
+    "scope": "cross_sectional",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "p"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "截面 p 分位数值（广播到各列；百分位排名见 cs_pct_rank）",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "cs_rank_01",
+    "scope": "cross_sectional",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "截面 0-1 排名（同 rank）",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "cs_regression",
+    "scope": "cross_sectional",
+    "frequency": "any",
+    "input_fields": [
+      "y",
+      "x",
+      "mode"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "截面回归: mode=0 残差, 1 beta, 2 拟合值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "cs_resid",
+    "scope": "cross_sectional",
+    "frequency": "any",
+    "input_fields": [
+      "y",
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "截面线性回归残差 y - (α + βx)",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "cs_wls_resid",
+    "scope": "cross_sectional",
+    "frequency": "any",
+    "input_fields": [
+      "y",
+      "x",
+      "weight",
+      "add_intercept",
+      "min_obs"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "加权横截面回归残差",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "csc",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "计算余割值 (1/sin)",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "cube",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "返回x的立方",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "cum_count",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "累积非空值计数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "cum_delta",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "累积变化量 x - first(x)",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "cum_first",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "截至目前的首个有效值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "cum_max",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "累积最大值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "cum_min",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "累积最小值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "cum_positive_streak",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "连续正值计数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "cum_prod",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "累积乘积",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "cum_sum",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "累积求和",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "cum_top_n_avg",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "n"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "累积前N大值均值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "cum_top_n_sum",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "n"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "累积前N大值求和",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "cumulative_returns",
+    "scope": "unknown",
+    "frequency": "any",
+    "input_fields": [
+      "price"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "累计收益率",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "current_ratio",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "current_assets",
+      "current_liabilities"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "experimental",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "流动比率：current_assets / current_liabilities（分母为 0 时 NaN）",
+    "execution_kind": "composite",
+    "production_policy": "pending",
+    "lowering_available": true,
+    "dual_backend_target": true
+  },
+  {
+    "name": "debt_to_equity",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "total_debt",
+      "total_equity"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "experimental",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "负债权益比：total_debt / total_equity（分母为 0 时 NaN）",
+    "execution_kind": "composite",
+    "production_policy": "pending",
+    "lowering_available": true,
+    "dual_backend_target": true
+  },
+  {
+    "name": "decimate",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "factor"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "降采样",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "digital_count",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "d",
+      "threshold",
+      "run"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "连续小波动片段计数",
+    "execution_kind": "external_kernel",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": false
+  },
+  {
+    "name": "div_or_default",
+    "scope": "unknown",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "y",
+      "epsilon",
+      "default"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "支持 Series/标量双向广播的填充安全除法",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "div_or_null",
+    "scope": "unknown",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "y",
+      "epsilon"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "production",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "安全除法：NULL 或 |denominator|<=epsilon 时返回 NULL。",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
     "lowering_available": false,
     "dual_backend_target": true
   },
@@ -426,6 +2721,107 @@
     "dual_backend_target": true
   },
   {
+    "name": "downside_beta",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "ret",
+      "benchmark_ret",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 3,
+    "nan_policy": "propagate",
+    "status": "experimental",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "下行 Beta：仅在 benchmark_ret < 0 子样本上估计",
+    "execution_kind": "external_kernel",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": false
+  },
+  {
+    "name": "dropna",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "删除缺失值（返回非NaN索引）",
+    "execution_kind": "primitive",
+    "production_policy": "permanently_forbidden",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "durbin_watson_test",
+    "scope": "hypothesis",
+    "frequency": "any",
+    "input_fields": [
+      "residuals"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "Durbin-Watson自相关检验",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "eig",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "特征值分解",
+    "execution_kind": "external_kernel",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": false
+  },
+  {
     "name": "eq",
     "scope": "elementwise",
     "frequency": "any",
@@ -448,6 +2844,138 @@
     "description": "eq comparison with symmetric scalar broadcasting",
     "execution_kind": "primitive",
     "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ewm",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "alpha"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "指数加权移动",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ewm_corr",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "y",
+      "span"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "指数加权相关系数",
+    "execution_kind": "stateful",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ewm_cov",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "y",
+      "span"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "指数加权协方差",
+    "execution_kind": "stateful",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ewm_std",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "span"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "EW标准差",
+    "execution_kind": "stateful",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ewm_var",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "span"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "指数加权方差",
+    "execution_kind": "stateful",
+    "production_policy": "denied",
     "lowering_available": false,
     "dual_backend_target": true
   },
@@ -477,6 +3005,206 @@
     "dual_backend_target": true
   },
   {
+    "name": "exp_neg",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "返回exp(-x)",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "expanding_max",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "扩展窗口最大值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "expanding_mean",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "扩展窗口均值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "expanding_min",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "扩展窗口最小值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "expanding_rank",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "扩展窗口排名（当前值在历史中的百分位排名）",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "expanding_std",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "扩展窗口标准差",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "expanding_sum",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "扩展窗口求和",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "expanding_zscore",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "累积Z-Score标准化",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
     "name": "ffill",
     "scope": "elementwise",
     "frequency": "any",
@@ -498,6 +3226,56 @@
     "description": "前向填充（用前值填充NaN）",
     "execution_kind": "primitive",
     "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "fft",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "快速傅里叶变换",
+    "execution_kind": "external_kernel",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": false
+  },
+  {
+    "name": "fillna",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "method"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "缺失值填充（method: 'mean', 'median', 'zero', 'ffill'）",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
     "lowering_available": false,
     "dual_backend_target": true
   },
@@ -524,6 +3302,210 @@
     "description": "常量填充",
     "execution_kind": "primitive",
     "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "filter_bandpass",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "low",
+      "high"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "带通滤波器",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "filter_highpass",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "cutoff"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "高通滤波器",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "filter_lowpass",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "cutoff"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "低通滤波器",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "filter_notch",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "freq",
+      "width"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "陷波滤波器",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "first_not_null",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "列首个非空值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "fix",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "取整数部分（向0取整）",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "flex_max",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "y_or_window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "max(x,y) 逐点比较；max(x,n) 滚动最大值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "flex_min",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "y_or_window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "min(x,y) 逐点比较；min(x,n) 滚动最小值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
     "lowering_available": false,
     "dual_backend_target": true
   },
@@ -579,6 +3561,137 @@
     "dual_backend_target": true
   },
   {
+    "name": "geometric_mean",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "几何平均数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "granger_causality",
+    "scope": "hypothesis",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "y",
+      "lag"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "Granger因果检验",
+    "execution_kind": "external_kernel",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": false
+  },
+  {
+    "name": "group_count",
+    "scope": "cross_sectional",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "group"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": 0,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "计算组内非空样本数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "group_decay_linear",
+    "scope": "cross_sectional",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "group",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "在指定分组内进行线性衰减加权，按排名赋予线性递减权重",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "group_max",
+    "scope": "cross_sectional",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "group"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": 0,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "计算组内最大值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
     "name": "group_mean",
     "scope": "cross_sectional",
     "frequency": "any",
@@ -601,6 +3714,32 @@
     "description": "计算组内均值",
     "execution_kind": "primitive",
     "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "group_min",
+    "scope": "cross_sectional",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "group"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": 0,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "计算组内最小值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
     "lowering_available": false,
     "dual_backend_target": true
   },
@@ -663,7 +3802,9 @@
     "input_fields": [
       "x",
       "group",
-      "p"
+      "p",
+      "side",
+      "missing_group_policy"
     ],
     "output_type": "series",
     "pit_safe": true,
@@ -672,14 +3813,14 @@
     "min_periods": null,
     "nan_policy": "propagate",
     "status": "research",
-    "allow_in_production": true,
+    "allow_in_production": false,
     "backends": [
       "pandas_numpy",
       "polars"
     ],
-    "description": "判断股票在组内的分位位置，返回0或1",
+    "description": "组内 top/bottom 分位掩码；默认 top。缺失分组默认报错，不静默退化为全截面。",
     "execution_kind": "primitive",
-    "production_policy": "allowed",
+    "production_policy": "denied",
     "lowering_available": false,
     "dual_backend_target": true
   },
@@ -732,6 +3873,32 @@
     "description": "计算组内标准差",
     "execution_kind": "primitive",
     "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "group_sum",
+    "scope": "cross_sectional",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "group"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": 0,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "计算组内求和",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
     "lowering_available": false,
     "dual_backend_target": true
   },
@@ -815,6 +3982,264 @@
     "dual_backend_target": true
   },
   {
+    "name": "harmonic_mean",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "调和平均数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "hump_decay",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "hump"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "阈值衰减：仅当变化量绝对值超过hump时才更新值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "identity",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "返回x不变",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "idio_skew",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "ret",
+      "benchmark_ret",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 5,
+    "nan_policy": "propagate",
+    "status": "experimental",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "特质偏度：CAPM 残差滚动偏度",
+    "execution_kind": "external_kernel",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": false
+  },
+  {
+    "name": "idio_vol",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "ret",
+      "benchmark_ret",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 5,
+    "nan_policy": "propagate",
+    "status": "experimental",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "特质波动率：CAPM 残差滚动标准差",
+    "execution_kind": "external_kernel",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": false
+  },
+  {
+    "name": "ifft",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "逆快速傅里叶变换",
+    "execution_kind": "external_kernel",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": false
+  },
+  {
+    "name": "ifnan",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "default"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "如果x为NaN则返回default",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "imag",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "取复数虚部",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "intercept",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "y",
+      "x",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "小写intercept回归截距",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "intraday_vwap_deviation",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "close",
+      "price",
+      "volume"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "experimental",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "close / session_cum_vwap(price, volume) - 1（按日 reset）",
+    "execution_kind": "stateful",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
     "name": "inverse",
     "scope": "elementwise",
     "frequency": "any",
@@ -863,6 +4288,56 @@
     "dual_backend_target": true
   },
   {
+    "name": "is_inf",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "判断是否为无穷",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "is_infinite",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "判断是否为 ±Inf",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
     "name": "is_nan",
     "scope": "elementwise",
     "frequency": "any",
@@ -884,6 +4359,186 @@
     "description": "判断是否为NaN",
     "execution_kind": "primitive",
     "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "is_not_null",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "判断是否非 NULL",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "is_null",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "判断是否为 NULL/缺失",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "jarque_bera_test",
+    "scope": "hypothesis",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "Jarque-Bera正态性检验",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "kendall_corr_test",
+    "scope": "hypothesis",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "y"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "Kendall相关性检验",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "kpss_test",
+    "scope": "hypothesis",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "KPSS平稳性检验",
+    "execution_kind": "external_kernel",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": false
+  },
+  {
+    "name": "ks_test",
+    "scope": "hypothesis",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "dist"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "KS检验",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "lasso",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "window_or_y",
+      "window",
+      "alpha"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "Lasso回归(L1正则化)，单参数时返回序列的L1正则化趋势，双参数时执行Lasso回归",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
     "lowering_available": false,
     "dual_backend_target": true
   },
@@ -914,6 +4569,84 @@
     "dual_backend_target": true
   },
   {
+    "name": "lerp",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "a",
+      "b",
+      "f"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "线性插值 a + f*(b-a)",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "levene_test",
+    "scope": "hypothesis",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "y"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "Levene方差齐性检验",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "lilliefors_test",
+    "scope": "hypothesis",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "Lilliefors正态性检验",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
     "name": "log",
     "scope": "elementwise",
     "frequency": "any",
@@ -935,6 +4668,106 @@
     "description": "计算自然对数（底数为e）",
     "execution_kind": "primitive",
     "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "log10",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "计算以10为底的对数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "log2",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "计算以2为底的对数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "log_abs",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "返回log(abs(x))",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "log_fill_invalid",
+    "scope": "unknown",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "epsilon"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "NULL/非法域填充 log(epsilon)",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
     "lowering_available": false,
     "dual_backend_target": true
   },
@@ -990,6 +4823,226 @@
     "dual_backend_target": true
   },
   {
+    "name": "lu_decompose",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "LU分解",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "mat_add",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "a",
+      "b"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "矩阵加法",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "mat_determinant",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "矩阵行列式",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "mat_inverse",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "矩阵求逆",
+    "execution_kind": "external_kernel",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": false
+  },
+  {
+    "name": "mat_multiply",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "a",
+      "b"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "矩阵乘法",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "mat_rank",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "矩阵秩",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "mat_subtract",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "a",
+      "b"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "矩阵减法",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "mat_transpose",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "矩阵转置",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "max_drawdown",
+    "scope": "unknown",
+    "frequency": "any",
+    "input_fields": [
+      "returns"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "最大回撤",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
     "name": "maximum",
     "scope": "elementwise",
     "frequency": "any",
@@ -1012,6 +5065,238 @@
     "description": "逐元素 max(x,y)",
     "execution_kind": "primitive",
     "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "micro_amihud_hf",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "close",
+      "volume"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "experimental",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "Amihud illiquidity |return|/(close*volume)",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "micro_bipower_var",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "close"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 2,
+    "nan_policy": "propagate",
+    "status": "experimental",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "Bipower variation estimator",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "micro_jump_indicator",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "close"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 2,
+    "nan_policy": "propagate",
+    "status": "experimental",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "Jump indicator max(RV-BV,0)",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "micro_kyle_lambda",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "close",
+      "volume"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 2,
+    "nan_policy": "propagate",
+    "status": "experimental",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "Kyle lambda proxy Cov(|ret|,vol)/Var(vol)",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "micro_mid_return",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "high",
+      "low"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "experimental",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "Mid-price return from (high+low)/2",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "micro_realized_vol",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "close"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 2,
+    "nan_policy": "propagate",
+    "status": "experimental",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "已实现波动率 sqrt rolling sum of squared returns (session-aware)",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "micro_spread",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "high",
+      "low",
+      "close"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "experimental",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "相对价差 (high-low)/close",
+    "execution_kind": "composite",
+    "production_policy": "pending",
+    "lowering_available": true,
+    "dual_backend_target": true
+  },
+  {
+    "name": "micro_trade_imbalance",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "close",
+      "volume"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "experimental",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "Volume-weighted return sign imbalance",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "micro_vpin",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "close",
+      "volume"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "experimental",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "Volume-synchronized |return| intensity proxy",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
     "lowering_available": false,
     "dual_backend_target": true
   },
@@ -1190,6 +5475,56 @@
     "dual_backend_target": true
   },
   {
+    "name": "open_gap",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "open",
+      "close"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "开盘缺口收益率：open / delay(close, 1) - 1",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "operating_margin",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "operating_income",
+      "revenue"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "experimental",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "营业利润率：operating_income / revenue（分母为 0 时 NaN）",
+    "execution_kind": "composite",
+    "production_policy": "pending",
+    "lowering_available": true,
+    "dual_backend_target": true
+  },
+  {
     "name": "or_",
     "scope": "elementwise",
     "frequency": "any",
@@ -1209,6 +5544,237 @@
     "description": "Basic runtime operator",
     "execution_kind": "primitive",
     "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "pacf",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "lag"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "偏自相关系数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "pca",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "n_components"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "PCA降维",
+    "execution_kind": "external_kernel",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": false
+  },
+  {
+    "name": "pdf_chi2",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "df"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "卡方分布概率密度函数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "pdf_f",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "d1",
+      "d2"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "F分布概率密度函数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "pdf_normal",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "mu",
+      "sigma"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "正态分布概率密度函数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "pdf_t",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "df"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "t分布概率密度函数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "period_lag",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "period_id",
+      "periods"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "按已披露报告期进行滞后",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "phase",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "复数相位（角度）",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "polar",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "mag",
+      "phase"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "极坐标转复数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
     "lowering_available": false,
     "dual_backend_target": true
   },
@@ -1235,6 +5801,82 @@
     "description": "计算x的y次方",
     "execution_kind": "primitive",
     "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "prev",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "取前一个值 Delay(x, 1)",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "price_spread_deviation",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "d"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "相对窗口均值偏离: x / mean(x, d) - 1",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "product",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "列连乘积",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
     "lowering_available": false,
     "dual_backend_target": true
   },
@@ -1318,6 +5960,213 @@
     "dual_backend_target": true
   },
   {
+    "name": "qr_decompose",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "QR分解",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "quantile",
+    "scope": "cross_sectional",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "bins"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "分箱/离散化",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "quantile_normal",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "p",
+      "mu",
+      "sigma"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "正态分布分位数函数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "quantile_t",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "p",
+      "df"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "t分布分位数函数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "quarter",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "fiscal_quarter"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "experimental",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "累计值转单季度；Q1/跨年用当期值，其余期用差分；可选 fiscal_quarter",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "quarter_from_cumulative",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "fiscal_quarter"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "experimental",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "累计值转单季（显式 period-aware；等同 quarter）",
+    "execution_kind": "stateful",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "quick_ratio",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "current_assets",
+      "inventory",
+      "current_liabilities"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "experimental",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "速动比率：(current_assets - inventory) / current_liabilities",
+    "execution_kind": "composite",
+    "production_policy": "pending",
+    "lowering_available": true,
+    "dual_backend_target": true
+  },
+  {
+    "name": "r_squared",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "y",
+      "x",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "R-squared决定系数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
     "name": "rank",
     "scope": "cross_sectional",
     "frequency": "any",
@@ -1343,6 +6192,33 @@
     "dual_backend_target": true
   },
   {
+    "name": "rank_corr",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "y",
+      "d"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 2,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "秩相关系数（d=0 为截面，d>0 为时序窗口）",
+    "execution_kind": "external_kernel",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": false
+  },
+  {
     "name": "rank_pct",
     "scope": "cross_sectional",
     "frequency": "any",
@@ -1364,6 +6240,240 @@
     "description": "截面 pandas 百分位排名 rank/count",
     "execution_kind": "primitive",
     "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "rank_transform",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "秩变换",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "rankavg_transform",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "平均秩变换",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "real",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "取复数实部",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "real_turnover_rate",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "volume",
+      "float_shares"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "experimental",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "真实流通盘换手率：volume / float_shares",
+    "execution_kind": "composite",
+    "production_policy": "pending",
+    "lowering_available": true,
+    "dual_backend_target": true
+  },
+  {
+    "name": "regress",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "y",
+      "x",
+      "window",
+      "retval"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "通用回归接口，支持指定返回值类型(slope/intercept/r_squared/residual)",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "residual",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "y",
+      "x",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "小写residual回归残差均值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "residual_momentum_capm",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "ret",
+      "benchmark_ret",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 5,
+    "nan_policy": "propagate",
+    "status": "experimental",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "CAPM 残差动量：窗口内回归残差之和",
+    "execution_kind": "external_kernel",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": false
+  },
+  {
+    "name": "reverse",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "Basic runtime operator",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ridge",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "window_or_y",
+      "window",
+      "alpha"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "Ridge回归(L2正则化)，单参数时返回序列的L2正则化趋势，双参数时执行Ridge回归",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
     "lowering_available": false,
     "dual_backend_target": true
   },
@@ -1395,6 +6505,386 @@
     "dual_backend_target": true
   },
   {
+    "name": "rolling_beta_to_market",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "ret",
+      "benchmark_ret",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 2,
+    "nan_policy": "propagate",
+    "status": "experimental",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "[experimental] 滚动市场 Beta；请优先使用 rolling_beta(ret, benchmark, window)",
+    "execution_kind": "external_kernel",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": false
+  },
+  {
+    "name": "round",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "k"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "四舍五入（保留k位小数）",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "row_avg",
+    "scope": "cross_sectional",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": 0,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "对每行（每个日期截面）求均值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "row_beta",
+    "scope": "cross_sectional",
+    "frequency": "any",
+    "input_fields": [
+      "y",
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": 0,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "对每行（每个日期截面）计算y对x的beta系数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "row_corr",
+    "scope": "cross_sectional",
+    "frequency": "any",
+    "input_fields": [
+      "y",
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": 0,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "对每行（每个日期截面）计算y和x的相关系数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "row_count",
+    "scope": "cross_sectional",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": 0,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "对每行（每个日期截面）计算非空值数量",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "row_kurt",
+    "scope": "cross_sectional",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": 0,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "对每行（每个日期截面）求峰度",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "row_max",
+    "scope": "cross_sectional",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": 0,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "对每行（每个日期截面）求最大值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "row_median",
+    "scope": "cross_sectional",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": 0,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "对每行（每个日期截面）求中位数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "row_min",
+    "scope": "cross_sectional",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": 0,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "对每行（每个日期截面）求最小值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "row_prod",
+    "scope": "cross_sectional",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": 0,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "对每行（每个日期截面）求乘积",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "row_skew",
+    "scope": "cross_sectional",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": 0,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "对每行（每个日期截面）求偏度",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "row_std",
+    "scope": "cross_sectional",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": 0,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "对每行（每个日期截面）求标准差",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "row_sum",
+    "scope": "cross_sectional",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": 0,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "对每行（每个日期截面）求和",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "row_var",
+    "scope": "cross_sectional",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": 0,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "对每行（每个日期截面）求方差",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
     "name": "safe_div_null",
     "scope": "elementwise",
     "frequency": "any",
@@ -1418,6 +6908,31 @@
     "description": "比率除法：numerator/denominator；NULL 或 |denom|<=epsilon → NULL",
     "execution_kind": "primitive",
     "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "saturate",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "限制x在[0, 1]范围内",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
     "lowering_available": false,
     "dual_backend_target": true
   },
@@ -1448,6 +6963,107 @@
     "dual_backend_target": true
   },
   {
+    "name": "sec",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "计算正割值 (1/cos)",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "sem",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "均值标准误",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "sharpe_ratio",
+    "scope": "unknown",
+    "frequency": "any",
+    "input_fields": [
+      "returns",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "年化夏普比率",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "sigmoid",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "Sigmoid 映射",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
     "name": "sign",
     "scope": "elementwise",
     "frequency": "any",
@@ -1469,6 +7085,184 @@
     "description": "返回符号：正数返回1，负数返回-1，零返回0",
     "execution_kind": "primitive",
     "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "signed_log",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "符号对数：sign(x) * log(|x|)",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "signed_power",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "c"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "符号保持幂：sign(x) * |x|^c",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "signed_sqrt",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "保留符号开方: sign(x)*sqrt(|x|)",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "sin",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "计算正弦值（弧度）",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "sinh",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "计算双曲正弦值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "size_neutralize",
+    "scope": "cross_sectional",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "market_cap"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": 0,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "市值中性化（对 log(market_cap) 做截面回归残差）",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "spearman_corr_test",
+    "scope": "hypothesis",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "y"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "Spearman相关性检验",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
     "lowering_available": false,
     "dual_backend_target": true
   },
@@ -1498,6 +7292,131 @@
     "dual_backend_target": true
   },
   {
+    "name": "sqrt_abs",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "返回sqrt(abs(x))",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "square",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "返回x的平方",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "stationarity_test",
+    "scope": "hypothesis",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "ADF平稳性检验",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "std_agg",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "样本标准差",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "stdp",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "总体标准差",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
     "name": "subtract",
     "scope": "elementwise",
     "frequency": "any",
@@ -1517,6 +7436,292 @@
     "description": "Basic runtime operator",
     "execution_kind": "primitive",
     "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "sum_agg",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "列求和",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "svd",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "SVD奇异值分解",
+    "execution_kind": "external_kernel",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": false
+  },
+  {
+    "name": "tail_beta",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "ret",
+      "benchmark_ret",
+      "window",
+      "q"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 3,
+    "nan_policy": "propagate",
+    "status": "experimental",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "尾部 Beta：在 benchmark_ret 最低 q 分位子样本上估计",
+    "execution_kind": "external_kernel",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": false
+  },
+  {
+    "name": "tan",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "计算正切值（弧度）",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "tanh",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "计算双曲正切值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "tm_top_n_avg",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "time_window",
+      "n"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "时间窗口内前N大值的均值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "tm_top_n_sum",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "time_window",
+      "n"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "时间窗口内前N大值的求和",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "trade_when",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "condition",
+      "signal",
+      "fallback"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "条件信号：condition为真时返回signal，否则返回fallback",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "truncate",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "k"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "截断（保留k位小数）",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ts_argmax",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "窗口最大值距当前 bar 的距离（0=当前，tie 取最近）",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ts_argmin",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "窗口最小值距当前 bar 的距离（0=当前，tie 取最近）",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
     "lowering_available": false,
     "dual_backend_target": true
   },
@@ -1575,6 +7780,58 @@
     "dual_backend_target": true
   },
   {
+    "name": "ts_bottom_n_avg",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "n"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "滚动窗口内后N小值的均值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ts_bottom_n_sum",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "n"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "滚动窗口内后N小值的求和",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
     "name": "ts_corr",
     "scope": "time_series",
     "frequency": "any",
@@ -1602,6 +7859,33 @@
     "dual_backend_target": true
   },
   {
+    "name": "ts_count_if",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "condition",
+      "window",
+      "min_periods"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "滚动统计条件为真的次数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
     "name": "ts_cov",
     "scope": "time_series",
     "frequency": "any",
@@ -1625,6 +7909,59 @@
     "description": "滚动协方差 (与m_cov相同)",
     "execution_kind": "primitive",
     "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ts_days_since",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "condition",
+      "max_lookback"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "距最近一次条件成立的交易行数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ts_decay_exp_window",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "window",
+      "alpha"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "指数加权滚动",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
     "lowering_available": false,
     "dual_backend_target": true
   },
@@ -1733,6 +8070,112 @@
     "dual_backend_target": true
   },
   {
+    "name": "ts_kurt",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "计算n期移动峰度",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ts_last_if",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "condition",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "窗口内最近一次条件成立时的值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ts_log_return",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "d"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 2,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "d 期对数收益率 ln(x_t / x_{t-d})",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ts_mad",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "window",
+      "min_periods",
+      "scale"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "滚动中位绝对偏差 median(|x-median(x)|)。",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
     "name": "ts_max",
     "scope": "time_series",
     "frequency": "any",
@@ -1759,6 +8202,59 @@
     "dual_backend_target": true
   },
   {
+    "name": "ts_max_buildup",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "d"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "窗口内持续创新高次数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ts_max_drawdown",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "window",
+      "min_periods"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 2,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "滚动窗口最大回撤",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
     "name": "ts_mean",
     "scope": "time_series",
     "frequency": "any",
@@ -1781,6 +8277,34 @@
     "description": "滚动均值 (与m_avg相同)",
     "execution_kind": "primitive",
     "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ts_mean_if",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "condition",
+      "window",
+      "min_periods"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "滚动条件均值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
     "lowering_available": false,
     "dual_backend_target": true
   },
@@ -1837,6 +8361,91 @@
     "dual_backend_target": true
   },
   {
+    "name": "ts_moment",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "d",
+      "k"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "窗口 k 阶中心矩",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ts_nth_value",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "window",
+      "n",
+      "order",
+      "min_periods"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "滚动窗口第 N 大或第 N 小有效值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ts_partial_corr",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "y",
+      "z",
+      "window",
+      "min_periods"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 3,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "控制单一变量后的滚动偏相关",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
     "name": "ts_pct",
     "scope": "time_series",
     "frequency": "any",
@@ -1863,6 +8472,114 @@
     "dual_backend_target": true
   },
   {
+    "name": "ts_poly2_coeff",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "d"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 3,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "时间二次拟合二次项系数",
+    "execution_kind": "external_kernel",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": false
+  },
+  {
+    "name": "ts_poly2_resid",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "y",
+      "x",
+      "d"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 3,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "二次拟合残差",
+    "execution_kind": "external_kernel",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": false
+  },
+  {
+    "name": "ts_product",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "window",
+      "min_periods",
+      "skipna"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "滚动乘积；保留零与负号，NaN 可跳过，溢出返回 NaN。",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ts_quantile",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "d",
+      "q"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "滚动窗口分位数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
     "name": "ts_rank",
     "scope": "time_series",
     "frequency": "any",
@@ -1885,6 +8602,89 @@
     "description": "滚动排名 (与m_rank相同)",
     "execution_kind": "primitive",
     "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ts_ratio",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "当前值与前一期之比 x / Ref(x, 1)",
+    "execution_kind": "composite",
+    "production_policy": "pending",
+    "lowering_available": true,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ts_regression_slope",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "y",
+      "x",
+      "window",
+      "lag",
+      "retval"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 3,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "pairwise-finite 滚动 OLS",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ts_regression_tstat",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "y",
+      "x",
+      "window",
+      "min_periods",
+      "add_intercept"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 3,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "滚动回归斜率 t 统计量",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
     "lowering_available": false,
     "dual_backend_target": true
   },
@@ -1916,6 +8716,32 @@
     "dual_backend_target": true
   },
   {
+    "name": "ts_skew",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "计算n期移动偏度",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
     "name": "ts_std",
     "scope": "time_series",
     "frequency": "any",
@@ -1942,6 +8768,35 @@
     "dual_backend_target": true
   },
   {
+    "name": "ts_std_if",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "condition",
+      "window",
+      "min_periods",
+      "ddof"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 2,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "滚动条件样本标准差",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
     "name": "ts_sum",
     "scope": "time_series",
     "frequency": "any",
@@ -1964,6 +8819,191 @@
     "description": "滚动求和 (与m_sum相同)",
     "execution_kind": "primitive",
     "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ts_sum_decay",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "衰减求和",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ts_sum_if",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "condition",
+      "window",
+      "min_periods"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "滚动条件求和",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ts_top_n_avg",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "n"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "滚动窗口内前N大值的均值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ts_top_n_std",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "n"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "滚动窗口内前N大值的标准差",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ts_topk_sum",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "d",
+      "k"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "滚动窗口内 Top-K 求和",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ts_trend_tstat",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "window",
+      "min_periods"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 3,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "滚动时间趋势斜率 t 统计量",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ts_true_streak",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "condition"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "截至当前连续条件成立长度",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
     "lowering_available": false,
     "dual_backend_target": true
   },
@@ -2020,6 +9060,285 @@
     "dual_backend_target": true
   },
   {
+    "name": "ttest_one_sample",
+    "scope": "hypothesis",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "mu"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "单样本t检验",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ttest_paired",
+    "scope": "hypothesis",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "y"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "配对t检验",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ttest_two_samples",
+    "scope": "hypothesis",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "y"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "双样本t检验",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ttm",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "fiscal_quarter"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "experimental",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "滚动十二个月（TTM）累加；可选 fiscal_quarter(1-4) 对齐报告期",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ttm_from_cumulative",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "fiscal_quarter"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "experimental",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "累计值 → 单季 → 滚动 4 季 TTM",
+    "execution_kind": "stateful",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "ttm_from_quarterly",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "fiscal_quarter"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "experimental",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "单季值滚动 4 期 TTM（输入须为单季口径）",
+    "execution_kind": "stateful",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "tukey_transform",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "Tukey变换",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "unitize",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "归一化到[-1, 1]",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "unwrap",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "相位展开",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "van_der_waerden_transform",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "Van der Waerden变换",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "varp",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "x"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "总体方差",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
     "name": "volatility",
     "scope": "time_series",
     "frequency": "any",
@@ -2042,6 +9361,95 @@
     "description": "波动率（年化）",
     "execution_kind": "primitive",
     "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "vp_weighted_price",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "close",
+      "volume",
+      "open",
+      "high",
+      "low"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "计算量价加权价格 P*t = Σ(Pi × Volumei × σi × ri) / ΣVolumei",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "vpmacd",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "close",
+      "volume",
+      "open",
+      "high",
+      "low",
+      "lambda_param"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "VP-MACD因子：将成交量、波动率、日内K线结构嵌入MACD指标，搭配灵敏度参数λ",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "vpmacd_signal",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "close",
+      "volume",
+      "open",
+      "high",
+      "low",
+      "lambda_param"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "VP-MACD交易信号：1=买入信号, -1=卖出信号, 0=持有",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
     "lowering_available": false,
     "dual_backend_target": true
   },
@@ -2069,6 +9477,109 @@
     "description": "成交量加权平均价",
     "execution_kind": "primitive",
     "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "wavelet",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "wavelet_type"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "小波变换",
+    "execution_kind": "external_kernel",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": false
+  },
+  {
+    "name": "wavelet_denoise",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "threshold"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "小波去噪",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "wavg",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "w",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "加权平均",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "weighted_mean",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "weights"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "加权平均数",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
     "lowering_available": false,
     "dual_backend_target": true
   },
@@ -2123,6 +9634,110 @@
     "description": "缩尾处理",
     "execution_kind": "primitive",
     "production_policy": "allowed",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "winsorize_mean",
+    "scope": "elementwise",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "trim_pct"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": null,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "截尾均值",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "wsum",
+    "scope": "aggregate",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "w",
+      "window"
+    ],
+    "output_type": "series",
+    "pit_safe": false,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 1,
+    "nan_policy": "propagate",
+    "status": "research",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "加权求和",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "yoy",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "fiscal_quarter"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 5,
+    "nan_policy": "propagate",
+    "status": "experimental",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy",
+      "polars"
+    ],
+    "description": "同比增速；默认 lag=4，可选 fiscal_quarter 找同季度去年同期",
+    "execution_kind": "primitive",
+    "production_policy": "denied",
+    "lowering_available": false,
+    "dual_backend_target": true
+  },
+  {
+    "name": "yoy_by_period",
+    "scope": "time_series",
+    "frequency": "any",
+    "input_fields": [
+      "x",
+      "fiscal_quarter"
+    ],
+    "output_type": "series",
+    "pit_safe": true,
+    "includes_current": true,
+    "lookback": null,
+    "min_periods": 5,
+    "nan_policy": "propagate",
+    "status": "experimental",
+    "allow_in_production": false,
+    "backends": [
+      "pandas_numpy"
+    ],
+    "description": "按报告期计算同比增速（显式 period-aware；等同 yoy）",
+    "execution_kind": "stateful",
+    "production_policy": "denied",
     "lowering_available": false,
     "dual_backend_target": true
   },

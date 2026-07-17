@@ -37,6 +37,9 @@ DATA_ACCESS_EXCLUDES = {
     ".pytest_cache",
     "__pycache__",
     "tests",
+    # Runtime data is environment-specific and may contain large audit logs.
+    # The standalone distribution creates its own workspace at runtime.
+    "workspace_data",
 }
 EXCLUDED_SUFFIXES = {
     ".pyc",
@@ -81,15 +84,22 @@ def _copy_atomic(source: Path, destination: Path, excluded_dirs: set[str]) -> No
             shutil.rmtree(backup)
 
 
-def _iter_files(root: Path) -> Iterable[Path]:
-    yield from sorted(path for path in root.rglob("*") if path.is_file())
+def _iter_files(root: Path, excluded_dirs: set[str]) -> Iterable[Path]:
+    """Yield release files only, ignoring runtime artifacts created after sync."""
+    for path in sorted(candidate for candidate in root.rglob("*") if candidate.is_file()):
+        relative = path.relative_to(root)
+        if any(part in excluded_dirs or part in EXCLUDED_NAMES for part in relative.parts):
+            continue
+        if path.suffix.lower() in EXCLUDED_SUFFIXES:
+            continue
+        yield path
 
 
-def _tree_digest(root: Path) -> tuple[str, int, int]:
+def _tree_digest(root: Path, excluded_dirs: set[str]) -> tuple[str, int, int]:
     digest = hashlib.sha256()
     file_count = 0
     byte_count = 0
-    for path in _iter_files(root):
+    for path in _iter_files(root, excluded_dirs):
         relative = path.relative_to(root).as_posix().encode("utf-8")
         payload = path.read_bytes()
         digest.update(len(relative).to_bytes(8, "big"))
@@ -127,8 +137,12 @@ def _verify_embedded() -> None:
 
 def _write_manifest(source_commit: str | None) -> dict:
     modules = {}
-    for name in ("factor_engine", "data_access"):
-        digest, files, size_bytes = _tree_digest(PROJECT_ROOT / name)
+    module_excludes = {
+        "factor_engine": FACTOR_ENGINE_EXCLUDES,
+        "data_access": DATA_ACCESS_EXCLUDES,
+    }
+    for name, excluded_dirs in module_excludes.items():
+        digest, files, size_bytes = _tree_digest(PROJECT_ROOT / name, excluded_dirs)
         modules[name] = {
             "sha256": digest,
             "files": files,
@@ -160,9 +174,13 @@ def verify_manifest() -> dict:
         raise FileNotFoundError(f"manifest missing: {MANIFEST_PATH}")
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     failures = []
-    for name in ("factor_engine", "data_access"):
+    module_excludes = {
+        "factor_engine": FACTOR_ENGINE_EXCLUDES,
+        "data_access": DATA_ACCESS_EXCLUDES,
+    }
+    for name, excluded_dirs in module_excludes.items():
         expected = manifest.get("modules", {}).get(name, {})
-        digest, files, size_bytes = _tree_digest(PROJECT_ROOT / name)
+        digest, files, size_bytes = _tree_digest(PROJECT_ROOT / name, excluded_dirs)
         actual = {"sha256": digest, "files": files, "size_bytes": size_bytes}
         if actual != expected:
             failures.append({"module": name, "expected": expected, "actual": actual})

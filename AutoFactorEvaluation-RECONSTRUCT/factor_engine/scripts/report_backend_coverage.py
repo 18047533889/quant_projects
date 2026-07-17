@@ -103,6 +103,7 @@ def main() -> int:
     from backend.sql_pushdown.sql_registry import SQL_CAPABLE_CANONICALS
     from backend.polars_long_policy import get_polars_long_capable, POLARS_LONG_NATIVE
     from backend.production_fast_path import summarize_production_fast_path
+    from backend.operator_capability import resolve_canonical
 
     rows = _build_rows()
     canon = [r["canonical"] for r in rows]

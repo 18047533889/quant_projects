@@ -28,6 +28,7 @@ _LOAD_MODULES = (
     "cleaned_operators.common.group",
     "cleaned_operators.common.data_cleaning",
     "cleaned_operators.common.statistics",
+    "cleaned_operators.common.daily_panel",
     "cleaned_operators.common.gtja_compat",
     "cleaned_operators.common.scalar_compare",
     "cleaned_operators.common.polars_ops",

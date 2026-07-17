@@ -162,7 +162,7 @@ python AutoFactorEvaluation-RECONSTRUCT/scripts/sync_embedded_platform.py
 脚本会：
 
 1. 原子替换目录内的 `factor_engine` 与 `data_access`；
-2. 排除测试、notebook、benchmark、缓存和压缩包等非运行时文件；
+2. 排除测试、notebook、benchmark、缓存、压缩包和 `workspace_data` 运行日志等非发布文件；
 3. 校验关键文件，包括最新的 `semantic_hardening.py`；
 4. 生成 `embedded_platform_manifest.json`；
 5. 记录源提交、文件数量、字节数和整棵目录哈希。

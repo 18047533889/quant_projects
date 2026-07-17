@@ -49,7 +49,12 @@ class CompiledSql:
 
 def _resolve_canonical(op: str) -> str:
     """将算子别名解析为 canonical 名称。"""
-    return OperatorRegistry._aliases.get(op, op)
+    resolved = OperatorRegistry._aliases.get(op, op)
+    from backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
+
+    if op in SQL_IMPLEMENTED_CANONICALS and resolved not in SQL_IMPLEMENTED_CANONICALS:
+        return op
+    return resolved
 
 
 def _window_int(node: PlanNode, default: int = 3) -> int:
@@ -399,6 +404,7 @@ def _average_rank_frac_correlated(
     row_alias: str,
     dialect: SqlDialect,
     exclude_nan: bool = True,
+    descending: bool = False,
 ) -> str:
     """pandas ``rank(method='average', pct=True)`` 相关子查询表达式。"""
     from backend.stat_valid import row_stat_invalid_sql, stat_valid_sql
@@ -406,6 +412,7 @@ def _average_rank_frac_correlated(
     match = " AND ".join(f"p.{k} = {row_alias}.{k}" for k in partition_keys)
     valid = stat_valid_sql("p._v", dialect=dialect, exclude_nan=exclude_nan)
     invalid_row = row_stat_invalid_sql(row_value_col, dialect=dialect, exclude_nan=exclude_nan)
+    rank_cmp = ">=" if descending else "<="
     cnt_subq = (
         f"(SELECT COUNT(*) FILTER (WHERE {valid}) "
         f"FROM ({numbered_sql}) p WHERE {match})"
@@ -421,7 +428,7 @@ def _average_rank_frac_correlated(
             f"FROM ("
             f"SELECT "
             f"countIf({valid_ch}) AS cnt, "
-            f"countIf({valid_ch} AND p._v <= {row_value_col}) AS cnt_le, "
+            f"countIf({valid_ch} AND p._v {rank_cmp} {row_value_col}) AS cnt_le, "
             f"countIf({valid_ch} AND p._v = {row_value_col}) AS cnt_eq "
             f"FROM ({numbered_sql}) p WHERE {match}"
             f") s"
@@ -437,7 +444,7 @@ def _average_rank_frac_correlated(
         f"FROM ("
         f"SELECT "
         f"COUNT(*) FILTER (WHERE {valid}) AS cnt, "
-        f"COUNT(*) FILTER (WHERE {valid} AND p._v <= {row_value_col}) AS cnt_le, "
+        f"COUNT(*) FILTER (WHERE {valid} AND p._v {rank_cmp} {row_value_col}) AS cnt_le, "
         f"COUNT(*) FILTER (WHERE {valid} AND p._v = {row_value_col}) AS cnt_eq "
         f"FROM ({numbered_sql}) p WHERE {match}"
         f") s"
@@ -1112,6 +1119,186 @@ def _ts_argext_sql(inner_sql: str, w: int, *, dialect: SqlDialect, pick: str) ->
     )
 
 
+def _duckdb_valid(value: str) -> str:
+    return f"({value} IS NOT NULL AND NOT isnan({value}) AND NOT isinf({value}))"
+
+
+def _raw_literal(node: PlanNode, input_index: int, default: Any = None) -> Any:
+    if input_index >= len(node.inputs):
+        return default
+    child = node.inputs[input_index]
+    if child.op != "literal":
+        return default
+    return child.attrs.get("value", default)
+
+
+def _duckdb_join_layers(layers: list[_Layer], aliases: list[str]) -> str:
+    sql = f"FROM ({layers[0].sql}) {aliases[0]}"
+    for layer, alias in zip(layers[1:], aliases[1:], strict=True):
+        sql += f" LEFT JOIN ({layer.sql}) {alias} USING (ts, inst)"
+    return sql
+
+
+def _duckdb_conditional_rolling_sql(
+    value_sql: str | None,
+    condition_sql: str,
+    *,
+    window: int,
+    min_periods: int,
+    op: str,
+    ddof: int = 1,
+) -> str:
+    if value_sql is None:
+        joined = f"FROM ({condition_sql}) c"
+        over = (
+            f"PARTITION BY c.inst ORDER BY c.ts "
+            f"ROWS BETWEEN {window - 1} PRECEDING AND CURRENT ROW"
+        )
+        valid = _duckdb_valid("c._v")
+        true = f"({valid} AND c._v <> 0)"
+        count_valid = f"SUM(CASE WHEN {valid} THEN 1 ELSE 0 END) OVER ({over})"
+        value = f"SUM(CASE WHEN {true} THEN 1 ELSE 0 END) OVER ({over})"
+        return (
+            f"SELECT c.ts, c.inst, CASE WHEN {count_valid} < {min_periods} "
+            f"THEN NULL ELSE CAST({value} AS DOUBLE) END AS _v {joined}"
+        )
+
+    joined = (
+        f"FROM ({value_sql}) x LEFT JOIN ({condition_sql}) c USING (ts, inst)"
+    )
+    over = (
+        f"PARTITION BY x.inst ORDER BY x.ts "
+        f"ROWS BETWEEN {window - 1} PRECEDING AND CURRENT ROW"
+    )
+    selected = (
+        f"({_duckdb_valid('x._v')} AND {_duckdb_valid('c._v')} AND c._v <> 0)"
+    )
+    count = f"SUM(CASE WHEN {selected} THEN 1 ELSE 0 END) OVER ({over})"
+    if op == "sum":
+        aggregate = f"SUM(CASE WHEN {selected} THEN x._v ELSE NULL END) OVER ({over})"
+        required = min_periods
+    elif op == "mean":
+        aggregate = f"AVG(CASE WHEN {selected} THEN x._v ELSE NULL END) OVER ({over})"
+        required = min_periods
+    elif op == "std":
+        fn = "STDDEV_POP" if ddof == 0 else "STDDEV_SAMP"
+        aggregate = f"{fn}(CASE WHEN {selected} THEN x._v ELSE NULL END) OVER ({over})"
+        required = max(min_periods, ddof + 1)
+    else:  # pragma: no cover
+        raise ValueError(op)
+    return (
+        f"SELECT x.ts, x.inst, CASE WHEN {count} < {required} "
+        f"THEN NULL ELSE {aggregate} END AS _v {joined}"
+    )
+
+
+def _duckdb_multi_resid_sql(
+    layers: list[_Layer],
+    *,
+    add_intercept: bool,
+    min_obs: int,
+) -> str:
+    aliases = ["y"] + [f"x{i}" for i in range(1, len(layers))]
+    joined = _duckdb_join_layers(layers, aliases)
+    valid_parts = [_duckdb_valid("y._v")]
+    valid_parts.extend(_duckdb_valid(f"{alias}._v") for alias in aliases[1:])
+    ok = " AND ".join(valid_parts)
+    raw_cols = ", ".join(
+        ["y._v AS _y"] + [f"{alias}._v AS _x{i}" for i, alias in enumerate(aliases[1:], 1)]
+    )
+    base = (
+        f"SELECT y.ts, y.inst, {raw_cols}, CASE WHEN {ok} THEN 1 ELSE 0 END AS _ok "
+        f"{joined}"
+    )
+    n = "SUM(_ok) OVER (PARTITION BY ts)"
+    if add_intercept:
+        mean_y = "AVG(CASE WHEN _ok = 1 THEN _y END) OVER (PARTITION BY ts)"
+        centered = [f"_x{i} - AVG(CASE WHEN _ok = 1 THEN _x{i} END) OVER (PARTITION BY ts)" for i in range(1, len(layers))]
+        y_centered = f"_y - {mean_y}"
+    else:
+        mean_y = "0.0"
+        centered = [f"_x{i}" for i in range(1, len(layers))]
+        y_centered = "_y"
+    stage = (
+        f"SELECT *, {n} AS _n, {mean_y} AS _mean_y, "
+        f"CASE WHEN _ok = 1 THEN {y_centered} END AS _yc, "
+        + ", ".join(
+            f"CASE WHEN _ok = 1 THEN {expr} END AS _v{i}"
+            for i, expr in enumerate(centered, 1)
+        )
+        + f" FROM ({base}) b"
+    )
+    q_names: list[str] = []
+    for i in range(1, len(layers)):
+        residual = f"_v{i}"
+        for q in q_names:
+            coeff = (
+                f"SUM(_v{i} * {q}) OVER (PARTITION BY ts) / "
+                f"NULLIF(SUM({q} * {q}) OVER (PARTITION BY ts), 0)"
+            )
+            residual += f" - ({coeff}) * {q}"
+        q = f"_q{i}"
+        stage = f"SELECT *, ({residual}) AS {q} FROM ({stage}) qstage{i}"
+        q_names.append(q)
+    singular = " OR ".join(
+        f"SUM({q} * {q}) OVER (PARTITION BY ts) IS NULL OR "
+        f"SUM({q} * {q}) OVER (PARTITION BY ts) <= 1e-24"
+        for q in q_names
+    )
+    fitted_terms = [
+        (
+            f"(SUM(_yc * {q}) OVER (PARTITION BY ts) / "
+            f"NULLIF(SUM({q} * {q}) OVER (PARTITION BY ts), 0)) * {q}"
+        )
+        for q in q_names
+    ]
+    fitted = "_mean_y" + "".join(f" + {term}" for term in fitted_terms)
+    return (
+        f"SELECT ts, inst, CASE WHEN _ok = 0 OR _n < {min_obs} "
+        f"OR ({singular}) THEN NULL ELSE _y - ({fitted}) END AS _v "
+        f"FROM ({stage}) scored"
+    )
+
+
+def _duckdb_rolling_tstat_sql(
+    y_sql: str,
+    x_sql: str,
+    *,
+    window: int,
+    min_periods: int,
+    add_intercept: bool,
+) -> str:
+    over = (
+        f"PARTITION BY y.inst ORDER BY y.ts "
+        f"ROWS BETWEEN {window - 1} PRECEDING AND CURRENT ROW"
+    )
+    valid = f"({_duckdb_valid('y._v')} AND {_duckdb_valid('x._v')})"
+    yv = f"CASE WHEN {valid} THEN y._v END"
+    xv = f"CASE WHEN {valid} THEN x._v END"
+    n = f"COUNT({yv}) OVER ({over})"
+    sx = f"SUM({xv}) OVER ({over})"
+    sy = f"SUM({yv}) OVER ({over})"
+    sxx = f"SUM(({xv}) * ({xv})) OVER ({over})"
+    sxy = f"SUM(({xv}) * ({yv})) OVER ({over})"
+    syy = f"SUM(({yv}) * ({yv})) OVER ({over})"
+    if add_intercept:
+        xx = f"({sxx} - ({sx}) * ({sx}) / NULLIF({n}, 0))"
+        xy = f"({sxy} - ({sx}) * ({sy}) / NULLIF({n}, 0))"
+        yy = f"({syy} - ({sy}) * ({sy}) / NULLIF({n}, 0))"
+        dof = f"({n} - 2)"
+    else:
+        xx, xy, yy = sxx, sxy, syy
+        dof = f"({n} - 1)"
+    beta = f"({xy}) / NULLIF(({xx}), 0)"
+    sse = f"GREATEST(0.0, ({yy}) - ({beta}) * ({xy}))"
+    se = f"SQRT(({sse}) / NULLIF({dof}, 0) / NULLIF(({xx}), 0))"
+    return (
+        f"SELECT y.ts, y.inst, CASE WHEN {n} < {min_periods} OR {dof} <= 0 "
+        f"OR ({xx}) <= 0 OR ({se}) <= 0 THEN NULL ELSE ({beta}) / ({se}) END AS _v "
+        f"FROM ({y_sql}) y LEFT JOIN ({x_sql}) x USING (ts, inst)"
+    )
+
+
 def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
     """递归将 PlanNode 编译为 ``_Layer`` 子查询；不支持的算子返回 ``None``。"""
     op = _resolve_canonical(node.op)
@@ -1420,6 +1607,364 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             f"SELECT ts, inst, {expr} AS _v FROM ({inner.sql}) t",
             has_inst_window=inner.has_inst_window,
             has_ts_partition=inner.has_ts_partition,
+        )
+
+    if op in {"ts_count_if", "ts_sum_if", "ts_mean_if", "ts_std_if"}:
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        if op == "ts_count_if":
+            condition = _compile_layer(node.inputs[0], dialect=dialect)
+            if condition is None:
+                return None
+            window = int(node.attrs.get("window", _raw_literal(node, 1, 3)))
+            min_periods = int(node.attrs.get("min_periods", _raw_literal(node, 2, 1)))
+            sql = _duckdb_conditional_rolling_sql(
+                None,
+                condition.sql,
+                window=window,
+                min_periods=min_periods,
+                op="count",
+            )
+        else:
+            if len(node.inputs) < 2:
+                return None
+            value = _compile_layer(node.inputs[0], dialect=dialect)
+            condition = _compile_layer(node.inputs[1], dialect=dialect)
+            if value is None or condition is None:
+                return None
+            window = int(node.attrs.get("window", _raw_literal(node, 2, 3)))
+            default_mp = 2 if op == "ts_std_if" else 1
+            min_periods = int(
+                node.attrs.get("min_periods", _raw_literal(node, 3, default_mp))
+            )
+            ddof = int(node.attrs.get("ddof", _raw_literal(node, 4, 1)))
+            sql = _duckdb_conditional_rolling_sql(
+                value.sql,
+                condition.sql,
+                window=window,
+                min_periods=min_periods,
+                op=op.removeprefix("ts_").removesuffix("_if"),
+                ddof=ddof,
+            )
+        return _Layer(sql, has_inst_window=True)
+
+    if op == "ts_last_if":
+        if dialect != SqlDialect.DUCKDB or len(node.inputs) < 2:
+            return None
+        value = _compile_layer(node.inputs[0], dialect=dialect)
+        condition = _compile_layer(node.inputs[1], dialect=dialect)
+        if value is None or condition is None:
+            return None
+        window = int(node.attrs.get("window", _raw_literal(node, 2, 3)))
+        over = (
+            f"PARTITION BY x.inst ORDER BY x.ts "
+            f"ROWS BETWEEN {window - 1} PRECEDING AND CURRENT ROW"
+        )
+        selected = (
+            f"({_duckdb_valid('x._v')} AND {_duckdb_valid('c._v')} AND c._v <> 0)"
+        )
+        return _Layer(
+            f"SELECT x.ts, x.inst, "
+            f"arg_max(x._v, x.ts) FILTER (WHERE {selected}) OVER ({over}) AS _v "
+            f"FROM ({value.sql}) x LEFT JOIN ({condition.sql}) c USING (ts, inst)",
+            has_inst_window=True,
+        )
+
+    if op == "ts_days_since":
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        condition = _compile_layer(node.inputs[0], dialect=dialect)
+        if condition is None:
+            return None
+        raw_limit = node.attrs.get("max_lookback", _raw_literal(node, 1, None))
+        limit = None if raw_limit is None else int(raw_limit)
+        true = f"({_duckdb_valid('_v')} AND _v <> 0)"
+        distance = "(_rn - _last_true)"
+        limit_guard = "" if limit is None else f" OR {distance} >= {limit}"
+        return _Layer(
+            f"SELECT ts, inst, CASE WHEN _last_true IS NULL{limit_guard} "
+            f"THEN NULL ELSE CAST({distance} AS DOUBLE) END AS _v FROM ("
+            f"SELECT *, MAX(CASE WHEN {true} THEN _rn END) OVER ("
+            f"PARTITION BY inst ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"
+            f") AS _last_true FROM ("
+            f"SELECT ts, inst, _v, ROW_NUMBER() OVER (PARTITION BY inst ORDER BY ts) AS _rn "
+            f"FROM ({condition.sql}) c0"
+            f") c1"
+            f") c2",
+            has_inst_window=True,
+        )
+
+    if op == "ts_true_streak":
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        condition = _compile_layer(node.inputs[0], dialect=dialect)
+        if condition is None:
+            return None
+        false = f"(NOT {_duckdb_valid('_v')} OR _v = 0)"
+        return _Layer(
+            f"SELECT ts, inst, CAST(_rn - COALESCE(_last_false, 0) AS DOUBLE) AS _v FROM ("
+            f"SELECT *, MAX(CASE WHEN {false} THEN _rn END) OVER ("
+            f"PARTITION BY inst ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"
+            f") AS _last_false FROM ("
+            f"SELECT ts, inst, _v, ROW_NUMBER() OVER (PARTITION BY inst ORDER BY ts) AS _rn "
+            f"FROM ({condition.sql}) s0"
+            f") s1"
+            f") s2",
+            has_inst_window=True,
+        )
+
+    if op == "cs_bucket":
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        buckets = int(node.attrs.get("buckets", _raw_literal(node, 1, 10)))
+        ascending = bool(node.attrs.get("ascending", _raw_literal(node, 2, True)))
+        direction = "ASC" if ascending else "DESC"
+        return _Layer(
+            f"SELECT ts, inst, CASE WHEN _v IS NULL THEN NULL ELSE "
+            f"LEAST({buckets}.0, FLOOR(((_rank + (_ties - 1) / 2.0) / _n) * {buckets}) + 1.0) "
+            f"END AS _v FROM ("
+            f"SELECT ts, inst, _v, "
+            f"RANK() OVER (PARTITION BY ts ORDER BY _v {direction} NULLS LAST) AS _rank, "
+            f"COUNT(*) OVER (PARTITION BY ts, _v) AS _ties, "
+            f"COUNT(_v) OVER (PARTITION BY ts) AS _n "
+            f"FROM ({inner.sql}) b0"
+            f") b1",
+            has_ts_partition=True,
+        )
+
+    if op == "cs_multi_resid":
+        if dialect != SqlDialect.DUCKDB or len(node.inputs) < 2:
+            return None
+        layers: list[_Layer] = []
+        for child in node.inputs:
+            if child.op == "literal":
+                return None
+            layer = _compile_layer(child, dialect=dialect)
+            if layer is None:
+                return None
+            layers.append(layer)
+        add_intercept = bool(node.attrs.get("add_intercept", True))
+        default_min = len(layers) + 1
+        min_obs = int(node.attrs.get("min_obs") or default_min)
+        return _Layer(
+            _duckdb_multi_resid_sql(
+                layers,
+                add_intercept=add_intercept,
+                min_obs=min_obs,
+            ),
+            has_ts_partition=True,
+        )
+
+    if op == "cs_wls_resid":
+        if dialect != SqlDialect.DUCKDB or len(node.inputs) < 3:
+            return None
+        y = _compile_layer(node.inputs[0], dialect=dialect)
+        x = _compile_layer(node.inputs[1], dialect=dialect)
+        weight = _compile_layer(node.inputs[2], dialect=dialect)
+        if y is None or x is None or weight is None:
+            return None
+        add_intercept = bool(node.attrs.get("add_intercept", True))
+        min_obs = int(node.attrs.get("min_obs", 5))
+        valid = (
+            f"({_duckdb_valid('y._v')} AND {_duckdb_valid('x._v')} "
+            f"AND {_duckdb_valid('w._v')} AND w._v > 0)"
+        )
+        joined = (
+            f"SELECT y.ts, y.inst, y._v AS _y, x._v AS _x, w._v AS _w, "
+            f"CASE WHEN {valid} THEN 1 ELSE 0 END AS _ok "
+            f"FROM ({y.sql}) y LEFT JOIN ({x.sql}) x USING (ts, inst) "
+            f"LEFT JOIN ({weight.sql}) w USING (ts, inst)"
+        )
+        n_expr = "SUM(_ok) OVER (PARTITION BY ts)"
+        sum_w_expr = "SUM(CASE WHEN _ok = 1 THEN _w END) OVER (PARTITION BY ts)"
+        if add_intercept:
+            mx_expr = f"SUM(CASE WHEN _ok = 1 THEN _w * _x END) OVER (PARTITION BY ts) / NULLIF({sum_w_expr}, 0)"
+            my_expr = f"SUM(CASE WHEN _ok = 1 THEN _w * _y END) OVER (PARTITION BY ts) / NULLIF({sum_w_expr}, 0)"
+        else:
+            mx_expr = my_expr = "0.0"
+        centered = (
+            f"SELECT *, {n_expr} AS _n, {mx_expr} AS _mx, {my_expr} AS _my "
+            f"FROM ({joined}) w0"
+        )
+        dx, dy = "(_x - _mx)", "(_y - _my)"
+        cov = f"SUM(CASE WHEN _ok = 1 THEN _w * ({dx}) * ({dy}) END) OVER (PARTITION BY ts)"
+        var = f"SUM(CASE WHEN _ok = 1 THEN _w * ({dx}) * ({dx}) END) OVER (PARTITION BY ts)"
+        moments = (
+            f"SELECT *, {cov} AS _cov, {var} AS _var FROM ({centered}) w1"
+        )
+        beta = "_cov / NULLIF(_var, 0)"
+        fitted = f"_my + ({beta}) * ({dx})"
+        return _Layer(
+            f"SELECT ts, inst, CASE WHEN _ok = 0 OR _n < {min_obs} "
+            f"OR _var <= 1e-24 THEN NULL ELSE _y - ({fitted}) END AS _v "
+            f"FROM ({moments}) wr",
+            has_ts_partition=True,
+        )
+
+    if op == "period_lag":
+        if dialect != SqlDialect.DUCKDB or len(node.inputs) < 2:
+            return None
+        value = _compile_layer(node.inputs[0], dialect=dialect)
+        period = _compile_layer(node.inputs[1], dialect=dialect)
+        if value is None or period is None:
+            return None
+        periods = int(node.attrs.get("periods", _raw_literal(node, 2, 1)))
+        joined = (
+            f"SELECT x.ts, x.inst, x._v AS xv, p._v AS pid "
+            f"FROM ({value.sql}) x LEFT JOIN ({period.sql}) p USING (ts, inst)"
+        )
+        return _Layer(
+            f"SELECT r.ts, r.inst, CASE WHEN r.pid IS NULL THEN NULL ELSE ("
+            f"SELECT arg_max(h.xv, h.ts) FROM ({joined}) h "
+            f"WHERE h.inst = r.inst AND h.ts <= r.ts AND h.pid = ("
+            f"SELECT target.pid FROM ("
+            f"SELECT q.pid, MIN(q.ts) AS first_seen FROM ({joined}) q "
+            f"WHERE q.inst = r.inst AND q.ts <= r.ts AND q.pid IS NOT NULL "
+            f"GROUP BY q.pid ORDER BY first_seen DESC LIMIT 1 OFFSET {periods}"
+            f") target"
+            f")) END AS _v FROM ({joined}) r",
+            has_inst_window=True,
+        )
+
+    if op == "ts_regression_tstat":
+        if dialect != SqlDialect.DUCKDB or len(node.inputs) < 2:
+            return None
+        y = _compile_layer(node.inputs[0], dialect=dialect)
+        x = _compile_layer(node.inputs[1], dialect=dialect)
+        if y is None or x is None:
+            return None
+        window = int(node.attrs.get("window", _raw_literal(node, 2, 3)))
+        raw_mp = node.attrs.get("min_periods", _raw_literal(node, 3, None))
+        min_periods = window if raw_mp is None else int(raw_mp)
+        add_intercept = bool(node.attrs.get("add_intercept", _raw_literal(node, 4, True)))
+        return _Layer(
+            _duckdb_rolling_tstat_sql(
+                y.sql,
+                x.sql,
+                window=window,
+                min_periods=min_periods,
+                add_intercept=add_intercept,
+            ),
+            has_inst_window=True,
+        )
+
+    if op == "ts_trend_tstat":
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        window = int(node.attrs.get("window", _raw_literal(node, 1, 3)))
+        raw_mp = node.attrs.get("min_periods", _raw_literal(node, 2, None))
+        min_periods = window if raw_mp is None else int(raw_mp)
+        time_sql = (
+            f"SELECT ts, inst, _v, "
+            f"CAST(ROW_NUMBER() OVER (PARTITION BY inst ORDER BY ts) AS DOUBLE) AS _time "
+            f"FROM ({inner.sql}) tr0"
+        )
+        y_sql = f"SELECT ts, inst, _v FROM ({time_sql}) tr1"
+        x_sql = f"SELECT ts, inst, _time AS _v FROM ({time_sql}) tr2"
+        return _Layer(
+            _duckdb_rolling_tstat_sql(
+                y_sql,
+                x_sql,
+                window=window,
+                min_periods=min_periods,
+                add_intercept=True,
+            ),
+            has_inst_window=True,
+        )
+
+    if op == "ts_max_drawdown":
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        window = int(node.attrs.get("window", _raw_literal(node, 1, 3)))
+        min_periods = int(node.attrs.get("min_periods", _raw_literal(node, 2, 2)))
+        over = "PARTITION BY inst ORDER BY ts"
+        lags = ["_v"] + [f"LAG(_v, {i}) OVER ({over})" for i in range(1, window)]
+        values = f"list_value({', '.join(lags)})"
+        valid_list = f"list_filter({values}, v -> v IS NOT NULL AND NOT isnan(v) AND NOT isinf(v))"
+        drawdowns = ["0.0"]
+        for i, value_i in enumerate(lags):
+            earlier = f"list_max(list_value({', '.join(lags[i:])}))"
+            drawdowns.append(
+                f"CASE WHEN {value_i} IS NULL OR {earlier} IS NULL THEN NULL "
+                f"ELSE {value_i} / {earlier} - 1.0 END"
+            )
+        return _Layer(
+            f"SELECT ts, inst, CASE WHEN list_count({valid_list}) < {min_periods} "
+            f"OR list_min({valid_list}) <= 0 THEN NULL "
+            f"ELSE LEAST({', '.join(drawdowns)}) END AS _v FROM ({inner.sql}) md",
+            has_inst_window=True,
+        )
+
+    if op == "ts_partial_corr":
+        if dialect != SqlDialect.DUCKDB or len(node.inputs) < 3:
+            return None
+        x = _compile_layer(node.inputs[0], dialect=dialect)
+        y = _compile_layer(node.inputs[1], dialect=dialect)
+        z = _compile_layer(node.inputs[2], dialect=dialect)
+        if x is None or y is None or z is None:
+            return None
+        window = int(node.attrs.get("window", _raw_literal(node, 3, 3)))
+        raw_mp = node.attrs.get("min_periods", _raw_literal(node, 4, None))
+        min_periods = window if raw_mp is None else int(raw_mp)
+        over = (
+            f"PARTITION BY x.inst ORDER BY x.ts "
+            f"ROWS BETWEEN {window - 1} PRECEDING AND CURRENT ROW"
+        )
+        valid = (
+            f"({_duckdb_valid('x._v')} AND {_duckdb_valid('y._v')} "
+            f"AND {_duckdb_valid('z._v')})"
+        )
+        xv = f"CASE WHEN {valid} THEN x._v END"
+        yv = f"CASE WHEN {valid} THEN y._v END"
+        zv = f"CASE WHEN {valid} THEN z._v END"
+        n = f"COUNT({xv}) OVER ({over})"
+        rxy = f"corr({xv}, {yv}) OVER ({over})"
+        rxz = f"corr({xv}, {zv}) OVER ({over})"
+        ryz = f"corr({yv}, {zv}) OVER ({over})"
+        denom = f"SQRT(GREATEST(0.0, 1 - ({rxz}) * ({rxz})) * GREATEST(0.0, 1 - ({ryz}) * ({ryz})))"
+        return _Layer(
+            f"SELECT x.ts, x.inst, CASE WHEN {n} < {min_periods} OR ({denom}) <= 0 "
+            f"THEN NULL ELSE (({rxy}) - ({rxz}) * ({ryz})) / ({denom}) END AS _v "
+            f"FROM ({x.sql}) x LEFT JOIN ({y.sql}) y USING (ts, inst) "
+            f"LEFT JOIN ({z.sql}) z USING (ts, inst)",
+            has_inst_window=True,
+        )
+
+    if op == "ts_nth_value":
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        window = int(node.attrs.get("window", _raw_literal(node, 1, 3)))
+        nth = int(node.attrs.get("n", _raw_literal(node, 2, 1)))
+        order = str(node.attrs.get("order", _raw_literal(node, 3, "largest"))).lower()
+        raw_mp = node.attrs.get("min_periods", _raw_literal(node, 4, None))
+        min_periods = nth if raw_mp is None else int(raw_mp)
+        if order not in {"largest", "smallest"}:
+            return None
+        over = "PARTITION BY inst ORDER BY ts"
+        lags = ["_v"] + [f"LAG(_v, {i}) OVER ({over})" for i in range(1, window)]
+        values = f"list_filter(list_value({', '.join(lags)}), v -> v IS NOT NULL AND NOT isnan(v) AND NOT isinf(v))"
+        sorted_values = (
+            f"list_reverse_sort({values})"
+            if order == "largest"
+            else f"list_sort({values})"
+        )
+        required = max(min_periods, nth)
+        return _Layer(
+            f"SELECT ts, inst, CASE WHEN list_count({values}) < {required} THEN NULL "
+            f"ELSE list_extract({sorted_values}, {nth}) END AS _v FROM ({inner.sql}) nth0",
+            has_inst_window=True,
         )
 
     if op == "ts_mean":
@@ -2016,11 +2561,14 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         pos_p = _literal_positional(node, 1)
         if pos_p is not None:
             p = pos_p
-        grp_layer = None
-        if len(node.inputs) >= 2:
-            grp_layer = _compile_layer(node.inputs[1], dialect=dialect)
-            if grp_layer is None:
-                return None
+        if len(node.inputs) < 2:
+            return None
+        grp_layer = _compile_layer(node.inputs[1], dialect=dialect)
+        if grp_layer is None:
+            return None
+        side = str(node.attrs.get("side", "top")).lower()
+        if side not in {"top", "bottom"}:
+            return None
         wrapped, keys = _group_partition_wrap(
             inner.sql,
             grp_layer.sql if grp_layer is not None else None,
@@ -2037,6 +2585,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             numbered_sql=numbered,
             row_alias="b",
             dialect=dialect,
+            descending=side == "top",
         )
         expr = (
             f"CASE WHEN b._oval IS NULL THEN NULL "
@@ -2178,18 +2727,40 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        w = _window_int(node)
-        med = "median" if dialect == SqlDialect.DUCKDB else "median"
+        spec = _window_spec(node)
+        w = spec.size
+        mp = spec.min_periods if node.attrs.get("min_periods") is not None else w
+        scale = _float_attr(node, "scale", default=1.0)
         over = (
             f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
         )
+        if dialect == SqlDialect.DUCKDB:
+            vals = (
+                f"list(_v) FILTER (WHERE _v IS NOT NULL AND isfinite(_v)) "
+                f"OVER ({over})"
+            )
+            inf_count = (
+                f"COUNT(*) FILTER (WHERE _v IS NOT NULL AND isinf(_v)) "
+                f"OVER ({over})"
+            )
+            return _Layer(
+                f"SELECT ts, inst, "
+                f"CASE WHEN _inf_count > 0 OR length(_vals) < {mp} THEN NULL "
+                f"ELSE {scale} * list_median(list_transform("
+                f"_vals, x -> abs(x - list_median(_vals)))) END AS _v "
+                f"FROM (SELECT ts, inst, {vals} AS _vals, "
+                f"{inf_count} AS _inf_count FROM ({inner.sql}) t0) t",
+                has_inst_window=True,
+            )
+        vals = f"groupArrayIf(_v, isFinite(_v)) OVER ({over})"
+        inf_count = f"countIf(isInfinite(_v)) OVER ({over})"
         return _Layer(
             f"SELECT ts, inst, "
-            f"AVG(ABS(_v - med)) OVER ({over}) AS _v "
-            f"FROM ("
-            f"SELECT ts, inst, _v, {med}(_v) OVER ({over}) AS med "
-            f"FROM ({inner.sql}) t0"
-            f") t",
+            f"if(_inf_count > 0 OR length(_vals) < {mp}, NULL, {scale} * "
+            f"arrayReduce('medianExact', arrayMap("
+            f"x -> abs(x - arrayReduce('medianExact', _vals)), _vals))) AS _v "
+            f"FROM (SELECT ts, inst, {vals} AS _vals, "
+            f"{inf_count} AS _inf_count FROM ({inner.sql}) t0) t",
             has_inst_window=True,
         )
 
@@ -2431,15 +3002,37 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        w = _window_int(node)
+        spec = _window_spec(node)
+        w = spec.size
+        mp = spec.min_periods if node.attrs.get("min_periods") is not None else w
         over = (
             f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
         )
-        eps = 1e-12
+        if dialect == SqlDialect.DUCKDB:
+            valid = "_v IS NOT NULL AND isfinite(_v)"
+            count_valid = f"COUNT(*) FILTER (WHERE {valid}) OVER ({over})"
+            count_zero = f"COUNT(*) FILTER (WHERE {valid} AND _v = 0) OVER ({over})"
+            count_neg = f"COUNT(*) FILTER (WHERE {valid} AND _v < 0) OVER ({over})"
+            count_inf = (
+                f"COUNT(*) FILTER (WHERE _v IS NOT NULL AND isinf(_v)) OVER ({over})"
+            )
+        else:
+            valid = "isFinite(_v)"
+            count_valid = f"countIf({valid}) OVER ({over})"
+            count_zero = f"countIf({valid} AND _v = 0) OVER ({over})"
+            count_neg = f"countIf({valid} AND _v < 0) OVER ({over})"
+            count_inf = f"countIf(isInfinite(_v)) OVER ({over})"
+        log_sum = (
+            f"SUM(CASE WHEN {valid} AND _v != 0 THEN {ln}(ABS(_v)) ELSE NULL END) "
+            f"OVER ({over})"
+        )
         return _Layer(
             f"SELECT ts, inst, "
-            f"EXP(SUM(CASE WHEN _v IS NULL OR _v <= {eps} THEN NULL ELSE {ln}(_v) END) "
-            f"OVER ({over})) AS _v "
+            f"CASE WHEN {count_inf} > 0 OR {count_valid} < {mp} THEN NULL "
+            f"WHEN {count_zero} > 0 THEN 0.0 "
+            f"WHEN {log_sum} > 709.782712893384 THEN NULL "
+            f"ELSE CASE WHEN MOD({count_neg}, 2) = 1 THEN -1.0 ELSE 1.0 END "
+            f"* EXP({log_sum}) END AS _v "
             f"FROM ({inner.sql}) t",
             has_inst_window=True,
         )

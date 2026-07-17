@@ -4,7 +4,8 @@
     "data_access": [
       ".pytest_cache",
       "__pycache__",
-      "tests"
+      "tests",
+      "workspace_data"
     ],
     "factor_engine": [
       ".pytest_cache",
@@ -33,14 +34,14 @@
       "size_bytes": 446474
     },
     "factor_engine": {
-      "files": 413,
-      "sha256": "0a7bb5df84bf63ec722e9182bd94f1942dadee5f2add1300718a198f3c258337",
-      "size_bytes": 4022774
+      "files": 415,
+      "sha256": "945b4d369e4aab265154532c24e6a7c6bf50df89b91e9af46fe402d160585914",
+      "size_bytes": 4265228
     }
   },
   "schema_version": 1,
-  "source_commit": "5fe9407aaa5b95538a3f98d5b466682135af42db",
+  "source_commit": "a2fa4f0e85965d71dd175a0f7896f165f1868541",
   "source_layout": "monorepo-root/factor_engine + data_access",
   "source_repository": "18047533889/quant_projects",
-  "synced_at_utc": "2026-07-16T17:14:19.530373+00:00"
+  "synced_at_utc": "2026-07-17T04:26:55.579499+00:00"
 }

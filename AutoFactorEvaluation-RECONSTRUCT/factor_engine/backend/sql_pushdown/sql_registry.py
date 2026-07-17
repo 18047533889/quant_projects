@@ -93,7 +93,13 @@ def register_sql_backends() -> None:
 
 def resolve_canonical(op: str) -> str:
     """将算子别名解析为 canonical 名称。"""
-    return OperatorRegistry._aliases.get(op, op)
+    resolved = OperatorRegistry._aliases.get(op, op)
+    # During early imports legacy aliases may temporarily point at a pre-dedupe
+    # name (for example ts_regression_slope -> ts_regression).  Keep an explicit
+    # SQL canonical when the temporary target is not itself SQL implemented.
+    if op in SQL_CAPABLE_CANONICALS and resolved not in SQL_CAPABLE_CANONICALS:
+        return op
+    return resolved
 
 
 def is_sql_capable(plan: PlanNode) -> bool:

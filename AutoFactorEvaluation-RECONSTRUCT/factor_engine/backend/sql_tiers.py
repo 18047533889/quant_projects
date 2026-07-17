@@ -147,6 +147,22 @@ SQL_IMPLEMENTED_CANONICALS: frozenset[str] = frozenset(
         "cs_mad_zscore",
         "RSI_WILDER",
         "ATR_WILDER",
+        "ts_count_if",
+        "ts_sum_if",
+        "ts_mean_if",
+        "ts_std_if",
+        "ts_last_if",
+        "ts_days_since",
+        "ts_true_streak",
+        "cs_bucket",
+        "cs_multi_resid",
+        "cs_wls_resid",
+        "period_lag",
+        "ts_regression_tstat",
+        "ts_trend_tstat",
+        "ts_max_drawdown",
+        "ts_partial_corr",
+        "ts_nth_value",
     }
 )
 
