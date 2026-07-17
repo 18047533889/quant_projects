@@ -280,7 +280,7 @@
     },
     "c_std": {
       "canonical": "c_std",
-      "execution_kind": "registry",
+      "execution_kind": "other",
       "polars_implemented": true,
       "polars_pure_native": false,
       "duckdb_implemented": false,

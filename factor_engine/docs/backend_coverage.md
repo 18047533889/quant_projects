@@ -7,10 +7,10 @@
 
 - active canonical: **220**
 - daily surface: **180**
-- Polars registered: **180**
-- Polars non-bridge implementation: **158**
-- Polars parity verified: **67**
-- Polars production safe: **52**
+- Polars registered: **157**
+- Polars non-bridge implementation: **157**
+- Polars parity verified: **51**
+- Polars production safe: **51**
 - DuckDB SQL emitter implemented: **116**
 - DuckDB parity verified: **77**
 - DuckDB production safe: **66**
@@ -48,17 +48,17 @@
 | cs_demean | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | cs_fill_mean | daily | yes | yes | yes | no | no | no | no | no |
 | cs_fill_median | daily | yes | yes | yes | no | no | no | no | no |
-| cs_mad | daily | yes | yes | no | yes | no | yes | yes | yes |
-| cs_mad_zscore | daily | yes | yes | no | yes | no | yes | yes | yes |
+| cs_mad | daily | yes | no | no | no | no | yes | yes | yes |
+| cs_mad_zscore | daily | yes | no | no | no | no | yes | yes | yes |
 | cs_mean | daily | yes | yes | yes | no | no | no | no | no |
 | cs_multi_resid | daily | yes | no | no | no | no | yes | no | no |
 | cs_neutralize | daily | yes | no | no | no | no | no | no | no |
 | cs_pct_rank | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | cs_quantile | daily | yes | no | no | no | no | yes | no | no |
 | cs_rank_gaussian | daily | yes | yes | yes | no | no | no | no | no |
-| cs_regression | daily | yes | yes | no | yes | no | yes | no | no |
-| cs_resid | daily | yes | yes | no | yes | no | yes | no | no |
-| cs_std | daily | yes | yes | no | no | no | no | no | no |
+| cs_regression | daily | yes | no | no | no | no | yes | no | no |
+| cs_resid | daily | yes | no | no | no | no | yes | no | no |
+| cs_std | daily | yes | no | no | no | no | no | no | no |
 | cs_sum | daily | yes | yes | yes | no | no | no | no | no |
 | cs_weighted_demean | daily | yes | yes | yes | no | no | no | no | no |
 | cs_weighted_mean | daily | yes | yes | yes | no | no | no | no | no |
@@ -68,7 +68,7 @@
 | cube | legacy | yes | yes | yes | no | no | no | no | no |
 | digital_count | research | yes | yes | yes | no | no | no | no | no |
 | divide | daily | yes | yes | yes | no | no | yes | yes | yes |
-| downside_beta | research | yes | yes | no | no | no | no | no | no |
+| downside_beta | research | yes | no | no | no | no | no | no | no |
 | eq | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | ewm | daily | yes | yes | yes | no | no | no | no | no |
 | ewm_corr | daily | yes | no | no | no | no | yes | no | no |
@@ -90,20 +90,20 @@
 | group_max | daily | yes | yes | yes | no | no | yes | yes | no |
 | group_mean | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | group_min | daily | yes | yes | yes | no | no | yes | yes | no |
-| group_neutralize | daily | yes | yes | no | yes | no | yes | yes | yes |
-| group_normalize | daily | yes | yes | no | yes | no | yes | yes | yes |
-| group_percentile | daily | yes | yes | no | yes | no | yes | yes | no |
+| group_neutralize | daily | yes | no | no | no | no | yes | yes | yes |
+| group_normalize | daily | yes | no | no | no | no | yes | yes | yes |
+| group_percentile | daily | yes | no | no | no | no | yes | yes | no |
 | group_rank | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | group_std | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | group_sum | daily | yes | yes | yes | no | no | yes | yes | no |
 | group_weighted_mean | daily | yes | yes | yes | no | no | no | no | no |
 | group_weighted_zscore | daily | yes | yes | yes | no | no | no | no | no |
-| group_winsorize | daily | yes | yes | no | yes | no | yes | yes | yes |
+| group_winsorize | daily | yes | no | no | no | no | yes | yes | yes |
 | group_zscore | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | gt | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | identity | internal | yes | yes | yes | no | no | no | no | no |
 | idio_skew | research | yes | yes | yes | no | no | no | no | no |
-| idio_vol | research | yes | yes | no | no | no | no | no | no |
+| idio_vol | research | yes | no | no | no | no | no | no | no |
 | intercept | daily | yes | yes | yes | no | no | no | no | no |
 | intraday_vwap_deviation | research | yes | no | no | no | no | no | no | no |
 | inverse | daily | yes | yes | yes | yes | yes | yes | yes | yes |
@@ -133,7 +133,7 @@
 | multiply | daily | yes | yes | yes | no | no | yes | yes | yes |
 | ne | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | neg | daily | yes | yes | yes | no | no | yes | yes | yes |
-| normalize | daily | yes | yes | no | yes | no | yes | yes | yes |
+| normalize | daily | yes | no | no | no | no | yes | yes | yes |
 | not_ | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | or_ | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | period_average | daily | yes | no | no | no | no | no | no | no |
@@ -146,7 +146,7 @@
 | protected_div | internal | yes | no | no | no | no | yes | yes | yes |
 | quarter_from_cumulative | daily | yes | no | no | no | no | no | no | no |
 | rank | daily | yes | no | no | no | no | yes | yes | yes |
-| rank_corr | research | yes | yes | no | no | no | no | no | no |
+| rank_corr | research | yes | no | no | no | no | no | no | no |
 | real_turnover_rate | daily | yes | yes | yes | no | no | no | no | no |
 | residual_momentum_capm | research | yes | yes | yes | no | no | no | no | no |
 | revision_delta | daily | yes | yes | yes | no | no | no | no | no |
@@ -168,7 +168,7 @@
 | sqrt_abs | extended | yes | no | no | no | no | no | no | no |
 | square | extended | yes | yes | yes | no | no | no | no | no |
 | subtract | daily | yes | yes | yes | no | no | yes | yes | yes |
-| tail_beta | research | yes | yes | no | no | no | no | no | no |
+| tail_beta | research | yes | no | no | no | no | no | no | no |
 | tan | daily | yes | yes | yes | no | no | no | no | no |
 | tanh | daily | yes | yes | yes | no | no | yes | no | no |
 | trade_when | research | yes | yes | yes | no | no | no | no | no |
@@ -185,15 +185,15 @@
 | ts_count_if | daily | yes | yes | yes | no | no | yes | no | no |
 | ts_cov | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | ts_days_since | daily | yes | yes | yes | no | no | yes | no | no |
-| ts_decay_exp_window | daily | yes | yes | no | no | no | no | no | no |
-| ts_decay_linear | daily | yes | yes | no | yes | no | yes | no | no |
+| ts_decay_exp_window | daily | yes | no | no | no | no | no | no | no |
+| ts_decay_linear | daily | yes | no | no | no | no | yes | no | no |
 | ts_delay | daily | yes | yes | yes | no | no | yes | yes | yes |
 | ts_delta | daily | yes | yes | yes | no | no | yes | yes | yes |
 | ts_ema | daily | yes | yes | yes | yes | yes | yes | no | no |
-| ts_kurt | daily | yes | yes | yes | yes | yes | no | no | no |
+| ts_kurt | daily | yes | no | no | no | no | no | no | no |
 | ts_last_if | daily | yes | yes | yes | no | no | yes | no | no |
 | ts_log_return | daily | yes | no | no | no | no | no | no | no |
-| ts_mad | daily | yes | yes | no | yes | no | yes | no | no |
+| ts_mad | daily | yes | no | no | no | no | yes | no | no |
 | ts_max | daily | yes | yes | yes | no | no | yes | yes | yes |
 | ts_max_buildup | daily | yes | no | no | no | no | no | no | no |
 | ts_max_drawdown | daily | yes | no | no | no | no | yes | no | no |
@@ -207,21 +207,21 @@
 | ts_pct | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | ts_poly2_coeff | research | yes | no | no | no | no | no | no | no |
 | ts_poly2_resid | research | yes | no | no | no | no | no | no | no |
-| ts_product | daily | yes | yes | no | yes | no | yes | no | no |
+| ts_product | daily | yes | no | no | no | no | yes | no | no |
 | ts_quantile | daily | yes | yes | yes | yes | yes | yes | no | no |
-| ts_rank | daily | yes | yes | no | yes | no | yes | yes | yes |
+| ts_rank | daily | yes | no | no | no | no | yes | yes | yes |
 | ts_ratio | daily | yes | no | no | no | no | no | no | no |
 | ts_regression_intercept | daily | yes | no | no | no | no | no | no | no |
 | ts_regression_r2 | daily | yes | no | no | no | no | no | no | no |
 | ts_regression_resid | daily | yes | no | no | no | no | no | no | no |
 | ts_regression_slope | daily | yes | no | no | no | no | yes | no | no |
 | ts_regression_tstat | daily | yes | no | no | no | no | yes | no | no |
-| ts_sharpe | daily | yes | yes | no | yes | no | yes | yes | yes |
+| ts_sharpe | daily | yes | no | no | no | no | yes | yes | yes |
 | ts_skew | daily | yes | yes | yes | yes | yes | yes | no | no |
 | ts_std | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | ts_std_if | daily | yes | yes | yes | no | no | yes | no | no |
 | ts_sum | daily | yes | yes | yes | no | no | yes | yes | yes |
-| ts_sum_decay | research | yes | yes | no | no | no | no | no | no |
+| ts_sum_decay | research | yes | no | no | no | no | no | no | no |
 | ts_sum_if | daily | yes | yes | yes | no | no | yes | no | no |
 | ts_tail_mean | daily | yes | yes | yes | no | no | no | no | no |
 | ts_time_slope | daily | yes | yes | yes | no | no | yes | no | no |
@@ -236,7 +236,7 @@
 | ttm_from_quarterly | daily | yes | no | no | no | no | no | no | no |
 | unitize | daily | yes | no | no | no | no | no | no | no |
 | where | daily | yes | yes | yes | yes | yes | yes | yes | yes |
-| winsorize | daily | yes | yes | no | yes | no | yes | yes | yes |
+| winsorize | daily | yes | no | no | no | no | yes | yes | yes |
 | winsorize_mean | daily | yes | no | no | no | no | no | no | no |
 | yoy_by_period | daily | yes | no | no | no | no | no | no | no |
 | zscore | daily | yes | yes | yes | yes | yes | yes | yes | yes |

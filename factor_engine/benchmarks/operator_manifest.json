@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-07-17T15:07:34.170474+00:00",
-  "generated_commit_sha": "9504a995380a3fff882d7e2563e94b463337fb34",
+  "generated_at": "2026-07-17T15:54:36.774366+00:00",
+  "generated_commit_sha": "1a49d31e5539d82c729a45b5dc7fe7e922480ea6",
   "operators": [
     {
       "name": "ADX",
@@ -1703,7 +1703,6 @@
       "allow_in_production": true,
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "description": "截面中位绝对偏差（MAD，广播到各列）",
@@ -1725,7 +1724,7 @@
       "effective_production_fastpath": true,
       "effective_dual_backend_fastpath": true,
       "pandas": "implemented",
-      "polars_panel": "production_safe",
+      "polars_panel": "unsupported",
       "polars_long": "native_production_safe",
       "polars_long_tier": "native",
       "polars_long_native_tier": "production_safe",
@@ -1763,7 +1762,6 @@
       "allow_in_production": true,
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "description": "MAD 稳健 Z-Score：(x - median) / MAD",
@@ -1785,7 +1783,7 @@
       "effective_production_fastpath": true,
       "effective_dual_backend_fastpath": true,
       "pandas": "implemented",
-      "polars_panel": "production_safe",
+      "polars_panel": "unsupported",
       "polars_long": "native_production_safe",
       "polars_long_tier": "native",
       "polars_long_native_tier": "production_safe",
@@ -2192,7 +2190,6 @@
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "description": "截面回归: mode=0 残差, 1 beta, 2 拟合值",
@@ -2214,7 +2211,7 @@
       "effective_production_fastpath": false,
       "effective_dual_backend_fastpath": false,
       "pandas": "implemented",
-      "polars_panel": "production_safe",
+      "polars_panel": "unsupported",
       "polars_long": "native",
       "polars_long_tier": "native",
       "polars_long_native_tier": "implemented",
@@ -2253,7 +2250,6 @@
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "description": "截面线性回归残差 y - (α + βx)",
@@ -2275,7 +2271,7 @@
       "effective_production_fastpath": false,
       "effective_dual_backend_fastpath": false,
       "pandas": "implemented",
-      "polars_panel": "production_safe",
+      "polars_panel": "unsupported",
       "polars_long": "native",
       "polars_long_tier": "native",
       "polars_long_native_tier": "implemented",
@@ -2313,7 +2309,6 @@
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "description": "计算截面标准差",
@@ -2335,10 +2330,10 @@
       "effective_production_fastpath": false,
       "effective_dual_backend_fastpath": false,
       "pandas": "implemented",
-      "polars_panel": "implemented",
-      "polars_long": "registry",
-      "polars_long_tier": "registry",
-      "polars_long_native_tier": "registry",
+      "polars_panel": "unsupported",
+      "polars_long": "unsupported",
+      "polars_long_tier": "unsupported",
+      "polars_long_native_tier": "unsupported",
       "duckdb_sql": "unsupported",
       "duckdb_sql_effective_production_safe": false,
       "clickhouse_sql": "unsupported",
@@ -2915,8 +2910,7 @@
       "status": "experimental",
       "allow_in_production": false,
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "description": "下行 Beta：仅在 benchmark_ret < 0 子样本上估计",
       "execution_kind": "external_kernel",
@@ -2937,10 +2931,10 @@
       "effective_production_fastpath": false,
       "effective_dual_backend_fastpath": false,
       "pandas": "implemented",
-      "polars_panel": "implemented",
-      "polars_long": "registry",
-      "polars_long_tier": "registry",
-      "polars_long_native_tier": "registry",
+      "polars_panel": "unsupported",
+      "polars_long": "unsupported",
+      "polars_long_tier": "unsupported",
+      "polars_long_native_tier": "unsupported",
       "duckdb_sql": "unsupported",
       "duckdb_sql_effective_production_safe": false,
       "clickhouse_sql": "unsupported",
@@ -4247,7 +4241,6 @@
       "allow_in_production": true,
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "description": "在指定分组内进行去均值处理 (x - group_mean)",
@@ -4269,7 +4262,7 @@
       "effective_production_fastpath": true,
       "effective_dual_backend_fastpath": true,
       "pandas": "implemented",
-      "polars_panel": "production_safe",
+      "polars_panel": "unsupported",
       "polars_long": "native_production_safe",
       "polars_long_tier": "native",
       "polars_long_native_tier": "production_safe",
@@ -4308,7 +4301,6 @@
       "allow_in_production": true,
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "description": "在指定分组内对股票进行归一化到[0,1]",
@@ -4330,7 +4322,7 @@
       "effective_production_fastpath": true,
       "effective_dual_backend_fastpath": true,
       "pandas": "implemented",
-      "polars_panel": "parity_verified",
+      "polars_panel": "unsupported",
       "polars_long": "native_production_safe",
       "polars_long_tier": "native",
       "polars_long_native_tier": "production_safe",
@@ -4372,7 +4364,6 @@
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "description": "组内 top/bottom 分位掩码；默认 top。缺失分组默认报错，不静默退化为全截面。",
@@ -4394,7 +4385,7 @@
       "effective_production_fastpath": false,
       "effective_dual_backend_fastpath": false,
       "pandas": "implemented",
-      "polars_panel": "production_safe",
+      "polars_panel": "unsupported",
       "polars_long": "native",
       "polars_long_tier": "native",
       "polars_long_native_tier": "parity_verified",
@@ -4739,7 +4730,6 @@
       "allow_in_production": true,
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "description": "在指定分组内进行缩尾处理，将超出分位数a的值截断",
@@ -4761,7 +4751,7 @@
       "effective_production_fastpath": true,
       "effective_dual_backend_fastpath": true,
       "pandas": "implemented",
-      "polars_panel": "production_safe",
+      "polars_panel": "unsupported",
       "polars_long": "native_production_safe",
       "polars_long_tier": "native",
       "polars_long_native_tier": "production_safe",
@@ -5042,8 +5032,7 @@
       "status": "experimental",
       "allow_in_production": false,
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "description": "特质波动率：CAPM 残差滚动标准差",
       "execution_kind": "external_kernel",
@@ -5064,10 +5053,10 @@
       "effective_production_fastpath": false,
       "effective_dual_backend_fastpath": false,
       "pandas": "implemented",
-      "polars_panel": "implemented",
-      "polars_long": "registry",
-      "polars_long_tier": "registry",
-      "polars_long_native_tier": "registry",
+      "polars_panel": "unsupported",
+      "polars_long": "unsupported",
+      "polars_long_tier": "unsupported",
+      "polars_long_native_tier": "unsupported",
       "duckdb_sql": "unsupported",
       "duckdb_sql_effective_production_safe": false,
       "clickhouse_sql": "unsupported",
@@ -6844,7 +6833,6 @@
       "allow_in_production": true,
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "description": "归一化到[0, 1]",
@@ -6866,7 +6854,7 @@
       "effective_production_fastpath": true,
       "effective_dual_backend_fastpath": true,
       "pandas": "implemented",
-      "polars_panel": "parity_verified",
+      "polars_panel": "unsupported",
       "polars_long": "native_production_safe",
       "polars_long_tier": "native",
       "polars_long_native_tier": "production_safe",
@@ -7635,8 +7623,7 @@
       "status": "research",
       "allow_in_production": false,
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "description": "秩相关系数（d=0 为截面，d>0 为时序窗口）",
       "execution_kind": "external_kernel",
@@ -7657,10 +7644,10 @@
       "effective_production_fastpath": false,
       "effective_dual_backend_fastpath": false,
       "pandas": "implemented",
-      "polars_panel": "implemented",
-      "polars_long": "registry",
-      "polars_long_tier": "registry",
-      "polars_long_native_tier": "registry",
+      "polars_panel": "unsupported",
+      "polars_long": "unsupported",
+      "polars_long_tier": "unsupported",
+      "polars_long_native_tier": "unsupported",
       "duckdb_sql": "unsupported",
       "duckdb_sql_effective_production_safe": false,
       "clickhouse_sql": "unsupported",
@@ -8954,8 +8941,7 @@
       "status": "experimental",
       "allow_in_production": false,
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "description": "尾部 Beta：在 benchmark_ret 最低 q 分位子样本上估计",
       "execution_kind": "external_kernel",
@@ -8976,10 +8962,10 @@
       "effective_production_fastpath": false,
       "effective_dual_backend_fastpath": false,
       "pandas": "implemented",
-      "polars_panel": "implemented",
-      "polars_long": "registry",
-      "polars_long_tier": "registry",
-      "polars_long_native_tier": "registry",
+      "polars_panel": "unsupported",
+      "polars_long": "unsupported",
+      "polars_long_tier": "unsupported",
+      "polars_long_native_tier": "unsupported",
       "duckdb_sql": "unsupported",
       "duckdb_sql_effective_production_safe": false,
       "clickhouse_sql": "unsupported",
@@ -9998,8 +9984,7 @@
       "status": "research",
       "allow_in_production": false,
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "description": "指数加权滚动",
       "execution_kind": "primitive",
@@ -10020,10 +10005,10 @@
       "effective_production_fastpath": false,
       "effective_dual_backend_fastpath": false,
       "pandas": "implemented",
-      "polars_panel": "implemented",
-      "polars_long": "registry",
-      "polars_long_tier": "registry",
-      "polars_long_native_tier": "registry",
+      "polars_panel": "unsupported",
+      "polars_long": "unsupported",
+      "polars_long_tier": "unsupported",
+      "polars_long_native_tier": "unsupported",
       "duckdb_sql": "unsupported",
       "duckdb_sql_effective_production_safe": false,
       "clickhouse_sql": "unsupported",
@@ -10059,7 +10044,6 @@
       "allow_in_production": true,
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "description": "线性加权滚动平均",
@@ -10081,7 +10065,7 @@
       "effective_production_fastpath": false,
       "effective_dual_backend_fastpath": false,
       "pandas": "implemented",
-      "polars_panel": "production_safe",
+      "polars_panel": "unsupported",
       "polars_long": "python_rolling",
       "polars_long_tier": "python_rolling",
       "polars_long_native_tier": "python_rolling",
@@ -10302,8 +10286,7 @@
       "status": "research",
       "allow_in_production": false,
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "description": "计算n期移动峰度",
       "execution_kind": "primitive",
@@ -10324,7 +10307,7 @@
       "effective_production_fastpath": false,
       "effective_dual_backend_fastpath": false,
       "pandas": "implemented",
-      "polars_panel": "production_safe",
+      "polars_panel": "unsupported",
       "polars_long": "map_groups",
       "polars_long_tier": "map_groups",
       "polars_long_native_tier": "map_groups",
@@ -10487,7 +10470,6 @@
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "description": "滚动中位绝对偏差 median(|x-median(x)|)。",
@@ -10509,7 +10491,7 @@
       "effective_production_fastpath": false,
       "effective_dual_backend_fastpath": false,
       "pandas": "implemented",
-      "polars_panel": "production_safe",
+      "polars_panel": "unsupported",
       "polars_long": "nonstandard_alg",
       "polars_long_tier": "nonstandard_alg",
       "polars_long_native_tier": "nonstandard_alg",
@@ -11343,7 +11325,6 @@
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "description": "滚动乘积；保留零与负号，NaN 可跳过，溢出返回 NaN。",
@@ -11365,7 +11346,7 @@
       "effective_production_fastpath": false,
       "effective_dual_backend_fastpath": false,
       "pandas": "implemented",
-      "polars_panel": "production_safe",
+      "polars_panel": "unsupported",
       "polars_long": "python_rolling",
       "polars_long_tier": "python_rolling",
       "polars_long_native_tier": "python_rolling",
@@ -11466,7 +11447,6 @@
       "allow_in_production": true,
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "description": "滚动排名 (与m_rank相同)",
@@ -11488,7 +11468,7 @@
       "effective_production_fastpath": true,
       "effective_dual_backend_fastpath": true,
       "pandas": "implemented",
-      "polars_panel": "production_safe",
+      "polars_panel": "unsupported",
       "polars_long": "native_production_safe",
       "polars_long_tier": "native",
       "polars_long_native_tier": "production_safe",
@@ -11903,7 +11883,6 @@
       "allow_in_production": true,
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "description": "滚动夏普：mean/std * sqrt(ann_factor)",
@@ -11925,7 +11904,7 @@
       "effective_production_fastpath": true,
       "effective_dual_backend_fastpath": true,
       "pandas": "implemented",
-      "polars_panel": "parity_verified",
+      "polars_panel": "unsupported",
       "polars_long": "native_production_safe",
       "polars_long_tier": "native",
       "polars_long_native_tier": "production_safe",
@@ -12210,8 +12189,7 @@
       "status": "research",
       "allow_in_production": false,
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "description": "衰减求和",
       "execution_kind": "primitive",
@@ -12232,10 +12210,10 @@
       "effective_production_fastpath": false,
       "effective_dual_backend_fastpath": false,
       "pandas": "implemented",
-      "polars_panel": "implemented",
-      "polars_long": "registry",
-      "polars_long_tier": "registry",
-      "polars_long_native_tier": "registry",
+      "polars_panel": "unsupported",
+      "polars_long": "unsupported",
+      "polars_long_tier": "unsupported",
+      "polars_long_native_tier": "unsupported",
       "duckdb_sql": "unsupported",
       "duckdb_sql_effective_production_safe": false,
       "clickhouse_sql": "unsupported",
@@ -13132,7 +13110,6 @@
       "allow_in_production": true,
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "description": "缩尾处理",
@@ -13154,7 +13131,7 @@
       "effective_production_fastpath": true,
       "effective_dual_backend_fastpath": true,
       "pandas": "implemented",
-      "polars_panel": "parity_verified",
+      "polars_panel": "unsupported",
       "polars_long": "native_production_safe",
       "polars_long_tier": "native",
       "polars_long_native_tier": "production_safe",

@@ -1638,10 +1638,12 @@ class TSSkewnessPolars(SeriesOperator):
         tags=["time_series", "ts_", "skewness"]
     )
     def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        from cleaned_operators.base_polars import panel_pandas_bridge
-
         w = int(kwargs.get("d", window))
-        return panel_pandas_bridge(x, lambda pdf: pdf.rolling(window=w, min_periods=1).skew())
+        cols = [c for c in x.columns if c not in ['date', 'stock_code']]
+        return x.with_columns([
+            pl.col(c).rolling_skew(window_size=w, bias=False, min_samples=1).alias(c)
+            for c in cols
+        ])
 
 # aliases: TS_SKEW
 

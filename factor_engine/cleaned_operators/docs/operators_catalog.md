@@ -41,17 +41,17 @@
 | cs_demean | daily | pandas_numpy, polars, sql | CS_DEMEAN, c_demean | True | cs | None | None | 0 |
 | cs_fill_mean | daily | pandas_numpy, polars |  | True | cs | 0 | 1 | 0 |
 | cs_fill_median | daily | pandas_numpy, polars |  | True | cs | 0 | 1 | 0 |
-| cs_mad | daily | pandas_numpy, polars, sql |  | True | cs | None | None | 0 |
-| cs_mad_zscore | daily | pandas_numpy, polars, sql |  | True | cs | None | None | 0 |
+| cs_mad | daily | pandas_numpy, sql |  | True | cs | None | None | 0 |
+| cs_mad_zscore | daily | pandas_numpy, sql |  | True | cs | None | None | 0 |
 | cs_mean | daily | pandas_numpy, polars, sql | c_mean | False | cs | 0 | 1 | 0 |
 | cs_multi_resid | daily | pandas_numpy, sql |  | True | cs | None | None | 0 |
 | cs_neutralize | daily | pandas_numpy |  | True | cs | None | None | 0 |
 | cs_pct_rank | daily | pandas_numpy, polars, sql | rank_pct | True | cs | None | None | 0 |
 | cs_quantile | daily | pandas_numpy, sql | c_percentile, quantile | True | cs | None | None | 0 |
 | cs_rank_gaussian | daily | pandas_numpy, polars |  | True | cs | 0 | 1 | 0 |
-| cs_regression | daily | pandas_numpy, polars, sql |  | True | cs | None | None | 0 |
-| cs_resid | daily | pandas_numpy, polars, sql |  | True | cs | None | None | 0 |
-| cs_std | daily | pandas_numpy, polars, sql | c_std | False | cs | 0 | 1 | 0 |
+| cs_regression | daily | pandas_numpy, sql |  | True | cs | None | None | 0 |
+| cs_resid | daily | pandas_numpy, sql |  | True | cs | None | None | 0 |
+| cs_std | daily | pandas_numpy, sql | c_std | False | cs | 0 | 1 | 0 |
 | cs_sum | daily | pandas_numpy, polars, sql | c_sum | False | cs | 0 | 1 | 0 |
 | cs_weighted_demean | daily | pandas_numpy, polars |  | True | cs | 0 | 1 | 0 |
 | cs_weighted_mean | daily | pandas_numpy, polars |  | True | cs | 0 | 1 | 0 |
@@ -61,7 +61,7 @@
 | cube | legacy | pandas_numpy, polars |  | False | elementwise | None | None | 0 |
 | digital_count | research | pandas_numpy, polars |  | False | ts | None | None | 0 |
 | divide | daily | pandas_numpy, polars, sql |  | True | elementwise | None | None | 0 |
-| downside_beta | research | pandas_numpy, polars |  | True | ts | None | 3 | 0 |
+| downside_beta | research | pandas_numpy |  | True | ts | None | 3 | 0 |
 | eq | daily | pandas_numpy, polars, sql |  | True | elementwise | None | None | 0 |
 | ewm | daily | pandas_numpy, polars |  | False | elementwise | None | None | 0 |
 | ewm_corr | daily | pandas_numpy, sql |  | True | ts | None | 1 | 0 |
@@ -83,20 +83,20 @@
 | group_max | daily | pandas_numpy, polars, sql |  | False | cs | 0 | 1 | 0 |
 | group_mean | daily | pandas_numpy, polars, sql |  | True | cs | None | None | 0 |
 | group_min | daily | pandas_numpy, polars, sql |  | False | cs | 0 | 1 | 0 |
-| group_neutralize | daily | pandas_numpy, polars, sql | INDUSTRY_NEUTRAL, INDUSTRY_NEUTRALIZE, IND_NEUTRALIZE, NEUTRALIZE, c_neutralize, group_demean, ind_neutralize, industry_neutral, industry_neutralize, neutralize, panel_neutralize | True | cs | None | None | 0 |
-| group_normalize | daily | pandas_numpy, polars, sql |  | True | cs | None | None | 0 |
-| group_percentile | daily | pandas_numpy, polars, sql |  | True | cs | None | None | 0 |
+| group_neutralize | daily | pandas_numpy, sql | INDUSTRY_NEUTRAL, INDUSTRY_NEUTRALIZE, IND_NEUTRALIZE, NEUTRALIZE, c_neutralize, group_demean, ind_neutralize, industry_neutral, industry_neutralize, neutralize, panel_neutralize | True | cs | None | None | 0 |
+| group_normalize | daily | pandas_numpy, sql |  | True | cs | None | None | 0 |
+| group_percentile | daily | pandas_numpy, sql |  | True | cs | None | None | 0 |
 | group_rank | daily | pandas_numpy, polars, sql |  | True | cs | None | None | 0 |
 | group_std | daily | pandas_numpy, polars, sql |  | True | cs | None | None | 0 |
 | group_sum | daily | pandas_numpy, polars, sql |  | False | cs | 0 | 1 | 0 |
 | group_weighted_mean | daily | pandas_numpy, polars |  | True | cs | 0 | 1 | 0 |
 | group_weighted_zscore | daily | pandas_numpy, polars |  | True | cs | 0 | 1 | 0 |
-| group_winsorize | daily | pandas_numpy, polars, sql |  | True | cs | None | None | 0 |
+| group_winsorize | daily | pandas_numpy, sql |  | True | cs | None | None | 0 |
 | group_zscore | daily | pandas_numpy, polars, sql |  | True | cs | None | None | 0 |
 | gt | daily | pandas_numpy, polars, sql |  | True | elementwise | None | None | 0 |
 | identity | internal | pandas_numpy, polars |  | False | elementwise | None | None | 0 |
 | idio_skew | research | pandas_numpy, polars |  | True | ts | None | 5 | 0 |
-| idio_vol | research | pandas_numpy, polars |  | True | ts | None | 5 | 0 |
+| idio_vol | research | pandas_numpy |  | True | ts | None | 5 | 0 |
 | intercept | daily | pandas_numpy, polars | Intercept | False | aggregate | None | 1 | 0 |
 | intraday_vwap_deviation | research | pandas_numpy |  | True | ts | None | 1 | 0 |
 | inverse | daily | pandas_numpy, polars, sql | inv, reciprocal | True | elementwise | None | None | 0 |
@@ -126,7 +126,7 @@
 | multiply | daily | pandas_numpy, polars, sql |  | True | elementwise | None | None | 0 |
 | ne | daily | pandas_numpy, polars, sql |  | True | elementwise | None | None | 0 |
 | neg | daily | pandas_numpy, polars, sql | negate, reverse | True | elementwise | None | None | 0 |
-| normalize | daily | pandas_numpy, polars, sql |  | True | cs | None | None | 0 |
+| normalize | daily | pandas_numpy, sql |  | True | cs | None | None | 0 |
 | not_ | daily | pandas_numpy, polars, sql |  | True | elementwise | None | None | 0 |
 | or_ | daily | pandas_numpy, polars, sql |  | True | elementwise | None | None | 0 |
 | period_average | daily | pandas_numpy |  | True | fundamental_period | None | 1 | 0 |
@@ -139,7 +139,7 @@
 | protected_div | internal | pandas_numpy, sql |  | True | elementwise | None | None | 0 |
 | quarter_from_cumulative | daily | pandas_numpy | quarter_from_cumulative | True | ts | None | 1 | 0 |
 | rank | daily | pandas_numpy, sql | CS_RANK, RANK, c_rank, cs_rank, cs_rank_01, panel_rank | True | cs | None | None | 0 |
-| rank_corr | research | pandas_numpy, polars | RANKCORR, RANK_CORR, rankcorr | True | ts | None | 2 | 0 |
+| rank_corr | research | pandas_numpy | RANKCORR, RANK_CORR, rankcorr | True | ts | None | 2 | 0 |
 | real_turnover_rate | daily | pandas_numpy, polars |  | True | elementwise | None | None | 0 |
 | residual_momentum_capm | research | pandas_numpy, polars |  | True | ts | None | 5 | 0 |
 | revision_delta | daily | pandas_numpy, polars |  | True | fundamental_period | None | 1 | 0 |
@@ -161,7 +161,7 @@
 | sqrt_abs | extended | pandas_numpy |  | False | elementwise | None | None | 0 |
 | square | extended | pandas_numpy, polars | sqr | True | elementwise | None | None | 0 |
 | subtract | daily | pandas_numpy, polars, sql |  | True | elementwise | None | None | 0 |
-| tail_beta | research | pandas_numpy, polars |  | True | ts | None | 3 | 0 |
+| tail_beta | research | pandas_numpy |  | True | ts | None | 3 | 0 |
 | tan | daily | pandas_numpy, polars |  | False | elementwise | None | None | 0 |
 | tanh | daily | pandas_numpy, polars, sql |  | True | elementwise | None | None | 0 |
 | trade_when | research | pandas_numpy, polars |  | False | ts | None | None | 0 |
@@ -178,15 +178,15 @@
 | ts_count_if | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
 | ts_cov | daily | pandas_numpy, polars, sql | Cov, Covariance, TS_COV, cov, m_cov, ts_covariance | True | ts | None | 1 | 0 |
 | ts_days_since | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
-| ts_decay_exp_window | daily | pandas_numpy, polars |  | False | ts | None | 1 | 0 |
-| ts_decay_linear | daily | pandas_numpy, polars, sql | DECAY_LINEAR, TS_DECAY_LINEAR, WMA, decay_linear, ts_decay, ts_decay_linear | True | ts | None | 1 | 0 |
+| ts_decay_exp_window | daily | pandas_numpy |  | False | ts | None | 1 | 0 |
+| ts_decay_linear | daily | pandas_numpy, sql | DECAY_LINEAR, TS_DECAY_LINEAR, WMA, decay_linear, ts_decay, ts_decay_linear | True | ts | None | 1 | 0 |
 | ts_delay | daily | pandas_numpy, polars, sql | DELAY, Delay, Ref, delay, m_delay, prev, shift, ts_delay | True | ts | None | None | 1 |
 | ts_delta | daily | pandas_numpy, polars, sql | Delta, Diff, TS_DELTA, delta, deltas | True | ts | None | None | 1 |
 | ts_ema | daily | pandas_numpy, polars, sql | EMA, ema, ewm_mean, ts_ema | True | ts | None | 1 | 0 |
-| ts_kurt | daily | pandas_numpy, polars | Kurt, TS_KURT, kurt, m_kurt, ts_kurtosis | False | ts | None | None | 0 |
+| ts_kurt | daily | pandas_numpy | Kurt, TS_KURT, kurt, m_kurt, ts_kurtosis | False | ts | None | None | 0 |
 | ts_last_if | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
 | ts_log_return | daily | pandas_numpy, sql | log_returns | True | ts | None | 2 | 1 |
-| ts_mad | daily | pandas_numpy, polars, sql | Mad, m_mad, mad | True | ts | None | None | 0 |
+| ts_mad | daily | pandas_numpy, sql | Mad, m_mad, mad | True | ts | None | None | 0 |
 | ts_max | daily | pandas_numpy, polars, sql | Max, TS_MAX, m_max, window_max | True | ts | None | 1 | 0 |
 | ts_max_buildup | daily | pandas_numpy |  | False | ts | None | None | 0 |
 | ts_max_drawdown | daily | pandas_numpy, sql |  | True | ts | None | 2 | 0 |
@@ -200,21 +200,21 @@
 | ts_pct | daily | pandas_numpy, polars, sql | TS_PCT, m_pct_change, pct_change, returns, ts_return | True | ts | None | None | 1 |
 | ts_poly2_coeff | research | pandas_numpy |  | True | ts | None | 3 | 0 |
 | ts_poly2_resid | research | pandas_numpy |  | True | ts | None | 3 | 0 |
-| ts_product | daily | pandas_numpy, polars, sql |  | True | ts | None | None | 0 |
+| ts_product | daily | pandas_numpy, sql |  | True | ts | None | None | 0 |
 | ts_quantile | daily | pandas_numpy, polars, sql | Percentile, TS_QUANTILE, m_percentile, percentile | False | ts | None | None | 0 |
-| ts_rank | daily | pandas_numpy, polars, sql | TS_RANK, m_rank | True | ts | None | 1 | 0 |
+| ts_rank | daily | pandas_numpy, sql | TS_RANK, m_rank | True | ts | None | 1 | 0 |
 | ts_ratio | daily | pandas_numpy | ratios | False | ts | None | None | 0 |
 | ts_regression_intercept | daily | pandas_numpy |  | True | ts | None | 3 | 0 |
 | ts_regression_r2 | daily | pandas_numpy |  | True | ts | None | 3 | 0 |
 | ts_regression_resid | daily | pandas_numpy | rolling_residual | True | ts | None | 3 | 0 |
 | ts_regression_slope | daily | pandas_numpy, sql | TS_REGRESSION_SLOPE, ts_regression | True | ts | None | 3 | 0 |
 | ts_regression_tstat | daily | pandas_numpy, sql |  | True | ts | None | 3 | 0 |
-| ts_sharpe | daily | pandas_numpy, polars, sql |  | True | ts | None | 2 | 0 |
+| ts_sharpe | daily | pandas_numpy, sql |  | True | ts | None | 2 | 0 |
 | ts_skew | daily | pandas_numpy, polars, sql | Skew, TS_SKEW, m_skew, skew, ts_skewness | False | ts | None | None | 0 |
 | ts_std | daily | pandas_numpy, polars, sql | Std, TS_STD, m_std, running_std, std, std_n, ts_std_dev, ts_stddev, window_std | True | ts | None | 1 | 0 |
 | ts_std_if | daily | pandas_numpy, polars, sql |  | True | ts | None | 2 | 0 |
 | ts_sum | daily | pandas_numpy, polars, sql | Sum, TS_SUM, m_sum, running_sum, sum, sum_n, window_sum | True | ts | None | 1 | 0 |
-| ts_sum_decay | research | pandas_numpy, polars |  | False | ts | None | 1 | 0 |
+| ts_sum_decay | research | pandas_numpy |  | False | ts | None | 1 | 0 |
 | ts_sum_if | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
 | ts_tail_mean | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_time_slope | daily | pandas_numpy, polars, sql | Slope, TS_TIME_SLOPE, slope | True | ts | None | 2 | 0 |
@@ -229,7 +229,7 @@
 | ttm_from_quarterly | daily | pandas_numpy | ttm_from_quarterly | True | ts | None | 1 | 0 |
 | unitize | daily | pandas_numpy |  | False | elementwise | None | None | 0 |
 | where | daily | pandas_numpy, polars, sql | IIF, WHERE, if, if_else, iif | True | elementwise | None | None | 0 |
-| winsorize | daily | pandas_numpy, polars, sql | WINSORIZE, c_winsorize | True | cs | None | None | 0 |
+| winsorize | daily | pandas_numpy, sql | WINSORIZE, c_winsorize | True | cs | None | None | 0 |
 | winsorize_mean | daily | pandas_numpy |  | False | elementwise | None | None | 0 |
 | yoy_by_period | daily | pandas_numpy | yoy_by_period | True | ts | None | 5 | 0 |
 | zscore | daily | pandas_numpy, polars, sql | CS_ZSCORE, ZSCORE, c_zscore, cs_zscore, panel_standardize, panel_zscore, standardize | True | cs | None | None | 0 |

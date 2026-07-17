@@ -66,19 +66,10 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
-        },
-        "polars": {
-          "execution_kind": "numpy_materialized",
-          "explicit": true,
-          "materializes_full_panel": true,
-          "source": "factor_dsl_polars",
-          "supports_lazy": false,
-          "supports_streaming": false
         }
       },
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "canonical": "Mode",
       "description": "滚动众数",
@@ -122,19 +113,10 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
-        },
-        "polars": {
-          "execution_kind": "expression_native",
-          "explicit": true,
-          "materializes_full_panel": false,
-          "source": "factor_dsl_polars",
-          "supports_lazy": true,
-          "supports_streaming": true
         }
       },
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "canonical": "at_imax",
       "description": "扩展 argmax",
@@ -152,19 +134,10 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
-        },
-        "polars": {
-          "execution_kind": "expression_native",
-          "explicit": true,
-          "materializes_full_panel": false,
-          "source": "factor_dsl_polars",
-          "supports_lazy": true,
-          "supports_streaming": true
         }
       },
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "canonical": "at_imin",
       "description": "扩展 argmin",
@@ -235,19 +208,10 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
-        },
-        "polars": {
-          "execution_kind": "expression_native",
-          "explicit": true,
-          "materializes_full_panel": false,
-          "source": "factor_dsl_polars",
-          "supports_lazy": true,
-          "supports_streaming": true
         }
       },
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "canonical": "blom_transform",
       "description": "Blom 变换",
@@ -265,19 +229,10 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
-        },
-        "polars": {
-          "execution_kind": "numpy_materialized",
-          "explicit": true,
-          "materializes_full_panel": true,
-          "source": "factor_dsl_polars",
-          "supports_lazy": false,
-          "supports_streaming": false
         }
       },
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "canonical": "causal_linear_extrapolate",
       "description": "因果线性外推",
@@ -472,19 +427,10 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
-        },
-        "polars": {
-          "execution_kind": "numpy_materialized",
-          "explicit": true,
-          "materializes_full_panel": true,
-          "source": "factor_dsl_polars",
-          "supports_lazy": false,
-          "supports_streaming": false
         }
       },
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "canonical": "corr_test",
       "description": "Pearson 相关检验 p 值",
@@ -706,19 +652,10 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
-        },
-        "polars": {
-          "execution_kind": "numpy_materialized",
-          "explicit": true,
-          "materializes_full_panel": true,
-          "source": "factor_dsl_polars",
-          "supports_lazy": false,
-          "supports_streaming": false
         }
       },
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "canonical": "cum_top_n_avg",
       "description": "累积前N大值均值",
@@ -737,19 +674,10 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
-        },
-        "polars": {
-          "execution_kind": "numpy_materialized",
-          "explicit": true,
-          "materializes_full_panel": true,
-          "source": "factor_dsl_polars",
-          "supports_lazy": false,
-          "supports_streaming": false
         }
       },
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "canonical": "cum_top_n_sum",
       "description": "累积前N大值求和",
@@ -874,19 +802,10 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
-        },
-        "polars": {
-          "execution_kind": "numpy_materialized",
-          "explicit": true,
-          "materializes_full_panel": true,
-          "source": "factor_dsl_polars",
-          "supports_lazy": false,
-          "supports_streaming": false
         }
       },
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "canonical": "durbin_watson_test",
       "description": "Durbin-Watson 统计量",
@@ -1027,19 +946,10 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
-        },
-        "polars": {
-          "execution_kind": "numpy_materialized",
-          "explicit": true,
-          "materializes_full_panel": true,
-          "source": "factor_dsl_polars",
-          "supports_lazy": false,
-          "supports_streaming": false
         }
       },
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "canonical": "expanding_rank",
       "description": "扩展窗口百分位排名",
@@ -1451,19 +1361,10 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
-        },
-        "polars": {
-          "execution_kind": "numpy_materialized",
-          "explicit": true,
-          "materializes_full_panel": true,
-          "source": "factor_dsl_polars",
-          "supports_lazy": false,
-          "supports_streaming": false
         }
       },
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "canonical": "hump_decay",
       "description": "阈值衰减",
@@ -1536,19 +1437,10 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
-        },
-        "polars": {
-          "execution_kind": "numpy_materialized",
-          "explicit": true,
-          "materializes_full_panel": true,
-          "source": "factor_dsl_polars",
-          "supports_lazy": false,
-          "supports_streaming": false
         }
       },
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "canonical": "imag",
       "description": "虚部",
@@ -2360,19 +2252,10 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
-        },
-        "polars": {
-          "execution_kind": "numpy_materialized",
-          "explicit": true,
-          "materializes_full_panel": true,
-          "source": "factor_dsl_polars",
-          "supports_lazy": false,
-          "supports_streaming": false
         }
       },
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "canonical": "real",
       "description": "实部",
@@ -2502,19 +2385,10 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
-        },
-        "polars": {
-          "execution_kind": "numpy_materialized",
-          "explicit": true,
-          "materializes_full_panel": true,
-          "source": "factor_dsl_polars",
-          "supports_lazy": false,
-          "supports_streaming": false
         }
       },
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "canonical": "row_beta",
       "description": "行 Beta",
@@ -2533,19 +2407,10 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
-        },
-        "polars": {
-          "execution_kind": "numpy_materialized",
-          "explicit": true,
-          "materializes_full_panel": true,
-          "source": "factor_dsl_polars",
-          "supports_lazy": false,
-          "supports_streaming": false
         }
       },
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "canonical": "row_corr",
       "description": "行相关（两输入同名列）",
@@ -2594,19 +2459,10 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
-        },
-        "polars": {
-          "execution_kind": "numpy_materialized",
-          "explicit": true,
-          "materializes_full_panel": true,
-          "source": "factor_dsl_polars",
-          "supports_lazy": false,
-          "supports_streaming": false
         }
       },
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "canonical": "row_kurt",
       "description": "行峰度",
@@ -2654,19 +2510,10 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
-        },
-        "polars": {
-          "execution_kind": "numpy_materialized",
-          "explicit": true,
-          "materializes_full_panel": true,
-          "source": "factor_dsl_polars",
-          "supports_lazy": false,
-          "supports_streaming": false
         }
       },
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "canonical": "row_median",
       "description": "行中位数",
@@ -2714,19 +2561,10 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
-        },
-        "polars": {
-          "execution_kind": "numpy_materialized",
-          "explicit": true,
-          "materializes_full_panel": true,
-          "source": "factor_dsl_polars",
-          "supports_lazy": false,
-          "supports_streaming": false
         }
       },
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "canonical": "row_prod",
       "description": "行连乘",
@@ -2744,19 +2582,10 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
-        },
-        "polars": {
-          "execution_kind": "numpy_materialized",
-          "explicit": true,
-          "materializes_full_panel": true,
-          "source": "factor_dsl_polars",
-          "supports_lazy": false,
-          "supports_streaming": false
         }
       },
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "canonical": "row_skew",
       "description": "行偏度",
@@ -2774,19 +2603,10 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
-        },
-        "polars": {
-          "execution_kind": "numpy_materialized",
-          "explicit": true,
-          "materializes_full_panel": true,
-          "source": "factor_dsl_polars",
-          "supports_lazy": false,
-          "supports_streaming": false
         }
       },
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "canonical": "row_std",
       "description": "行标准差",
@@ -2834,19 +2654,10 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
-        },
-        "polars": {
-          "execution_kind": "numpy_materialized",
-          "explicit": true,
-          "materializes_full_panel": true,
-          "source": "factor_dsl_polars",
-          "supports_lazy": false,
-          "supports_streaming": false
         }
       },
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "canonical": "row_var",
       "description": "行方差",

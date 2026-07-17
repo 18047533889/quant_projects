@@ -390,10 +390,16 @@ class TSQuantilePolars(SeriesOperator):
     def _calculate_series(self, x: pl.DataFrame, d: int = 20, q: float = 0.5, **kwargs) -> pl.DataFrame:
         window = int(kwargs.get("window", d))
         quantile = float(kwargs.get("p", q))
-        return panel_pandas_bridge(
-            x,
-            lambda pdf: pdf.rolling(window=window, min_periods=1).quantile(quantile),
-        )
+        cols = _numeric_cols(x)
+        return x.with_columns([
+            pl.col(c).rolling_quantile(
+                quantile=quantile,
+                interpolation="linear",
+                window_size=window,
+                min_samples=1,
+            ).alias(c)
+            for c in cols
+        ])
 
 
 # ---------------------------------------------------------------------------

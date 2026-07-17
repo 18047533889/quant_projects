@@ -81,10 +81,17 @@ class EWMStdPolars(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, span: int = 20, **kwargs) -> pl.DataFrame:
-        from cleaned_operators.base_polars import panel_pandas_bridge
-
         span_i = int(kwargs.get("d", span))
-        return panel_pandas_bridge(x, lambda pdf: pdf.ewm(span=span_i, adjust=False).std())
+        cols = _numeric_cols(x)
+        return x.with_columns([
+            pl.when(pl.col(c).is_not_null().cum_sum() < 2)
+            .then(None)
+            .otherwise(
+                pl.col(c).ewm_std(span=span_i, adjust=False, bias=False, min_samples=1)
+                .fill_null(strategy="forward")
+            ).alias(c)
+            for c in cols
+        ])
 
 
 @register_operator(name="ewm_var", category="data_handling", business_category="data_cleaning", canonical="ewm_var", source="factor_dsl_polars")
@@ -96,10 +103,17 @@ class EWMVarPolars(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, span: int = 20, **kwargs) -> pl.DataFrame:
-        from cleaned_operators.base_polars import panel_pandas_bridge
-
         span_i = int(kwargs.get("d", span))
-        return panel_pandas_bridge(x, lambda pdf: pdf.ewm(span=span_i, adjust=False).var())
+        cols = _numeric_cols(x)
+        return x.with_columns([
+            pl.when(pl.col(c).is_not_null().cum_sum() < 2)
+            .then(None)
+            .otherwise(
+                pl.col(c).ewm_var(span=span_i, adjust=False, bias=False, min_samples=1)
+                .fill_null(strategy="forward")
+            ).alias(c)
+            for c in cols
+        ])
 
 
 @register_operator(name="ewm_corr", category="data_handling", business_category="data_cleaning", canonical="ewm_corr", source="factor_dsl_polars")

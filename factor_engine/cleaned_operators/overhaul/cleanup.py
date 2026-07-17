@@ -118,17 +118,10 @@ def finalize() -> None:
         (set(operator_surface.DAILY_CANONICALS) - set(DEDUPE) - set(RECIPE_CANONICALS))
         | set(DAILY_ADDITIONS)
     )
-    operator_policy.POLARS_PARITY_VERIFIED = frozenset(
-        c for c in operator_policy.POLARS_PARITY_VERIFIED
-        if "polars" in OperatorRegistry.backends_for(c)
-    )
-    operator_policy.POLARS_PRODUCTION_SAFE = frozenset(
-        c for c in operator_policy.POLARS_PRODUCTION_SAFE
-        if "polars" in OperatorRegistry.backends_for(c)
-    )
-    # Record how the surviving Polars implementation actually executes.  This
-    # is deliberately conservative: materialized NumPy/Python kernels are not
-    # advertised as expression-native or lazy/streaming capable.
+    # A registered Polars backend is a promise that the implementation stays
+    # inside the Polars engine.  NumPy materialisation and Python callbacks are
+    # useful research fallbacks, but advertising them as Polars is misleading
+    # and prevents lazy/streaming execution.  Fail closed by removing them.
     import inspect
     for canonical, implementations in OperatorRegistry._operators.items():
         operator = implementations.get("polars")
@@ -138,7 +131,13 @@ def finalize() -> None:
             implementation = inspect.getsource(operator.__class__)
         except (OSError, TypeError):
             implementation = ""
-        materialized = any(token in implementation for token in ("to_numpy(", "np.", "rolling_map(", "map_elements("))
+        materialized = any(token in implementation for token in (
+            "to_numpy(", "np.", "rolling_map(", "map_elements(", "to_pandas(",
+            "panel_pandas_bridge", "bridge_pandas", "bridge_registry",
+        ))
+        if materialized:
+            remove_backend(canonical, "polars")
+            continue
         execution_kind = "numpy_materialized" if materialized else "expression_native"
         entry = OperatorRegistry._catalog.get(canonical, {})
         backend_meta = dict(entry.get("backend_meta") or {})
@@ -151,4 +150,12 @@ def finalize() -> None:
         })
         backend_meta["polars"] = polars_meta
         entry["backend_meta"] = backend_meta
+    operator_policy.POLARS_PARITY_VERIFIED = frozenset(
+        c for c in operator_policy.POLARS_PARITY_VERIFIED
+        if "polars" in OperatorRegistry.backends_for(c)
+    )
+    operator_policy.POLARS_PRODUCTION_SAFE = frozenset(
+        c for c in operator_policy.POLARS_PRODUCTION_SAFE
+        if "polars" in OperatorRegistry.backends_for(c)
+    )
     _FINALIZED = True

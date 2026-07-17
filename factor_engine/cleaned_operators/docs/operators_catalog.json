@@ -440,7 +440,6 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -455,7 +454,6 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -562,7 +560,6 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -577,7 +574,6 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -594,7 +590,6 @@
       ],
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "pit_safe": false,
@@ -738,8 +733,7 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -1075,7 +1069,6 @@
       ],
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -1090,7 +1083,6 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -1105,7 +1097,6 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -1193,7 +1184,6 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -1265,8 +1255,7 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -1726,7 +1715,6 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -1923,8 +1911,7 @@
         "rankcorr"
       ],
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -2260,8 +2247,7 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -2536,8 +2522,7 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -2558,7 +2543,6 @@
       ],
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -2643,8 +2627,7 @@
         "ts_kurtosis"
       ],
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -2693,7 +2676,6 @@
       ],
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -2922,7 +2904,6 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -2960,7 +2941,6 @@
       ],
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -3062,7 +3042,6 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -3160,8 +3139,7 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -3406,7 +3384,6 @@
       ],
       "backends": [
         "pandas_numpy",
-        "polars",
         "sql"
       ],
       "pit_safe": true,

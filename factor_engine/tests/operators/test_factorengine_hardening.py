@@ -59,7 +59,7 @@ def test_inverse_polars_does_not_use_pandas_bridge(monkeypatch: pytest.MonkeyPat
     assert out == [0.5, None, None, -0.25]
 
 
-def test_no_registered_polars_backend_uses_pandas_bridge() -> None:
+def test_registered_polars_backends_are_engine_native() -> None:
     import inspect
 
     offenders = []
@@ -68,9 +68,26 @@ def test_no_registered_polars_backend_uses_pandas_bridge() -> None:
         if operator is None:
             continue
         source = inspect.getsource(operator.__class__)
-        if any(token in source for token in ("to_pandas", "bridge_pandas", "bridge_registry", "from_pandas_panel")):
+        if any(token in source for token in (
+            "to_pandas", "bridge_pandas", "bridge_registry", "from_pandas_panel",
+            "panel_pandas_bridge", "to_numpy(", "np.", "rolling_map(", "map_elements(",
+        )):
             offenders.append(canonical)
     assert offenders == []
+
+
+@pytest.mark.parametrize("canonical", ["ewm_std", "ewm_var", "ts_skew", "ts_quantile"])
+def test_new_native_polars_implementations_match_pandas(canonical: str) -> None:
+    pl = pytest.importorskip("polars")
+    values = [1.0, 2.0, None, 4.0, 8.0, 16.0, 32.0]
+    pdf = pd.DataFrame({"x": values})
+    pldf = pl.DataFrame({"x": values})
+    kwargs = {"span": 4} if canonical.startswith("ewm_") else {"window": 4}
+    if canonical == "ts_quantile":
+        kwargs["q"] = 0.35
+    expected = OperatorRegistry.get(canonical).calculate(pdf, **kwargs)["x"].to_numpy()
+    actual = OperatorRegistry.get(canonical, "polars").calculate(pldf, **kwargs)["x"].to_numpy()
+    np.testing.assert_allclose(actual, expected, equal_nan=True, rtol=1e-12, atol=1e-12)
 
 
 def test_surface_and_alias_hardening() -> None:
