@@ -42,16 +42,20 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
           python -m pip install pytest pyyaml
-      - name: Validate deterministic runtime governance artifacts
+      - name: Generate operator catalog and allowlist
         run: |
-          generate_all() {
-            python factor_engine/scripts/generate_operators_catalog.py
-            python factor_engine/scripts/export_dsl_allowlist.py
-            python factor_engine/scripts/generate_layer_manifests.py
-            python factor_engine/scripts/generate_operator_usage_report.py
-            python factor_engine/scripts/sync_primitive_evidence.py
-            python factor_engine/scripts/sync_backend_docs.py
-          }
+          python factor_engine/scripts/generate_operators_catalog.py
+          python factor_engine/scripts/export_dsl_allowlist.py
+      - name: Generate executable layer manifests
+        run: python factor_engine/scripts/generate_layer_manifests.py
+      - name: Generate usage report
+        run: python factor_engine/scripts/generate_operator_usage_report.py
+      - name: Synchronize exact-active evidence cases
+        run: python factor_engine/scripts/sync_primitive_evidence.py
+      - name: Generate active backend capabilities
+        run: python factor_engine/scripts/sync_backend_docs.py
+      - name: Verify deterministic artifacts and public surface
+        run: |
           generated_files=(
             factor_engine/cleaned_operators/docs/operators_catalog.md
             factor_engine/cleaned_operators/docs/operators_catalog.json
@@ -67,9 +71,13 @@ jobs:
             factor_engine/docs/sql_pushdown_coverage.md
             factor_engine/evidence/primitive_case_registry.json
           )
-          generate_all
           sha256sum "${generated_files[@]}" > /tmp/generated-1.sha
-          generate_all
+          python factor_engine/scripts/generate_operators_catalog.py
+          python factor_engine/scripts/export_dsl_allowlist.py
+          python factor_engine/scripts/generate_layer_manifests.py
+          python factor_engine/scripts/generate_operator_usage_report.py
+          python factor_engine/scripts/sync_primitive_evidence.py
+          python factor_engine/scripts/sync_backend_docs.py
           sha256sum "${generated_files[@]}" > /tmp/generated-2.sha
           diff -u /tmp/generated-1.sha /tmp/generated-2.sha
           pytest -q factor_engine/tests/test_operator_surface.py
