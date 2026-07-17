@@ -16,7 +16,7 @@ on:
       - ".github/workflows/operator-surface-gate.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: operator-surface-${{ github.ref }}
@@ -31,6 +31,9 @@ jobs:
       FACTOR_ENGINE_DISABLE_NUMBA: "1"
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -44,6 +47,19 @@ jobs:
         run: |
           python factor_engine/scripts/generate_operators_catalog.py
           python factor_engine/scripts/export_dsl_allowlist.py
+          if [ -n "${GITHUB_HEAD_REF}" ] && ! git diff --quiet -- \
+            factor_engine/cleaned_operators/docs/operators_catalog.md \
+            factor_engine/cleaned_operators/docs/operators_catalog.json \
+            factor_engine/docs/dsl_allowlist.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add \
+              factor_engine/cleaned_operators/docs/operators_catalog.md \
+              factor_engine/cleaned_operators/docs/operators_catalog.json \
+              factor_engine/docs/dsl_allowlist.json
+            git commit -m "Regenerate operator artifacts [skip ci]"
+            git push origin HEAD:${GITHUB_HEAD_REF}
+          fi
           git diff --exit-code -- \
             factor_engine/cleaned_operators/docs/operators_catalog.md \
             factor_engine/cleaned_operators/docs/operators_catalog.json \
