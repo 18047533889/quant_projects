@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Generate deterministic production operator/recipe usage and review report."""
+"""Generate deterministic direct, recipe and expanded-primitive usage report."""
 from __future__ import annotations
 
 import json
@@ -13,13 +13,12 @@ if str(FACTOR_ENGINE) not in sys.path:
     sys.path.insert(0, str(FACTOR_ENGINE))
 
 from cleaned_operators import load_all  # noqa: E402
-from operator_usage import build_usage_report, scan_manifest_files  # noqa: E402
+from operator_usage_expanded import build_usage_report, scan_manifest_files  # noqa: E402
 
 
 def main() -> None:
     load_all()
-    records = scan_manifest_files(ROOT)
-    report = build_usage_report(records, lookback_days=90)
+    report = build_usage_report(scan_manifest_files(ROOT), lookback_days=90)
     output = FACTOR_ENGINE / "docs" / "operator_usage_report.json"
     output.write_text(
         json.dumps(report.to_dict(), ensure_ascii=False, indent=2, sort_keys=True) + "\n",
