@@ -3,8 +3,10 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
+from backend.sql_pushdown import compile_plan_to_sql
 from cleaned_operators import load_all
 from cleaned_operators.registry import OperatorRegistry
+from planner.logical_plan import PlanNode
 
 @pytest.fixture(scope="module", autouse=True)
 def _load():
@@ -64,3 +66,18 @@ def test_new_polars_backends_are_real_registrations():
         assert "polars" in OperatorRegistry.backends_for(name)
         source = OperatorRegistry.catalog()[name]["backend_meta"]["polars"]["source"]
         assert "bridge" not in source.lower() and source != "daily_panel_polars"
+
+def test_duckdb_bucket_matches_zero_to_one_rank_semantics():
+    duckdb = pytest.importorskip("duckdb")
+    plan = PlanNode("cs_bucket", [
+        PlanNode("column", attrs={"name": "x"}),
+        PlanNode("literal", attrs={"value": 3}),
+        PlanNode("literal", attrs={"value": True}),
+    ])
+    compiled = compile_plan_to_sql(plan, dataset="panel", time_column="ts", instrument_column="inst")
+    assert compiled is not None
+    panel = pd.DataFrame({"ts": [0, 0, 0], "inst": ["A", "B", "C"], "x": [10.0, 20.0, 30.0]})
+    con = duckdb.connect()
+    con.register("panel", panel)
+    actual = con.execute(compiled.query.replace("{{panel}}", "panel")).df().sort_values("inst")["value"].tolist()
+    assert actual == [1.0, 2.0, 3.0]
