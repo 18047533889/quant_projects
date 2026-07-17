@@ -47,4 +47,4 @@ nan location mismatch:
  DESIRED: array([[      nan,       nan],
        [ 6.550202,  2.904134],
        [ 9.141563,  3.948085],...
-2 failed, 22 passed in 0.72s
+2 failed, 22 passed in 0.73s
