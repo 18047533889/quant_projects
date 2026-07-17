@@ -61,31 +61,7 @@ jobs:
             exit "${status}"
           fi
           rm -f factor_engine/layer_generation_failure.md
-          if [ -n "${GITHUB_HEAD_REF}" ] && { 
-            ! git diff --quiet -- \
-              factor_engine/cleaned_operators/docs/operators_catalog.md \
-              factor_engine/cleaned_operators/docs/operators_catalog.json \
-              factor_engine/docs/dsl_allowlist.json ||
-            [ ! -f factor_engine/docs/field_manifest.json ] ||
-            [ ! -f factor_engine/docs/operator_manifest.json ] ||
-            [ ! -f factor_engine/docs/factor_recipe_manifest.json ] ||
-            [ ! -f factor_engine/docs/research_tool_manifest.json ] ||
-            [ -n "$(git status --porcelain -- factor_engine/docs/field_manifest.json factor_engine/docs/operator_manifest.json factor_engine/docs/factor_recipe_manifest.json factor_engine/docs/research_tool_manifest.json)" ];
-          }; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add \
-              factor_engine/cleaned_operators/docs/operators_catalog.md \
-              factor_engine/cleaned_operators/docs/operators_catalog.json \
-              factor_engine/docs/dsl_allowlist.json \
-              factor_engine/docs/field_manifest.json \
-              factor_engine/docs/operator_manifest.json \
-              factor_engine/docs/factor_recipe_manifest.json \
-              factor_engine/docs/research_tool_manifest.json
-            git commit -m "Regenerate factor layer manifests [skip ci]"
-            git push origin HEAD:${GITHUB_HEAD_REF}
-          fi
-          git diff --exit-code -- \
+          git add \
             factor_engine/cleaned_operators/docs/operators_catalog.md \
             factor_engine/cleaned_operators/docs/operators_catalog.json \
             factor_engine/docs/dsl_allowlist.json \
@@ -93,6 +69,12 @@ jobs:
             factor_engine/docs/operator_manifest.json \
             factor_engine/docs/factor_recipe_manifest.json \
             factor_engine/docs/research_tool_manifest.json
+          if ! git diff --cached --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "Regenerate factor layer manifests [skip ci]"
+            git push origin HEAD:${GITHUB_HEAD_REF}
+          fi
           pytest -q factor_engine/tests/test_operator_surface.py
           python factor_engine/scripts/validate_public_factor_formulas.py
       - name: GTJA185 factor pack regression
