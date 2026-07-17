@@ -21,6 +21,14 @@ _RECIPES = (
     FactorRecipe("net_debt_ratio", "fundamental", "净债务资产比", "safe_div_null(short_debt + long_debt - cash, total_assets)", ("short_debt", "long_debt", "cash", "total_assets")),
     FactorRecipe("interest_coverage", "fundamental", "利息保障倍数", "safe_div_null(ttm_from_quarterly(operating_income, period_id), abs(ttm_from_quarterly(interest_expense, period_id)))", ("operating_income", "interest_expense", "period_id")),
     FactorRecipe("cash_conversion", "fundamental", "现金利润转化率", "safe_div_null(ttm_from_quarterly(operating_cash_flow, period_id), ttm_from_quarterly(net_income, period_id))", ("operating_cash_flow", "net_income", "period_id")),
+    FactorRecipe(
+        "size_neutralize",
+        "cross_sectional",
+        "对数市值暴露中性化",
+        "cs_neutralize(y, log(clip(market_cap, 1e-12, 1e100)))",
+        ("y", "market_cap"),
+        replacement_for=("size_neutralize",),
+    ),
 )
 
 for _recipe in _RECIPES:
