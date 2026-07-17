@@ -83,6 +83,7 @@ def load_all() -> None:
     from cleaned_operators.layer_regression_fusion import install_rolling_ols_fusion
     from cleaned_operators.layer_native_polars_final import install_final_native_polars
     from cleaned_operators.layer_final_audit import apply_final_operator_audit
+    from cleaned_operators.layer_public_formula_compat import apply_public_formula_compatibility
 
     normalize_historical_aliases()
     install_stateful_full_history_semantics()
@@ -90,6 +91,7 @@ def load_all() -> None:
     install_rolling_ols_fusion()
     install_final_native_polars()
     apply_final_operator_audit()
+    apply_public_formula_compatibility()
 
     # Any module-level historical tier sets are narrowed to the final registry
     # only after all canonical renames, backend replacements and surface moves.
