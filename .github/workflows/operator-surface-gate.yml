@@ -72,7 +72,10 @@ jobs:
           pytest -q factor_engine/tests/test_operator_surface.py
           python factor_engine/scripts/validate_public_factor_formulas.py
       - name: DataAccess COS contract regression
-        run: pytest -q data_access/tests/test_cos_contract.py
+        run: |
+          pytest -q \
+            data_access/tests/test_cos_contract.py \
+            data_access/tests/test_cos_factor_runtime.py
       - name: Fiscal and backend semantic regression
         run: pytest -q factor_engine/tests/operators/test_cos_fiscal_primitives.py
       - name: Stateful segmented runtime regression
