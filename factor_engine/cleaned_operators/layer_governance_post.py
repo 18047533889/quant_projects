@@ -31,14 +31,7 @@ def _restore_compiler_internal(canonical: str) -> None:
 
 
 def _normalize_research_aliases() -> None:
-    """Make research manifests deterministic across Python hash seeds.
-
-    Historical cumulative names can appear both as canonical candidates and as
-    aliases.  The governance migration iterates a set, so without normalization
-    their copied catalog membership can depend on process order.  Pin every
-    compatibility spelling to exactly one research canonical and sort all alias
-    arrays before manifest generation.
-    """
+    """Make research manifests deterministic across Python hash seeds."""
     forced = {
         "cum_max": "expanding_max",
         "cumulative_max": "expanding_max",
@@ -58,22 +51,32 @@ def _normalize_research_aliases() -> None:
             catalog["aliases"] = sorted(set(catalog.get("aliases") or []) | {alias})
 
 
+def _attach_checkpoint_contracts() -> None:
+    from stateful_contract import StatefulCheckpointRegistry
+
+    for canonical, contract in StatefulCheckpointRegistry.catalog().items():
+        catalog = OperatorRegistry._catalog.get(canonical)
+        if catalog is None:
+            continue
+        catalog["stateful"] = True
+        catalog["checkpoint_contract"] = contract
+        catalog["segmented_execution_requires_checkpoint"] = bool(
+            contract["checkpoint_required_for_segmented"]
+        )
+
+
 def apply_post_governance() -> None:
     global _APPLIED
     if _APPLIED:
         return
     from cleaned_operators import operator_surface
 
-    # The parser lowers `/` to protected_div.  Keep it as an internal kernel,
-    # never as an author-facing daily operator.
     _restore_compiler_internal("protected_div")
     if "protected_div" in OperatorRegistry._operators:
         operator_surface.INTERNAL_ONLY_CANONICALS = frozenset(
             set(operator_surface.INTERNAL_ONLY_CANONICALS) | {"protected_div"}
         )
 
-    # Historical GTJA formulas may spell linear decay as WMA.  It is a one-hop
-    # compatibility alias to the primitive, not another canonical implementation.
     if "ts_decay_linear" in OperatorRegistry._operators:
         OperatorRegistry.register_alias("WMA", "ts_decay_linear")
 
@@ -87,4 +90,5 @@ def apply_post_governance() -> None:
             catalog["pit_safe"] = True
 
     _normalize_research_aliases()
+    _attach_checkpoint_contracts()
     _APPLIED = True
