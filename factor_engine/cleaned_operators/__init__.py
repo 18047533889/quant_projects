@@ -54,6 +54,10 @@ _LOAD_MODULES = (
     # canonical/backend registrations and tighten the authoring surface.
     "cleaned_operators.semantic_hardening",
     "cleaned_operators.operator_overhaul",
+    # Final performance layer: simple composites reuse primitives; recursive
+    # families share fused intermediates and native Polars kernels.
+    "cleaned_operators.composite_fastpath",
+    "cleaned_operators.composite_fastpath_fixes",
 )
 
 

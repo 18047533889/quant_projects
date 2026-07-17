@@ -19,14 +19,14 @@
 | AROON | daily | pandas_numpy, polars | ts_aroon | True | ts | None | 2 | 0 |
 | AROON_down | daily | pandas_numpy, polars |  | True | ts | None | 2 | 0 |
 | AROON_up | daily | pandas_numpy, polars |  | True | ts | None | 2 | 0 |
-| ATR | daily | pandas_numpy, polars | ts_atr | False | unknown | None | None | 0 |
+| ATR | daily | pandas_numpy, polars | ts_atr | True | ts | None | None | 0 |
 | ATR_WILDER | daily | pandas_numpy, polars, sql | ts_atr_wilder | True | ts | None | 2 | 0 |
 | BollingerBands | daily | pandas_numpy, polars | ts_bbands | True | ts | None | 1 | 0 |
 | BollingerLower | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | BollingerUpper | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | CCI | daily | pandas_numpy, polars | ts_cci | False | unknown | None | None | 0 |
 | DPO | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
-| KAMA | daily | pandas_numpy, polars |  | False | unknown | None | None | 0 |
+| KAMA | daily | pandas_numpy, polars |  | True | ts | None | None | 0 |
 | MACD_hist | daily | pandas_numpy, polars |  | True | ts | None | None | 0 |
 | MACD_line | daily | pandas_numpy, polars | MACD | True | ts | None | None | 0 |
 | MACD_signal | daily | pandas_numpy, polars |  | True | ts | None | None | 0 |
@@ -38,7 +38,7 @@
 | RSI_WILDER | daily | pandas_numpy, polars, sql | ts_rsi_wilder | True | ts | None | 2 | 0 |
 | StochasticD | daily | pandas_numpy, polars | ts_stochf | True | ts | None | 1 | 0 |
 | StochasticK | daily | pandas_numpy, polars | ts_stoch | True | ts | None | 1 | 0 |
-| TRIX | daily | pandas_numpy, polars | ts_trix | False | unknown | None | None | 0 |
+| TRIX | daily | pandas_numpy, polars | ts_trix | True | ts | None | None | 0 |
 | WMA | daily | pandas_numpy, polars, sql | ts_wma, wma | True | ts | None | 1 | 0 |
 | WilliamsR | daily | pandas_numpy, polars | ts_willr | True | ts | None | 1 | 0 |
 | abs | daily | pandas_numpy, polars, sql | ABS | True | elementwise | None | None | 0 |
@@ -69,7 +69,7 @@
 | ceil | daily | pandas_numpy, polars, sql |  | True | elementwise | None | None | 0 |
 | chi_square_test | research | pandas_numpy |  | False | hypothesis | None | None | 0 |
 | clip | daily | pandas_numpy, polars, sql | CLIP, cap, clamp, clip | True | elementwise | None | None | 0 |
-| close_gap | daily | pandas_numpy |  | True | elementwise | None | None | 0 |
+| close_gap | daily | pandas_numpy, polars |  | True | elementwise | None | None | 0 |
 | coalesce | daily | pandas_numpy, polars, sql | COALESCE | True | elementwise | None | None | 0 |
 | complex | research | pandas_numpy |  | False | elementwise | None | None | 0 |
 | conj | research | pandas_numpy |  | False | elementwise | None | None | 0 |
@@ -217,7 +217,7 @@
 | neg | daily | pandas_numpy, polars, sql | negate | True | elementwise | None | None | 0 |
 | normalize | daily | pandas_numpy, polars, sql |  | True | cs | None | None | 0 |
 | not_ | daily | pandas_numpy, polars, sql |  | True | elementwise | None | None | 0 |
-| open_gap | daily | pandas_numpy |  | True | ts | None | None | 1 |
+| open_gap | daily | pandas_numpy, polars |  | True | ts | None | None | 1 |
 | operating_margin | research | pandas_numpy |  | True | elementwise | None | None | 0 |
 | or_ | daily | pandas_numpy, polars, sql |  | True | elementwise | None | None | 0 |
 | pacf | research | pandas_numpy |  | False | aggregate | None | 1 | 0 |
@@ -274,7 +274,7 @@
 | scale | daily | pandas_numpy, polars, sql | SCALE, c_scale | True | cs | None | None | 0 |
 | sec | daily | pandas_numpy, polars |  | False | elementwise | None | None | 0 |
 | sem | research | pandas_numpy |  | False | aggregate | None | 1 | 0 |
-| sharpe_ratio | research | pandas_numpy, polars |  | False | unknown | None | None | 0 |
+| sharpe_ratio | research | pandas_numpy, polars |  | True | ts | None | None | 0 |
 | sigmoid | daily | pandas_numpy, polars |  | False | elementwise | None | None | 0 |
 | sign | daily | pandas_numpy, polars, sql | SIGN | True | elementwise | None | None | 0 |
 | signed_log | daily | pandas_numpy, polars, sql |  | False | ts | None | None | 0 |
@@ -369,8 +369,8 @@
 | varp | daily | pandas_numpy |  | False | aggregate | None | 1 | 0 |
 | volatility | daily | pandas_numpy, polars, sql |  | True | ts | None | 2 | 0 |
 | vp_weighted_price | research | pandas_numpy, polars |  | True | ts | None | None | 0 |
-| vpmacd | research | pandas_numpy, polars |  | False | ts | None | None | 0 |
-| vpmacd_signal | research | pandas_numpy, polars |  | False | ts | None | None | 0 |
+| vpmacd | research | pandas_numpy, polars |  | True | ts | None | None | 0 |
+| vpmacd_signal | research | pandas_numpy, polars |  | True | ts | None | None | 0 |
 | vwap | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
 | wavelet | research | pandas_numpy |  | False | elementwise | None | None | 0 |
 | wavelet_denoise | research | pandas_numpy |  | False | elementwise | None | None | 0 |

@@ -111,8 +111,8 @@
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
-      "scope": "unknown",
+      "pit_safe": true,
+      "scope": "ts",
       "lookback": null,
       "min_periods": null,
       "lag": 0
@@ -216,8 +216,8 @@
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
-      "scope": "unknown",
+      "pit_safe": true,
+      "scope": "ts",
       "lookback": null,
       "min_periods": null,
       "lag": 0
@@ -405,8 +405,8 @@
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
-      "scope": "unknown",
+      "pit_safe": true,
+      "scope": "ts",
       "lookback": null,
       "min_periods": null,
       "lag": 0
@@ -853,7 +853,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "elementwise",
@@ -3038,7 +3039,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -3858,8 +3860,8 @@
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
-      "scope": "unknown",
+      "pit_safe": true,
+      "scope": "ts",
       "lookback": null,
       "min_periods": null,
       "lag": 0
@@ -5366,7 +5368,7 @@
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "ts",
       "lookback": null,
       "min_periods": null,
@@ -5380,7 +5382,7 @@
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "ts",
       "lookback": null,
       "min_periods": null,
