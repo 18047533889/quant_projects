@@ -18,14 +18,24 @@ def _load():
     if str(FE_ROOT) not in sys.path:
         sys.path.insert(0, str(FE_ROOT))
     from cleaned_operators import load_all
-    from cleaned_operators.operator_policy import infer_operator_policy
-    from cleaned_operators.operator_surface import classify_canonical, surface_summary
     from cleaned_operators.registry import OperatorRegistry
+
+    load_all()  # includes dedupe, governance, final audit and tier synchronization
+
+    # Resolve final callable objects only after load_all. The final audit adds
+    # the explicit ``extended`` surface and replaces the module-level helpers;
+    # importing these callables before load_all would retain stale references.
+    from cleaned_operators.operator_policy import infer_operator_policy
+    from cleaned_operators import operator_surface
     from backend.sql_pushdown.sql_registry import register_sql_backends
 
-    load_all()  # includes apply_operator_deduplication()
     register_sql_backends()
-    return OperatorRegistry, infer_operator_policy, classify_canonical, surface_summary
+    return (
+        OperatorRegistry,
+        infer_operator_policy,
+        operator_surface.classify_canonical,
+        operator_surface.surface_summary,
+    )
 
 
 def _payload(registry, infer_policy, classify_canonical, surface_summary) -> dict:
@@ -50,7 +60,7 @@ def _payload(registry, infer_policy, classify_canonical, surface_summary) -> dic
             }
         )
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "canonical_count": len(rows),
         "surface_counts": surface_summary([row["canonical"] for row in rows]),
         "operators": rows,
@@ -62,16 +72,18 @@ def _render(payload: dict) -> str:
     lines = [
         "# Operators Catalog（自动生成）",
         "",
-        "> 从 `load_all()` 去重后的最终 runtime registry 生成。",
-        "> 日常因子 DSL 仅使用 `surface=daily`；其他工具见 `research_operators/`。",
+        "> 从 `load_all()` 去重和最终治理后的 runtime registry 生成。",
+        "> 默认因子 DSL 仅使用 `surface=daily`；低频数学/专用变换需显式使用 `extended`。",
         "",
         "## 摘要",
         "",
         f"- canonical 总数：{payload['canonical_count']}",
         f"- daily：{counts['daily']}",
+        f"- extended：{counts.get('extended', 0)}",
         f"- research：{counts['research']}",
         f"- unsafe：{counts['unsafe']}",
         f"- legacy：{counts['legacy']}",
+        f"- internal：{counts.get('internal', 0)}",
         "",
         "| canonical | surface | backends | aliases | pit_safe | scope | lookback | min_periods | lag |",
         "|---|---|---|---|---|---|---|---|---|",
