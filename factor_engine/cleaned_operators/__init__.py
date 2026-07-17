@@ -77,11 +77,13 @@ def load_all() -> None:
     # Final production hardening is intentionally performed after the registry
     # has been sealed: replacements require an explicit reason/version and
     # therefore remain auditable in OperatorRegistry._replacement_history.
+    from cleaned_operators.layer_alias_normalization import normalize_historical_aliases
     from cleaned_operators.layer_stateful_semantics import install_stateful_full_history_semantics
     from cleaned_operators.layer_regression_fusion import install_rolling_ols_fusion
     from cleaned_operators.layer_native_polars_final import install_final_native_polars
     from cleaned_operators.layer_final_audit import apply_final_operator_audit
 
+    normalize_historical_aliases()
     install_stateful_full_history_semantics()
     install_rolling_ols_fusion()
     install_final_native_polars()
