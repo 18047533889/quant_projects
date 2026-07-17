@@ -78,6 +78,7 @@ def load_all() -> None:
     from cleaned_operators.layer_stateful_semantics import install_stateful_full_history_semantics
     from cleaned_operators.layer_scalar_broadcast import install_scalar_broadcast_primitives
     from cleaned_operators.layer_regression_fusion import install_rolling_ols_fusion
+    from cleaned_operators.layer_regression_compat_fix import install_regression_call_compatibility
     from cleaned_operators.layer_native_polars_final import install_final_native_polars
     from cleaned_operators.layer_final_audit import apply_final_operator_audit
     from cleaned_operators.layer_public_formula_compat import apply_public_formula_compatibility
@@ -87,6 +88,7 @@ def load_all() -> None:
     install_stateful_full_history_semantics()
     install_scalar_broadcast_primitives()
     install_rolling_ols_fusion()
+    install_regression_call_compatibility()
     install_final_native_polars()
     apply_final_operator_audit()
     apply_public_formula_compatibility()
