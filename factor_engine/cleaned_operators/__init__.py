@@ -74,9 +74,6 @@ def load_all() -> None:
 
     apply_post_governance()
 
-    # Final production hardening is intentionally performed after the registry
-    # has been sealed: replacements require an explicit reason/version and
-    # therefore remain auditable in OperatorRegistry._replacement_history.
     from cleaned_operators.layer_alias_normalization import normalize_historical_aliases
     from cleaned_operators.layer_stateful_semantics import install_stateful_full_history_semantics
     from cleaned_operators.layer_scalar_broadcast import install_scalar_broadcast_primitives
@@ -84,6 +81,7 @@ def load_all() -> None:
     from cleaned_operators.layer_native_polars_final import install_final_native_polars
     from cleaned_operators.layer_final_audit import apply_final_operator_audit
     from cleaned_operators.layer_public_formula_compat import apply_public_formula_compatibility
+    from cleaned_operators.layer_stateful_metadata import attach_final_stateful_metadata
 
     normalize_historical_aliases()
     install_stateful_full_history_semantics()
@@ -92,9 +90,8 @@ def load_all() -> None:
     install_final_native_polars()
     apply_final_operator_audit()
     apply_public_formula_compatibility()
+    attach_final_stateful_metadata()
 
-    # Any module-level historical tier sets are narrowed to the final registry
-    # only after all canonical renames, backend replacements and surface moves.
     from backend.active_capabilities import synchronize_active_backend_sets
     from backend.sql_declared_restore import install_declared_sql_restore
 
