@@ -58,6 +58,7 @@ jobs:
       - name: FactorEngine regression
         run: |
           pytest -q \
+            factor_engine/tests/operators/test_layer_governance.py \
             factor_engine/tests/operators/test_composite_fastpath.py \
             factor_engine/tests/test_gtja_compat_semantics.py \
             factor_engine/tests/test_data_scope_stability.py
