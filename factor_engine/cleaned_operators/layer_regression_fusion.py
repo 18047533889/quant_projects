@@ -54,11 +54,8 @@ def _fit(y: np.ndarray, x: np.ndarray, add_intercept: bool):
 
 
 def _fingerprint(frame: pd.DataFrame) -> tuple:
-    # Cache is intentionally scoped to the same immutable planner input objects.
-    # Shape/axes protect against accidental object-id reuse or structural edits.
     return (
-        id(frame), frame.shape,
-        id(frame.index), id(frame.columns),
+        id(frame), frame.shape, id(frame.index), id(frame.columns),
         frame.index[0] if len(frame.index) else None,
         frame.index[-1] if len(frame.index) else None,
         tuple(frame.columns),
@@ -69,9 +66,6 @@ def _compute_all(y, x, window, min_periods=None, add_intercept=True):
     global _STATS_COMPUTATIONS
     if not isinstance(y, pd.DataFrame) or not isinstance(x, pd.DataFrame):
         raise TypeError("rolling OLS fusion requires pandas DataFrame inputs")
-
-    # Build the cache key before aligned_pd: alignment may allocate fresh
-    # DataFrames on every call, which would defeat cross-output reuse.
     source_y, source_x = y, x
     w, mp = window_params(window, min_periods, default_mp=3)
     key = (_fingerprint(source_y), _fingerprint(source_x), w, mp, bool(add_intercept))
@@ -114,6 +108,29 @@ def _output(name):
     return calculate
 
 
+def _slope_compat(y, x, window, *legacy_args, min_periods=None, add_intercept=True, lag=None, retval=None, **_):
+    if len(legacy_args) > 2:
+        raise TypeError("ts_regression accepts at most legacy lag and retval arguments")
+    if legacy_args:
+        lag = int(legacy_args[0])
+    if len(legacy_args) == 2:
+        retval = str(legacy_args[1])
+    lag_i = 0 if lag is None else int(lag)
+    if lag_i < 0:
+        return pd.DataFrame(np.nan, index=y.index, columns=y.columns, dtype=float)
+    if lag_i:
+        x = x.shift(lag_i)
+    requested = str(retval or "slope").lower()
+    output = {
+        "slope": "slope", "beta": "slope", "intercept": "intercept",
+        "residual": "resid", "resid": "resid", "r_squared": "r2",
+        "r2": "r2", "tstat": "tstat", "t_stat": "tstat",
+    }.get(requested)
+    if output is None:
+        raise ValueError(f"unsupported regression retval: {retval!r}")
+    return _compute_all(y, x, window, min_periods, add_intercept)[output]
+
+
 def clear_rolling_ols_cache() -> None:
     global _STATS_COMPUTATIONS
     with _LOCK:
@@ -137,22 +154,25 @@ def install_rolling_ols_fusion() -> None:
         ("ts_regression_r2", "r2"),
         ("ts_regression_tstat", "tstat"),
     ):
-        exists = "pandas_numpy" in OperatorRegistry.backends_for(canonical)
+        function = _slope_compat if canonical == "ts_regression_slope" else _output(output)
+        params = (
+            ["y", "x", "window", "lag", "retval", "min_periods", "add_intercept"]
+            if canonical == "ts_regression_slope"
+            else ["y", "x", "window", "min_periods", "add_intercept"]
+        )
         OperatorRegistry.register(
             PandasFunctionOperator(
-                canonical,
-                "time_series_regression",
-                ["y", "x", "window", "min_periods", "add_intercept"],
+                canonical, "time_series_regression", params,
                 "rolling OLS output projected from a shared five-stat computation",
-                _output(output),
+                function,
             ),
             canonical=canonical,
             backend="pandas_numpy",
             source="rolling_ols_fused_cache",
             status="production",
             backend_explicit=True,
-            replace=exists,
-            replacement_reason="share one rolling OLS fit across slope/intercept/residual/r2/tstat",
+            replace="pandas_numpy" in OperatorRegistry.backends_for(canonical),
+            replacement_reason="share one rolling OLS fit while retaining historical ts_regression signature",
             semantic_version="3.0",
         )
     _APPLIED = True
