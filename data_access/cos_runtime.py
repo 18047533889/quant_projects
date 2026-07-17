@@ -51,7 +51,10 @@ def _read_cos_panel(self: Any, dataset: str, *, columns: Sequence[str] | None = 
             params=bind,
         )
     else:
-        table = self.read_arrow(dataset, columns=selected, time_range=time_range, instrument_filter=instrument_filter, **params)
+        read_kwargs = dict(params)
+        if instrument_filter is not None:
+            read_kwargs["instrument_filter"] = instrument_filter
+        table = self.read_arrow(dataset, columns=selected, time_range=time_range, **read_kwargs)
     if normalize_returns:
         values = base.normalize_return_values(table[contract.return_column], dataset)
         if return_output_column in table.column_names:
@@ -64,13 +67,12 @@ def _load_factor_columns(self: Any, dataset: str, *, columns: Sequence[str], tim
     contract = base.validate_panel_request(dataset, semantic_filters=semantic_filters)
     ds = self._registry.get(dataset)
     requested = list(columns)
-    physical = list(requested)
     return_output = "__return_decimal"
     replace_return = bool(normalize_returns and contract.return_column in requested)
     axes = [ds.time_column, ds.instrument_column]
     table = self.read_cos_panel(
         dataset,
-        columns=list(dict.fromkeys([*axes, *physical])),
+        columns=list(dict.fromkeys([*axes, *requested])),
         time_range=time_range,
         instrument_filter=instrument_filter,
         semantic_filters=semantic_filters,
@@ -116,16 +118,18 @@ def _guarded_load_columns(self: Any, original: Any, dataset: str, **kwargs: Any)
 
 
 def install_cos_contract_methods(store: Any) -> Any:
+    """Install raw COS helpers on any compatible store and panel guards when available."""
     if getattr(store, "_cos_runtime_installed", False):
         return store
     base.install_cos_contract_methods(store)
-    original_load_columns = store.load_columns
     store.read_cos_panel = MethodType(_read_cos_panel, store)
-    store.load_factor_columns = MethodType(_load_factor_columns, store)
-    store.load_columns = MethodType(
-        lambda self, dataset, **kwargs: _guarded_load_columns(self, original_load_columns, dataset, **kwargs),
-        store,
-    )
+    if hasattr(store, "load_columns") and hasattr(store, "_registry"):
+        original_load_columns = store.load_columns
+        store.load_factor_columns = MethodType(_load_factor_columns, store)
+        store.load_columns = MethodType(
+            lambda self, dataset, **kwargs: _guarded_load_columns(self, original_load_columns, dataset, **kwargs),
+            store,
+        )
     store._cos_runtime_installed = True
     return store
 
