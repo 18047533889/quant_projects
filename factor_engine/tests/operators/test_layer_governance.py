@@ -78,7 +78,8 @@ def test_cross_sectional_dialect_is_canonicalized() -> None:
 def test_strict_cleaning_primitives() -> None:
     x = pd.DataFrame({"A": [1.0, np.nan, np.nan, np.nan, 5.0]})
     result = OperatorRegistry.get("ffill_limit").calculate(x, 2)
-    assert result["A"].tolist()[:4] == [1.0, 1.0, 1.0, np.nan]
+    assert result["A"].iloc[:3].tolist() == [1.0, 1.0, 1.0]
+    assert np.isnan(result["A"].iloc[3])
 
     panel = pd.DataFrame({"A": [1.0, np.nan], "B": [3.0, 5.0]})
     mean_filled = OperatorRegistry.get("cs_fill_mean").calculate(panel)
@@ -101,11 +102,21 @@ def test_period_primitives_require_consecutive_quarters() -> None:
 
 
 def test_period_average_and_cagr() -> None:
-    period = pd.DataFrame({"A": ["2021Q1", "2022Q1", "2023Q1", "2024Q1"]})
-    value = pd.DataFrame({"A": [100.0, 121.0, 146.41, 177.1561]})
-    average = OperatorRegistry.get("period_average").calculate(value, period, 2, False)
-    assert average["A"].iloc[-1] == pytest.approx((146.41 + 177.1561) / 2)
-    cagr = OperatorRegistry.get("period_cagr").calculate(value, period, 12, 4, "strict", False)
+    periods = []
+    values = []
+    value = 100.0
+    for ordinal in range(13):
+        year = 2021 + ordinal // 4
+        quarter = ordinal % 4 + 1
+        periods.append(f"{year}Q{quarter}")
+        values.append(value)
+        value *= 1.21 ** 0.25
+    period = pd.DataFrame({"A": periods})
+    data = pd.DataFrame({"A": values})
+
+    average = OperatorRegistry.get("period_average").calculate(data, period, 2, True)
+    assert average["A"].iloc[-1] == pytest.approx((values[-2] + values[-1]) / 2)
+    cagr = OperatorRegistry.get("period_cagr").calculate(data, period, 12, 4, "strict", True)
     assert cagr["A"].iloc[-1] == pytest.approx(0.21, rel=1e-6)
 
 
