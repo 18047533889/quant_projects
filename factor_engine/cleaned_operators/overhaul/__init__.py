@@ -9,12 +9,14 @@ def register_all() -> None:
     global _REGISTERED
     if _REGISTERED:
         return
-    from cleaned_operators.overhaul import daily, fundamental, regression, technical
+    from cleaned_operators.overhaul import compat, daily, fundamental, regression, technical
 
     daily.register()
     regression.register()
     fundamental.register()
     technical.register()
+    # Compatibility wrappers must load after audited canonical implementations.
+    compat.register()
     _REGISTERED = True
 
 
