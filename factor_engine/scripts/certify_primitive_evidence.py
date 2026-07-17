@@ -150,15 +150,21 @@ def _build_verified_payload(*, stages_passed: list[str]) -> dict:
         enrich_operator_metadata,
         load_case_registry,
     )
+    from cleaned_operators.registry import OperatorRegistry
     from tests.backend_parity.evidence_case_registry import six_way_certified_names
 
     registry = load_case_registry()
-    polars_ref = frozenset(registry.get("polars_reference_parity") or [])
-    polars_ed = frozenset(registry.get("polars_edge_verified") or [])
-    duck_ref = frozenset(registry.get("duckdb_reference_parity") or [])
-    duck_ed = frozenset(registry.get("duckdb_edge_verified") or [])
-    duck_nan = frozenset(registry.get("duckdb_nan_edge_verified") or [])
-    no_fb = frozenset(registry.get("no_fallback_verified") or [])
+    active = frozenset(OperatorRegistry._operators)
+
+    def exact(key: str) -> frozenset[str]:
+        return frozenset(registry.get(key) or ()) & active
+
+    polars_ref = exact("polars_reference_parity")
+    polars_ed = exact("polars_edge_verified")
+    duck_ref = exact("duckdb_reference_parity")
+    duck_ed = exact("duckdb_edge_verified")
+    duck_nan = exact("duckdb_nan_edge_verified")
+    no_fb = exact("no_fallback_verified")
     dual = six_way_certified_names(
         polars_reference=polars_ref,
         polars_edge=polars_ed,
@@ -166,25 +172,28 @@ def _build_verified_payload(*, stages_passed: list[str]) -> dict:
         duckdb_real_sql=duck_ref,
         duckdb_edge=duck_ed | duck_nan,
         no_fallback=no_fb,
-    )
+    ) & active
     existing_ops = {}
     verified_path = FE_ROOT / "evidence" / "primitive_verified.json"
     if verified_path.is_file():
-        existing_ops = json.loads(verified_path.read_text(encoding="utf-8")).get("operators") or {}
+        raw_existing = json.loads(verified_path.read_text(encoding="utf-8")).get("operators") or {}
+        existing_ops = {name: value for name, value in raw_existing.items() if name in active}
 
     payload = {
-        "schema_version": 3,
+        "schema_version": 4,
         "description": (
-            "Primitive production evidence（须 pytest 通过后由 certify_primitive_evidence.py 写入）"
+            "Primitive production evidence; exact active canonical names only, written after pytest certification"
         ),
+        "exact_canonical_only": True,
+        "active_registry_count": len(active),
         "polars_reference_parity": sorted(polars_ref & dual) if dual else sorted(polars_ref),
         "polars_edge_verified": sorted(polars_ed & dual) if dual else sorted(polars_ed),
         "duckdb_reference_parity": sorted(duck_ref & dual) if dual else sorted(duck_ref),
         "duckdb_real_sql_verified": sorted(duck_ref & dual) if dual else sorted(duck_ref),
         "duckdb_edge_verified": sorted(duck_ed & dual) if dual else sorted(duck_ed),
-        "duckdb_null_edge_verified": sorted(registry.get("duckdb_null_edge_verified") or []),
-        "duckdb_nan_edge_verified": sorted(registry.get("duckdb_nan_edge_verified") or []),
-        "duckdb_inf_edge_verified": sorted(registry.get("duckdb_inf_edge_verified") or []),
+        "duckdb_null_edge_verified": sorted(exact("duckdb_null_edge_verified")),
+        "duckdb_nan_edge_verified": sorted(exact("duckdb_nan_edge_verified")),
+        "duckdb_inf_edge_verified": sorted(exact("duckdb_inf_edge_verified")),
         "no_fallback_verified": sorted(no_fb & dual) if dual else sorted(no_fb),
         "operators": enrich_operator_metadata(certified=dual, existing=existing_ops),
         "provenance": build_provenance(
@@ -192,6 +201,9 @@ def _build_verified_payload(*, stages_passed: list[str]) -> dict:
             test_passed=True,
             stages_passed=stages_passed,
         ),
+    }
+    payload["operators"] = {
+        name: value for name, value in payload["operators"].items() if name in active
     }
     payload["_six_way_count"] = len(dual)
     return payload
@@ -208,11 +220,19 @@ def main() -> int:
 
     if args.check:
         from backend.evidence_provenance import evidence_artifact_valid, load_verified_artifact
+        from cleaned_operators.registry import OperatorRegistry
 
         if not evidence_artifact_valid(require_commit_match=True):
             print("primitive_verified.json 无效或 commit 不匹配", file=sys.stderr)
             return 1
         data = load_verified_artifact()
+        active = set(OperatorRegistry._operators)
+        for key, value in data.items():
+            if key.endswith("verified") or key.endswith("parity"):
+                stale = set(value or ()) - active if isinstance(value, list) else set()
+                if stale:
+                    print(f"evidence contains inactive exact names: {key}: {sorted(stale)}", file=sys.stderr)
+                    return 1
         dual = set(data.get("polars_reference_parity") or [])
         for key in (
             "polars_edge_verified",
