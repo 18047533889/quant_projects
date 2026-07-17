@@ -42,10 +42,10 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
           python -m pip install pytest pyyaml
-      - name: Generate operator catalog and allowlist
-        run: |
-          python factor_engine/scripts/generate_operators_catalog.py
-          python factor_engine/scripts/export_dsl_allowlist.py
+      - name: Generate operator catalog
+        run: python factor_engine/scripts/generate_operators_catalog.py
+      - name: Generate public DSL allowlist
+        run: python factor_engine/scripts/export_dsl_allowlist.py
       - name: Generate executable layer manifests
         run: python factor_engine/scripts/generate_layer_manifests.py
       - name: Generate usage report
