@@ -30,6 +30,34 @@ def _restore_compiler_internal(canonical: str) -> None:
         })
 
 
+def _normalize_research_aliases() -> None:
+    """Make research manifests deterministic across Python hash seeds.
+
+    Historical cumulative names can appear both as canonical candidates and as
+    aliases.  The governance migration iterates a set, so without normalization
+    their copied catalog membership can depend on process order.  Pin every
+    compatibility spelling to exactly one research canonical and sort all alias
+    arrays before manifest generation.
+    """
+    forced = {
+        "cum_max": "expanding_max",
+        "cumulative_max": "expanding_max",
+        "cum_min": "expanding_min",
+        "cumulative_min": "expanding_min",
+        "cum_sum": "expanding_sum",
+        "cumulative_sum": "expanding_sum",
+        "cumulative_mean": "expanding_mean",
+    }
+    forced_names = set(forced)
+    for catalog in ResearchToolRegistry._catalog.values():
+        aliases = set(catalog.get("aliases") or []) - forced_names
+        catalog["aliases"] = sorted(aliases)
+    for alias, canonical in forced.items():
+        catalog = ResearchToolRegistry._catalog.get(canonical)
+        if catalog is not None:
+            catalog["aliases"] = sorted(set(catalog.get("aliases") or []) | {alias})
+
+
 def apply_post_governance() -> None:
     global _APPLIED
     if _APPLIED:
@@ -57,4 +85,6 @@ def apply_post_governance() -> None:
             catalog["surface"] = "daily"
             catalog["scope"] = "cross_sectional"
             catalog["pit_safe"] = True
+
+    _normalize_research_aliases()
     _APPLIED = True
