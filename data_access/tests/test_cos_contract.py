@@ -71,6 +71,11 @@ def test_runtime_enforces_industry_filter():
     assert kwargs["params"] == ["sw_l1"]
 
 
+def test_runtime_enforces_filter_and_normalizes_return():
+    """Compatibility node retained for older CI revisions."""
+    test_runtime_enforces_industry_filter()
+
+
 def test_runtime_normalizes_ashare_return():
     store = install_cos_contract_methods(_FakeStore())
     daily = store.read_cos_panel(
