@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Generate authoritative field/operator/recipe/research layer manifests."""
+"""Generate authoritative field/operator/recipe/research/state layer manifests."""
 from __future__ import annotations
 
 import json
@@ -15,8 +15,10 @@ if str(FACTOR_ENGINE) not in sys.path:
 from cleaned_operators import load_all  # noqa: E402
 from cleaned_operators.layer_governance import formula_field_names  # noqa: E402
 from cleaned_operators.registry import OperatorRegistry  # noqa: E402
+from factor_recipes.compiler import RecipeCompiler  # noqa: E402
 from factor_recipes.registry import FactorRecipeRegistry  # noqa: E402
 from research_tools.registry import ResearchToolRegistry  # noqa: E402
+from stateful_contract import StatefulCheckpointRegistry  # noqa: E402
 
 
 def write_json(path: Path, payload: dict) -> None:
@@ -43,17 +45,35 @@ def main() -> None:
         "operator_count": len(operators),
         "operators": operators,
     })
+
     recipes = FactorRecipeRegistry.catalog()
+    compiler = RecipeCompiler(allowed_statuses=("production", "optional", "experimental"))
+    for name, recipe in recipes.items():
+        bindings = {parameter: parameter for parameter in recipe["parameters"]}
+        recipe["expanded_expression"] = compiler.expand(name, bindings)
+        plan = compiler.compile_batch({name: (name, bindings)})
+        recipe["compiled_node_count"] = len(plan.nodes)
+        recipe["compile_status"] = "verified"
     write_json(docs / "factor_recipe_manifest.json", {
-        "schema_version": "factor_recipe_manifest.v1",
+        "schema_version": "factor_recipe_manifest.v2",
         "recipe_count": len(recipes),
         "recipes": recipes,
     })
+
     research = ResearchToolRegistry.catalog()
     write_json(docs / "research_tool_manifest.json", {
         "schema_version": "research_tool_manifest.v1",
         "tool_count": len(research),
         "tools": research,
+    })
+    stateful = StatefulCheckpointRegistry.catalog()
+    missing_runtime = sorted(set(stateful) - set(operators))
+    if missing_runtime:
+        raise SystemExit(f"stateful contracts reference unavailable operators: {missing_runtime}")
+    write_json(docs / "stateful_operator_manifest.json", {
+        "schema_version": "stateful_operator_manifest.v1",
+        "operator_count": len(stateful),
+        "operators": stateful,
     })
 
 

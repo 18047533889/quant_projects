@@ -3,7 +3,10 @@
   "recipes": {
     "accruals": {
       "category": "fundamental",
+      "compile_status": "verified",
+      "compiled_node_count": 10,
       "description": "总应计项",
+      "expanded_expression": "safe_div_null(ttm_from_quarterly(net_income, period_id) - ttm_from_quarterly(operating_cash_flow, period_id), period_average(total_assets, period_id, 2))",
       "expression": "safe_div_null(ttm_from_quarterly(net_income, period_id) - ttm_from_quarterly(operating_cash_flow, period_id), period_average(total_assets, period_id, 2))",
       "name": "accruals",
       "parameters": [
@@ -17,7 +20,10 @@
     },
     "adxr": {
       "category": "technical",
+      "compile_status": "verified",
+      "compiled_node_count": 9,
       "description": "ADX平均方向指数评级",
+      "expanded_expression": "0.5 * (ADX(high, low, close, window) + ts_delay(ADX(high, low, close, window), window))",
       "expression": "0.5 * (ADX(high, low, close, window) + ts_delay(ADX(high, low, close, window), window))",
       "name": "adxr",
       "parameters": [
@@ -33,7 +39,10 @@
     },
     "annualized_volatility": {
       "category": "risk",
+      "compile_status": "verified",
+      "compiled_node_count": 6,
       "description": "滚动年化波动率",
+      "expanded_expression": "ts_std(returns, window) * sqrt(ann_factor)",
       "expression": "ts_std(returns, window) * sqrt(ann_factor)",
       "name": "annualized_volatility",
       "parameters": [
@@ -48,7 +57,10 @@
     },
     "aroon_down": {
       "category": "technical",
+      "compile_status": "verified",
+      "compiled_node_count": 8,
       "description": "距最近窗口低点的新鲜度",
+      "expanded_expression": "100 * (1 - safe_div_null(ts_argmin(low, window), window))",
       "expression": "100 * (1 - safe_div_null(ts_argmin(low, window), window))",
       "name": "aroon_down",
       "parameters": [
@@ -62,7 +74,10 @@
     },
     "aroon_oscillator": {
       "category": "technical",
+      "compile_status": "verified",
+      "compiled_node_count": 14,
       "description": "Aroon上下轨差",
+      "expanded_expression": "100 * (1 - safe_div_null(ts_argmax(high, window), window)) - 100 * (1 - safe_div_null(ts_argmin(low, window), window))",
       "expression": "aroon_up(high, window) - aroon_down(low, window)",
       "name": "aroon_oscillator",
       "parameters": [
@@ -77,7 +92,10 @@
     },
     "aroon_up": {
       "category": "technical",
+      "compile_status": "verified",
+      "compiled_node_count": 8,
       "description": "距最近窗口高点的新鲜度",
+      "expanded_expression": "100 * (1 - safe_div_null(ts_argmax(high, window), window))",
       "expression": "100 * (1 - safe_div_null(ts_argmax(high, window), window))",
       "name": "aroon_up",
       "parameters": [
@@ -91,7 +109,10 @@
     },
     "asset_growth": {
       "category": "fundamental",
+      "compile_status": "verified",
+      "compiled_node_count": 5,
       "description": "资产同比增长",
+      "expanded_expression": "period_change(total_assets, period_id, 4, 'ratio')",
       "expression": "period_change(total_assets, period_id, 4, 'ratio')",
       "name": "asset_growth",
       "parameters": [
@@ -103,7 +124,10 @@
     },
     "atr_sma": {
       "category": "technical",
+      "compile_status": "verified",
+      "compiled_node_count": 6,
       "description": "真实波幅简单移动平均",
+      "expanded_expression": "ts_mean(true_range(high, low, close), window)",
       "expression": "ts_mean(true_range(high, low, close), window)",
       "name": "atr_sma",
       "parameters": [
@@ -119,7 +143,10 @@
     },
     "bollinger_lower": {
       "category": "technical",
+      "compile_status": "verified",
+      "compiled_node_count": 7,
       "description": "布林下轨",
+      "expanded_expression": "ts_mean(x, window) - width * ts_std(x, window)",
       "expression": "ts_mean(x, window) - width * ts_std(x, window)",
       "name": "bollinger_lower",
       "parameters": [
@@ -134,7 +161,10 @@
     },
     "bollinger_mid": {
       "category": "technical",
+      "compile_status": "verified",
+      "compiled_node_count": 3,
       "description": "布林中轨",
+      "expanded_expression": "ts_mean(x, window)",
       "expression": "ts_mean(x, window)",
       "name": "bollinger_mid",
       "parameters": [
@@ -148,7 +178,10 @@
     },
     "bollinger_upper": {
       "category": "technical",
+      "compile_status": "verified",
+      "compiled_node_count": 7,
       "description": "布林上轨",
+      "expanded_expression": "ts_mean(x, window) + width * ts_std(x, window)",
       "expression": "ts_mean(x, window) + width * ts_std(x, window)",
       "name": "bollinger_upper",
       "parameters": [
@@ -163,7 +196,10 @@
     },
     "capex_intensity": {
       "category": "fundamental",
+      "compile_status": "verified",
+      "compiled_node_count": 8,
       "description": "资本开支强度",
+      "expanded_expression": "safe_div_null(abs(ttm_from_quarterly(capex, period_id)), period_average(total_assets, period_id, 2))",
       "expression": "safe_div_null(abs(ttm_from_quarterly(capex, period_id)), period_average(total_assets, period_id, 2))",
       "name": "capex_intensity",
       "parameters": [
@@ -176,7 +212,10 @@
     },
     "cash_conversion": {
       "category": "fundamental",
+      "compile_status": "verified",
+      "compiled_node_count": 6,
       "description": "现金利润转化率",
+      "expanded_expression": "safe_div_null(ttm_from_quarterly(operating_cash_flow, period_id), ttm_from_quarterly(net_income, period_id))",
       "expression": "safe_div_null(ttm_from_quarterly(operating_cash_flow, period_id), ttm_from_quarterly(net_income, period_id))",
       "name": "cash_conversion",
       "parameters": [
@@ -189,7 +228,10 @@
     },
     "cash_profitability": {
       "category": "fundamental",
+      "compile_status": "verified",
+      "compiled_node_count": 7,
       "description": "经营现金流资产收益",
+      "expanded_expression": "safe_div_null(ttm_from_quarterly(operating_cash_flow, period_id), period_average(total_assets, period_id, 2))",
       "expression": "safe_div_null(ttm_from_quarterly(operating_cash_flow, period_id), period_average(total_assets, period_id, 2))",
       "name": "cash_profitability",
       "parameters": [
@@ -202,7 +244,10 @@
     },
     "cci": {
       "category": "technical",
+      "compile_status": "verified",
+      "compiled_node_count": 8,
       "description": "商品通道指数",
+      "expanded_expression": "safe_div_null(typical_price - ts_mean(typical_price, window), constant * ts_mad(typical_price, window))",
       "expression": "safe_div_null(typical_price - ts_mean(typical_price, window), constant * ts_mad(typical_price, window))",
       "name": "cci",
       "parameters": [
@@ -217,7 +262,10 @@
     },
     "current_ratio": {
       "category": "fundamental",
+      "compile_status": "verified",
+      "compiled_node_count": 3,
       "description": "流动比率",
+      "expanded_expression": "safe_div_null(current_assets, current_liabilities)",
       "expression": "safe_div_null(current_assets, current_liabilities)",
       "name": "current_ratio",
       "parameters": [
@@ -231,7 +279,10 @@
     },
     "debt_to_equity": {
       "category": "fundamental",
+      "compile_status": "verified",
+      "compiled_node_count": 3,
       "description": "负债权益比",
+      "expanded_expression": "safe_div_null(total_debt, total_equity)",
       "expression": "safe_div_null(total_debt, total_equity)",
       "name": "debt_to_equity",
       "parameters": [
@@ -245,7 +296,10 @@
     },
     "dpo_causal": {
       "category": "technical",
+      "compile_status": "verified",
+      "compiled_node_count": 10,
       "description": "严格因果去趋势价格振荡器",
+      "expanded_expression": "close - ts_delay(ts_mean(close, window), floor(window / 2) + 1)",
       "expression": "close - ts_delay(ts_mean(close, window), floor(window / 2) + 1)",
       "name": "dpo_causal",
       "parameters": [
@@ -259,7 +313,10 @@
     },
     "free_cash_flow_profitability": {
       "category": "fundamental",
+      "compile_status": "verified",
+      "compiled_node_count": 11,
       "description": "自由现金流资产收益",
+      "expanded_expression": "safe_div_null(ttm_from_quarterly(operating_cash_flow, period_id) - abs(ttm_from_quarterly(capex, period_id)), period_average(total_assets, period_id, 2))",
       "expression": "safe_div_null(ttm_from_quarterly(operating_cash_flow, period_id) - abs(ttm_from_quarterly(capex, period_id)), period_average(total_assets, period_id, 2))",
       "name": "free_cash_flow_profitability",
       "parameters": [
@@ -273,7 +330,10 @@
     },
     "gross_profitability": {
       "category": "fundamental",
+      "compile_status": "verified",
+      "compiled_node_count": 7,
       "description": "毛利润资产收益",
+      "expanded_expression": "safe_div_null(ttm_from_quarterly(gross_profit, period_id), period_average(total_assets, period_id, 2))",
       "expression": "safe_div_null(ttm_from_quarterly(gross_profit, period_id), period_average(total_assets, period_id, 2))",
       "name": "gross_profitability",
       "parameters": [
@@ -286,7 +346,10 @@
     },
     "interest_coverage": {
       "category": "fundamental",
+      "compile_status": "verified",
+      "compiled_node_count": 7,
       "description": "利息保障倍数",
+      "expanded_expression": "safe_div_null(ttm_from_quarterly(operating_income, period_id), abs(ttm_from_quarterly(interest_expense, period_id)))",
       "expression": "safe_div_null(ttm_from_quarterly(operating_income, period_id), abs(ttm_from_quarterly(interest_expense, period_id)))",
       "name": "interest_coverage",
       "parameters": [
@@ -299,7 +362,10 @@
     },
     "intraday_return": {
       "category": "price_volume",
+      "compile_status": "verified",
+      "compiled_node_count": 5,
       "description": "开盘到收盘收益",
+      "expanded_expression": "safe_div_null(close, open) - 1",
       "expression": "safe_div_null(close, open) - 1",
       "name": "intraday_return",
       "parameters": [
@@ -313,7 +379,10 @@
     },
     "inventory_growth": {
       "category": "fundamental",
+      "compile_status": "verified",
+      "compiled_node_count": 5,
       "description": "存货同比增长",
+      "expanded_expression": "period_change(inventory, period_id, 4, 'ratio')",
       "expression": "period_change(inventory, period_id, 4, 'ratio')",
       "name": "inventory_growth",
       "parameters": [
@@ -325,7 +394,10 @@
     },
     "momentum": {
       "category": "technical",
+      "compile_status": "verified",
+      "compiled_node_count": 3,
       "description": "N期价格动量",
+      "expanded_expression": "ts_delta(x, window)",
       "expression": "ts_delta(x, window)",
       "name": "momentum",
       "parameters": [
@@ -339,7 +411,10 @@
     },
     "net_debt_ratio": {
       "category": "fundamental",
+      "compile_status": "verified",
+      "compiled_node_count": 7,
       "description": "净债务资产比",
+      "expanded_expression": "safe_div_null(short_debt + long_debt - cash, total_assets)",
       "expression": "safe_div_null(short_debt + long_debt - cash, total_assets)",
       "name": "net_debt_ratio",
       "parameters": [
@@ -353,7 +428,10 @@
     },
     "operating_margin": {
       "category": "fundamental",
+      "compile_status": "verified",
+      "compiled_node_count": 3,
       "description": "营业利润率",
+      "expanded_expression": "safe_div_null(operating_income, revenue)",
       "expression": "safe_div_null(operating_income, revenue)",
       "name": "operating_margin",
       "parameters": [
@@ -367,7 +445,10 @@
     },
     "operating_profitability": {
       "category": "fundamental",
+      "compile_status": "verified",
+      "compiled_node_count": 7,
       "description": "营业利润资产收益",
+      "expanded_expression": "safe_div_null(ttm_from_quarterly(operating_income, period_id), period_average(total_assets, period_id, 2))",
       "expression": "safe_div_null(ttm_from_quarterly(operating_income, period_id), period_average(total_assets, period_id, 2))",
       "name": "operating_profitability",
       "parameters": [
@@ -380,7 +461,10 @@
     },
     "overnight_gap": {
       "category": "price_volume",
+      "compile_status": "verified",
+      "compiled_node_count": 6,
       "description": "隔夜开盘缺口",
+      "expanded_expression": "safe_div_null(open, ts_delay(close, 1)) - 1",
       "expression": "safe_div_null(open, ts_delay(close, 1)) - 1",
       "name": "overnight_gap",
       "parameters": [
@@ -394,7 +478,10 @@
     },
     "quick_ratio": {
       "category": "fundamental",
+      "compile_status": "verified",
+      "compiled_node_count": 5,
       "description": "速动比率",
+      "expanded_expression": "safe_div_null(current_assets - inventory, current_liabilities)",
       "expression": "safe_div_null(current_assets - inventory, current_liabilities)",
       "name": "quick_ratio",
       "parameters": [
@@ -409,7 +496,10 @@
     },
     "rate_of_change": {
       "category": "technical",
+      "compile_status": "verified",
+      "compiled_node_count": 5,
       "description": "N期百分比变化",
+      "expanded_expression": "100 * ts_pct(x, window)",
       "expression": "100 * ts_pct(x, window)",
       "name": "rate_of_change",
       "parameters": [
@@ -423,7 +513,10 @@
     },
     "rd_intensity": {
       "category": "fundamental",
+      "compile_status": "verified",
+      "compiled_node_count": 6,
       "description": "研发强度",
+      "expanded_expression": "safe_div_null(ttm_from_quarterly(research_development, period_id), ttm_from_quarterly(revenue, period_id))",
       "expression": "safe_div_null(ttm_from_quarterly(research_development, period_id), ttm_from_quarterly(revenue, period_id))",
       "name": "rd_intensity",
       "parameters": [
@@ -436,7 +529,10 @@
     },
     "receivables_growth": {
       "category": "fundamental",
+      "compile_status": "verified",
+      "compiled_node_count": 5,
       "description": "应收账款同比增长",
+      "expanded_expression": "period_change(receivables, period_id, 4, 'ratio')",
       "expression": "period_change(receivables, period_id, 4, 'ratio')",
       "name": "receivables_growth",
       "parameters": [
@@ -448,7 +544,10 @@
     },
     "rolling_obv": {
       "category": "technical",
+      "compile_status": "verified",
+      "compiled_node_count": 8,
       "description": "固定窗口成交量方向累计",
+      "expanded_expression": "ts_sum(sign(ts_delta(close, 1)) * volume, window)",
       "expression": "ts_sum(sign(ts_delta(close, 1)) * volume, window)",
       "name": "rolling_obv",
       "parameters": [
@@ -463,7 +562,10 @@
     },
     "rolling_sharpe": {
       "category": "risk",
+      "compile_status": "verified",
+      "compiled_node_count": 8,
       "description": "滚动年化夏普",
+      "expanded_expression": "safe_div_null(ts_mean(returns, window), ts_std(returns, window)) * sqrt(ann_factor)",
       "expression": "safe_div_null(ts_mean(returns, window), ts_std(returns, window)) * sqrt(ann_factor)",
       "name": "rolling_sharpe",
       "parameters": [
@@ -478,7 +580,10 @@
     },
     "rsi_sma": {
       "category": "technical",
+      "compile_status": "verified",
+      "compiled_node_count": 17,
       "description": "简单移动平均版本RSI",
+      "expanded_expression": "100 - 100 / (1 + safe_div_null(ts_mean(clip(ts_delta(close, 1), 0, inf), window), ts_mean(abs(clip(ts_delta(close, 1), -inf, 0)), window)))",
       "expression": "100 - 100 / (1 + safe_div_null(ts_mean(clip(ts_delta(close, 1), 0, inf), window), ts_mean(abs(clip(ts_delta(close, 1), -inf, 0)), window)))",
       "name": "rsi_sma",
       "parameters": [
@@ -492,7 +597,10 @@
     },
     "stochastic_d": {
       "category": "technical",
+      "compile_status": "verified",
+      "compiled_node_count": 13,
       "description": "随机指标D值",
+      "expanded_expression": "ts_mean(100 * safe_div_null(close - ts_min(low, window), ts_max(high, window) - ts_min(low, window)), smooth_window)",
       "expression": "ts_mean(100 * safe_div_null(close - ts_min(low, window), ts_max(high, window) - ts_min(low, window)), smooth_window)",
       "name": "stochastic_d",
       "parameters": [
@@ -509,7 +617,10 @@
     },
     "stochastic_k": {
       "category": "technical",
+      "compile_status": "verified",
+      "compiled_node_count": 11,
       "description": "随机指标K值",
+      "expanded_expression": "100 * safe_div_null(close - ts_min(low, window), ts_max(high, window) - ts_min(low, window))",
       "expression": "100 * safe_div_null(close - ts_min(low, window), ts_max(high, window) - ts_min(low, window))",
       "name": "stochastic_k",
       "parameters": [
@@ -525,7 +636,10 @@
     },
     "trix": {
       "category": "technical",
+      "compile_status": "verified",
+      "compiled_node_count": 9,
       "description": "三重EMA的一期变化率",
+      "expanded_expression": "100 * ts_pct(ts_ema(ts_ema(ts_ema(close, window), window), window), 1)",
       "expression": "100 * ts_pct(ts_ema(ts_ema(ts_ema(close, window), window), window), 1)",
       "name": "trix",
       "parameters": [
@@ -539,7 +653,10 @@
     },
     "vpmacd": {
       "category": "experimental",
+      "compile_status": "verified",
+      "compiled_node_count": 7,
       "description": "量价加权MACD实验配方",
+      "expanded_expression": "experimental_vpmacd(close, volume, open, high, low, lambda_param)",
       "expression": "experimental_vpmacd(close, volume, open, high, low, lambda_param)",
       "name": "vpmacd",
       "parameters": [
@@ -559,7 +676,10 @@
     },
     "weighted_moving_average": {
       "category": "technical",
+      "compile_status": "verified",
+      "compiled_node_count": 3,
       "description": "线性衰减加权均值",
+      "expanded_expression": "ts_decay_linear(x, window)",
       "expression": "ts_decay_linear(x, window)",
       "name": "weighted_moving_average",
       "parameters": [
@@ -573,7 +693,10 @@
     },
     "williams_r": {
       "category": "technical",
+      "compile_status": "verified",
+      "compiled_node_count": 11,
       "description": "Williams %R",
+      "expanded_expression": "100 * safe_div_null(close - ts_max(high, window), ts_max(high, window) - ts_min(low, window))",
       "expression": "100 * safe_div_null(close - ts_max(high, window), ts_max(high, window) - ts_min(low, window))",
       "name": "williams_r",
       "parameters": [
@@ -588,5 +711,5 @@
       "status": "production"
     }
   },
-  "schema_version": "factor_recipe_manifest.v1"
+  "schema_version": "factor_recipe_manifest.v2"
 }

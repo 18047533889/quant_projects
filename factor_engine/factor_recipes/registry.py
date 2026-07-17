@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import asdict, dataclass
+from typing import Any, Iterable, Mapping
 
 
 @dataclass(frozen=True)
@@ -41,3 +42,26 @@ class FactorRecipeRegistry:
     @classmethod
     def catalog(cls) -> dict[str, dict]:
         return {name: deepcopy(asdict(recipe)) for name, recipe in sorted(cls._recipes.items())}
+
+    @classmethod
+    def expand(
+        cls,
+        name: str,
+        bindings: Mapping[str, Any],
+        *,
+        allowed_statuses: Iterable[str] = ("production",),
+    ) -> str:
+        from factor_recipes.compiler import RecipeCompiler
+
+        return RecipeCompiler(allowed_statuses=allowed_statuses).expand(name, bindings)
+
+    @classmethod
+    def compile_batch(
+        cls,
+        requests: Mapping[str, tuple[str, Mapping[str, Any]]],
+        *,
+        allowed_statuses: Iterable[str] = ("production",),
+    ):
+        from factor_recipes.compiler import RecipeCompiler
+
+        return RecipeCompiler(allowed_statuses=allowed_statuses).compile_batch(requests)
