@@ -20,8 +20,7 @@ def test_panel_contracts_fail_closed():
     with pytest.raises(ValidationError, match="IndustrySource"):
         validate_panel_request("ashare_stock_industry")
     assert validate_panel_request(
-        "ashare_stock_industry",
-        semantic_filters={"IndustrySource": "sw_l1"},
+        "ashare_stock_industry", semantic_filters={"IndustrySource": "sw_l1"}
     ).time_model == "D1"
 
 
@@ -70,7 +69,6 @@ def test_runtime_enforces_filter_and_normalizes_return():
     query, kwargs = store.sql_call
     assert '"IndustrySource" = ?' in query
     assert kwargs["params"] == ["sw_l1"]
-
     daily = store.read_cos_panel(
         "ashare_stock_daily", columns=["Return"], normalize_returns=True
     )
@@ -84,10 +82,13 @@ def test_event_asof_uses_publication_time_and_staleness():
         "decision_timestamp": ["2024-05-02", "2024-09-02"],
     })
     result = store.read_cos_events_asof(
-        "ashare_stock_balance",
-        decisions,
-        columns=["TotalAssets"],
-        max_age_days=180,
+        "ashare_stock_balance", decisions, columns=["TotalAssets"], max_age_days=180
     ).sort_values("decision_timestamp")
     assert result["TotalAssets"].tolist() == [100.0, 120.0]
     assert (result["fundamental_staleness_days"] >= 0).all()
+
+
+from data_access.tests.test_cos_factor_runtime import (  # noqa: E402,F401
+    test_load_columns_cannot_bypass_event_sparse_and_unit_contracts,
+    test_load_factor_columns_normalizes_ashare_return_before_panelization,
+)
