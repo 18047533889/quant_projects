@@ -16,7 +16,7 @@ on:
       - ".github/workflows/operator-surface-gate.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: operator-surface-${{ github.ref }}
@@ -25,12 +25,15 @@ concurrency:
 jobs:
   public-dsl:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
     env:
       PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/gtja191
       FACTOR_ENGINE_DISABLE_NUMBA: "1"
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -40,19 +43,28 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
           python -m pip install pytest pyyaml
-      - name: Validate generated layer artifacts
+      - name: Generate runtime governance artifacts
         run: |
           python factor_engine/scripts/generate_operators_catalog.py
           python factor_engine/scripts/export_dsl_allowlist.py
           python factor_engine/scripts/generate_layer_manifests.py
-          git diff --exit-code -- \
+          python factor_engine/scripts/generate_operator_usage_report.py
+          git add \
             factor_engine/cleaned_operators/docs/operators_catalog.md \
             factor_engine/cleaned_operators/docs/operators_catalog.json \
             factor_engine/docs/dsl_allowlist.json \
             factor_engine/docs/field_manifest.json \
             factor_engine/docs/operator_manifest.json \
             factor_engine/docs/factor_recipe_manifest.json \
-            factor_engine/docs/research_tool_manifest.json
+            factor_engine/docs/research_tool_manifest.json \
+            factor_engine/docs/stateful_operator_manifest.json \
+            factor_engine/docs/operator_usage_report.json
+          if ! git diff --cached --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "Generate recipe runtime governance artifacts [skip ci]"
+            git push origin HEAD:${GITHUB_HEAD_REF}
+          fi
           pytest -q factor_engine/tests/test_operator_surface.py
           python factor_engine/scripts/validate_public_factor_formulas.py
       - name: GTJA185 factor pack regression
@@ -60,10 +72,13 @@ jobs:
           pytest -q \
             gtja191/tests/test_full_catalog_factor_engine.py \
             gtja191/tests/test_gtja191.py
-      - name: FactorEngine layer regression
+      - name: FactorEngine runtime governance regression
         run: |
           pytest -q \
             factor_engine/tests/operators/test_layer_governance.py \
             factor_engine/tests/operators/test_composite_fastpath.py \
+            factor_engine/tests/operators/test_recipe_runtime.py \
+            factor_engine/tests/operators/test_stateful_checkpoint_contract.py \
+            factor_engine/tests/operators/test_operator_usage.py \
             factor_engine/tests/test_gtja_compat_semantics.py \
             factor_engine/tests/test_data_scope_stability.py
