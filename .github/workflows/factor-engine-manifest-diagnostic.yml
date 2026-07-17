@@ -6,6 +6,10 @@ on:
     paths:
       - "factor_engine/**"
       - ".github/workflows/factor-engine-manifest-diagnostic.yml"
+  pull_request:
+    paths:
+      - "factor_engine/**"
+      - ".github/workflows/factor-engine-manifest-diagnostic.yml"
 
 permissions:
   contents: read
