@@ -9,13 +9,22 @@ def register_all() -> None:
     global _REGISTERED
     if _REGISTERED:
         return
-    from cleaned_operators.overhaul import compat, daily, fundamental, regression, technical
+    from cleaned_operators.overhaul import (
+        compat,
+        daily,
+        fundamental,
+        polars_fixes,
+        regression,
+        technical,
+    )
 
     daily.register()
     regression.register()
     fundamental.register()
     technical.register()
-    # Compatibility wrappers must load after audited canonical implementations.
+    # Targeted backend fixes and compatibility wrappers must load after the
+    # audited canonical implementations so they replace only the affected slot.
+    polars_fixes.register()
     compat.register()
     _REGISTERED = True
 
