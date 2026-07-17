@@ -904,6 +904,7 @@
     },
     "expanding_min": {
       "aliases": [
+        "cum_min",
         "cumulative_min"
       ],
       "backend_meta": {
@@ -987,7 +988,9 @@
       "surface": "research_tools"
     },
     "expanding_sum": {
-      "aliases": [],
+      "aliases": [
+        "cum_sum"
+      ],
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,

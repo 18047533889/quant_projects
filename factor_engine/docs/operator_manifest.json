@@ -12,7 +12,7 @@
         },
         "polars": {
           "explicit": true,
-          "source": "operator_overhaul_native_polars"
+          "source": "layer_governance_native_polars"
         }
       },
       "backends": [
@@ -20,7 +20,7 @@
         "polars"
       ],
       "canonical": "ADX",
-      "description": "Wilder ADX，方向运动独立判断",
+      "description": "Wilder ADX with strict pandas-compatible missing seed",
       "earliest_trade_time": "next_session_open",
       "lookback_fn": "window",
       "param_names": [
@@ -33,7 +33,7 @@
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "close",
       "scope": "time_series",
-      "selected_source": "operator_overhaul_native_polars",
+      "selected_source": "layer_governance_native_polars",
       "semantic_version": "2.0",
       "stateful": true,
       "status": "production",
