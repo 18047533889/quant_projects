@@ -45,22 +45,11 @@ jobs:
           python -m pip install pytest pyyaml
       - name: Regenerate layer artifacts
         run: |
-          set +e
           bash -o pipefail -c '
             python factor_engine/scripts/generate_operators_catalog.py &&
             python factor_engine/scripts/export_dsl_allowlist.py &&
             python factor_engine/scripts/generate_layer_manifests.py
-          ' 2>&1 | tee factor_engine/layer_generation_failure.md
-          status=${PIPESTATUS[0]}
-          if [ "${status}" -ne 0 ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add -f factor_engine/layer_generation_failure.md
-            git commit -m "Capture layer generation failure [skip ci]"
-            git push origin HEAD:${GITHUB_HEAD_REF}
-            exit "${status}"
-          fi
-          rm -f factor_engine/layer_generation_failure.md
+          '
           git add \
             factor_engine/cleaned_operators/docs/operators_catalog.md \
             factor_engine/cleaned_operators/docs/operators_catalog.json \
@@ -75,8 +64,24 @@ jobs:
             git commit -m "Regenerate factor layer manifests [skip ci]"
             git push origin HEAD:${GITHUB_HEAD_REF}
           fi
-          pytest -q factor_engine/tests/test_operator_surface.py
-          python factor_engine/scripts/validate_public_factor_formulas.py
+      - name: Validate public surfaces
+        run: |
+          set +e
+          {
+            pytest -q --tb=short factor_engine/tests/test_operator_surface.py
+            python factor_engine/scripts/validate_public_factor_formulas.py
+          } 2>&1 | tee factor_engine/layer_surface_failure.md
+          status=${PIPESTATUS[0]}
+          if [ "${status}" -ne 0 ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -f factor_engine/layer_surface_failure.md
+            git commit -m "Capture layer surface failure [skip ci]"
+            git push origin HEAD:${GITHUB_HEAD_REF}
+          else
+            rm -f factor_engine/layer_surface_failure.md
+          fi
+          exit "${status}"
       - name: GTJA185 factor pack regression
         run: |
           pytest -q \
