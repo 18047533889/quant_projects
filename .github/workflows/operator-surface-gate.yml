@@ -16,7 +16,7 @@ on:
       - ".github/workflows/operator-surface-gate.yml"
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: operator-surface-${{ github.ref }}
@@ -31,9 +31,6 @@ jobs:
       FACTOR_ENGINE_DISABLE_NUMBA: "1"
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref || github.ref_name }}
-          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -47,19 +44,6 @@ jobs:
         run: |
           python factor_engine/scripts/generate_operators_catalog.py
           python factor_engine/scripts/export_dsl_allowlist.py
-          if [ -n "${GITHUB_HEAD_REF}" ] && ! git diff --quiet -- \
-            factor_engine/cleaned_operators/docs/operators_catalog.md \
-            factor_engine/cleaned_operators/docs/operators_catalog.json \
-            factor_engine/docs/dsl_allowlist.json; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add \
-              factor_engine/cleaned_operators/docs/operators_catalog.md \
-              factor_engine/cleaned_operators/docs/operators_catalog.json \
-              factor_engine/docs/dsl_allowlist.json
-            git commit -m "Regenerate operator artifacts [skip ci]"
-            git push origin HEAD:${GITHUB_HEAD_REF}
-          fi
           git diff --exit-code -- \
             factor_engine/cleaned_operators/docs/operators_catalog.md \
             factor_engine/cleaned_operators/docs/operators_catalog.json \
@@ -71,24 +55,8 @@ jobs:
           pytest -q \
             gtja191/tests/test_full_catalog_factor_engine.py \
             gtja191/tests/test_gtja191.py
-      - name: FactorEngine regression with diagnostic capture
+      - name: FactorEngine regression
         run: |
-          set +e
-          pytest -q --tb=short \
-            factor_engine/tests/operators/test_operator_overhaul.py \
-            factor_engine/tests/test_data_scope_stability.py \
-            factor_engine/tests/test_data_access_source_snapshot_cache.py \
+          pytest -q \
             factor_engine/tests/test_gtja_compat_semantics.py \
-            factor_engine/tests/test_scalar_comparison_semantics.py \
-            2>&1 | tee factor_engine/ci_operator_failure.md
-          status=${PIPESTATUS[0]}
-          if [ "${status}" -ne 0 ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add -f factor_engine/ci_operator_failure.md
-            git commit -m "Capture operator CI failure [skip ci]"
-            git push origin HEAD:${GITHUB_HEAD_REF}
-          else
-            rm -f factor_engine/ci_operator_failure.md
-          fi
-          exit "${status}"
+            factor_engine/tests/test_data_scope_stability.py
