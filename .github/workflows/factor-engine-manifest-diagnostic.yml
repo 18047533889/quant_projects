@@ -30,13 +30,46 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
           python -m pip install pytest pyyaml
-      - id: manifests
+      - id: verify
         continue-on-error: true
-        run: python factor_engine/scripts/generate_layer_manifests.py > /tmp/manifests.log 2>&1
+        run: |
+          set -o pipefail
+          {
+            generate_all() {
+              python factor_engine/scripts/generate_operators_catalog.py
+              python factor_engine/scripts/export_dsl_allowlist.py
+              python factor_engine/scripts/generate_layer_manifests.py
+              python factor_engine/scripts/generate_operator_usage_report.py
+              python factor_engine/scripts/sync_primitive_evidence.py
+              python factor_engine/scripts/sync_backend_docs.py
+            }
+            files=(
+              factor_engine/cleaned_operators/docs/operators_catalog.md
+              factor_engine/cleaned_operators/docs/operators_catalog.json
+              factor_engine/docs/dsl_allowlist.json
+              factor_engine/docs/field_manifest.json
+              factor_engine/docs/operator_manifest.json
+              factor_engine/docs/factor_recipe_manifest.json
+              factor_engine/docs/research_tool_manifest.json
+              factor_engine/docs/stateful_operator_manifest.json
+              factor_engine/docs/operator_usage_report.json
+              factor_engine/docs/backend_capabilities.json
+              factor_engine/docs/backend_coverage.md
+              factor_engine/docs/sql_pushdown_coverage.md
+              factor_engine/evidence/primitive_case_registry.json
+            )
+            generate_all
+            sha256sum "${files[@]}" > /tmp/first.sha
+            generate_all
+            sha256sum "${files[@]}" > /tmp/second.sha
+            diff -u /tmp/first.sha /tmp/second.sha
+            pytest -q factor_engine/tests/test_operator_surface.py
+            python factor_engine/scripts/validate_public_factor_formulas.py
+          } > /tmp/verify.log 2>&1
       - if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: factor-engine-manifest-traceback
-          path: /tmp/manifests.log
-      - if: steps.manifests.outcome == 'failure'
+          name: factor-engine-verification-traceback
+          path: /tmp/verify.log
+      - if: steps.verify.outcome == 'failure'
         run: exit 1
