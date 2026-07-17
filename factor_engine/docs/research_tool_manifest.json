@@ -989,7 +989,8 @@
     },
     "expanding_sum": {
       "aliases": [
-        "cum_sum"
+        "cum_sum",
+        "cumulative_sum"
       ],
       "backend_meta": {
         "pandas_numpy": {
