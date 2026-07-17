@@ -50,8 +50,6 @@ _LOAD_MODULES = (
     "cleaned_operators.operator_overhaul",
     "cleaned_operators.composite_fastpath",
     "cleaned_operators.composite_fastpath_fixes",
-    # Strict primitives load after historical implementations so the period-aware
-    # variants become the active reference backend before final surface governance.
     "cleaned_operators.layer_primitives",
 )
 
@@ -67,8 +65,10 @@ def load_all() -> None:
 
     finalize_operator_overhaul()
 
-    # Last step: physically separate fields, recipes and research tools from the
-    # production operator registry, enrich contracts and seal duplicate writes.
     from cleaned_operators.layer_governance import finalize_layer_governance
 
     finalize_layer_governance()
+
+    from cleaned_operators.layer_governance_post import apply_post_governance
+
+    apply_post_governance()
