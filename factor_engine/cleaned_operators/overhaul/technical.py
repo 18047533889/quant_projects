@@ -37,7 +37,9 @@ def ema_registered(x, window, backend):
         return operator.calculate(x, window=int(window))
 
 
-def pd_macd_line(x, fast=12, slow=26, **_):
+def pd_macd_line(x, fast=12, slow=26, signal=None, **_):
+    # ``signal`` is accepted for backward compatibility with historical
+    # ``MACD(x, fast, slow, signal)`` calls.  The line itself does not use it.
     fast, slow = positive_int(fast, "fast"), positive_int(slow, "slow")
     if fast >= slow:
         raise ValueError("fast must be smaller than slow")
@@ -63,7 +65,8 @@ def pd_macd_hist(x, fast=12, slow=26, signal=9, **_):
     )
 
 
-def pl_macd_line(x, fast=12, slow=26, **_):
+def pl_macd_line(x, fast=12, slow=26, signal=None, **_):
+    # Keep the same compatibility contract as the pandas implementation.
     fast, slow = positive_int(fast, "fast"), positive_int(slow, "slow")
     if fast >= slow:
         raise ValueError("fast must be smaller than slow")
