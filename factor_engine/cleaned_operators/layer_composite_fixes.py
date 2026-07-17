@@ -1,19 +1,20 @@
 # -*- coding: utf-8 -*-
-"""Final native-Polars parity fixes for retained fused composites."""
+"""Final native-Polars parity fixes and strict COS/fiscal layers."""
 from __future__ import annotations
 
+# Imported here because this module is deliberately the last runtime layer in
+# cleaned_operators.load_all. Their registrations therefore override historical
+# implementations without widening the bootstrap surface.
+from cleaned_operators import fiscal_strict as _fiscal_strict  # noqa: F401
+from cleaned_operators import layer_cos_fundamental as _cos_fundamental  # noqa: F401
+from cleaned_operators import layer_weighted as _weighted  # noqa: F401
+from cleaned_operators import layer_topk_compat as _topk_compat  # noqa: F401
 from cleaned_operators.overhaul.base import EPS, PolarsFunctionOperator, pl, pl_base_with, pl_cols, positive_int
 from cleaned_operators.registry import OperatorRegistry
 
 
 def pl_adx_strict(high, low, close, window=14, **_):
-    """Wilder ADX with the same missing previous-close seed as pandas.
-
-    Polars ``max_horizontal`` ignores null inputs, while NumPy ``maximum`` in the
-    pandas reference propagates the missing previous close.  Explicitly nulling
-    True Range whenever previous close is unavailable keeps warm-up and interior
-    gaps identical without leaving Polars execution.
-    """
+    """Wilder ADX with the same missing previous-close seed as pandas."""
     w = positive_int(window, "window")
     replacements = {}
     for col in [c for c in pl_cols(high) if c in low.columns and c in close.columns]:
@@ -21,15 +22,11 @@ def pl_adx_strict(high, low, close, window=14, **_):
         previous_close = pl.col("c").shift(1)
         raw_plus = pl.col("h") - pl.col("h").shift(1)
         raw_minus = pl.col("l").shift(1) - pl.col("l")
-        true_range = (
-            pl.when(previous_close.is_null())
-            .then(None)
-            .otherwise(
-                pl.max_horizontal(
-                    pl.col("h") - pl.col("l"),
-                    (pl.col("h") - previous_close).abs(),
-                    (pl.col("l") - previous_close).abs(),
-                )
+        true_range = pl.when(previous_close.is_null()).then(None).otherwise(
+            pl.max_horizontal(
+                pl.col("h") - pl.col("l"),
+                (pl.col("h") - previous_close).abs(),
+                (pl.col("l") - previous_close).abs(),
             )
         )
         plus = pl.when((raw_plus > raw_minus) & (raw_plus > 0)).then(raw_plus).otherwise(0.0)
@@ -42,32 +39,18 @@ def pl_adx_strict(high, low, close, window=14, **_):
             (100.0 * pl.col("pdm") / pl.when(pl.col("atr").abs() > EPS).then(pl.col("atr")).otherwise(None)).alias("pdi"),
             (100.0 * pl.col("mdm") / pl.when(pl.col("atr").abs() > EPS).then(pl.col("atr")).otherwise(None)).alias("mdi"),
         ).with_columns(
-            (
-                100.0
-                * (pl.col("pdi") - pl.col("mdi")).abs()
-                / pl.when((pl.col("pdi") + pl.col("mdi")).abs() > EPS)
-                .then(pl.col("pdi") + pl.col("mdi"))
-                .otherwise(None)
-            ).alias("dx")
+            (100.0 * (pl.col("pdi") - pl.col("mdi")).abs() / pl.when((pl.col("pdi") + pl.col("mdi")).abs() > EPS).then(pl.col("pdi") + pl.col("mdi")).otherwise(None)).alias("dx")
         )
-        replacements[col] = staged.select(
-            pl.col("dx").ewm_mean(alpha=1.0 / w, adjust=False, min_samples=w).alias("value")
-        )["value"]
+        replacements[col] = staged.select(pl.col("dx").ewm_mean(alpha=1.0 / w, adjust=False, min_samples=w).alias("value"))["value"]
     return pl_base_with(high, replacements)
 
 
 if pl is not None:
     OperatorRegistry.register(
         PolarsFunctionOperator(
-            "ADX",
-            "technical_signal",
-            ["high", "low", "close", "window"],
-            "Wilder ADX with strict pandas-compatible missing seed",
-            pl_adx_strict,
+            "ADX", "technical_signal", ["high", "low", "close", "window"],
+            "Wilder ADX with strict pandas-compatible missing seed", pl_adx_strict,
         ),
-        canonical="ADX",
-        backend="polars",
-        source="layer_governance_native_polars",
-        status="production",
-        backend_explicit=True,
+        canonical="ADX", backend="polars", source="layer_governance_native_polars",
+        status="production", backend_explicit=True,
     )
