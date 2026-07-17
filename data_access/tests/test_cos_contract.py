@@ -19,11 +19,10 @@ def test_panel_contracts_fail_closed():
         validate_panel_request("us_stock_industry")
     with pytest.raises(ValidationError, match="IndustrySource"):
         validate_panel_request("ashare_stock_industry")
-    contract = validate_panel_request(
+    assert validate_panel_request(
         "ashare_stock_industry",
         semantic_filters={"IndustrySource": "sw_l1"},
-    )
-    assert contract.time_model == "D1"
+    ).time_model == "D1"
 
 
 def test_return_units_are_market_specific():
@@ -39,9 +38,15 @@ class _FakeStore:
 
     def sql(self, query, **kwargs):
         self.sql_call = (query, kwargs)
-        return pa.table({"TradeDate": [pd.Timestamp("2024-01-02")], "Symbol": ["000001.SZ"], "Return": [100.0]})
+        return pa.table({
+            "TradeDate": [pd.Timestamp("2024-01-02")],
+            "Symbol": ["000001.SZ"],
+            "IndustrySource": ["sw_l1"],
+        })
 
     def read_arrow(self, dataset, **kwargs):
+        if dataset == "ashare_stock_daily":
+            return pa.table({"Return": [100.0]})
         return pa.table({"Ret": [0.01]})
 
     def read_frame(self, dataset, **kwargs):
@@ -56,16 +61,20 @@ class _FakeStore:
 
 def test_runtime_enforces_filter_and_normalizes_return():
     store = install_cos_contract_methods(_FakeStore())
-    table = store.read_cos_panel(
+    industry = store.read_cos_panel(
         "ashare_stock_industry",
-        columns=["TradeDate", "Symbol", "Return"],
+        columns=["TradeDate", "Symbol", "IndustrySource"],
         semantic_filters={"IndustrySource": "sw_l1"},
-        normalize_returns=True,
     )
-    assert table["return_decimal"].to_pylist() == pytest.approx([0.01])
+    assert industry.num_rows == 1
     query, kwargs = store.sql_call
     assert '"IndustrySource" = ?' in query
     assert kwargs["params"] == ["sw_l1"]
+
+    daily = store.read_cos_panel(
+        "ashare_stock_daily", columns=["Return"], normalize_returns=True
+    )
+    assert daily["return_decimal"].to_pylist() == pytest.approx([0.01])
 
 
 def test_event_asof_uses_publication_time_and_staleness():
