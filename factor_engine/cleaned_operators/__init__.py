@@ -96,5 +96,7 @@ def load_all() -> None:
     # Any module-level historical tier sets are narrowed to the final registry
     # only after all canonical renames, backend replacements and surface moves.
     from backend.active_capabilities import synchronize_active_backend_sets
+    from backend.sql_declared_restore import install_declared_sql_restore
 
     synchronize_active_backend_sets()
+    install_declared_sql_restore()
