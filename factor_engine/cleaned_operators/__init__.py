@@ -40,6 +40,8 @@ _LOAD_MODULES = (
     "cleaned_operators.common.polars_statistics",
     "cleaned_operators.common.polars_np_parity",
     "cleaned_operators.common.polars_math_extended",
+    # Historical pandas/NumPy bridges are still imported for compatibility with
+    # old modules, but the final audit removes every bridge-backed Polars entry.
     "cleaned_operators.common.polars_batch_mirror",
     "cleaned_operators.price_volume.ops",
     "cleaned_operators.price_volume.polars_price_volume",
@@ -51,6 +53,7 @@ _LOAD_MODULES = (
     # Must be imported last: audited implementations replace historical
     # canonical/backend registrations and tighten the authoring surface.
     "cleaned_operators.semantic_hardening",
+    "cleaned_operators.operator_overhaul",
 )
 
 
@@ -60,3 +63,9 @@ def load_all() -> None:
     from cleaned_operators._dedupe import apply_operator_deduplication
 
     apply_operator_deduplication()
+
+    # The final audit is deliberately applied after historical deduplication so
+    # aliases, backend capability and surface policy reflect the actual runtime.
+    from cleaned_operators.operator_overhaul import finalize_operator_overhaul
+
+    finalize_operator_overhaul()
