@@ -98,19 +98,23 @@ def build_operator_manifest(
 
 def _manifest_metadata() -> dict[str, str]:
     """Manifest 生成元数据（schema v2）。"""
+    import os
     import subprocess
-    sha = "unknown"
-    generated_at = "unknown"
+
+    sha = os.environ.get("FACTOR_ENGINE_MANIFEST_COMMIT_SHA", "").strip() or "unknown"
+    generated_at = os.environ.get("FACTOR_ENGINE_MANIFEST_GENERATED_AT", "").strip() or "unknown"
     try:
         cwd = str(Path(__file__).resolve().parents[1])
-        sha = subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], cwd=cwd, stderr=subprocess.DEVNULL
-        ).decode().strip()
-        generated_at = subprocess.check_output(
-            ["git", "show", "-s", "--format=%cI", "HEAD"],
-            cwd=cwd,
-            stderr=subprocess.DEVNULL,
-        ).decode().strip()
+        if sha == "unknown":
+            sha = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], cwd=cwd, stderr=subprocess.DEVNULL
+            ).decode().strip()
+        if generated_at == "unknown":
+            generated_at = subprocess.check_output(
+                ["git", "show", "-s", "--format=%cI", "HEAD"],
+                cwd=cwd,
+                stderr=subprocess.DEVNULL,
+            ).decode().strip()
     except Exception:
         pass
     return {
