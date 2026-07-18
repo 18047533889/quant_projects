@@ -84,3 +84,7 @@ def load_all() -> None:
     from backend.sql_audit_fixes import apply_sql_audit_fixes
 
     apply_sql_audit_fixes()
+
+    from backend.index_dtype_hardening import apply_index_dtype_hardening
+
+    apply_index_dtype_hardening()
