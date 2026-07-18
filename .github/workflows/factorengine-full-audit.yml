@@ -5,6 +5,7 @@ on:
     paths:
       - "factor_engine/**"
       - "dataaccess/**"
+      - "data_access/**"
       - "gtja191/**"
       - ".github/workflows/factorengine-full-audit.yml"
   push:
@@ -12,6 +13,7 @@ on:
     paths:
       - "factor_engine/**"
       - "dataaccess/**"
+      - "data_access/**"
       - "gtja191/**"
       - ".github/workflows/factorengine-full-audit.yml"
 
@@ -27,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 75
     env:
-      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/dataaccess:${{ github.workspace }}/gtja191
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/dataaccess
       FACTOR_ENGINE_DISABLE_NUMBA: "1"
       FACTOR_ENGINE_RUN_MODE: research
       QUANT_PRODUCTION_MODE: "0"
@@ -44,7 +46,7 @@ jobs:
           python -m pip install pytest pyyaml
       - name: Compile audited runtime
         run: |
-          python -m compileall -q factor_engine dataaccess gtja191
+          python -m compileall -q factor_engine dataaccess data_access gtja191
           python - <<'PY'
           from cleaned_operators import load_all
           from cleaned_operators.registry import OperatorRegistry
@@ -56,13 +58,14 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          pytest -q \
+          pytest -q --import-mode=importlib \
             factor_engine/tests/operators \
             factor_engine/tests/test_operator_surface.py \
             factor_engine/tests/test_gtja_compat_semantics.py \
             factor_engine/tests/test_scalar_comparison_semantics.py \
             factor_engine/tests/test_data_scope_stability.py \
             factor_engine/tests/test_data_access_source_snapshot_cache.py \
+            dataaccess/tests/test_package_alias.py \
             dataaccess/tests/test_cos_contract_core.py \
             dataaccess/tests/test_cos_pit_runtime.py \
             dataaccess/tests/test_cos_pit_edges.py \
