@@ -65,6 +65,11 @@ def lower_to_physical_plan(plan: PlanNode, *, mode: str = "production") -> Physi
 
     def _transform(node: PlanNode) -> PlanNode:
         """将 maximal SQL 子树替换为 ``materialized_series`` 占位并登记 sid。"""
+        # Literal nodes are scalar call parameters, not panel-valued SQL
+        # subtrees.  Materializing them converts values such as a rolling
+        # window ``3`` into a DataFrame and breaks the Python fallback call.
+        if node.op == "literal":
+            return node
         if _is_sql_capable(node, mode=mode):
             sid = plan_cache_key(node)
             pending[sid] = node
