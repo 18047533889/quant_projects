@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 50
     env:
-      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/gtja191
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/dataaccess:${{ github.workspace }}/gtja191
       FACTOR_ENGINE_DISABLE_NUMBA: "1"
     steps:
       - uses: actions/checkout@v4
@@ -111,7 +111,8 @@ jobs:
         run: |
           pytest -q \
             factor_engine/tests/operators/test_cos_fiscal_primitives.py \
-            factor_engine/tests/operators/test_full_operator_audit_fixes.py
+            factor_engine/tests/operators/test_full_operator_audit_fixes.py \
+            factor_engine/tests/operators/test_sql_audit_fixes.py
       - name: Stateful segmented runtime regression
         run: pytest -q factor_engine/tests/operators/test_stateful_segment_runtime.py
       - name: Operator overhaul compatibility regression
