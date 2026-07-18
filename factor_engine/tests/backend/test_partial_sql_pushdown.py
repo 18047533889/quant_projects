@@ -123,3 +123,29 @@ def test_rank_ts_mean_still_fully_sql(tmp_path, monkeypatch):
     plan, _ = engine.compile(factor)
     physical = lower_to_physical_plan(plan)
     assert physical.fully_sql
+
+
+def test_partial_lowering_preserves_scalar_literals(monkeypatch):
+    """Python fallback must receive scalar parameters, not panel materializations."""
+    from planner.logical_plan import PlanNode
+    import planner.sql_lowerer as lowerer
+
+    plan = PlanNode(
+        "ts_mean",
+        inputs=(
+            PlanNode("column", attrs={"name": "Close"}),
+            PlanNode("literal", attrs={"value": 3}),
+        ),
+    )
+
+    def capable(node, *, mode="production"):
+        del mode
+        return node.op in {"column", "literal"}
+
+    monkeypatch.setattr(lowerer, "_is_sql_capable", capable)
+    physical = lowerer.lower_to_physical_plan(plan)
+    assert not physical.fully_sql
+    assert physical.root.op == "ts_mean"
+    assert physical.root.inputs[0].op == "materialized_series"
+    assert physical.root.inputs[1].op == "literal"
+    assert physical.root.inputs[1].attrs["value"] == 3
