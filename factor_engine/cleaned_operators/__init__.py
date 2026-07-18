@@ -74,3 +74,7 @@ def load_all() -> None:
     from cleaned_operators.layer_governance_post import apply_post_governance
 
     apply_post_governance()
+
+    from backend.runtime_hardening import apply_runtime_hardening
+
+    apply_runtime_hardening()
