@@ -2,21 +2,19 @@
 
 可扩展的量化因子引擎框架，支持表达式树构建、编译优化、多后端执行与配置驱动运行。
 
-**文档索引**：**[`docs/FactorEngine完全指南.md`](docs/FactorEngine完全指南.md)**（零基础必读） · [`docs/README.md`](docs/README.md) · [`docs/源码注释导读.md`](docs/源码注释导读.md) · 挖掘投递 [`docs/miner_delivery_spec.md`](docs/miner_delivery_spec.md) · 算子写法 [`docs/算子与导入教程.md`](docs/算子与导入教程.md) · 白名单 [`docs/dsl_operators_reference.md`](docs/dsl_operators_reference.md) · 语义 [`docs/operators_semantics.md`](docs/operators_semantics.md) · 回测 ADR [`docs/adr_backtest_target_position.md`](docs/adr_backtest_target_position.md) · 变更 [`docs/changelog_shw.md`](docs/changelog_shw.md)
+> **Monorepo 总使用文档** → [`../docs/量化平台使用总览.md`](../docs/量化平台使用总览.md)  
+> **本模块总指南** → [`docs/FactorEngine完全指南.md`](docs/FactorEngine完全指南.md)
+
+**文档索引**：[`docs/README.md`](docs/README.md) · [`docs/源码注释导读.md`](docs/源码注释导读.md) · 挖掘投递 [`docs/miner_delivery_spec.md`](docs/miner_delivery_spec.md) · 算子写法 [`docs/算子与导入教程.md`](docs/算子与导入教程.md) · 白名单 [`docs/dsl_operators_reference.md`](docs/dsl_operators_reference.md) · 语义 [`docs/operators_semantics.md`](docs/operators_semantics.md) · 回测 ADR [`docs/adr_backtest_target_position.md`](docs/adr_backtest_target_position.md) · 变更 [`docs/changelog_shw.md`](docs/changelog_shw.md)
 
 ### 协作者速览（新人约 5 分钟）
 
-> **完全不了解 factor_engine？** 请先读 **[`docs/FactorEngine完全指南.md`](docs/FactorEngine完全指南.md)**（总文档，30 分钟建立全局认识）。
+> **完全不了解 factor_engine？** 请先读 **[`docs/FactorEngine完全指南.md`](docs/FactorEngine完全指南.md)**；若还不了解读数层，先看 **[量化平台使用总览](../docs/量化平台使用总览.md)**。
 
-1. **数据流（本仓库在干什么）**：`api`（`Factor` / DSL / 算子工厂，经 **`cleaned_operators`**）→ `expr` → `ir` → `planner` → `backend` → **MultiIndex 因子序列**；**编排入口**是 **`runtime/FactorEngine`**。挖掘侧入门：**[`docs/算子与导入教程.md`](docs/算子与导入教程.md)**。
-2. **Backend 覆盖（2026-07）**（详见 [`docs/sql_pushdown_coverage.md`](docs/sql_pushdown_coverage.md)）：
-   - **Polars registry capable**：325（含 map_groups / registry bridge，非全部 native）
-   - **DuckDB SQL emitter implemented**：~88 canonical（implemented，非 production-safe）
-   - **Primitive dual-backend production-safe**（证据交集）：见 `evidence/primitive_verified.json` 中 `PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE`（须 Polars reference + DuckDB real SQL + no-fallback 三证齐全）
-   - **Composite**：16 个 lowered triple parity + evidence JSON；`production_policy` 仍为 pending，未正式 production 放行
-   - **第一阶段冻结清单**：[`evidence/phase1_production_scope.yaml`](evidence/phase1_production_scope.yaml)（84 primitive + 16 composite）；认证流水线：`python scripts/certify_operator.py <canonical>`
-3. **规范从哪读**：算子 **能否写入 manifest** 以 [`docs/dsl_operators_reference.md`](docs/dsl_operators_reference.md) 为准；参数语义见 [`docs/operators_semantics.md`](docs/operators_semantics.md)。
-4. **动手跑**：最小脚本 [`examples/simple_factor.py`](examples/simple_factor.py)；配置驱动见 `examples/` 与 **`FactorEngine.run_from_config`**；**批量 YAML** 见 [`runtime/README.md`](runtime/README.md) §8；**目标仓位回测**见 [`../../backtest_layer/single_asset_backtest/README.md`](../../backtest_layer/single_asset_backtest/README.md) 文首 **「新人 5 分钟上手」**。
+1. **数据流**：`api`（`Factor` / DSL / 算子工厂，经 **`cleaned_operators`**）→ `expr` → `ir` → `planner` → `backend` → **MultiIndex 因子序列**；编排入口 **`runtime/FactorEngine`**。读数经 **`data_access`**（磁盘目录 `dataaccess/`）。
+2. **Backend**：默认 `auto`（DuckDB SQL 下推 + Polars/Pandas）。覆盖见 [`docs/sql_pushdown_coverage.md`](docs/sql_pushdown_coverage.md)、[`docs/backend_coverage.md`](docs/backend_coverage.md)。
+3. **规范**：能否写入 manifest 以 [`docs/dsl_operators_reference.md`](docs/dsl_operators_reference.md) 为准；参数语义见 [`docs/operators_semantics.md`](docs/operators_semantics.md)。
+4. **动手跑**：[`examples/simple_factor.py`](examples/simple_factor.py)；配置驱动 `FactorEngine.run_from_config`；批量见 [`runtime/README.md`](runtime/README.md) §8；A 股 preset：`api.mining_integration.default_ashare_pv_data_source_config`。
 5. **版本与变更**：[`docs/changelog_shw.md`](docs/changelog_shw.md)
 
 ---
@@ -168,7 +166,7 @@ FactorEngine.materialize_incremental_from_config("configs/fa.yaml", since="2024-
 
 生产 profile 示例：[`examples/profiles/prod.yaml`](examples/profiles/prod.yaml)（`auto_warmup`、DQ、PIT、`staging_clickhouse`）。写目标：`local` / `staging` / `clickhouse` / `staging_clickhouse`（见 [`storage/write_targets.py`](storage/write_targets.py)）。
 
-读端审计与 SQL 限额：monorepo [`data_access/README.md`](../data_access/README.md)（`QueryBudget`、`sql_stream`、`verify_factor_write`）。
+读端审计与 SQL 限额：monorepo [`dataaccess/README.md`](../dataaccess/README.md)（`QueryBudget`、`sql_stream`、`verify_factor_write`）。
 
 ### 底层栈与 backend 选择（2026-07）
 
@@ -231,7 +229,7 @@ sorted(build_dsl_allowlist().keys())
 
 **可选依赖**：`pip install "factor-engine[pandas]"`（含 scipy）；`[talib]`（部分技术指标优先 C 实现）；**`[polars]`**；**`[modin]`**（`FACTOR_ENGINE_USE_MODIN=1` 或 `backend.type: pandas_modin`）；**`[parallel]`**（Joblib + CSE，见 `runtime/perf_config.py`）；**`[backtest]`**（Backtrader，见 monorepo `backtest_layer`）。性能脚本：`scripts/profile_pandas_backend.py`、`scripts/bench_pandas_vs_modin.py`。
 
-**回测接口与语义 ADR**：[`docs/adr_backtest_target_position.md`](docs/adr_backtest_target_position.md)（输出协议、策略版本、真实数据路径、分层指标、可复现字段、**信号时点 / 防前视** §13、**多资产执行与指纹** §14）。**逐步数据流与模块说明（可替代通读源码）**：[`../../backtest_layer/single_asset_backtest/README.md`](../../backtest_layer/single_asset_backtest/README.md)。
+**回测接口与语义 ADR**：[`docs/adr_backtest_target_position.md`](docs/adr_backtest_target_position.md)（输出协议、策略版本、真实数据路径、分层指标、可复现字段、**信号时点 / 防前视** §13、**多资产执行与指纹** §14）。回测执行层若在独立仓 `backtest_layer/`（本 monorepo 可能未附带），以其 README 为准。
 
 ### 多资产组合回测（Portfolio Mode）
 
@@ -307,7 +305,7 @@ cfg = BacktestConfig(
 )
 ```
 
-运行示例（在 **monorepo 根目录**，且 `PYTHONPATH` 含 `backtest_layer` 与 `factor_engine`，见 [`../../backtest_layer/single_asset_backtest/README.md`](../../backtest_layer/single_asset_backtest/README.md) 文首）：
+运行示例（在 **monorepo 根目录**，且本机另有 `backtest_layer` 时）：
 
 ```bash
 python backtest_layer/examples/backtest_single_asset.py

@@ -66,7 +66,7 @@ Mining presets: `api.mining_integration.default_mining_data_source_presets()`.
 
 ## 3. Available Datasets (24 Total)
 
-> **Read path**: use `type: data_access` + **`dataset`** from the table in §2 (schema in `data_access/config/datasets.yaml`). Field lists below describe parquet columns; only schema-declared columns are validated in CI.
+> **Read path**: use `type: data_access` + **`dataset`** from the table in §2 (schema in `dataaccess/config/datasets.yaml`). Field lists below describe parquet columns; only schema-declared columns are validated in CI.
 
 ### **Fundamentals (7 datasets)**
 

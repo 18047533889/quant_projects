@@ -90,7 +90,7 @@
 - **`data_access`**：`dataset`、`fields`、`start_date`/`end_date`、`params`/`kind`（参数化数据集）  
 - **`composite`**：`anchor`、`sources`、`joins`（非 anchor 源默认 `asof_backward`）  
 - **legacy**：`parquet_kline` / `multi_parquet` — 仅调试或无 registry 时使用  
-- 字段语义见 [`docs/massive_parquet_data_dictionary.md`](../docs/massive_parquet_data_dictionary.md) 与 [`data_access/config/datasets.yaml`](../../data_access/config/datasets.yaml)
+- 字段语义见 [`docs/massive_parquet_data_dictionary.md`](../docs/massive_parquet_data_dictionary.md) 与 [`dataaccess/config/datasets.yaml`](../../dataaccess/config/datasets.yaml)
 
 ---
 

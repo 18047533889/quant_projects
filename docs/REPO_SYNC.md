@@ -2,7 +2,7 @@
 
 ## 问题背景
 
-若 GitHub 仓库（如 `hsunbj_quant_projects`）里看不到 `data_access/`、`factor_engine/`，通常**不是代码没写**，而是同步链路断了：
+若 GitHub 仓库（如 `hsunbj_quant_projects`）里看不到 `dataaccess/`、`factor_engine/`，通常**不是代码没写**，而是同步链路断了：
 
 | 原因 | 现象 |
 |------|------|
@@ -17,7 +17,7 @@
 
 ```text
 quant_projects/          # 或 hsunbj_quant_projects 根
-├── data_access/         # ✅ 必须 git track
+├── dataaccess/         # ✅ 必须 git track
 ├── factor_engine/       # ✅ 必须 git track
 ├── factor_layer/
 ├── scripts/
@@ -74,17 +74,17 @@ bash scripts/git_sync_public_code.sh --commit "..." --push
 cd ~/quant_projects
 
 # 公共代码在哪
-find . -path './data_access/store.py' -o -path './factor_engine/runtime/engine.py'
+find . -path './dataaccess/store.py' -o -path './factor_engine/runtime/engine.py'
 
 # 是否被 ignore
-git check-ignore -v data_access/store.py
+git check-ignore -v dataaccess/store.py
 
 # Git 实际跟踪了什么
-git ls-files data_access/ | wc -l
+git ls-files dataaccess/ | wc -l
 git ls-files factor_engine/ | wc -l
 
 # 未跟踪新文件
-git status --short --untracked-files=all data_access/ factor_engine/
+git status --short --untracked-files=all dataaccess/ factor_engine/
 ```
 
 ## CI 门禁

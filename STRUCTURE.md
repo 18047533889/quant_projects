@@ -10,15 +10,17 @@ quant_projects/
 ├── .pre-commit-config.yaml         # 可选：pre-commit 钩子
 ├── .data_access_allowlist.yaml     # data_access 直读 API 豁免清单
 │
-├── data_access/                    # 统一数据读写（DuckDB + Parquet + COS 镜像）
-│   ├── store.py                    # 对外主 API
+├── dataaccess/                     # 磁盘目录名；Python: import data_access
+│   ├── store.py                    # 对外主 API（get_store）
 │   ├── core/                       # 引擎、异常、namespace、审计
 │   ├── registry/                   # datasets.yaml 加载、路径白名单
 │   ├── read/                       # 读契约、预算、适配、SQL
 │   ├── write/                      # publish / upsert
-│   ├── cos/                        # COS 镜像与远程直读
+│   ├── cos/                        # COS 镜像与远程直读 + PIT 契约
 │   ├── clickhouse/                 # ClickHouse 读/写
-│   ├── service/                    # HTTP 读数服务
+│   ├── service/                    # HTTP 读数服务 + client
+│   ├── quality/                    # 质量校验 CLI
+│   ├── deploy/                     # Docker / K8s / systemd
 │   ├── ops/                        # 运维脚本（stats 刷新等）
 │   ├── config/datasets.yaml        # 数据集登记表
 │   ├── docs/                       # 用户使用手册
@@ -65,18 +67,24 @@ quant_projects/
 │   ├── us_stock/clean_data/        # adj_factor / universe 等
 │   └── factors/lake/               # 因子落盘湖
 │
+├── ashare_lqtp_kit/                # LQTP gRPC 客户端 + HTML 报告包
+│
 ├── docs/
-│   └── team_docs/                  # 团队规范与 data_access 迁移指南
+│   ├── 量化平台使用总览.md          # ★ 总使用文档
+│   ├── REPO_SYNC.md
+│   └── team_docs/                  # 团队规范与迁移指南
 │
 └── logs/  output/  notebooks/      # 运行时产出
 ```
+
+> **注意**：文档里常写「data_access 包」= Python 包名；仓库磁盘目录是 **`dataaccess/`**。
 
 ## 模块依赖关系
 
 ```mermaid
 flowchart LR
   COS[COS Parquet] --> Mirror[cos/]
-  Mirror --> DA[data_access]
+  Mirror --> DA[dataaccess / data_access]
   DA --> FES[DataAccessSource]
   FES --> FE[factor_engine]
   FE --> Lake[factor lake]
@@ -94,4 +102,4 @@ flowchart LR
 
 ## 受保护目录（同步脚本不覆盖）
 
-`data_access/`、`factor_engine/`、`gtja191/`、`week2_pv_factors/`、`data/`
+`dataaccess/`、`factor_engine/`、`gtja191/`、`week2_pv_factors/`、`data/`

@@ -466,4 +466,4 @@
 - **data_access**：`QueryBudget` + read/sql/stream 审计；`delete_rows` dry_run/max_rows；`factor_lake` metadata schema；`sql_stream` + `apply_sql_row_limit`
 - **factor_engine**：`factor_schema` 单点契约；production `auto_warmup`；lineage `source_expr`；`dual_write_service` / `warmup_service` / `lineage_service` / `materialize_service`；`SessionBarCalendar` 分钟 warmup；`FactorWriteTarget`（local/staging/CH）；`run_many_from_config` 按 data_scope 分组；`materialize_many_from_config`；`schema_migration` + CLI；composite `join_reports` → lineage
 - **测试**：`test_enterprise_p0/p1/p2/p3`；782+ factor_engine / 168 data_access unit 通过
-- **文档**：企业级路线图（已删除，见 changelog 2026-07 文档清理）；[`data_access/README.md`](../../data_access/README.md) PR8+
+- **文档**：企业级路线图（已删除，见 changelog 2026-07 文档清理）；[`dataaccess/README.md`](../../dataaccess/README.md) PR8+

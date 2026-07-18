@@ -1,19 +1,20 @@
-# data_access/config/ 说明
+# dataaccess/config/ 说明
 
-本目录只有一份核心文件：`datasets.yaml`。它是**团队读数据的唯一真源**。
+本目录核心文件：`datasets.yaml`。它是**团队读数据的唯一真源**。
+
+> 磁盘路径：`dataaccess/config/`｜包内仍称 data_access 配置。
 
 ## 为什么要这份 YAML
 
-以前全仓库有 **55+ 个源文件硬编码了 `/home/yluel/share/projects/massive_parquet/...`** 这类路径；
-搬盘、改分区、加新数据源都要改一大片代码。
-
-现在业务代码只写数据集名：
+业务代码只写数据集名，不硬编码绝对路径：
 
 ```python
+from data_access import get_store
+store = get_store()
 store.read_frame("us_stocks_sip_day_aggs", columns=[...], time_range=(...))
 ```
 
-路径、分区、时间列、标的列都在 YAML 里，改一处，全员生效。
+路径、分区、时间列、标的列都在 YAML 里；写路径走 staging → publish。
 
 ## 字段说明
 
@@ -53,11 +54,11 @@ store.read_frame("us_stocks_sip_day_aggs", columns=[...], time_range=(...))
 
 | 模式 | 读权限 | 写权限 | 路径规则 |
 |---|---|---|---|
-| `published` | 全员 | 仅 `publish()` 流程（PR2） | 固定路径，多人共读同一份 |
+| `published` | 全员 | 仅经 `publish()` 晋升 | 固定路径，多人共读同一份 |
 | `namespaced` | 仅本 `RUN_NAMESPACE` | 仅本 `RUN_NAMESPACE` | 路径自动拼 `${RUN_NAMESPACE}` |
 | `staging` | 仅本 `RUN_NAMESPACE` | 仅本 `RUN_NAMESPACE` | 发布前暂存，通过 `publish()` 晋升到 `published` |
 
-> PR1 只实现读路径；写 / publish 是 PR2 的事。
+> 读 / 写 / `publish()` 均已落地；细则见 [用户使用手册](../docs/用户使用手册.md)。
 
 ## 环境变量
 
@@ -72,7 +73,7 @@ store.read_frame("us_stocks_sip_day_aggs", columns=[...], time_range=(...))
 ## 加新数据集的 checklist
 
 1. 在 `datasets.yaml` 加一条
-2. 在 `data_access/tests/fixtures/golden/` 放一个小样本（<1 MB）
-3. 在 `data_access/tests/contract/test_store_golden.py` 加 golden 断言
-4. 跑 `pytest data_access/tests/` 全绿
+2. 在 `dataaccess/tests/fixtures/golden/` 放一个小样本（<1 MB）
+3. 在 `dataaccess/tests/contract/test_store_golden.py` 加 golden 断言
+4. 跑 `pytest dataaccess/tests/` 全绿
 5. PR 描述里写明：数据来源、负责人、磁盘估算

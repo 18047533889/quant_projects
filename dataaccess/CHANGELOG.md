@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0
+
+- 包版本对齐 monorepo `dataaccess/`（Python 包名仍为 `data_access`）。
+- HTTP：`/v1/datasets` 列表、读服务配置与客户端加固。
+- 部署模板：`Dockerfile` / `docker-compose` / K8s / systemd（`deploy/`）。
+- 质量 CLI：`data-access-quality`（`quality/`）。
+- 文档：修正目录名漂移，补充总使用文档交叉链接与 COS PIT 索引。
+
 ## 0.2.0
 
 - 同步 `quant_projects` 最新 COS fail-closed 思路到独立组织仓库。

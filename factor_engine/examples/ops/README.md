@@ -20,7 +20,7 @@ sudo journalctl -u fe-queue-worker -f
 
 ```bash
 cd quant_projects
-PYTHONPATH=. python3 data_access/ops/refresh_dataset_stats.py --dataset ashare_stock_daily
+PYTHONPATH=. python3 dataaccess/ops/refresh_dataset_stats.py --dataset ashare_stock_daily
 ```
 
 ## 生产严格 Polars

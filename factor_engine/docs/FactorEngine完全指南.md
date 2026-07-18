@@ -1,16 +1,17 @@
 # Factor Engine 完全指南
 
-> **给完全不了解 factor_engine 的读者**：本文是 **唯一推荐入口**。读完后应能回答：它是什么、在 monorepo 里干什么、数据怎么流、怎么跑第一个因子、代码从哪读起、遇到问题查哪份文档。
+> **给完全不了解 factor_engine 的读者**：本文是本模块 **推荐入口**。读完后应能回答：它是什么、在 monorepo 里干什么、数据怎么流、怎么跑第一个因子、代码从哪读起、遇到问题查哪份文档。
 >
+> **平台总入口**（data_access + factor_engine 怎么串）：[`../../docs/量化平台使用总览.md`](../../docs/量化平台使用总览.md)  
 > **预计阅读时间**：通读约 30 分钟；只看 §1–§6 约 10 分钟可动手跑示例。
 
-**文档关系**：本文 = 总览 · 细节见各包 [`README.md`](../README.md) · 源码注释见 [`源码注释导读.md`](源码注释导读.md) · 写公式见 [`算子与导入教程.md`](算子与导入教程.md)
+**文档关系**：本文 = 本模块总览 · 细节见各包 [`README.md`](../README.md) · 源码注释见 [`源码注释导读.md`](源码注释导读.md) · 写公式见 [`算子与导入教程.md`](算子与导入教程.md)
 
 ---
 
 ## 1. 它是什么（一句话）
 
-**Factor Engine** 是量化 monorepo（`quant_projects`）里的 **因子计算引擎**：你把公式写成 DSL（如 `rank(ts_mean(close, 20))`），引擎从 **`data_access`** 读行情，在 **时间 × 标的** 网格上算出因子值（`pandas.Series`，MultiIndex），可选 **落盘到因子湖**（`factor_lake`）。
+**Factor Engine** 是量化 monorepo（`quant_projects`）里的 **因子计算引擎**：你把公式写成 DSL（如 `rank(ts_mean(close, 20))`），引擎从 **`data_access`**（磁盘目录 `dataaccess/`）读行情，在 **时间 × 标的** 网格上算出因子值（`pandas.Series`，MultiIndex），可选 **落盘到因子湖**（`factor_lake`）。
 
 **它不负责**：数据清洗（`raw_data_layer`）、因子评估/回测业务（`backtest_layer`）、模型训练——只负责 **算因子** 和 **写因子湖**。
 
@@ -20,11 +21,10 @@
 
 ```text
 quant_projects/
-├── data_access/          ← 统一读 parquet（ashare_stock_daily、factor_lake 等）
-├── factor_engine/        ← 【本仓库】算因子
-├── gtja191/              ← 因子库示例（185 条 GTJA191，调用 factor_engine）
-├── week2_pv_factors/     ← 另一套因子库示例
-├── scripts/              ← 落盘、校验等运维脚本（如 materialize_gtja191_factors.py）
+├── dataaccess/           ← 统一读 parquet（包名 data_access）
+├── factor_engine/        ← 【本模块】算因子
+├── ashare_lqtp_kit/      ← A 股 LQTP 因子评估 / 报告示例
+├── scripts/              ← 落盘、校验等运维脚本
 └── data/
     └── factors/lake/     ← 因子湖落盘目录（hive: factors/{factor_id}/year=*/data.parquet）
 ```
@@ -214,11 +214,11 @@ python run_pipeline.py run-dir examples/configs/   # 目录批量
 
 ### 8.1 读数据（经 data_access）
 
-- 登记在 `data_access/config/datasets.yaml`
+- 登记在 `dataaccess/config/datasets.yaml`
 - A 股日线：`ashare_stock_daily`（`TradeDate` + `Symbol`）
 - 已发布因子：`factor_lake`，参数 `factor_id=gtja191_alpha_001`
 
-**禁止**业务代码直接 `pd.read_parquet`；统一 `get_store().read_frame(...)`。见 monorepo [`data_access/README.md`](../../data_access/README.md)。
+**禁止**业务代码直接 `pd.read_parquet`；统一 `get_store().read_frame(...)`。见 monorepo [`dataaccess/README.md`](../../dataaccess/README.md)。
 
 ### 8.2 写因子（落盘）
 

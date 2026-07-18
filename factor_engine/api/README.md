@@ -156,7 +156,7 @@ all_presets = default_mining_data_source_presets()
 
 - 机器可读快照：[`docs/mining_data_source_presets.json`](../docs/mining_data_source_presets.json)  
 - Registry 契约：[`scripts/validate_datasets_mining_alignment.py`](../scripts/validate_datasets_mining_alignment.py)  
-- 数据集 schema：[`data_access/config/datasets.yaml`](../../data_access/config/datasets.yaml)
+- 数据集 schema：[`dataaccess/config/datasets.yaml`](../../dataaccess/config/datasets.yaml)
 
 ---
 
@@ -166,7 +166,7 @@ all_presets = default_mining_data_source_presets()
 2. 可选：在 **`cleaned_operators/_aliases.py`** 增加 DSL 别名。  
 3. **`build_dsl_allowlist()` 自动收录**（无需改 `api/operators`）。  
 4. 重启或新建 **`PandasBackend()`** 以注册新 kernel。  
-5. 补测试：[`tests/test_cleaned_operators_comprehensive.py`](../tests/test_cleaned_operators_comprehensive.py) 中 `TestFutureOperatorExtension` 模式。
+5. 补测试：[`tests/integration/test_cleaned_operators_comprehensive.py`](../tests/integration/test_cleaned_operators_comprehensive.py) 中 `TestFutureOperatorExtension` 模式。
 
 ---
 
@@ -176,7 +176,7 @@ all_presets = default_mining_data_source_presets()
 |----------|------|
 | `tests/test_dsl_parser.py` | DSL 解析 |
 | `tests/test_expr.py` | Expr 构造 |
-| `tests/test_cleaned_operators_comprehensive.py` | API + 全链路 |
+| `tests/integration/test_cleaned_operators_comprehensive.py` | API + 全链路 |
 | `tests/test_cleaned_integration.py` | 冒烟 |
 
 ---

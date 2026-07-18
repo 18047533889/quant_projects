@@ -122,7 +122,7 @@ Layer 2  （尚未建设）           跨源 panel、PiT 特征视图、因子�
 |---|---|---|
 | 清洗脚本 | `raw_data_layer/raw_data_cleaning/massive_cleaning_framework.py` | raw → cleaned |
 | 清洗配置 | `raw_data_layer/raw_data_cleaning/data_source_cleaning_config.yaml` | 每源 align_time / 主键规则 |
-| 数据访问 | `data_access/config/datasets.yaml` | 登记了 day_aggs、ticks、REST 日线等 |
+| 数据访问 | `dataaccess/config/datasets.yaml` | 登记了 day_aggs、ticks、REST 日线等 |
 | 因子引擎读 cleaned | `factor_layer/factor_engine/storage/cleaned_parquet_source.py` | 默认 `align_time` + `ticker` |
 | 多源对齐 | `factor_layer/factor_engine/storage/composite_source.py` | `merge_asof` backward |
 | 因子评估 Database | `factor_layer/factor_evaluation_alphapurify/history_module/Database_original.py` | 价量 exact join，基本面 asof |
@@ -594,7 +594,7 @@ cleaned 层 `align_time` 由上述列解析为 `datetime64[ns, UTC]`，与 raw �
 
 #### `datasets.yaml` schema 与磁盘不符
 
-`data_access/config/datasets.yaml` 中 `us_stocks_sip_day_aggs` 声明 `volume: int`、`window_start: int`，实际 cleaned 文件为 **`double`**。PR8 schema 自检可能误报或静默漂移，使用前宜以磁盘 schema 为准。
+`dataaccess/config/datasets.yaml` 中 `us_stocks_sip_day_aggs` 声明 `volume: int`、`window_start: int`，实际 cleaned 文件为 **`double`**。PR8 schema 自检可能误报或静默漂移，使用前宜以磁盘 schema 为准。
 
 #### data_access 登记覆盖不足
 
@@ -1517,7 +1517,7 @@ panel = pd.merge_asof(
 | tick 逐笔成交/报价 | `raw_massive_data/us_stocks_sip/trades_v1/` 或 `quotes_v1/` |
 | tick 灾备 | `project_data_backup/us_stocks_sip/` |
 | 原始字段溯源 | `raw_massive_data/` 下同路径 |
-| 代码里读（推荐） | `data_access` store，见 `data_access/config/datasets.yaml` |
+| 代码里读（推荐） | `data_access` store，见 `dataaccess/config/datasets.yaml` |
 
 **Python 快速查看任意文件 head(3)**
 
@@ -2293,7 +2293,7 @@ python -m raw_data_layer.raw_data_fetching.run_pipeline download-history \
 | REST API 字段文档 | `raw_data_layer/raw_data_fetching/rest_api_doc/`（若存在） |
 | 清洗框架 README | `raw_data_layer/raw_data_cleaning/README.md` |
 | 清洗配置 YAML | `raw_data_layer/raw_data_cleaning/data_source_cleaning_config.yaml` |
-| data_access 数据集登记 | `data_access/config/datasets.yaml` |
+| data_access 数据集登记 | `dataaccess/config/datasets.yaml` |
 | 备份脚本 | `raw_data_layer/raw_data_fetching/copy_backup.sh` |
 
 ---
