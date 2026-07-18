@@ -310,6 +310,28 @@ FASTPATH_DEFERRED_CANONICALS: frozenset[str] = (
     | P1_EXTENDED_PARITY_PENDING
 )
 
+# The reviewed static daily surface supersedes historical tier batches.  A
+# canonical cannot be both production daily and deferred.
+from cleaned_operators.operator_surface import (
+    DAILY_CANONICALS as _DAILY_CANONICALS,
+    EXTENDED_ONLY_CANONICALS as _EXTENDED_CANONICALS,
+    RESEARCH_ONLY_CANONICALS as _RESEARCH_CANONICALS,
+)
+
+# The old P0/P1 batches are retained above as historical documentation only.
+# Runtime admission is authored from the reviewed surface, never from those
+# mutable rollout lists.  ``protected_div`` is the sole internal lowering
+# primitive that participates in production certification.
+P0_PRODUCTION_FASTPATH_CANONICALS = frozenset(_DAILY_CANONICALS | {"protected_div"})
+P1_POLARS_CORE_PRODUCTION_SAFE = frozenset()
+P1_DUCKDB_CORE_PRODUCTION_SAFE = frozenset()
+P1_POLARS_PRODUCTION_SAFE = frozenset()
+P1_DUCKDB_PRODUCTION_SAFE = frozenset()
+
+FASTPATH_DEFERRED_CANONICALS = frozenset(
+    (_EXTENDED_CANONICALS | _RESEARCH_CANONICALS) - _DAILY_CANONICALS
+)
+
 # ---------------------------------------------------------------------------
 # 明确禁止 production fast path
 # ---------------------------------------------------------------------------
@@ -340,6 +362,9 @@ FORBIDDEN_PRODUCTION_FASTPATH: frozenset[str] = frozenset(
         "eig",
         "pca",
     }
+)
+FORBIDDEN_PRODUCTION_FASTPATH = frozenset(
+    set(FORBIDDEN_PRODUCTION_FASTPATH) - set(_DAILY_CANONICALS)
 )
 
 # PolarsLong emitter 将 rolling_beta 映射为 ts_beta native

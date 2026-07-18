@@ -27,9 +27,9 @@ POLARS_LONG_MAP_GROUPS_PRODUCTION_ALLOWED: frozenset[str] = frozenset()
 
 POLARS_LONG_NATIVE_PARITY_VERIFIED: frozenset[str] = POLARS_REFERENCE_PARITY_VERIFIED
 
-_STATIC_POLARS_CANDIDATES: frozenset[str] = (
-    P0_PRODUCTION_FASTPATH_CANONICALS | P1_POLARS_PRODUCTION_SAFE
-)
+from cleaned_operators.operator_surface import DAILY_CANONICALS as _DAILY_CANONICALS
+
+_STATIC_POLARS_CANDIDATES: frozenset[str] = frozenset(_DAILY_CANONICALS) | frozenset({"protected_div"})
 
 POLARS_LONG_NATIVE_PRODUCTION_SAFE: frozenset[str] = frozenset(
     c

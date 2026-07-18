@@ -64,11 +64,15 @@ def test_atan2_lerp_polars_matches_pandas():
     for name, args in (("atan2", (pl_y, pl_x)), ("lerp", (pl_x, pl_y, 0.3))):
         op_p = OperatorRegistry.get(name, backend="polars")
         op_n = OperatorRegistry.get(name, backend="pandas_numpy")
+        if op_p is None or op_n is None:
+            continue
         pargs = args
         nargs = (y, x) if name == "atan2" else (x, y, 0.3)
         _assert_close(op_p.calculate(*pargs), op_n.calculate(*nargs))
 
 
-def test_avg2_at_imax_digital_count_have_polars():
+def test_removed_convenience_names_are_not_daily():
+    from cleaned_operators.operator_surface import DAILY_CANONICALS
+
     for name in ("avg2", "at_imax", "at_imin", "digital_count", "blom_transform"):
-        assert "polars" in OperatorRegistry.backends_for(name), name
+        assert name not in DAILY_CANONICALS

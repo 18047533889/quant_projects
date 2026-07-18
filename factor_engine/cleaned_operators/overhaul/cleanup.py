@@ -5,7 +5,7 @@ from __future__ import annotations
 from cleaned_operators.registry import OperatorRegistry
 
 PANDAS_BRIDGE_POLARS_CANONICALS = frozenset({
-    "rank", "cs_quantile", "ewm_corr", "ewm_cov", "arg", "atan2", "ts_regression_slope",
+    "cs_quantile", "ewm_corr", "ewm_cov", "arg", "atan2", "ts_regression_slope",
 })
 
 FAKE_POLARS_SOURCES = frozenset({"factor_dsl_polars_bridge", "daily_panel_polars"})
@@ -114,23 +114,45 @@ def finalize() -> None:
             catalog["status"] = "deprecated_recipe"
             catalog["selected_source"] = "factor_recipes.fundamental_ratios"
     from cleaned_operators import operator_policy, operator_surface
-    operator_surface.DAILY_CANONICALS = frozenset(
-        (set(operator_surface.DAILY_CANONICALS) - set(DEDUPE) - set(RECIPE_CANONICALS))
-        | set(DAILY_ADDITIONS)
-    )
     # A registered Polars backend is a promise that the implementation stays
     # inside the Polars engine.  NumPy materialisation and Python callbacks are
     # useful research fallbacks, but advertising them as Polars is misleading
     # and prevents lazy/streaming execution.  Fail closed by removing them.
     import inspect
+
+    def implementation_source(operator) -> str:
+        """Include wrapped functions and their local helper call graph."""
+        seen: set[int] = set()
+        chunks: list[str] = []
+
+        def visit(obj, depth: int = 0) -> None:
+            if obj is None or id(obj) in seen or depth > 3:
+                return
+            seen.add(id(obj))
+            try:
+                chunks.append(inspect.getsource(obj))
+            except (OSError, TypeError):
+                pass
+            if not callable(obj):
+                return
+            try:
+                closure = inspect.getclosurevars(obj)
+            except (TypeError, ValueError):
+                return
+            module = getattr(obj, "__module__", "")
+            for value in (*closure.nonlocals.values(), *closure.globals.values()):
+                if inspect.isfunction(value) and getattr(value, "__module__", "") == module:
+                    visit(value, depth + 1)
+
+        visit(operator.__class__)
+        visit(getattr(operator, "_fn", None))
+        return "\n".join(chunks)
+
     for canonical, implementations in OperatorRegistry._operators.items():
         operator = implementations.get("polars")
         if operator is None:
             continue
-        try:
-            implementation = inspect.getsource(operator.__class__)
-        except (OSError, TypeError):
-            implementation = ""
+        implementation = implementation_source(operator)
         materialized = any(token in implementation for token in (
             "to_numpy(", "np.", "rolling_map(", "map_elements(", "to_pandas(",
             "panel_pandas_bridge", "bridge_pandas", "bridge_registry",
@@ -150,12 +172,20 @@ def finalize() -> None:
         })
         backend_meta["polars"] = polars_meta
         entry["backend_meta"] = backend_meta
-    operator_policy.POLARS_PARITY_VERIFIED = frozenset(
-        c for c in operator_policy.POLARS_PARITY_VERIFIED
+    from backend.primitive_evidence import (
+        POLARS_EDGE_VERIFIED,
+        POLARS_NO_FALLBACK_VERIFIED,
+        POLARS_REFERENCE_PARITY_VERIFIED,
+    )
+    native = frozenset(
+        c for c in OperatorRegistry._operators
         if "polars" in OperatorRegistry.backends_for(c)
     )
-    operator_policy.POLARS_PRODUCTION_SAFE = frozenset(
-        c for c in operator_policy.POLARS_PRODUCTION_SAFE
-        if "polars" in OperatorRegistry.backends_for(c)
+    operator_policy.POLARS_PARITY_VERIFIED.intersection_update(
+        native & POLARS_REFERENCE_PARITY_VERIFIED
+    )
+    operator_policy.POLARS_PRODUCTION_SAFE.intersection_update(
+        native & POLARS_REFERENCE_PARITY_VERIFIED
+        & POLARS_EDGE_VERIFIED & POLARS_NO_FALLBACK_VERIFIED
     )
     _FINALIZED = True

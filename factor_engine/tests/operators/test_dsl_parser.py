@@ -24,12 +24,10 @@ def test_parse_expr_cleaned_operators():
     parse_expr('group_rank(col("x"), col("g"))')
     parse_expr('neutralize(col("x"), col("y"))')
     parse_expr('SMA(col("close"), 5)')
-    parse_expr('sin(col("x"))')
-    parse_expr('cos(col("x"))')
+    parse_expr('sin(col("x"))', surface="extended")
+    parse_expr('cos(col("x"))', surface="extended")
     parse_expr('exp(col("x"))')
-    parse_expr('ts_macd(col("c"), line="hist")')
-    parse_expr('ts_roc(col("c"), 5)')
-    parse_expr('ts_atr(col("h"), col("l"), col("c"), 14)')
+    parse_expr('ts_macd(col("c"), line="hist")', surface="compat")
 
 
 def test_parse_expr_bare_field_names():

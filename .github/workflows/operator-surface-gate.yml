@@ -67,6 +67,7 @@ jobs:
             factor_engine/docs/sql_pushdown_coverage.md
           )
           generate_all
+          git diff --exit-code -- "${generated_files[@]}"
           sha256sum "${generated_files[@]}" > /tmp/generated-1.sha
           generate_all
           sha256sum "${generated_files[@]}" > /tmp/generated-2.sha
@@ -105,6 +106,7 @@ jobs:
             factor_engine/tests/operators/test_composite_fastpath.py \
             factor_engine/tests/operators/test_recipe_runtime.py \
             factor_engine/tests/operators/test_stateful_checkpoint_contract.py \
+            factor_engine/tests/operators/test_production_convergence.py \
             factor_engine/tests/operators/test_operator_usage.py \
             factor_engine/tests/test_gtja_compat_semantics.py \
             factor_engine/tests/test_data_scope_stability.py

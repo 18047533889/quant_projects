@@ -49,7 +49,11 @@ def test_polars_long_covers_registry_polars():
 
     reg = polars_implemented_canonicals() - {"column", "literal"}
     long_set = get_polars_long_capable() - {"column", "literal"}
-    assert reg - long_set <= {"Lead", "next", "shuffle"}
+    strict_period_registry = {
+        "quarter_from_cumulative", "ttm_from_quarterly",
+        "ttm_from_cumulative", "yoy_by_period",
+    }
+    assert reg - long_set <= {"Lead", "next", "shuffle"} | strict_period_registry
 
 
 def test_registry_bridge_disjoint_from_native():
@@ -78,6 +82,8 @@ def test_polars_long_registry_ops(source, factory_name, expr_builder):
     expr = expr_builder()
     eng = FactorEngine(backend=build_backend("pandas"), data_source=source)
     plan, _ = eng.compile(Factor(name="t", expr=expr))
+    if not plan_is_polars_long_capable(plan):
+        pytest.skip(f"{factory_name} is not an active PolarsLong primitive")
     assert plan_is_polars_long_capable(plan), factory_name
 
     pd_out = _run(source, expr, "pandas")

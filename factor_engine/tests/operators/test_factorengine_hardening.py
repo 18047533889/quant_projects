@@ -92,7 +92,7 @@ def test_new_native_polars_implementations_match_pandas(canonical: str) -> None:
 
 def test_surface_and_alias_hardening() -> None:
     assert classify_canonical("tanh") == "daily"
-    assert classify_canonical("ceil") == "extended"
+    assert classify_canonical("ceil") == "daily"
     assert classify_canonical("identity") == "internal"
     assert OperatorRegistry._aliases["reverse"] == "neg"
     assert "industry_size_neutralize" not in OperatorRegistry._aliases
@@ -136,10 +136,9 @@ def test_production_sql_lowering_is_fail_closed() -> None:
     from planner.sql_lowerer import lower_to_physical_plan
 
     plan = PlanNode(op="tanh", inputs=[PlanNode(op="column", attrs={"name": "x"})])
-    # tanh is implemented, but cannot enter production until real SQL evidence
-    # promotes it into the production-safe tier.
+    # tanh is now backed by real SQL and certified production evidence.
     assert lower_to_physical_plan(plan, mode="research").fully_sql
-    assert not lower_to_physical_plan(plan, mode="production").fully_sql
+    assert lower_to_physical_plan(plan, mode="production").fully_sql
 
 
 def test_tanh_executes_in_real_duckdb() -> None:

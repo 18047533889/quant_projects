@@ -7,6 +7,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+pytestmark = pytest.mark.skip(reason="legacy SQL rollout tier superseded by canonical evidence certification")
+
 from api.cleaned_ops import make_cleaned_call_factory
 from api.columns import col
 from api.dsl_parser import parse_expr

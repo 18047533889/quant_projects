@@ -53,15 +53,16 @@ def _case_registry_sets():
 
 
 def test_primitive_case_registry_matches_cases(_loaded):
-    from tests.backend_parity.evidence_case_registry import case_names
+    from scripts.sync_primitive_evidence import _collect_cases
 
-    cases = _merged_cases()
+    expected = _collect_cases()
+    expected.pop("_six_way_count", None)
     reg = _case_registry_sets()
-    assert reg["polars_reference"] == case_names(cases["polars_reference"])
-    assert reg["duckdb_reference"] == case_names(cases["duckdb_reference"])
-    assert reg["polars_edge"] == case_names(cases["polars_edge"])
-    assert reg["duckdb_edge"] == case_names(cases["duckdb_edge"])
-    assert reg["no_fallback"] == case_names(cases["no_fallback"])
+    assert reg["polars_reference"] == frozenset(expected["polars_reference_parity"])
+    assert reg["duckdb_reference"] == frozenset(expected["duckdb_reference_parity"])
+    assert reg["polars_edge"] == frozenset(expected["polars_edge_verified"])
+    assert reg["duckdb_edge"] == frozenset(expected["duckdb_edge_verified"])
+    assert reg["no_fallback"] == frozenset(expected["no_fallback_verified"])
 
 
 def test_primitive_case_registry_six_way_intersection(_loaded):

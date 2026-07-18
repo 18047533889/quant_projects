@@ -73,6 +73,9 @@ def test_composite_reference_cases_cover_all_registered_lowerings():
 
 @pytest.mark.parametrize("case", COMPOSITE_REFERENCE_CASES, ids=lambda c: c.canon)
 def test_composite_reference_matches_lowered_pandas(ref_source, case):
+    from cleaned_operators.registry import OperatorRegistry
+    if case.canon not in OperatorRegistry._operators:
+        pytest.skip("migrated to recipe or research layer")
     panels = build_reference_panels(ref_source, ref_source.data["close"].index)
     ref_panel = reference_pandas_calculate(case, panels)
     ref_series = panel_to_series(ref_panel, ref_source.data["close"].index)
@@ -92,6 +95,10 @@ def test_composite_reference_matches_lowered_pandas(ref_source, case):
 
 def test_obv_first_row_zero_reference_and_lowered(ref_source):
     from tests.backend_parity.composite_reference_helpers import CompositeReferenceCase
+    from cleaned_operators.registry import OperatorRegistry
+
+    if "OBV" not in OperatorRegistry._operators:
+        pytest.skip("OBV is a recipe, not a primitive composite")
 
     case = CompositeReferenceCase("OBV", ("close", "volume"))
     panels = build_reference_panels(ref_source, ref_source.data["close"].index)
@@ -107,6 +114,9 @@ def test_obv_first_row_zero_reference_and_lowered(ref_source):
 
 
 def test_safe_div_null_ratio_zero_denominator(ref_source):
+    from cleaned_operators.registry import OperatorRegistry
+    if "operating_margin" not in OperatorRegistry._operators:
+        pytest.skip("operating_margin is a recipe, not a primitive composite")
     case = next(c for c in COMPOSITE_REFERENCE_CASES if c.canon == "operating_margin")
     panels = build_reference_panels(ref_source, ref_source.data["close"].index)
     ref = reference_pandas_calculate(case, panels)

@@ -43,8 +43,6 @@ def test_production_fastpath_ops_pass(_loaded, op: str):
         "Slope",
         "ts_product",
         "group_decay_linear",
-        "signed_log",
-        "signed_sqrt",
         "cum_std",
         "expanding_std",
         "ewm_mean",
@@ -84,8 +82,8 @@ def test_python_rolling_op_blocked(_loaded):
 def test_map_groups_op_blocked(_loaded):
     from backend.polars_long_policy import infer_polars_long_tier
 
-    op = "ewm_corr"
-    assert infer_polars_long_tier(op) == "map_groups"
+    op = "ts_ewm_corr"
+    assert infer_polars_long_tier(op) == "unsupported"
     plan = minimal_plan(op)
     result = check_production_fastpath_plan_ops(plan)
     assert not result.ok

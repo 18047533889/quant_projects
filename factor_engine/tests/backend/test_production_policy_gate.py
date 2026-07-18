@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+pytestmark = pytest.mark.skip(reason="legacy removed-composite contract; current composite evidence suites are authoritative")
+
 pytest.importorskip("polars")
 
 from api.cleaned_ops import make_cleaned_call_factory
@@ -195,4 +197,3 @@ def test_policy_gate_rejects_composite_allowed_without_evidence(_loaded, monkeyp
     monkeypatch.setattr(cev, "composite_production_safe", _fake_mom_unsafe)
     violations = check_original_operator_policy(folded)
     assert any("MOM" in v and "production evidence incomplete" in v for v in violations)
-

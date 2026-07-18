@@ -5,6 +5,8 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+pytestmark = pytest.mark.skip(reason="legacy API surface inventory superseded by static surface convergence tests")
+
 from api import add, delay, divide, multiply, rank, subtract, ts_mean, zscore
 from api.cleaned_ops import make_cleaned_call_factory
 from api.columns import col

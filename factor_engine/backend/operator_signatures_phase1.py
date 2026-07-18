@@ -39,7 +39,8 @@ _UNARY = frozenset(
     winsorize cum_sum cum_max cum_min cum_prod cum_delta expanding_sum expanding_mean
     count is_null is_not_null is_nan is_finite is_infinite nan_to_num
     cs_demean cs_mad cs_mad_zscore cs_pct_rank c_mean c_std c_sum c_count
-    log_returns protected_log protected_sqrt not_ log_abs signed_log signed_sqrt
+    cs_mean cs_std cs_sum cs_count log_returns ts_log_return tanh
+    protected_log protected_sqrt not_ log_abs signed_log signed_sqrt
     fillna_const ffill
     """.split()
 )
@@ -102,6 +103,27 @@ _SPECIAL: dict[str, OperatorSignature] = {
     "div_or_default": OperatorSignature("div_or_default", _B),
     "div_or_null": OperatorSignature("div_or_null", _B),
     "log_fill_invalid": OperatorSignature("log_fill_invalid", _U),
+    "period_change": OperatorSignature(
+        "period_change", (ArgSpec("x", TypeKind.SERIES_FLOAT), ArgSpec("period_id", TypeKind.ANY)),
+    ),
+    "period_average": OperatorSignature(
+        "period_average", (ArgSpec("x", TypeKind.SERIES_FLOAT), ArgSpec("period_id", TypeKind.ANY)),
+    ),
+    "period_cagr": OperatorSignature(
+        "period_cagr", (ArgSpec("x", TypeKind.SERIES_FLOAT), ArgSpec("period_id", TypeKind.ANY)),
+    ),
+    "quarter_from_cumulative": OperatorSignature(
+        "quarter_from_cumulative", (ArgSpec("x", TypeKind.SERIES_FLOAT), ArgSpec("period_id", TypeKind.ANY)),
+    ),
+    "ttm_from_quarterly": OperatorSignature(
+        "ttm_from_quarterly", (ArgSpec("x", TypeKind.SERIES_FLOAT), ArgSpec("period_id", TypeKind.ANY)),
+    ),
+    "ttm_from_cumulative": OperatorSignature(
+        "ttm_from_cumulative", (ArgSpec("x", TypeKind.SERIES_FLOAT), ArgSpec("period_id", TypeKind.ANY)),
+    ),
+    "yoy_by_period": OperatorSignature(
+        "yoy_by_period", (ArgSpec("x", TypeKind.SERIES_FLOAT), ArgSpec("period_id", TypeKind.ANY)),
+    ),
     "cs_regression": OperatorSignature(
         "cs_regression",
         (

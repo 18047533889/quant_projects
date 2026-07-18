@@ -30,12 +30,26 @@ def _collect_cases() -> dict:
     from tests.backend_parity.test_polars_long_no_pandas_path import NO_PANDAS_CASES
     from tests.backend_parity.test_production_core_triple_parity import DUCKDB_CASES, MEMORY_CASES
     from tests.backend_parity.test_production_safe_bulk_parity import DUCKDB_BULK_CASES, POLARS_BULK_CASES
+    from tests.operators.test_production_convergence import STRICT_PERIOD_CASES
+    from cleaned_operators.operator_surface import DAILY_CANONICALS
+    from cleaned_operators.registry import OperatorRegistry
 
-    polars_reference = merge_case_lists(MEMORY_CASES, POLARS_BULK_CASES)
-    duckdb_reference = merge_case_lists(DUCKDB_CASES, DUCKDB_BULK_CASES)
-    polars_edge = merge_case_lists(EDGE_CASES)
-    duckdb_edge = merge_case_lists(DUCKDB_EDGE_CASES)
-    no_fallback = merge_case_lists(NO_PANDAS_CASES)
+    evidence_canonicals = set(DAILY_CANONICALS) | {"protected_div"}
+
+    def daily_canonical_cases(cases):
+        """Normalize aliases and exclude non-production cases from evidence."""
+        normalized = {}
+        for name, builder in cases:
+            canonical = OperatorRegistry._aliases.get(name, name)
+            if canonical in evidence_canonicals:
+                normalized.setdefault(canonical, builder)
+        return sorted(normalized.items())
+
+    polars_reference = daily_canonical_cases(merge_case_lists(MEMORY_CASES, POLARS_BULK_CASES, STRICT_PERIOD_CASES))
+    duckdb_reference = daily_canonical_cases(merge_case_lists(DUCKDB_CASES, DUCKDB_BULK_CASES, STRICT_PERIOD_CASES))
+    polars_edge = daily_canonical_cases(merge_case_lists(EDGE_CASES, STRICT_PERIOD_CASES))
+    duckdb_edge = daily_canonical_cases(merge_case_lists(DUCKDB_EDGE_CASES, STRICT_PERIOD_CASES))
+    no_fallback = daily_canonical_cases(merge_case_lists(NO_PANDAS_CASES, STRICT_PERIOD_CASES))
 
     return build_case_registry_payload(
         polars_reference=polars_reference,
@@ -43,8 +57,8 @@ def _collect_cases() -> dict:
         duckdb_reference=duckdb_reference,
         duckdb_edge=duckdb_edge,
         duckdb_null_edge=duckdb_edge,
-        duckdb_nan_edge=merge_case_lists(DUCKDB_IEEE_NAN_CASES),
-        duckdb_inf_edge=merge_case_lists(DUCKDB_IEEE_INF_CASES),
+        duckdb_nan_edge=daily_canonical_cases(merge_case_lists(DUCKDB_IEEE_NAN_CASES)),
+        duckdb_inf_edge=daily_canonical_cases(merge_case_lists(DUCKDB_IEEE_INF_CASES)),
         no_fallback=no_fallback,
     )
 

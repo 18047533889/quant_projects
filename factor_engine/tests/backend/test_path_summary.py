@@ -54,11 +54,16 @@ def test_window_group_ops_are_native_tier(op):
 
 @pytest.mark.parametrize(
     "op",
-    ["ewm_corr", "ts_kurt", "quantile"],
+    ["ts_kurt"],
 )
 def test_complex_group_ops_remain_map_groups(op):
     assert classify_plan_op(op) == "map_groups"
     assert infer_polars_long_tier(op) == "map_groups"
+
+
+def test_recursive_ewm_corr_is_not_admitted_to_segmented_long_execution():
+    assert classify_plan_op("ts_ewm_corr") == "other"
+    assert infer_polars_long_tier("ts_ewm_corr") == "unsupported"
 
 
 @pytest.mark.parametrize(

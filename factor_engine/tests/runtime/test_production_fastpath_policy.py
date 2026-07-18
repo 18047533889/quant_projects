@@ -28,7 +28,7 @@ def loaded():
 
 
 def test_map_groups_blocked_in_production(loaded):
-    plan = minimal_plan("ewm_corr")
+    plan = minimal_plan("ts_kurt")
     with pytest.raises(ProductionPolicyViolation):
         assert_no_unapproved_map_groups_in_production(plan, mode="production")
 
@@ -41,7 +41,7 @@ def test_fastpath_gate_opt_in(loaded, monkeypatch):
 
 def test_fastpath_gate_rejects_deferred(loaded, monkeypatch):
     monkeypatch.setenv("FACTOR_ENGINE_PRODUCTION_REQUIRE_FASTPATH", "1")
-    plan = minimal_plan("ewm_corr")
+    plan = minimal_plan("ts_ewm_corr")
     with pytest.raises(ProductionPolicyViolation):
         assert_production_fastpath_plan(plan, mode="production")
 

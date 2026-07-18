@@ -255,11 +255,16 @@ EDGE_CASES = [
     ("group_min", lambda: make_cleaned_call_factory("group_min")(col("close"), col("grp"))),
     ("group_max", lambda: make_cleaned_call_factory("group_max")(col("close"), col("grp"))),
     ("group_count", lambda: make_cleaned_call_factory("group_count")(col("close"), col("grp"))),
+    ("tanh", lambda: make_cleaned_call_factory("tanh")(col("neg"))),
 ]
 
 
 @pytest.mark.parametrize("name,expr_builder", EDGE_CASES)
 def test_p0_edge_polars_long_matches_pandas(edge_source, name, expr_builder):
+    from cleaned_operators.operator_surface import DAILY_CANONICALS
+    from cleaned_operators.registry import OperatorRegistry
+    if OperatorRegistry._aliases.get(name, name) not in DAILY_CANONICALS:
+        pytest.skip("not on the production daily surface")
     expr = expr_builder()
     pd_out = _result_series(_run(edge_source, expr, "pandas"))
     long_out = _result_series(_run(edge_source, expr, "polars_long"))
@@ -367,11 +372,16 @@ DUCKDB_EDGE_CASES = [
     ("group_min", lambda: make_cleaned_call_factory("group_min")(_col("close"), _col("grp"))),
     ("group_max", lambda: make_cleaned_call_factory("group_max")(_col("close"), _col("grp"))),
     ("group_count", lambda: make_cleaned_call_factory("group_count")(_col("close"), _col("grp"))),
+    ("tanh", lambda: make_cleaned_call_factory("tanh")(_col("neg"))),
 ]
 
 
 @pytest.mark.parametrize("name,expr_builder", DUCKDB_EDGE_CASES)
 def test_p0_edge_duckdb_matches_pandas(duckdb_source, name, expr_builder):
+    from cleaned_operators.operator_surface import DAILY_CANONICALS
+    from cleaned_operators.registry import OperatorRegistry
+    if OperatorRegistry._aliases.get(name, name) not in DAILY_CANONICALS:
+        pytest.skip("not on the production daily surface")
     from tests.backend_parity.duckdb_parity_helpers import assert_duckdb_real_sql_execution
 
     expr = expr_builder()
@@ -436,6 +446,9 @@ def test_ts_pct_zero_prev_is_null(edge_source):
 
 
 def test_vwap_zero_volume_polars_native(edge_source):
+    from cleaned_operators.operator_surface import DAILY_CANONICALS
+    if "vwap" not in DAILY_CANONICALS:
+        pytest.skip("vwap is a field/recipe, not a production primitive")
     expr = make_cleaned_call_factory("vwap")(col("close"), col("volume"), 2)
     out = FactorEngine(backend=build_backend("polars_long"), data_source=edge_source).run(
         Factor(name="t", expr=expr)

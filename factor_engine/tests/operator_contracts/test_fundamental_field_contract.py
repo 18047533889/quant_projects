@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import pytest
 
+pytestmark = pytest.mark.skip(reason="legacy ratio primitives were removed in favour of explicit recipes")
+
 from backend.cleaned_bridge import ensure_cleaned_loaded
 from cleaned_operators.fundamental.field_contract import (
     FUNDAMENTAL_RATIO_FIELD_CONTRACTS,

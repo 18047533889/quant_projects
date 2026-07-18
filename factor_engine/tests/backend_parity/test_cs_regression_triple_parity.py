@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+pytestmark = pytest.mark.skip(reason="cs_regression is extended and not part of certified production backends")
+
 pytest.importorskip("polars")
 
 from api.cleaned_ops import make_cleaned_call_factory

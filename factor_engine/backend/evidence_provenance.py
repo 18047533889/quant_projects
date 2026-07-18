@@ -30,6 +30,28 @@ def current_commit_sha() -> str:
         return ""
 
 
+def _commit_is_ancestor(ancestor: str, descendant: str) -> bool:
+    """Return whether certified code is reachable from the current commit.
+
+    Exact HEAD equality is impossible to preserve for a tracked evidence file:
+    committing the freshly certified artifact necessarily creates a new HEAD.
+    Reachability plus exact case-registry and emitter hashes gives stable,
+    fail-closed provenance without that self-referential SHA cycle.
+    """
+    if not ancestor or not descendant:
+        return False
+    try:
+        return subprocess.run(
+            ["git", "merge-base", "--is-ancestor", ancestor, descendant],
+            cwd=str(FE_ROOT),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        ).returncode == 0
+    except Exception:
+        return False
+
+
 def collect_runtime_versions() -> dict[str, str]:
     versions: dict[str, str] = {
         "python": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
@@ -128,7 +150,9 @@ def evidence_artifact_valid(*, require_commit_match: bool = False) -> bool:
         return False
     if not prov.get("passed_at") or not prov.get("commit_sha"):
         return False
-    if require_commit_match and prov.get("commit_sha") != current_commit_sha():
+    if require_commit_match and not _commit_is_ancestor(
+        str(prov.get("commit_sha") or ""), current_commit_sha()
+    ):
         return False
     try:
         registry = load_case_registry()

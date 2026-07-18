@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+import math
 
 import numpy as np
 import pandas as pd
@@ -157,7 +158,7 @@ def pd_safe_div(x, y, epsilon=EPS, **_):
 
 def pl_safe_div(x, y, epsilon=EPS, **_):
     epsilon = float(epsilon)
-    if not np.isfinite(epsilon) or epsilon <= 0:
+    if not math.isfinite(epsilon) or epsilon <= 0:
         raise ValueError("epsilon must be finite and positive")
     cols = [c for c in pl_cols(x) if c in y.columns]
     return x.with_columns([pl.when(x[c].cast(pl.Float64, strict=False).is_finite() & y[c].cast(pl.Float64, strict=False).is_finite() & (y[c].cast(pl.Float64, strict=False).abs() > epsilon)).then(x[c].cast(pl.Float64, strict=False) / y[c].cast(pl.Float64, strict=False)).otherwise(None).alias(c) for c in cols])

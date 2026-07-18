@@ -18,19 +18,18 @@ def _ensure_ops_loaded():
     _load()
 
 
-def test_regress_slope_aggr_top_n_have_polars():
+def test_removed_legacy_regression_names_are_not_production_backends():
+    from cleaned_operators.operator_surface import DAILY_CANONICALS
+
     for name in ("regress", "ridge", "lasso", "slope", "aggr_top_n", "ACF", "pacf"):
-        assert "polars" in OperatorRegistry.backends_for(name), name
+        assert name not in DAILY_CANONICALS
 
 
-def test_pandas_only_is_subset_of_intentional_or_small():
-    canon = [c for c in OperatorRegistry.list_canonical() if OperatorRegistry.backends_for(c)]
-    pandas_only = sorted(
-        c for c in canon if "polars" not in OperatorRegistry.backends_for(c) and "pandas_numpy" in OperatorRegistry.backends_for(c)
-    )
-    unexpected = [c for c in pandas_only if c not in INTENTIONALLY_PANDAS_ONLY]
-    assert len(pandas_only) <= 55, f"pandas-only 过多: {len(pandas_only)} {pandas_only}"
-    assert len(unexpected) == 0, f"非 intentional pandas-only: {unexpected}"
+def test_daily_has_no_pandas_only_evidence_gap():
+    from backend.fastpath_evidence import polars_executed_parity_canonicals
+    from cleaned_operators.operator_surface import DAILY_CANONICALS
+
+    assert DAILY_CANONICALS <= polars_executed_parity_canonicals()
 
 
 def test_intentionally_pandas_only_still_have_pandas():

@@ -454,42 +454,7 @@ if pl is not None:
 
 
 def apply_surface_hardening() -> None:
-    """Align daily authoring visibility with production governance.
-
-    The repository historically maintained independent daily and production
-    lists.  This function keeps them consistent without making runtime
-    registration itself sufficient for daily exposure.
-    """
-    from cleaned_operators import operator_surface
-    from cleaned_operators.operator_spec import PRODUCTION_DENIED_CANONICALS
-
-    manual_research_only = {
-        "group_decay_linear",
-        "ts_sum_decay",
-        "trade_when",
-        "rank_corr",
-        "vp_weighted_price",
-        "vpmacd",
-        "vpmacd_signal",
-    }
-    microstructure_research_only = {
-        name
-        for name in operator_surface.DAILY_CANONICALS
-        if name.startswith("micro_")
-    }
-    move = (
-        set(PRODUCTION_DENIED_CANONICALS)
-        | manual_research_only
-        | microstructure_research_only
-    )
-    move &= set(operator_surface.DAILY_CANONICALS)
-
-    operator_surface.DAILY_CANONICALS = frozenset(
-        set(operator_surface.DAILY_CANONICALS) - move
-    )
-    operator_surface.RESEARCH_ONLY_CANONICALS = frozenset(
-        set(operator_surface.RESEARCH_ONLY_CANONICALS) | move
-    )
+    """Compatibility hook; the static surface module is authoritative."""
 
 
 apply_surface_hardening()

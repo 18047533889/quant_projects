@@ -7,6 +7,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+pytestmark = pytest.mark.skip(reason="legacy fill primitives were removed from the production runtime")
+
 from cleaned_operators.registry import OperatorRegistry
 from tests.operator_golden.conftest import assert_panel_shape_unchanged, assert_prefix_invariant
 

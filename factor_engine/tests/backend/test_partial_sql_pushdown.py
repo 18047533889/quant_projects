@@ -78,11 +78,11 @@ def test_sql_lowerer_splits_macd_mixed_tree(tmp_path, monkeypatch):
     monkeypatch.setenv("DATA_ACCESS_CONFIG", str(_registry(tmp_path, tmp_path / "data")))
     _seed(tmp_path / "data")
 
-    from api import MACD
     from api.cleaned_ops import make_cleaned_call_factory
 
     where = make_cleaned_call_factory("where")
-    expr = where(MACD(col("Close")), ts_mean(col("Close"), 2), col("Open"))
+    macd = make_cleaned_call_factory("MACD")
+    expr = where(macd(col("Close")), ts_mean(col("Close"), 2), col("Open"))
     factor = Factor(name="mixed", expr=expr)
     engine = FactorEngine(backend=build_backend("pandas"), data_source=build_data_source({"type": "data_access", "dataset": "test_daily"}))
     plan, _ = engine.compile(factor)
@@ -97,11 +97,11 @@ def test_partial_sql_hybrid_matches_pandas(tmp_path, monkeypatch):
     monkeypatch.setenv("DATA_ACCESS_CONFIG", str(_registry(tmp_path, tmp_path / "data")))
     _seed(tmp_path / "data")
 
-    from api import MACD
     from api.cleaned_ops import make_cleaned_call_factory
 
     where = make_cleaned_call_factory("where")
-    expr = where(MACD(col("Close")), ts_mean(col("Close"), 2), col("Open"))
+    macd = make_cleaned_call_factory("MACD")
+    expr = where(macd(col("Close")), ts_mean(col("Close"), 2), col("Open"))
     factor = Factor(name="mixed", expr=expr)
 
     source = build_data_source({"type": "data_access", "dataset": "test_daily", "long_table": True})

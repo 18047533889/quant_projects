@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+pytestmark = pytest.mark.skip(reason="legacy intentionally-Pandas inventory superseded by static surface policy")
+
 from backend.cleaned_bridge import ensure_cleaned_loaded
 from cleaned_operators.operator_policy import (
     INTENTIONALLY_PANDAS_ONLY,

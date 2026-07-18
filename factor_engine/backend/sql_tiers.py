@@ -107,8 +107,8 @@ SQL_IMPLEMENTED_CANONICALS: frozenset[str] = frozenset(
         "cum_max",
         "cum_min",
         "WMA",
-        "ewm_std",
-        "ewm_var",
+        "ts_ewm_std",
+        "ts_ewm_var",
         "cum_std",
         "expanding_std",
         "floor",
@@ -118,8 +118,8 @@ SQL_IMPLEMENTED_CANONICALS: frozenset[str] = frozenset(
         "ts_time_slope",
         "ts_argmax",
         "ts_argmin",
-        "ewm_corr",
-        "ewm_cov",
+        "ts_ewm_corr",
+        "ts_ewm_cov",
         "ts_sharpe",
         "ts_autocorr",
         "rolling_beta",
@@ -127,7 +127,7 @@ SQL_IMPLEMENTED_CANONICALS: frozenset[str] = frozenset(
         "cs_pct_rank",
         "cs_quantile",
         "c_percentile",
-        "log_returns",
+        "ts_log_return",
         "volatility",
         "vwap",
         "maximum",
@@ -142,10 +142,10 @@ SQL_IMPLEMENTED_CANONICALS: frozenset[str] = frozenset(
         "tanh",
         "cbrt",
         "truncate",
-        "c_mean",
-        "c_std",
-        "c_sum",
-        "c_count",
+        "cs_mean",
+        "cs_std",
+        "cs_sum",
+        "cs_count",
         "cs_mad",
         "cs_mad_zscore",
         "RSI_WILDER",
@@ -161,6 +161,13 @@ SQL_IMPLEMENTED_CANONICALS: frozenset[str] = frozenset(
         "cs_multi_resid",
         "cs_wls_resid",
         "period_lag",
+        "period_change",
+        "period_average",
+        "period_cagr",
+        "quarter_from_cumulative",
+        "ttm_from_quarterly",
+        "ttm_from_cumulative",
+        "yoy_by_period",
         "ts_regression_tstat",
         "ts_trend_tstat",
         "ts_max_drawdown",
@@ -187,10 +194,10 @@ SQL_PARITY_VERIFIED_CANONICALS: frozenset[str] = frozenset(
     {"column", "literal"}
 ) | DUCKDB_REAL_SQL_VERIFIED
 
+from cleaned_operators.operator_surface import DAILY_CANONICALS as _DAILY_CANONICALS
+
 _STATIC_SQL_CANDIDATES: frozenset[str] = (
-    frozenset({"column", "literal"})
-    | P0_PRODUCTION_FASTPATH_CANONICALS
-    | P1_DUCKDB_PRODUCTION_SAFE
+    frozenset({"column", "literal", "protected_div"}) | frozenset(_DAILY_CANONICALS)
 )
 
 SQL_PRODUCTION_SAFE_CANONICALS: frozenset[str] = frozenset(

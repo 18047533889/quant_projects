@@ -223,21 +223,24 @@ def _sql_emitter_ok(canon: str) -> bool:
 
 
 def _polars_status(canon: str) -> CapabilityStatus:
-    """根据 registry 与 parity 白名单推断 Polars 能力状态。"""
-    from cleaned_operators.operator_policy import (
-        POLARS_PARITY_VERIFIED,
-        POLARS_PRODUCTION_SAFE,
+    """Derive Polars status only from tested backend evidence."""
+    from backend.primitive_evidence import (
+        POLARS_EDGE_VERIFIED,
+        POLARS_NO_FALLBACK_VERIFIED,
+        POLARS_REFERENCE_PARITY_VERIFIED,
     )
     from cleaned_operators.registry import OperatorRegistry
 
     backends = OperatorRegistry.backends_for(canon)
     if "polars" not in backends:
         return "unsupported"
-    if canon in POLARS_PRODUCTION_SAFE:
-        from cleaned_operators.edge_requirements import production_edge_evidence_complete
-
-        return "production_safe" if production_edge_evidence_complete(canon) else "parity_verified"
-    if canon in POLARS_PARITY_VERIFIED:
+    if (
+        canon in POLARS_REFERENCE_PARITY_VERIFIED
+        and canon in POLARS_EDGE_VERIFIED
+        and canon in POLARS_NO_FALLBACK_VERIFIED
+    ):
+        return "production_safe"
+    if canon in POLARS_REFERENCE_PARITY_VERIFIED:
         return "parity_verified"
     return "implemented"
 
@@ -253,10 +256,7 @@ def _pandas_status(canon: str) -> CapabilityStatus:
 
 def _sql_status(canon: str, *, dialect: BackendName) -> CapabilityStatus:
     """根据 SQL tier 与 emitter 能力推断指定方言的 SQL 状态。"""
-    from backend.sql_tiers import (
-        SQL_IMPLEMENTED_CANONICALS,
-        SQL_PARITY_VERIFIED_CANONICALS,
-    )
+    from backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
 
     if canon not in SQL_IMPLEMENTED_CANONICALS:
         return "unsupported"
@@ -264,18 +264,21 @@ def _sql_status(canon: str, *, dialect: BackendName) -> CapabilityStatus:
         return "implemented"
 
     if dialect == "clickhouse_sql":
+        from backend.sql_tiers import CLICKHOUSE_SQL_PARITY_VERIFIED
         from backend.sql_pushdown.clickhouse_capabilities import effective_clickhouse_production_safe
 
         if effective_clickhouse_production_safe(canon):
             return "production_safe"
+        if canon in CLICKHOUSE_SQL_PARITY_VERIFIED:
+            return "parity_verified"
+        return "implemented"
     else:
-        from backend.sql_tiers import effective_sql_production_safe
+        from backend.sql_tiers import DUCKDB_SQL_PARITY_VERIFIED, effective_sql_production_safe
 
         if effective_sql_production_safe(canon):
             return "production_safe"
-
-    if canon in SQL_PARITY_VERIFIED_CANONICALS:
-        return "parity_verified"
+        if canon in DUCKDB_SQL_PARITY_VERIFIED:
+            return "parity_verified"
     return "implemented"
 
 
@@ -427,7 +430,7 @@ def supports_sql(
     参数:
         canonical: 算子 canonical 名称。
         data_source_kind: 数据源类型，``duckdb`` 或 ``clickhouse``/``ch``。
-        mode: ``production`` 仅 parity/production_safe；``research`` 允许已实现。
+        mode: ``production`` 仅 production-safe；``research`` 允许已实现。
 
     返回:
         是否支持 SQL 执行。
@@ -440,7 +443,7 @@ def supports_sql(
     if status == "unsupported":
         return False
     if mode == "production":
-        return status in {"parity_verified", "production_safe"}
+        return status == "production_safe"
     return status != "unsupported"
 
 
@@ -463,6 +466,7 @@ def get_best_backend(
     data_source_kind: str = "memory",
     row_count_estimate: int | None = None,
     prefer: str = "auto",
+    allow_unverified_backend: bool = False,
 ) -> tuple[object | None, str]:
     """算子热路径 backend 选型：Polars（已验证） vs Pandas fallback。
 
@@ -491,13 +495,22 @@ def get_best_backend(
         return op, "pandas_numpy"
     if prefer == "polars":
         op = OperatorRegistry.get(canonical, "polars")
-        if op is not None:
+        permitted = _polars_status(canonical) == "production_safe" or (
+            mode != "production" and allow_unverified_backend
+        )
+        if op is not None and permitted:
             return op, "polars"
         op = OperatorRegistry.get(canonical, "pandas_numpy")
         return op, "pandas_numpy"
     if prefer == "sql":
         op = OperatorRegistry.get(canonical, "sql")
-        if op is not None:
+        dialect: BackendName = (
+            "clickhouse_sql" if data_source_kind.lower() in {"clickhouse", "ch"} else "duckdb_sql"
+        )
+        permitted = _sql_status(canonical, dialect=dialect) == "production_safe" or (
+            mode != "production" and allow_unverified_backend
+        )
+        if op is not None and permitted:
             return op, "sql"
         prefer = "auto"
 
@@ -542,13 +555,12 @@ def get_best_backend(
     if use_cost and len(candidates) > 1:
         chosen = min(candidates, key=lambda x: x[1])[0]
     else:
-        # 默认：与 registry.get_preferred 一致 — production 仅 safe 白名单
-        from cleaned_operators.operator_policy import POLARS_PRODUCTION_SAFE
-
+        # Default production route consumes the same evidence-backed status as
+        # reports and explicit backend selection.
         if (
             "polars" in backends
             and (
-                canonical in POLARS_PRODUCTION_SAFE
+                _polars_status(canonical) == "production_safe"
                 or (aggressive and _polars_status(canonical) != "unsupported")
             )
         ):

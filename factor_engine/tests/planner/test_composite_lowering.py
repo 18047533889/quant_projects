@@ -202,8 +202,8 @@ def test_list_composite_lowerings_batch_one_size():
         assert name in names
 
 
-def test_composite_dual_backend_capable_obv():
+def test_removed_obv_is_not_claimed_dual_backend_capable():
     from cleaned_operators import load_all
 
     load_all()
-    assert composite_dual_backend_capable("OBV") is True
+    assert composite_dual_backend_capable("OBV") is False

@@ -98,6 +98,10 @@ CERTIFICATION_STAGES: list[tuple[str, list[str]]] = [
             "tests/operator_contracts/test_manifest_sync.py",
         ],
     ),
+    (
+        "strict_period_triple_parity_and_no_fallback",
+        ["tests/operators/test_production_convergence.py"],
+    ),
 ]
 
 

@@ -58,7 +58,8 @@ def _run_expr(source, expr, *, use_polars_expr: bool):
 
 
 def test_polars_expr_capable_subset_of_production_ops():
-    from cleaned_operators.operator_policy import POLARS_PRODUCTION_SAFE
+    from backend.fastpath_evidence import polars_executed_parity_canonicals
+    from cleaned_operators.operator_surface import DAILY_CANONICALS
 
     # native expr 已实现但 production 门禁尚未同步的算子
     # native long path 已有；panel production parity 以 ``where`` 别名代表
@@ -80,7 +81,7 @@ def test_polars_expr_capable_subset_of_production_ops():
         "materialized_series",
         "plan_ref",
     }
-    assert native_ops - pending_production <= POLARS_PRODUCTION_SAFE
+    assert (native_ops & DAILY_CANONICALS) - pending_production <= polars_executed_parity_canonicals()
 
 
 @pytest.mark.parametrize(
@@ -156,6 +157,12 @@ def test_polars_expr_matches_polars_bridge(source, factory_name, expr_builder):
     # compile plan for capability check
     eng = FactorEngine(backend=build_backend("pandas"), data_source=source)
     plan, _ = eng.compile(Factor(name="t", expr=expr))
+    from cleaned_operators.operator_surface import classify_canonical
+    from cleaned_operators.registry import OperatorRegistry
+
+    canonical = OperatorRegistry._aliases.get(plan.op, plan.op)
+    if classify_canonical(canonical) != "daily":
+        pytest.skip(f"{factory_name} is outside the production daily surface")
     assert plan_is_polars_expr_capable(plan), factory_name
 
     base = _run_expr(source, expr, use_polars_expr=False)["result"].sort_index()
@@ -165,14 +172,7 @@ def test_polars_expr_matches_polars_bridge(source, factory_name, expr_builder):
     pd.testing.assert_series_equal(base, fast, check_names=False, rtol=1e-6, atol=1e-6)
 
 
-def test_macd_uses_polars_expr_path(source):
-    from api import MACD
+def test_macd_is_not_exported_on_daily_api(source):
+    import api
 
-    os.environ["FACTOR_ENGINE_POLARS_EXPR"] = "1"
-    try:
-        eng = FactorEngine(backend=build_backend("polars"), data_source=source)
-        out = eng.run(Factor(name="t", expr=MACD(col("close"))))
-        assert out.get("polars_expr") is True
-        assert not out.get("polars_expr_fallback")
-    finally:
-        os.environ.pop("FACTOR_ENGINE_POLARS_EXPR", None)
+    assert not hasattr(api, "MACD")

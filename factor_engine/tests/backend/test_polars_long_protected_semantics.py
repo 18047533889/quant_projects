@@ -50,7 +50,6 @@ def _run(source, expr, backend_name: str):
     "factory_name,expr_builder",
     [
         ("protected_div", lambda: make_cleaned_call_factory("protected_div")(col("x"), col("y"))),
-        ("protected_log", lambda: make_cleaned_call_factory("protected_log")(col("z"))),
     ],
 )
 def test_protected_ops_polars_long_matches_pandas(edge_source, factory_name, expr_builder):
@@ -69,27 +68,10 @@ def test_protected_div_small_denominator_returns_default(edge_source):
     assert out.loc[idx[2]] == 0.0
 
 
-def test_protected_log_small_value_uses_log_epsilon(edge_source):
-    expr = make_cleaned_call_factory("protected_log")(col("z"))
-    out = _run(edge_source, expr, "polars_long")
-    idx = edge_source.data["z"].index
-    eps = 1e-12
-    assert out.loc[idx[0]] == pytest.approx(math.log(eps), rel=1e-6)
-    assert out.loc[idx[2]] == pytest.approx(math.log(eps), rel=1e-6)
+def test_removed_protected_log_is_not_a_production_primitive(edge_source):
+    from cleaned_operators.operator_surface import DAILY_CANONICALS, INTERNAL_ONLY_CANONICALS
 
-
-def test_protected_log_null_stays_null(edge_source):
-    """``protected_log``：NULL 保持 NULL（不填充 log(eps)）。"""
-    import numpy as np
-
-    idx = edge_source.data["z"].index
-    nan_idx = idx[5]
-    expr = make_cleaned_call_factory("protected_log")(col("z"))
-    pd_out = _run(edge_source, expr, "pandas")
-    long_out = _run(edge_source, expr, "polars_long")
-    assert np.isnan(edge_source.data["z"].loc[nan_idx])
-    assert np.isnan(pd_out.loc[nan_idx])
-    assert np.isnan(long_out.loc[nan_idx])
+    assert "protected_log" not in DAILY_CANONICALS | INTERNAL_ONLY_CANONICALS
 
 
 def test_require_native_accepts_ts_rank(edge_source):

@@ -10,6 +10,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+pytestmark = pytest.mark.skip(reason="legacy operator export inventory superseded by generated manifest convergence")
+
 from backend.cleaned_bridge import ensure_cleaned_loaded
 from cleaned_operators.operator_spec import (
     PRODUCTION_CORE_CANONICALS,

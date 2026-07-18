@@ -52,6 +52,7 @@ RECIPE_CANONICALS = frozenset({
     "vp_weighted_price",
     "vpmacd",
     "vpmacd_signal",
+    "size_neutralize",
 })
 
 # Tools retained for analysis but removed from Factor DSL, catalog and LLM authoring.
@@ -88,11 +89,14 @@ RESEARCH_CANONICALS = frozenset({
     "row_median", "row_min", "row_prod", "row_skew", "row_std", "row_sum", "row_var",
     # Broad data masking and unlimited repair.
     "causal_linear_extrapolate", "dropna", "ffill", "fillna", "interpolate",
-    "ifnan", "log_fill_invalid", "nan_to_num", "protected_div", "protected_log",
+    "ifnan", "log_fill_invalid", "nan_to_num", "protected_log",
     "protected_sqrt", "div_or_default",
     # Summary outputs and stateful/experimental indicators.
     "ACF", "Mode", "autocorr", "KAMA", "hump_decay", "max_drawdown", "pacf",
-    "r_squared", "residual", "sem",
+    "r_squared", "residual", "sem", "downside_beta", "idio_vol", "rank_corr",
+    "micro_amihud_hf", "micro_bipower_var", "micro_jump_indicator",
+    "micro_kyle_lambda", "micro_mid_return", "micro_realized_vol", "micro_spread",
+    "micro_trade_imbalance", "micro_vpin",
 })
 
 # Historical duplicate that can remain as a compatibility alias without a canonical.
@@ -118,6 +122,10 @@ DAILY_ADDITIONS = frozenset({
     "RSI_WILDER",
     "ATR_WILDER",
     "ADX",
+    "ts_ewm_std",
+    "ts_ewm_var",
+    "ts_ewm_cov",
+    "ts_ewm_corr",
 })
 
 _FINALIZED = False
@@ -166,6 +174,22 @@ def _rename_cross_sectional_dialect() -> None:
             OperatorRegistry.rename_canonical(old, new)
 
 
+def _normalize_semantic_names() -> None:
+    """Make ambiguous historical names compatibility aliases only."""
+    for old, new in {
+        "ewm_std": "ts_ewm_std",
+        "ewm_var": "ts_ewm_var",
+        "ewm_cov": "ts_ewm_cov",
+        "ewm_corr": "ts_ewm_corr",
+    }.items():
+        if old in OperatorRegistry._operators and new not in OperatorRegistry._operators:
+            OperatorRegistry.rename_canonical(old, new)
+    for old, target in {"ewm": "ts_ema", "intercept": "ts_regression_intercept"}.items():
+        _unregister(old)
+        if target in OperatorRegistry._operators:
+            OperatorRegistry.register_alias(old, target)
+
+
 def _collect_formula_fields(payload: Any, out: set[str]) -> None:
     if isinstance(payload, dict):
         canonical = payload.get("canonical")
@@ -206,10 +230,15 @@ def _scope_for(canonical: str) -> str:
 
 
 def _enrich_catalog(daily: set[str]) -> None:
+    from cleaned_operators.operator_surface import classify_canonical
+    from cleaned_operators.operator_policy import infer_operator_policy
+
     close_cutoff = {"MACD_line", "MACD_signal", "MACD_hist", "RSI_WILDER", "ATR_WILDER", "ADX", "true_range"}
     for canonical, catalog in OperatorRegistry._catalog.items():
-        surface = "daily" if canonical in daily else "research"
+        surface = classify_canonical(canonical)
         scope = _scope_for(canonical)
+        operator = OperatorRegistry.get(canonical)
+        policy = infer_operator_policy(operator, canonical=canonical) if operator is not None else None
         params = list(catalog.get("param_names") or [])
         if scope == "fundamental_period":
             cutoff, trade_time = "available_at", "next_decision_time"
@@ -219,9 +248,15 @@ def _enrich_catalog(daily: set[str]) -> None:
             cutoff, trade_time = "input_dependent", "input_dependent"
         catalog.update({
             "surface": surface,
+            "status": (
+                "production" if surface == "daily" else
+                "research" if surface == "research" else
+                "deprecated" if surface == "legacy" else
+                surface
+            ),
             "scope": scope,
             "semantic_version": "2.0" if canonical in DAILY_ADDITIONS else "1.0",
-            "pit_safe": surface == "daily",
+            "pit_safe": bool(policy.pit_safe) if policy is not None else False,
             "required_cutoff": cutoff,
             "earliest_trade_time": trade_time,
             "stateful": canonical in {"ts_ema", "RSI_WILDER", "ATR_WILDER", "ADX"},
@@ -291,6 +326,7 @@ def finalize_layer_governance() -> None:
         return
 
     _rename_cross_sectional_dialect()
+    _normalize_semantic_names()
     replacements = _recipe_replacement_index()
     missing_recipe_migrations = sorted(RECIPE_CANONICALS - set(replacements))
     if missing_recipe_migrations:
@@ -311,26 +347,39 @@ def finalize_layer_governance() -> None:
     from cleaned_operators import operator_policy, operator_surface
 
     actual = set(OperatorRegistry._operators)
-    removed = set(DELETE_CANONICALS) | set(RECIPE_CANONICALS) | set(RESEARCH_CANONICALS)
-    daily = ((set(operator_surface.DAILY_CANONICALS) - removed) | set(DAILY_ADDITIONS)) & actual
-    unsafe = set(operator_surface.UNSAFE_CANONICALS) & actual
-    legacy = set(operator_surface.LEGACY_ONLY_CANONICALS) & actual
-    internal = set(operator_surface.INTERNAL_ONLY_CANONICALS) & actual
-    research = (set(operator_surface.RESEARCH_ONLY_CANONICALS) & actual) - daily
+    partitions = {
+        "daily": set(operator_surface.DAILY_CANONICALS),
+        "extended": set(operator_surface.EXTENDED_ONLY_CANONICALS),
+        "research": set(operator_surface.RESEARCH_ONLY_CANONICALS),
+        "unsafe": set(operator_surface.UNSAFE_CANONICALS),
+        "legacy": set(operator_surface.LEGACY_ONLY_CANONICALS),
+        "internal": set(operator_surface.INTERNAL_ONLY_CANONICALS),
+    }
+    missing = {label: sorted(names - actual) for label, names in partitions.items() if names - actual}
+    if missing:
+        raise RuntimeError(f"static operator surface contains inactive canonicals: {missing}")
+    labels = tuple(partitions)
+    overlaps = {
+        f"{left}/{right}": sorted(partitions[left] & partitions[right])
+        for i, left in enumerate(labels)
+        for right in labels[i + 1:]
+        if partitions[left] & partitions[right]
+    }
+    if overlaps:
+        raise RuntimeError(f"static operator surfaces overlap: {overlaps}")
+    classified = set().union(*partitions.values())
+    if classified != actual:
+        raise RuntimeError(
+            "static operator surface must classify the final registry exactly; "
+            f"unclassified={sorted(actual - classified)}, inactive={sorted(classified - actual)}"
+        )
+    daily = partitions["daily"]
 
-    operator_surface.DAILY_CANONICALS = frozenset(daily)
-    operator_surface.RESEARCH_ONLY_CANONICALS = frozenset(research)
-    operator_surface.UNSAFE_CANONICALS = frozenset(unsafe)
-    operator_surface.LEGACY_ONLY_CANONICALS = frozenset(legacy)
-    operator_surface.INTERNAL_ONLY_CANONICALS = frozenset(internal)
-
-    operator_policy.POLARS_PARITY_VERIFIED = frozenset(
-        name for name in operator_policy.POLARS_PARITY_VERIFIED
-        if name in daily and "polars" in OperatorRegistry.backends_for(name)
+    operator_policy.POLARS_PARITY_VERIFIED.intersection_update(
+        name for name in daily if "polars" in OperatorRegistry.backends_for(name)
     )
-    operator_policy.POLARS_PRODUCTION_SAFE = frozenset(
-        name for name in operator_policy.POLARS_PRODUCTION_SAFE
-        if name in daily and "polars" in OperatorRegistry.backends_for(name)
+    operator_policy.POLARS_PRODUCTION_SAFE.intersection_update(
+        name for name in daily if "polars" in OperatorRegistry.backends_for(name)
     )
 
     collisions = formula_field_names() & set(OperatorRegistry._operators)

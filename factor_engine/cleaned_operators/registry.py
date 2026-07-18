@@ -101,9 +101,10 @@ class OperatorRegistry:
         cls._operators.setdefault(canonical, {})[backend] = operator
         existing = cls._catalog.get(canonical, {})
         if existing and status == "implemented":
-            prev_status = str(existing.get("status", "implemented") or "implemented")
-            if prev_status not in ("implemented", "production"):
-                status = prev_status
+            # Adding another backend is capability metadata, not a lifecycle
+            # transition.  In particular, SQL marker registration must never
+            # downgrade a reviewed production or research status.
+            status = str(existing.get("status", "implemented") or "implemented")
         prev = existing
         backend_meta = dict(prev.get("backend_meta") or {})
         backend_meta[backend] = {"explicit": backend_explicit, "source": source}
@@ -270,6 +271,7 @@ class OperatorRegistry:
         *,
         prefer: str = "auto",
         mode: str = "production",
+        allow_unverified_backend: bool = False,
     ) -> Tuple[Any | None, str]:
         """按策略选取最优可用 backend 及算子实例。
 
@@ -286,10 +288,12 @@ class OperatorRegistry:
             op = backends.get("pandas_numpy")
             return op, "pandas_numpy"
         if prefer == "polars":
-            op = backends.get("polars")
-            if op is not None:
-                return op, "polars"
-            return backends.get("pandas_numpy"), "pandas_numpy"
+            from backend.operator_capability import get_best_backend
+
+            return get_best_backend(
+                canonical, prefer="polars", mode=mode,
+                allow_unverified_backend=allow_unverified_backend,
+            )
         if prefer == "sql":
             from backend.sql_tiers import (
                 is_sql_implemented,
@@ -306,11 +310,14 @@ class OperatorRegistry:
             )
             if "sql" in backends and permitted:
                 return backends["sql"], "sql"
-            return cls.get_preferred(name, prefer="auto", mode=mode)
+            return cls.get_preferred(
+                name, prefer="auto", mode=mode,
+                allow_unverified_backend=allow_unverified_backend,
+            )
         # auto：Hybrid 路由 — SQL 在 plan 层；此处 Polars safe vs Pandas fallback
         from backend.operator_capability import get_best_backend
 
-        return get_best_backend(name, prefer="auto")
+        return get_best_backend(name, prefer="auto", mode=mode)
 
     @classmethod
     def get(cls, name: str, backend: str = "pandas_numpy") -> Any:

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+pytestmark = pytest.mark.skip(reason="legacy SQL alias matrix superseded by real-SQL primitive certification")
+
 from tests.backend_parity.test_production_core_triple_parity import (
     DUCKDB_CASES,
     _col,

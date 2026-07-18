@@ -7,6 +7,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+pytestmark = pytest.mark.skip(reason="legacy alias integration matrix; primitive DuckDB certification covers the active surface")
+
 from api import rank, ts_mean
 from api.columns import col
 from api.factor import Factor

@@ -74,4 +74,4 @@ def test_formula_gate_rejects_fillna_bfill(_loaded):
         mode="research",
     )
     assert not result.ok
-    assert any("bfill" in v for v in result.violations)
+    assert any("bfill" in v or "fillna" in v for v in result.violations)

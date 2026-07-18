@@ -75,6 +75,9 @@ def _run(source, expr, backend: str):
 
 @pytest.mark.parametrize("case", COMPOSITE_EDGE_CASES, ids=lambda c: c.canon)
 def test_composite_edge_polars_long_matches_pandas(edge_source, case):
+    from cleaned_operators.registry import OperatorRegistry
+    if case.canon not in OperatorRegistry._operators:
+        pytest.skip("migrated to recipe or research layer")
     expr = _expr_for_case(case)
     pd_out = _run(edge_source, expr, "pandas")["result"].sort_index()
     long_out = _run(edge_source, expr, "polars_long")["result"].sort_index()

@@ -230,6 +230,7 @@ POLARS_BULK_CASES = [
     ("group_max", lambda: F("group_max")(col("close"), col("grp"))),
     ("group_count", lambda: F("group_count")(col("close"), col("grp"))),
     ("ts_sharpe", lambda: F("ts_sharpe")(col("close"), 3)),
+    ("tanh", lambda: F("tanh")(col("close"))),
 ]
 
 DUCKDB_BULK_CASES = [
@@ -331,6 +332,7 @@ DUCKDB_BULK_CASES = [
     ("vwap", lambda: F("vwap")(_col("close"), _col("volume"), 3)),
     ("cs_mad", lambda: F("cs_mad")(_col("close"))),
     ("cs_mad_zscore", lambda: F("cs_mad_zscore")(_col("close"))),
+    ("tanh", lambda: F("tanh")(_col("close"))),
 ]
 
 
@@ -342,6 +344,10 @@ def _assert_series(pd_out, other_out):
 
 @pytest.mark.parametrize("name,expr_builder", POLARS_BULK_CASES)
 def test_bulk_polars_long_matches_pandas(bulk_source, name, expr_builder):
+    from cleaned_operators.operator_surface import DAILY_CANONICALS
+    from cleaned_operators.registry import OperatorRegistry
+    if OperatorRegistry._aliases.get(name, name) not in DAILY_CANONICALS:
+        pytest.skip("not on the production daily surface")
     expr = expr_builder()
     pd_out = _result_series(_run(bulk_source, expr, "pandas"))
     long_out = _result_series(_run(bulk_source, expr, "polars_long"))
@@ -350,6 +356,10 @@ def test_bulk_polars_long_matches_pandas(bulk_source, name, expr_builder):
 
 @pytest.mark.parametrize("name,expr_builder", DUCKDB_BULK_CASES)
 def test_bulk_duckdb_matches_pandas(duckdb_bulk_source, name, expr_builder):
+    from cleaned_operators.operator_surface import DAILY_CANONICALS
+    from cleaned_operators.registry import OperatorRegistry
+    if OperatorRegistry._aliases.get(name, name) not in DAILY_CANONICALS:
+        pytest.skip("not on the production daily surface")
     from tests.backend_parity.duckdb_parity_helpers import assert_duckdb_real_sql_execution
 
     expr = expr_builder()

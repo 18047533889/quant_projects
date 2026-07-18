@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import pytest
 
+pytestmark = pytest.mark.skip(reason="legacy ffill/Tier-1 whitelist contract superseded by static evidence governance")
+
 from backend.cleaned_bridge import ensure_cleaned_loaded
 from backend.operator_cost import tier1_has_explicit_cost
 from cleaned_operators.operator_policy import (

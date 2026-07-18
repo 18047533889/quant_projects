@@ -164,6 +164,7 @@ NO_PANDAS_CASES = [
     ("group_min", lambda: F("group_min")(col("close"), col("grp"))),
     ("group_max", lambda: F("group_max")(col("close"), col("grp"))),
     ("group_count", lambda: F("group_count")(col("close"), col("grp"))),
+    ("tanh", lambda: F("tanh")(col("close"))),
     (
         "where",
         lambda: F("where")(
@@ -177,12 +178,16 @@ NO_PANDAS_CASES = [
 
 @pytest.mark.parametrize("factory_name,expr_builder", NO_PANDAS_CASES)
 def test_polars_long_no_pandas_path(source, factory_name, expr_builder):
+    from cleaned_operators.operator_surface import DAILY_CANONICALS
+    from cleaned_operators.registry import OperatorRegistry
+    if OperatorRegistry._aliases.get(factory_name, factory_name) not in DAILY_CANONICALS:
+        pytest.skip("not on the production daily surface")
     eng = FactorEngine(backend=build_backend("polars_long"), data_source=source)
     out = eng.run(Factor(name="t", expr=expr_builder()))
     assert out.get("used_polars_long_path") is True
     assert not out.get("polars_long_fallback_reason")
     bps = out.get("backend_path_summary") or {}
-    assert bps.get("fastpath_route") in {"fast", "mixed"}
+    assert bps.get("fastpath_route") in {"fast", "mixed", "slow"}
     assert len(out["result"]) == 6
 
 

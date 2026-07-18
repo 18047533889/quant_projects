@@ -3,9 +3,9 @@
 > Generated from active runtime canonicals. SQL means DuckDB emitter support unless a dialect-specific certification says otherwise.
 > ClickHouse production certification remains separate and is not inferred from DuckDB.
 
-- active SQL emitter implementations: **116**
-- DuckDB parity verified: **77**
-- DuckDB production safe: **66**
+- active SQL emitter implementations: **128**
+- DuckDB parity verified: **87**
+- DuckDB production safe: **87**
 
 | canonical | implemented | parity verified | production safe |
 |---|---:|---:|---:|
@@ -19,48 +19,48 @@
 | clip | yes | yes | yes |
 | coalesce | yes | yes | yes |
 | cs_bucket | yes | no | no |
+| cs_count | yes | yes | yes |
 | cs_demean | yes | yes | yes |
 | cs_mad | yes | yes | yes |
 | cs_mad_zscore | yes | yes | yes |
+| cs_mean | yes | yes | yes |
 | cs_multi_resid | yes | no | no |
 | cs_pct_rank | yes | yes | yes |
 | cs_quantile | yes | no | no |
 | cs_regression | yes | no | no |
 | cs_resid | yes | no | no |
+| cs_std | yes | yes | yes |
+| cs_sum | yes | yes | yes |
 | cs_wls_resid | yes | no | no |
 | divide | yes | yes | yes |
 | eq | yes | yes | yes |
-| ewm_corr | yes | no | no |
-| ewm_cov | yes | no | no |
-| ewm_std | yes | no | no |
-| ewm_var | yes | no | no |
 | exp | yes | yes | yes |
 | fillna_const | yes | yes | yes |
 | floor | yes | yes | yes |
 | ge | yes | yes | yes |
-| group_count | yes | yes | no |
+| group_count | yes | yes | yes |
 | group_decay_linear | yes | no | no |
-| group_max | yes | yes | no |
+| group_max | yes | yes | yes |
 | group_mean | yes | yes | yes |
-| group_min | yes | yes | no |
+| group_min | yes | yes | yes |
 | group_neutralize | yes | yes | yes |
 | group_normalize | yes | yes | yes |
-| group_percentile | yes | yes | no |
+| group_percentile | yes | no | no |
 | group_rank | yes | yes | yes |
 | group_std | yes | yes | yes |
-| group_sum | yes | yes | no |
+| group_sum | yes | yes | yes |
 | group_winsorize | yes | yes | yes |
 | group_zscore | yes | yes | yes |
 | gt | yes | yes | yes |
 | inverse | yes | yes | yes |
 | is_finite | yes | yes | yes |
-| is_infinite | yes | yes | no |
-| is_nan | yes | yes | yes |
-| is_not_null | yes | yes | no |
-| is_null | yes | yes | no |
+| is_infinite | yes | yes | yes |
+| is_nan | yes | no | no |
+| is_not_null | yes | yes | yes |
+| is_null | yes | yes | yes |
 | le | yes | yes | yes |
 | log | yes | yes | yes |
-| log_abs | yes | yes | no |
+| log_abs | yes | yes | yes |
 | lt | yes | yes | yes |
 | maximum | yes | yes | yes |
 | minimum | yes | yes | yes |
@@ -70,18 +70,22 @@
 | normalize | yes | yes | yes |
 | not_ | yes | yes | yes |
 | or_ | yes | yes | yes |
+| period_average | yes | yes | yes |
+| period_cagr | yes | yes | yes |
+| period_change | yes | yes | yes |
 | period_lag | yes | no | no |
 | power | yes | yes | yes |
 | protected_div | yes | yes | yes |
+| quarter_from_cumulative | yes | yes | yes |
 | rank | yes | yes | yes |
 | safe_div_null | yes | yes | yes |
-| scale | yes | yes | yes |
+| scale | yes | no | no |
 | sign | yes | yes | yes |
-| signed_log | yes | yes | no |
-| signed_sqrt | yes | yes | no |
+| signed_log | yes | yes | yes |
+| signed_sqrt | yes | yes | yes |
 | sqrt | yes | yes | yes |
 | subtract | yes | yes | yes |
-| tanh | yes | no | no |
+| tanh | yes | yes | yes |
 | truncate | yes | no | no |
 | ts_argmax | yes | no | no |
 | ts_argmin | yes | no | no |
@@ -95,7 +99,12 @@
 | ts_delay | yes | yes | yes |
 | ts_delta | yes | yes | yes |
 | ts_ema | yes | no | no |
+| ts_ewm_corr | yes | no | no |
+| ts_ewm_cov | yes | no | no |
+| ts_ewm_std | yes | no | no |
+| ts_ewm_var | yes | no | no |
 | ts_last_if | yes | no | no |
+| ts_log_return | yes | yes | yes |
 | ts_mad | yes | no | no |
 | ts_max | yes | yes | yes |
 | ts_max_drawdown | yes | no | no |
@@ -122,6 +131,9 @@
 | ts_true_streak | yes | no | no |
 | ts_var | yes | yes | yes |
 | ts_zscore | yes | yes | yes |
+| ttm_from_cumulative | yes | yes | yes |
+| ttm_from_quarterly | yes | yes | yes |
 | where | yes | yes | yes |
 | winsorize | yes | yes | yes |
+| yoy_by_period | yes | yes | yes |
 | zscore | yes | yes | yes |

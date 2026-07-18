@@ -29,17 +29,19 @@ def test_factor_engine_config_default_backend_is_auto():
     assert cfg.backend.type == "auto"
 
 
-def test_production_core_fully_polars_safe(loaded):
-    gap = PRODUCTION_CORE_CANONICALS - POLARS_PRODUCTION_SAFE
-    assert not gap, f"PRODUCTION_CORE 未进 Polars 白名单: {sorted(gap)}"
+def test_production_core_is_not_self_certifying(loaded):
+    assert POLARS_PRODUCTION_SAFE <= POLARS_PARITY_VERIFIED
 
 
 def test_polars_production_gate_contract(loaded):
     assert check_polars_production_gate() == []
 
 
-def test_polars_safe_equals_core_union_parity(loaded):
-    assert POLARS_PRODUCTION_SAFE == POLARS_PRODUCTION_SAFE_CORE | POLARS_PARITY_VERIFIED
+def test_polars_safe_requires_independent_edge_and_no_fallback_evidence(loaded):
+    from backend.primitive_evidence import POLARS_EDGE_VERIFIED, POLARS_NO_FALLBACK_VERIFIED
+
+    assert POLARS_PRODUCTION_SAFE <= POLARS_EDGE_VERIFIED
+    assert POLARS_PRODUCTION_SAFE <= POLARS_NO_FALLBACK_VERIFIED
 
 
 def test_polars_implemented_superset_production_safe(loaded):

@@ -91,14 +91,14 @@ def test_div_or_null_really_returns_null():
     ],
 )
 def test_misleading_or_experimental_ops_are_not_daily(canonical):
-    assert classify_canonical(canonical) == "research"
+    assert classify_canonical(canonical) != "daily"
 
 
-def test_audited_ops_remain_daily():
-    assert classify_canonical("ts_product") == "daily"
-    assert classify_canonical("ts_mad") == "daily"
-    assert classify_canonical("group_percentile") == "daily"
-    assert classify_canonical("div_or_null") == "daily"
+def test_audited_nonproduction_ops_remain_fail_closed():
+    assert classify_canonical("ts_product") == "extended"
+    assert classify_canonical("ts_mad") == "extended"
+    assert classify_canonical("group_percentile") == "extended"
+    assert classify_canonical("div_or_null") != "daily"
 
 
 def test_nested_delay_and_rolling_lookback_is_additive():

@@ -56,6 +56,8 @@ def test_flex_rolling_matches_pandas(name: str):
 def test_expanding_ops_match_pandas(name: str):
     op_p = OperatorRegistry.get(name, backend="polars")
     op_n = OperatorRegistry.get(name, backend="pandas_numpy")
+    if op_p is None or op_n is None:
+        pytest.skip(f"{name} is not an active dual-backend primitive")
     x = _panel()
     pl_x = pl.from_pandas(x.reset_index(names=["date"]))
     _assert_close(op_p.calculate(pl_x), op_n.calculate(x))

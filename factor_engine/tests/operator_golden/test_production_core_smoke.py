@@ -29,6 +29,13 @@ _SKIP_SMOKE: frozenset[str] = frozenset(
         "coalesce",
         "protected_div",
         "safe_div_null",
+        "period_average",
+        "period_change",
+        "period_cagr",
+        "quarter_from_cumulative",
+        "ttm_from_quarterly",
+        "ttm_from_cumulative",
+        "yoy_by_period",
     }
 )
 

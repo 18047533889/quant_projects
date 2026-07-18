@@ -1,5 +1,5 @@
 {
-  "operator_count": 7,
+  "operator_count": 11,
   "operators": {
     "ADX": {
       "canonical": "ADX",
@@ -19,6 +19,7 @@
       ],
       "minimum_history": 28,
       "missing_policy": "carry_state_emit_null",
+      "segmented_execution_supported": true,
       "semantic_version": "2.0",
       "state_schema_version": "adx_state.v1"
     },
@@ -33,6 +34,7 @@
       "dependencies": [],
       "minimum_history": 14,
       "missing_policy": "carry_state_emit_null",
+      "segmented_execution_supported": true,
       "semantic_version": "2.0",
       "state_schema_version": "atr_wilder_state.v1"
     },
@@ -51,6 +53,7 @@
       ],
       "minimum_history": 1,
       "missing_policy": "carry_state_emit_null",
+      "segmented_execution_supported": true,
       "semantic_version": "2.0",
       "state_schema_version": "macd_hist_state.v1"
     },
@@ -67,6 +70,7 @@
       ],
       "minimum_history": 1,
       "missing_policy": "carry_state_emit_null",
+      "segmented_execution_supported": true,
       "semantic_version": "2.0",
       "state_schema_version": "macd_line_state.v1"
     },
@@ -85,6 +89,7 @@
       ],
       "minimum_history": 1,
       "missing_policy": "carry_state_emit_null",
+      "segmented_execution_supported": true,
       "semantic_version": "2.0",
       "state_schema_version": "macd_signal_state.v1"
     },
@@ -100,6 +105,7 @@
       "dependencies": [],
       "minimum_history": 14,
       "missing_policy": "carry_state_emit_null",
+      "segmented_execution_supported": true,
       "semantic_version": "2.0",
       "state_schema_version": "rsi_wilder_state.v1"
     },
@@ -113,8 +119,53 @@
       "dependencies": [],
       "minimum_history": 1,
       "missing_policy": "carry_state_emit_null",
+      "segmented_execution_supported": true,
       "semantic_version": "1.0",
       "state_schema_version": "ema_state.v1"
+    },
+    "ts_ewm_corr": {
+      "canonical": "ts_ewm_corr",
+      "checkpoint_fields": [],
+      "checkpoint_required_for_segmented": false,
+      "dependencies": [],
+      "minimum_history": 2,
+      "missing_policy": "recursive_state",
+      "segmented_execution_supported": false,
+      "semantic_version": "2.0",
+      "state_schema_version": "unsupported.v1"
+    },
+    "ts_ewm_cov": {
+      "canonical": "ts_ewm_cov",
+      "checkpoint_fields": [],
+      "checkpoint_required_for_segmented": false,
+      "dependencies": [],
+      "minimum_history": 2,
+      "missing_policy": "recursive_state",
+      "segmented_execution_supported": false,
+      "semantic_version": "2.0",
+      "state_schema_version": "unsupported.v1"
+    },
+    "ts_ewm_std": {
+      "canonical": "ts_ewm_std",
+      "checkpoint_fields": [],
+      "checkpoint_required_for_segmented": false,
+      "dependencies": [],
+      "minimum_history": 2,
+      "missing_policy": "recursive_state",
+      "segmented_execution_supported": false,
+      "semantic_version": "2.0",
+      "state_schema_version": "unsupported.v1"
+    },
+    "ts_ewm_var": {
+      "canonical": "ts_ewm_var",
+      "checkpoint_fields": [],
+      "checkpoint_required_for_segmented": false,
+      "dependencies": [],
+      "minimum_history": 2,
+      "missing_policy": "recursive_state",
+      "segmented_execution_supported": false,
+      "semantic_version": "2.0",
+      "state_schema_version": "unsupported.v1"
     }
   },
   "schema_version": "stateful_operator_manifest.v1"

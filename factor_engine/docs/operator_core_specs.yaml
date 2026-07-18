@@ -1,49 +1,3 @@
-- name: ATR_WILDER
-  scope: time_series
-  frequency: any
-  input_fields:
-  - high
-  - low
-  - close
-  - window
-  output_type: series
-  pit_safe: true
-  includes_current: true
-  lookback: null
-  min_periods: 2
-  nan_policy: propagate
-  status: research
-  allow_in_production: true
-  backends:
-  - pandas_numpy
-  - polars
-  description: Wilder 平均真实波幅
-  execution_kind: stateful
-  production_policy: allowed
-  lowering_available: false
-  dual_backend_target: true
-- name: RSI_WILDER
-  scope: time_series
-  frequency: any
-  input_fields:
-  - x
-  - window
-  output_type: series
-  pit_safe: true
-  includes_current: true
-  lookback: null
-  min_periods: 2
-  nan_policy: propagate
-  status: research
-  allow_in_production: true
-  backends:
-  - pandas_numpy
-  - polars
-  description: Wilder 相对强弱指数
-  execution_kind: stateful
-  production_policy: allowed
-  lowering_available: false
-  dual_backend_target: true
 - name: abs
   scope: elementwise
   frequency: any
@@ -51,11 +5,14 @@
   - x
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -71,11 +28,14 @@
   input_fields: []
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -91,100 +51,19 @@
   input_fields: []
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
   - polars
   description: Basic runtime operator
-  execution_kind: primitive
-  production_policy: allowed
-  lowering_available: false
-  dual_backend_target: true
-- name: c_count
-  scope: cross_sectional
-  frequency: any
-  input_fields:
-  - x
-  output_type: series
-  pit_safe: true
-  includes_current: true
-  lookback: null
-  min_periods: null
-  nan_policy: propagate
-  status: research
-  allow_in_production: true
-  backends:
-  - pandas_numpy
-  - polars
-  description: 计算截面非空计数
-  execution_kind: primitive
-  production_policy: allowed
-  lowering_available: false
-  dual_backend_target: true
-- name: c_mean
-  scope: cross_sectional
-  frequency: any
-  input_fields:
-  - x
-  output_type: series
-  pit_safe: true
-  includes_current: true
-  lookback: null
-  min_periods: null
-  nan_policy: propagate
-  status: research
-  allow_in_production: true
-  backends:
-  - pandas_numpy
-  - polars
-  description: 计算截面均值
-  execution_kind: primitive
-  production_policy: allowed
-  lowering_available: false
-  dual_backend_target: true
-- name: c_std
-  scope: cross_sectional
-  frequency: any
-  input_fields:
-  - x
-  output_type: series
-  pit_safe: true
-  includes_current: true
-  lookback: null
-  min_periods: null
-  nan_policy: propagate
-  status: research
-  allow_in_production: true
-  backends:
-  - pandas_numpy
-  - polars
-  description: 计算截面标准差
-  execution_kind: primitive
-  production_policy: allowed
-  lowering_available: false
-  dual_backend_target: true
-- name: c_sum
-  scope: cross_sectional
-  frequency: any
-  input_fields:
-  - x
-  output_type: series
-  pit_safe: true
-  includes_current: true
-  lookback: null
-  min_periods: null
-  nan_policy: propagate
-  status: research
-  allow_in_production: true
-  backends:
-  - pandas_numpy
-  - polars
-  description: 计算截面求和
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
@@ -196,11 +75,14 @@
   - x
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -219,11 +101,14 @@
   - hi
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -241,16 +126,43 @@
   - y
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
   - polars
   description: 返回第一个非 NaN 值
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
+- name: cs_count
+  scope: cross_sectional
+  frequency: any
+  input_fields:
+  - x
+  output_type: series
+  pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 计算截面非空计数
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
@@ -262,11 +174,14 @@
   - x
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -283,15 +198,17 @@
   - x
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
-  - polars
   description: 截面中位绝对偏差（MAD，广播到各列）
   execution_kind: primitive
   production_policy: allowed
@@ -304,16 +221,42 @@
   - x
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  description: MAD 稳健 Z-Score：(x - median) / MAD
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
+- name: cs_mean
+  scope: cross_sectional
+  frequency: any
+  input_fields:
+  - x
+  output_type: series
+  pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
   - polars
-  description: MAD 稳健 Z-Score：(x - median) / MAD
+  description: 计算截面均值
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
@@ -325,16 +268,66 @@
   - x
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
   - polars
   description: 截面百分位排名（同 rank_pct）
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
+- name: cs_std
+  scope: cross_sectional
+  frequency: any
+  input_fields:
+  - x
+  output_type: series
+  pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  description: 计算截面标准差
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
+- name: cs_sum
+  scope: cross_sectional
+  frequency: any
+  input_fields:
+  - x
+  output_type: series
+  pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 计算截面求和
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
@@ -345,11 +338,14 @@
   input_fields: []
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -367,11 +363,14 @@
   - y
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -388,37 +387,19 @@
   - x
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
   - polars
   description: 计算e的x次方
-  execution_kind: primitive
-  production_policy: allowed
-  lowering_available: false
-  dual_backend_target: true
-- name: ffill
-  scope: elementwise
-  frequency: any
-  input_fields:
-  - x
-  output_type: series
-  pit_safe: true
-  includes_current: true
-  lookback: null
-  min_periods: null
-  nan_policy: ffill_only
-  status: research
-  allow_in_production: true
-  backends:
-  - pandas_numpy
-  - polars
-  description: 前向填充（用前值填充NaN）
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
@@ -431,11 +412,14 @@
   - value
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -452,11 +436,14 @@
   - x
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -474,16 +461,69 @@
   - y
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
   - polars
   description: ge comparison with symmetric scalar broadcasting
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
+- name: group_count
+  scope: group
+  frequency: any
+  input_fields:
+  - x
+  - group
+  output_type: series
+  pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 计算组内非空样本数
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
+- name: group_max
+  scope: group
+  frequency: any
+  input_fields:
+  - x
+  - group
+  output_type: series
+  pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 计算组内最大值
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
@@ -496,16 +536,44 @@
   - group
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
   - polars
   description: 计算组内均值
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
+- name: group_min
+  scope: group
+  frequency: any
+  input_fields:
+  - x
+  - group
+  output_type: series
+  pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 计算组内最小值
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
@@ -518,15 +586,17 @@
   - group
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
-  - polars
   description: 在指定分组内进行去均值处理 (x - group_mean)
   execution_kind: primitive
   production_policy: allowed
@@ -540,15 +610,17 @@
   - group
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
-  - polars
   description: 在指定分组内对股票进行归一化到[0,1]
   execution_kind: primitive
   production_policy: allowed
@@ -562,11 +634,14 @@
   - group
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -584,16 +659,44 @@
   - group
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
   - polars
   description: 计算组内标准差
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
+- name: group_sum
+  scope: group
+  frequency: any
+  input_fields:
+  - x
+  - group
+  output_type: series
+  pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 计算组内求和
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
@@ -607,15 +710,17 @@
   - a
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
-  - polars
   description: 在指定分组内进行缩尾处理，将超出分位数a的值截断
   execution_kind: primitive
   production_policy: allowed
@@ -629,11 +734,14 @@
   - group
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -651,11 +759,14 @@
   - y
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -671,11 +782,14 @@
   input_fields: []
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -692,11 +806,14 @@
   - x
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -706,23 +823,74 @@
   production_policy: allowed
   lowering_available: false
   dual_backend_target: true
-- name: is_nan
+- name: is_infinite
   scope: elementwise
   frequency: any
   input_fields:
   - x
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
   - polars
-  description: 判断是否为NaN
+  description: 判断是否为 ±Inf
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
+- name: is_not_null
+  scope: elementwise
+  frequency: any
+  input_fields:
+  - x
+  output_type: series
+  pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 判断是否非 NULL
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
+- name: is_null
+  scope: elementwise
+  frequency: any
+  input_fields:
+  - x
+  output_type: series
+  pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 判断是否为 NULL/缺失
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
@@ -735,11 +903,14 @@
   - y
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -756,11 +927,14 @@
   - x
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -770,23 +944,26 @@
   production_policy: allowed
   lowering_available: false
   dual_backend_target: true
-- name: log_returns
-  scope: time_series
+- name: log_abs
+  scope: elementwise
   frequency: any
   input_fields:
   - x
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
-  min_periods: 2
+  min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
   - polars
-  description: 对数收益率 ln(P_t / P_{t-1})
+  description: 返回log(abs(x))
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
@@ -799,11 +976,14 @@
   - y
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -821,11 +1001,14 @@
   - y
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -843,11 +1026,14 @@
   - y
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -863,38 +1049,19 @@
   input_fields: []
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
   - polars
   description: Basic runtime operator
-  execution_kind: primitive
-  production_policy: allowed
-  lowering_available: false
-  dual_backend_target: true
-- name: nan_to_num
-  scope: elementwise
-  frequency: any
-  input_fields:
-  - x
-  - num
-  output_type: series
-  pit_safe: true
-  includes_current: true
-  lookback: null
-  min_periods: null
-  nan_policy: propagate
-  status: research
-  allow_in_production: true
-  backends:
-  - pandas_numpy
-  - polars
-  description: NaN转数值
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
@@ -907,11 +1074,14 @@
   - y
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -928,11 +1098,14 @@
   - x
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -949,15 +1122,17 @@
   - x
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
-  - polars
   description: 归一化到[0, 1]
   execution_kind: primitive
   production_policy: allowed
@@ -969,11 +1144,14 @@
   input_fields: []
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -989,16 +1167,103 @@
   input_fields: []
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
   - polars
   description: Basic runtime operator
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
+- name: period_average
+  scope: fundamental_period
+  frequency: any
+  input_fields:
+  - x
+  - period_id
+  - periods
+  - require_consecutive
+  output_type: series
+  pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
+  includes_current: true
+  lookback: null
+  min_periods: 1
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 按连续报告期计算平均值
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
+- name: period_cagr
+  scope: fundamental_period
+  frequency: any
+  input_fields:
+  - x
+  - period_id
+  - periods
+  - periods_per_year
+  - sign_policy
+  - require_consecutive
+  output_type: series
+  pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
+  includes_current: true
+  lookback: null
+  min_periods: 2
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 按连续报告期计算复合增长率
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
+- name: period_change
+  scope: fundamental_period
+  frequency: any
+  input_fields:
+  - x
+  - period_id
+  - periods
+  - mode
+  - require_consecutive
+  output_type: series
+  pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
+  includes_current: true
+  lookback: null
+  min_periods: 1
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 按连续报告期计算变化
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
@@ -1011,11 +1276,14 @@
   - y
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -1035,6 +1303,9 @@
   - default
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
@@ -1043,51 +1314,34 @@
   allow_in_production: true
   backends:
   - pandas_numpy
-  - polars
   description: 支持 Series/标量双向广播的安全除法
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
   dual_backend_target: true
-- name: protected_log
-  scope: elementwise
+- name: quarter_from_cumulative
+  scope: fundamental_period
   frequency: any
   input_fields:
   - x
-  - epsilon
+  - period_id
+  - fiscal_quarter
+  - revision_policy
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
-  min_periods: null
+  min_periods: 1
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
   - polars
-  description: 安全对数：log(max(x, epsilon))
-  execution_kind: primitive
-  production_policy: allowed
-  lowering_available: false
-  dual_backend_target: true
-- name: protected_sqrt
-  scope: elementwise
-  frequency: any
-  input_fields:
-  - x
-  output_type: series
-  pit_safe: true
-  includes_current: true
-  lookback: null
-  min_periods: null
-  nan_policy: propagate
-  status: research
-  allow_in_production: true
-  backends:
-  - pandas_numpy
-  - polars
-  description: 安全平方根：sqrt(max(x, 0))
+  description: strict cumulative-to-quarter conversion
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
@@ -1099,60 +1353,19 @@
   - x
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
   - polars
   description: 截面 0-1 排名（单有效值 → 0.5）；pandas 百分位排名见 rank_pct
-  execution_kind: primitive
-  production_policy: allowed
-  lowering_available: false
-  dual_backend_target: true
-- name: rank_pct
-  scope: cross_sectional
-  frequency: any
-  input_fields:
-  - x
-  output_type: series
-  pit_safe: true
-  includes_current: true
-  lookback: null
-  min_periods: null
-  nan_policy: propagate
-  status: research
-  allow_in_production: true
-  backends:
-  - pandas_numpy
-  - polars
-  description: 截面 pandas 百分位排名 rank/count
-  execution_kind: primitive
-  production_policy: allowed
-  lowering_available: false
-  dual_backend_target: true
-- name: rolling_beta
-  scope: time_series
-  frequency: any
-  input_fields:
-  - ret
-  - benchmark_ret
-  - window
-  output_type: series
-  pit_safe: true
-  includes_current: true
-  lookback: null
-  min_periods: 2
-  nan_policy: propagate
-  status: research
-  allow_in_production: true
-  backends:
-  - pandas_numpy
-  - polars
-  description: 滚动 Beta：Cov(ret, benchmark_ret) / Var(benchmark_ret)
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
@@ -1166,38 +1379,19 @@
   - epsilon
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
   - polars
-  description: 比率除法：numerator/denominator；NULL 或 |denom|<=epsilon → NULL
-  execution_kind: primitive
-  production_policy: allowed
-  lowering_available: false
-  dual_backend_target: true
-- name: scale
-  scope: cross_sectional
-  frequency: any
-  input_fields:
-  - x
-  - to
-  output_type: series
-  pit_safe: true
-  includes_current: true
-  lookback: null
-  min_periods: null
-  nan_policy: propagate
-  status: research
-  allow_in_production: true
-  backends:
-  - pandas_numpy
-  - polars
-  description: 缩放数据使sum(abs(x))=指定值（与c_scale相同）
+  description: finite safe division returning null for near-zero denominator
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
@@ -1209,16 +1403,66 @@
   - x
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
   - polars
   description: 返回符号：正数返回1，负数返回-1，零返回0
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
+- name: signed_log
+  scope: elementwise
+  frequency: any
+  input_fields:
+  - x
+  output_type: series
+  pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 符号对数：sign(x) * log(|x|)
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
+- name: signed_sqrt
+  scope: elementwise
+  frequency: any
+  input_fields:
+  - x
+  output_type: series
+  pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  description: '保留符号开方: sign(x)*sqrt(|x|)'
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
@@ -1230,11 +1474,14 @@
   - x
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -1250,16 +1497,43 @@
   input_fields: []
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
   - polars
   description: Basic runtime operator
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
+- name: tanh
+  scope: elementwise
+  frequency: any
+  input_fields:
+  - x
+  output_type: series
+  pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: 计算双曲正切值
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
@@ -1273,11 +1547,14 @@
   - lag
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: 3
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -1296,11 +1573,14 @@
   - window
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: 2
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -1319,11 +1599,14 @@
   - window
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: 1
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -1342,39 +1625,20 @@
   - window
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: 1
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
   - polars
   description: 滚动协方差 (与m_cov相同)
   execution_kind: primitive
-  production_policy: allowed
-  lowering_available: false
-  dual_backend_target: true
-- name: ts_decay_linear
-  scope: time_series
-  frequency: any
-  input_fields:
-  - x
-  - window
-  output_type: series
-  pit_safe: true
-  includes_current: true
-  lookback: null
-  min_periods: 1
-  nan_policy: propagate
-  status: research
-  allow_in_production: true
-  backends:
-  - pandas_numpy
-  - polars
-  description: 线性加权滚动平均
-  execution_kind: stateful
   production_policy: allowed
   lowering_available: false
   dual_backend_target: true
@@ -1386,11 +1650,14 @@
   - n
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -1408,11 +1675,14 @@
   - n
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -1422,25 +1692,27 @@
   production_policy: allowed
   lowering_available: false
   dual_backend_target: true
-- name: ts_ema
+- name: ts_log_return
   scope: time_series
   frequency: any
   input_fields:
   - x
-  - span
+  - d
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
-  min_periods: 1
+  min_periods: 2
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
-  - polars
-  description: 计算n期指数移动平均
-  execution_kind: stateful
+  description: d 期对数收益率 ln(x_t / x_{t-d})
+  execution_kind: primitive
   production_policy: allowed
   lowering_available: false
   dual_backend_target: true
@@ -1452,11 +1724,14 @@
   - window
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: 1
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -1474,11 +1749,14 @@
   - window
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: 1
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -1496,11 +1774,14 @@
   - window
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: 1
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -1518,11 +1799,14 @@
   - window
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: 1
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -1540,11 +1824,14 @@
   - d
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -1562,15 +1849,17 @@
   - window
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: 1
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
-  - polars
   description: 滚动排名 (与m_rank相同)
   execution_kind: primitive
   production_policy: allowed
@@ -1585,15 +1874,17 @@
   - ann_factor
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: 2
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
-  - polars
   description: 滚动夏普：mean/std * sqrt(ann_factor)
   execution_kind: primitive
   production_policy: allowed
@@ -1607,11 +1898,14 @@
   - window
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: 1
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -1629,11 +1923,14 @@
   - window
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: 1
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -1651,11 +1948,14 @@
   - window
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: 1
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -1673,11 +1973,14 @@
   - window
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: 1
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -1687,47 +1990,57 @@
   production_policy: allowed
   lowering_available: false
   dual_backend_target: true
-- name: volatility
-  scope: time_series
+- name: ttm_from_cumulative
+  scope: fundamental_period
   frequency: any
   input_fields:
   - x
-  - window
+  - period_id
+  - fiscal_quarter
+  - revision_policy
   output_type: series
   pit_safe: true
-  includes_current: true
-  lookback: null
-  min_periods: 2
-  nan_policy: propagate
-  status: research
-  allow_in_production: true
-  backends:
-  - pandas_numpy
-  - polars
-  description: 波动率（年化）
-  execution_kind: primitive
-  production_policy: allowed
-  lowering_available: false
-  dual_backend_target: true
-- name: vwap
-  scope: time_series
-  frequency: any
-  input_fields:
-  - price
-  - volume
-  - window
-  output_type: series
-  pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: 1
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
   - polars
-  description: 成交量加权平均价
+  description: strict cumulative-to-TTM
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
+- name: ttm_from_quarterly
+  scope: fundamental_period
+  frequency: any
+  input_fields:
+  - x
+  - period_id
+  - periods
+  - require_consecutive
+  - revision_policy
+  output_type: series
+  pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
+  includes_current: true
+  lookback: null
+  min_periods: 1
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  description: strict consecutive-period TTM
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
@@ -1741,11 +2054,14 @@
   - v2
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
@@ -1764,16 +2080,47 @@
   - upper
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  description: 缩尾处理
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: true
+- name: yoy_by_period
+  scope: fundamental_period
+  frequency: any
+  input_fields:
+  - x
+  - period_id
+  - periods
+  - denominator
+  - require_consecutive
+  - revision_policy
+  output_type: series
+  pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
+  includes_current: true
+  lookback: null
+  min_periods: 5
+  nan_policy: propagate
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy
   - polars
-  description: 缩尾处理
+  description: strict fiscal-period growth
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
@@ -1785,11 +2132,14 @@
   - x
   output_type: series
   pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
   includes_current: true
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: research
+  status: production
   allow_in_production: true
   backends:
   - pandas_numpy

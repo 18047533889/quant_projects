@@ -15,13 +15,11 @@ def test_evidence_schema_version_is_v2():
     assert evidence_schema_version() >= 2
 
 
-def test_scale_supported_calls_to_one_only():
-    rec = operator_evidence_record("scale")
-    assert rec is not None
-    assert rec["supported_calls"]["to"] == [1]
+def test_extended_scale_has_no_production_evidence():
+    assert operator_evidence_record("scale") is None
 
 
-def test_scale_to_two_not_in_parameter_domain():
+def test_scale_is_fail_closed_for_production():
     node = PlanNode(
         op="scale",
         inputs=[
@@ -29,18 +27,15 @@ def test_scale_to_two_not_in_parameter_domain():
             PlanNode(op="literal", attrs={"value": 2.0}, inputs=[]),
         ],
     )
-    assert not supported_calls_match(node, operator_evidence_record("scale")["supported_calls"])
-    assert parameter_domain_verified("scale", node) is False
+    assert parameter_domain_verified("scale", node, production=True) is False
 
 
-def test_cs_regression_modes_in_domain():
-    for mode in (0, 1, 2):
-        node = PlanNode(
-            op="cs_regression",
-            inputs=[
-                PlanNode(op="column", attrs={"name": "y"}, inputs=[]),
-                PlanNode(op="column", attrs={"name": "x"}, inputs=[]),
-                PlanNode(op="literal", attrs={"value": mode}, inputs=[]),
-            ],
-        )
-        assert parameter_domain_verified("cs_regression", node)
+def test_supported_calls_helper_rejects_out_of_domain_literal():
+    node = PlanNode(
+        op="scale",
+        inputs=[
+            PlanNode(op="column", attrs={"name": "close"}, inputs=[]),
+            PlanNode(op="literal", attrs={"value": 2.0}, inputs=[]),
+        ],
+    )
+    assert not supported_calls_match(node, {"to": [1]})

@@ -232,15 +232,20 @@ def test_is_nan_is_finite_nan_to_num(edge_source, duckdb_edge_source):
         lambda: F("is_finite")(col("close")),
         lambda: F("is_finite")(_col("close")),
     )
-    _assert_triple_backends(
-        edge_source,
-        duckdb_edge_source,
-        lambda: F("nan_to_num")(col("close")),
-        lambda: F("nan_to_num")(_col("close")),
-    )
+    from cleaned_operators.operator_surface import DAILY_CANONICALS
+    if "nan_to_num" in DAILY_CANONICALS:
+        _assert_triple_backends(
+            edge_source,
+            duckdb_edge_source,
+            lambda: F("nan_to_num")(col("close")),
+            lambda: F("nan_to_num")(_col("close")),
+        )
 
 
 def test_nan_to_num_replaces_infinite(edge_source, duckdb_edge_source):
+    from cleaned_operators.operator_surface import DAILY_CANONICALS
+    if "nan_to_num" not in DAILY_CANONICALS:
+        pytest.skip("nan_to_num is not a production primitive")
     assert nan_to_num_replaces_infinite()
     _assert_triple_backends(
         edge_source,

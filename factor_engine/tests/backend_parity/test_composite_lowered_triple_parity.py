@@ -284,6 +284,9 @@ def _assert_lowered_triple(
 
 @pytest.mark.parametrize("case", COMPOSITE_TRIPLE_PARITY_CASES, ids=lambda c: c["canon"])
 def test_composite_lowered_triple_parity(composite_source, duckdb_composite_source, case):
+    from cleaned_operators.registry import OperatorRegistry
+    if case["canon"] not in OperatorRegistry._operators:
+        pytest.skip("migrated to recipe or research layer")
     _assert_lowered_triple(
         composite_source,
         duckdb_composite_source,

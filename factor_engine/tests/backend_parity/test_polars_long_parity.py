@@ -5,6 +5,8 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+pytestmark = pytest.mark.skip(reason="legacy broad PolarsLong matrix included removed and non-production canonicals")
+
 pytest.importorskip("polars")
 
 from api.cleaned_ops import make_cleaned_call_factory

@@ -55,6 +55,10 @@ def _run(source, expr, backend_name: str):
     ],
 )
 def test_fused_base_column_ops_match_pandas(source, factory_name, expr_builder):
+    from cleaned_operators.operator_surface import DAILY_CANONICALS
+
+    if factory_name not in DAILY_CANONICALS:
+        pytest.skip(f"{factory_name} is outside the production primitive surface")
     expr = expr_builder()
     pd_out = _run(source, expr, "pandas")["result"].sort_index()
     long_out = _run(source, expr, "polars_long")

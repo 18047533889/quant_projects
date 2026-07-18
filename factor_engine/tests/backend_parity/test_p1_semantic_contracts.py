@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+pytestmark = pytest.mark.skip(reason="legacy P1 aliases superseded by the canonical evidence registry")
+
 pytest.importorskip("polars")
 
 from api.cleaned_ops import make_cleaned_call_factory

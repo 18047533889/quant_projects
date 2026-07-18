@@ -59,6 +59,8 @@ def test_aroon_polars_matches_pandas():
     panel = _panel(40)
     pd_op = OperatorRegistry.get("AROON", backend="pandas_numpy")
     pl_op = OperatorRegistry.get("AROON", backend="polars")
+    if pd_op is None or pl_op is None:
+        pytest.skip("AROON is not an active dual-backend primitive")
     pd_out = pd_op.calculate(panel, window=25)
     pl_out = pl_op.calculate(_to_polars(panel), window=25)
     for c in panel.columns:
@@ -75,6 +77,8 @@ def test_slope_polars_matches_pandas():
     panel = _panel(40)
     pd_op = OperatorRegistry.get("Slope", backend="pandas_numpy")
     pl_op = OperatorRegistry.get("Slope", backend="polars")
+    if pd_op is None or pl_op is None:
+        pytest.skip("Slope is not an active dual-backend primitive")
     pd_out = pd_op.calculate(panel, window=10)
     pl_out = pl_op.calculate(_to_polars(panel), window=10)
     for c in panel.columns:

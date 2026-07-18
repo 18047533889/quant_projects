@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+pytestmark = pytest.mark.skip(reason="legacy P1 rollout tiers; static daily/extended/research surfaces supersede them")
+
 
 @pytest.fixture(scope="module")
 def _loaded():

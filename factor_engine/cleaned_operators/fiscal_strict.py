@@ -16,6 +16,13 @@ from cleaned_operators.overhaul.base import (
     EPS, Spec, aligned_pd, finite_pd, frame_pd, nonnegative_int,
     pl, pl_base_with, pl_cols, positive_int, register_specs,
 )
+from cleaned_operators.overhaul.fundamental import (
+    pl_period_lag,
+    pl_quarter_from_cumulative,
+    pl_ttm_from_cumulative,
+    pl_ttm_from_quarterly,
+    pl_yoy_by_period,
+)
 
 
 def period_ordinal(value: Any) -> int | None:
@@ -67,18 +74,6 @@ def pd_period_lag(x, period_id, periods=1, revision_policy="latest_available", *
     if policy not in {"latest_available", "first_available"}:
         raise ValueError("revision_policy must be latest_available or first_available")
     return frame_pd(x, _lag_array(x.to_numpy(dtype=float), period_id.to_numpy(dtype=object), lag, policy))
-
-
-def pl_period_lag(x, period_id, periods=1, revision_policy="latest_available", **_):
-    lag = nonnegative_int(periods, "periods")
-    policy = str(revision_policy).lower()
-    if policy not in {"latest_available", "first_available"}:
-        raise ValueError("revision_policy must be latest_available or first_available")
-    cols = [c for c in pl_cols(x) if c in period_id.columns]
-    values = np.column_stack([x[c].cast(pl.Float64, strict=False).to_numpy() for c in cols])
-    periods_array = np.column_stack([np.asarray(period_id[c].to_list(), dtype=object) for c in cols])
-    result = _lag_array(values, periods_array, lag, policy)
-    return pl_base_with(x, {c: pl.Series(c, result[:, i]) for i, c in enumerate(cols)})
 
 
 def _ordinal_lag(period_id, lag, policy):
@@ -151,10 +146,10 @@ def pd_yoy_by_period(x, period_id, periods=4, denominator="signed", require_cons
 def register() -> None:
     register_specs({
         "period_lag": Spec("fundamental_period", ["x", "period_id", "periods", "revision_policy"], "exact fiscal ordinal lag with visible revision policy", pd_period_lag, pl_period_lag),
-        "quarter_from_cumulative": Spec("fundamental_period", ["x", "period_id", "fiscal_quarter", "revision_policy"], "strict cumulative-to-quarter conversion", pd_quarter_from_cumulative),
-        "ttm_from_quarterly": Spec("fundamental_period", ["x", "period_id", "periods", "require_consecutive", "revision_policy"], "strict consecutive-period TTM", pd_ttm_from_quarterly),
-        "ttm_from_cumulative": Spec("fundamental_period", ["x", "period_id", "fiscal_quarter", "revision_policy"], "strict cumulative-to-TTM", pd_ttm_from_cumulative),
-        "yoy_by_period": Spec("fundamental_period", ["x", "period_id", "periods", "denominator", "require_consecutive", "revision_policy"], "strict fiscal-period growth", pd_yoy_by_period),
+        "quarter_from_cumulative": Spec("fundamental_period", ["x", "period_id", "fiscal_quarter", "revision_policy"], "strict cumulative-to-quarter conversion", pd_quarter_from_cumulative, pl_quarter_from_cumulative),
+        "ttm_from_quarterly": Spec("fundamental_period", ["x", "period_id", "periods", "require_consecutive", "revision_policy"], "strict consecutive-period TTM", pd_ttm_from_quarterly, pl_ttm_from_quarterly),
+        "ttm_from_cumulative": Spec("fundamental_period", ["x", "period_id", "fiscal_quarter", "revision_policy"], "strict cumulative-to-TTM", pd_ttm_from_cumulative, pl_ttm_from_cumulative),
+        "yoy_by_period": Spec("fundamental_period", ["x", "period_id", "periods", "denominator", "require_consecutive", "revision_policy"], "strict fiscal-period growth", pd_yoy_by_period, pl_yoy_by_period),
     })
 
 

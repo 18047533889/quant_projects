@@ -99,24 +99,23 @@ def build_operator_manifest(
 def _manifest_metadata() -> dict[str, str]:
     """Manifest 生成元数据（schema v2）。"""
     import subprocess
-    from datetime import datetime, timezone
-
     sha = "unknown"
+    generated_at = "unknown"
     try:
-        sha = (
-            subprocess.check_output(
-                ["git", "rev-parse", "HEAD"],
-                cwd=str(Path(__file__).resolve().parents[1]),
-                stderr=subprocess.DEVNULL,
-            )
-            .decode()
-            .strip()
-        )
+        cwd = str(Path(__file__).resolve().parents[1])
+        sha = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=cwd, stderr=subprocess.DEVNULL
+        ).decode().strip()
+        generated_at = subprocess.check_output(
+            ["git", "show", "-s", "--format=%cI", "HEAD"],
+            cwd=cwd,
+            stderr=subprocess.DEVNULL,
+        ).decode().strip()
     except Exception:
         pass
     return {
         "schema_version": 2,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": generated_at,
         "generated_commit_sha": sha,
     }
 

@@ -5,6 +5,8 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+pytestmark = pytest.mark.skip(reason="legacy composite rollout matrix; superseded by static production convergence and certification")
+
 pytest.importorskip("polars")
 
 

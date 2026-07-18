@@ -5,30 +5,20 @@
     "abs",
     "add",
     "and_",
-    "c_count",
-    "c_mean",
-    "c_std",
-    "c_sum",
     "ceil",
     "clip",
     "coalesce",
-    "count",
+    "cs_count",
     "cs_demean",
     "cs_mad",
     "cs_mad_zscore",
+    "cs_mean",
     "cs_pct_rank",
-    "cum_delta",
-    "cum_max",
-    "cum_min",
-    "cum_prod",
-    "cum_sum",
-    "div_or_default",
+    "cs_std",
+    "cs_sum",
     "divide",
     "eq",
     "exp",
-    "expanding_mean",
-    "expanding_sum",
-    "ffill",
     "fillna_const",
     "floor",
     "ge",
@@ -38,7 +28,6 @@
     "group_min",
     "group_neutralize",
     "group_normalize",
-    "group_percentile",
     "group_rank",
     "group_std",
     "group_sum",
@@ -48,43 +37,41 @@
     "inverse",
     "is_finite",
     "is_infinite",
-    "is_nan",
     "is_not_null",
     "is_null",
     "le",
     "log",
     "log_abs",
-    "log_fill_invalid",
-    "log_returns",
     "lt",
     "maximum",
     "minimum",
     "multiply",
-    "nan_to_num",
     "ne",
     "neg",
     "normalize",
     "not_",
     "or_",
+    "period_average",
+    "period_cagr",
+    "period_change",
     "power",
     "protected_div",
-    "protected_log",
-    "protected_sqrt",
+    "quarter_from_cumulative",
     "rank",
-    "rank_pct",
     "safe_div_null",
-    "scale",
     "sign",
     "signed_log",
     "signed_sqrt",
     "sqrt",
     "subtract",
+    "tanh",
     "ts_autocorr",
     "ts_beta",
     "ts_corr",
     "ts_cov",
     "ts_delay",
     "ts_delta",
+    "ts_log_return",
     "ts_max",
     "ts_mean",
     "ts_median",
@@ -96,40 +83,31 @@
     "ts_sum",
     "ts_var",
     "ts_zscore",
-    "volatility",
-    "vwap",
+    "ttm_from_cumulative",
+    "ttm_from_quarterly",
     "where",
     "winsorize",
+    "yoy_by_period",
     "zscore"
   ],
   "polars_edge_verified": [
     "abs",
     "add",
     "and_",
-    "c_count",
-    "c_mean",
-    "c_std",
-    "c_sum",
     "ceil",
     "clip",
     "coalesce",
-    "count",
+    "cs_count",
     "cs_demean",
     "cs_mad",
     "cs_mad_zscore",
+    "cs_mean",
     "cs_pct_rank",
-    "cum_delta",
-    "cum_max",
-    "cum_min",
-    "cum_prod",
-    "cum_sum",
-    "div_or_default",
+    "cs_std",
+    "cs_sum",
     "divide",
     "eq",
     "exp",
-    "expanding_mean",
-    "expanding_sum",
-    "ffill",
     "fillna_const",
     "floor",
     "ge",
@@ -139,7 +117,6 @@
     "group_min",
     "group_neutralize",
     "group_normalize",
-    "group_percentile",
     "group_rank",
     "group_std",
     "group_sum",
@@ -149,43 +126,41 @@
     "inverse",
     "is_finite",
     "is_infinite",
-    "is_nan",
     "is_not_null",
     "is_null",
     "le",
     "log",
     "log_abs",
-    "log_fill_invalid",
-    "log_returns",
     "lt",
     "maximum",
     "minimum",
     "multiply",
-    "nan_to_num",
     "ne",
     "neg",
     "normalize",
     "not_",
     "or_",
+    "period_average",
+    "period_cagr",
+    "period_change",
     "power",
     "protected_div",
-    "protected_log",
-    "protected_sqrt",
+    "quarter_from_cumulative",
     "rank",
-    "rank_pct",
     "safe_div_null",
-    "scale",
     "sign",
     "signed_log",
     "signed_sqrt",
     "sqrt",
     "subtract",
+    "tanh",
     "ts_autocorr",
     "ts_beta",
     "ts_corr",
     "ts_cov",
     "ts_delay",
     "ts_delta",
+    "ts_log_return",
     "ts_max",
     "ts_mean",
     "ts_median",
@@ -197,40 +172,31 @@
     "ts_sum",
     "ts_var",
     "ts_zscore",
-    "volatility",
-    "vwap",
+    "ttm_from_cumulative",
+    "ttm_from_quarterly",
     "where",
     "winsorize",
+    "yoy_by_period",
     "zscore"
   ],
   "duckdb_reference_parity": [
     "abs",
     "add",
     "and_",
-    "c_count",
-    "c_mean",
-    "c_std",
-    "c_sum",
     "ceil",
     "clip",
     "coalesce",
-    "count",
+    "cs_count",
     "cs_demean",
     "cs_mad",
     "cs_mad_zscore",
+    "cs_mean",
     "cs_pct_rank",
-    "cum_delta",
-    "cum_max",
-    "cum_min",
-    "cum_prod",
-    "cum_sum",
-    "div_or_default",
+    "cs_std",
+    "cs_sum",
     "divide",
     "eq",
     "exp",
-    "expanding_mean",
-    "expanding_sum",
-    "ffill",
     "fillna_const",
     "floor",
     "ge",
@@ -240,7 +206,6 @@
     "group_min",
     "group_neutralize",
     "group_normalize",
-    "group_percentile",
     "group_rank",
     "group_std",
     "group_sum",
@@ -250,43 +215,41 @@
     "inverse",
     "is_finite",
     "is_infinite",
-    "is_nan",
     "is_not_null",
     "is_null",
     "le",
     "log",
     "log_abs",
-    "log_fill_invalid",
-    "log_returns",
     "lt",
     "maximum",
     "minimum",
     "multiply",
-    "nan_to_num",
     "ne",
     "neg",
     "normalize",
     "not_",
     "or_",
+    "period_average",
+    "period_cagr",
+    "period_change",
     "power",
     "protected_div",
-    "protected_log",
-    "protected_sqrt",
+    "quarter_from_cumulative",
     "rank",
-    "rank_pct",
     "safe_div_null",
-    "scale",
     "sign",
     "signed_log",
     "signed_sqrt",
     "sqrt",
     "subtract",
+    "tanh",
     "ts_autocorr",
     "ts_beta",
     "ts_corr",
     "ts_cov",
     "ts_delay",
     "ts_delta",
+    "ts_log_return",
     "ts_max",
     "ts_mean",
     "ts_median",
@@ -298,40 +261,31 @@
     "ts_sum",
     "ts_var",
     "ts_zscore",
-    "volatility",
-    "vwap",
+    "ttm_from_cumulative",
+    "ttm_from_quarterly",
     "where",
     "winsorize",
+    "yoy_by_period",
     "zscore"
   ],
   "duckdb_real_sql_verified": [
     "abs",
     "add",
     "and_",
-    "c_count",
-    "c_mean",
-    "c_std",
-    "c_sum",
     "ceil",
     "clip",
     "coalesce",
-    "count",
+    "cs_count",
     "cs_demean",
     "cs_mad",
     "cs_mad_zscore",
+    "cs_mean",
     "cs_pct_rank",
-    "cum_delta",
-    "cum_max",
-    "cum_min",
-    "cum_prod",
-    "cum_sum",
-    "div_or_default",
+    "cs_std",
+    "cs_sum",
     "divide",
     "eq",
     "exp",
-    "expanding_mean",
-    "expanding_sum",
-    "ffill",
     "fillna_const",
     "floor",
     "ge",
@@ -341,7 +295,6 @@
     "group_min",
     "group_neutralize",
     "group_normalize",
-    "group_percentile",
     "group_rank",
     "group_std",
     "group_sum",
@@ -351,43 +304,41 @@
     "inverse",
     "is_finite",
     "is_infinite",
-    "is_nan",
     "is_not_null",
     "is_null",
     "le",
     "log",
     "log_abs",
-    "log_fill_invalid",
-    "log_returns",
     "lt",
     "maximum",
     "minimum",
     "multiply",
-    "nan_to_num",
     "ne",
     "neg",
     "normalize",
     "not_",
     "or_",
+    "period_average",
+    "period_cagr",
+    "period_change",
     "power",
     "protected_div",
-    "protected_log",
-    "protected_sqrt",
+    "quarter_from_cumulative",
     "rank",
-    "rank_pct",
     "safe_div_null",
-    "scale",
     "sign",
     "signed_log",
     "signed_sqrt",
     "sqrt",
     "subtract",
+    "tanh",
     "ts_autocorr",
     "ts_beta",
     "ts_corr",
     "ts_cov",
     "ts_delay",
     "ts_delta",
+    "ts_log_return",
     "ts_max",
     "ts_mean",
     "ts_median",
@@ -399,40 +350,31 @@
     "ts_sum",
     "ts_var",
     "ts_zscore",
-    "volatility",
-    "vwap",
+    "ttm_from_cumulative",
+    "ttm_from_quarterly",
     "where",
     "winsorize",
+    "yoy_by_period",
     "zscore"
   ],
   "duckdb_edge_verified": [
     "abs",
     "add",
     "and_",
-    "c_count",
-    "c_mean",
-    "c_std",
-    "c_sum",
     "ceil",
     "clip",
     "coalesce",
-    "count",
+    "cs_count",
     "cs_demean",
     "cs_mad",
     "cs_mad_zscore",
+    "cs_mean",
     "cs_pct_rank",
-    "cum_delta",
-    "cum_max",
-    "cum_min",
-    "cum_prod",
-    "cum_sum",
-    "div_or_default",
+    "cs_std",
+    "cs_sum",
     "divide",
     "eq",
     "exp",
-    "expanding_mean",
-    "expanding_sum",
-    "ffill",
     "fillna_const",
     "floor",
     "ge",
@@ -442,7 +384,6 @@
     "group_min",
     "group_neutralize",
     "group_normalize",
-    "group_percentile",
     "group_rank",
     "group_std",
     "group_sum",
@@ -457,37 +398,36 @@
     "le",
     "log",
     "log_abs",
-    "log_fill_invalid",
-    "log_returns",
     "lt",
     "maximum",
     "minimum",
     "multiply",
-    "nan_to_num",
     "ne",
     "neg",
     "normalize",
     "not_",
     "or_",
+    "period_average",
+    "period_cagr",
+    "period_change",
     "power",
     "protected_div",
-    "protected_log",
-    "protected_sqrt",
+    "quarter_from_cumulative",
     "rank",
-    "rank_pct",
     "safe_div_null",
-    "scale",
     "sign",
     "signed_log",
     "signed_sqrt",
     "sqrt",
     "subtract",
+    "tanh",
     "ts_autocorr",
     "ts_beta",
     "ts_corr",
     "ts_cov",
     "ts_delay",
     "ts_delta",
+    "ts_log_return",
     "ts_max",
     "ts_mean",
     "ts_median",
@@ -499,40 +439,31 @@
     "ts_sum",
     "ts_var",
     "ts_zscore",
-    "volatility",
-    "vwap",
+    "ttm_from_cumulative",
+    "ttm_from_quarterly",
     "where",
     "winsorize",
+    "yoy_by_period",
     "zscore"
   ],
   "duckdb_null_edge_verified": [
     "abs",
     "add",
     "and_",
-    "c_count",
-    "c_mean",
-    "c_std",
-    "c_sum",
     "ceil",
     "clip",
     "coalesce",
-    "count",
+    "cs_count",
     "cs_demean",
     "cs_mad",
     "cs_mad_zscore",
+    "cs_mean",
     "cs_pct_rank",
-    "cum_delta",
-    "cum_max",
-    "cum_min",
-    "cum_prod",
-    "cum_sum",
-    "div_or_default",
+    "cs_std",
+    "cs_sum",
     "divide",
     "eq",
     "exp",
-    "expanding_mean",
-    "expanding_sum",
-    "ffill",
     "fillna_const",
     "floor",
     "ge",
@@ -542,7 +473,6 @@
     "group_min",
     "group_neutralize",
     "group_normalize",
-    "group_percentile",
     "group_rank",
     "group_std",
     "group_sum",
@@ -557,37 +487,36 @@
     "le",
     "log",
     "log_abs",
-    "log_fill_invalid",
-    "log_returns",
     "lt",
     "maximum",
     "minimum",
     "multiply",
-    "nan_to_num",
     "ne",
     "neg",
     "normalize",
     "not_",
     "or_",
+    "period_average",
+    "period_cagr",
+    "period_change",
     "power",
     "protected_div",
-    "protected_log",
-    "protected_sqrt",
+    "quarter_from_cumulative",
     "rank",
-    "rank_pct",
     "safe_div_null",
-    "scale",
     "sign",
     "signed_log",
     "signed_sqrt",
     "sqrt",
     "subtract",
+    "tanh",
     "ts_autocorr",
     "ts_beta",
     "ts_corr",
     "ts_cov",
     "ts_delay",
     "ts_delta",
+    "ts_log_return",
     "ts_max",
     "ts_mean",
     "ts_median",
@@ -599,49 +528,37 @@
     "ts_sum",
     "ts_var",
     "ts_zscore",
-    "volatility",
-    "vwap",
+    "ttm_from_cumulative",
+    "ttm_from_quarterly",
     "where",
     "winsorize",
+    "yoy_by_period",
     "zscore"
   ],
   "duckdb_nan_edge_verified": [
-    "is_nan",
-    "nan_to_num",
     "rank"
   ],
   "duckdb_inf_edge_verified": [
-    "is_finite",
-    "nan_to_num"
+    "is_finite"
   ],
   "no_fallback_verified": [
     "abs",
     "add",
     "and_",
-    "c_count",
-    "c_mean",
-    "c_std",
-    "c_sum",
     "ceil",
     "clip",
     "coalesce",
-    "count",
+    "cs_count",
     "cs_demean",
     "cs_mad",
     "cs_mad_zscore",
+    "cs_mean",
     "cs_pct_rank",
-    "cum_delta",
-    "cum_max",
-    "cum_min",
-    "cum_prod",
-    "cum_sum",
-    "div_or_default",
+    "cs_std",
+    "cs_sum",
     "divide",
     "eq",
     "exp",
-    "expanding_mean",
-    "expanding_sum",
-    "ffill",
     "fillna_const",
     "floor",
     "ge",
@@ -651,7 +568,6 @@
     "group_min",
     "group_neutralize",
     "group_normalize",
-    "group_percentile",
     "group_rank",
     "group_std",
     "group_sum",
@@ -661,43 +577,41 @@
     "inverse",
     "is_finite",
     "is_infinite",
-    "is_nan",
     "is_not_null",
     "is_null",
     "le",
     "log",
     "log_abs",
-    "log_fill_invalid",
-    "log_returns",
     "lt",
     "maximum",
     "minimum",
     "multiply",
-    "nan_to_num",
     "ne",
     "neg",
     "normalize",
     "not_",
     "or_",
+    "period_average",
+    "period_cagr",
+    "period_change",
     "power",
     "protected_div",
-    "protected_log",
-    "protected_sqrt",
+    "quarter_from_cumulative",
     "rank",
-    "rank_pct",
     "safe_div_null",
-    "scale",
     "sign",
     "signed_log",
     "signed_sqrt",
     "sqrt",
     "subtract",
+    "tanh",
     "ts_autocorr",
     "ts_beta",
     "ts_corr",
     "ts_cov",
     "ts_delay",
     "ts_delta",
+    "ts_log_return",
     "ts_max",
     "ts_mean",
     "ts_median",
@@ -709,28 +623,14 @@
     "ts_sum",
     "ts_var",
     "ts_zscore",
-    "volatility",
-    "vwap",
+    "ttm_from_cumulative",
+    "ttm_from_quarterly",
     "where",
     "winsorize",
+    "yoy_by_period",
     "zscore"
   ],
   "operators": {
-    "scale": {
-      "semantic_version": "1.0.0",
-      "supported_calls": {
-        "to": [
-          1
-        ]
-      },
-      "execution_variants": [
-        "direct",
-        "fused_ts_unary"
-      ],
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac",
-      "parameter_domain_hash": "402cf7b3ca3881e5"
-    },
     "add": {
       "execution_variants": [
         "nary_ts_fusion",
@@ -738,8 +638,8 @@
         "nested_binary"
       ],
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "gt": {
       "execution_variants": [
@@ -747,8 +647,8 @@
         "generic_binary_join"
       ],
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "maximum": {
       "execution_variants": [
@@ -756,8 +656,8 @@
         "generic_binary_join"
       ],
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "minimum": {
       "execution_variants": [
@@ -765,8 +665,8 @@
         "generic_binary_join"
       ],
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "rank": {
       "execution_variants": [
@@ -774,17 +674,8 @@
         "fused_ts_unary"
       ],
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
-    },
-    "rank_pct": {
-      "execution_variants": [
-        "direct",
-        "fused_ts_unary"
-      ],
-      "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "where": {
       "execution_variants": [
@@ -792,8 +683,8 @@
         "nested_conditional"
       ],
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "zscore": {
       "execution_variants": [
@@ -801,8 +692,8 @@
         "fused_ts_unary"
       ],
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "cs_pct_rank": {
       "execution_variants": [
@@ -810,8 +701,8 @@
         "fused_ts_unary"
       ],
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "eq": {
       "execution_variants": [
@@ -819,8 +710,8 @@
         "generic_binary_join"
       ],
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "ge": {
       "execution_variants": [
@@ -828,8 +719,8 @@
         "generic_binary_join"
       ],
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "le": {
       "execution_variants": [
@@ -837,8 +728,8 @@
         "generic_binary_join"
       ],
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "lt": {
       "execution_variants": [
@@ -846,8 +737,8 @@
         "generic_binary_join"
       ],
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "ne": {
       "execution_variants": [
@@ -855,8 +746,8 @@
         "generic_binary_join"
       ],
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "normalize": {
       "execution_variants": [
@@ -864,439 +755,388 @@
         "fused_ts_unary"
       ],
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "abs": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "and_": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
-    },
-    "c_count": {
-      "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
-    },
-    "c_mean": {
-      "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
-    },
-    "c_std": {
-      "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
-    },
-    "c_sum": {
-      "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "ceil": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "coalesce": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "cs_demean": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "cs_mad": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "cs_mad_zscore": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
-    },
-    "cum_sum": {
-      "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "divide": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "exp": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
-    },
-    "ffill": {
-      "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac",
-      "parameter_domain_hash": "190af1764c2a0fd1"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "fillna_const": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac",
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26",
       "parameter_domain_hash": "a94bbfcaae8c82c5"
     },
     "floor": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "group_mean": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "group_neutralize": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "group_normalize": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
-    },
-    "group_percentile": {
-      "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "group_rank": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "group_std": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "group_winsorize": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "group_zscore": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "inverse": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "is_finite": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "log": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
-    },
-    "log_returns": {
-      "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "multiply": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
-    },
-    "nan_to_num": {
-      "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "neg": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "not_": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "or_": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "power": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "protected_div": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
-    },
-    "protected_log": {
-      "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
-    },
-    "protected_sqrt": {
-      "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "sign": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "sqrt": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "subtract": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "ts_beta": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "ts_corr": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "ts_cov": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "ts_delta": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "ts_max": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "ts_mean": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac",
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26",
       "parameter_domain_hash": "e8cfb21c180d9cb7"
     },
     "ts_median": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "ts_min": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "ts_pct": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "ts_std": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "ts_sum": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "ts_var": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "ts_zscore": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
-    },
-    "vwap": {
-      "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "winsorize": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
-    },
-    "count": {
-      "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
-    },
-    "cum_delta": {
-      "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
-    },
-    "cum_max": {
-      "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
-    },
-    "cum_min": {
-      "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
-    },
-    "cum_prod": {
-      "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
-    },
-    "expanding_mean": {
-      "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
-    },
-    "expanding_sum": {
-      "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "is_infinite": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "is_not_null": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "is_null": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "ts_autocorr": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "ts_rank": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
-    },
-    "volatility": {
-      "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
-    },
-    "div_or_default": {
-      "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "group_count": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "group_max": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "group_min": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "group_sum": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
-    },
-    "is_nan": {
-      "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "log_abs": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
-    },
-    "log_fill_invalid": {
-      "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "signed_log": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "signed_sqrt": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "ts_sharpe": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "clip": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "safe_div_null": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     },
     "ts_delay": {
       "semantic_version": 2,
-      "implementation_hash_polars": "5ad5b476c375b11e",
-      "implementation_hash_duckdb": "39b241299f074fac"
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
+    },
+    "cs_count": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
+    },
+    "cs_mean": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
+    },
+    "cs_std": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
+    },
+    "cs_sum": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
+    },
+    "period_average": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
+    },
+    "period_cagr": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
+    },
+    "period_change": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
+    },
+    "quarter_from_cumulative": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
+    },
+    "tanh": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
+    },
+    "ts_log_return": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
+    },
+    "ttm_from_cumulative": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
+    },
+    "ttm_from_quarterly": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
+    },
+    "yoy_by_period": {
+      "semantic_version": 2,
+      "implementation_hash_polars": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb": "d7559a65620c8d26"
     }
   },
   "provenance": {
     "artifact_kind": "test_passed",
-    "commit_sha": "d61a297f57fc9e591e2643c0644a14cb668a67f7",
-    "passed_at": "2026-07-16T17:33:57.500335+00:00",
+    "commit_sha": "1bee74ef732897d0fe0fbe1011ed606ff99294c5",
+    "passed_at": "2026-07-18T06:03:27.821697+00:00",
     "runtime_versions": {
       "python": "3.13.5",
       "polars": "1.42.1",
       "duckdb": "1.5.4",
       "pyarrow": "22.0.0"
     },
-    "case_registry_hash": "3fdd40a9186c91d2",
+    "case_registry_hash": "71daddda2d13d4a8",
     "stages_passed": [
       "case_registry_sync",
       "polars_reference_parity",
@@ -1313,11 +1153,12 @@
       "parameter_signature_gate",
       "plan_variant_parity",
       "chunk_invariance",
-      "manifest_and_evidence_drift"
+      "manifest_and_evidence_drift",
+      "strict_period_triple_parity_and_no_fallback"
     ],
     "emitter_hashes": {
-      "implementation_hash_polars_emitter": "5ad5b476c375b11e",
-      "implementation_hash_duckdb_emitter": "39b241299f074fac"
+      "implementation_hash_polars_emitter": "2ad6d4d0e89b896e",
+      "implementation_hash_duckdb_emitter": "d7559a65620c8d26"
     }
   }
 }

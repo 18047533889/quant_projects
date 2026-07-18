@@ -15,11 +15,19 @@ def build() -> dict:
     from cleaned_operators import load_all
     from cleaned_operators.registry import OperatorRegistry
     from cleaned_operators.operator_surface import classify_canonical, surface_summary
-    from cleaned_operators.operator_policy import POLARS_PARITY_VERIFIED
-    from backend.primitive_evidence import DUCKDB_REAL_SQL_VERIFIED, POLARS_REFERENCE_PARITY_VERIFIED
+    from backend.primitive_evidence import (
+        DUCKDB_EDGE_VERIFIED,
+        DUCKDB_REAL_SQL_VERIFIED,
+        DUCKDB_REFERENCE_PARITY_VERIFIED,
+        POLARS_EDGE_VERIFIED,
+        POLARS_NO_FALLBACK_VERIFIED,
+        POLARS_REFERENCE_PARITY_VERIFIED,
+    )
     from backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS, effective_sql_production_safe
+    from backend.sql_pushdown.sql_registry import register_sql_backends
 
     load_all()
+    register_sql_backends()
     catalog = OperatorRegistry.catalog()
     operators = {}
     for canonical in sorted(catalog):
@@ -27,16 +35,17 @@ def build() -> dict:
         polars_meta = dict(((catalog[canonical].get("backend_meta") or {}).get("polars") or {}))
         execution_kind = polars_meta.get("execution_kind", "unsupported")
         polars_implemented = "polars" in backends
-        polars_reference = polars_implemented and (
-            canonical in POLARS_REFERENCE_PARITY_VERIFIED or canonical in POLARS_PARITY_VERIFIED
+        polars_reference = polars_implemented and canonical in POLARS_REFERENCE_PARITY_VERIFIED
+        polars_edge = polars_implemented and canonical in POLARS_EDGE_VERIFIED
+        polars_no_fallback = (
+            polars_implemented
+            and canonical in POLARS_NO_FALLBACK_VERIFIED
+            and execution_kind in {"expression_native", "long_native"}
         )
-        # Edge certification has no independent legacy source yet.  Fail closed:
-        # only explicit edge evidence can promote this field in future.
-        polars_edge = False
-        polars_no_fallback = polars_implemented and execution_kind in {"expression_native", "long_native"}
         duckdb_implemented = canonical in SQL_IMPLEMENTED_CANONICALS
-        duckdb_reference = canonical in DUCKDB_REAL_SQL_VERIFIED
-        duckdb_edge = duckdb_reference
+        duckdb_reference = canonical in DUCKDB_REFERENCE_PARITY_VERIFIED
+        duckdb_real_sql = canonical in DUCKDB_REAL_SQL_VERIFIED
+        duckdb_edge = canonical in DUCKDB_EDGE_VERIFIED
         operators[canonical] = {
             "surface": classify_canonical(canonical),
             "pandas_runtime": "pandas_numpy" in backends,
@@ -47,10 +56,13 @@ def build() -> dict:
             "polars_no_fallback": polars_no_fallback,
             "polars_production_safe": polars_reference and polars_edge and polars_no_fallback,
             "duckdb_implemented": duckdb_implemented,
-            "duckdb_real_sql_tested": duckdb_reference,
+            "duckdb_real_sql_tested": duckdb_real_sql,
             "duckdb_reference_parity": duckdb_reference,
             "duckdb_edge_parity": duckdb_edge,
-            "duckdb_production_safe": duckdb_edge and effective_sql_production_safe(canonical),
+            "duckdb_production_safe": (
+                duckdb_reference and duckdb_real_sql and duckdb_edge
+                and effective_sql_production_safe(canonical)
+            ),
         }
     return {
         "schema_version": 1,

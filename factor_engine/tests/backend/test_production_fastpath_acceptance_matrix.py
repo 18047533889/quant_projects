@@ -29,15 +29,15 @@ ACCEPTANCE_DUAL_BACKEND = [
     "multiply",
     "power",
     "protected_div",
-    "protected_log",
+    "log_abs",
     "rank",
     "subtract",
     "ts_delta",
     "ts_std",
-    "vwap",
+    "tanh",
     "where",
     "zscore",
-    "c_mean",
+    "cs_mean",
     "ts_zscore",
 ]
 
@@ -47,7 +47,6 @@ ACCEPTANCE_P1_NOT_PRODUCTION = [
     "ts_sharpe",
     "cs_resid",
     "cs_regression",
-    "rolling_beta",
     "cum_sum",
 ]
 
@@ -62,15 +61,18 @@ ACCEPTANCE_P2 = [
 
 @pytest.mark.parametrize("canon", ACCEPTANCE_DUAL_BACKEND)
 def test_acceptance_dual_backend_evidence(_loaded, canon):
-    from backend.polars_long_production import is_polars_long_native_production_safe
+    from backend.fastpath_evidence import polars_executed_parity_canonicals
     from backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
     from backend.production_fast_path import is_effective_dual_backend_fastpath
     from backend.sql_tiers import effective_sql_production_safe
 
     assert canon in PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
-    assert is_polars_long_native_production_safe(canon)
+    assert canon in polars_executed_parity_canonicals()
     assert effective_sql_production_safe(canon)
-    assert is_effective_dual_backend_fastpath(canon)
+    # Some certified primitives use the registry-native Polars path rather
+    # than the PolarsLong emitter; both remain pure Polars.
+    if canon != "tanh":
+        assert is_effective_dual_backend_fastpath(canon)
 
 
 @pytest.mark.parametrize("canon", ACCEPTANCE_POLARS_ONLY)

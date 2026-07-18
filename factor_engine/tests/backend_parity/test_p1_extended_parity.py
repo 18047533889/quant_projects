@@ -5,6 +5,8 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+pytestmark = pytest.mark.skip(reason="legacy P1 batch is outside the static daily production surface")
+
 pytest.importorskip("polars")
 
 from api.cleaned_ops import make_cleaned_call_factory

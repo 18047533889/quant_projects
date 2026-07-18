@@ -63,28 +63,23 @@ def _attach_checkpoint_contracts() -> None:
         catalog["segmented_execution_requires_checkpoint"] = bool(
             contract["checkpoint_required_for_segmented"]
         )
+        catalog["segmented_execution_supported"] = bool(
+            contract.get("segmented_execution_supported", True)
+        )
 
 
 def apply_post_governance() -> None:
     global _APPLIED
     if _APPLIED:
         return
-    from cleaned_operators import operator_surface
-
     _restore_compiler_internal("protected_div")
     if "neg" in OperatorRegistry._operators:
         OperatorRegistry.unregister("reverse")
         OperatorRegistry.register_alias("reverse", "neg")
-    if "protected_div" in OperatorRegistry._operators:
-        operator_surface.INTERNAL_ONLY_CANONICALS = frozenset(
-            set(operator_surface.INTERNAL_ONLY_CANONICALS) | {"protected_div"}
-        )
-
     if "ts_decay_linear" in OperatorRegistry._operators:
         OperatorRegistry.register_alias("WMA", "ts_decay_linear")
 
     renamed = {"cs_count", "cs_mean", "cs_std", "cs_sum"} & set(OperatorRegistry._operators)
-    operator_surface.DAILY_CANONICALS = frozenset(set(operator_surface.DAILY_CANONICALS) | renamed)
     for canonical in renamed:
         catalog = OperatorRegistry._catalog.get(canonical)
         if catalog is not None:

@@ -1829,6 +1829,96 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_inst_window=True,
         )
 
+    if op in {"period_change", "period_cagr", "yoy_by_period"}:
+        if dialect != SqlDialect.DUCKDB or len(node.inputs) < 2:
+            return None
+        current = _compile_layer(node.inputs[0], dialect=dialect)
+        periods = int(node.attrs.get("periods", _raw_literal(node, 2, 1 if op != "yoy_by_period" else 4)))
+        previous = _compile_layer(
+            PlanNode(op="period_lag", inputs=[node.inputs[0], node.inputs[1]], attrs={"periods": periods}),
+            dialect=dialect,
+        )
+        if current is None or previous is None:
+            return None
+        joined = f"SELECT x.ts, x.inst, x._v AS xv, p._v AS pv FROM ({current.sql}) x LEFT JOIN ({previous.sql}) p USING (ts, inst)"
+        valid = f"({_duckdb_valid('xv')} AND {_duckdb_valid('pv')})"
+        if op == "period_change":
+            mode = str(node.attrs.get("mode", _raw_literal(node, 3, "absolute"))).lower()
+            expr = "xv - pv" if mode == "absolute" else "xv / NULLIF(pv, 0) - 1.0" if mode == "ratio" else "LN(xv / NULLIF(pv, 0))"
+            if mode not in {"absolute", "ratio", "log"}:
+                return None
+            if mode == "log":
+                valid += " AND xv / NULLIF(pv, 0) > 0"
+        elif op == "period_cagr":
+            ppy = int(node.attrs.get("periods_per_year", _raw_literal(node, 3, 4)))
+            policy = str(node.attrs.get("sign_policy", _raw_literal(node, 4, "strict"))).lower()
+            if policy == "strict":
+                valid += " AND xv > 0 AND pv > 0"
+                ratio = "xv / pv"
+            elif policy == "absolute":
+                valid += " AND ABS(pv) > 1e-12"
+                ratio = "ABS(xv) / ABS(pv)"
+            else:
+                return None
+            expr = f"POW({ratio}, {float(ppy) / float(periods)}) - 1.0"
+        else:
+            mode = str(node.attrs.get("denominator", _raw_literal(node, 3, "signed"))).lower()
+            if mode not in {"signed", "absolute"}:
+                return None
+            valid += " AND ABS(pv) > 1e-12"
+            denom = "pv" if mode == "signed" else "ABS(pv)"
+            expr = f"(xv - pv) / {denom}"
+        return _Layer(f"SELECT ts, inst, CASE WHEN {valid} THEN {expr} ELSE NULL END AS _v FROM ({joined}) fp", has_inst_window=True)
+
+    if op in {"period_average", "ttm_from_quarterly"}:
+        if dialect != SqlDialect.DUCKDB or len(node.inputs) < 2:
+            return None
+        count = int(node.attrs.get("periods", _raw_literal(node, 2, 2 if op == "period_average" else 4)))
+        if count < 1:
+            return None
+        layers = [_compile_layer(node.inputs[0], dialect=dialect)]
+        layers.extend(
+            _compile_layer(PlanNode(op="period_lag", inputs=[node.inputs[0], node.inputs[1]], attrs={"periods": lag}), dialect=dialect)
+            for lag in range(1, count)
+        )
+        if any(layer is None for layer in layers):
+            return None
+        aliases = [f"v{i}" for i in range(count)]
+        sql = f"SELECT b.ts, b.inst, b._v AS {aliases[0]} FROM ({layers[0].sql}) b"
+        for i in range(1, count):
+            sql = f"SELECT j.*, p._v AS {aliases[i]} FROM ({sql}) j LEFT JOIN ({layers[i].sql}) p USING (ts, inst)"
+        valid = " AND ".join(_duckdb_valid(alias) for alias in aliases)
+        total = " + ".join(aliases)
+        expr = f"({total}) / {float(count)}" if op == "period_average" else f"({total})"
+        return _Layer(f"SELECT ts, inst, CASE WHEN {valid} THEN {expr} ELSE NULL END AS _v FROM ({sql}) fs", has_inst_window=True)
+
+    if op == "quarter_from_cumulative":
+        if dialect != SqlDialect.DUCKDB or len(node.inputs) < 3:
+            return None
+        current = _compile_layer(node.inputs[0], dialect=dialect)
+        quarter = _compile_layer(node.inputs[2], dialect=dialect)
+        previous = _compile_layer(PlanNode(op="period_lag", inputs=[node.inputs[0], node.inputs[1]], attrs={"periods": 1}), dialect=dialect)
+        previous_q = _compile_layer(PlanNode(op="period_lag", inputs=[node.inputs[2], node.inputs[1]], attrs={"periods": 1}), dialect=dialect)
+        if any(layer is None for layer in (current, quarter, previous, previous_q)):
+            return None
+        joined = (
+            f"SELECT x.ts, x.inst, x._v AS xv, q._v AS qv, p._v AS pv, pq._v AS pqv "
+            f"FROM ({current.sql}) x LEFT JOIN ({quarter.sql}) q USING (ts, inst) "
+            f"LEFT JOIN ({previous.sql}) p USING (ts, inst) LEFT JOIN ({previous_q.sql}) pq USING (ts, inst)"
+        )
+        consecutive = "((pqv = 4 AND qv = 1) OR qv = pqv + 1)"
+        expr = f"CASE WHEN qv = 1 THEN xv WHEN {consecutive} THEN xv - pv ELSE NULL END"
+        return _Layer(f"SELECT ts, inst, {expr} AS _v FROM ({joined}) fq", has_inst_window=True)
+
+    if op == "ttm_from_cumulative":
+        if dialect != SqlDialect.DUCKDB or len(node.inputs) < 3:
+            return None
+        quarterly = PlanNode(op="quarter_from_cumulative", inputs=list(node.inputs[:3]), attrs={})
+        return _compile_layer(
+            PlanNode(op="ttm_from_quarterly", inputs=[quarterly, node.inputs[1]], attrs={"periods": 4}),
+            dialect=dialect,
+        )
+
     if op == "ts_regression_tstat":
         if dialect != SqlDialect.DUCKDB or len(node.inputs) < 2:
             return None
@@ -2147,7 +2237,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_ts_partition=True,
         )
 
-    if op == "log_returns":
+    if op in {"log_returns", "ts_log_return"}:
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
@@ -2261,43 +2351,27 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_ts_partition=True,
         )
 
-    if op == "c_mean":
+    cs_aggregates = {
+        "c_mean": "AVG", "cs_mean": "AVG",
+        "c_sum": "SUM", "cs_sum": "SUM",
+        "c_count": "COUNT", "cs_count": "COUNT",
+        "c_std": _dialect_fn(dialect, "stddev"),
+        "cs_std": _dialect_fn(dialect, "stddev"),
+    }
+    if op in cs_aggregates:
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        return _Layer(
-            _cs_broadcast_agg("AVG", inner.sql, all_null_null=True),
-            has_inst_window=inner.has_inst_window,
-            has_ts_partition=True,
-        )
+        from backend.stat_valid import row_stat_invalid_sql
 
-    if op == "c_sum":
-        inner = _compile_layer(node.inputs[0], dialect=dialect)
-        if inner is None:
-            return None
-        return _Layer(
-            _cs_broadcast_agg("SUM", inner.sql, all_null_null=True),
-            has_inst_window=inner.has_inst_window,
-            has_ts_partition=True,
+        invalid = row_stat_invalid_sql("_v", dialect=dialect, exclude_nan=True)
+        cleaned = (
+            f"SELECT ts, inst, CASE WHEN {invalid} THEN NULL ELSE _v END AS _v "
+            f"FROM ({inner.sql}) t_clean"
         )
-
-    if op == "c_count":
-        inner = _compile_layer(node.inputs[0], dialect=dialect)
-        if inner is None:
-            return None
+        agg = cs_aggregates[op]
         return _Layer(
-            _cs_broadcast_agg("COUNT", inner.sql),
-            has_inst_window=inner.has_inst_window,
-            has_ts_partition=True,
-        )
-
-    if op == "c_std":
-        inner = _compile_layer(node.inputs[0], dialect=dialect)
-        if inner is None:
-            return None
-        std_fn = _dialect_fn(dialect, "stddev")
-        return _Layer(
-            _cs_broadcast_agg(std_fn, inner.sql, all_null_null=True),
+            _cs_broadcast_agg(agg, cleaned, all_null_null=agg != "COUNT"),
             has_inst_window=inner.has_inst_window,
             has_ts_partition=True,
         )
@@ -3291,7 +3365,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_ts_partition=inner.has_ts_partition,
         )
 
-    if op == "ewm_std":
+    if op in {"ewm_std", "ts_ewm_std"}:
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
@@ -3301,7 +3375,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_inst_window=True,
         )
 
-    if op == "ewm_var":
+    if op in {"ewm_var", "ts_ewm_var"}:
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
@@ -3341,7 +3415,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_inst_window=True,
         )
 
-    if op in {"ewm_cov", "ewm_corr"}:
+    if op in {"ewm_cov", "ewm_corr", "ts_ewm_cov", "ts_ewm_corr"}:
         if len(node.inputs) < 2:
             return None
         left = _compile_layer(node.inputs[0], dialect=dialect)
@@ -3355,7 +3429,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
                 right.sql,
                 span,
                 dialect=dialect,
-                corr=(op == "ewm_corr"),
+                corr=(op in {"ewm_corr", "ts_ewm_corr"}),
             ),
             has_inst_window=True,
         )

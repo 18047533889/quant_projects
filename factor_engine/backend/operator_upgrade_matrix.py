@@ -244,7 +244,17 @@ def build_operator_upgrade_row(canon: str) -> OperatorUpgradeRow:
     gaps = certification_gaps(canon)
     batch = infer_upgrade_batch(canon)
     tier = classify_plan_op(canon)
-    polars_impl = tier in {
+    from cleaned_operators.registry import OperatorRegistry
+
+    polars_meta = dict(
+        ((OperatorRegistry.catalog().get(canon, {}).get("backend_meta") or {}).get("polars") or {})
+    )
+    registered_polars_native = (
+        "polars" in OperatorRegistry.backends_for(canon)
+        and polars_meta.get("execution_kind") == "expression_native"
+        and not bool(polars_meta.get("materializes_full_panel"))
+    )
+    polars_impl = registered_polars_native or tier in {
         "native",
         "python_rolling",
         "map_groups",
@@ -252,7 +262,7 @@ def build_operator_upgrade_row(canon: str) -> OperatorUpgradeRow:
         "nonstandard_alg",
         "registry",
     } or canon in POLARS_LONG_NATIVE | POLARS_LONG_PYTHON_ROLLING
-    polars_pure = tier == "native" and canon in POLARS_LONG_NATIVE
+    polars_pure = registered_polars_native or (tier == "native" and canon in POLARS_LONG_NATIVE)
     duck_impl = is_sql_implemented(canon)
     certified = primitive_dual_backend_production_safe(canon)
     operational = primitive_operational_production_certified(canon)

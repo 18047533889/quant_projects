@@ -141,6 +141,9 @@ def test_rank_duckdb_all_null_cross_section(duckdb_ieee_source):
 
 def test_is_nan_duckdb_detects_ieee_nan(duckdb_ieee_source):
     """DuckDB 原生 NaN fixture：is_nan 须识别 IEEE NaN（非 SQL NULL）。"""
+    from cleaned_operators.operator_surface import DAILY_CANONICALS
+    if "is_nan" not in DAILY_CANONICALS:
+        pytest.skip("is_nan is not production-certified")
     load_all()
     expr = make_cleaned_call_factory("is_nan")(_duck_col("close"))
     out = _run(duckdb_ieee_source, expr, "duckdb_sql")

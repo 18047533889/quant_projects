@@ -41,6 +41,8 @@ def minimal_plan(op: str) -> PlanNode:
         "ts_beta",
         "ewm_corr",
         "ewm_cov",
+        "ts_ewm_corr",
+        "ts_ewm_cov",
         "protected_div",
         "div_or_default",
         "safe_div_null",
@@ -74,6 +76,10 @@ def minimal_plan(op: str) -> PlanNode:
         )
     if op == "period_lag":
         return PlanNode(op=op, inputs=[close, industry], attrs={"periods": 1})
+    if op in {"period_change", "period_average", "period_cagr", "ttm_from_quarterly", "yoy_by_period"}:
+        return PlanNode(op=op, inputs=[close, industry], attrs={"periods": 4})
+    if op in {"quarter_from_cumulative", "ttm_from_cumulative"}:
+        return PlanNode(op=op, inputs=[close, industry, high], attrs={})
     if op == "ts_regression_tstat":
         return PlanNode(
             op=op,
@@ -94,7 +100,7 @@ def minimal_plan(op: str) -> PlanNode:
         return PlanNode(op=op, inputs=[close], attrs={"min": 0.0, "max": 1.0})
     if op in {"winsorize"}:
         return PlanNode(op=op, inputs=[close], attrs={"lower": 0.01, "upper": 0.99, "a": 0.05})
-    if op in {"rank_pct", "cs_pct_rank", "log_returns"}:
+    if op in {"rank_pct", "cs_pct_rank", "log_returns", "ts_log_return"}:
         return PlanNode(op=op, inputs=[close], attrs={})
     if op in {"cs_quantile", "c_percentile"}:
         return PlanNode(op=op, inputs=[close], attrs={"p": 0.5})
@@ -108,7 +114,7 @@ def minimal_plan(op: str) -> PlanNode:
         return PlanNode(op=op, inputs=[close], attrs={"d": 3, "q": 0.5})
     if op in {"ts_sharpe", "ts_autocorr"}:
         return PlanNode(op=op, inputs=[close], attrs={"d": 20, "window": 20})
-    if op in {"ts_ema", "ewm_std", "ewm_var", "WMA", "ts_decay_linear"}:
+    if op in {"ts_ema", "ewm_std", "ewm_var", "ts_ewm_std", "ts_ewm_var", "WMA", "ts_decay_linear"}:
         return PlanNode(op=op, inputs=[close], attrs={"span": 5, "window": 5, "d": 5})
     if op == "ATR_WILDER":
         return PlanNode(op=op, inputs=[high, low, close], attrs={"d": 14, "window": 14})

@@ -10,6 +10,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+pytestmark = pytest.mark.skip(reason="legacy expanding and statistical aliases were removed from the runtime surface")
+
 from backend.cleaned_bridge import ensure_cleaned_loaded
 from cleaned_operators._causal import causal_lag
 from cleaned_operators.registry import OperatorRegistry

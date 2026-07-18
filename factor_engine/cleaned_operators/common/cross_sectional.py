@@ -871,7 +871,10 @@ class CrossSectionalCountPolars(SeriesOperator):
         numeric_cols = [c for c in x.columns if c not in ['date', 'stock_code']]
 
         # 计算每行非空计数
-        count_expr = sum(pl.col(c).is_not_null().cast(pl.Int32) for c in numeric_cols)
+        count_expr = sum(
+            (pl.col(c).is_not_null() & ~pl.col(c).is_nan()).cast(pl.Int32)
+            for c in numeric_cols
+        )
 
         return x.with_columns([
             count_expr.cast(pl.Float64).alias(c) for c in numeric_cols
@@ -896,7 +899,8 @@ class CrossSectionalMeanPolars(SeriesOperator):
 
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
         numeric_cols = [c for c in x.columns if c not in ['date', 'stock_code']]
-        mean_expr = pl.mean_horizontal(*[pl.col(c) for c in numeric_cols])
+        values = [pl.when(pl.col(c).is_nan()).then(None).otherwise(pl.col(c)) for c in numeric_cols]
+        mean_expr = pl.mean_horizontal(*values)
         return x.with_columns([
             mean_expr.alias(c) for c in numeric_cols
         ])
@@ -1033,10 +1037,9 @@ class CrossSectionalSumPolars(SeriesOperator):
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
         numeric_cols = [c for c in x.columns if c not in ['date', 'stock_code']]
 
-        valid_count = pl.sum_horizontal(
-            [pl.col(c).is_not_null().cast(pl.Int64) for c in numeric_cols]
-        )
-        raw_sum = pl.sum_horizontal([pl.col(c) for c in numeric_cols], ignore_nulls=True)
+        values = [pl.when(pl.col(c).is_nan()).then(None).otherwise(pl.col(c)) for c in numeric_cols]
+        valid_count = pl.sum_horizontal([v.is_not_null().cast(pl.Int64) for v in values])
+        raw_sum = pl.sum_horizontal(values, ignore_nulls=True)
         sum_expr = pl.when(valid_count > 0).then(raw_sum).otherwise(None)
 
         return x.with_columns([
@@ -1151,10 +1154,18 @@ class CrossSectionalRank(SeriesOperator):
 
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
         numeric_cols = [c for c in x.columns if c not in {"date", "stock_code"}]
-        pdf = x.select(numeric_cols).to_pandas()
-        ranked = cs_rank_01(pdf)
+        values = pl.concat_list([
+            pl.when(pl.col(c).is_nan()).then(None).otherwise(pl.col(c))
+            for c in numeric_cols
+        ])
+        ranks = values.list.eval(pl.element().rank(method="average"))
+        count = values.list.drop_nulls().list.len()
         return x.with_columns([
-            pl.Series(name=c, values=ranked[c].to_numpy()) for c in numeric_cols
+            pl.when(values.list.get(i).is_null()).then(None)
+            .when(count <= 1).then(0.5)
+            .otherwise((ranks.list.get(i) - 1.0) / (count - 1.0))
+            .alias(c)
+            for i, c in enumerate(numeric_cols)
         ])
 
 @register_operator(name="rank", category="cross_sectional", business_category="cross_sectional", canonical="rank", source="factor_dsl_np")
@@ -1172,12 +1183,7 @@ class RankPolars(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        numeric_cols = [c for c in x.columns if c not in {"date", "stock_code"}]
-        pdf = x.select(numeric_cols).to_pandas()
-        ranked = cs_rank_01(pdf)
-        return x.with_columns([
-            pl.Series(name=c, values=ranked[c].to_numpy()) for c in numeric_cols
-        ])
+        return CrossSectionalRank()._calculate_series(x, **kwargs)
 
 
 @register_operator(
@@ -1201,10 +1207,17 @@ class RankPctPolars(SeriesOperator):
 
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
         numeric_cols = [c for c in x.columns if c not in {"date", "stock_code"}]
-        pdf = x.select(numeric_cols).to_pandas()
-        ranked = cs_rank_pct(pdf)
+        values = pl.concat_list([
+            pl.when(pl.col(c).is_nan()).then(None).otherwise(pl.col(c))
+            for c in numeric_cols
+        ])
+        ranks = values.list.eval(pl.element().rank(method="average"))
+        count = values.list.drop_nulls().list.len()
         return x.with_columns([
-            pl.Series(name=c, values=ranked[c].to_numpy()) for c in numeric_cols
+            pl.when(values.list.get(i).is_null()).then(None)
+            .otherwise(ranks.list.get(i) / count)
+            .alias(c)
+            for i, c in enumerate(numeric_cols)
         ])
 
 

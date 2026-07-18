@@ -2275,7 +2275,7 @@ def _compile_polars_impl(
             polars_scale_expr(_VAL, to_val, partition_cols=(_TS,), order_by=_INST).alias(_VAL)
         )
 
-    if op == "log_returns":
+    if op in {"log_returns", "ts_log_return"}:
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
@@ -2308,19 +2308,27 @@ def _compile_polars_impl(
             ).alias(_VAL)
         )
 
-    if op in {"c_mean", "c_std", "c_sum", "c_count"}:
+    cs_aggregates = {
+        "c_mean": "mean", "cs_mean": "mean",
+        "c_std": "std", "cs_std": "std",
+        "c_sum": "sum", "cs_sum": "sum",
+        "c_count": "count", "cs_count": "count",
+    }
+    if op in cs_aggregates:
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        valid = pl.col(_VAL).count().over(_TS, order_by=_INST)
-        if op == "c_mean":
-            raw = pl.col(_VAL).mean().over(_TS, order_by=_INST)
+        value = pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan()).then(None).otherwise(pl.col(_VAL))
+        valid = value.count().over(_TS, order_by=_INST)
+        kind = cs_aggregates[op]
+        if kind == "mean":
+            raw = value.mean().over(_TS, order_by=_INST)
             expr = pl.when(valid == 0).then(None).otherwise(raw)
-        elif op == "c_std":
-            raw = pl.col(_VAL).std(ddof=1).over(_TS, order_by=_INST)
+        elif kind == "std":
+            raw = value.std(ddof=1).over(_TS, order_by=_INST)
             expr = pl.when(valid == 0).then(None).otherwise(raw)
-        elif op == "c_sum":
-            raw = pl.col(_VAL).sum().over(_TS, order_by=_INST)
+        elif kind == "sum":
+            raw = value.sum().over(_TS, order_by=_INST)
             expr = pl.when(valid == 0).then(None).otherwise(raw)
         else:
             expr = valid.cast(pl.Float64)

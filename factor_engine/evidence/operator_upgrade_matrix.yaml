@@ -1,22 +1,18 @@
 schema_version: 2
 description: 算子 production 升级矩阵：semantic / backend_execution / operational 三层认证
 counts:
-  primitives: 106
-  certified_dual: 99
-  backend_execution_certified: 99
-  operational_production_certified: 0
+  primitives: 89
+  certified_dual: 87
+  backend_execution_certified: 87
+  operational_production_certified: 87
   batch_a_total: 45
-  batch_a_certified: 44
-  batch_a_pending: 1
+  batch_a_certified: 36
+  batch_a_pending: 9
 batches:
   A:
   - abs
   - add
   - and_
-  - c_count
-  - c_mean
-  - c_std
-  - c_sum
   - ceil
   - coalesce
   - cs_demean
@@ -31,7 +27,6 @@ batches:
   - group_std
   - gt
   - le
-  - log_returns
   - lt
   - maximum
   - minimum
@@ -40,7 +35,6 @@ batches:
   - neg
   - not_
   - or_
-  - rank_pct
   - sign
   - subtract
   - ts_delta
@@ -51,92 +45,25 @@ batches:
   - ts_sum
   - ts_var
   - ts_zscore
-  - volatility
-  - vwap
   - where
   B:
   - divide
   - is_finite
   - is_infinite
-  - is_nan
   - is_not_null
   - is_null
   - log
   - protected_div
-  - protected_log
-  - protected_sqrt
-  - scale
   - ts_sharpe
   C:
   - ts_argmax
   - ts_argmin
-  D:
-  - rolling_beta
-  E:
-  - ATR_WILDER
-  - RSI_WILDER
-  F: []
+  D: []
+  E: []
+  F:
+  - quarter_from_cumulative
+  - ttm_from_quarterly
 operators:
-  ATR_WILDER:
-    canonical: ATR_WILDER
-    execution_kind: stateful
-    polars_implemented: true
-    polars_pure_native: false
-    duckdb_implemented: true
-    duckdb_real_sql: false
-    semantic_contract_complete: true
-    parameter_domain_complete: true
-    type_signature_complete: false
-    normal_parity: false
-    edge_parity: false
-    alignment_verified: true
-    chunk_invariance: false
-    performance_verified: false
-    semantic_certified: true
-    backend_execution_certified: false
-    operational_production_certified: false
-    production_status: deferred
-    upgrade_batch: E
-    block_reason: stateful_scan_required
-    certification_gaps:
-    - polars_reference_parity
-    - polars_edge_verified
-    - duckdb_reference_parity
-    - duckdb_real_sql_verified
-    - duckdb_edge_verified
-    - no_fallback_verified
-    execution_variants: []
-    certified_dual: false
-  RSI_WILDER:
-    canonical: RSI_WILDER
-    execution_kind: stateful
-    polars_implemented: true
-    polars_pure_native: false
-    duckdb_implemented: true
-    duckdb_real_sql: false
-    semantic_contract_complete: true
-    parameter_domain_complete: true
-    type_signature_complete: false
-    normal_parity: false
-    edge_parity: false
-    alignment_verified: true
-    chunk_invariance: false
-    performance_verified: false
-    semantic_certified: true
-    backend_execution_certified: false
-    operational_production_certified: false
-    production_status: deferred
-    upgrade_batch: E
-    block_reason: stateful_scan_required
-    certification_gaps:
-    - polars_reference_parity
-    - polars_edge_verified
-    - duckdb_reference_parity
-    - duckdb_real_sql_verified
-    - duckdb_edge_verified
-    - no_fallback_verified
-    execution_variants: []
-    certified_dual: false
   abs:
     canonical: abs
     execution_kind: native
@@ -154,7 +81,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -178,7 +105,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -205,104 +132,8 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
-    upgrade_batch: A
-    block_reason: null
-    certification_gaps: []
-    execution_variants: []
-    certified_dual: true
-  c_count:
-    canonical: c_count
-    execution_kind: registry
-    polars_implemented: true
-    polars_pure_native: false
-    duckdb_implemented: false
-    duckdb_real_sql: true
-    semantic_contract_complete: true
-    parameter_domain_complete: true
-    type_signature_complete: true
-    normal_parity: true
-    edge_parity: true
-    alignment_verified: true
-    chunk_invariance: false
-    performance_verified: false
-    semantic_certified: true
-    backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
-    upgrade_batch: A
-    block_reason: null
-    certification_gaps: []
-    execution_variants: []
-    certified_dual: true
-  c_mean:
-    canonical: c_mean
-    execution_kind: registry
-    polars_implemented: true
-    polars_pure_native: false
-    duckdb_implemented: false
-    duckdb_real_sql: true
-    semantic_contract_complete: true
-    parameter_domain_complete: true
-    type_signature_complete: true
-    normal_parity: true
-    edge_parity: true
-    alignment_verified: true
-    chunk_invariance: false
-    performance_verified: false
-    semantic_certified: true
-    backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
-    upgrade_batch: A
-    block_reason: null
-    certification_gaps: []
-    execution_variants: []
-    certified_dual: true
-  c_std:
-    canonical: c_std
-    execution_kind: other
-    polars_implemented: true
-    polars_pure_native: false
-    duckdb_implemented: false
-    duckdb_real_sql: true
-    semantic_contract_complete: true
-    parameter_domain_complete: true
-    type_signature_complete: true
-    normal_parity: true
-    edge_parity: true
-    alignment_verified: true
-    chunk_invariance: false
-    performance_verified: false
-    semantic_certified: true
-    backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
-    upgrade_batch: A
-    block_reason: null
-    certification_gaps: []
-    execution_variants: []
-    certified_dual: true
-  c_sum:
-    canonical: c_sum
-    execution_kind: registry
-    polars_implemented: true
-    polars_pure_native: false
-    duckdb_implemented: false
-    duckdb_real_sql: true
-    semantic_contract_complete: true
-    parameter_domain_complete: true
-    type_signature_complete: true
-    normal_parity: true
-    edge_parity: true
-    alignment_verified: true
-    chunk_invariance: false
-    performance_verified: false
-    semantic_certified: true
-    backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
     upgrade_batch: A
     block_reason: null
     certification_gaps: []
@@ -325,7 +156,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -349,7 +180,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -373,15 +204,15 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
     certification_gaps: []
     execution_variants: []
     certified_dual: true
-  count:
-    canonical: count
+  cs_count:
+    canonical: cs_count
     execution_kind: native
     polars_implemented: true
     polars_pure_native: true
@@ -397,8 +228,8 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
+    operational_production_certified: true
+    production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
     certification_gaps: []
@@ -421,7 +252,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -445,7 +276,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -469,7 +300,31 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
+    production_status: backend_execution_certified
+    upgrade_batch: null
+    block_reason: null
+    certification_gaps: []
+    execution_variants: []
+    certified_dual: true
+  cs_mean:
+    canonical: cs_mean
+    execution_kind: native
+    polars_implemented: true
+    polars_pure_native: true
+    duckdb_implemented: true
+    duckdb_real_sql: true
+    semantic_contract_complete: true
+    parameter_domain_complete: true
+    type_signature_complete: true
+    normal_parity: true
+    edge_parity: true
+    alignment_verified: true
+    chunk_invariance: false
+    performance_verified: false
+    semantic_certified: true
+    backend_execution_certified: true
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -493,7 +348,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -502,8 +357,8 @@ operators:
     - direct
     - fused_ts_unary
     certified_dual: true
-  cum_delta:
-    canonical: cum_delta
+  cs_std:
+    canonical: cs_std
     execution_kind: native
     polars_implemented: true
     polars_pure_native: true
@@ -519,15 +374,15 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
+    operational_production_certified: true
+    production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
     certification_gaps: []
     execution_variants: []
     certified_dual: true
-  cum_max:
-    canonical: cum_max
+  cs_sum:
+    canonical: cs_sum
     execution_kind: native
     polars_implemented: true
     polars_pure_native: true
@@ -543,104 +398,8 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
-    upgrade_batch: null
-    block_reason: null
-    certification_gaps: []
-    execution_variants: []
-    certified_dual: true
-  cum_min:
-    canonical: cum_min
-    execution_kind: native
-    polars_implemented: true
-    polars_pure_native: true
-    duckdb_implemented: true
-    duckdb_real_sql: true
-    semantic_contract_complete: true
-    parameter_domain_complete: true
-    type_signature_complete: true
-    normal_parity: true
-    edge_parity: true
-    alignment_verified: true
-    chunk_invariance: false
-    performance_verified: false
-    semantic_certified: true
-    backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
-    upgrade_batch: null
-    block_reason: null
-    certification_gaps: []
-    execution_variants: []
-    certified_dual: true
-  cum_prod:
-    canonical: cum_prod
-    execution_kind: native
-    polars_implemented: true
-    polars_pure_native: true
-    duckdb_implemented: true
-    duckdb_real_sql: true
-    semantic_contract_complete: true
-    parameter_domain_complete: true
-    type_signature_complete: true
-    normal_parity: true
-    edge_parity: true
-    alignment_verified: true
-    chunk_invariance: false
-    performance_verified: false
-    semantic_certified: true
-    backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
-    upgrade_batch: null
-    block_reason: null
-    certification_gaps: []
-    execution_variants: []
-    certified_dual: true
-  cum_sum:
-    canonical: cum_sum
-    execution_kind: native
-    polars_implemented: true
-    polars_pure_native: true
-    duckdb_implemented: true
-    duckdb_real_sql: true
-    semantic_contract_complete: true
-    parameter_domain_complete: true
-    type_signature_complete: true
-    normal_parity: true
-    edge_parity: true
-    alignment_verified: true
-    chunk_invariance: false
-    performance_verified: false
-    semantic_certified: true
-    backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
-    upgrade_batch: null
-    block_reason: null
-    certification_gaps: []
-    execution_variants: []
-    certified_dual: true
-  div_or_default:
-    canonical: div_or_default
-    execution_kind: native
-    polars_implemented: true
-    polars_pure_native: true
-    duckdb_implemented: true
-    duckdb_real_sql: true
-    semantic_contract_complete: true
-    parameter_domain_complete: true
-    type_signature_complete: true
-    normal_parity: true
-    edge_parity: true
-    alignment_verified: true
-    chunk_invariance: false
-    performance_verified: false
-    semantic_certified: true
-    backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
+    operational_production_certified: true
+    production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
     certification_gaps: []
@@ -663,7 +422,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: B
     block_reason: null
@@ -687,7 +446,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -713,81 +472,9 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
-    block_reason: null
-    certification_gaps: []
-    execution_variants: []
-    certified_dual: true
-  expanding_mean:
-    canonical: expanding_mean
-    execution_kind: native
-    polars_implemented: true
-    polars_pure_native: true
-    duckdb_implemented: true
-    duckdb_real_sql: true
-    semantic_contract_complete: true
-    parameter_domain_complete: true
-    type_signature_complete: true
-    normal_parity: true
-    edge_parity: true
-    alignment_verified: true
-    chunk_invariance: false
-    performance_verified: false
-    semantic_certified: true
-    backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
-    upgrade_batch: null
-    block_reason: null
-    certification_gaps: []
-    execution_variants: []
-    certified_dual: true
-  expanding_sum:
-    canonical: expanding_sum
-    execution_kind: native
-    polars_implemented: true
-    polars_pure_native: true
-    duckdb_implemented: true
-    duckdb_real_sql: true
-    semantic_contract_complete: true
-    parameter_domain_complete: true
-    type_signature_complete: true
-    normal_parity: true
-    edge_parity: true
-    alignment_verified: true
-    chunk_invariance: false
-    performance_verified: false
-    semantic_certified: true
-    backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
-    upgrade_batch: null
-    block_reason: null
-    certification_gaps: []
-    execution_variants: []
-    certified_dual: true
-  ffill:
-    canonical: ffill
-    execution_kind: native
-    polars_implemented: true
-    polars_pure_native: true
-    duckdb_implemented: true
-    duckdb_real_sql: true
-    semantic_contract_complete: true
-    parameter_domain_complete: false
-    type_signature_complete: true
-    normal_parity: true
-    edge_parity: true
-    alignment_verified: true
-    chunk_invariance: false
-    performance_verified: false
-    semantic_certified: true
-    backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
-    upgrade_batch: null
     block_reason: null
     certification_gaps: []
     execution_variants: []
@@ -809,7 +496,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -833,7 +520,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -857,7 +544,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -883,8 +570,8 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
+    operational_production_certified: true
+    production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
     certification_gaps: []
@@ -907,8 +594,8 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
+    operational_production_certified: true
+    production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
     certification_gaps: []
@@ -931,7 +618,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -955,8 +642,8 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
+    operational_production_certified: true
+    production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
     certification_gaps: []
@@ -979,7 +666,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -1003,32 +690,8 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
-    upgrade_batch: null
-    block_reason: null
-    certification_gaps: []
-    execution_variants: []
-    certified_dual: true
-  group_percentile:
-    canonical: group_percentile
-    execution_kind: native
-    polars_implemented: true
-    polars_pure_native: true
-    duckdb_implemented: true
-    duckdb_real_sql: true
-    semantic_contract_complete: true
-    parameter_domain_complete: true
-    type_signature_complete: true
-    normal_parity: true
-    edge_parity: true
-    alignment_verified: true
-    chunk_invariance: false
-    performance_verified: false
-    semantic_certified: true
-    backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
     upgrade_batch: null
     block_reason: null
     certification_gaps: []
@@ -1051,7 +714,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -1075,7 +738,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -1099,8 +762,8 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
+    operational_production_certified: true
+    production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
     certification_gaps: []
@@ -1123,7 +786,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -1147,7 +810,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -1171,7 +834,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -1197,7 +860,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -1221,7 +884,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: B
     block_reason: null
@@ -1245,36 +908,11 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
-    upgrade_batch: B
-    block_reason: null
-    certification_gaps: []
-    execution_variants: []
-    certified_dual: true
-  is_nan:
-    canonical: is_nan
-    execution_kind: native
-    polars_implemented: true
-    polars_pure_native: true
-    duckdb_implemented: true
-    duckdb_real_sql: true
-    semantic_contract_complete: true
-    parameter_domain_complete: true
-    type_signature_complete: true
-    normal_parity: true
-    edge_parity: true
-    alignment_verified: true
-    chunk_invariance: false
-    performance_verified: false
-    semantic_certified: true
-    backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: B
     block_reason: null
-    certification_gaps:
-    - duckdb_edge_verified
+    certification_gaps: []
     execution_variants: []
     certified_dual: true
   is_not_null:
@@ -1294,8 +932,8 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
+    operational_production_certified: true
+    production_status: backend_execution_certified
     upgrade_batch: B
     block_reason: null
     certification_gaps: []
@@ -1318,8 +956,8 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
+    operational_production_certified: true
+    production_status: backend_execution_certified
     upgrade_batch: B
     block_reason: null
     certification_gaps: []
@@ -1342,7 +980,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -1368,7 +1006,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: B
     block_reason: null
@@ -1392,57 +1030,9 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
+    operational_production_certified: true
+    production_status: backend_execution_certified
     upgrade_batch: null
-    block_reason: null
-    certification_gaps: []
-    execution_variants: []
-    certified_dual: true
-  log_fill_invalid:
-    canonical: log_fill_invalid
-    execution_kind: native
-    polars_implemented: true
-    polars_pure_native: true
-    duckdb_implemented: true
-    duckdb_real_sql: true
-    semantic_contract_complete: true
-    parameter_domain_complete: true
-    type_signature_complete: true
-    normal_parity: true
-    edge_parity: true
-    alignment_verified: true
-    chunk_invariance: false
-    performance_verified: false
-    semantic_certified: true
-    backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
-    upgrade_batch: null
-    block_reason: null
-    certification_gaps: []
-    execution_variants: []
-    certified_dual: true
-  log_returns:
-    canonical: log_returns
-    execution_kind: other
-    polars_implemented: true
-    polars_pure_native: false
-    duckdb_implemented: false
-    duckdb_real_sql: true
-    semantic_contract_complete: true
-    parameter_domain_complete: true
-    type_signature_complete: true
-    normal_parity: true
-    edge_parity: true
-    alignment_verified: true
-    chunk_invariance: false
-    performance_verified: false
-    semantic_certified: true
-    backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
-    upgrade_batch: A
     block_reason: null
     certification_gaps: []
     execution_variants: []
@@ -1464,7 +1054,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -1490,7 +1080,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -1516,7 +1106,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -1542,33 +1132,9 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
-    block_reason: null
-    certification_gaps: []
-    execution_variants: []
-    certified_dual: true
-  nan_to_num:
-    canonical: nan_to_num
-    execution_kind: native
-    polars_implemented: true
-    polars_pure_native: true
-    duckdb_implemented: true
-    duckdb_real_sql: true
-    semantic_contract_complete: true
-    parameter_domain_complete: true
-    type_signature_complete: true
-    normal_parity: true
-    edge_parity: true
-    alignment_verified: true
-    chunk_invariance: false
-    performance_verified: false
-    semantic_certified: true
-    backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
-    upgrade_batch: null
     block_reason: null
     certification_gaps: []
     execution_variants: []
@@ -1590,7 +1156,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -1616,7 +1182,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -1640,7 +1206,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -1666,7 +1232,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -1690,9 +1256,81 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
+    block_reason: null
+    certification_gaps: []
+    execution_variants: []
+    certified_dual: true
+  period_average:
+    canonical: period_average
+    execution_kind: registry
+    polars_implemented: true
+    polars_pure_native: true
+    duckdb_implemented: true
+    duckdb_real_sql: true
+    semantic_contract_complete: true
+    parameter_domain_complete: true
+    type_signature_complete: true
+    normal_parity: true
+    edge_parity: true
+    alignment_verified: true
+    chunk_invariance: false
+    performance_verified: false
+    semantic_certified: true
+    backend_execution_certified: true
+    operational_production_certified: true
+    production_status: backend_execution_certified
+    upgrade_batch: null
+    block_reason: null
+    certification_gaps: []
+    execution_variants: []
+    certified_dual: true
+  period_cagr:
+    canonical: period_cagr
+    execution_kind: registry
+    polars_implemented: true
+    polars_pure_native: true
+    duckdb_implemented: true
+    duckdb_real_sql: true
+    semantic_contract_complete: true
+    parameter_domain_complete: true
+    type_signature_complete: true
+    normal_parity: true
+    edge_parity: true
+    alignment_verified: true
+    chunk_invariance: false
+    performance_verified: false
+    semantic_certified: true
+    backend_execution_certified: true
+    operational_production_certified: true
+    production_status: backend_execution_certified
+    upgrade_batch: null
+    block_reason: null
+    certification_gaps: []
+    execution_variants: []
+    certified_dual: true
+  period_change:
+    canonical: period_change
+    execution_kind: registry
+    polars_implemented: true
+    polars_pure_native: true
+    duckdb_implemented: true
+    duckdb_real_sql: true
+    semantic_contract_complete: true
+    parameter_domain_complete: true
+    type_signature_complete: true
+    normal_parity: true
+    edge_parity: true
+    alignment_verified: true
+    chunk_invariance: false
+    performance_verified: false
+    semantic_certified: true
+    backend_execution_certified: true
+    operational_production_certified: true
+    production_status: backend_execution_certified
+    upgrade_batch: null
     block_reason: null
     certification_gaps: []
     execution_variants: []
@@ -1714,7 +1352,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -1738,16 +1376,16 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: B
     block_reason: null
     certification_gaps: []
     execution_variants: []
     certified_dual: true
-  protected_log:
-    canonical: protected_log
-    execution_kind: native
+  quarter_from_cumulative:
+    canonical: quarter_from_cumulative
+    execution_kind: other
     polars_implemented: true
     polars_pure_native: true
     duckdb_implemented: true
@@ -1762,33 +1400,9 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
-    upgrade_batch: B
-    block_reason: null
-    certification_gaps: []
-    execution_variants: []
-    certified_dual: true
-  protected_sqrt:
-    canonical: protected_sqrt
-    execution_kind: native
-    polars_implemented: true
-    polars_pure_native: true
-    duckdb_implemented: true
-    duckdb_real_sql: true
-    semantic_contract_complete: true
-    parameter_domain_complete: true
-    type_signature_complete: true
-    normal_parity: true
-    edge_parity: true
-    alignment_verified: true
-    chunk_invariance: false
-    performance_verified: false
-    semantic_certified: true
-    backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
-    upgrade_batch: B
+    operational_production_certified: true
+    production_status: backend_execution_certified
+    upgrade_batch: F
     block_reason: null
     certification_gaps: []
     execution_variants: []
@@ -1810,7 +1424,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -1819,61 +1433,6 @@ operators:
     - direct
     - fused_ts_unary
     certified_dual: true
-  rank_pct:
-    canonical: rank_pct
-    execution_kind: native
-    polars_implemented: true
-    polars_pure_native: true
-    duckdb_implemented: true
-    duckdb_real_sql: true
-    semantic_contract_complete: true
-    parameter_domain_complete: true
-    type_signature_complete: true
-    normal_parity: true
-    edge_parity: true
-    alignment_verified: true
-    chunk_invariance: false
-    performance_verified: false
-    semantic_certified: true
-    backend_execution_certified: true
-    operational_production_certified: false
-    production_status: backend_execution_certified
-    upgrade_batch: A
-    block_reason: null
-    certification_gaps: []
-    execution_variants:
-    - direct
-    - fused_ts_unary
-    certified_dual: true
-  rolling_beta:
-    canonical: rolling_beta
-    execution_kind: native
-    polars_implemented: true
-    polars_pure_native: false
-    duckdb_implemented: true
-    duckdb_real_sql: true
-    semantic_contract_complete: true
-    parameter_domain_complete: true
-    type_signature_complete: false
-    normal_parity: false
-    edge_parity: false
-    alignment_verified: true
-    chunk_invariance: false
-    performance_verified: false
-    semantic_certified: true
-    backend_execution_certified: false
-    operational_production_certified: false
-    production_status: missing_primitive
-    upgrade_batch: D
-    block_reason: missing_stable_primitive
-    certification_gaps:
-    - polars_reference_parity
-    - polars_edge_verified
-    - duckdb_edge_verified
-    - no_fallback_verified
-    execution_variants:
-    - alias_rewrite_ts_beta
-    certified_dual: false
   safe_div_null:
     canonical: safe_div_null
     execution_kind: native
@@ -1891,38 +1450,12 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
     certification_gaps: []
     execution_variants: []
-    certified_dual: true
-  scale:
-    canonical: scale
-    execution_kind: native
-    polars_implemented: true
-    polars_pure_native: true
-    duckdb_implemented: true
-    duckdb_real_sql: true
-    semantic_contract_complete: true
-    parameter_domain_complete: false
-    type_signature_complete: true
-    normal_parity: true
-    edge_parity: true
-    alignment_verified: true
-    chunk_invariance: false
-    performance_verified: false
-    semantic_certified: true
-    backend_execution_certified: true
-    operational_production_certified: false
-    production_status: backend_execution_certified
-    upgrade_batch: B
-    block_reason: null
-    certification_gaps: []
-    execution_variants:
-    - direct
-    - fused_ts_unary
     certified_dual: true
   sign:
     canonical: sign
@@ -1941,7 +1474,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -1965,8 +1498,8 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
+    operational_production_certified: true
+    production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
     certification_gaps: []
@@ -1989,8 +1522,8 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
+    operational_production_certified: true
+    production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
     certification_gaps: []
@@ -2013,7 +1546,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -2037,9 +1570,33 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
+    block_reason: null
+    certification_gaps: []
+    execution_variants: []
+    certified_dual: true
+  tanh:
+    canonical: tanh
+    execution_kind: registry
+    polars_implemented: true
+    polars_pure_native: true
+    duckdb_implemented: true
+    duckdb_real_sql: true
+    semantic_contract_complete: true
+    parameter_domain_complete: true
+    type_signature_complete: true
+    normal_parity: true
+    edge_parity: true
+    alignment_verified: true
+    chunk_invariance: false
+    performance_verified: false
+    semantic_certified: true
+    backend_execution_certified: true
+    operational_production_certified: true
+    production_status: backend_execution_certified
+    upgrade_batch: null
     block_reason: null
     certification_gaps: []
     execution_variants: []
@@ -2121,7 +1678,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -2145,7 +1702,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -2169,7 +1726,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -2193,43 +1750,13 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
     certification_gaps: []
     execution_variants: []
     certified_dual: true
-  ts_decay_linear:
-    canonical: ts_decay_linear
-    execution_kind: python_rolling
-    polars_implemented: true
-    polars_pure_native: false
-    duckdb_implemented: true
-    duckdb_real_sql: false
-    semantic_contract_complete: false
-    parameter_domain_complete: true
-    type_signature_complete: false
-    normal_parity: false
-    edge_parity: false
-    alignment_verified: true
-    chunk_invariance: false
-    performance_verified: false
-    semantic_certified: false
-    backend_execution_certified: false
-    operational_production_certified: false
-    production_status: python_rolling
-    upgrade_batch: null
-    block_reason: not_in_phase1_scope
-    certification_gaps:
-    - polars_reference_parity
-    - polars_edge_verified
-    - duckdb_reference_parity
-    - duckdb_real_sql_verified
-    - duckdb_edge_verified
-    - no_fallback_verified
-    execution_variants: []
-    certified_dual: false
   ts_delay:
     canonical: ts_delay
     execution_kind: native
@@ -2247,7 +1774,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -2271,43 +1798,37 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
     certification_gaps: []
     execution_variants: []
     certified_dual: true
-  ts_ema:
-    canonical: ts_ema
-    execution_kind: stateful
+  ts_log_return:
+    canonical: ts_log_return
+    execution_kind: native
     polars_implemented: true
-    polars_pure_native: false
+    polars_pure_native: true
     duckdb_implemented: true
-    duckdb_real_sql: false
-    semantic_contract_complete: false
+    duckdb_real_sql: true
+    semantic_contract_complete: true
     parameter_domain_complete: true
-    type_signature_complete: false
-    normal_parity: false
-    edge_parity: false
+    type_signature_complete: true
+    normal_parity: true
+    edge_parity: true
     alignment_verified: true
     chunk_invariance: false
     performance_verified: false
-    semantic_certified: false
-    backend_execution_certified: false
-    operational_production_certified: false
-    production_status: deferred
+    semantic_certified: true
+    backend_execution_certified: true
+    operational_production_certified: true
+    production_status: backend_execution_certified
     upgrade_batch: null
-    block_reason: not_in_phase1_scope
-    certification_gaps:
-    - polars_reference_parity
-    - polars_edge_verified
-    - duckdb_reference_parity
-    - duckdb_real_sql_verified
-    - duckdb_edge_verified
-    - no_fallback_verified
+    block_reason: null
+    certification_gaps: []
     execution_variants: []
-    certified_dual: false
+    certified_dual: true
   ts_max:
     canonical: ts_max
     execution_kind: native
@@ -2325,7 +1846,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -2349,7 +1870,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -2373,7 +1894,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -2397,7 +1918,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -2421,7 +1942,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -2445,7 +1966,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -2469,7 +1990,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: B
     block_reason: null
@@ -2493,7 +2014,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -2517,7 +2038,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -2541,7 +2062,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -2565,16 +2086,16 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
     certification_gaps: []
     execution_variants: []
     certified_dual: true
-  volatility:
-    canonical: volatility
-    execution_kind: native
+  ttm_from_cumulative:
+    canonical: ttm_from_cumulative
+    execution_kind: other
     polars_implemented: true
     polars_pure_native: true
     duckdb_implemented: true
@@ -2589,16 +2110,16 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
-    upgrade_batch: A
+    operational_production_certified: true
+    production_status: backend_execution_certified
+    upgrade_batch: null
     block_reason: null
     certification_gaps: []
     execution_variants: []
     certified_dual: true
-  vwap:
-    canonical: vwap
-    execution_kind: native
+  ttm_from_quarterly:
+    canonical: ttm_from_quarterly
+    execution_kind: other
     polars_implemented: true
     polars_pure_native: true
     duckdb_implemented: true
@@ -2613,9 +2134,9 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
-    production_status: forbidden
-    upgrade_batch: A
+    operational_production_certified: true
+    production_status: backend_execution_certified
+    upgrade_batch: F
     block_reason: null
     certification_gaps: []
     execution_variants: []
@@ -2637,7 +2158,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -2663,7 +2184,31 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
+    production_status: backend_execution_certified
+    upgrade_batch: null
+    block_reason: null
+    certification_gaps: []
+    execution_variants: []
+    certified_dual: true
+  yoy_by_period:
+    canonical: yoy_by_period
+    execution_kind: other
+    polars_implemented: true
+    polars_pure_native: true
+    duckdb_implemented: true
+    duckdb_real_sql: true
+    semantic_contract_complete: true
+    parameter_domain_complete: true
+    type_signature_complete: true
+    normal_parity: true
+    edge_parity: true
+    alignment_verified: true
+    chunk_invariance: false
+    performance_verified: false
+    semantic_certified: true
+    backend_execution_certified: true
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -2687,7 +2232,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null

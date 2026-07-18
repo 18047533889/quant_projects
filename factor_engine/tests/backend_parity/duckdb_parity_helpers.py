@@ -4,8 +4,10 @@ from __future__ import annotations
 
 
 def assert_duckdb_real_sql_execution(run_out: dict) -> None:
-    """DuckDB fast path 须 ``sql_query_count > 0`` 且无 Python fallback。"""
+    """Require the tested operator tree—not merely a leaf—to run in DuckDB."""
     assert int(run_out.get("sql_query_count") or 0) > 0, run_out
     assert run_out.get("used_sql_pushdown") is True, run_out
     assert int(run_out.get("sql_fallback_subtree_count") or 0) == 0, run_out
     assert run_out.get("sql_full_execution_failed") is not True, run_out
+    assert run_out.get("fully_sql") is True, run_out
+    assert run_out.get("sql_fully_pushed") is True, run_out

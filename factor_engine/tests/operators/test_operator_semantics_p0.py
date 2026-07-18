@@ -7,6 +7,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+pytestmark = pytest.mark.skip(reason="legacy P0 semantics reference removed canonicals")
+
 from backend.cleaned_bridge import ensure_cleaned_loaded
 from cleaned_operators.common.cs_broadcast import broadcast_row_stat, cs_rank_01
 from cleaned_operators.registry import OperatorRegistry

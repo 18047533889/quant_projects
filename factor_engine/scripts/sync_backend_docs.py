@@ -25,6 +25,9 @@ def _yes(value: bool) -> str:
 
 def main() -> None:
     load_all()
+    from backend.sql_pushdown.sql_registry import register_sql_backends
+
+    register_sql_backends()
     from cleaned_operators.operator_policy import POLARS_PARITY_VERIFIED, POLARS_PRODUCTION_SAFE
     from cleaned_operators.operator_surface import classify_canonical
     from backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS, SQL_PARITY_VERIFIED_CANONICALS, SQL_PRODUCTION_SAFE_CANONICALS

@@ -25,6 +25,7 @@ class StatefulOperatorSpec:
     missing_policy: str
     dependencies: tuple[str, ...] = ()
     checkpoint_required_for_segmented: bool = True
+    segmented_execution_supported: bool = True
 
 
 @dataclass(frozen=True)
@@ -171,6 +172,10 @@ class StatefulCheckpointRegistry:
         expected_instrument: str | None = None,
     ) -> None:
         spec = cls.get(canonical)
+        if spec is not None and not spec.segmented_execution_supported and not starts_at_dataset_origin:
+            raise StatefulContractError(
+                f"segmented execution of {canonical} is unsupported without a native checkpoint"
+            )
         if spec is None or not spec.checkpoint_required_for_segmented:
             return
         if starts_at_dataset_origin:
@@ -191,6 +196,30 @@ class StatefulCheckpointRegistry:
 
 
 for _spec in (
+    StatefulOperatorSpec(
+        canonical="ts_ewm_std", state_schema_version="unsupported.v1",
+        semantic_version="2.0", minimum_history=2, checkpoint_fields=(),
+        missing_policy="recursive_state", checkpoint_required_for_segmented=False,
+        segmented_execution_supported=False,
+    ),
+    StatefulOperatorSpec(
+        canonical="ts_ewm_var", state_schema_version="unsupported.v1",
+        semantic_version="2.0", minimum_history=2, checkpoint_fields=(),
+        missing_policy="recursive_state", checkpoint_required_for_segmented=False,
+        segmented_execution_supported=False,
+    ),
+    StatefulOperatorSpec(
+        canonical="ts_ewm_cov", state_schema_version="unsupported.v1",
+        semantic_version="2.0", minimum_history=2, checkpoint_fields=(),
+        missing_policy="recursive_state", checkpoint_required_for_segmented=False,
+        segmented_execution_supported=False,
+    ),
+    StatefulOperatorSpec(
+        canonical="ts_ewm_corr", state_schema_version="unsupported.v1",
+        semantic_version="2.0", minimum_history=2, checkpoint_fields=(),
+        missing_policy="recursive_state", checkpoint_required_for_segmented=False,
+        segmented_execution_supported=False,
+    ),
     StatefulOperatorSpec(
         canonical="ts_ema",
         state_schema_version="ema_state.v1",

@@ -9,7 +9,7 @@ import pytest
 pd = pytest.importorskip("pandas")
 pytest.importorskip("polars")
 
-from api import cos, exp, rank, sin, ts_delay, ts_mean, zscore
+from api import exp, rank, ts_delay, ts_mean, zscore
 from api.cleaned_ops import make_cleaned_call_factory
 from api.columns import col
 from api.factor import Factor
@@ -18,6 +18,8 @@ from runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
 abs_ = make_cleaned_call_factory("abs")
+sin = make_cleaned_call_factory("sin")
+cos = make_cleaned_call_factory("cos")
 
 
 def _panel():

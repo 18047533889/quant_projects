@@ -10,10 +10,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ATR_WILDER": {
       "duckdb_edge_parity": false,
@@ -25,10 +25,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
-      "polars_reference_parity": true,
-      "surface": "daily"
+      "polars_reference_parity": false,
+      "surface": "extended"
     },
     "MACD_hist": {
       "duckdb_edge_parity": false,
@@ -40,10 +40,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "MACD_line": {
       "duckdb_edge_parity": false,
@@ -55,10 +55,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "MACD_signal": {
       "duckdb_edge_parity": false,
@@ -70,10 +70,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "RSI_WILDER": {
       "duckdb_edge_parity": false,
@@ -85,10 +85,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
-      "polars_reference_parity": true,
-      "surface": "daily"
+      "polars_reference_parity": false,
+      "surface": "extended"
     },
     "abs": {
       "duckdb_edge_parity": true,
@@ -97,11 +97,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -115,10 +115,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "add": {
       "duckdb_edge_parity": true,
@@ -127,11 +127,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -142,11 +142,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -163,7 +163,7 @@
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "asin": {
       "duckdb_edge_parity": false,
@@ -175,10 +175,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "atan": {
       "duckdb_edge_parity": false,
@@ -190,10 +190,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "atan2": {
       "duckdb_edge_parity": false,
@@ -208,7 +208,7 @@
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "cbrt": {
       "duckdb_edge_parity": false,
@@ -220,10 +220,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ceil": {
       "duckdb_edge_parity": true,
@@ -232,13 +232,13 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
-      "surface": "extended"
+      "surface": "daily"
     },
     "clip": {
       "duckdb_edge_parity": true,
@@ -247,11 +247,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -262,11 +262,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -295,10 +295,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "cosh": {
       "duckdb_edge_parity": false,
@@ -310,10 +310,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "coskewness_to_market": {
       "duckdb_edge_parity": false,
@@ -325,7 +325,7 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
       "surface": "research"
@@ -340,10 +340,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "cs_bucket": {
       "duckdb_edge_parity": false,
@@ -355,24 +355,24 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "cs_count": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": false,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
+      "duckdb_edge_parity": true,
+      "duckdb_implemented": true,
+      "duckdb_production_safe": true,
+      "duckdb_real_sql_tested": true,
+      "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
-      "polars_reference_parity": false,
+      "polars_production_safe": true,
+      "polars_reference_parity": true,
       "surface": "daily"
     },
     "cs_demean": {
@@ -382,11 +382,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -400,10 +400,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "cs_fill_median": {
       "duckdb_edge_parity": false,
@@ -415,10 +415,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "cs_mad": {
       "duckdb_edge_parity": true,
@@ -451,18 +451,18 @@
       "surface": "daily"
     },
     "cs_mean": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": false,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
+      "duckdb_edge_parity": true,
+      "duckdb_implemented": true,
+      "duckdb_production_safe": true,
+      "duckdb_real_sql_tested": true,
+      "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
-      "polars_reference_parity": false,
+      "polars_production_safe": true,
+      "polars_reference_parity": true,
       "surface": "daily"
     },
     "cs_multi_resid": {
@@ -478,7 +478,7 @@
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "cs_neutralize": {
       "duckdb_edge_parity": false,
@@ -493,7 +493,7 @@
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "cs_pct_rank": {
       "duckdb_edge_parity": true,
@@ -502,11 +502,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -523,7 +523,7 @@
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "cs_rank_gaussian": {
       "duckdb_edge_parity": false,
@@ -533,12 +533,12 @@
       "duckdb_reference_parity": false,
       "pandas_runtime": true,
       "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_execution_kind": "unsupported",
+      "polars_implemented": false,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "cs_regression": {
       "duckdb_edge_parity": false,
@@ -553,7 +553,7 @@
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "cs_resid": {
       "duckdb_edge_parity": false,
@@ -568,9 +568,39 @@
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "cs_std": {
+      "duckdb_edge_parity": true,
+      "duckdb_implemented": true,
+      "duckdb_production_safe": true,
+      "duckdb_real_sql_tested": true,
+      "duckdb_reference_parity": true,
+      "pandas_runtime": true,
+      "polars_edge_parity": false,
+      "polars_execution_kind": "unsupported",
+      "polars_implemented": false,
+      "polars_no_fallback": false,
+      "polars_production_safe": false,
+      "polars_reference_parity": false,
+      "surface": "daily"
+    },
+    "cs_sum": {
+      "duckdb_edge_parity": true,
+      "duckdb_implemented": true,
+      "duckdb_production_safe": true,
+      "duckdb_real_sql_tested": true,
+      "duckdb_reference_parity": true,
+      "pandas_runtime": true,
+      "polars_edge_parity": true,
+      "polars_execution_kind": "expression_native",
+      "polars_implemented": true,
+      "polars_no_fallback": true,
+      "polars_production_safe": true,
+      "polars_reference_parity": true,
+      "surface": "daily"
+    },
+    "cs_weighted_demean": {
       "duckdb_edge_parity": false,
       "duckdb_implemented": false,
       "duckdb_production_safe": false,
@@ -583,37 +613,7 @@
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
-    },
-    "cs_sum": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": false,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
-      "pandas_runtime": true,
-      "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
-      "polars_production_safe": false,
-      "polars_reference_parity": false,
-      "surface": "daily"
-    },
-    "cs_weighted_demean": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": false,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
-      "pandas_runtime": true,
-      "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
-      "polars_production_safe": false,
-      "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "cs_weighted_mean": {
       "duckdb_edge_parity": false,
@@ -623,12 +623,12 @@
       "duckdb_reference_parity": false,
       "pandas_runtime": true,
       "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_execution_kind": "unsupported",
+      "polars_implemented": false,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "cs_weighted_zscore": {
       "duckdb_edge_parity": false,
@@ -638,12 +638,12 @@
       "duckdb_reference_parity": false,
       "pandas_runtime": true,
       "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_execution_kind": "unsupported",
+      "polars_implemented": false,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "cs_wls_resid": {
       "duckdb_edge_parity": false,
@@ -658,7 +658,7 @@
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "csc": {
       "duckdb_edge_parity": false,
@@ -670,10 +670,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "cube": {
       "duckdb_edge_parity": false,
@@ -685,7 +685,7 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
       "surface": "legacy"
@@ -700,7 +700,7 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
       "surface": "research"
@@ -712,28 +712,13 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
-    },
-    "downside_beta": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": false,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
-      "pandas_runtime": true,
-      "polars_edge_parity": false,
-      "polars_execution_kind": "unsupported",
-      "polars_implemented": false,
-      "polars_no_fallback": false,
-      "polars_production_safe": false,
-      "polars_reference_parity": false,
-      "surface": "research"
     },
     "eq": {
       "duckdb_edge_parity": true,
@@ -742,86 +727,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
-      "polars_reference_parity": true,
-      "surface": "daily"
-    },
-    "ewm": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": false,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
-      "pandas_runtime": true,
-      "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
-      "polars_production_safe": false,
-      "polars_reference_parity": false,
-      "surface": "daily"
-    },
-    "ewm_corr": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": true,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
-      "pandas_runtime": true,
-      "polars_edge_parity": false,
-      "polars_execution_kind": "unsupported",
-      "polars_implemented": false,
-      "polars_no_fallback": false,
-      "polars_production_safe": false,
-      "polars_reference_parity": false,
-      "surface": "daily"
-    },
-    "ewm_cov": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": true,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
-      "pandas_runtime": true,
-      "polars_edge_parity": false,
-      "polars_execution_kind": "unsupported",
-      "polars_implemented": false,
-      "polars_no_fallback": false,
-      "polars_production_safe": false,
-      "polars_reference_parity": false,
-      "surface": "daily"
-    },
-    "ewm_std": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": true,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
-      "pandas_runtime": true,
-      "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
-      "polars_production_safe": false,
-      "polars_reference_parity": true,
-      "surface": "daily"
-    },
-    "ewm_var": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": true,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
-      "pandas_runtime": true,
-      "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -832,11 +742,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -850,7 +760,7 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
       "surface": "extended"
@@ -865,10 +775,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "fillna_const": {
       "duckdb_edge_parity": true,
@@ -877,11 +787,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -895,10 +805,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "flex_max": {
       "duckdb_edge_parity": false,
@@ -910,7 +820,7 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
       "surface": "extended"
@@ -925,7 +835,7 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
       "surface": "extended"
@@ -937,13 +847,13 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
-      "surface": "extended"
+      "surface": "daily"
     },
     "fundamental_staleness": {
       "duckdb_edge_parity": false,
@@ -955,10 +865,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ge": {
       "duckdb_edge_parity": true,
@@ -967,26 +877,26 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
     "group_count": {
       "duckdb_edge_parity": true,
       "duckdb_implemented": true,
-      "duckdb_production_safe": false,
+      "duckdb_production_safe": true,
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -1000,23 +910,23 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
-      "polars_reference_parity": true,
+      "polars_reference_parity": false,
       "surface": "research"
     },
     "group_max": {
       "duckdb_edge_parity": true,
       "duckdb_implemented": true,
-      "duckdb_production_safe": false,
+      "duckdb_production_safe": true,
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -1027,26 +937,26 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
     "group_min": {
       "duckdb_edge_parity": true,
       "duckdb_implemented": true,
-      "duckdb_production_safe": false,
+      "duckdb_production_safe": true,
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -1081,11 +991,11 @@
       "surface": "daily"
     },
     "group_percentile": {
-      "duckdb_edge_parity": true,
+      "duckdb_edge_parity": false,
       "duckdb_implemented": true,
       "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": true,
-      "duckdb_reference_parity": true,
+      "duckdb_real_sql_tested": false,
+      "duckdb_reference_parity": false,
       "pandas_runtime": true,
       "polars_edge_parity": false,
       "polars_execution_kind": "unsupported",
@@ -1093,7 +1003,7 @@
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "group_rank": {
       "duckdb_edge_parity": true,
@@ -1102,11 +1012,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -1117,26 +1027,26 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
     "group_sum": {
       "duckdb_edge_parity": true,
       "duckdb_implemented": true,
-      "duckdb_production_safe": false,
+      "duckdb_production_safe": true,
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -1148,12 +1058,12 @@
       "duckdb_reference_parity": false,
       "pandas_runtime": true,
       "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_execution_kind": "unsupported",
+      "polars_implemented": false,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "group_weighted_zscore": {
       "duckdb_edge_parity": false,
@@ -1163,12 +1073,12 @@
       "duckdb_reference_parity": false,
       "pandas_runtime": true,
       "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_execution_kind": "unsupported",
+      "polars_implemented": false,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "group_winsorize": {
       "duckdb_edge_parity": true,
@@ -1192,11 +1102,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -1207,11 +1117,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -1225,7 +1135,7 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
       "surface": "internal"
@@ -1240,40 +1150,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
-      "polars_production_safe": false,
-      "polars_reference_parity": false,
-      "surface": "research"
-    },
-    "idio_vol": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": false,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
-      "pandas_runtime": true,
-      "polars_edge_parity": false,
-      "polars_execution_kind": "unsupported",
-      "polars_implemented": false,
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
       "surface": "research"
-    },
-    "intercept": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": false,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
-      "pandas_runtime": true,
-      "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
-      "polars_production_safe": false,
-      "polars_reference_parity": false,
-      "surface": "daily"
     },
     "intraday_vwap_deviation": {
       "duckdb_edge_parity": false,
@@ -1297,11 +1177,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -1312,71 +1192,71 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
     "is_infinite": {
       "duckdb_edge_parity": true,
       "duckdb_implemented": true,
-      "duckdb_production_safe": false,
+      "duckdb_production_safe": true,
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
     "is_nan": {
+      "duckdb_edge_parity": false,
+      "duckdb_implemented": true,
+      "duckdb_production_safe": false,
+      "duckdb_real_sql_tested": false,
+      "duckdb_reference_parity": false,
+      "pandas_runtime": true,
+      "polars_edge_parity": false,
+      "polars_execution_kind": "expression_native",
+      "polars_implemented": true,
+      "polars_no_fallback": false,
+      "polars_production_safe": false,
+      "polars_reference_parity": false,
+      "surface": "extended"
+    },
+    "is_not_null": {
       "duckdb_edge_parity": true,
       "duckdb_implemented": true,
       "duckdb_production_safe": true,
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
-      "polars_reference_parity": true,
-      "surface": "daily"
-    },
-    "is_not_null": {
-      "duckdb_edge_parity": true,
-      "duckdb_implemented": true,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": true,
-      "duckdb_reference_parity": true,
-      "pandas_runtime": true,
-      "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
     "is_null": {
       "duckdb_edge_parity": true,
       "duckdb_implemented": true,
-      "duckdb_production_safe": false,
+      "duckdb_production_safe": true,
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -1387,11 +1267,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -1405,10 +1285,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "log": {
       "duckdb_edge_parity": true,
@@ -1417,11 +1297,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -1435,7 +1315,7 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
       "surface": "extended"
@@ -1450,7 +1330,7 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
       "surface": "extended"
@@ -1458,15 +1338,15 @@
     "log_abs": {
       "duckdb_edge_parity": true,
       "duckdb_implemented": true,
-      "duckdb_production_safe": false,
+      "duckdb_production_safe": true,
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -1477,11 +1357,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -1492,148 +1372,13 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
-    },
-    "micro_amihud_hf": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": false,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
-      "pandas_runtime": true,
-      "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
-      "polars_production_safe": false,
-      "polars_reference_parity": false,
-      "surface": "research"
-    },
-    "micro_bipower_var": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": false,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
-      "pandas_runtime": true,
-      "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
-      "polars_production_safe": false,
-      "polars_reference_parity": false,
-      "surface": "research"
-    },
-    "micro_jump_indicator": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": false,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
-      "pandas_runtime": true,
-      "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
-      "polars_production_safe": false,
-      "polars_reference_parity": false,
-      "surface": "research"
-    },
-    "micro_kyle_lambda": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": false,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
-      "pandas_runtime": true,
-      "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
-      "polars_production_safe": false,
-      "polars_reference_parity": false,
-      "surface": "research"
-    },
-    "micro_mid_return": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": false,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
-      "pandas_runtime": true,
-      "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
-      "polars_production_safe": false,
-      "polars_reference_parity": false,
-      "surface": "research"
-    },
-    "micro_realized_vol": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": false,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
-      "pandas_runtime": true,
-      "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
-      "polars_production_safe": false,
-      "polars_reference_parity": false,
-      "surface": "research"
-    },
-    "micro_spread": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": false,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
-      "pandas_runtime": true,
-      "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
-      "polars_production_safe": false,
-      "polars_reference_parity": false,
-      "surface": "research"
-    },
-    "micro_trade_imbalance": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": false,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
-      "pandas_runtime": true,
-      "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
-      "polars_production_safe": false,
-      "polars_reference_parity": false,
-      "surface": "research"
-    },
-    "micro_vpin": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": false,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
-      "pandas_runtime": true,
-      "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
-      "polars_production_safe": false,
-      "polars_reference_parity": false,
-      "surface": "research"
     },
     "minimum": {
       "duckdb_edge_parity": true,
@@ -1642,11 +1387,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -1657,11 +1402,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -1672,11 +1417,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -1687,11 +1432,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -1717,11 +1462,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -1732,57 +1477,57 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
     "period_average": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": false,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
+      "duckdb_edge_parity": true,
+      "duckdb_implemented": true,
+      "duckdb_production_safe": true,
+      "duckdb_real_sql_tested": true,
+      "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
-      "polars_execution_kind": "unsupported",
-      "polars_implemented": false,
-      "polars_no_fallback": false,
-      "polars_production_safe": false,
-      "polars_reference_parity": false,
+      "polars_edge_parity": true,
+      "polars_execution_kind": "expression_native",
+      "polars_implemented": true,
+      "polars_no_fallback": true,
+      "polars_production_safe": true,
+      "polars_reference_parity": true,
       "surface": "daily"
     },
     "period_cagr": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": false,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
+      "duckdb_edge_parity": true,
+      "duckdb_implemented": true,
+      "duckdb_production_safe": true,
+      "duckdb_real_sql_tested": true,
+      "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
-      "polars_execution_kind": "unsupported",
-      "polars_implemented": false,
-      "polars_no_fallback": false,
-      "polars_production_safe": false,
-      "polars_reference_parity": false,
+      "polars_edge_parity": true,
+      "polars_execution_kind": "expression_native",
+      "polars_implemented": true,
+      "polars_no_fallback": true,
+      "polars_production_safe": true,
+      "polars_reference_parity": true,
       "surface": "daily"
     },
     "period_change": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": false,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
+      "duckdb_edge_parity": true,
+      "duckdb_implemented": true,
+      "duckdb_production_safe": true,
+      "duckdb_real_sql_tested": true,
+      "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
-      "polars_execution_kind": "unsupported",
-      "polars_implemented": false,
-      "polars_no_fallback": false,
-      "polars_production_safe": false,
-      "polars_reference_parity": false,
+      "polars_edge_parity": true,
+      "polars_execution_kind": "expression_native",
+      "polars_implemented": true,
+      "polars_no_fallback": true,
+      "polars_production_safe": true,
+      "polars_reference_parity": true,
       "surface": "daily"
     },
     "period_lag": {
@@ -1795,10 +1540,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "period_stability": {
       "duckdb_edge_parity": false,
@@ -1808,12 +1553,12 @@
       "duckdb_reference_parity": false,
       "pandas_runtime": true,
       "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_execution_kind": "unsupported",
+      "polars_implemented": false,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "power": {
       "duckdb_edge_parity": true,
@@ -1822,11 +1567,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -1843,7 +1588,7 @@
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "protected_div": {
       "duckdb_edge_parity": true,
@@ -1861,18 +1606,18 @@
       "surface": "internal"
     },
     "quarter_from_cumulative": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": false,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
+      "duckdb_edge_parity": true,
+      "duckdb_implemented": true,
+      "duckdb_production_safe": true,
+      "duckdb_real_sql_tested": true,
+      "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
-      "polars_execution_kind": "unsupported",
-      "polars_implemented": false,
-      "polars_no_fallback": false,
-      "polars_production_safe": false,
-      "polars_reference_parity": false,
+      "polars_edge_parity": true,
+      "polars_execution_kind": "expression_native",
+      "polars_implemented": true,
+      "polars_no_fallback": true,
+      "polars_production_safe": true,
+      "polars_reference_parity": true,
       "surface": "daily"
     },
     "rank": {
@@ -1882,28 +1627,13 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
-      "polars_execution_kind": "unsupported",
-      "polars_implemented": false,
-      "polars_no_fallback": false,
-      "polars_production_safe": false,
-      "polars_reference_parity": false,
+      "polars_edge_parity": true,
+      "polars_execution_kind": "expression_native",
+      "polars_implemented": true,
+      "polars_no_fallback": true,
+      "polars_production_safe": true,
+      "polars_reference_parity": true,
       "surface": "daily"
-    },
-    "rank_corr": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": false,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
-      "pandas_runtime": true,
-      "polars_edge_parity": false,
-      "polars_execution_kind": "unsupported",
-      "polars_implemented": false,
-      "polars_no_fallback": false,
-      "polars_production_safe": false,
-      "polars_reference_parity": false,
-      "surface": "research"
     },
     "real_turnover_rate": {
       "duckdb_edge_parity": false,
@@ -1915,10 +1645,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "residual_momentum_capm": {
       "duckdb_edge_parity": false,
@@ -1930,7 +1660,7 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
       "surface": "research"
@@ -1943,12 +1673,12 @@
       "duckdb_reference_parity": false,
       "pandas_runtime": true,
       "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_execution_kind": "unsupported",
+      "polars_implemented": false,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "rolling_beta_to_market": {
       "duckdb_edge_parity": false,
@@ -1960,7 +1690,7 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
       "surface": "research"
@@ -1975,7 +1705,7 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
       "surface": "extended"
@@ -1987,11 +1717,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -2005,25 +1735,25 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "scale": {
-      "duckdb_edge_parity": true,
+      "duckdb_edge_parity": false,
       "duckdb_implemented": true,
-      "duckdb_production_safe": true,
-      "duckdb_real_sql_tested": true,
-      "duckdb_reference_parity": true,
+      "duckdb_production_safe": false,
+      "duckdb_real_sql_tested": false,
+      "duckdb_reference_parity": false,
       "pandas_runtime": true,
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
-      "polars_reference_parity": true,
-      "surface": "daily"
+      "polars_reference_parity": false,
+      "surface": "extended"
     },
     "sec": {
       "duckdb_edge_parity": false,
@@ -2035,10 +1765,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "sigmoid": {
       "duckdb_edge_parity": false,
@@ -2050,7 +1780,7 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
       "surface": "extended"
@@ -2062,26 +1792,26 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
     "signed_log": {
       "duckdb_edge_parity": true,
       "duckdb_implemented": true,
-      "duckdb_production_safe": false,
+      "duckdb_production_safe": true,
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -2095,15 +1825,15 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "signed_sqrt": {
       "duckdb_edge_parity": true,
       "duckdb_implemented": true,
-      "duckdb_production_safe": false,
+      "duckdb_production_safe": true,
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
@@ -2125,10 +1855,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "sinh": {
       "duckdb_edge_parity": false,
@@ -2140,25 +1870,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
-      "polars_production_safe": false,
-      "polars_reference_parity": false,
-      "surface": "daily"
-    },
-    "size_neutralize": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": false,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
-      "pandas_runtime": true,
-      "polars_edge_parity": false,
-      "polars_execution_kind": "unsupported",
-      "polars_implemented": false,
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "sqrt": {
       "duckdb_edge_parity": true,
@@ -2167,11 +1882,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -2200,7 +1915,7 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
       "surface": "extended"
@@ -2212,11 +1927,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -2245,24 +1960,24 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "tanh": {
-      "duckdb_edge_parity": false,
+      "duckdb_edge_parity": true,
       "duckdb_implemented": true,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
+      "duckdb_production_safe": true,
+      "duckdb_real_sql_tested": true,
+      "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
-      "polars_reference_parity": false,
+      "polars_production_safe": true,
+      "polars_reference_parity": true,
       "surface": "daily"
     },
     "trade_when": {
@@ -2275,7 +1990,7 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
       "surface": "research"
@@ -2290,10 +2005,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "truncate": {
       "duckdb_edge_parity": false,
@@ -2305,7 +2020,7 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
       "surface": "extended"
@@ -2318,12 +2033,12 @@
       "duckdb_reference_parity": false,
       "pandas_runtime": true,
       "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_execution_kind": "unsupported",
+      "polars_implemented": false,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
-      "polars_reference_parity": true,
-      "surface": "daily"
+      "polars_reference_parity": false,
+      "surface": "extended"
     },
     "ts_argmin": {
       "duckdb_edge_parity": false,
@@ -2333,12 +2048,12 @@
       "duckdb_reference_parity": false,
       "pandas_runtime": true,
       "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_execution_kind": "unsupported",
+      "polars_implemented": false,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
-      "polars_reference_parity": true,
-      "surface": "daily"
+      "polars_reference_parity": false,
+      "surface": "extended"
     },
     "ts_autocorr": {
       "duckdb_edge_parity": true,
@@ -2347,11 +2062,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -2362,11 +2077,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -2378,12 +2093,12 @@
       "duckdb_reference_parity": false,
       "pandas_runtime": true,
       "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_execution_kind": "unsupported",
+      "polars_implemented": false,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_bottomk_std": {
       "duckdb_edge_parity": false,
@@ -2393,12 +2108,12 @@
       "duckdb_reference_parity": false,
       "pandas_runtime": true,
       "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_execution_kind": "unsupported",
+      "polars_implemented": false,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_bottomk_sum": {
       "duckdb_edge_parity": false,
@@ -2408,12 +2123,12 @@
       "duckdb_reference_parity": false,
       "pandas_runtime": true,
       "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_execution_kind": "unsupported",
+      "polars_implemented": false,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_corr": {
       "duckdb_edge_parity": true,
@@ -2422,11 +2137,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -2440,10 +2155,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_cov": {
       "duckdb_edge_parity": true,
@@ -2452,11 +2167,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -2470,10 +2185,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_decay_exp_window": {
       "duckdb_edge_parity": false,
@@ -2488,7 +2203,7 @@
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_decay_linear": {
       "duckdb_edge_parity": false,
@@ -2503,7 +2218,7 @@
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_delay": {
       "duckdb_edge_parity": true,
@@ -2512,11 +2227,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -2527,11 +2242,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -2545,10 +2260,70 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
-      "polars_reference_parity": true,
-      "surface": "daily"
+      "polars_reference_parity": false,
+      "surface": "extended"
+    },
+    "ts_ewm_corr": {
+      "duckdb_edge_parity": false,
+      "duckdb_implemented": true,
+      "duckdb_production_safe": false,
+      "duckdb_real_sql_tested": false,
+      "duckdb_reference_parity": false,
+      "pandas_runtime": true,
+      "polars_edge_parity": false,
+      "polars_execution_kind": "unsupported",
+      "polars_implemented": false,
+      "polars_no_fallback": false,
+      "polars_production_safe": false,
+      "polars_reference_parity": false,
+      "surface": "extended"
+    },
+    "ts_ewm_cov": {
+      "duckdb_edge_parity": false,
+      "duckdb_implemented": true,
+      "duckdb_production_safe": false,
+      "duckdb_real_sql_tested": false,
+      "duckdb_reference_parity": false,
+      "pandas_runtime": true,
+      "polars_edge_parity": false,
+      "polars_execution_kind": "unsupported",
+      "polars_implemented": false,
+      "polars_no_fallback": false,
+      "polars_production_safe": false,
+      "polars_reference_parity": false,
+      "surface": "extended"
+    },
+    "ts_ewm_std": {
+      "duckdb_edge_parity": false,
+      "duckdb_implemented": true,
+      "duckdb_production_safe": false,
+      "duckdb_real_sql_tested": false,
+      "duckdb_reference_parity": false,
+      "pandas_runtime": true,
+      "polars_edge_parity": false,
+      "polars_execution_kind": "expression_native",
+      "polars_implemented": true,
+      "polars_no_fallback": false,
+      "polars_production_safe": false,
+      "polars_reference_parity": false,
+      "surface": "extended"
+    },
+    "ts_ewm_var": {
+      "duckdb_edge_parity": false,
+      "duckdb_implemented": true,
+      "duckdb_production_safe": false,
+      "duckdb_real_sql_tested": false,
+      "duckdb_reference_parity": false,
+      "pandas_runtime": true,
+      "polars_edge_parity": false,
+      "polars_execution_kind": "expression_native",
+      "polars_implemented": true,
+      "polars_no_fallback": false,
+      "polars_production_safe": false,
+      "polars_reference_parity": false,
+      "surface": "extended"
     },
     "ts_kurt": {
       "duckdb_edge_parity": false,
@@ -2563,7 +2338,7 @@
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_last_if": {
       "duckdb_edge_parity": false,
@@ -2573,19 +2348,19 @@
       "duckdb_reference_parity": false,
       "pandas_runtime": true,
       "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_execution_kind": "unsupported",
+      "polars_implemented": false,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_log_return": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": false,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
+      "duckdb_edge_parity": true,
+      "duckdb_implemented": true,
+      "duckdb_production_safe": true,
+      "duckdb_real_sql_tested": true,
+      "duckdb_reference_parity": true,
       "pandas_runtime": true,
       "polars_edge_parity": false,
       "polars_execution_kind": "unsupported",
@@ -2608,7 +2383,7 @@
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_max": {
       "duckdb_edge_parity": true,
@@ -2617,11 +2392,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -2638,7 +2413,7 @@
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "research"
     },
     "ts_max_drawdown": {
       "duckdb_edge_parity": false,
@@ -2653,7 +2428,7 @@
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_mean": {
       "duckdb_edge_parity": true,
@@ -2662,11 +2437,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -2680,10 +2455,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_median": {
       "duckdb_edge_parity": true,
@@ -2692,11 +2467,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -2707,11 +2482,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -2728,7 +2503,7 @@
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "research"
     },
     "ts_nth_value": {
       "duckdb_edge_parity": false,
@@ -2743,7 +2518,7 @@
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_partial_corr": {
       "duckdb_edge_parity": false,
@@ -2758,7 +2533,7 @@
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_pct": {
       "duckdb_edge_parity": true,
@@ -2767,11 +2542,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -2818,7 +2593,7 @@
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_quantile": {
       "duckdb_edge_parity": false,
@@ -2830,10 +2605,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
-      "polars_reference_parity": true,
-      "surface": "daily"
+      "polars_reference_parity": false,
+      "surface": "extended"
     },
     "ts_rank": {
       "duckdb_edge_parity": true,
@@ -2863,7 +2638,7 @@
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_regression_intercept": {
       "duckdb_edge_parity": false,
@@ -2878,7 +2653,7 @@
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_regression_r2": {
       "duckdb_edge_parity": false,
@@ -2893,7 +2668,7 @@
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_regression_resid": {
       "duckdb_edge_parity": false,
@@ -2908,7 +2683,7 @@
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_regression_slope": {
       "duckdb_edge_parity": false,
@@ -2923,7 +2698,7 @@
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_regression_tstat": {
       "duckdb_edge_parity": false,
@@ -2938,7 +2713,7 @@
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_sharpe": {
       "duckdb_edge_parity": true,
@@ -2965,10 +2740,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
-      "polars_reference_parity": true,
-      "surface": "daily"
+      "polars_reference_parity": false,
+      "surface": "extended"
     },
     "ts_std": {
       "duckdb_edge_parity": true,
@@ -2977,11 +2752,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -2995,10 +2770,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_sum": {
       "duckdb_edge_parity": true,
@@ -3007,11 +2782,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -3040,10 +2815,10 @@
       "polars_edge_parity": false,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_tail_mean": {
       "duckdb_edge_parity": false,
@@ -3053,12 +2828,12 @@
       "duckdb_reference_parity": false,
       "pandas_runtime": true,
       "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_execution_kind": "unsupported",
+      "polars_implemented": false,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_time_slope": {
       "duckdb_edge_parity": false,
@@ -3068,12 +2843,12 @@
       "duckdb_reference_parity": false,
       "pandas_runtime": true,
       "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_execution_kind": "unsupported",
+      "polars_implemented": false,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_topk_mean": {
       "duckdb_edge_parity": false,
@@ -3083,12 +2858,12 @@
       "duckdb_reference_parity": false,
       "pandas_runtime": true,
       "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_execution_kind": "unsupported",
+      "polars_implemented": false,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_topk_std": {
       "duckdb_edge_parity": false,
@@ -3098,12 +2873,12 @@
       "duckdb_reference_parity": false,
       "pandas_runtime": true,
       "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_execution_kind": "unsupported",
+      "polars_implemented": false,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_topk_sum": {
       "duckdb_edge_parity": false,
@@ -3113,12 +2888,12 @@
       "duckdb_reference_parity": false,
       "pandas_runtime": true,
       "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_execution_kind": "unsupported",
+      "polars_implemented": false,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_trend_tstat": {
       "duckdb_edge_parity": false,
@@ -3133,7 +2908,7 @@
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_true_streak": {
       "duckdb_edge_parity": false,
@@ -3143,12 +2918,12 @@
       "duckdb_reference_parity": false,
       "pandas_runtime": true,
       "polars_edge_parity": false,
-      "polars_execution_kind": "expression_native",
-      "polars_implemented": true,
-      "polars_no_fallback": true,
+      "polars_execution_kind": "unsupported",
+      "polars_implemented": false,
+      "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "ts_var": {
       "duckdb_edge_parity": true,
@@ -3157,11 +2932,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -3172,42 +2947,42 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
     "ttm_from_cumulative": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": false,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
+      "duckdb_edge_parity": true,
+      "duckdb_implemented": true,
+      "duckdb_production_safe": true,
+      "duckdb_real_sql_tested": true,
+      "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
-      "polars_execution_kind": "unsupported",
-      "polars_implemented": false,
-      "polars_no_fallback": false,
-      "polars_production_safe": false,
-      "polars_reference_parity": false,
+      "polars_edge_parity": true,
+      "polars_execution_kind": "expression_native",
+      "polars_implemented": true,
+      "polars_no_fallback": true,
+      "polars_production_safe": true,
+      "polars_reference_parity": true,
       "surface": "daily"
     },
     "ttm_from_quarterly": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": false,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
+      "duckdb_edge_parity": true,
+      "duckdb_implemented": true,
+      "duckdb_production_safe": true,
+      "duckdb_real_sql_tested": true,
+      "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
-      "polars_execution_kind": "unsupported",
-      "polars_implemented": false,
-      "polars_no_fallback": false,
-      "polars_production_safe": false,
-      "polars_reference_parity": false,
+      "polars_edge_parity": true,
+      "polars_execution_kind": "expression_native",
+      "polars_implemented": true,
+      "polars_no_fallback": true,
+      "polars_production_safe": true,
+      "polars_reference_parity": true,
       "surface": "daily"
     },
     "unitize": {
@@ -3223,7 +2998,7 @@
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "where": {
       "duckdb_edge_parity": true,
@@ -3232,11 +3007,11 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     },
@@ -3268,21 +3043,21 @@
       "polars_no_fallback": false,
       "polars_production_safe": false,
       "polars_reference_parity": false,
-      "surface": "daily"
+      "surface": "extended"
     },
     "yoy_by_period": {
-      "duckdb_edge_parity": false,
-      "duckdb_implemented": false,
-      "duckdb_production_safe": false,
-      "duckdb_real_sql_tested": false,
-      "duckdb_reference_parity": false,
+      "duckdb_edge_parity": true,
+      "duckdb_implemented": true,
+      "duckdb_production_safe": true,
+      "duckdb_real_sql_tested": true,
+      "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
-      "polars_execution_kind": "unsupported",
-      "polars_implemented": false,
-      "polars_no_fallback": false,
-      "polars_production_safe": false,
-      "polars_reference_parity": false,
+      "polars_edge_parity": true,
+      "polars_execution_kind": "expression_native",
+      "polars_implemented": true,
+      "polars_no_fallback": true,
+      "polars_production_safe": true,
+      "polars_reference_parity": true,
       "surface": "daily"
     },
     "zscore": {
@@ -3292,22 +3067,22 @@
       "duckdb_real_sql_tested": true,
       "duckdb_reference_parity": true,
       "pandas_runtime": true,
-      "polars_edge_parity": false,
+      "polars_edge_parity": true,
       "polars_execution_kind": "expression_native",
       "polars_implemented": true,
       "polars_no_fallback": true,
-      "polars_production_safe": false,
+      "polars_production_safe": true,
       "polars_reference_parity": true,
       "surface": "daily"
     }
   },
   "schema_version": 1,
   "surface_counts": {
-    "daily": 180,
-    "extended": 12,
+    "daily": 86,
+    "extended": 101,
     "internal": 3,
     "legacy": 1,
-    "research": 24,
+    "research": 14,
     "unclassified": 0,
     "unsafe": 0
   }

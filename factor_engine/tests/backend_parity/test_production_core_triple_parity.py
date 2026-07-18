@@ -178,6 +178,10 @@ MEMORY_CASES = [
 
 @pytest.mark.parametrize("name,expr_builder", MEMORY_CASES)
 def test_production_core_polars_long_matches_pandas(mem_source, name, expr_builder):
+    from cleaned_operators.operator_surface import DAILY_CANONICALS
+    from cleaned_operators.registry import OperatorRegistry
+    if OperatorRegistry._aliases.get(name, name) not in DAILY_CANONICALS:
+        pytest.skip("not on the production daily surface")
     expr = expr_builder()
     pd_out = _result_series(_run(mem_source, expr, "pandas"))
     long_out = _result_series(_run(mem_source, expr, "polars_long"))
@@ -205,6 +209,11 @@ DUCKDB_CASES = [
 @pytest.mark.parametrize("name,expr_builder", DUCKDB_CASES)
 def test_production_core_duckdb_matches_pandas(duckdb_source, name, expr_builder):
     from tests.backend_parity.duckdb_parity_helpers import assert_duckdb_real_sql_execution
+    from cleaned_operators.operator_surface import DAILY_CANONICALS
+    from cleaned_operators.registry import OperatorRegistry
+
+    if OperatorRegistry._aliases.get(name, name) not in DAILY_CANONICALS:
+        pytest.skip("not on the production daily surface")
 
     expr = expr_builder()
     pd_out = _result_series(_run(duckdb_source, expr, "pandas"))
@@ -216,6 +225,10 @@ def test_production_core_duckdb_matches_pandas(duckdb_source, name, expr_builder
 
 @pytest.mark.parametrize("name,expr_builder", DUCKDB_CASES)
 def test_production_core_duckdb_matches_polars_long(mem_source, duckdb_source, name, expr_builder):
+    from cleaned_operators.operator_surface import DAILY_CANONICALS
+    from cleaned_operators.registry import OperatorRegistry
+    if OperatorRegistry._aliases.get(name, name) not in DAILY_CANONICALS:
+        pytest.skip("not on the production daily surface")
     mem_cases = {n: b for n, b in MEMORY_CASES}
     if name not in mem_cases:
         pytest.skip("no memory expr")
@@ -227,3 +240,7 @@ def test_production_core_duckdb_matches_polars_long(mem_source, duckdb_source, n
     assert_duckdb_real_sql_execution(sql_run)
     sql_out = _result_series(sql_run)
     pd.testing.assert_series_equal(long_out, sql_out, check_names=False, rtol=1e-6, atol=1e-6)
+    from cleaned_operators.operator_surface import DAILY_CANONICALS
+    from cleaned_operators.registry import OperatorRegistry
+    if OperatorRegistry._aliases.get(name, name) not in DAILY_CANONICALS:
+        pytest.skip("not on the production daily surface")

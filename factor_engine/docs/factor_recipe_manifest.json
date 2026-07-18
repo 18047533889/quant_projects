@@ -1,20 +1,36 @@
 {
-  "recipe_count": 41,
+  "recipe_count": 42,
   "recipes": {
     "accruals": {
       "category": "fundamental",
       "compile_status": "verified",
       "compiled_node_count": 10,
       "description": "总应计项",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "safe_div_null(ttm_from_quarterly(net_income, period_id) - ttm_from_quarterly(operating_cash_flow, period_id), period_average(total_assets, period_id, 2))",
       "expression": "safe_div_null(ttm_from_quarterly(net_income, period_id) - ttm_from_quarterly(operating_cash_flow, period_id), period_average(total_assets, period_id, 2))",
       "name": "accruals",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "net_income",
         "operating_cash_flow",
         "total_assets",
         "period_id"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "period_average",
+        "safe_div_null",
+        "subtract",
+        "ttm_from_quarterly"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [],
       "status": "production"
     },
@@ -23,15 +39,31 @@
       "compile_status": "verified",
       "compiled_node_count": 9,
       "description": "ADX平均方向指数评级",
+      "duckdb_dependencies_real_sql": false,
+      "duckdb_primitive_dependencies_certified": false,
       "expanded_expression": "0.5 * (ADX(high, low, close, window) + ts_delay(ADX(high, low, close, window), window))",
       "expression": "0.5 * (ADX(high, low, close, window) + ts_delay(ADX(high, low, close, window), window))",
       "name": "adxr",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "high",
         "low",
         "close",
         "window"
       ],
+      "polars_dependencies_no_fallback": false,
+      "polars_primitive_dependencies_certified": false,
+      "primitive_dependencies_null_edge_verified": false,
+      "primitive_dependency_backend_ready": false,
+      "primitive_operators": [
+        "ADX",
+        "add",
+        "multiply",
+        "ts_delay"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [
         "ADXR"
       ],
@@ -42,14 +74,29 @@
       "compile_status": "verified",
       "compiled_node_count": 6,
       "description": "滚动年化波动率",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "ts_std(returns, window) * sqrt(ann_factor)",
       "expression": "ts_std(returns, window) * sqrt(ann_factor)",
       "name": "annualized_volatility",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "returns",
         "window",
         "ann_factor"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "multiply",
+        "sqrt",
+        "ts_std"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [
         "volatility"
       ],
@@ -60,13 +107,29 @@
       "compile_status": "verified",
       "compiled_node_count": 8,
       "description": "距最近窗口低点的新鲜度",
+      "duckdb_dependencies_real_sql": false,
+      "duckdb_primitive_dependencies_certified": false,
       "expanded_expression": "100 * (1 - safe_div_null(ts_argmin(low, window), window))",
       "expression": "100 * (1 - safe_div_null(ts_argmin(low, window), window))",
       "name": "aroon_down",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "low",
         "window"
       ],
+      "polars_dependencies_no_fallback": false,
+      "polars_primitive_dependencies_certified": false,
+      "primitive_dependencies_null_edge_verified": false,
+      "primitive_dependency_backend_ready": false,
+      "primitive_operators": [
+        "multiply",
+        "safe_div_null",
+        "subtract",
+        "ts_argmin"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [
         "AROON_down"
       ],
@@ -77,14 +140,31 @@
       "compile_status": "verified",
       "compiled_node_count": 14,
       "description": "Aroon上下轨差",
+      "duckdb_dependencies_real_sql": false,
+      "duckdb_primitive_dependencies_certified": false,
       "expanded_expression": "100 * (1 - safe_div_null(ts_argmax(high, window), window)) - 100 * (1 - safe_div_null(ts_argmin(low, window), window))",
       "expression": "aroon_up(high, window) - aroon_down(low, window)",
       "name": "aroon_oscillator",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "high",
         "low",
         "window"
       ],
+      "polars_dependencies_no_fallback": false,
+      "polars_primitive_dependencies_certified": false,
+      "primitive_dependencies_null_edge_verified": false,
+      "primitive_dependency_backend_ready": false,
+      "primitive_operators": [
+        "multiply",
+        "safe_div_null",
+        "subtract",
+        "ts_argmax",
+        "ts_argmin"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [
         "AROON"
       ],
@@ -95,13 +175,29 @@
       "compile_status": "verified",
       "compiled_node_count": 8,
       "description": "距最近窗口高点的新鲜度",
+      "duckdb_dependencies_real_sql": false,
+      "duckdb_primitive_dependencies_certified": false,
       "expanded_expression": "100 * (1 - safe_div_null(ts_argmax(high, window), window))",
       "expression": "100 * (1 - safe_div_null(ts_argmax(high, window), window))",
       "name": "aroon_up",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "high",
         "window"
       ],
+      "polars_dependencies_no_fallback": false,
+      "polars_primitive_dependencies_certified": false,
+      "primitive_dependencies_null_edge_verified": false,
+      "primitive_dependency_backend_ready": false,
+      "primitive_operators": [
+        "multiply",
+        "safe_div_null",
+        "subtract",
+        "ts_argmax"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [
         "AROON_up"
       ],
@@ -112,13 +208,26 @@
       "compile_status": "verified",
       "compiled_node_count": 5,
       "description": "资产同比增长",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "period_change(total_assets, period_id, 4, 'ratio')",
       "expression": "period_change(total_assets, period_id, 4, 'ratio')",
       "name": "asset_growth",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "total_assets",
         "period_id"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "period_change"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [],
       "status": "production"
     },
@@ -127,15 +236,29 @@
       "compile_status": "verified",
       "compiled_node_count": 6,
       "description": "真实波幅简单移动平均",
+      "duckdb_dependencies_real_sql": false,
+      "duckdb_primitive_dependencies_certified": false,
       "expanded_expression": "ts_mean(true_range(high, low, close), window)",
       "expression": "ts_mean(true_range(high, low, close), window)",
       "name": "atr_sma",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "high",
         "low",
         "close",
         "window"
       ],
+      "polars_dependencies_no_fallback": false,
+      "polars_primitive_dependencies_certified": false,
+      "primitive_dependencies_null_edge_verified": false,
+      "primitive_dependency_backend_ready": false,
+      "primitive_operators": [
+        "true_range",
+        "ts_mean"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [
         "ATR"
       ],
@@ -146,14 +269,30 @@
       "compile_status": "verified",
       "compiled_node_count": 7,
       "description": "布林下轨",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "ts_mean(x, window) - width * ts_std(x, window)",
       "expression": "ts_mean(x, window) - width * ts_std(x, window)",
       "name": "bollinger_lower",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "x",
         "window",
         "width"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "multiply",
+        "subtract",
+        "ts_mean",
+        "ts_std"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [
         "BollingerLower"
       ],
@@ -164,13 +303,26 @@
       "compile_status": "verified",
       "compiled_node_count": 3,
       "description": "布林中轨",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "ts_mean(x, window)",
       "expression": "ts_mean(x, window)",
       "name": "bollinger_mid",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "x",
         "window"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "ts_mean"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [
         "BollingerBands"
       ],
@@ -181,14 +333,30 @@
       "compile_status": "verified",
       "compiled_node_count": 7,
       "description": "布林上轨",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "ts_mean(x, window) + width * ts_std(x, window)",
       "expression": "ts_mean(x, window) + width * ts_std(x, window)",
       "name": "bollinger_upper",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "x",
         "window",
         "width"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "add",
+        "multiply",
+        "ts_mean",
+        "ts_std"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [
         "BollingerUpper"
       ],
@@ -199,14 +367,30 @@
       "compile_status": "verified",
       "compiled_node_count": 8,
       "description": "资本开支强度",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "safe_div_null(abs(ttm_from_quarterly(capex, period_id)), period_average(total_assets, period_id, 2))",
       "expression": "safe_div_null(abs(ttm_from_quarterly(capex, period_id)), period_average(total_assets, period_id, 2))",
       "name": "capex_intensity",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "capex",
         "total_assets",
         "period_id"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "abs",
+        "period_average",
+        "safe_div_null",
+        "ttm_from_quarterly"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [],
       "status": "production"
     },
@@ -215,14 +399,28 @@
       "compile_status": "verified",
       "compiled_node_count": 6,
       "description": "现金利润转化率",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "safe_div_null(ttm_from_quarterly(operating_cash_flow, period_id), ttm_from_quarterly(net_income, period_id))",
       "expression": "safe_div_null(ttm_from_quarterly(operating_cash_flow, period_id), ttm_from_quarterly(net_income, period_id))",
       "name": "cash_conversion",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "operating_cash_flow",
         "net_income",
         "period_id"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "safe_div_null",
+        "ttm_from_quarterly"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [],
       "status": "production"
     },
@@ -231,14 +429,29 @@
       "compile_status": "verified",
       "compiled_node_count": 7,
       "description": "经营现金流资产收益",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "safe_div_null(ttm_from_quarterly(operating_cash_flow, period_id), period_average(total_assets, period_id, 2))",
       "expression": "safe_div_null(ttm_from_quarterly(operating_cash_flow, period_id), period_average(total_assets, period_id, 2))",
       "name": "cash_profitability",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "operating_cash_flow",
         "total_assets",
         "period_id"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "period_average",
+        "safe_div_null",
+        "ttm_from_quarterly"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [],
       "status": "production"
     },
@@ -247,14 +460,31 @@
       "compile_status": "verified",
       "compiled_node_count": 8,
       "description": "商品通道指数",
+      "duckdb_dependencies_real_sql": false,
+      "duckdb_primitive_dependencies_certified": false,
       "expanded_expression": "safe_div_null(typical_price - ts_mean(typical_price, window), constant * ts_mad(typical_price, window))",
       "expression": "safe_div_null(typical_price - ts_mean(typical_price, window), constant * ts_mad(typical_price, window))",
       "name": "cci",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "typical_price",
         "window",
         "constant"
       ],
+      "polars_dependencies_no_fallback": false,
+      "polars_primitive_dependencies_certified": false,
+      "primitive_dependencies_null_edge_verified": false,
+      "primitive_dependency_backend_ready": false,
+      "primitive_operators": [
+        "multiply",
+        "safe_div_null",
+        "subtract",
+        "ts_mad",
+        "ts_mean"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [
         "CCI"
       ],
@@ -265,13 +495,26 @@
       "compile_status": "verified",
       "compiled_node_count": 3,
       "description": "流动比率",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "safe_div_null(current_assets, current_liabilities)",
       "expression": "safe_div_null(current_assets, current_liabilities)",
       "name": "current_ratio",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "current_assets",
         "current_liabilities"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "safe_div_null"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [
         "current_ratio"
       ],
@@ -282,13 +525,26 @@
       "compile_status": "verified",
       "compiled_node_count": 3,
       "description": "负债权益比",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "safe_div_null(total_debt, total_equity)",
       "expression": "safe_div_null(total_debt, total_equity)",
       "name": "debt_to_equity",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "total_debt",
         "total_equity"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "safe_div_null"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [
         "debt_to_equity"
       ],
@@ -299,13 +555,31 @@
       "compile_status": "verified",
       "compiled_node_count": 10,
       "description": "严格因果去趋势价格振荡器",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "close - ts_delay(ts_mean(close, window), floor(window / 2) + 1)",
       "expression": "close - ts_delay(ts_mean(close, window), floor(window / 2) + 1)",
       "name": "dpo_causal",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "close",
         "window"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "add",
+        "divide",
+        "floor",
+        "subtract",
+        "ts_delay",
+        "ts_mean"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [
         "DPO"
       ],
@@ -316,15 +590,32 @@
       "compile_status": "verified",
       "compiled_node_count": 11,
       "description": "自由现金流资产收益",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "safe_div_null(ttm_from_quarterly(operating_cash_flow, period_id) - abs(ttm_from_quarterly(capex, period_id)), period_average(total_assets, period_id, 2))",
       "expression": "safe_div_null(ttm_from_quarterly(operating_cash_flow, period_id) - abs(ttm_from_quarterly(capex, period_id)), period_average(total_assets, period_id, 2))",
       "name": "free_cash_flow_profitability",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "operating_cash_flow",
         "capex",
         "total_assets",
         "period_id"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "abs",
+        "period_average",
+        "safe_div_null",
+        "subtract",
+        "ttm_from_quarterly"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [],
       "status": "production"
     },
@@ -333,14 +624,29 @@
       "compile_status": "verified",
       "compiled_node_count": 7,
       "description": "毛利润资产收益",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "safe_div_null(ttm_from_quarterly(gross_profit, period_id), period_average(total_assets, period_id, 2))",
       "expression": "safe_div_null(ttm_from_quarterly(gross_profit, period_id), period_average(total_assets, period_id, 2))",
       "name": "gross_profitability",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "gross_profit",
         "total_assets",
         "period_id"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "period_average",
+        "safe_div_null",
+        "ttm_from_quarterly"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [],
       "status": "production"
     },
@@ -349,14 +655,29 @@
       "compile_status": "verified",
       "compiled_node_count": 7,
       "description": "利息保障倍数",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "safe_div_null(ttm_from_quarterly(operating_income, period_id), abs(ttm_from_quarterly(interest_expense, period_id)))",
       "expression": "safe_div_null(ttm_from_quarterly(operating_income, period_id), abs(ttm_from_quarterly(interest_expense, period_id)))",
       "name": "interest_coverage",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "operating_income",
         "interest_expense",
         "period_id"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "abs",
+        "safe_div_null",
+        "ttm_from_quarterly"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [],
       "status": "production"
     },
@@ -365,13 +686,27 @@
       "compile_status": "verified",
       "compiled_node_count": 5,
       "description": "开盘到收盘收益",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "safe_div_null(close, open) - 1",
       "expression": "safe_div_null(close, open) - 1",
       "name": "intraday_return",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "open",
         "close"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "safe_div_null",
+        "subtract"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [
         "close_gap"
       ],
@@ -382,13 +717,26 @@
       "compile_status": "verified",
       "compiled_node_count": 5,
       "description": "存货同比增长",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "period_change(inventory, period_id, 4, 'ratio')",
       "expression": "period_change(inventory, period_id, 4, 'ratio')",
       "name": "inventory_growth",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "inventory",
         "period_id"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "period_change"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [],
       "status": "production"
     },
@@ -397,13 +745,26 @@
       "compile_status": "verified",
       "compiled_node_count": 3,
       "description": "N期价格动量",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "ts_delta(x, window)",
       "expression": "ts_delta(x, window)",
       "name": "momentum",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "x",
         "window"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "ts_delta"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [
         "MOM"
       ],
@@ -414,15 +775,30 @@
       "compile_status": "verified",
       "compiled_node_count": 7,
       "description": "净债务资产比",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "safe_div_null(short_debt + long_debt - cash, total_assets)",
       "expression": "safe_div_null(short_debt + long_debt - cash, total_assets)",
       "name": "net_debt_ratio",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "short_debt",
         "long_debt",
         "cash",
         "total_assets"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "add",
+        "safe_div_null",
+        "subtract"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [],
       "status": "production"
     },
@@ -431,13 +807,26 @@
       "compile_status": "verified",
       "compiled_node_count": 3,
       "description": "营业利润率",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "safe_div_null(operating_income, revenue)",
       "expression": "safe_div_null(operating_income, revenue)",
       "name": "operating_margin",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "operating_income",
         "revenue"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "safe_div_null"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [
         "operating_margin"
       ],
@@ -448,14 +837,29 @@
       "compile_status": "verified",
       "compiled_node_count": 7,
       "description": "营业利润资产收益",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "safe_div_null(ttm_from_quarterly(operating_income, period_id), period_average(total_assets, period_id, 2))",
       "expression": "safe_div_null(ttm_from_quarterly(operating_income, period_id), period_average(total_assets, period_id, 2))",
       "name": "operating_profitability",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "operating_income",
         "total_assets",
         "period_id"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "period_average",
+        "safe_div_null",
+        "ttm_from_quarterly"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [],
       "status": "production"
     },
@@ -464,13 +868,28 @@
       "compile_status": "verified",
       "compiled_node_count": 6,
       "description": "隔夜开盘缺口",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "safe_div_null(open, ts_delay(close, 1)) - 1",
       "expression": "safe_div_null(open, ts_delay(close, 1)) - 1",
       "name": "overnight_gap",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "open",
         "close"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "safe_div_null",
+        "subtract",
+        "ts_delay"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [
         "open_gap"
       ],
@@ -481,14 +900,28 @@
       "compile_status": "verified",
       "compiled_node_count": 5,
       "description": "速动比率",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "safe_div_null(current_assets - inventory, current_liabilities)",
       "expression": "safe_div_null(current_assets - inventory, current_liabilities)",
       "name": "quick_ratio",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "current_assets",
         "inventory",
         "current_liabilities"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "safe_div_null",
+        "subtract"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [
         "quick_ratio"
       ],
@@ -499,13 +932,27 @@
       "compile_status": "verified",
       "compiled_node_count": 5,
       "description": "N期百分比变化",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "100 * ts_pct(x, window)",
       "expression": "100 * ts_pct(x, window)",
       "name": "rate_of_change",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "x",
         "window"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "multiply",
+        "ts_pct"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [
         "ROC"
       ],
@@ -516,14 +963,28 @@
       "compile_status": "verified",
       "compiled_node_count": 6,
       "description": "研发强度",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "safe_div_null(ttm_from_quarterly(research_development, period_id), ttm_from_quarterly(revenue, period_id))",
       "expression": "safe_div_null(ttm_from_quarterly(research_development, period_id), ttm_from_quarterly(revenue, period_id))",
       "name": "rd_intensity",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "research_development",
         "revenue",
         "period_id"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "safe_div_null",
+        "ttm_from_quarterly"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [],
       "status": "production"
     },
@@ -532,13 +993,26 @@
       "compile_status": "verified",
       "compiled_node_count": 5,
       "description": "应收账款同比增长",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "period_change(receivables, period_id, 4, 'ratio')",
       "expression": "period_change(receivables, period_id, 4, 'ratio')",
       "name": "receivables_growth",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "receivables",
         "period_id"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "period_change"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [],
       "status": "production"
     },
@@ -547,14 +1021,30 @@
       "compile_status": "verified",
       "compiled_node_count": 8,
       "description": "固定窗口成交量方向累计",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "ts_sum(sign(ts_delta(close, 1)) * volume, window)",
       "expression": "ts_sum(sign(ts_delta(close, 1)) * volume, window)",
       "name": "rolling_obv",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "close",
         "volume",
         "window"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "multiply",
+        "sign",
+        "ts_delta",
+        "ts_sum"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [
         "OBV"
       ],
@@ -565,14 +1055,31 @@
       "compile_status": "verified",
       "compiled_node_count": 8,
       "description": "滚动年化夏普",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "safe_div_null(ts_mean(returns, window), ts_std(returns, window)) * sqrt(ann_factor)",
       "expression": "safe_div_null(ts_mean(returns, window), ts_std(returns, window)) * sqrt(ann_factor)",
       "name": "rolling_sharpe",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "returns",
         "window",
         "ann_factor"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "multiply",
+        "safe_div_null",
+        "sqrt",
+        "ts_mean",
+        "ts_std"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [
         "sharpe_ratio"
       ],
@@ -583,26 +1090,82 @@
       "compile_status": "verified",
       "compiled_node_count": 17,
       "description": "简单移动平均版本RSI",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "100 - 100 / (1 + safe_div_null(ts_mean(clip(ts_delta(close, 1), 0, inf), window), ts_mean(abs(clip(ts_delta(close, 1), -inf, 0)), window)))",
       "expression": "100 - 100 / (1 + safe_div_null(ts_mean(clip(ts_delta(close, 1), 0, inf), window), ts_mean(abs(clip(ts_delta(close, 1), -inf, 0)), window)))",
       "name": "rsi_sma",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "close",
         "window"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "abs",
+        "add",
+        "clip",
+        "divide",
+        "neg",
+        "safe_div_null",
+        "subtract",
+        "ts_delta",
+        "ts_mean"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [
         "RSI"
       ],
       "status": "optional"
+    },
+    "size_neutralize": {
+      "category": "cross_sectional",
+      "compile_status": "verified",
+      "compiled_node_count": 3,
+      "description": "市值中性化残差",
+      "duckdb_dependencies_real_sql": false,
+      "duckdb_primitive_dependencies_certified": false,
+      "expanded_expression": "cs_multi_resid(factor, market_cap)",
+      "expression": "cs_multi_resid(factor, market_cap)",
+      "name": "size_neutralize",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
+      "parameters": [
+        "factor",
+        "market_cap"
+      ],
+      "polars_dependencies_no_fallback": false,
+      "polars_primitive_dependencies_certified": false,
+      "primitive_dependencies_null_edge_verified": false,
+      "primitive_dependency_backend_ready": false,
+      "primitive_operators": [
+        "cs_multi_resid"
+      ],
+      "recipe_execution_verified": false,
+      "replacement_for": [
+        "size_neutralize"
+      ],
+      "status": "production"
     },
     "stochastic_d": {
       "category": "technical",
       "compile_status": "verified",
       "compiled_node_count": 13,
       "description": "随机指标D值",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "ts_mean(100 * safe_div_null(close - ts_min(low, window), ts_max(high, window) - ts_min(low, window)), smooth_window)",
       "expression": "ts_mean(100 * safe_div_null(close - ts_min(low, window), ts_max(high, window) - ts_min(low, window)), smooth_window)",
       "name": "stochastic_d",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "high",
         "low",
@@ -610,6 +1173,19 @@
         "window",
         "smooth_window"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "multiply",
+        "safe_div_null",
+        "subtract",
+        "ts_max",
+        "ts_mean",
+        "ts_min"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [
         "StochasticD"
       ],
@@ -620,15 +1196,32 @@
       "compile_status": "verified",
       "compiled_node_count": 11,
       "description": "随机指标K值",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "100 * safe_div_null(close - ts_min(low, window), ts_max(high, window) - ts_min(low, window))",
       "expression": "100 * safe_div_null(close - ts_min(low, window), ts_max(high, window) - ts_min(low, window))",
       "name": "stochastic_k",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "high",
         "low",
         "close",
         "window"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "multiply",
+        "safe_div_null",
+        "subtract",
+        "ts_max",
+        "ts_min"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [
         "StochasticK"
       ],
@@ -639,13 +1232,28 @@
       "compile_status": "verified",
       "compiled_node_count": 9,
       "description": "三重EMA的一期变化率",
+      "duckdb_dependencies_real_sql": false,
+      "duckdb_primitive_dependencies_certified": false,
       "expanded_expression": "100 * ts_pct(ts_ema(ts_ema(ts_ema(close, window), window), window), 1)",
       "expression": "100 * ts_pct(ts_ema(ts_ema(ts_ema(close, window), window), window), 1)",
       "name": "trix",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "close",
         "window"
       ],
+      "polars_dependencies_no_fallback": false,
+      "polars_primitive_dependencies_certified": false,
+      "primitive_dependencies_null_edge_verified": false,
+      "primitive_dependency_backend_ready": false,
+      "primitive_operators": [
+        "multiply",
+        "ts_ema",
+        "ts_pct"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [
         "TRIX"
       ],
@@ -656,9 +1264,14 @@
       "compile_status": "verified",
       "compiled_node_count": 7,
       "description": "量价加权MACD实验配方",
+      "duckdb_dependencies_real_sql": false,
+      "duckdb_primitive_dependencies_certified": false,
       "expanded_expression": "experimental_vpmacd(close, volume, open, high, low, lambda_param)",
       "expression": "experimental_vpmacd(close, volume, open, high, low, lambda_param)",
       "name": "vpmacd",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": false,
       "parameters": [
         "close",
         "volume",
@@ -667,6 +1280,14 @@
         "low",
         "lambda_param"
       ],
+      "polars_dependencies_no_fallback": false,
+      "polars_primitive_dependencies_certified": false,
+      "primitive_dependencies_null_edge_verified": false,
+      "primitive_dependency_backend_ready": false,
+      "primitive_operators": [
+        "experimental_vpmacd"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [
         "vp_weighted_price",
         "vpmacd",
@@ -679,13 +1300,26 @@
       "compile_status": "verified",
       "compiled_node_count": 3,
       "description": "线性衰减加权均值",
+      "duckdb_dependencies_real_sql": false,
+      "duckdb_primitive_dependencies_certified": false,
       "expanded_expression": "ts_decay_linear(x, window)",
       "expression": "ts_decay_linear(x, window)",
       "name": "weighted_moving_average",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "x",
         "window"
       ],
+      "polars_dependencies_no_fallback": false,
+      "polars_primitive_dependencies_certified": false,
+      "primitive_dependencies_null_edge_verified": false,
+      "primitive_dependency_backend_ready": false,
+      "primitive_operators": [
+        "ts_decay_linear"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [
         "WMA"
       ],
@@ -696,20 +1330,37 @@
       "compile_status": "verified",
       "compiled_node_count": 11,
       "description": "Williams %R",
+      "duckdb_dependencies_real_sql": true,
+      "duckdb_primitive_dependencies_certified": true,
       "expanded_expression": "100 * safe_div_null(close - ts_max(high, window), ts_max(high, window) - ts_min(low, window))",
       "expression": "100 * safe_div_null(close - ts_max(high, window), ts_max(high, window) - ts_min(low, window))",
       "name": "williams_r",
+      "pandas_duckdb_max_error": null,
+      "pandas_polars_max_error": null,
+      "pandas_primitive_dependencies_available": true,
       "parameters": [
         "high",
         "low",
         "close",
         "window"
       ],
+      "polars_dependencies_no_fallback": true,
+      "polars_primitive_dependencies_certified": true,
+      "primitive_dependencies_null_edge_verified": true,
+      "primitive_dependency_backend_ready": true,
+      "primitive_operators": [
+        "multiply",
+        "safe_div_null",
+        "subtract",
+        "ts_max",
+        "ts_min"
+      ],
+      "recipe_execution_verified": false,
       "replacement_for": [
         "WilliamsR"
       ],
       "status": "production"
     }
   },
-  "schema_version": "factor_recipe_manifest.v2"
+  "schema_version": "factor_recipe_manifest.v3"
 }

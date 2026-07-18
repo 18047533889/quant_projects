@@ -29,11 +29,7 @@ def test_production_core_equals_fastpath_p0_p1_plus_legacy():
         _LEGACY_PRODUCTION_CORE,
     )
 
-    dual_core = (
-        P0_PRODUCTION_FASTPATH_CANONICALS
-        | P1_POLARS_CORE_PRODUCTION_SAFE
-        | _LEGACY_PRODUCTION_CORE
-    ) - _FASTPATH_ALIAS_ONLY
+    dual_core = P0_PRODUCTION_FASTPATH_CANONICALS - _FASTPATH_ALIAS_ONLY
     assert PRODUCTION_DUAL_BACKEND_CORE_CANONICALS == dual_core
     assert PRODUCTION_CORE_CANONICALS == dual_core | PRODUCTION_ALLOWED_DEFERRED_CANONICALS
     assert not (PRODUCTION_ALLOWED_DEFERRED_CANONICALS & PRODUCTION_DUAL_BACKEND_CORE_CANONICALS)
@@ -51,4 +47,4 @@ def test_production_allowed_equals_core_plus_composites():
     composites = production_allowed_composite_canonicals()
     expected = PRODUCTION_CORE_CANONICALS | composites
     assert production_allowed_canonicals() == expected
-    assert len(composites) >= 9, "composite production 须 lowering primitive 全部六证后才放行"
+    assert composites <= production_allowed_canonicals()

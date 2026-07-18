@@ -16,49 +16,28 @@ OperatorStatus = Literal["production", "research", "experimental", "deprecated",
 NumericalStability = Literal["high", "medium", "low"]
 
 # stateful / deferred：允许 production 但不计入 strict dual-backend core
-PRODUCTION_ALLOWED_DEFERRED_CANONICALS: frozenset[str] = frozenset(
-    {
-        "ts_ema",
-        "ts_decay_linear",
-        "RSI_WILDER",
-        "ATR_WILDER",
-    }
-)
+PRODUCTION_ALLOWED_DEFERRED_CANONICALS: frozenset[str] = frozenset()
 
 # legacy PIT core（不含 deferred stateful）
-_LEGACY_PRODUCTION_CORE: frozenset[str] = frozenset(
-    {
-        "ts_rank",
-        "ts_sharpe",
-        "ts_autocorr",
-        "ffill",
-    }
-)
+_LEGACY_PRODUCTION_CORE: frozenset[str] = frozenset()
 
 # DSL alias；canonical 为 ``where``
 _FASTPATH_ALIAS_ONLY: frozenset[str] = frozenset({"if_else"})
 
 
 def _build_production_dual_backend_core() -> frozenset[str]:
-    """构建 strict dual-backend production core（不含 deferred stateful）。"""
-    from backend.production_fastpath_tiers import (
-        P0_PRODUCTION_FASTPATH_CANONICALS,
-        P1_POLARS_CORE_PRODUCTION_SAFE,
-    )
+    """Use the reviewed daily surface as the production primitive core."""
+    from cleaned_operators.operator_surface import DAILY_CANONICALS
 
-    return (
-        P0_PRODUCTION_FASTPATH_CANONICALS
-        | P1_POLARS_CORE_PRODUCTION_SAFE
-        | _LEGACY_PRODUCTION_CORE
-    ) - _FASTPATH_ALIAS_ONLY
+    return frozenset(DAILY_CANONICALS) | frozenset({"protected_div"})
 
 
 PRODUCTION_DUAL_BACKEND_CORE_CANONICALS: frozenset[str] = _build_production_dual_backend_core()
 
 
 def _build_production_core_canonicals() -> frozenset[str]:
-    """构建 PRODUCTION_CORE canonical 集合（dual-backend core + deferred allowed）。"""
-    return PRODUCTION_DUAL_BACKEND_CORE_CANONICALS | PRODUCTION_ALLOWED_DEFERRED_CANONICALS
+    """Build the production core from the static reviewed daily surface."""
+    return PRODUCTION_DUAL_BACKEND_CORE_CANONICALS
 
 
 # SQL 下推 / DSL 常用 production 核心 canonical（PIT 门禁 / 契约脚本对齐此清单）
@@ -133,10 +112,8 @@ PRODUCTION_DENIED_CANONICALS: frozenset[str] = frozenset(
         "ttm",
         "yoy",
         "avg2",
-        "quarter_from_cumulative",
-        "ttm_from_quarterly",
-        "ttm_from_cumulative",
-        "yoy_by_period",
+        # Strict PIT-aware fiscal operators are production primitives.  Only
+        # the legacy row-shift names quarter/ttm/yoy/avg2 remain denied.
         "operating_margin",
         "current_ratio",
         "quick_ratio",

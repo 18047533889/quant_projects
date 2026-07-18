@@ -1,6 +1,6 @@
 {
   "schema_version": "research_tool_manifest.v1",
-  "tool_count": 127,
+  "tool_count": 139,
   "tools": {
     "ACF": {
       "aliases": [
@@ -33,19 +33,10 @@
         "pandas_numpy": {
           "explicit": true,
           "source": "composite_fastpath_primitives"
-        },
-        "polars": {
-          "execution_kind": "expression_native",
-          "explicit": true,
-          "materializes_full_panel": false,
-          "source": "composite_fastpath_native_polars",
-          "supports_lazy": true,
-          "supports_streaming": true
         }
       },
       "backends": [
-        "pandas_numpy",
-        "polars"
+        "pandas_numpy"
       ],
       "canonical": "KAMA",
       "description": "共享效率比并按行向量化递归",
@@ -766,6 +757,29 @@
       "status": "implemented",
       "surface": "research_tools"
     },
+    "downside_beta": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "downside_beta",
+      "description": "下行 Beta",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "ret",
+        "benchmark_ret",
+        "window"
+      ],
+      "selected_source": "factor_dsl_polars",
+      "status": "experimental",
+      "surface": "research_tools"
+    },
     "dropna": {
       "aliases": [],
       "backend_meta": {
@@ -1377,6 +1391,29 @@
       "status": "implemented",
       "surface": "research_tools"
     },
+    "idio_vol": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "idio_vol",
+      "description": "特质波动率",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "ret",
+        "benchmark_ret",
+        "window"
+      ],
+      "selected_source": "factor_dsl_polars",
+      "status": "experimental",
+      "surface": "research_tools"
+    },
     "ifft": {
       "aliases": [
         "idft"
@@ -1828,6 +1865,289 @@
       "status": "implemented",
       "surface": "research_tools"
     },
+    "micro_amihud_hf": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "micro_amihud_hf",
+      "description": "Amihud illiquidity",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "close",
+        "volume"
+      ],
+      "selected_source": "factor_dsl_polars",
+      "status": "experimental",
+      "surface": "research_tools"
+    },
+    "micro_bipower_var": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "micro_bipower_var",
+      "description": "Bipower variation",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "close",
+        "window"
+      ],
+      "selected_source": "factor_dsl_polars",
+      "status": "experimental",
+      "surface": "research_tools"
+    },
+    "micro_jump_indicator": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "micro_jump_indicator",
+      "description": "Jump indicator",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "close",
+        "window"
+      ],
+      "selected_source": "factor_dsl_polars",
+      "status": "experimental",
+      "surface": "research_tools"
+    },
+    "micro_kyle_lambda": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "micro_kyle_lambda",
+      "description": "Kyle lambda proxy",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "close",
+        "volume",
+        "window"
+      ],
+      "selected_source": "factor_dsl_polars",
+      "status": "experimental",
+      "surface": "research_tools"
+    },
+    "micro_mid_return": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "micro_mid_return",
+      "description": "Mid-price return",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "high",
+        "low"
+      ],
+      "selected_source": "factor_dsl_polars",
+      "status": "experimental",
+      "surface": "research_tools"
+    },
+    "micro_realized_vol": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": true,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "micro_realized_vol",
+      "description": "已实现波动率",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "close",
+        "window"
+      ],
+      "selected_source": "factor_dsl_polars",
+      "status": "experimental",
+      "surface": "research_tools"
+    },
+    "micro_spread": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "micro_spread",
+      "description": "相对价差",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "high",
+        "low",
+        "close"
+      ],
+      "selected_source": "factor_dsl_polars",
+      "status": "experimental",
+      "surface": "research_tools"
+    },
+    "micro_trade_imbalance": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "micro_trade_imbalance",
+      "description": "Trade imbalance proxy",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "close",
+        "volume",
+        "window"
+      ],
+      "selected_source": "factor_dsl_polars",
+      "status": "experimental",
+      "surface": "research_tools"
+    },
+    "micro_vpin": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "source": "factor_dsl_polars",
+          "supports_lazy": true,
+          "supports_streaming": true
+        }
+      },
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "canonical": "micro_vpin",
+      "description": "VPIN proxy",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "close",
+        "volume",
+        "window"
+      ],
+      "selected_source": "factor_dsl_polars",
+      "status": "experimental",
+      "surface": "research_tools"
+    },
     "nan_to_num": {
       "aliases": [
         "NAN_TO_NUM"
@@ -2201,6 +2521,33 @@
         "window"
       ],
       "selected_source": "factor_dsl_polars",
+      "status": "implemented",
+      "surface": "research_tools"
+    },
+    "rank_corr": {
+      "aliases": [
+        "RANKCORR",
+        "RANK_CORR",
+        "rankcorr"
+      ],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "rank_corr",
+      "description": "秩相关系数（d=0 为截面，d>0 为时序窗口）",
+      "migration_reason": "not a production daily factor primitive",
+      "param_names": [
+        "x",
+        "y",
+        "d"
+      ],
+      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },

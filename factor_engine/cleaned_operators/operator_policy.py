@@ -35,12 +35,10 @@ RESEARCH_CORE_CANONICALS: frozenset[str] = frozenset(
         "micro_vpin",
         "micro_kyle_lambda",
         # 价量 / 统计 research
-        "real_turnover_rate",
         "rank_corr",
         "hump_decay",
         "corr_test",
         "vp_weighted_price",
-        "ts_topk_sum",
         "ts_poly2_coeff",
         "ts_poly2_resid",
         # 基本面 period（research alias，待 period-aware 拆分）
@@ -48,10 +46,6 @@ RESEARCH_CORE_CANONICALS: frozenset[str] = frozenset(
         "quarter",
         "yoy",
         "avg2",
-        "quarter_from_cumulative",
-        "ttm_from_quarterly",
-        "ttm_from_cumulative",
-        "yoy_by_period",
         # CAPM 扩展（production 仅 rolling_beta）
         "downside_beta",
         "tail_beta",
@@ -70,7 +64,7 @@ _POLICY_EXTENSION_CANONICALS: frozenset[str] = frozenset(
     {
         "WMA",
         "ts_ema",
-        "ewm_corr",
+        "ts_ewm_corr",
         "neutralize",
         "quantile",
         "standardize",
@@ -323,20 +317,20 @@ POLARS_PARITY_VERIFIED_TIER10: frozenset[str] = frozenset({
     "cs_quantile",
 })
 
-POLARS_PARITY_VERIFIED: frozenset[str] = (
-    POLARS_PARITY_VERIFIED_TIER1
-    | POLARS_PARITY_VERIFIED_TIER2
-    | POLARS_PARITY_VERIFIED_TIER3
-    | POLARS_PARITY_VERIFIED_TIER4
-    | POLARS_PARITY_VERIFIED_TIER5
-    | POLARS_PARITY_VERIFIED_TIER6
-    | POLARS_PARITY_VERIFIED_TIER7
-    | POLARS_PARITY_VERIFIED_TIER8
-    | POLARS_PARITY_VERIFIED_TIER9
-    | POLARS_PARITY_VERIFIED_TIER10
+from backend.primitive_evidence import (
+    POLARS_EDGE_VERIFIED as _POLARS_EDGE_VERIFIED,
+    POLARS_NO_FALLBACK_VERIFIED as _POLARS_NO_FALLBACK_VERIFIED,
+    POLARS_REFERENCE_PARITY_VERIFIED as _POLARS_REFERENCE_PARITY_VERIFIED,
 )
 
-POLARS_PRODUCTION_SAFE: frozenset[str] = POLARS_PRODUCTION_SAFE_CORE | POLARS_PARITY_VERIFIED
+# Mutable in place during registry finalisation so modules which imported these
+# objects before load_all() observe the same final evidence-backed truth.
+POLARS_PARITY_VERIFIED: set[str] = set(_POLARS_REFERENCE_PARITY_VERIFIED)
+POLARS_PRODUCTION_SAFE: set[str] = set(
+    _POLARS_REFERENCE_PARITY_VERIFIED
+    & _POLARS_EDGE_VERIFIED
+    & _POLARS_NO_FALLBACK_VERIFIED
+)
 
 
 def polars_implemented_canonicals() -> frozenset[str]:
@@ -360,25 +354,14 @@ def check_polars_production_gate() -> list[str]:
 返回:
     违规描述字符串列表。
 """
-    from cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS
-
     errors: list[str] = []
-    if POLARS_PRODUCTION_SAFE != POLARS_PRODUCTION_SAFE_CORE | POLARS_PARITY_VERIFIED:
-        errors.append("POLARS_PRODUCTION_SAFE 须等于 CORE | PARITY_VERIFIED")
-    if not POLARS_PARITY_VERIFIED <= POLARS_PRODUCTION_SAFE:
-        errors.append("POLARS_PARITY_VERIFIED 必须是 POLARS_PRODUCTION_SAFE 子集")
-    missing_core = sorted(PRODUCTION_CORE_CANONICALS - POLARS_PRODUCTION_SAFE)
-    if missing_core:
-        errors.append(
-            f"PRODUCTION_CORE 未全部进入 POLARS_PRODUCTION_SAFE: {missing_core}"
-        )
-    unverified = sorted(
-        POLARS_PRODUCTION_SAFE - POLARS_PRODUCTION_SAFE_CORE - POLARS_PARITY_VERIFIED
-    )
-    if unverified:
-        errors.append(
-            f"POLARS_PRODUCTION_SAFE 含未在 CORE|PARITY 中的算子: {unverified}"
-        )
+    implemented = polars_implemented_canonicals()
+    if not POLARS_PRODUCTION_SAFE <= POLARS_PARITY_VERIFIED:
+        errors.append("POLARS_PRODUCTION_SAFE 必须是 reference parity 子集")
+    if not POLARS_PRODUCTION_SAFE <= implemented:
+        errors.append("POLARS_PRODUCTION_SAFE 含未注册原生 Polars backend 的算子")
+    if not POLARS_PARITY_VERIFIED <= implemented:
+        errors.append("POLARS_PARITY_VERIFIED 含未注册 Polars backend 的算子")
     return errors
 
 
@@ -509,6 +492,7 @@ _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
     "tanh": {"scope": "elementwise", "pit_safe": True},
     "sigmoid": {"scope": "elementwise", "pit_safe": True},
     "signed_log": {"scope": "elementwise", "pit_safe": True},
+    "log_abs": {"scope": "elementwise", "pit_safe": True},
     "signed_sqrt": {"scope": "elementwise", "pit_safe": True},
     "square": {"scope": "elementwise", "pit_safe": True},
     "log10": {"scope": "elementwise", "pit_safe": True},
@@ -570,7 +554,7 @@ _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
     "ts_last_if": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "ts_days_since": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "ts_true_streak": {"scope": "ts", "pit_safe": True, "min_periods": 1},
-    "period_lag": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "period_lag": {"scope": "fundamental_period", "pit_safe": True, "min_periods": 1},
     "ts_regression_tstat": {"scope": "ts", "pit_safe": True, "min_periods": 3},
     "ts_trend_tstat": {"scope": "ts", "pit_safe": True, "min_periods": 3},
     "ts_max_drawdown": {"scope": "ts", "pit_safe": True, "min_periods": 2},
@@ -628,6 +612,23 @@ _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
     "c_std": {"scope": "cs", "pit_safe": True},
     "c_sum": {"scope": "cs", "pit_safe": True},
     "c_count": {"scope": "cs", "pit_safe": True},
+    "cs_mean": {"scope": "cs", "pit_safe": True},
+    "cs_std": {"scope": "cs", "pit_safe": True},
+    "cs_sum": {"scope": "cs", "pit_safe": True},
+    "cs_count": {"scope": "cs", "pit_safe": True},
+    "is_infinite": {"scope": "elementwise", "pit_safe": True},
+    "cbrt": {"scope": "elementwise", "pit_safe": True},
+    "round": {"scope": "elementwise", "pit_safe": True},
+    "truncate": {"scope": "elementwise", "pit_safe": True},
+    "ts_quantile": {"scope": "ts", "pit_safe": True},
+    "ts_skew": {"scope": "ts", "pit_safe": True},
+    "ts_kurt": {"scope": "ts", "pit_safe": True},
+    "group_count": {"scope": "group", "pit_safe": True},
+    "group_max": {"scope": "group", "pit_safe": True},
+    "group_min": {"scope": "group", "pit_safe": True},
+    "group_sum": {"scope": "group", "pit_safe": True},
+    "constant": {"scope": "elementwise", "pit_safe": True},
+    "identity": {"scope": "elementwise", "pit_safe": True},
     "protected_div": {"scope": "elementwise", "pit_safe": True},
     "safe_div_null": {"scope": "elementwise", "pit_safe": True},
     "protected_log": {"scope": "elementwise", "pit_safe": True},
@@ -759,12 +760,16 @@ _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
     "ts_var": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "ts_median": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "quarter": {"scope": "ts", "pit_safe": True, "min_periods": 1},
-    "quarter_from_cumulative": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "quarter_from_cumulative": {"scope": "fundamental_period", "pit_safe": True, "min_periods": 1},
     "ttm": {"scope": "ts", "pit_safe": True, "min_periods": 1},
-    "ttm_from_quarterly": {"scope": "ts", "pit_safe": True, "min_periods": 1},
-    "ttm_from_cumulative": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ttm_from_quarterly": {"scope": "fundamental_period", "pit_safe": True, "min_periods": 1},
+    "ttm_from_cumulative": {"scope": "fundamental_period", "pit_safe": True, "min_periods": 1},
     "yoy": {"scope": "ts", "pit_safe": True, "min_periods": 5},
-    "yoy_by_period": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "yoy_by_period": {"scope": "fundamental_period", "pit_safe": True, "min_periods": 5},
+    "ts_ewm_std": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_ewm_var": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_ewm_cov": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_ewm_corr": {"scope": "ts", "pit_safe": True, "min_periods": 2},
     "avg2": {"scope": "ts", "pit_safe": True, "min_periods": 2},
     "ts_zscore": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     # Phase-1 composite lowerings（evidence 齐全且非 micro_* 可 production）
@@ -833,7 +838,7 @@ def infer_operator_policy(op: Any, *, canonical: str | None = None) -> OperatorP
 返回:
     推断或查表得到的 ``OperatorPolicy`` 对象。
 """
-    canon = canonical or getattr(getattr(op, "metadata", None), "name", "") or ""
+    canon = canonical or (op if isinstance(op, str) else getattr(getattr(op, "metadata", None), "name", "")) or ""
     try:
         from cleaned_operators.registry import OperatorRegistry
 
@@ -877,7 +882,10 @@ def infer_operator_policy(op: Any, *, canonical: str | None = None) -> OperatorP
     elif category in ("math", "elementwise_math", "data_handling"):
         scope = "elementwise"
 
-    pit_safe = "pit_safe" in tags or "causal" in tags
+    # Domain restrictions and research status are not look-ahead.  Pure
+    # elementwise/cross-sectional transforms are PIT-safe by construction;
+    # time-series operators still require an explicit causal declaration.
+    pit_safe = scope in {"elementwise", "cs", "group"} or "pit_safe" in tags or "causal" in tags
     if canon in PIT_UNSAFE_CANONICALS:
         pit_safe = False
     elif name in ("lead", "next"):

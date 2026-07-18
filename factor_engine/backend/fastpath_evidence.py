@@ -1,78 +1,39 @@
 # -*- coding: utf-8
-"""Production fast path 证据链：production-safe 算子须绑定真实执行 parity case。"""
+"""Production fast path evidence backed by the certified artifact.
+
+The certification script is the single authority for executed parity.  Do not
+reconstruct evidence by importing pytest parameter tables here: those tables
+contain aliases and are intentionally reorganised over time, while the
+certified artifact contains final canonicals and provenance hashes.
+"""
 from __future__ import annotations
 
-import importlib
-from typing import Iterable
+from backend.evidence_provenance import evidence_artifact_valid, load_verified_artifact
 
 _META_OPS: frozenset[str] = frozenset(
     {"column", "literal", "materialized_series", "plan_ref", "if_else"}
 )
 
-# DSL 别名 → parity 代表 canonical
-_EVIDENCE_ALIASES: dict[str, str] = {
-    "if_else": "where",
-    "rolling_beta": "ts_beta",
-    "cum_std": "expanding_std",
-    "WMA": "ts_decay_linear",
-}
-
-#  parametrized parity 用例来源（module, cases_attr）
-_POLARS_PARITY_SOURCES: tuple[tuple[str, str], ...] = (
-    ("tests.backend_parity.test_production_core_triple_parity", "MEMORY_CASES"),
-    ("tests.backend_parity.test_p0_edge_cases_triple_parity", "EDGE_CASES"),
-    ("tests.backend_parity.test_production_safe_bulk_parity", "POLARS_BULK_CASES"),
-    ("tests.backend_parity.test_p1_pending_golden", "PENDING_GOLDEN_CASES"),
-    ("tests.backend_parity.test_polars_long_no_pandas_path", "NO_PANDAS_CASES"),
-)
-
-_DUCKDB_PARITY_SOURCES: tuple[tuple[str, str], ...] = (
-    ("tests.backend_parity.test_production_core_triple_parity", "DUCKDB_CASES"),
-    ("tests.backend_parity.test_p0_edge_cases_triple_parity", "DUCKDB_EDGE_CASES"),
-    ("tests.backend_parity.test_production_safe_bulk_parity", "DUCKDB_BULK_CASES"),
-    ("tests.backend_parity.test_p1_pending_golden", "PENDING_DUCKDB_CASES"),
-)
-
-
-def _load_case_names(module_path: str, attr: str) -> frozenset[str]:
-    """从测试模块加载 parity case 名称集合。"""
-    mod = importlib.import_module(module_path)
-    raw = getattr(mod, attr)
-    return frozenset(str(name) for name, _ in raw)
-
-
-def _expand_aliases(names: Iterable[str]) -> frozenset[str]:
-    """将 DSL 别名展开为证据链 canonical 集合。"""
-    out: set[str] = set()
-    for name in names:
-        out.add(name)
-        for alias, target in _EVIDENCE_ALIASES.items():
-            if name == target:
-                out.add(alias)
-    return frozenset(out)
+def _certified_set(field: str) -> frozenset[str]:
+    """Return a fail-closed canonical set from a valid certified artifact."""
+    if not evidence_artifact_valid():
+        return frozenset()
+    values = load_verified_artifact().get(field) or []
+    return frozenset(str(value) for value in values)
 
 
 def polars_executed_parity_canonicals() -> frozenset[str]:
-    """PolarsLong 真实执行 parity case 覆盖的 canonical。"""
-    out: set[str] = set()
-    for mod, attr in _POLARS_PARITY_SOURCES:
-        out |= _load_case_names(mod, attr)
-    # polars_long_parity 历史用例
-    try:
-        from tests.backend_parity import test_polars_long_parity as plp
-
-        out |= _load_case_names(plp.__name__, "POLARS_LONG_PARITY_CASES")
-    except Exception:
-        pass
-    return _expand_aliases(out)
+    """Canonicals with certified Polars reference and edge parity."""
+    return _certified_set("polars_reference_parity") & _certified_set("polars_edge_verified")
 
 
 def duckdb_executed_parity_canonicals() -> frozenset[str]:
-    """DuckDB 真实 SQL execute parity case 覆盖的 canonical。"""
-    out: set[str] = set()
-    for mod, attr in _DUCKDB_PARITY_SOURCES:
-        out |= _load_case_names(mod, attr)
-    return _expand_aliases(out)
+    """Canonicals with certified DuckDB parity, edge coverage and real SQL."""
+    return (
+        _certified_set("duckdb_reference_parity")
+        & _certified_set("duckdb_edge_verified")
+        & _certified_set("duckdb_real_sql_verified")
+    )
 
 
 def missing_polars_parity_evidence() -> list[str]:
