@@ -1,5 +1,5 @@
 # -*- coding: utf-8
-"""Evidence artifact 溯源：绑定 commit、依赖版本、case hash、implementation hash。"""
+"""Evidence artifact 溯源：绑定 commit、依赖版本、case 与完整运行时实现。"""
 from __future__ import annotations
 
 import hashlib
@@ -35,8 +35,8 @@ def _commit_is_ancestor(ancestor: str, descendant: str) -> bool:
 
     Exact HEAD equality is impossible to preserve for a tracked evidence file:
     committing the freshly certified artifact necessarily creates a new HEAD.
-    Reachability plus exact case-registry and emitter hashes gives stable,
-    fail-closed provenance without that self-referential SHA cycle.
+    Reachability plus exact case-registry and implementation hashes gives
+    stable, fail-closed provenance without that self-referential SHA cycle.
     """
     if not ancestor or not descendant:
         return False
@@ -54,7 +54,11 @@ def _commit_is_ancestor(ancestor: str, descendant: str) -> bool:
 
 def collect_runtime_versions() -> dict[str, str]:
     versions: dict[str, str] = {
-        "python": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+        "python": (
+            f"{sys.version_info.major}."
+            f"{sys.version_info.minor}."
+            f"{sys.version_info.micro}"
+        ),
     }
     for mod, key in (
         ("polars", "polars"),
@@ -62,15 +66,20 @@ def collect_runtime_versions() -> dict[str, str]:
         ("pyarrow", "pyarrow"),
     ):
         try:
-            m = __import__(mod)
-            versions[key] = str(getattr(m, "__version__", "unknown"))
+            module = __import__(mod)
+            versions[key] = str(getattr(module, "__version__", "unknown"))
         except Exception:
             versions[key] = "missing"
     return versions
 
 
 def compute_payload_hash(payload: Mapping[str, Any]) -> str:
-    text = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    text = json.dumps(
+        payload,
+        sort_keys=True,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
 
@@ -86,7 +95,7 @@ def compute_case_registry_hash(registry: Mapping[str, Any]) -> str:
         "duckdb_inf_edge_verified",
         "no_fallback_verified",
     )
-    subset = {k: sorted(registry.get(k) or []) for k in keys}
+    subset = {key: sorted(registry.get(key) or []) for key in keys}
     return compute_payload_hash(subset)
 
 
@@ -94,10 +103,57 @@ def compute_implementation_hash(source: str) -> str:
     return hashlib.sha256(source.encode("utf-8")).hexdigest()[:16]
 
 
+def _runtime_source_paths() -> list[Path]:
+    """Return every source file that can change primitive runtime semantics.
+
+    Earlier evidence only hashed the two emitters.  Final registry overrides,
+    checkpoint implementations or routing guards could therefore change while
+    the old artifact remained valid.  Hash the complete active operator tree
+    and the backend/planner modules that select or compile those operators.
+    """
+    paths: set[Path] = set()
+    cleaned = FE_ROOT / "cleaned_operators"
+    if cleaned.is_dir():
+        paths.update(cleaned.rglob("*.py"))
+    sql_pushdown = FE_ROOT / "backend" / "sql_pushdown"
+    if sql_pushdown.is_dir():
+        paths.update(sql_pushdown.rglob("*.py"))
+    for relative in (
+        "backend/polars_expr_emitter.py",
+        "backend/operator_capability.py",
+        "backend/sql_tiers.py",
+        "backend/runtime_hardening.py",
+        "backend/primitive_evidence.py",
+        "backend/production_signature.py",
+        "backend/evidence_provenance.py",
+        "stateful_runtime.py",
+        "planner/composite_lowering.py",
+        "planner/logical_plan.py",
+        "runtime/planner_runtime.py",
+    ):
+        path = FE_ROOT / relative
+        if path.is_file():
+            paths.add(path)
+    return sorted(paths, key=lambda path: path.relative_to(FE_ROOT).as_posix())
+
+
+def _runtime_tree_hash() -> str:
+    payload: dict[str, str] = {}
+    for path in _runtime_source_paths():
+        relative = path.relative_to(FE_ROOT).as_posix()
+        payload[relative] = compute_implementation_hash(
+            path.read_text(encoding="utf-8")
+        )
+    return compute_payload_hash(payload)
+
+
 def emitter_hashes() -> dict[str, str]:
+    """Compatibility name returning all evidence-bound implementation hashes."""
     polars_path = FE_ROOT / "backend" / "polars_expr_emitter.py"
     duck_path = FE_ROOT / "backend" / "sql_pushdown" / "emitter.py"
-    out: dict[str, str] = {}
+    out: dict[str, str] = {
+        "implementation_hash_operator_runtime": _runtime_tree_hash(),
+    }
     if polars_path.is_file():
         out["implementation_hash_polars_emitter"] = compute_implementation_hash(
             polars_path.read_text(encoding="utf-8")
@@ -129,38 +185,44 @@ def build_provenance(
 
 def load_case_registry() -> dict[str, Any]:
     if not CASE_REGISTRY_JSON.is_file():
-        raise FileNotFoundError(f"missing case registry: {CASE_REGISTRY_JSON}")
+        raise FileNotFoundError(
+            f"missing case registry: {CASE_REGISTRY_JSON}"
+        )
     return json.loads(CASE_REGISTRY_JSON.read_text(encoding="utf-8"))
 
 
 def load_verified_artifact() -> dict[str, Any]:
     if not VERIFIED_JSON.is_file():
-        raise FileNotFoundError(f"missing verified artifact: {VERIFIED_JSON}")
+        raise FileNotFoundError(
+            f"missing verified artifact: {VERIFIED_JSON}"
+        )
     return json.loads(VERIFIED_JSON.read_text(encoding="utf-8"))
 
 
 def evidence_artifact_valid(*, require_commit_match: bool = False) -> bool:
-    """验证 evidence 是否仍绑定当前代码、case registry 与 emitter 实现。"""
+    """验证 evidence 是否绑定当前代码、case registry 与完整实现树。"""
     try:
         data = load_verified_artifact()
-    except FileNotFoundError:
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
         return False
-    prov = data.get("provenance") or {}
-    if prov.get("artifact_kind") != "test_passed":
+    provenance = data.get("provenance") or {}
+    if provenance.get("artifact_kind") != "test_passed":
         return False
-    if not prov.get("passed_at") or not prov.get("commit_sha"):
+    if not provenance.get("passed_at") or not provenance.get("commit_sha"):
         return False
     if require_commit_match and not _commit_is_ancestor(
-        str(prov.get("commit_sha") or ""), current_commit_sha()
+        str(provenance.get("commit_sha") or ""), current_commit_sha()
     ):
         return False
     try:
         registry = load_case_registry()
-    except FileNotFoundError:
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
         return False
-    if prov.get("case_registry_hash") != compute_case_registry_hash(registry):
+    if provenance.get("case_registry_hash") != compute_case_registry_hash(
+        registry
+    ):
         return False
-    if dict(prov.get("emitter_hashes") or {}) != emitter_hashes():
+    if dict(provenance.get("emitter_hashes") or {}) != emitter_hashes():
         return False
     return True
 
@@ -172,38 +234,53 @@ def enrich_operator_metadata(
 ) -> dict[str, dict[str, Any]]:
     from backend.operator_evidence_schema import compute_implementation_hash
     from backend.production_signature import signature_for
-    from tests.backend_parity.evidence_case_registry import EXECUTION_VARIANTS, operator_evidence_meta
+    from tests.backend_parity.evidence_case_registry import (
+        EXECUTION_VARIANTS,
+        operator_evidence_meta,
+    )
 
-    emitter = emitter_hashes()
-    polars_h = emitter.get("implementation_hash_polars_emitter", "")
-    duck_h = emitter.get("implementation_hash_duckdb_emitter", "")
+    implementation = emitter_hashes()
+    polars_hash = implementation.get(
+        "implementation_hash_polars_emitter", ""
+    )
+    duckdb_hash = implementation.get(
+        "implementation_hash_duckdb_emitter", ""
+    )
+    runtime_hash = implementation.get(
+        "implementation_hash_operator_runtime", ""
+    )
     base = operator_evidence_meta(certified=certified)
     merged: dict[str, dict[str, Any]] = {}
     if existing:
-        for k, v in existing.items():
-            if k in certified and isinstance(v, dict):
-                merged[k] = dict(v)
+        for key, value in existing.items():
+            if key in certified and isinstance(value, dict):
+                merged[key] = dict(value)
     for name in sorted(certified):
-        rec = dict(merged.get(name) or {})
-        rec.setdefault("semantic_version", 2)
-        if polars_h:
-            rec["implementation_hash_polars"] = polars_h
-        if duck_h:
-            rec["implementation_hash_duckdb"] = duck_h
-        sig = signature_for(name)
-        if sig is not None:
-            rec["parameter_domain_hash"] = compute_implementation_hash(
+        record = dict(merged.get(name) or base.get(name) or {})
+        record.setdefault("semantic_version", 2)
+        if polars_hash:
+            record["implementation_hash_polars"] = polars_hash
+        if duckdb_hash:
+            record["implementation_hash_duckdb"] = duckdb_hash
+        if runtime_hash:
+            record["implementation_hash_operator_runtime"] = runtime_hash
+        signature = signature_for(name)
+        if signature is not None:
+            record["parameter_domain_hash"] = compute_implementation_hash(
                 json.dumps(
                     {
-                        "canonical": sig.canonical,
-                        "default_status": sig.default_status,
-                        "params": [(p.name, p.constraint, p.status) for p in sig.params],
+                        "canonical": signature.canonical,
+                        "default_status": signature.default_status,
+                        "params": [
+                            (param.name, param.constraint, param.status)
+                            for param in signature.params
+                        ],
                     },
                     sort_keys=True,
                 )
             )
         variants = EXECUTION_VARIANTS.get(name)
         if variants:
-            rec["execution_variants"] = variants
-        merged[name] = rec
+            record["execution_variants"] = variants
+        merged[name] = record
     return merged
