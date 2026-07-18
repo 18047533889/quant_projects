@@ -12,6 +12,7 @@ from cleaned_operators.overhaul.base import (
     aligned_pd,
     frame_pd,
     pl,
+    pl_base_with,
     pl_cols,
     positive_int,
 )
@@ -100,9 +101,7 @@ if pl is not None:
         clean = _clean(expr)
         valid = clean.is_not_null()
         count = valid.cast(pl.Int64).cum_sum()
-        running_sum = (
-            pl.when(valid).then(clean).otherwise(0.0).cum_sum()
-        )
+        running_sum = pl.when(valid).then(clean).otherwise(0.0).cum_sum()
         seeded_input = (
             pl.when(count < w)
             .then(None)
@@ -120,107 +119,198 @@ if pl is not None:
         )
         return pl.when(valid & (count >= w)).then(smoothed).otherwise(None)
 
-    def pl_rsi_wilder(x, window=14, **_):
-        w = positive_int(window, "window")
-        exprs = []
-        for col in pl_cols(x):
-            close = _clean(pl.col(col))
-            previous = close.forward_fill().shift(1)
-            delta = pl.when(close.is_not_null()).then(close - previous).otherwise(None)
-            gain = pl.when(delta.is_null()).then(None).when(delta > 0).then(delta).otherwise(0.0)
-            loss = pl.when(delta.is_null()).then(None).when(delta < 0).then(-delta).otherwise(0.0)
-            avg_gain = _wilder_seeded(gain, w)
-            avg_loss = _wilder_seeded(loss, w)
-            ratio = avg_gain / pl.when(avg_loss.abs() > EPS).then(avg_loss).otherwise(None)
-            raw = 100.0 - 100.0 / (1.0 + ratio)
-            value = (
-                pl.when((avg_loss == 0) & (avg_gain > 0))
-                .then(100.0)
-                .when((avg_gain == 0) & (avg_loss > 0))
-                .then(0.0)
-                .when((avg_gain == 0) & (avg_loss == 0))
-                .then(50.0)
-                .otherwise(raw)
-            )
-            exprs.append(pl.when(close.is_not_null()).then(value).otherwise(None).alias(col))
-        return x.with_columns(exprs)
-
-    def _true_range(high, low, close):
-        h, l, c = _clean(high), _clean(low), _clean(close)
-        previous_close = c.forward_fill().shift(1)
+    def _true_range_expr():
+        previous_close = pl.col("_c").forward_fill().shift(1)
         return (
-            pl.when(h.is_null() | l.is_null() | c.is_null())
+            pl.when(
+                pl.col("_h").is_null()
+                | pl.col("_l").is_null()
+                | pl.col("_c").is_null()
+            )
             .then(None)
             .when(previous_close.is_null())
-            .then(h - l)
+            .then(pl.col("_h") - pl.col("_l"))
             .otherwise(
                 pl.max_horizontal(
-                    h - l,
-                    (h - previous_close).abs(),
-                    (l - previous_close).abs(),
+                    pl.col("_h") - pl.col("_l"),
+                    (pl.col("_h") - previous_close).abs(),
+                    (pl.col("_l") - previous_close).abs(),
                 )
             )
         )
 
+    def pl_rsi_wilder(x, window=14, **_):
+        w = positive_int(window, "window")
+        replacements = {}
+        for col in pl_cols(x):
+            temp = pl.DataFrame({"_raw": x[col]}).with_columns(
+                _clean(pl.col("_raw")).alias("_close")
+            ).with_columns(
+                pl.col("_close").forward_fill().shift(1).alias("_previous")
+            ).with_columns(
+                pl.when(pl.col("_close").is_not_null())
+                .then(pl.col("_close") - pl.col("_previous"))
+                .otherwise(None)
+                .alias("_delta")
+            ).with_columns(
+                pl.when(pl.col("_delta").is_null())
+                .then(None)
+                .when(pl.col("_delta") > 0)
+                .then(pl.col("_delta"))
+                .otherwise(0.0)
+                .alias("_gain"),
+                pl.when(pl.col("_delta").is_null())
+                .then(None)
+                .when(pl.col("_delta") < 0)
+                .then(-pl.col("_delta"))
+                .otherwise(0.0)
+                .alias("_loss"),
+            ).with_columns(
+                _wilder_seeded(pl.col("_gain"), w).alias("_avg_gain"),
+                _wilder_seeded(pl.col("_loss"), w).alias("_avg_loss"),
+            ).with_columns(
+                (
+                    pl.col("_avg_gain")
+                    / pl.when(pl.col("_avg_loss").abs() > EPS)
+                    .then(pl.col("_avg_loss"))
+                    .otherwise(None)
+                ).alias("_ratio")
+            ).with_columns(
+                (
+                    pl.when(
+                        (pl.col("_avg_loss") == 0)
+                        & (pl.col("_avg_gain") > 0)
+                    )
+                    .then(100.0)
+                    .when(
+                        (pl.col("_avg_gain") == 0)
+                        & (pl.col("_avg_loss") > 0)
+                    )
+                    .then(0.0)
+                    .when(
+                        (pl.col("_avg_gain") == 0)
+                        & (pl.col("_avg_loss") == 0)
+                    )
+                    .then(50.0)
+                    .otherwise(100.0 - 100.0 / (1.0 + pl.col("_ratio")))
+                ).alias("_rsi")
+            )
+            replacements[col] = temp.select(
+                pl.when(pl.col("_close").is_not_null())
+                .then(pl.col("_rsi"))
+                .otherwise(None)
+                .alias(col)
+            )[col]
+        return pl_base_with(x, replacements)
+
+    def _ohlc_temp(high, low, close, col):
+        return pl.DataFrame(
+            {"_high_raw": high[col], "_low_raw": low[col], "_close_raw": close[col]}
+        ).with_columns(
+            _clean(pl.col("_high_raw")).alias("_h"),
+            _clean(pl.col("_low_raw")).alias("_l"),
+            _clean(pl.col("_close_raw")).alias("_c"),
+        )
+
     def pl_atr_wilder(high, low, close, window=14, **_):
         w = positive_int(window, "window")
-        cols = [
-            col for col in pl_cols(close)
-            if col in high.columns and col in low.columns
-        ]
-        return close.with_columns(
-            [
-                _wilder_seeded(
-                    _true_range(high[col], low[col], close[col]),
-                    w,
-                ).alias(col)
-                for col in cols
-            ]
-        )
+        replacements = {}
+        for col in [
+            name for name in pl_cols(close)
+            if name in high.columns and name in low.columns
+        ]:
+            temp = _ohlc_temp(high, low, close, col).with_columns(
+                _true_range_expr().alias("_tr")
+            ).with_columns(
+                _wilder_seeded(pl.col("_tr"), w).alias(col)
+            )
+            replacements[col] = temp[col]
+        return pl_base_with(close, replacements)
 
     def pl_adx(high, low, close, window=14, **_):
         w = positive_int(window, "window")
-        exprs = []
+        replacements = {}
         for col in [
-            c for c in pl_cols(close)
-            if c in high.columns and c in low.columns
+            name for name in pl_cols(close)
+            if name in high.columns and name in low.columns
         ]:
-            h = _clean(high[col])
-            l = _clean(low[col])
-            c = _clean(close[col])
-            previous_h = h.forward_fill().shift(1)
-            previous_l = l.forward_fill().shift(1)
-            up = h - previous_h
-            down = previous_l - l
-            plus = (
-                pl.when(h.is_null() | l.is_null() | c.is_null())
-                .then(None)
-                .when(previous_h.is_null() | previous_l.is_null())
-                .then(0.0)
-                .when((up > down) & (up > 0))
-                .then(up)
+            temp = _ohlc_temp(high, low, close, col).with_columns(
+                pl.col("_h").forward_fill().shift(1).alias("_previous_h"),
+                pl.col("_l").forward_fill().shift(1).alias("_previous_l"),
+                _true_range_expr().alias("_tr"),
+            ).with_columns(
+                (pl.col("_h") - pl.col("_previous_h")).alias("_up"),
+                (pl.col("_previous_l") - pl.col("_l")).alias("_down"),
+            ).with_columns(
+                (
+                    pl.when(
+                        pl.col("_h").is_null()
+                        | pl.col("_l").is_null()
+                        | pl.col("_c").is_null()
+                    )
+                    .then(None)
+                    .when(
+                        pl.col("_previous_h").is_null()
+                        | pl.col("_previous_l").is_null()
+                    )
+                    .then(0.0)
+                    .when(
+                        (pl.col("_up") > pl.col("_down"))
+                        & (pl.col("_up") > 0)
+                    )
+                    .then(pl.col("_up"))
+                    .otherwise(0.0)
+                ).alias("_plus"),
+                (
+                    pl.when(
+                        pl.col("_h").is_null()
+                        | pl.col("_l").is_null()
+                        | pl.col("_c").is_null()
+                    )
+                    .then(None)
+                    .when(
+                        pl.col("_previous_h").is_null()
+                        | pl.col("_previous_l").is_null()
+                    )
+                    .then(0.0)
+                    .when(
+                        (pl.col("_down") > pl.col("_up"))
+                        & (pl.col("_down") > 0)
+                    )
+                    .then(pl.col("_down"))
+                    .otherwise(0.0)
+                ).alias("_minus"),
+            ).with_columns(
+                _wilder_seeded(pl.col("_tr"), w).alias("_atr"),
+                _wilder_seeded(pl.col("_plus"), w).alias("_plus_sm"),
+                _wilder_seeded(pl.col("_minus"), w).alias("_minus_sm"),
+            ).with_columns(
+                pl.when(pl.col("_atr").abs() > EPS)
+                .then(100.0 * pl.col("_plus_sm") / pl.col("_atr"))
                 .otherwise(0.0)
-            )
-            minus = (
-                pl.when(h.is_null() | l.is_null() | c.is_null())
-                .then(None)
-                .when(previous_h.is_null() | previous_l.is_null())
-                .then(0.0)
-                .when((down > up) & (down > 0))
-                .then(down)
+                .alias("_plus_di"),
+                pl.when(pl.col("_atr").abs() > EPS)
+                .then(100.0 * pl.col("_minus_sm") / pl.col("_atr"))
                 .otherwise(0.0)
+                .alias("_minus_di"),
+            ).with_columns(
+                (pl.col("_plus_di") + pl.col("_minus_di")).alias("_denom")
+            ).with_columns(
+                pl.when(pl.col("_atr").is_null())
+                .then(None)
+                .when(pl.col("_denom") > EPS)
+                .then(
+                    100.0
+                    * (pl.col("_plus_di") - pl.col("_minus_di")).abs()
+                    / pl.col("_denom")
+                )
+                .otherwise(0.0)
+                .alias("_dx")
+            ).with_columns(
+                _wilder_seeded(pl.col("_dx"), w).alias(col)
             )
-            atr = _wilder_seeded(_true_range(h, l, c), w)
-            plus_smoothed = _wilder_seeded(plus, w)
-            minus_smoothed = _wilder_seeded(minus, w)
-            plus_di = pl.when(atr.abs() > EPS).then(100.0 * plus_smoothed / atr).otherwise(0.0)
-            minus_di = pl.when(atr.abs() > EPS).then(100.0 * minus_smoothed / atr).otherwise(0.0)
-            denominator = plus_di + minus_di
-            dx = pl.when(denominator > EPS).then(
-                100.0 * (plus_di - minus_di).abs() / denominator
-            ).otherwise(0.0)
-            exprs.append(_wilder_seeded(dx, w).alias(col))
-        return close.with_columns(exprs)
+            replacements[col] = temp[col]
+        return pl_base_with(close, replacements)
 
 
 _register(
