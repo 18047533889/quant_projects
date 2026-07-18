@@ -37,20 +37,15 @@ def test_mixed_fiscal_period_encodings_are_exact_and_cross_backend_equal():
 
     pandas_result = _pd("period_lag").calculate(values, periods, 1)
     np.testing.assert_allclose(
-        pandas_result["A"].to_numpy(),
-        expected,
-        equal_nan=True,
+        pandas_result["A"].to_numpy(), expected, equal_nan=True
     )
-
     polars_result = _pl("period_lag").calculate(
         pl.DataFrame({"A": values["A"].to_numpy()}),
         pl.DataFrame({"A": periods["A"].tolist()}),
         1,
     )
     np.testing.assert_allclose(
-        polars_result["A"].to_numpy(),
-        expected,
-        equal_nan=True,
+        polars_result["A"].to_numpy(), expected, equal_nan=True
     )
 
 
@@ -60,6 +55,8 @@ def test_fiscal_revision_policy_and_composites_match_polars():
     periods = pd.DataFrame(
         {"A": ["2024Q1", "2024Q2", "2024Q2", "2024Q3", "2024Q4"]}
     )
+    pl_values = pl.DataFrame({"A": values["A"].to_numpy()})
+    pl_periods = pl.DataFrame({"A": periods["A"].tolist()})
 
     latest = _pd("period_lag").calculate(
         values, periods, 1, "latest_available"
@@ -69,22 +66,17 @@ def test_fiscal_revision_policy_and_composites_match_polars():
     )
     assert latest.iloc[-2, 0] == 22.0
     assert first.iloc[-2, 0] == 20.0
-
-    pl_values = pl.DataFrame({"A": values["A"].to_numpy()})
-    pl_periods = pl.DataFrame({"A": periods["A"].tolist()})
-    latest_pl = _pl("period_lag").calculate(
-        pl_values, pl_periods, 1, "latest_available"
-    )
-    first_pl = _pl("period_lag").calculate(
-        pl_values, pl_periods, 1, "first_available"
-    )
     np.testing.assert_allclose(
-        latest_pl["A"].to_numpy(),
+        _pl("period_lag")
+        .calculate(pl_values, pl_periods, 1, "latest_available")["A"]
+        .to_numpy(),
         latest["A"].to_numpy(),
         equal_nan=True,
     )
     np.testing.assert_allclose(
-        first_pl["A"].to_numpy(),
+        _pl("period_lag")
+        .calculate(pl_values, pl_periods, 1, "first_available")["A"]
+        .to_numpy(),
         first["A"].to_numpy(),
         equal_nan=True,
     )
@@ -105,15 +97,17 @@ def test_fiscal_revision_policy_and_composites_match_polars():
             atol=1e-10,
         )
 
-    assert _pd("period_average").calculate(values, periods, 2, True).iloc[-1, 0] == 35.0
-    assert _pd("ttm_from_quarterly").calculate(values, periods, 4, True).iloc[-1, 0] == 102.0
+    assert _pd("period_average").calculate(
+        values, periods, 2, True
+    ).iloc[-1, 0] == 35.0
+    assert _pd("ttm_from_quarterly").calculate(
+        values, periods, 4, True
+    ).iloc[-1, 0] == 102.0
 
 
 def test_cumulative_quarter_ttm_and_yoy_cross_backend_parity():
     pl = pytest.importorskip("polars")
-    cumulative = pd.DataFrame(
-        {"A": [10.0, 30.0, 60.0, 100.0, 15.0]}
-    )
+    cumulative = pd.DataFrame({"A": [10.0, 30.0, 60.0, 100.0, 15.0]})
     periods = pd.DataFrame(
         {"A": ["2024Q1", "2024Q2", "2024Q3", "2024Q4", "2025Q1"]}
     )
@@ -177,9 +171,7 @@ def test_fundamental_staleness_rejects_future_availability_in_both_backends():
 def test_no_intercept_r2_uses_uncentered_definition():
     x = pd.DataFrame({"A": [1.0, 2.0, 3.0, 4.0]})
     y = pd.DataFrame({"A": [2.0, 3.0, 5.0, 8.0]})
-    result = _pd("ts_regression_r2").calculate(
-        y, x, 4, 3, False
-    )
+    result = _pd("ts_regression_r2").calculate(y, x, 4, 3, False)
     xv = x["A"].to_numpy()
     yv = y["A"].to_numpy()
     slope = float(np.dot(xv, yv) / np.dot(xv, xv))
@@ -192,18 +184,13 @@ def test_no_intercept_r2_uses_uncentered_definition():
 
 def test_cs_neutralize_excludes_missing_groups_and_handles_intercept_only():
     y = pd.DataFrame(
-        [[1.0, 2.0, 3.0, 100.0]],
-        columns=list("ABCD"),
+        [[1.0, 2.0, 3.0, 100.0]], columns=list("ABCD")
     )
     group = pd.DataFrame(
-        [["industry", "industry", "industry", None]],
-        columns=list("ABCD"),
+        [["industry", "industry", "industry", None]], columns=list("ABCD")
     )
     result = _pd("cs_neutralize").calculate(
-        y,
-        group=group,
-        add_intercept=True,
-        min_obs=3,
+        y, group=group, add_intercept=True, min_obs=3
     )
     np.testing.assert_allclose(
         result.loc[0, ["A", "B", "C"]].to_numpy(dtype=float),
@@ -220,6 +207,76 @@ def test_fractional_windows_are_rejected(canonical):
         _pd(canonical).calculate(values, 1.5)
 
 
+def _stateful_values(canonical, inputs, params):
+    from stateful_runtime import execute_stateful_segment
+
+    size = len(next(iter(inputs.values())))
+    result = execute_stateful_segment(
+        canonical,
+        inputs,
+        timestamps=pd.date_range(
+            "2024-01-01", periods=size, freq="D", tz="UTC"
+        ),
+        instrument="A",
+        input_identity={"dataset": "audit"},
+        params=params,
+        starts_at_dataset_origin=True,
+    )
+    return result.values
+
+
+@pytest.mark.parametrize("canonical", ["RSI_WILDER", "ATR_WILDER", "ADX"])
+def test_wilder_batch_matches_checkpoint_runtime_and_polars(canonical):
+    pl = pytest.importorskip("polars")
+    close = 100.0 + np.cumsum(
+        np.sin(np.arange(80) / 4.0) + 0.15
+    )
+    close[[23, 51]] = np.nan
+    high = close + 1.0
+    low = close - 1.2
+    high[np.isnan(close)] = np.nan
+    low[np.isnan(close)] = np.nan
+
+    if canonical == "RSI_WILDER":
+        pandas_args = (pd.DataFrame({"A": close}), 14)
+        polars_args = (pl.DataFrame({"A": close}), 14)
+        inputs = {"x": close}
+    else:
+        pandas_args = (
+            pd.DataFrame({"A": high}),
+            pd.DataFrame({"A": low}),
+            pd.DataFrame({"A": close}),
+            14,
+        )
+        polars_args = (
+            pl.DataFrame({"A": high}),
+            pl.DataFrame({"A": low}),
+            pl.DataFrame({"A": close}),
+            14,
+        )
+        inputs = {"high": high, "low": low, "close": close}
+
+    pandas_result = _pd(canonical).calculate(*pandas_args)["A"].to_numpy()
+    checkpoint_result = _stateful_values(
+        canonical, inputs, {"window": 14}
+    )
+    polars_result = _pl(canonical).calculate(*polars_args)["A"].to_numpy()
+    np.testing.assert_allclose(
+        pandas_result,
+        checkpoint_result,
+        equal_nan=True,
+        rtol=1e-12,
+        atol=1e-12,
+    )
+    np.testing.assert_allclose(
+        polars_result,
+        pandas_result,
+        equal_nan=True,
+        rtol=1e-10,
+        atol=1e-10,
+    )
+
+
 def test_production_aggressive_environment_cannot_bypass_evidence(monkeypatch):
     from backend.operator_capability import (
         UnsupportedOperatorBackendError,
@@ -227,16 +284,10 @@ def test_production_aggressive_environment_cannot_bypass_evidence(monkeypatch):
     )
 
     monkeypatch.setenv("FACTOR_ENGINE_OPERATOR_BACKEND", "auto_aggressive")
-    _, backend = get_best_backend(
-        "ADX",
-        mode="production",
-        prefer="auto",
-    )
+    _, backend = get_best_backend("ADX", mode="production", prefer="auto")
     assert backend == "pandas_numpy"
-
     with pytest.raises(UnsupportedOperatorBackendError):
         get_best_backend("ADX", mode="production", prefer="polars")
-
     _, research_backend = get_best_backend(
         "ADX",
         mode="research",
@@ -246,15 +297,12 @@ def test_production_aggressive_environment_cannot_bypass_evidence(monkeypatch):
     assert research_backend == "polars"
 
 
-def test_registry_explicit_preference_is_fail_closed():
-    from backend.operator_capability import UnsupportedOperatorBackendError
-
-    with pytest.raises(UnsupportedOperatorBackendError):
-        OperatorRegistry.get_preferred(
-            "ADX",
-            prefer="polars",
-            mode="production",
-        )
+def test_registry_explicit_preference_falls_back_only_on_capability_rejection():
+    operator, backend = OperatorRegistry.get_preferred(
+        "ADX", prefer="polars", mode="production"
+    )
+    assert backend == "pandas_numpy"
+    assert operator is OperatorRegistry.get("ADX", "pandas_numpy")
     with pytest.raises(ValueError):
         OperatorRegistry.get_preferred("ADX", prefer="unknown")
 
@@ -263,16 +311,11 @@ def test_invalid_evidence_never_falls_back_to_case_registry(monkeypatch):
     from backend import primitive_evidence
 
     monkeypatch.setattr(
-        primitive_evidence,
-        "evidence_artifact_valid",
-        lambda: False,
+        primitive_evidence, "evidence_artifact_valid", lambda: False
     )
-    assert (
-        primitive_evidence._load_verified_fail_closed(
-            "polars_reference_parity"
-        )
-        == frozenset()
-    )
+    assert primitive_evidence._load_verified_fail_closed(
+        "polars_reference_parity"
+    ) == frozenset()
 
 
 def test_duckdb_probe_failure_downgrades_all_static_candidates(monkeypatch):
@@ -283,9 +326,7 @@ def test_duckdb_probe_failure_downgrades_all_static_candidates(monkeypatch):
         raise RuntimeError("probe failed")
 
     monkeypatch.setattr(
-        duckdb_capabilities,
-        "get_duckdb_capability_report",
-        fail,
+        duckdb_capabilities, "get_duckdb_capability_report", fail
     )
     sql_tiers._DUCKDB_DOWNGRADE_CACHE = None
     downgraded = sql_tiers.duckdb_downgraded_canonicals(refresh=True)
@@ -301,7 +342,6 @@ def test_final_registry_aliases_and_surfaces_are_closed():
     for alias, target in OperatorRegistry._aliases.items():
         assert target in canonicals, (alias, target)
         assert OperatorRegistry.resolve_canonical(alias) == target
-
     for canonical in canonicals:
         catalog = OperatorRegistry.catalog()[canonical]
         assert catalog.get("surface") == classify_canonical(canonical)
