@@ -37,6 +37,8 @@ jobs:
       FACTOR_ENGINE_MANIFEST_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Upload temporary audit source snapshot
         uses: actions/upload-artifact@v4
         with:
@@ -73,7 +75,10 @@ jobs:
           print("canonicals", len(OperatorRegistry.list_canonical()))
           PY
       - name: Certify primitive evidence and regenerate governance artifacts
-        run: python factor_engine/scripts/certify_primitive_evidence.py
+        shell: bash
+        run: |
+          set -o pipefail
+          python factor_engine/scripts/certify_primitive_evidence.py 2>&1 | tee primitive-certification.log
       - name: Upload certified governance artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -127,5 +132,6 @@ jobs:
           name: factorengine-full-audit-diagnostics
           if-no-files-found: warn
           path: |
+            primitive-certification.log
             factorengine-full-audit.xml
             factorengine-full-audit.log
