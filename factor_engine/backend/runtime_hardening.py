@@ -155,14 +155,27 @@ def _safe_registry_get_preferred(
     mode: str = "production",
     allow_unverified_backend: bool = False,
 ) -> tuple[Any | None, str]:
-    from backend.operator_capability import get_best_backend
-
-    return get_best_backend(
-        name,
-        prefer=prefer,
-        mode=mode,
-        allow_unverified_backend=allow_unverified_backend,
+    from backend.operator_capability import (
+        UnsupportedOperatorBackendError,
+        get_best_backend,
     )
+
+    try:
+        return get_best_backend(
+            name,
+            prefer=prefer,
+            mode=mode,
+            allow_unverified_backend=allow_unverified_backend,
+        )
+    except UnsupportedOperatorBackendError:
+        # Preserve the historical production fallback contract, but only for a
+        # deliberate capability rejection.  Runtime implementation errors and
+        # invalid preferences must propagate instead of being hidden.
+        if mode == "production" and prefer in {"polars", "sql"}:
+            fallback = cls.get(name, backend="pandas_numpy")
+            if fallback is not None:
+                return fallback, "pandas_numpy"
+        raise
 
 
 def _safe_duckdb_downgrades(*, refresh: bool = False) -> frozenset[str]:
