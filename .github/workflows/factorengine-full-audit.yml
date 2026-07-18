@@ -27,12 +27,14 @@ concurrency:
 jobs:
   full-operator-audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 90
     env:
       PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/dataaccess
       FACTOR_ENGINE_DISABLE_NUMBA: "1"
       FACTOR_ENGINE_RUN_MODE: research
       QUANT_PRODUCTION_MODE: "0"
+      FACTOR_ENGINE_EVIDENCE_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      FACTOR_ENGINE_MANIFEST_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
       - name: Upload temporary audit source snapshot
@@ -56,6 +58,10 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
           python -m pip install pytest pyyaml
+      - name: Resolve certified source timestamp
+        shell: bash
+        run: |
+          echo "FACTOR_ENGINE_MANIFEST_GENERATED_AT=$(git show -s --format=%cI \"${FACTOR_ENGINE_EVIDENCE_COMMIT_SHA}\")" >> "$GITHUB_ENV"
       - name: Compile audited runtime
         run: |
           python -m compileall -q factor_engine dataaccess data_access gtja191
@@ -66,12 +72,37 @@ jobs:
           assert OperatorRegistry.list_canonical()
           print("canonicals", len(OperatorRegistry.list_canonical()))
           PY
+      - name: Certify primitive evidence and regenerate governance artifacts
+        run: python factor_engine/scripts/certify_primitive_evidence.py
+      - name: Upload certified governance artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: factorengine-certified-governance
+          if-no-files-found: error
+          path: |
+            factor_engine/evidence/primitive_verified.json
+            factor_engine/benchmarks/operator_manifest.json
+            factor_engine/cleaned_operators/docs/operators_catalog.md
+            factor_engine/cleaned_operators/docs/operators_catalog.json
+            factor_engine/docs/dsl_allowlist.json
+            factor_engine/docs/field_manifest.json
+            factor_engine/docs/operator_manifest.json
+            factor_engine/docs/factor_recipe_manifest.json
+            factor_engine/docs/research_tool_manifest.json
+            factor_engine/docs/stateful_operator_manifest.json
+            factor_engine/docs/operator_usage_report.json
+            factor_engine/docs/backend_coverage.md
+            factor_engine/docs/backend_evidence_manifest.json
+            factor_engine/docs/sql_pushdown_coverage.md
       - name: Run complete semantic and backend regression suite
         shell: bash
         run: |
           set -o pipefail
           pytest -q --import-mode=importlib \
             factor_engine/tests/operators \
+            factor_engine/tests/backend \
+            factor_engine/tests/backend_parity \
+            factor_engine/tests/operator_contracts \
             factor_engine/tests/test_operator_surface.py \
             factor_engine/tests/test_gtja_compat_semantics.py \
             factor_engine/tests/test_scalar_comparison_semantics.py \
