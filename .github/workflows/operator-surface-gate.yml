@@ -6,6 +6,7 @@ on:
     paths:
       - "factor_engine/**"
       - "dataaccess/**"
+      - "data_access/**"
       - "gtja191/**"
       - "week2_pv_factors/**"
       - ".github/workflows/operator-surface-gate.yml"
@@ -13,6 +14,7 @@ on:
     paths:
       - "factor_engine/**"
       - "dataaccess/**"
+      - "data_access/**"
       - "gtja191/**"
       - "week2_pv_factors/**"
       - ".github/workflows/operator-surface-gate.yml"
@@ -27,9 +29,9 @@ concurrency:
 jobs:
   public-dsl:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 60
     env:
-      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/dataaccess:${{ github.workspace }}/gtja191
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/dataaccess
       FACTOR_ENGINE_DISABLE_NUMBA: "1"
     steps:
       - uses: actions/checkout@v4
@@ -94,7 +96,7 @@ jobs:
             factor_engine/docs/backend_evidence_manifest.json
             factor_engine/docs/sql_pushdown_coverage.md
       - name: COS contract and unit regressions
-        run: pytest -q dataaccess/tests/test_cos_contract_core.py
+        run: pytest -q dataaccess/tests/test_package_alias.py dataaccess/tests/test_cos_contract_core.py
       - name: COS filing PIT regressions
         run: |
           pytest -q \
@@ -107,19 +109,22 @@ jobs:
             dataaccess/tests/test_cos_factor_runtime.py \
             dataaccess/tests/test_cos_registry_runtime.py \
             dataaccess/tests/test_cos_storage_runtime.py
-      - name: Fiscal and backend semantic regression
+      - name: Existing fiscal-period regressions
+        run: timeout 12m pytest -q -vv factor_engine/tests/operators/test_cos_fiscal_primitives.py
+      - name: Pandas and Polars operator audit regressions
         run: |
-          pytest -q \
-            factor_engine/tests/operators/test_cos_fiscal_primitives.py \
+          timeout 12m pytest -q -vv \
             factor_engine/tests/operators/test_full_operator_audit_fixes.py \
-            factor_engine/tests/operators/test_sql_audit_fixes.py
+            factor_engine/tests/operators/test_edge_semantic_fixes.py
+      - name: DuckDB fiscal SQL audit regressions
+        run: timeout 12m pytest -q -vv factor_engine/tests/operators/test_sql_audit_fixes.py
       - name: Stateful segmented runtime regression
         run: pytest -q factor_engine/tests/operators/test_stateful_segment_runtime.py
       - name: Operator overhaul compatibility regression
         run: pytest -q factor_engine/tests/operators/test_operator_overhaul.py
       - name: GTJA185 factor pack regression
         run: |
-          pytest -q \
+          pytest -q --import-mode=importlib \
             gtja191/tests/test_full_catalog_factor_engine.py \
             gtja191/tests/test_gtja191.py
       - name: FactorEngine runtime governance regression
