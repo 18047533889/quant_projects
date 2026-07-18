@@ -8,13 +8,13 @@ on:
     paths:
       - "AutoFactorEvaluation-RECONSTRUCT/**"
       - "factor_engine/**"
-      - "data_access/**"
+      - "dataaccess/**"
       - ".github/workflows/autofactor-platform-integration.yml"
   pull_request:
     paths:
       - "AutoFactorEvaluation-RECONSTRUCT/**"
       - "factor_engine/**"
-      - "data_access/**"
+      - "dataaccess/**"
       - ".github/workflows/autofactor-platform-integration.yml"
 
 permissions:
@@ -81,11 +81,11 @@ jobs:
           count = load_operators()
           assert count > 0
           manifest = {
-            "schema_version": "disk.v1",
-            "candidate_id": "ci_factor",
-            "formula": "ts_mean(close, 3)",
-            "market": "ashare",
-            "frequency_bucket": "1d",
+              "schema_version": "disk.v1",
+              "candidate_id": "ci_factor",
+              "formula": "ts_mean(close, 3)",
+              "market": "ashare",
+              "frequency_bucket": "1d",
           }
           assert _step2_build_yaml(manifest).status == "PASS"
           tiny = _step4_tiny_run(manifest)
@@ -100,8 +100,8 @@ jobs:
           AUTOFAC_PLATFORM_ROOT: ${{ github.workspace }}
         run: |
           pytest -q \
-            data_access/tests/unit/test_params_validation_strict.py \
-            data_access/tests/unit/test_key_policy_deterministic.py \
-            data_access/tests/unit/test_scan_handle_guard.py \
+            dataaccess/tests/unit/test_params_validation_strict.py \
+            dataaccess/tests/unit/test_key_policy_deterministic.py \
+            dataaccess/tests/unit/test_scan_handle_guard.py \
             factor_engine/tests/test_data_scope_stability.py \
             factor_engine/tests/test_gtja_compat_semantics.py
