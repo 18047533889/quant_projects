@@ -5,14 +5,14 @@ on:
     branches: [main, agent/operator-surface-cleanup, agent/factor-engine-cos-contracts]
     paths:
       - "factor_engine/**"
-      - "data_access/**"
+      - "dataaccess/**"
       - "gtja191/**"
       - "week2_pv_factors/**"
       - ".github/workflows/operator-surface-gate.yml"
   pull_request:
     paths:
       - "factor_engine/**"
-      - "data_access/**"
+      - "dataaccess/**"
       - "gtja191/**"
       - "week2_pv_factors/**"
       - ".github/workflows/operator-surface-gate.yml"
@@ -75,21 +75,24 @@ jobs:
           pytest -q factor_engine/tests/test_operator_surface.py
           python factor_engine/scripts/validate_public_factor_formulas.py
       - name: COS contract and unit regressions
-        run: pytest -q data_access/tests/test_cos_contract_core.py
+        run: pytest -q dataaccess/tests/test_cos_contract_core.py
       - name: COS filing PIT regressions
         run: |
           pytest -q \
-            data_access/tests/test_cos_pit_runtime.py \
-            data_access/tests/test_cos_pit_edges.py \
-            data_access/tests/test_cos_read_asof_guard.py
+            dataaccess/tests/test_cos_pit_runtime.py \
+            dataaccess/tests/test_cos_pit_edges.py \
+            dataaccess/tests/test_cos_read_asof_guard.py
       - name: COS factor and storage regressions
         run: |
           pytest -q \
-            data_access/tests/test_cos_factor_runtime.py \
-            data_access/tests/test_cos_registry_runtime.py \
-            data_access/tests/test_cos_storage_runtime.py
+            dataaccess/tests/test_cos_factor_runtime.py \
+            dataaccess/tests/test_cos_registry_runtime.py \
+            dataaccess/tests/test_cos_storage_runtime.py
       - name: Fiscal and backend semantic regression
-        run: pytest -q factor_engine/tests/operators/test_cos_fiscal_primitives.py
+        run: |
+          pytest -q \
+            factor_engine/tests/operators/test_cos_fiscal_primitives.py \
+            factor_engine/tests/operators/test_full_operator_audit_fixes.py
       - name: Stateful segmented runtime regression
         run: pytest -q factor_engine/tests/operators/test_stateful_segment_runtime.py
       - name: Operator overhaul compatibility regression
