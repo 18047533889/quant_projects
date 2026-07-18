@@ -24,9 +24,9 @@ def test_recipe_expands_to_primitives() -> None:
     nested = FactorRecipeRegistry.expand(
         "aroon_oscillator", {"high": "high", "low": "low", "window": 25}
     )
-    assert "ts_argmax(high, 25)" in nested
-    assert "ts_argmin(low, 25)" in nested
-    assert "aroon_up" not in nested and "aroon_down" not in nested
+    assert "AROON_up(high, 25)" in nested
+    assert "AROON_down(low, 25)" in nested
+    assert "ts_argmax" not in nested and "ts_argmin" not in nested
 
 
 def test_optional_recipe_requires_explicit_status_opt_in() -> None:
