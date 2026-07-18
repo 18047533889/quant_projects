@@ -1,0 +1,85 @@
+name: FactorEngine Full Operator Audit
+
+on:
+  pull_request:
+    paths:
+      - "factor_engine/**"
+      - "dataaccess/**"
+      - "gtja191/**"
+      - ".github/workflows/factorengine-full-audit.yml"
+  push:
+    branches: [main]
+    paths:
+      - "factor_engine/**"
+      - "dataaccess/**"
+      - "gtja191/**"
+      - ".github/workflows/factorengine-full-audit.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: factorengine-full-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  full-operator-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/dataaccess:${{ github.workspace }}/gtja191
+      FACTOR_ENGINE_DISABLE_NUMBA: "1"
+      FACTOR_ENGINE_RUN_MODE: research
+      QUANT_PRODUCTION_MODE: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pytest pyyaml
+      - name: Compile audited runtime
+        run: |
+          python -m compileall -q factor_engine dataaccess gtja191
+          python - <<'PY'
+          from cleaned_operators import load_all
+          from cleaned_operators.registry import OperatorRegistry
+          load_all()
+          assert OperatorRegistry.list_canonical()
+          print("canonicals", len(OperatorRegistry.list_canonical()))
+          PY
+      - name: Run complete semantic and backend regression suite
+        shell: bash
+        run: |
+          set -o pipefail
+          pytest -q \
+            factor_engine/tests/operators \
+            factor_engine/tests/test_operator_surface.py \
+            factor_engine/tests/test_gtja_compat_semantics.py \
+            factor_engine/tests/test_scalar_comparison_semantics.py \
+            factor_engine/tests/test_data_scope_stability.py \
+            factor_engine/tests/test_data_access_source_snapshot_cache.py \
+            dataaccess/tests/test_cos_contract_core.py \
+            dataaccess/tests/test_cos_pit_runtime.py \
+            dataaccess/tests/test_cos_pit_edges.py \
+            dataaccess/tests/test_cos_read_asof_guard.py \
+            dataaccess/tests/test_cos_factor_runtime.py \
+            dataaccess/tests/test_cos_registry_runtime.py \
+            dataaccess/tests/test_cos_storage_runtime.py \
+            gtja191/tests/test_full_catalog_factor_engine.py \
+            gtja191/tests/test_gtja191.py \
+            --junitxml=factorengine-full-audit.xml \
+            2>&1 | tee factorengine-full-audit.log
+      - name: Upload complete audit diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: factorengine-full-audit-diagnostics
+          if-no-files-found: warn
+          path: |
+            factorengine-full-audit.xml
+            factorengine-full-audit.log
