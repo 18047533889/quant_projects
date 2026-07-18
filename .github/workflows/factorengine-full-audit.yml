@@ -35,6 +35,18 @@ jobs:
       QUANT_PRODUCTION_MODE: "0"
     steps:
       - uses: actions/checkout@v4
+      - name: Upload temporary audit source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: factorengine-audit-source
+          retention-days: 1
+          if-no-files-found: error
+          path: |
+            factor_engine
+            dataaccess
+            data_access
+            gtja191
+            requirements.txt
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
