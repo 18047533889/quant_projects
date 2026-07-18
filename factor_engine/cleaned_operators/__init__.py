@@ -53,6 +53,7 @@ _LOAD_MODULES = (
     "cleaned_operators.layer_primitives",
     "cleaned_operators.layer_composite_fixes",
     "cleaned_operators.operator_audit_fixes",
+    "cleaned_operators.stateful_batch_fixes",
 )
 
 
