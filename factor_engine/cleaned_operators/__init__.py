@@ -79,3 +79,7 @@ def load_all() -> None:
     from backend.runtime_hardening import apply_runtime_hardening
 
     apply_runtime_hardening()
+
+    from backend.sql_audit_fixes import apply_sql_audit_fixes
+
+    apply_sql_audit_fixes()
