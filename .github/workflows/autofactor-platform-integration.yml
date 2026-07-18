@@ -95,7 +95,7 @@ jobs:
           PY
       - name: Root platform regression tests
         env:
-          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/dataaccess
           AUTOFAC_PLATFORM_MODE: external
           AUTOFAC_PLATFORM_ROOT: ${{ github.workspace }}
         run: |
