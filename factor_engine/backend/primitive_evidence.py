@@ -15,7 +15,8 @@ _VERIFIED_JSON = FE_ROOT / "evidence" / "primitive_verified.json"
 @lru_cache(maxsize=1)
 def _load_case_registry() -> dict[str, Any]:
     if not _CASE_REGISTRY_JSON.is_file():
-        # 开发回退：从 verified 或空集（须运行 sync_primitive_evidence.py）
+        # Development metadata only.  A case registry proves that a test case is
+        # declared; it never proves that the test passed.
         if _VERIFIED_JSON.is_file():
             data = json.loads(_VERIFIED_JSON.read_text(encoding="utf-8"))
             if data.get("artifact_kind") == "case_registry":
@@ -66,26 +67,31 @@ CASE_REGISTRY_SIX_WAY: frozenset[str] = (
 )
 
 
-def _load_verified_or_registry(key: str) -> frozenset[str]:
-    """verified artifact 有效时读 verified，否则回退 case registry（开发模式）。"""
-    if evidence_artifact_valid():
+def _load_verified_fail_closed(key: str) -> frozenset[str]:
+    """Return passed evidence only; invalid/missing artifacts certify nothing."""
+    if not evidence_artifact_valid():
+        return frozenset()
+    try:
         return _verified_set(key)
-    return _case_registry_set(key)
+    except (FileNotFoundError, json.JSONDecodeError, OSError, TypeError, ValueError):
+        return frozenset()
 
 
 # Verified lists（须 pytest 通过后由 certify_primitive_evidence.py 写入）
-POLARS_REFERENCE_PARITY_VERIFIED: frozenset[str] = _load_verified_or_registry("polars_reference_parity")
-POLARS_EDGE_VERIFIED: frozenset[str] = _load_verified_or_registry("polars_edge_verified")
-DUCKDB_REFERENCE_PARITY_VERIFIED: frozenset[str] = _load_verified_or_registry("duckdb_reference_parity")
-DUCKDB_REAL_SQL_VERIFIED: frozenset[str] = _load_verified_or_registry("duckdb_real_sql_verified")
-DUCKDB_EDGE_VERIFIED: frozenset[str] = _load_verified_or_registry("duckdb_edge_verified")
-DUCKDB_NULL_EDGE_VERIFIED: frozenset[str] = _load_verified_or_registry("duckdb_null_edge_verified")
-DUCKDB_NAN_EDGE_VERIFIED: frozenset[str] = _load_verified_or_registry("duckdb_nan_edge_verified")
-DUCKDB_INF_EDGE_VERIFIED: frozenset[str] = _load_verified_or_registry("duckdb_inf_edge_verified")
-POLARS_NO_FALLBACK_VERIFIED: frozenset[str] = _load_verified_or_registry("no_fallback_verified")
+# Never fall back to the case registry here.  Production routing consumes these
+# names, so a stale or malformed artifact must fail closed.
+POLARS_REFERENCE_PARITY_VERIFIED: frozenset[str] = _load_verified_fail_closed("polars_reference_parity")
+POLARS_EDGE_VERIFIED: frozenset[str] = _load_verified_fail_closed("polars_edge_verified")
+DUCKDB_REFERENCE_PARITY_VERIFIED: frozenset[str] = _load_verified_fail_closed("duckdb_reference_parity")
+DUCKDB_REAL_SQL_VERIFIED: frozenset[str] = _load_verified_fail_closed("duckdb_real_sql_verified")
+DUCKDB_EDGE_VERIFIED: frozenset[str] = _load_verified_fail_closed("duckdb_edge_verified")
+DUCKDB_NULL_EDGE_VERIFIED: frozenset[str] = _load_verified_fail_closed("duckdb_null_edge_verified")
+DUCKDB_NAN_EDGE_VERIFIED: frozenset[str] = _load_verified_fail_closed("duckdb_nan_edge_verified")
+DUCKDB_INF_EDGE_VERIFIED: frozenset[str] = _load_verified_fail_closed("duckdb_inf_edge_verified")
+POLARS_NO_FALLBACK_VERIFIED: frozenset[str] = _load_verified_fail_closed("no_fallback_verified")
 NO_FALLBACK_VERIFIED: frozenset[str] = POLARS_NO_FALLBACK_VERIFIED
 
-# 六证交集：backend execution certified（case registry 或 test artifact）
+# 六证交集：backend execution certified（只接受 test-passed artifact）
 PRIMITIVE_BACKEND_EXECUTION_CERTIFIED: frozenset[str] = (
     POLARS_REFERENCE_PARITY_VERIFIED
     & POLARS_EDGE_VERIFIED
