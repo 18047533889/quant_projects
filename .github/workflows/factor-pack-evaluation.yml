@@ -9,14 +9,14 @@ on:
       - "AutoFactorEvaluation-RECONSTRUCT/**"
       - "gtja191/**"
       - "factor_engine/**"
-      - "data_access/**"
+      - "dataaccess/**"
       - ".github/workflows/factor-pack-evaluation.yml"
   pull_request:
     paths:
       - "AutoFactorEvaluation-RECONSTRUCT/**"
       - "gtja191/**"
       - "factor_engine/**"
-      - "data_access/**"
+      - "dataaccess/**"
       - ".github/workflows/factor-pack-evaluation.yml"
 
 permissions:
@@ -84,7 +84,7 @@ jobs:
       - name: Platform regressions
         run: |
           pytest -q \
-            data_access/tests/unit/test_params_validation_strict.py \
-            data_access/tests/unit/test_key_policy_deterministic.py \
+            dataaccess/tests/unit/test_params_validation_strict.py \
+            dataaccess/tests/unit/test_key_policy_deterministic.py \
             factor_engine/tests/test_data_scope_stability.py \
             factor_engine/tests/test_gtja_compat_semantics.py
