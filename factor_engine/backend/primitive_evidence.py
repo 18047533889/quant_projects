@@ -27,9 +27,9 @@ def _load_case_registry() -> dict[str, Any]:
 
 @lru_cache(maxsize=1)
 def _load_verified() -> dict[str, Any]:
-    if not _VERIFIED_JSON.is_file():
-        raise FileNotFoundError(f"missing primitive evidence: {_VERIFIED_JSON}")
-    return json.loads(_VERIFIED_JSON.read_text(encoding="utf-8"))
+    from backend.evidence_provenance import load_verified_artifact
+
+    return load_verified_artifact()
 
 
 def _set_from(data: dict[str, Any], key: str) -> frozenset[str]:
