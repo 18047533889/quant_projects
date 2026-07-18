@@ -1,0 +1,29 @@
+name: Rename DataAccess directory
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  rename:
+    if: github.head_ref == 'agent/rename-data-access-to-dataaccess'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Rename directory on main
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d data_access
+          test ! -e dataaccess
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git mv data_access dataaccess
+          git commit -m "Rename DataAccess directory to dataaccess"
+          git push origin HEAD:main
