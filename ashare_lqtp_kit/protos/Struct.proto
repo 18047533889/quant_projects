@@ -1,0 +1,243 @@
+syntax = "proto3";
+
+package LQTP;
+
+message Weight {
+  int32 trade_date = 1;
+  int32 quote_time = 2;
+  string symbol = 3;
+  double value = 4;
+}
+
+message Position {
+  int32 trade_date = 1;
+  int32 quote_time = 2;
+  string symbol = 3;
+  int64 volume = 4;
+  double price = 5;
+}
+
+message Order {
+  int32 trade_date = 1;
+  int32 quote_time = 2;
+  string symbol = 3;
+  int64 volume = 4;
+  int64 trader_volume = 5;
+  double price = 6;
+}
+
+message TradeDate
+{
+  int32 trade_date = 1;
+}
+
+message TradeDateArray
+{
+  repeated TradeDate data = 1;
+}
+
+message DailyBar {
+  int32 trade_date = 1;
+  string symbol = 2;
+  double open = 3;
+  double high = 4;
+  double low = 5;
+  double close = 6;
+  double pre_close = 7;
+  uint64 volume = 8;
+  double amount = 9;
+  double high_limit = 10;
+  double low_limit = 11;
+  double ret = 12;
+  double vwap = 13;
+  bool is_suspend = 14;
+  double open_interest = 16; // Futures open interest; stocks/ETFs default to 0
+  double factor = 15; // 复权因子（后复权用 close * factor）
+}
+
+message DailyBarArray {
+  repeated DailyBar data = 1;
+}
+
+message MinuteBar {
+  int32 trade_date = 1;
+  int32 quote_time = 2;
+  string symbol = 3;
+  double open = 4;
+  double high = 5;
+  double low = 6;
+  double close = 7;
+  double pre_close = 8;
+  uint64 volume = 9;
+  double amount = 10;
+  double vwap = 11;
+}
+
+message MinuteBarArray {
+  repeated MinuteBar data = 1;
+}
+
+message StockDividend {
+  int32 trade_date = 1;
+  string symbol = 2;
+  int32 right_reg_date = 3;
+  int32 ex_dividend_date = 4;
+  double cash_dividend = 5;
+  double stock_dividend = 6;
+  double stock_transfer = 7;
+}
+
+message StockDividendArray {
+  repeated StockDividend data = 1;
+}
+
+message StockAllotment {
+  int32 trade_date = 1;
+  string symbol = 2;
+  int32 right_reg_date = 3;
+  int32 ex_right_date = 4;
+  double allotment = 5;
+  double price = 6;
+}
+
+message StockAllotmentArray {
+  repeated StockAllotment data = 1;
+}
+
+// 自定义截面字段（单日单标的一个值）
+message CustomFieldBar {
+  int32  trade_date  = 1;
+  string symbol      = 2;
+  double value       = 3;
+  string field_name  = 4; // 字段名，多字段批量返回时用于区分（如 "Low"、"High"）
+}
+
+message CustomFieldArray {
+  repeated CustomFieldBar data = 1;
+}
+
+message Result {
+  int32 trade_date = 1;
+  double bod_net_asset = 2;
+  double eod_net_asset = 3;
+  double bod_market_value = 4;
+  double eod_market_value = 5;
+  double bod_long_market_value = 6;
+  double eod_long_market_value = 7;
+  double bod_short_market_value = 8;
+  double eod_short_market_value = 9;
+  double bod_cash = 10;
+  double eod_cash = 11;
+  double expect_buy_amount = 12;
+  double expect_sell_amount = 13;
+  double buy_amount = 14;
+  double sell_amount = 15;
+  double buy_execution_ratio = 16;
+  double sell_execution_ratio = 17;
+  double execution_ratio = 18;
+  double turnover_rate = 19;
+  double leverage = 20;
+  double commission = 21;
+  double net_asset_diff = 22;
+  double ret = 23;
+}
+
+enum PriceType
+{
+  OPEN = 0;
+  CLOSE = 1;
+  PRE_CLOSE = 2;
+  VWAP = 3;
+}
+
+//回测请求
+enum BacktestPersistenceMode
+{
+  BACKTEST_PERSISTENCE_MODE_UNSPECIFIED = 0;
+  BACKTEST_PERSISTENCE_MODE_NONE = 1;
+  BACKTEST_PERSISTENCE_MODE_DAILY = 2;
+}
+
+message Request {
+  reserved 18;
+  string name = 15;
+  BacktestPersistenceMode persistence_mode = 16;
+  string factor_definition_id = 17;
+  bool enable_short_selling = 19;
+  int32 begin_date = 1; //起始日期
+  int32 end_date = 2; //结束日期
+  repeated Weight weights = 3;
+  bool return_orders = 4; // 是否返回订单
+  bool return_targets = 5; // 是否返回目标仓位
+  bool return_positions = 6; // 是否返回持仓
+  double cash = 7; // 初始现金
+  repeated Position positions = 8; // 初始持仓
+  double commission_buy = 9; // 买入手续费 0.1 = 0.1%
+  double commission_sell = 10; // 卖出手续费 0.1 = 0.1%
+  double max_turnover_limit = 11; // 最大换手率限制 0.1 = 0.1%
+  double price_limit = 12; // 涨跌停限制
+  int32 duration = 13; // 分钟模式交易持续时间
+  PriceType price_type = 14; // 成交价格类型
+}
+
+// 流式响应：每个交易日推送一条 DailyResponse
+message DailyResponse {
+  string backtest_id = 6;
+  Result result = 1;            // 当日回测结果（含 trade_date）
+  repeated Order orders = 2;    // 当日订单（return_orders=true 时有值）
+  repeated Position targets = 3;// 当日目标持仓（return_targets=true 时有值）
+  repeated Position positions = 4; // 当日实际持仓（return_positions=true 时有值）
+  string error = 5;             // 非空表示发生错误，流结束
+}
+
+message BacktestSummary {
+  double final_net_asset = 1;
+  double total_return = 2;
+  double annualized_return = 3;
+  double max_drawdown = 4;
+  double sharpe_ratio = 5;
+  double volatility = 6;
+  double average_turnover = 7;
+  double total_commission = 8;
+  int64 trade_count = 9;
+  int32 trading_days = 10;
+}
+
+message BacktestRun {
+  string backtest_id = 1;
+  string name = 2;
+  string status = 3;
+  int32 begin_date = 4;
+  int32 end_date = 5;
+  double initial_cash = 6;
+  string factor_definition_id = 7;
+  string persistence_mode = 8;
+  string error_message = 9;
+  string created_at = 10;
+  string completed_at = 11;
+  BacktestSummary summary = 12;
+}
+
+message ListBacktestRunsRequest {
+  int32 limit = 1;
+}
+
+message ListBacktestRunsResponse {
+  repeated BacktestRun runs = 1;
+}
+
+message GetBacktestResultRequest {
+  string backtest_id = 1;
+}
+
+message GetBacktestResultResponse {
+  BacktestRun run = 1;
+  repeated Result daily_results = 2;
+}
+
+service BacktestService {
+  // 服务端流式：每处理完一个交易日即推送一条 DailyResponse
+  rpc Backtest (Request) returns (stream DailyResponse);
+  rpc ListBacktestRuns (ListBacktestRunsRequest) returns (ListBacktestRunsResponse);
+  rpc GetBacktestResult (GetBacktestResultRequest) returns (GetBacktestResultResponse);
+}

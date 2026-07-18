@@ -59,7 +59,7 @@ class SlopePolars(SeriesOperator):
     """Polars 滚动时间斜率"""
     metadata = OperatorMetadata(
         name="ts_time_slope", category="statistics", description="滚动时间斜率",
-        param_names=["x", "window"], return_type="series", tags=["statistics", "polars"],
+        param_names=["x", "d"], return_type="series", tags=["statistics", "polars"],
     )
 
     def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:

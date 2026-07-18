@@ -439,7 +439,7 @@ class RowCorr(SeriesOperator):
         category="cross_sectional",
         description="对每行（每个日期截面）计算y和x的相关系数",
         examples=["row_corr(factor_y, factor_x)"],
-        param_names=["y", "x"],
+        param_names=["x", "y"],
         return_type="series",
         tags=["cross_sectional", "row", "corr"]
     )
@@ -1328,13 +1328,13 @@ class CrossSectionalWinsorizePolars(SeriesOperator):
         category="cross_sectional",
         description="对截面数据进行缩尾处理",
         examples=["c_winsorize(ROE, 0.05, 0.95)"],
-        param_names=["x", "min_pct", "max_pct"],
+        param_names=["x", "lower", "upper"],
         return_type="series",
         tags=["cross_sectional", "winsorize", "outlier"]
     )
 
-    def _calculate_series(self, x: pl.DataFrame, min_pct: float = 0.05, max_pct: float = 0.95, **kwargs) -> pl.DataFrame:
-        numeric_cols = [c for c in x.columns if c not in ['date', 'stock_code']]
+    def _calculate_series(self, x: pl.DataFrame, lower: float = 0.05, upper: float = 0.95, **kwargs) -> pl.DataFrame:
+        min_pct, max_pct = lower, upper
 
         # 使用 Numba 计算分位数并裁剪
         arr = x.select(numeric_cols).to_numpy()

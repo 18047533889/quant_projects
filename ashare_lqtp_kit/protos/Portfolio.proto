@@ -1,0 +1,105 @@
+syntax = "proto3";
+
+package LQTP;
+
+import "Struct.proto";
+
+message CreatePaperPortfolioRequest {
+  string name = 1;
+  double initial_cash = 2;
+  double commission_buy = 3;
+  double commission_sell = 4;
+  double max_turnover_limit = 5;
+  double price_limit = 6;
+  PriceType price_type = 7;
+}
+
+message PaperPortfolio {
+  string portfolio_id = 1;
+  string name = 2;
+  string status = 3;
+  double initial_cash = 4;
+  double current_cash = 5;
+  double current_net_asset = 6;
+  int32 last_settled_date = 7;
+  double commission_buy = 8;
+  double commission_sell = 9;
+  double max_turnover_limit = 10;
+  double price_limit = 11;
+  PriceType price_type = 12;
+  string created_at = 13;
+}
+
+message ListPaperPortfoliosRequest {}
+
+message ListPaperPortfoliosResponse {
+  repeated PaperPortfolio portfolios = 1;
+}
+
+message GetPaperPortfolioRequest {
+  string portfolio_id = 1;
+}
+
+message PaperPortfolioDetail {
+  PaperPortfolio portfolio = 1;
+  repeated Position positions = 2;
+}
+
+message SubmitPaperWeightsRequest {
+  string portfolio_id = 1;
+  int32 effective_trade_date = 2;
+  repeated Weight weights = 3;
+}
+
+message PaperWeightSubmission {
+  string submission_id = 1;
+  string portfolio_id = 2;
+  int32 effective_trade_date = 3;
+  int32 version = 4;
+  string status = 5;
+  repeated Weight weights = 6;
+  string submitted_at = 7;
+}
+
+message SettlePaperPortfolioDayRequest {
+  string portfolio_id = 1;
+  int32 trade_date = 2;
+}
+
+message PaperPortfolioDailyResponse {
+  string portfolio_id = 1;
+  Result result = 2;
+  repeated Order orders = 3;
+  repeated Position positions = 4;
+  bool already_settled = 5;
+  string error = 6;
+}
+
+message ListPaperPortfolioDailyResultsRequest {
+  string portfolio_id = 1;
+  int32 begin_date = 2; // optional YYYYMMDD; 0 means no lower bound
+  int32 end_date = 3; // optional YYYYMMDD; 0 means no upper bound
+  bool include_details = 4; // include orders and position snapshots
+}
+
+message ListPaperPortfolioDailyResultsResponse {
+  repeated PaperPortfolioDailyResponse results = 1;
+}
+
+message SettleActivePaperPortfoliosRequest {
+  int32 trade_date = 1;
+}
+
+message SettleActivePaperPortfoliosResponse {
+  repeated PaperPortfolioDailyResponse results = 1;
+}
+
+service PortfolioService {
+  rpc CreatePaperPortfolio (CreatePaperPortfolioRequest) returns (PaperPortfolio);
+  rpc ListPaperPortfolios (ListPaperPortfoliosRequest) returns (ListPaperPortfoliosResponse);
+  rpc GetPaperPortfolio (GetPaperPortfolioRequest) returns (PaperPortfolioDetail);
+  rpc SubmitPaperWeights (SubmitPaperWeightsRequest) returns (PaperWeightSubmission);
+  rpc ListPaperPortfolioDailyResults (ListPaperPortfolioDailyResultsRequest) returns (ListPaperPortfolioDailyResultsResponse);
+  rpc SettlePaperPortfolioDay (SettlePaperPortfolioDayRequest) returns (PaperPortfolioDailyResponse);
+  rpc SettleActivePaperPortfolios (SettleActivePaperPortfoliosRequest) returns (SettleActivePaperPortfoliosResponse);
+}

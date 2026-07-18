@@ -167,7 +167,7 @@ def _build_verified_payload(*, stages_passed: list[str]) -> dict:
         polars_reference=polars_ref,
         polars_edge=polars_ed,
         duckdb_reference=duck_ref,
-        duckdb_real_sql=duck_ref,
+        duckdb_real_sql=frozenset(registry.get("duckdb_real_sql_verified") or []),
         duckdb_edge=duck_ed | duck_nan,
         no_fallback=no_fb,
     )
@@ -176,16 +176,18 @@ def _build_verified_payload(*, stages_passed: list[str]) -> dict:
     if verified_path.is_file():
         existing_ops = json.loads(verified_path.read_text(encoding="utf-8")).get("operators") or {}
 
+    if not dual:
+        raise RuntimeError("six-way evidence intersection is empty")
     payload = {
         "schema_version": 3,
         "description": (
             "Primitive production evidence（须 pytest 通过后由 certify_primitive_evidence.py 写入）"
         ),
-        "polars_reference_parity": sorted(polars_ref & dual) if dual else sorted(polars_ref),
-        "polars_edge_verified": sorted(polars_ed & dual) if dual else sorted(polars_ed),
-        "duckdb_reference_parity": sorted(duck_ref & dual) if dual else sorted(duck_ref),
-        "duckdb_real_sql_verified": sorted(duck_ref & dual) if dual else sorted(duck_ref),
-        "duckdb_edge_verified": sorted(duck_ed & dual) if dual else sorted(duck_ed),
+        "polars_reference_parity": sorted(polars_ref & dual),
+        "polars_edge_verified": sorted(polars_ed & dual),
+        "duckdb_reference_parity": sorted(duck_ref & dual),
+        "duckdb_real_sql_verified": sorted(frozenset(registry.get("duckdb_real_sql_verified") or []) & dual),
+        "duckdb_edge_verified": sorted(duck_ed & dual),
         "duckdb_null_edge_verified": sorted(registry.get("duckdb_null_edge_verified") or []),
         "duckdb_nan_edge_verified": sorted(registry.get("duckdb_nan_edge_verified") or []),
         "duckdb_inf_edge_verified": sorted(registry.get("duckdb_inf_edge_verified") or []),
@@ -203,7 +205,11 @@ def _build_verified_payload(*, stages_passed: list[str]) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--skip-pytest", action="store_true", help="仅重建 payload（本地调试）")
+    parser.add_argument(
+        "--skip-pytest",
+        action="store_true",
+        help="仅输出未认证预览，不写入 primitive_verified.json",
+    )
     parser.add_argument("--check", action="store_true", help="校验 verified artifact 与当前 commit 一致")
     args = parser.parse_args()
     _bootstrap()
@@ -236,15 +242,18 @@ def main() -> int:
         print(registry_out, file=sys.stderr)
         return 1
 
+    if args.skip_pytest:
+        print("unverified_preview: --skip-pytest cannot write verified evidence")
+        return 0
+
     stages_passed: list[str] = ["case_registry_sync"]
-    if not args.skip_pytest:
-        for stage_name, files in CERTIFICATION_STAGES:
-            ok, detail = _run_pytest(files)
-            if not ok:
-                print(f"stage failed: {stage_name}", file=sys.stderr)
-                print(detail, file=sys.stderr)
-                return 1
-            stages_passed.append(stage_name)
+    for stage_name, files in CERTIFICATION_STAGES:
+        ok, detail = _run_pytest(files)
+        if not ok:
+            print(f"stage failed: {stage_name}", file=sys.stderr)
+            print(detail, file=sys.stderr)
+            return 1
+        stages_passed.append(stage_name)
 
     payload = _build_verified_payload(stages_passed=stages_passed)
     count = payload.pop("_six_way_count", 0)

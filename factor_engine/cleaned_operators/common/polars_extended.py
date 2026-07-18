@@ -83,7 +83,7 @@ class PowerPolars(SeriesOperator):
     """Polars 幂"""
     metadata = OperatorMetadata(
         name="power", category="math", description="幂",
-        param_names=["x", "p"], return_type="series", tags=["math", "polars"],
+        param_names=["x", "y"], return_type="series", tags=["math", "polars"],
     )
 
     def _calculate_series(self, x: pl.DataFrame, p: float = 2.0, **kwargs) -> pl.DataFrame:
@@ -173,7 +173,7 @@ class IfNaNPolars(SeriesOperator):
     """Polars NaN 替换"""
     metadata = OperatorMetadata(
         name="ifnan", category="signal", description="NaN 替换",
-        param_names=["x", "v"], return_type="series", tags=["signal", "polars"],
+        param_names=["x", "default"], return_type="series", tags=["signal", "polars"],
     )
 
     def _calculate_series(self, x: pl.DataFrame, v: float = 0.0, **kwargs) -> pl.DataFrame:

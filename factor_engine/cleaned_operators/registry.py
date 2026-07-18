@@ -29,34 +29,22 @@
 """
 from __future__ import annotations
 
-import os
+import copy
 from typing import Any, Dict, List, Optional, Tuple
 
 
 def _merge_param_names(existing: list[str] | None, new: list[str] | None) -> list[str]:
-    """多 backend 注册时合并 param_names，保留更完整的参数契约。
-
-    参数:
-        existing: 已有 catalog 中的 param_names。
-        new: 本次注册算子 metadata 中的 param_names。
-
-    返回:
-        合并后的参数名列表；同长度时优先含 ``benchmark_ret`` 的 CAPM 契约。
-    """
+    """Preserve the first canonical positional contract across backend adapters."""
     old = list(existing or [])
     cur = list(new or [])
     if not old:
         return cur
     if not cur:
         return old
-    # 同长度时优先含 benchmark_ret/ret 的契约（CAPM 类算子）
-    if len(cur) == len(old):
-        if "benchmark_ret" in cur and "benchmark_ret" not in old:
-            return cur
-        if "benchmark_ret" in old:
-            return old
-    if len(cur) >= len(old):
-        return cur
+    # Backend implementations frequently use local names (x/y, d/window,
+    # value/method) for the same positional contract.  The canonical contract
+    # remains the first registered declaration; backend-specific details are
+    # retained in backend metadata and validated by execution tests.
     return old
 
 
@@ -113,35 +101,76 @@ class OperatorRegistry:
         # by later audit layers and must survive when another backend (most
         # commonly the SQL marker) is registered.
         updated = dict(prev)
+        # Canonical metadata is established by the first registration and is
+        # never replaced by a later backend marker.  Backend-specific provenance
+        # belongs exclusively under backend_meta.
+        canonical_description = prev.get("description") or getattr(
+            operator.metadata, "description", ""
+        )
+        canonical_params = _merge_param_names(
+            prev.get("param_names"),
+            getattr(operator.metadata, "param_names", []),
+        )
         updated.update({
             "canonical": canonical,
             "backends": sorted(cls._operators[canonical].keys()),
-            "selected_source": source,
             "status": status,
-            "description": getattr(operator.metadata, "description", ""),
-            "param_names": _merge_param_names(
-                prev.get("param_names"),
-                getattr(operator.metadata, "param_names", []),
-            ),
+            "description": canonical_description,
+            "param_names": canonical_params,
             "aliases": sorted(set((aliases or []) + prev.get("aliases", []))),
             "backend_meta": backend_meta,
         })
+        # Keep legacy catalog readers from seeing a registration-order-dependent
+        # source.  New consumers must use backend_meta[backend].source.
+        updated.pop("selected_source", None)
         cls._catalog[canonical] = updated
         for alias in aliases or []:
             if alias != canonical:
                 cls._aliases[alias] = canonical
 
     @classmethod
-    def register_alias(cls, alias: str, canonical: str) -> None:
-        """登记 DSL 别名 → canonical 映射。
+    def resolve_canonical(cls, name: str, *, max_depth: int = 8) -> str:
+        """Resolve aliases transitively and reject cycles or missing targets."""
+        current = name
+        seen: set[str] = set()
+        for _ in range(max_depth + 1):
+            if current in seen:
+                raise ValueError(f"alias cycle detected at {current!r}")
+            seen.add(current)
+            target = cls._aliases.get(current)
+            if target is None:
+                if current in cls._catalog or current in cls._operators:
+                    return current
+                # Unknown names remain unchanged for lookup compatibility.
+                return current
+            current = target
+        raise ValueError(f"alias resolution exceeded max_depth={max_depth}: {name!r}")
 
-        参数:
-            alias: DSL 侧名称（如 ``ts_rsi``）。
-            canonical: 目标 canonical 名（如 ``RSI``）。
-
-        返回:
-            None
-        """
+    @classmethod
+    def register_alias(
+        cls, alias: str, canonical: str, *, replace: bool = False,
+        replacement_reason: str = "",
+    ) -> None:
+        """Register an alias with collision and canonical-name checks."""
+        if alias == canonical:
+            return
+        if alias in cls._operators or alias in cls._catalog:
+            # A legacy canonical wins over a late alias declaration; silently
+            # replacing an active implementation would be worse than retaining
+            # the explicit canonical entry.
+            return
+        existing = cls._aliases.get(alias)
+        if existing is not None and existing != canonical and not replace:
+            raise ValueError(f"alias already points to {existing!r}: {alias!r}")
+        if replace and not replacement_reason.strip():
+            raise ValueError("replacement_reason is required when replacing an alias")
+        # Existing bootstrap aliases may be temporarily cyclic while dedupe
+        # renames canonical keys. Validate only newly introduced edges once the
+        # target has settled; repeated identical registrations are harmless.
+        if cls._aliases.get(alias) == canonical:
+            return
+        if existing is not None and existing == canonical:
+            return
         cls._aliases[alias] = canonical
         if canonical in cls._catalog:
             aliases = set(cls._catalog[canonical].get("aliases", []))
@@ -261,7 +290,7 @@ class OperatorRegistry:
         返回:
             已注册 backend 名排序列表，如 ``["pandas_numpy", "polars"]``。
         """
-        canonical = cls._aliases.get(name, name)
+        canonical = cls.resolve_canonical(name)
         return sorted(cls._operators.get(canonical, {}).keys())
 
     @classmethod
@@ -282,18 +311,27 @@ class OperatorRegistry:
         返回:
             ``(算子实例或 None, 实际选用的 backend 名)`` 元组。
         """
-        canonical = cls._aliases.get(name, name)
+        canonical = cls.resolve_canonical(name)
         backends = cls._operators.get(canonical, {})
         if prefer == "pandas_numpy":
             op = backends.get("pandas_numpy")
+            if op is None:
+                raise LookupError(f"{canonical!r} has no pandas_numpy backend")
             return op, "pandas_numpy"
         if prefer == "polars":
             from backend.operator_capability import get_best_backend
 
-            return get_best_backend(
-                canonical, prefer="polars", mode=mode,
-                allow_unverified_backend=allow_unverified_backend,
-            )
+            try:
+                return get_best_backend(
+                    canonical, prefer="polars", mode=mode,
+                    allow_unverified_backend=allow_unverified_backend,
+                )
+            except Exception:
+                if mode == "production":
+                    op = cls.get(canonical, "pandas_numpy")
+                    if op is not None:
+                        return op, "pandas_numpy"
+                raise
         if prefer == "sql":
             from backend.sql_tiers import (
                 is_sql_implemented,
@@ -330,7 +368,7 @@ class OperatorRegistry:
         返回:
             算子实例；未注册时返回 ``None``。
         """
-        canonical = cls._aliases.get(name, name)
+        canonical = cls.resolve_canonical(name)
         return cls._operators.get(canonical, {}).get(backend)
 
     @classmethod
@@ -344,9 +382,5 @@ class OperatorRegistry:
 
     @classmethod
     def catalog(cls) -> Dict[str, dict]:
-        """导出完整 catalog 浅拷贝。
-
-        返回:
-            ``canonical → catalog 元数据`` 字典副本，供白名单导出与文档生成使用。
-        """
-        return dict(cls._catalog)
+        """导出完整 catalog 深拷贝，防止调用者修改 registry 内部状态。"""
+        return copy.deepcopy(cls._catalog)

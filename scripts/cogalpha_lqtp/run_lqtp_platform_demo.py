@@ -71,8 +71,8 @@ def main() -> int:
     parser.add_argument("--end", default="2024-01-31")
     parser.add_argument("--n-symbols", type=int, default=10)
     parser.add_argument("--server", default=os.getenv("LQTP_SERVER", DEFAULT_SERVER))
-    parser.add_argument("--username", default=os.getenv("LQTP_USERNAME", "james.gd.luo@gmail.com"))
-    parser.add_argument("--password", default=os.getenv("LQTP_PASSWORD", "3213709208"))
+    parser.add_argument("--username", default=os.getenv("LQTP_USERNAME", ""))
+    parser.add_argument("--password", default=os.getenv("LQTP_PASSWORD", ""))
     args = parser.parse_args()
 
     work = args.work_dir

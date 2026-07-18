@@ -136,6 +136,7 @@ class DataAccessStore:
         )
         # PR8 + P0：首访 schema 自检缓存 key = dataset + params + manifest
         self._schema_checked: set[str] = set()
+        self._schema_check_lock = threading.Lock()
         self._registry_hash = _compute_registry_hash(registry)
 
     @property
@@ -1125,6 +1126,9 @@ class DataAccessStore:
         target_dir = self._resolve_write_dir(ds, params)
         self._authorizer.resolve_and_authorize(str(target_dir))
 
+        ok = False
+        err_msg: str | None = None
+        files_written: list[Path] = []
         with audit.AuditTimer() as timer:
             try:
                 if mode == "overwrite":
@@ -1145,7 +1149,7 @@ class DataAccessStore:
                 audit.record(
                     op="write",
                     dataset=dataset,
-                    ok=ok if 'ok' in locals() else False,
+                    ok=ok,
                     mode=mode,
                     rows=table.num_rows,
                     paths=[str(p) for p in files_written] if files_written else [str(target_dir)],
@@ -1729,25 +1733,23 @@ class DataAccessStore:
         if not getattr(ds, "schema", None):
             return
         cache_key = self._schema_fingerprint(ds, paths, params or {}, files=files)
-        if cache_key in self._schema_checked:
-            return
+        with self._schema_check_lock:
+            if cache_key in self._schema_checked:
+                return
 
-        result = check_schema(self._engine, ds, paths)
-        if result.ok:
-            self._schema_checked.add(cache_key)
-            mark_validated(cache_key)
-            return
+            result = check_schema(self._engine, ds, paths)
+            if result.ok:
+                self._schema_checked.add(cache_key)
+                mark_validated(cache_key)
+                return
 
-        from data_access.registry.schema_validation import _resolve_mode
+            from data_access.registry.schema_validation import _resolve_mode
 
-        mode = _resolve_mode()
-        try:
+            mode = _resolve_mode()
             enforce_schema_or_raise(result, mode=mode)
-        except Exception:
-            raise
-        self._schema_checked.add(cache_key)
-        if mode == "warn":
-            mark_validated(cache_key)
+            self._schema_checked.add(cache_key)
+            if mode == "warn":
+                mark_validated(cache_key)
 
     def _resolve_paths(
         self,

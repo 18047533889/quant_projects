@@ -21,7 +21,31 @@ def test_resolve_duckdb_config_from_env(monkeypatch):
     assert cfg.max_temp_directory_size == "10GB"
 
 
-def test_apply_pragmas_sets_threads():
+def test_auto_memory_limit_is_bounded(monkeypatch):
+    monkeypatch.delenv("DUCKDB_MEMORY_LIMIT", raising=False)
+    monkeypatch.setattr(
+        "data_access.core.duckdb_config._available_memory_bytes",
+        lambda: 4 * 1024**3,
+    )
+    monkeypatch.setenv("DUCKDB_MEMORY_FRACTION", "0.5")
+    monkeypatch.setenv("DUCKDB_MEMORY_MIN_MB", "512")
+    monkeypatch.setenv("DUCKDB_MEMORY_MAX_MB", "4096")
+    cfg = resolve_duckdb_config()
+    assert cfg.memory_limit == "2048MB"
+
+
+def test_explicit_memory_and_threads_override_auto(monkeypatch):
+    monkeypatch.setenv("DUCKDB_MEMORY_LIMIT", "1GB")
+    monkeypatch.setenv("DUCKDB_THREADS", "3")
+    monkeypatch.setattr(
+        "data_access.core.duckdb_config._available_memory_bytes",
+        lambda: 64 * 1024**3,
+    )
+    cfg = resolve_duckdb_config()
+    assert cfg.memory_limit == "1GB"
+    assert cfg.threads == 3
+
+
     conn = duckdb.connect(":memory:")
     try:
         apply_pragmas(conn, DuckDBConfig(threads=3, memory_limit="512MB"))

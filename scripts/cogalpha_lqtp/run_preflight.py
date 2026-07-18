@@ -350,8 +350,8 @@ def main() -> int:
     parser.add_argument("--min-symbols", type=int, default=20)
     parser.add_argument("--skip-lqtp", action="store_true")
     parser.add_argument("--server", default=DEFAULT_SERVER)
-    parser.add_argument("--username", default=os.getenv("LQTP_USERNAME", "james.gd.luo@gmail.com"))
-    parser.add_argument("--password", default=os.getenv("LQTP_PASSWORD", "3213709208"))
+    parser.add_argument("--username", default=os.getenv("LQTP_USERNAME", ""))
+    parser.add_argument("--password", default=os.getenv("LQTP_PASSWORD", ""))
     parser.add_argument("--regen-catalog", action="store_true")
     args = parser.parse_args()
 

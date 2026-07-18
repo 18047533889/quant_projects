@@ -147,7 +147,7 @@ def _safe_divide(left, right, *, epsilon: float, default: float, missing_default
 
 @register_operator(name="ts_argmax", category="time_series", business_category="time_series", canonical="ts_argmax", source="gtja_compat", backend="pandas_numpy")
 class GTJATSArgmax(SeriesOperator):
-    metadata = OperatorMetadata(name="ts_argmax", category="time_series", description="窗口最大值距当前 bar 的距离（0=当前，tie 取最近）", examples=["ts_argmax(high, 20)"], param_names=["x", "window"], return_type="series", tags=["time_series", "gtja", "pit_safe"])
+    metadata = OperatorMetadata(name="ts_argmax", category="time_series", description="窗口最大值距当前 bar 的距离（0=当前，tie 取最近）", examples=["ts_argmax(high, 20)"], param_names=["x", "d"], return_type="series", tags=["time_series", "gtja", "pit_safe"])
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
         w = max(1, int(kwargs.get("d", window)))
@@ -156,7 +156,7 @@ class GTJATSArgmax(SeriesOperator):
 
 @register_operator(name="ts_argmin", category="time_series", business_category="time_series", canonical="ts_argmin", source="gtja_compat", backend="pandas_numpy")
 class GTJATSArgmin(SeriesOperator):
-    metadata = OperatorMetadata(name="ts_argmin", category="time_series", description="窗口最小值距当前 bar 的距离（0=当前，tie 取最近）", examples=["ts_argmin(low, 20)"], param_names=["x", "window"], return_type="series", tags=["time_series", "gtja", "pit_safe"])
+    metadata = OperatorMetadata(name="ts_argmin", category="time_series", description="窗口最小值距当前 bar 的距离（0=当前，tie 取最近）", examples=["ts_argmin(low, 20)"], param_names=["x", "d"], return_type="series", tags=["time_series", "gtja", "pit_safe"])
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
         w = max(1, int(kwargs.get("d", window)))
@@ -173,7 +173,7 @@ class GTJATSRegression(SeriesOperator):
 
 @register_operator(name="ts_time_slope", category="time_series", business_category="time_series", canonical="ts_time_slope", source="gtja_compat", backend="pandas_numpy")
 class GTJATimeSlope(SeriesOperator):
-    metadata = OperatorMetadata(name="ts_time_slope", category="time_series", description="窗口内序列对时间位置的 OLS 斜率", examples=["ts_time_slope(close, 20)"], param_names=["x", "window"], return_type="series", tags=["time_series", "regression", "gtja", "pit_safe"])
+    metadata = OperatorMetadata(name="ts_time_slope", category="time_series", description="窗口内序列对时间位置的 OLS 斜率", examples=["ts_time_slope(close, 20)"], param_names=["x", "d"], return_type="series", tags=["time_series", "regression", "gtja", "pit_safe"])
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
         w = max(2, int(window))

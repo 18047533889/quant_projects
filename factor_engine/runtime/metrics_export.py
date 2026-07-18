@@ -307,9 +307,13 @@ def push_otlp_grpc(
         from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
         from opentelemetry.sdk.resources import Resource
 
+        import socket
         host = endpoint.replace("http://", "").replace("https://", "")
         if ":" not in host:
             host = f"{host}:4317"
+        probe_host, probe_port = host.rsplit(":", 1)
+        with socket.create_connection((probe_host, int(probe_port)), timeout=timeout_sec):
+            pass
         exporter = OTLPMetricExporter(endpoint=host, insecure=True)
         reader = PeriodicExportingMetricReader(exporter, export_interval_millis=1000)
         provider = MeterProvider(resource=Resource.create({"service.name": "factor_engine"}), metric_readers=[reader])
@@ -321,7 +325,7 @@ def push_otlp_grpc(
         provider.force_flush(timeout_millis=int(timeout_sec * 1000))
         provider.shutdown()
         return {"ok": True, "endpoint": host, "transport": "grpc_native"}
-    except ImportError:
+    except (ImportError, OSError, RuntimeError, TimeoutError) as exc:
         http_endpoint = endpoint.replace(":4317", ":4318")
         if "://" not in http_endpoint:
             http_endpoint = f"http://{http_endpoint}"

@@ -389,6 +389,12 @@ class RedisTaskQueue:
 
         self._redis = redis.from_url(redis_url, decode_responses=True)
         self._prefix = prefix.rstrip(":")
+        try:
+            self._redis.ping()
+        except Exception as exc:
+            raise ImportError(
+                f"RedisTaskQueue backend unavailable at {redis_url}: {exc}"
+            ) from exc
         for bucket in ("pending", "running", "done", "failed"):
             self._redis.delete(f"{self._prefix}:{bucket}")
 

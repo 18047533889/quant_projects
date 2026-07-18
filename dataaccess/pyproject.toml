@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "data-access"
-version = "0.2.0"
+version = "0.3.0"
 description = "Unified quantitative data access with executable COS panel and point-in-time contracts"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -21,7 +21,7 @@ dependencies = [
 polars = ["polars>=0.20"]
 client = ["httpx>=0.27", "pydantic>=2.0"]
 service = ["fastapi>=0.110", "uvicorn[standard]>=0.27"]
-dev = ["pytest>=8.0", "build>=1.2"]
+dev = ["pytest>=8.0", "build>=1.2", "twine>=5.0"]
 all = [
     "polars>=0.20",
     "httpx>=0.27",
@@ -36,6 +36,9 @@ Repository = "https://github.com/HKUST-QUANT-SOCIETY/data_access"
 [project.scripts]
 data-access-server = "data_access.service.__main__:main"
 
+[project.entry-points."console_scripts"]
+data-access-quality = "data_access.quality.cli:main"
+
 [tool.setuptools]
 packages = [
     "data_access",
@@ -46,6 +49,7 @@ packages = [
     "data_access.cos",
     "data_access.service",
     "data_access.clickhouse",
+    "data_access.quality",
 ]
 
 [tool.setuptools.package-dir]

@@ -397,7 +397,10 @@ my_new_dataset:
 |---|---|---|
 | `QUANT_AUDIT_LOG` | `${QUANTSOCIETY_WORKSPACE_DATA_ROOT}/logs/data_access_audit.jsonl` | 审计日志文件路径，测试里常指向 tmp |
 | `QUANT_AUDIT_READS` | `false` | 设 `true` 时连 read 也记审计；默认只记 write（量太大） |
-| `QUANT_OPERATOR` | 空 | 审计日志里的 operator 字段（允许 `@+.-_`，如 `shw@team`） |
+| `DUCKDB_MEMORY_LIMIT` | 显式设置 DuckDB 内存上限；未设置时按主机可用内存自动计算 | 未设置 |
+| `DUCKDB_MEMORY_FRACTION` | 自动内存上限占主机可用内存比例 | `0.60` |
+| `DUCKDB_MEMORY_MIN_MB` / `DUCKDB_MEMORY_MAX_MB` | 自动内存上限范围 | `512` / `65536` |
+| `DUCKDB_MAX_THREADS` | 自动线程上限，避免多 worker 机器过度并发 | `8` |
 
 ---
 

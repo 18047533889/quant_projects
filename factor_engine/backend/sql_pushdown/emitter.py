@@ -2297,7 +2297,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_inst_window=True,
         )
 
-    if op == "zscore":
+    if op in {"zscore", "standardize"}:
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
@@ -2838,7 +2838,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_inst_window=True,
         )
 
-    if op in {"ts_ema", "ema"}:
+    if op in {"ts_ema", "ema", "ewm_mean"}:
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None

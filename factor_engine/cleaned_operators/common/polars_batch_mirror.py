@@ -101,7 +101,6 @@ def _register_colwise(
 
 # ---- 一元 / 简单桥接 ---------------------------------------------------------
 for _canon in (
-    "complex",
     "conj",
     "phase",
     "polar",
@@ -127,7 +126,7 @@ for _canon in (
     "wsum",
     "ts_ratio",
 ):
-    _register_bridge(_canon)
+    _register_bridge(_canon, param_names=["real", "imag"] if _canon == "complex" else None)
 
 _register_bridge(
     "protected_div",

@@ -51,7 +51,7 @@ def _register_unary(
             category=category,
             description=desc,
             examples=[f"{op_name}(x)"],
-            param_names=["x"],
+            param_names=(["x", "decimals"] if canonical == "round" else ["x"]),
             return_type="series",
             tags=[category, "polars", "auto"],
         )
@@ -343,7 +343,7 @@ if not _has_polars("fillna"):
         """NaN 填充"""
         metadata = OperatorMetadata(
             name="fillna", category="data_handling", description="NaN 填充",
-            param_names=["x", "value"], return_type="series", tags=["data_handling", "polars"],
+            param_names=["x", "method"], return_type="series", tags=["data_handling", "polars"],
         )
 
         def _calculate_series(self, x: pl.DataFrame, value: float = 0.0, **kwargs) -> pl.DataFrame:

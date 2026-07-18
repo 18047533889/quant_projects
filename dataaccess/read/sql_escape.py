@@ -29,6 +29,7 @@ import os
 import re
 import time
 import uuid
+import inspect
 from collections.abc import Iterator
 from typing import Any, Mapping, Sequence
 
@@ -81,26 +82,104 @@ def _build_view_map(read_datasets: Sequence[str], scope_id: str) -> dict[str, st
 
 
 def _rewrite_query_tables(query: str, view_map: dict[str, str]) -> str:
-    """只替换 ``{{dataset}}`` 占位符，避免误改字符串字面量、注释、列别名。"""
-    rewritten = query
-    missing: list[str] = []
-
-    for dataset_name, view_name in view_map.items():
-        token = f"{{{{{dataset_name}}}}}"
-        if token in rewritten:
-            rewritten = rewritten.replace(token, view_name)
+    """Replace dataset placeholders only outside SQL strings and comments."""
+    missing = set(view_map)
+    out: list[str] = []
+    i = 0
+    state = "code"
+    while i < len(query):
+        if state == "code":
+            if query.startswith("--", i):
+                state = "line_comment"
+                out.append("--")
+                i += 2
+                continue
+            if query.startswith("/*", i):
+                state = "block_comment"
+                out.append("/*")
+                i += 2
+                continue
+            if query[i] == "'":
+                state = "string"
+                out.append(query[i])
+                i += 1
+                continue
+            if query[i] == '"':
+                state = "quoted_ident"
+                out.append(query[i])
+                i += 1
+                continue
+            if query[i] == "{" and i + 1 < len(query) and query[i + 1] == "{":
+                end = query.find("}}", i + 2)
+                if end >= 0:
+                    name = query[i + 2:end]
+                    if name in view_map:
+                        out.append(view_map[name])
+                        missing.discard(name)
+                        i = end + 2
+                        continue
+            out.append(query[i])
+            i += 1
+            continue
+        if state == "string":
+            out.append(query[i])
+            if query[i] == "'":
+                if i + 1 < len(query) and query[i + 1] == "'":
+                    out.append(query[i + 1])
+                    i += 2
+                    continue
+                state = "code"
+            i += 1
+            continue
+        if state == "quoted_ident":
+            out.append(query[i])
+            if query[i] == '"':
+                if i + 1 < len(query) and query[i + 1] == '"':
+                    out.append(query[i + 1])
+                    i += 2
+                    continue
+                state = "code"
+            i += 1
+            continue
+        if state == "line_comment":
+            out.append(query[i])
+            if query[i] == "\n":
+                state = "code"
+            i += 1
+            continue
+        if query.startswith("*/", i):
+            out.append("*/")
+            i += 2
+            state = "code"
         else:
-            missing.append(dataset_name)
+            out.append(query[i])
+            i += 1
 
     if missing:
         raise ValidationError(
             "sql() 现在要求用 {{dataset}} 引用 read_datasets，避免裸表名重写误伤。"
-            f"缺少占位符: {missing}. "
+            f"缺少占位符: {sorted(missing)}. "
             "示例: SELECT * FROM {{factor_lake}} WHERE datetime >= ?"
         )
+    return "".join(out)
 
-    return rewritten
 
+def _resolver_supports_time_range(resolve_paths) -> bool:
+    try:
+        signature = inspect.signature(resolve_paths)
+    except (TypeError, ValueError):
+        return True
+    return "time_range" in signature.parameters or any(
+        p.kind == inspect.Parameter.VAR_KEYWORD
+        for p in signature.parameters.values()
+    )
+
+
+def _resolve_paths_compat(resolve_paths, ds, ds_params, time_range, *, supports_time_range):
+    """Call path resolvers without masking TypeError raised by their body."""
+    if supports_time_range:
+        return resolve_paths(ds, ds_params, time_range=time_range)
+    return resolve_paths(ds, ds_params)
 
 def _prepare_sql_views(
     *,
@@ -122,14 +201,15 @@ def _prepare_sql_views(
     view_map = _build_view_map(read_datasets, scope_id)
     time_ranges = dict(read_time_ranges or {})
     register_specs: list[tuple[str, str]] = []
+    supports_time_range = _resolver_supports_time_range(resolve_paths)
     for name in read_datasets:
         ds = registry.get(name)
         ds_params = dict(read_params.get(name, {}))
         time_range = time_ranges.get(name)
-        try:
-            paths = resolve_paths(ds, ds_params, time_range=time_range)
-        except TypeError:
-            paths = resolve_paths(ds, ds_params)
+        paths = _resolve_paths_compat(
+            resolve_paths, ds, ds_params, time_range,
+            supports_time_range=supports_time_range,
+        )
         cols = list(view_columns[name]) if view_columns and name in view_columns else None
         sql, sql_params = build_select_sql(
             ds=ds,

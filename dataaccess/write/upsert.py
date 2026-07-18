@@ -84,7 +84,7 @@ def upsert_table(
     if partition_by:
         _require_columns(new_table, list(partition_by), label="partition_by")
 
-    authorizer.resolve_and_authorize(str(target_dir))
+    target_dir = _authorize_write_path(target_dir, authorizer)
     target_dir.mkdir(parents=True, exist_ok=True)
 
     err_msg: str | None = None
@@ -98,8 +98,12 @@ def upsert_table(
             for part_values, part_table in _split_by_partitions(new_table, partition_by):
                 partition_dir = target_dir
                 for col, val in zip(partition_by, part_values):
+                    _validate_partition_component(col, val)
                     partition_dir = partition_dir / f"{col}={val}"
-                _upsert_single_dir(
+                partition_dir = _authorize_write_path(
+                    partition_dir, authorizer, expected_root=target_dir
+                )
+                merged_rows = _upsert_single_dir(
                     partition_dir=partition_dir,
                     new_table=part_table,
                     upsert_on=upsert_on,
@@ -161,7 +165,7 @@ def _upsert_single_dir(
     new_table: pa.Table,
     upsert_on: Sequence[str],
     data_filename: str,
-) -> None:
+) -> int:
     """
     单个分区目录（或无分区的整个 target_dir）内做 read-merge-write。
 
@@ -198,7 +202,60 @@ def _upsert_single_dir(
         tmp_path = partition_dir / f".{data_filename}.tmp.{uuid.uuid4().hex[:8]}"
         pq.write_table(merged, str(tmp_path))
         os.replace(str(tmp_path), str(final_path))
+    return merged.num_rows
 
+
+def _authorize_write_path(
+    path: Path,
+    authorizer: PathAuthorizer,
+    *,
+    expected_root: Path | None = None,
+) -> Path:
+    """Authorize a write path and reject symlink components."""
+    raw_path = Path(path).expanduser()
+    if not raw_path.is_absolute():
+        raw_path = Path.cwd() / raw_path
+    raw_root = Path(expected_root).expanduser() if expected_root is not None else None
+    current_raw = raw_path
+    while True:
+        if current_raw.is_symlink():
+            raise ValidationError(f"upsert 不允许通过软链接写入：{current_raw}")
+        if raw_root is not None and current_raw == raw_root:
+            break
+        if current_raw.parent == current_raw:
+            break
+        current_raw = current_raw.parent
+
+    resolved = authorizer.resolve_and_authorize(raw_path)
+    root = authorizer.resolve_and_authorize(expected_root) if expected_root is not None else None
+    if root is not None:
+        try:
+            resolved.relative_to(root)
+        except ValueError as exc:
+            raise ValidationError(
+                f"upsert 分区路径越界：{resolved} 不在目标目录 {root} 下"
+            ) from exc
+    current = resolved
+    while True:
+        if current.is_symlink():
+            raise ValidationError(f"upsert 不允许通过软链接写入：{current}")
+        if root is not None and current == root:
+            break
+        if current.parent == current:
+            break
+        current = current.parent
+    return resolved
+
+
+def _validate_partition_component(column: Any, value: Any) -> None:
+    """Reject partition components that can alter filesystem path semantics."""
+    text = str(value)
+    if not isinstance(column, str) or not column or column in {".", ".."}:
+        raise ValidationError(f"upsert 分区列名非法：{column!r}")
+    if any(ch in text for ch in ("/", "\\", "\x00", "\n", "\r")):
+        raise ValidationError(f"upsert 分区值包含非法路径字符：{value!r}")
+    if text in {"", ".", ".."} or Path(text).is_absolute():
+        raise ValidationError(f"upsert 分区值非法：{value!r}")
 
 def _safe_concat(existing_df, new_df):
     """pandas concat，防止列序/缺列时的诡异行为。

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"/>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+<title>CogAlpha → LQTP</title></head>
+<body>
+  <h1>CogAlpha 因子评估索引</h1>
+  <p>算值路径分三类：<b>自研 factor_engine DSL 落值</b> / <b>LQTP 原生 DSL 直算</b> / <b>纯 Python 落值</b>。
+  RankIC / 分层 / 多空 / TopK（开盘成交）。</p>
+  <ul><li><a href="factor_vol_regime_smoothed_trend.html">factor_vol_regime_smoothed_trend</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_values_duckdb_panel · RankIC=0.0009 · RankICIR=0.0118</li>
+<li><a href="factor_asym_vol_cont_gate_30.html">factor_asym_vol_cont_gate_30</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_values_duckdb_panel+topk_open · RankIC=0.0385 · RankICIR=0.3551</li>
+<li><a href="factor_asym_vol_30.html">factor_asym_vol_30</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_run_factor · RankIC=0.0 · RankICIR=0.0</li>
+<li><a href="factor_vwap_adjusted_range_tanh_smooth.html">factor_vwap_adjusted_range_tanh_smooth</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0723 · RankICIR=0.5129</li>
+<li><a href="factor_vwap_adjusted_range_tanh_mutated_v2.html">factor_vwap_adjusted_range_tanh_mutated_v2</a> · <b>自研 factor_engine DSL 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0711 · RankICIR=0.5148</li>
+<li><a href="factor_squared_range_volume_rank_smoothed_no_cuberoot.html">factor_squared_range_volume_rank_smoothed_no_cuberoot</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0554 · RankICIR=0.3135</li>
+<li><a href="factor_persistence_ewma.html">factor_persistence_ewma</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_values_duckdb_panel+topk_open · RankIC=0.0557 · RankICIR=0.3352</li>
+<li><a href="factor_vol_regime_vol_ratio.html">factor_vol_regime_vol_ratio</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_values_duckdb_panel+topk_open · RankIC=0.0547 · RankICIR=0.6767</li>
+<li><a href="factor_lag_vol_robust_volratio.html">factor_lag_vol_robust_volratio</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0537 · RankICIR=0.4739</li>
+<li><a href="factor_stable_symmetry_reinforced.html">factor_stable_symmetry_reinforced</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0534 · RankICIR=0.4974</li>
+<li><a href="factor_lag_vol_ratio_smoothed_v2.html">factor_lag_vol_ratio_smoothed_v2</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0534 · RankICIR=0.4555</li>
+<li><a href="factor_persistence.html">factor_persistence</a> · <b>LQTP 原生 DSL 直算</b> · mode=duckdb_panel+topk_open · RankIC=0.0531 · RankICIR=0.3258</li>
+<li><a href="factor_squared_range_close_ema_cuberoot.html">factor_squared_range_close_ema_cuberoot</a> · <b>纯 Python 落值</b> · mode=duckdb_panel · RankIC=0.0494 · RankICIR=0.2647</li>
+<li><a href="factor_abnormality_asymmetry.html">factor_abnormality_asymmetry</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0479 · RankICIR=0.5316</li>
+<li><a href="factor_volume_abnormality_liquidity_gated.html">factor_volume_abnormality_liquidity_gated</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0464 · RankICIR=0.5368</li>
+<li><a href="factor_lag_vol_volatility_adjusted_gate.html">factor_lag_vol_volatility_adjusted_gate</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0447 · RankICIR=0.3527</li>
+<li><a href="factor_volume_abnormality_range_interaction.html">factor_volume_abnormality_range_interaction</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_values_duckdb_panel · RankIC=0.044 · RankICIR=0.456</li>
+<li><a href="factor_lag_response_vol_tool_adaptive.html">factor_lag_response_vol_tool_adaptive</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0437 · RankICIR=0.3447</li>
+<li><a href="factor_intraday_pressure_ema.html">factor_intraday_pressure_ema</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0434 · RankICIR=0.3745</li>
+<li><a href="factor_volume_regime_intraday_momentum.html">factor_volume_regime_intraday_momentum</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0434 · RankICIR=0.3734</li>
+<li><a href="factor_lag_volatility_regime_adapted.html">factor_lag_volatility_regime_adapted</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0429 · RankICIR=0.3577</li>
+<li><a href="factor_lag_vol_volatility_adjusted.html">factor_lag_vol_volatility_adjusted</a> · <b>自研 factor_engine DSL 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0423 · RankICIR=0.353</li>
+<li><a href="factor_vol_lag_ret_smoothed.html">factor_vol_lag_ret_smoothed</a> · <b>自研 factor_engine DSL 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0399 · RankICIR=0.3692</li>
+<li><a href="factor_asym_vol_gated.html">factor_asym_vol_gated</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0397 · RankICIR=0.4945</li>
+<li><a href="factor_price_impact_stable_5d.html">factor_price_impact_stable_5d</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_values_duckdb_panel · RankIC=0.0395 · RankICIR=0.3008</li>
+<li><a href="factor_adaptive_volume_smoothness.html">factor_adaptive_volume_smoothness</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0393 · RankICIR=0.586</li>
+<li><a href="factor_asym_vol_attenuate.html">factor_asym_vol_attenuate</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0393 · RankICIR=0.4937</li>
+<li><a href="factor_rsi_reversal_resvol_volume.html">factor_rsi_reversal_resvol_volume</a> · <b>纯 Python 落值</b> · mode=local_values_lqtp_returns+topk_open · RankIC=0.0389 · RankICIR=0.2782</li>
+<li><a href="factor_asym_vol_volume_cont_30.html">factor_asym_vol_volume_cont_30</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0377 · RankICIR=0.3421</li>
+<li><a href="factor_roughness_trend_vol_short.html">factor_roughness_trend_vol_short</a> · <b>自研 factor_engine DSL 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0372 · RankICIR=0.2465</li>
+<li><a href="factor_drawdown_vol_persistence.html">factor_drawdown_vol_persistence</a> · <b>自研 factor_engine DSL 落值</b> · mode=local_values_lqtp_returns+topk_open · RankIC=0.0363 · RankICIR=0.2572</li>
+<li><a href="factor_asym_ratio_pure.html">factor_asym_ratio_pure</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_values_duckdb_panel+topk_open · RankIC=0.038 · RankICIR=0.4846</li>
+<li><a href="factor_vol_gated_momentum_v2.html">factor_vol_gated_momentum_v2</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.036 · RankICIR=0.2397</li>
+<li><a href="factor_volatility_scaled_deviation.html">factor_volatility_scaled_deviation</a> · <b>自研 factor_engine DSL 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0358 · RankICIR=0.2447</li>
+<li><a href="factor_range_asym_log_vol.html">factor_range_asym_log_vol</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0357 · RankICIR=0.4476</li>
+<li><a href="factor_drawdown_depth_duration_range_vol.html">factor_drawdown_depth_duration_range_vol</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_values_duckdb_panel+topk_open · RankIC=0.0392 · RankICIR=0.3058</li>
+<li><a href="factor_resvol_volume_momentum.html">factor_resvol_volume_momentum</a> · <b>自研 factor_engine DSL 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0354 · RankICIR=0.2346</li>
+<li><a href="factor_volume_price_divergence_cross_mut.html">factor_volume_price_divergence_cross_mut</a> · <b>自研 factor_engine DSL 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0352 · RankICIR=0.2464</li>
+<li><a href="factor_volume_pressure_reversal.html">factor_volume_pressure_reversal</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_run_factor+topk_open · RankIC=0.035 · RankICIR=0.238</li>
+<li><a href="factor_vol_gated_herding_mutated.html">factor_vol_gated_herding_mutated</a> · <b>自研 factor_engine DSL 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0349 · RankICIR=0.2525</li>
+<li><a href="factor_range_asym_log_short.html">factor_range_asym_log_short</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0347 · RankICIR=0.4363</li>
+<li><a href="factor_liquidity_adaptive_momentum.html">factor_liquidity_adaptive_momentum</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0344 · RankICIR=0.2428</li>
+<li><a href="factor_downside_vol_liquidity_momentum.html">factor_downside_vol_liquidity_momentum</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0344 · RankICIR=0.2428</li>
+<li><a href="factor_range_asym_vol_smooth.html">factor_range_asym_vol_smooth</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0339 · RankICIR=0.4313</li>
+<li><a href="factor_liquidity_range_gated_momentum_v6.html">factor_liquidity_range_gated_momentum_v6</a> · <b>自研 factor_engine DSL 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0336 · RankICIR=0.2279</li>
+<li><a href="factor_liquidity_range_gated_momentum_v5.html">factor_liquidity_range_gated_momentum_v5</a> · <b>自研 factor_engine DSL 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0335 · RankICIR=0.2282</li>
+<li><a href="factor_vol_gated_herding_crossover.html">factor_vol_gated_herding_crossover</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0334 · RankICIR=0.2338</li>
+<li><a href="factor_drawdown_depth_normalized.html">factor_drawdown_depth_normalized</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_run_factor · RankIC=0.0333 · RankICIR=0.256</li>
+<li><a href="factor_volume_confirmed_momentum.html">factor_volume_confirmed_momentum</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_run_factor+topk_open · RankIC=0.0332 · RankICIR=0.2378</li>
+<li><a href="factor_volume_confirmed_momentum_v3.html">factor_volume_confirmed_momentum_v3</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_run_factor+topk_open · RankIC=0.0332 · RankICIR=0.2378</li>
+<li><a href="factor_crash_volume_rank.html">factor_crash_volume_rank</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_run_factor+topk_open · RankIC=0.0332 · RankICIR=0.2378</li>
+<li><a href="factor_rsi_volume_confirmed_reversal.html">factor_rsi_volume_confirmed_reversal</a> · <b>自研 factor_engine DSL 落值</b> · mode=local_values_lqtp_returns+topk_open · RankIC=0.0327 · RankICIR=0.2422</li>
+<li><a href="factor_volume_adjusted_breakout_with_vol_filter_v2.html">factor_volume_adjusted_breakout_with_vol_filter_v2</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0326 · RankICIR=0.3887</li>
+<li><a href="factor_drawdown_normalized.html">factor_drawdown_normalized</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_run_factor · RankIC=0.0325 · RankICIR=0.2376</li>
+<li><a href="factor_drawdown_recovery.html">factor_drawdown_recovery</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_run_factor · RankIC=0.0325 · RankICIR=0.2376</li>
+<li><a href="factor_volume_adjusted_breakout_v3.html">factor_volume_adjusted_breakout_v3</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0324 · RankICIR=0.3703</li>
+<li><a href="factor_direction_volume_shape_mut2.html">factor_direction_volume_shape_mut2</a> · <b>自研 factor_engine DSL 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0322 · RankICIR=0.3954</li>
+<li><a href="factor_volume_gated_momentum_mutated_v3.html">factor_volume_gated_momentum_mutated_v3</a> · <b>自研 factor_engine DSL 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0318 · RankICIR=0.2196</li>
+<li><a href="factor_volume_adjusted_breakout_window_001.html">factor_volume_adjusted_breakout_window_001</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0318 · RankICIR=0.3817</li>
+<li><a href="factor_adx_trend_vol_ema.html">factor_adx_trend_vol_ema</a> · <b>自研 factor_engine DSL 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0317 · RankICIR=0.2853</li>
+<li><a href="factor_resvol_smoothed_trend.html">factor_resvol_smoothed_trend</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.031 · RankICIR=0.2349</li>
+<li><a href="factor_downside_vol_asymmetry_smoothed.html">factor_downside_vol_asymmetry_smoothed</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0309 · RankICIR=0.2511</li>
+<li><a href="factor_drawdown_atr_20_normalized.html">factor_drawdown_atr_20_normalized</a> · <b>自研 factor_engine DSL 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0309 · RankICIR=0.2112</li>
+<li><a href="factor_drawdown_atr_normalized_20.html">factor_drawdown_atr_normalized_20</a> · <b>自研 factor_engine DSL 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0309 · RankICIR=0.2112</li>
+<li><a href="factor_drawdown_atr_recovery.html">factor_drawdown_atr_recovery</a> · <b>自研 factor_engine DSL 落值</b> · mode=local_values_lqtp_returns+topk_open · RankIC=0.0309 · RankICIR=0.2112</li>
+<li><a href="factor_lagret_volratio_gated_smooth.html">factor_lagret_volratio_gated_smooth</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0307 · RankICIR=0.2963</li>
+<li><a href="factor_crash_volume_gate.html">factor_crash_volume_gate</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_run_factor · RankIC=0.0303 · RankICIR=0.2172</li>
+<li><a href="factor_volume_confirmed_momentum_crossover_v1.html">factor_volume_confirmed_momentum_crossover_v1</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_run_factor · RankIC=0.0299 · RankICIR=0.2225</li>
+<li><a href="factor_volume_confirmed_momentum_crossover_v2.html">factor_volume_confirmed_momentum_crossover_v2</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_run_factor · RankIC=0.0298 · RankICIR=0.2213</li>
+<li><a href="factor_crash_vol_body_asym.html">factor_crash_vol_body_asym</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_values_duckdb_panel+topk_open · RankIC=0.0297 · RankICIR=0.241</li>
+<li><a href="factor_pressure_compression_simplified_v3.html">factor_pressure_compression_simplified_v3</a> · <b>自研 factor_engine DSL 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0296 · RankICIR=0.2372</li>
+<li><a href="factor_liquidity_mom_simple_2_mutated.html">factor_liquidity_mom_simple_2_mutated</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_run_factor · RankIC=0.0288 · RankICIR=0.228</li>
+<li><a href="factor_negative_skew_stress_gated.html">factor_negative_skew_stress_gated</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0284 · RankICIR=0.3596</li>
+<li><a href="factor_crossover_vol_impact_trend_gated.html">factor_crossover_vol_impact_trend_gated</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0281 · RankICIR=0.2367</li>
+<li><a href="factor_drawdown_atr_normalized_v2.html">factor_drawdown_atr_normalized_v2</a> · <b>自研 factor_engine DSL 落值</b> · mode=duckdb_panel · RankIC=0.0273 · RankICIR=0.1851</li>
+<li><a href="factor_herding_vol_gated_momentum.html">factor_herding_vol_gated_momentum</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.027 · RankICIR=0.3867</li>
+<li><a href="factor_drawdown_std60_normalized.html">factor_drawdown_std60_normalized</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_run_factor · RankIC=0.0265 · RankICIR=0.2173</li>
+<li><a href="factor_smoothed_atr_ratio_gated.html">factor_smoothed_atr_ratio_gated</a> · <b>自研 factor_engine DSL 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0261 · RankICIR=0.2155</li>
+<li><a href="factor_regime_switch_simple.html">factor_regime_switch_simple</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_run_factor · RankIC=0.0257 · RankICIR=0.2278</li>
+<li><a href="factor_crossover_hybrid_magnitude.html">factor_crossover_hybrid_magnitude</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0252 · RankICIR=0.304</li>
+<li><a href="factor_vol_volume_asym_ewma.html">factor_vol_volume_asym_ewma</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_values_duckdb_panel · RankIC=0.0247 · RankICIR=0.3531</li>
+<li><a href="factor_volume_confirmed_momentum_simple_volume_deviation.html">factor_volume_confirmed_momentum_simple_volume_deviation</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_run_factor · RankIC=0.0243 · RankICIR=0.3048</li>
+<li><a href="factor_range_volume_trend.html">factor_range_volume_trend</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_run_factor · RankIC=0.0241 · RankICIR=0.2759</li>
+<li><a href="factor_reversal_volume_volregime.html">factor_reversal_volume_volregime</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0241 · RankICIR=0.2188</li>
+<li><a href="factor_volume_stress_adjusted_momentum_robust.html">factor_volume_stress_adjusted_momentum_robust</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0237 · RankICIR=0.2775</li>
+<li><a href="factor_asym_vol_down_up_volatility_gated.html">factor_asym_vol_down_up_volatility_gated</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0234 · RankICIR=0.2919</li>
+<li><a href="factor_volume_persistence_momentum_robust.html">factor_volume_persistence_momentum_robust</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0228 · RankICIR=0.2663</li>
+<li><a href="factor_simplified_robust_volume_momentum.html">factor_simplified_robust_volume_momentum</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0222 · RankICIR=0.2513</li>
+<li><a href="factor_regime_vol_adaptive_trend_v4.html">factor_regime_vol_adaptive_trend_v4</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0217 · RankICIR=0.1941</li>
+<li><a href="factor_drawdown_vol_norm_clean.html">factor_drawdown_vol_norm_clean</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_run_factor · RankIC=0.0217 · RankICIR=0.1812</li>
+<li><a href="factor_order_imbalance_volume_flow_ema.html">factor_order_imbalance_volume_flow_ema</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_values_duckdb_panel · RankIC=0.0211 · RankICIR=0.1919</li>
+<li><a href="factor_volratio_resvol_trend_gated.html">factor_volratio_resvol_trend_gated</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0187 · RankICIR=0.1957</li>
+<li><a href="factor_roughness_drawdown_interaction.html">factor_roughness_drawdown_interaction</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0187 · RankICIR=0.2058</li>
+<li><a href="factor_vol_adjusted_lag_log_coherence.html">factor_vol_adjusted_lag_log_coherence</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.018 · RankICIR=0.2147</li>
+<li><a href="factor_smoothed_trend_vol_contraction_simplified.html">factor_smoothed_trend_vol_contraction_simplified</a> · <b>自研 factor_engine DSL 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.018 · RankICIR=0.1964</li>
+<li><a href="factor_volume_abnormality_price_amp.html">factor_volume_abnormality_price_amp</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_run_factor · RankIC=0.0169 · RankICIR=0.2958</li>
+<li><a href="factor_mutation_dir_vol_shape_zscore.html">factor_mutation_dir_vol_shape_zscore</a> · <b>自研 factor_engine DSL 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0153 · RankICIR=0.1807</li>
+<li><a href="factor_imbalance_volume_mutation.html">factor_imbalance_volume_mutation</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0151 · RankICIR=0.1413</li>
+<li><a href="factor_volume_confirmed_intraday_mean_reversion.html">factor_volume_confirmed_intraday_mean_reversion</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_run_factor · RankIC=0.0151 · RankICIR=0.1363</li>
+<li><a href="factor_regime_switch_zscore_momentum.html">factor_regime_switch_zscore_momentum</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_run_factor · RankIC=0.015 · RankICIR=0.1491</li>
+<li><a href="factor_volume_confirmed_dir_mut_v4.html">factor_volume_confirmed_dir_mut_v4</a> · <b>自研 factor_engine DSL 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0146 · RankICIR=0.2402</li>
+<li><a href="factor_vol_regime_volume.html">factor_vol_regime_volume</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_values_duckdb_panel · RankIC=0.0144 · RankICIR=0.1742</li>
+<li><a href="factor_simplified_intraday_mean_reversion.html">factor_simplified_intraday_mean_reversion</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_run_factor · RankIC=0.0142 · RankICIR=0.122</li>
+<li><a href="factor_intraday_reversal_zscore_volume_short.html">factor_intraday_reversal_zscore_volume_short</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_run_factor · RankIC=0.0135 · RankICIR=0.1279</li>
+<li><a href="factor_volume_reversal_direct.html">factor_volume_reversal_direct</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_run_factor · RankIC=0.0133 · RankICIR=0.1247</li>
+<li><a href="factor_regime_vol_adjusted_momentum_deviation.html">factor_regime_vol_adjusted_momentum_deviation</a> · <b>纯 Python 落值</b> · mode=duckdb_panel · RankIC=0.0129 · RankICIR=0.165</li>
+<li><a href="factor_smooth_vol_regime.html">factor_smooth_vol_regime</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_values_duckdb_panel · RankIC=0.0126 · RankICIR=0.1439</li>
+<li><a href="factor_volume_reversal_rank.html">factor_volume_reversal_rank</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_run_factor · RankIC=0.0125 · RankICIR=0.1181</li>
+<li><a href="factor_volatility_regime_momentum.html">factor_volatility_regime_momentum</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_values_duckdb_panel · RankIC=0.0125 · RankICIR=0.141</li>
+<li><a href="factor_volume_confirmed_return.html">factor_volume_confirmed_return</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_run_factor · RankIC=0.0117 · RankICIR=0.1597</li>
+<li><a href="factor_vol_volume_regime.html">factor_vol_volume_regime</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_values_duckdb_panel · RankIC=0.0112 · RankICIR=0.149</li>
+<li><a href="factor_mut_vol_weighted_shape_dir.html">factor_mut_vol_weighted_shape_dir</a> · <b>自研 factor_engine DSL 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0105 · RankICIR=0.1856</li>
+<li><a href="factor_rank_tanh_volume_shape_crossover.html">factor_rank_tanh_volume_shape_crossover</a> · <b>自研 factor_engine DSL 落值</b> · mode=duckdb_panel · RankIC=0.0104 · RankICIR=0.1851</li>
+<li><a href="factor_dollar_pressure_range_zscore.html">factor_dollar_pressure_range_zscore</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_run_factor · RankIC=0.0089 · RankICIR=0.0854</li>
+<li><a href="factor_trend_volume_tanh_rank.html">factor_trend_volume_tanh_rank</a> · <b>自研 factor_engine DSL 落值</b> · mode=duckdb_panel · RankIC=0.0084 · RankICIR=0.0842</li>
+<li><a href="factor_imbalance_volume_interaction.html">factor_imbalance_volume_interaction</a> · <b>纯 Python 落值</b> · mode=duckdb_panel+topk_open · RankIC=0.0058 · RankICIR=0.0843</li>
+<li><a href="factor_drawdown_vol_simple.html">factor_drawdown_vol_simple</a> · <b>LQTP 原生 DSL 直算</b> · mode=lqtp_run_factor · RankIC=0.0053 · RankICIR=0.0577</li></ul>
+</body></html>

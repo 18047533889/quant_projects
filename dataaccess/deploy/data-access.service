@@ -1,0 +1,21 @@
+[Unit]
+Description=data-access read service
+After=network.target
+
+[Service]
+Type=simple
+User=dataaccess
+Group=dataaccess
+WorkingDirectory=/opt/dataaccess
+EnvironmentFile=-/etc/data-access.env
+ExecStart=/opt/venv/bin/data-access-server --host 127.0.0.1 --port 8765
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/dataaccess /tmp
+
+[Install]
+WantedBy=multi-user.target

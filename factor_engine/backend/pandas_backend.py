@@ -141,7 +141,12 @@ class PandasBackend(Backend):
         try:
             kernel = self._registry.get(node.op)
         except KeyError as exc:
-            raise NotImplementedError(f"Unsupported op: {node.op}") from exc
+            from cleaned_operators.registry import OperatorRegistry
+            try:
+                resolved = "where" if node.op == "if_else" else OperatorRegistry.resolve_canonical(node.op)
+                kernel = self._registry.get(resolved)
+            except (KeyError, ValueError):
+                raise NotImplementedError(f"Unsupported op: {node.op}") from exc
 
         out = kernel(node, ctx)
         if cache is not None and cache_key is not None:
@@ -155,6 +160,11 @@ class PandasBackend(Backend):
         reg("literal", self._op_literal)
         for op in list_cleaned_ops_for_backend(set()):
             reg(op, make_cleaned_kernel(self._eval, op))
+        # Compatibility aliases resolve to the now-registered canonical kernel.
+        from cleaned_operators.registry import OperatorRegistry
+        for alias, canonical in OperatorRegistry._aliases.items():
+            if canonical in self._registry._kernels:
+                reg(alias, self._registry._kernels[canonical])
 
     def _op_column(self, node: PlanNode, ctx: ExecutionContext):
         """``column`` 节点 kernel：从数据源加载指定列。

@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-access
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: data-access
+  template:
+    metadata:
+      labels:
+        app: data-access
+    spec:
+      containers:
+        - name: data-access
+          image: your-registry/data-access:0.3.0
+          ports:
+            - containerPort: 8765
+          env:
+            - name: DATA_ACCESS_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: data-access-secret
+                  key: api-key
+            - name: QUANT_PRODUCTION_MODE
+              value: "1"
+            - name: DUCKDB_TEMP_DIRECTORY
+              value: /tmp/duckdb
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "4"
+              memory: 8Gi
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8765
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8765
+          securityContext:
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 4Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: data-access
+spec:
+  selector:
+    app: data-access
+  ports:
+    - port: 8765
+      targetPort: 8765

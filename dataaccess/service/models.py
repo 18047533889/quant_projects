@@ -15,9 +15,10 @@ class ReadRequest(BaseModel):
     time_range: tuple[str | None, str | None] | None = None
     instrument_filter: list[str] | None = None
     params: dict[str, Any] = Field(default_factory=dict)
-    format: Literal["parquet", "arrow_ipc", "json"] = "parquet"
+    format: Literal["parquet", "arrow_ipc", "arrow_ipc_stream", "json"] = "parquet"
     max_rows: int | None = Field(
         default=None,
+        ge=1,
         description="json 格式时的行数上限；未指定时由服务端默认预算决定",
     )
 

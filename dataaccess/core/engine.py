@@ -12,8 +12,8 @@ data_access.engine —— DuckDB 连接与 PRAGMA 管理
        buffer pool / catalog / PRAGMA 共享
     3. PRAGMA enable_object_cache=true —— parquet footer 跨查询复用，
        factor_engine 重复读同一批文件时收益显著
-    4. threads 默认用 os.cpu_count()；memory_limit 默认从 env 读，没设就不限
-       （DuckDB 默认是物理内存 80%）
+    4. threads 默认取 min(可用 CPU 数, DUCKDB_MAX_THREADS)；memory_limit 默认按主机可用内存自动计算，
+       可用 DUCKDB_MEMORY_LIMIT 显式覆盖；无法探测时保持 DuckDB 默认行为
 
 非职责：
     不负责 SQL 组装（store.py）、不负责 predicate 编译（predicate.py）、
@@ -143,13 +143,17 @@ class DuckDBEngine:
         batch_size: int,
     ) -> pa.RecordBatchReader:
         cursor = self._conn.cursor()
-        if params is not None:
-            result = cursor.execute(sql, params)
-        else:
-            result = cursor.execute(sql)
-        if hasattr(result, "to_arrow_reader"):
-            return result.to_arrow_reader(batch_size)
-        return result.fetch_record_batch(batch_size)
+        try:
+            if params is not None:
+                result = cursor.execute(sql, params)
+            else:
+                result = cursor.execute(sql)
+            if hasattr(result, "to_arrow_reader"):
+                return result.to_arrow_reader(batch_size)
+            return result.fetch_record_batch(batch_size)
+        except Exception:
+            cursor.close()
+            raise
 
     def explain(self, sql: str, params: Sequence[Any] | None = None) -> str:
         """返回 EXPLAIN 计划文本（诊断用，默认不在热路径调用）。"""
@@ -315,33 +319,30 @@ class DuckDBEngine:
         batch_size: int = 100_000,
     ) -> Iterator[pa.RecordBatch]:
         """独立连接流式 scoped sql；返回 batch iterator，迭代完自动关闭连接。"""
-        conn = duckdb.connect(":memory:")
-        try:
-            apply_pragmas(conn, self._config)
-            self._configure_scoped_s3_if_needed(conn, register_specs)
-            for view_name, inlined_sql in register_specs:
-                conn.execute(f"CREATE TEMP VIEW {view_name} AS {inlined_sql}")
-            if params is not None:
-                rel = conn.execute(sql, list(params))
-            else:
-                rel = conn.execute(sql)
-            if hasattr(rel, "to_arrow_reader"):
-                reader = rel.to_arrow_reader(batch_size)
-            else:
-                reader = rel.fetch_record_batch(batch_size)
+        def _iter() -> Iterator[pa.RecordBatch]:
+            conn = duckdb.connect(":memory:")
+            try:
+                apply_pragmas(conn, self._config)
+                self._configure_scoped_s3_if_needed(conn, register_specs)
+                for view_name, inlined_sql in register_specs:
+                    conn.execute(f"CREATE TEMP VIEW {view_name} AS {inlined_sql}")
+                if params is not None:
+                    rel = conn.execute(sql, list(params))
+                else:
+                    rel = conn.execute(sql)
+                if hasattr(rel, "to_arrow_reader"):
+                    reader = rel.to_arrow_reader(batch_size)
+                else:
+                    reader = rel.fetch_record_batch(batch_size)
+                yield from reader
+            except duckdb.Error as exc:
+                raise EngineError(
+                    f"DuckDB scoped sql stream 失败: {exc}\nSQL: {sql[:500]}"
+                ) from exc
+            finally:
+                conn.close()
 
-            def _iter() -> Iterator[pa.RecordBatch]:
-                try:
-                    yield from reader
-                finally:
-                    conn.close()
-
-            return _iter()
-        except duckdb.Error as exc:
-            conn.close()
-            raise EngineError(
-                f"DuckDB scoped sql stream 失败: {exc}\nSQL: {sql[:500]}"
-            ) from exc
+        return _iter()
 
     def execute_df(self, sql: str, params: Sequence[Any] | None = None):
         """执行 SQL 并返回 pandas DataFrame。"""

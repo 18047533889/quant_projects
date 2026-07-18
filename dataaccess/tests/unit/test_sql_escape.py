@@ -44,3 +44,12 @@ def test_rewrite_query_tables_does_not_touch_string_literals():
     assert "note = 'factor_lake'" in out
     assert "source = 'us_stocks'" in out
     assert "__da_x_factor_lake" in out
+
+
+def test_rewrite_query_tables_does_not_touch_comments_or_string_placeholder():
+    view_map = {"factor_lake": "__da_x_factor_lake"}
+    sql = "SELECT '{{factor_lake}}' AS literal -- {{factor_lake}}\nFROM {{factor_lake}}"
+    out = _rewrite_query_tables(sql, view_map)
+    assert "'{{factor_lake}}'" in out
+    assert "-- {{factor_lake}}" in out
+    assert out.endswith("FROM __da_x_factor_lake")

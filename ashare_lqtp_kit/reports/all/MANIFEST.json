@@ -1,0 +1,7 @@
+{
+  "generated_at": "2026-07-18T22:38:37",
+  "template": "report_html.render_factor_report + render_production_summary",
+  "metrics_recovered": 117,
+  "catalog_unique": 170,
+  "charts": "mostly missing; smoke charts appended for 3 factors when available"
+}

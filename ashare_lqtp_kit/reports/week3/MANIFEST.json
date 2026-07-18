@@ -1,0 +1,6 @@
+{
+  "generated_at": "2026-07-18T22:38:37",
+  "summary_template": "render_week3_summary",
+  "detail_template": "render_factor_report",
+  "factor_count": 20
+}

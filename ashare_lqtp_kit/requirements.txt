@@ -1,0 +1,5 @@
+# A-share LQTP kit dependencies
+grpcio>=1.60
+protobuf>=4.25
+pandas>=2.0
+numpy>=1.24

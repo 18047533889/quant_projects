@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <title>factor_smoothed_vol_adj_volume_momentum_10 · RankIC / 分层 / TopK</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif; margin: 24px; color: #1f2937; max-width: 1100px; }
+    .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin: 16px 0; background: #fff; }
+    .metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+    .metric { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px; }
+    .metric b { display: block; font-size: 16px; color: #1e3a5f; }
+    .metric span { color: #6b7280; font-size: 12px; }
+    pre { background: #f8fafc; padding: 12px; overflow-x: auto; font-size: 12px; }
+    img { max-width: 100%; border: 1px solid #e5e7eb; border-radius: 6px; margin-top: 8px; }
+    table { border-collapse: collapse; width: 100%; font-size: 13px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 8px; text-align: left; }
+    table.kv th { width: 280px; background: #f8fafc; }
+    .note { color: #4b5563; font-size: 14px; }
+    pre.rationale { white-space: pre-wrap; line-height: 1.55; font-size: 13px; }
+    ol.steps { margin: 8px 0 12px 22px; padding: 0; }
+    ol.steps li { margin: 6px 0; }
+    ul.op-list { margin: 8px 0 12px 22px; font-size: 14px; }
+    .theme-line { color: #1e3a5f; font-size: 16px; margin: 0 0 10px; }
+    .chart-guide { background: #f8fafc; padding: 10px 12px; border-radius: 6px; font-size: 14px; margin: 0 0 12px; }
+    .hl { background: #eef6ff; border: 1px solid #c9def5; padding: 10px 12px; border-radius: 6px; }
+    .path-badge { display:flex; gap:12px; align-items:flex-start; border:2px solid; border-radius:8px; padding:12px 14px; margin:12px 0 16px; background:#fff; }
+    .path-tag { flex:0 0 auto; color:#fff; font-weight:700; font-size:13px; padding:4px 10px; border-radius:4px; }
+    .path-detail { color:#374151; font-size:13px; line-height:1.5; }
+    details { margin-top: 12px; }
+    @media (max-width: 900px) { .metrics { grid-template-columns: 1fr 1fr; } .path-badge { flex-direction:column; } }
+  </style>
+</head>
+<body>
+  <h1>factor_smoothed_vol_adj_volume_momentum_10</h1>
+  <div class="path-badge" style="border-color:#a16207;"><span class="path-tag" style="background:#a16207;">纯 Python 落值</span><span class="path-detail">未转换成可执行 DSL（或仅有阅读用公式），直接跑 Python 因子函数落值。</span></div>
+  <div class="hl note">
+    <b>评估口径</b>：unknown<br/>
+    【复原页】聊天记录中未找到该因子完整指标；仅保留公式。图表与指标均缺失。<br/>
+    算值路径=<code>local_python</code>
+    · 评估模式=<code>unknown</code>
+  </div>
+
+  
+  <div class="card">
+    <h2>公式 / 代码</h2>
+    <p class="note">下方为可读公式与可执行代码。若同时出现「公式化表示」与 DSL，以 DSL 为准用于落值。</p>
+    
+    
+    
+    <h3>Python 源码</h3><pre>def factor_smoothed_vol_adj_volume_momentum_10(df):
+    df_copy = df.copy()
+    ret = df_copy[&quot;close&quot;] / df_copy[&quot;close&quot;].shift(10) - 1
+    vol_ema = df_copy[&quot;volume&quot;].ewm(span=20, adjust=False).mean()
+    vol_ratio = df_copy[&quot;volume&quot;] / vol_ema.replace(0.0, np.nan)
+    log_vol_ratio = np.log(vol_ratio.clip(lower=1e-12))
+    ret_vol = ret.rolling(20, min_periods=20).std(ddof=0)
+    raw_factor = (ret * log_vol_ratio) / ret_vol.replace(0.0, np.nan)
+    smoothed = raw_factor.ewm(span=5, adjust=False).mean()
+    df_copy[&quot;factor_smoothed_vol_adj_volume_momentum_10&quot;] = smoothed.fillna(0)
+    return df_copy[&quot;factor_smoothed_vol_adj_volume_momentum_10&quot;]</pre>
+    
+  </div>
+  
+  <div class="card">
+    <h2>因子说明</h2>
+    <p class="theme-line"><b>量价因子</b></p>
+    <p>属于量价因子，具体逻辑见公式与代码。</p>
+    <h3>计算步骤</h3>
+    <ol class="steps"><li>按公式计算：(ewm_mean((((close / delay(close, 10) - 1) * (log((volume / (ewm_mean(volume, 20)))))) / (ts_std((close / delay(close, 10) - 1), 20))), 5))</li><li>每个交易日 T 仅使用 T 日及以前的 OHLCV，不使用未来数据</li></ol>
+    <h3>因子值怎么理解</h3>
+    <p>因子值越高/越低的经济含义需结合公式方向与 RankIC 符号判断（本页 RankIC 为正向检验）。</p>
+    <h3>公式里用到的算子</h3><ul class='op-list'><li><code>ts_std</code>：过去 n 日样本标准差，衡量波动大小</li><li><code>delay</code>：取 n 个交易日之前的数值（滞后）</li><li><code>log</code>：自然对数，常用于比值或压缩尺度</li><li><code>volume</code>：成交量</li></ul>
+    
+  </div>
+  
+  <div class="card">
+    <h2>落值元信息 · 纯 Python 落值</h2>
+    <pre>{
+  "restored": true,
+  "metrics_missing": true
+}</pre>
+  </div>
+
+  <div class="card">
+    <h2>① RankIC（因子预测力）</h2>
+    <p class="chart-guide"><b>怎么看图：</b>横轴为日期，纵轴为当日 RankIC（Spearman 秩相关）。每个点 = 当日全市场因子排序与次日收盘收益的相关系数。线在 0 上方居多说明因子多数日子有效；大幅下穿 0 的区间需结合市场环境看。上方卡片：Mean RankIC 为全程平均；RankICIR = 均值/标准差，越大越稳定；胜率为 RankIC&gt;0 的交易日占比。</p>
+    <p class="note" style="background:#fffbeb;border:1px solid #f0e0a8;padding:10px 12px;border-radius:6px;">📉 <b>图表未复原：</b>原报告此处有内嵌 PNG 曲线/柱状图；当前仅保留指标卡片与中文说明。完整带图版需重新跑评估。</p>
+    <div class="metrics"><div class="metric"><b>nan</b><span>Mean RankIC（均值）</span></div><div class="metric"><b>—</b><span>Std RankIC（标准差）</span></div><div class="metric"><b>nan</b><span>RankICIR</span></div><div class="metric"><b>nan</b><span>RankIC 胜率</span></div><div class="metric"><b>—</b><span>多空累计（G10−G1 净）</span></div><div class="metric"><b>nan</b><span>多空 Sharpe（净）</span></div></div>
+    
+  </div>
+
+  <div class="card">
+    <h2>② 分层回测（十分位 G1…G10）</h2>
+    <p class="chart-guide"><b>怎么看图：</b>横轴 G1~G10 为按因子值从低到高的十个分组（G1 因子最低，G10 最高）。纵轴为各组累计收益（复利净值 − 1）。理想情况：G10 明显高于 G1，且中间组大致单调递增，说明因子排序有分层能力。若 G1 与 G10 差距小或交叉，说明分层弱。</p>
+    <p class="note" style="background:#fffbeb;border:1px solid #f0e0a8;padding:10px 12px;border-radius:6px;">📉 <b>图表未复原：</b>原报告此处有内嵌 PNG 曲线/柱状图；当前仅保留指标卡片与中文说明。完整带图版需重新跑评估。</p>
+    
+  </div>
+
+  <div class="card">
+    <h2>③ 多空（G10 做多 − G1 做空）</h2>
+    <p class="chart-guide"><b>怎么看图：</b>多空累计净值曲线：每日做多 G10、做空 G1 的净收益（已扣假设换手成本）复利累积。曲线向上 = 高因子组长期跑赢低因子组；向下 = 反向。注意：这是研究用十分位多空，不是下方 TopK 可交易组合。</p>
+    <p class="note" style="background:#fffbeb;border:1px solid #f0e0a8;padding:10px 12px;border-radius:6px;">📉 <b>图表未复原：</b>原报告此处有内嵌 PNG 曲线/柱状图；当前仅保留指标卡片与中文说明。完整带图版需重新跑评估。</p>
+    <p class="note">
+      <b>计算步骤（DuckDB 面板，非 LQTP 平台回测）：</b><br/>
+      1) 每个交易日 T，对全市场股票按因子值升序分成 10 组（G1 最低 … G10 最高）；<br/>
+      2) 各组内股票等权，组收益 = 组内个股 T+1 相对 T 的前瞻收益均值；<br/>
+      3) 当日多空 gross = mean(G10 收益) − mean(G1 收益)；<br/>
+      4) 扣费：假设每日单边换手 40%，日成本 = 2 × 40% × (买0.01% + 卖0.01%) = 0.0160% ；net = gross − 日成本；<br/>
+      5) 多空 Sharpe = mean(日 net) / std(日 net) × √252；多空累计 = ∏(1+日 net) − 1。<br/>
+      <b>注意</b>：这是研究用十分位多空，不是可交易的 TopK 组合；TopK 见下方。
+    </p>
+    
+  </div>
+
+  <div class="card">
+    <h2>④ TopK 回测（LQTP 平台 · 开盘价）</h2>
+    <p class="chart-guide"><b>怎么看图：</b>TopK 组合净值曲线（起点归一化为 1）。规则：每日选因子值最高 10% 股票（最多 50 只），次日开盘价等权买入。曲线向上且回撤可控 = 头部选股策略有效；若 RankIC 高但 TopK 弱，可能是中间分组贡献大或头部极端值不稳定。</p>
+    <p class="note" style="background:#fffbeb;border:1px solid #f0e0a8;padding:10px 12px;border-radius:6px;">📉 <b>图表未复原：</b>原报告此处有内嵌 PNG 曲线/柱状图；当前仅保留指标卡片与中文说明。完整带图版需重新跑评估。</p>
+    <p class="note">
+      每天取因子 Top 10%（最多 50 只）等权做多；信号日 T 的权重落到 T+1，
+      以开盘价成交；买卖手续费各 0.01%；初始本金 1000 万。
+      下图 NAV 已归一化到起点=1（平台原始净值为绝对金额）。
+    </p>
+    <div class="metrics"><div class="metric"><b>nan</b><span>累计收益</span></div><div class="metric"><b>nan</b><span>年化收益</span></div><div class="metric"><b>nan</b><span>最大回撤</span></div><div class="metric"><b>nan</b><span>Sharpe 比率</span></div><div class="metric"><b>nan</b><span>波动率</span></div><div class="metric"><b>nan</b><span>Calmar 比率</span></div><div class="metric"><b>nan</b><span>胜率</span></div><div class="metric"><b>nan</b><span>平均换手</span></div><div class="metric"><b>nan</b><span>总佣金</span></div><div class="metric"><b>0</b><span>交易天数</span></div></div>
+    <p class="note">无 TopK 回测结果（尚未跑或被跳过）。</p>
+    <h3>TopK 回测指标明细</h3><table class='kv'><tbody><tr><th>累计收益</th><td>—</td></tr><tr><th>年化收益</th><td>—</td></tr><tr><th>最大回撤</th><td>—</td></tr><tr><th>Sharpe 比率</th><td>nan</td></tr><tr><th>波动率</th><td>—</td></tr><tr><th>Calmar 比率</th><td>nan</td></tr><tr><th>胜率</th><td>—</td></tr><tr><th>平均换手</th><td>—</td></tr><tr><th>总佣金</th><td>nan</td></tr><tr><th>期末净值</th><td>nan</td></tr><tr><th>交易天数</th><td>0</td></tr></tbody></table>
+  </div>
+
+  
+
+  <div class="card">
+    <h2>附录</h2>
+    
+    <details>
+      <summary>Raw Analysis JSON</summary>
+      <pre>{
+  "mean_rank_ic": NaN,
+  "rank_icir": NaN,
+  "rank_ic_positive_ratio": NaN,
+  "long_short_sharpe": NaN,
+  "signal_lag_note": "【复原页】聊天记录中未找到该因子完整指标；仅保留公式。图表与指标均缺失。",
+  "n_groups": 10,
+  "commission_buy": 0.01,
+  "commission_sell": 0.01
+}</pre>
+    </details>
+  </div>
+</body>
+</html>

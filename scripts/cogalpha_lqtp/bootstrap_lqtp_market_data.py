@@ -152,8 +152,8 @@ def main() -> int:
     parser.add_argument("--start", default="2019-01-01")
     parser.add_argument("--end", default="2026-06-30")
     parser.add_argument("--server", default=os.getenv("LQTP_SERVER", DEFAULT_SERVER))
-    parser.add_argument("--username", default=os.getenv("LQTP_USERNAME", "james.gd.luo@gmail.com"))
-    parser.add_argument("--password", default=os.getenv("LQTP_PASSWORD", "3213709208"))
+    parser.add_argument("--username", default=os.getenv("LQTP_USERNAME", ""))
+    parser.add_argument("--password", default=os.getenv("LQTP_PASSWORD", ""))
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
 

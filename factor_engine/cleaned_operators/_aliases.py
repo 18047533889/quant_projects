@@ -152,7 +152,8 @@ OperatorRegistry.register_alias("TS_QUANTILE", "ts_quantile")
 OperatorRegistry.register_alias("TS_RANK", "ts_rank")
 OperatorRegistry.register_alias("m_rank", "ts_rank")
 OperatorRegistry.register_alias("TS_REGRESSION_SLOPE", "ts_regression")
-OperatorRegistry.register_alias("ts_regression_slope", "ts_regression")
+# ts_regression_slope is the post-dedupe canonical; do not point it back to ts_regression.
+
 OperatorRegistry.register_alias("TS_SKEW", "ts_skew")
 OperatorRegistry.register_alias("Std", "ts_std")
 OperatorRegistry.register_alias("TS_STD", "ts_std")

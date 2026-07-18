@@ -1,0 +1,7 @@
+# Runtime dependency constraints for the validated Python 3.10 deployment.
+# Regenerate per Python/platform before production release.
+PyYAML>=6.0,<7
+pandas>=2.0,<3
+pyarrow>=14,<26
+duckdb>=0.10,<2
+numpy>=1.24,<3

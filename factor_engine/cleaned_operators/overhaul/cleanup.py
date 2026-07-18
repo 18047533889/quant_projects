@@ -12,6 +12,11 @@ FAKE_POLARS_SOURCES = frozenset({"factor_dsl_polars_bridge", "daily_panel_polars
 
 DEDUPE = {
     "reverse": "neg",
+    "inv": "inverse",
+    "reciprocal": "inverse",
+    "fmax": "maximum",
+    "fmin": "minimum",
+    "sqr": "square",
     "MACD": "MACD_line",
     "Slope": "ts_time_slope",
     "slope": "ts_time_slope",
@@ -101,9 +106,10 @@ def finalize() -> None:
             if misleading in (catalog.get("aliases") or []):
                 catalog["aliases"] = [a for a in catalog["aliases"] if a != misleading]
     for alias, target in {
-        "MACD": "MACD_line", "rolling_beta": "ts_beta", "beta": "ts_beta",
+        "Beta": "ts_beta", "rolling_beta": "ts_beta", "beta": "ts_beta",
         "Slope": "ts_time_slope", "slope": "ts_time_slope",
         "ts_regression": "ts_regression_slope",
+        "neutralize": "group_neutralize",
         "rolling_residual": "ts_regression_resid", "safe_div": "safe_div_null",
     }.items():
         if target in OperatorRegistry._operators:

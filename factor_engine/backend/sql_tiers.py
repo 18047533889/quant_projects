@@ -64,6 +64,8 @@ SQL_IMPLEMENTED_CANONICALS: frozenset[str] = frozenset(
         "ts_beta",
         "ts_mad",
         "ts_ema",
+        "ewm_mean",
+        "standardize",
         "ts_rank",
         "ts_ema",
         "ffill",

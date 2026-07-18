@@ -6,7 +6,7 @@ Usage:
   export LQTP_PASSWORD=your_password
   python3 lqtp_connectivity_probe.py
 
-Server: 118.89.191.220:50051 (insecure gRPC)
+Server: 110.42.223.26:50051 (insecure gRPC)
 
 ----------------------------------------------------------------------
 REPORTED ERRORS (2026-07-12, platform-side)
@@ -42,7 +42,14 @@ from textwrap import dedent
 import grpc
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "lqtp-python-grpc-examples" / "protos"))
+_PROTO_CANDIDATES = [
+    ROOT / "ashare_lqtp_kit" / "protos",
+    ROOT / "lqtp-python-grpc-examples" / "protos",
+]
+for _p in _PROTO_CANDIDATES:
+    if _p.is_dir():
+        sys.path.insert(0, str(_p))
+        break
 
 import Auth_pb2
 import Auth_pb2_grpc
@@ -51,21 +58,23 @@ import Factor_pb2_grpc
 import Struct_pb2
 import Struct_pb2_grpc
 
-SERVER = os.getenv("LQTP_SERVER", "118.89.191.220:50051")
-USERNAME = os.getenv("LQTP_USERNAME", "james.gd.luo@gmail.com")
+SERVER = os.getenv("LQTP_SERVER", "110.42.223.26:50051")
+USERNAME = os.getenv("LQTP_USERNAME", "")
 PASSWORD = os.getenv("LQTP_PASSWORD", "")
 
-# Copy-paste block for platform support (same content as module docstring errors section)
+# Historical notes for platform support (old host may still appear in tickets)
 REPORTED_ERRORS = dedent("""
-    [2026-07-12] LQTP platform errors (user=james.gd.luo@gmail.com, server=118.89.191.220:50051)
+    [2026-07-12] LQTP platform errors (old server 118.89.191.220:50051)
 
     (1) UNAVAILABLE / Connection refused (~17:00 UTC+8, ~30 minutes)
         status = StatusCode.UNAVAILABLE
-        details = "failed to connect to all addresses; last error: UNKNOWN: ipv4:118.89.191.220:50051: Failed to connect to remote host: Connection refused"
+        details = "failed to connect to all addresses ... Connection refused"
 
     (2) BacktestService OUT_OF_RANGE — decoded message > 4MB platform limit
         status = StatusCode.OUT_OF_RANGE
         details = "Error, decoded message length too large: found 4895143 bytes, the limit is: 4194304 bytes"
+
+    Current default server: 110.42.223.26:50051 (override with LQTP_SERVER)
 """).strip()
 
 
@@ -145,8 +154,8 @@ def main() -> int:
     if len(sys.argv) > 1 and sys.argv[1] in {"--errors", "-e"}:
         print(REPORTED_ERRORS)
         return 0
-    if not PASSWORD:
-        print("Set LQTP_PASSWORD env var", file=sys.stderr)
+    if not USERNAME or not PASSWORD:
+        print("Set LQTP_USERNAME and LQTP_PASSWORD env vars", file=sys.stderr)
         print("\n--- reported errors (see also file header) ---\n", file=sys.stderr)
         print(REPORTED_ERRORS, file=sys.stderr)
         return 2

@@ -275,7 +275,7 @@ class WherePolars(SeriesOperator):
 
     metadata = OperatorMetadata(
         name="where", category="signal", description="条件选择",
-        examples=["where(cond, a, b)"], param_names=["cond", "a", "b"], return_type="series",
+        examples=["where(cond, a, b)"], param_names=["condition", "v1", "v2"], return_type="series",
         tags=["signal", "polars"],
     )
 

@@ -30,6 +30,11 @@ CapabilityStatus = Literal[
     "production_safe",
 ]
 
+
+class UnsupportedOperatorBackendError(RuntimeError):
+    """Raised when an explicitly requested backend cannot be used."""
+
+
 # registry backend → capability backend
 _REGISTRY_TO_CAPABILITY: dict[str, BackendName | None] = {
     "pandas_numpy": "pandas_numpy",
@@ -99,7 +104,7 @@ def resolve_canonical(name: str) -> str:
     """
     from cleaned_operators.registry import OperatorRegistry
 
-    return OperatorRegistry._aliases.get(name, name)
+    return OperatorRegistry.resolve_canonical(name)
 
 
 def polars_long_native(canonical: str) -> bool:
@@ -296,6 +301,8 @@ def capability_for(canonical: str, backend: BackendName) -> BackendCapability:
     from backend.operator_cost import default_backend_speedup
 
     canon = resolve_canonical(canonical)
+    if canon == "if_else":
+        canon = "where"
     policy = infer_operator_policy(canon)
     scope = getattr(policy, "scope", "") or ""
     supports_group = canon.startswith("group_") or scope == "cs"
@@ -341,6 +348,8 @@ def summarize_operator(canonical: str) -> OperatorCapabilitySummary:
     from cleaned_operators.operator_spec import build_operator_spec
 
     canon = resolve_canonical(canonical)
+    if canon == "if_else":
+        canon = "where"
     spec = build_operator_spec(canon)
     return OperatorCapabilitySummary(
         canonical=canon,
@@ -348,9 +357,9 @@ def summarize_operator(canonical: str) -> OperatorCapabilitySummary:
         polars=_polars_status(canon),
         duckdb_sql=_sql_status(canon, dialect="duckdb_sql"),
         clickhouse_sql=_sql_status(canon, dialect="clickhouse_sql"),
-        allow_in_production=bool(spec.allow_in_production),
+        allow_in_production=bool(spec.allow_in_production) if spec is not None else False,
         parity_verified=canon in POLARS_PARITY_VERIFIED,
-        polars_long_tier=spec.polars_long_tier,
+        polars_long_tier=spec.polars_long_tier if spec is not None else "unsupported",
     )
 
 
@@ -492,6 +501,10 @@ def get_best_backend(
 
     if prefer == "pandas_numpy":
         op = OperatorRegistry.get(canonical, "pandas_numpy")
+        if op is None:
+            raise UnsupportedOperatorBackendError(
+                f"{canonical!r} has no pandas_numpy backend"
+            )
         return op, "pandas_numpy"
     if prefer == "polars":
         op = OperatorRegistry.get(canonical, "polars")
@@ -500,8 +513,15 @@ def get_best_backend(
         )
         if op is not None and permitted:
             return op, "polars"
-        op = OperatorRegistry.get(canonical, "pandas_numpy")
-        return op, "pandas_numpy"
+        if mode == "production":
+            raise UnsupportedOperatorBackendError(
+                f"{canonical!r} polars backend is not production-safe"
+            )
+        if not allow_unverified_backend:
+            raise UnsupportedOperatorBackendError(
+                f"{canonical!r} polars backend is not verified"
+            )
+        raise UnsupportedOperatorBackendError(f"{canonical!r} has no usable polars backend")
     if prefer == "sql":
         op = OperatorRegistry.get(canonical, "sql")
         dialect: BackendName = (
@@ -512,7 +532,11 @@ def get_best_backend(
         )
         if op is not None and permitted:
             return op, "sql"
-        prefer = "auto"
+        if mode == "production" or not allow_unverified_backend:
+            raise UnsupportedOperatorBackendError(
+                f"{canonical!r} SQL backend is not usable for {dialect}"
+            )
+        raise UnsupportedOperatorBackendError(f"{canonical!r} has no usable SQL backend")
 
     use_cost = os.environ.get("FACTOR_ENGINE_COST_ROUTING", "").strip().lower() in {
         "1",
@@ -550,7 +574,12 @@ def get_best_backend(
         candidates.append(("pandas_numpy", cost))
 
     if not candidates:
-        return None, "pandas_numpy"
+        op = OperatorRegistry.get(canonical, "pandas_numpy")
+        if op is not None:
+            return op, "pandas_numpy"
+        raise UnsupportedOperatorBackendError(
+            f"no usable backend for {canonical!r}"
+        )
 
     if use_cost and len(candidates) > 1:
         chosen = min(candidates, key=lambda x: x[1])[0]

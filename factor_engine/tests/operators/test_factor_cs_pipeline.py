@@ -25,7 +25,7 @@ def test_pr5_datasets_registered_with_schema():
     from data_access.registry import load_registry
 
     repo_root = Path(__file__).resolve().parents[2]
-    registry = load_registry(repo_root.parent / "data_access" / "config" / "datasets.yaml")
+    registry = load_registry(repo_root.parent / "dataaccess" / "config" / "datasets.yaml")
     report = audit_pr5_datasets_contract(registry=registry)
     assert report["ok"], report["violations"]
     assert "us_stocks_sip_quotes" in report["datasets"]

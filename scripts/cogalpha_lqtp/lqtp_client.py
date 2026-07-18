@@ -16,8 +16,26 @@ import grpc
 import numpy as np
 import pandas as pd
 
-LQTP_ROOT = Path(__file__).resolve().parents[2] / "lqtp-python-grpc-examples"
-sys.path.insert(0, str(LQTP_ROOT / "protos"))
+def _ensure_lqtp_protos() -> Path:
+    """Prefer sibling kit protos, then official examples under quant_projects."""
+    here = Path(__file__).resolve()
+    candidates = [
+        here.parents[2] / "ashare_lqtp_kit" / "protos",
+        here.parents[2] / "lqtp-python-grpc-examples" / "protos",
+    ]
+    for path in candidates:
+        if path.is_dir():
+            p = str(path)
+            if p not in sys.path:
+                sys.path.insert(0, p)
+            return path
+    raise FileNotFoundError(
+        "LQTP protos not found. Expected ashare_lqtp_kit/protos or "
+        "lqtp-python-grpc-examples/protos under quant_projects."
+    )
+
+
+LQTP_PROTOS = _ensure_lqtp_protos()
 
 import Factor_pb2  # noqa: E402
 import Factor_pb2_grpc  # noqa: E402
@@ -25,18 +43,51 @@ import Struct_pb2  # noqa: E402
 import Struct_pb2_grpc  # noqa: E402
 
 
-DEFAULT_SERVER = os.getenv("LQTP_SERVER", "118.89.191.220:50051")
+DEFAULT_SERVER = os.getenv("LQTP_SERVER", "110.42.223.26:50051")
 DEFAULT_TOKEN_REFRESH_SECONDS = 10 * 60
 DEFAULT_BACKTEST_AUTH_RETRIES = 12
 DEFAULT_BACKTEST_CASH = 10_000_000.0  # 1000万本金；图中 NAV 另归一化到 start=1
 DEFAULT_LQTP_LOGIN_RETRIES = 12
 DEFAULT_LQTP_LOGIN_WAIT_SEC = 15.0
+# Platform may return large Backtest streams; default gRPC limit is 4MB.
+GRPC_CHANNEL_OPTIONS: tuple[tuple[str, int], ...] = (
+    ("grpc.max_send_message_length", 256 * 1024 * 1024),
+    ("grpc.max_receive_message_length", 256 * 1024 * 1024),
+)
 _MISSING_QUOTE_RE = re.compile(r"行情不存在:\s*(\S+)")
 SAFE_LQTP_SYMBOLS_LIST = [
     "000001.SZ", "000004.SZ", "000006.SZ", "000008.SZ", "000011.SZ",
     "000014.SZ", "000016.SZ", "000021.SZ", "000023.SZ", "000026.SZ",
 ]
 SAFE_LQTP_SYMBOLS = set(SAFE_LQTP_SYMBOLS_LIST)
+
+
+def env_username() -> str:
+    """LQTP username from env (no hardcoded account in source)."""
+    return os.getenv("LQTP_USERNAME", "").strip()
+
+
+def env_password() -> str:
+    """LQTP password from env (never hardcode secrets)."""
+    return os.getenv("LQTP_PASSWORD", "")
+
+
+def require_credentials(*, username: str | None = None, password: str | None = None) -> tuple[str, str]:
+    """Resolve username/password; raise SystemExit-friendly ValueError if missing."""
+    user = (username if username is not None else env_username()).strip()
+    pwd = password if password is not None else env_password()
+    if not user or not pwd:
+        raise ValueError(
+            "Missing LQTP credentials. Set LQTP_USERNAME / LQTP_PASSWORD "
+            "or pass --username/--password."
+        )
+    return user, pwd
+
+
+def make_channel(server: str | None = None) -> grpc.Channel:
+    """Create insecure gRPC channel with large message limits."""
+    return grpc.insecure_channel(server or DEFAULT_SERVER, options=list(GRPC_CHANNEL_OPTIONS))
+
 
 
 def fetch_lqtp_universe(
@@ -76,13 +127,7 @@ def _metadata(token: str | None) -> tuple[tuple[str, str], ...] | None:
 
 
 def _channel(server: str) -> grpc.Channel:
-    return grpc.insecure_channel(
-        server,
-        options=[
-            ("grpc.max_send_message_length", 256 * 1024 * 1024),
-            ("grpc.max_receive_message_length", 256 * 1024 * 1024),
-        ],
-    )
+    return make_channel(server)
 
 
 def _is_transient_grpc_error(error: BaseException) -> bool:
@@ -379,7 +424,13 @@ def evaluate_factor(
     **_deprecated: Any,
 ) -> tuple[dict[str, Any], str]:
     """Evaluate uploaded factor_engine values (never re-runs our DSL on LQTP)."""
-    from scripts.cogalpha_lqtp.factor_eval import evaluate_uploaded_values
+    try:
+        from scripts.cogalpha_lqtp.factor_eval import evaluate_uploaded_values
+    except ImportError as exc:  # pragma: no cover
+        raise ImportError(
+            "evaluate_factor requires scripts.cogalpha_lqtp.factor_eval "
+            "(full quant_projects tree)."
+        ) from exc
 
     if _deprecated:
         import warnings
