@@ -42,7 +42,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
           python -m pip install pytest pyyaml
-      - name: Validate deterministic runtime governance artifacts
+      - name: Generate deterministic runtime governance artifacts
         run: |
           generate_all() {
             python factor_engine/scripts/generate_operators_catalog.py
@@ -67,13 +67,30 @@ jobs:
             factor_engine/docs/sql_pushdown_coverage.md
           )
           generate_all
-          git diff --exit-code -- "${generated_files[@]}"
           sha256sum "${generated_files[@]}" > /tmp/generated-1.sha
           generate_all
           sha256sum "${generated_files[@]}" > /tmp/generated-2.sha
           diff -u /tmp/generated-1.sha /tmp/generated-2.sha
           pytest -q factor_engine/tests/test_operator_surface.py
           python factor_engine/scripts/validate_public_factor_formulas.py
+      - name: Upload generated governance artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-governance-artifacts
+          if-no-files-found: error
+          path: |
+            factor_engine/cleaned_operators/docs/operators_catalog.md
+            factor_engine/cleaned_operators/docs/operators_catalog.json
+            factor_engine/docs/dsl_allowlist.json
+            factor_engine/docs/field_manifest.json
+            factor_engine/docs/operator_manifest.json
+            factor_engine/docs/factor_recipe_manifest.json
+            factor_engine/docs/research_tool_manifest.json
+            factor_engine/docs/stateful_operator_manifest.json
+            factor_engine/docs/operator_usage_report.json
+            factor_engine/docs/backend_coverage.md
+            factor_engine/docs/backend_evidence_manifest.json
+            factor_engine/docs/sql_pushdown_coverage.md
       - name: COS contract and unit regressions
         run: pytest -q dataaccess/tests/test_cos_contract_core.py
       - name: COS filing PIT regressions
@@ -113,3 +130,18 @@ jobs:
             factor_engine/tests/operators/test_operator_usage.py \
             factor_engine/tests/test_gtja_compat_semantics.py \
             factor_engine/tests/test_data_scope_stability.py
+      - name: Enforce committed governance artifacts
+        run: |
+          git diff --exit-code -- \
+            factor_engine/cleaned_operators/docs/operators_catalog.md \
+            factor_engine/cleaned_operators/docs/operators_catalog.json \
+            factor_engine/docs/dsl_allowlist.json \
+            factor_engine/docs/field_manifest.json \
+            factor_engine/docs/operator_manifest.json \
+            factor_engine/docs/factor_recipe_manifest.json \
+            factor_engine/docs/research_tool_manifest.json \
+            factor_engine/docs/stateful_operator_manifest.json \
+            factor_engine/docs/operator_usage_report.json \
+            factor_engine/docs/backend_coverage.md \
+            factor_engine/docs/backend_evidence_manifest.json \
+            factor_engine/docs/sql_pushdown_coverage.md
