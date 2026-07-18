@@ -3,21 +3,17 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from functools import lru_cache
-from pathlib import Path
 from typing import Any, Mapping
 
 from planner.logical_plan import PlanNode
 
-_EVIDENCE_JSON = Path(__file__).resolve().parents[1] / "evidence" / "primitive_verified.json"
-
 
 @lru_cache(maxsize=1)
 def load_evidence_v2() -> dict[str, Any]:
-    if not _EVIDENCE_JSON.is_file():
-        raise FileNotFoundError(f"missing evidence: {_EVIDENCE_JSON}")
-    return json.loads(_EVIDENCE_JSON.read_text(encoding="utf-8"))
+    from backend.evidence_provenance import load_verified_artifact
+
+    return load_verified_artifact()
 
 
 def evidence_schema_version() -> int:
