@@ -113,6 +113,7 @@ def apply_rolling_cse(
     sem_counts: dict[str, int] = {}
     sem_first_node: dict[str, PlanNode] = {}
 
+    key_memo: dict[int, str] = {}
     for root in roots:
         for n in _postorder(root):
             sem = rolling_semantic_key(n)
@@ -121,7 +122,7 @@ def apply_rolling_cse(
             sem_counts[sem] = sem_counts.get(sem, 0) + 1
             if sem not in sem_first_node:
                 sem_first_node[sem] = n
-            sid = structural_key(n, {})
+            sid = structural_key(n, key_memo)
             if sid in existing_sids:
                 sem_to_sid.setdefault(sem, sid)
 
@@ -152,5 +153,5 @@ def apply_rolling_cse(
             node_id=n.node_id,
         )
 
-    new_roots = [rewrite(r, {}) for r in roots]
+    new_roots = [rewrite(r, key_memo) for r in roots]
     return new_roots, shared

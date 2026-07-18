@@ -56,11 +56,11 @@ def apply_cse(roots: list[PlanNode]) -> tuple[list[PlanNode], dict[str, PlanNode
 
     counts: dict[str, int] = {}  # 结构键 → 在森林中出现过几次
     first_seen: dict[str, PlanNode] = {}  # 首次出现时保留一份用于 shared_nodes
+    key_memo: dict[int, str] = {}
 
     for root in roots:
-        memo: dict[int, str] = {}
         for n in _postorder(root):
-            k = structural_key(n, memo)
+            k = structural_key(n, key_memo)
             counts[k] = counts.get(k, 0) + 1
             if k not in first_seen:
                 first_seen[k] = n
@@ -82,5 +82,5 @@ def apply_cse(roots: list[PlanNode]) -> tuple[list[PlanNode], dict[str, PlanNode
             node_id=n.node_id,
         )
 
-    new_roots = [rewrite(r, {}) for r in roots]
+    new_roots = [rewrite(r, key_memo) for r in roots]
     return new_roots, shared_nodes

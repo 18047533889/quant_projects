@@ -15,6 +15,10 @@ from typing import Any, Literal
 OperatorBackend = Literal["auto", "polars", "pandas_numpy"]
 
 
+_ENV_CACHE: PerfConfig | None = None
+_ENV_CACHE_KEY: tuple[str | None, ...] | None = None
+
+
 BacktestExecutionEngine = Literal["python", "numpy", "numba", "auto"]
 
 
@@ -108,6 +112,10 @@ class PerfConfig:
     def from_env(cls) -> "PerfConfig":
         """从环境变量构造 ``PerfConfig`` 实例。
 
+        环境变量在进程内通常不会在一次执行期间变化，因此通过小型缓存
+        避免每个算子/节点重复解析；测试或动态配置修改可调用
+        :meth:`invalidate_env_cache`。
+
         支持的环境变量：
 
         - ``FACTOR_ENGINE_MAX_WORKERS``：正整数，多进程/线程 worker 数
@@ -123,6 +131,22 @@ class PerfConfig:
         - ``FACTOR_ENGINE_QUERY_MAX_ROWS``：SQL 下推行数硬上限
         - ``FACTOR_ENGINE_QUERY_MAX_RESULT_BYTES``：SQL 结果字节硬上限
         """
+        global _ENV_CACHE, _ENV_CACHE_KEY
+        cache_names = (
+            "FACTOR_ENGINE_MAX_WORKERS",
+            "FACTOR_ENGINE_INSTRUMENT_CHUNK",
+            "FACTOR_ENGINE_MAX_MEMORY_MB",
+            "FACTOR_ENGINE_DISABLE_CSE",
+            "FACTOR_ENGINE_DISABLE_PANEL_NATIVE",
+            "FACTOR_ENGINE_USE_NUMBA",
+            "FACTOR_BACKTEST_EXECUTION_ENGINE",
+            "FACTOR_ENGINE_OPERATOR_BACKEND",
+            "FACTOR_ENGINE_QUERY_MAX_ROWS",
+            "FACTOR_ENGINE_QUERY_MAX_RESULT_BYTES",
+        )
+        cache_key = tuple(os.environ.get(name) for name in cache_names)
+        if _ENV_CACHE is not None and _ENV_CACHE_KEY == cache_key:
+            return _ENV_CACHE
         disable_cse = os.environ.get("FACTOR_ENGINE_DISABLE_CSE", "").lower() in (
             "1",
             "true",
@@ -141,7 +165,7 @@ class PerfConfig:
         op_backend = _env_str("FACTOR_ENGINE_OPERATOR_BACKEND", "auto").lower()
         if op_backend not in {"auto", "polars", "pandas_numpy"}:
             op_backend = "auto"
-        return cls(
+        _ENV_CACHE = cls(
             max_workers=_env_int("FACTOR_ENGINE_MAX_WORKERS", None),
             instrument_chunk_size=_env_int("FACTOR_ENGINE_INSTRUMENT_CHUNK", None),
             max_in_memory_mb=_env_float("FACTOR_ENGINE_MAX_MEMORY_MB", None),
@@ -153,3 +177,12 @@ class PerfConfig:
             query_max_rows=_env_int("FACTOR_ENGINE_QUERY_MAX_ROWS", None),
             query_max_result_bytes=_env_int("FACTOR_ENGINE_QUERY_MAX_RESULT_BYTES", None),
         )
+        _ENV_CACHE_KEY = cache_key
+        return _ENV_CACHE
+
+    @classmethod
+    def invalidate_env_cache(cls) -> None:
+        """清除环境配置缓存，供测试和动态配置重载使用。"""
+        global _ENV_CACHE, _ENV_CACHE_KEY
+        _ENV_CACHE = None
+        _ENV_CACHE_KEY = None

@@ -40,11 +40,11 @@ def engine(_loaded):
     return FactorEngine(backend=build_backend("pandas"), data_source=src)
 
 
-def test_compile_rewrites_divide_to_protected_div(engine):
+def test_compile_preserves_divide_by_default(engine):
     from api import divide
     from api.columns import col
 
     factor = Factor(name="rw_div", expr=divide(col("close"), col("volume")))
     plan, _ = engine.compile(factor)
-    assert "protected_div" in _walk_ops(plan)
-    assert "divide" not in _walk_ops(plan)
+    assert "divide" in _walk_ops(plan)
+    assert "protected_div" not in _walk_ops(plan)

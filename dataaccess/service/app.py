@@ -121,6 +121,7 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
         return list_datasets()
 
 
+    @app.get("/v1/datasets/{dataset_name}", dependencies=[Depends(require_api_key)])
     def get_dataset(dataset_name: str) -> DatasetInfo:
         try:
             ds = get_store().registry.get(dataset_name)
@@ -151,11 +152,15 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
                     query_budget=budget,
                     **request.params,
                 )
-                first = next(batches)
             except ValidationError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
             except DataAccessError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
+            try:
+                first = next(batches)
+            except StopIteration:
+                query_slots.release()
+                return Response(status_code=204)
 
             def body():
                 try:
@@ -185,6 +190,7 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
             query_slots.release()
             raise
 
+    @app.post("/v1/read", dependencies=[Depends(require_api_key)])
     def read_dataset(request: ReadRequest) -> Response:
         if not query_slots.acquire(blocking=False):
             raise HTTPException(status_code=503, detail="查询并发已达上限，请稍后重试")

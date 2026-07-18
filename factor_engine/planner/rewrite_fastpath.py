@@ -84,16 +84,22 @@ def _try_rewrite_log_returns(node: PlanNode, inputs: list[PlanNode]) -> PlanNode
     return PlanNode(op="log_returns", inputs=[col], attrs={"d": w, "window": w})
 
 
-def rewrite_plan_for_fastpath(plan: PlanNode) -> PlanNode:
-    """对逻辑计划做安全、语义保持的 fastpath 友好改写。
+def rewrite_plan_for_fastpath(
+    plan: PlanNode,
+    *,
+    allow_semantic_rewrites: bool = False,
+) -> PlanNode:
+    """对逻辑计划做 fastpath 改写。
 
-    参数：
-        plan: 逻辑计划根节点
-
-    返回：
-        改写后的计划根节点（可能合并为专用算子或 ``protected_div`` 等）
+    ``protected_div`` 和 ``group_neutralize`` 不是所有输入下都与原始
+    ``divide`` / ``subtract(group_mean)`` 等价。调用方若未明确允许语义
+    改写，应保持原始算子，仅使用严格等价的 fusion 规则。
     """
-    inputs = [rewrite_plan_for_fastpath(c) for c in plan.inputs]
+
+    inputs = [
+        rewrite_plan_for_fastpath(c, allow_semantic_rewrites=allow_semantic_rewrites)
+        for c in plan.inputs
+    ]
     op = plan.op
     attrs = dict(plan.attrs)
 
@@ -105,10 +111,10 @@ def rewrite_plan_for_fastpath(plan: PlanNode) -> PlanNode:
     if rewritten is not None:
         return rewritten
 
-    if op in {"divide", "div"} and len(inputs) == 2:
+    if allow_semantic_rewrites and op in {"divide", "div"} and len(inputs) == 2:
         return PlanNode(op="protected_div", inputs=inputs, attrs=attrs)
 
-    if op in {"subtract", "sub"} and len(inputs) == 2:
+    if allow_semantic_rewrites and op in {"subtract", "sub"} and len(inputs) == 2:
         left, right = inputs
         if (
             right.op == "group_mean"

@@ -88,7 +88,26 @@ def _execute_root_with_path(
     ):
         if key in parent_runtime:
             local_runtime[key] = parent_runtime[key]
-    local_ctx = replace(ctx, runtime_stats=local_runtime)
+    local_ctx = replace(
+        ctx,
+        runtime_stats=local_runtime,
+        # Shared subplans are fully materialized before workers start. Give
+        # each root an independent mutable view so backend execution cannot
+        # race on panel/materialization dictionaries.
+        shared_result_cache=dict(ctx.shared_result_cache or {})
+        if ctx.shared_result_cache is not None
+        else None,
+        shared_long_lazy_cache=dict(ctx.shared_long_lazy_cache or {})
+        if ctx.shared_long_lazy_cache is not None
+        else None,
+        materialized_long_lazy=dict(ctx.materialized_long_lazy or {})
+        if ctx.materialized_long_lazy is not None
+        else None,
+        materialized_series=dict(ctx.materialized_series or {})
+        if ctx.materialized_series is not None
+        else None,
+        panel_cache={},
+    )
     result = backend.execute(plan, local_ctx)
     path = snapshot_backend_path(getattr(local_ctx, "runtime_stats", None))
     audit_ctx = f"run_many:{factor_name}" if factor_name else "run_many"

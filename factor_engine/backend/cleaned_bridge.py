@@ -81,7 +81,12 @@ def series_to_panel(s: pd.Series, ctx: ExecutionContext) -> pd.DataFrame:
     if s.index.names != [tcol, icol]:
         s = s.copy()
         s.index = s.index.set_names([tcol, icol])
-    panel = s.unstack(level=icol).sort_index()
+    panel = s.unstack(level=icol)
+    # ``unstack`` normally preserves the source ordering. Only sort when the
+    # input is demonstrably non-monotonic; wide panels can make unconditional
+    # sorting a material part of execution time.
+    if not panel.index.is_monotonic_increasing:
+        panel = panel.sort_index()
     if cache is not None:
         cache[cache_key] = panel
         cache[id(s)] = panel

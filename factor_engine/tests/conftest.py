@@ -10,8 +10,10 @@ import pytest
 _FE_ROOT = Path(__file__).resolve().parents[1]
 _QUANT_ROOT = _FE_ROOT.parent
 
-_DATAACCESS_ROOT = _QUANT_ROOT / "dataaccess"
-for _path in (str(_FE_ROOT), str(_QUANT_ROOT), str(_DATAACCESS_ROOT)):
+# ``data_access`` is installed as an editable package in the project venv.
+# Do not add its source directory directly: that shadows the factor_engine
+# ``tests`` package when the monorepo is collected from its root.
+for _path in (str(_FE_ROOT), str(_QUANT_ROOT)):
     if _path not in sys.path:
         sys.path.insert(0, _path)
 

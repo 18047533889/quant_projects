@@ -378,8 +378,14 @@ def _parse_ts(value: str | None) -> datetime | None:
 class RedisTaskQueue:
     """Redis 任务队列 backend（Phase 10）；未安装 redis 时 raise ImportError。"""
 
-    def __init__(self, redis_url: str, *, prefix: str = "factor_engine:queue") -> None:
-        """连接 Redis 并初始化 pending/running/done/failed 哈希桶。"""
+    def __init__(
+        self,
+        redis_url: str,
+        *,
+        prefix: str = "factor_engine:queue",
+        reset: bool = False,
+    ) -> None:
+        """连接 Redis；仅在显式 ``reset=True`` 时清理已有队列。"""
         try:
             import redis
         except ImportError as exc:
@@ -395,8 +401,9 @@ class RedisTaskQueue:
             raise ImportError(
                 f"RedisTaskQueue backend unavailable at {redis_url}: {exc}"
             ) from exc
-        for bucket in ("pending", "running", "done", "failed"):
-            self._redis.delete(f"{self._prefix}:{bucket}")
+        if reset:
+            for bucket in ("pending", "running", "done", "failed"):
+                self._redis.delete(f"{self._prefix}:{bucket}")
 
     def _key(self, bucket: str) -> str:
         return f"{self._prefix}:{bucket}"

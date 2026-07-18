@@ -6,7 +6,11 @@ from .logical_plan import PlanNode
 
 
 class Optimizer:
-    """轻量计划优化：自底向上常量折叠等。"""
+    """轻量计划优化：常量折叠与可选的语义保持 fastpath 改写。"""
+
+    def __init__(self, *, allow_semantic_rewrites: bool = False) -> None:
+        """创建优化器；默认不改变 divide/group_mean 的边界语义。"""
+        self.allow_semantic_rewrites = bool(allow_semantic_rewrites)
 
     def optimize(self, plan: PlanNode) -> PlanNode:
         """对逻辑计划执行优化流水线。
@@ -23,7 +27,10 @@ class Optimizer:
 
         lowered = lower_composite_operators(folded)
         refolded = self._fold_literals(lowered)
-        return rewrite_plan_for_fastpath(refolded)
+        return rewrite_plan_for_fastpath(
+            refolded,
+            allow_semantic_rewrites=self.allow_semantic_rewrites,
+        )
 
     def lower_only(self, plan: PlanNode) -> PlanNode:
         """仅 composite lowering + 常量折叠（不含 fastpath rewrite）。"""
@@ -43,7 +50,10 @@ class Optimizer:
         folded = self._fold_literals(plan)
         lowered = lower_composite_operators(folded)
         refolded = self._fold_literals(lowered)
-        final = rewrite_plan_for_fastpath(refolded)
+        final = rewrite_plan_for_fastpath(
+            refolded,
+            allow_semantic_rewrites=self.allow_semantic_rewrites,
+        )
         trace = build_lowering_trace(folded, refolded)
         return final, folded, trace
 

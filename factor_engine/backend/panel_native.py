@@ -19,17 +19,16 @@ def panel_native_enabled(ctx: ExecutionContext) -> bool:
     返回:
         未禁用且 perf 配置允许时为 ``True``。
     """
-    # long_table 仅约束数据源形态；算子链仍用 panel-native 避免逐节点 stack/unstack。
-    if os.environ.get("FACTOR_ENGINE_DISABLE_PANEL_NATIVE", "").lower() in (
-        "1",
-        "true",
-        "yes",
-    ):
-        return False
     perf = getattr(ctx, "perf", None)
     if perf is not None and hasattr(perf, "panel_native"):
         return bool(perf.panel_native)
-    return True
+    # Keep the environment fallback for callers that construct a bare context,
+    # but normal engine execution has already parsed it into PerfConfig.
+    return os.environ.get("FACTOR_ENGINE_DISABLE_PANEL_NATIVE", "").lower() not in (
+        "1",
+        "true",
+        "yes",
+    )
 
 
 def ensure_template_from_series(ctx: ExecutionContext, series: pd.Series) -> None:

@@ -6,7 +6,7 @@ from planner.logical_plan import PlanNode
 from planner.rewrite_fastpath import rewrite_plan_for_fastpath
 
 
-def test_divide_rewrites_to_protected_div():
+def test_divide_preserves_semantics_by_default():
     plan = PlanNode(
         op="divide",
         inputs=[
@@ -16,6 +16,19 @@ def test_divide_rewrites_to_protected_div():
         attrs={},
     )
     out = rewrite_plan_for_fastpath(plan)
+    assert out.op == "divide"
+
+
+def test_divide_can_opt_into_protected_div():
+    plan = PlanNode(
+        op="divide",
+        inputs=[
+            PlanNode(op="column", attrs={"name": "close"}, inputs=[]),
+            PlanNode(op="column", attrs={"name": "volume"}, inputs=[]),
+        ],
+        attrs={},
+    )
+    out = rewrite_plan_for_fastpath(plan, allow_semantic_rewrites=True)
     assert out.op == "protected_div"
 
 
@@ -49,10 +62,19 @@ def test_log_divide_delay_rewrites_to_log_returns():
     assert out.attrs.get("d") == 1
 
 
-def test_group_mean_subtract_rewrites_to_group_neutralize():
+def test_group_mean_subtract_preserves_semantics_by_default():
     col = PlanNode(op="column", attrs={"name": "close"}, inputs=[])
     grp = PlanNode(op="column", attrs={"name": "sector"}, inputs=[])
     gm = PlanNode(op="group_mean", inputs=[col, grp], attrs={})
     plan = PlanNode(op="subtract", inputs=[col, gm], attrs={})
     out = rewrite_plan_for_fastpath(plan)
+    assert out.op == "subtract"
+
+
+def test_group_mean_subtract_can_opt_into_neutralize():
+    col = PlanNode(op="column", attrs={"name": "close"}, inputs=[])
+    grp = PlanNode(op="column", attrs={"name": "sector"}, inputs=[])
+    gm = PlanNode(op="group_mean", inputs=[col, grp], attrs={})
+    plan = PlanNode(op="subtract", inputs=[col, gm], attrs={})
+    out = rewrite_plan_for_fastpath(plan, allow_semantic_rewrites=True)
     assert out.op == "group_neutralize"
