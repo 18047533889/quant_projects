@@ -30,6 +30,7 @@
 from __future__ import annotations
 
 import copy
+from enum import StrEnum
 from typing import Any, Dict, List, Optional, Tuple
 
 
@@ -55,9 +56,59 @@ class OperatorRegistry:
     全部接口通过 ``classmethod`` 访问，线程安全由 import 时序保证。
     """
 
+    class Lifecycle(StrEnum):
+        BUILDING = "building"
+        FINALIZED = "finalized"
+        FROZEN = "frozen"
+
     _operators: Dict[str, Dict[str, Any]] = {}
     _aliases: Dict[str, str] = {}
     _catalog: Dict[str, dict] = {}
+    _lifecycle: Lifecycle = Lifecycle.BUILDING
+    _version: int = 0
+
+    @classmethod
+    def lifecycle(cls) -> str:
+        return cls._lifecycle.value
+
+    @classmethod
+    def version(cls) -> int:
+        return cls._version
+
+    @classmethod
+    def _assert_writable(cls) -> None:
+        if cls._lifecycle is cls.Lifecycle.FROZEN:
+            raise RuntimeError("operator registry is frozen")
+
+    @classmethod
+    def finalize(cls) -> None:
+        """Validate aliases and close the bootstrap registration phase."""
+        cls._assert_writable()
+        for alias, canonical in cls._aliases.items():
+            if alias in cls._operators or alias in cls._catalog:
+                raise ValueError(f"alias collides with canonical: {alias!r}")
+            if canonical not in cls._operators and canonical not in cls._catalog:
+                raise ValueError(f"dangling alias: {alias!r} -> {canonical!r}")
+            if cls.resolve_canonical(canonical) != canonical:
+                raise ValueError(f"alias chain is not flattened: {alias!r}")
+        cls._lifecycle = cls.Lifecycle.FINALIZED
+        cls._version += 1
+
+    @classmethod
+    def freeze(cls) -> None:
+        """Freeze all registry mutation after import-time bootstrap."""
+        if cls._lifecycle is cls.Lifecycle.BUILDING:
+            cls.finalize()
+        if cls._lifecycle is not cls.Lifecycle.FROZEN:
+            cls._lifecycle = cls.Lifecycle.FROZEN
+            cls._version += 1
+
+    @classmethod
+    def thaw_for_bootstrap(cls) -> None:
+        """Explicit test/bootstrap escape hatch for a previously frozen registry."""
+        if cls._lifecycle is cls.Lifecycle.FROZEN:
+            cls._lifecycle = cls.Lifecycle.BUILDING
+            cls._version += 1
 
     @classmethod
     def register(
@@ -86,6 +137,9 @@ class OperatorRegistry:
             None
         """
         canonical = canonical or operator.metadata.name
+        cls._assert_writable()
+        if canonical in cls._aliases:
+            raise ValueError(f"canonical already declared as alias: {canonical!r}")
         cls._operators.setdefault(canonical, {})[backend] = operator
         existing = cls._catalog.get(canonical, {})
         if existing and status == "implemented":
@@ -126,7 +180,7 @@ class OperatorRegistry:
         cls._catalog[canonical] = updated
         for alias in aliases or []:
             if alias != canonical:
-                cls._aliases[alias] = canonical
+                cls.register_alias(alias, canonical)
 
     @classmethod
     def resolve_canonical(cls, name: str, *, max_depth: int = 8) -> str:
@@ -141,7 +195,7 @@ class OperatorRegistry:
             if target is None:
                 if current in cls._catalog or current in cls._operators:
                     return current
-                # Unknown names remain unchanged for lookup compatibility.
+                # Unknown names remain unchanged for optional lookup compatibility.
                 return current
             current = target
         raise ValueError(f"alias resolution exceeded max_depth={max_depth}: {name!r}")

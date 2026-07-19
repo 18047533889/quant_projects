@@ -4,6 +4,7 @@
   "campaign_id": "manual_ashare_pv_202607041600",
   "formula": "log(flex_max((ts_sum(where(close / ts_delay(close, 1) - 1 > power(close / ts_delay(close, 19), 0.05) - 1, 1, 0), 20) - 1) * ts_sum(where(close / ts_delay(close, 1) - 1 < power(close / ts_delay(close, 19), 0.05) - 1, power(close / ts_delay(close, 1) - 1 - (power(close / ts_delay(close, 19), 0.05) - 1), 2), 0), 20) / ((ts_sum(where(close / ts_delay(close, 1) - 1 < power(close / ts_delay(close, 19), 0.05) - 1, 1, 0), 20) + 1e-08) * (ts_sum(where(close / ts_delay(close, 1) - 1 > power(close / ts_delay(close, 19), 0.05) - 1, power(close / ts_delay(close, 1) - 1 - (power(close / ts_delay(close, 19), 0.05) - 1), 2), 0), 20) + 1e-08)), 1e-08))",
   "expression_type": "dsl",
+  "dsl_surface": "compat",
   "generator_name": "manual",
   "generator_version": "1.0.0",
   "mined_by": "zhangborui",

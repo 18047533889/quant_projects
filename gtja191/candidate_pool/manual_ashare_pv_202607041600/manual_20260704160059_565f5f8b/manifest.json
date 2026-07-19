@@ -4,6 +4,7 @@
   "campaign_id": "manual_ashare_pv_202607041600",
   "formula": "ts_sum(where(open >= ts_delay(open, 1), 0, flex_max(open - low, open - ts_delay(open, 1))), 20)",
   "expression_type": "dsl",
+  "dsl_surface": "compat",
   "generator_name": "manual",
   "generator_version": "1.0.0",
   "mined_by": "zhangborui",

@@ -79,6 +79,12 @@ def ts_delta(x: PlanNode, window: int = 1) -> PlanNode:
     return PlanNode(op="ts_delta", inputs=[x, literal(float(w))], attrs={})
 
 
+def ts_ema(x: PlanNode, window: int) -> PlanNode:
+    """构造与 registry ``ts_ema`` 一致的时序 EMA 节点。"""
+    w = int(window)
+    return PlanNode(op="ts_ema", inputs=[x, literal(float(w))], attrs={})
+
+
 def ts_pct(x: PlanNode, window: int = 1) -> PlanNode:
     w = int(window)
     return PlanNode(op="ts_pct", inputs=[x, literal(float(w))], attrs={})

@@ -276,18 +276,19 @@ class TestDeliveryPackage(unittest.TestCase):
         engine = build_fastest_engine(data_source=None)
         self.assertEqual(type(engine.backend).__name__, "PandasBackend")
 
-    def test_campaign_data_source_uses_data_access(self) -> None:
+    def test_campaign_data_source_is_local_cos_paths(self) -> None:
+        """disk.v1 campaign data_source = {local, cos}（FE §2.8）；执行层另走 data_access。"""
         config_path = self.campaign_dir / "config.json"
         self.assertTrue(config_path.exists())
         config = json.loads(config_path.read_text(encoding="utf-8"))
         ds = config["data_source"]
-        self.assertEqual(ds["type"], "data_access")
-        self.assertEqual(ds["dataset"], "ashare_stock_daily")
-        self.assertTrue(ds.get("read_auto"))
-        self.assertIn("close", ds["fields"])
-        self.assertEqual(ds["fields"]["close"], "Close")
-        self.assertNotIn("local", ds)
-        self.assertNotIn("cos", ds)
+        self.assertIn("local", ds)
+        self.assertIn("cos", ds)
+        self.assertTrue(str(ds["local"]).endswith("/") or "lqtp" in str(ds["local"]))
+        self.assertTrue(str(ds["cos"]).startswith("cos://"))
+        self.assertNotIn("type", ds)
+        self.assertEqual(config.get("dsl_surface"), "compat")
+        self.assertEqual(config.get("operator_policy"), "lqtp_pv_daily")
 
 
 if __name__ == "__main__":

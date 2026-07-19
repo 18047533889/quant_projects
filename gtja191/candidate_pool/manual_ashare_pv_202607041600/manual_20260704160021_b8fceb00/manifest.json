@@ -1,9 +1,10 @@
 {
   "schema_version": "disk.v1",
-  "candidate_id": "manual_20260704160059_12684c7b",
+  "candidate_id": "manual_20260704160021_b8fceb00",
   "campaign_id": "manual_ashare_pv_202607041600",
-  "formula": "ts_regression(close, ts_delay(close, 1), 20, 0, 'slope')",
+  "formula": "ts_time_slope(ts_mean(close, 6), 6)",
   "expression_type": "dsl",
+  "dsl_surface": "compat",
   "generator_name": "manual",
   "generator_version": "1.0.0",
   "mined_by": "zhangborui",
@@ -14,7 +15,7 @@
   "frequency_bucket": "daily",
   "signal_structure": "cross_sectional",
   "asset_class": "equity",
-  "born_timestamp": "2026-07-04T16:00:59Z",
+  "born_timestamp": "2026-07-04T16:00:21Z",
   "metrics": {
     "train": {
       "ic": null,
@@ -32,5 +33,5 @@
       "rank_ic": null
     }
   },
-  "description": "国泰君安 GTJA-191 第 116 号因子，由原始价量公式翻译为 factor_engine DSL。 来源公式: REGBETA(CLOSE,SEQUENCE,20)"
+  "description": "国泰君安 GTJA-191 第 21 号因子，由原始价量公式翻译为 factor_engine DSL。 来源公式: REGBETA(MEAN(CLOSE,6),SEQUENCE(6))"
 }

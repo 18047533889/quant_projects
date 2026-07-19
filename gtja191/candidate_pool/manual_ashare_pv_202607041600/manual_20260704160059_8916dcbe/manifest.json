@@ -4,6 +4,7 @@
   "campaign_id": "manual_ashare_pv_202607041600",
   "formula": "16 * (close - ts_delay(close, 1) + (close - open) / 2 + ts_delay(close, 1) - ts_delay(open, 1)) / (abs(high - ts_delay(close, 1)) + abs(low - ts_delay(close, 1)) + 1e-08) * flex_max(abs(high - ts_delay(close, 1)), abs(low - ts_delay(close, 1)))",
   "expression_type": "dsl",
+  "dsl_surface": "compat",
   "generator_name": "manual",
   "generator_version": "1.0.0",
   "mined_by": "zhangborui",

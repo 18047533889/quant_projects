@@ -18,7 +18,10 @@
     "debt_to_equity",
     "real_turnover_rate",
     "micro_spread",
-    "ts_ratio"
+    "ts_ratio",
+    "MACD_line",
+    "MACD_signal",
+    "MACD_hist"
   ],
   "lowered_polars_native": [
     "MOM",

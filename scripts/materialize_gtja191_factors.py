@@ -21,6 +21,8 @@ GTJA_ROOT = QUANT_ROOT / "gtja191"
 
 if str(FE_ROOT) not in sys.path:
     sys.path.insert(0, str(FE_ROOT))
+if str(GTJA_ROOT) not in sys.path:
+    sys.path.insert(0, str(GTJA_ROOT))
 
 from api.dsl_parser import parse_factor  # noqa: E402
 from api.factor import Factor  # noqa: E402
@@ -37,14 +39,8 @@ from workspace_paths import default_factor_lake_root, quant_projects_root  # noq
 
 logger = get_logger("scripts.materialize_gtja191_factors")
 
-# 目录 DSL 转换错误时的落盘修正（不修改 gtja191/ 内文件）
-_FORMULA_OVERRIDES: dict[str, str] = {
-    # 原式把 power(13) 误嵌进 ts_corr 窗口位，应为 corr(...,13)^5
-    "gtja191_alpha_056": (
-        "(rank((open - ts_min(open, 12))) < rank((power(rank(ts_corr("
-        "ts_sum(((high + low) / 2), 19), ts_sum(ts_mean(volume,40), 19), 13)), 5))))"
-    ),
-}
+# GTJA185 = published compat 包（ts_ema / flex_max / ts_time_slope 等）
+DSL_SURFACE = "compat"
 
 # 全 A 股 panel 落盘内存预算（30G 机器、无 swap 时偏保守）
 _DEFAULT_RESERVE_GB = 6.0   # OS + IDE + 其他进程
@@ -150,13 +146,26 @@ def _prepare_factor_dir(lake_root: Path, factor_id: str, *, force: bool) -> None
 
 
 def load_catalog(*, include_excluded: bool) -> list[dict]:
-    catalog_path = GTJA_ROOT / "dsl" / "gtja191_dsl_catalog.json"
-    payload = json.loads(catalog_path.read_text(encoding="utf-8"))
-    items = list(payload.values())
-    items.sort(key=lambda x: x["factor_name"])
-    if not include_excluded:
-        items = [x for x in items if not x.get("delivery_excluded")]
-    return items
+    """加载 GTJA 公式：优先走 gtja191.lib.catalog（含 audited overrides）。"""
+    try:
+        from lib.catalog import deliverable_catalog, load_catalog as _load_all
+
+        if include_excluded:
+            catalog = _load_all()
+        else:
+            catalog = deliverable_catalog()
+        items = list(catalog.values())
+        items.sort(key=lambda x: x["factor_name"])
+        return items
+    except Exception as exc:
+        logger.warning("fallback to raw JSON catalog (%s)", exc)
+        catalog_path = GTJA_ROOT / "dsl" / "gtja191_dsl_catalog.json"
+        payload = json.loads(catalog_path.read_text(encoding="utf-8"))
+        items = list(payload.values())
+        items.sort(key=lambda x: x["factor_name"])
+        if not include_excluded:
+            items = [x for x in items if not x.get("delivery_excluded")]
+        return items
 
 
 def build_engine(*, max_files: int | None, start_date: str | None, end_date: str | None) -> FactorEngine:
@@ -280,7 +289,7 @@ def materialize_gtja191(
         meta: dict[str, dict] = {}
         for item in batch:
             fid = item["factor_name"]
-            formula = _FORMULA_OVERRIDES.get(fid, item["dsl_formula"].strip())
+            formula = item["dsl_formula"].strip()
             desc = f"GTJA191 {fid} ({item.get('conversion', '')})"
             factors.append(
                 parse_factor(
@@ -289,9 +298,10 @@ def materialize_gtja191(
                     freq="1d",
                     universe="A_SHARE_ALL_A_EX_ST",
                     description=desc,
+                    surface=DSL_SURFACE,
                 )
             )
-            meta[fid] = {"formula": formula, "description": desc}
+            meta[fid] = {"formula": formula, "description": desc, "dsl_surface": DSL_SURFACE}
 
         t_batch = time.time()
         try:

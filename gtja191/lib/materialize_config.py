@@ -58,6 +58,7 @@ def build_materialize_config(
             "freq": FREQUENCY,
             "universe": UNIVERSE,
             "description": f"GTJA-191 {factor_name}",
+            "surface": "compat",
         },
         "data_source": data_source,
         "backend": {"type": "pandas"},

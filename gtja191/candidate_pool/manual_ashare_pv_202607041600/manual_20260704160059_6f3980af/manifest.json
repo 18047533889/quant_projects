@@ -4,6 +4,7 @@
   "campaign_id": "manual_ashare_pv_202607041600",
   "formula": "-1 * rank(open - ts_delay(high, 1)) * rank(open - ts_delay(close, 1)) * rank(open - ts_delay(low, 1))",
   "expression_type": "dsl",
+  "dsl_surface": "compat",
   "generator_name": "manual",
   "generator_version": "1.0.0",
   "mined_by": "zhangborui",

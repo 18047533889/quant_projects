@@ -7,6 +7,61 @@ from planner.logical_plan import PlanNode
 from planner.lowerings import _helpers as H
 
 
+def _macd_windows(node: PlanNode) -> tuple[int, int, int] | None:
+    """读取显式 MACD 参数；无参数时保留原始 operator 语义。"""
+    explicit = any(k in node.attrs for k in ("fast", "slow", "signal")) or len(node.inputs) >= 3
+    if not explicit:
+        return None
+    fast = int(node.attrs.get("fast", H._literal_input(node, 1) or 12))
+    slow = int(node.attrs.get("slow", H._literal_input(node, 2) or 26))
+    signal = int(node.attrs.get("signal", H._literal_input(node, 3) or 9))
+    return fast, slow, signal
+
+
+@register_lowering("MACD_line")
+def lower_macd_line(node: PlanNode) -> PlanNode:
+    if not node.inputs:
+        return node
+    windows = _macd_windows(node)
+    if windows is None:
+        return node
+    fast, slow, _ = windows
+    if fast >= slow:
+        return node
+    x = node.inputs[0]
+    return H.binop("subtract", H.ts_ema(x, fast), H.ts_ema(x, slow))
+
+
+@register_lowering("MACD_signal")
+def lower_macd_signal(node: PlanNode) -> PlanNode:
+    if not node.inputs:
+        return node
+    windows = _macd_windows(node)
+    if windows is None:
+        return node
+    fast, slow, signal = windows
+    if fast >= slow:
+        return node
+    x = node.inputs[0]
+    line = H.binop("subtract", H.ts_ema(x, fast), H.ts_ema(x, slow))
+    return H.ts_ema(line, signal)
+
+
+@register_lowering("MACD_hist")
+def lower_macd_hist(node: PlanNode) -> PlanNode:
+    if not node.inputs:
+        return node
+    windows = _macd_windows(node)
+    if windows is None:
+        return node
+    fast, slow, signal = windows
+    if fast >= slow:
+        return node
+    x = node.inputs[0]
+    line = H.binop("subtract", H.ts_ema(x, fast), H.ts_ema(x, slow))
+    return H.binop("subtract", line, H.ts_ema(line, signal))
+
+
 @register_lowering("MOM")
 def lower_mom(node: PlanNode) -> PlanNode:
     """``ts_delta(price, w)``（与 PIT-safe causal lag 一致）。"""

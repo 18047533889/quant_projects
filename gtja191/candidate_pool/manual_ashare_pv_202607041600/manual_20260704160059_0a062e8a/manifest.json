@@ -4,6 +4,7 @@
   "campaign_id": "manual_ashare_pv_202607041600",
   "formula": "ts_mean(flex_max(flex_max(high - low, abs(ts_delay(close, 1) - high)), abs(ts_delay(close, 1) - low)), 6)",
   "expression_type": "dsl",
+  "dsl_surface": "compat",
   "generator_name": "manual",
   "generator_version": "1.0.0",
   "mined_by": "zhangborui",

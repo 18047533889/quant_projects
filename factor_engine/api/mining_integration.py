@@ -131,13 +131,19 @@ def write_fastpath_allowlists(path: str | Path, *, strict: bool = True) -> Path:
     return out
 
 
-def validate_factor_engine_dsl(formula: str) -> tuple[bool, str]:
+def validate_factor_engine_dsl(
+    formula: str,
+    *,
+    surface: str = "daily",
+) -> tuple[bool, str]:
     """校验 factor_engine DSL 语法与白名单（A 股 / 美股同一套 ``parse_expr``）。
 
     Parameters
     ----------
     formula : str
         DSL 公式字符串。
+    surface : str
+        算子面：``daily``（默认，新投递）或 ``compat``（已发布 / 遗留公式，如 GTJA185）。
 
     Returns
     -------
@@ -148,36 +154,43 @@ def validate_factor_engine_dsl(formula: str) -> tuple[bool, str]:
     if not text:
         return False, "empty formula"
     try:
-        parse_expr(text)
+        parse_expr(text, surface=str(surface or "daily"))
         return True, "OK"
     except DSLParseError as exc:
         return False, str(exc)
 
 
-def validate_us_dsl(formula: str) -> tuple[bool, str]:
+def validate_us_dsl(formula: str, *, surface: str = "daily") -> tuple[bool, str]:
     """兼容旧名；同 :func:`validate_factor_engine_dsl`。"""
-    return validate_factor_engine_dsl(formula)
+    return validate_factor_engine_dsl(formula, surface=surface)
 
 
-def list_dsl_allowlist() -> list[str]:
+def list_dsl_allowlist(*, surface: str = "daily") -> list[str]:
     """返回完整 DSL 算子白名单（排序后的函数名列表）。"""
-    return sorted(build_dsl_allowlist().keys())
+    return sorted(build_dsl_allowlist(surface=str(surface or "daily")).keys())
 
 
-def export_dsl_allowlist_json(*, market: str | None = None) -> dict[str, Any]:
+def export_dsl_allowlist_json(
+    *,
+    market: str | None = None,
+    surface: str = "daily",
+) -> dict[str, Any]:
     """导出 AFV Gateway 对齐用的算子白名单 JSON。
 
     Parameters
     ----------
     market : str | None
         市场标识（``us`` / ``ashare`` 等），决定 ``operator_policy`` 字段。
+    surface : str
+        ``daily`` 或 ``compat``（GTJA185 等 published 包用 compat）。
 
     Returns
     -------
     dict[str, Any]
-        含 ``operators``、``count``、``operator_policy`` 的 dict。
+        含 ``operators``、``count``、``operator_policy``、``dsl_surface`` 的 dict。
     """
-    names = list_dsl_allowlist()
+    surf = str(surface or "daily").strip() or "daily"
+    names = list_dsl_allowlist(surface=surf)
     mkt = str(market or "us").strip().lower()
     policy_by_market = {
         "ashare": "lqtp_pv_daily",
@@ -191,6 +204,7 @@ def export_dsl_allowlist_json(*, market: str | None = None) -> dict[str, Any]:
         "schema_version": "factor_engine.dsl_allowlist.v1",
         "operator_policy": policy_by_market.get(mkt, "afv_us_pv_daily"),
         "market": mkt,
+        "dsl_surface": surf,
         "operators": names,
         "count": len(names),
     }
@@ -939,12 +953,15 @@ def validate_manifest_for_execution(
     formula: str,
     require_production: bool = False,
     require_fastpath: bool | None = None,
+    surface: str | None = None,
 ) -> tuple[bool, str]:
     """按 market / expression_type 决定是否做 factor_engine 语法校验。
 
     ``require_production``：额外校验 production allowlist。
     ``require_fastpath``：额外校验 production fastpath；默认读
     ``FACTOR_ENGINE_MINING_REQUIRE_FASTPATH=1``。
+    ``surface``：``daily`` / ``compat``；也可从环境 ``FACTOR_ENGINE_DSL_SURFACE`` 读取。
+    已发布包（如 GTJA185）应传 ``surface=\"compat\"`` 或在 campaign 标 ``dsl_surface``。
     """
     import os
 
@@ -963,11 +980,17 @@ def validate_manifest_for_execution(
             "on",
         }
 
+    surf = str(
+        surface
+        or os.environ.get("FACTOR_ENGINE_DSL_SURFACE", "").strip()
+        or "daily"
+    ).strip() or "daily"
+
     if require_fastpath:
         return validate_production_fastpath_dsl(formula)
     if require_production:
         return validate_production_dsl(formula)
-    return validate_factor_engine_dsl(formula)
+    return validate_factor_engine_dsl(formula, surface=surf)
 
 
 def default_mining_operator_allowlist(*, tier: str = "production_fastpath") -> list[str]:

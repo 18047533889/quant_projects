@@ -47,6 +47,7 @@ def load_pack() -> FactorPack:
                     "frequency": "1d",
                     "universe": "GTJA185",
                     "owner": "gtja191",
+                    "dsl_surface": "compat",
                 },
             )
         )
@@ -75,5 +76,7 @@ def load_pack() -> FactorPack:
             "source": "gtja191/lib/catalog.py",
             "deliverable_count": DELIVERABLE_COUNT,
             "owner": "gtja191",
+            "dsl_surface": "compat",
+            "pack_alias": "gtja185",
         },
     )

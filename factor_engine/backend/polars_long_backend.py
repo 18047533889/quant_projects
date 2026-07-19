@@ -29,7 +29,9 @@ from .polars_long_policy import (
     collect_plan_op_stats,
     long_path_telemetry_flags,
     strict_polars_long_fallback,
+    UnsupportedCausalOperatorError,
 )
+from .operator_capability import UnsupportedOperatorBackendError
 
 
 def _record_long_stats(
@@ -471,7 +473,7 @@ class PolarsLongBackend(Backend):
             return result
         except PolarsLongStrictError:
             raise
-        except Exception as exc:
+        except (UnsupportedCausalOperatorError, UnsupportedOperatorBackendError) as exc:
             return _fallback_or_raise(
                 self._fallback,
                 plan,
@@ -480,3 +482,10 @@ class PolarsLongBackend(Backend):
                 reason=str(exc),
                 exc=exc,
             )
+        except (TypeError, ValueError, KeyError, AssertionError) as exc:
+            # Data/schema/compiler errors are not capability misses. Preserve
+            # them in strict mode and avoid disguising broken native code as a
+            # normal backend fallback.
+            if strict_polars_long_fallback(ctx):
+                raise
+            raise

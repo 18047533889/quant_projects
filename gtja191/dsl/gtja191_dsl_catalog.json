@@ -202,7 +202,7 @@
   "gtja191_alpha_021": {
     "factor_name": "gtja191_alpha_021",
     "source_formula": "REGBETA(MEAN(CLOSE,6),SEQUENCE(6))",
-    "dsl_formula": "ts_regression(ts_mean(close, 6), ts_delay(close, 1), 6, 0, 'slope')",
+    "dsl_formula": "ts_time_slope(ts_mean(close, 6), 6)",
     "conversion": "manual_dsl",
     "valid": true,
     "validation": "OK",
@@ -552,8 +552,8 @@
   "gtja191_alpha_056": {
     "factor_name": "gtja191_alpha_056",
     "source_formula": "(RANK((OPEN - TSMIN(OPEN, 12))) < RANK((RANK(CORR(SUM(((HIGH + LOW) / 2), 19), SUM(MEAN(VOLUME,40), 19), 13))^5)))",
-    "dsl_formula": "rank(open - ts_min(open, 12)) < rank(rank(ts_corr(ts_sum((high + low) / 2, 19), ts_sum(ts_mean(volume, 40), 19), power(13)), 5))",
-    "conversion": "converted",
+    "dsl_formula": "rank(open - ts_min(open, 12)) < rank(power(rank(ts_corr(ts_sum((high + low) / 2, 19), ts_sum(ts_mean(volume, 40), 19), 13)), 5))",
+    "conversion": "manual_dsl",
     "valid": true,
     "validation": "OK",
     "delivery_excluded": false,
@@ -1152,7 +1152,7 @@
   "gtja191_alpha_116": {
     "factor_name": "gtja191_alpha_116",
     "source_formula": "REGBETA(CLOSE,SEQUENCE,20)",
-    "dsl_formula": "ts_regression(close, ts_delay(close, 1), 20, 0, 'slope')",
+    "dsl_formula": "ts_time_slope(close, 20)",
     "conversion": "manual_dsl",
     "valid": true,
     "validation": "OK",
@@ -1462,7 +1462,7 @@
   "gtja191_alpha_147": {
     "factor_name": "gtja191_alpha_147",
     "source_formula": "REGBETA(MEAN(CLOSE,12),SEQUENCE(12))",
-    "dsl_formula": "ts_regression(ts_mean(close, 12), ts_delay(close, 1), 12, 0, 'slope')",
+    "dsl_formula": "ts_time_slope(ts_mean(close, 12), 12)",
     "conversion": "manual_dsl",
     "valid": true,
     "validation": "OK",

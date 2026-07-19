@@ -4,6 +4,7 @@
   "campaign_id": "manual_ashare_pv_202607041600",
   "formula": "power(ts_mean(power(100 * (close - ts_max(close, 12)) / (ts_max(close, 12) + 1e-08), 2), 20), 0.5)",
   "expression_type": "dsl",
+  "dsl_surface": "compat",
   "generator_name": "manual",
   "generator_version": "1.0.0",
   "mined_by": "zhangborui",

@@ -4,6 +4,7 @@
   "campaign_id": "manual_ashare_pv_202607041600",
   "formula": "where(close < ts_delay(close, 5), (close - ts_delay(close, 5)) / (ts_delay(close, 5) + 1e-08), where(close == ts_delay(close, 5), 0, (close - ts_delay(close, 5)) / (close + 1e-08)))",
   "expression_type": "dsl",
+  "dsl_surface": "compat",
   "generator_name": "manual",
   "generator_version": "1.0.0",
   "mined_by": "zhangborui",

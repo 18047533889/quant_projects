@@ -4,6 +4,7 @@
   "campaign_id": "manual_ashare_pv_202607041600",
   "formula": "(ts_ema(ts_ema(ts_ema(log(close), 12), 12), 12) - ts_delay(ts_ema(ts_ema(ts_ema(log(close), 12), 12), 12), 1)) / ts_delay(ts_ema(ts_ema(ts_ema(log(close), 12), 12), 12), 1)",
   "expression_type": "dsl",
+  "dsl_surface": "compat",
   "generator_name": "manual",
   "generator_version": "1.0.0",
   "mined_by": "zhangborui",

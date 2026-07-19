@@ -280,6 +280,7 @@ class FactorEngine:
             freq=config.factor.freq,
             universe=config.factor.universe,
             description=config.factor.description,
+            surface=getattr(config.factor, "surface", "daily") or "daily",
         )
         logger.info(
             "配置对象加载完成: factor=%s, backend=%s, data_source=%s, cache=%s",

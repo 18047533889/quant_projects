@@ -24,16 +24,23 @@ GTJA_ROOT = PACKAGE_ROOT
 # 手工 DSL（原始 GTJA 语法无法自动翻译或需简化）
 # ---------------------------------------------------------------------------
 MANUAL_DSL: dict[str, str] = {
-    "gtja191_alpha_021": "ts_regression(ts_mean(close, 6), ts_delay(close, 1), 6, 0, 'slope')",
+    # REGBETA(..., SEQUENCE(n)) = 对时间序号回归 → ts_time_slope（compat）
+    "gtja191_alpha_021": "ts_time_slope(ts_mean(close, 6), 6)",
     "gtja191_alpha_027": (
         'WMA((close - ts_delay(close, 3)) / (ts_delay(close, 3) + 1e-08) * 100 + (close - ts_delay(close, 6)) / (ts_delay(close, 6) + 1e-08) * 100, 12)'
     ),
     "gtja191_alpha_030": '0 * close',
+    # 源式 corr 窗口=13、外层 ^5；勿写成 power(13) 进 corr 窗口
+    "gtja191_alpha_056": (
+        "rank(open - ts_min(open, 12)) < "
+        "rank(power(rank(ts_corr(ts_sum((high + low) / 2, 19), "
+        "ts_sum(ts_mean(volume, 40), 19), 13)), 5))"
+    ),
     "gtja191_alpha_075": (
         'ts_sum(where(and_(close > open, index_close < index_open), 1, 0), 50) / (ts_sum(where(index_close < index_open, 1, 0), 50) + 1e-08)'
     ),
-    "gtja191_alpha_116": "ts_regression(close, ts_delay(close, 1), 20, 0, 'slope')",
-    "gtja191_alpha_147": "ts_regression(ts_mean(close, 12), ts_delay(close, 1), 12, 0, 'slope')",
+    "gtja191_alpha_116": "ts_time_slope(close, 20)",
+    "gtja191_alpha_147": "ts_time_slope(ts_mean(close, 12), 12)",
     "gtja191_alpha_069": (
         'where(ts_sum(where(high + low <= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 20) > ts_sum(where(high + low >= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 20), (ts_sum(where(high + low <= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 20) - ts_sum(where(high + low >= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 20)) / (ts_sum(where(high + low <= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 20) + 1e-08), where(ts_sum(where(high + low <= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 20) == ts_sum(where(high + low >= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 20), 0, (ts_sum(where(high + low <= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 20) - ts_sum(where(high + low >= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 20)) / (ts_sum(where(high + low >= ts_delay(high, 1) + ts_delay(low, 1), 0, flex_max(abs(high - ts_delay(high, 1)), abs(low - ts_delay(low, 1)))), 20) + 1e-08)))'
     ),
@@ -623,8 +630,11 @@ def build_campaign(
             "auxiliary_tables": ["StockList", "StockStatus", "StockIndustry", "Calendar"],
             "forbidden_tables": ["StockBalance", "StockIncome", "StockCashFlow"],
         },
-        "operator_policy": "afv_us_pv_daily",
+        "operator_policy": "lqtp_pv_daily",
+        # AFV campaign 路径提示（与 week2 / FE miner_delivery_spec §2.8 一致）
         "data_source": campaign_data_source(),
+        # 本包公式含 ts_ema / flex_max / ts_time_slope 等，须 surface=compat 解析
+        "dsl_surface": "compat",
         "mined_by": "zhangborui",
         "created_at": "2026-07-04T16:00:00Z",
         "mining_config": {
@@ -686,6 +696,7 @@ def build_campaign(
             "campaign_id": campaign_id,
             "formula": formula,
             "expression_type": "dsl",
+            "dsl_surface": "compat",
             "generator_name": "manual",
             "generator_version": "1.0.0",
             "mined_by": "zhangborui",

@@ -272,8 +272,8 @@ A：检查 `fields` 映射、日期范围、lookback 是否够长；A 股列名�
 **Q：生产用什么 backend？**  
 A：YAML 里 `backend.type: auto`；环境变量见 [`runtime/perf_config.py`](../runtime/perf_config.py)。
 
-**Q：和 gtja191 什么关系？**  
-A：`gtja191/` 是 **因子公式库**（185 条），内部 `build_engine()` 调用本引擎 + `data_access`；落盘脚本在 monorepo `scripts/materialize_gtja191_factors.py`。
+**Q：和 gtja191 / GTJA185 什么关系？**  
+A：`gtja191/` 是 **因子公式库**（投递 **185** 条，AutoFactor pack 名 `gtja185`）。须用 **`dsl_surface=compat`** 解析；campaign 的 `data_source` 为 `{local,cos}`，执行读数走 `data_access`。落盘：`scripts/materialize_gtja191_factors.py` 或包内 `run_materialize.py`。
 
 **Q：pytest 失败 FACTOR_LAKE_ROOT？**  
 A：测试前 `unset FACTOR_LAKE_ROOT`，避免污染 `data_access` 路径。

@@ -32,6 +32,7 @@ class FactorDefinitionConfig:
     freq: str = "1d"
     universe: str | None = None
     description: str | None = None
+    surface: str = "daily"
 
 
 @dataclass(frozen=True)
@@ -267,6 +268,11 @@ def load_config(path: str | Path, *, profile: str | None = None) -> FactorEngine
         freq=factor_payload.get("freq", "1d"),
         universe=factor_payload.get("universe"),
         description=factor_payload.get("description"),
+        surface=str(
+            factor_payload.get("surface")
+            or factor_payload.get("dsl_surface")
+            or "daily"
+        ),
     )
     data_source_config = DataSourceConfig(
         type=data_source_payload["type"],

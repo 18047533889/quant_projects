@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""用 factor_engine（read_auto + pandas）跑 GTJA-191 smoke。"""
+"""用 factor_engine（read_auto + pandas + surface=compat）跑 GTJA-191 smoke。"""
 from __future__ import annotations
 
 import argparse
@@ -12,8 +12,12 @@ PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 if str(PACKAGE_ROOT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_ROOT))
 
+from lib.catalog import deliverable_catalog  # noqa: E402
 from lib.engine_config import build_fastest_engine, enable_fastest_read, fastest_data_source  # noqa: E402
 from lib.paths import resolve_factor_engine_root  # noqa: E402
+
+# GTJA185 为 published compat 包：须 surface=compat（含 ts_ema / flex_max / ts_time_slope 等）
+DSL_SURFACE = "compat"
 
 
 def _ensure_factor_engine() -> Path:
@@ -28,14 +32,10 @@ def _ensure_factor_engine() -> Path:
 
 
 def _load_formula(name: str) -> str:
-    catalog_path = PACKAGE_ROOT / "dsl" / "gtja191_dsl_catalog.json"
-    catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+    catalog = deliverable_catalog()
     if name not in catalog:
-        raise SystemExit(f"unknown factor: {name}")
-    item = catalog[name]
-    if not item["valid"]:
-        raise SystemExit(f"{name} is invalid: {item['validation']}")
-    return item["dsl_formula"]
+        raise SystemExit(f"unknown deliverable factor: {name}")
+    return str(catalog[name]["dsl_formula"])
 
 
 def run_smoke(
@@ -51,7 +51,7 @@ def run_smoke(
     from storage.factory import build_data_source  # noqa: WPS433
 
     formula = _load_formula(factor_name)
-    expr = parse_expr(formula)
+    expr = parse_expr(formula, surface=DSL_SURFACE)
     factor = Factor(name=factor_name, expr=expr, freq="1d")
     source_cfg = fastest_data_source(start_date=start_date, end_date=end_date)
     source = build_data_source(source_cfg)
@@ -66,6 +66,7 @@ def run_smoke(
     return {
         "factor": factor_name,
         "formula": formula,
+        "dsl_surface": DSL_SURFACE,
         "backend": backend_name,
         "elapsed_seconds": round(elapsed, 3),
         "rows": int(series.shape[0]),
@@ -76,7 +77,7 @@ def run_smoke(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Run GTJA-191 factor smoke (read_auto + pandas backend)"
+        description="Run GTJA-191 factor smoke (read_auto + pandas + surface=compat)"
     )
     parser.add_argument("--factor", default="gtja191_alpha_001")
     parser.add_argument("--start-date", default="2016-01-04")

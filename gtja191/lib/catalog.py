@@ -1,4 +1,8 @@
-"""GTJA-191 catalog 加载：对外默认 185 条可投递因子。"""
+"""GTJA-191 catalog 加载：对外默认 185 条可投递因子（dsl_surface=compat）。
+
+磁盘 catalog 由 ``scripts/convert_and_build_delivery.py`` 生成；
+``_AUDITED_FORMULA_OVERRIDES`` 保证 021/056/116/147 等语义修正在运行时一致。
+"""
 from __future__ import annotations
 
 import json

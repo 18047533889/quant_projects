@@ -4,6 +4,7 @@ factor:
   freq: 1d
   universe: ASHARE_ALL
   description: GTJA-191 gtja191_alpha_141
+  surface: compat
 data_source:
   type: data_access
   dataset: ashare_stock_daily

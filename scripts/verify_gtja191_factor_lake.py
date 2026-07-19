@@ -26,10 +26,12 @@ LAKE_ROOT = QUANT_ROOT / "data" / "factors" / "lake"
 
 if str(FE_ROOT) not in sys.path:
     sys.path.insert(0, str(FE_ROOT))
+if str(GTJA_ROOT) not in sys.path:
+    sys.path.insert(0, str(GTJA_ROOT))
 
 from api.dsl_parser import parse_factor  # noqa: E402
 from scripts.materialize_gtja191_factors import (  # noqa: E402
-    _FORMULA_OVERRIDES,
+    DSL_SURFACE,
     build_engine,
     release_engine,
 )
@@ -46,16 +48,21 @@ class AuditReport:
 
 
 def load_catalog() -> dict[str, dict]:
-    path = GTJA_ROOT / "dsl" / "gtja191_dsl_catalog.json"
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    return {
-        k: v for k, v in payload.items()
-        if not v.get("delivery_excluded")
-    }
+    try:
+        from lib.catalog import deliverable_catalog
+
+        return deliverable_catalog()
+    except Exception:
+        path = GTJA_ROOT / "dsl" / "gtja191_dsl_catalog.json"
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return {
+            k: v for k, v in payload.items()
+            if not v.get("delivery_excluded")
+        }
 
 
 def factor_formula(fid: str, item: dict) -> str:
-    return _FORMULA_OVERRIDES.get(fid, item["dsl_formula"].strip())
+    return item["dsl_formula"].strip()
 
 
 def load_lake_long(
@@ -179,7 +186,7 @@ def compare_factor(
     """重算必须用全量历史（与落盘一致），再截取对比窗口。"""
     engine = build_engine(max_files=None, start_date=None, end_date=None)
     try:
-        factor = parse_factor(formula, name=fid)
+        factor = parse_factor(formula, name=fid, surface=DSL_SURFACE)
         run_out = engine.run(factor)
         fresh = series_to_long(run_out["result"])
     finally:

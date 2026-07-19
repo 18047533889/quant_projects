@@ -4,6 +4,7 @@
   "campaign_id": "manual_ashare_pv_202607041600",
   "formula": "rank(ts_corr(ts_sum(low * 0.35 + col('vwap') * 0.65, 20), ts_sum(ts_mean(volume, 40), 20), 7)) + rank(ts_corr(rank(col('vwap')), rank(volume), 6))",
   "expression_type": "dsl",
+  "dsl_surface": "compat",
   "generator_name": "manual",
   "generator_version": "1.0.0",
   "mined_by": "zhangborui",

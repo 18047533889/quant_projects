@@ -12,6 +12,7 @@ data_access.query_budget —— 读路径查询预算（行数 / 字节 / 耗时
 
 from __future__ import annotations
 
+import math
 import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Mapping, Sequence

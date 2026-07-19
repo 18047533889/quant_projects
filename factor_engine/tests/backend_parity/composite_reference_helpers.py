@@ -41,6 +41,9 @@ COMPOSITE_REFERENCE_CASES: tuple[CompositeReferenceCase, ...] = (
     CompositeReferenceCase("debt_to_equity", ("total_debt", "total_equity")),
     CompositeReferenceCase("real_turnover_rate", ("volume", "float_shares")),
     CompositeReferenceCase("micro_spread", ("high", "low", "close")),
+    CompositeReferenceCase("MACD_line", ("close",), window=3, extra_attrs={"fast": 2, "slow": 3}, calc_kwargs={"fast": 2, "slow": 3}),
+    CompositeReferenceCase("MACD_signal", ("close",), window=3, extra_attrs={"fast": 2, "slow": 3, "signal": 2}, calc_kwargs={"fast": 2, "slow": 3, "signal": 2}),
+    CompositeReferenceCase("MACD_hist", ("close",), window=3, extra_attrs={"fast": 2, "slow": 3, "signal": 2}, calc_kwargs={"fast": 2, "slow": 3, "signal": 2}),
     CompositeReferenceCase("ts_ratio", ("close",), window=1),
 )
 

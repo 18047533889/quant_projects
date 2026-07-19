@@ -24,6 +24,8 @@ from runtime.perf_config import PerfConfig
 from .context import ExecutionContext
 from .pandas_backend import PandasBackend
 from .panel_native import finalize_panel_result
+from .polars_long_policy import UnsupportedCausalOperatorError
+from .operator_capability import UnsupportedOperatorBackendError
 
 
 def _env_flag(name: str, default: bool = False) -> bool:
@@ -122,9 +124,10 @@ class PolarsBackend(PandasBackend):
 
                     assert_no_production_pandas_fallbacks(ctx, context="polars_execute")
                     return result
-                except Exception:
+                except (UnsupportedCausalOperatorError, UnsupportedOperatorBackendError) as exc:
                     runtime = dict(getattr(ctx, "runtime_stats", None) or {})
                     runtime["polars_expr_fallback"] = True
+                    runtime["polars_expr_fallback_reason"] = str(exc)
                     ctx.runtime_stats = runtime  # type: ignore[attr-defined]
                     root_ctx.runtime_stats = runtime  # type: ignore[attr-defined]
 
