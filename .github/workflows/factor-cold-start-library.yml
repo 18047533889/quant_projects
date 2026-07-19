@@ -2,7 +2,7 @@ name: Factor Cold Start Library
 
 on:
   push:
-    branches: [main]
+    branches: ["**"]
     paths:
       - "factor_cold_start/**"
       - "factor_engine/**"
