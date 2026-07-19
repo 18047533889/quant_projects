@@ -5,6 +5,7 @@ on:
     branches: [agent/factor-cold-start-library-20260720, main]
     paths:
       - "factor_cold_start/**"
+      - ".cold_start_bootstrap/**"
       - "factor_engine/**"
       - "week2_pv_factors/**"
       - "gtja191/**"
@@ -13,6 +14,7 @@ on:
   pull_request:
     paths:
       - "factor_cold_start/**"
+      - ".cold_start_bootstrap/**"
       - "factor_engine/**"
       - "week2_pv_factors/**"
       - "gtja191/**"
@@ -20,7 +22,11 @@ on:
       - ".github/workflows/factor-cold-start-library.yml"
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: factor-cold-start-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   validate-cold-start:
@@ -35,21 +41,35 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Upload source snapshot for library construction
-        uses: actions/upload-artifact@v4
-        with:
-          name: factor-cold-start-source
-          retention-days: 1
-          if-no-files-found: error
-          path: |
-            factor_engine
-            week2_pv_factors
-            gtja191
-            AutoFactorEvaluation-RECONSTRUCT
-            factor-pool-standard
-            scripts
-            requirements.txt
-            pytest.ini
+          ref: ${{ github.head_ref || github.ref_name }}
+      - name: Restore audited cold-start source
+        id: bootstrap
+        if: ${{ hashFiles('.cold_start_bootstrap/part00.b85') != '' }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import base64
+          import shutil
+          import tarfile
+
+          root = Path('.').resolve()
+          parts = sorted((root / '.cold_start_bootstrap').glob('part*.b85'))
+          if not parts:
+              raise SystemExit('cold-start bootstrap chunks missing')
+          encoded = ''.join(path.read_text(encoding='utf-8') for path in parts)
+          archive = root / '.cold-start-source.tar.xz'
+          archive.write_bytes(base64.b85decode(encoded.encode('ascii')))
+          with tarfile.open(archive, mode='r:xz') as handle:
+              for member in handle.getmembers():
+                  target = (root / member.name).resolve()
+                  if root not in target.parents and target != root:
+                      raise RuntimeError(f'unsafe archive path: {member.name}')
+              handle.extractall(root)
+          archive.unlink()
+          shutil.rmtree(root / '.cold_start_bootstrap')
+          PY
+          echo "bootstrapped=true" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -59,13 +79,19 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
           python -m pip install pytest pyyaml
-      - name: Validate cold-start package when present
+      - name: Build and validate cold-start library
         shell: bash
         run: |
-          if [ -d factor_cold_start ]; then
-            python -m compileall -q factor_cold_start
-            pytest -q factor_cold_start/tests
-            python factor_cold_start/scripts/validate_catalog.py --all
-          else
-            echo "factor_cold_start package not created yet"
-          fi
+          python -m compileall -q factor_cold_start
+          python factor_cold_start/scripts/report_coverage.py
+          pytest -q factor_cold_start/tests
+          python factor_cold_start/scripts/validate_catalog.py --all
+      - name: Commit validated source and reports
+        if: ${{ steps.bootstrap.outputs.bootstrapped == 'true' }}
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A factor_cold_start .cold_start_bootstrap
+          git commit -m "Add FactorEngine-native cold-start factor library"
+          git push origin "HEAD:${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
