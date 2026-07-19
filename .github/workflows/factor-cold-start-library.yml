@@ -1,0 +1,71 @@
+name: Factor Cold Start Library
+
+on:
+  push:
+    branches: [agent/factor-cold-start-library-20260720, main]
+    paths:
+      - "factor_cold_start/**"
+      - "factor_engine/**"
+      - "week2_pv_factors/**"
+      - "gtja191/**"
+      - "AutoFactorEvaluation-RECONSTRUCT/**"
+      - ".github/workflows/factor-cold-start-library.yml"
+  pull_request:
+    paths:
+      - "factor_cold_start/**"
+      - "factor_engine/**"
+      - "week2_pv_factors/**"
+      - "gtja191/**"
+      - "AutoFactorEvaluation-RECONSTRUCT/**"
+      - ".github/workflows/factor-cold-start-library.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate-cold-start:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/AutoFactorEvaluation-RECONSTRUCT:${{ github.workspace }}/dataaccess
+      FACTOR_ENGINE_DISABLE_NUMBA: "1"
+      FACTOR_ENGINE_RUN_MODE: research
+      QUANT_PRODUCTION_MODE: "0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Upload source snapshot for library construction
+        uses: actions/upload-artifact@v4
+        with:
+          name: factor-cold-start-source
+          retention-days: 1
+          if-no-files-found: error
+          path: |
+            factor_engine
+            week2_pv_factors
+            gtja191
+            AutoFactorEvaluation-RECONSTRUCT
+            factor-pool-standard
+            scripts
+            requirements.txt
+            pytest.ini
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pytest pyyaml
+      - name: Validate cold-start package when present
+        shell: bash
+        run: |
+          if [ -d factor_cold_start ]; then
+            python -m compileall -q factor_cold_start
+            pytest -q factor_cold_start/tests
+            python factor_cold_start/scripts/validate_catalog.py --all
+          else
+            echo "factor_cold_start package not created yet"
+          fi
