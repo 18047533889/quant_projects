@@ -1,5 +1,6 @@
 name: Factor Cold Start Library
 
+# The bootstrap block is removed after the validated source commit lands.
 on:
   push:
     branches: [agent/factor-cold-start-library-20260720, main]
