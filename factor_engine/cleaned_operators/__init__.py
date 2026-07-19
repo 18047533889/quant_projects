@@ -55,7 +55,15 @@ _LOAD_MODULES = (
 )
 
 
+_LOADED = False
+
+
 def load_all() -> None:
+    global _LOADED
+    if _LOADED:
+        return
+    if OperatorRegistry.lifecycle() != "building":
+        return
     for mod in _LOAD_MODULES:
         __import__(mod, fromlist=["*"])
     from cleaned_operators._dedupe import apply_operator_deduplication
@@ -73,3 +81,9 @@ def load_all() -> None:
     from cleaned_operators.layer_governance_post import apply_post_governance
 
     apply_post_governance()
+    from backend.sql_pushdown.sql_registry import register_sql_backends
+
+    register_sql_backends()
+    OperatorRegistry.finalize()
+    OperatorRegistry.freeze()
+    _LOADED = True

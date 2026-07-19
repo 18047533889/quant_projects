@@ -57,6 +57,9 @@ class BackendCapability:
     supports_min_periods: bool = True
     supports_group: bool = False
     supports_window: bool = False
+    supports_lazy: bool = False
+    supports_streaming: bool = False
+    materializes_full_panel: bool = False
     notes: str = ""
 
     def to_csv_row(self) -> dict[str, str | float | bool]:
@@ -74,6 +77,9 @@ class BackendCapability:
             "supports_min_periods": self.supports_min_periods,
             "supports_group": self.supports_group,
             "supports_window": self.supports_window,
+            "supports_lazy": self.supports_lazy,
+            "supports_streaming": self.supports_streaming,
+            "materializes_full_panel": self.materializes_full_panel,
             "notes": self.notes,
         }
 
@@ -193,19 +199,22 @@ def _sql_capable_canonicals() -> frozenset[str]:
     return SQL_IMPLEMENTED_CANONICALS
 
 
-_EMITTER_OK_CACHE: dict[str, bool] = {}
+_EMITTER_OK_CACHE: dict[tuple[str, str, int], bool] = {}
 
 
-def _sql_emitter_ok(canon: str) -> bool:
-    """registry 声明可 SQL 且 emitter 能编译最小 plan（带缓存）。"""
-    if canon in _EMITTER_OK_CACHE:
-        return _EMITTER_OK_CACHE[canon]
+def _sql_emitter_ok(canon: str, *, dialect: str = "duckdb_sql") -> bool:
+    """registry 声明可 SQL 且 emitter 能编译最小 plan（按版本缓存）。"""
+    from cleaned_operators.registry import OperatorRegistry
+
+    cache_key = (canon, dialect, OperatorRegistry.version())
+    if cache_key in _EMITTER_OK_CACHE:
+        return _EMITTER_OK_CACHE[cache_key]
     if canon in {"column", "literal"}:
-        _EMITTER_OK_CACHE[canon] = True
+        _EMITTER_OK_CACHE[cache_key] = True
         return True
     sql_set = _sql_capable_canonicals()
     if canon not in sql_set:
-        _EMITTER_OK_CACHE[canon] = False
+        _EMITTER_OK_CACHE[cache_key] = False
         return False
     ok = False
     try:
@@ -223,7 +232,7 @@ def _sql_emitter_ok(canon: str) -> bool:
             ok = compiled is not None and bool(compiled.query.strip())
     except Exception:
         ok = False
-    _EMITTER_OK_CACHE[canon] = ok
+    _EMITTER_OK_CACHE[cache_key] = ok
     return ok
 
 
@@ -265,7 +274,7 @@ def _sql_status(canon: str, *, dialect: BackendName) -> CapabilityStatus:
 
     if canon not in SQL_IMPLEMENTED_CANONICALS:
         return "unsupported"
-    if not _sql_emitter_ok(canon):
+    if not _sql_emitter_ok(canon, dialect=dialect):
         return "implemented"
 
     if dialect == "clickhouse_sql":
@@ -543,10 +552,11 @@ def get_best_backend(
         "true",
         "yes",
     }
-    aggressive = os.environ.get("FACTOR_ENGINE_OPERATOR_BACKEND", "").strip().lower() in {
+    aggressive_requested = os.environ.get("FACTOR_ENGINE_OPERATOR_BACKEND", "").strip().lower() in {
         "auto_aggressive",
         "aggressive",
     }
+    aggressive = aggressive_requested and mode == "research" and allow_unverified_backend
 
     candidates: list[tuple[str, float]] = []
 

@@ -31,7 +31,15 @@ def test_audit_ir_flags_negative_lag():
     assert any(v.startswith("ts_pct(") for v in report.violations)
 
 
-def test_assert_pit_safe_raises_when_enforced():
+def test_audit_ir_flags_future_aliases():
+    from expr.cleaned_call import CleanedCall
+    from expr.column import ColumnRef
+
+    call = CleanedCall("bfill", (ColumnRef("close"),))
+    with pytest.raises(Exception):
+        Analyzer().lower(call)
+
+
     from expr.cleaned_call import CleanedCall
     from expr.column import ColumnRef
     from expr.literal import Literal

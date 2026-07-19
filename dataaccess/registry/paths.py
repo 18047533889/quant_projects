@@ -14,6 +14,7 @@ data_access.paths —— 路径白名单与解析
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 from pathlib import Path
@@ -48,9 +49,9 @@ def expand_env(template: str) -> str:
         # 既没 env 也没默认：保留原样，让后续路径解析报带上下文的错
         return match.group(0)
 
+    # Never expand variables introduced by a default value; only the original
+    # template's ${...} tokens are configuration inputs.
     expanded = _ENV_PATTERN.sub(replace, template)
-    # 再处理 $VAR 形式（无大括号）和 ~
-    expanded = os.path.expandvars(expanded)
     return os.path.expanduser(expanded)
 
 
@@ -129,7 +130,14 @@ class PathAuthorizer:
         for root in self._roots:
             if path_is_under(resolved, root):
                 return resolved
-        # 错误消息列出白名单，便于排查。生产环境若敏感可只打哈希。
+        sensitive = os.environ.get("QUANT_PRODUCTION_MODE", "").lower() in {"1", "true", "yes"}
+        if sensitive:
+            root_hint = f"{len(self._roots)} registered roots"
+            resolved_hint = hashlib.sha256(str(resolved).encode()).hexdigest()[:12]
+            raise ValidationError(
+                f"路径越界（canonical path fingerprint={resolved_hint}）；{root_hint}。"
+                "如需新增，请在 data_access/config/datasets.yaml 注册数据集。"
+            )
         roots_hint = "\n  ".join(str(r) for r in self._roots)
         raise ValidationError(
             f"路径越界（不在任何已注册数据集根下）：{resolved}\n"

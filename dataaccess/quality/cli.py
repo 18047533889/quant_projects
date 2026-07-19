@@ -64,3 +64,7 @@ def main() -> int:
     )
     print(json.dumps(asdict(report), ensure_ascii=False))
     return 0 if report.passed else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

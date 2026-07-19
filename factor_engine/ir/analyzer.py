@@ -147,7 +147,7 @@ def _legacy_single_window_lookback(expr: Expr) -> int | None:
         from cleaned_operators.registry import OperatorRegistry
 
         ensure_cleaned_loaded()
-        canon = OperatorRegistry._aliases.get(node.op, node.op)
+        canon = OperatorRegistry.resolve_canonical_strict(node.op)
         op_impl = OperatorRegistry.get(canon)
         if op_impl is None:
             return None
@@ -213,7 +213,12 @@ class Analyzer:
                 from cleaned_operators.registry import OperatorRegistry
 
                 ensure_cleaned_loaded()
-                canon = OperatorRegistry._aliases.get(node.op, node.op)
+                if node.op in {"bfill", "causal_bfill"}:
+                    from backend.polars_long_policy import UnsupportedCausalOperatorError
+                    raise UnsupportedCausalOperatorError(
+                        f"{node.op} is disabled: backward-looking fill is not point-in-time safe"
+                    )
+                canon = OperatorRegistry.resolve_canonical_strict(node.op)
                 op_impl = OperatorRegistry.get(canon)
 
                 if op_impl is not None:

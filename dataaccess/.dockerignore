@@ -5,4 +5,11 @@ build/
 dist/
 *.egg-info/
 tests/
-.git/
+.env
+.env.*
+workspace_data/
+cache/
+logs/
+UNKNOWN.egg-info/
+UPSTREAM.json
+SYNC_REPORT.json

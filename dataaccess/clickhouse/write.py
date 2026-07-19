@@ -21,6 +21,20 @@ _FORBIDDEN_DML = re.compile(
 DEFAULT_FACTOR_TABLE = "factor_values"
 DEFAULT_PANEL_TABLE = "panel_daily"
 
+_ALLOWED_CH_TYPES = {
+    "Float32", "Float64", "Int8", "Int16", "Int32", "Int64",
+    "UInt8", "UInt16", "UInt32", "UInt64", "String", "Date", "DateTime",
+    "Bool",
+}
+
+
+def _validate_column_type(value: object) -> str:
+    if not isinstance(value, str) or value not in _ALLOWED_CH_TYPES:
+        raise ValidationError(f"不支持的 ClickHouse 列类型: {value!r}")
+    return value
+
+
+
 
 def _require_clickhouse_connect():
     try:
@@ -101,7 +115,7 @@ def ensure_panel_table(
     types = dict(column_types or {})
     col_defs = []
     for col in value_columns:
-        ch_type = types.get(col, "Float64")
+        ch_type = _validate_column_type(types.get(col, "Float64"))
         col_defs.append(f"{_quote_ident(col)} {ch_type}")
     cols_sql = ",\n        ".join(col_defs)
     ddl = f"""

@@ -16,14 +16,13 @@
         "pandas_numpy"
       ],
       "canonical": "ACF",
-      "description": "ACF（Polars 桥接）",
+      "description": "自相关系数",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
         "window",
         "lag"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -39,13 +38,12 @@
         "pandas_numpy"
       ],
       "canonical": "KAMA",
-      "description": "共享效率比并按行向量化递归",
+      "description": "考夫曼自适应移动平均",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "close",
         "window"
       ],
-      "selected_source": "composite_fastpath_native_polars",
       "status": "production",
       "surface": "research_tools"
     },
@@ -63,13 +61,12 @@
         "pandas_numpy"
       ],
       "canonical": "Mode",
-      "description": "滚动众数",
+      "description": "众数",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
         "window"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -85,7 +82,7 @@
         "pandas_numpy"
       ],
       "canonical": "aggr_top_n",
-      "description": "aggr_top_n（Polars 桥接）",
+      "description": "自定义Top-N聚合",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "aggr_func",
@@ -94,7 +91,6 @@
         "top",
         "asc"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -110,12 +106,11 @@
         "pandas_numpy"
       ],
       "canonical": "at_imax",
-      "description": "扩展 argmax",
+      "description": "列最大值索引",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -131,12 +126,11 @@
         "pandas_numpy"
       ],
       "canonical": "at_imin",
-      "description": "扩展 argmin",
+      "description": "列最小值索引",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -167,7 +161,6 @@
         "x",
         "lag"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -183,13 +176,12 @@
         "pandas_numpy"
       ],
       "canonical": "bartlett_test",
-      "description": "bartlett_test（Polars 桥接）",
+      "description": "Bartlett方差齐性检验",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
         "y"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -205,12 +197,11 @@
         "pandas_numpy"
       ],
       "canonical": "blom_transform",
-      "description": "Blom 变换",
+      "description": "Blom变换（秩的逆正态CDF）",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -226,12 +217,11 @@
         "pandas_numpy"
       ],
       "canonical": "causal_linear_extrapolate",
-      "description": "因果线性外推",
+      "description": "仅使用最近两个历史有效点线性外推缺失值",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "research",
       "surface": "research_tools"
     },
@@ -253,7 +243,6 @@
         "x",
         "df"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -276,7 +265,6 @@
         "d1",
         "d2"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -299,7 +287,6 @@
         "mu",
         "sigma"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -321,7 +308,6 @@
         "x",
         "df"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -337,13 +323,12 @@
         "pandas_numpy"
       ],
       "canonical": "chi_square_test",
-      "description": "chi_square_test（Polars 桥接）",
+      "description": "卡方检验",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
         "y"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -359,13 +344,12 @@
         "pandas_numpy"
       ],
       "canonical": "complex",
-      "description": "complex（Polars 桥接）",
+      "description": "构造复数DataFrame",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "real",
         "imag"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -381,12 +365,11 @@
         "pandas_numpy"
       ],
       "canonical": "conj",
-      "description": "conj（Polars 桥接）",
+      "description": "复数共轭",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -408,7 +391,6 @@
         "x",
         "y"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -424,13 +406,12 @@
         "pandas_numpy"
       ],
       "canonical": "corr_test",
-      "description": "Pearson 相关检验 p 值",
+      "description": "Pearson相关性检验",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
         "y"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -446,13 +427,12 @@
         "pandas_numpy"
       ],
       "canonical": "correlate",
-      "description": "correlate（Polars 桥接）",
+      "description": "互相关",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
         "y"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -477,13 +457,11 @@
         "polars"
       ],
       "canonical": "count",
-      "description": "滚动非空计数",
+      "description": "非空值计数",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
-        "x",
-        "window"
+        "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -508,12 +486,11 @@
         "polars"
       ],
       "canonical": "cum_count",
-      "description": "累积非空计数",
+      "description": "累积非空值计数",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -543,7 +520,6 @@
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -568,12 +544,11 @@
         "polars"
       ],
       "canonical": "cum_first",
-      "description": "截至目前首个有效值",
+      "description": "截至目前的首个有效值",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -603,7 +578,6 @@
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -628,12 +602,11 @@
         "polars"
       ],
       "canonical": "cum_prod",
-      "description": "累计积",
+      "description": "累积乘积",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -649,13 +622,12 @@
         "pandas_numpy"
       ],
       "canonical": "cum_top_n_avg",
-      "description": "累积前N大值均值",
+      "description": "累积前 N 大均值",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
         "n"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -671,13 +643,12 @@
         "pandas_numpy"
       ],
       "canonical": "cum_top_n_sum",
-      "description": "累积前N大值求和",
+      "description": "累积前 N 大求和",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
         "n"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -707,7 +678,6 @@
       "param_names": [
         "price"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -723,13 +693,12 @@
         "pandas_numpy"
       ],
       "canonical": "decimate",
-      "description": "decimate（Polars 桥接）",
+      "description": "降采样",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
         "factor"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -745,7 +714,7 @@
         "pandas_numpy"
       ],
       "canonical": "div_or_default",
-      "description": "支持 Series/标量双向广播的填充安全除法",
+      "description": "NULL 或 |denom|<=epsilon 时返回 default",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
@@ -753,7 +722,6 @@
         "epsilon",
         "default"
       ],
-      "selected_source": "gtja_compat",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -769,14 +737,13 @@
         "pandas_numpy"
       ],
       "canonical": "downside_beta",
-      "description": "下行 Beta",
+      "description": "下行 Beta：仅在 benchmark_ret < 0 子样本上估计",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "ret",
         "benchmark_ret",
         "window"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "experimental",
       "surface": "research_tools"
     },
@@ -801,12 +768,11 @@
         "polars"
       ],
       "canonical": "dropna",
-      "description": "Polars dropna",
+      "description": "删除缺失值（返回非NaN索引）",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars_auto",
       "status": "research",
       "surface": "research_tools"
     },
@@ -822,12 +788,11 @@
         "pandas_numpy"
       ],
       "canonical": "durbin_watson_test",
-      "description": "Durbin-Watson 统计量",
+      "description": "Durbin-Watson自相关检验",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "residuals"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -848,7 +813,6 @@
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -876,19 +840,17 @@
         "polars"
       ],
       "canonical": "expanding_max",
-      "description": "扩展最大值",
+      "description": "扩展窗口最大值",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
     "expanding_mean": {
       "aliases": [
         "avg",
-        "cum_avg",
         "cumulative_mean"
       ],
       "backend_meta": {
@@ -910,12 +872,11 @@
         "polars"
       ],
       "canonical": "expanding_mean",
-      "description": "扩展均值",
+      "description": "扩展窗口均值",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -943,12 +904,11 @@
         "polars"
       ],
       "canonical": "expanding_min",
-      "description": "扩展最小值",
+      "description": "扩展窗口最小值",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -966,12 +926,11 @@
         "pandas_numpy"
       ],
       "canonical": "expanding_rank",
-      "description": "扩展窗口百分位排名",
+      "description": "扩展窗口排名（当前值在历史中的百分位排名）",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -998,12 +957,11 @@
         "polars"
       ],
       "canonical": "expanding_std",
-      "description": "扩展标准差",
+      "description": "扩展窗口标准差",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1031,12 +989,11 @@
         "polars"
       ],
       "canonical": "expanding_sum",
-      "description": "扩展求和",
+      "description": "扩展窗口求和",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1063,12 +1020,11 @@
         "polars"
       ],
       "canonical": "expanding_zscore",
-      "description": "扩展 zscore",
+      "description": "累积Z-Score标准化",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1076,9 +1032,7 @@
       "aliases": [
         "FillForward",
         "cum_last",
-        "fillna_forward",
-        "last",
-        "last_not_null"
+        "fillna_forward"
       ],
       "backend_meta": {
         "pandas_numpy": {
@@ -1099,19 +1053,16 @@
         "polars"
       ],
       "canonical": "ffill",
-      "description": "Polars ffill",
+      "description": "前向填充（用前值填充NaN）",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars_auto",
       "status": "implemented",
       "surface": "research_tools"
     },
     "fft": {
-      "aliases": [
-        "dft"
-      ],
+      "aliases": [],
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -1127,7 +1078,6 @@
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1154,13 +1104,12 @@
         "polars"
       ],
       "canonical": "fillna",
-      "description": "NaN 填充",
+      "description": "缺失值填充（method: 'mean', 'median', 'zero', 'ffill'）",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
-        "value"
+        "method"
       ],
-      "selected_source": "factor_dsl_polars_auto",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1183,7 +1132,6 @@
         "low",
         "high"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1205,7 +1153,6 @@
         "x",
         "cutoff"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1227,7 +1174,6 @@
         "x",
         "cutoff"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1250,14 +1196,11 @@
         "freq",
         "width"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
     "first_not_null": {
-      "aliases": [
-        "first"
-      ],
+      "aliases": [],
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -1277,12 +1220,11 @@
         "polars"
       ],
       "canonical": "first_not_null",
-      "description": "列首个非空值",
+      "description": "扩展首个非空",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1307,12 +1249,11 @@
         "polars"
       ],
       "canonical": "geometric_mean",
-      "description": "扩展几何平均",
+      "description": "几何平均数",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1328,14 +1269,13 @@
         "pandas_numpy"
       ],
       "canonical": "granger_causality",
-      "description": "granger_causality（Polars 桥接）",
+      "description": "Granger因果检验",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
         "y",
         "lag"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1360,12 +1300,11 @@
         "polars"
       ],
       "canonical": "harmonic_mean",
-      "description": "扩展调和平均",
+      "description": "调和平均数",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1381,13 +1320,12 @@
         "pandas_numpy"
       ],
       "canonical": "hump_decay",
-      "description": "阈值衰减",
+      "description": "阈值衰减：仅当变化量绝对值超过hump时才更新值",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
         "hump"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1403,21 +1341,18 @@
         "pandas_numpy"
       ],
       "canonical": "idio_vol",
-      "description": "特质波动率",
+      "description": "特质波动率：CAPM 残差滚动标准差",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "ret",
         "benchmark_ret",
         "window"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "experimental",
       "surface": "research_tools"
     },
     "ifft": {
-      "aliases": [
-        "idft"
-      ],
+      "aliases": [],
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -1433,7 +1368,6 @@
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1458,13 +1392,12 @@
         "polars"
       ],
       "canonical": "ifnan",
-      "description": "NaN 替换",
+      "description": "如果x为NaN则返回default",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
-        "v"
+        "default"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1480,12 +1413,11 @@
         "pandas_numpy"
       ],
       "canonical": "imag",
-      "description": "虚部",
+      "description": "取复数虚部",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1501,12 +1433,11 @@
         "pandas_numpy"
       ],
       "canonical": "jarque_bera_test",
-      "description": "jarque_bera_test（Polars 桥接）",
+      "description": "Jarque-Bera正态性检验",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1522,13 +1453,12 @@
         "pandas_numpy"
       ],
       "canonical": "kendall_corr_test",
-      "description": "kendall_corr_test（Polars 桥接）",
+      "description": "Kendall相关性检验",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
         "y"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1544,12 +1474,11 @@
         "pandas_numpy"
       ],
       "canonical": "kpss_test",
-      "description": "kpss_test（Polars 桥接）",
+      "description": "KPSS平稳性检验",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1565,13 +1494,12 @@
         "pandas_numpy"
       ],
       "canonical": "ks_test",
-      "description": "ks_test（Polars 桥接）",
+      "description": "KS检验",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
         "dist"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1587,7 +1515,7 @@
         "pandas_numpy"
       ],
       "canonical": "lasso",
-      "description": "lasso（Polars 桥接）",
+      "description": "Lasso回归(L1正则化)，单参数时返回序列的L1正则化趋势，双参数时执行Lasso回归",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
@@ -1595,7 +1523,6 @@
         "window",
         "alpha"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1611,13 +1538,12 @@
         "pandas_numpy"
       ],
       "canonical": "levene_test",
-      "description": "levene_test（Polars 桥接）",
+      "description": "Levene方差齐性检验",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
         "y"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1633,12 +1559,11 @@
         "pandas_numpy"
       ],
       "canonical": "lilliefors_test",
-      "description": "lilliefors_test（Polars 桥接）",
+      "description": "Lilliefors正态性检验",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1660,7 +1585,6 @@
         "x",
         "epsilon"
       ],
-      "selected_source": "basic_runtime",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1681,7 +1605,6 @@
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1703,7 +1626,6 @@
         "a",
         "b"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1724,7 +1646,6 @@
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1745,7 +1666,6 @@
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1767,7 +1687,6 @@
         "a",
         "b"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1788,7 +1707,6 @@
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1810,7 +1728,6 @@
         "a",
         "b"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1831,7 +1748,6 @@
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1861,7 +1777,6 @@
       "param_names": [
         "returns"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -1886,13 +1801,12 @@
         "polars"
       ],
       "canonical": "micro_amihud_hf",
-      "description": "Amihud illiquidity",
+      "description": "Amihud illiquidity |return|/(close*volume)",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "close",
         "volume"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "experimental",
       "surface": "research_tools"
     },
@@ -1917,13 +1831,11 @@
         "polars"
       ],
       "canonical": "micro_bipower_var",
-      "description": "Bipower variation",
+      "description": "Bipower variation estimator",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
-        "close",
-        "window"
+        "close"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "experimental",
       "surface": "research_tools"
     },
@@ -1948,13 +1860,11 @@
         "polars"
       ],
       "canonical": "micro_jump_indicator",
-      "description": "Jump indicator",
+      "description": "Jump indicator max(RV-BV,0)",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
-        "close",
-        "window"
+        "close"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "experimental",
       "surface": "research_tools"
     },
@@ -1979,14 +1889,12 @@
         "polars"
       ],
       "canonical": "micro_kyle_lambda",
-      "description": "Kyle lambda proxy",
+      "description": "Kyle lambda proxy Cov(|ret|,vol)/Var(vol)",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "close",
-        "volume",
-        "window"
+        "volume"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "experimental",
       "surface": "research_tools"
     },
@@ -2011,13 +1919,12 @@
         "polars"
       ],
       "canonical": "micro_mid_return",
-      "description": "Mid-price return",
+      "description": "Mid-price return from (high+low)/2",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "high",
         "low"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "experimental",
       "surface": "research_tools"
     },
@@ -2042,13 +1949,11 @@
         "polars"
       ],
       "canonical": "micro_realized_vol",
-      "description": "已实现波动率",
+      "description": "已实现波动率 sqrt rolling sum of squared returns (session-aware)",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
-        "close",
-        "window"
+        "close"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "experimental",
       "surface": "research_tools"
     },
@@ -2073,14 +1978,13 @@
         "polars"
       ],
       "canonical": "micro_spread",
-      "description": "相对价差",
+      "description": "相对价差 (high-low)/close",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "high",
         "low",
         "close"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "experimental",
       "surface": "research_tools"
     },
@@ -2105,14 +2009,12 @@
         "polars"
       ],
       "canonical": "micro_trade_imbalance",
-      "description": "Trade imbalance proxy",
+      "description": "Volume-weighted return sign imbalance",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "close",
-        "volume",
-        "window"
+        "volume"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "experimental",
       "surface": "research_tools"
     },
@@ -2137,14 +2039,12 @@
         "polars"
       ],
       "canonical": "micro_vpin",
-      "description": "VPIN proxy",
+      "description": "Volume-synchronized |return| intensity proxy",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "close",
-        "volume",
-        "window"
+        "volume"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "experimental",
       "surface": "research_tools"
     },
@@ -2162,13 +2062,12 @@
         "pandas_numpy"
       ],
       "canonical": "nan_to_num",
-      "description": "nan_to_num（Polars 桥接）",
+      "description": "NaN转数值",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
         "num"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2184,13 +2083,12 @@
         "pandas_numpy"
       ],
       "canonical": "pacf",
-      "description": "pacf（Polars 桥接）",
+      "description": "偏自相关系数",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
         "lag"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2212,7 +2110,6 @@
         "x",
         "n_components"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2234,7 +2131,6 @@
         "x",
         "df"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2257,7 +2153,6 @@
         "d1",
         "d2"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2280,7 +2175,6 @@
         "mu",
         "sigma"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2302,7 +2196,6 @@
         "x",
         "df"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2318,12 +2211,11 @@
         "pandas_numpy"
       ],
       "canonical": "phase",
-      "description": "phase（Polars 桥接）",
+      "description": "复数相位（角度）",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2339,13 +2231,12 @@
         "pandas_numpy"
       ],
       "canonical": "polar",
-      "description": "polar（Polars 桥接）",
+      "description": "极坐标转复数",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "mag",
         "phase"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2361,12 +2252,11 @@
         "pandas_numpy"
       ],
       "canonical": "product",
-      "description": "product（Polars 桥接）",
+      "description": "列连乘积",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2384,13 +2274,12 @@
         "pandas_numpy"
       ],
       "canonical": "protected_log",
-      "description": "protected_log（Polars 桥接）",
+      "description": "安全对数：log(max(x, epsilon))",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
         "epsilon"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2420,7 +2309,6 @@
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2441,7 +2329,6 @@
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2457,14 +2344,13 @@
         "pandas_numpy"
       ],
       "canonical": "quantile_normal",
-      "description": "quantile_normal（Polars 桥接）",
+      "description": "正态分布分位数函数",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "p",
         "mu",
         "sigma"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2480,20 +2366,17 @@
         "pandas_numpy"
       ],
       "canonical": "quantile_t",
-      "description": "quantile_t（Polars 桥接）",
+      "description": "t分布分位数函数",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "p",
         "df"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
     "r_squared": {
-      "aliases": [
-        "R2"
-      ],
+      "aliases": [],
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -2513,14 +2396,13 @@
         "polars"
       ],
       "canonical": "r_squared",
-      "description": "滚动 R²",
+      "description": "R-squared决定系数",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "y",
         "x",
         "window"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2540,14 +2422,13 @@
         "pandas_numpy"
       ],
       "canonical": "rank_corr",
-      "description": "秩相关系数（d=0 为截面，d>0 为时序窗口）",
+      "description": "秩相关系数",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
         "y",
         "d"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2563,12 +2444,11 @@
         "pandas_numpy"
       ],
       "canonical": "rank_transform",
-      "description": "rank_transform（Polars 桥接）",
+      "description": "秩变换",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2584,12 +2464,11 @@
         "pandas_numpy"
       ],
       "canonical": "rankavg_transform",
-      "description": "rankavg_transform（Polars 桥接）",
+      "description": "平均秩变换",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2605,12 +2484,11 @@
         "pandas_numpy"
       ],
       "canonical": "real",
-      "description": "实部",
+      "description": "取复数实部",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2626,7 +2504,7 @@
         "pandas_numpy"
       ],
       "canonical": "regress",
-      "description": "regress（Polars 桥接）",
+      "description": "通用回归接口，支持指定返回值类型(slope/intercept/r_squared/residual)",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "y",
@@ -2634,14 +2512,11 @@
         "window",
         "retval"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
     "residual": {
-      "aliases": [
-        "Residual"
-      ],
+      "aliases": [],
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -2661,14 +2536,13 @@
         "polars"
       ],
       "canonical": "residual",
-      "description": "滚动回归残差均值",
+      "description": "小写residual回归残差均值",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "y",
         "x",
         "window"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2684,7 +2558,7 @@
         "pandas_numpy"
       ],
       "canonical": "ridge",
-      "description": "ridge（Polars 桥接）",
+      "description": "Ridge回归(L2正则化)，单参数时返回序列的L2正则化趋势，双参数时执行Ridge回归",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
@@ -2692,7 +2566,6 @@
         "window",
         "alpha"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2717,12 +2590,11 @@
         "polars"
       ],
       "canonical": "row_avg",
-      "description": "行均值",
+      "description": "对每行（每个日期截面）求均值",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2738,13 +2610,12 @@
         "pandas_numpy"
       ],
       "canonical": "row_beta",
-      "description": "行 Beta",
+      "description": "对每行（每个日期截面）计算y对x的beta系数",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "y",
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2760,13 +2631,12 @@
         "pandas_numpy"
       ],
       "canonical": "row_corr",
-      "description": "行相关（两输入同名列）",
+      "description": "对每行（每个日期截面）计算y和x的相关系数",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
         "y"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2791,12 +2661,11 @@
         "polars"
       ],
       "canonical": "row_count",
-      "description": "行非空计数",
+      "description": "对每行（每个日期截面）计算非空值数量",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2812,12 +2681,11 @@
         "pandas_numpy"
       ],
       "canonical": "row_kurt",
-      "description": "行峰度",
+      "description": "对每行（每个日期截面）求峰度",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2842,12 +2710,11 @@
         "polars"
       ],
       "canonical": "row_max",
-      "description": "行最大",
+      "description": "对每行（每个日期截面）求最大值",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2863,12 +2730,11 @@
         "pandas_numpy"
       ],
       "canonical": "row_median",
-      "description": "行中位数",
+      "description": "对每行（每个日期截面）求中位数",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2893,12 +2759,11 @@
         "polars"
       ],
       "canonical": "row_min",
-      "description": "行最小",
+      "description": "对每行（每个日期截面）求最小值",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2914,12 +2779,11 @@
         "pandas_numpy"
       ],
       "canonical": "row_prod",
-      "description": "行连乘",
+      "description": "对每行（每个日期截面）求乘积",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2935,12 +2799,11 @@
         "pandas_numpy"
       ],
       "canonical": "row_skew",
-      "description": "行偏度",
+      "description": "对每行（每个日期截面）求偏度",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2956,12 +2819,11 @@
         "pandas_numpy"
       ],
       "canonical": "row_std",
-      "description": "行标准差",
+      "description": "对每行（每个日期截面）求标准差",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -2986,12 +2848,11 @@
         "polars"
       ],
       "canonical": "row_sum",
-      "description": "行求和",
+      "description": "对每行（每个日期截面）求和",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -3007,12 +2868,11 @@
         "pandas_numpy"
       ],
       "canonical": "row_var",
-      "description": "行方差",
+      "description": "对每行（每个日期截面）求方差",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -3028,12 +2888,11 @@
         "pandas_numpy"
       ],
       "canonical": "sem",
-      "description": "sem（Polars 桥接）",
+      "description": "均值标准误",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -3049,13 +2908,12 @@
         "pandas_numpy"
       ],
       "canonical": "spearman_corr_test",
-      "description": "spearman_corr_test（Polars 桥接）",
+      "description": "Spearman相关性检验",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
         "y"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -3071,12 +2929,11 @@
         "pandas_numpy"
       ],
       "canonical": "stationarity_test",
-      "description": "stationarity_test（Polars 桥接）",
+      "description": "ADF平稳性检验",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -3092,12 +2949,11 @@
         "pandas_numpy"
       ],
       "canonical": "std_agg",
-      "description": "std_agg（Polars 桥接）",
+      "description": "样本标准差",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -3113,12 +2969,11 @@
         "pandas_numpy"
       ],
       "canonical": "stdp",
-      "description": "stdp（Polars 桥接）",
+      "description": "总体标准差",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -3134,12 +2989,11 @@
         "pandas_numpy"
       ],
       "canonical": "sum_agg",
-      "description": "sum_agg（Polars 桥接）",
+      "description": "列求和",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -3160,7 +3014,6 @@
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -3176,13 +3029,12 @@
         "pandas_numpy"
       ],
       "canonical": "ttest_one_sample",
-      "description": "ttest_one_sample（Polars 桥接）",
+      "description": "单样本t检验",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
         "mu"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -3198,13 +3050,12 @@
         "pandas_numpy"
       ],
       "canonical": "ttest_paired",
-      "description": "ttest_paired（Polars 桥接）",
+      "description": "配对t检验",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
         "y"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -3220,13 +3071,12 @@
         "pandas_numpy"
       ],
       "canonical": "ttest_two_samples",
-      "description": "ttest_two_samples（Polars 桥接）",
+      "description": "双样本t检验",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
         "y"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -3242,12 +3092,11 @@
         "pandas_numpy"
       ],
       "canonical": "tukey_transform",
-      "description": "tukey_transform（Polars 桥接）",
+      "description": "Tukey变换",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -3263,12 +3112,11 @@
         "pandas_numpy"
       ],
       "canonical": "unwrap",
-      "description": "unwrap（Polars 桥接）",
+      "description": "相位展开",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -3284,12 +3132,11 @@
         "pandas_numpy"
       ],
       "canonical": "van_der_waerden_transform",
-      "description": "van_der_waerden_transform（Polars 桥接）",
+      "description": "Van der Waerden变换",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -3305,12 +3152,11 @@
         "pandas_numpy"
       ],
       "canonical": "varp",
-      "description": "varp（Polars 桥接）",
+      "description": "总体方差",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -3332,7 +3178,6 @@
         "x",
         "wavelet_type"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -3354,7 +3199,6 @@
         "x",
         "threshold"
       ],
-      "selected_source": "factor_dsl_np",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -3370,14 +3214,13 @@
         "pandas_numpy"
       ],
       "canonical": "wavg",
-      "description": "wavg（Polars 桥接）",
+      "description": "加权平均",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
         "w",
         "window"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -3393,13 +3236,12 @@
         "pandas_numpy"
       ],
       "canonical": "weighted_mean",
-      "description": "weighted_mean（Polars 桥接）",
+      "description": "加权平均数",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
         "weights"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     },
@@ -3415,14 +3257,13 @@
         "pandas_numpy"
       ],
       "canonical": "wsum",
-      "description": "wsum（Polars 桥接）",
+      "description": "加权求和",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "x",
         "w",
         "window"
       ],
-      "selected_source": "factor_dsl_polars_bridge",
       "status": "implemented",
       "surface": "research_tools"
     }

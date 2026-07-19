@@ -87,7 +87,7 @@ def audit_ir(
         if node.op in ("column", "literal", "plan_ref"):
             return
         checked.append(node.op)
-        canon = OperatorRegistry._aliases.get(node.op, node.op)
+        canon = OperatorRegistry.resolve_canonical_optional(node.op)
         op_impl = OperatorRegistry.get(canon)
         if op_impl is None:
             if fail_on_missing:
@@ -102,6 +102,8 @@ def audit_ir(
             value = _literal_number(node, attr=param_name, input_index=input_index)
             if value is not None and value < 1:
                 violations.append(f"{canon}({param_name}={value:g})")
+        if canon in {"bfill", "backfill", "fillna_backfill", "fillna_bfill", "lead", "next"}:
+            violations.append(f"{canon}(future_data)")
         if forbid_forward_fill and canon in _FORWARD_FILL_OPS:
             violations.append(f"{canon}(forward_fill)")
         for child in node.inputs:

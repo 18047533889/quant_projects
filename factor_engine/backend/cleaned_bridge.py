@@ -137,7 +137,7 @@ def _resolve_canonical(op: str) -> str:
     """
     from cleaned_operators.registry import OperatorRegistry
 
-    return OperatorRegistry._aliases.get(op, op)
+    return OperatorRegistry.resolve_canonical_optional(op)
 
 
 def _remap_d_to_window(kwargs: dict[str, Any]) -> dict[str, Any] | None:

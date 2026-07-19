@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from types import MappingProxyType
+from typing import Any, Mapping
 
 
-@dataclass
+@dataclass(frozen=True)
 class PlanNode:
     """单棵计划子树：算子名、有序子节点、属性字典。
 
@@ -18,6 +19,10 @@ class PlanNode:
     """
 
     op: str
-    inputs: list["PlanNode"] = field(default_factory=list)
-    attrs: dict[str, Any] = field(default_factory=dict)
+    inputs: tuple["PlanNode", ...] = field(default_factory=tuple)
+    attrs: Mapping[str, Any] = field(default_factory=dict)
     node_id: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "inputs", tuple(self.inputs))
+        object.__setattr__(self, "attrs", MappingProxyType(dict(self.attrs)))

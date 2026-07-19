@@ -94,7 +94,14 @@ def main() -> None:
             ),
             "primitive_dependency_backend_ready": dependency_ready,
             "recipe_execution_verified": False,
+            "pandas_execution_verified": False,
+            "polars_execution_verified": False,
+            "duckdb_execution_verified": False,
+            "edge_verified": False,
+            "no_fallback_verified": False,
         })
+        if recipe.get("status") == "production":
+            recipe["status"] = "pending"
     write_json(docs / "factor_recipe_manifest.json", {
         "schema_version": "factor_recipe_manifest.v3",
         "recipe_count": len(recipes),

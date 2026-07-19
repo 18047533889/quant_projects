@@ -47,6 +47,37 @@ class DatasetQueryPolicy:
     max_scan_files: int | None = None
 
 
+def _strict_bool(value: object, *, context: str) -> bool:
+    """Parse YAML/env booleans without accepting truthy arbitrary strings."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.strip().lower() in {"true", "false"}:
+        return value.strip().lower() == "true"
+    raise ValidationError(f"{context} 必须是布尔值 true/false")
+
+
+def _positive_int(value: object, *, context: str) -> int:
+    if isinstance(value, bool):
+        raise ValidationError(f"{context} 必须是正整数")
+    try:
+        out = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError(f"{context} 必须是正整数") from exc
+    if out <= 0 or (isinstance(value, float) and not value.is_integer()):
+        raise ValidationError(f"{context} 必须是正整数")
+    return out
+
+
+def _positive_finite_float(value: object, *, context: str) -> float:
+    try:
+        out = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError(f"{context} 必须是有限正数") from exc
+    if not math.isfinite(out) or out <= 0:
+        raise ValidationError(f"{context} 必须是有限正数")
+    return out
+
+
 def parse_dataset_query_policy(raw: object, *, context: str) -> DatasetQueryPolicy:
     """解析 YAML ``query_policy`` 块。"""
     if raw is None:
@@ -58,27 +89,21 @@ def parse_dataset_query_policy(raw: object, *, context: str) -> DatasetQueryPoli
 
     def _opt_int(key: str) -> int | None:
         val = raw.get(key)
-        if val is None:
-            return None
-        if isinstance(val, bool) or not isinstance(val, int):
-            raise ValidationError(f"{context}: query_policy.{key} 必须是整数")
-        return int(val)
+        return None if val is None else _positive_int(val, context=f"{context}: query_policy.{key}")
 
     def _opt_float(key: str) -> float | None:
         val = raw.get(key)
-        if val is None:
-            return None
-        try:
-            out = float(val)
-        except (TypeError, ValueError) as exc:
-            raise ValidationError(
-                f"{context}: query_policy.{key} 必须是数字"
-            ) from exc
-        return out
+        return None if val is None else _positive_finite_float(val, context=f"{context}: query_policy.{key}")
 
     return DatasetQueryPolicy(
-        require_explicit_columns=bool(raw.get("require_explicit_columns", False)),
-        require_time_range=bool(raw.get("require_time_range", False)),
+        require_explicit_columns=_strict_bool(
+            raw.get("require_explicit_columns", False),
+            context=f"{context}: query_policy.require_explicit_columns",
+        ),
+        require_time_range=_strict_bool(
+            raw.get("require_time_range", False),
+            context=f"{context}: query_policy.require_time_range",
+        ),
         max_rows=_opt_int("max_rows"),
         max_result_bytes=_opt_int("max_result_bytes"),
         max_elapsed_ms=_opt_float("max_elapsed_ms"),
@@ -154,10 +179,12 @@ def resolve_query_budget(budget: QueryBudget | None = None) -> QueryBudget:
     default_max_rows = os.environ.get("DATA_ACCESS_DEFAULT_MAX_ROWS")
     if default_max_rows is not None and str(default_max_rows).strip():
         try:
-            max_rows = int(default_max_rows)
-        except ValueError as exc:
+            max_rows = _positive_int(default_max_rows.strip(), context="DATA_ACCESS_DEFAULT_MAX_ROWS")
+        except ValidationError:
+            raise
+        except (TypeError, ValueError) as exc:
             raise ValidationError(
-                "DATA_ACCESS_DEFAULT_MAX_ROWS 必须是整数"
+                "DATA_ACCESS_DEFAULT_MAX_ROWS 必须是正整数"
             ) from exc
         return QueryBudget(max_rows=max_rows)
     return QueryBudget()

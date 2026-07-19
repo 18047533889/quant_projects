@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class ReadRequest(BaseModel):
@@ -31,6 +31,32 @@ class ReadRequest(BaseModel):
             raise ValueError("time_range 必须是 [start, end] 二元组")
         start, end = value
         return (None if start is None else str(start), None if end is None else str(end))
+
+    @field_validator("columns")
+    @classmethod
+    def _validate_columns(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        if not value or any(not isinstance(col, str) or not col.strip() for col in value):
+            raise ValueError("columns 必须是非空字符串列表")
+        if len(set(value)) != len(value):
+            raise ValueError("columns 不允许重复")
+        return value
+
+    @field_validator("max_rows")
+    @classmethod
+    def _validate_max_rows(cls, value: int | None) -> int | None:
+        if value is not None and value <= 0:
+            raise ValueError("max_rows 必须是正整数")
+        return value
+
+    @model_validator(mode="after")
+    def _validate_time_range(self) -> "ReadRequest":
+        if self.time_range is not None:
+            start, end = self.time_range
+            if start is None and end is None:
+                raise ValueError("time_range 不能同时为 [null, null]")
+        return self
 
 
 class DatasetInfo(BaseModel):

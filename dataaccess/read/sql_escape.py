@@ -61,7 +61,8 @@ _FORBIDDEN_PATTERNS = [
     r"\bINSERT\b", r"\bUPDATE\b", r"\bDELETE\b", r"\bMERGE\b",
     r"\bCREATE\b", r"\bDROP\b", r"\bALTER\b", r"\bTRUNCATE\b",
     r"\bCOPY\b", r"\bATTACH\b", r"\bDETACH\b", r"\bEXPORT\b",
-    r"\bPRAGMA\b", r"\bINSTALL\b", r"\bLOAD\b",
+    r"\bPRAGMA\b", r"\bINSTALL\b", r"\bLOAD\b", r"\bCALL\b", r"\bEXECUTE\b",
+    r"\bSET\b", r"\bEXPORT\b", r"\bIMPORT\b",
     # 文件/外部表入口
     r"\bread_parquet\b", r"\bread_csv\b", r"\bread_csv_auto\b",
     r"\bread_json\b", r"\bread_ndjson\b", r"\bread_json_auto\b",

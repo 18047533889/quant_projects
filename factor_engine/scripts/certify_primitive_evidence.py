@@ -156,6 +156,8 @@ def _build_verified_payload(*, stages_passed: list[str]) -> dict:
     )
     from tests.backend_parity.evidence_case_registry import six_way_certified_names
 
+    from cleaned_operators.registry import OperatorRegistry
+
     registry = load_case_registry()
     polars_ref = frozenset(registry.get("polars_reference_parity") or [])
     polars_ed = frozenset(registry.get("polars_edge_verified") or [])
@@ -171,7 +173,11 @@ def _build_verified_payload(*, stages_passed: list[str]) -> dict:
         duckdb_edge=duck_ed | duck_nan,
         no_fallback=no_fb,
     )
-    existing_ops = {}
+    dual = frozenset(
+        name for name in dual
+        if {"pandas_numpy", "polars", "sql"}.issubset(set(OperatorRegistry.backends_for(name)))
+    )
+    existing_ops: dict[str, dict] = {}
     verified_path = FE_ROOT / "evidence" / "primitive_verified.json"
     if verified_path.is_file():
         existing_ops = json.loads(verified_path.read_text(encoding="utf-8")).get("operators") or {}

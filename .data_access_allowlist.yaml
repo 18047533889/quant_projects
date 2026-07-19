@@ -130,6 +130,26 @@
   reason: "因子湖 schema 迁移 CLI 入口；委托 schema_migration 读改写本地 lake 分区"
 - path: data_access/clickhouse/write.py
   reason: "ClickHouse 物化读本地 parquet 单文件；CH ETL 专用路径，非 registry dataset"
+- path: dataaccess/clickhouse/write.py
+  reason: "ClickHouse 物化读本地 parquet 单文件；CH ETL 专用路径，非 registry dataset"
+- path: dataaccess/core/duckdb_config.py
+  reason: "DuckDB PRAGMA 配置模块，供 dataaccess engine 复用"
+- path: dataaccess/core/engine.py
+  reason: "DuckDB 引擎封装本体，import/connect 是唯一合法落点"
+- path: dataaccess/cos/remote.py
+  reason: "COS remote 模式使用隔离 DuckDB 连接探测 S3 路径"
+- path: dataaccess/quality/cli.py
+  reason: "质量 CLI 直接读取待检查 parquet 文件"
+- path: dataaccess/read/stats.py
+  reason: "dataset footer 行数估算需要 pq.read_table"
+- path: dataaccess/service/app.py
+  reason: "HTTP 服务序列化 Arrow/Parquet 响应"
+- path: dataaccess/service/client.py
+  reason: "HTTP 客户端解析远程 Parquet 响应"
+- path: dataaccess/store.py
+  reason: "dataaccess 实现本体，内部原子写入 parquet"
+- path: dataaccess/write/upsert.py
+  reason: "upsert 读取已有分区并原子写回"
 - path: scripts/verify_gtja191_factor_lake.py
   reason: "GTJA191 factor lake 结构审计 + 重算对比；按 factors/<id>/year=*/data.parquet 逐分区读，非 registry dataset"
 - path: factor_engine/backend/fastpath_plan_probe.py

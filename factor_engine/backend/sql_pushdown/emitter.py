@@ -2241,7 +2241,8 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        lag = f"LAG(_v) OVER (PARTITION BY inst ORDER BY ts)"
+        d = _window_int(node, default=1)
+        lag = f"LAG(_v, {d}) OVER (PARTITION BY inst ORDER BY ts)"
         return _Layer(
             f"SELECT ts, inst, "
             f"CASE WHEN _v IS NULL OR {lag} IS NULL OR _v <= 0 OR {lag} <= 0 THEN NULL "

@@ -523,6 +523,21 @@ _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
     "ts_log_return": {"scope": "ts", "lag": 1, "pit_safe": True, "min_periods": 2},
     "ts_sharpe": {"scope": "ts", "pit_safe": True, "min_periods": 2},
     "ts_autocorr": {"scope": "ts", "pit_safe": True, "min_periods": 3, "lag": 1},
+    # Explicit causal contracts for operators promoted from extended/research review.
+    "price_spread_deviation": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "saturate": {"scope": "elementwise", "pit_safe": True, "min_periods": 1},
+    "signed_power": {"scope": "elementwise", "pit_safe": True, "min_periods": 1},
+    "ts_decay_exp_window": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_sum_decay": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_moment": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_ratio": {"scope": "ts", "pit_safe": True, "lag": 1, "min_periods": 2},
+    "trade_when": {
+        "scope": "ts",
+        "pit_safe": True,
+        "min_periods": 1,
+    },
+    "ts_max_buildup": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "digital_count": {"scope": "ts", "pit_safe": True, "lag": 1, "min_periods": 1},
     "intraday_vwap_deviation": {
         "scope": "ts",
         "pit_safe": True,

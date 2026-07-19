@@ -6,6 +6,7 @@ import hashlib
 import json
 import subprocess
 import sys
+import platform
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
@@ -66,6 +67,8 @@ def collect_runtime_versions() -> dict[str, str]:
             versions[key] = str(getattr(m, "__version__", "unknown"))
         except Exception:
             versions[key] = "missing"
+    versions["os"] = platform.system()
+    versions["architecture"] = platform.machine()
     return versions
 
 
@@ -143,7 +146,7 @@ def evidence_artifact_valid(*, require_commit_match: bool = False) -> bool:
     """验证 evidence 是否仍绑定当前代码、case registry 与 emitter 实现。"""
     try:
         data = load_verified_artifact()
-    except FileNotFoundError:
+    except (FileNotFoundError, json.JSONDecodeError, OSError, TypeError):
         return False
     prov = data.get("provenance") or {}
     if prov.get("artifact_kind") != "test_passed":
@@ -156,14 +159,75 @@ def evidence_artifact_valid(*, require_commit_match: bool = False) -> bool:
         return False
     try:
         registry = load_case_registry()
-    except FileNotFoundError:
+    except (FileNotFoundError, json.JSONDecodeError, OSError, TypeError):
+        return False
+    if not isinstance(registry, dict):
         return False
     if prov.get("case_registry_hash") != compute_case_registry_hash(registry):
         return False
     if dict(prov.get("emitter_hashes") or {}) != emitter_hashes():
         return False
+    recorded_versions = dict(prov.get("runtime_versions") or {})
+    current_versions = collect_runtime_versions()
+    operators = data.get("operators") or {}
+    if not isinstance(operators, dict):
+        return False
+    for canonical, record in operators.items():
+        if not isinstance(record, dict):
+            return False
+        expected = implementation_hashes_for(str(canonical))
+        if expected and any(record.get(key) != value for key, value in expected.items()):
+            return False
+        if not expected and any(
+            key.startswith("implementation_hash_")
+            for key in record
+        ):
+            return False
+    verified_names = set()
+    for key in (
+        "polars_reference_parity", "polars_edge_verified", "duckdb_reference_parity",
+        "duckdb_real_sql_verified", "duckdb_edge_verified", "duckdb_null_edge_verified",
+        "duckdb_nan_edge_verified", "duckdb_inf_edge_verified", "no_fallback_verified",
+    ):
+        verified_names.update(str(name) for name in (data.get(key) or []))
+    if not verified_names.issubset(set(operators)):
+        return False
+    for key in ("python", "polars", "duckdb", "pyarrow", "os", "architecture"):
+        recorded = str(recorded_versions.get(key, ""))
+        current = str(current_versions.get(key, ""))
+        if key in {"python", "polars", "duckdb", "pyarrow"}:
+            recorded = ".".join(recorded.split(".")[:2])
+            current = ".".join(current.split(".")[:2])
+        if not recorded or recorded != current:
+            return False
     return True
 
+
+def _source_hash(path: Path) -> str:
+    if not path.is_file():
+        return ""
+    return compute_implementation_hash(path.read_text(encoding="utf-8"))
+
+
+def implementation_hashes_for(canonical: str) -> dict[str, str]:
+    """Hash the registered implementation sources for one canonical operator."""
+    from cleaned_operators.registry import OperatorRegistry
+
+    hashes: dict[str, str] = {}
+    for backend, key in (("pandas_numpy", "pandas"), ("polars", "polars"), ("sql", "duckdb")):
+        implementation = OperatorRegistry.get(canonical, backend)
+        if implementation is None:
+            continue
+        source_file = getattr(implementation.__class__, "__module__", "")
+        try:
+            module = __import__(source_file, fromlist=["*"])
+            path = Path(getattr(module, "__file__", ""))
+        except (ImportError, TypeError):
+            continue
+        digest = _source_hash(path)
+        if digest:
+            hashes[f"implementation_hash_{key}"] = digest
+    return hashes
 
 def enrich_operator_metadata(
     *,
@@ -186,10 +250,11 @@ def enrich_operator_metadata(
     for name in sorted(certified):
         rec = dict(merged.get(name) or {})
         rec.setdefault("semantic_version", 2)
-        if polars_h:
-            rec["implementation_hash_polars"] = polars_h
-        if duck_h:
-            rec["implementation_hash_duckdb"] = duck_h
+        rec.update(implementation_hashes_for(name))
+        if polars_h and "implementation_hash_polars" not in rec:
+            rec["implementation_hash_polars_emitter"] = polars_h
+        if duck_h and "implementation_hash_duckdb" not in rec:
+            rec["implementation_hash_duckdb_emitter"] = duck_h
         sig = signature_for(name)
         if sig is not None:
             rec["parameter_domain_hash"] = compute_implementation_hash(

@@ -73,7 +73,7 @@ def register_sql_backends() -> None:
             continue
         # Attach sql marker to the resolved runtime canonical when possible, so we
         # never create an empty new primary name that later blocks rename merges.
-        resolved = OperatorRegistry._aliases.get(canon, canon)
+        resolved = OperatorRegistry.resolve_canonical_optional(canon)
         if resolved in OperatorRegistry._operators:
             target = resolved
         elif canon in OperatorRegistry._operators:

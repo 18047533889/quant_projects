@@ -40,6 +40,7 @@ from data_access.core.exceptions import DataError, ValidationError
 from data_access.core.namespace import is_namespace_explicit, resolve_namespace
 from data_access.registry.paths import PathAuthorizer
 from data_access.registry import Dataset
+from data_access.write.mutation_lock import mutation_lock
 
 
 logger = logging.getLogger("data_access.upsert")
@@ -94,33 +95,34 @@ def upsert_table(
     elapsed_ms = 0.0
 
     try:
-        if partition_by:
-            for part_values, part_table in _split_by_partitions(new_table, partition_by):
-                partition_dir = target_dir
-                for col, val in zip(partition_by, part_values):
-                    _validate_partition_component(col, val)
-                    partition_dir = partition_dir / f"{col}={val}"
-                partition_dir = _authorize_write_path(
-                    partition_dir, authorizer, expected_root=target_dir
-                )
-                merged_rows = _upsert_single_dir(
-                    partition_dir=partition_dir,
-                    new_table=part_table,
+        with mutation_lock(target_dir):
+            if partition_by:
+                for part_values, part_table in _split_by_partitions(new_table, partition_by):
+                    partition_dir = target_dir
+                    for col, val in zip(partition_by, part_values):
+                        _validate_partition_component(col, val)
+                        partition_dir = partition_dir / f"{col}={val}"
+                    partition_dir = _authorize_write_path(
+                        partition_dir, authorizer, expected_root=target_dir
+                    )
+                    _upsert_single_dir(
+                        partition_dir=partition_dir,
+                        new_table=part_table,
+                        upsert_on=upsert_on,
+                        data_filename="data.parquet",
+                    )
+                    partitions_written.append(str(partition_dir))
+                    rows_written += part_table.num_rows
+            else:
+                _upsert_single_dir(
+                    partition_dir=target_dir,
+                    new_table=new_table,
                     upsert_on=upsert_on,
                     data_filename="data.parquet",
                 )
-                partitions_written.append(str(partition_dir))
-                rows_written += part_table.num_rows
-        else:
-            _upsert_single_dir(
-                partition_dir=target_dir,
-                new_table=new_table,
-                upsert_on=upsert_on,
-                data_filename="data.parquet",
-            )
-            partitions_written.append(str(target_dir))
-            rows_written = new_table.num_rows
-        ok = True
+                partitions_written.append(str(target_dir))
+                rows_written = new_table.num_rows
+            ok = True
     except Exception as exc:
         err_msg = f"{type(exc).__name__}: {exc}"
         raise

@@ -2279,7 +2279,8 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        prev = pl.col(_VAL).shift(1).over(_INST, order_by=_TS)
+        d = _window_int(node, default=1)
+        prev = pl.col(_VAL).shift(d).over(_INST, order_by=_TS)
         return inner.with_columns(
             pl.when(
                 pl.col(_VAL).is_null()
@@ -2569,7 +2570,8 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        prev = pl.col(_VAL).shift(1).over(_INST, order_by=_TS)
+        d = _window_int(node, default=1)
+        prev = pl.col(_VAL).shift(d).over(_INST, order_by=_TS)
         return inner.with_columns(
             pl.when(prev.is_null() | (prev == 0))
             .then(None)

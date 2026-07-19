@@ -89,25 +89,14 @@ class FactorEngine:
         self.data_source = data_source  # 从 parquet 等拉 MultiIndex 面板的统一入口
         self.cache = cache  # 列级缓存；无则每次 execute 全量算
         self.run_mode = resolve_run_mode(run_mode)
-        FactorEngine._sync_production_env(self.run_mode)
         self.analyzer = Analyzer()  # Expr → IR + 依赖列分析
         self.lowerer = Lowerer()  # IR → 逻辑计划树
         self.optimizer = Optimizer()  # 计划级优化（常折叠等）
 
     @staticmethod
     def _sync_production_env(run_mode: str | None = None) -> None:
-        """production 模式同步 data_access 读路径硬策略。"""
-        import os
-
-        from runtime.production_policy import PRODUCTION_MODE, is_production_mode
-
-        if is_production_mode(run_mode):
-            os.environ["FACTOR_ENGINE_RUN_MODE"] = PRODUCTION_MODE
-            os.environ["QUANT_PRODUCTION_MODE"] = "1"
-            os.environ["FACTOR_ENGINE_PRODUCTION_REQUIRE_FASTPATH"] = "1"
-            os.environ["FACTOR_ENGINE_PRODUCTION_REQUIRE_DUAL_BACKEND"] = "1"
-        else:
-            os.environ["FACTOR_ENGINE_RUN_MODE"] = "research"
+        """Deprecated compatibility hook; engine construction is context-local."""
+        return None
 
     def compile(self, factor: Factor, *, pit_enforce: bool = False, pit_forbid_forward_fill: bool = False):
         """将因子表达式编译为可执行的逻辑计划。
@@ -1134,8 +1123,18 @@ class FactorEngine:
 
         prefer_long = isinstance(self.data_source, LongTableDataSource)
         effective_perf = perf or PerfConfig.from_env()
+        from cleaned_operators.registry import OperatorRegistry
+        from backend.evidence_provenance import compute_payload_hash, load_verified_artifact
+        try:
+            evidence = load_verified_artifact()
+            evidence_version = compute_payload_hash((evidence or {}).get("provenance") or {})
+        except (FileNotFoundError, ValueError, TypeError, OSError):
+            evidence_version = ""
         base = ExecutionContext(
             data_source=self.data_source,
+            run_mode=self.run_mode,
+            registry_version=OperatorRegistry.version(),
+            evidence_version=evidence_version,
             cache=self.cache,
             shared_result_cache=shared_result_cache,
             shared_long_lazy_cache={},
@@ -1344,11 +1343,15 @@ class FactorEngine:
         input_report = None
         from planner.sql_io import should_skip_column_prefetch
 
-        skip_prefetch = should_skip_column_prefetch(
-            [plan],
-            input_dq_check=input_dq_check,
-            backend=engine_to_use.backend,
-        )
+        # DebugBackend renders plans without reading data; skip all source I/O.
+        if engine_to_use.backend.__class__.__name__ == "DebugBackend":
+            skip_prefetch = True
+        else:
+            skip_prefetch = should_skip_column_prefetch(
+                [plan],
+                input_dq_check=input_dq_check,
+                backend=engine_to_use.backend,
+            )
         if analysis.referenced_columns and not skip_prefetch:
             from storage.read_session import DataSourceReadSession
 

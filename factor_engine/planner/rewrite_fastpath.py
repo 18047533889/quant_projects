@@ -19,9 +19,22 @@ def _column_node(name: str) -> PlanNode | None:
     return PlanNode(op="column", attrs={"name": name}, inputs=[])
 
 
+def _window_value(node: PlanNode, *, default: int) -> int:
+    value = node.attrs.get("d")
+    if value is None:
+        value = node.attrs.get("window")
+    if value is None and len(node.inputs) > 1 and node.inputs[1].op == "literal":
+        value = node.inputs[1].attrs.get("value")
+    if value is None:
+        value = default
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or int(value) != value or value <= 0:
+        raise ValueError(f"window must be a positive integer, got {value!r}")
+    return int(value)
+
+
 def _window_attrs(node: PlanNode) -> dict:
-    """从节点 attrs 提取统一的窗口参数字典。"""
-    w = node.attrs.get("d") or node.attrs.get("window") or 3
+    """从节点 attrs 或 literal positional input 提取窗口。"""
+    w = _window_value(node, default=3)
     return {"d": w, "window": w}
 
 
@@ -49,7 +62,19 @@ def _try_rewrite_ts_zscore(node: PlanNode, inputs: list[PlanNode]) -> PlanNode |
         and _same_column(mean_node.inputs[0], den.inputs[0])
     ):
         return None
-    w = mean_node.attrs.get("d") or mean_node.attrs.get("window") or den.attrs.get("d") or 3
+    mean_attrs = _window_attrs(mean_node)
+    std_attrs = _window_attrs(den)
+    for key in ("d", "window", "min_periods", "ddof", "null_policy"):
+        mean_value = mean_node.attrs.get(key)
+        std_value = den.attrs.get(key)
+        if key in {"d", "window"}:
+            if mean_value is None:
+                mean_value = mean_attrs["d"]
+            if std_value is None:
+                std_value = std_attrs["d"]
+        if mean_value != std_value:
+            return None
+    w = mean_attrs["d"]
     attrs = {"d": w, "window": w}
     return PlanNode(op="ts_zscore", inputs=[left], attrs=attrs)
 
@@ -64,10 +89,10 @@ def _try_rewrite_log_returns(node: PlanNode, inputs: list[PlanNode]) -> PlanNode
     返回：
         匹配成功时返回 ``log_returns`` 节点，否则 ``None``
     """
-    if node.op not in {"log", "protected_log", "ln"} or len(inputs) != 1:
+    if node.op != "log" or len(inputs) != 1:
         return None
     inner = inputs[0]
-    if inner.op not in {"divide", "protected_div"} or len(inner.inputs) != 2:
+    if inner.op != "divide" or len(inner.inputs) != 2:
         return None
     num, den = inner.inputs
     if num.op != "column":
@@ -77,11 +102,11 @@ def _try_rewrite_log_returns(node: PlanNode, inputs: list[PlanNode]) -> PlanNode
         return None
     if not _same_column(num, den.inputs[0]):
         return None
-    w = den.attrs.get("d") or den.attrs.get("window") or 1
+    w = _window_value(den, default=1)
     col = _column_node(col_name)
     if col is None:
         return None
-    return PlanNode(op="log_returns", inputs=[col], attrs={"d": w, "window": w})
+    return PlanNode(op="ts_log_return", inputs=[col], attrs={"d": w, "window": w})
 
 
 def rewrite_plan_for_fastpath(

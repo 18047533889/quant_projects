@@ -9,6 +9,7 @@
 
 from dataclasses import dataclass
 from typing import Any
+from uuid import uuid4
 
 from storage.cache import CacheManager
 from storage.datasource import DataSource
@@ -55,6 +56,11 @@ class ExecutionContext:
     """
 
     data_source: DataSource
+    run_mode: str = "research"
+    registry_version: int = 0
+    evidence_version: str = ""
+    execution_id: str = ""
+    production_fallback_policy: str = "error"
     cache: CacheManager | None = None
     timestamp_col: str = "timestamp"
     instrument_col: str = "instrument"
@@ -82,3 +88,10 @@ class ExecutionContext:
     runtime_stats: dict[str, Any] | None = None
     #: PolarsBackend：宽表尽量保持 polars.DataFrame
     prefer_polars_panel: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.execution_id:
+            self.execution_id = uuid4().hex
+        self.run_mode = str(self.run_mode).lower()
+        if self.production_fallback_policy not in {"error", "warn"}:
+            raise ValueError("production_fallback_policy must be 'error' or 'warn'")

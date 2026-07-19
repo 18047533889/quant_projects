@@ -46,6 +46,7 @@ from data_access.core.namespace import is_namespace_explicit, resolve_namespace
 from data_access.registry.paths import PathAuthorizer
 from .publish_manifest import write_publish_manifest
 from data_access.registry import Dataset, DatasetRegistry, ParametricDataset, StaticDataset
+from data_access.write.mutation_lock import mutation_lock
 
 
 logger = logging.getLogger("data_access.publish")
@@ -116,61 +117,59 @@ def publish_from_staging(
         target_parent.mkdir(parents=True, exist_ok=True)
         candidate_dir = target_parent / f".publish_candidate.{uuid.uuid4().hex[:12]}"
 
-        with _publish_lock(target_parent, target_dir.name):
-            # 第 1 步：copy staging → candidate（跨 FS 兼容的慢路径）
-            _copy_tree(staging_dir, candidate_dir)
+        with mutation_lock(target_dir.parent):
+            with _publish_lock(target_parent, target_dir.name):
+                # 第 1 步：copy staging → candidate（跨 FS 兼容的慢路径）
+                _copy_tree(staging_dir, candidate_dir)
 
-            # 第 2 步：校验 candidate 确实有数据
-            candidate_rows = _count_parquet_rows(candidate_dir)
-            if candidate_rows != source_rows:
-                raise DataError(
-                    f"candidate 拷贝后行数 {candidate_rows} != staging {source_rows}，"
-                    f"拷贝可能中断；拒绝发布"
+                # 第 2 步：校验 candidate 确实有数据
+                candidate_rows = _count_parquet_rows(candidate_dir)
+                if candidate_rows != source_rows:
+                    raise DataError(
+                        f"candidate 拷贝后行数 {candidate_rows} != staging {source_rows}，"
+                        f"拷贝可能中断；拒绝发布"
+                    )
+
+                # 第 3 步：同 FS 原子 rename —— old_published → archive，candidate → final
+                if target_dir.exists():
+                    archive_path = _archive_path(target_parent, target_dir.name)
+                    archive_path.parent.mkdir(parents=True, exist_ok=True)
+                    os.rename(str(target_dir), str(archive_path))
+
+                try:
+                    os.rename(str(candidate_dir), str(target_dir))
+                except OSError:
+                    if archive_path and archive_path.exists():
+                        os.rename(str(archive_path), str(target_dir))
+                        archive_path = None
+                    raise
+
+                try:
+                    post_rows = _count_parquet_rows(target_dir)
+                except Exception as exc:
+                    _rollback_final(target_dir, archive_path)
+                    raise DataError(
+                        f"publish 后读 {target_dir} 失败：{exc}；已回滚到归档版本"
+                    ) from exc
+                if post_rows != source_rows:
+                    _rollback_final(target_dir, archive_path)
+                    raise DataError(
+                        f"publish 后读出行数 {post_rows} != source {source_rows}；已回滚"
+                    )
+
+                ok = True
+                candidate_dir = None
+
+                manifest_path = write_publish_manifest(
+                    target_dir,
+                    staging_name=staging_name,
+                    target_name=target_name,
+                    params=params,
+                    rows=source_rows,
+                    archive_path=archive_path,
+                    elapsed_ms=(time.perf_counter() - start) * 1000,
                 )
-
-            # 第 3 步：同 FS 原子 rename —— old_published → archive，candidate → final
-            if target_dir.exists():
-                archive_path = _archive_path(target_parent, target_dir.name)
-                archive_path.parent.mkdir(parents=True, exist_ok=True)
-                os.rename(str(target_dir), str(archive_path))
-
-            try:
-                os.rename(str(candidate_dir), str(target_dir))
-            except OSError:
-                # candidate → final 失败，把归档 rename 回来
-                if archive_path and archive_path.exists():
-                    os.rename(str(archive_path), str(target_dir))
-                    archive_path = None
-                raise
-
-            # 第 4 步：发布后验证 —— 真的能从 published 路径读出数据
-            try:
-                post_rows = _count_parquet_rows(target_dir)
-            except Exception as exc:
-                # 发布后读失败是大事，尽力回滚
-                _rollback_final(target_dir, archive_path)
-                raise DataError(
-                    f"publish 后读 {target_dir} 失败：{exc}；已回滚到归档版本"
-                ) from exc
-            if post_rows != source_rows:
-                _rollback_final(target_dir, archive_path)
-                raise DataError(
-                    f"publish 后读出行数 {post_rows} != source {source_rows}；已回滚"
-                )
-
-            ok = True             
-            candidate_dir = None
-
-            manifest_path = write_publish_manifest(
-                target_dir,
-                staging_name=staging_name,
-                target_name=target_name,
-                params=params,
-                rows=source_rows,
-                archive_path=archive_path,
-                elapsed_ms=(time.perf_counter() - start) * 1000,
-            )
-            logger.info("publish manifest written: %s", manifest_path)
+                logger.info("publish manifest written: %s", manifest_path)
     except Exception as exc:
         err_msg = f"{type(exc).__name__}: {exc}"
         raise

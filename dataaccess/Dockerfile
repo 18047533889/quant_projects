@@ -10,8 +10,9 @@ RUN useradd --create-home --uid 10001 dataaccess \
     && chown -R dataaccess:dataaccess /tmp/duckdb /var/lib/dataaccess
 
 WORKDIR /opt/dataaccess
+COPY constraints/py310.txt /tmp/constraints.txt
 COPY . .
-RUN python -m pip install --no-cache-dir .[service]
+RUN python -m pip install --no-cache-dir -c /tmp/constraints.txt '.[service]'
 
 USER dataaccess
 EXPOSE 8765

@@ -30,7 +30,7 @@
 from __future__ import annotations
 
 import copy
-from enum import StrEnum
+from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
 
@@ -56,7 +56,7 @@ class OperatorRegistry:
     全部接口通过 ``classmethod`` 访问，线程安全由 import 时序保证。
     """
 
-    class Lifecycle(StrEnum):
+    class Lifecycle(str, Enum):
         BUILDING = "building"
         FINALIZED = "finalized"
         FROZEN = "frozen"
@@ -77,8 +77,8 @@ class OperatorRegistry:
 
     @classmethod
     def _assert_writable(cls) -> None:
-        if cls._lifecycle is cls.Lifecycle.FROZEN:
-            raise RuntimeError("operator registry is frozen")
+        if cls._lifecycle is not cls.Lifecycle.BUILDING:
+            raise RuntimeError(f"operator registry is not writable: {cls._lifecycle.value}")
 
     @classmethod
     def finalize(cls) -> None:
@@ -98,7 +98,7 @@ class OperatorRegistry:
     def freeze(cls) -> None:
         """Freeze all registry mutation after import-time bootstrap."""
         if cls._lifecycle is cls.Lifecycle.BUILDING:
-            cls.finalize()
+            raise RuntimeError("operator registry must be finalized before freezing")
         if cls._lifecycle is not cls.Lifecycle.FROZEN:
             cls._lifecycle = cls.Lifecycle.FROZEN
             cls._version += 1
@@ -201,20 +201,37 @@ class OperatorRegistry:
         raise ValueError(f"alias resolution exceeded max_depth={max_depth}: {name!r}")
 
     @classmethod
+    def resolve_canonical_strict(cls, name: str, *, max_depth: int = 8) -> str:
+        """Resolve a registered name and fail immediately for unknown operators."""
+        canonical = cls.resolve_canonical(name, max_depth=max_depth)
+        if canonical not in cls._operators and canonical not in cls._catalog:
+            raise KeyError(f"unknown operator canonical: {name!r}")
+        return canonical
+
+    @classmethod
+    def resolve_canonical_optional(cls, name: str, *, max_depth: int = 8) -> str:
+        """Resolve aliases while retaining optional lookup compatibility."""
+        return cls.resolve_canonical(name, max_depth=max_depth)
+
+    @classmethod
     def register_alias(
         cls, alias: str, canonical: str, *, replace: bool = False,
         replacement_reason: str = "",
     ) -> None:
         """Register an alias with collision and canonical-name checks."""
+        cls._assert_writable()
         if alias == canonical:
             return
         if alias in cls._operators or alias in cls._catalog:
-            # A legacy canonical wins over a late alias declaration; silently
-            # replacing an active implementation would be worse than retaining
-            # the explicit canonical entry.
-            return
+            if cls._lifecycle is cls.Lifecycle.BUILDING:
+                # Compatibility declarations may reuse a canonical spelling;
+                # the canonical implementation remains authoritative.
+                return
+            raise ValueError(f"alias collides with canonical: {alias!r}")
         existing = cls._aliases.get(alias)
         if existing is not None and existing != canonical and not replace:
+            if cls._lifecycle is cls.Lifecycle.BUILDING:
+                return
             raise ValueError(f"alias already points to {existing!r}: {alias!r}")
         if replace and not replacement_reason.strip():
             raise ValueError("replacement_reason is required when replacing an alias")
@@ -225,6 +242,20 @@ class OperatorRegistry:
             return
         if existing is not None and existing == canonical:
             return
+        if canonical not in cls._operators and canonical not in cls._catalog:
+            raise KeyError(f"alias target is not registered: {canonical!r}")
+        probe = dict(cls._aliases)
+        probe[alias] = canonical
+        current = alias
+        seen: set[str] = set()
+        for _ in range(9):
+            if current in seen:
+                raise ValueError(f"alias cycle detected at {current!r}")
+            seen.add(current)
+            target = probe.get(current)
+            if target is None:
+                break
+            current = target
         cls._aliases[alias] = canonical
         if canonical in cls._catalog:
             aliases = set(cls._catalog[canonical].get("aliases", []))
@@ -255,18 +286,25 @@ class OperatorRegistry:
         返回:
             None
         """
+        cls._assert_writable()
+        if canonical in cls._aliases:
+            raise ValueError(f"canonical already declared as alias: {canonical!r}")
+        previous = cls._catalog.get(canonical, {})
+        stale_aliases = set(previous.get("aliases") or []) - set(aliases or [])
+        for alias in stale_aliases:
+            if cls._aliases.get(alias) == canonical:
+                cls._aliases.pop(alias, None)
         cls._catalog[canonical] = {
             "canonical": canonical,
             "aliases": sorted(set(aliases or [])),
             "backends": [],
-            "selected_source": source,
             "status": status,
             "description": description,
             "param_names": [],
             "business_category": business_category,
         }
         for alias in aliases or []:
-            cls._aliases[alias] = canonical
+            cls.register_alias(alias, canonical)
 
     @classmethod
     def unregister(cls, canonical: str) -> None:
@@ -278,8 +316,12 @@ class OperatorRegistry:
         返回:
             None
         """
+        cls._assert_writable()
         cls._operators.pop(canonical, None)
         cls._catalog.pop(canonical, None)
+        for alias, target in list(cls._aliases.items()):
+            if target == canonical:
+                cls._aliases.pop(alias, None)
 
     @classmethod
     def rename_canonical(cls, old: str, new: str) -> None:
@@ -292,6 +334,7 @@ class OperatorRegistry:
         返回:
             None
         """
+        cls._assert_writable()
         if old == new or old not in cls._operators:
             return
         if new in cls._operators:
@@ -373,18 +416,17 @@ class OperatorRegistry:
                 raise LookupError(f"{canonical!r} has no pandas_numpy backend")
             return op, "pandas_numpy"
         if prefer == "polars":
-            from backend.operator_capability import get_best_backend
+            from backend.operator_capability import (
+                UnsupportedOperatorBackendError,
+                get_best_backend,
+            )
 
             try:
                 return get_best_backend(
                     canonical, prefer="polars", mode=mode,
                     allow_unverified_backend=allow_unverified_backend,
                 )
-            except Exception:
-                if mode == "production":
-                    op = cls.get(canonical, "pandas_numpy")
-                    if op is not None:
-                        return op, "pandas_numpy"
+            except UnsupportedOperatorBackendError:
                 raise
         if prefer == "sql":
             from backend.sql_tiers import (

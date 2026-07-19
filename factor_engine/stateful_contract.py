@@ -197,6 +197,14 @@ class StatefulCheckpointRegistry:
 
 for _spec in (
     StatefulOperatorSpec(
+        canonical="trade_when",
+        state_schema_version="trade_when_state.v1",
+        semantic_version="1.0",
+        minimum_history=1,
+        checkpoint_fields=("last_value", "last_timestamp"),
+        missing_policy="carry_state_emit_null",
+    ),
+    StatefulOperatorSpec(
         canonical="ts_ewm_std", state_schema_version="unsupported.v1",
         semantic_version="2.0", minimum_history=2, checkpoint_fields=(),
         missing_policy="recursive_state", checkpoint_required_for_segmented=False,

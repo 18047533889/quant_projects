@@ -235,6 +235,7 @@ class DuckDBEngine:
                 op="reader",
             )
 
+    @retry_io()
     def execute_isolated_arrow(
         self,
         sql: str,

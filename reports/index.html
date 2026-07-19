@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>因子统一回测报告</title>
+  <style>
+    :root{--fg:#18202a;--muted:#5d6878;--line:#d9dee7;--bg:#f6f8fb;--panel:#fff;--blue:#255f9e;--green:#287a52}
+    *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",Arial,sans-serif;color:var(--fg);background:var(--bg);line-height:1.65}
+    header{padding:36px 48px 24px;background:#fff;border-bottom:1px solid var(--line)}main{max-width:1400px;margin:0 auto;padding:24px}h1{margin:0 0 8px;font-size:28px}h2{margin:32px 0 14px;font-size:20px;border-left:4px solid var(--blue);padding-left:10px}h3{margin:0 0 8px;font-size:16px}.muted{color:var(--muted)}
+    .cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin:20px 0}.metric{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px}.metric b{display:block;font-size:26px;color:var(--blue)}.metric span{color:var(--muted);font-size:13px}
+    .notice{background:#eef6ff;border:1px solid #c9def5;padding:12px 15px;border-radius:8px;margin:16px 0}.explain,.fcard{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px 18px;margin:12px 0}.explain ul{margin:8px 0 0 20px;padding:0}.explain li{margin:5px 0}
+    table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);font-size:13px}th,td{padding:8px 10px;border-bottom:1px solid #edf0f5;text-align:right;vertical-align:top}th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}th{background:#f0f3f8;position:sticky;top:0}tr:hover td{background:#fbfcff}a{color:#165a9f;text-decoration:none}a:hover{text-decoration:underline}code{font-size:12px;background:#f4f6fa;padding:2px 5px;border-radius:4px;word-break:break-all}
+    .tag{display:inline-block;padding:2px 8px;border-radius:999px;background:#eaf3fc;color:var(--blue);font-size:11px}.fcard{padding:15px 18px}.fhead{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.fmetrics{color:var(--muted);font-size:13px}.formula{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted);font-size:12px}.toc{columns:2;column-gap:24px;font-size:14px}.toc a{display:block;margin:4px 0}
+    .heatmap-wrap{overflow:auto;background:#fff;border:1px solid var(--line);border-radius:8px;padding:12px}.heatmap{border-collapse:separate;border-spacing:2px;width:auto;border:0}.heatmap th,.heatmap td{position:static;border:0;padding:3px;min-width:28px;height:28px;text-align:center;font-size:9px}.heatmap th{max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:#f0f3f8}.heatmap td{color:#172235}
+    @media(max-width:900px){.cards{grid-template-columns:1fr 1fr}header{padding:20px}.toc{columns:1}}
+  </style>
+</head>
+<body>
+<header><h1>因子统一回测报告</h1><p class="muted" id="subtitle">加载中…</p></header>
+<main>
+  <section><div class="cards">
+    <div class="metric"><b id="count">—</b><span>入选因子</span></div>
+    <div class="metric"><b id="mean-ic">—</b><span>Mean RankIC 均值</span></div>
+    <div class="metric"><b id="mean-ls">—</b><span>LS Sharpe net 均值</span></div>
+    <div class="metric"><b id="mean-ac1">—</b><span>平均 ACF(1)</span></div>
+    <div class="metric"><b>—</b><span>TopK（待平台恢复）</span></div>
+  </div></section>
+
+  <div class="notice"><b>本轮筛选：</b>Mean RankIC &gt; 0.03，且本地多空净 Sharpe &gt; 0。</div>
+
+  <section><h2>一、评估口径</h2><div class="explain"><ul>
+    <li><b>RankIC：</b>T日因子与 <code>Close(T+1)/Close(T)-1</code> 做每日横截面 Spearman，再按日期平均。</li>
+    <li><b>十分组：</b>每日从低到高分为G1—G10；多空为G10−G1。</li>
+    <li><b>多空：</b>同时保留gross/net；净值每日扣除0.0160%固定成本，本页以net为主。</li>
+    <li><b>自相关：</b>计算截面排名在lag 1/5/20的相关性并按日期平均。</li>
+    <li><b>TopK：</b>T+1 OPEN、Top 10%且最多50只；平台结果暂缺。</li>
+  </ul></div></section>
+
+  <section><h2>二、因子排行（按Mean RankIC降序）</h2><div style="overflow:auto"><table>
+    <thead><tr><th>#</th><th>因子</th><th>路径</th><th>Mean RankIC</th><th>RankICIR</th><th>胜率</th><th>LS Sharpe net</th><th>ACF(1)</th><th>ACF(5)</th><th>ACF(20)</th><th>TopK Sharpe</th></tr></thead>
+    <tbody id="ranking"></tbody>
+  </table></div></section>
+
+  <section><h2>三、因子逐一概览</h2><nav class="toc muted" id="toc"></nav><div id="factor-cards"></div></section>
+
+  <section><h2>四、因子相关性</h2><p class="muted">每日共同股票截面Spearman相关，再按日期平均。矩阵覆盖本页全部因子。</p><div id="correlation" class="heatmap-wrap">相关性矩阵待计算</div></section>
+</main>
+<script src="report_data.js"></script>
+<script>
+(()=>{
+ const data=window.REPORT_DATA||{}, factors=[...(data.factors||[])].sort((a,b)=>(b.metrics?.mean_rank_ic??-99)-(a.metrics?.mean_rank_ic??-99));
+ const fmt=(v,d=4)=>v==null||!Number.isFinite(Number(v))?'—':Number(v).toFixed(d), pct=v=>v==null||!Number.isFinite(Number(v))?'—':(Number(v)*100).toFixed(2)+'%';
+ const avg=xs=>{const a=xs.filter(Number.isFinite);return a.length?a.reduce((x,y)=>x+y,0)/a.length:null};
+ document.querySelector('#subtitle').textContent=`样本区间 ${data.meta?.sample_begin||'—'} ~ ${data.meta?.sample_end||'—'} · 共 ${factors.length} 个因子 · 生成时间 ${data.meta?.generated_at||'—'}`;
+ document.querySelector('#count').textContent=factors.length;document.querySelector('#mean-ic').textContent=fmt(avg(factors.map(f=>Number(f.metrics?.mean_rank_ic))),4);document.querySelector('#mean-ls').textContent=fmt(avg(factors.map(f=>Number(f.metrics?.ls_sharpe_net))),3);document.querySelector('#mean-ac1').textContent=fmt(avg(factors.map(f=>Number(f.autocorrelation?.lag_1))),3);
+ const href=f=>`${f.factor_id}.html`;
+ document.querySelector('#ranking').innerHTML=factors.map((f,i)=>{const m=f.metrics||{},a=f.autocorrelation||{};return `<tr><td>${i+1}</td><td><a href="${href(f)}"><b>${f.factor_name}</b></a><br><span class="muted">${f.factor_key}</span></td><td><span class="tag">${f.route_label||f.route}</span></td><td>${fmt(m.mean_rank_ic)}</td><td>${fmt(m.rank_ic_ir)}</td><td>${pct(m.rank_ic_positive_ratio)}</td><td>${fmt(m.ls_sharpe_net,3)}</td><td>${fmt(a.lag_1,3)}</td><td>${fmt(a.lag_5,3)}</td><td>${fmt(a.lag_20,3)}</td><td>—</td></tr>`}).join('');
+ document.querySelector('#toc').innerHTML=factors.map((f,i)=>`<a href="#f-${i}">${i+1}. ${f.factor_name}</a>`).join('');
+ document.querySelector('#factor-cards').innerHTML=factors.map((f,i)=>{const m=f.metrics||{},a=f.autocorrelation||{};return `<article class="fcard" id="f-${i}"><div class="fhead"><div><h3>${i+1}. ${f.factor_name}</h3><span class="tag">${f.route_label||f.route}</span></div><div class="fmetrics">RankIC ${fmt(m.mean_rank_ic)} · LS Sharpe ${fmt(m.ls_sharpe_net,3)} · ACF(1) ${fmt(a.lag_1,3)}</div></div><p class="formula"><b>公式/代码：</b>${String(f.source_payload||'—').replace(/[<>]/g,x=>x==='<'?'&lt;':'&gt;')}</p><a href="${href(f)}">查看完整图表 →</a></article>`}).join('');
+ const corr=data.correlation||{},keys=corr.factor_keys||[],matrix=corr.matrix||[];
+ if(keys.length){const short=k=>k.length>15?k.slice(0,15)+'…':k;const color=v=>{if(!Number.isFinite(v))return '#f2f3f5';const x=Math.max(-1,Math.min(1,v));return x>=0?`rgba(202,58,49,${.08+.72*x})`:`rgba(37,95,158,${.08+.72*-x})`};document.querySelector('#correlation').innerHTML=`<table class="heatmap"><thead><tr><th></th>${keys.map(k=>`<th title="${k}">${short(k)}</th>`).join('')}</tr></thead><tbody>${keys.map((k,i)=>`<tr><th title="${k}">${short(k)}</th>${keys.map((_,j)=>`<td style="background:${color(Number(matrix[i]?.[j]))}" title="${k} / ${keys[j]}: ${fmt(matrix[i]?.[j],3)}">${i===j?'1':fmt(matrix[i]?.[j],1)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;}
+})();
+</script>
+</body></html>

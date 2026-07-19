@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import Any
 
@@ -16,7 +17,7 @@ def _jsonable(v: Any) -> Any:
         return [_jsonable(x) for x in v]
     if isinstance(v, dict):
         return {str(k): _jsonable(val) for k, val in sorted(v.items())}
-    return repr(v)
+    raise TypeError(f"unsupported plan attribute type: {type(v).__name__}")
 
 
 def structural_key(node: PlanNode, memo: dict[int, str] | None = None) -> str:
@@ -40,9 +41,12 @@ def structural_key(node: PlanNode, memo: dict[int, str] | None = None) -> str:
         "attrs": {k: _jsonable(v) for k, v in sorted(node.attrs.items())},
         "in": child_keys,
     }
+    semantic_version = payload["attrs"].get("semantic_version", 1)
+    payload["semantic_version"] = semantic_version
     s = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    memo[nid] = s
-    return s
+    key = hashlib.sha256(s.encode("utf-8")).hexdigest()
+    memo[nid] = key
+    return key
 
 
 def plan_cache_key(node: PlanNode) -> str:

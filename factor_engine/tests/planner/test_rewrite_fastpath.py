@@ -58,7 +58,7 @@ def test_log_divide_delay_rewrites_to_log_returns():
     div = PlanNode(op="divide", inputs=[col, delay], attrs={})
     plan = PlanNode(op="log", inputs=[div], attrs={})
     out = rewrite_plan_for_fastpath(plan)
-    assert out.op == "log_returns"
+    assert out.op == "ts_log_return"
     assert out.attrs.get("d") == 1
 
 

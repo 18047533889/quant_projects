@@ -1,3 +1,5 @@
 """写路径：发布、合并、manifest。"""
 
-__all__: list[str] = []
+from .mutation_lock import mutation_lock
+
+__all__ = ["mutation_lock"]

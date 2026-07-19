@@ -4,6 +4,8 @@ metadata:
   name: data-access
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: data-access
@@ -35,10 +37,14 @@ spec:
               cpu: "4"
               memory: 8Gi
           readinessProbe:
+            initialDelaySeconds: 10
+            periodSeconds: 10
             httpGet:
               path: /ready
               port: 8765
           livenessProbe:
+            initialDelaySeconds: 20
+            periodSeconds: 20
             httpGet:
               path: /health
               port: 8765

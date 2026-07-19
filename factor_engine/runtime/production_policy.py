@@ -284,22 +284,18 @@ def assert_no_production_pandas_fallbacks(
     mode: str | None = None,
     context: str = "execute",
 ) -> None:
-    """production 严格模式：禁止 Polars 热路径回退 pandas。"""
+    """Production rejects fallbacks unless the context explicitly permits warnings."""
+    if mode is None:
+        mode = getattr(ctx, "run_mode", None)
     if not is_production_mode(mode):
-        return
-    strict = os.environ.get("FACTOR_ENGINE_PRODUCTION_STRICT_POLARS", "").lower() in (
-        "1",
-        "true",
-        "yes",
-    )
-    if not strict:
         return
     runtime = getattr(ctx, "runtime_stats", None) or {}
     fallbacks = runtime.get("production_pandas_fallbacks") or []
-    if fallbacks:
+    policy = str(getattr(ctx, "production_fallback_policy", "error") or "error")
+    if fallbacks and policy != "warn":
         ops = sorted({str(x.get("op", "")) for x in fallbacks if x.get("op")})
         raise ProductionPolicyViolation(
-            f"production 严格模式 {context} 禁止 pandas fallback，算子: {', '.join(ops)}"
+            f"production 模式 {context} 禁止 pandas fallback，算子: {', '.join(ops)}"
         )
 
 

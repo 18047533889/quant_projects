@@ -93,6 +93,7 @@ from data_access.registry.schema_validation import (
     schema_cache_key,
 )
 from data_access.read.telemetry import record_polars_scan
+from data_access.write.mutation_lock import mutation_lock
 
 
 logger = logging.getLogger("data_access.store")
@@ -1131,12 +1132,13 @@ class DataAccessStore:
         files_written: list[Path] = []
         with audit.AuditTimer() as timer:
             try:
-                if mode == "overwrite":
-                    self._clear_dir(target_dir)
-                target_dir.mkdir(parents=True, exist_ok=True)
-                files_written = self._write_table_to_dir(
-                    table, target_dir, partition_by=partition_by,
-                )
+                with mutation_lock(target_dir):
+                    if mode == "overwrite":
+                        self._clear_dir(target_dir)
+                    target_dir.mkdir(parents=True, exist_ok=True)
+                    files_written = self._write_table_to_dir(
+                        table, target_dir, partition_by=partition_by,
+                    )
                 ok = True
                 err_msg = None
             except Exception as exc:

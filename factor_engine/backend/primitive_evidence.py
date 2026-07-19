@@ -67,10 +67,30 @@ CASE_REGISTRY_SIX_WAY: frozenset[str] = (
 
 
 def _load_verified_or_registry(key: str) -> frozenset[str]:
-    """verified artifact 有效时读 verified，否则回退 case registry（开发模式）。"""
+    """Use certified artifact when valid; otherwise expose declared cases only in development.
+
+    Production admission still calls ``evidence_artifact_valid`` through the
+    operational gate. This fallback keeps local capability reports and tests
+    usable while the working tree is being certified.
+    """
     if evidence_artifact_valid():
         return _verified_set(key)
     return _case_registry_set(key)
+
+
+def declared_test_cases(key: str | None = None) -> frozenset[str] | dict[str, frozenset[str]]:
+    """Expose case declarations separately from verified production evidence."""
+    values = {
+        "polars_reference_parity": CASE_REGISTRY_POLARS_REFERENCE,
+        "polars_edge_verified": CASE_REGISTRY_POLARS_EDGE,
+        "duckdb_reference_parity": CASE_REGISTRY_DUCKDB_REFERENCE,
+        "duckdb_edge_verified": CASE_REGISTRY_DUCKDB_EDGE,
+        "duckdb_nan_edge_verified": CASE_REGISTRY_DUCKDB_NAN_EDGE,
+        "no_fallback_verified": CASE_REGISTRY_NO_FALLBACK,
+    }
+    if key is None:
+        return values
+    return values.get(key, frozenset())
 
 
 # Verified lists（须 pytest 通过后由 certify_primitive_evidence.py 写入）
@@ -101,9 +121,9 @@ PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE: frozenset[str] = PRIMITIVE_BACKEND_EXECU
 
 def primitive_operational_production_certified(canon: str) -> bool:
     """Operational production：六证 + 参数域 + production signature + artifact 有效。"""
-    if canon not in PRIMITIVE_BACKEND_EXECUTION_CERTIFIED:
-        return False
     if not evidence_artifact_valid():
+        return False
+    if canon not in PRIMITIVE_BACKEND_EXECUTION_CERTIFIED:
         return False
     from cleaned_operators.operator_spec import build_operator_spec
 

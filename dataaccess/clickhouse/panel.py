@@ -24,6 +24,9 @@ def _bootstrap_env() -> None:
     global _ENV_BOOTSTRAPPED
     if _ENV_BOOTSTRAPPED:
         return
+    if os.environ.get("DATA_ACCESS_CLICKHOUSE_LOAD_DOTENV", "").lower() not in {"1", "true", "yes"}:
+        _ENV_BOOTSTRAPPED = True
+        return
     env_path = Path(__file__).resolve().parents[1] / ".env"
     if env_path.is_file():
         for raw in env_path.read_text(encoding="utf-8").splitlines():
@@ -66,9 +69,14 @@ class ClickHouseConfig:
         )
 
 
+_CLICKHOUSE_RESERVED = {"select", "from", "where", "order", "group", "limit", "date", "table", "value"}
+
+
 def _quote_ident(name: str) -> str:
     if not name or not name.replace("_", "").isalnum():
         raise ValidationError(f"非法 ClickHouse 标识符: {name!r}")
+    if name.lower() in _CLICKHOUSE_RESERVED:
+        return f"`{name.replace('`', '``')}`"
     return name
 
 
