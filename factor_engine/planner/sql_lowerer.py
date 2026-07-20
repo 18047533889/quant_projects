@@ -6,6 +6,10 @@ from planner.logical_plan import PlanNode
 from planner.plan_hash import plan_cache_key
 from planner.physical_plan import ExecKind, PhysicalNode, PhysicalPlan
 
+# Bare leaves are SQL-capable but extracting them alone under a Python parent
+# only adds DuckDB round-trips; the Python parent can read columns cheaper.
+_SQL_LEAF_OPS = frozenset({"column", "literal"})
+
 
 def _is_sql_capable(plan: PlanNode, *, mode: str = "production") -> bool:
     """查询算子注册表，判断节点是否支持 SQL 下推。"""
@@ -18,6 +22,17 @@ def _is_sql_capable(plan: PlanNode, *, mode: str = "production") -> bool:
     if mode == "validation":
         return is_sql_parity_verified(plan)
     return is_sql_capable(plan)
+
+
+def _is_extractable_sql_subtree(plan: PlanNode, *, mode: str = "production") -> bool:
+    """Whether ``plan`` should be materialised as a standalone SQL subtree.
+
+    Whole-plan SQL (including a bare ``column`` root) still uses
+    ``_is_sql_capable`` at the root.  Partial extraction skips leaf-only nodes.
+    """
+    if plan.op in _SQL_LEAF_OPS:
+        return False
+    return _is_sql_capable(plan, mode=mode)
 
 
 def annotate_node(plan: PlanNode, *, parent_sql: bool = False, mode: str = "production") -> PhysicalNode:
@@ -34,7 +49,7 @@ def annotate_node(plan: PlanNode, *, parent_sql: bool = False, mode: str = "prod
         children = tuple(annotate_node(c, parent_sql=True, mode=mode) for c in plan.inputs)
         return PhysicalNode(kind=ExecKind.SQL, plan=plan, children=children)
 
-    if _is_sql_capable(plan, mode=mode) and not parent_sql:
+    if _is_extractable_sql_subtree(plan, mode=mode) and not parent_sql:
         sid = plan_cache_key(plan)
         return PhysicalNode(kind=ExecKind.SQL, plan=plan, sid=sid)
 
@@ -65,7 +80,7 @@ def lower_to_physical_plan(plan: PlanNode, *, mode: str = "production") -> Physi
 
     def _transform(node: PlanNode) -> PlanNode:
         """将 maximal SQL 子树替换为 ``materialized_series`` 占位并登记 sid。"""
-        if _is_sql_capable(node, mode=mode):
+        if _is_extractable_sql_subtree(node, mode=mode):
             sid = plan_cache_key(node)
             pending[sid] = node
             return PlanNode(

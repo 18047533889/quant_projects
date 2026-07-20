@@ -18,9 +18,9 @@ class AggregationSpec:
 
 AGG_SPECS: dict[str, AggregationSpec] = {
     "ts_sum": AggregationSpec(all_null_sum="null"),
-    "c_sum": AggregationSpec(all_null_sum="null"),
-    "c_mean": AggregationSpec(all_null_sum="null"),
-    "c_std": AggregationSpec(all_null_sum="null"),
+    "cs_sum": AggregationSpec(all_null_sum="null"),
+    "cs_mean": AggregationSpec(all_null_sum="null"),
+    "cs_std": AggregationSpec(all_null_sum="null"),
     "cum_sum": AggregationSpec(all_null_sum="null"),
     "expanding_sum": AggregationSpec(all_null_sum="null"),
     "ts_max": AggregationSpec(nan_compare_policy="treat_as_null"),

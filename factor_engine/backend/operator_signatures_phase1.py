@@ -38,7 +38,7 @@ _UNARY = frozenset(
     abs neg sign floor ceil exp log sqrt inverse rank rank_pct zscore normalize
     winsorize cum_sum cum_max cum_min cum_prod cum_delta expanding_sum expanding_mean
     count is_null is_not_null is_nan is_finite is_infinite nan_to_num
-    cs_demean cs_mad cs_mad_zscore cs_pct_rank c_mean c_std c_sum c_count
+    cs_demean cs_mad cs_mad_zscore cs_pct_rank cs_mean cs_std cs_sum cs_count
     cs_mean cs_std cs_sum cs_count log_returns ts_log_return tanh
     protected_log protected_sqrt not_ log_abs signed_log signed_sqrt
     fillna_const ffill

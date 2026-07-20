@@ -32,10 +32,10 @@ _TIER7_OPS = frozenset(
         "log_abs",
         "signed_log",
         "signed_sqrt",
-        "c_mean",
-        "c_std",
-        "c_sum",
-        "c_count",
+        "cs_mean",
+        "cs_std",
+        "cs_sum",
+        "cs_count",
     }
 )
 
@@ -62,10 +62,10 @@ def test_tier7_in_sql_registry():
     ("log_abs", "abs"),
     ("signed_log", "sign"),
     ("signed_sqrt", "sqrt"),
-    ("c_mean", "PARTITION BY ts"),
-    ("c_std", "STDDEV_SAMP"),
-    ("c_sum", "SUM"),
-    ("c_count", "COUNT"),
+    ("cs_mean", "PARTITION BY ts"),
+    ("cs_std", "STDDEV_SAMP"),
+    ("cs_sum", "SUM"),
+    ("cs_count", "COUNT"),
 ]))
 def test_tier7_ops_emit_sql(op: str, frag: str):
     plan = minimal_plan(op)
@@ -143,7 +143,7 @@ def test_duckdb_tier7_match_pandas(tmp_path, monkeypatch):
     expanding_mean = make_cleaned_call_factory("expanding_mean")
     log_abs = make_cleaned_call_factory("log_abs")
     signed_log = make_cleaned_call_factory("signed_log")
-    c_mean = make_cleaned_call_factory("c_mean")
+    cs_mean = make_cleaned_call_factory("cs_mean")
 
     for expr, name in (
         (maximum(col("Close"), col("Open")), "maximum"),
@@ -153,7 +153,7 @@ def test_duckdb_tier7_match_pandas(tmp_path, monkeypatch):
         (expanding_mean(col("Close")), "expanding_mean"),
         (log_abs(col("Close")), "log_abs"),
         (signed_log(col("Close")), "signed_log"),
-        (c_mean(col("Close")), "c_mean"),
+        (cs_mean(col("Close")), "cs_mean"),
     ):
         factor = Factor(name=name, expr=expr)
         eng_pd = FactorEngine(backend=build_backend("pandas"), data_source=source)

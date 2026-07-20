@@ -21,41 +21,32 @@ Scope = Literal[
 ]
 NanPolicy = Literal["propagate", "ignore", "zero", "ffill_only"]
 
-# research 常用：须有显式 policy，但不进 production
+# research 常用：须有显式 policy；与 operator_surface.RESEARCH_ONLY_CANONICALS 对齐。
+# 已迁出的 micro_* / ttm / recipe 名不再列入（避免假阳性 research 白名单）。
 RESEARCH_CORE_CANONICALS: frozenset[str] = frozenset(
     {
-        # 微观结构
-        "micro_realized_vol",
-        "micro_spread",
-        "micro_amihud_hf",
-        "micro_mid_return",
-        "micro_bipower_var",
-        "micro_jump_indicator",
-        "micro_trade_imbalance",
-        "micro_vpin",
-        "micro_kyle_lambda",
-        # 价量 / 统计 research
-        "rank_corr",
-        "hump_decay",
-        "corr_test",
-        "vp_weighted_price",
+        "group_decay_linear",
+        "trade_when",
         "ts_poly2_coeff",
         "ts_poly2_resid",
-        # 基本面 period（research alias，待 period-aware 拆分）
-        "ttm",
-        "quarter",
-        "yoy",
-        "avg2",
-        # CAPM 扩展（production 仅 rolling_beta）
-        "downside_beta",
+        "ts_moment",
+        "ts_max_buildup",
+        "ts_sum_decay",
         "tail_beta",
-        "idio_vol",
         "idio_skew",
         "residual_momentum_capm",
         "coskewness_to_market",
         "rolling_beta_to_market",
-        # 清洗 research
+        "digital_count",
+        "intraday_vwap_deviation",
+        # kept as research-adjacent when still registered
         "causal_linear_extrapolate",
+        "rank_corr",
+        "hump_decay",
+        "corr_test",
+        "vp_weighted_price",
+        "downside_beta",
+        "idio_vol",
     }
 )
 
@@ -230,11 +221,12 @@ POLARS_PARITY_VERIFIED_TIER7: frozenset[str] = frozenset({
 })
 
 # Tier-8：截面聚合 / EWM·WMA / 清洗·group 扩展（见 tests/operators/test_polars_parity_tier8.py）
+# Names are post-governance canonicals (c_mean → cs_mean, etc.).
 POLARS_PARITY_VERIFIED_TIER8: frozenset[str] = frozenset({
-    "c_mean",
-    "c_std",
-    "c_sum",
-    "c_count",
+    "cs_mean",
+    "cs_std",
+    "cs_sum",
+    "cs_count",
     "ts_ema",
     "WMA",
     "nan_to_num",
@@ -261,7 +253,7 @@ POLARS_PARITY_VERIFIED_TIER9: frozenset[str] = frozenset({
     "ts_ratio",
     "Slope",
     # 截面 / 分组
-    "c_percentile",
+    "cs_quantile",
     "cs_mad",
     "cs_mad_zscore",
     "quantile",
@@ -428,13 +420,9 @@ INTENTIONALLY_PANDAS_ONLY: frozenset[str] = frozenset(
         "pdf_f",
         "pdf_normal",
         "pdf_t",
-        # experimental / 待 Polars 移植
-        "ts_log_return",
+        # experimental / 待 Polars 移植（daily 已 native 的不要放这里）
         "open_gap",
         "close_gap",
-        "cs_mad",
-        "cs_mad_zscore",
-        "cs_pct_rank",
         "cs_quantile",
         "cs_rank_01",
         "rank_pct",
@@ -443,10 +431,6 @@ INTENTIONALLY_PANDAS_ONLY: frozenset[str] = frozenset(
         "debt_to_equity",
         "operating_margin",
         "intraday_vwap_deviation",
-        "quarter_from_cumulative",
-        "ttm_from_quarterly",
-        "ttm_from_cumulative",
-        "yoy_by_period",
         "div_or_default",
         "log_fill_invalid",
         "div_or_null",
@@ -456,12 +440,8 @@ INTENTIONALLY_PANDAS_ONLY: frozenset[str] = frozenset(
 # 暂无 Polars、但 metadata 仍 PIT 安全（不应强制 pit_safe=False）
 PANDAS_ONLY_PIT_SAFE: frozenset[str] = frozenset(
     {
-        "ts_log_return",
         "open_gap",
         "close_gap",
-        "cs_mad",
-        "cs_mad_zscore",
-        "cs_pct_rank",
         "cs_quantile",
         "cs_rank_01",
         "rank_pct",
@@ -470,10 +450,6 @@ PANDAS_ONLY_PIT_SAFE: frozenset[str] = frozenset(
         "debt_to_equity",
         "operating_margin",
         "intraday_vwap_deviation",
-        "quarter_from_cumulative",
-        "ttm_from_quarterly",
-        "ttm_from_cumulative",
-        "yoy_by_period",
     }
 )
 
@@ -622,11 +598,7 @@ _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
     "rank_pct": {"scope": "cs", "pit_safe": True},
     "cs_pct_rank": {"scope": "cs", "pit_safe": True},
     "cs_rank_01": {"scope": "cs", "pit_safe": True},
-    "c_percentile": {"scope": "cs", "pit_safe": True},
-    "c_mean": {"scope": "cs", "pit_safe": True},
-    "c_std": {"scope": "cs", "pit_safe": True},
-    "c_sum": {"scope": "cs", "pit_safe": True},
-    "c_count": {"scope": "cs", "pit_safe": True},
+    "cs_quantile": {"scope": "cs", "pit_safe": True},
     "cs_mean": {"scope": "cs", "pit_safe": True},
     "cs_std": {"scope": "cs", "pit_safe": True},
     "cs_sum": {"scope": "cs", "pit_safe": True},

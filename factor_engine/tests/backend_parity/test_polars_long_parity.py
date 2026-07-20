@@ -103,8 +103,8 @@ POLARS_LONG_PARITY_CASES = [
             lambda: make_cleaned_call_factory("cs_mad_zscore")(col("close")),
         ),
         (
-            "c_mean",
-            lambda: make_cleaned_call_factory("c_mean")(col("close")),
+            "cs_mean",
+            lambda: make_cleaned_call_factory("cs_mean")(col("close")),
         ),
         (
             "ts_decay_linear",

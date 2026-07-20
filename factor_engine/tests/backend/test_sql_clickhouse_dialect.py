@@ -152,8 +152,8 @@ def test_tier7_clickhouse_dialect():
         "expanding_mean",
         "log_abs",
         "signed_log",
-        "c_mean",
-        "c_std",
+        "cs_mean",
+        "cs_std",
     ):
         plan = minimal_plan(op)
         q = _ch_sql(plan)
@@ -166,5 +166,5 @@ def test_tier7_clickhouse_dialect():
             assert "OVER (" in q or "PARTITION BY" in q, op
         if op == "cum_prod":
             assert "product" in q
-        if op == "c_std":
+        if op == "cs_std":
             assert "stddevSamp" in q

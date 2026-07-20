@@ -20,7 +20,7 @@ PRODUCTION_TRIPLE_PARITY_CANONICALS: frozenset[str] = frozenset(
         "rank_pct",
         "zscore",
         "cs_pct_rank",
-        "c_mean",
+        "cs_mean",
         "log_returns",
         "volatility",
         "vwap",

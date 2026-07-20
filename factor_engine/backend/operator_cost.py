@@ -124,10 +124,10 @@ _COSTS: dict[str, OperatorCost] = {
     "is_finite": OperatorCost("O(N)", "low", True, 2, True, False),
     "nan_to_num": OperatorCost("O(N)", "low", True, 2, True, False),
     "fillna": OperatorCost("O(N)", "low", True, 2, True, False),
-    "c_mean": OperatorCost("O(N)", "medium", False, 2, True, False),
-    "c_std": OperatorCost("O(N)", "medium", False, 2, True, False),
-    "c_sum": OperatorCost("O(N)", "medium", False, 2, True, False),
-    "c_count": OperatorCost("O(N)", "low", False, 2, True, False),
+    "cs_mean": OperatorCost("O(N)", "medium", False, 2, True, False),
+    "cs_std": OperatorCost("O(N)", "medium", False, 2, True, False),
+    "cs_sum": OperatorCost("O(N)", "medium", False, 2, True, False),
+    "cs_count": OperatorCost("O(N)", "low", False, 2, True, False),
     "cs_mad": OperatorCost("O(N log N)", "medium", False, 2, True, False),
     "cs_mad_zscore": OperatorCost("O(N log N)", "medium", False, 2, True, False),
     "group_std": OperatorCost("O(N)", "medium", False, 2, True, False),
@@ -369,7 +369,13 @@ def tier1_has_explicit_cost(canon: str) -> bool:
     返回:
         是否在 ``_COSTS`` 字典中有专属条目（非仅 ``_DEFAULT``）。
     """
-    return canon in _COSTS
+    try:
+        from cleaned_operators.registry import OperatorRegistry
+
+        name = OperatorRegistry.resolve_canonical(str(canon))
+    except Exception:
+        name = str(canon)
+    return name in _COSTS
 
 
 def get_operator_cost(op: str) -> OperatorCost:
@@ -381,7 +387,13 @@ def get_operator_cost(op: str) -> OperatorCost:
     返回:
         已登记则返回对应 ``OperatorCost``，否则返回默认 ``_DEFAULT``。
     """
-    return _COSTS.get(str(op), _DEFAULT)
+    try:
+        from cleaned_operators.registry import OperatorRegistry
+
+        name = OperatorRegistry.resolve_canonical(str(op))
+    except Exception:
+        name = str(op)
+    return _COSTS.get(name, _DEFAULT)
 
 
 def estimate_plan_cost(plan: object) -> dict[str, object]:

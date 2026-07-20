@@ -22,7 +22,8 @@ def build_backend(backend_type: str):
     - ``polars`` / ``polars_lazy``：Polars 宽表或 Lazy 路径
     - ``polars_long`` / ``auto_long``：长表 Polars 编译（见 polars_long_backend）
     - ``duckdb_sql`` / ``clickhouse_sql``：SQL 子树下推
-    - ``auto`` / ``hybrid``：自动选 SQL + Polars/Pandas fallback
+    - ``auto`` / ``hybrid``：SQL + Polars；数据源有 ``scan_polars_long`` 时自动走
+      ``hybrid_long``（DuckDB long 物化 + 原生 Polars long），否则宽表 hybrid
     - ``debug``：只打印计划，不读数据
 
     示例：

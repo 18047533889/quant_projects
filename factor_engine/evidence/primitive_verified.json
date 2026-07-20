@@ -55,7 +55,6 @@
     "period_cagr",
     "period_change",
     "power",
-    "protected_div",
     "quarter_from_cumulative",
     "rank",
     "safe_div_null",
@@ -144,7 +143,6 @@
     "period_cagr",
     "period_change",
     "power",
-    "protected_div",
     "quarter_from_cumulative",
     "rank",
     "safe_div_null",
@@ -233,7 +231,6 @@
     "period_cagr",
     "period_change",
     "power",
-    "protected_div",
     "quarter_from_cumulative",
     "rank",
     "safe_div_null",
@@ -322,7 +319,6 @@
     "period_cagr",
     "period_change",
     "power",
-    "protected_div",
     "quarter_from_cumulative",
     "rank",
     "safe_div_null",
@@ -411,7 +407,6 @@
     "period_cagr",
     "period_change",
     "power",
-    "protected_div",
     "quarter_from_cumulative",
     "rank",
     "safe_div_null",
@@ -595,7 +590,6 @@
     "period_cagr",
     "period_change",
     "power",
-    "protected_div",
     "quarter_from_cumulative",
     "rank",
     "safe_div_null",
@@ -638,8 +632,9 @@
         "nested_binary"
       ],
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "454169dd6d8aeab8",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "a307380c95b7b01a"
     },
     "gt": {
       "execution_variants": [
@@ -647,8 +642,9 @@
         "generic_binary_join"
       ],
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "98d893acb5dac4d0",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "b129e18fa8454884"
     },
     "maximum": {
       "execution_variants": [
@@ -656,8 +652,9 @@
         "generic_binary_join"
       ],
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "e11669493aef38b0",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "1abb64c3e9e2abfe"
     },
     "minimum": {
       "execution_variants": [
@@ -665,8 +662,9 @@
         "generic_binary_join"
       ],
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "e11669493aef38b0",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "1abb64c3e9e2abfe"
     },
     "rank": {
       "execution_variants": [
@@ -674,8 +672,9 @@
         "fused_ts_unary"
       ],
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "eb97c885d0b88417",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "eb97c885d0b88417"
     },
     "where": {
       "execution_variants": [
@@ -683,8 +682,9 @@
         "nested_conditional"
       ],
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "454169dd6d8aeab8",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "293319ca84073960"
     },
     "zscore": {
       "execution_variants": [
@@ -692,8 +692,9 @@
         "fused_ts_unary"
       ],
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "eb97c885d0b88417",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "eb97c885d0b88417"
     },
     "cs_pct_rank": {
       "execution_variants": [
@@ -701,8 +702,9 @@
         "fused_ts_unary"
       ],
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "eb97c885d0b88417",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "eb97c885d0b88417"
     },
     "eq": {
       "execution_variants": [
@@ -710,8 +712,9 @@
         "generic_binary_join"
       ],
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "98d893acb5dac4d0",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "b129e18fa8454884"
     },
     "ge": {
       "execution_variants": [
@@ -719,8 +722,9 @@
         "generic_binary_join"
       ],
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "98d893acb5dac4d0",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "b129e18fa8454884"
     },
     "le": {
       "execution_variants": [
@@ -728,8 +732,9 @@
         "generic_binary_join"
       ],
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "98d893acb5dac4d0",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "b129e18fa8454884"
     },
     "lt": {
       "execution_variants": [
@@ -737,8 +742,9 @@
         "generic_binary_join"
       ],
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "98d893acb5dac4d0",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "b129e18fa8454884"
     },
     "ne": {
       "execution_variants": [
@@ -746,8 +752,9 @@
         "generic_binary_join"
       ],
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "98d893acb5dac4d0",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "b129e18fa8454884"
     },
     "normalize": {
       "execution_variants": [
@@ -755,386 +762,462 @@
         "fused_ts_unary"
       ],
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "213dd9fc9c317e73",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "a307380c95b7b01a"
     },
     "abs": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "454169dd6d8aeab8",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "a307380c95b7b01a"
     },
     "and_": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "98d893acb5dac4d0",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "a307380c95b7b01a"
     },
     "ceil": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "5fdc570a49ad7a28",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "a307380c95b7b01a"
     },
     "coalesce": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "98d893acb5dac4d0",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "a307380c95b7b01a"
     },
     "cs_demean": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "eb97c885d0b88417",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "eb97c885d0b88417"
     },
     "cs_mad": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "213dd9fc9c317e73",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "eb97c885d0b88417"
     },
     "cs_mad_zscore": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "213dd9fc9c317e73",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "eb97c885d0b88417"
     },
     "divide": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "454169dd6d8aeab8",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "a307380c95b7b01a"
     },
     "exp": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "454169dd6d8aeab8",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "a307380c95b7b01a"
     },
     "fillna_const": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566",
-      "parameter_domain_hash": "a94bbfcaae8c82c5"
+      "implementation_hash_polars": "3d52a0598811971c",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "parameter_domain_hash": "a94bbfcaae8c82c5",
+      "implementation_hash_pandas": "a6dff07964751fdd"
     },
     "floor": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "5fdc570a49ad7a28",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "a307380c95b7b01a"
     },
     "group_mean": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "cdcd53407faf3993",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "d00b6fcac682c9dd"
     },
     "group_neutralize": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "213dd9fc9c317e73",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "d00b6fcac682c9dd"
     },
     "group_normalize": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "213dd9fc9c317e73",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "d00b6fcac682c9dd"
     },
     "group_rank": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "cdcd53407faf3993",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "d00b6fcac682c9dd"
     },
     "group_std": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "cdcd53407faf3993",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "d00b6fcac682c9dd"
     },
     "group_winsorize": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "213dd9fc9c317e73",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "d00b6fcac682c9dd"
     },
     "group_zscore": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "cdcd53407faf3993",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "d00b6fcac682c9dd"
     },
     "inverse": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "5fdc570a49ad7a28",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "a307380c95b7b01a"
     },
     "is_finite": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "b0fab58a6bb2eac4",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "293319ca84073960"
     },
     "log": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "454169dd6d8aeab8",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "a307380c95b7b01a"
     },
     "multiply": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "454169dd6d8aeab8",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "a307380c95b7b01a"
     },
     "neg": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "454169dd6d8aeab8",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "a307380c95b7b01a"
     },
     "not_": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "98d893acb5dac4d0",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "a307380c95b7b01a"
     },
     "or_": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "98d893acb5dac4d0",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "a307380c95b7b01a"
     },
     "power": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
-    },
-    "protected_div": {
-      "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "e11669493aef38b0",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "a307380c95b7b01a"
     },
     "sign": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "454169dd6d8aeab8",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "a307380c95b7b01a"
     },
     "sqrt": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "454169dd6d8aeab8",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "a307380c95b7b01a"
     },
     "subtract": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "454169dd6d8aeab8",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "a307380c95b7b01a"
     },
     "ts_beta": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "8ebcf65f405c01c5",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "0eef51a2bb5c6716"
     },
     "ts_corr": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "0eef51a2bb5c6716",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "0eef51a2bb5c6716"
     },
     "ts_cov": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "0eef51a2bb5c6716",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "0eef51a2bb5c6716"
     },
     "ts_delta": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "0eef51a2bb5c6716",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "0eef51a2bb5c6716"
     },
     "ts_max": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "0eef51a2bb5c6716",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "0eef51a2bb5c6716"
     },
     "ts_mean": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566",
-      "parameter_domain_hash": "e8cfb21c180d9cb7"
+      "implementation_hash_polars": "0eef51a2bb5c6716",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "parameter_domain_hash": "e8cfb21c180d9cb7",
+      "implementation_hash_pandas": "0eef51a2bb5c6716"
     },
     "ts_median": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "e11669493aef38b0",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "0eef51a2bb5c6716"
     },
     "ts_min": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "0eef51a2bb5c6716",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "0eef51a2bb5c6716"
     },
     "ts_pct": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "454169dd6d8aeab8",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "0eef51a2bb5c6716"
     },
     "ts_std": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "0eef51a2bb5c6716",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "0eef51a2bb5c6716"
     },
     "ts_sum": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "0eef51a2bb5c6716",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "0eef51a2bb5c6716"
     },
     "ts_var": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "e11669493aef38b0",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "0eef51a2bb5c6716"
     },
     "ts_zscore": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "0eef51a2bb5c6716",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "0eef51a2bb5c6716"
     },
     "winsorize": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "213dd9fc9c317e73",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "a307380c95b7b01a"
     },
     "is_infinite": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "3d52a0598811971c",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "a6dff07964751fdd"
     },
     "is_not_null": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "3d52a0598811971c",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "a6dff07964751fdd"
     },
     "is_null": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "3d52a0598811971c",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "a6dff07964751fdd"
     },
     "ts_autocorr": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "0eef51a2bb5c6716",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "0eef51a2bb5c6716"
     },
     "ts_rank": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "213dd9fc9c317e73",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "0eef51a2bb5c6716"
     },
     "group_count": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "cdcd53407faf3993",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "d00b6fcac682c9dd"
     },
     "group_max": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "cdcd53407faf3993",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "d00b6fcac682c9dd"
     },
     "group_min": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "cdcd53407faf3993",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "d00b6fcac682c9dd"
     },
     "group_sum": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "cdcd53407faf3993",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "d00b6fcac682c9dd"
     },
     "log_abs": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "98d893acb5dac4d0",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "a307380c95b7b01a"
     },
     "signed_log": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "b0fab58a6bb2eac4",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "293319ca84073960"
     },
     "signed_sqrt": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "213dd9fc9c317e73",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "a307380c95b7b01a"
     },
     "ts_sharpe": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "213dd9fc9c317e73",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "0eef51a2bb5c6716"
     },
     "clip": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "454169dd6d8aeab8",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "a307380c95b7b01a"
     },
     "safe_div_null": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "9a1297214c2892e6",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "9a1297214c2892e6"
     },
     "ts_delay": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "0eef51a2bb5c6716",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "0eef51a2bb5c6716"
     },
     "cs_count": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "eb97c885d0b88417",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "eb97c885d0b88417"
     },
     "cs_mean": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "eb97c885d0b88417",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "eb97c885d0b88417"
     },
     "cs_std": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "213dd9fc9c317e73",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "eb97c885d0b88417"
     },
     "cs_sum": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "eb97c885d0b88417",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "eb97c885d0b88417"
     },
     "period_average": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "9a1297214c2892e6",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "9a1297214c2892e6"
     },
     "period_cagr": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "9a1297214c2892e6",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "9a1297214c2892e6"
     },
     "period_change": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "9a1297214c2892e6",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "9a1297214c2892e6"
     },
     "quarter_from_cumulative": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "9a1297214c2892e6",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "9a1297214c2892e6"
     },
     "tanh": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "e11669493aef38b0",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "a307380c95b7b01a"
     },
     "ts_log_return": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "213dd9fc9c317e73",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "0eef51a2bb5c6716"
     },
     "ttm_from_cumulative": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "9a1297214c2892e6",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "9a1297214c2892e6"
     },
     "ttm_from_quarterly": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "9a1297214c2892e6",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "9a1297214c2892e6"
     },
     "yoy_by_period": {
       "semantic_version": 2,
-      "implementation_hash_polars": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb": "83c363f91cbd7566"
+      "implementation_hash_polars": "9a1297214c2892e6",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_pandas": "9a1297214c2892e6"
+    },
+    "protected_div": {
+      "semantic_version": 2,
+      "implementation_hash_pandas": "98df2f2c7e8a0109",
+      "implementation_hash_duckdb": "74f3772e52a64e67",
+      "implementation_hash_polars_emitter": "f207e354569cbf4a"
     }
   },
   "provenance": {
     "artifact_kind": "test_passed",
-    "commit_sha": "86f9b115094782cc2321dd0e37782aee7b7b231c",
-    "passed_at": "2026-07-18T14:34:34.574990+00:00",
+    "commit_sha": "92efe11211ca5dacbaabeac9721dd31e54fe516d",
+    "passed_at": "2026-07-19T18:52:40.902982+00:00",
     "runtime_versions": {
       "python": "3.10.12",
       "polars": "1.42.1",
       "duckdb": "1.5.4",
-      "pyarrow": "25.0.0"
+      "pyarrow": "25.0.0",
+      "os": "Linux",
+      "architecture": "x86_64"
     },
     "case_registry_hash": "71daddda2d13d4a8",
     "stages_passed": [
@@ -1157,8 +1240,8 @@
       "strict_period_triple_parity_and_no_fallback"
     ],
     "emitter_hashes": {
-      "implementation_hash_polars_emitter": "2ad6d4d0e89b896e",
-      "implementation_hash_duckdb_emitter": "83c363f91cbd7566"
+      "implementation_hash_polars_emitter": "f207e354569cbf4a",
+      "implementation_hash_duckdb_emitter": "2a6235172872ed63"
     }
   }
 }

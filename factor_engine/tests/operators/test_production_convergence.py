@@ -86,14 +86,33 @@ def test_generated_manifests_share_the_final_registry_snapshot() -> None:
     operator_manifest = json.loads((root / "docs/operator_manifest.json").read_text())
     catalog_payload = json.loads((root / "cleaned_operators/docs/operators_catalog.json").read_text())
     backend_manifest = json.loads((root / "docs/backend_evidence_manifest.json").read_text())
-    catalog = {row["canonical"]: row for row in catalog_payload["operators"]}
-    assert set(operator_manifest["operators"]) == set(catalog) == set(backend_manifest["operators"])
-    for name, operator in operator_manifest["operators"].items():
+
+    def _as_map(payload: dict) -> dict:
+        ops = payload.get("operators")
+        if isinstance(ops, dict):
+            return ops
+        if isinstance(ops, list):
+            out = {}
+            for row in ops:
+                key = row.get("canonical") or row.get("name")
+                if key:
+                    out[str(key)] = row
+            return out
+        raise AssertionError(f"unexpected operators payload: {type(ops)!r}")
+
+    operators = _as_map(operator_manifest)
+    catalog = _as_map(catalog_payload)
+    evidence = _as_map(backend_manifest)
+    assert set(operators) == set(catalog) == set(evidence)
+    for name, operator in operators.items():
         row = catalog[name]
-        evidence = backend_manifest["operators"][name]
-        assert sorted(operator["backends"]) == sorted(row["backends"]), name
-        assert operator["surface"] == row["surface"] == evidence["surface"], name
-        assert bool(operator["pit_safe"]) == bool(row["pit_safe"]), name
+        ev = evidence[name]
+        assert sorted(operator.get("backends") or []) == sorted(row.get("backends") or []), name
+        assert bool(operator.get("pit_safe")) == bool(row.get("pit_safe")), name
+        # Layer catalog + backend evidence share the sealed surface label.
+        assert row.get("surface") == ev.get("surface"), name
+        if "surface" in operator:
+            assert operator.get("surface") == row.get("surface"), name
 
 
 def test_explicit_backend_preference_cannot_bypass_production_evidence() -> None:

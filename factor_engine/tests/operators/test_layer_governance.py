@@ -142,8 +142,9 @@ def test_pit_contract_uses_available_at_and_staleness() -> None:
 def test_registry_rejects_implicit_duplicate_after_bootstrap() -> None:
     name = "__layer_governance_test_operator__"
     op = PandasFunctionOperator(name, "internal", ["x"], "test", lambda x, **_: x)
-    OperatorRegistry.register(op, canonical=name, source="test")
+    OperatorRegistry.thaw_for_bootstrap()
     try:
+        OperatorRegistry.register(op, canonical=name, source="test")
         with pytest.raises(ValueError, match="duplicate operator registration"):
             OperatorRegistry.register(op, canonical=name, source="test")
         OperatorRegistry.register(
@@ -156,4 +157,8 @@ def test_registry_rejects_implicit_duplicate_after_bootstrap() -> None:
         )
         assert OperatorRegistry._replacement_history[-1]["replacement_reason"] == "test explicit replacement"
     finally:
-        OperatorRegistry.unregister(name)
+        if name in OperatorRegistry._operators:
+            OperatorRegistry.unregister(name)
+        if OperatorRegistry.lifecycle() == "building":
+            OperatorRegistry.finalize()
+        OperatorRegistry.freeze()

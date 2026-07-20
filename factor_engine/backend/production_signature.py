@@ -53,13 +53,66 @@ PRODUCTION_SIGNATURES: dict[str, OperatorProductionSignature] = {
         (ParamConstraint("mode", "0|1|2"),),
         default_status="production",
     ),
-    "ffill": OperatorProductionSignature(
-        "ffill",
+    "digital_count": OperatorProductionSignature(
+        "digital_count",
         (
-            ParamConstraint("limit", "positive_integer", status="production"),
-            ParamConstraint("max_age", "positive_duration", status="production"),
+            ParamConstraint("d", "positive_integer"),
+            ParamConstraint("threshold", "finite_nonnegative_scalar"),
+            ParamConstraint("run", "positive_integer"),
         ),
-        default_status="pending",  # unlimited ffill research-only until limit=N
+        default_status="production",
+    ),
+    "price_spread_deviation": OperatorProductionSignature(
+        "price_spread_deviation",
+        (ParamConstraint("d", "positive_integer"),),
+        default_status="production",
+    ),
+    "saturate": OperatorProductionSignature(
+        "saturate",
+        (
+            ParamConstraint("lower", "finite_scalar"),
+            ParamConstraint("upper", "finite_scalar"),
+        ),
+        default_status="production",
+    ),
+    "signed_power": OperatorProductionSignature(
+        "signed_power",
+        (ParamConstraint("c", "finite_scalar"),),
+        default_status="production",
+    ),
+    "ts_decay_exp_window": OperatorProductionSignature(
+        "ts_decay_exp_window",
+        (
+            ParamConstraint("window", "positive_integer"),
+            ParamConstraint("alpha", "finite_0_1"),
+        ),
+        default_status="production",
+    ),
+    "ts_sum_decay": OperatorProductionSignature(
+        "ts_sum_decay",
+        (ParamConstraint("window", "positive_integer"),),
+        default_status="production",
+    ),
+    "ts_moment": OperatorProductionSignature(
+        "ts_moment",
+        (
+            ParamConstraint("d", "positive_integer"),
+            ParamConstraint("k", "positive_integer"),
+        ),
+        default_status="production",
+    ),
+    "ts_ratio": OperatorProductionSignature(
+        "ts_ratio",
+        default_status="production",
+    ),
+    "ts_max_buildup": OperatorProductionSignature(
+        "ts_max_buildup",
+        (ParamConstraint("d", "positive_integer"),),
+        default_status="production",
+    ),
+    "trade_when": OperatorProductionSignature(
+        "trade_when",
+        default_status="pending",
     ),
 }
 
@@ -81,6 +134,26 @@ def param_allowed(canon: str, param: str, *, value: Any = None) -> SignatureStat
         return "pending"
     for pc in sig.params:
         if pc.name == param:
+            if pc.constraint == "finite_0_1" and value is not None:
+                try:
+                    v = float(value)
+                    if not 0.0 <= v <= 1.0:
+                        return "forbidden"
+                except (TypeError, ValueError):
+                    return "forbidden"
+            if pc.constraint == "finite_nonnegative_scalar" and value is not None:
+                try:
+                    v = float(value)
+                    if v < 0 or v != v or v in (float("inf"), float("-inf")):
+                        return "forbidden"
+                except (TypeError, ValueError):
+                    return "forbidden"
+            if pc.constraint == "positive_integer" and value is not None:
+                try:
+                    if isinstance(value, bool) or int(value) != value or int(value) <= 0:
+                        return "forbidden"
+                except (TypeError, ValueError):
+                    return "forbidden"
             if pc.constraint == "finite_scalar" and value is not None:
                 try:
                     v = float(value)

@@ -129,6 +129,9 @@ def test_primitive_evidence_uses_final_canonical_names() -> None:
 
 
 def test_ieee_edge_policy_is_fail_closed_for_statistics() -> None:
+    load_all()
     evidence = {"duckdb_nan_edge_verified": [], "duckdb_inf_edge_verified": []}
     assert missing_edge_dimensions("ts_std", evidence) == {"nan", "inf"}
+    assert missing_edge_dimensions("cs_mean", evidence) == {"nan", "inf"}
+    assert missing_edge_dimensions("c_mean", evidence) == {"nan", "inf"}  # alias
     assert missing_edge_dimensions("abs", evidence) == set()

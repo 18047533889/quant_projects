@@ -162,7 +162,7 @@ MEMORY_CASES = [
     ("vwap", lambda: make_cleaned_call_factory("vwap")(col("close"), col("volume"), 3)),
     ("power", lambda: make_cleaned_call_factory("power")(col("close"), col("volume"))),
     ("gt", lambda: make_cleaned_call_factory("gt")(col("close"), col("open"))),
-    ("c_mean", lambda: make_cleaned_call_factory("c_mean")(col("close"))),
+    ("cs_mean", lambda: make_cleaned_call_factory("cs_mean")(col("close"))),
     ("cs_pct_rank", lambda: make_cleaned_call_factory("cs_pct_rank")(col("close"))),
     ("ts_median", lambda: make_cleaned_call_factory("ts_median")(col("close"), 3)),
     ("rank_pct", lambda: make_cleaned_call_factory("rank_pct")(col("close"))),

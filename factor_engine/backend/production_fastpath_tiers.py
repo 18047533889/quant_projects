@@ -102,10 +102,10 @@ P0_CROSS_SECTION_CANONICALS: frozenset[str] = frozenset(
         "cs_demean",
         "scale",
         "normalize",
-        "c_mean",
-        "c_std",
-        "c_sum",
-        "c_count",
+        "cs_mean",
+        "cs_std",
+        "cs_sum",
+        "cs_count",
     }
 )
 

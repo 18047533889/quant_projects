@@ -24,10 +24,10 @@ from cleaned_operators.operator_policy import (
 from runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
-c_mean = make_cleaned_call_factory("c_mean")
-c_std = make_cleaned_call_factory("c_std")
-c_sum = make_cleaned_call_factory("c_sum")
-c_count = make_cleaned_call_factory("c_count")
+cs_mean = make_cleaned_call_factory("cs_mean")
+cs_std = make_cleaned_call_factory("cs_std")
+cs_sum = make_cleaned_call_factory("cs_sum")
+cs_count = make_cleaned_call_factory("cs_count")
 ewm_mean = make_cleaned_call_factory("ewm_mean")
 wma = make_cleaned_call_factory("WMA")
 nan_to_num = make_cleaned_call_factory("nan_to_num")
@@ -74,10 +74,10 @@ def _run_pair(source, expr):
 def _parity_exprs():
     x, y = col("x"), col("y")
     return {
-        "c_mean": c_mean(x),
-        "c_std": c_std(x),
-        "c_sum": c_sum(x),
-        "c_count": c_count(x),
+        "cs_mean": cs_mean(x),
+        "cs_std": cs_std(x),
+        "cs_sum": cs_sum(x),
+        "cs_count": cs_count(x),
         "ts_ema": ewm_mean(x, 2),
         "WMA": wma(x, 2),
         "nan_to_num": nan_to_num(x, 0),

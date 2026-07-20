@@ -178,6 +178,31 @@ SQL_IMPLEMENTED_CANONICALS: frozenset[str] = frozenset(
     }
 )
 
+# Drop emitter names that are neither active registry canonicals nor IR meta /
+# historical alias targets still referenced by the compiler.  Keeps
+# ``is_sql_implemented`` honest for coverage reports.
+_SQL_IMPLEMENTED_DEAD: frozenset[str] = frozenset(
+    {
+        "div_or_default",
+        "log_fill_invalid",
+        "nan_to_num",
+        "protected_log",
+        "protected_sqrt",
+        "ewm_mean",
+        "standardize",
+        "volatility",
+        "vwap",
+        "WMA",
+        "c_percentile",
+        "rank_pct",
+        "count",
+        # keep rolling_beta — alias target still asserted by production SQL tests
+    }
+)
+SQL_IMPLEMENTED_CANONICALS = frozenset(
+    c for c in SQL_IMPLEMENTED_CANONICALS if c not in _SQL_IMPLEMENTED_DEAD
+) | frozenset({"column", "literal"})
+
 # DuckDB 分层
 DUCKDB_SQL_PARITY_VERIFIED: frozenset[str] = frozenset()
 DUCKDB_SQL_PRODUCTION_SAFE: frozenset[str] = frozenset()
@@ -216,6 +241,20 @@ CLICKHOUSE_SQL_PRODUCTION_SAFE = frozenset()
 # 有 emitter 实现但暂不默认 production SQL 下推
 SQL_PRODUCTION_DEFERRED_CANONICALS: frozenset[str] = frozenset(
     FASTPATH_DEFERRED_CANONICALS
+)
+
+# Cheap elementwise emitters that exist in SQL_IMPLEMENTED but stay on the
+# *extended* surface (not daily).  They push down in research/validation mode
+# via ``is_sql_capable``; promoting them to production SQL would require daily
+# surface + six-way dual evidence.  Not forced — pandas (and Polars for
+# ``scale``) is fine when the formula stays off the daily allowlist.
+SQL_RESEARCH_SPEED_CANDIDATES: frozenset[str] = frozenset(
+    {
+        "cbrt",
+        "truncate",
+        "is_nan",
+        "scale",
+    }
 )
 
 # 向后兼容

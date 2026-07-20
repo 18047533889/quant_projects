@@ -256,8 +256,7 @@
       "aliases": [
         "CLIP",
         "cap",
-        "clamp",
-        "clip"
+        "clamp"
       ],
       "backends": [
         "pandas_numpy",
@@ -440,6 +439,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -454,6 +454,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -589,6 +590,7 @@
       ],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -703,11 +705,11 @@
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
-      "lag": 0
+      "min_periods": 1,
+      "lag": 1
     },
     {
       "canonical": "divide",
@@ -970,16 +972,15 @@
         "INDUSTRY_NEUTRALIZE",
         "IND_NEUTRALIZE",
         "NEUTRALIZE",
-        "c_neutralize",
         "group_demean",
         "ind_neutralize",
         "industry_neutral",
         "industry_neutralize",
-        "neutralize",
-        "panel_neutralize"
+        "neutralize"
       ],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -994,6 +995,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -1093,6 +1095,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -1244,8 +1247,7 @@
       "canonical": "is_not_null",
       "surface": "daily",
       "aliases": [
-        "IS_NOT_NULL",
-        "is_not_null"
+        "IS_NOT_NULL"
       ],
       "backends": [
         "pandas_numpy",
@@ -1262,8 +1264,7 @@
       "canonical": "is_null",
       "surface": "daily",
       "aliases": [
-        "IS_NULL",
-        "is_null"
+        "IS_NULL"
       ],
       "backends": [
         "pandas_numpy",
@@ -1449,7 +1450,6 @@
       "canonical": "neg",
       "surface": "daily",
       "aliases": [
-        "negate",
         "reverse"
       ],
       "backends": [
@@ -1469,6 +1469,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -1603,12 +1604,13 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -1628,9 +1630,7 @@
     {
       "canonical": "quarter_from_cumulative",
       "surface": "daily",
-      "aliases": [
-        "quarter_from_cumulative"
-      ],
+      "aliases": [],
       "backends": [
         "pandas_numpy",
         "polars",
@@ -1650,8 +1650,7 @@
         "RANK",
         "c_rank",
         "cs_rank",
-        "cs_rank_01",
-        "panel_rank"
+        "cs_rank_01"
       ],
       "backends": [
         "pandas_numpy",
@@ -1744,8 +1743,7 @@
       "surface": "daily",
       "aliases": [
         "div_or_null",
-        "safe_div",
-        "safe_div_null"
+        "safe_div"
       ],
       "backends": [
         "pandas_numpy",
@@ -1766,10 +1764,10 @@
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
-      "scope": "ts",
+      "pit_safe": true,
+      "scope": "elementwise",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -1858,10 +1856,10 @@
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
-      "scope": "ts",
+      "pit_safe": true,
+      "scope": "elementwise",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -1870,6 +1868,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -2017,10 +2016,10 @@
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -2105,6 +2104,7 @@
       "canonical": "ts_beta",
       "surface": "daily",
       "aliases": [
+        "Beta",
         "beta",
         "m_beta",
         "rolling_beta"
@@ -2167,7 +2167,6 @@
       "canonical": "ts_corr",
       "surface": "daily",
       "aliases": [
-        "Corr",
         "TS_CORR",
         "corr",
         "correlation",
@@ -2204,8 +2203,6 @@
       "canonical": "ts_cov",
       "surface": "daily",
       "aliases": [
-        "Cov",
-        "Covariance",
         "TS_COV",
         "cov",
         "m_cov",
@@ -2244,7 +2241,7 @@
       "backends": [
         "pandas_numpy"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "ts",
       "lookback": null,
       "min_periods": 1,
@@ -2258,8 +2255,7 @@
         "TS_DECAY_LINEAR",
         "WMA",
         "decay_linear",
-        "ts_decay",
-        "ts_decay_linear"
+        "ts_decay"
       ],
       "backends": [
         "pandas_numpy",
@@ -2281,8 +2277,7 @@
         "delay",
         "m_delay",
         "prev",
-        "shift",
-        "ts_delay"
+        "shift"
       ],
       "backends": [
         "pandas_numpy",
@@ -2302,8 +2297,7 @@
         "Delta",
         "Diff",
         "TS_DELTA",
-        "delta",
-        "deltas"
+        "delta"
       ],
       "backends": [
         "pandas_numpy",
@@ -2322,9 +2316,7 @@
       "aliases": [
         "EMA",
         "ema",
-        "ewm",
-        "ewm_mean",
-        "ts_ema"
+        "ewm"
       ],
       "backends": [
         "pandas_numpy",
@@ -2407,7 +2399,6 @@
       "canonical": "ts_kurt",
       "surface": "extended",
       "aliases": [
-        "Kurt",
         "TS_KURT",
         "kurt",
         "m_kurt",
@@ -2444,6 +2435,7 @@
       ],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -2456,7 +2448,6 @@
       "canonical": "ts_mad",
       "surface": "extended",
       "aliases": [
-        "Mad",
         "m_mad",
         "mad"
       ],
@@ -2476,8 +2467,7 @@
       "aliases": [
         "Max",
         "TS_MAX",
-        "m_max",
-        "window_max"
+        "m_max"
       ],
       "backends": [
         "pandas_numpy",
@@ -2497,10 +2487,10 @@
       "backends": [
         "pandas_numpy"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -2526,10 +2516,7 @@
         "TS_MEAN",
         "m_avg",
         "ma",
-        "mean",
-        "move",
-        "running_mean",
-        "window_mean"
+        "mean"
       ],
       "backends": [
         "pandas_numpy",
@@ -2561,7 +2548,6 @@
       "canonical": "ts_median",
       "surface": "daily",
       "aliases": [
-        "Median",
         "m_median",
         "median"
       ],
@@ -2582,8 +2568,7 @@
       "aliases": [
         "Min",
         "TS_MIN",
-        "m_min",
-        "window_min"
+        "m_min"
       ],
       "backends": [
         "pandas_numpy",
@@ -2603,10 +2588,10 @@
       "backends": [
         "pandas_numpy"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -2702,7 +2687,6 @@
       "canonical": "ts_quantile",
       "surface": "extended",
       "aliases": [
-        "Percentile",
         "TS_QUANTILE",
         "m_percentile",
         "percentile"
@@ -2727,6 +2711,7 @@
       ],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -2744,11 +2729,11 @@
       "backends": [
         "pandas_numpy"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
-      "lag": 0
+      "min_periods": 2,
+      "lag": 1
     },
     {
       "canonical": "ts_regression_intercept",
@@ -2830,6 +2815,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -2842,7 +2828,6 @@
       "canonical": "ts_skew",
       "surface": "extended",
       "aliases": [
-        "Skew",
         "TS_SKEW",
         "m_skew",
         "skew",
@@ -2866,12 +2851,10 @@
         "Std",
         "TS_STD",
         "m_std",
-        "running_std",
         "std",
         "std_n",
         "ts_std_dev",
-        "ts_stddev",
-        "window_std"
+        "ts_stddev"
       ],
       "backends": [
         "pandas_numpy",
@@ -2903,13 +2886,10 @@
       "canonical": "ts_sum",
       "surface": "daily",
       "aliases": [
-        "Sum",
         "TS_SUM",
         "m_sum",
-        "running_sum",
         "sum",
-        "sum_n",
-        "window_sum"
+        "sum_n"
       ],
       "backends": [
         "pandas_numpy",
@@ -2929,7 +2909,7 @@
       "backends": [
         "pandas_numpy"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "ts",
       "lookback": null,
       "min_periods": 1,
@@ -3061,7 +3041,6 @@
       "canonical": "ts_var",
       "surface": "daily",
       "aliases": [
-        "Var",
         "m_var",
         "var"
       ],
@@ -3096,9 +3075,7 @@
     {
       "canonical": "ttm_from_cumulative",
       "surface": "daily",
-      "aliases": [
-        "ttm_from_cumulative"
-      ],
+      "aliases": [],
       "backends": [
         "pandas_numpy",
         "polars",
@@ -3113,9 +3090,7 @@
     {
       "canonical": "ttm_from_quarterly",
       "surface": "daily",
-      "aliases": [
-        "ttm_from_quarterly"
-      ],
+      "aliases": [],
       "backends": [
         "pandas_numpy",
         "polars",
@@ -3147,7 +3122,6 @@
         "IIF",
         "WHERE",
         "if",
-        "if_else",
         "iif"
       ],
       "backends": [
@@ -3170,6 +3144,7 @@
       ],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -3194,9 +3169,7 @@
     {
       "canonical": "yoy_by_period",
       "surface": "daily",
-      "aliases": [
-        "yoy_by_period"
-      ],
+      "aliases": [],
       "backends": [
         "pandas_numpy",
         "polars",
@@ -3215,10 +3188,7 @@
         "CS_ZSCORE",
         "ZSCORE",
         "c_zscore",
-        "cs_zscore",
-        "panel_standardize",
-        "panel_zscore",
-        "standardize"
+        "cs_zscore"
       ],
       "backends": [
         "pandas_numpy",

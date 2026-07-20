@@ -375,11 +375,28 @@ def finalize_layer_governance() -> None:
         )
     daily = partitions["daily"]
 
-    operator_policy.POLARS_PARITY_VERIFIED.intersection_update(
-        name for name in daily if "polars" in OperatorRegistry.backends_for(name)
+    # Rebuild SAFE sets *after* c_* → cs_* renames.  cleanup.finalize intersects
+    # against pre-rename registry names, so evidence keyed as cs_mean would
+    # otherwise be dropped even though the renamed op has a native Polars backend.
+    from backend.primitive_evidence import (
+        POLARS_EDGE_VERIFIED,
+        POLARS_NO_FALLBACK_VERIFIED,
+        POLARS_REFERENCE_PARITY_VERIFIED,
     )
-    operator_policy.POLARS_PRODUCTION_SAFE.intersection_update(
+
+    daily_polars = {
         name for name in daily if "polars" in OperatorRegistry.backends_for(name)
+    }
+    operator_policy.POLARS_PARITY_VERIFIED.clear()
+    operator_policy.POLARS_PARITY_VERIFIED.update(
+        daily_polars & POLARS_REFERENCE_PARITY_VERIFIED
+    )
+    operator_policy.POLARS_PRODUCTION_SAFE.clear()
+    operator_policy.POLARS_PRODUCTION_SAFE.update(
+        daily_polars
+        & POLARS_REFERENCE_PARITY_VERIFIED
+        & POLARS_EDGE_VERIFIED
+        & POLARS_NO_FALLBACK_VERIFIED
     )
 
     collisions = formula_field_names() & set(OperatorRegistry._operators)

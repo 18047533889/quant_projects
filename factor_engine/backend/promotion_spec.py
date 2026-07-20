@@ -28,7 +28,7 @@ STATISTICAL_OPS_TARGET: DtypeTarget = "float64"
 COUNT_OPS_TARGET: DtypeTarget = "int64"
 
 OVERFLOW_SENSITIVE_OPS: frozenset[str] = frozenset(
-    {"multiply", "cum_sum", "cum_prod", "power", "c_sum", "ts_sum", "vwap"}
+    {"multiply", "cum_sum", "cum_prod", "power", "cs_sum", "ts_sum", "vwap"}
 )
 
 

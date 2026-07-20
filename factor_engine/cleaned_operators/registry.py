@@ -427,6 +427,10 @@ class OperatorRegistry:
                     allow_unverified_backend=allow_unverified_backend,
                 )
             except UnsupportedOperatorBackendError:
+                # Production fail-closed for unverified Polars: fall back to
+                # pandas_numpy rather than bypassing evidence or crashing callers.
+                if mode == "production" and "pandas_numpy" in backends:
+                    return backends["pandas_numpy"], "pandas_numpy"
                 raise
         if prefer == "sql":
             from backend.sql_tiers import (

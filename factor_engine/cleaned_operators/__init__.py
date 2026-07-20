@@ -39,6 +39,8 @@ _LOAD_MODULES = (
     "cleaned_operators.common.polars_np_parity",
     "cleaned_operators.common.polars_math_extended",
     "cleaned_operators.common.polars_batch_mirror",
+    "cleaned_operators.common.polars_daily_native",
+    "cleaned_operators.research_polars",
     "cleaned_operators.price_volume.ops",
     "cleaned_operators.price_volume.polars_price_volume",
     "cleaned_operators.technical.signal",

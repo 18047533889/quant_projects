@@ -11,7 +11,7 @@ from functools import lru_cache
 from pathlib import Path
 
 NAN_REQUIRED = frozenset({
-    "c_mean", "c_std", "c_sum", "normalize", "zscore", "scale", "winsorize",
+    "cs_mean", "cs_std", "cs_sum", "normalize", "zscore", "scale", "winsorize",
     "group_mean", "group_std", "group_zscore", "group_normalize", "group_rank",
     "ts_mean", "ts_std", "ts_var", "ts_corr", "ts_cov", "ts_beta", "ts_zscore",
     "ts_sharpe", "volatility", "maximum", "minimum", "where", "coalesce",
@@ -23,6 +23,15 @@ def _factor_engine_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+def _resolve(canonical: str) -> str:
+    try:
+        from cleaned_operators.registry import OperatorRegistry
+
+        return OperatorRegistry.resolve_canonical(canonical)
+    except Exception:
+        return canonical
+
+
 @lru_cache(maxsize=1)
 def load_primitive_evidence() -> dict:
     paths = sorted(_factor_engine_root().rglob("primitive_verified.json"))
@@ -32,21 +41,23 @@ def load_primitive_evidence() -> dict:
 
 
 def required_edge_dimensions(canonical: str) -> frozenset[str]:
+    name = _resolve(canonical)
     required: set[str] = set()
-    if canonical in NAN_REQUIRED:
+    if name in NAN_REQUIRED:
         required.add("nan")
-    if canonical in INF_REQUIRED:
+    if name in INF_REQUIRED:
         required.add("inf")
     return frozenset(required)
 
 
 def missing_edge_dimensions(canonical: str, evidence: dict | None = None) -> frozenset[str]:
     payload = evidence if evidence is not None else load_primitive_evidence()
+    name = _resolve(canonical)
     missing: set[str] = set()
-    required = required_edge_dimensions(canonical)
-    if "nan" in required and canonical not in set(payload.get("duckdb_nan_edge_verified", [])):
+    required = required_edge_dimensions(name)
+    if "nan" in required and name not in set(payload.get("duckdb_nan_edge_verified", [])):
         missing.add("nan")
-    if "inf" in required and canonical not in set(payload.get("duckdb_inf_edge_verified", [])):
+    if "inf" in required and name not in set(payload.get("duckdb_inf_edge_verified", [])):
         missing.add("inf")
     return frozenset(missing)
 

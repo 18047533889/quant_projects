@@ -80,7 +80,7 @@ def _parity_exprs():
         "ts_moment": make_cleaned_call_factory("ts_moment")(x, 3, 2),
         "ts_ratio": make_cleaned_call_factory("ts_ratio")(x),
         "Slope": make_cleaned_call_factory("Slope")(x, 3),
-        "c_percentile": make_cleaned_call_factory("c_percentile")(x, 0.5),
+        "cs_quantile": make_cleaned_call_factory("cs_quantile")(x, 0.5),
         "cs_mad": make_cleaned_call_factory("cs_mad")(x),
         "cs_mad_zscore": make_cleaned_call_factory("cs_mad_zscore")(x),
         "quantile": make_cleaned_call_factory("quantile")(x, 0.5),

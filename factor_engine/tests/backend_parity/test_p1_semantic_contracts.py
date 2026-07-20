@@ -85,14 +85,14 @@ def test_ts_ratio_composite_lowering():
     assert lowered.inputs[1].op == "ts_delay"
 
 
-def test_c_sum_all_null_cross_section(_loaded):
+def test_cs_sum_all_null_cross_section(_loaded):
     idx = pd.MultiIndex.from_product(
         [pd.date_range("2024-01-01", periods=2, freq="B"), ["A", "B"]],
         names=["timestamp", "instrument"],
     )
     close = pd.Series([np.nan, np.nan, np.nan, np.nan], index=idx)
     src = InMemorySeriesSource(data={"close": close})
-    expr = make_cleaned_call_factory("c_sum")(col("close"))
+    expr = make_cleaned_call_factory("cs_sum")(col("close"))
     pd_out = _run(src, expr, "pandas")
     pl_out = _run(src, expr, "polars_long")
     assert pd_out.isna().all()
