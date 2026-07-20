@@ -104,6 +104,13 @@ CERTIFICATION_STAGES: list[tuple[str, list[str]]] = [
     ),
 ]
 
+# These checks consume the artifact being certified.  Running them before the
+# candidate is visible creates a deadlock whenever the evidence schema/hash
+# changes: capability fails closed, which makes the generated manifest appear
+# stale, so a new valid artifact can never be produced.  They run transactionally
+# after the candidate write and restore the previous artifact on failure.
+POST_ARTIFACT_STAGES = frozenset({"manifest_and_evidence_drift"})
+
 
 def _bootstrap() -> None:
     root = str(FE_ROOT.parent)
@@ -279,6 +286,8 @@ def main() -> int:
 
     stages_passed: list[str] = ["case_registry_sync"]
     for stage_name, files in CERTIFICATION_STAGES:
+        if stage_name in POST_ARTIFACT_STAGES:
+            continue
         ok, detail = _run_pytest(files)
         if not ok:
             print(f"stage failed: {stage_name}", file=sys.stderr)
@@ -286,10 +295,33 @@ def main() -> int:
             return 1
         stages_passed.append(stage_name)
 
-    payload = _build_verified_payload(stages_passed=stages_passed)
+    payload = _build_verified_payload(
+        stages_passed=[
+            *stages_passed,
+            *(name for name, _ in CERTIFICATION_STAGES if name in POST_ARTIFACT_STAGES),
+        ]
+    )
     count = payload.pop("_six_way_count", 0)
     text = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
-    out.write_text(text, encoding="utf-8")
+    previous = out.read_bytes() if out.is_file() else None
+    candidate = out.with_suffix(".json.tmp")
+    candidate.write_text(text, encoding="utf-8")
+    candidate.replace(out)
+    for stage_name, files in CERTIFICATION_STAGES:
+        if stage_name not in POST_ARTIFACT_STAGES:
+            continue
+        ok, detail = _run_pytest(files)
+        if not ok:
+            if previous is None:
+                out.unlink(missing_ok=True)
+            else:
+                restore = out.with_suffix(".json.restore")
+                restore.write_bytes(previous)
+                restore.replace(out)
+            print(f"stage failed: {stage_name}", file=sys.stderr)
+            print(detail, file=sys.stderr)
+            return 1
+        stages_passed.append(stage_name)
     print(f"wrote {out} (test-certified six-way: {count})")
     return 0
 

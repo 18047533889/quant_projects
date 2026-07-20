@@ -307,7 +307,14 @@ def _source_hash(path: Path) -> str:
 
 @lru_cache(maxsize=32)
 def _tree_hash(root: Path, patterns: tuple[str, ...] = ("*.py", "*.json", "*.csv")) -> str:
-    """Hash a deterministic source/data tree while excluding generated caches."""
+    """Hash a deterministic source/data tree while excluding generated caches.
+
+    Git may materialize an identical tracked text blob differently according to
+    checkout attributes.  Hash each file through Git's clean-filter semantics so
+    evidence produced on macOS and checked on Linux is tied to the same committed
+    content.  ``git hash-object`` reads the current file, so unstaged edits still
+    invalidate the evidence instead of being hidden by the index.
+    """
     if not root.exists():
         return ""
     files: set[Path] = set()
@@ -317,9 +324,33 @@ def _tree_hash(root: Path, patterns: tuple[str, ...] = ("*.py", "*.json", "*.csv
     for path in sorted(files):
         payload.update(str(path.relative_to(root)).encode("utf-8"))
         payload.update(b"\0")
-        payload.update(path.read_bytes())
+        payload.update(_canonical_file_digest(path).encode("ascii"))
         payload.update(b"\0")
     return payload.hexdigest()[:16]
+
+
+@lru_cache(maxsize=1024)
+def _canonical_file_digest(path: Path) -> str:
+    """Return a cross-platform digest of the current working-tree file."""
+    try:
+        repo_root = FE_ROOT.parent.resolve()
+        relative = path.resolve().relative_to(repo_root)
+        return (
+            subprocess.check_output(
+                [
+                    "git",
+                    "hash-object",
+                    f"--path={relative.as_posix()}",
+                    str(path.resolve()),
+                ],
+                cwd=str(repo_root),
+                stderr=subprocess.DEVNULL,
+            )
+            .decode("ascii")
+            .strip()
+        )
+    except (OSError, subprocess.SubprocessError, UnicodeError, ValueError):
+        return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def semantic_hashes_for(canonical: str) -> dict[str, str]:
