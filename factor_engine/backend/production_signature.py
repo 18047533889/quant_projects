@@ -238,5 +238,10 @@ def verify_production_signature(canon: str, node: PlanNode | None, *, production
 
 def operational_production_allowed(canon: str, node: PlanNode | None = None) -> bool:
     """算子级 operational production（不含 backend-specific 检查）。"""
+    from cleaned_operators.registry import OperatorRegistry
+
+    canonical = OperatorRegistry.resolve_canonical_optional(canon)
+    if canonical not in OperatorRegistry._operators:
+        return False
     ok, _ = verify_production_signature(canon, node, production=True)
     return ok

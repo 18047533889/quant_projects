@@ -124,8 +124,6 @@ def test_tier6_clickhouse_dialect():
         "cs_pct_rank",
         "cs_quantile",
         "log_returns",
-        "volatility",
-        "vwap",
     ):
         plan = minimal_plan(op)
         q = _ch_sql(plan)
@@ -136,8 +134,6 @@ def test_tier6_clickhouse_dialect():
             assert "quantileExact" in q
         if op == "log_returns":
             assert "log(" in q.lower()
-        if op == "volatility":
-            assert "stddevSamp" in q
         if op == "vwap":
             assert "SUM(" in q
 

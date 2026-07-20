@@ -2,7 +2,7 @@
 
 - Total factors: **4620**
 - Catalogs: **4**
-- Existing GTJA/Week2 formulas excluded structurally: **453**
+- Existing GTJA/Week2 formulas excluded structurally: **227**
 
 ## Catalog summary
 

@@ -117,7 +117,13 @@ def test_generated_manifests_share_the_final_registry_snapshot() -> None:
 
 def test_explicit_backend_preference_cannot_bypass_production_evidence() -> None:
     # ts_ewm_std is implemented natively but is not independently production-certified.
-    op, backend = OperatorRegistry.get_preferred("ts_ewm_std", prefer="polars", mode="production")
+    from backend.operator_capability import UnsupportedOperatorBackendError
+
+    with pytest.raises(UnsupportedOperatorBackendError, match="not production-safe"):
+        OperatorRegistry.get_preferred("ts_ewm_std", prefer="polars", mode="production")
+    op, backend = OperatorRegistry.get_preferred(
+        "ts_ewm_std", prefer="polars", mode="production", fallback_policy="allow"
+    )
     assert backend == "pandas_numpy"
     assert op is OperatorRegistry.get("ts_ewm_std", "pandas_numpy")
     op, backend = OperatorRegistry.get_preferred(
@@ -135,12 +141,12 @@ def test_clickhouse_does_not_inherit_duckdb_parity() -> None:
     assert capability_for("ts_mean", "clickhouse_sql").status != "parity_verified"
 
 
-def test_recursive_ewm_rejects_segment_restart_without_checkpoint_support() -> None:
+def test_recursive_ewm_requires_native_checkpoint_for_segment_restart() -> None:
     from stateful_contract import StatefulCheckpointRegistry, StatefulContractError
 
     spec = StatefulCheckpointRegistry.get("ts_ewm_std")
-    assert spec is not None and not spec.segmented_execution_supported
-    with pytest.raises(StatefulContractError, match="unsupported without a native checkpoint"):
+    assert spec is not None and spec.segmented_execution_supported
+    with pytest.raises(StatefulContractError, match="requires a validated checkpoint"):
         StatefulCheckpointRegistry.require_for_segment(
             "ts_ewm_std", starts_at_dataset_origin=False, checkpoint=None
         )

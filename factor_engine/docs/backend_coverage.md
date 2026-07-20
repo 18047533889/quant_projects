@@ -7,14 +7,14 @@
 
 - active canonical: **205**
 - daily surface: **86**
-- Polars registered: **134**
-- Polars non-bridge implementation: **134**
-- Polars parity verified: **71**
-- Polars production safe: **71**
+- Polars registered: **147**
+- Polars non-bridge implementation: **138**
+- Polars parity verified: **86**
+- Polars production safe: **78**
 - DuckDB SQL emitter implemented: **128**
-- DuckDB parity verified: **87**
-- DuckDB production safe: **87**
-- Polars and DuckDB both production safe: **71**
+- DuckDB parity verified: **86**
+- DuckDB production safe: **86**
+- Polars and DuckDB both production safe: **78**
 
 ## Matrix
 
@@ -43,14 +43,14 @@
 | cosh | extended | yes | yes | yes | no | no | no | no | no |
 | coskewness_to_market | research | yes | yes | yes | no | no | no | no | no |
 | cot | extended | yes | yes | yes | no | no | no | no | no |
-| cs_bucket | extended | yes | yes | yes | no | no | yes | no | no |
-| cs_count | daily | yes | yes | yes | no | no | yes | yes | yes |
+| cs_bucket | extended | yes | yes | no | no | no | yes | no | no |
+| cs_count | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | cs_demean | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | cs_fill_mean | extended | yes | yes | yes | no | no | no | no | no |
 | cs_fill_median | extended | yes | yes | yes | no | no | no | no | no |
-| cs_mad | daily | yes | no | no | no | no | yes | yes | yes |
-| cs_mad_zscore | daily | yes | no | no | no | no | yes | yes | yes |
-| cs_mean | daily | yes | yes | yes | no | no | yes | yes | yes |
+| cs_mad | daily | yes | yes | no | yes | no | yes | yes | yes |
+| cs_mad_zscore | daily | yes | yes | no | yes | no | yes | yes | yes |
+| cs_mean | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | cs_multi_resid | extended | yes | no | no | no | no | yes | no | no |
 | cs_neutralize | extended | yes | no | no | no | no | no | no | no |
 | cs_pct_rank | daily | yes | yes | yes | yes | yes | yes | yes | yes |
@@ -58,8 +58,8 @@
 | cs_rank_gaussian | extended | yes | no | no | no | no | no | no | no |
 | cs_regression | extended | yes | no | no | no | no | yes | no | no |
 | cs_resid | extended | yes | no | no | no | no | yes | no | no |
-| cs_std | daily | yes | no | no | no | no | yes | yes | yes |
-| cs_sum | daily | yes | yes | yes | no | no | yes | yes | yes |
+| cs_std | daily | yes | yes | no | yes | no | yes | yes | yes |
+| cs_sum | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | cs_weighted_demean | extended | yes | no | no | no | no | no | no | no |
 | cs_weighted_mean | extended | yes | no | no | no | no | no | no | no |
 | cs_weighted_zscore | extended | yes | no | no | no | no | no | no | no |
@@ -84,15 +84,15 @@
 | group_max | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | group_mean | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | group_min | daily | yes | yes | yes | yes | yes | yes | yes | yes |
-| group_neutralize | daily | yes | no | no | no | no | yes | yes | yes |
-| group_normalize | daily | yes | no | no | no | no | yes | yes | yes |
+| group_neutralize | daily | yes | yes | no | yes | no | yes | yes | yes |
+| group_normalize | daily | yes | yes | no | yes | no | yes | yes | yes |
 | group_percentile | extended | yes | no | no | no | no | yes | no | no |
 | group_rank | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | group_std | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | group_sum | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | group_weighted_mean | extended | yes | no | no | no | no | no | no | no |
 | group_weighted_zscore | extended | yes | no | no | no | no | no | no | no |
-| group_winsorize | daily | yes | no | no | no | no | yes | yes | yes |
+| group_winsorize | daily | yes | yes | no | yes | no | yes | yes | yes |
 | group_zscore | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | gt | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | identity | internal | yes | yes | yes | no | no | no | no | no |
@@ -116,7 +116,7 @@
 | multiply | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | ne | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | neg | daily | yes | yes | yes | yes | yes | yes | yes | yes |
-| normalize | daily | yes | no | no | no | no | yes | yes | yes |
+| normalize | daily | yes | yes | no | yes | no | yes | yes | yes |
 | not_ | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | or_ | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | period_average | daily | yes | yes | yes | yes | yes | yes | yes | yes |
@@ -125,8 +125,8 @@
 | period_lag | extended | yes | yes | yes | no | no | yes | no | no |
 | period_stability | extended | yes | no | no | no | no | no | no | no |
 | power | daily | yes | yes | yes | yes | yes | yes | yes | yes |
-| price_spread_deviation | extended | yes | no | no | no | no | no | no | no |
-| protected_div | internal | yes | no | no | no | no | yes | yes | yes |
+| price_spread_deviation | extended | yes | yes | yes | no | no | no | no | no |
+| protected_div | internal | yes | no | no | no | no | yes | no | no |
 | quarter_from_cumulative | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | rank | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | real_turnover_rate | extended | yes | yes | yes | no | no | no | no | no |
@@ -142,7 +142,7 @@
 | sign | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | signed_log | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | signed_power | extended | yes | yes | yes | no | no | no | no | no |
-| signed_sqrt | daily | yes | no | no | no | no | yes | yes | yes |
+| signed_sqrt | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | sin | extended | yes | yes | yes | no | no | no | no | no |
 | sinh | extended | yes | yes | yes | no | no | no | no | no |
 | sqrt | daily | yes | yes | yes | yes | yes | yes | yes | yes |
@@ -177,7 +177,7 @@
 | ts_ewm_var | extended | yes | yes | yes | no | no | yes | no | no |
 | ts_kurt | extended | yes | no | no | no | no | no | no | no |
 | ts_last_if | extended | yes | no | no | no | no | yes | no | no |
-| ts_log_return | daily | yes | no | no | no | no | yes | yes | yes |
+| ts_log_return | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | ts_mad | extended | yes | no | no | no | no | yes | no | no |
 | ts_max | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | ts_max_buildup | research | yes | no | no | no | no | no | no | no |
@@ -194,14 +194,14 @@
 | ts_poly2_resid | research | yes | no | no | no | no | no | no | no |
 | ts_product | extended | yes | no | no | no | no | yes | no | no |
 | ts_quantile | extended | yes | yes | yes | no | no | yes | no | no |
-| ts_rank | daily | yes | no | no | no | no | yes | yes | yes |
+| ts_rank | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | ts_ratio | extended | yes | no | no | no | no | no | no | no |
 | ts_regression_intercept | extended | yes | no | no | no | no | no | no | no |
 | ts_regression_r2 | extended | yes | no | no | no | no | no | no | no |
 | ts_regression_resid | extended | yes | no | no | no | no | no | no | no |
 | ts_regression_slope | extended | yes | no | no | no | no | yes | no | no |
 | ts_regression_tstat | extended | yes | no | no | no | no | yes | no | no |
-| ts_sharpe | daily | yes | no | no | no | no | yes | yes | yes |
+| ts_sharpe | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | ts_skew | extended | yes | yes | yes | no | no | yes | no | no |
 | ts_std | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | ts_std_if | extended | yes | yes | yes | no | no | yes | no | no |
@@ -221,7 +221,7 @@
 | ttm_from_quarterly | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | unitize | extended | yes | no | no | no | no | no | no | no |
 | where | daily | yes | yes | yes | yes | yes | yes | yes | yes |
-| winsorize | daily | yes | no | no | no | no | yes | yes | yes |
+| winsorize | daily | yes | yes | no | yes | no | yes | yes | yes |
 | winsorize_mean | extended | yes | no | no | no | no | no | no | no |
 | yoy_by_period | daily | yes | yes | yes | yes | yes | yes | yes | yes |
 | zscore | daily | yes | yes | yes | yes | yes | yes | yes | yes |

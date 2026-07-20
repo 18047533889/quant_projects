@@ -1,10 +1,10 @@
 schema_version: 2
 description: 算子 production 升级矩阵：semantic / backend_execution / operational 三层认证
 counts:
-  primitives: 89
-  certified_dual: 87
-  backend_execution_certified: 87
-  operational_production_certified: 0
+  primitives: 88
+  certified_dual: 86
+  backend_execution_certified: 86
+  operational_production_certified: 86
   batch_a_total: 45
   batch_a_certified: 36
   batch_a_pending: 9
@@ -53,7 +53,6 @@ batches:
   - is_not_null
   - is_null
   - log
-  - protected_div
   - ts_sharpe
   C:
   - ts_argmax
@@ -81,7 +80,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -105,7 +104,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -132,7 +131,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -156,7 +155,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -180,7 +179,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -204,7 +203,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -228,7 +227,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -252,7 +251,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -276,7 +275,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -300,7 +299,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -324,7 +323,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -348,7 +347,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -374,7 +373,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -398,7 +397,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -422,7 +421,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: B
     block_reason: null
@@ -446,7 +445,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -472,7 +471,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -496,7 +495,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -520,7 +519,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -544,7 +543,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -570,7 +569,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -594,7 +593,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -618,7 +617,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -642,7 +641,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -666,7 +665,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -690,7 +689,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -714,7 +713,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -738,7 +737,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -762,7 +761,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -786,7 +785,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -810,7 +809,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -834,7 +833,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -860,7 +859,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -884,7 +883,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: B
     block_reason: null
@@ -908,7 +907,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: B
     block_reason: null
@@ -932,7 +931,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: B
     block_reason: null
@@ -956,7 +955,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: B
     block_reason: null
@@ -980,7 +979,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -1006,7 +1005,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: B
     block_reason: null
@@ -1030,7 +1029,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -1054,7 +1053,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -1080,7 +1079,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -1106,7 +1105,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -1132,7 +1131,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -1156,7 +1155,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -1182,7 +1181,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -1206,7 +1205,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -1232,7 +1231,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -1256,7 +1255,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -1280,7 +1279,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -1304,7 +1303,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -1328,7 +1327,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -1352,40 +1351,16 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
     certification_gaps: []
     execution_variants: []
     certified_dual: true
-  protected_div:
-    canonical: protected_div
-    execution_kind: native
-    polars_implemented: true
-    polars_pure_native: true
-    duckdb_implemented: true
-    duckdb_real_sql: true
-    semantic_contract_complete: true
-    parameter_domain_complete: true
-    type_signature_complete: true
-    normal_parity: true
-    edge_parity: true
-    alignment_verified: true
-    chunk_invariance: false
-    performance_verified: false
-    semantic_certified: true
-    backend_execution_certified: true
-    operational_production_certified: false
-    production_status: backend_execution_certified
-    upgrade_batch: B
-    block_reason: null
-    certification_gaps: []
-    execution_variants: []
-    certified_dual: true
   quarter_from_cumulative:
     canonical: quarter_from_cumulative
-    execution_kind: other
+    execution_kind: registry
     polars_implemented: true
     polars_pure_native: true
     duckdb_implemented: true
@@ -1400,7 +1375,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: F
     block_reason: null
@@ -1424,7 +1399,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -1450,7 +1425,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -1474,7 +1449,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -1498,7 +1473,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -1522,7 +1497,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -1546,7 +1521,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -1570,7 +1545,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -1594,7 +1569,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -1678,7 +1653,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -1702,7 +1677,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -1726,7 +1701,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -1750,7 +1725,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -1774,7 +1749,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -1798,7 +1773,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -1822,7 +1797,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -1846,7 +1821,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -1870,7 +1845,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -1894,7 +1869,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -1918,7 +1893,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -1942,7 +1917,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -1966,7 +1941,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -1990,7 +1965,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: B
     block_reason: null
@@ -2014,7 +1989,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -2038,7 +2013,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -2062,7 +2037,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -2086,7 +2061,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -2095,7 +2070,7 @@ operators:
     certified_dual: true
   ttm_from_cumulative:
     canonical: ttm_from_cumulative
-    execution_kind: other
+    execution_kind: registry
     polars_implemented: true
     polars_pure_native: true
     duckdb_implemented: true
@@ -2110,7 +2085,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -2119,7 +2094,7 @@ operators:
     certified_dual: true
   ttm_from_quarterly:
     canonical: ttm_from_quarterly
-    execution_kind: other
+    execution_kind: registry
     polars_implemented: true
     polars_pure_native: true
     duckdb_implemented: true
@@ -2134,7 +2109,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: F
     block_reason: null
@@ -2158,7 +2133,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: A
     block_reason: null
@@ -2184,7 +2159,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -2193,7 +2168,7 @@ operators:
     certified_dual: true
   yoy_by_period:
     canonical: yoy_by_period
-    execution_kind: other
+    execution_kind: registry
     polars_implemented: true
     polars_pure_native: true
     duckdb_implemented: true
@@ -2208,7 +2183,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null
@@ -2232,7 +2207,7 @@ operators:
     performance_verified: false
     semantic_certified: true
     backend_execution_certified: true
-    operational_production_certified: false
+    operational_production_certified: true
     production_status: backend_execution_certified
     upgrade_batch: null
     block_reason: null

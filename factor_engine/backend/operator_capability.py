@@ -218,7 +218,7 @@ def _sql_emitter_ok(canon: str, *, dialect: str = "duckdb_sql") -> bool:
         return False
     ok = False
     try:
-        from backend.sql_pushdown.emitter import compile_plan_to_sql, plan_is_sql_capable
+        from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql, plan_is_sql_capable
         from backend.sql_pushdown.plan_fixtures import minimal_plan
 
         plan = minimal_plan(canon)
@@ -226,8 +226,14 @@ def _sql_emitter_ok(canon: str, *, dialect: str = "duckdb_sql") -> bool:
             compiled = compile_plan_to_sql(
                 plan,
                 dataset="_cap_check",
+                table="_cap_check",
                 time_column="ts",
                 instrument_column="inst",
+                dialect=(
+                    SqlDialect.CLICKHOUSE
+                    if dialect == "clickhouse_sql"
+                    else SqlDialect.DUCKDB
+                ),
             )
             ok = compiled is not None and bool(compiled.query.strip())
     except Exception:
@@ -307,6 +313,7 @@ def capability_for(canonical: str, backend: BackendName) -> BackendCapability:
         含状态、加速比与各能力标志的 ``BackendCapability``。
     """
     from cleaned_operators.operator_policy import infer_operator_policy
+    from cleaned_operators.registry import OperatorRegistry
     from backend.operator_cost import default_backend_speedup
 
     canon = resolve_canonical(canonical)
@@ -316,6 +323,10 @@ def capability_for(canonical: str, backend: BackendName) -> BackendCapability:
     scope = getattr(policy, "scope", "") or ""
     supports_group = canon.startswith("group_") or scope == "cs"
     supports_window = canon.startswith("ts_") or scope == "ts"
+    backend_key = "sql" if backend in _SQL_BACKENDS else backend
+    backend_meta = dict(
+        ((OperatorRegistry._catalog.get(canon, {}).get("backend_meta") or {}).get(backend_key) or {})
+    )
 
     if backend == "pandas_numpy":
         status = _pandas_status(canon)
@@ -336,10 +347,13 @@ def capability_for(canonical: str, backend: BackendName) -> BackendCapability:
         backend=backend,
         status=status,
         estimated_speedup=default_backend_speedup(canon, backend, status),
-        supports_nulls=True,
-        supports_min_periods=supports_window,
-        supports_group=supports_group,
-        supports_window=supports_window,
+        supports_nulls=bool(backend_meta.get("supports_nulls", True)),
+        supports_min_periods=bool(backend_meta.get("supports_min_periods", supports_window)),
+        supports_group=bool(backend_meta.get("supports_group", supports_group)),
+        supports_window=bool(backend_meta.get("supports_window", supports_window)),
+        supports_lazy=bool(backend_meta.get("supports_lazy", False)),
+        supports_streaming=bool(backend_meta.get("supports_streaming", False)),
+        materializes_full_panel=bool(backend_meta.get("materializes_full_panel", False)),
         notes=notes,
     )
 

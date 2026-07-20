@@ -20,6 +20,39 @@ def _jsonable(v: Any) -> Any:
     raise TypeError(f"unsupported plan attribute type: {type(v).__name__}")
 
 
+def _operator_semantic_contract(op: str) -> dict[str, Any]:
+    """Bind structural hashes to the registered operator semantics."""
+    if op in {"column", "literal", "plan_ref"}:
+        return {"semantic_version": 1}
+    try:
+        from cleaned_operators.operator_policy import infer_operator_policy
+        from cleaned_operators.registry import OperatorRegistry
+        from backend.evidence_provenance import compute_payload_hash
+        from backend.production_signature import signature_for
+
+        canonical = OperatorRegistry.resolve_canonical(op)
+        catalog = OperatorRegistry._catalog.get(canonical, {})
+        signature = signature_for(canonical)
+        signature_payload = None
+        if signature is not None:
+            signature_payload = {
+                "default_status": signature.default_status,
+                "params": [(p.name, p.constraint, p.status) for p in signature.params],
+            }
+        return {
+            "canonical": canonical,
+            "semantic_version": str(catalog.get("semantic_version") or "1.0"),
+            "policy_hash": compute_payload_hash(
+                infer_operator_policy(canonical, canonical=canonical).to_dict()
+            ),
+            "signature_hash": compute_payload_hash(signature_payload),
+        }
+    except (ImportError, AttributeError, KeyError, RuntimeError, ValueError, TypeError):
+        # Bootstrap/compiler tooling can construct plans before registry load;
+        # such plans remain deterministic but are intentionally version 0.
+        return {"canonical": op, "semantic_version": "unregistered"}
+
+
 def structural_key(node: PlanNode, memo: dict[int, str] | None = None) -> str:
     """递归计算子树结构键；同一子树形状得到相同字符串。
 
@@ -40,9 +73,8 @@ def structural_key(node: PlanNode, memo: dict[int, str] | None = None) -> str:
         "op": node.op,
         "attrs": {k: _jsonable(v) for k, v in sorted(node.attrs.items())},
         "in": child_keys,
+        "operator_contract": _operator_semantic_contract(node.op),
     }
-    semantic_version = payload["attrs"].get("semantic_version", 1)
-    payload["semantic_version"] = semantic_version
     s = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     key = hashlib.sha256(s.encode("utf-8")).hexdigest()
     memo[nid] = key

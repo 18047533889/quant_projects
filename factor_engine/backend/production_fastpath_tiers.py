@@ -322,7 +322,7 @@ from cleaned_operators.operator_surface import (
 # Runtime admission is authored from the reviewed surface, never from those
 # mutable rollout lists.  ``protected_div`` is the sole internal lowering
 # primitive that participates in production certification.
-P0_PRODUCTION_FASTPATH_CANONICALS = frozenset(_DAILY_CANONICALS | {"protected_div"})
+P0_PRODUCTION_FASTPATH_CANONICALS = frozenset(_DAILY_CANONICALS)
 P1_POLARS_CORE_PRODUCTION_SAFE = frozenset()
 P1_DUCKDB_CORE_PRODUCTION_SAFE = frozenset()
 P1_POLARS_PRODUCTION_SAFE = frozenset()

@@ -63,9 +63,19 @@ _LOADED = False
 def load_all() -> None:
     global _LOADED
     if _LOADED:
-        return
+        if OperatorRegistry.lifecycle() == "frozen":
+            return
+        from cleaned_operators.registry import RegistryInitializationError
+
+        raise RegistryInitializationError(
+            f"loaded registry is unexpectedly {OperatorRegistry.lifecycle()!r}"
+        )
     if OperatorRegistry.lifecycle() != "building":
-        return
+        from cleaned_operators.registry import RegistryInitializationError
+
+        raise RegistryInitializationError(
+            f"unloaded registry cannot initialize from {OperatorRegistry.lifecycle()!r}"
+        )
     for mod in _LOAD_MODULES:
         __import__(mod, fromlist=["*"])
     from cleaned_operators._dedupe import apply_operator_deduplication

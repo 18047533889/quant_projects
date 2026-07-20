@@ -12,7 +12,7 @@ class Optimizer:
         """创建优化器；默认不改变 divide/group_mean 的边界语义。"""
         self.allow_semantic_rewrites = bool(allow_semantic_rewrites)
 
-    def optimize(self, plan: PlanNode) -> PlanNode:
+    def optimize(self, plan: PlanNode, *, production: bool = False) -> PlanNode:
         """对逻辑计划执行优化流水线。
 
         参数：
@@ -29,7 +29,7 @@ class Optimizer:
         refolded = self._fold_literals(lowered)
         return rewrite_plan_for_fastpath(
             refolded,
-            allow_semantic_rewrites=self.allow_semantic_rewrites,
+            allow_semantic_rewrites=(self.allow_semantic_rewrites and not production),
         )
 
     def lower_only(self, plan: PlanNode) -> PlanNode:
@@ -41,7 +41,7 @@ class Optimizer:
         return self._fold_literals(lowered)
 
     def optimize_with_trace(
-        self, plan: PlanNode
+        self, plan: PlanNode, *, production: bool = False
     ) -> tuple[PlanNode, PlanNode, tuple[tuple[str, tuple[str, ...]], ...]]:
         """返回 ``(optimized_plan, pre_lowering_plan, lowering_trace)``。"""
         from planner.composite_lowering import build_lowering_trace, lower_composite_operators
@@ -52,7 +52,7 @@ class Optimizer:
         refolded = self._fold_literals(lowered)
         final = rewrite_plan_for_fastpath(
             refolded,
-            allow_semantic_rewrites=self.allow_semantic_rewrites,
+            allow_semantic_rewrites=(self.allow_semantic_rewrites and not production),
         )
         trace = build_lowering_trace(folded, refolded)
         return final, folded, trace

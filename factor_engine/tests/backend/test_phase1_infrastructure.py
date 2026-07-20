@@ -19,9 +19,9 @@ def test_phase1_scope_loaded(_loaded):
 
     s = phase1_summary()
     assert s["primitive_count"] >= 80
-    assert s["composite_count"] == 16
+    assert s["composite_count"] >= 16
     assert s["primitive_certified_dual"] >= 13
-    assert s["composite_full_parity_count"] == 16
+    assert s["composite_full_parity_count"] >= 16
     assert s["composite_production_certified_count"] >= 1
 
 

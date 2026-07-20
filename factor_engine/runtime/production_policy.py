@@ -124,6 +124,8 @@ def record_production_pandas_fallback(
     mode: str | None = None,
 ) -> None:
     """production 下 Polars 热路径回退 pandas 时记录/告警。"""
+    if mode is None:
+        mode = getattr(ctx, "run_mode", None)
     if not is_production_mode(mode):
         return
     if actual_backend != "pandas_numpy" or requested_backend == actual_backend:

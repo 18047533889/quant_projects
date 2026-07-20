@@ -25,19 +25,37 @@ _LEGACY_PRODUCTION_CORE: frozenset[str] = frozenset()
 _FASTPATH_ALIAS_ONLY: frozenset[str] = frozenset({"if_else"})
 
 
-def _build_production_dual_backend_core() -> frozenset[str]:
-    """Use the reviewed daily surface as the production primitive core."""
+def _build_production_authoring_canonicals() -> frozenset[str]:
+    """Return the reviewed daily authoring target, not a capability claim."""
     from cleaned_operators.operator_surface import DAILY_CANONICALS
 
-    return frozenset(DAILY_CANONICALS) | frozenset({"protected_div"})
+    return frozenset(DAILY_CANONICALS)
+
+
+PRODUCTION_AUTHORING_CANONICALS: frozenset[str] = _build_production_authoring_canonicals()
+PRODUCTION_INTERNAL_CANONICALS: frozenset[str] = frozenset()
+
+
+def _build_production_dual_backend_core() -> frozenset[str]:
+    """Derive certified three-engine capability from current evidence."""
+    from backend.evidence_provenance import evidence_artifact_valid
+    from backend.primitive_evidence import PRIMITIVE_BACKEND_EXECUTION_CERTIFIED
+
+    if not evidence_artifact_valid():
+        return frozenset()
+    return frozenset(
+        canonical
+        for canonical in PRODUCTION_AUTHORING_CANONICALS
+        if canonical in PRIMITIVE_BACKEND_EXECUTION_CERTIFIED
+    )
 
 
 PRODUCTION_DUAL_BACKEND_CORE_CANONICALS: frozenset[str] = _build_production_dual_backend_core()
 
 
 def _build_production_core_canonicals() -> frozenset[str]:
-    """Build the production core from the static reviewed daily surface."""
-    return PRODUCTION_DUAL_BACKEND_CORE_CANONICALS
+    """Build the policy target independently from current backend evidence."""
+    return PRODUCTION_AUTHORING_CANONICALS | PRODUCTION_INTERNAL_CANONICALS
 
 
 # SQL 下推 / DSL 常用 production 核心 canonical（PIT 门禁 / 契约脚本对齐此清单）
@@ -307,7 +325,17 @@ def _compute_allow_in_production(
             return pit_safe
         return False
     if resolved in PRODUCTION_CORE_CANONICALS:
-        return True
+        from backend.evidence_provenance import evidence_artifact_valid
+        from backend.primitive_evidence import PRIMITIVE_BACKEND_EXECUTION_CERTIFIED
+        from backend.production_signature import operational_production_allowed
+
+        return bool(
+            pit_safe
+            and shape_preserving
+            and evidence_artifact_valid()
+            and resolved in PRIMITIVE_BACKEND_EXECUTION_CERTIFIED
+            and operational_production_allowed(resolved)
+        )
     if status == "production":
         return pit_safe
     return False

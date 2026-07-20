@@ -17,6 +17,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 计算绝对值
   execution_kind: primitive
   production_policy: allowed
@@ -40,6 +41,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: Basic runtime operator
   execution_kind: primitive
   production_policy: allowed
@@ -63,6 +65,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: Basic runtime operator
   execution_kind: primitive
   production_policy: allowed
@@ -87,6 +90,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 向上取整
   execution_kind: primitive
   production_policy: allowed
@@ -113,6 +117,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 裁剪到 [lo, hi] 区间
   execution_kind: primitive
   production_policy: allowed
@@ -138,6 +143,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 返回第一个非 NaN 值
   execution_kind: primitive
   production_policy: allowed
@@ -162,6 +168,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 计算截面非空计数
   execution_kind: primitive
   production_policy: allowed
@@ -186,6 +193,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 截面数据减去均值
   execution_kind: primitive
   production_policy: allowed
@@ -209,6 +217,8 @@
   allow_in_production: true
   backends:
   - pandas_numpy
+  - polars
+  - sql
   description: 截面中位绝对偏差（MAD，广播到各列）
   execution_kind: primitive
   production_policy: allowed
@@ -232,6 +242,8 @@
   allow_in_production: true
   backends:
   - pandas_numpy
+  - polars
+  - sql
   description: MAD 稳健 Z-Score：(x - median) / MAD
   execution_kind: primitive
   production_policy: allowed
@@ -256,6 +268,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 计算截面均值
   execution_kind: primitive
   production_policy: allowed
@@ -280,6 +293,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 截面百分位排名（同 rank_pct）
   execution_kind: primitive
   production_policy: allowed
@@ -303,6 +317,8 @@
   allow_in_production: true
   backends:
   - pandas_numpy
+  - polars
+  - sql
   description: 计算截面标准差
   execution_kind: primitive
   production_policy: allowed
@@ -327,6 +343,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 计算截面求和
   execution_kind: primitive
   production_policy: allowed
@@ -350,6 +367,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: Basic runtime operator
   execution_kind: primitive
   production_policy: allowed
@@ -375,6 +393,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: eq comparison with symmetric scalar broadcasting
   execution_kind: primitive
   production_policy: allowed
@@ -399,6 +418,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 计算e的x次方
   execution_kind: primitive
   production_policy: allowed
@@ -424,6 +444,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 常量填充
   execution_kind: primitive
   production_policy: allowed
@@ -448,6 +469,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 向下取整
   execution_kind: primitive
   production_policy: allowed
@@ -473,6 +495,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: ge comparison with symmetric scalar broadcasting
   execution_kind: primitive
   production_policy: allowed
@@ -498,6 +521,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 计算组内非空样本数
   execution_kind: primitive
   production_policy: allowed
@@ -523,6 +547,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 计算组内最大值
   execution_kind: primitive
   production_policy: allowed
@@ -548,6 +573,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 计算组内均值
   execution_kind: primitive
   production_policy: allowed
@@ -573,6 +599,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 计算组内最小值
   execution_kind: primitive
   production_policy: allowed
@@ -597,6 +624,8 @@
   allow_in_production: true
   backends:
   - pandas_numpy
+  - polars
+  - sql
   description: 在指定分组内进行去均值处理 (x - group_mean)
   execution_kind: primitive
   production_policy: allowed
@@ -621,6 +650,8 @@
   allow_in_production: true
   backends:
   - pandas_numpy
+  - polars
+  - sql
   description: 在指定分组内对股票进行归一化到[0,1]
   execution_kind: primitive
   production_policy: allowed
@@ -646,6 +677,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 在指定分组内对股票进行排名，返回归一化排名(0-1)
   execution_kind: primitive
   production_policy: allowed
@@ -671,6 +703,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 计算组内标准差
   execution_kind: primitive
   production_policy: allowed
@@ -696,6 +729,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 计算组内求和
   execution_kind: primitive
   production_policy: allowed
@@ -721,6 +755,8 @@
   allow_in_production: true
   backends:
   - pandas_numpy
+  - polars
+  - sql
   description: 在指定分组内进行缩尾处理，将超出分位数a的值截断
   execution_kind: primitive
   production_policy: allowed
@@ -746,6 +782,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 在指定分组内进行Z-Score标准化 (x-mean)/std
   execution_kind: primitive
   production_policy: allowed
@@ -771,6 +808,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: gt comparison with symmetric scalar broadcasting
   execution_kind: primitive
   production_policy: allowed
@@ -794,6 +832,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: Basic runtime operator
   execution_kind: primitive
   production_policy: allowed
@@ -818,6 +857,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 判断是否为有限数
   execution_kind: primitive
   production_policy: allowed
@@ -842,6 +882,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 判断是否为 ±Inf
   execution_kind: primitive
   production_policy: allowed
@@ -866,6 +907,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 判断是否非 NULL
   execution_kind: primitive
   production_policy: allowed
@@ -890,6 +932,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 判断是否为 NULL/缺失
   execution_kind: primitive
   production_policy: allowed
@@ -915,6 +958,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: le comparison with symmetric scalar broadcasting
   execution_kind: primitive
   production_policy: allowed
@@ -939,6 +983,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 计算自然对数（底数为e）
   execution_kind: primitive
   production_policy: allowed
@@ -963,6 +1008,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 返回log(abs(x))
   execution_kind: primitive
   production_policy: allowed
@@ -988,6 +1034,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: lt comparison with symmetric scalar broadcasting
   execution_kind: primitive
   production_policy: allowed
@@ -1013,6 +1060,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 逐元素 max(x,y)
   execution_kind: primitive
   production_policy: allowed
@@ -1038,6 +1086,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 逐元素 min(x,y)
   execution_kind: primitive
   production_policy: allowed
@@ -1061,6 +1110,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: Basic runtime operator
   execution_kind: primitive
   production_policy: allowed
@@ -1086,6 +1136,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: ne comparison with symmetric scalar broadcasting
   execution_kind: primitive
   production_policy: allowed
@@ -1110,6 +1161,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 返回-x
   execution_kind: primitive
   production_policy: allowed
@@ -1133,6 +1185,8 @@
   allow_in_production: true
   backends:
   - pandas_numpy
+  - polars
+  - sql
   description: 归一化到[0, 1]
   execution_kind: primitive
   production_policy: allowed
@@ -1156,6 +1210,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: Basic runtime operator
   execution_kind: primitive
   production_policy: allowed
@@ -1179,6 +1234,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: Basic runtime operator
   execution_kind: primitive
   production_policy: allowed
@@ -1206,6 +1262,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 按连续报告期计算平均值
   execution_kind: primitive
   production_policy: allowed
@@ -1235,6 +1292,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 按连续报告期计算复合增长率
   execution_kind: primitive
   production_policy: allowed
@@ -1263,6 +1321,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 按连续报告期计算变化
   execution_kind: primitive
   production_policy: allowed
@@ -1288,33 +1347,8 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 计算x的y次方
-  execution_kind: primitive
-  production_policy: allowed
-  lowering_available: false
-  dual_backend_target: true
-- name: protected_div
-  scope: elementwise
-  frequency: any
-  input_fields:
-  - x
-  - y
-  - epsilon
-  - default
-  output_type: series
-  pit_safe: true
-  domain_policy: all_numeric
-  overflow_policy: ieee_propagate
-  null_policy: propagate
-  includes_current: true
-  lookback: null
-  min_periods: null
-  nan_policy: propagate
-  status: research
-  allow_in_production: true
-  backends:
-  - pandas_numpy
-  description: 支持 Series/标量双向广播的安全除法
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
@@ -1341,6 +1375,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: strict cumulative-to-quarter conversion
   execution_kind: primitive
   production_policy: allowed
@@ -1365,6 +1400,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 截面 0-1 排名（单有效值 → 0.5）；pandas 百分位排名见 rank_pct
   execution_kind: primitive
   production_policy: allowed
@@ -1391,6 +1427,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: finite safe division returning null for near-zero denominator
   execution_kind: primitive
   production_policy: allowed
@@ -1415,6 +1452,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 返回符号：正数返回1，负数返回-1，零返回0
   execution_kind: primitive
   production_policy: allowed
@@ -1439,6 +1477,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 符号对数：sign(x) * log(|x|)
   execution_kind: primitive
   production_policy: allowed
@@ -1462,6 +1501,8 @@
   allow_in_production: true
   backends:
   - pandas_numpy
+  - polars
+  - sql
   description: '保留符号开方: sign(x)*sqrt(|x|)'
   execution_kind: primitive
   production_policy: allowed
@@ -1486,6 +1527,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 计算平方根
   execution_kind: primitive
   production_policy: allowed
@@ -1509,6 +1551,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: Basic runtime operator
   execution_kind: primitive
   production_policy: allowed
@@ -1533,6 +1576,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 计算双曲正切值
   execution_kind: primitive
   production_policy: allowed
@@ -1559,6 +1603,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 滚动自相关 corr(x_t, x_{t-lag}) within window
   execution_kind: primitive
   production_policy: allowed
@@ -1585,6 +1630,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 计算两变量的n期移动Beta
   execution_kind: primitive
   production_policy: allowed
@@ -1611,6 +1657,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 滚动相关系数 (ts_correlation的别名)
   execution_kind: primitive
   production_policy: allowed
@@ -1637,6 +1684,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 滚动协方差 (与m_cov相同)
   execution_kind: primitive
   production_policy: allowed
@@ -1662,6 +1710,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: n期滞后 (与Ref相同)
   execution_kind: primitive
   production_policy: allowed
@@ -1687,6 +1736,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: n期差分 (与Delta相同)
   execution_kind: primitive
   production_policy: allowed
@@ -1711,6 +1761,8 @@
   allow_in_production: true
   backends:
   - pandas_numpy
+  - polars
+  - sql
   description: d 期对数收益率 ln(x_t / x_{t-d})
   execution_kind: primitive
   production_policy: allowed
@@ -1736,6 +1788,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 滚动最大值 (与m_max相同)
   execution_kind: primitive
   production_policy: allowed
@@ -1761,6 +1814,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 滚动均值 (与m_avg相同)
   execution_kind: primitive
   production_policy: allowed
@@ -1786,6 +1840,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 计算n期移动中位数
   execution_kind: primitive
   production_policy: allowed
@@ -1811,6 +1866,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 滚动最小值 (与m_min相同)
   execution_kind: primitive
   production_policy: allowed
@@ -1836,6 +1892,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: d 期变化率
   execution_kind: primitive
   production_policy: allowed
@@ -1860,6 +1917,8 @@
   allow_in_production: true
   backends:
   - pandas_numpy
+  - polars
+  - sql
   description: 滚动排名 (与m_rank相同)
   execution_kind: primitive
   production_policy: allowed
@@ -1885,6 +1944,8 @@
   allow_in_production: true
   backends:
   - pandas_numpy
+  - polars
+  - sql
   description: 滚动夏普：mean/std * sqrt(ann_factor)
   execution_kind: primitive
   production_policy: allowed
@@ -1910,6 +1971,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 滚动标准差 (ts_std_dev的别名)
   execution_kind: primitive
   production_policy: allowed
@@ -1935,6 +1997,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 滚动求和 (与m_sum相同)
   execution_kind: primitive
   production_policy: allowed
@@ -1960,6 +2023,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 计算n期移动方差
   execution_kind: primitive
   production_policy: allowed
@@ -1985,6 +2049,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 滚动Z-Score (与m_zscore相同)
   execution_kind: primitive
   production_policy: allowed
@@ -2012,6 +2077,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: strict cumulative-to-TTM
   execution_kind: primitive
   production_policy: allowed
@@ -2040,6 +2106,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: strict consecutive-period TTM
   execution_kind: primitive
   production_policy: allowed
@@ -2066,6 +2133,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 条件选择（与if_else相同）
   execution_kind: primitive
   production_policy: allowed
@@ -2091,6 +2159,8 @@
   allow_in_production: true
   backends:
   - pandas_numpy
+  - polars
+  - sql
   description: 缩尾处理
   execution_kind: primitive
   production_policy: allowed
@@ -2120,6 +2190,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: strict fiscal-period growth
   execution_kind: primitive
   production_policy: allowed
@@ -2144,6 +2215,7 @@
   backends:
   - pandas_numpy
   - polars
+  - sql
   description: 对截面数据进行Z-Score标准化（与c_zscore相同）
   execution_kind: primitive
   production_policy: allowed

@@ -851,6 +851,7 @@
     "expanding_mean": {
       "aliases": [
         "avg",
+        "cum_avg",
         "cumulative_mean"
       ],
       "backend_meta": {
@@ -1032,7 +1033,9 @@
       "aliases": [
         "FillForward",
         "cum_last",
-        "fillna_forward"
+        "fillna_forward",
+        "last",
+        "last_not_null"
       ],
       "backend_meta": {
         "pandas_numpy": {
@@ -1062,7 +1065,9 @@
       "surface": "research_tools"
     },
     "fft": {
-      "aliases": [],
+      "aliases": [
+        "dft"
+      ],
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -1200,7 +1205,9 @@
       "surface": "research_tools"
     },
     "first_not_null": {
-      "aliases": [],
+      "aliases": [
+        "first"
+      ],
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -1352,7 +1359,9 @@
       "surface": "research_tools"
     },
     "ifft": {
-      "aliases": [],
+      "aliases": [
+        "idft"
+      ],
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -2376,7 +2385,9 @@
       "surface": "research_tools"
     },
     "r_squared": {
-      "aliases": [],
+      "aliases": [
+        "R2"
+      ],
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,
@@ -2516,7 +2527,9 @@
       "surface": "research_tools"
     },
     "residual": {
-      "aliases": [],
+      "aliases": [
+        "Residual"
+      ],
       "backend_meta": {
         "pandas_numpy": {
           "explicit": false,

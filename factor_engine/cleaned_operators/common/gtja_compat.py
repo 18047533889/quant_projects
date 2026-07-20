@@ -207,5 +207,5 @@ class GTJADivOrDefault(SeriesOperator):
         return _safe_divide(x, y, epsilon=float(epsilon), default=float(default), missing_default=True)
 
 
-for _alias in ("Slope", "slope", "TS_TIME_SLOPE"):
+for _alias in ("TS_TIME_SLOPE",):
     OperatorRegistry.register_alias(_alias, "ts_time_slope")

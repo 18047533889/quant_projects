@@ -64,18 +64,32 @@ def _try_rewrite_ts_zscore(node: PlanNode, inputs: list[PlanNode]) -> PlanNode |
         return None
     mean_attrs = _window_attrs(mean_node)
     std_attrs = _window_attrs(den)
-    for key in ("d", "window", "min_periods", "ddof", "null_policy"):
-        mean_value = mean_node.attrs.get(key)
-        std_value = den.attrs.get(key)
-        if key in {"d", "window"}:
-            if mean_value is None:
-                mean_value = mean_attrs["d"]
-            if std_value is None:
-                std_value = std_attrs["d"]
-        if mean_value != std_value:
+    if mean_attrs["window"] != std_attrs["window"]:
+        return None
+    allowed_mean = {
+        "d", "window", "min_periods", "null_policy", "nan_policy",
+        "includes_current_bar",
+    }
+    allowed_std = allowed_mean | {"ddof", "zero_std_policy"}
+    if set(mean_node.attrs) - allowed_mean or set(den.attrs) - allowed_std:
+        return None
+    defaults = {
+        "min_periods": 1,
+        "null_policy": "ignore",
+        "nan_policy": "propagate",
+        "includes_current_bar": True,
+    }
+    for key, default in defaults.items():
+        if mean_node.attrs.get(key, default) != den.attrs.get(key, default):
             return None
     w = mean_attrs["d"]
-    attrs = {"d": w, "window": w}
+    attrs = {
+        "d": w,
+        "window": w,
+        **{key: mean_node.attrs.get(key, default) for key, default in defaults.items()},
+        "ddof": den.attrs.get("ddof", 1),
+        "zero_std_policy": den.attrs.get("zero_std_policy", "zero"),
+    }
     return PlanNode(op="ts_zscore", inputs=[left], attrs=attrs)
 
 

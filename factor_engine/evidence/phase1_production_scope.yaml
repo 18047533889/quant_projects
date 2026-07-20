@@ -1,7 +1,7 @@
 schema_version: 1
 freeze_id: phase1-dual-backend-primitives-v1
-frozen_at: '2026-07-19T18:52:47.448051+00:00'
-frozen_commit_sha: 92efe11211ca5dacbaabeac9721dd31e54fe516d
+frozen_at: '2026-07-20T14:35:27.804531+00:00'
+frozen_commit_sha: 8bd7a3b8ced63ed5c40cbeebc0a941eec61f84fe
 description: 第一阶段 production 范围冻结：约 90 primitive + 16 composite。未经 scripts/certify_operator.py
   完整证据链不得新增 production 算子。
 invariants:
@@ -1307,30 +1307,6 @@ primitives:
       tie_policy: null
       zero_denominator: null
       return_type: float64
-  protected_div:
-    kind: primitive
-    tier: p0
-    phase1_status: certified_dual
-    production_policy: allowed
-    polars_long:
-      tier: native
-      production_tier: production_safe
-    duckdb_sql:
-      implemented: true
-      production_safe: true
-    certification:
-      dual_backend_production_safe: true
-      effective_dual_backend_fastpath: true
-    semantics:
-      scope: elementwise
-      null_policy: propagate
-      nan_policy: propagate
-      inf_policy: to_nan
-      min_periods: null
-      ddof: null
-      tie_policy: null
-      zero_denominator: 'null'
-      return_type: float64
   quarter_from_cumulative:
     kind: primitive
     tier: p0
@@ -2172,7 +2148,7 @@ primitives:
       zero_denominator: null
       return_type: float64
 counts:
-  primitives: 89
+  primitives: 88
   composites: 20
-  certified_dual: 87
+  certified_dual: 86
   composite_certified: 1

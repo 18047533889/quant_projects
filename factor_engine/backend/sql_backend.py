@@ -49,7 +49,9 @@ class SqlBackend(Backend):
         from .polars_long_policy import assert_no_blocked_causal_plan
 
         assert_no_blocked_causal_plan(plan, backend="duckdb_sql")
-        physical = lower_to_physical_plan(plan)
+        physical = lower_to_physical_plan(
+            plan, mode=str(getattr(ctx, "run_mode", "research") or "research").lower()
+        )
         pctx = extract_pushdown_context(ctx)
         dialect = pctx.dialect.value if pctx is not None else None
 

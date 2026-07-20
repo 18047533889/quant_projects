@@ -47,6 +47,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
+          python -m pip install -e ./dataaccess
           python -m pip install pytest pyyaml
       - name: Compile cold-start package
         run: python -m compileall -q factor_cold_start

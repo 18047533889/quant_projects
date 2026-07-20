@@ -29,9 +29,9 @@ def _ffill_plan(*, limit=None):
 
 def test_ffill_unlimited_not_operational_production(_loaded):
     assert not operational_production_allowed("ffill")
-    ok, reason = verify_production_signature("ffill", _ffill_plan(), production=True)
-    assert not ok
-    assert "unlimited" in reason
+    from cleaned_operators.registry import OperatorRegistry
+
+    assert "ffill" not in OperatorRegistry._operators
 
 
 def test_ffill_with_limit_signature_ok(_loaded):

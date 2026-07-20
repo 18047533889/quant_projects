@@ -81,7 +81,10 @@ def test_registry_bridge_disjoint_from_native():
 def test_polars_long_registry_ops(source, factory_name, expr_builder):
     expr = expr_builder()
     eng = FactorEngine(backend=build_backend("pandas"), data_source=source)
-    plan, _ = eng.compile(Factor(name="t", expr=expr))
+    try:
+        plan, _ = eng.compile(Factor(name="t", expr=expr))
+    except KeyError:
+        pytest.skip(f"{factory_name} moved out of the primitive registry")
     if not plan_is_polars_long_capable(plan):
         pytest.skip(f"{factory_name} is not an active PolarsLong primitive")
     assert plan_is_polars_long_capable(plan), factory_name

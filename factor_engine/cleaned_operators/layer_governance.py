@@ -236,9 +236,14 @@ def _enrich_catalog(daily: set[str]) -> None:
     close_cutoff = {"MACD_line", "MACD_signal", "MACD_hist", "RSI_WILDER", "ATR_WILDER", "ADX", "true_range"}
     for canonical, catalog in OperatorRegistry._catalog.items():
         surface = classify_canonical(canonical)
-        scope = _scope_for(canonical)
         operator = OperatorRegistry.get(canonical)
         policy = infer_operator_policy(operator, canonical=canonical) if operator is not None else None
+        policy_scope = getattr(policy, "scope", "unknown") if policy is not None else "unknown"
+        scope = {
+            "ts": "time_series",
+            "cs": "cross_sectional",
+            "group": "group",
+        }.get(policy_scope, policy_scope if policy_scope != "unknown" else _scope_for(canonical))
         params = list(catalog.get("param_names") or [])
         if scope == "fundamental_period":
             cutoff, trade_time = "available_at", "next_decision_time"
@@ -259,7 +264,9 @@ def _enrich_catalog(daily: set[str]) -> None:
             "pit_safe": bool(policy.pit_safe) if policy is not None else False,
             "required_cutoff": cutoff,
             "earliest_trade_time": trade_time,
-            "stateful": canonical in {"ts_ema", "RSI_WILDER", "ATR_WILDER", "ADX"},
+            # StatefulCheckpointRegistry is attached after governance and is
+            # the sole source of truth.  Never infer this from a name list.
+            "stateful": False,
             "lookback_fn": "window" if "window" in params else ("periods" if "periods" in params else None),
             "replacement_policy": "sealed_after_bootstrap",
         })

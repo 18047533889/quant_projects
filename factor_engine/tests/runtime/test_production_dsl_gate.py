@@ -43,7 +43,7 @@ def test_production_compile_blocks_shuffle():
     try:
         eng = FactorEngine(backend=build_backend("pandas"), data_source=source, run_mode="production")
         factor = Factor(name="bad", expr=shuffle(col("close"), 1), source_expr="shuffle(close, 1)")
-        with pytest.raises(ProductionPolicyViolation, match="非 production 算子"):
+        with pytest.raises(KeyError, match="unknown operator canonical"):
             eng.compile(factor)
     finally:
         os.environ.pop("QUANT_PRODUCTION_MODE", None)

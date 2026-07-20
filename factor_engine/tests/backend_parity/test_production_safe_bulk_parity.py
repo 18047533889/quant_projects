@@ -141,7 +141,10 @@ def _col(name: str):
 
 
 def _run(source, expr, backend: str):
-    return FactorEngine(backend=build_backend(backend), data_source=source).run(
+    # Evidence generation must not depend on already-valid production evidence.
+    return FactorEngine(
+        backend=build_backend(backend), data_source=source, run_mode="research"
+    ).run(
         Factor(name="t", expr=expr)
     )
 

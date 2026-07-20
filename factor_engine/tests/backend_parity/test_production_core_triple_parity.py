@@ -131,7 +131,11 @@ def _col(name: str):
 
 
 def _run(source, expr, backend_name: str):
-    return FactorEngine(backend=build_backend(backend_name), data_source=source).run(
+    # Certification executes untrusted candidates in research mode.  Production
+    # capability is granted only after this suite writes a valid artifact.
+    return FactorEngine(
+        backend=build_backend(backend_name), data_source=source, run_mode="research"
+    ).run(
         Factor(name="t", expr=expr)
     )
 

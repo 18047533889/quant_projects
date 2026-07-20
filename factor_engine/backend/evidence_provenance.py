@@ -7,6 +7,7 @@ import json
 import subprocess
 import sys
 import platform
+from functools import lru_cache
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
@@ -142,6 +143,7 @@ def load_verified_artifact() -> dict[str, Any]:
     return json.loads(VERIFIED_JSON.read_text(encoding="utf-8"))
 
 
+@lru_cache(maxsize=2)
 def evidence_artifact_valid(*, require_commit_match: bool = False) -> bool:
     """验证 evidence 是否仍绑定当前代码、case registry 与 emitter 实现。"""
     try:
@@ -175,13 +177,30 @@ def evidence_artifact_valid(*, require_commit_match: bool = False) -> bool:
     for canonical, record in operators.items():
         if not isinstance(record, dict):
             return False
-        expected = implementation_hashes_for(str(canonical))
-        if expected and any(record.get(key) != value for key, value in expected.items()):
+        for backend_key in ("pandas", "polars", "duckdb"):
+            hash_key = f"implementation_hash_{backend_key}"
+            source_key = f"implementation_source_{backend_key}"
+            recorded_hash = str(record.get(hash_key) or "")
+            recorded_source = str(record.get(source_key) or "")
+            if not recorded_hash:
+                continue
+            if not recorded_source:
+                return False
+            source_path = (FE_ROOT / recorded_source).resolve()
+            try:
+                source_path.relative_to(FE_ROOT.resolve())
+            except ValueError:
+                return False
+            if _source_hash(source_path) != recorded_hash:
+                return False
+        try:
+            semantic_expected = semantic_hashes_for(str(canonical))
+        except (ImportError, AttributeError, RuntimeError):
+            # During registry bootstrap operator_policy intentionally imports
+            # primitive_evidence.  A partially initialized semantic module must
+            # fail closed, never break package import or grant capability.
             return False
-        if not expected and any(
-            key.startswith("implementation_hash_")
-            for key in record
-        ):
+        if any(record.get(key) != value for key, value in semantic_expected.items()):
             return False
     verified_names = set()
     for key in (
@@ -203,10 +222,67 @@ def evidence_artifact_valid(*, require_commit_match: bool = False) -> bool:
     return True
 
 
+@lru_cache(maxsize=256)
 def _source_hash(path: Path) -> str:
     if not path.is_file():
         return ""
     return compute_implementation_hash(path.read_text(encoding="utf-8"))
+
+
+@lru_cache(maxsize=32)
+def _tree_hash(root: Path, patterns: tuple[str, ...] = ("*.py", "*.json", "*.csv")) -> str:
+    """Hash a deterministic source/data tree while excluding generated caches."""
+    if not root.exists():
+        return ""
+    files: set[Path] = set()
+    for pattern in patterns:
+        files.update(p for p in root.rglob(pattern) if "__pycache__" not in p.parts)
+    payload = hashlib.sha256()
+    for path in sorted(files):
+        payload.update(str(path.relative_to(root)).encode("utf-8"))
+        payload.update(b"\0")
+        payload.update(path.read_bytes())
+        payload.update(b"\0")
+    return payload.hexdigest()[:16]
+
+
+def semantic_hashes_for(canonical: str) -> dict[str, str]:
+    """Return all mutable semantic inputs that invalidate operator evidence."""
+    # This function is called while operator_policy imports primitive_evidence.
+    # Hash sources directly so validation is bootstrap-safe and cannot observe a
+    # partially initialized registry.  Including canonical keeps each record
+    # independently bound even when a shared policy/signature table changes.
+    policy_source = _source_hash(FE_ROOT / "cleaned_operators" / "operator_policy.py")
+    signature_source = _source_hash(FE_ROOT / "backend" / "production_signature.py")
+    semantic_sources = (
+        FE_ROOT / "backend" / "numeric_semantics.py",
+        FE_ROOT / "backend" / "cross_section_spec.py",
+        FE_ROOT / "backend" / "production_signature.py",
+    )
+    semantic_contract = {
+        str(path.relative_to(FE_ROOT)): _source_hash(path) for path in semantic_sources
+    }
+    variant_source = _source_hash(
+        FE_ROOT / "tests" / "backend_parity" / "evidence_case_registry.py"
+    )
+    return {
+        "operator_policy_hash": compute_payload_hash({"canonical": canonical, "source": policy_source}),
+        "parameter_signature_hash": compute_payload_hash({"canonical": canonical, "source": signature_source}),
+        "semantic_contract_hash": compute_payload_hash(semantic_contract),
+        "planner_rewrite_hash": _source_hash(FE_ROOT / "planner" / "rewrite_fastpath.py"),
+        "bridge_parameter_hash": _source_hash(FE_ROOT / "backend" / "cleaned_bridge.py"),
+        "test_source_hash": _tree_hash(FE_ROOT / "tests" / "backend_parity", ("*.py",)),
+        "golden_data_hash": compute_payload_hash({
+            "operator_golden": _tree_hash(FE_ROOT / "tests" / "operator_golden", ("*.py", "*.csv", "*.json", "*.parquet")),
+            "fixtures": _tree_hash(FE_ROOT / "tests" / "fixtures" / "golden", ("*.py", "*.csv", "*.json", "*.parquet")),
+            "integration_fixture": _tree_hash(FE_ROOT / "tests" / "integration" / "fixtures" / "golden", ("*.csv", "*.json", "*.parquet")),
+        }),
+        "tolerance_policy_hash": compute_payload_hash({
+            "numeric_semantics": _source_hash(FE_ROOT / "backend" / "numeric_semantics.py"),
+            "parity_helpers": _source_hash(FE_ROOT / "tests" / "backend_parity" / "duckdb_parity_helpers.py"),
+        }),
+        "execution_variant_hash": compute_payload_hash({"canonical": canonical, "source": variant_source}),
+    }
 
 
 def implementation_hashes_for(canonical: str) -> dict[str, str]:
@@ -214,7 +290,7 @@ def implementation_hashes_for(canonical: str) -> dict[str, str]:
     from cleaned_operators.registry import OperatorRegistry
 
     hashes: dict[str, str] = {}
-    for backend, key in (("pandas_numpy", "pandas"), ("polars", "polars"), ("sql", "duckdb")):
+    for backend, key in (("pandas_numpy", "pandas"), ("polars", "polars")):
         implementation = OperatorRegistry.get(canonical, backend)
         if implementation is None:
             continue
@@ -227,7 +303,33 @@ def implementation_hashes_for(canonical: str) -> dict[str, str]:
         digest = _source_hash(path)
         if digest:
             hashes[f"implementation_hash_{key}"] = digest
+    # SQL implementations are emitter fragments, not the registry's generic
+    # SqlCapableOperator marker.  Binding every certified SQL canonical to the
+    # emitter source is bootstrap-safe and invalidates evidence on any fragment
+    # change even before SQL markers are registered.
+    duckdb_emitter = _source_hash(FE_ROOT / "backend" / "sql_pushdown" / "emitter.py")
+    if duckdb_emitter:
+        hashes["implementation_hash_duckdb"] = duckdb_emitter
     return hashes
+
+
+def implementation_sources_for(canonical: str) -> dict[str, str]:
+    """Record reviewable relative source paths for bootstrap-safe validation."""
+    from cleaned_operators.registry import OperatorRegistry
+
+    sources: dict[str, str] = {}
+    for backend, key in (("pandas_numpy", "pandas"), ("polars", "polars")):
+        implementation = OperatorRegistry.get(canonical, backend)
+        if implementation is None:
+            continue
+        try:
+            module = __import__(implementation.__class__.__module__, fromlist=["*"])
+            path = Path(getattr(module, "__file__", "")).resolve()
+            sources[f"implementation_source_{key}"] = str(path.relative_to(FE_ROOT.resolve()))
+        except (ImportError, TypeError, ValueError):
+            continue
+    sources["implementation_source_duckdb"] = "backend/sql_pushdown/emitter.py"
+    return sources
 
 def enrich_operator_metadata(
     *,
@@ -251,6 +353,8 @@ def enrich_operator_metadata(
         rec = dict(merged.get(name) or {})
         rec.setdefault("semantic_version", 2)
         rec.update(implementation_hashes_for(name))
+        rec.update(implementation_sources_for(name))
+        rec.update(semantic_hashes_for(name))
         if polars_h and "implementation_hash_polars" not in rec:
             rec["implementation_hash_polars_emitter"] = polars_h
         if duck_h and "implementation_hash_duckdb" not in rec:

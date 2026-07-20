@@ -159,14 +159,18 @@ def finalize() -> None:
         if operator is None:
             continue
         implementation = implementation_source(operator)
-        materialized = any(token in implementation for token in (
+        forbidden_bridge = any(token in implementation for token in (
             "to_numpy(", "np.", "rolling_map(", "map_elements(", "to_pandas(",
             "panel_pandas_bridge", "bridge_pandas", "bridge_registry",
         ))
-        if materialized:
+        if forbidden_bridge:
             remove_backend(canonical, "polars")
             continue
-        execution_kind = "numpy_materialized" if materialized else "expression_native"
+        materialized = any(token in implementation for token in (
+            ".unpivot(", ".pivot(", ".collect(",
+            "_cs_long_transform(", "_group_long_transform(",
+        ))
+        execution_kind = "polars_eager_native" if materialized else "expression_native"
         entry = OperatorRegistry._catalog.get(canonical, {})
         backend_meta = dict(entry.get("backend_meta") or {})
         polars_meta = dict(backend_meta.get("polars") or {})

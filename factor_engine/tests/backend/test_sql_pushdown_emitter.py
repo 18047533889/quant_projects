@@ -460,7 +460,7 @@ def test_protected_log_sql():
     from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = PlanNode(op="protected_log", inputs=[_col("close")])
-    assert plan_is_sql_capable(plan)
+    assert not plan_is_sql_capable(plan)
     compiled = compile_plan_to_sql(
         plan,
         dataset="d",
@@ -468,15 +468,14 @@ def test_protected_log_sql():
         instrument_column="i",
         dialect=SqlDialect.DUCKDB,
     )
-    assert compiled is not None
-    assert "WHEN _v IS NULL" in compiled.query
+    assert compiled is None
 
 
 def test_protected_sqrt_sql():
     from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = PlanNode(op="protected_sqrt", inputs=[_col("close")])
-    assert plan_is_sql_capable(plan)
+    assert not plan_is_sql_capable(plan)
     compiled = compile_plan_to_sql(
         plan,
         dataset="d",
@@ -484,15 +483,14 @@ def test_protected_sqrt_sql():
         instrument_column="i",
         dialect=SqlDialect.DUCKDB,
     )
-    assert compiled is not None
-    assert "WHEN _v IS NULL THEN NULL" in compiled.query
+    assert compiled is None
 
 
 def test_nan_to_num_sql():
     from backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
 
     plan = PlanNode(op="nan_to_num", inputs=[_col("close"), _lit(-1.0)])
-    assert plan_is_sql_capable(plan)
+    assert not plan_is_sql_capable(plan)
     compiled = compile_plan_to_sql(
         plan,
         dataset="d",
@@ -500,10 +498,7 @@ def test_nan_to_num_sql():
         instrument_column="i",
         dialect=SqlDialect.DUCKDB,
     )
-    assert compiled is not None
-    assert "isnan(_v)" in compiled.query or "isNaN(_v)" in compiled.query
-    assert "isinf(_v)" in compiled.query or "isInfinite(_v)" in compiled.query
-    assert "-1" in compiled.query
+    assert compiled is None
 
 
 def test_is_nan_sql():
@@ -723,4 +718,3 @@ def test_cs_regression_sql_modes():
         )
         assert compiled is not None
         assert needle in compiled.query
-

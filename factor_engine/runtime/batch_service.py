@@ -200,6 +200,9 @@ def execute_run_many(
         含 ``results``、``dag``、``analyses`` 及可选 ``batch_graph``、
         ``input_dq``、``backend_paths`` 等的字典。
     """
+    from runtime.production_policy import is_production_mode
+
+    pit_enforce = bool(pit_enforce or is_production_mode(engine.run_mode))
     assert_production_run_flags(
         mode=engine.run_mode,
         input_dq_check=input_dq_check,
@@ -358,6 +361,9 @@ def execute_run_many_parallel(
     Raises:
         ImportError: 未安装 joblib。
     """
+    from runtime.production_policy import is_production_mode
+
+    pit_enforce = bool(pit_enforce or is_production_mode(engine.run_mode))
     assert_production_run_flags(
         mode=engine.run_mode,
         input_dq_check=input_dq_check,

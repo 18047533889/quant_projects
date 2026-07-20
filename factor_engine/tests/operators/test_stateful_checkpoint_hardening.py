@@ -9,6 +9,33 @@ import pytest
 from stateful_runtime import execute_stateful_segment
 
 
+@pytest.mark.parametrize("canonical", ["ts_ewm_std", "ts_ewm_var", "ts_ewm_cov", "ts_ewm_corr"])
+def test_ewm_checkpoint_matches_full_pandas_history(canonical: str) -> None:
+    timestamps = pd.date_range("2024-01-01", periods=7, tz="UTC")
+    x = np.array([1.0, 2.0, np.nan, 4.0, 5.0, 4.0, 7.0])
+    y = np.array([2.0, 1.0, 3.0, 8.0, 7.0, np.nan, 9.0])
+    inputs = {"x": x} if canonical in {"ts_ewm_std", "ts_ewm_var"} else {"x": x, "y": y}
+    common = {"instrument": "A", "input_identity": {"dataset": "unit"}, "params": {"span": 3}}
+    first = execute_stateful_segment(
+        canonical, {key: values[:3] for key, values in inputs.items()},
+        timestamps=timestamps[:3], starts_at_dataset_origin=True, **common,
+    )
+    second = execute_stateful_segment(
+        canonical, {key: values[3:] for key, values in inputs.items()},
+        timestamps=timestamps[3:], checkpoint=first.checkpoint, **common,
+    )
+    sx, sy = pd.Series(x), pd.Series(y)
+    expected = {
+        "ts_ewm_std": sx.ewm(span=3, adjust=False).std(),
+        "ts_ewm_var": sx.ewm(span=3, adjust=False).var(),
+        "ts_ewm_cov": sx.ewm(span=3, adjust=False).cov(sy),
+        "ts_ewm_corr": sx.ewm(span=3, adjust=False).corr(sy),
+    }[canonical].to_numpy()
+    np.testing.assert_allclose(
+        np.concatenate([first.values, second.values]), expected, equal_nan=True
+    )
+
+
 def test_checkpoint_binds_parameters_inputs_and_adjustment() -> None:
     x = np.arange(10, dtype=float)
     timestamps = pd.date_range("2024-01-01", periods=10, freq="D", tz="UTC")

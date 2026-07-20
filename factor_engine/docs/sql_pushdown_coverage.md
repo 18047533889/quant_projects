@@ -4,8 +4,8 @@
 > ClickHouse production certification remains separate and is not inferred from DuckDB.
 
 - active SQL emitter implementations: **128**
-- DuckDB parity verified: **87**
-- DuckDB production safe: **87**
+- DuckDB parity verified: **86**
+- DuckDB production safe: **86**
 
 | canonical | implemented | parity verified | production safe |
 |---|---:|---:|---:|
@@ -75,7 +75,7 @@
 | period_change | yes | yes | yes |
 | period_lag | yes | no | no |
 | power | yes | yes | yes |
-| protected_div | yes | yes | yes |
+| protected_div | yes | no | no |
 | quarter_from_cumulative | yes | yes | yes |
 | rank | yes | yes | yes |
 | safe_div_null | yes | yes | yes |

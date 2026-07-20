@@ -17,6 +17,8 @@ def _loaded() -> None:
 
 
 def test_backend_registration_preserves_governance_metadata() -> None:
+    from cleaned_operators.registry import _BOOTSTRAP_TOKEN
+
     class Meta:
         name = "_catalog_merge_probe"
         description = "probe"
@@ -25,17 +27,23 @@ def test_backend_registration_preserves_governance_metadata() -> None:
     class Op:
         metadata = Meta()
 
-    OperatorRegistry.register(Op(), canonical=Meta.name, backend="pandas_numpy", source="test")
-    OperatorRegistry._catalog[Meta.name].update(
-        surface="daily", pit_safe=True, scope="elementwise", checkpoint_contract={"version": 1}
-    )
-    OperatorRegistry.register(Op(), canonical=Meta.name, backend="sql", source="test-sql")
-    entry = OperatorRegistry._catalog[Meta.name]
-    assert entry["surface"] == "daily"
-    assert entry["pit_safe"] is True
-    assert entry["scope"] == "elementwise"
-    assert entry["checkpoint_contract"] == {"version": 1}
-    OperatorRegistry.unregister(Meta.name)
+    OperatorRegistry.thaw_for_bootstrap(_BOOTSTRAP_TOKEN)
+    try:
+        OperatorRegistry.register(Op(), canonical=Meta.name, backend="pandas_numpy", source="test")
+        OperatorRegistry._catalog[Meta.name].update(
+            surface="daily", pit_safe=True, scope="elementwise", checkpoint_contract={"version": 1}
+        )
+        OperatorRegistry.register(Op(), canonical=Meta.name, backend="sql", source="test-sql")
+        entry = OperatorRegistry._catalog[Meta.name]
+        assert entry["surface"] == "daily"
+        assert entry["pit_safe"] is True
+        assert entry["scope"] == "elementwise"
+        assert entry["checkpoint_contract"] == {"version": 1}
+        OperatorRegistry.unregister(Meta.name)
+    finally:
+        if OperatorRegistry.lifecycle() == "building":
+            OperatorRegistry.finalize()
+        OperatorRegistry.freeze()
 
 
 def test_tanh_native_polars_edges_and_pit() -> None:

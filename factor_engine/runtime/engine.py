@@ -116,6 +116,9 @@ class FactorEngine:
             ProductionPolicyViolation: production 模式下计划不合规。
             PITAuditError: PIT 审计失败（``pit_enforce=True`` 时）。
         """
+        from runtime.production_policy import is_production_mode
+
+        pit_enforce = bool(pit_enforce or is_production_mode(self.run_mode))
         started_at = time.perf_counter()
         logger.info("开始编译因子 '%s'", factor.name)
         analysis = self.analyzer.lower(factor.expr)
@@ -128,7 +131,9 @@ class FactorEngine:
                 forbid_forward_fill=pit_forbid_forward_fill,
             )
         logical_plan = self.lowerer.to_logical_plan(analysis.ir)
-        optimized_plan = self.optimizer.optimize(logical_plan)
+        optimized_plan = self.optimizer.optimize(
+            logical_plan, production=is_production_mode(self.run_mode)
+        )
         from runtime.production_policy import (
             assert_no_unapproved_map_groups_in_production,
             assert_production_fastpath_plan,
@@ -1303,6 +1308,9 @@ class FactorEngine:
             ``input_dq``、``run_window``、``backend_path``、``production_pandas_fallbacks``
             及 SQL/Polars 路径诊断字段。
         """
+        from runtime.production_policy import is_production_mode
+
+        pit_enforce = bool(pit_enforce or is_production_mode(self.run_mode))
         started_at = time.perf_counter()
         logger.info("开始执行因子 '%s'", factor.name)
         from runtime.production_policy import (

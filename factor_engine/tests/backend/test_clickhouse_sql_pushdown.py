@@ -202,10 +202,10 @@ def test_try_execute_sql_pushdown_clickhouse_nan_to_num():
         with patch("data_access.clickhouse.panel.execute_query", return_value=table) as mock_eq:
             series = try_execute_sql_pushdown(plan, ctx)
 
-    mock_eq.assert_called_once()
-    sql = mock_eq.call_args.kwargs.get("sql") or mock_eq.call_args.args[1]
-    assert "isNaN(" in sql or "isnan(" in sql
-    assert series is not None
+    # nan_to_num was moved out of the active Factor DSL.  A dormant emitter
+    # branch must not make the removed research tool SQL-capable.
+    mock_eq.assert_not_called()
+    assert series is None
 
 
 def test_try_execute_sql_pushdown_clickhouse_where_is_finite():

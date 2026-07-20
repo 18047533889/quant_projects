@@ -8,13 +8,13 @@ on:
     paths:
       - "AutoFactorEvaluation-RECONSTRUCT/**"
       - "factor_engine/**"
-      - "data_access/**"
+      - "dataaccess/**"
       - ".github/workflows/autofactor-platform-integration.yml"
   pull_request:
     paths:
       - "AutoFactorEvaluation-RECONSTRUCT/**"
       - "factor_engine/**"
-      - "data_access/**"
+      - "dataaccess/**"
       - ".github/workflows/autofactor-platform-integration.yml"
 
 permissions:
@@ -40,6 +40,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
+          python -m pip install -e ./dataaccess
           python -m pip install pytest numpy pandas scipy statsmodels pyarrow polars duckdb pyyaml pydantic requests
       - name: Static standalone distribution contract
         shell: bash
@@ -100,8 +101,8 @@ jobs:
           AUTOFAC_PLATFORM_ROOT: ${{ github.workspace }}
         run: |
           pytest -q \
-            data_access/tests/unit/test_params_validation_strict.py \
-            data_access/tests/unit/test_key_policy_deterministic.py \
-            data_access/tests/unit/test_scan_handle_guard.py \
+            dataaccess/tests/unit/test_params_validation_strict.py \
+            dataaccess/tests/unit/test_key_policy_deterministic.py \
+            dataaccess/tests/unit/test_scan_handle_guard.py \
             factor_engine/tests/test_data_scope_stability.py \
             factor_engine/tests/test_gtja_compat_semantics.py

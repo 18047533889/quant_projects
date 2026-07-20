@@ -66,16 +66,16 @@ CASE_REGISTRY_SIX_WAY: frozenset[str] = (
 )
 
 
-def _load_verified_or_registry(key: str) -> frozenset[str]:
-    """Use certified artifact when valid; otherwise expose declared cases only in development.
+def _load_verified_set(key: str) -> frozenset[str]:
+    """Return certified evidence, failing closed when provenance is invalid.
 
-    Production admission still calls ``evidence_artifact_valid`` through the
-    operational gate. This fallback keeps local capability reports and tests
-    usable while the working tree is being certified.
+    A case registry proves only that a test was declared.  It must never feed
+    routing, capability reports, production tiers, or generated manifests.
+    Declaration tooling must use :func:`declared_test_cases` explicitly.
     """
-    if evidence_artifact_valid():
-        return _verified_set(key)
-    return _case_registry_set(key)
+    if not evidence_artifact_valid():
+        return frozenset()
+    return _verified_set(key)
 
 
 def declared_test_cases(key: str | None = None) -> frozenset[str] | dict[str, frozenset[str]]:
@@ -94,15 +94,15 @@ def declared_test_cases(key: str | None = None) -> frozenset[str] | dict[str, fr
 
 
 # Verified lists（须 pytest 通过后由 certify_primitive_evidence.py 写入）
-POLARS_REFERENCE_PARITY_VERIFIED: frozenset[str] = _load_verified_or_registry("polars_reference_parity")
-POLARS_EDGE_VERIFIED: frozenset[str] = _load_verified_or_registry("polars_edge_verified")
-DUCKDB_REFERENCE_PARITY_VERIFIED: frozenset[str] = _load_verified_or_registry("duckdb_reference_parity")
-DUCKDB_REAL_SQL_VERIFIED: frozenset[str] = _load_verified_or_registry("duckdb_real_sql_verified")
-DUCKDB_EDGE_VERIFIED: frozenset[str] = _load_verified_or_registry("duckdb_edge_verified")
-DUCKDB_NULL_EDGE_VERIFIED: frozenset[str] = _load_verified_or_registry("duckdb_null_edge_verified")
-DUCKDB_NAN_EDGE_VERIFIED: frozenset[str] = _load_verified_or_registry("duckdb_nan_edge_verified")
-DUCKDB_INF_EDGE_VERIFIED: frozenset[str] = _load_verified_or_registry("duckdb_inf_edge_verified")
-POLARS_NO_FALLBACK_VERIFIED: frozenset[str] = _load_verified_or_registry("no_fallback_verified")
+POLARS_REFERENCE_PARITY_VERIFIED: frozenset[str] = _load_verified_set("polars_reference_parity")
+POLARS_EDGE_VERIFIED: frozenset[str] = _load_verified_set("polars_edge_verified")
+DUCKDB_REFERENCE_PARITY_VERIFIED: frozenset[str] = _load_verified_set("duckdb_reference_parity")
+DUCKDB_REAL_SQL_VERIFIED: frozenset[str] = _load_verified_set("duckdb_real_sql_verified")
+DUCKDB_EDGE_VERIFIED: frozenset[str] = _load_verified_set("duckdb_edge_verified")
+DUCKDB_NULL_EDGE_VERIFIED: frozenset[str] = _load_verified_set("duckdb_null_edge_verified")
+DUCKDB_NAN_EDGE_VERIFIED: frozenset[str] = _load_verified_set("duckdb_nan_edge_verified")
+DUCKDB_INF_EDGE_VERIFIED: frozenset[str] = _load_verified_set("duckdb_inf_edge_verified")
+POLARS_NO_FALLBACK_VERIFIED: frozenset[str] = _load_verified_set("no_fallback_verified")
 NO_FALLBACK_VERIFIED: frozenset[str] = POLARS_NO_FALLBACK_VERIFIED
 
 # 六证交集：backend execution certified（case registry 或 test artifact）

@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "test_passed",
+  "commit_sha": "8bd7a3b8ced63ed5c40cbeebc0a941eec61f84fe",
+  "passed_at": "2026-07-20T14:47:59.660080+00:00",
+  "recipes": [
+    "annualized_volatility",
+    "bollinger_lower",
+    "bollinger_mid",
+    "bollinger_upper",
+    "current_ratio",
+    "debt_to_equity",
+    "intraday_return",
+    "momentum",
+    "net_debt_ratio",
+    "operating_margin",
+    "overnight_gap",
+    "quick_ratio",
+    "rate_of_change",
+    "rolling_sharpe",
+    "stochastic_d",
+    "stochastic_k",
+    "williams_r"
+  ],
+  "backends": [
+    "pandas_numpy",
+    "polars_long_native",
+    "duckdb_real_sql"
+  ],
+  "edge_cases": [
+    "null",
+    "nan",
+    "zero_denominator",
+    "short_window"
+  ],
+  "no_fallback_verified": true,
+  "hashes": {
+    "case_registry_hash": "d101f40a4e6a6a78643c7168d1ff2bf24ddf941d18b406ca38e7d075f38f5675",
+    "recipe_source_hash": "ce5fcf26027ea8cbb9c7522d128caac6717cafdc7ed378713a2d8ed5c286f885",
+    "test_source_hash": "f0c89a47588aabff5946dc3f61104855fa7ae3ebee0b9d13ed5986e9d7bcccf7",
+    "primitive_evidence_hash": "36d31864fd66cafc7c0bbe6beb705ce8eea8f86f4c0fac6de63ad1ce72f3fa22"
+  }
+}

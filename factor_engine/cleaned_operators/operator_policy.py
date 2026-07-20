@@ -456,9 +456,12 @@ PANDAS_ONLY_PIT_SAFE: frozenset[str] = frozenset(
 # Backend availability is not a temporal-safety property.  In particular,
 # deterministic elementwise transforms must not become PIT-unsafe merely
 # because one execution backend is missing.
+# Temporal safety is independent of backend availability.  Keep this set
+# limited to operators whose semantics actually consume future observations or
+# deliberately destroy time ordering.
 PIT_UNSAFE_CANONICALS: frozenset[str] = frozenset(
     {"Lead", "next", "bfill", "causal_bfill", "fillna_interpolate", "shuffle"}
-) | (INTENTIONALLY_PANDAS_ONLY - PANDAS_ONLY_PIT_SAFE)
+)
 
 # 破坏 panel shape 的算子（即使 PIT-safe 也不进 production）
 NON_SHAPE_PRESERVING_CANONICALS: frozenset[str] = frozenset({"dropna"})
@@ -791,7 +794,7 @@ class OperatorPolicy:
     lookback_window: int | None = None
     min_periods: int | None = None
     lag: int = 0
-    pit_safe: bool = True
+    pit_safe: bool = False
     domain_policy: str = "all_numeric"
     overflow_policy: str = "ieee_propagate"
     null_policy: str = "propagate"
@@ -833,7 +836,7 @@ def infer_operator_policy(op: Any, *, canonical: str | None = None) -> OperatorP
     except Exception:
         pass
     if canon in _EXPLICIT_POLICIES:
-        base = {"scope": "unknown", "pit_safe": True}
+        base = {"scope": "unknown", "pit_safe": False}
         if canon in NON_SHAPE_PRESERVING_CANONICALS:
             base.update(
                 shape_preserving=False,

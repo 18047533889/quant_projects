@@ -972,11 +972,13 @@
         "INDUSTRY_NEUTRALIZE",
         "IND_NEUTRALIZE",
         "NEUTRALIZE",
+        "c_neutralize",
         "group_demean",
         "ind_neutralize",
         "industry_neutral",
         "industry_neutralize",
-        "neutralize"
+        "neutralize",
+        "panel_neutralize"
       ],
       "backends": [
         "pandas_numpy",
@@ -1450,6 +1452,7 @@
       "canonical": "neg",
       "surface": "daily",
       "aliases": [
+        "negate",
         "reverse"
       ],
       "backends": [
@@ -1650,7 +1653,8 @@
         "RANK",
         "c_rank",
         "cs_rank",
-        "cs_rank_01"
+        "cs_rank_01",
+        "panel_rank"
       ],
       "backends": [
         "pandas_numpy",
@@ -2104,7 +2108,6 @@
       "canonical": "ts_beta",
       "surface": "daily",
       "aliases": [
-        "Beta",
         "beta",
         "m_beta",
         "rolling_beta"
@@ -2167,6 +2170,7 @@
       "canonical": "ts_corr",
       "surface": "daily",
       "aliases": [
+        "Corr",
         "TS_CORR",
         "corr",
         "correlation",
@@ -2203,6 +2207,8 @@
       "canonical": "ts_cov",
       "surface": "daily",
       "aliases": [
+        "Cov",
+        "Covariance",
         "TS_COV",
         "cov",
         "m_cov",
@@ -2297,7 +2303,8 @@
         "Delta",
         "Diff",
         "TS_DELTA",
-        "delta"
+        "delta",
+        "deltas"
       ],
       "backends": [
         "pandas_numpy",
@@ -2316,7 +2323,8 @@
       "aliases": [
         "EMA",
         "ema",
-        "ewm"
+        "ewm",
+        "ewm_mean"
       ],
       "backends": [
         "pandas_numpy",
@@ -2399,6 +2407,7 @@
       "canonical": "ts_kurt",
       "surface": "extended",
       "aliases": [
+        "Kurt",
         "TS_KURT",
         "kurt",
         "m_kurt",
@@ -2448,6 +2457,7 @@
       "canonical": "ts_mad",
       "surface": "extended",
       "aliases": [
+        "Mad",
         "m_mad",
         "mad"
       ],
@@ -2467,7 +2477,8 @@
       "aliases": [
         "Max",
         "TS_MAX",
-        "m_max"
+        "m_max",
+        "window_max"
       ],
       "backends": [
         "pandas_numpy",
@@ -2516,7 +2527,10 @@
         "TS_MEAN",
         "m_avg",
         "ma",
-        "mean"
+        "mean",
+        "move",
+        "running_mean",
+        "window_mean"
       ],
       "backends": [
         "pandas_numpy",
@@ -2548,6 +2562,7 @@
       "canonical": "ts_median",
       "surface": "daily",
       "aliases": [
+        "Median",
         "m_median",
         "median"
       ],
@@ -2568,7 +2583,8 @@
       "aliases": [
         "Min",
         "TS_MIN",
-        "m_min"
+        "m_min",
+        "window_min"
       ],
       "backends": [
         "pandas_numpy",
@@ -2687,6 +2703,7 @@
       "canonical": "ts_quantile",
       "surface": "extended",
       "aliases": [
+        "Percentile",
         "TS_QUANTILE",
         "m_percentile",
         "percentile"
@@ -2828,6 +2845,7 @@
       "canonical": "ts_skew",
       "surface": "extended",
       "aliases": [
+        "Skew",
         "TS_SKEW",
         "m_skew",
         "skew",
@@ -2851,10 +2869,12 @@
         "Std",
         "TS_STD",
         "m_std",
+        "running_std",
         "std",
         "std_n",
         "ts_std_dev",
-        "ts_stddev"
+        "ts_stddev",
+        "window_std"
       ],
       "backends": [
         "pandas_numpy",
@@ -2886,10 +2906,13 @@
       "canonical": "ts_sum",
       "surface": "daily",
       "aliases": [
+        "Sum",
         "TS_SUM",
         "m_sum",
+        "running_sum",
         "sum",
-        "sum_n"
+        "sum_n",
+        "window_sum"
       ],
       "backends": [
         "pandas_numpy",
@@ -3041,6 +3064,7 @@
       "canonical": "ts_var",
       "surface": "daily",
       "aliases": [
+        "Var",
         "m_var",
         "var"
       ],
@@ -3122,6 +3146,7 @@
         "IIF",
         "WHERE",
         "if",
+        "if_else",
         "iif"
       ],
       "backends": [
@@ -3188,7 +3213,10 @@
         "CS_ZSCORE",
         "ZSCORE",
         "c_zscore",
-        "cs_zscore"
+        "cs_zscore",
+        "panel_standardize",
+        "panel_zscore",
+        "standardize"
       ],
       "backends": [
         "pandas_numpy",

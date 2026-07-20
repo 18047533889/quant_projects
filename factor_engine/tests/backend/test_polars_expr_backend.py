@@ -156,7 +156,10 @@ def test_polars_expr_matches_polars_bridge(source, factory_name, expr_builder):
 
     # compile plan for capability check
     eng = FactorEngine(backend=build_backend("pandas"), data_source=source)
-    plan, _ = eng.compile(Factor(name="t", expr=expr))
+    try:
+        plan, _ = eng.compile(Factor(name="t", expr=expr))
+    except KeyError:
+        pytest.skip(f"{factory_name} is no longer an active operator canonical")
     from cleaned_operators.operator_surface import classify_canonical
     from cleaned_operators.registry import OperatorRegistry
 

@@ -68,15 +68,19 @@ def _group_long_transform(
         .unpivot(index="_r", on=cols, variable_name="_c", value_name="_v")
     )
     if group is None:
-        long = x_long.with_columns(pl.lit(None).alias("_g"))
-    else:
-        g_cols = [c for c in cols if c in group.columns]
-        g_long = (
-            group.select(g_cols)
-            .with_row_index("_r")
-            .unpivot(index="_r", on=g_cols, variable_name="_c", value_name="_g")
-        )
-        long = x_long.join(g_long, on=["_r", "_c"], how="left")
+        raise ValueError("group is required; use an explicit cs_* operator for full cross-sections")
+    g_cols = [c for c in cols if c in group.columns]
+    if g_cols != cols:
+        missing = sorted(set(cols) - set(g_cols))
+        raise ValueError(f"group panel is missing columns: {missing}")
+    if group.height != x.height:
+        raise ValueError("group panel must have the same row count as the value panel")
+    g_long = (
+        group.select(g_cols)
+        .with_row_index("_r")
+        .unpivot(index="_r", on=g_cols, variable_name="_c", value_name="_g")
+    )
+    long = x_long.join(g_long, on=["_r", "_c"], how="left")
     long = transform(long)
     wide = (
         long.pivot(values="_v", index="_r", on="_c", aggregate_function="first")
@@ -395,8 +399,8 @@ class WinsorizeNative(SeriesOperator):
         hi_q = float(upper)
 
         def _xform(long: pl.DataFrame) -> pl.DataFrame:
-            lo = pl.col("_v").quantile(lo_q).over("_r")
-            hi = pl.col("_v").quantile(hi_q).over("_r")
+            lo = pl.col("_v").quantile(lo_q, interpolation="linear").over("_r")
+            hi = pl.col("_v").quantile(hi_q, interpolation="linear").over("_r")
             return long.with_columns(pl.col("_v").clip(lo, hi).alias("_v"))
 
         return _cs_long_transform(x, _xform)
@@ -507,8 +511,8 @@ class GroupWinsorizeNative(SeriesOperator):
 
         def _xform(long: pl.DataFrame) -> pl.DataFrame:
             key = ["_r", "_g"] if "_g" in long.columns else ["_r"]
-            lo = pl.col("_v").quantile(lo_q).over(key)
-            hi = pl.col("_v").quantile(hi_q).over(key)
+            lo = pl.col("_v").quantile(lo_q, interpolation="linear").over(key)
+            hi = pl.col("_v").quantile(hi_q, interpolation="linear").over(key)
             return long.with_columns(pl.col("_v").clip(lo, hi).alias("_v"))
 
         return _group_long_transform(x, group, _xform)

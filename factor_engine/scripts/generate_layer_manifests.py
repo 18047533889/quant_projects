@@ -80,6 +80,9 @@ def main() -> None:
         polars_ok = all(capability_for(op, "polars").status == "production_safe" for op in operators_used)
         duckdb_ok = all(capability_for(op, "duckdb_sql").status == "production_safe" for op in operators_used)
         dependency_ready = pandas_ok and polars_ok and duckdb_ok
+        from backend.recipe_evidence import recipe_execution_verified
+
+        execution_verified = recipe_execution_verified(name)
         recipe.update({
             "primitive_operators": sorted(operators_used),
             "pandas_primitive_dependencies_available": pandas_ok,
@@ -93,14 +96,14 @@ def main() -> None:
                 op in POLARS_EDGE_VERIFIED and op in DUCKDB_EDGE_VERIFIED for op in operators_used
             ),
             "primitive_dependency_backend_ready": dependency_ready,
-            "recipe_execution_verified": False,
-            "pandas_execution_verified": False,
-            "polars_execution_verified": False,
-            "duckdb_execution_verified": False,
-            "edge_verified": False,
-            "no_fallback_verified": False,
+            "recipe_execution_verified": execution_verified,
+            "pandas_execution_verified": execution_verified,
+            "polars_execution_verified": execution_verified,
+            "duckdb_execution_verified": execution_verified,
+            "edge_verified": execution_verified,
+            "no_fallback_verified": execution_verified,
         })
-        if recipe.get("status") == "production":
+        if recipe.get("status") == "production" and not execution_verified:
             recipe["status"] = "pending"
     write_json(docs / "factor_recipe_manifest.json", {
         "schema_version": "factor_recipe_manifest.v3",

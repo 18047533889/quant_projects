@@ -22,7 +22,6 @@ def _loaded():
     [
         "rank",
         "ts_std",
-        "protected_div",
         "group_zscore",
         "zscore",
     ],

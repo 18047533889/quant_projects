@@ -31,7 +31,14 @@ from __future__ import annotations
 
 import copy
 from enum import Enum
+from types import MappingProxyType
 from typing import Any, Dict, List, Optional, Tuple
+
+_BOOTSTRAP_TOKEN = object()
+
+
+class RegistryInitializationError(RuntimeError):
+    """Registry bootstrap was attempted from an impossible lifecycle state."""
 
 
 def _merge_param_names(existing: list[str] | None, new: list[str] | None) -> list[str]:
@@ -104,8 +111,10 @@ class OperatorRegistry:
             cls._version += 1
 
     @classmethod
-    def thaw_for_bootstrap(cls) -> None:
-        """Explicit test/bootstrap escape hatch for a previously frozen registry."""
+    def thaw_for_bootstrap(cls, token: object) -> None:
+        """Internal bootstrap escape hatch guarded by an unexported token."""
+        if token is not _BOOTSTRAP_TOKEN:
+            raise PermissionError("registry thaw requires the internal bootstrap token")
         if cls._lifecycle is cls.Lifecycle.FROZEN:
             cls._lifecycle = cls.Lifecycle.BUILDING
             cls._version += 1
@@ -223,15 +232,9 @@ class OperatorRegistry:
         if alias == canonical:
             return
         if alias in cls._operators or alias in cls._catalog:
-            if cls._lifecycle is cls.Lifecycle.BUILDING:
-                # Compatibility declarations may reuse a canonical spelling;
-                # the canonical implementation remains authoritative.
-                return
             raise ValueError(f"alias collides with canonical: {alias!r}")
         existing = cls._aliases.get(alias)
         if existing is not None and existing != canonical and not replace:
-            if cls._lifecycle is cls.Lifecycle.BUILDING:
-                return
             raise ValueError(f"alias already points to {existing!r}: {alias!r}")
         if replace and not replacement_reason.strip():
             raise ValueError("replacement_reason is required when replacing an alias")
@@ -261,6 +264,32 @@ class OperatorRegistry:
             aliases = set(cls._catalog[canonical].get("aliases", []))
             aliases.add(alias)
             cls._catalog[canonical]["aliases"] = sorted(aliases)
+
+    @classmethod
+    def register_compat_alias(
+        cls,
+        alias: str,
+        canonical: str,
+        *,
+        migration_reason: str,
+        deprecated_since: str,
+        removal_version: str,
+    ) -> None:
+        """Register an intentional migration alias with mandatory provenance."""
+        if not all(str(x).strip() for x in (migration_reason, deprecated_since, removal_version)):
+            raise ValueError("compat alias requires reason, deprecated_since and removal_version")
+        cls.register_alias(
+            alias,
+            canonical,
+            replace=alias in cls._aliases and cls._aliases.get(alias) != canonical,
+            replacement_reason=migration_reason,
+        )
+        if alias != canonical:
+            cls._catalog.setdefault(canonical, {}).setdefault("compat_aliases", {})[alias] = {
+                "migration_reason": migration_reason,
+                "deprecated_since": deprecated_since,
+                "removal_version": removal_version,
+            }
 
     @classmethod
     def register_catalog_only(
@@ -398,6 +427,9 @@ class OperatorRegistry:
         prefer: str = "auto",
         mode: str = "production",
         allow_unverified_backend: bool = False,
+        fallback_policy: str = "error",
+        data_source_kind: str = "memory",
+        row_count_estimate: int | None = None,
     ) -> Tuple[Any | None, str]:
         """按策略选取最优可用 backend 及算子实例。
 
@@ -408,54 +440,18 @@ class OperatorRegistry:
         返回:
             ``(算子实例或 None, 实际选用的 backend 名)`` 元组。
         """
-        canonical = cls.resolve_canonical(name)
-        backends = cls._operators.get(canonical, {})
-        if prefer == "pandas_numpy":
-            op = backends.get("pandas_numpy")
-            if op is None:
-                raise LookupError(f"{canonical!r} has no pandas_numpy backend")
-            return op, "pandas_numpy"
-        if prefer == "polars":
-            from backend.operator_capability import (
-                UnsupportedOperatorBackendError,
-                get_best_backend,
-            )
+        from backend.backend_router import BackendRouter
 
-            try:
-                return get_best_backend(
-                    canonical, prefer="polars", mode=mode,
-                    allow_unverified_backend=allow_unverified_backend,
-                )
-            except UnsupportedOperatorBackendError:
-                # Production fail-closed for unverified Polars: fall back to
-                # pandas_numpy rather than bypassing evidence or crashing callers.
-                if mode == "production" and "pandas_numpy" in backends:
-                    return backends["pandas_numpy"], "pandas_numpy"
-                raise
-        if prefer == "sql":
-            from backend.sql_tiers import (
-                is_sql_implemented,
-                is_sql_parity_verified,
-                effective_sql_production_safe,
-            )
-
-            permitted = (
-                effective_sql_production_safe(canonical)
-                if mode == "production"
-                else is_sql_parity_verified(canonical)
-                if mode == "validation"
-                else is_sql_implemented(canonical)
-            )
-            if "sql" in backends and permitted:
-                return backends["sql"], "sql"
-            return cls.get_preferred(
-                name, prefer="auto", mode=mode,
-                allow_unverified_backend=allow_unverified_backend,
-            )
-        # auto：Hybrid 路由 — SQL 在 plan 层；此处 Polars safe vs Pandas fallback
-        from backend.operator_capability import get_best_backend
-
-        return get_best_backend(name, prefer="auto", mode=mode)
+        selection = BackendRouter.select(
+            cls.resolve_canonical(name),
+            requested_backend=prefer,
+            run_mode=mode,
+            fallback_policy=fallback_policy,
+            data_source_kind=data_source_kind,
+            row_count_estimate=row_count_estimate,
+            allow_unverified_backend=allow_unverified_backend,
+        )
+        return selection.operator, selection.backend
 
     @classmethod
     def get(cls, name: str, backend: str = "pandas_numpy") -> Any:
@@ -484,3 +480,15 @@ class OperatorRegistry:
     def catalog(cls) -> Dict[str, dict]:
         """导出完整 catalog 深拷贝，防止调用者修改 registry 内部状态。"""
         return copy.deepcopy(cls._catalog)
+
+    @classmethod
+    def snapshot(cls):
+        """Return an immutable deep snapshot after the registry is frozen."""
+        if cls._lifecycle is not cls.Lifecycle.FROZEN:
+            raise RuntimeError("registry snapshot is available only after freeze")
+        return MappingProxyType({
+            "version": cls._version,
+            "operators": MappingProxyType(copy.deepcopy(cls._operators)),
+            "aliases": MappingProxyType(copy.deepcopy(cls._aliases)),
+            "catalog": MappingProxyType(copy.deepcopy(cls._catalog)),
+        })

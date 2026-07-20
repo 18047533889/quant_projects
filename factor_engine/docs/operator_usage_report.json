@@ -276,8 +276,8 @@
       "recipe_expanded_call_count": 0
     },
     "ts_delay": {
-      "call_count": 348,
-      "direct_call_count": 348,
+      "call_count": 345,
+      "direct_call_count": 345,
       "examples": [
         "ts_sum(where(close == ts_delay(close, 1), 0, close - where(close > ts_delay(close, 1), flex_min(low, ts_delay(close, 1)), flex_max(high, ts_delay(close, 1)))), 6)",
         "ts_ema(((high + low) / 2 - (ts_delay(high, 1) + ts_delay(low, 1)) / 2) * (high - low) / volume, 6)",
@@ -285,7 +285,7 @@
       ],
       "kind": "operator",
       "last_seen": "2026-07-04T16:00:59+00:00",
-      "manifest_count": 89,
+      "manifest_count": 86,
       "name": "ts_delay",
       "recipe_expanded_call_count": 0
     },
@@ -336,7 +336,7 @@
       "direct_call_count": 119,
       "examples": [
         "where(ts_sum(close, 8) / 8 + ts_std(close, 8) < ts_sum(close, 2) / 2, -1, where(ts_sum(close, 2) / 2 < ts_sum(close, 8) / 8 - ts_std(close, 8), 1, where(or_(1 < volume / ts_mean(volume, 20), volume / ts_mean(volume, 20) == 1), 1, -1)))",
-        "ts_regression(ts_mean(close, 6), ts_delay(close, 1), 6, 0, 'slope')",
+        "ts_time_slope(ts_mean(close, 6), 6)",
         "ts_ema((close - ts_mean(close, 6)) / ts_mean(close, 6) - ts_delay((close - ts_mean(close, 6)) / ts_mean(close, 6), 3), 23)"
       ],
       "kind": "operator",
@@ -411,20 +411,6 @@
       "name": "ts_rank",
       "recipe_expanded_call_count": 0
     },
-    "ts_regression_slope": {
-      "call_count": 3,
-      "direct_call_count": 3,
-      "examples": [
-        "ts_regression(ts_mean(close, 6), ts_delay(close, 1), 6, 0, 'slope')",
-        "ts_regression(close, ts_delay(close, 1), 20, 0, 'slope')",
-        "ts_regression(ts_mean(close, 12), ts_delay(close, 1), 12, 0, 'slope')"
-      ],
-      "kind": "operator",
-      "last_seen": "2026-07-04T16:00:59+00:00",
-      "manifest_count": 3,
-      "name": "ts_regression_slope",
-      "recipe_expanded_call_count": 0
-    },
     "ts_std": {
       "call_count": 25,
       "direct_call_count": 25,
@@ -451,6 +437,20 @@
       "last_seen": "2026-07-04T16:00:59+00:00",
       "manifest_count": 55,
       "name": "ts_sum",
+      "recipe_expanded_call_count": 0
+    },
+    "ts_time_slope": {
+      "call_count": 3,
+      "direct_call_count": 3,
+      "examples": [
+        "ts_time_slope(ts_mean(close, 6), 6)",
+        "ts_time_slope(close, 20)",
+        "ts_time_slope(ts_mean(close, 12), 12)"
+      ],
+      "kind": "operator",
+      "last_seen": "2026-07-04T16:00:59+00:00",
+      "manifest_count": 3,
+      "name": "ts_time_slope",
       "recipe_expanded_call_count": 0
     },
     "where": {

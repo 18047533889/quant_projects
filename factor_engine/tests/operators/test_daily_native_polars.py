@@ -38,7 +38,18 @@ def test_daily_native_polars_backend_registered(name: str) -> None:
     assert "polars" in backends, (name, backends)
     assert "sql" in backends, (name, backends)
     meta = (OperatorRegistry.catalog().get(name) or {}).get("backend_meta") or {}
-    assert meta.get("polars", {}).get("execution_kind") == "expression_native"
+    expected_kind = (
+        "polars_eager_native"
+        if name in {
+            "cs_std", "cs_mad", "cs_mad_zscore", "normalize", "winsorize",
+            "group_neutralize", "group_normalize", "group_winsorize",
+        }
+        else "expression_native"
+    )
+    assert meta.get("polars", {}).get("execution_kind") == expected_kind
+    assert bool(meta.get("polars", {}).get("materializes_full_panel")) == (
+        expected_kind == "polars_eager_native"
+    )
 
 
 def test_signed_sqrt_polars_matches_pandas() -> None:

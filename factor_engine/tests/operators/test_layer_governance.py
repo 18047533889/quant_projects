@@ -142,7 +142,9 @@ def test_pit_contract_uses_available_at_and_staleness() -> None:
 def test_registry_rejects_implicit_duplicate_after_bootstrap() -> None:
     name = "__layer_governance_test_operator__"
     op = PandasFunctionOperator(name, "internal", ["x"], "test", lambda x, **_: x)
-    OperatorRegistry.thaw_for_bootstrap()
+    from cleaned_operators.registry import _BOOTSTRAP_TOKEN
+
+    OperatorRegistry.thaw_for_bootstrap(_BOOTSTRAP_TOKEN)
     try:
         OperatorRegistry.register(op, canonical=name, source="test")
         with pytest.raises(ValueError, match="duplicate operator registration"):

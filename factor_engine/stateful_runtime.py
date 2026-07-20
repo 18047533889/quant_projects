@@ -71,6 +71,96 @@ def _ema_segment(x, state, span):
     return out, state
 
 
+def _finite_state(state, key, default):
+    value = state.get(key, default)
+    try:
+        return float(value) if np.isfinite(float(value)) else float(default)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _ewm_moment_segment(x, y, state, span, output):
+    """Exact pandas ``ewm(span, adjust=False, bias=False)`` recurrence."""
+    alpha = 2.0 / (span + 1.0)
+    beta = 1.0 - alpha
+    count = int(state.get("observation_count", 0) or 0)
+    mean_x = state.get("mean_x")
+    mean_y = state.get("mean_y")
+    mean_x = float(mean_x) if mean_x is not None and np.isfinite(mean_x) else None
+    mean_y = float(mean_y) if mean_y is not None and np.isfinite(mean_y) else None
+    moment_x = _finite_state(state, "second_moment_x", 0.0)
+    moment_y = _finite_state(state, "second_moment_y", 0.0)
+    cross = _finite_state(state, "cross_moment", 0.0)
+    weight_sum = _finite_state(state, "weight_sum", 1.0)
+    weight_sq = _finite_state(state, "squared_weight_sum", 1.0)
+    effective_weight = _finite_state(state, "effective_weight", 1.0)
+    out = np.full(x.shape, np.nan)
+
+    for i, (xv, yv) in enumerate(zip(x, y)):
+        observed = bool(np.isfinite(xv) and np.isfinite(yv))
+        if mean_x is not None:
+            effective_weight *= beta
+            weight_sum *= beta
+            weight_sq *= beta * beta
+        if observed:
+            xv, yv = float(xv), float(yv)
+            count += 1
+            if mean_x is None:
+                mean_x, mean_y = xv, yv
+            else:
+                old_x, old_y = mean_x, mean_y
+                denom = effective_weight + alpha
+                if old_x != xv:
+                    mean_x = (effective_weight * old_x + alpha * xv) / denom
+                if old_y != yv:
+                    mean_y = (effective_weight * old_y + alpha * yv) / denom
+                moment_x = (
+                    effective_weight * (moment_x + (old_x - mean_x) ** 2)
+                    + alpha * (xv - mean_x) ** 2
+                ) / denom
+                moment_y = (
+                    effective_weight * (moment_y + (old_y - mean_y) ** 2)
+                    + alpha * (yv - mean_y) ** 2
+                ) / denom
+                cross = (
+                    effective_weight * (cross + (old_x - mean_x) * (old_y - mean_y))
+                    + alpha * (xv - mean_x) * (yv - mean_y)
+                ) / denom
+                weight_sum += alpha
+                weight_sq += alpha * alpha
+                effective_weight += alpha
+                weight_sum /= effective_weight
+                weight_sq /= effective_weight * effective_weight
+                effective_weight = 1.0
+        correction_denom = weight_sum * weight_sum - weight_sq
+        if count >= 2 and correction_denom > 0.0:
+            correction = weight_sum * weight_sum / correction_denom
+            var_x = correction * moment_x
+            var_y = correction * moment_y
+            cov = correction * cross
+            if output == "var":
+                out[i] = var_x
+            elif output == "std":
+                out[i] = np.sqrt(max(var_x, 0.0))
+            elif output == "cov":
+                out[i] = cov
+            elif var_x > 0.0 and var_y > 0.0:
+                out[i] = cov / np.sqrt(var_x * var_y)
+
+    state.update({
+        "effective_weight": effective_weight,
+        "weight_sum": weight_sum,
+        "squared_weight_sum": weight_sq,
+        "observation_count": count,
+        "mean_x": np.nan if mean_x is None else mean_x,
+        "mean_y": np.nan if mean_y is None else mean_y,
+        "second_moment_x": moment_x,
+        "second_moment_y": moment_y,
+        "cross_moment": cross,
+    })
+    return out, state
+
+
 def _rsi(avg_gain, avg_loss):
     if avg_loss <= 0:
         return 50.0 if avg_gain <= 0 else 100.0
@@ -220,6 +310,14 @@ def execute_stateful_segment(canonical: str, inputs: Mapping[str, Sequence[Any]]
         values, state = _adx_segment(_array(inputs["high"], "high"), _array(inputs["low"], "low"), _array(inputs["close"], "close"), state, _positive(options.get("window", 14), "window"))
     elif canonical in {"MACD_line", "MACD_signal", "MACD_hist"}:
         values, state = _macd_segment(_array(inputs["x"], "x"), state, _positive(options.get("fast", 12), "fast"), _positive(options.get("slow", 26), "slow"), _positive(options.get("signal", 9), "signal"), {"MACD_line": "line", "MACD_signal": "signal", "MACD_hist": "hist"}[canonical])
+    elif canonical in {"ts_ewm_std", "ts_ewm_var", "ts_ewm_cov", "ts_ewm_corr"}:
+        x = _array(inputs["x"], "x")
+        y = _array(inputs.get("y", inputs["x"]), "y")
+        values, state = _ewm_moment_segment(
+            x, y, state,
+            _positive(options.get("span", options.get("window", 20)), "span"),
+            canonical.removeprefix("ts_ewm_"),
+        )
     else:
         raise ValueError(f"stateful runtime not implemented for {canonical}")
     state["last_timestamp"] = ts[-1].isoformat()

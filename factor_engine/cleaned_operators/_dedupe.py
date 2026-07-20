@@ -293,11 +293,14 @@ def apply_operator_deduplication() -> None:
     for old, new in CANONICAL_RENAMES.items():
         OperatorRegistry.rename_canonical(old, new)
 
+    # Remove retired canonical spellings before registering them as aliases;
+    # alias/canonical collisions are always errors in the Registry.
+    for name in REMOVED_CANONICALS:
+        OperatorRegistry.unregister(name)
+
     for alias, canonical in DEDUPE_ALIASES.items():
         if canonical not in OperatorRegistry._operators:
             raise RuntimeError(f"dedupe target missing: {canonical!r} (alias {alias!r})")
         OperatorRegistry.register_alias(alias, canonical)
 
-    for name in REMOVED_CANONICALS:
-        OperatorRegistry.unregister(name)
     _DEDUPE_APPLIED = True

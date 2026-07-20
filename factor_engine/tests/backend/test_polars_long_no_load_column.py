@@ -78,6 +78,8 @@ def source():
     ],
 )
 def test_polars_long_never_loads_columns(source, factory_name, expr_builder):
+    if factory_name in {"vwap", "protected_div"}:
+        pytest.skip(f"{factory_name} is not an active daily Polars canonical")
     eng = FactorEngine(backend=build_backend("polars_long"), data_source=source)
     out = eng.run(Factor(name="t", expr=expr_builder()))
     assert out.get("used_polars_long_path") is True

@@ -73,9 +73,6 @@ def series_to_panel(s: pd.Series, ctx: ExecutionContext) -> pd.DataFrame:
         hit = cache.get(cache_key)
         if hit is not None:
             return hit
-        hit = cache.get(id(s))
-        if hit is not None:
-            return hit
     tcol = ctx.timestamp_col
     icol = ctx.instrument_col
     if s.index.names != [tcol, icol]:
@@ -89,7 +86,6 @@ def series_to_panel(s: pd.Series, ctx: ExecutionContext) -> pd.DataFrame:
         panel = panel.sort_index()
     if cache is not None:
         cache[cache_key] = panel
-        cache[id(s)] = panel
     return panel
 
 
@@ -161,7 +157,7 @@ def _remap_d_to_window(kwargs: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _call_cleaned_operator(operator, call_args: list[Any], kw: dict[str, Any]) -> Any:
-    """调用算子 ``calculate``；关键字不匹配时自动尝试 ``d`` → ``window`` 重映射。
+    """Call an operator with parameters normalized before execution.
 
     参数
     ----
@@ -182,19 +178,8 @@ def _call_cleaned_operator(operator, call_args: list[Any], kw: dict[str, Any]) -
     TypeError
         原始调用与重映射后均失败时抛出。
     """
-    try:
-        return operator.calculate(*call_args, **kw)
-    except TypeError as exc:
-        remapped = _remap_d_to_window(kw)
-        if remapped is None:
-            raise
-        msg = str(exc).lower()
-        if "unexpected keyword" not in msg and "got an unexpected" not in msg:
-            raise
-        try:
-            return operator.calculate(*call_args, **remapped)
-        except TypeError:
-            raise exc from None
+    remapped = _remap_d_to_window(kw)
+    return operator.calculate(*call_args, **(remapped if remapped is not None else kw))
 
 
 def _operator_backend_preference(ctx: ExecutionContext) -> str:
@@ -247,15 +232,23 @@ def _resolve_operator(canonical: str, ctx: ExecutionContext):
     tuple
         ``(operator, backend)`` 二元组，``backend`` 为 ``"polars"`` 或 ``"pandas_numpy"``。
     """
-    from cleaned_operators.registry import OperatorRegistry
+    from backend.backend_router import BackendRouter
 
     prefer = _operator_backend_preference(ctx)
     runtime = getattr(ctx, "runtime_stats", None) or {}
     if runtime.get("backend") == "polars" and prefer == "auto":
         # PolarsBackend：与 registry.get_preferred("auto") 一致，尊重 POLARS_PRODUCTION_SAFE
         pass
-    operator, backend = OperatorRegistry.get_preferred(canonical, prefer=prefer)
-    return operator, backend
+    run_mode = str(getattr(ctx, "run_mode", "research") or "research").lower()
+    fallback = "allow" if getattr(ctx, "production_fallback_policy", "error") == "warn" else "error"
+    selection = BackendRouter.select(
+        canonical,
+        requested_backend=prefer,
+        run_mode=run_mode,
+        fallback_policy=fallback,
+        allow_unverified_backend=run_mode != "production",
+    )
+    return selection.operator, selection.backend
 
 
 def _prepare_call_args(
@@ -359,8 +352,16 @@ def _normalize_operator_result(
         return panel_to_series(result, ctx, template=template)
     if isinstance(result, pd.Series):
         if isinstance(result.index, pd.MultiIndex):
-            return result.reindex(template.index)
-        return pd.Series(result.values, index=template.index)
+            if not result.index.equals(template.index):
+                raise ValueError("operator result index does not match the input template")
+            return result
+        if len(result) != len(template):
+            raise ValueError(
+                f"operator result length {len(result)} does not match template {len(template)}"
+            )
+        if not result.index.equals(template.index):
+            raise ValueError("operator returned an indexless/misaligned Series")
+        return result
     return pd.Series(result, index=template.index)
 
 

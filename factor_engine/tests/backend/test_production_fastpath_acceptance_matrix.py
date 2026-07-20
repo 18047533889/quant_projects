@@ -28,7 +28,6 @@ ACCEPTANCE_DUAL_BACKEND = [
     "group_zscore",
     "multiply",
     "power",
-    "protected_div",
     "log_abs",
     "rank",
     "subtract",

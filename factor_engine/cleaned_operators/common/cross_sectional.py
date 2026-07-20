@@ -1075,12 +1075,12 @@ class CrossSectionalDemeanPolars(SeriesOperator):
 
 
 # canonical=group_neutralize backend=polars selected=c_neutralize source=cross_sectional/c_ops_polars.py
-@register_operator(name="c_neutralize", category="cross_sectional", business_category="cross_sectional", canonical="group_neutralize", source="factor_dsl_np")
+@register_operator(name="group_neutralize", category="cross_sectional", business_category="cross_sectional", canonical="group_neutralize", source="factor_dsl_np")
 class CrossSectionalNeutralizePolars(SeriesOperator):
     """行业中性化"""
 
     metadata = OperatorMetadata(
-        name="c_neutralize",
+        name="group_neutralize",
         category="cross_sectional",
         description="对因子进行行业中性化处理",
         examples=["c_neutralize(ROE, industry)"],
