@@ -315,11 +315,7 @@ def _tree_hash(root: Path, patterns: tuple[str, ...] = ("*.py", "*.json", "*.csv
     content.  ``git hash-object`` reads the current file, so unstaged edits still
     invalidate the evidence instead of being hidden by the index.
     """
-    if not root.exists():
-        return ""
-    files: set[Path] = set()
-    for pattern in patterns:
-        files.update(p for p in root.rglob(pattern) if "__pycache__" not in p.parts)
+    files = _tracked_tree_files(root, patterns)
     payload = hashlib.sha256()
     for path in sorted(files):
         payload.update(str(path.relative_to(root)).encode("utf-8"))
@@ -327,6 +323,34 @@ def _tree_hash(root: Path, patterns: tuple[str, ...] = ("*.py", "*.json", "*.csv
         payload.update(_canonical_file_digest(path).encode("ascii"))
         payload.update(b"\0")
     return payload.hexdigest()[:16]
+
+
+def _tracked_tree_files(root: Path, patterns: tuple[str, ...]) -> set[Path]:
+    """Return only version-controlled semantic inputs below ``root``."""
+    try:
+        repo_root = FE_ROOT.parent.resolve()
+        relative_root = root.resolve().relative_to(repo_root)
+        raw = subprocess.check_output(
+            ["git", "ls-files", "-z", "--", relative_root.as_posix()],
+            cwd=str(repo_root),
+            stderr=subprocess.DEVNULL,
+        )
+        return {
+            path
+            for item in raw.decode("utf-8").split("\0")
+            if item
+            for path in [(repo_root / item).resolve()]
+            if path.is_file() and any(path.match(pattern) for pattern in patterns)
+        }
+    except (OSError, subprocess.SubprocessError, UnicodeError, ValueError):
+        files: set[Path] = set()
+        for pattern in patterns:
+            files.update(
+                path
+                for path in root.rglob(pattern)
+                if "__pycache__" not in path.parts
+            )
+        return files
 
 
 @lru_cache(maxsize=1024)
