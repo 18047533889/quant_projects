@@ -242,10 +242,16 @@ def main() -> int:
     out = FE_ROOT / "evidence" / "primitive_verified.json"
 
     if args.check:
-        from backend.evidence_provenance import evidence_artifact_valid, load_verified_artifact
+        from backend.evidence_provenance import (
+            evidence_artifact_validation_errors,
+            load_verified_artifact,
+        )
 
-        if not evidence_artifact_valid(require_commit_match=True):
-            print("primitive_verified.json 无效或 commit 不匹配", file=sys.stderr)
+        validation_errors = evidence_artifact_validation_errors(require_commit_match=True)
+        if validation_errors:
+            print("primitive_verified.json 无效:", file=sys.stderr)
+            for error in validation_errors:
+                print(f"- {error}", file=sys.stderr)
             return 1
         data = load_verified_artifact()
         dual = set(data.get("polars_reference_parity") or [])

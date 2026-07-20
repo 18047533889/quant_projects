@@ -145,40 +145,63 @@ def load_verified_artifact() -> dict[str, Any]:
     return json.loads(VERIFIED_JSON.read_text(encoding="utf-8"))
 
 
-@lru_cache(maxsize=2)
-def evidence_artifact_valid(*, require_commit_match: bool = False) -> bool:
-    """验证 evidence 是否仍绑定当前代码、case registry 与 emitter 实现。"""
+def evidence_artifact_validation_errors(
+    *, require_commit_match: bool = False
+) -> list[str]:
+    """Return every reason the committed primitive evidence is invalid.
+
+    Keep this function uncached so CI diagnostics always describe the files on
+    disk at the time of the check.  Production callers should use the cached
+    boolean wrapper below.
+    """
+    errors: list[str] = []
     try:
         data = load_verified_artifact()
-    except (FileNotFoundError, json.JSONDecodeError, OSError, TypeError):
-        return False
+    except (FileNotFoundError, json.JSONDecodeError, OSError, TypeError) as exc:
+        return [f"artifact_load: {type(exc).__name__}: {exc}"]
     prov = data.get("provenance") or {}
     if prov.get("artifact_kind") != "test_passed":
-        return False
+        errors.append(
+            f"artifact_kind: expected='test_passed' actual={prov.get('artifact_kind')!r}"
+        )
     if not prov.get("passed_at") or not prov.get("commit_sha"):
-        return False
+        errors.append("provenance: passed_at and commit_sha are required")
     if require_commit_match and not _commit_is_ancestor(
         str(prov.get("commit_sha") or ""), current_commit_sha()
     ):
-        return False
+        errors.append(
+            "commit_ancestry: certified commit "
+            f"{prov.get('commit_sha')!r} is not an ancestor of {current_commit_sha()!r}"
+        )
     try:
         registry = load_case_registry()
-    except (FileNotFoundError, json.JSONDecodeError, OSError, TypeError):
-        return False
+    except (FileNotFoundError, json.JSONDecodeError, OSError, TypeError) as exc:
+        return errors + [f"case_registry_load: {type(exc).__name__}: {exc}"]
     if not isinstance(registry, dict):
-        return False
-    if prov.get("case_registry_hash") != compute_case_registry_hash(registry):
-        return False
-    if dict(prov.get("emitter_hashes") or {}) != emitter_hashes():
-        return False
+        return errors + [f"case_registry_type: expected=dict actual={type(registry).__name__}"]
+    expected_case_hash = compute_case_registry_hash(registry)
+    if prov.get("case_registry_hash") != expected_case_hash:
+        errors.append(
+            "case_registry_hash: "
+            f"expected={expected_case_hash!r} actual={prov.get('case_registry_hash')!r}"
+        )
+    expected_emitters = emitter_hashes()
+    recorded_emitters = dict(prov.get("emitter_hashes") or {})
+    if recorded_emitters != expected_emitters:
+        errors.append(
+            f"emitter_hashes: expected={expected_emitters!r} actual={recorded_emitters!r}"
+        )
     recorded_versions = dict(prov.get("runtime_versions") or {})
     current_versions = collect_runtime_versions()
     operators = data.get("operators") or {}
     if not isinstance(operators, dict):
-        return False
+        return errors + [f"operators_type: expected=dict actual={type(operators).__name__}"]
     for canonical, record in operators.items():
         if not isinstance(record, dict):
-            return False
+            errors.append(
+                f"operator[{canonical}]: expected=dict actual={type(record).__name__}"
+            )
+            continue
         for backend_key in ("pandas", "polars", "duckdb"):
             hash_key = f"implementation_hash_{backend_key}"
             source_key = f"implementation_source_{backend_key}"
@@ -187,23 +210,53 @@ def evidence_artifact_valid(*, require_commit_match: bool = False) -> bool:
             if not recorded_hash:
                 continue
             if not recorded_source:
-                return False
+                errors.append(f"operator[{canonical}].{source_key}: missing")
+                continue
             source_path = (FE_ROOT / recorded_source).resolve()
             try:
                 source_path.relative_to(FE_ROOT.resolve())
             except ValueError:
-                return False
-            if _source_hash(source_path) != recorded_hash:
-                return False
+                errors.append(
+                    f"operator[{canonical}].{source_key}: escapes factor_engine root"
+                )
+                continue
+            expected_hash = _source_hash(source_path)
+            if expected_hash != recorded_hash:
+                errors.append(
+                    f"operator[{canonical}].{hash_key}: expected={expected_hash!r} "
+                    f"actual={recorded_hash!r} source={recorded_source!r}"
+                )
         try:
             semantic_expected = semantic_hashes_for(str(canonical))
-        except (ImportError, AttributeError, RuntimeError):
+        except (ImportError, AttributeError, RuntimeError) as exc:
             # During registry bootstrap operator_policy intentionally imports
             # primitive_evidence.  A partially initialized semantic module must
             # fail closed, never break package import or grant capability.
-            return False
-        if any(record.get(key) != value for key, value in semantic_expected.items()):
-            return False
+            errors.append(
+                f"operator[{canonical}].semantic_hashes: {type(exc).__name__}: {exc}"
+            )
+            continue
+        for key, value in semantic_expected.items():
+            if record.get(key) != value:
+                errors.append(
+                    f"operator[{canonical}].{key}: expected={value!r} "
+                    f"actual={record.get(key)!r}"
+                )
+        recorded_domain_hash = str(record.get("parameter_domain_hash") or "")
+        if recorded_domain_hash:
+            try:
+                expected_domain_hash = parameter_domain_hash_for(str(canonical))
+            except (ImportError, AttributeError, RuntimeError) as exc:
+                errors.append(
+                    f"operator[{canonical}].parameter_domain_hash: "
+                    f"{type(exc).__name__}: {exc}"
+                )
+            else:
+                if recorded_domain_hash != expected_domain_hash:
+                    errors.append(
+                        f"operator[{canonical}].parameter_domain_hash: "
+                        f"expected={expected_domain_hash!r} actual={recorded_domain_hash!r}"
+                    )
     verified_names = set()
     for key in (
         "polars_reference_parity", "polars_edge_verified", "duckdb_reference_parity",
@@ -212,7 +265,10 @@ def evidence_artifact_valid(*, require_commit_match: bool = False) -> bool:
     ):
         verified_names.update(str(name) for name in (data.get(key) or []))
     if not verified_names.issubset(set(operators)):
-        return False
+        errors.append(
+            "verified_operator_records: missing="
+            f"{sorted(verified_names.difference(set(operators)))!r}"
+        )
     # Platform/architecture remain provenance metadata, but do not invalidate
     # portable semantic evidence.  Python minor AST/runtime differences are
     # covered by source/golden hashes; require the Python major and library
@@ -227,8 +283,19 @@ def evidence_artifact_valid(*, require_commit_match: bool = False) -> bool:
             recorded = ".".join(recorded.split(".")[:2])
             current = ".".join(current.split(".")[:2])
         if not recorded or recorded != current:
-            return False
-    return True
+            errors.append(
+                f"runtime_versions.{key}: expected_family={current!r} "
+                f"actual_family={recorded!r}"
+            )
+    return errors
+
+
+@lru_cache(maxsize=2)
+def evidence_artifact_valid(*, require_commit_match: bool = False) -> bool:
+    """验证 evidence 是否仍绑定当前代码、case registry 与 emitter 实现。"""
+    return not evidence_artifact_validation_errors(
+        require_commit_match=require_commit_match
+    )
 
 
 @lru_cache(maxsize=256)
@@ -292,6 +359,26 @@ def semantic_hashes_for(canonical: str) -> dict[str, str]:
         }),
         "execution_variant_hash": compute_payload_hash({"canonical": canonical, "source": variant_source}),
     }
+
+
+def parameter_domain_hash_for(canonical: str) -> str:
+    """Recompute the exact signature-domain digest stored in evidence."""
+    from backend.operator_evidence_schema import compute_implementation_hash
+    from backend.production_signature import signature_for
+
+    sig = signature_for(canonical)
+    if sig is None:
+        return ""
+    return compute_implementation_hash(
+        json.dumps(
+            {
+                "canonical": sig.canonical,
+                "default_status": sig.default_status,
+                "params": [(p.name, p.constraint, p.status) for p in sig.params],
+            },
+            sort_keys=True,
+        )
+    )
 
 
 def implementation_hashes_for(canonical: str) -> dict[str, str]:
@@ -370,16 +457,7 @@ def enrich_operator_metadata(
             rec["implementation_hash_duckdb_emitter"] = duck_h
         sig = signature_for(name)
         if sig is not None:
-            rec["parameter_domain_hash"] = compute_implementation_hash(
-                json.dumps(
-                    {
-                        "canonical": sig.canonical,
-                        "default_status": sig.default_status,
-                        "params": [(p.name, p.constraint, p.status) for p in sig.params],
-                    },
-                    sort_keys=True,
-                )
-            )
+            rec["parameter_domain_hash"] = parameter_domain_hash_for(name)
         variants = EXECUTION_VARIANTS.get(name)
         if variants:
             rec["execution_variants"] = variants

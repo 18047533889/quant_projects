@@ -84,6 +84,11 @@ jobs:
             gtja191/tests/test_full_catalog_factor_engine.py \
             gtja191/tests/test_gtja191.py
       - name: Platform regressions
+        env:
+          # AutoFactorEvaluation ships a provider-local ``data_access`` module.
+          # Exclude that path here so DataAccess regression tests exercise the
+          # editable production package installed above, not the shadow copy.
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/gtja191
         run: |
           pytest -q \
             dataaccess/tests/unit/test_params_validation_strict.py \
