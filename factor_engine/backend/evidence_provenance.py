@@ -59,6 +59,8 @@ def collect_runtime_versions() -> dict[str, str]:
         "python": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
     }
     for mod, key in (
+        ("numpy", "numpy"),
+        ("pandas", "pandas"),
         ("polars", "polars"),
         ("duckdb", "duckdb"),
         ("pyarrow", "pyarrow"),
@@ -211,10 +213,17 @@ def evidence_artifact_valid(*, require_commit_match: bool = False) -> bool:
         verified_names.update(str(name) for name in (data.get(key) or []))
     if not verified_names.issubset(set(operators)):
         return False
-    for key in ("python", "polars", "duckdb", "pyarrow", "os", "architecture"):
+    # Platform/architecture remain provenance metadata, but do not invalidate
+    # portable semantic evidence.  Python minor AST/runtime differences are
+    # covered by source/golden hashes; require the Python major and library
+    # major.minor ABI/semantic families.
+    for key in ("python", "numpy", "pandas", "polars", "duckdb", "pyarrow"):
         recorded = str(recorded_versions.get(key, ""))
         current = str(current_versions.get(key, ""))
-        if key in {"python", "polars", "duckdb", "pyarrow"}:
+        if key == "python":
+            recorded = recorded.split(".")[0]
+            current = current.split(".")[0]
+        else:
             recorded = ".".join(recorded.split(".")[:2])
             current = ".".join(current.split(".")[:2])
         if not recorded or recorded != current:

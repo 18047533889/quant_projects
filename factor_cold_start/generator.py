@@ -76,6 +76,11 @@ def existing_formula_hashes(repo_root: Path = ROOT) -> set[str]:
     if snapshot.is_file():
         data = json.loads(snapshot.read_text(encoding="utf-8"))
         hashes.update(str(value) for value in data.get("formula_hashes", []))
+        # ``ast.dump`` is not stable across Python minor versions.  The
+        # committed snapshot is the cross-runtime authority; mixing it with
+        # hashes recomputed by the current interpreter made CI (3.11) and
+        # developer machines (3.13) produce different coverage reports.
+        return hashes
     for path in (repo_root / "gtja191" / "formulas").glob("*.dsl"):
         formula = _strip_dsl(path)
         if formula:

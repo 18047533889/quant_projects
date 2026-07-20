@@ -2252,10 +2252,12 @@
   },
   "provenance": {
     "artifact_kind": "test_passed",
-    "commit_sha": "8bd7a3b8ced63ed5c40cbeebc0a941eec61f84fe",
-    "passed_at": "2026-07-20T13:52:25.903896+00:00",
+    "commit_sha": "5f1786155ba70b255ef4143542ec7ebe7af04ece",
+    "passed_at": "2026-07-20T15:00:30.429375+00:00",
     "runtime_versions": {
       "python": "3.13.5",
+      "numpy": "2.1.3",
+      "pandas": "2.2.3",
       "polars": "1.42.1",
       "duckdb": "1.5.4",
       "pyarrow": "22.0.0",

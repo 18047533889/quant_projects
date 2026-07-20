@@ -1,7 +1,7 @@
 schema_version: 1
 freeze_id: phase1-dual-backend-primitives-v1
-frozen_at: '2026-07-20T14:35:27.804531+00:00'
-frozen_commit_sha: 8bd7a3b8ced63ed5c40cbeebc0a941eec61f84fe
+frozen_at: '2026-07-20T15:01:30.277999+00:00'
+frozen_commit_sha: 5f1786155ba70b255ef4143542ec7ebe7af04ece
 description: 第一阶段 production 范围冻结：约 90 primitive + 16 composite。未经 scripts/certify_operator.py
   完整证据链不得新增 production 算子。
 invariants:
