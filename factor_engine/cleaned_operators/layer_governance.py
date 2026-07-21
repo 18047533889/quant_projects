@@ -102,32 +102,6 @@ RESEARCH_CANONICALS = frozenset({
 # Historical duplicate that can remain as a compatibility alias without a canonical.
 ALIAS_MIGRATIONS = {"log_returns": "ts_log_return"}
 
-DAILY_ADDITIONS = frozenset({
-    "true_range",
-    "ffill_limit",
-    "cs_fill_mean",
-    "cs_fill_median",
-    "cs_rank_gaussian",
-    "period_change",
-    "period_average",
-    "period_cagr",
-    "period_lag",
-    "quarter_from_cumulative",
-    "ttm_from_quarterly",
-    "ttm_from_cumulative",
-    "yoy_by_period",
-    "MACD_line",
-    "MACD_signal",
-    "MACD_hist",
-    "RSI_WILDER",
-    "ATR_WILDER",
-    "ADX",
-    "ts_ewm_std",
-    "ts_ewm_var",
-    "ts_ewm_cov",
-    "ts_ewm_corr",
-})
-
 _FINALIZED = False
 
 
@@ -215,20 +189,6 @@ def formula_field_names() -> set[str]:
     return fields
 
 
-def _scope_for(canonical: str) -> str:
-    if canonical.startswith("period_") or canonical in {
-        "quarter_from_cumulative", "ttm_from_quarterly", "ttm_from_cumulative", "yoy_by_period"
-    }:
-        return "fundamental_period"
-    if canonical.startswith("group_"):
-        return "group"
-    if canonical.startswith("cs_") or canonical in {"rank", "zscore", "winsorize"}:
-        return "cross_sectional"
-    if canonical.startswith("ts_") or canonical in DAILY_ADDITIONS:
-        return "time_series"
-    return "elementwise"
-
-
 def _enrich_catalog(daily: set[str]) -> None:
     from cleaned_operators.operator_surface import classify_canonical
     from cleaned_operators.operator_policy import infer_operator_policy
@@ -239,11 +199,13 @@ def _enrich_catalog(daily: set[str]) -> None:
         operator = OperatorRegistry.get(canonical)
         policy = infer_operator_policy(operator, canonical=canonical) if operator is not None else None
         policy_scope = getattr(policy, "scope", "unknown") if policy is not None else "unknown"
+        if policy_scope == "unknown":
+            raise RuntimeError(f"active canonical {canonical!r} has no explicit scope policy")
         scope = {
             "ts": "time_series",
             "cs": "cross_sectional",
             "group": "group",
-        }.get(policy_scope, policy_scope if policy_scope != "unknown" else _scope_for(canonical))
+        }.get(policy_scope, policy_scope)
         params = list(catalog.get("param_names") or [])
         if scope == "fundamental_period":
             cutoff, trade_time = "available_at", "next_decision_time"
@@ -251,16 +213,19 @@ def _enrich_catalog(daily: set[str]) -> None:
             cutoff, trade_time = "close", "next_session_open"
         else:
             cutoff, trade_time = "input_dependent", "input_dependent"
+        lifecycle_status = (
+            "production" if surface == "daily" else
+            "research" if surface == "research" else
+            "deprecated" if surface == "legacy" else
+            "experimental"
+        )
         catalog.update({
             "surface": surface,
-            "status": (
-                "production" if surface == "daily" else
-                "research" if surface == "research" else
-                "deprecated" if surface == "legacy" else
-                surface
-            ),
+            "status": lifecycle_status,
+            "lifecycle_status": lifecycle_status,
+            "backend_status": "implemented",
             "scope": scope,
-            "semantic_version": "2.0" if canonical in DAILY_ADDITIONS else "1.0",
+            "semantic_version": "2.0" if surface == "daily" else "1.0",
             "pit_safe": bool(policy.pit_safe) if policy is not None else False,
             "required_cutoff": cutoff,
             "earliest_trade_time": trade_time,

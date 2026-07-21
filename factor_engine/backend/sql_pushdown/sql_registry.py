@@ -81,14 +81,38 @@ def register_sql_backends() -> None:
         else:
             incomplete = True
             continue
-        if "sql" in OperatorRegistry.backends_for(target):
-            continue
-        OperatorRegistry.register(
-            SqlCapableOperator(target),
-            canonical=target,
-            backend="sql",
-            source="backend/sql_pushdown",
-        )
+        if "sql" not in OperatorRegistry.backends_for(target):
+            OperatorRegistry.register(
+                SqlCapableOperator(target),
+                canonical=target,
+                backend="sql",
+                source="backend/sql_pushdown",
+            )
+        # SQL capability is an explicit implementation contract.  Production
+        # reports must not infer these flags from an operator name or defaults.
+        from cleaned_operators.operator_policy import infer_operator_policy
+
+        entry = OperatorRegistry._catalog[target]
+        policy = infer_operator_policy(target, canonical=target)
+        scope = getattr(policy, "scope", "unknown")
+        params = set(entry.get("param_names") or ())
+        backend_meta = dict(entry.get("backend_meta") or {})
+        sql_meta = dict(backend_meta.get("sql") or {})
+        sql_meta.update({
+            "execution_kind": "sql_expression_native",
+            "supports_lazy": True,
+            "supports_streaming": True,
+            "materializes_full_panel": False,
+            "supports_nulls": True,
+            "supports_nan": True,
+            "supports_inf": True,
+            "supports_scalar_broadcast": True,
+            "supports_group": scope == "group",
+            "supports_window": scope == "ts",
+            "supports_min_periods": "min_periods" in params,
+        })
+        backend_meta["sql"] = sql_meta
+        entry["backend_meta"] = backend_meta
     _SQL_MARKERS_REGISTERED = True
     _SQL_MARKERS_INCOMPLETE = incomplete
 

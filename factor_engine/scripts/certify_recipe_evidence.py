@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -26,9 +27,12 @@ def main() -> int:
             return 1
         print("recipe evidence valid")
         return 0
+    env = dict(os.environ)
+    env["FACTOR_ENGINE_CERTIFY_RECIPE_EVIDENCE"] = "1"
     proc = subprocess.run(
         [sys.executable, "-m", "pytest", "-q", "tests/operators/test_recipe_backend_certification.py"],
         cwd=FE_ROOT,
+        env=env,
     )
     if proc.returncode:
         return proc.returncode

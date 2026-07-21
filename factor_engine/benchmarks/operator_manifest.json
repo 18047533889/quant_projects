@@ -1,11 +1,11 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-07-20T22:49:22+08:00",
-  "generated_commit_sha": "5f1786155ba70b255ef4143542ec7ebe7af04ece",
+  "generated_at": "2026-07-20T23:38:46+08:00",
+  "generated_commit_sha": "c4a87f27e5eb779bbce25411538692a0ed4b8abb",
   "operators": [
     {
       "name": "ADX",
-      "scope": "time_series",
+      "scope": "elementwise",
       "frequency": "any",
       "input_fields": [
         "high",
@@ -14,7 +14,7 @@
         "window"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
@@ -22,7 +22,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -84,7 +84,7 @@
       "lookback": null,
       "min_periods": 2,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -130,7 +130,7 @@
     },
     {
       "name": "MACD_hist",
-      "scope": "time_series",
+      "scope": "elementwise",
       "frequency": "any",
       "input_fields": [
         "x",
@@ -139,7 +139,7 @@
         "signal"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
@@ -147,7 +147,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -195,7 +195,7 @@
     },
     {
       "name": "MACD_line",
-      "scope": "time_series",
+      "scope": "elementwise",
       "frequency": "any",
       "input_fields": [
         "x",
@@ -203,7 +203,7 @@
         "slow"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
@@ -211,7 +211,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -259,7 +259,7 @@
     },
     {
       "name": "MACD_signal",
-      "scope": "time_series",
+      "scope": "elementwise",
       "frequency": "any",
       "input_fields": [
         "x",
@@ -268,7 +268,7 @@
         "signal"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
@@ -276,7 +276,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -339,7 +339,7 @@
       "lookback": null,
       "min_periods": 2,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -451,7 +451,7 @@
         "x"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
@@ -459,7 +459,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -626,7 +626,7 @@
         "x"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
@@ -634,7 +634,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy"
@@ -684,7 +684,7 @@
         "x"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
@@ -692,7 +692,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -743,7 +743,7 @@
         "x"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
@@ -751,7 +751,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -803,7 +803,7 @@
         "x"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
@@ -811,7 +811,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy"
@@ -869,7 +869,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -1112,7 +1112,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy"
@@ -1162,7 +1162,7 @@
         "x"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
@@ -1170,7 +1170,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -1221,7 +1221,7 @@
         "x"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
@@ -1229,7 +1229,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -1341,7 +1341,7 @@
         "x"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
@@ -1349,7 +1349,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -1410,7 +1410,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -1582,15 +1582,15 @@
         "x"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
       "includes_current": true,
-      "lookback": 0,
-      "min_periods": 1,
+      "lookback": null,
+      "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -1641,15 +1641,15 @@
         "x"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
       "includes_current": true,
-      "lookback": 0,
-      "min_periods": 1,
+      "lookback": null,
+      "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -1893,7 +1893,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -1957,7 +1957,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy"
@@ -2076,7 +2076,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -2128,15 +2128,15 @@
         "method"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
       "includes_current": true,
-      "lookback": 0,
-      "min_periods": 1,
+      "lookback": null,
+      "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy"
@@ -2196,7 +2196,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -2256,7 +2256,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -2428,15 +2428,15 @@
         "weight"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
       "includes_current": true,
-      "lookback": 0,
-      "min_periods": 1,
+      "lookback": null,
+      "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy"
@@ -2487,15 +2487,15 @@
         "weight"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
       "includes_current": true,
-      "lookback": 0,
-      "min_periods": 1,
+      "lookback": null,
+      "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy"
@@ -2546,15 +2546,15 @@
         "weight"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
       "includes_current": true,
-      "lookback": 0,
-      "min_periods": 1,
+      "lookback": null,
+      "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy"
@@ -2616,7 +2616,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -2667,7 +2667,7 @@
         "x"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
@@ -2675,7 +2675,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -2726,7 +2726,7 @@
         "x"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
@@ -3026,7 +3026,7 @@
         "x"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
@@ -3034,7 +3034,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -3094,7 +3094,7 @@
       "lookback": null,
       "min_periods": 1,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -3206,7 +3206,7 @@
         "x"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
@@ -3214,7 +3214,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -3274,7 +3274,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -3334,7 +3334,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -3454,7 +3454,7 @@
       "lookback": null,
       "min_periods": 1,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -4006,7 +4006,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -4234,7 +4234,7 @@
     },
     {
       "name": "group_weighted_mean",
-      "scope": "cross_sectional",
+      "scope": "group",
       "frequency": "any",
       "input_fields": [
         "x",
@@ -4242,15 +4242,15 @@
         "weight"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
       "includes_current": true,
-      "lookback": 0,
-      "min_periods": 1,
+      "lookback": null,
+      "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy"
@@ -4294,7 +4294,7 @@
     },
     {
       "name": "group_weighted_zscore",
-      "scope": "cross_sectional",
+      "scope": "group",
       "frequency": "any",
       "input_fields": [
         "x",
@@ -4302,15 +4302,15 @@
         "weight"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
       "includes_current": true,
-      "lookback": 0,
-      "min_periods": 1,
+      "lookback": null,
+      "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy"
@@ -4552,7 +4552,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -4910,7 +4910,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -5142,10 +5142,10 @@
       "input_fields": [
         "a",
         "b",
-        "f"
+        "fraction"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
@@ -5153,7 +5153,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -5200,9 +5200,7 @@
       "name": "log",
       "scope": "elementwise",
       "frequency": "any",
-      "input_fields": [
-        "x"
-      ],
+      "input_fields": [],
       "output_type": "series",
       "pit_safe": true,
       "domain_policy": "all_numeric",
@@ -5272,7 +5270,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -5331,7 +5329,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -6183,7 +6181,7 @@
       "lookback": null,
       "min_periods": 1,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -6247,7 +6245,7 @@
       "lookback": null,
       "min_periods": 2,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy"
@@ -6367,7 +6365,7 @@
       "lookback": null,
       "min_periods": 1,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -6429,7 +6427,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -6612,15 +6610,15 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
-      "allow_in_production": true,
+      "status": "experimental",
+      "allow_in_production": false,
       "backends": [
         "pandas_numpy",
         "polars"
       ],
       "description": "真实流通盘换手率：volume / float_shares",
       "execution_kind": "composite",
-      "production_policy": "allowed",
+      "production_policy": "pending",
       "lowering_available": true,
       "dual_backend_target": true,
       "canonical": "real_turnover_rate",
@@ -6629,7 +6627,7 @@
         "safe_div_null"
       ],
       "composite_dual_backend_capable": true,
-      "composite_production_safe": true,
+      "composite_production_safe": false,
       "composite_reference_parity": true,
       "composite_reference_to_lowered_pandas": true,
       "polars_long_fastpath": false,
@@ -6647,14 +6645,14 @@
       "duckdb_sql_effective_production_safe": false,
       "clickhouse_sql": "unsupported",
       "production_fast_path": false,
-      "fastpath_block_reason": "deferred_complex_op",
+      "fastpath_block_reason": "composite_policy_pending",
       "parity_verified": false,
       "polars_parity_verified": false,
       "duckdb_parity_verified": false,
       "dual_backend_parity_verified": false,
       "benchmark": false,
       "research_allowed": true,
-      "production_allowed": true,
+      "production_allowed": false,
       "production_fastpath_allowed": false
     },
     {
@@ -6737,7 +6735,7 @@
       "lookback": null,
       "min_periods": 1,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy"
@@ -6857,7 +6855,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -6978,7 +6976,7 @@
       "lookback": null,
       "min_periods": 1,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -7038,7 +7036,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -7090,7 +7088,7 @@
         "x"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
@@ -7098,7 +7096,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -7157,7 +7155,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -7337,7 +7335,7 @@
       "lookback": null,
       "min_periods": 1,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -7448,7 +7446,7 @@
         "x"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
@@ -7456,7 +7454,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -7507,7 +7505,7 @@
         "x"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
@@ -7515,7 +7513,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -7626,7 +7624,7 @@
         "x"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
@@ -7634,7 +7632,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy"
@@ -7692,7 +7690,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -7862,7 +7860,7 @@
         "x"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
@@ -7870,7 +7868,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -8036,7 +8034,7 @@
     },
     {
       "name": "true_range",
-      "scope": "time_series",
+      "scope": "elementwise",
       "frequency": "any",
       "input_fields": [
         "high",
@@ -8044,7 +8042,7 @@
         "close"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
@@ -8052,7 +8050,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -8112,7 +8110,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -8174,7 +8172,7 @@
       "lookback": null,
       "min_periods": 1,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -8235,7 +8233,7 @@
       "lookback": null,
       "min_periods": 1,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -8421,7 +8419,7 @@
       "lookback": null,
       "min_periods": 1,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy"
@@ -8482,7 +8480,7 @@
       "lookback": null,
       "min_periods": 1,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy"
@@ -8543,7 +8541,7 @@
       "lookback": null,
       "min_periods": 1,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy"
@@ -8665,7 +8663,7 @@
       "lookback": null,
       "min_periods": 1,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -8788,7 +8786,7 @@
       "lookback": null,
       "min_periods": 1,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -8850,7 +8848,7 @@
       "lookback": null,
       "min_periods": 1,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy"
@@ -8909,7 +8907,7 @@
       "lookback": null,
       "min_periods": 1,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -9091,7 +9089,7 @@
       "lookback": null,
       "min_periods": 1,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -9153,7 +9151,7 @@
       "lookback": null,
       "min_periods": 2,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -9214,7 +9212,7 @@
       "lookback": null,
       "min_periods": 2,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -9274,7 +9272,7 @@
       "lookback": null,
       "min_periods": 2,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -9335,7 +9333,7 @@
       "lookback": null,
       "min_periods": 2,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -9396,7 +9394,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy"
@@ -9456,7 +9454,7 @@
       "lookback": null,
       "min_periods": 1,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -9571,15 +9569,15 @@
         "scale"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
       "includes_current": true,
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -9760,7 +9758,7 @@
       "lookback": null,
       "min_periods": 2,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -9883,7 +9881,7 @@
       "lookback": null,
       "min_periods": 1,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -10129,7 +10127,7 @@
       "lookback": null,
       "min_periods": 1,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -10192,7 +10190,7 @@
       "lookback": null,
       "min_periods": 3,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -10426,15 +10424,15 @@
         "skipna"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
       "includes_current": true,
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -10495,7 +10493,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -10616,7 +10614,7 @@
       "lookback": null,
       "min_periods": 2,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy"
@@ -10681,7 +10679,7 @@
       "lookback": null,
       "min_periods": 3,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy"
@@ -10743,7 +10741,7 @@
       "lookback": null,
       "min_periods": 3,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy"
@@ -10805,7 +10803,7 @@
       "lookback": null,
       "min_periods": 3,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy"
@@ -10869,7 +10867,7 @@
       "lookback": null,
       "min_periods": 3,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -10932,7 +10930,7 @@
       "lookback": null,
       "min_periods": 3,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -11054,7 +11052,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -11179,7 +11177,7 @@
       "lookback": null,
       "min_periods": 2,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -11362,7 +11360,7 @@
       "lookback": null,
       "min_periods": 1,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -11426,7 +11424,7 @@
       "lookback": null,
       "min_periods": 1,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy"
@@ -11486,7 +11484,7 @@
       "lookback": null,
       "min_periods": 2,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -11548,7 +11546,7 @@
       "lookback": null,
       "min_periods": 1,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy"
@@ -11609,7 +11607,7 @@
       "lookback": null,
       "min_periods": 1,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy"
@@ -11670,7 +11668,7 @@
       "lookback": null,
       "min_periods": 1,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy"
@@ -11730,7 +11728,7 @@
       "lookback": null,
       "min_periods": 3,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -11789,7 +11787,7 @@
       "lookback": null,
       "min_periods": 1,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy",
@@ -12089,7 +12087,7 @@
         "x"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
@@ -12097,7 +12095,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy"
@@ -12272,7 +12270,7 @@
         "trim_pct"
       ],
       "output_type": "series",
-      "pit_safe": true,
+      "pit_safe": false,
       "domain_policy": "all_numeric",
       "overflow_policy": "ieee_propagate",
       "null_policy": "propagate",
@@ -12280,7 +12278,7 @@
       "lookback": null,
       "min_periods": null,
       "nan_policy": "propagate",
-      "status": "research",
+      "status": "experimental",
       "allow_in_production": false,
       "backends": [
         "pandas_numpy"

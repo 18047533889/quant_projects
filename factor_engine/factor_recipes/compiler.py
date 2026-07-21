@@ -11,6 +11,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import os
 import operator as py_operator
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Mapping, Sequence
@@ -106,6 +107,16 @@ class RecipeCompiler:
                 f"recipe {recipe_name!r} has status {recipe.status!r}; "
                 f"allowed={sorted(self.allowed_statuses)}"
             )
+        if (
+            recipe.status == "production"
+            and os.getenv("FACTOR_ENGINE_CERTIFY_RECIPE_EVIDENCE") != "1"
+        ):
+            from backend.recipe_evidence import recipe_execution_verified
+
+            if not recipe_execution_verified(recipe_name):
+                raise RecipeExpansionError(
+                    f"recipe {recipe_name!r} lacks valid three-backend production evidence"
+                )
         if recipe_name in _stack:
             chain = " -> ".join((*_stack, recipe_name))
             raise RecipeExpansionError(f"cyclic factor recipe dependency: {chain}")

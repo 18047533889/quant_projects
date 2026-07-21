@@ -51,7 +51,6 @@ OperatorRegistry.register_alias("wma", "WMA")
 # § 元素数学 / 清洗 / 截面 / 时序 / 基本面 等（其余模块）
 # ---------------------------------------------------------------------------
 OperatorRegistry.register_alias("ABS", "abs")
-OperatorRegistry.register_alias("AVG2", "avg2")
 OperatorRegistry.register_alias("ts_return", "ts_pct")
 OperatorRegistry.register_alias("COALESCE", "coalesce")
 OperatorRegistry.register_alias("CS_DEMEAN", "cs_demean")

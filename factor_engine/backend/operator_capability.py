@@ -52,9 +52,13 @@ class BackendCapability:
     canonical: str
     backend: BackendName
     status: CapabilityStatus
+    execution_kind: str = "unsupported"
     estimated_speedup: float = 1.0
-    supports_nulls: bool = True
-    supports_min_periods: bool = True
+    supports_nulls: bool = False
+    supports_nan: bool = False
+    supports_inf: bool = False
+    supports_scalar_broadcast: bool = False
+    supports_min_periods: bool = False
     supports_group: bool = False
     supports_window: bool = False
     supports_lazy: bool = False
@@ -72,8 +76,12 @@ class BackendCapability:
             "canonical": self.canonical,
             "backend": self.backend,
             "status": self.status,
+            "execution_kind": self.execution_kind,
             "estimated_speedup": self.estimated_speedup,
             "supports_nulls": self.supports_nulls,
+            "supports_nan": self.supports_nan,
+            "supports_inf": self.supports_inf,
+            "supports_scalar_broadcast": self.supports_scalar_broadcast,
             "supports_min_periods": self.supports_min_periods,
             "supports_group": self.supports_group,
             "supports_window": self.supports_window,
@@ -321,8 +329,8 @@ def capability_for(canonical: str, backend: BackendName) -> BackendCapability:
         canon = "where"
     policy = infer_operator_policy(canon)
     scope = getattr(policy, "scope", "") or ""
-    supports_group = canon.startswith("group_") or scope == "cs"
-    supports_window = canon.startswith("ts_") or scope == "ts"
+    supports_group = scope == "group"
+    supports_window = scope == "ts"
     backend_key = "sql" if backend in _SQL_BACKENDS else backend
     backend_meta = dict(
         ((OperatorRegistry._catalog.get(canon, {}).get("backend_meta") or {}).get(backend_key) or {})
@@ -337,6 +345,19 @@ def capability_for(canonical: str, backend: BackendName) -> BackendCapability:
     else:
         status = "unsupported"
 
+    required_metadata = {
+        "execution_kind", "supports_lazy", "supports_streaming",
+        "materializes_full_panel", "supports_nulls", "supports_nan",
+        "supports_inf", "supports_scalar_broadcast", "supports_group",
+        "supports_window", "supports_min_periods",
+    }
+    if status == "production_safe":
+        missing = sorted(required_metadata.difference(backend_meta))
+        if missing:
+            raise RuntimeError(
+                f"{canon}/{backend}: production-safe capability metadata missing {missing}"
+            )
+
     notes = ""
     if backend == "clickhouse_sql" and status != "unsupported":
         # 部分算子 DuckDB 已通、CH 方言待验
@@ -346,9 +367,13 @@ def capability_for(canonical: str, backend: BackendName) -> BackendCapability:
         canonical=canon,
         backend=backend,
         status=status,
+        execution_kind=str(backend_meta.get("execution_kind", "unsupported")),
         estimated_speedup=default_backend_speedup(canon, backend, status),
-        supports_nulls=bool(backend_meta.get("supports_nulls", True)),
-        supports_min_periods=bool(backend_meta.get("supports_min_periods", supports_window)),
+        supports_nulls=bool(backend_meta.get("supports_nulls", False)),
+        supports_nan=bool(backend_meta.get("supports_nan", False)),
+        supports_inf=bool(backend_meta.get("supports_inf", False)),
+        supports_scalar_broadcast=bool(backend_meta.get("supports_scalar_broadcast", False)),
+        supports_min_periods=bool(backend_meta.get("supports_min_periods", False)),
         supports_group=bool(backend_meta.get("supports_group", supports_group)),
         supports_window=bool(backend_meta.get("supports_window", supports_window)),
         supports_lazy=bool(backend_meta.get("supports_lazy", False)),

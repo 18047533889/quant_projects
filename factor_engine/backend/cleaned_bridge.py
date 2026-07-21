@@ -22,6 +22,8 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+import numpy as np
+
 from .pandas_compat import pd
 
 from planner.logical_plan import PlanNode
@@ -133,30 +135,15 @@ def _resolve_canonical(op: str) -> str:
     """
     from cleaned_operators.registry import OperatorRegistry
 
-    return OperatorRegistry.resolve_canonical_optional(op)
+    return OperatorRegistry.resolve_canonical_strict(op)
 
 
-def _remap_d_to_window(kwargs: dict[str, Any]) -> dict[str, Any] | None:
-    """将 planner 常用的 ``d`` 参数名重映射为算子期望的 ``window``。
-
-    参数
-    ----
-    kwargs : dict[str, Any]
-        算子调用关键字参数。
-
-    返回
-    ----
-    dict[str, Any] | None
-        重映射后的参数字典；无需重映射时返回 ``None``。
-    """
-    if "d" not in kwargs or "window" in kwargs:
-        return None
-    remapped = {k: v for k, v in kwargs.items() if k != "d"}
-    remapped["window"] = kwargs["d"]
-    return remapped
-
-
-def _call_cleaned_operator(operator, call_args: list[Any], kw: dict[str, Any]) -> Any:
+def _call_cleaned_operator(
+    canonical: str,
+    operator: Any,
+    call_args: list[Any],
+    kw: dict[str, Any],
+) -> Any:
     """Call an operator with parameters normalized before execution.
 
     参数
@@ -178,8 +165,10 @@ def _call_cleaned_operator(operator, call_args: list[Any], kw: dict[str, Any]) -
     TypeError
         原始调用与重映射后均失败时抛出。
     """
-    remapped = _remap_d_to_window(kw)
-    return operator.calculate(*call_args, **(remapped if remapped is not None else kw))
+    from backend.parameter_aliases import reject_runtime_parameter_aliases
+
+    reject_runtime_parameter_aliases(canonical, kw)
+    return operator.calculate(*call_args, **kw)
 
 
 def _operator_backend_preference(ctx: ExecutionContext) -> str:
@@ -346,23 +335,57 @@ def _normalize_operator_result(
                 raise ValueError("polars operator requires a DataFrame template panel")
             result = polars_to_panel(result, template=template_panel)
 
+    from backend.operator_errors import OperatorShapeError
+
     if isinstance(result, pd.DataFrame):
+        if template_panel is None:
+            raise OperatorShapeError("DataFrame result requires a panel template")
+        if not result.index.equals(template_panel.index):
+            raise OperatorShapeError("operator DataFrame index does not match input panel")
+        if not result.columns.equals(template_panel.columns):
+            raise OperatorShapeError("operator DataFrame columns do not match input panel")
         if panel_native_enabled(ctx):
             return result
         return panel_to_series(result, ctx, template=template)
     if isinstance(result, pd.Series):
         if isinstance(result.index, pd.MultiIndex):
             if not result.index.equals(template.index):
-                raise ValueError("operator result index does not match the input template")
+                raise OperatorShapeError("operator result index does not match the input template")
             return result
         if len(result) != len(template):
-            raise ValueError(
+            raise OperatorShapeError(
                 f"operator result length {len(result)} does not match template {len(template)}"
             )
         if not result.index.equals(template.index):
-            raise ValueError("operator returned an indexless/misaligned Series")
+            raise OperatorShapeError("operator returned an indexless/misaligned Series")
         return result
-    return pd.Series(result, index=template.index)
+    if pd.api.types.is_scalar(result):
+        return pd.Series(result, index=template.index)
+    array = np.asarray(result)
+    if array.ndim == 1:
+        if len(array) != len(template):
+            raise OperatorShapeError(
+                f"operator 1D result length {len(array)} does not match template {len(template)}"
+            )
+        return pd.Series(array, index=template.index)
+    if array.ndim == 2:
+        if template_panel is None:
+            raise OperatorShapeError("operator 2D result requires a panel template")
+        if tuple(array.shape) != tuple(template_panel.shape):
+            raise OperatorShapeError(
+                f"operator 2D result shape {array.shape} does not match panel {template_panel.shape}"
+            )
+        frame = pd.DataFrame(
+            array,
+            index=template_panel.index,
+            columns=template_panel.columns,
+        )
+        if panel_native_enabled(ctx):
+            return frame
+        return panel_to_series(frame, ctx, template=template)
+    raise OperatorShapeError(
+        f"unsupported operator result type/shape: {type(result).__name__} {array.shape}"
+    )
 
 
 def make_cleaned_kernel(eval_fn: Callable[[PlanNode, ExecutionContext], Any], op: str):
@@ -431,7 +454,7 @@ def make_cleaned_kernel(eval_fn: Callable[[PlanNode, ExecutionContext], Any], op
             evaluated, ctx, backend=backend
         )
 
-        result = _call_cleaned_operator(operator, call_args, kw)
+        result = _call_cleaned_operator(canonical, operator, call_args, kw)
 
         if template is None:
             template = getattr(ctx, "template_series", None)

@@ -22,7 +22,9 @@ def test_recipe_expands_to_primitives() -> None:
     formula = FactorRecipeRegistry.expand("momentum", {"x": "close", "window": 20})
     assert formula == "ts_delta(close, 20)"
     nested = FactorRecipeRegistry.expand(
-        "aroon_oscillator", {"high": "high", "low": "low", "window": 25}
+        "aroon_oscillator",
+        {"high": "high", "low": "low", "window": 25},
+        allowed_statuses=("pending",),
     )
     assert "ts_argmax(high, 25)" in nested
     assert "ts_argmin(low, 25)" in nested
@@ -40,16 +42,16 @@ def test_optional_recipe_requires_explicit_status_opt_in() -> None:
 
 
 def test_recipe_compiler_rejects_unsafe_syntax_and_cycles() -> None:
-    unsafe = FactorRecipe("unsafe_test_recipe", "test", "test", "__import__('os')", ())
-    first = FactorRecipe("cycle_test_a", "test", "test", "cycle_test_b(x)", ("x",))
-    second = FactorRecipe("cycle_test_b", "test", "test", "cycle_test_a(x)", ("x",))
+    unsafe = FactorRecipe("unsafe_test_recipe", "test", "test", "__import__('os')", (), status="test")
+    first = FactorRecipe("cycle_test_a", "test", "test", "cycle_test_b(x)", ("x",), status="test")
+    second = FactorRecipe("cycle_test_b", "test", "test", "cycle_test_a(x)", ("x",), status="test")
     for recipe in (unsafe, first, second):
         FactorRecipeRegistry.register(recipe)
     try:
         with pytest.raises(RecipeExpansionError):
-            RecipeCompiler().expand("unsafe_test_recipe", {})
+            RecipeCompiler(allowed_statuses=("test",)).expand("unsafe_test_recipe", {})
         with pytest.raises(RecipeExpansionError, match="cyclic"):
-            RecipeCompiler().expand("cycle_test_a", {"x": "close"})
+            RecipeCompiler(allowed_statuses=("test",)).expand("cycle_test_a", {"x": "close"})
     finally:
         for name in (unsafe.name, first.name, second.name):
             FactorRecipeRegistry._recipes.pop(name, None)
@@ -100,8 +102,8 @@ def test_dag_node_ids_are_deterministic() -> None:
     requests = {"factor": ("gross_profitability", {
         "gross_profit": "gross_profit", "total_assets": "total_assets", "period_id": "period_id",
     })}
-    first = FactorRecipeRegistry.compile_batch(requests)
-    second = FactorRecipeRegistry.compile_batch(requests)
+    first = FactorRecipeRegistry.compile_batch(requests, allowed_statuses=("pending",))
+    second = FactorRecipeRegistry.compile_batch(requests, allowed_statuses=("pending",))
     assert first.roots == second.roots
     assert first.nodes == second.nodes
 

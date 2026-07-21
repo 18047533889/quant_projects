@@ -271,6 +271,10 @@ class Analyzer:
                     else:
                         attrs[key] = value
 
+                from backend.parameter_aliases import normalize_parameter_aliases
+
+                attrs = normalize_parameter_aliases(canon, attrs)
+
                 policy = None
                 if op_impl is not None:
                     from cleaned_operators.operator_policy import infer_operator_policy

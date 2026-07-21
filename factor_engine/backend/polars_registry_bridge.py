@@ -120,30 +120,17 @@ def _op_scope(canonical: str) -> str:
     return "ts"
 
 
-def _remap_d_to_window(kwargs: dict[str, Any]) -> dict[str, Any] | None:
-    """部分算子参数名是 ``window`` 而非 ``d``；尝试自动 remap 后重试 ``calculate``。"""
-    if "d" not in kwargs or "window" in kwargs:
-        return None
-    remapped = {k: v for k, v in kwargs.items() if k != "d"}
-    remapped["window"] = kwargs["d"]
-    return remapped
+def _call_polars_operator(
+    canonical: str,
+    operator: Any,
+    call_args: list[Any],
+    kw: dict[str, Any],
+) -> pl.DataFrame:
+    """Call a native Polars operator with Analyzer-normalized parameters."""
+    from backend.parameter_aliases import reject_runtime_parameter_aliases
 
-
-def _call_polars_operator(operator: Any, call_args: list[Any], kw: dict[str, Any]) -> pl.DataFrame:
-    """调用 Registry 算子的 ``calculate``；``TypeError`` 时尝试 ``d→window`` 参数 remap。"""
-    try:
-        return operator.calculate(*call_args, **kw)
-    except TypeError as exc:
-        remapped = _remap_d_to_window(kw)
-        if remapped is None:
-            raise
-        msg = str(exc).lower()
-        if "unexpected keyword" not in msg and "got an unexpected" not in msg:
-            raise
-        try:
-            return operator.calculate(*call_args, **remapped)
-        except TypeError:
-            raise exc from None
+    reject_runtime_parameter_aliases(canonical, kw)
+    return operator.calculate(*call_args, **kw)
 
 
 def _extract_output_values(result: pl.DataFrame, n: int) -> list[float]:
@@ -230,6 +217,7 @@ def _parse_inputs(
 def _registry_map_inst(
     joined: pl.LazyFrame,
     *,
+    canonical: str,
     arg_specs: list[tuple[str, Any]],
     series_cols: list[str],
     operator: Any,
@@ -240,7 +228,7 @@ def _registry_map_inst(
 
     def _apply(g: pl.DataFrame) -> pl.DataFrame:
         call_args = _build_call_args(g, arg_specs=arg_specs, series_cols=series_cols, cs=False)
-        result = _call_polars_operator(operator, call_args, kw)
+        result = _call_polars_operator(canonical, operator, call_args, kw)
         out = _extract_output_values(result, g.height)
         return g.select(
             pl.col(_TS),
@@ -257,6 +245,7 @@ def _registry_map_inst(
 def _registry_map_cs(
     joined: pl.LazyFrame,
     *,
+    canonical: str,
     arg_specs: list[tuple[str, Any]],
     series_cols: list[str],
     operator: Any,
@@ -267,7 +256,7 @@ def _registry_map_cs(
 
     def _apply(g: pl.DataFrame) -> pl.DataFrame:
         call_args = _build_call_args(g, arg_specs=arg_specs, series_cols=series_cols, cs=True)
-        result = _call_polars_operator(operator, call_args, kw)
+        result = _call_polars_operator(canonical, operator, call_args, kw)
         out = _extract_output_values(result, g.height)
         return g.select(
             pl.col(_TS),
@@ -322,6 +311,7 @@ def compile_registry_op(
     if scope == "cs":
         return _registry_map_cs(
             joined,
+            canonical=canonical,
             arg_specs=arg_specs,
             series_cols=series_cols,
             operator=operator,
@@ -329,6 +319,7 @@ def compile_registry_op(
         )
     return _registry_map_inst(
         joined,
+        canonical=canonical,
         arg_specs=arg_specs,
         series_cols=series_cols,
         operator=operator,

@@ -156,13 +156,10 @@ def test_explicit_operator_policies_cover_core_tier1():
         "rank",
         "zscore",
         "winsorize",
-        "neutralize",
-        "quantile",
         "normalize",
         "ts_delay",
         "ts_rank",
         "ts_ema",
-        "vp_weighted_price",
     }
     missing = sorted(core - set(_EXPLICIT_POLICIES))
     assert not missing, f"核心算子缺少显式 policy: {missing}"

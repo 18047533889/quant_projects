@@ -56,7 +56,7 @@ def test_polars_backend_uses_polars_kernel(panel_source):
     from planner.logical_plan import PlanNode
 
     col_node = PlanNode(op="column", inputs=[], attrs={"name": "close"})
-    node = PlanNode(op="ts_mean", inputs=[col_node], attrs={"d": 2})
+    node = PlanNode(op="ts_mean", inputs=[col_node], attrs={"window": 2})
     ctx.panel_cache = {}
     ctx.template_series = panel_source.load_column("close")
     result = kernel(node, ctx)

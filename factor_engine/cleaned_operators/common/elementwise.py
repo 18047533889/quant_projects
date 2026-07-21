@@ -36,8 +36,6 @@ from cleaned_operators.base import (
     register_operator,
 )
 
-import numpy as np
-import pandas as pd
 try:
     from scipy import stats as sp_stats
 except ImportError:
@@ -322,17 +320,14 @@ class Convolve(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        try:
-            x_vals = x.values.astype(float)
-            y_vals = y.values.astype(float)
-            result = np.full(x_vals.shape, np.nan, dtype=float)
-            for col_idx in range(x_vals.shape[1]):
-                result[:, col_idx] = causal_convolve_column(
-                    x_vals[:, col_idx], y_vals[:, col_idx]
-                )
-            return pd.DataFrame(result, index=x.index, columns=x.columns).replace([np.inf, -np.inf], np.nan)
-        except Exception:
-            return pd.DataFrame(np.nan, index=x.index, columns=x.columns)
+        x_vals = x.values.astype(float)
+        y_vals = y.values.astype(float)
+        result = np.full(x_vals.shape, np.nan, dtype=float)
+        for col_idx in range(x_vals.shape[1]):
+            result[:, col_idx] = causal_convolve_column(
+                x_vals[:, col_idx], y_vals[:, col_idx]
+            )
+        return pd.DataFrame(result, index=x.index, columns=x.columns).replace([np.inf, -np.inf], np.nan)
 
 
 
@@ -351,17 +346,14 @@ class Correlate(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        try:
-            x_vals = x.values.astype(float)
-            y_vals = y.values.astype(float)
-            result = np.full(x_vals.shape, np.nan, dtype=float)
-            for col_idx in range(x_vals.shape[1]):
-                result[:, col_idx] = causal_correlate_column(
-                    x_vals[:, col_idx], y_vals[:, col_idx]
-                )
-            return pd.DataFrame(result, index=x.index, columns=x.columns).replace([np.inf, -np.inf], np.nan)
-        except Exception:
-            return pd.DataFrame(np.nan, index=x.index, columns=x.columns)
+        x_vals = x.values.astype(float)
+        y_vals = y.values.astype(float)
+        result = np.full(x_vals.shape, np.nan, dtype=float)
+        for col_idx in range(x_vals.shape[1]):
+            result[:, col_idx] = causal_correlate_column(
+                x_vals[:, col_idx], y_vals[:, col_idx]
+            )
+        return pd.DataFrame(result, index=x.index, columns=x.columns).replace([np.inf, -np.inf], np.nan)
 
 
 
@@ -1086,13 +1078,13 @@ class Lerp(SeriesOperator):
         category="math",
         description="线性插值 a + f*(b-a)",
         examples=["lerp(a, b, 0.5)"],
-        param_names=["a", "b", "f"],
+        param_names=["a", "b", "fraction"],
         return_type="series",
         tags=["math", "interpolation"]
     )
 
-    def _calculate_series(self, a: pd.DataFrame, b: pd.DataFrame, f: float = 0.5, **kwargs) -> pd.DataFrame:
-        result = a + f * (b - a)
+    def _calculate_series(self, a: pd.DataFrame, b: pd.DataFrame, fraction: float = 0.5, **kwargs) -> pd.DataFrame:
+        result = a + fraction * (b - a)
         return result.replace([np.inf, -np.inf], np.nan)
 
 
@@ -1107,7 +1099,6 @@ class Log(SeriesOperator):
         category="math",
         description="计算自然对数（底数为e）",
         examples=["log(close)", "log(volume)"],
-        param_names=["x"],
         return_type="series",
         tags=["math", "logarithm", "ln"]
     )
@@ -1648,10 +1639,10 @@ class Round(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, decimals: int = 0, **kwargs) -> pd.DataFrame:
-        # ``k``/``d`` remain deprecated runtime keyword aliases; exported
-        # metadata and newly authored formulas use only ``decimals``.
-        value = kwargs.get("k", kwargs.get("d", decimals))
-        return x.round(decimals=int(value))
+        from cleaned_operators.parameter_validation import strict_integer
+
+        value = strict_integer(decimals, "decimals", minimum=-18, maximum=18)
+        return x.round(decimals=value)
 
 # aliases: ROUND
 
@@ -1979,7 +1970,9 @@ class Truncate(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, decimals: int = 0, **kwargs) -> pd.DataFrame:
-        value = int(kwargs.get("k", kwargs.get("d", decimals)))
+        from cleaned_operators.parameter_validation import strict_integer
+
+        value = strict_integer(decimals, "decimals", minimum=-18, maximum=18)
         scale = 10.0 ** value
         return np.trunc(x * scale) / scale
 

@@ -1584,7 +1584,7 @@ operators:
     duckdb_implemented: true
     duckdb_real_sql: false
     semantic_contract_complete: true
-    parameter_domain_complete: true
+    parameter_domain_complete: false
     type_signature_complete: true
     normal_parity: false
     edge_parity: false
@@ -1614,7 +1614,7 @@ operators:
     duckdb_implemented: true
     duckdb_real_sql: false
     semantic_contract_complete: true
-    parameter_domain_complete: true
+    parameter_domain_complete: false
     type_signature_complete: true
     normal_parity: false
     edge_parity: false

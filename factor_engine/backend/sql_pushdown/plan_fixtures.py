@@ -19,7 +19,7 @@ def literal(value) -> PlanNode:
     return PlanNode(op="literal", attrs={"value": value})
 
 
-def minimal_plan(op: str) -> PlanNode:
+def _minimal_plan_raw(op: str) -> PlanNode:
     """为 registry 中指定 canonical 构造可编译的最小逻辑计划。"""
     close, volume, industry = column("close"), column("volume"), column("industry")
     high, low = column("high"), column("low")
@@ -123,3 +123,24 @@ def minimal_plan(op: str) -> PlanNode:
     if op == "not_":
         return PlanNode(op=op, inputs=[close], attrs={})
     return PlanNode(op=op, inputs=[close], attrs={"d": 3, "window": 3, "span": 3})
+
+
+def minimal_plan(op: str) -> PlanNode:
+    """Build a fixture whose production parameters use canonical spellings only."""
+    plan = _minimal_plan_raw(op)
+    from backend.parameter_aliases import normalize_parameter_aliases
+    from backend.production_signature import PRODUCTION_SIGNATURES
+
+    signature = PRODUCTION_SIGNATURES.get(op)
+    if signature is None:
+        return plan
+    attrs = dict(plan.attrs)
+    if op == "clip":
+        if "min" in attrs:
+            attrs["lo"] = attrs.pop("min")
+        if "max" in attrs:
+            attrs["hi"] = attrs.pop("max")
+    attrs = normalize_parameter_aliases(op, attrs)
+    allowed = {constraint.name for constraint in signature.params}
+    attrs = {name: value for name, value in attrs.items() if name in allowed}
+    return PlanNode(op=plan.op, inputs=plan.inputs, attrs=attrs, node_id=plan.node_id)

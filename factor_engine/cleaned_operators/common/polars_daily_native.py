@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-"""Daily-surface Polars backends that stay expression-native (no NumPy materialisation).
+"""Daily-surface native Polars backends (expression and eager-panel variants).
 
 ``overhaul.cleanup.finalize`` strips Polars adapters that call ``to_numpy`` / ``np.`` /
-``rolling_map``.  These implementations use only Polars expressions so they survive
-cleanup and restore dual-backend production coverage for high-value daily ops that
-already have DuckDB SQL emitters.
+``rolling_map``.  These implementations use Polars only, so they survive cleanup.
+Cross-sectional/group kernels that unpivot and pivot are explicitly classified as
+``polars_eager_native``; they are not advertised as lazy or streaming expressions.
 """
 from __future__ import annotations
 
@@ -144,7 +144,9 @@ class TSLogReturnNative(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, d: int = 1, **kwargs) -> pl.DataFrame:
-        n = max(1, int(kwargs.get("periods", d)))
+        from cleaned_operators.parameter_validation import strict_integer
+
+        n = strict_integer(d, "d", minimum=1)
         cols = _numeric_cols(x)
         exprs = []
         for c in cols:

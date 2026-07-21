@@ -79,24 +79,6 @@ class LqtpYoyOp(SeriesOperator):
         return compute_yoy(x, fiscal_quarter)
 
 
-@register_operator(name="avg2", category="fundamental", business_category="fundamental", canonical="avg2", source="factor_dsl_np")
-class LqtpAvg2Op(SeriesOperator):
-    """当期与上期均值；可选 fiscal_quarter 限制连续报告期"""
-    metadata = OperatorMetadata(
-        name="avg2",
-        category="fundamental",
-        description="当期与上期均值；可选 fiscal_quarter 限制连续报告期",
-        param_names=["x", "fiscal_quarter"],
-        return_type="series",
-        tags=["fundamental", "pit_safe"],
-    )
-
-    def _calculate_series(self, x: pd.DataFrame, fiscal_quarter: pd.DataFrame | None = None, **kwargs):
-        from cleaned_operators.fundamental.period_helpers import compute_avg2
-
-        return compute_avg2(x, fiscal_quarter)
-
-
 def _period_op_factory(helper_name: str, description: str, *, canonical: str):
     """period_helpers 显式算子的轻量 SeriesOperator 工厂。"""
 

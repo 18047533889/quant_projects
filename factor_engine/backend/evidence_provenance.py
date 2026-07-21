@@ -429,7 +429,10 @@ def parameter_domain_hash_for(canonical: str) -> str:
             {
                 "canonical": sig.canonical,
                 "default_status": sig.default_status,
-                "params": [(p.name, p.constraint, p.status) for p in sig.params],
+                "params": [
+                    (p.name, p.constraint, p.status, p.input_index, p.choices)
+                    for p in sig.params
+                ],
             },
             sort_keys=True,
         )

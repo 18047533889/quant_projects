@@ -433,23 +433,6 @@ def yoy_(x) -> np.ndarray:
         result[4:] = arr[4:] / arr[:-4] - 1.0
     return result
 
-def avg2_(x) -> np.ndarray:
-    """当期与上期均值：``(x_t + x_{t-1}) / 2``。
-
-参数:
-    x: 一维时序数组。
-
-返回:
-    两期均值数组。
-"""
-    arr = _to_array(x)
-    result = np.full_like(arr, np.nan, dtype=float)
-    result[0] = arr[0]
-    for i in range(1, len(arr)):
-        if not np.isnan(arr[i]) and not np.isnan(arr[i - 1]):
-            result[i] = (arr[i] + arr[i - 1]) / 2.0
-    return result
-
 def rolling_beta_to_market_(ret, index_ret, window: int) -> np.ndarray:
     """滚动 Beta：``Cov(r_i, r_m) / Var(r_m)``。
 
@@ -647,4 +630,3 @@ def real_turnover_rate_(volume: np.ndarray, effective_float: np.ndarray) -> np.n
 """
     with np.errstate(divide="ignore", invalid="ignore"):
         return _to_array(volume) / _to_array(effective_float)
-

@@ -378,9 +378,9 @@ class TSPctChange(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, d: int = 1, **kwargs) -> pd.DataFrame:
-        periods = int(kwargs.get("periods", d))
-        if periods < 1:
-            raise ValueError(f"ts_pct periods must be >= 1, got {periods}")
+        from cleaned_operators.parameter_validation import strict_integer
+
+        periods = strict_integer(d, "d", minimum=1)
         prev = x.shift(periods)
         with np.errstate(divide="ignore", invalid="ignore"):
             out = x / prev - 1.0
@@ -404,7 +404,9 @@ class TSLogReturn(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, d: int = 1, **kwargs) -> pd.DataFrame:
-        n = max(1, int(kwargs.get("periods", d)))
+        from cleaned_operators.parameter_validation import strict_integer
+
+        n = strict_integer(d, "d", minimum=1)
         prev = x.shift(n)
         ratio = x / prev.replace(0, np.nan)
         return np.log(ratio.replace([np.inf, -np.inf], np.nan))
@@ -765,7 +767,9 @@ class TSDelay(SeriesOperator):
         tags=["time_series", "ts_", "delay"]
     )
     def _calculate_series(self, x: pd.DataFrame, n: int = 1, **kwargs) -> pd.DataFrame:
-        return causal_lag(x, n)
+        from cleaned_operators.parameter_validation import strict_integer
+
+        return causal_lag(x, strict_integer(n, "n", minimum=0))
 
 # aliases: DELAY, Delay, Ref, delay, m_delay, shift
 
@@ -784,7 +788,9 @@ class TSDelta(SeriesOperator):
         tags=["time_series", "ts_", "delta"]
     )
     def _calculate_series(self, x: pd.DataFrame, n: int = 1, **kwargs) -> pd.DataFrame:
-        return x - causal_lag(x, n)
+        from cleaned_operators.parameter_validation import strict_integer
+
+        return x - causal_lag(x, strict_integer(n, "n", minimum=1))
 
 # aliases: Delta, Diff, TS_DELTA, pct_change
 
@@ -1445,10 +1451,10 @@ class TSDelayPolars(SeriesOperator):
         tags=["time_series", "ts_", "delay"]
     )
     def _calculate_series(self, x: pl.DataFrame, n: int = 1, **kwargs) -> pl.DataFrame:
+        from cleaned_operators.parameter_validation import strict_integer
+
         numeric_cols = [c for c in x.columns if c not in ['date', 'stock_code']]
-        lag = int(n)
-        if lag < 0:
-            return x.with_columns([pl.lit(None).cast(pl.Float64).alias(c) for c in numeric_cols])
+        lag = strict_integer(n, "n", minimum=0)
         return x.with_columns([
             pl.col(c).shift(lag).alias(c) for c in numeric_cols
         ])
@@ -1470,10 +1476,10 @@ class TSDeltaPolars(SeriesOperator):
         tags=["time_series", "ts_", "delta"]
     )
     def _calculate_series(self, x: pl.DataFrame, n: int = 1, **kwargs) -> pl.DataFrame:
+        from cleaned_operators.parameter_validation import strict_integer
+
         numeric_cols = [c for c in x.columns if c not in ['date', 'stock_code']]
-        lag = int(n)
-        if lag < 0:
-            return x.with_columns([pl.lit(None).cast(pl.Float64).alias(c) for c in numeric_cols])
+        lag = strict_integer(n, "n", minimum=1)
         return x.with_columns([
             (pl.col(c) - pl.col(c).shift(lag)).alias(c) for c in numeric_cols
         ])

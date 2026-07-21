@@ -51,7 +51,8 @@ def main() -> None:
     })
 
     recipes = FactorRecipeRegistry.catalog()
-    compiler = RecipeCompiler(allowed_statuses=("production", "optional", "experimental"))
+    authoring_statuses = ("production", "pending", "optional", "experimental")
+    compiler = RecipeCompiler(allowed_statuses=authoring_statuses)
     for name, recipe in recipes.items():
         bindings = {parameter: parameter for parameter in recipe["parameters"]}
         recipe["expanded_expression"] = compiler.expand(name, bindings)
@@ -60,7 +61,7 @@ def main() -> None:
         recipe["compile_status"] = "verified"
         logical = compile_recipe_plans(
             {name: (name, bindings)},
-            allowed_statuses=("production", "optional", "experimental"),
+            allowed_statuses=authoring_statuses,
         ).plans[name]
         operators_used: set[str] = set()
 

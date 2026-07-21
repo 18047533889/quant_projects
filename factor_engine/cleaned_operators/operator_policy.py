@@ -39,14 +39,6 @@ RESEARCH_CORE_CANONICALS: frozenset[str] = frozenset(
         "rolling_beta_to_market",
         "digital_count",
         "intraday_vwap_deviation",
-        # kept as research-adjacent when still registered
-        "causal_linear_extrapolate",
-        "rank_corr",
-        "hump_decay",
-        "corr_test",
-        "vp_weighted_price",
-        "downside_beta",
-        "idio_vol",
     }
 )
 
@@ -81,12 +73,24 @@ def policy_required_canonicals() -> frozenset[str]:
     production core、research core 与 policy 扩展算子的 ``frozenset``。
 """
     from cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS
+    from cleaned_operators.operator_surface import (
+        DAILY_CANONICALS,
+        EXTENDED_ONLY_CANONICALS,
+        INTERNAL_ONLY_CANONICALS,
+        LEGACY_ONLY_CANONICALS,
+        RESEARCH_ONLY_CANONICALS,
+    )
+
+    active = (
+        DAILY_CANONICALS | EXTENDED_ONLY_CANONICALS | INTERNAL_ONLY_CANONICALS
+        | LEGACY_ONLY_CANONICALS | RESEARCH_ONLY_CANONICALS
+    )
 
     return (
         PRODUCTION_CORE_CANONICALS
         | RESEARCH_CORE_CANONICALS
-        | _POLICY_EXTENSION_CANONICALS
-    )
+        | (_POLICY_EXTENSION_CANONICALS & active)
+    ) & active
 
 
 def tier1_canonicals() -> frozenset[str]:
@@ -313,6 +317,37 @@ from backend.primitive_evidence import (
     POLARS_EDGE_VERIFIED as _POLARS_EDGE_VERIFIED,
     POLARS_NO_FALLBACK_VERIFIED as _POLARS_NO_FALLBACK_VERIFIED,
     POLARS_REFERENCE_PARITY_VERIFIED as _POLARS_REFERENCE_PARITY_VERIFIED,
+)
+
+# Deprecated Tier exports remain import-compatible for old test modules, but
+# their values are now derived from the current surface and certified evidence.
+# Historical/deleted names in the source-era partitions cannot leak into policy,
+# routing, capability reports, or production admission.
+from cleaned_operators.operator_surface import (  # noqa: E402
+    DAILY_CANONICALS as _DAILY_SURFACE,
+    EXTENDED_ONLY_CANONICALS as _EXTENDED_SURFACE,
+    INTERNAL_ONLY_CANONICALS as _INTERNAL_SURFACE,
+    LEGACY_ONLY_CANONICALS as _LEGACY_SURFACE,
+    RESEARCH_ONLY_CANONICALS as _RESEARCH_SURFACE,
+)
+
+_CURRENT_ACTIVE_SURFACE = (
+    _DAILY_SURFACE | _EXTENDED_SURFACE | _INTERNAL_SURFACE
+    | _LEGACY_SURFACE | _RESEARCH_SURFACE
+)
+for _tier_number in range(1, 11):
+    _tier_name = f"POLARS_PARITY_VERIFIED_TIER{_tier_number}"
+    globals()[_tier_name] = frozenset(
+        globals()[_tier_name]
+        & _CURRENT_ACTIVE_SURFACE
+        & _POLARS_REFERENCE_PARITY_VERIFIED
+    )
+POLARS_PRODUCTION_SAFE_CORE = frozenset(
+    POLARS_PRODUCTION_SAFE_CORE
+    & _DAILY_SURFACE
+    & _POLARS_REFERENCE_PARITY_VERIFIED
+    & _POLARS_EDGE_VERIFIED
+    & _POLARS_NO_FALLBACK_VERIFIED
 )
 
 # Mutable in place during registry finalisation so modules which imported these
@@ -782,6 +817,67 @@ _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
 }
 
 
+def _reviewed_active_policy(canonical: str, *, pit_safe: bool) -> dict[str, Any]:
+    """Materialize a fail-closed policy row for an active canonical."""
+    if canonical.startswith("group_"):
+        scope: Scope = "group"
+    elif canonical.startswith("cs_") or canonical in {
+        "rank", "normalize", "winsorize", "zscore",
+    }:
+        scope = "cs"
+    elif canonical.startswith("ts_"):
+        scope = "ts"
+    elif canonical.startswith("period_") or canonical in {
+        "quarter_from_cumulative", "ttm_from_cumulative",
+        "ttm_from_quarterly", "yoy_by_period",
+    }:
+        scope = "fundamental_period"
+    else:
+        scope = "elementwise"
+    policy: dict[str, Any] = {"scope": scope, "pit_safe": pit_safe}
+    if scope in {"ts", "fundamental_period"}:
+        policy["min_periods"] = 1
+    return policy
+
+
+# Primitive policy is constrained to the reviewed runtime surfaces.  Recipes
+# and historical/deleted names are governed by their own registries and cannot
+# influence primitive PIT or backend admission.
+from cleaned_operators.operator_surface import (  # noqa: E402
+    DAILY_CANONICALS,
+    EXTENDED_ONLY_CANONICALS,
+    INTERNAL_ONLY_CANONICALS,
+    LEGACY_ONLY_CANONICALS,
+    RESEARCH_ONLY_CANONICALS,
+)
+
+_ACTIVE_POLICY_CANONICALS = (
+    DAILY_CANONICALS
+    | EXTENDED_ONLY_CANONICALS
+    | INTERNAL_ONLY_CANONICALS
+    | LEGACY_ONLY_CANONICALS
+    | RESEARCH_ONLY_CANONICALS
+)
+_EXPLICIT_POLICIES = {
+    name: policy
+    for name, policy in _EXPLICIT_POLICIES.items()
+    if name in _ACTIVE_POLICY_CANONICALS
+}
+for _daily_name in DAILY_CANONICALS:
+    _EXPLICIT_POLICIES.setdefault(
+        _daily_name,
+        _reviewed_active_policy(_daily_name, pit_safe=True),
+    )
+for _active_name in _ACTIVE_POLICY_CANONICALS - DAILY_CANONICALS:
+    _EXPLICIT_POLICIES.setdefault(
+        _active_name,
+        _reviewed_active_policy(_active_name, pit_safe=False),
+    )
+
+# Compatibility export now reflects the reviewed research surface exactly.
+RESEARCH_CORE_CANONICALS = RESEARCH_ONLY_CANONICALS
+
+
 @dataclass
 class OperatorPolicy:
     """算子执行语义（企业级 schema 子集）。
@@ -872,10 +968,15 @@ def infer_operator_policy(op: Any, *, canonical: str | None = None) -> OperatorP
     elif category in ("math", "elementwise_math", "data_handling"):
         scope = "elementwise"
 
-    # Domain restrictions and research status are not look-ahead.  Pure
-    # elementwise/cross-sectional transforms are PIT-safe by construction;
-    # time-series operators still require an explicit causal declaration.
-    pit_safe = scope in {"elementwise", "cs", "group"} or "pit_safe" in tags or "causal" in tags
+    # Active daily/extended primitives are fail-closed: only an explicit policy
+    # above may grant PIT safety.  Heuristics remain useful for migration reports
+    # and third-party research operators but never for production admission.
+    governed_without_policy = canon in (DAILY_CANONICALS | EXTENDED_ONLY_CANONICALS)
+    pit_safe = False if governed_without_policy else (
+        scope in {"elementwise", "cs", "group"}
+        or "pit_safe" in tags
+        or "causal" in tags
+    )
     if canon in PIT_UNSAFE_CANONICALS:
         pit_safe = False
     elif name in ("lead", "next"):

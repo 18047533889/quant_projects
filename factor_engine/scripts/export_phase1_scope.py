@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 FE_ROOT = Path(__file__).resolve().parents[1]
@@ -30,6 +29,22 @@ def _git_sha() -> str:
         return (
             subprocess.check_output(
                 ["git", "rev-parse", "HEAD"],
+                cwd=str(FE_ROOT),
+                stderr=subprocess.DEVNULL,
+            )
+            .decode()
+            .strip()
+        )
+    except Exception:
+        return ""
+
+
+def _git_commit_time() -> str:
+    """Use immutable commit metadata so repeated generation is byte-stable."""
+    try:
+        return (
+            subprocess.check_output(
+                ["git", "show", "-s", "--format=%cI", "HEAD"],
                 cwd=str(FE_ROOT),
                 stderr=subprocess.DEVNULL,
             )
@@ -139,7 +154,7 @@ def build_scope_document() -> dict:
     return {
         "schema_version": 1,
         "freeze_id": "phase1-dual-backend-primitives-v1",
-        "frozen_at": datetime.now(timezone.utc).isoformat(),
+        "frozen_at": _git_commit_time(),
         "frozen_commit_sha": _git_sha() or current_git_sha(),
         "description": (
             "第一阶段 production 范围冻结：约 90 primitive + 16 composite。"

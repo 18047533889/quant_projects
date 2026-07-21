@@ -94,7 +94,9 @@ class RoundPolars(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, decimals: int = 0, **kwargs) -> pl.DataFrame:
-        d = int(kwargs.get("d", decimals))
+        from cleaned_operators.parameter_validation import strict_integer
+
+        d = strict_integer(decimals, "decimals", minimum=-18, maximum=18)
         cols = numeric_cols(x)
         return x.with_columns([pl.col(c).round(d).alias(c) for c in cols])
 
@@ -108,7 +110,9 @@ class TruncatePolars(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, decimals: int = 0, **kwargs) -> pl.DataFrame:
-        value = int(kwargs.get("k", kwargs.get("d", decimals)))
+        from cleaned_operators.parameter_validation import strict_integer
+
+        value = strict_integer(decimals, "decimals", minimum=-18, maximum=18)
         scale = 10.0 ** value
         cols = numeric_cols(x)
         return x.with_columns([((pl.col(c) * scale).truncate() / scale).alias(c) for c in cols])
@@ -202,10 +206,10 @@ class Atan2Polars(SeriesOperator):
 @register_operator(name="lerp", category="math", business_category="elementwise_math", canonical="lerp", source="factor_dsl_polars")
 class LerpPolars(SeriesOperator):
     """Polars 线性插值"""
-    metadata = OperatorMetadata(name="lerp", category="math", description="线性插值", param_names=["a", "b", "f"], tags=["math", "polars"])
+    metadata = OperatorMetadata(name="lerp", category="math", description="线性插值", param_names=["a", "b", "fraction"], tags=["math", "polars"])
 
-    def _calculate_series(self, a: pl.DataFrame, b: pl.DataFrame, f: float = 0.5, **kwargs) -> pl.DataFrame:
-        frac = float(kwargs.get("d", f))
+    def _calculate_series(self, a: pl.DataFrame, b: pl.DataFrame, fraction: float = 0.5, **kwargs) -> pl.DataFrame:
+        frac = float(fraction)
         cols = align_cols(a, b)
         return a.with_columns([(pl.col(c) + frac * (b[c] - pl.col(c))).alias(c) for c in cols])
 
@@ -217,17 +221,6 @@ class BlomTransformPolars(SeriesOperator):
 
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
         return bridge_registry("blom_transform", x)
-
-
-@register_operator(name="avg2", category="fundamental", business_category="fundamental", canonical="avg2", source="factor_dsl_polars")
-class Avg2Polars(SeriesOperator):
-    """Polars 当期与上期均值"""
-    metadata = OperatorMetadata(name="avg2", category="fundamental", description="当期与上期均值", param_names=["x"], tags=["polars"])
-
-    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        from cleaned_operators._numpy_kernels import avg2_
-
-        return colwise_numpy_kernel(x, avg2_)
 
 
 @register_operator(name="at_imax", category="statistics", business_category="statistics_regression", canonical="at_imax", source="factor_dsl_polars")

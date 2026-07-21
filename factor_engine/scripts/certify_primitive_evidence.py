@@ -154,6 +154,19 @@ def _sync_case_registry_check() -> tuple[bool, str]:
     return proc.returncode == 0, out.strip()
 
 
+def _refresh_operator_manifest() -> tuple[bool, str]:
+    """Regenerate the capability manifest after candidate evidence is visible."""
+    proc = subprocess.run(
+        [sys.executable, str(FE_ROOT / "scripts" / "export_operator_manifest.py")],
+        cwd=str(FE_ROOT),
+        env=_env(),
+        capture_output=True,
+        text=True,
+    )
+    out = (proc.stdout or "") + (proc.stderr or "")
+    return proc.returncode == 0, out.strip()
+
+
 def _build_verified_payload(*, stages_passed: list[str]) -> dict:
     from backend.evidence_provenance import (
         build_provenance,
@@ -304,9 +317,22 @@ def main() -> int:
     count = payload.pop("_six_way_count", 0)
     text = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
     previous = out.read_bytes() if out.is_file() else None
+    manifest = FE_ROOT / "benchmarks" / "operator_manifest.json"
+    previous_manifest = manifest.read_bytes() if manifest.is_file() else None
     candidate = out.with_suffix(".json.tmp")
     candidate.write_text(text, encoding="utf-8")
     candidate.replace(out)
+    manifest_ok, manifest_detail = _refresh_operator_manifest()
+    if not manifest_ok:
+        if previous is None:
+            out.unlink(missing_ok=True)
+        else:
+            restore = out.with_suffix(".json.restore")
+            restore.write_bytes(previous)
+            restore.replace(out)
+        print("stage failed: refresh_operator_manifest", file=sys.stderr)
+        print(manifest_detail, file=sys.stderr)
+        return 1
     for stage_name, files in CERTIFICATION_STAGES:
         if stage_name not in POST_ARTIFACT_STAGES:
             continue
@@ -318,6 +344,12 @@ def main() -> int:
                 restore = out.with_suffix(".json.restore")
                 restore.write_bytes(previous)
                 restore.replace(out)
+            if previous_manifest is None:
+                manifest.unlink(missing_ok=True)
+            else:
+                restore_manifest = manifest.with_suffix(".json.restore")
+                restore_manifest.write_bytes(previous_manifest)
+                restore_manifest.replace(manifest)
             print(f"stage failed: {stage_name}", file=sys.stderr)
             print(detail, file=sys.stderr)
             return 1

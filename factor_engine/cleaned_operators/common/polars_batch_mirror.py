@@ -146,7 +146,7 @@ _register_bridge(
     business_category="statistics_regression",
     param_names=["x", "w"],
 )
-for _f in ("quarter", "ttm", "yoy", "avg2"):
+for _f in ("quarter", "ttm", "yoy"):
     _register_bridge(
         _f,
         category="fundamental",

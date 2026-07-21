@@ -28,9 +28,8 @@ def main() -> None:
     from backend.sql_pushdown.sql_registry import register_sql_backends
 
     register_sql_backends()
-    from cleaned_operators.operator_policy import POLARS_PARITY_VERIFIED, POLARS_PRODUCTION_SAFE
     from cleaned_operators.operator_surface import classify_canonical
-    from backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS, SQL_PARITY_VERIFIED_CANONICALS, SQL_PRODUCTION_SAFE_CANONICALS
+    from backend.operator_capability import capability_for
 
     catalog = OperatorRegistry.catalog()
     active = sorted(catalog)
@@ -39,27 +38,32 @@ def main() -> None:
         item = catalog[name]
         backends = set(item.get("backends") or [])
         polars_meta = ((item.get("backend_meta") or {}).get("polars") or {})
-        polars_native = "polars" in backends and polars_meta.get("execution_kind") == "expression_native"
-        polars_verified = "polars" in backends and name in POLARS_PARITY_VERIFIED
-        polars_safe = polars_native and polars_verified and name in POLARS_PRODUCTION_SAFE
-        sql_verified = name in SQL_PARITY_VERIFIED_CANONICALS
-        sql_safe = sql_verified and name in SQL_PRODUCTION_SAFE_CANONICALS
+        execution_kind = str(polars_meta.get("execution_kind", "unsupported"))
+        polars = capability_for(name, "polars")
+        duckdb = capability_for(name, "duckdb_sql")
+        polars_verified = polars.status in {"parity_verified", "production_safe"}
+        polars_safe = polars.status == "production_safe"
+        sql_verified = duckdb.status in {"parity_verified", "production_safe"}
+        sql_safe = duckdb.status == "production_safe"
         rows.append((
             name,
             classify_canonical(name),
             "pandas_numpy" in backends,
             "polars" in backends,
-            polars_native,
+            execution_kind,
             polars_verified,
             polars_safe,
-            name in SQL_IMPLEMENTED_CANONICALS,
+            duckdb.status != "unsupported",
             sql_verified,
             sql_safe,
+            polars.supports_lazy,
+            polars.supports_streaming,
+            polars.materializes_full_panel,
         ))
 
     daily = sum(row[1] == "daily" for row in rows)
     polars_registered = sum(row[3] for row in rows)
-    polars_native = sum(row[4] for row in rows)
+    polars_native = sum(row[4] in {"expression_native", "polars_eager_native"} for row in rows)
     polars_verified = sum(row[5] for row in rows)
     polars_safe = sum(row[6] for row in rows)
     sql_implemented = sum(row[7] for row in rows)
@@ -88,14 +92,19 @@ def main() -> None:
         "",
         "## Matrix",
         "",
-        "| canonical | surface | pandas | polars | polars native | polars verified | polars safe | duckdb implemented | duckdb verified | duckdb safe |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| canonical | surface | pandas | polars | execution kind | polars verified | polars safe | lazy | streaming | full-panel | duckdb implemented | duckdb verified | duckdb safe |",
+        "|---|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     body = [
-        "| " + " | ".join([
-            name, surface, *(_yes(value) for value in values)
-        ]) + " |"
-        for name, surface, *values in rows
+        "| " + " | ".join((
+            name, surface, _yes(pd_ok), _yes(pl_ok), execution_kind,
+            _yes(pl_verified), _yes(pl_safe), _yes(lazy), _yes(streaming),
+            _yes(full_panel), _yes(sql_impl), _yes(sql_verified), _yes(sql_safe),
+        )) + " |"
+        for (
+            name, surface, pd_ok, pl_ok, execution_kind, pl_verified, pl_safe,
+            sql_impl, sql_verified, sql_safe, lazy, streaming, full_panel,
+        ) in rows
     ]
     backend_doc = "\n".join(header + body) + "\n"
     (FACTOR_ENGINE / "docs" / "backend_coverage.md").write_text(backend_doc, encoding="utf-8")
@@ -116,7 +125,7 @@ def main() -> None:
     ]
     sql_doc.extend(
         f"| {name} | yes | {_yes(verified)} | {_yes(safe)} |"
-        for name, _surface, _pd, _pl, _native, _pv, _ps, _impl, verified, safe in sql_rows
+        for name, _surface, _pd, _pl, _kind, _pv, _ps, _impl, verified, safe, _lazy, _streaming, _full in sql_rows
     )
     (FACTOR_ENGINE / "docs" / "sql_pushdown_coverage.md").write_text("\n".join(sql_doc) + "\n", encoding="utf-8")
 

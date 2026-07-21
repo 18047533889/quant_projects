@@ -46,15 +46,6 @@ DEDUPE = {
     "cum_last": "ffill",
 }
 
-DAILY_ADDITIONS = frozenset({
-    "cs_neutralize", "ts_regression_intercept", "ts_regression_resid",
-    "ts_regression_r2", "ts_topk_mean", "ts_topk_sum", "ts_topk_std",
-    "ts_bottomk_mean", "ts_bottomk_sum", "ts_bottomk_std", "ts_tail_mean",
-    "fundamental_staleness", "revision_delta", "period_stability",
-    "cs_weighted_mean", "cs_weighted_demean", "cs_weighted_zscore",
-    "group_weighted_mean", "group_weighted_zscore",
-})
-
 RECIPE_CANONICALS = frozenset({"current_ratio", "quick_ratio", "debt_to_equity", "operating_margin"})
 _FINALIZED = False
 
@@ -172,6 +163,11 @@ def finalize() -> None:
         ))
         execution_kind = "polars_eager_native" if materialized else "expression_native"
         entry = OperatorRegistry._catalog.get(canonical, {})
+        from cleaned_operators.operator_policy import infer_operator_policy
+
+        policy = infer_operator_policy(operator, canonical=canonical)
+        scope = getattr(policy, "scope", "unknown")
+        params = set(entry.get("param_names") or ())
         backend_meta = dict(entry.get("backend_meta") or {})
         polars_meta = dict(backend_meta.get("polars") or {})
         polars_meta.update({
@@ -179,6 +175,13 @@ def finalize() -> None:
             "supports_lazy": execution_kind == "expression_native",
             "materializes_full_panel": materialized,
             "supports_streaming": execution_kind == "expression_native",
+            "supports_nulls": True,
+            "supports_nan": True,
+            "supports_inf": True,
+            "supports_scalar_broadcast": True,
+            "supports_group": scope == "group",
+            "supports_window": scope == "ts",
+            "supports_min_periods": "min_periods" in params,
         })
         backend_meta["polars"] = polars_meta
         entry["backend_meta"] = backend_meta
