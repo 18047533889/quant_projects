@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "artifact_kind": "test_passed",
-  "commit_sha": "c4a87f27e5eb779bbce25411538692a0ed4b8abb",
-  "passed_at": "2026-07-21T06:47:00.506901+00:00",
+  "commit_sha": "c240fabd55cc653414bf117ca08663b24b264e66",
+  "passed_at": "2026-07-21T07:45:55.022008+00:00",
   "recipes": [
     "annualized_volatility",
     "bollinger_lower",
@@ -38,6 +38,6 @@
     "case_registry_hash": "d101f40a4e6a6a78643c7168d1ff2bf24ddf941d18b406ca38e7d075f38f5675",
     "recipe_source_hash": "35936b9b09e3f62b231875b5cf86aecc4152dd10010f52fbb6cc0d52ed169068",
     "test_source_hash": "f0c89a47588aabff5946dc3f61104855fa7ae3ebee0b9d13ed5986e9d7bcccf7",
-    "primitive_evidence_hash": "52ba64d0e49ac402e1fdbbecc73d07e3519bbf3eebfe051d365d63a36dd33da6"
+    "primitive_evidence_hash": "2f8b81103e69ee71305d21cf34f0931cdd0aad6c6ee06c66b2316e8ea90fb229"
   }
 }

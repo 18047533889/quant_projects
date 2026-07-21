@@ -82,6 +82,11 @@ def test_cross_parameter_constraints_are_executable(_loaded):
     assert not ok and "lag" in reason
 
     ok, reason = verify_production_signature(
+        "ts_sharpe", _plan("ts_sharpe", 1), production=True
+    )
+    assert not ok and "window" in reason
+
+    ok, reason = verify_production_signature(
         "winsorize", _plan("winsorize", 0.9, 0.1), production=True
     )
     assert not ok and "lower" in reason

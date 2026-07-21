@@ -44,11 +44,13 @@ def test_ts_autocorr_perfect_for_monotonic_series(_loaded):
     assert out.iloc[-1, 0] == pytest.approx(1.0)
 
 
-def test_ts_autocorr_negative_lag_returns_nan(_loaded):
+def test_ts_autocorr_negative_lag_is_rejected(_loaded):
+    from backend.operator_errors import OperatorParameterError
+
     op = OperatorRegistry.get("ts_autocorr")
     x = pd.DataFrame({"A": np.arange(10, dtype=float)})
-    out = op.calculate(x, window=5, lag=-1)
-    assert out.isna().all().all()
+    with pytest.raises(OperatorParameterError, match="lag"):
+        op.calculate(x, window=5, lag=-1)
 
 
 def test_session_key_splits_at_calendar_midnight():

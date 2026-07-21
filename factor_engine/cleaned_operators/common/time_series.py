@@ -436,8 +436,18 @@ class TSSharpe(SeriesOperator):
         min_periods: int | None = None,
         **kwargs,
     ) -> pd.DataFrame:
-        w = max(2, int(window))
-        mp = max(2, int(min_periods)) if min_periods is not None else max(2, w // 3)
+        from cleaned_operators.parameter_validation import strict_finite_scalar, strict_integer
+
+        w = strict_integer(window, "window", minimum=2)
+        mp = (
+            strict_integer(min_periods, "min_periods", minimum=2)
+            if min_periods is not None
+            else max(2, w // 3)
+        )
+        if mp > w:
+            from backend.operator_errors import OperatorParameterError
+            raise OperatorParameterError("min_periods must be <= window")
+        scale = strict_finite_scalar(ann_factor, "ann_factor", minimum=0.0)
         mean = x.rolling(window=w, min_periods=mp).mean()
         std = x.rolling(window=w, min_periods=mp).std(ddof=1)
         zero_vol = std.eq(0) | std.isna()
@@ -449,7 +459,7 @@ class TSSharpe(SeriesOperator):
         else:
             sharpe = sharpe.mask(zero_vol & mean.gt(0), np.inf)
             sharpe = sharpe.mask(zero_vol & mean.le(0), 0.0)
-        return sharpe * np.sqrt(float(ann_factor))
+        return sharpe * np.sqrt(scale)
 
 
 # canonical=ts_autocorr backend=pandas_numpy selected=ts_autocorr source=time_series/m_ops.py
@@ -481,11 +491,21 @@ class TSAutocorr(SeriesOperator):
         min_periods: int | None = None,
         **kwargs,
     ) -> pd.DataFrame:
-        k = max(1, int(lag))
-        w = max(k + 2, int(window))
-        mp = max(k + 2, int(min_periods)) if min_periods is not None else max(2, w // 3)
-        if int(lag) < 1:
-            return pd.DataFrame(np.nan, index=x.index, columns=x.columns)
+        from cleaned_operators.parameter_validation import strict_integer
+
+        w = strict_integer(window, "window", minimum=2)
+        k = strict_integer(lag, "lag", minimum=1)
+        if k >= w:
+            from backend.operator_errors import OperatorParameterError
+            raise OperatorParameterError("lag must be < window")
+        mp = (
+            strict_integer(min_periods, "min_periods", minimum=2)
+            if min_periods is not None
+            else max(2, w // 3)
+        )
+        if mp > w:
+            from backend.operator_errors import OperatorParameterError
+            raise OperatorParameterError("min_periods must be <= window")
         y = x.shift(k)
         return x.rolling(window=w, min_periods=mp).corr(y)
 
@@ -918,20 +938,25 @@ class TSRank(SeriesOperator):
     )
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
         from backend.routing import numba_enabled_for_op
+        from cleaned_operators.parameter_validation import strict_integer
 
-        min_periods = max(int(kwargs.get("min_periods", 1)), 1)
-        if numba_enabled_for_op("ts_rank", window=int(window)):
+        w = strict_integer(window, "window", minimum=1)
+        min_periods = strict_integer(kwargs.get("min_periods", 1), "min_periods", minimum=1)
+        if min_periods > w:
+            from backend.operator_errors import OperatorParameterError
+            raise OperatorParameterError("min_periods must be <= window")
+        if numba_enabled_for_op("ts_rank", window=w):
             try:
                 from backend.numba_kernels import rolling_rank_pct_panel
 
                 fast = rolling_rank_pct_panel(
-                    x.to_numpy(dtype=float), int(window), min_count=min_periods
+                    x.to_numpy(dtype=float), w, min_count=min_periods
                 )
                 if fast is not None:
                     return pd.DataFrame(fast, index=x.index, columns=x.columns)
             except Exception:
                 pass
-        return x.rolling(window=window, min_periods=min_periods).rank(pct=True)
+        return x.rolling(window=w, min_periods=min_periods).rank(pct=True)
 
 # aliases: TS_RANK, m_rank
 
@@ -1804,10 +1829,20 @@ class TSSharpePolars(SeriesOperator):
         min_periods: int | None = None,
         **kwargs,
     ) -> pl.DataFrame:
-        w = max(2, int(window))
-        mp = max(2, int(min_periods)) if min_periods is not None else max(2, w // 3)
+        from cleaned_operators.parameter_validation import strict_finite_scalar, strict_integer
+
+        w = strict_integer(window, "window", minimum=2)
+        mp = (
+            strict_integer(min_periods, "min_periods", minimum=2)
+            if min_periods is not None
+            else max(2, w // 3)
+        )
+        if mp > w:
+            from backend.operator_errors import OperatorParameterError
+            raise OperatorParameterError("min_periods must be <= window")
+        ann_factor = strict_finite_scalar(ann_factor, "ann_factor", minimum=0.0)
         cols = [c for c in x.columns if c not in ["date", "stock_code"]]
-        sqrt_af = float(np.sqrt(float(ann_factor)))
+        sqrt_af = float(np.sqrt(ann_factor))
         return x.with_columns(
             [
                 pl.when(
@@ -1858,12 +1893,21 @@ class TSAutocorrPolars(SeriesOperator):
         min_periods: int | None = None,
         **kwargs,
     ) -> pl.DataFrame:
-        if int(lag) < 1:
-            cols = [c for c in x.columns if c not in ["date", "stock_code"]]
-            return x.with_columns([pl.lit(None).cast(pl.Float64).alias(c) for c in cols])
-        k = max(1, int(lag))
-        w = max(k + 2, int(window))
-        mp = max(k + 2, int(min_periods)) if min_periods is not None else max(2, w // 3)
+        from cleaned_operators.parameter_validation import strict_integer
+
+        w = strict_integer(window, "window", minimum=2)
+        k = strict_integer(lag, "lag", minimum=1)
+        if k >= w:
+            from backend.operator_errors import OperatorParameterError
+            raise OperatorParameterError("lag must be < window")
+        mp = (
+            strict_integer(min_periods, "min_periods", minimum=2)
+            if min_periods is not None
+            else max(2, w // 3)
+        )
+        if mp > w:
+            from backend.operator_errors import OperatorParameterError
+            raise OperatorParameterError("min_periods must be <= window")
         cols = [c for c in x.columns if c not in ["date", "stock_code"]]
         return x.with_columns(
             [

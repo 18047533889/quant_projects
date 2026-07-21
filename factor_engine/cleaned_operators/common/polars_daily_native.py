@@ -181,18 +181,27 @@ class TSRankNative(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        w = max(1, int(kwargs.get("d", window)))
+        from cleaned_operators.parameter_validation import strict_integer
+
+        if "d" in kwargs:
+            from backend.operator_errors import OperatorParameterError
+            raise OperatorParameterError("ts_rank accepts window; d is not a supported runtime alias")
+        w = strict_integer(window, "window", minimum=1)
+        min_periods = strict_integer(kwargs.get("min_periods", 1), "min_periods", minimum=1)
+        if min_periods > w:
+            from backend.operator_errors import OperatorParameterError
+            raise OperatorParameterError("min_periods must be <= window")
         cols = _numeric_cols(x)
         return x.with_columns(
             [
                 (
                     pl.col(c).rolling_rank(
-                        window_size=w, method="average", min_samples=1
+                        window_size=w, method="average", min_samples=min_periods
                     )
                     / pl.col(c)
                     .is_not_null()
                     .cast(pl.Float64)
-                    .rolling_sum(window_size=w, min_samples=1)
+                    .rolling_sum(window_size=w, min_samples=min_periods)
                 ).alias(c)
                 for c in cols
             ]
@@ -227,9 +236,18 @@ class TSSharpeNative(SeriesOperator):
         min_periods: int | None = None,
         **kwargs,
     ) -> pl.DataFrame:
-        w = max(2, int(window))
-        mp = max(2, int(min_periods)) if min_periods is not None else max(2, w // 3)
-        scale = float(ann_factor) ** 0.5
+        from cleaned_operators.parameter_validation import strict_finite_scalar, strict_integer
+
+        w = strict_integer(window, "window", minimum=2)
+        mp = (
+            strict_integer(min_periods, "min_periods", minimum=2)
+            if min_periods is not None
+            else max(2, w // 3)
+        )
+        if mp > w:
+            from backend.operator_errors import OperatorParameterError
+            raise OperatorParameterError("min_periods must be <= window")
+        scale = strict_finite_scalar(ann_factor, "ann_factor", minimum=0.0) ** 0.5
         cols = _numeric_cols(x)
         exprs = []
         for c in cols:

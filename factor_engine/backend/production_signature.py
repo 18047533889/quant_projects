@@ -319,6 +319,8 @@ def verify_production_signature(canon: str, node: PlanNode | None, *, production
             )
     window = values.get("window")
     min_periods = values.get("min_periods")
+    if canon in {"ts_sharpe", "ts_autocorr"} and window is not None and int(window) < 2:
+        return False, f"{canon}: window must be >= 2"
     if window is not None and min_periods is not None and int(min_periods) > int(window):
         return False, f"{canon}: min_periods must satisfy 1 <= min_periods <= window"
     if canon == "ts_autocorr":

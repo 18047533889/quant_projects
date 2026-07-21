@@ -45,10 +45,10 @@ _REGISTRY_LONG_CACHE: frozenset[str] | None = None
 
 
 def _resolve(op: str) -> str:
-    """把 DSL 别名解析为 OperatorRegistry canonical 名。"""
+    """Strictly resolve a DSL alias to its registered canonical name."""
     from cleaned_operators.registry import OperatorRegistry
 
-    return OperatorRegistry._aliases.get(op, op)
+    return OperatorRegistry.resolve_canonical_strict(op)
 
 
 def _numeric_cols(df: pl.DataFrame) -> list[str]:
@@ -84,12 +84,21 @@ def polars_registry_long_capable(*, exclude_native: frozenset[str] | None = None
 
 def registry_op_long_capable(op: str) -> bool:
     """单个算子名（可含别名）是否可由 long-bridge 编译。"""
-    return _resolve(op) in polars_registry_long_capable()
+    try:
+        canonical = _resolve(op)
+    except KeyError:
+        # Capability discovery is intentionally non-throwing. Execution uses
+        # ``compile_registry_op`` below and therefore retains strict resolution.
+        return False
+    return canonical in polars_registry_long_capable()
 
 
 def plan_registry_long_capable(plan: PlanNode) -> bool:
     """整棵 PlanNode 子树是否 **全部** 可由 long-bridge 编译（递归检查）。"""
-    op = _resolve(plan.op)
+    try:
+        op = _resolve(plan.op)
+    except KeyError:
+        return False
     if op in {"column", "literal"}:
         return True
     if not registry_op_long_capable(op):
@@ -98,26 +107,13 @@ def plan_registry_long_capable(plan: PlanNode) -> bool:
 
 
 def _op_scope(canonical: str) -> str:
-    """推断算子分组维度：``ts``（按标的滚动）、``cs``（按时间截面）、``group``（不支持）。
-
-    优先读 ``operator_policy`` 显式配置，其次读 Registry metadata.category。
-    """
+    """Read the reviewed execution scope; scope guessing is forbidden."""
     from cleaned_operators.operator_policy import _EXPLICIT_POLICIES
 
-    if canonical in _EXPLICIT_POLICIES:
-        return str(_EXPLICIT_POLICIES[canonical].get("scope", "ts"))
-    try:
-        from cleaned_operators.registry import OperatorRegistry
-
-        meta = OperatorRegistry.get(canonical, backend="polars").metadata
-        cat = getattr(meta, "category", "") or ""
-        if cat == "cross_sectional" or canonical.startswith(("cs_", "c_")):
-            return "cs"
-        if cat in {"group_neutralization", "group"} or canonical.startswith("group_"):
-            return "group"
-    except Exception:
-        pass
-    return "ts"
+    policy = _EXPLICIT_POLICIES.get(canonical)
+    if policy is None or not policy.get("scope"):
+        raise RuntimeError(f"{canonical}: missing explicit long-bridge scope policy")
+    return str(policy["scope"])
 
 
 def _call_polars_operator(

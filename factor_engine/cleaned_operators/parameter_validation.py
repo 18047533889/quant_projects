@@ -25,3 +25,20 @@ def strict_integer(
     if maximum is not None and parsed > maximum:
         raise OperatorParameterError(f"{name} must be <= {maximum}, got {parsed}")
     return parsed
+
+
+def strict_finite_scalar(
+    value: Any,
+    name: str,
+    *,
+    minimum: float | None = None,
+) -> float:
+    """Parse a finite numeric scalar without accepting booleans."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise OperatorParameterError(f"{name} must be a finite scalar, got {value!r}")
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise OperatorParameterError(f"{name} must be a finite scalar, got {value!r}")
+    if minimum is not None and parsed < minimum:
+        raise OperatorParameterError(f"{name} must be >= {minimum}, got {parsed}")
+    return parsed
