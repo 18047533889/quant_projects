@@ -1,43 +1,25 @@
 # -*- coding: utf-8 -*-
 """Production hardening overlay for every factor-shaped operator.
 
-This module deliberately separates *factor operators* from *research tools*.
 Anything that remains in the Factor DSL must have a causal/PIT contract,
 deterministic panel semantics and at least one certified execution backend.
 Diagnostics, hypothesis tests, matrix/frequency tools and other non-factor
 utilities belong in ``ResearchToolRegistry`` and are not handled here.
-
-The overlay runs after layer governance and before registry finalisation.  It is
-therefore the single place where legacy ``research``/``experimental`` labels are
-promoted after their execution semantics have already been registered.
 """
 from __future__ import annotations
 
 from typing import Any
 
-# Operators that consume future observations, destroy ordering, are random, or
-# do not preserve the factor panel are not legitimate factor-production APIs.
-# They remain unavailable to the factor authoring surfaces even if an internal
-# implementation exists for tests/tools.
 NON_FACTOR_PRODUCTION_CANONICALS: frozenset[str] = frozenset({
     "Lead", "next", "bfill", "causal_bfill", "fillna_interpolate", "shuffle",
     "dropna", "constant", "sample", "rand_exp", "rand_lognormal", "rand_normal",
     "rand_poisson", "rand_uniform",
 })
 
-# Exact output at time t depends on the complete earlier path.  These are still
-# production-safe, but incremental materialisation must replay from a checkpoint
-# or from the beginning of the requested history; a finite rolling lookback is
-# not a valid substitute.
 FULL_HISTORY_REPLAY_CANONICALS: frozenset[str] = frozenset({
-    "expanding_rank",
-    "trade_when",
-    "hump_decay",
+    "expanding_rank", "trade_when", "hump_decay",
 })
 
-# Recursive state can be represented by a bounded checkpoint.  The checkpoint
-# metadata is declarative; segmented runtimes must explicitly advertise support
-# before they are allowed to consume it.
 STATEFUL_CHECKPOINTS: dict[str, tuple[str, ...]] = {
     "ts_sma_cn": ("last_value", "last_timestamp"),
     "trade_when": ("last_output", "last_timestamp"),
@@ -45,48 +27,22 @@ STATEFUL_CHECKPOINTS: dict[str, tuple[str, ...]] = {
 }
 
 _SCOPE_OVERRIDES: dict[str, str] = {
-    "ADX": "ts",
-    "ATR_WILDER": "ts",
-    "MACD_hist": "ts",
-    "MACD_line": "ts",
-    "MACD_signal": "ts",
-    "RSI_WILDER": "ts",
-    "coskewness_to_market": "ts",
-    "digital_count": "ts",
-    "expanding_rank": "ts",
-    "hump_decay": "ts",
-    "idio_skew": "ts",
-    "idio_vol": "ts",
-    "intraday_vwap_deviation": "session_intraday",
-    "lqtp_historical_cvar": "ts",
-    "rank_corr": "ts",
-    "residual_momentum_capm": "ts",
-    "rolling_beta_to_market": "ts",
-    "tail_beta": "ts",
-    "trade_when": "ts",
-    "ts_poly2_coeff": "ts",
-    "ts_poly2_resid": "ts",
-    "ts_sma_cn": "ts",
+    "ADX": "ts", "ATR_WILDER": "ts", "MACD_hist": "ts", "MACD_line": "ts",
+    "MACD_signal": "ts", "RSI_WILDER": "ts", "coskewness_to_market": "ts",
+    "digital_count": "ts", "expanding_rank": "ts", "hump_decay": "ts",
+    "idio_skew": "ts", "idio_vol": "ts", "intraday_vwap_deviation": "session_intraday",
+    "lqtp_historical_cvar": "ts", "rank_corr": "ts", "residual_momentum_capm": "ts",
+    "rolling_beta_to_market": "ts", "tail_beta": "ts", "trade_when": "ts",
+    "ts_poly2_coeff": "ts", "ts_poly2_resid": "ts", "ts_sma_cn": "ts",
     "ts_sum_decay": "ts",
 }
 
 _MIN_PERIODS_OVERRIDES: dict[str, int] = {
-    "ts_regression_intercept": 3,
-    "ts_regression_r2": 3,
-    "ts_regression_resid": 3,
-    "ts_regression_slope": 3,
-    "ts_regression_tstat": 3,
-    "ts_trend_tstat": 3,
-    "ts_partial_corr": 3,
-    "ts_poly2_coeff": 3,
-    "ts_poly2_resid": 3,
-    "rolling_beta_to_market": 2,
-    "tail_beta": 3,
-    "idio_vol": 5,
-    "idio_skew": 5,
-    "residual_momentum_capm": 5,
-    "coskewness_to_market": 5,
-    "ts_sma_cn": 1,
+    "ts_regression_intercept": 3, "ts_regression_r2": 3, "ts_regression_resid": 3,
+    "ts_regression_slope": 3, "ts_regression_tstat": 3, "ts_trend_tstat": 3,
+    "ts_partial_corr": 3, "ts_poly2_coeff": 3, "ts_poly2_resid": 3,
+    "rolling_beta_to_market": 2, "tail_beta": 3, "idio_vol": 5, "idio_skew": 5,
+    "residual_momentum_capm": 5, "coskewness_to_market": 5, "ts_sma_cn": 1,
 }
 
 
@@ -128,11 +84,8 @@ def _policy_patch(canonical: str, catalog: dict[str, Any]) -> dict[str, Any]:
 
 
 def factor_production_targets() -> frozenset[str]:
-    """Return every registered factor-shaped canonical targeted for production."""
     from cleaned_operators.operator_surface import (
-        DAILY_CANONICALS,
-        EXTENDED_ONLY_CANONICALS,
-        RESEARCH_ONLY_CANONICALS,
+        DAILY_CANONICALS, EXTENDED_ONLY_CANONICALS, RESEARCH_ONLY_CANONICALS,
     )
     from cleaned_operators.registry import OperatorRegistry
 
@@ -141,23 +94,35 @@ def factor_production_targets() -> frozenset[str]:
     return frozenset(active.difference(NON_FACTOR_PRODUCTION_CANONICALS))
 
 
-def apply_production_hardening() -> None:
-    """Promote factor operators and install explicit machine-readable contracts.
+def _remove_promoted_legacy_denials(targets: frozenset[str]) -> None:
+    """Legacy deny lists must not override a completed production review."""
+    import cleaned_operators.operator_spec as spec_mod
 
-    The Pandas/Numpy implementation is the semantic reference backend.  Marking
-    it as the first production backend does not make Polars/SQL production-safe;
-    those backends keep their independent parity/evidence gates.
-    """
+    spec_mod.PRODUCTION_DENIED_CANONICALS = frozenset(
+        c for c in spec_mod.PRODUCTION_DENIED_CANONICALS if c not in targets
+    )
+    # Never weaken hard temporal/non-deterministic bans. A promoted target in
+    # this set is a programming error and fails closed below.
+    overlap = targets & spec_mod.PERMANENTLY_FORBIDDEN_CANONICALS
+    if overlap:
+        raise RuntimeError(
+            "production target intersects permanently forbidden canonicals: "
+            + ", ".join(sorted(overlap))
+        )
+
+
+def apply_production_hardening() -> None:
+    """Promote retained factor operators and install production contracts."""
     from cleaned_operators.operator_policy import _EXPLICIT_POLICIES
     from cleaned_operators.registry import OperatorRegistry
 
-    for canonical in sorted(factor_production_targets()):
+    targets = factor_production_targets()
+    _remove_promoted_legacy_denials(targets)
+
+    for canonical in sorted(targets):
         catalog = OperatorRegistry._catalog.setdefault(canonical, {})
         existing_policy = dict(_EXPLICIT_POLICIES.get(canonical) or {})
         merged_policy = {**_policy_patch(canonical, catalog), **existing_policy}
-        # A stale legacy policy may have been fail-closed only because the
-        # operator had not yet been reviewed.  Future-data operators are already
-        # excluded above; all remaining factor APIs are explicitly causal here.
         merged_policy["pit_safe"] = True
         _EXPLICIT_POLICIES[canonical] = merged_policy
 
@@ -204,9 +169,9 @@ def apply_production_hardening() -> None:
 
 
 def check_factor_production_hardening() -> list[str]:
-    """Fail-closed CI audit for the production target set."""
     from cleaned_operators.operator_policy import infer_operator_policy
     from cleaned_operators.registry import OperatorRegistry
+    from backend.operator_capability import production_eligible_backends
 
     errors: list[str] = []
     for canonical in sorted(factor_production_targets()):
@@ -228,4 +193,6 @@ def check_factor_production_hardening() -> list[str]:
         meta = (catalog.get("backend_meta") or {}).get("pandas_numpy") or {}
         if not meta.get("production_certified"):
             errors.append(f"{canonical}: pandas reference is not production certified")
+        if not production_eligible_backends(canonical):
+            errors.append(f"{canonical}: no production-eligible physical backend")
     return errors
