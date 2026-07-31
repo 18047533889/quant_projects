@@ -1,9 +1,4 @@
-"""Factor DSL allowlists with an explicit compatibility shell.
-
-Canonical operator semantics remain in ``cleaned_operators``. External LQTP/JQ
-spellings are factories that resolve to those canonicals, never duplicate
-numerical kernels.
-"""
+"""Factor DSL allowlists with orthogonal authoring surfaces and dialects."""
 from __future__ import annotations
 
 from typing import Any, Callable
@@ -14,22 +9,45 @@ from backend.cleaned_bridge import build_cleaned_dsl_allowlist
 STUB_IR_OPS: frozenset[str] = frozenset()
 
 
-def build_dsl_allowlist(*, surface: str = "daily") -> dict[str, Callable[..., Any]]:
-    """Return a surface-scoped DSL mapping.
+def build_dsl_allowlist(
+    *,
+    surface: str = "daily",
+    dialect: str = "native",
+    dialect_version: str | None = None,
+) -> dict[str, Callable[..., Any]]:
+    """Return a canonical surface mapping, optionally decorated by a dialect.
 
-    ``compat`` combines daily + extended. ``lqtp`` starts from daily + extended
-    + factor-shaped research visibility and then applies versioned compatibility
-    spellings. Production admission remains a separate canonical-plan gate.
+    ``surface`` controls which canonical operators are visible. ``dialect`` only
+    controls external spellings/macros. Legacy ``surface='lqtp'`` remains
+    supported and means ``surface='compat_research', dialect='lqtp'``.
     """
+    raw_surface = str(surface or "daily")
+    raw_dialect = str(dialect or "native").lower()
+    if raw_surface == "lqtp":
+        raw_surface = "compat_research"
+        raw_dialect = "lqtp"
+
     allow: dict[str, Callable[..., Any]] = {"col": col}
-    if surface == "compat":
+    if raw_surface == "compat":
         surfaces = ("daily", "extended")
-    elif surface == "lqtp":
+    elif raw_surface == "compat_research":
         surfaces = ("daily", "extended", "research")
+    elif raw_surface == "all":
+        surfaces = ("all",)
     else:
-        surfaces = (surface,)
+        surfaces = (raw_surface,)
+
     for selected in surfaces:
         allow.update(build_cleaned_dsl_allowlist(set(), surface=selected))
 
+    if raw_dialect in {"native", ""}:
+        return allow
+    if raw_dialect != "lqtp":
+        raise ValueError(f"unsupported factor dialect: {dialect!r}")
+
     from api.lqtp_compat import augment_dsl_allowlist
-    return augment_dsl_allowlist(allow, surface=surface)
+    return augment_dsl_allowlist(
+        allow,
+        surface=raw_surface,
+        dialect_version=dialect_version,
+    )
