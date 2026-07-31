@@ -15,13 +15,7 @@ def build_dsl_allowlist(
     dialect: str = "native",
     dialect_version: str | None = None,
 ) -> dict[str, Callable[..., Any]]:
-    """Return a canonical surface mapping, optionally decorated by a dialect.
-
-    Source-backed intraday→daily aggregators are admitted on extended/compat
-    surfaces even though they are not normal shape-preserving cleaned operators.
-    They resolve to opaque SourceRefs and are evaluated at the logical-data
-    boundary before entering a daily FactorEngine DAG.
-    """
+    """Return a canonical surface mapping, optionally decorated by a dialect."""
     raw_surface = str(surface or "daily")
     raw_dialect = str(dialect or "native").lower()
     if raw_surface == "lqtp":
@@ -42,6 +36,8 @@ def build_dsl_allowlist(
 
     if raw_surface in {"extended", "compat", "compat_research", "all"}:
         from api.intraday_daily import INTRADAY_DAILY_DSL_FUNCTIONS
+        from storage.sources.intraday_clock_install import install_intraday_clock_runtime
+        install_intraday_clock_runtime()
         allow.update(INTRADAY_DAILY_DSL_FUNCTIONS)
 
     if raw_dialect in {"native", ""}:
