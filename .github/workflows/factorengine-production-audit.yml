@@ -5,12 +5,17 @@ on:
     types: [opened, synchronize, reopened]
 
 jobs:
-  registry-import:
+  registry-stage:
     if: github.event.pull_request.head.ref == 'agent/factorengine-production-hardening'
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        stage: [native, reviewed, dedupe, overhaul, governance, post, hardening, overlay, finalize]
     env:
       PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/gtja191
       FACTOR_ENGINE_DISABLE_NUMBA: '1'
+      REGISTRY_STAGE: ${{ matrix.stage }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -18,14 +23,53 @@ jobs:
           python-version: '3.11'
           cache: pip
       - run: python -m pip install -r requirements.txt && python -m pip install -e ./dataaccess
-      - name: Import and freeze Registry
+      - name: Registry bootstrap stage
         run: |
           python - <<'PY'
-          from cleaned_operators import load_all
+          import os
+          import cleaned_operators as co
           from cleaned_operators.registry import OperatorRegistry
-          load_all()
-          print('canonicals', len(OperatorRegistry.list_canonical()))
-          print('lifecycle', OperatorRegistry.lifecycle())
+          target=os.environ['REGISTRY_STAGE']
+          stages=[]
+          for mod in co._LOAD_MODULES:
+              __import__(mod,fromlist=['*'])
+          stages.append('native')
+          if target=='native': print('OK native'); raise SystemExit(0)
+          for mod in (
+              'cleaned_operators.production_repairs',
+              'cleaned_operators.price_volume.technical_extensions',
+              'cleaned_operators.price_volume.technical_structure_repairs',
+              'cleaned_operators.price_volume.candle_patterns_extended',
+          ):
+              __import__(mod,fromlist=['*'])
+          stages.append('reviewed')
+          if target=='reviewed': print('OK reviewed'); raise SystemExit(0)
+          from cleaned_operators._dedupe import apply_operator_deduplication
+          apply_operator_deduplication(); stages.append('dedupe')
+          if target=='dedupe': print('OK dedupe'); raise SystemExit(0)
+          from cleaned_operators.operator_overhaul import finalize_operator_overhaul
+          finalize_operator_overhaul()
+          from cleaned_operators.lqtp_policy_patch import apply_lqtp_policy_patch
+          apply_lqtp_policy_patch()
+          from cleaned_operators.research_factor_enable import enable_research_factor_runtime
+          enable_research_factor_runtime(); stages.append('overhaul')
+          if target=='overhaul': print('OK overhaul'); raise SystemExit(0)
+          from cleaned_operators.layer_governance import finalize_layer_governance
+          finalize_layer_governance(); stages.append('governance')
+          if target=='governance': print('OK governance'); raise SystemExit(0)
+          from cleaned_operators.layer_governance_post import apply_post_governance
+          apply_post_governance(); stages.append('post')
+          if target=='post': print('OK post'); raise SystemExit(0)
+          from cleaned_operators.production_hardening import apply_production_hardening
+          apply_production_hardening(); stages.append('hardening')
+          if target=='hardening': print('OK hardening'); raise SystemExit(0)
+          from cleaned_operators.production_certification_overlay import apply_evidence_certification_overlay
+          apply_evidence_certification_overlay(); stages.append('overlay')
+          if target=='overlay': print('OK overlay'); raise SystemExit(0)
+          from backend.sql_pushdown.sql_registry import register_sql_backends
+          register_sql_backends()
+          OperatorRegistry.finalize(); OperatorRegistry.freeze(); stages.append('finalize')
+          print('OK',stages,len(OperatorRegistry.list_canonical()))
           PY
 
   technical-tests:
@@ -41,11 +85,7 @@ jobs:
           python-version: '3.11'
           cache: pip
       - run: python -m pip install -r requirements.txt && python -m pip install -e ./dataaccess && python -m pip install pytest
-      - name: Technical production tests
-        run: |
-          pytest -q \
-            factor_engine/tests/operators/test_technical_extensions.py \
-            factor_engine/tests/operators/test_candle_patterns_extended.py
+      - run: pytest -q factor_engine/tests/operators/test_technical_extensions.py factor_engine/tests/operators/test_candle_patterns_extended.py
 
   runtime-audit:
     if: github.event.pull_request.head.ref == 'agent/factorengine-production-hardening'
@@ -60,8 +100,7 @@ jobs:
           python-version: '3.11'
           cache: pip
       - run: python -m pip install -r requirements.txt && python -m pip install -e ./dataaccess
-      - name: All-factor runtime audit
-        run: python factor_engine/scripts/audit_all_factor_production.py --runtime-only
+      - run: python factor_engine/scripts/audit_all_factor_production.py --runtime-only
 
   coldstart-coverage:
     if: github.event.pull_request.head.ref == 'agent/factorengine-production-hardening'
