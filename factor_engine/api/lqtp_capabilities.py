@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """Machine-readable LQTP compatibility states.
 
-The key distinction is intentional: recognized != executable != production.
+recognized != parseable != executable != production-certified. Source-aware
+entries may additionally require an explicit external dataset/definition.
 """
 from __future__ import annotations
-
 from typing import Any
 
 
@@ -17,69 +17,67 @@ def build_lqtp_capability_manifest() -> dict[str, Any]:
 
     ensure_cleaned_loaded()
     aliases = {
-        "decay_linear": "ts_decay_linear",
-        "ts_rank_pct": "ts_rank",
-        "ts_ewm_mean": "ts_ema",
-        "ts_expanding_rank": "expanding_rank",
-        "ts_hump_decay": "hump_decay",
-        "sma(x,n)": "ts_mean",
-        "sma(x,n,m)": "ts_sma_cn",
-        "momentum": "ts_delta",
+        "decay_linear":"ts_decay_linear","ts_rank_pct":"ts_rank","ts_ewm_mean":"ts_ema",
+        "ts_expanding_rank":"expanding_rank","ts_hump_decay":"hump_decay",
+        "sma(x,n)":"ts_mean","sma(x,n,m)":"ts_sma_cn","momentum":"ts_delta",
     }
-    macros = ["safe_log", "nullif_zero", "clean", "historical_var"]
-    sources = {
-        "benchmark_index(...).Field": "BenchmarkIndexDailyBar",
-        "BenchmarkIndexDailyBar(...).Field": "BenchmarkIndexDailyBar",
-        "market_ret": "BenchmarkIndexDailyBar",
-        "rolling_beta_to_market(ret,window)": "BenchmarkIndexDailyBar",
-        "tail_beta(ret,window,q)": "BenchmarkIndexDailyBar",
-        "residual_momentum_capm(ret,window)": "BenchmarkIndexDailyBar",
-        "real_turnover_rate()": "TurnoverBaseDaily",
-        "asof(financial_field)": "StockIncome/StockCashFlow/StockBalance",
-        "financial_lag(financial_field,q)": "StockIncome/StockCashFlow/StockBalance",
-        "minute_at": "StockMinuteBar",
-        "minute_range": "StockMinuteBar",
-        "minute_bar": "StockMinuteBar",
-        "minute_resample": "StockMinuteBar (intraday run only)",
-        "intermediate(name,version)": "FactorLake + intermediate registry",
+    macros=["safe_log","nullif_zero","clean","historical_var"]
+    sources={
+        "benchmark_index(...).Field":"BenchmarkIndexDailyBar",
+        "BenchmarkIndexDailyBar(...).Field":"BenchmarkIndexDailyBar",
+        "market_ret":"BenchmarkIndexDailyBar.Return",
+        "rolling_beta_to_market(ret,window)":"BenchmarkIndexDailyBar.Return",
+        "tail_beta(ret,window,q)":"BenchmarkIndexDailyBar.Return",
+        "residual_momentum_capm(ret,window)":"BenchmarkIndexDailyBar.Return",
+        "industry_neutralize(x)":"IndustryDaily.IndustryCode",
+        "real_turnover_rate()":"TurnoverBaseDaily",
+        "asof(financial_field)":"StockIncome/StockCashFlow/StockBalance",
+        "financial_lag(financial_field,q)":"StockIncome/StockCashFlow/StockBalance",
+        "minute_at":"StockMinuteBar","minute_range":"StockMinuteBar","minute_bar":"StockMinuteBar",
+        "minute_resample":"StockMinuteBar (intraday run only)",
+        "intermediate(name,version)":"FactorLake + intermediate registry",
+        "enterprise_value":"DerivedFieldRegistry (definition required)",
+        "ebitda_approx":"DerivedFieldRegistry (definition required)",
     }
-    recognized_blocked = {
-        "ts_sumac": "exact semantic definition absent from supplied LQTP manual",
-        "ts_regression_slope_sequence": "exact semantic definition absent from supplied LQTP manual",
-        "enterprise_value": "derived-field definition/source absent; no guessed finance formula",
-        "ebitda_approx": "derived-field definition/source absent; no guessed finance formula",
-        "group_minmax": "named by manual but exact compatibility contract not installed",
-        "group_quantile_mask": "named by manual but exact compatibility contract not installed",
-        "l2_sum": "requires StockTransaction/L2 source contract",
-        "l2_sum_if": "requires StockTransaction/L2 source contract",
-        "l2_count": "requires StockTransaction/L2 source contract",
-        "l2_count_if": "requires StockTransaction/L2 source contract",
+    configuration_required={
+        "enterprise_value":"provide a versioned, hashed DerivedFieldRegistry expression; no finance formula is guessed",
+        "ebitda_approx":"provide a versioned, hashed DerivedFieldRegistry expression; no finance formula is guessed",
+        "intermediate(name,version)":"materialize existing dependency or register a synchronous backfill config",
+        "real_turnover_rate()":"TurnoverBaseDaily LQTP mirror must be available",
+    }
+    recognized_blocked={
+        "ts_sumac":"exact semantic definition absent from supplied LQTP manual",
+        "ts_regression_slope_sequence":"exact semantic definition absent from supplied LQTP manual",
+        "group_minmax":"named by manual but exact compatibility contract not installed",
+        "group_quantile_mask":"named by manual but exact compatibility contract not installed",
+        "size_neutralize":"exact SizeDaily exposure transform is not pinned",
+        "market_cap_neutralize":"exact SizeDaily exposure transform is not pinned",
+        "cap_neutralize":"exact SizeDaily exposure transform is not pinned",
+        "size_industry_neutralize":"combined exposure contract is not pinned",
+        "industry_size_neutralize":"combined exposure contract is not pinned",
+        "neutralize(x)":"one-argument LQTP size/industry exposure contract is not pinned; explicit neutralize(x, exposure) works",
+        "l2_sum":"requires StockTransaction/L2 source contract",
+        "l2_sum_if":"requires StockTransaction/L2 source contract",
+        "l2_count":"requires StockTransaction/L2 source contract",
+        "l2_count_if":"requires StockTransaction/L2 source contract",
     }
 
-    canonical: dict[str, Any] = {}
+    canonical={}
     for name in sorted(OperatorRegistry.list_canonical()):
-        spec = build_operator_spec(name)
-        cert = backend_certification(name)
-        canonical[name] = {
-            "surface": getattr(spec, "status", None) if spec is not None else None,
-            "production_allowed": bool(getattr(spec, "allow_in_production", False)) if spec is not None else False,
-            "production_backends": [
-                backend for backend, status in {
-                    "pandas_numpy": cert.pandas_numpy,
-                    "polars": cert.polars,
-                    "duckdb_sql": cert.duckdb_sql,
-                }.items() if status == "production"
-            ],
+        spec=build_operator_spec(name);cert=backend_certification(name)
+        canonical[name]={
+            "surface":getattr(spec,"status",None) if spec is not None else None,
+            "production_allowed":bool(getattr(spec,"allow_in_production",False)) if spec is not None else False,
+            "production_backends":[backend for backend,status in {
+                "pandas_numpy":cert.pandas_numpy,"polars":cert.polars,"duckdb_sql":cert.duckdb_sql,
+            }.items() if status=="production"],
         }
-
     return {
-        "schema_version": "factor_engine.lqtp_compatibility.v2",
-        "dialect": "lqtp",
-        "dialect_version": DEFAULT_LQTP_DIALECT_VERSION,
-        "state_model": ["recognized", "parseable", "executable", "production_certified"],
-        "exact_aliases": aliases,
-        "macros": macros,
-        "source_aware": sources,
-        "recognized_blocked": recognized_blocked,
-        "canonical_operators": canonical,
+        "schema_version":"factor_engine.lqtp_compatibility.v2",
+        "dialect":"lqtp","dialect_version":DEFAULT_LQTP_DIALECT_VERSION,
+        "state_model":["recognized","parseable","executable","production_certified"],
+        "exact_aliases":aliases,"macros":macros,"source_aware":sources,
+        "configuration_required":configuration_required,
+        "recognized_blocked":recognized_blocked,
+        "canonical_operators":canonical,
     }
