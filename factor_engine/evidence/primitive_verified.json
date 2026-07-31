@@ -2336,8 +2336,8 @@
   },
   "provenance": {
     "artifact_kind": "test_passed",
-    "commit_sha": "878a34c59a7cb88aabce0bf9f64e0e9db88f28d2",
-    "passed_at": "2026-07-31T07:28:19.717831+00:00",
+    "commit_sha": "53c45f3a8d2fa6fcdb3dc48a8881677449313283",
+    "passed_at": "2026-07-31T07:33:56.082601+00:00",
     "runtime_versions": {
       "python": "3.11.15",
       "numpy": "2.1.3",
