@@ -35,8 +35,6 @@ _SCOPE_OVERRIDES: dict[str, str] = {
     "rolling_beta_to_market": "ts", "tail_beta": "ts", "trade_when": "ts",
     "ts_poly2_coeff": "ts", "ts_poly2_resid": "ts", "ts_sma_cn": "ts",
     "ts_sum_decay": "ts",
-    # Candle geometry is elementwise except the operators that explicitly use a
-    # previous bar or a rolling true-range baseline.
     "candle_gap": "ts", "candle_gap_pct": "ts", "candle_range_atr": "ts",
     "cdl_engulfing": "ts", "cdl_inside_bar": "ts", "cdl_outside_bar": "ts",
 }
@@ -93,7 +91,6 @@ def _policy_patch(canonical: str, catalog: dict[str, Any]) -> dict[str, Any]:
 
 
 def _scope_is_authoritative(canonical: str) -> bool:
-    """Return whether naming/domain semantics determine scope unambiguously."""
     return (
         canonical in _SCOPE_OVERRIDES
         or canonical.startswith(("ts_", "cs_", "group_", "period_"))
@@ -126,6 +123,31 @@ def _remove_promoted_legacy_denials(targets: frozenset[str]) -> None:
         )
 
 
+def _sync_final_runtime_contract(canonical: str, catalog: dict[str, Any]) -> None:
+    """Make the final selected implementation the public parameter authority.
+
+    Replacement kernels may change a historical call contract (for example the
+    bounded support/resistance family adds ``history_window``). Registry catalog
+    metadata must never retain parameters from an implementation that has already
+    been replaced, because parsers, audits and signature gates consume the catalog.
+    """
+    from cleaned_operators.registry import OperatorRegistry
+
+    op = OperatorRegistry.get(canonical, "pandas_numpy") or OperatorRegistry.get(canonical)
+    if op is None:
+        return
+    meta = getattr(op, "metadata", None)
+    params = list(getattr(meta, "param_names", ()) or ())
+    if params:
+        catalog["param_names"] = params
+    description = str(getattr(meta, "description", "") or "").strip()
+    if description:
+        catalog["description"] = description
+    category = str(getattr(meta, "category", "") or "").strip()
+    if category:
+        catalog["category"] = category
+
+
 def apply_production_hardening() -> None:
     from cleaned_operators.operator_policy import _EXPLICIT_POLICIES
     from cleaned_operators.registry import OperatorRegistry
@@ -135,6 +157,7 @@ def apply_production_hardening() -> None:
 
     for canonical in sorted(targets):
         catalog = OperatorRegistry._catalog.setdefault(canonical, {})
+        _sync_final_runtime_contract(canonical, catalog)
         patch = _policy_patch(canonical, catalog)
         existing_policy = dict(_EXPLICIT_POLICIES.get(canonical) or {})
         merged_policy = {**patch, **existing_policy}
@@ -142,8 +165,6 @@ def apply_production_hardening() -> None:
             merged_policy["scope"] = patch["scope"]
             if "min_periods" in patch:
                 merged_policy["min_periods"] = patch["min_periods"]
-        # Reviewed extension categories also own their time-domain scope even
-        # though their canonical names do not all start with ``ts_``.
         if str(catalog.get("category") or "").lower() in {
             "price_volume_extension", "ohlc_volatility", "candle_pattern",
         }:
@@ -206,6 +227,9 @@ def check_factor_production_hardening() -> list[str]:
             errors.append(f"{canonical}: no runtime")
             continue
         catalog = OperatorRegistry._catalog.get(canonical, {})
+        final_params = list(getattr(getattr(op, "metadata", None), "param_names", ()) or ())
+        if final_params and list(catalog.get("param_names") or []) != final_params:
+            errors.append(f"{canonical}: catalog parameter contract does not match final runtime")
         if str(catalog.get("status")) != "production":
             errors.append(f"{canonical}: status is not production")
         policy = infer_operator_policy(op, canonical=canonical)
