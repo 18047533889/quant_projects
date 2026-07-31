@@ -2,6 +2,11 @@ name: Temporary LQTP V2 Recertification
 on:
   push:
     branches: [agent/lqtp-compat-v2-full-20260731]
+  pull_request:
+    branches: [main]
+    paths:
+      - "factor_engine/**"
+      - ".github/workflows/temp-lqtp-v2-recertify.yml"
 permissions:
   contents: write
 jobs:
