@@ -6,6 +6,7 @@ from planner.logical_plan import PlanNode
 
 
 def _same_column(a: PlanNode, b: PlanNode) -> bool:
+    """判断两节点是否引用同一数据列。"""
     return (
         a.op == "column"
         and b.op == "column"
@@ -14,13 +15,14 @@ def _same_column(a: PlanNode, b: PlanNode) -> bool:
 
 
 def _column_node(name: str) -> PlanNode | None:
+    """构造列引用节点；空名时返回 ``None``。"""
     return PlanNode(op="column", attrs={"name": name}, inputs=[])
 
 
 def _window_value(node: PlanNode, *, default: int) -> int:
-    value = node.attrs.get("window")
+    value = node.attrs.get("d")
     if value is None:
-        value = node.attrs.get("d")
+        value = node.attrs.get("window")
     if value is None and len(node.inputs) > 1 and node.inputs[1].op == "literal":
         value = node.inputs[1].attrs.get("value")
     if value is None:
@@ -31,12 +33,21 @@ def _window_value(node: PlanNode, *, default: int) -> int:
 
 
 def _window_attrs(node: PlanNode) -> dict:
-    """Extract a window using the canonical ``window`` spelling only."""
-    return {"window": _window_value(node, default=3)}
+    """从节点 attrs 或 literal positional input 提取窗口。"""
+    w = _window_value(node, default=3)
+    return {"d": w, "window": w}
 
 
 def _try_rewrite_ts_zscore(node: PlanNode, inputs: list[PlanNode]) -> PlanNode | None:
-    """``(col-ts_mean(col,w))/ts_std(col,w)`` → canonical ``ts_zscore``."""
+    """``(col - ts_mean(col,w)) / ts_std(col,w)`` → ``ts_zscore(col,w)``。
+
+    参数：
+        node: 当前待匹配节点（已递归改写子节点）
+        inputs: 改写后的子节点列表
+
+    返回：
+        匹配成功时返回 ``ts_zscore`` 节点，否则 ``None``
+    """
     if node.op != "divide" or len(inputs) != 2:
         return None
     num, den = inputs
@@ -71,8 +82,9 @@ def _try_rewrite_ts_zscore(node: PlanNode, inputs: list[PlanNode]) -> PlanNode |
     for key, default in defaults.items():
         if mean_node.attrs.get(key, default) != den.attrs.get(key, default):
             return None
-    w = mean_attrs["window"]
+    w = mean_attrs["d"]
     attrs = {
+        "d": w,
         "window": w,
         **{key: mean_node.attrs.get(key, default) for key, default in defaults.items()},
         "ddof": den.attrs.get("ddof", 1),
@@ -82,7 +94,15 @@ def _try_rewrite_ts_zscore(node: PlanNode, inputs: list[PlanNode]) -> PlanNode |
 
 
 def _try_rewrite_log_returns(node: PlanNode, inputs: list[PlanNode]) -> PlanNode | None:
-    """``log(divide(col, delay(col,d)))`` → canonical ``ts_log_return``."""
+    """``log(divide(col, delay(col,d)))`` → ``log_returns(col,d)``。
+
+    参数：
+        node: 当前待匹配节点
+        inputs: 改写后的子节点列表
+
+    返回：
+        匹配成功时返回 ``log_returns`` 节点，否则 ``None``
+    """
     if node.op != "log" or len(inputs) != 1:
         return None
     inner = inputs[0]
@@ -100,9 +120,7 @@ def _try_rewrite_log_returns(node: PlanNode, inputs: list[PlanNode]) -> PlanNode
     col = _column_node(col_name)
     if col is None:
         return None
-    # ``d`` is the canonical ts_log_return parameter; do not emit a duplicate
-    # ``window`` alias that would later be rejected by execution.
-    return PlanNode(op="ts_log_return", inputs=[col], attrs={"d": w})
+    return PlanNode(op="ts_log_return", inputs=[col], attrs={"d": w, "window": w})
 
 
 def rewrite_plan_for_fastpath(
@@ -110,7 +128,13 @@ def rewrite_plan_for_fastpath(
     *,
     allow_semantic_rewrites: bool = False,
 ) -> PlanNode:
-    """Rewrite strictly equivalent fast paths; semantic rewrites are opt-in."""
+    """对逻辑计划做 fastpath 改写。
+
+    ``protected_div`` 和 ``group_neutralize`` 不是所有输入下都与原始
+    ``divide`` / ``subtract(group_mean)`` 等价。调用方若未明确允许语义
+    改写，应保持原始算子，仅使用严格等价的 fusion 规则。
+    """
+
     inputs = [
         rewrite_plan_for_fastpath(c, allow_semantic_rewrites=allow_semantic_rewrites)
         for c in plan.inputs
@@ -143,4 +167,12 @@ def rewrite_plan_for_fastpath(
 
 
 def rewrite_formula_for_fastpath(formula: str) -> str:
+    """字符串级占位：复杂 DSL 改写走 planner；此处仅做文档化入口。
+
+    参数：
+        formula: 原始公式字符串
+
+    返回：
+        未改写的公式字符串（当前实现为透传）
+    """
     return str(formula or "")
