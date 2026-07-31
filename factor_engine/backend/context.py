@@ -6,7 +6,6 @@ from uuid import uuid4
 from storage.cache import CacheManager
 from storage.datasource import DataSource
 
-
 @dataclass
 class ExecutionContext:
     data_source: DataSource
@@ -32,22 +31,17 @@ class ExecutionContext:
     prefer_polars_panel: bool = False
 
     def __post_init__(self) -> None:
-        if not self.execution_id:
-            self.execution_id = uuid4().hex
+        if not self.execution_id: self.execution_id = uuid4().hex
         self.run_mode = str(self.run_mode).lower()
-        if self.production_fallback_policy not in {"error", "warn"}:
-            raise ValueError("production_fallback_policy must be 'error' or 'warn'")
+        if self.production_fallback_policy not in {"error","warn"}: raise ValueError("production_fallback_policy must be 'error' or 'warn'")
         try:
-            from storage.sources.lqtp_logical_source import LQTPLogicalDataSource
-            if not isinstance(self.data_source, LQTPLogicalDataSource):
-                inner = self.data_source
-                wrapper = getattr(inner, "_factor_engine_lqtp_wrapper", None)
-                if not isinstance(wrapper, LQTPLogicalDataSource):
-                    wrapper = LQTPLogicalDataSource(inner)
-                    try:
-                        setattr(inner, "_factor_engine_lqtp_wrapper", wrapper)
-                    except Exception:
-                        pass
-                self.data_source = wrapper
+            from storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
+            if not isinstance(self.data_source,LQTPLogicalDataSource):
+                inner=self.data_source; wrapper=getattr(inner,"_factor_engine_lqtp_wrapper",None)
+                if not isinstance(wrapper,LQTPLogicalDataSource):
+                    wrapper=LQTPLogicalDataSource(inner)
+                    try: setattr(inner,"_factor_engine_lqtp_wrapper",wrapper)
+                    except Exception: pass
+                self.data_source=wrapper
         except ImportError:
             pass
