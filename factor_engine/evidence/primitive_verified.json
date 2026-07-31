@@ -749,7 +749,7 @@
       "semantic_version": 2,
       "implementation_hash_polars": "3a7124323d190dfe",
       "implementation_hash_duckdb": "2a6235172872ed63",
-      "implementation_hash_pandas": "293319ca84073960",
+      "implementation_hash_pandas": "b468d33ce6b4bdb7",
       "operator_policy_hash": "6815b9577898b3bd",
       "parameter_signature_hash": "39ed37664728a4af",
       "semantic_contract_hash": "63a961944a997e94",
@@ -759,7 +759,7 @@
       "golden_data_hash": "91362df3b27f95b5",
       "tolerance_policy_hash": "c33cac86aa3db231",
       "execution_variant_hash": "a8d7eac9cfa2e82f",
-      "implementation_source_pandas": "cleaned_operators/technical/signal.py",
+      "implementation_source_pandas": "cleaned_operators/common/scalar_where.py",
       "implementation_source_polars": "cleaned_operators/common/polars_ops.py",
       "implementation_source_duckdb": "backend/sql_pushdown/emitter.py",
       "parameter_domain_hash": "8599c329246eb9fd"
@@ -2336,17 +2336,17 @@
   },
   "provenance": {
     "artifact_kind": "test_passed",
-    "commit_sha": "c240fabd55cc653414bf117ca08663b24b264e66",
-    "passed_at": "2026-07-21T07:43:30.984672+00:00",
+    "commit_sha": "878a34c59a7cb88aabce0bf9f64e0e9db88f28d2",
+    "passed_at": "2026-07-31T07:28:19.717831+00:00",
     "runtime_versions": {
-      "python": "3.13.5",
+      "python": "3.11.15",
       "numpy": "2.1.3",
       "pandas": "2.2.3",
       "polars": "1.42.1",
       "duckdb": "1.5.4",
       "pyarrow": "22.0.0",
-      "os": "Darwin",
-      "architecture": "arm64"
+      "os": "Linux",
+      "architecture": "x86_64"
     },
     "case_registry_hash": "71daddda2d13d4a8",
     "stages_passed": [
