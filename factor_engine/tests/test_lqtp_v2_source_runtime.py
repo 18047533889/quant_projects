@@ -90,10 +90,20 @@ def test_minute_resample_does_not_silently_collapse_to_daily() -> None:
     from storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
     from storage.sources.data_access_source import MissingDataDependencyError
 
-    class DummyInner:
-        pass
+    class DailyInner:
+        def load_column(self, name: str):
+            if name != "close":
+                raise KeyError(name)
+            idx = pd.MultiIndex.from_tuples(
+                [
+                    (pd.Timestamp("2024-01-02"), "A"),
+                    (pd.Timestamp("2024-01-03"), "A"),
+                ],
+                names=["timestamp", "instrument"],
+            )
+            return pd.Series([1.0, 2.0], index=idx, name="close")
 
-    source = LQTPLogicalDataSource(DummyInner(), factor_freq="1d")
+    source = LQTPLogicalDataSource(DailyInner(), factor_freq="1d")
     with pytest.raises(MissingDataDependencyError, match="intraday bar sequence"):
         source._minute_daily("Close", "minute_resample", {"period": 5})
 
