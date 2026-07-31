@@ -76,9 +76,6 @@ def load_all() -> None:
             f"unloaded registry cannot initialize from {OperatorRegistry.lifecycle()!r}"
         )
 
-    # Load all historical/native modules first, then reviewed replacements while
-    # the registry is still mutable. No physical implementation may be swapped
-    # after layer_governance seals duplicate registration.
     for mod in _LOAD_MODULES:
         __import__(mod, fromlist=["*"])
     __import__("cleaned_operators.production_repairs", fromlist=["*"])
@@ -106,6 +103,11 @@ def load_all() -> None:
 
     from cleaned_operators.production_hardening import apply_production_hardening
     apply_production_hardening()
+
+    # Backend certification is derived from immutable evidence after semantic
+    # hardening, never from the production target label itself.
+    from cleaned_operators.production_certification_overlay import apply_evidence_certification_overlay
+    apply_evidence_certification_overlay()
 
     from backend.sql_pushdown.sql_registry import register_sql_backends
     register_sql_backends()
