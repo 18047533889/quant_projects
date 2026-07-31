@@ -4,32 +4,62 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+x-runtime: &runtime
+  if: github.event.pull_request.head.ref == 'agent/factorengine-production-hardening'
+  runs-on: ubuntu-24.04
+  env:
+    PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/gtja191
+    FACTOR_ENGINE_DISABLE_NUMBA: '1'
+
 jobs:
-  audit:
-    if: github.event.pull_request.head.ref == 'agent/factorengine-production-hardening'
-    runs-on: ubuntu-24.04
-    env:
-      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/gtja191
-      FACTOR_ENGINE_DISABLE_NUMBA: '1'
+  registry-import:
+    <<: *runtime
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: pip
-      - name: Install runtime
+        with: {python-version: '3.11', cache: pip}
+      - run: python -m pip install -r requirements.txt && python -m pip install -e ./dataaccess
+      - name: Import and freeze Registry
         run: |
-          python -m pip install -r requirements.txt
-          python -m pip install -e ./dataaccess
-          python -m pip install pytest
-      - name: Test technical extension contracts
+          python - <<'PY'
+          from cleaned_operators import load_all
+          from cleaned_operators.registry import OperatorRegistry
+          load_all()
+          print('canonicals', len(OperatorRegistry.list_canonical()))
+          print('lifecycle', OperatorRegistry.lifecycle())
+          PY
+
+  technical-tests:
+    <<: *runtime
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11', cache: pip}
+      - run: python -m pip install -r requirements.txt && python -m pip install -e ./dataaccess && python -m pip install pytest
+      - name: Technical production tests
         run: |
           pytest -q \
             factor_engine/tests/operators/test_technical_extensions.py \
             factor_engine/tests/operators/test_candle_patterns_extended.py
-      - name: Audit all factor runtime invariants
+
+  runtime-audit:
+    <<: *runtime
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11', cache: pip}
+      - run: python -m pip install -r requirements.txt && python -m pip install -e ./dataaccess
+      - name: All-factor runtime audit
         run: python factor_engine/scripts/audit_all_factor_production.py --runtime-only
-      - name: Audit cold-start production coverage
+
+  coldstart-coverage:
+    <<: *runtime
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11', cache: pip}
+      - run: python -m pip install -r requirements.txt && python -m pip install -e ./dataaccess
+      - name: Cold-start production coverage
         run: |
           python factor_cold_start/scripts/report_coverage.py
           python - <<'PY'
