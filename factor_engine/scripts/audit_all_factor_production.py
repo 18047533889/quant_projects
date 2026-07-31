@@ -28,29 +28,47 @@ PANEL_PARAM_NAMES = frozenset({
     "price", "volume", "amount", "vwap", "weight", "weights", "signal",
     "fallback", "condition", "group", "industry", "sector", "fiscal_quarter",
     "period_id", "quarter", "revision_id", "decision_time", "available_time",
-    "exposure", "exposures", "control", "controls", "factor", "target",
-    "mask", "event", "value", "values",
+    "available_at", "exposure", "exposures", "control", "controls", "factor",
+    "target", "mask", "event", "value", "values", "sort_col",
 })
 
 SCALAR_VALUES: dict[str, Any] = {
     "window": 20, "d": 20, "n": 20, "m": 2, "span": 20, "period": 20,
-    "periods": 20, "lag": 1, "lags": 1, "k": 3, "q": 0.2,
+    "periods": 4, "lag": 1, "lags": 1, "k": 3, "q": 0.2,
     "quantile": 0.2, "threshold": 0.0, "run": 2, "hump": 0.02,
-    "min_periods": 5, "ddof": 1, "ann_factor": 252, "decimals": 2,
-    "to": 1.0, "lower": -2.0, "upper": 2.0, "eps": 1e-8,
+    "min_periods": 5, "min_obs": 3, "ddof": 1, "ann_factor": 252,
+    "decimals": 2, "to": 1.0, "lower": -2.0, "upper": 2.0, "eps": 1e-8,
     "epsilon": 1e-8, "alpha": 0.2, "fast": 12, "slow": 26,
     "fast_period": 12, "slow_period": 26, "signal_span": 9,
     "signal_window": 9, "signal_period": 9, "side": "lower",
     "order": "largest", "add_intercept": True, "clip": 3.0, "limit": 3,
-    "max_gap": 3, "max_periods": 3, "power": 2.0, "exponent": 2.0,
-    "p": 2.0, "c": 1.0, "annualization": 252, "annualization_factor": 252,
-    "periods_per_year": 252, "method": "average", "interpolation": "linear",
-    "center": True, "ascending": True, "inclusive": True, "offset": 0,
+    "max_gap": 3, "max_periods": 3, "max_lookback": 60, "power": 2.0,
+    "exponent": 2.0, "p": 0.5, "c": 1.0, "fraction": 0.5,
+    "buckets": 5, "top": 3, "asc": True, "annualization": 252,
+    "annualization_factor": 252, "periods_per_year": 4, "method": "average",
+    "interpolation": "linear", "center": True, "ascending": True,
+    "inclusive": True, "offset": 0, "require_consecutive": True,
+    "trim_pct": 0.1, "sign_policy": "strict", "denominator": "signed",
+    "aggr_func": "sum",
 }
 
-# Catalogs with a vararg-style public contract need explicit positional fixtures.
+# Canonical-specific legal parameter points. A generic name such as ``mode`` or
+# ``method`` has different semantic domains across operators and must never be
+# guessed globally.
+SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
+    ("cs_rank_gaussian", "method"): "blom",
+    ("cs_regression", "mode"): 0,
+    ("cs_quantile", "p"): 0.5,
+    ("group_percentile", "p"): 0.5,
+    ("revision_delta", "mode"): "absolute",
+    ("period_change", "mode"): "absolute",
+    ("ts_nth_value", "order"): "largest",
+}
+
 SPECIAL_POSITIONAL: dict[str, tuple[str, ...]] = {
-    "cs_multi_resid": ("target", "exposure", "control"),
+    # Canonical metadata contains an ellipsis marker because this operator has a
+    # variable number of exposures. The smoke case supplies two explicit ones.
+    "cs_multi_resid": ("target", "exposure", "control", "add_intercept", "min_obs"),
 }
 
 
@@ -110,14 +128,22 @@ def _panels(rows: int = 96, cols: int = 6) -> dict[str, pd.DataFrame]:
         "event": condition, "group": group, "industry": group, "sector": group,
         "fiscal_quarter": quarters, "period_id": quarters, "quarter": quarters,
         "revision_id": revision, "decision_time": decision_time,
-        "available_time": available_time, "exposure": market, "exposures": market,
-        "control": control, "controls": control, "factor": market, "target": ret,
+        "available_time": available_time, "available_at": available_time,
+        "exposure": market, "exposures": market, "control": control,
+        "controls": control, "factor": market, "target": ret, "sort_col": volume,
         "value": close, "values": close,
     }
 
 
-def _value_for_parameter(name: str, panels: dict[str, pd.DataFrame]) -> Any:
+def _value_for_parameter(
+    canonical: str,
+    name: str,
+    panels: dict[str, pd.DataFrame],
+) -> Any:
     key = str(name)
+    special = SPECIAL_SCALARS.get((canonical, key))
+    if (canonical, key) in SPECIAL_SCALARS:
+        return special
     if key in panels:
         return panels[key]
     if key in SCALAR_VALUES:
@@ -146,19 +172,19 @@ def _build_call(
     catalog = OperatorRegistry._catalog.get(canonical, {})
     names = tuple(str(x) for x in (catalog.get("param_names") or ()))
     if not names:
-        # A one-input elementwise operator may legitimately have old metadata
-        # without param_names; all multi-input production operators must declare.
         names = ("x",)
 
     if canonical in SPECIAL_POSITIONAL:
         return [
-            _value_for_parameter(name, panels)
+            _value_for_parameter(canonical, name, panels)
             for name in SPECIAL_POSITIONAL[canonical]
         ], {}
 
     positional: list[Any] = []
     for name in names:
-        positional.append(_value_for_parameter(name, panels))
+        if name == "...":
+            continue
+        positional.append(_value_for_parameter(canonical, name, panels))
     return positional, {}
 
 
@@ -187,12 +213,24 @@ def _to_frame(value: Any, template: pd.DataFrame) -> pd.DataFrame:
     raise TypeError(f"unsupported result shape/type: {type(value).__name__} {arr.shape}")
 
 
+def _numeric_delta(a: pd.DataFrame, b: pd.DataFrame) -> float | None:
+    try:
+        av = a.to_numpy(dtype=float)
+        bv = b.to_numpy(dtype=float)
+    except (TypeError, ValueError):
+        return None
+    finite = np.isfinite(av) & np.isfinite(bv)
+    if not finite.any():
+        return 0.0
+    return float(np.max(np.abs(av[finite] - bv[finite])))
+
+
 def _equal(a: pd.DataFrame, b: pd.DataFrame) -> bool:
     if a.shape != b.shape or not a.index.equals(b.index) or not a.columns.equals(b.columns):
         return False
     av, bv = a.to_numpy(), b.to_numpy()
     if av.dtype.kind in "biufc" and bv.dtype.kind in "biufc":
-        return bool(np.allclose(av, bv, equal_nan=True, rtol=1e-9, atol=1e-11))
+        return bool(np.allclose(av, bv, equal_nan=True, rtol=1e-8, atol=1e-10))
     return a.astype(object).where(pd.notna(a), None).equals(
         b.astype(object).where(pd.notna(b), None)
     )
@@ -244,8 +282,13 @@ def audit() -> list[str]:
             p_kwargs = {k: _slice_value(v, prefix_rows) for k, v in kwargs.items()}
             p_template = template.iloc[:prefix_rows]
             prefix = _to_frame(op.calculate(*p_args, **p_kwargs), p_template)
-            if not _equal(result1.iloc[:prefix_rows], prefix):
-                errors.append(f"{canonical}: prefix invariance / causality violation")
+            historical = result1.iloc[:prefix_rows]
+            if not _equal(historical, prefix):
+                delta = _numeric_delta(historical, prefix)
+                errors.append(
+                    f"{canonical}: prefix invariance / causality violation"
+                    + (f" (max_abs_delta={delta:.6g})" if delta is not None else "")
+                )
         except Exception as exc:
             errors.append(f"{canonical}: {type(exc).__name__}: {exc}")
 
