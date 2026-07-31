@@ -37,6 +37,11 @@ _SCOPE_OVERRIDES: dict[str, str] = {
     "ts_sum_decay": "ts",
 }
 
+_FUNDAMENTAL_PERIOD_CANONICALS: frozenset[str] = frozenset({
+    "fundamental_staleness", "revision_delta", "quarter_from_cumulative",
+    "ttm_from_cumulative", "ttm_from_quarterly", "yoy_by_period",
+})
+
 _MIN_PERIODS_OVERRIDES: dict[str, int] = {
     "ts_regression_intercept": 3, "ts_regression_r2": 3, "ts_regression_resid": 3,
     "ts_regression_slope": 3, "ts_regression_tstat": 3, "ts_trend_tstat": 3,
@@ -55,10 +60,7 @@ def _infer_scope(canonical: str, catalog: dict[str, Any]) -> str:
         return "cs"
     if canonical.startswith("group_"):
         return "group"
-    if canonical.startswith("period_") or canonical in {
-        "fundamental_staleness", "revision_delta", "quarter_from_cumulative",
-        "ttm_from_cumulative", "ttm_from_quarterly", "yoy_by_period",
-    }:
+    if canonical.startswith("period_") or canonical in _FUNDAMENTAL_PERIOD_CANONICALS:
         return "fundamental_period"
     category = str(catalog.get("category") or "").lower()
     if category in {"time_series", "technical_signal", "price_volume", "signal"}:
@@ -83,6 +85,15 @@ def _policy_patch(canonical: str, catalog: dict[str, Any]) -> dict[str, Any]:
     return patch
 
 
+def _scope_is_authoritative(canonical: str) -> bool:
+    """Return whether naming/domain semantics determine scope unambiguously."""
+    return (
+        canonical in _SCOPE_OVERRIDES
+        or canonical.startswith(("ts_", "cs_", "group_", "period_"))
+        or canonical in _FUNDAMENTAL_PERIOD_CANONICALS
+    )
+
+
 def factor_production_targets() -> frozenset[str]:
     from cleaned_operators.operator_surface import (
         DAILY_CANONICALS, EXTENDED_ONLY_CANONICALS, RESEARCH_ONLY_CANONICALS,
@@ -101,8 +112,6 @@ def _remove_promoted_legacy_denials(targets: frozenset[str]) -> None:
     spec_mod.PRODUCTION_DENIED_CANONICALS = frozenset(
         c for c in spec_mod.PRODUCTION_DENIED_CANONICALS if c not in targets
     )
-    # Never weaken hard temporal/non-deterministic bans. A promoted target in
-    # this set is a programming error and fails closed below.
     overlap = targets & spec_mod.PERMANENTLY_FORBIDDEN_CANONICALS
     if overlap:
         raise RuntimeError(
@@ -121,8 +130,17 @@ def apply_production_hardening() -> None:
 
     for canonical in sorted(targets):
         catalog = OperatorRegistry._catalog.setdefault(canonical, {})
+        patch = _policy_patch(canonical, catalog)
         existing_policy = dict(_EXPLICIT_POLICIES.get(canonical) or {})
-        merged_policy = {**_policy_patch(canonical, catalog), **existing_policy}
+        merged_policy = {**patch, **existing_policy}
+        # Old fail-closed metadata sometimes labelled domain operators as
+        # elementwise.  Once the operator has been reviewed, an unambiguous
+        # ts/cs/group/fiscal name owns the scope; optional tuning fields from the
+        # existing policy still survive.
+        if _scope_is_authoritative(canonical):
+            merged_policy["scope"] = patch["scope"]
+            if "min_periods" in patch:
+                merged_policy["min_periods"] = patch["min_periods"]
         merged_policy["pit_safe"] = True
         _EXPLICIT_POLICIES[canonical] = merged_policy
 
