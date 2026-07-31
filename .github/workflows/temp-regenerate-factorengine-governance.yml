@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - agent/factorengine-production-routing-lqtp-20260731
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
