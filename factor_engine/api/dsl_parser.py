@@ -3,16 +3,12 @@
 支持的语法（受限 Python ``eval`` 子集）
 --------------------------------------
 - 四则运算、比较（``>`` ``<`` ``==`` 等会 lower 为 ``gt``/``lt``/``eq`` 算子）、一元 ``-``；
-- 函数调用：函数名必须在 ``build_dsl_allowlist()`` 内（``col``、``rank``、``ts_mean`` 等）；
-- 字面量：数值、字符串（字段名由 ``col('...')`` 引用，勿裸写未定义变量）。
+- 函数调用：函数名必须在 ``build_dsl_allowlist()`` 内；
+- 字面量：数值、字符串（字段名由 ``col('...')`` 引用，或使用合法裸字段名）。
 
-不支持：任意 import、属性访问、列表推导、lambda、未白名单的第三方函数。
-
-典型流程::
-
-    from api.dsl_parser import parse_expr
-    expr = parse_expr("rank(ts_mean(col('close'), 20))")
-    # → CleanedCall 嵌套树，再经 IR → PlanNode → PandasBackend 执行
+LQTP/JQ 的兼容拼写在进入 AST 前做窄范围规范化，随后仍走同一个受限
+AST、canonical Expr、IR、DAG 和 backend runtime。任意 import、通用属性访问、
+列表推导、lambda 和未白名单第三方函数仍然禁止。
 """
 
 from __future__ import annotations
@@ -34,14 +30,16 @@ class _ExprBuilder:
     """遍历 ``ast``，把调用/比较/四则运算还原为 ``CleanedCall`` / ``Expr`` 树。"""
 
     def __init__(self, *, surface: str = "daily") -> None:
-        """初始化白名单：``build_dsl_allowlist()`` 返回的 ``{函数名: 工厂}``。"""
-        # 允许出现的函数名 → 工厂（来自 operator_registry + cleaned_operators）
-        self._allowed = build_dsl_allowlist(surface=surface)
+        self._surface = str(surface or "daily")
+        self._allowed = build_dsl_allowlist(surface=self._surface)
 
     def build(self, text: str) -> Expr:
         """解析 DSL 字符串并返回根 ``Expr`` 节点。"""
+        from api.lqtp_compat import normalize_lqtp_formula
+
+        normalized = normalize_lqtp_formula(text)
         try:
-            parsed = ast.parse(text, mode="eval")
+            parsed = ast.parse(normalized, mode="eval")
         except SyntaxError as exc:
             raise DSLParseError(f"Invalid expression syntax: {text}") from exc
 
@@ -51,7 +49,6 @@ class _ExprBuilder:
         return expr
 
     def _visit(self, node: ast.AST) -> Any:
-        """递归访问 ``ast`` 节点，分发至各子访问器。"""
         if isinstance(node, ast.Call):
             return self._visit_call(node)
 
@@ -79,10 +76,19 @@ class _ExprBuilder:
                 raise DSLParseError(f"Unsupported name: {node.id}")
             return col(node.id)
 
+        if isinstance(node, ast.Attribute):
+            # Do not open generic Python attribute access. Parameterized logical
+            # sources such as benchmark_index(...).Close require a dedicated
+            # SourceRef planner so the index parameter and PIT contract are not
+            # silently discarded.
+            raise DSLParseError(
+                "Parameterized data-source attribute access is not a normal column. "
+                "Use a configured composite/source alias until SourceRef planning is enabled."
+            )
+
         raise DSLParseError(f"Unsupported syntax node: {type(node).__name__}")
 
     def _visit_call(self, node: ast.Call) -> Any:
-        """处理函数调用节点；函数名须在白名单内。"""
         if isinstance(node.func, ast.Name):
             name = node.func.id
             if name not in self._allowed:
@@ -100,10 +106,14 @@ class _ExprBuilder:
 
         if not callable(func):
             raise DSLParseError("Call target is not callable.")
-        return func(*args, **kwargs)
+        try:
+            return func(*args, **kwargs)
+        except ValueError as exc:
+            # Compatibility dispatchers use ValueError subclasses for semantic
+            # ambiguity; surface the original message as a DSL error.
+            raise DSLParseError(str(exc)) from exc
 
     def _visit_compare(self, node: ast.Compare) -> Expr:
-        """单条比较 ``left op right``（不支持链式 ``a < b < c``）。"""
         if len(node.ops) != 1 or len(node.comparators) != 1:
             raise DSLParseError(
                 "Chained comparisons are not supported; use one comparison only."
@@ -128,7 +138,6 @@ class _ExprBuilder:
         raise DSLParseError(f"Unsupported comparison: {type(op).__name__}")
 
     def _visit_binop(self, node: ast.BinOp) -> Any:
-        """处理四则运算（``+`` ``-`` ``*`` ``/``），委托 ``Expr`` 运算符重载。"""
         left = self._visit(node.left)
         right = self._visit(node.right)
 
@@ -145,30 +154,13 @@ class _ExprBuilder:
 
 
 def _is_field_identifier(name: str) -> bool:
-    """挖掘侧 DSL 字段名：蛇形标识符（如 ``close``、``ret_price``）。"""
     if not name or name[0].isdigit():
         return False
     return all(c.isalnum() or c == "_" for c in name)
 
 
 def parse_expr(text: str, *, surface: str = "daily") -> Expr:
-    """解析单条表达式字符串为 ``Expr``。
-
-    Parameters
-    ----------
-    text : str
-        受限 Python 子集 DSL（见模块 docstring）。
-
-    Returns
-    -------
-    Expr
-        ``ColumnRef`` / ``CleanedCall`` 等节点组成的表达式树。
-
-    Raises
-    ------
-    DSLParseError
-        语法错误、未白名单函数或非法结构。
-    """
+    """解析单条表达式字符串为 ``Expr``。"""
     return _ExprBuilder(surface=surface).build(text)
 
 
@@ -181,26 +173,7 @@ def parse_factor(
     description: str | None = None,
     surface: str = "daily",
 ) -> Factor:
-    """解析表达式并包成带元数据的 :class:`api.factor.Factor`。
-
-    Parameters
-    ----------
-    text : str
-        DSL 公式字符串。
-    name : str
-        因子名称（默认 ``"factor"``）。
-    freq : str
-        业务频率（默认 ``"1d"``）。
-    universe : str | None
-        可选股票池标签。
-    description : str | None
-        可选人类可读说明。
-
-    Returns
-    -------
-    Factor
-        含 ``expr`` 与 ``source_expr=text`` 的因子容器。
-    """
+    """解析表达式并包成带元数据的 :class:`api.factor.Factor`。"""
     return Factor(
         name=name,
         expr=parse_expr(text, surface=surface),
