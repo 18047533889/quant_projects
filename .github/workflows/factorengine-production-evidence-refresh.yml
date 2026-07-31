@@ -51,10 +51,11 @@ jobs:
           python factor_engine/scripts/generate_lqtp_compatibility_manifest.py
           python factor_cold_start/scripts/report_coverage.py
 
-      - name: Validate refreshed artifacts
+      - name: Validate refreshed artifacts and all factor operators
         run: |
           python factor_engine/scripts/certify_primitive_evidence.py --check
           python factor_engine/scripts/certify_recipe_evidence.py --check
+          python factor_engine/scripts/audit_all_factor_production.py
           pytest -q factor_engine/tests/test_operator_surface.py
           test "$(python - <<'PY'
           import json
