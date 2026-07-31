@@ -33,8 +33,9 @@ def load_catalog(market:str,surface:str="daily"):
         from .technical_extension_seeds import technical_extension_seeds
         from .candle_pattern_seeds import candle_pattern_seeds
         from .v2_operator_seeds import v2_operator_seeds
+        from .intraday_daily_seeds import intraday_daily_seeds
         _extend_unique(rows,(seed for seed in technical_extension_seeds(market) if not (_RECIPE_OWNED_TA_CANONICALS&set(seed.operators))))
-        _extend_unique(rows,candle_pattern_seeds(market));_extend_unique(rows,v2_operator_seeds(market))
+        _extend_unique(rows,candle_pattern_seeds(market));_extend_unique(rows,v2_operator_seeds(market));_extend_unique(rows,intraday_daily_seeds(market))
     return ensure_unique(rows)
 def load_all_catalogs():
     rows=[]
