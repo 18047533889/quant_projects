@@ -50,8 +50,7 @@ def fin_days_since_update(x,period_id,max_days=504):
     pid=period_id.reindex(index=x.index,columns=x.columns)
     update=pid.ne(pid.shift(1))|x.ne(x.shift(1)); out=pd.DataFrame(np.nan,index=x.index,columns=x.columns,dtype=float)
     for col in x.columns:
-        age=cap
-        arr=[]
+        age=cap; arr=[]
         for i,flag in enumerate(update[col].fillna(False).to_numpy(bool)):
             if i==0 or flag:age=0
             else:age=min(cap,age+1)
@@ -60,6 +59,7 @@ def fin_days_since_update(x,period_id,max_days=504):
     return out
 def fin_staleness(x,period_id,max_days=504):return fin_days_since_update(x,period_id,max_days)
 
+_EXTRA=set()
 for _name,_params,_fn,_desc in [
 ("fin_positive_streak",["x","period_id","max_periods"],fin_positive_streak,"Bounded streak of positive report-to-report changes."),
 ("fin_negative_streak",["x","period_id","max_periods"],fin_negative_streak,"Bounded streak of negative report-to-report changes."),
@@ -72,4 +72,11 @@ for _name,_params,_fn,_desc in [
 ("fin_restated_flag",["x","period_id","window_days"],fin_restated_flag,"Whether a same-period revision occurred in the bounded window."),
 ("fin_days_since_update",["x","period_id","max_days"],fin_days_since_update,"Bounded trading days since report-period or value update."),
 ("fin_staleness",["x","period_id","max_days"],fin_staleness,"Bounded accounting-data staleness in trading days."),
-]:_register(_name,_params,_fn,_desc)
+]:
+    _register(_name,_params,_fn,_desc);_EXTRA.add(_name)
+
+# Surface extension is performed during bootstrap before production tiers and DSL
+# allowlists are consumed.
+import cleaned_operators.operator_surface as _surface
+_surface._FUNDAMENTAL_V2_CANONICALS=frozenset(set(_surface._FUNDAMENTAL_V2_CANONICALS)|_EXTRA)
+_surface.EXTENDED_ONLY_CANONICALS=frozenset(set(_surface.EXTENDED_ONLY_CANONICALS)|_EXTRA)
