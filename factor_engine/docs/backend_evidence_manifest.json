@@ -1395,6 +1395,21 @@
       "polars_reference_parity": true,
       "surface": "daily"
     },
+    "lqtp_historical_cvar": {
+      "duckdb_edge_parity": false,
+      "duckdb_implemented": false,
+      "duckdb_production_safe": false,
+      "duckdb_real_sql_tested": false,
+      "duckdb_reference_parity": false,
+      "pandas_runtime": true,
+      "polars_edge_parity": false,
+      "polars_execution_kind": "unsupported",
+      "polars_implemented": false,
+      "polars_no_fallback": false,
+      "polars_production_safe": false,
+      "polars_reference_parity": false,
+      "surface": "research"
+    },
     "lt": {
       "duckdb_edge_parity": true,
       "duckdb_implemented": true,
@@ -3157,7 +3172,7 @@
     "extended": 101,
     "internal": 3,
     "legacy": 1,
-    "research": 19,
+    "research": 20,
     "unclassified": 0,
     "unsafe": 0
   }

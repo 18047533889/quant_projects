@@ -1,5 +1,5 @@
 {
-  "operator_count": 210,
+  "operator_count": 211,
   "operators": {
     "ADX": {
       "aliases": [
@@ -4972,6 +4972,37 @@
       "stateful": false,
       "status": "production",
       "surface": "daily"
+    },
+    "lqtp_historical_cvar": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": true,
+          "source": "lqtp_compat"
+        }
+      },
+      "backend_status": "implemented",
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "lqtp_historical_cvar",
+      "description": "historical CVaR/Expected Shortfall: -mean(lower-tail returns)",
+      "earliest_trade_time": "input_dependent",
+      "lifecycle_status": "research",
+      "lookback_fn": "window",
+      "param_names": [
+        "x",
+        "window",
+        "q"
+      ],
+      "pit_safe": false,
+      "replacement_policy": "sealed_after_bootstrap",
+      "required_cutoff": "input_dependent",
+      "scope": "elementwise",
+      "semantic_version": "1.0",
+      "stateful": false,
+      "status": "research",
+      "surface": "research"
     },
     "lt": {
       "aliases": [],

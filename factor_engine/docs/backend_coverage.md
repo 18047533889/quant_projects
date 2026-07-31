@@ -5,7 +5,7 @@
 
 ## Summary
 
-- active canonical: **210**
+- active canonical: **211**
 - daily surface: **86**
 - Polars registered: **147**
 - Polars non-bridge implementation: **147**
@@ -113,6 +113,7 @@
 | log10 | extended | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | log2 | extended | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | log_abs | daily | yes | yes | expression_native | yes | yes | yes | yes | no | yes | yes | yes |
+| lqtp_historical_cvar | research | yes | no | unsupported | no | no | no | no | no | no | no | no |
 | lt | daily | yes | yes | expression_native | yes | yes | yes | yes | no | yes | yes | yes |
 | maximum | daily | yes | yes | expression_native | yes | yes | yes | yes | no | yes | yes | yes |
 | minimum | daily | yes | yes | expression_native | yes | yes | yes | yes | no | yes | yes | yes |
