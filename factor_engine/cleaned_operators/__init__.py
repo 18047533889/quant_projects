@@ -58,7 +58,6 @@ _LOAD_MODULES = (
     "cleaned_operators.layer_composite_fixes",
 )
 
-
 _LOADED = False
 
 
@@ -86,14 +85,9 @@ def load_all() -> None:
     from cleaned_operators.operator_overhaul import finalize_operator_overhaul
     finalize_operator_overhaul()
 
-    # Compatibility operators need explicit PIT/scope contracts before layer
-    # governance enriches the catalog and computes lifecycle metadata.
     from cleaned_operators.lqtp_policy_patch import apply_lqtp_policy_patch
     apply_lqtp_policy_patch()
 
-    # Factor-shaped research operators are executable during governance so they
-    # can be audited and promoted. Diagnostics-only utilities remain in
-    # ResearchToolRegistry and never become Factor DSL production operators.
     from cleaned_operators.research_factor_enable import enable_research_factor_runtime
     enable_research_factor_runtime()
 
@@ -103,10 +97,12 @@ def load_all() -> None:
     from cleaned_operators.layer_governance_post import apply_post_governance
     apply_post_governance()
 
-    # Production is a semantic/operator property, not a requirement that all
-    # backends be portable. Harden every factor-shaped operator before the SQL
-    # registry and final capability snapshot are frozen; each physical backend
-    # retains an independent production-safe evidence gate.
+    # Late, explicit replacement of legacy compatibility kernels that failed the
+    # production causality/contract audit. Registration replaces only the chosen
+    # Pandas physical implementation while preserving the canonical identity,
+    # aliases and downstream governance metadata.
+    __import__("cleaned_operators.production_repairs", fromlist=["*"])
+
     from cleaned_operators.production_hardening import apply_production_hardening
     apply_production_hardening()
 
