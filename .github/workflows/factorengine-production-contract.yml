@@ -45,6 +45,13 @@ jobs:
       - name: Audit every Factor DSL production operator
         run: python factor_engine/scripts/audit_all_factor_production.py
 
+      - name: Regression test promoted and technical production operators
+        run: |
+          pytest -q \
+            factor_engine/tests/operators/test_promoted_production_repairs.py \
+            factor_engine/tests/operators/test_technical_extensions.py \
+            factor_engine/tests/runtime/test_logical_source_production_contracts.py
+
       - name: Verify cold-start production coverage
         run: |
           python factor_cold_start/scripts/report_coverage.py
@@ -67,6 +74,16 @@ jobs:
           p=json.loads(Path('/tmp/backend_cost_smoke.json').read_text())
           assert p['provenance']['measured'] is True
           assert p['operators'], 'empty calibration corpus'
+          failures=[]
+          measured=0
+          for canonical,row in p['operators'].items():
+              for backend,result in row.items():
+                  measured += 1
+                  if isinstance(result,dict) and result.get('error'):
+                      failures.append(f"{canonical}/{backend}: {result['error']}")
+          assert measured > 0, 'no production-safe backend candidates were calibrated'
+          if failures:
+              raise SystemExit('calibration failures:\n'+'\n'.join(failures))
           PY
 
       - name: Compile new production modules
@@ -76,5 +93,8 @@ jobs:
             factor_engine/backend/factor_operator_evidence.py \
             factor_engine/cleaned_operators/production_hardening.py \
             factor_engine/cleaned_operators/production_repairs.py \
+            factor_engine/cleaned_operators/price_volume/technical_extensions.py \
+            factor_engine/cleaned_operators/price_volume/technical_structure_repairs.py \
             factor_engine/scripts/audit_all_factor_production.py \
-            factor_engine/scripts/calibrate_backend_costs.py
+            factor_engine/scripts/calibrate_backend_costs.py \
+            factor_cold_start/technical_extension_seeds.py
