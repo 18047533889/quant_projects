@@ -33,7 +33,7 @@ jobs:
           python -m pip install pytest pyyaml
       - name: Test, recertify and regenerate
         run: |
-          pytest -q factor_engine/tests/test_lqtp_production_runtime.py factor_engine/tests/test_lqtp_v2_source_runtime.py factor_engine/tests/test_lqtp_v2_semantic_guards.py
+          pytest -q factor_engine/tests/test_lqtp_*.py
           python factor_engine/scripts/sync_primitive_evidence.py
           python factor_engine/scripts/certify_primitive_evidence.py
           python factor_engine/scripts/certify_recipe_evidence.py
