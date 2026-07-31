@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
-"""PIT/sequence-safe LQTP logical-source resolver."""
+"""PIT/sequence-safe LQTP logical-source resolver with dependency lineage."""
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any, Iterable
 
 import numpy as np
@@ -9,10 +11,40 @@ import pandas as pd
 
 from .data_access_source import MissingDataDependencyError
 from .lqtp_logical_source import LQTPLogicalDataSource as _Base
+from .lqtp_logical_source import _TABLE_DATASETS
 
 
 class LQTPLogicalDataSource(_Base):
     prefer_series_panel_loading = True
+
+    def _dependency_store(self) -> dict[str, dict[str, Any]]:
+        return self._cache.setdefault("__source_dependencies__", {})
+
+    def _record_dependency(
+        self,
+        key: str,
+        *,
+        kind: str,
+        snapshot_id: str | None = None,
+        **metadata: Any,
+    ) -> None:
+        row: dict[str, Any] = {"key": str(key), "kind": str(kind), **metadata}
+        if snapshot_id:
+            row["snapshot_id"] = str(snapshot_id)
+        self._dependency_store()[str(key)] = row
+
+    def collect_source_dependencies(self) -> list[dict[str, Any]]:
+        """Return deterministic secondary-source dependencies used this execution."""
+        return [dict(self._dependency_store()[k]) for k in sorted(self._dependency_store())]
+
+    def source_dependency_hash(self) -> str:
+        payload = json.dumps(
+            self.collect_source_dependencies(),
+            sort_keys=True,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     @staticmethod
     def _is_source_ref_name(name: str) -> bool:
@@ -81,14 +113,30 @@ class LQTPLogicalDataSource(_Base):
             raise NotImplementedError
         return fn()
 
-    def _financial_raw(self, dataset: str, field: str) -> pd.DataFrame:
-        """Read all pre-end PIT history, never truncate at factor start_date.
+    @staticmethod
+    def _align_exact_by_instrument(anchor: pd.MultiIndex, series: pd.Series) -> pd.Series:
+        """Exact date×instrument join; never carry a stale daily observation."""
+        s = series.copy()
+        if not isinstance(s.index, pd.MultiIndex):
+            raise MissingDataDependencyError("exact logical daily source requires MultiIndex")
+        s.index = s.index.set_names(["timestamp", "instrument"])
+        idx = anchor.set_names(["timestamp", "instrument"])
+        out = s.reindex(idx)
+        out.index = anchor
+        return out
 
-        An as-of value on the first requested trading day normally comes from a
-        report published before that start date.  A lagged financial transform
-        needs even more pre-start quarters. Reading from the beginning of the
-        registered financial dataset is the fail-safe production behavior.
-        """
+    @staticmethod
+    def _broadcast_exact_by_date(anchor: pd.MultiIndex, series: pd.Series) -> pd.Series:
+        """Exact benchmark-date broadcast; missing benchmark dates remain missing."""
+        right = series.rename("value").reset_index()
+        right.columns = ["timestamp", "_source_instrument", "value"]
+        right["timestamp"] = pd.to_datetime(right["timestamp"])
+        values = right.sort_values("timestamp").drop_duplicates("timestamp", keep="last").set_index("timestamp")["value"]
+        ts = pd.DatetimeIndex(anchor.get_level_values(0))
+        return pd.Series(values.reindex(ts).to_numpy(), index=anchor, name=series.name)
+
+    def _financial_raw(self, dataset: str, field: str) -> pd.DataFrame:
+        """Read all pre-end PIT history; start-date truncation is forbidden."""
         from .data_access_source import _get_store
 
         store = _get_store()
@@ -99,6 +147,15 @@ class LQTPLogicalDataSource(_Base):
         if end is not None:
             kwargs["time_range"] = (None, end)
         result = store.read_result(dataset, **kwargs)
+        snapshot = getattr(getattr(result, "snapshot", None), "snapshot_id", None)
+        self._record_dependency(
+            dataset,
+            kind="financial",
+            snapshot_id=snapshot,
+            field=field,
+            availability_column="PubDate",
+            join_policy="asof_backward",
+        )
         return result.table.to_pandas()
 
     def _financial(
@@ -130,8 +187,6 @@ class LQTPLogicalDataSource(_Base):
             for inst, grp in events.sort_values(
                 ["available_at", "period_end"], kind="stable"
             ).groupby("instrument", sort=False):
-                # visible is updated only when a report has actually become
-                # available, so later revisions never leak backward.
                 visible: dict[pd.Period, tuple[pd.Timestamp, Any]] = {}
                 for row in grp.itertuples(index=False):
                     q = pd.Timestamp(row.period_end).to_period("Q")
@@ -163,36 +218,124 @@ class LQTPLogicalDataSource(_Base):
         return pd.Series(joined["value"].to_numpy(), index=anchor, name=field)
 
     def _load_intermediate(self, spec) -> pd.Series:
-        """Validate the requested external version before reading any parquet."""
-        from runtime.intermediate_registry import ensure_intermediate_materialized
+        from runtime.intermediate_registry import (
+            ensure_intermediate_materialized,
+            intermediate_dependency_lineage,
+        )
 
         params = spec.params_dict()
-        name = str(params.get("name", ""))
-        version = int(params.get("version", 0))
+        name, version = str(params.get("name", "")), int(params.get("version", 0))
         ensure_intermediate_materialized(
             name,
             version,
             lake_root=self.factor_lake_root,
             require_version_pin=True,
         )
+        lineage = intermediate_dependency_lineage(name, version)
+        self._record_dependency(
+            f"intermediate:{name}@{version}",
+            kind="intermediate",
+            snapshot_id=lineage["expected_factor_version"],
+            **lineage,
+        )
         return super()._load_intermediate(spec)
 
     def _load_source_ref(self, spec) -> pd.Series:
-        if spec.table == "DerivedField":
-            from runtime.derived_field_registry import evaluate_derived_field
+        table, field = spec.table, spec.field
+        transform, tparams = spec.transform, spec.transform_params_dict()
+        anchor = self._anchor_index()
 
-            series = evaluate_derived_field(spec.field, self.inner)
+        if table == "DerivedField":
+            from runtime.derived_field_registry import evaluate_derived_field, derived_field_lineage
+
+            lineage = derived_field_lineage(field)
+            self._record_dependency(
+                f"derived:{field}",
+                kind="derived_field",
+                snapshot_id=lineage["definition_hash"],
+                **lineage,
+            )
+            series = evaluate_derived_field(field, self.inner)
             if isinstance(series, pd.DataFrame):
                 if series.shape[1] != 1:
                     raise MissingDataDependencyError(
-                        f"derived field {spec.field!r} returned multiple columns"
+                        f"derived field {field!r} returned multiple columns"
                     )
                 series = series.iloc[:, 0]
             if not isinstance(series, pd.Series):
                 raise MissingDataDependencyError(
-                    f"derived field {spec.field!r} did not return a Series"
+                    f"derived field {field!r} did not return a Series"
                 )
-            return self._align_by_instrument(self._anchor_index(), series.rename(spec.field))
+            return self._align_by_instrument(anchor, series.rename(field))
+
+        if table == "Intermediate":
+            return self._align_by_instrument(anchor, self._load_intermediate(spec))
+
+        if table in {"DailyBar", "StockDailyBar"}:
+            return self.inner.load_column(field)
+
+        if table == "TurnoverBaseDaily":
+            series = self._load_turnover_base(field)
+            self._record_dependency(
+                "TurnoverBaseDaily",
+                kind="daily_exact",
+                field=field,
+                join_policy="exact",
+            )
+            return self._align_exact_by_instrument(anchor, series)
+
+        if table in {"StockIncome", "StockCashFlow", "StockBalance"}:
+            return self._financial(_TABLE_DATASETS[table], field, transform, tparams)
+
+        if table in {"StockMinuteBar", "MinuteBar"}:
+            if transform is None:
+                raise MissingDataDependencyError(
+                    "minute fields require minute_at/range/resample/bar transform"
+                )
+            return self._minute_daily(field, transform, tparams)
+
+        dataset = _TABLE_DATASETS.get(table)
+        if dataset is None:
+            raise MissingDataDependencyError(
+                f"no FactorEngine dataset mapping for LQTP DataTable {table!r}"
+            )
+        params = spec.params_dict()
+        filt = [str(params["index"])] if table == "BenchmarkIndexDailyBar" and "index" in params else None
+        child = self._child(dataset, instrument_filter=filt)
+        series = child.load_column(field)
+        snapshot = getattr(child, "data_snapshot_id", None)
+
+        if table == "BenchmarkIndexDailyBar":
+            self._record_dependency(
+                f"{dataset}:{params.get('index','')}",
+                kind="benchmark_daily",
+                snapshot_id=snapshot,
+                field=field,
+                join_policy="exact_date",
+            )
+            return self._broadcast_exact_by_date(anchor, series)
+        if table in {"SizeDaily", "EtfDailyBar"}:
+            self._record_dependency(
+                dataset,
+                kind="daily_exact",
+                snapshot_id=snapshot,
+                field=field,
+                join_policy="exact",
+            )
+            return self._align_exact_by_instrument(anchor, series)
+        if table == "IndustryDaily":
+            self._record_dependency(
+                dataset,
+                kind="classification_asof",
+                snapshot_id=snapshot,
+                field=field,
+                join_policy="asof_backward",
+            )
+            return self._align_by_instrument(anchor, series)
+
+        # Unknown mapped tables are research-compatible only; production PIT
+        # audit rejects tables without an explicit availability contract.
+        self._record_dependency(dataset, kind="unclassified", snapshot_id=snapshot, field=field)
         return super()._load_source_ref(spec)
 
     def _anchor_is_intraday(self) -> bool:
@@ -220,19 +363,11 @@ class LQTPLogicalDataSource(_Base):
 
     @staticmethod
     def _session_slots(frame: pd.DataFrame) -> pd.DataFrame:
-        """Assign collision-free CN regular-session minute slots.
-
-        Both open-labelled (09:30, 13:00) and close-labelled (09:31, 13:01)
-        minute datasets are supported. Morning and afternoon are separate
-        sessions, so the lunch boundary can never map 11:30 and 13:00 into the
-        same bucket.
-        """
         out = frame.copy()
         ts = pd.to_datetime(out["timestamp"])
         minute = ts.dt.hour * 60 + ts.dt.minute
         has_open_labels = bool((minute == 570).any() or (minute == 780).any())
         label_offset = 0 if has_open_labels else 1
-
         am = (minute >= 570 + label_offset) & (minute <= 690)
         pm = (minute >= 780 + label_offset) & (minute <= 900)
         valid = am | pm
@@ -240,9 +375,7 @@ class LQTPLogicalDataSource(_Base):
         minute = minute.loc[valid]
         out["session"] = np.where(am.loc[valid], "am", "pm")
         out["session_slot"] = np.where(
-            am.loc[valid],
-            minute - (570 + label_offset),
-            minute - (780 + label_offset),
+            am.loc[valid], minute - (570 + label_offset), minute - (780 + label_offset)
         ).astype(int)
         return out
 
@@ -256,6 +389,14 @@ class LQTPLogicalDataSource(_Base):
 
         src = self._child("ashare_stock_minute")
         series = src.load_column(field)
+        self._record_dependency(
+            "ashare_stock_minute",
+            kind="minute_session",
+            snapshot_id=getattr(src, "data_snapshot_id", None),
+            field=field,
+            transform=transform,
+            join_policy="exact_session",
+        )
         frame = series.rename("value").reset_index()
         frame.columns = ["timestamp", "instrument", "value"]
         frame["timestamp"] = pd.to_datetime(frame["timestamp"])
@@ -264,12 +405,7 @@ class LQTPLogicalDataSource(_Base):
 
         if transform == "minute_at":
             sub = frame[frame["hhmm"] == str(params["hhmm"])]
-            agg = (
-                sub.sort_values("timestamp")
-                .groupby(["date", "instrument"], sort=False)
-                .tail(1)
-                .rename(columns={"timestamp": "bar_timestamp"})
-            )
+            agg = sub.sort_values("timestamp").groupby(["date", "instrument"], sort=False).tail(1)
         elif transform == "minute_range":
             start, end = str(params["start"]), str(params["end"])
             if start >= end:
@@ -277,18 +413,8 @@ class LQTPLogicalDataSource(_Base):
             sub = frame[(frame["hhmm"] >= start) & (frame["hhmm"] <= end)]
             rows: list[tuple[Any, ...]] = []
             for (date, inst), grp in sub.groupby(["date", "instrument"], sort=False):
-                rows.append(
-                    (
-                        date,
-                        inst,
-                        grp["timestamp"].max(),
-                        self._minute_semantic_aggregate_frame(grp.sort_values("timestamp"), field),
-                    )
-                )
-            agg = pd.DataFrame(
-                rows,
-                columns=["date", "instrument", "bar_timestamp", "value"],
-            )
+                rows.append((date, inst, self._minute_semantic_aggregate_frame(grp.sort_values("timestamp"), field)))
+            agg = pd.DataFrame(rows, columns=["date", "instrument", "value"])
         elif transform in {"minute_bar", "minute_resample"}:
             period = int(params.get("period", 1))
             offset = int(params.get("index", 0))
@@ -301,16 +427,10 @@ class LQTPLogicalDataSource(_Base):
                 ["date", "instrument", "session", "bar"], sort=False
             ):
                 ordered = grp.sort_values("timestamp")
-                rows.append(
-                    (
-                        date,
-                        inst,
-                        session,
-                        int(bar),
-                        ordered["timestamp"].max(),
-                        self._minute_semantic_aggregate_frame(ordered, field),
-                    )
-                )
+                rows.append((
+                    date, inst, session, int(bar), ordered["timestamp"].max(),
+                    self._minute_semantic_aggregate_frame(ordered, field),
+                ))
             barf = pd.DataFrame(
                 rows,
                 columns=["date", "instrument", "session", "bar", "bar_timestamp", "value"],
@@ -328,8 +448,6 @@ class LQTPLogicalDataSource(_Base):
                 )
                 return pd.Series(barf["value"].to_numpy(), index=idx, name=field).sort_index()
 
-            # minute_bar(period, index): nth completed bar from the end of each
-            # trading day, ordered by the real exchange timestamp across lunch.
             pieces: list[pd.DataFrame] = []
             for _, grp in barf.groupby(["date", "instrument"], sort=False):
                 ordered = grp.sort_values("bar_timestamp")
@@ -337,7 +455,7 @@ class LQTPLogicalDataSource(_Base):
                 if pos >= 0:
                     pieces.append(ordered.iloc[[pos]])
             agg = pd.concat(pieces, ignore_index=True) if pieces else pd.DataFrame(
-                columns=["date", "instrument", "bar_timestamp", "value"]
+                columns=["date", "instrument", "value"]
             )
         else:
             raise MissingDataDependencyError(f"unsupported minute transform {transform!r}")
