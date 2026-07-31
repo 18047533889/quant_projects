@@ -42,10 +42,10 @@ _REVIEWED_EXTENSIONS = (
     "cleaned_operators.price_volume.liquidity_v2",
     "cleaned_operators.technical.indicators_v2",
     "cleaned_operators.fundamental.transforms_v2",
+    "cleaned_operators.production_policy_extensions_v2",
 )
 
 _LOADED = False
-
 
 def load_all() -> None:
     global _LOADED
@@ -56,10 +56,8 @@ def load_all() -> None:
     if OperatorRegistry.lifecycle() != "building":
         from cleaned_operators.registry import RegistryInitializationError
         raise RegistryInitializationError(f"unloaded registry cannot initialize from {OperatorRegistry.lifecycle()!r}")
-
     for mod in _LOAD_MODULES: __import__(mod, fromlist=["*"])
     for mod in _REVIEWED_EXTENSIONS: __import__(mod, fromlist=["*"])
-
     from cleaned_operators._dedupe import apply_operator_deduplication
     apply_operator_deduplication()
     from cleaned_operators.operator_overhaul import finalize_operator_overhaul
