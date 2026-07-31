@@ -76,12 +76,12 @@ def load_all() -> None:
             f"unloaded registry cannot initialize from {OperatorRegistry.lifecycle()!r}"
         )
 
-    # Load all historical/native modules first. Reviewed extensions then replace
-    # overlapping TA canonicals before dedupe/governance inspect the static
-    # authoring surface, so the surface can remain fail-closed without seeing
-    # temporarily inactive extension names.
+    # Load all historical/native modules first, then reviewed replacements while
+    # the registry is still mutable. No physical implementation may be swapped
+    # after layer_governance seals duplicate registration.
     for mod in _LOAD_MODULES:
         __import__(mod, fromlist=["*"])
+    __import__("cleaned_operators.production_repairs", fromlist=["*"])
     __import__("cleaned_operators.price_volume.technical_extensions", fromlist=["*"])
     __import__("cleaned_operators.price_volume.technical_structure_repairs", fromlist=["*"])
 
@@ -102,11 +102,6 @@ def load_all() -> None:
 
     from cleaned_operators.layer_governance_post import apply_post_governance
     apply_post_governance()
-
-    # Repairs must remain after governance because they intentionally replace
-    # specific legacy kernels whose semantic bugs were exposed by production
-    # causality/contract audits.
-    __import__("cleaned_operators.production_repairs", fromlist=["*"])
 
     from cleaned_operators.production_hardening import apply_production_hardening
     apply_production_hardening()
