@@ -8,6 +8,9 @@ value per date×instrument before they enter a daily factor DAG.
 from __future__ import annotations
 from typing import Any, Callable
 from api.source_ref import source_col, transform_source_col
+from storage.sources.intraday_feature_extension import install_intraday_feature_runtime
+
+install_intraday_feature_runtime()
 
 
 def _feature(name: str, **params: Any):
