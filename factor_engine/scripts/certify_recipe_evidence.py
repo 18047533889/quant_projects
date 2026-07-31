@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Run real three-backend recipe tests and issue a fail-closed artifact."""
+"""Run real three-backend recipe tests and issue a fail-closed artifact.
+
+Recipe correctness is bound to recipe source, certification tests, case registry,
+and the exact certified primitive evidence artifact. Commit SHA is audit metadata
+only so squash/rebase merges do not invalidate unchanged semantic evidence.
+"""
 from __future__ import annotations
 
 import argparse
@@ -18,15 +23,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
-    from backend.recipe_evidence import (
-        CASE_PATH, VERIFIED_PATH, current_hashes, recipe_evidence_valid,
-    )
+    from backend.recipe_evidence import CASE_PATH, VERIFIED_PATH, current_hashes, recipe_evidence_valid
+
     if args.check:
-        if not recipe_evidence_valid(require_commit_ancestor=True):
+        if not recipe_evidence_valid(require_commit_ancestor=False):
             print("recipe_verified.json invalid or stale", file=sys.stderr)
             return 1
-        print("recipe evidence valid")
+        print("recipe evidence valid (semantic/source hashes; squash-safe)")
         return 0
+
     env = dict(os.environ)
     env["FACTOR_ENGINE_CERTIFY_RECIPE_EVIDENCE"] = "1"
     proc = subprocess.run(
@@ -36,6 +41,7 @@ def main() -> int:
     )
     if proc.returncode:
         return proc.returncode
+
     cases = json.loads(CASE_PATH.read_text(encoding="utf-8"))
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=FE_ROOT).decode().strip()
     payload = {
