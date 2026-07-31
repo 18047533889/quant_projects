@@ -15,12 +15,7 @@ def build_dsl_allowlist(
     dialect: str = "native",
     dialect_version: str | None = None,
 ) -> dict[str, Callable[..., Any]]:
-    """Return a canonical surface mapping, optionally decorated by a dialect.
-
-    ``surface`` controls which canonical operators are visible. ``dialect`` only
-    controls external spellings/macros. Legacy ``surface='lqtp'`` remains
-    supported and means ``surface='compat_research', dialect='lqtp'``.
-    """
+    """Return a canonical surface mapping, optionally decorated by a dialect."""
     raw_surface = str(surface or "daily")
     raw_dialect = str(dialect or "native").lower()
     if raw_surface == "lqtp":
@@ -36,7 +31,6 @@ def build_dsl_allowlist(
         surfaces = ("all",)
     else:
         surfaces = (raw_surface,)
-
     for selected in surfaces:
         allow.update(build_cleaned_dsl_allowlist(set(), surface=selected))
 
@@ -45,9 +39,10 @@ def build_dsl_allowlist(
     if raw_dialect != "lqtp":
         raise ValueError(f"unsupported factor dialect: {dialect!r}")
 
-    from api.lqtp_compat import augment_dsl_allowlist
-    return augment_dsl_allowlist(
-        allow,
-        surface=raw_surface,
-        dialect_version=dialect_version,
-    )
+    from api.lqtp_compat import DEFAULT_LQTP_DIALECT_VERSION, augment_dsl_allowlist
+    version = str(dialect_version or DEFAULT_LQTP_DIALECT_VERSION)
+    if version != DEFAULT_LQTP_DIALECT_VERSION:
+        raise ValueError(
+            f"unsupported LQTP dialect_version={version!r}; supported={DEFAULT_LQTP_DIALECT_VERSION!r}"
+        )
+    return augment_dsl_allowlist(allow, surface=raw_surface)
