@@ -49,4 +49,6 @@ def build_dsl_allowlist(
     from api.lqtp_neutralization import augment_neutralization
     out = augment_neutralization(out)
     from api.lqtp_market import augment_market
-    return augment_market(out)
+    out = augment_market(out)
+    from api.lqtp_functions_loader import augment_from_functions_yaml
+    return augment_from_functions_yaml(out)
