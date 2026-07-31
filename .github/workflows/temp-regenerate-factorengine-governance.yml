@@ -30,6 +30,9 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install -e ./dataaccess
           python -m pip install pytest pyyaml
+      - name: Run focused LQTP production regressions
+        run: |
+          pytest -q factor_engine/tests/test_lqtp_production_runtime.py
       - name: Re-certify backend and recipe evidence
         run: |
           python factor_engine/scripts/sync_primitive_evidence.py
