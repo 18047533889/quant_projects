@@ -1,11 +1,10 @@
-"""Production 硬策略：research 宽松 / production 强制门禁。
+"""Production hard policy: semantic admission is backend independent.
 
-Production safety is evaluated on the canonical logical plan. Backend
-portability is a separate capability: a reviewed operator may run production on
-Pandas/NumPy even when DuckDB/Polars are unsupported, but its parameters, PIT
-contract and shape contract must still pass fail-closed validation.
+A factor operator may be production-safe on one certified backend without being
+portable to every backend. Backend-specific fast-path constraints are enforced
+only when that fast path is requested/selected; they must never reject an
+otherwise production-certified Pandas/Numpy execution path.
 """
-
 from __future__ import annotations
 
 import os
@@ -15,7 +14,7 @@ PRODUCTION_MODE = "production"
 
 
 class ProductionPolicyViolation(ValueError):
-    """production 模式下违反硬策略。"""
+    """Production policy violation."""
 
 
 def _truthy_env(name: str) -> bool:
@@ -23,14 +22,11 @@ def _truthy_env(name: str) -> bool:
 
 
 def resolve_run_mode(mode: str | None = None) -> str:
-    """解析运行模式为 ``research`` 或 ``production``。"""
     if mode is not None and str(mode).strip():
         return str(mode).lower()
     fe = os.environ.get("FACTOR_ENGINE_RUN_MODE", "").strip().lower()
-    if fe == "research":
-        return "research"
-    if fe == PRODUCTION_MODE:
-        return PRODUCTION_MODE
+    if fe in {"research", PRODUCTION_MODE}:
+        return fe
     if _truthy_env("QUANT_PRODUCTION_MODE"):
         return PRODUCTION_MODE
     return "research"
@@ -96,9 +92,8 @@ def assert_no_stub_operators(plan: Any, *, mode: str | None = None) -> None:
 
     walk(plan)
     if stub_ops:
-        unique = sorted(set(stub_ops))
         raise ProductionPolicyViolation(
-            f"production 模式禁止 stub 算子: {', '.join(unique)}"
+            f"production 模式禁止 stub 算子: {', '.join(sorted(set(stub_ops)))}"
         )
 
 
@@ -110,7 +105,7 @@ def record_production_pandas_fallback(
     actual_backend: str,
     mode: str | None = None,
 ) -> None:
-    """仅记录真正的 fallback；cost-aware 直接选择 Pandas 不算 fallback。"""
+    """Record a real fallback only; intentional cost routing is not fallback."""
     if mode is None:
         mode = getattr(ctx, "run_mode", None)
     if not is_production_mode(mode):
@@ -124,14 +119,6 @@ def record_production_pandas_fallback(
         fallbacks.append(entry)
     runtime["production_pandas_fallbacks"] = fallbacks
     ctx.runtime_stats = runtime  # type: ignore[attr-defined]
-    import logging
-
-    logging.getLogger("runtime.production_policy").warning(
-        "production pandas fallback: op=%s requested=%s actual=%s",
-        op,
-        requested_backend,
-        actual_backend,
-    )
 
 
 def assert_production_plan_ops(
@@ -140,7 +127,7 @@ def assert_production_plan_ops(
     mode: str | None = None,
     context: str = "compile",
 ) -> None:
-    """Production plan gate: semantic admission + bounded promoted signatures."""
+    """Semantic production gate + bounded production call signatures."""
     if not is_production_mode(mode):
         return
     from cleaned_operators.operator_spec import check_production_plan_ops
@@ -201,7 +188,15 @@ def assert_no_unapproved_map_groups_in_production(
     mode: str | None = None,
     context: str = "compile",
 ) -> None:
-    if not is_production_mode(mode):
+    """Backend-specific map_groups gate.
+
+    This check used to run for every production plan and therefore rejected a
+    Pandas-certified operator merely because an optional Polars map_groups
+    implementation was not certified.  It now applies only when the caller
+    explicitly requires production fast paths. Normal production routing is
+    constrained later by per-backend capability evidence.
+    """
+    if not is_production_mode(mode) or not _fastpath_gate_enabled():
         return
     from backend.polars_long_policy import infer_polars_long_tier
     from backend.polars_long_production import APPROVED_POLARS_LONG_MAP_GROUPS_PRODUCTION
@@ -211,29 +206,39 @@ def assert_no_unapproved_map_groups_in_production(
 
     def walk(node: Any) -> None:
         op = str(getattr(node, "op", "") or "")
-        if not op:
-            return
-        canon = OperatorRegistry._aliases.get(op, op)
-        if infer_polars_long_tier(canon) == "map_groups" and canon not in APPROVED_POLARS_LONG_MAP_GROUPS_PRODUCTION:
-            bad.append(canon)
+        if op:
+            canon = OperatorRegistry._aliases.get(op, op)
+            if (
+                infer_polars_long_tier(canon) == "map_groups"
+                and canon not in APPROVED_POLARS_LONG_MAP_GROUPS_PRODUCTION
+            ):
+                bad.append(canon)
         for child in getattr(node, "inputs", []) or []:
             walk(child)
 
     walk(plan)
     if bad:
-        unique = sorted(set(bad))
         raise ProductionPolicyViolation(
-            f"production 模式 {context} 含未批准 map_groups 算子: {', '.join(unique)}"
+            f"production fast path {context} 含未批准 Polars map_groups 算子: "
+            + ", ".join(sorted(set(bad)))
         )
 
 
 def record_production_fastpath_check(ctx: Any, plan: Any, *, mode: str | None = None) -> None:
+    # A diagnostic fastpath check must not silently reintroduce the strict dual
+    # backend policy when the production job did not request that policy.
+    if not _fastpath_gate_enabled():
+        runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+        runtime["production_fastpath_required"] = False
+        ctx.runtime_stats = runtime  # type: ignore[attr-defined]
+        return
     from backend.production_fastpath_gate import check_production_fastpath_plan_ops, fastpath_gate_strict
 
     result = check_production_fastpath_plan_ops(
         plan, strict=fastpath_gate_strict(), mode=mode
     )
     runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+    runtime["production_fastpath_required"] = True
     runtime["production_fastpath_ok"] = result.ok
     if result.violations:
         runtime["production_fastpath_violations"] = list(result.violations)
@@ -246,13 +251,7 @@ def assert_production_factors(
     mode: str | None = None,
     context: str = "run",
 ) -> None:
-    """Production preflight validates restricted syntax; canonical plan owns admission.
-
-    Macro/alias compatibility cannot be judged correctly from raw AST function
-    names (for example ``safe_log`` expands to already-certified primitives), so
-    this stage only checks that the LQTP-compatible restricted parser accepts the
-    source. The subsequent compile gate validates the canonical optimized plan.
-    """
+    """Validate restricted syntax; canonical plan owns production admission."""
     if not is_production_mode(mode):
         return
     from api.mining_integration import validate_factor_engine_dsl
@@ -286,7 +285,7 @@ def assert_no_production_pandas_fallbacks(
     if fallbacks and policy != "warn":
         ops = sorted({str(x.get("op", "")) for x in fallbacks if x.get("op")})
         raise ProductionPolicyViolation(
-            f"production 模式 {context} 禁止 pandas fallback，算子: {', '.join(ops)}"
+            f"production 模式 {context} 禁止未计划 pandas fallback，算子: {', '.join(ops)}"
         )
 
 
@@ -302,8 +301,8 @@ def format_pandas_fallback_report(fallbacks: Iterable[dict[str, str]]) -> str:
         return ""
     lines = [f"production pandas fallbacks ({len(items)}):"]
     for entry in items:
-        op = entry.get("op", "?")
-        requested = entry.get("requested", "?")
-        actual = entry.get("actual", "?")
-        lines.append(f"  - {op}: requested={requested} actual={actual}")
+        lines.append(
+            f"  - {entry.get('op','?')}: requested={entry.get('requested','?')} "
+            f"actual={entry.get('actual','?')}"
+        )
     return "\n".join(lines)
