@@ -1,16 +1,16 @@
-# -*- coding: utf-8
-"""统一 Backend 能力注册表：声明式覆盖 + 成本路由（不强制全量 Polars/SQL）。
+# -*- coding: utf-8 -*-
+"""Unified backend capability registry and evidence-constrained cost router.
 
-路由原则（production）::
+Production admission is two-dimensional:
 
-    能 SQL 下推的 → Hybrid/SQL 层优先（整树或子树）；
-    SQL 不适合但 Polars parity 已验证 → Polars；
-    语义不稳 / 未验证 / 不划算 → Pandas fallback（须可观测）。
+1. the canonical operator is semantically production-safe; and
+2. the selected physical backend is independently production-safe.
 
-本模块负责 **算子级能力声明** 与 **Polars/Pandas 热路径选型**；
-SQL 下推在 ``backend/sql_pushdown`` + HybridBackend 层完成。
+A production operator therefore does *not* need to be portable across all
+backends.  The router considers only certified backends and chooses the lowest
+estimated workload cost among them.  SQL subtree selection remains a plan-level
+responsibility of ``SqlBackend``/``HybridBackend``.
 """
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -22,7 +22,6 @@ BackendName = Literal[
     "duckdb_sql",
     "clickhouse_sql",
 ]
-
 CapabilityStatus = Literal[
     "unsupported",
     "implemented",
@@ -32,23 +31,19 @@ CapabilityStatus = Literal[
 
 
 class UnsupportedOperatorBackendError(RuntimeError):
-    """Raised when an explicitly requested backend cannot be used."""
+    """Raised when the requested/automatic backend has no eligible implementation."""
 
 
-# registry backend → capability backend
 _REGISTRY_TO_CAPABILITY: dict[str, BackendName | None] = {
     "pandas_numpy": "pandas_numpy",
     "polars": "polars",
     "sql": "duckdb_sql",
 }
-
 _SQL_BACKENDS: tuple[BackendName, ...] = ("duckdb_sql", "clickhouse_sql")
 
 
 @dataclass(frozen=True)
 class BackendCapability:
-    """单个 canonical × backend 的能力行。"""
-
     canonical: str
     backend: BackendName
     status: CapabilityStatus
@@ -67,11 +62,6 @@ class BackendCapability:
     notes: str = ""
 
     def to_csv_row(self) -> dict[str, str | float | bool]:
-        """导出为 CSV 扁平行字典。
-
-        返回:
-            含 canonical、backend、status 及各能力标志字段的字典。
-        """
         return {
             "canonical": self.canonical,
             "backend": self.backend,
@@ -94,8 +84,6 @@ class BackendCapability:
 
 @dataclass(frozen=True)
 class OperatorCapabilitySummary:
-    """按 canonical 聚合的多 backend 视图（报表 / 路由）。"""
-
     canonical: str
     pandas_numpy: CapabilityStatus
     polars: CapabilityStatus
@@ -108,102 +96,44 @@ class OperatorCapabilitySummary:
 
 
 def resolve_canonical(name: str) -> str:
-    """将算子别名解析为 canonical 名称。
-
-    参数:
-        name: 算子名或别名。
-
-    返回:
-        解析后的 canonical 名称。
-    """
     from cleaned_operators.registry import OperatorRegistry
-
     return OperatorRegistry.resolve_canonical(name)
 
 
 def polars_long_native(canonical: str) -> bool:
-    """判断 canonical 是否在纯 Polars Expr native 白名单内。
-
-    参数:
-        canonical: 算子 canonical 名称或别名。
-
-    返回:
-        是否属于 ``POLARS_LONG_NATIVE`` 集合。
-    """
     from backend.polars_long_policy import POLARS_LONG_NATIVE
-
     return resolve_canonical(canonical) in POLARS_LONG_NATIVE
 
 
 def polars_long_tier(canonical: str) -> str:
-    """查询 canonical 的 Polars long-table 能力 tier。
-
-    参数:
-        canonical: 算子 canonical 名称。
-
-    返回:
-        tier 标签，如 ``native``、``map_groups``、``unsupported`` 等。
-    """
     from backend.polars_long_policy import infer_polars_long_tier
-
     return infer_polars_long_tier(canonical)
 
 
 def polars_long_tier_status(canon: str) -> CapabilityStatus:
-    """将 long-table tier 映射为 capability status（production 路由用）。
-
-    参数:
-        canon: 算子 canonical 名称或别名。
-
-    返回:
-        对应 backend 能力状态标签。
-    """
-    tier = polars_long_tier(canon)
-    if tier == "unsupported":
-        return "unsupported"
-    if tier == "native":
-        from cleaned_operators.operator_policy import POLARS_PRODUCTION_SAFE
-
-        return "production_safe" if canon in POLARS_PRODUCTION_SAFE else "parity_verified"
-    if tier == "blocked_causal":
-        return "unsupported"
-    if tier in {"map_groups", "passthrough", "registry"}:
+    from backend.polars_long_production import polars_long_production_tier
+    tier = polars_long_production_tier(resolve_canonical(canon))
+    if tier == "production_safe":
+        return "production_safe"
+    if tier == "parity_verified":
+        return "parity_verified"
+    if tier in {"implemented", "stateful", "python_rolling", "map_groups", "registry", "passthrough", "nonstandard_alg"}:
         return "implemented"
     return "unsupported"
 
 
 def polars_expr_capable(canonical: str) -> bool:
-    """判断 canonical 是否在手写 Polars expr / map_groups 编译白名单内。
-
-    参数:
-        canonical: 算子 canonical 名称或别名。
-
-    返回:
-        是否属于 ``POLARS_LONG_COMPATIBLE`` 集合。
-    """
     from backend.polars_long_policy import POLARS_LONG_COMPATIBLE
-
     return resolve_canonical(canonical) in POLARS_LONG_COMPATIBLE
 
 
 def polars_long_capable(canonical: str) -> bool:
-    """判断 canonical 是否可走 polars_long（native + map_groups + registry bridge）。
-
-    参数:
-        canonical: 算子 canonical 名称或别名。
-
-    返回:
-        是否在 ``get_polars_long_capable()`` 返回的集合内。
-    """
     from backend.polars_long_policy import get_polars_long_capable
-
     return resolve_canonical(canonical) in get_polars_long_capable()
 
 
 def _sql_capable_canonicals() -> frozenset[str]:
-    """返回 SQL 已实现 canonical 集合。"""
     from backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
-
     return SQL_IMPLEMENTED_CANONICALS
 
 
@@ -211,7 +141,6 @@ _EMITTER_OK_CACHE: dict[tuple[str, str, int], bool] = {}
 
 
 def _sql_emitter_ok(canon: str, *, dialect: str = "duckdb_sql") -> bool:
-    """registry 声明可 SQL 且 emitter 能编译最小 plan（按版本缓存）。"""
     from cleaned_operators.registry import OperatorRegistry
 
     cache_key = (canon, dialect, OperatorRegistry.version())
@@ -220,8 +149,7 @@ def _sql_emitter_ok(canon: str, *, dialect: str = "duckdb_sql") -> bool:
     if canon in {"column", "literal"}:
         _EMITTER_OK_CACHE[cache_key] = True
         return True
-    sql_set = _sql_capable_canonicals()
-    if canon not in sql_set:
+    if canon not in _sql_capable_canonicals():
         _EMITTER_OK_CACHE[cache_key] = False
         return False
     ok = False
@@ -237,11 +165,7 @@ def _sql_emitter_ok(canon: str, *, dialect: str = "duckdb_sql") -> bool:
                 table="_cap_check",
                 time_column="ts",
                 instrument_column="inst",
-                dialect=(
-                    SqlDialect.CLICKHOUSE
-                    if dialect == "clickhouse_sql"
-                    else SqlDialect.DUCKDB
-                ),
+                dialect=(SqlDialect.CLICKHOUSE if dialect == "clickhouse_sql" else SqlDialect.DUCKDB),
             )
             ok = compiled is not None and bool(compiled.query.strip())
     except Exception:
@@ -251,7 +175,6 @@ def _sql_emitter_ok(canon: str, *, dialect: str = "duckdb_sql") -> bool:
 
 
 def _polars_status(canon: str) -> CapabilityStatus:
-    """Derive Polars status only from tested backend evidence."""
     from backend.primitive_evidence import (
         POLARS_EDGE_VERIFIED,
         POLARS_NO_FALLBACK_VERIFIED,
@@ -259,8 +182,7 @@ def _polars_status(canon: str) -> CapabilityStatus:
     )
     from cleaned_operators.registry import OperatorRegistry
 
-    backends = OperatorRegistry.backends_for(canon)
-    if "polars" not in backends:
+    if "polars" not in OperatorRegistry.backends_for(canon):
         return "unsupported"
     if (
         canon in POLARS_REFERENCE_PARITY_VERIFIED
@@ -274,52 +196,82 @@ def _polars_status(canon: str) -> CapabilityStatus:
 
 
 def _pandas_status(canon: str) -> CapabilityStatus:
-    """根据 registry 推断 Pandas/Numpy 能力状态。"""
+    """Derive Pandas status from semantic-reference certification/evidence."""
     from cleaned_operators.registry import OperatorRegistry
 
-    if "pandas_numpy" in OperatorRegistry.backends_for(canon):
-        return "implemented"
-    return "unsupported"
+    if "pandas_numpy" not in OperatorRegistry.backends_for(canon):
+        return "unsupported"
+
+    catalog = OperatorRegistry._catalog.get(canon, {})
+    meta = ((catalog.get("backend_meta") or {}).get("pandas_numpy") or {})
+    if bool(meta.get("production_certified")):
+        return "production_safe"
+
+    # Daily/triple-certified primitives are independently test-certified even
+    # when older registry metadata did not carry a pandas production flag.
+    try:
+        from backend.evidence_provenance import evidence_artifact_valid
+        from backend.primitive_evidence import PRIMITIVE_BACKEND_EXECUTION_CERTIFIED
+        if evidence_artifact_valid() and canon in PRIMITIVE_BACKEND_EXECUTION_CERTIFIED:
+            return "production_safe"
+    except Exception:
+        pass
+
+    from cleaned_operators.production_tiers import PANDAS_FIRST_PRODUCTION_CANONICALS
+    if canon in PANDAS_FIRST_PRODUCTION_CANONICALS and str(catalog.get("status")) == "production":
+        return "production_safe"
+    return "implemented"
 
 
 def _sql_status(canon: str, *, dialect: BackendName) -> CapabilityStatus:
-    """根据 SQL tier 与 emitter 能力推断指定方言的 SQL 状态。"""
     from backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
 
     if canon not in SQL_IMPLEMENTED_CANONICALS:
         return "unsupported"
     if not _sql_emitter_ok(canon, dialect=dialect):
         return "implemented"
-
     if dialect == "clickhouse_sql":
         from backend.sql_tiers import CLICKHOUSE_SQL_PARITY_VERIFIED
         from backend.sql_pushdown.clickhouse_capabilities import effective_clickhouse_production_safe
-
         if effective_clickhouse_production_safe(canon):
             return "production_safe"
         if canon in CLICKHOUSE_SQL_PARITY_VERIFIED:
             return "parity_verified"
         return "implemented"
-    else:
-        from backend.sql_tiers import DUCKDB_SQL_PARITY_VERIFIED, effective_sql_production_safe
-
-        if effective_sql_production_safe(canon):
-            return "production_safe"
-        if canon in DUCKDB_SQL_PARITY_VERIFIED:
-            return "parity_verified"
+    from backend.sql_tiers import DUCKDB_SQL_PARITY_VERIFIED, effective_sql_production_safe
+    if effective_sql_production_safe(canon):
+        return "production_safe"
+    if canon in DUCKDB_SQL_PARITY_VERIFIED:
+        return "parity_verified"
     return "implemented"
 
 
+def backend_status(canonical: str, backend: BackendName, *, data_source_kind: str = "duckdb") -> CapabilityStatus:
+    canon = resolve_canonical(canonical)
+    if backend == "pandas_numpy":
+        return _pandas_status(canon)
+    if backend == "polars":
+        return _polars_status(canon)
+    if backend in _SQL_BACKENDS:
+        return _sql_status(canon, dialect=backend)
+    return "unsupported"
+
+
+def production_eligible_backends(canonical: str, *, data_source_kind: str = "duckdb") -> tuple[str, ...]:
+    """Return only independently production-certified physical backends."""
+    canon = resolve_canonical(canonical)
+    eligible: list[str] = []
+    if _pandas_status(canon) == "production_safe":
+        eligible.append("pandas_numpy")
+    if _polars_status(canon) == "production_safe":
+        eligible.append("polars")
+    dialect: BackendName = "clickhouse_sql" if data_source_kind.lower() in {"clickhouse", "ch"} else "duckdb_sql"
+    if _sql_status(canon, dialect=dialect) == "production_safe":
+        eligible.append("sql")
+    return tuple(eligible)
+
+
 def capability_for(canonical: str, backend: BackendName) -> BackendCapability:
-    """导出单个 canonical × backend 能力行。
-
-    参数:
-        canonical: 算子 canonical 名称或别名。
-        backend: 目标 backend 名称。
-
-    返回:
-        含状态、加速比与各能力标志的 ``BackendCapability``。
-    """
     from cleaned_operators.operator_policy import infer_operator_policy
     from cleaned_operators.registry import OperatorRegistry
     from backend.operator_cost import default_backend_speedup
@@ -329,69 +281,53 @@ def capability_for(canonical: str, backend: BackendName) -> BackendCapability:
         canon = "where"
     policy = infer_operator_policy(canon)
     scope = getattr(policy, "scope", "") or ""
-    supports_group = scope == "group"
-    supports_window = scope == "ts"
     backend_key = "sql" if backend in _SQL_BACKENDS else backend
-    backend_meta = dict(
-        ((OperatorRegistry._catalog.get(canon, {}).get("backend_meta") or {}).get(backend_key) or {})
-    )
-
+    backend_meta = dict(((OperatorRegistry._catalog.get(canon, {}).get("backend_meta") or {}).get(backend_key) or {}))
     if backend == "pandas_numpy":
         status = _pandas_status(canon)
     elif backend == "polars":
         status = _polars_status(canon)
-    elif backend in _SQL_BACKENDS:
-        status = _sql_status(canon, dialect=backend)
     else:
-        status = "unsupported"
+        status = _sql_status(canon, dialect=backend)
 
+    # Native Polars/SQL production paths must carry execution metadata. Pandas
+    # is the semantic reference and may be backed by legacy classes whose
+    # metadata predates these fields; production_hardening fills sane defaults.
     required_metadata = {
         "execution_kind", "supports_lazy", "supports_streaming",
         "materializes_full_panel", "supports_nulls", "supports_nan",
         "supports_inf", "supports_scalar_broadcast", "supports_group",
         "supports_window", "supports_min_periods",
     }
-    if status == "production_safe":
+    if status == "production_safe" and backend != "pandas_numpy":
         missing = sorted(required_metadata.difference(backend_meta))
         if missing:
-            raise RuntimeError(
-                f"{canon}/{backend}: production-safe capability metadata missing {missing}"
-            )
+            raise RuntimeError(f"{canon}/{backend}: production-safe capability metadata missing {missing}")
 
     notes = ""
     if backend == "clickhouse_sql" and status != "unsupported":
-        # 部分算子 DuckDB 已通、CH 方言待验
         notes = "dialect=clickhouse; verify per deployment"
-
     return BackendCapability(
         canonical=canon,
         backend=backend,
         status=status,
-        execution_kind=str(backend_meta.get("execution_kind", "unsupported")),
+        execution_kind=str(backend_meta.get("execution_kind", "pandas_numpy_reference" if backend == "pandas_numpy" else "unsupported")),
         estimated_speedup=default_backend_speedup(canon, backend, status),
-        supports_nulls=bool(backend_meta.get("supports_nulls", False)),
-        supports_nan=bool(backend_meta.get("supports_nan", False)),
-        supports_inf=bool(backend_meta.get("supports_inf", False)),
-        supports_scalar_broadcast=bool(backend_meta.get("supports_scalar_broadcast", False)),
-        supports_min_periods=bool(backend_meta.get("supports_min_periods", False)),
-        supports_group=bool(backend_meta.get("supports_group", supports_group)),
-        supports_window=bool(backend_meta.get("supports_window", supports_window)),
+        supports_nulls=bool(backend_meta.get("supports_nulls", backend == "pandas_numpy")),
+        supports_nan=bool(backend_meta.get("supports_nan", backend == "pandas_numpy")),
+        supports_inf=bool(backend_meta.get("supports_inf", backend == "pandas_numpy")),
+        supports_scalar_broadcast=bool(backend_meta.get("supports_scalar_broadcast", backend == "pandas_numpy")),
+        supports_min_periods=bool(backend_meta.get("supports_min_periods", backend == "pandas_numpy")),
+        supports_group=bool(backend_meta.get("supports_group", scope in {"cs", "group"})),
+        supports_window=bool(backend_meta.get("supports_window", scope == "ts")),
         supports_lazy=bool(backend_meta.get("supports_lazy", False)),
         supports_streaming=bool(backend_meta.get("supports_streaming", False)),
-        materializes_full_panel=bool(backend_meta.get("materializes_full_panel", False)),
+        materializes_full_panel=bool(backend_meta.get("materializes_full_panel", backend == "pandas_numpy")),
         notes=notes,
     )
 
 
 def summarize_operator(canonical: str) -> OperatorCapabilitySummary:
-    """按 canonical 聚合四 backend 能力状态。
-
-    参数:
-        canonical: 算子 canonical 名称或别名。
-
-    返回:
-        多 backend 聚合视图 ``OperatorCapabilitySummary``。
-    """
     from cleaned_operators.operator_policy import POLARS_PARITY_VERIFIED
     from cleaned_operators.operator_spec import build_operator_spec
 
@@ -411,46 +347,16 @@ def summarize_operator(canonical: str) -> OperatorCapabilitySummary:
     )
 
 
-def build_capability_matrix(
-    canonicals: Sequence[str] | None = None,
-) -> list[OperatorCapabilitySummary]:
-    """构建全量或子集 capability 矩阵（按 resolve_canonical 去重）。
-
-    参数:
-        canonicals: 可选 canonical 子集；为 ``None`` 时遍历 registry 全量。
-
-    返回:
-        ``OperatorCapabilitySummary`` 列表。
-    """
+def build_capability_matrix(canonicals: Sequence[str] | None = None) -> list[OperatorCapabilitySummary]:
     from cleaned_operators.registry import OperatorRegistry
-
     if canonicals is None:
-        seen: set[str] = set()
-        names: list[str] = []
-        for c in OperatorRegistry.list_canonical():
-            if not OperatorRegistry.backends_for(c):
-                continue
-            rc = resolve_canonical(c)
-            if rc in seen:
-                continue
-            seen.add(rc)
-            names.append(rc)
+        names = sorted({resolve_canonical(c) for c in OperatorRegistry.list_canonical() if OperatorRegistry.backends_for(c)})
     else:
         names = sorted({resolve_canonical(c) for c in canonicals})
-    return [summarize_operator(c) for c in sorted(names)]
+    return [summarize_operator(c) for c in names]
 
 
-def export_flat_capabilities(
-    canonicals: Sequence[str] | None = None,
-) -> list[BackendCapability]:
-    """展开为 canonical × backend 扁平行（CSV 导出）。
-
-    参数:
-        canonicals: 可选 canonical 子集。
-
-    返回:
-        ``BackendCapability`` 扁平行列表。
-    """
+def export_flat_capabilities(canonicals: Sequence[str] | None = None) -> list[BackendCapability]:
     rows: list[BackendCapability] = []
     for summary in build_capability_matrix(canonicals):
         for backend in ("pandas_numpy", "polars", "duckdb_sql", "clickhouse_sql"):
@@ -459,61 +365,30 @@ def export_flat_capabilities(
 
 
 def supports_polars(canonical: str, *, mode: str = "production") -> bool:
-    """判断 canonical 是否可走 Polars 热路径。
-
-    参数:
-        canonical: 算子 canonical 名称或别名。
-        mode: ``production`` 仅 production_safe；``research`` 允许已实现/parity。
-
-    返回:
-        当前模式下是否支持 Polars 执行。
-    """
     status = _polars_status(resolve_canonical(canonical))
-    if status == "unsupported":
-        return False
-    if mode == "production":
-        return status == "production_safe"
-    return status in {"implemented", "parity_verified", "production_safe"}
+    return status == "production_safe" if mode == "production" else status != "unsupported"
 
 
-def supports_sql(
-    canonical: str,
-    data_source_kind: str = "duckdb",
-    *,
-    mode: str = "production",
-) -> bool:
-    """判断 canonical 在指定数据源方言下是否可走 SQL 路径。
-
-    参数:
-        canonical: 算子 canonical 名称。
-        data_source_kind: 数据源类型，``duckdb`` 或 ``clickhouse``/``ch``。
-        mode: ``production`` 仅 production-safe；``research`` 允许已实现。
-
-    返回:
-        是否支持 SQL 执行。
-    """
+def supports_sql(canonical: str, data_source_kind: str = "duckdb", *, mode: str = "production") -> bool:
     canon = resolve_canonical(canonical)
-    dialect: BackendName = (
-        "clickhouse_sql" if data_source_kind.lower() in {"clickhouse", "ch"} else "duckdb_sql"
-    )
+    dialect: BackendName = "clickhouse_sql" if data_source_kind.lower() in {"clickhouse", "ch"} else "duckdb_sql"
     status = _sql_status(canon, dialect=dialect)
-    if status == "unsupported":
-        return False
-    if mode == "production":
-        return status == "production_safe"
-    return status != "unsupported"
+    return status == "production_safe" if mode == "production" else status != "unsupported"
 
 
-def supports_pandas(canonical: str) -> bool:
-    """判断 canonical 是否有 Pandas/Numpy 实现。
+def supports_pandas(canonical: str, *, mode: str = "production") -> bool:
+    status = _pandas_status(resolve_canonical(canonical))
+    return status == "production_safe" if mode == "production" else status != "unsupported"
 
-    参数:
-        canonical: 算子 canonical 名称。
 
-    返回:
-        registry 中是否注册了 ``pandas_numpy`` backend。
-    """
-    return _pandas_status(resolve_canonical(canonical)) != "unsupported"
+def _backend_cost(canonical: str, backend: str, *, row_count_estimate: int | None, requires_conversion: bool) -> float:
+    from backend.operator_cost import estimate_backend_cost
+    return estimate_backend_cost(
+        canonical,
+        backend,
+        row_count_estimate=row_count_estimate,
+        requires_conversion=requires_conversion,
+    )
 
 
 def get_best_backend(
@@ -525,126 +400,76 @@ def get_best_backend(
     prefer: str = "auto",
     allow_unverified_backend: bool = False,
 ) -> tuple[object | None, str]:
-    """算子热路径 backend 选型：Polars（已验证） vs Pandas fallback。
+    """Select the cheapest eligible operator backend.
 
-    SQL 不在此函数选择——由 HybridBackend / SQL lowerer 在 plan 层处理。
-
-    参数:
-        name: 算子名称或别名。
-        mode: 运行模式，影响 Polars 白名单严格程度。
-        data_source_kind: 数据源类型（本函数内未直接用于 SQL 选型）。
-        row_count_estimate: 可选行数估计，用于成本路由。
-        prefer: 强制 backend（``pandas_numpy``/``polars``/``sql``/``auto``）。
-
-    返回:
-        ``(算子实例或 None, backend 名称)`` 元组。
+    In production, an implementation is a candidate only when that physical
+    backend is independently ``production_safe``.  There is no silent fallback
+    to an unverified Pandas implementation.  SQL is normally selected at the
+    plan/subtree layer, but explicit ``prefer='sql'`` remains supported.
     """
     import os
-
     from cleaned_operators.registry import OperatorRegistry
-    from backend.operator_cost import estimate_backend_cost
 
     canonical = resolve_canonical(name)
+    mode = str(mode or "research").lower()
     backends = OperatorRegistry.backends_for(canonical)
+    prod = mode == "production"
 
-    if prefer == "pandas_numpy":
-        op = OperatorRegistry.get(canonical, "pandas_numpy")
-        if op is None:
-            raise UnsupportedOperatorBackendError(
-                f"{canonical!r} has no pandas_numpy backend"
-            )
-        return op, "pandas_numpy"
-    if prefer == "polars":
-        op = OperatorRegistry.get(canonical, "polars")
-        permitted = _polars_status(canonical) == "production_safe" or (
-            mode != "production" and allow_unverified_backend
-        )
-        if op is not None and permitted:
-            return op, "polars"
-        if mode == "production":
-            raise UnsupportedOperatorBackendError(
-                f"{canonical!r} polars backend is not production-safe"
-            )
-        if not allow_unverified_backend:
-            raise UnsupportedOperatorBackendError(
-                f"{canonical!r} polars backend is not verified"
-            )
-        raise UnsupportedOperatorBackendError(f"{canonical!r} has no usable polars backend")
-    if prefer == "sql":
-        op = OperatorRegistry.get(canonical, "sql")
-        dialect: BackendName = (
-            "clickhouse_sql" if data_source_kind.lower() in {"clickhouse", "ch"} else "duckdb_sql"
-        )
-        permitted = _sql_status(canonical, dialect=dialect) == "production_safe" or (
-            mode != "production" and allow_unverified_backend
-        )
-        if op is not None and permitted:
-            return op, "sql"
-        if mode == "production" or not allow_unverified_backend:
-            raise UnsupportedOperatorBackendError(
-                f"{canonical!r} SQL backend is not usable for {dialect}"
-            )
-        raise UnsupportedOperatorBackendError(f"{canonical!r} has no usable SQL backend")
+    def permitted(registry_backend: str) -> bool:
+        if registry_backend == "pandas_numpy":
+            status = _pandas_status(canonical)
+        elif registry_backend == "polars":
+            status = _polars_status(canonical)
+        elif registry_backend == "sql":
+            dialect: BackendName = "clickhouse_sql" if data_source_kind.lower() in {"clickhouse", "ch"} else "duckdb_sql"
+            status = _sql_status(canonical, dialect=dialect)
+        else:
+            return False
+        if prod:
+            return status == "production_safe"
+        return status != "unsupported" and (allow_unverified_backend or status in {"parity_verified", "production_safe"})
 
-    use_cost = os.environ.get("FACTOR_ENGINE_COST_ROUTING", "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-    }
-    aggressive_requested = os.environ.get("FACTOR_ENGINE_OPERATOR_BACKEND", "").strip().lower() in {
-        "auto_aggressive",
-        "aggressive",
-    }
-    aggressive = aggressive_requested and mode == "research" and allow_unverified_backend
+    requested = str(prefer or "auto").lower()
+    if requested in {"pandas_numpy", "polars", "sql"}:
+        op = OperatorRegistry.get(canonical, requested)
+        if op is None or not permitted(requested):
+            raise UnsupportedOperatorBackendError(
+                f"{canonical!r} backend={requested!r} is not eligible in mode={mode!r}"
+            )
+        return op, requested
+    if requested != "auto":
+        raise UnsupportedOperatorBackendError(f"unknown backend preference {prefer!r}")
 
+    aggressive_requested = os.environ.get("FACTOR_ENGINE_OPERATOR_BACKEND", "").strip().lower() in {"auto_aggressive", "aggressive"}
+    aggressive = aggressive_requested and not prod and allow_unverified_backend
     candidates: list[tuple[str, float]] = []
 
-    if "polars" in backends:
-        pol_status = _polars_status(canonical)
-        pol_ok = pol_status == "production_safe" or (
-            aggressive and pol_status != "unsupported"
-        )
-        if pol_ok:
-            cost = estimate_backend_cost(
-                canonical,
-                "polars",
-                row_count_estimate=row_count_estimate,
-                requires_conversion=True,
-            )
-            candidates.append(("polars", cost))
-
-    if "pandas_numpy" in backends:
-        cost = estimate_backend_cost(
-            canonical,
+    if "pandas_numpy" in backends and (permitted("pandas_numpy") or aggressive):
+        candidates.append((
             "pandas_numpy",
-            row_count_estimate=row_count_estimate,
-            requires_conversion=False,
-        )
-        candidates.append(("pandas_numpy", cost))
+            _backend_cost(canonical, "pandas_numpy", row_count_estimate=row_count_estimate, requires_conversion=False),
+        ))
+    if "polars" in backends and (permitted("polars") or aggressive):
+        candidates.append((
+            "polars",
+            _backend_cost(canonical, "polars", row_count_estimate=row_count_estimate, requires_conversion=True),
+        ))
 
     if not candidates:
-        op = OperatorRegistry.get(canonical, "pandas_numpy")
-        if op is not None:
-            return op, "pandas_numpy"
         raise UnsupportedOperatorBackendError(
-            f"no usable backend for {canonical!r}"
+            f"no {'production-certified ' if prod else ''}operator backend for {canonical!r}"
         )
 
+    # Production defaults to cost-aware routing. Research can opt out for
+    # deterministic debugging or opt in via FACTOR_ENGINE_COST_ROUTING=1.
+    env_cost = os.environ.get("FACTOR_ENGINE_COST_ROUTING", "").strip().lower()
+    use_cost = prod or env_cost in {"1", "true", "yes", "on"}
     if use_cost and len(candidates) > 1:
-        chosen = min(candidates, key=lambda x: x[1])[0]
+        chosen = min(candidates, key=lambda item: (item[1], item[0]))[0]
     else:
-        # Default production route consumes the same evidence-backed status as
-        # reports and explicit backend selection.
-        if (
-            "polars" in backends
-            and (
-                _polars_status(canonical) == "production_safe"
-                or (aggressive and _polars_status(canonical) != "unsupported")
-            )
-        ):
-            chosen = "polars"
-        else:
-            chosen = "pandas_numpy"
+        chosen = "polars" if any(name == "polars" for name, _ in candidates) else candidates[0][0]
 
     op = OperatorRegistry.get(canonical, chosen)
+    if op is None:
+        raise UnsupportedOperatorBackendError(f"selected backend {chosen!r} disappeared for {canonical!r}")
     return op, chosen
