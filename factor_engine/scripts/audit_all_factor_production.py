@@ -29,24 +29,23 @@ PANEL_PARAM_NAMES = frozenset({
     "fallback","condition","group","industry","sector","fiscal_quarter","period_id",
     "quarter","revision_id","decision_time","available_time","available_at","exposure",
     "exposures","control","controls","factor","target","mask","event","value","values",
-    "sort_col","float_shares",
+    "v1","v2","sort_col","float_shares",
 })
 
 SCALAR_VALUES: dict[str, Any] = {
     "window":20,"d":20,"n":20,"m":2,"span":20,"period":20,"periods":4,
     "lag":1,"lags":1,"k":3,"q":0.2,"quantile":0.2,"threshold":0.0,"run":2,
-    "hump":0.02,"min_periods":5,"min_obs":3,"ddof":1,"ann_factor":252,
+    "hump":0.02,"min_periods":5,"min_obs":8,"ddof":1,"ann_factor":252,
     "decimals":2,"to":1.0,"lower":-2.0,"upper":2.0,"eps":1e-8,"epsilon":1e-8,
     "alpha":0.2,"fast":12,"slow":26,"fast_period":12,"slow_period":26,
     "signal_span":9,"signal_window":9,"signal_period":9,"side":"lower",
     "order":"largest","add_intercept":True,"clip":3.0,"limit":3,"max_gap":3,
     "max_periods":3,"max_lookback":60,"power":2.0,"exponent":2.0,"p":0.5,
     "c":1.0,"fraction":0.5,"buckets":5,"top":3,"asc":True,"annualization":252,
-    "annualization_factor":252,"periods_per_year":4,"method":"average",
+    "annualization_factor":252,"periods_per_year":4,"method":"std",
     "interpolation":"linear","center":True,"ascending":True,"inclusive":True,
     "offset":0,"require_consecutive":True,"trim_pct":0.1,"sign_policy":"strict",
-    "denominator":"signed","aggr_func":"sum","lo":-2.0,"hi":2.0,
-    # Production technical-extension controls.
+    "denominator":"signed","aggr_func":"sum","lo":-2.0,"hi":2.0,"a":0.05,
     "left_window":3,"right_window":3,"history_window":40,"points":3,"std_dev":2.0,
 }
 
@@ -57,25 +56,24 @@ SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
     ("group_percentile","p"):0.5,
     ("revision_delta","mode"):"absolute",
     ("period_change","mode"):"absolute",
-    ("period_stability","method"):"mean",
+    ("period_stability","method"):"std",
     ("ts_nth_value","order"):"largest",
     ("MACD_line","signal"):9,
     ("MACD_signal","signal"):9,
     ("MACD_hist","signal"):9,
     ("fillna_const","value"):0.0,
-    ("group_winsorize","lo"):0.05,
-    ("group_winsorize","hi"):0.95,
+    ("group_winsorize","a"):0.05,
     ("winsorize","lower"):0.05,
     ("winsorize","upper"):0.95,
 }
 
 SPECIAL_POSITIONAL: dict[str, tuple[str, ...]] = {
     "cs_multi_resid": ("target","exposure","control"),
-    "cs_neutralize": ("target","exposure","group","weight"),
+    "cs_neutralize": ("target","exposure","control"),
 }
 SPECIAL_KWARGS: dict[str, dict[str, Any]] = {
-    "cs_multi_resid": {"add_intercept": True, "min_obs": 3},
-    "cs_neutralize": {"add_intercept": True, "min_obs": 3},
+    "cs_multi_resid": {"add_intercept": True, "min_obs": 8},
+    "cs_neutralize": {"add_intercept": True, "min_obs": 8},
 }
 
 
@@ -120,7 +118,8 @@ def _panels(rows: int = 96, cols: int = 6) -> dict[str, pd.DataFrame]:
         "fiscal_quarter":quarters,"period_id":quarters,"quarter":quarters,"revision_id":revision,
         "decision_time":decision_time,"available_time":available_time,"available_at":available_time,
         "exposure":market,"exposures":market,"control":control,"controls":control,"factor":market,
-        "target":ret,"sort_col":volume,"value":close,"values":close,"float_shares":float_shares,
+        "target":ret,"sort_col":volume,"value":close,"values":close,"v1":close,"v2":open_,
+        "float_shares":float_shares,
     }
 
 
