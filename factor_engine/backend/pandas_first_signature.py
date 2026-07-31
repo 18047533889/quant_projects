@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-"""Production call validation for backend-independent Pandas-first operators.
+"""Bounded production call validation for single-backend/Extended operators.
 
-The semantic production tier intentionally does not require DuckDB or Polars,
-but it still requires bounded, deterministic call signatures.  This module
-validates the literal/static parameters of the reviewed Pandas-first promotion
-set after the logical plan has been canonicalized.
+Production eligibility is backend-independent, but every public factor call must
+also have a static, deterministic parameter contract.  This validator runs on
+the canonical Plan after aliases/macros have been normalized and therefore
+applies equally to former Research-factor operators promoted to Extended.
 """
 from __future__ import annotations
 
@@ -14,7 +14,35 @@ from typing import Any
 from planner.logical_plan import PlanNode
 
 
-_WINDOW_NAMES = ("window", "d", "n", "span", "period", "periods")
+_WINDOW_NAMES = (
+    "window", "d", "n", "span", "period", "periods", "lookback",
+    "max_lookback", "fast", "slow", "fast_period", "slow_period",
+    "signal_span", "signal_window", "signal_period",
+)
+
+# Names that are factor/panel inputs rather than static tuning parameters.  Some
+# names (notably ``signal`` and ``value``) are canonical-dependent and handled in
+# ``_is_panel_parameter`` below.
+_PANEL_NAMES = frozenset({
+    "x", "y", "z", "a", "b", "w", "g", "left", "right",
+    "numerator", "denominator", "ret", "returns", "benchmark_ret",
+    "market_ret", "benchmark", "market", "open", "high", "low", "close",
+    "price", "volume", "amount", "vwap", "weight", "weights", "condition",
+    "group", "industry", "sector", "fiscal_quarter", "period_id", "quarter",
+    "revision_id", "decision_time", "available_time", "available_at",
+    "exposure", "exposures", "control", "controls", "factor", "target",
+    "mask", "event", "sort_col", "float_shares",
+})
+
+_MACD = frozenset({"MACD_line", "MACD_signal", "MACD_hist"})
+_QUANTILE_Q = frozenset({
+    "ts_quantile", "cs_quantile", "group_percentile", "ts_tail_mean",
+    "tail_beta", "lqtp_historical_cvar",
+})
+_TOPK = frozenset({
+    "ts_topk_sum", "ts_topk_mean", "ts_topk_std",
+    "ts_bottomk_sum", "ts_bottomk_mean", "ts_bottomk_std",
+})
 
 
 def _literal(child: Any) -> Any | None:
@@ -23,21 +51,44 @@ def _literal(child: Any) -> Any | None:
     return (getattr(child, "attrs", None) or {}).get("value")
 
 
-def _static_params(node: PlanNode, canonical: str) -> dict[str, Any]:
-    """Collect literal positional and keyword parameters using registry metadata."""
+def _is_panel_parameter(canonical: str, name: str) -> bool:
+    if name in _PANEL_NAMES:
+        return True
+    if name == "signal":
+        return canonical not in _MACD
+    if name in {"value", "values", "fallback"}:
+        return canonical not in {"fillna_const"}
+    return False
+
+
+def _call_values(node: PlanNode, canonical: str) -> tuple[dict[str, Any], list[str]]:
+    """Collect static literals and flag dynamic tuning parameters.
+
+    Registry ``param_names`` is the canonical public contract.  Static tuning
+    parameters must be literals in Production: a panel-driven window/quantile or
+    mode makes lookback/resource behaviour data-dependent and is not admitted.
+    """
     from cleaned_operators.registry import OperatorRegistry
 
     catalog = OperatorRegistry._catalog.get(canonical, {})
-    names = list(catalog.get("param_names") or [])
+    names = [str(x) for x in (catalog.get("param_names") or []) if str(x) != "..."]
     values: dict[str, Any] = {}
+    dynamic: list[str] = []
     for index, name in enumerate(names):
+        if _is_panel_parameter(canonical, name):
+            continue
         if index >= len(node.inputs):
-            break
-        value = _literal(node.inputs[index])
-        if value is not None:
-            values[str(name)] = value
-    values.update(dict(node.attrs or {}))
-    return values
+            continue
+        child = node.inputs[index]
+        if getattr(child, "op", None) == "literal":
+            values[name] = (getattr(child, "attrs", None) or {}).get("value")
+        else:
+            dynamic.append(name)
+    for name, value in dict(node.attrs or {}).items():
+        if _is_panel_parameter(canonical, str(name)):
+            continue
+        values[str(name)] = value
+    return values, sorted(set(dynamic))
 
 
 def _finite(value: Any) -> bool:
@@ -65,42 +116,88 @@ def _first(values: dict[str, Any], names: tuple[str, ...]) -> Any | None:
     return None
 
 
+def _require_positive_int(canonical: str, values: dict[str, Any], name: str) -> str | None:
+    if name not in values:
+        return None
+    value = _integer(values[name])
+    if value is None or value <= 0:
+        return f"{canonical}: {name} must be a positive integer"
+    return None
+
+
 def validate_pandas_first_call(canonical: str, node: PlanNode) -> tuple[bool, str]:
-    """Validate one promoted call; dynamic panel inputs are validated by runtime DQ."""
+    """Validate one canonical Extended/single-backend production call."""
     from cleaned_operators.production_tiers import PANDAS_FIRST_PRODUCTION_CANONICALS
 
     if canonical not in PANDAS_FIRST_PRODUCTION_CANONICALS:
         return True, ""
 
-    values = _static_params(node, canonical)
-    window_raw = _first(values, _WINDOW_NAMES)
-    window: int | None = None
-    if window_raw is not None:
-        window = _integer(window_raw)
-        if window is None or window <= 0:
-            return False, f"{canonical}: rolling/state window must be a positive integer"
+    values, dynamic = _call_values(node, canonical)
+    if dynamic:
+        return False, f"{canonical}: production tuning parameter(s) must be literal: {', '.join(dynamic)}"
 
+    # Generic positive integer horizons.  ``n`` is deliberately included: all
+    # promoted n-parameters are a period/count, never a panel input.
+    for name in _WINDOW_NAMES:
+        error = _require_positive_int(canonical, values, name)
+        if error:
+            return False, error
+
+    for name in ("min_periods", "min_obs", "run", "buckets", "top", "k"):
+        error = _require_positive_int(canonical, values, name)
+        if error:
+            return False, error
+
+    window_raw = _first(values, ("window", "d", "span", "period"))
+    window = _integer(window_raw) if window_raw is not None else None
     min_periods_raw = values.get("min_periods")
-    if min_periods_raw is not None:
+    if min_periods_raw is not None and window is not None:
         min_periods = _integer(min_periods_raw)
-        if min_periods is None or min_periods <= 0:
-            return False, f"{canonical}: min_periods must be a positive integer"
-        if window is not None and min_periods > window:
+        if min_periods is not None and min_periods > window:
             return False, f"{canonical}: min_periods must be <= window"
 
-    for name in ("q", "quantile", "lower", "upper"):
-        if name in values:
-            if not _finite(values[name]) or not 0.0 <= float(values[name]) <= 1.0:
+    if canonical in _QUANTILE_Q:
+        for name in ("q", "quantile", "p", "fraction"):
+            if name in values and (not _finite(values[name]) or not 0.0 <= float(values[name]) <= 1.0):
                 return False, f"{canonical}: {name} must be in [0, 1]"
 
-    if "k" in values:
+    if canonical in _TOPK and "k" in values and window is not None:
         k = _integer(values["k"])
-        if k is None or k <= 0:
-            return False, f"{canonical}: k must be a positive integer"
-        if canonical == "ts_moment" and k > 8:
-            return False, "ts_moment: production supports moment order k<=8"
-        if canonical == "ts_topk_sum" and window is not None and k > window:
-            return False, "ts_topk_sum: k must be <= window"
+        if k is not None and k > window:
+            return False, f"{canonical}: k must be <= window"
+
+    if canonical == "ts_moment" and "k" in values:
+        k = _integer(values["k"])
+        if k is None or not 1 <= k <= 8:
+            return False, "ts_moment: production supports integer moment order 1..8"
+
+    if canonical == "ts_sma_cn":
+        n = _integer(values.get("n")) if "n" in values else None
+        m = _integer(values.get("m")) if "m" in values else None
+        if n is not None and m is not None and not 0 < m <= n:
+            return False, "ts_sma_cn: require 0 < m <= n"
+
+    if canonical == "digital_count":
+        if "threshold" in values and (not _finite(values["threshold"]) or float(values["threshold"]) < 0):
+            return False, "digital_count: threshold must be finite and non-negative"
+        d = _integer(values.get("d")) if "d" in values else None
+        run = _integer(values.get("run")) if "run" in values else None
+        if d is not None and run is not None and run > d:
+            return False, "digital_count: run must be <= d"
+
+    if canonical == "hump_decay" and "hump" in values:
+        if not _finite(values["hump"]) or float(values["hump"]) < 0:
+            return False, "hump_decay: hump must be finite and non-negative"
+
+    if canonical in _MACD:
+        for name in ("fast", "slow", "signal", "fast_period", "slow_period", "signal_period"):
+            error = _require_positive_int(canonical, values, name)
+            if error:
+                return False, error
+        fast = _integer(_first(values, ("fast", "fast_period")))
+        slow = _integer(_first(values, ("slow", "slow_period")))
+        if fast is not None and slow is not None and fast >= slow:
+            return False, f"{canonical}: fast period must be < slow period"
 
     if "ddof" in values:
         ddof = _integer(values["ddof"])
@@ -112,18 +209,30 @@ def validate_pandas_first_call(canonical: str, node: PlanNode) -> tuple[bool, st
         if decimals is None or abs(decimals) > 12:
             return False, "round: production decimals must be an integer in [-12, 12]"
 
-    if "to" in values and not _finite(values["to"]):
-        return False, "scale: to must be finite"
-
     if "add_intercept" in values and not isinstance(values["add_intercept"], bool):
         return False, f"{canonical}: add_intercept must be boolean"
 
-    # All other literal numeric tuning parameters must at least be finite. This
-    # catches NaN/Inf configuration leaks without guessing a narrower semantic
-    # domain that the operator contract has not declared.
+    if canonical == "clip":
+        lo, hi = values.get("lo"), values.get("hi")
+        if lo is not None and hi is not None:
+            if not (_finite(lo) and _finite(hi) and float(lo) <= float(hi)):
+                return False, "clip: require finite lo <= hi"
+
+    if canonical in {"group_winsorize", "winsorize"}:
+        lo = values.get("lo", values.get("lower"))
+        hi = values.get("hi", values.get("upper"))
+        if lo is not None and hi is not None:
+            if not (_finite(lo) and _finite(hi) and 0.0 <= float(lo) < float(hi) <= 1.0):
+                return False, f"{canonical}: winsor bounds must satisfy 0 <= lower < upper <= 1"
+
+    if "side" in values and str(values["side"]).lower() not in {"lower", "upper", "left", "right"}:
+        return False, f"{canonical}: unsupported side={values['side']!r}"
+    if "order" in values and str(values["order"]).lower() not in {"largest", "smallest", "asc", "desc"}:
+        return False, f"{canonical}: unsupported order={values['order']!r}"
+
+    # Any remaining literal numeric tuning parameter must be finite.  This does
+    # not invent an unsupported narrow domain, but it blocks NaN/Inf config leaks.
     for name, value in values.items():
-        if name in {"null_policy", "nan_policy", "zero_std_policy"}:
-            continue
         if isinstance(value, (int, float)) and not isinstance(value, bool) and not _finite(value):
             return False, f"{canonical}: {name} must be finite"
 
