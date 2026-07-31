@@ -1,14 +1,9 @@
 # -*- coding: utf-8 -*-
 """LQTP/JQ formula compatibility shell.
 
-Compatibility is intentionally implemented above the canonical operator layer.
-Different external spellings resolve to one canonical ``CleanedCall`` and
-therefore one IR/DAG/runtime implementation.  A compatibility name never
-creates a duplicate numerical kernel.
-
-The module also performs one narrowly-scoped legacy template rewrite: a bare
-``true_range`` token means ``true_range(high, low, close)``.  Calls already
-written as ``true_range(...)`` are left untouched.
+External spellings resolve to canonical ``CleanedCall`` nodes; no compatibility
+name owns a second numerical kernel.  Rules that are not proven equivalent are
+kept explicit instead of being guessed.
 """
 from __future__ import annotations
 
@@ -19,24 +14,21 @@ from typing import Any, Callable
 
 
 class LQTPCompatibilityError(ValueError):
-    """Base error for an LQTP compatibility rule that cannot be normalized."""
+    """A compatibility rule cannot be normalized without changing semantics."""
 
 
 class LQTPDataDependencyError(LQTPCompatibilityError):
-    """Formula requires a logical source/derived field not available as a bar column."""
+    """Formula requires a logical source/derived field, not a daily-bar column."""
 
 
 def _factory(canonical: str) -> Callable[..., Any]:
     from api.cleaned_ops import make_cleaned_call_factory
-
     return make_cleaned_call_factory(canonical)
 
 
 def _sma_dispatch(*args: Any, **kwargs: Any):
-    """Dispatch LQTP/JQ ``sma`` by arity without conflating two semantics."""
+    """Dispatch simple two-argument SMA and Chinese/JQ recursive three-argument SMA."""
     if kwargs:
-        # Named forms are kept explicit to avoid silently guessing whether n/m
-        # were intended as a simple or recursive average.
         if set(kwargs) <= {"window"} and len(args) == 1:
             return _factory("ts_mean")(*args, **kwargs)
         if set(kwargs) <= {"n", "m"} and len(args) == 1 and {"n", "m"} <= set(kwargs):
@@ -53,18 +45,34 @@ def _sma_dispatch(*args: Any, **kwargs: Any):
     )
 
 
-# Exact spelling/semantic compatibility.  Every value is a canonical runtime;
-# no duplicated operator implementation is created here.
+# Only source-supported equivalences belong here.
 _EXACT_COMPAT: dict[str, str] = {
     "decay_linear": "ts_decay_linear",
     "safe_log": "safe_log_null",
     "ts_rank_pct": "ts_rank",
     "ts_ewm_mean": "ts_ema",
-    "ts_regression_slope_sequence": "ts_time_slope",
     "ts_expanding_rank": "expanding_rank",
     "ts_hump_decay": "hump_decay",
     "fp_beta": "rolling_beta_to_market",
 }
+
+# The supplied LQTP material names these functions but does not define their
+# exact semantics.  Rejecting them explicitly is safer than silently mapping to
+# a superficially similar operator and materializing wrong factor values.
+_AMBIGUOUS_EXTERNAL_NAMES: frozenset[str] = frozenset({
+    "ts_regression_slope_sequence",
+    "ts_sumac",
+})
+
+
+def _ambiguous_dispatch(name: str) -> Callable[..., Any]:
+    def _raise(*args: Any, **kwargs: Any):
+        raise LQTPCompatibilityError(
+            f"{name} is present in the LQTP corpus but its exact semantic definition "
+            "is not supplied; add a versioned dialect rule before execution"
+        )
+    _raise.__name__ = name
+    return _raise
 
 
 def augment_dsl_allowlist(
@@ -85,11 +93,9 @@ def augment_dsl_allowlist(
     for external, canonical in _EXACT_COMPAT.items():
         if OperatorRegistry.get(canonical) is not None:
             out.setdefault(external, _factory(canonical))
+    for name in _AMBIGUOUS_EXTERNAL_NAMES:
+        out.setdefault(name, _ambiguous_dispatch(name))
 
-    # Make the canonical itself and all known aliases visible for the LQTP
-    # corpus even when the operator lifecycle is extended/research.  This is a
-    # parse capability only; production mode independently rejects unapproved
-    # operators at the plan gate.
     for canonical in sorted(LQTP_COMPAT_PARSE_CANONICALS):
         if OperatorRegistry.get(canonical) is None:
             continue
@@ -101,16 +107,20 @@ def augment_dsl_allowlist(
 
 
 def normalize_lqtp_formula(text: str) -> str:
-    """Normalize legacy LQTP formula tokens before the restricted AST parser."""
+    """Normalize only source-proven legacy templates before restricted AST parsing.
+
+    A bare ``true_range`` token is the LQTP template for
+    ``true_range(high, low, close)``.  Token-pair untokenizing intentionally
+    discards source positions so replacement tokens cannot create invalid
+    overlapping offsets.
+    """
     source = str(text or "")
     if not source.strip():
         return source
 
     tokens = list(tokenize.generate_tokens(io.StringIO(source).readline))
-    rewritten: list[tokenize.TokenInfo] = []
-    i = 0
-    while i < len(tokens):
-        current = tokens[i]
+    pairs: list[tuple[int, str]] = []
+    for i, current in enumerate(tokens):
         if current.type == token.NAME and current.string == "true_range":
             j = i + 1
             while j < len(tokens) and tokens[j].type in {
@@ -122,16 +132,20 @@ def normalize_lqtp_formula(text: str) -> str:
                 j += 1
             is_call = j < len(tokens) and tokens[j].string == "("
             if not is_call:
-                replacement = tokenize.generate_tokens(
-                    io.StringIO("true_range(high, low, close)").readline
-                )
-                repl = [t for t in replacement if t.type not in {tokenize.ENDMARKER}]
-                rewritten.extend(repl)
-                i += 1
+                pairs.extend([
+                    (token.NAME, "true_range"),
+                    (token.OP, "("),
+                    (token.NAME, "high"),
+                    (token.OP, ","),
+                    (token.NAME, "low"),
+                    (token.OP, ","),
+                    (token.NAME, "close"),
+                    (token.OP, ")"),
+                ])
                 continue
-        rewritten.append(current)
-        i += 1
+        if current.type != tokenize.ENDMARKER:
+            pairs.append((current.type, current.string))
     try:
-        return tokenize.untokenize(rewritten)
-    except Exception as exc:  # pragma: no cover - tokenizer defensive path
+        return tokenize.untokenize(pairs)
+    except Exception as exc:  # pragma: no cover
         raise LQTPCompatibilityError(f"failed to normalize LQTP formula: {source}") from exc
