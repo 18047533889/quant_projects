@@ -1,19 +1,16 @@
 # -*- coding: utf-8 -*-
-"""LQTP-specific compatibility primitives with explicit canonical semantics.
-
-Only operators whose semantics cannot be expressed as a plain alias live here.
-Simple spelling compatibility belongs in ``api.lqtp_compat`` / ``_aliases``.
+"""LQTP-specific compatibility primitives that cannot be represented as aliases/macros.
 
 The three-argument Chinese/JQ-style SMA is intentionally a separate canonical
-operator.  It must never be aliased to ``ts_mean`` because its recurrence is
+operator. It must never be aliased to ``ts_mean`` because its recurrence is
 stateful::
 
     y_t = (m * x_t + (n - m) * y_{t-1}) / n
 
-The first finite observation seeds the recurrence.  A missing input produces a
-missing output and leaves the previous state unchanged.  This is causal but is
-not admitted to production until a checkpoint contract is attached for true
-segmented/incremental execution.
+The first finite observation seeds the recurrence. A missing input produces a
+missing output and leaves the previous state unchanged. This is causal but
+remains research-only until a checkpoint contract proves segmented/incremental
+execution parity.
 """
 from __future__ import annotations
 
@@ -21,36 +18,6 @@ import numpy as np
 import pandas as pd
 
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
-
-
-@register_operator(
-    name="safe_log_null",
-    category="elementwise_math",
-    business_category="data_cleaning",
-    canonical="safe_log_null",
-    source="lqtp_compat",
-    backend="pandas_numpy",
-)
-class SafeLogNull(SeriesOperator):
-    """Natural log with NULL/NaN output for non-positive or non-finite input."""
-
-    metadata = OperatorMetadata(
-        name="safe_log_null",
-        category="elementwise_math",
-        description="log(x) for finite x>0; otherwise NaN",
-        examples=["safe_log(close)"],
-        param_names=["x"],
-        return_type="series",
-        tags=["pit_safe", "causal", "safe_log", "lqtp_compat"],
-    )
-
-    def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        arr = x.astype(float)
-        valid = np.isfinite(arr.to_numpy(dtype=float, copy=False)) & (arr.to_numpy(dtype=float, copy=False) > 0)
-        out = np.full(arr.shape, np.nan, dtype=float)
-        values = arr.to_numpy(dtype=float, copy=False)
-        out[valid] = np.log(values[valid])
-        return pd.DataFrame(out, index=x.index, columns=x.columns)
 
 
 @register_operator(
