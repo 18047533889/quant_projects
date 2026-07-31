@@ -30,8 +30,6 @@ _LOAD_MODULES = (
     "cleaned_operators.common.gtja_compat",
     "cleaned_operators.common.scalar_compare",
     "cleaned_operators.common.scalar_where",
-    # Compatibility primitives are loaded before governance so they receive the
-    # same registry, PIT and lifecycle audit as every native operator.
     "cleaned_operators.lqtp_compat",
     "cleaned_operators.common.polars_ops",
     "cleaned_operators.common.group_polars",
@@ -70,42 +68,43 @@ def load_all() -> None:
         if OperatorRegistry.lifecycle() == "frozen":
             return
         from cleaned_operators.registry import RegistryInitializationError
-
         raise RegistryInitializationError(
             f"loaded registry is unexpectedly {OperatorRegistry.lifecycle()!r}"
         )
     if OperatorRegistry.lifecycle() != "building":
         from cleaned_operators.registry import RegistryInitializationError
-
         raise RegistryInitializationError(
             f"unloaded registry cannot initialize from {OperatorRegistry.lifecycle()!r}"
         )
+
     for mod in _LOAD_MODULES:
         __import__(mod, fromlist=["*"])
-    from cleaned_operators._dedupe import apply_operator_deduplication
 
+    from cleaned_operators._dedupe import apply_operator_deduplication
     apply_operator_deduplication()
 
     from cleaned_operators.operator_overhaul import finalize_operator_overhaul
-
     finalize_operator_overhaul()
 
-    # Keep factor-shaped research operators executable on the research DSL
-    # before layer governance migrates diagnostics-only utilities away.
-    from cleaned_operators.research_factor_enable import enable_research_factor_runtime
+    # Compatibility operators need explicit PIT/scope contracts before layer
+    # governance enriches the catalog and computes lifecycle metadata.
+    from cleaned_operators.lqtp_policy_patch import apply_lqtp_policy_patch
+    apply_lqtp_policy_patch()
 
+    # Factor-shaped research operators remain executable under the research DSL;
+    # diagnostics-only utilities are still migrated into ResearchToolRegistry.
+    from cleaned_operators.research_factor_enable import enable_research_factor_runtime
     enable_research_factor_runtime()
 
     from cleaned_operators.layer_governance import finalize_layer_governance
-
     finalize_layer_governance()
 
     from cleaned_operators.layer_governance_post import apply_post_governance
-
     apply_post_governance()
-    from backend.sql_pushdown.sql_registry import register_sql_backends
 
+    from backend.sql_pushdown.sql_registry import register_sql_backends
     register_sql_backends()
+
     OperatorRegistry.finalize()
     OperatorRegistry.freeze()
     _LOADED = True
