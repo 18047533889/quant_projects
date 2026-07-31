@@ -1,0 +1,82 @@
+name: FactorEngine V2 Operator Contract
+
+on:
+  pull_request:
+    paths:
+      - 'factor_engine/cleaned_operators/price_volume/**'
+      - 'factor_engine/cleaned_operators/technical/**'
+      - 'factor_engine/cleaned_operators/fundamental/**'
+      - 'factor_engine/api/intraday_daily.py'
+      - 'factor_engine/api/technical_macros_v2.py'
+      - 'factor_engine/storage/sources/intraday_*'
+      - 'factor_engine/ir/analyzer.py'
+      - 'factor_engine/backend/pandas_first_signature.py'
+      - 'factor_engine/factor_recipes/**'
+      - 'factor_cold_start/**'
+      - '.github/workflows/factorengine-v2-operator-contract.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'factor_engine/**'
+      - 'factor_cold_start/**'
+
+jobs:
+  v2-contract:
+    runs-on: ubuntu-24.04
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/gtja191
+      FACTOR_ENGINE_DISABLE_NUMBA: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -e ./dataaccess
+          python -m pip install pytest pyyaml
+      - name: Compile v2 modules
+        run: |
+          python -m compileall -q \
+            factor_engine/cleaned_operators/price_volume \
+            factor_engine/cleaned_operators/technical \
+            factor_engine/cleaned_operators/fundamental \
+            factor_engine/api \
+            factor_engine/storage/sources \
+            factor_engine/factor_recipes \
+            factor_cold_start
+      - name: Test v2 numerical and PIT contracts
+        run: |
+          pytest -q \
+            factor_engine/tests/operators/test_v2_operator_expansion.py \
+            factor_engine/tests/operators/test_v2_macro_and_intraday_dsl.py \
+            factor_engine/tests/operators/test_recipe_production_admission_v2.py
+      - name: Audit all factor-shaped runtimes
+        run: python factor_engine/scripts/audit_all_factor_production.py --runtime-only
+      - name: Verify public surface classification and cold-start coverage
+        run: |
+          python factor_cold_start/scripts/report_coverage.py
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from cleaned_operators import load_all
+          from cleaned_operators.registry import OperatorRegistry
+          from cleaned_operators.operator_surface import unclassified_canonicals, RESEARCH_ONLY_CANONICALS
+          load_all()
+          unclassified=unclassified_canonicals(OperatorRegistry.list_canonical())
+          if unclassified:
+              raise SystemExit(f'unclassified canonicals: {unclassified}')
+          if RESEARCH_ONLY_CANONICALS:
+              raise SystemExit(f'factor-shaped Research surface must remain empty: {sorted(RESEARCH_ONLY_CANONICALS)}')
+          report=json.loads(Path('factor_cold_start/reports/coverage.json').read_text())
+          for key,row in report['catalogs'].items():
+              if key.endswith('_extended') and row['eligible_operator_coverage_pct'] != 100.0:
+                  raise SystemExit(f"{key}: missing={row['missing_eligible_operators']}")
+          PY
+      - name: Verify refactor policy file is parseable
+        run: python -m json.tool factor_engine/docs/operator_refactor_v2.json >/dev/null
