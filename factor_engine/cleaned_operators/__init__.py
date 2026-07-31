@@ -29,6 +29,7 @@ _LOAD_MODULES = (
     "cleaned_operators.common.daily_panel",
     "cleaned_operators.common.gtja_compat",
     "cleaned_operators.common.scalar_compare",
+    "cleaned_operators.common.scalar_where",
     # Compatibility primitives are loaded before governance so they receive the
     # same registry, PIT and lifecycle audit as every native operator.
     "cleaned_operators.lqtp_compat",
