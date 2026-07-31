@@ -3,8 +3,8 @@
 The generated base catalogs remain deterministic and regenerable. Small
 supplemental production catalogs are merged at load time for newly hardened
 operators whose seeds should not disappear when the large base library is
-regenerated. Reviewed technical-extension seeds are code-generated from one
-market-neutral specification so A-share and US coverage cannot drift apart.
+regenerated. Reviewed technical/candlestick extension seeds are code-generated
+from market-neutral specifications so A-share and US coverage cannot drift.
 """
 from __future__ import annotations
 
@@ -18,9 +18,6 @@ from .model import ColdStartFactor, ensure_unique
 PACKAGE_ROOT = Path(__file__).resolve().parent
 CATALOG_ROOT = PACKAGE_ROOT / "catalogs"
 
-# These historical canonical spellings are deliberately migrated out of the
-# primitive registry by layer_governance and owned by FactorRecipeRegistry.
-# Do not create primitive cold-start seeds that look callable after migration.
 _RECIPE_OWNED_TA_CANONICALS = frozenset({
     "AROON", "AROON_up", "AROON_down", "CCI",
     "StochasticK", "StochasticD", "WilliamsR",
@@ -58,14 +55,13 @@ def load_catalog(market: str, surface: str = "daily") -> tuple[ColdStartFactor, 
 
     if surface == "extended":
         from .technical_extension_seeds import technical_extension_seeds
+        from .candle_pattern_seeds import candle_pattern_seeds
         rows.extend(
             seed for seed in technical_extension_seeds(market)
             if not (_RECIPE_OWNED_TA_CANONICALS & set(seed.operators))
         )
+        rows.extend(candle_pattern_seeds(market))
 
-    # ensure_unique catches duplicate IDs and structural formula duplicates across
-    # generated, committed-production and technical-extension layers. Coverage
-    # therefore cannot be inflated by aliases or repeated formulas.
     return ensure_unique(rows)
 
 
