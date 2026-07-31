@@ -44,7 +44,6 @@ _LOAD_MODULES = (
     "cleaned_operators.common.polars_daily_native",
     "cleaned_operators.research_polars",
     "cleaned_operators.price_volume.ops",
-    "cleaned_operators.price_volume.technical_extensions",
     "cleaned_operators.price_volume.polars_price_volume",
     "cleaned_operators.technical.signal",
     "cleaned_operators.technical.polars_signal",
@@ -100,9 +99,12 @@ def load_all() -> None:
 
     # Late, explicit replacement of legacy compatibility kernels that failed the
     # production causality/contract audit. Registration replaces only the chosen
-    # Pandas physical implementation while preserving the canonical identity,
-    # aliases and downstream governance metadata.
+    # Pandas physical implementation while preserving canonical identity.
     __import__("cleaned_operators.production_repairs", fromlist=["*"])
+
+    # Reviewed price-structure/volume/volatility/candle extensions register late
+    # so legacy TA implementations cannot overwrite their production semantics.
+    __import__("cleaned_operators.price_volume.technical_extensions", fromlist=["*"])
 
     from cleaned_operators.production_hardening import apply_production_hardening
     apply_production_hardening()
