@@ -2,10 +2,10 @@
 """Reviewed, fail-closed operator authoring surfaces.
 
 Surfaces answer *where an operator is visible for authoring*; they are not a
-backend portability certificate.  Production admission is evaluated separately
-from backend capability.  An extended operator may therefore be production
-safe on a certified Pandas/NumPy runtime without being forced to implement
-Polars and DuckDB as well.
+backend portability certificate. Production admission is evaluated separately
+from backend capability. An extended/research operator may therefore be
+production safe on a certified Pandas/NumPy runtime without being forced to
+implement Polars and DuckDB as well.
 """
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ EXTENDED_ONLY_CANONICALS: frozenset[str] = frozenset({
     "group_percentile", "group_weighted_mean", "group_weighted_zscore",
     "is_nan", "lerp", "log10", "log2", "period_lag", "period_stability",
     "price_spread_deviation", "real_turnover_rate", "revision_delta", "round", "scale",
-    "safe_log_null", "saturate", "sec", "sigmoid", "signed_power", "sin", "sinh",
+    "saturate", "sec", "sigmoid", "signed_power", "sin", "sinh",
     "sqrt_abs", "square", "tan", "true_range", "truncate", "ts_argmax",
     "ts_argmin", "ts_bottomk_mean", "ts_bottomk_std", "ts_bottomk_sum",
     "ts_count_if", "ts_days_since", "ts_decay_exp_window", "ts_decay_linear",
@@ -99,7 +99,6 @@ def classify_canonical(canonical: str) -> str:
 
 
 def is_dsl_name_allowed(name: str, canonical: str, *, surface: OperatorSurface = "daily") -> bool:
-    """Return whether a registry name is visible on the requested surface."""
     if surface == "all":
         return True
     category = classify_canonical(canonical)
@@ -121,12 +120,10 @@ def is_dsl_name_allowed(name: str, canonical: str, *, surface: OperatorSurface =
 
 
 def unclassified_canonicals(canonicals: Iterable[str]) -> tuple[str, ...]:
-    """Return runtime canonicals that have not passed surface review."""
     return tuple(sorted(c for c in canonicals if classify_canonical(c) == "unclassified"))
 
 
 def surface_summary(canonicals: Iterable[str]) -> dict[str, int]:
-    """Count canonical operators by reviewed surface."""
     out = {name: 0 for name in (
         "daily", "extended", "research", "unsafe", "legacy", "internal", "unclassified"
     )}
