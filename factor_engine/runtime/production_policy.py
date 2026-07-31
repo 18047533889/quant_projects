@@ -1,13 +1,9 @@
 """Production 硬策略：research 宽松 / production 强制门禁。
 
-本模块定义 ``resolve_run_mode`` / ``is_production_mode`` 及一系列断言函数，
-在 compile / run / execute 各阶段 enforce production 约束，包括：
-
-- 显式列选择（禁止 SELECT *）
-- 强制 input_dq / auto_warmup / PIT
-- 禁止 stub 算子与非 production 算子
-- 可选 fast path 门禁（``FACTOR_ENGINE_PRODUCTION_REQUIRE_FASTPATH``）
-- Polars→pandas 回退记录与严格模式拦截
+Production safety is evaluated on the canonical logical plan. Backend
+portability is a separate capability: a reviewed operator may run production on
+Pandas/NumPy even when DuckDB/Polars are unsupported, but its parameters, PIT
+contract and shape contract must still pass fail-closed validation.
 """
 
 from __future__ import annotations
@@ -23,16 +19,11 @@ class ProductionPolicyViolation(ValueError):
 
 
 def _truthy_env(name: str) -> bool:
-    """判断环境变量是否为真值（``1``/``true``/``yes``/``on``，忽略大小写）。"""
     return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def resolve_run_mode(mode: str | None = None) -> str:
-    """解析运行模式为 ``research`` 或 ``production``。
-
-    优先级：显式 ``mode`` 参数 > ``FACTOR_ENGINE_RUN_MODE`` >
-    ``QUANT_PRODUCTION_MODE`` 环境变量 > 默认 ``research``。
-    """
+    """解析运行模式为 ``research`` 或 ``production``。"""
     if mode is not None and str(mode).strip():
         return str(mode).lower()
     fe = os.environ.get("FACTOR_ENGINE_RUN_MODE", "").strip().lower()
@@ -46,7 +37,6 @@ def resolve_run_mode(mode: str | None = None) -> str:
 
 
 def is_production_mode(mode: str | None = None) -> bool:
-    """当前是否为 production 模式。"""
     return resolve_run_mode(mode) == PRODUCTION_MODE
 
 
@@ -56,7 +46,6 @@ def assert_columns_explicit(
     mode: str | None = None,
     context: str = "read",
 ) -> None:
-    """production 禁止 SELECT * / 空列列表。"""
     if not is_production_mode(mode):
         return
     if columns is None:
@@ -78,7 +67,6 @@ def assert_production_run_flags(
     pit_enforce: bool = False,
     context: str = "run",
 ) -> None:
-    """production 强制 input_dq / auto_warmup / PIT。"""
     if not is_production_mode(mode):
         return
     missing: list[str] = []
@@ -95,7 +83,6 @@ def assert_production_run_flags(
 
 
 def assert_no_stub_operators(plan: Any, *, mode: str | None = None) -> None:
-    """production 禁止 ``*_stub`` 占位算子。"""
     if not is_production_mode(mode):
         return
     stub_ops: list[str] = []
@@ -123,7 +110,7 @@ def record_production_pandas_fallback(
     actual_backend: str,
     mode: str | None = None,
 ) -> None:
-    """production 下 Polars 热路径回退 pandas 时记录/告警。"""
+    """仅记录真正的 fallback；cost-aware 直接选择 Pandas 不算 fallback。"""
     if mode is None:
         mode = getattr(ctx, "run_mode", None)
     if not is_production_mode(mode):
@@ -153,20 +140,21 @@ def assert_production_plan_ops(
     mode: str | None = None,
     context: str = "compile",
 ) -> None:
-    """production 模式：逻辑计划中的算子须 ``allow_in_production``。"""
+    """Production plan gate: semantic admission + bounded promoted signatures."""
     if not is_production_mode(mode):
         return
     from cleaned_operators.operator_spec import check_production_plan_ops
+    from backend.pandas_first_signature import check_pandas_first_plan_signatures
 
     violations = check_production_plan_ops(plan)
+    violations.extend(check_pandas_first_plan_signatures(plan))
     if violations:
         raise ProductionPolicyViolation(
-            f"production 模式 {context} 含非 production 算子: {'; '.join(violations)}"
+            f"production 模式 {context} 含非 production/未认证调用: {'; '.join(violations)}"
         )
 
 
 def _fastpath_gate_enabled() -> bool:
-    """是否启用 production fast path 强制门禁。"""
     return _truthy_env("FACTOR_ENGINE_PRODUCTION_REQUIRE_FASTPATH")
 
 
@@ -176,7 +164,6 @@ def assert_production_fastpath_plan(
     mode: str | None = None,
     context: str = "compile",
 ) -> None:
-    """production + ``FACTOR_ENGINE_PRODUCTION_REQUIRE_FASTPATH=1``：须可走 fast path。"""
     if not is_production_mode(mode) or not _fastpath_gate_enabled():
         return
     from backend.production_fastpath_gate import check_production_fastpath_plan_ops, fastpath_gate_strict
@@ -196,7 +183,6 @@ def assert_production_fastpath_runtime(
     mode: str | None = None,
     context: str = "execute",
 ) -> None:
-    """production fastpath：执行后不得发生 fallback / 非 native tier。"""
     if not is_production_mode(mode) or not _fastpath_gate_enabled():
         return
     from backend.production_fastpath_gate import audit_runtime_fastpath_violations
@@ -215,7 +201,6 @@ def assert_no_unapproved_map_groups_in_production(
     mode: str | None = None,
     context: str = "compile",
 ) -> None:
-    """production 默认禁止 map_groups（除非在批准白名单）。"""
     if not is_production_mode(mode):
         return
     from backend.polars_long_policy import infer_polars_long_tier
@@ -243,7 +228,6 @@ def assert_no_unapproved_map_groups_in_production(
 
 
 def record_production_fastpath_check(ctx: Any, plan: Any, *, mode: str | None = None) -> None:
-    """记录 fast path 检查结果到 runtime_stats（不强制）。"""
     from backend.production_fastpath_gate import check_production_fastpath_plan_ops, fastpath_gate_strict
 
     result = check_production_fastpath_plan_ops(
@@ -262,21 +246,27 @@ def assert_production_factors(
     mode: str | None = None,
     context: str = "run",
 ) -> None:
-    """production 模式：因子 DSL / source_expr 须通过 production 校验。"""
+    """Production preflight validates restricted syntax; canonical plan owns admission.
+
+    Macro/alias compatibility cannot be judged correctly from raw AST function
+    names (for example ``safe_log`` expands to already-certified primitives), so
+    this stage only checks that the LQTP-compatible restricted parser accepts the
+    source. The subsequent compile gate validates the canonical optimized plan.
+    """
     if not is_production_mode(mode):
         return
-    from api.mining_integration import validate_production_dsl
+    from api.mining_integration import validate_factor_engine_dsl
 
     violations: list[str] = []
     for factor in factors:
         src = getattr(factor, "source_expr", None)
         if src:
-            ok, msg = validate_production_dsl(str(src))
+            ok, msg = validate_factor_engine_dsl(str(src), surface="lqtp")
             if not ok:
                 violations.append(f"{getattr(factor, 'name', '?')}: {msg}")
     if violations:
         raise ProductionPolicyViolation(
-            f"production 模式 {context} DSL 校验失败: {'; '.join(violations)}"
+            f"production 模式 {context} DSL 语法/兼容校验失败: {'; '.join(violations)}"
         )
 
 
@@ -286,7 +276,6 @@ def assert_no_production_pandas_fallbacks(
     mode: str | None = None,
     context: str = "execute",
 ) -> None:
-    """Production rejects fallbacks unless the context explicitly permits warnings."""
     if mode is None:
         mode = getattr(ctx, "run_mode", None)
     if not is_production_mode(mode):
@@ -302,14 +291,12 @@ def assert_no_production_pandas_fallbacks(
 
 
 def summarize_pandas_fallbacks(ctx: Any) -> list[dict[str, str]]:
-    """汇总 production 运行中的 Polars→pandas 回退记录（供报表 / 监控）。"""
     runtime = getattr(ctx, "runtime_stats", None) or {}
     raw = runtime.get("production_pandas_fallbacks") or []
     return [dict(x) for x in raw if isinstance(x, dict)]
 
 
 def format_pandas_fallback_report(fallbacks: Iterable[dict[str, str]]) -> str:
-    """将 fallback 列表格式化为单行摘要（日志 / 批跑报表）。"""
     items = [dict(x) for x in fallbacks if isinstance(x, dict)]
     if not items:
         return ""

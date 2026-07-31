@@ -1,6 +1,6 @@
 {
   "schema_version": "research_tool_manifest.v1",
-  "tool_count": 139,
+  "tool_count": 135,
   "tools": {
     "ACF": {
       "aliases": [
@@ -997,28 +997,6 @@
       "status": "implemented",
       "surface": "research_tools"
     },
-    "expanding_rank": {
-      "aliases": [
-        "cum_rank"
-      ],
-      "backend_meta": {
-        "pandas_numpy": {
-          "explicit": false,
-          "source": "factor_dsl_np"
-        }
-      },
-      "backends": [
-        "pandas_numpy"
-      ],
-      "canonical": "expanding_rank",
-      "description": "扩展窗口排名（当前值在历史中的百分位排名）",
-      "migration_reason": "not a production daily factor primitive",
-      "param_names": [
-        "x"
-      ],
-      "status": "implemented",
-      "surface": "research_tools"
-    },
     "expanding_std": {
       "aliases": [
         "cum_std"
@@ -1453,49 +1431,6 @@
         "x"
       ],
       "status": "implemented",
-      "surface": "research_tools"
-    },
-    "hump_decay": {
-      "aliases": [],
-      "backend_meta": {
-        "pandas_numpy": {
-          "explicit": false,
-          "source": "factor_dsl_np"
-        }
-      },
-      "backends": [
-        "pandas_numpy"
-      ],
-      "canonical": "hump_decay",
-      "description": "阈值衰减：仅当变化量绝对值超过hump时才更新值",
-      "migration_reason": "not a production daily factor primitive",
-      "param_names": [
-        "x",
-        "hump"
-      ],
-      "status": "implemented",
-      "surface": "research_tools"
-    },
-    "idio_vol": {
-      "aliases": [],
-      "backend_meta": {
-        "pandas_numpy": {
-          "explicit": false,
-          "source": "factor_dsl_np"
-        }
-      },
-      "backends": [
-        "pandas_numpy"
-      ],
-      "canonical": "idio_vol",
-      "description": "特质波动率：CAPM 残差滚动标准差",
-      "migration_reason": "not a production daily factor primitive",
-      "param_names": [
-        "ret",
-        "benchmark_ret",
-        "window"
-      ],
-      "status": "experimental",
       "surface": "research_tools"
     },
     "ifft": {
@@ -2644,32 +2579,6 @@
         "y",
         "x",
         "window"
-      ],
-      "status": "implemented",
-      "surface": "research_tools"
-    },
-    "rank_corr": {
-      "aliases": [
-        "RANKCORR",
-        "RANK_CORR",
-        "rankcorr"
-      ],
-      "backend_meta": {
-        "pandas_numpy": {
-          "explicit": false,
-          "source": "factor_dsl_np"
-        }
-      },
-      "backends": [
-        "pandas_numpy"
-      ],
-      "canonical": "rank_corr",
-      "description": "秩相关系数",
-      "migration_reason": "not a production daily factor primitive",
-      "param_names": [
-        "x",
-        "y",
-        "d"
       ],
       "status": "implemented",
       "surface": "research_tools"

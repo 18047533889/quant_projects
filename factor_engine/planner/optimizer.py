@@ -1,4 +1,4 @@
-"""逻辑计划轻量优化：常量折叠与 fastpath 友好改写。"""
+"""逻辑计划轻量优化：常量折叠、composite lowering 与 fastpath 改写。"""
 
 from __future__ import annotations
 
@@ -6,46 +6,39 @@ from .logical_plan import PlanNode
 
 
 class Optimizer:
-    """轻量计划优化：常量折叠与可选的语义保持 fastpath 改写。"""
+    """轻量计划优化；最终输出保证 canonical op/parameter spelling。"""
 
     def __init__(self, *, allow_semantic_rewrites: bool = False) -> None:
-        """创建优化器；默认不改变 divide/group_mean 的边界语义。"""
         self.allow_semantic_rewrites = bool(allow_semantic_rewrites)
 
     def optimize(self, plan: PlanNode, *, production: bool = False) -> PlanNode:
-        """对逻辑计划执行优化流水线。
-
-        参数：
-            plan: 未经优化的逻辑计划根节点
-
-        返回：
-            常量折叠并完成 fastpath 改写后的计划根节点
-        """
         folded = self._fold_literals(plan)
         from planner.composite_lowering import lower_composite_operators
         from planner.rewrite_fastpath import rewrite_plan_for_fastpath
+        from planner.canonicalize_params import canonicalize_plan_parameters
 
         lowered = lower_composite_operators(folded)
         refolded = self._fold_literals(lowered)
-        return rewrite_plan_for_fastpath(
+        rewritten = rewrite_plan_for_fastpath(
             refolded,
             allow_semantic_rewrites=(self.allow_semantic_rewrites and not production),
         )
+        return canonicalize_plan_parameters(rewritten)
 
     def lower_only(self, plan: PlanNode) -> PlanNode:
-        """仅 composite lowering + 常量折叠（不含 fastpath rewrite）。"""
         from planner.composite_lowering import lower_composite_operators
+        from planner.canonicalize_params import canonicalize_plan_parameters
 
         folded = self._fold_literals(plan)
         lowered = lower_composite_operators(folded)
-        return self._fold_literals(lowered)
+        return canonicalize_plan_parameters(self._fold_literals(lowered))
 
     def optimize_with_trace(
         self, plan: PlanNode, *, production: bool = False
     ) -> tuple[PlanNode, PlanNode, tuple[tuple[str, tuple[str, ...]], ...]]:
-        """返回 ``(optimized_plan, pre_lowering_plan, lowering_trace)``。"""
         from planner.composite_lowering import build_lowering_trace, lower_composite_operators
         from planner.rewrite_fastpath import rewrite_plan_for_fastpath
+        from planner.canonicalize_params import canonicalize_plan_parameters
 
         folded = self._fold_literals(plan)
         lowered = lower_composite_operators(folded)
@@ -54,11 +47,11 @@ class Optimizer:
             refolded,
             allow_semantic_rewrites=(self.allow_semantic_rewrites and not production),
         )
+        final = canonicalize_plan_parameters(final)
         trace = build_lowering_trace(folded, refolded)
         return final, folded, trace
 
     def _fold_literals(self, node: PlanNode) -> PlanNode:
-        """自底向上折叠二元/多元算术字面量子表达式。"""
         inputs = [self._fold_literals(c) for c in node.inputs]
         n = PlanNode(
             op=node.op,
@@ -70,7 +63,7 @@ class Optimizer:
             a, b = inputs
             if a.op == "literal" and b.op == "literal":
                 va, vb = float(a.attrs["value"]), float(b.attrs["value"])
-                if n.op in ("add",):
+                if n.op == "add":
                     out = va + vb
                 elif n.op in ("subtract", "sub"):
                     out = va - vb
@@ -82,8 +75,11 @@ class Optimizer:
                     out = va / vb
                 return PlanNode(op="literal", attrs={"value": out}, inputs=[])
         if n.op == "nary_add" and inputs and all(c.op == "literal" for c in inputs):
-            total = sum(float(c.attrs["value"]) for c in inputs)
-            return PlanNode(op="literal", attrs={"value": total}, inputs=[])
+            return PlanNode(
+                op="literal",
+                attrs={"value": sum(float(c.attrs["value"]) for c in inputs)},
+                inputs=[],
+            )
         if n.op == "nary_mul" and inputs and all(c.op == "literal" for c in inputs):
             prod = 1.0
             for c in inputs:
