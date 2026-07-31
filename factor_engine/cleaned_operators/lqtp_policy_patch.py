@@ -13,28 +13,21 @@ def apply_lqtp_policy_patch() -> None:
     from cleaned_operators import operator_policy
     from cleaned_operators.production_tiers import PANDAS_FIRST_PRODUCTION_CANONICALS
 
-    # Compatibility primitives introduced by this change.
-    operator_policy._EXPLICIT_POLICIES["safe_log_null"] = {
-        "scope": "elementwise",
-        "pit_safe": True,
-    }
+    # The only new numerical primitive is the stateful three-argument SMA.
     operator_policy._EXPLICIT_POLICIES["ts_sma_cn"] = {
         "scope": "ts",
         "pit_safe": True,
         "min_periods": 1,
     }
 
-    # The promotion list is reviewed independently from backend portability.
-    # Some extended/research canonicals were previously fail-closed to
-    # pit_safe=False only because they were outside the old three-backend daily
-    # surface.  Make temporal semantics explicit here rather than inferring
-    # safety from backend coverage.
+    # Promotion is reviewed independently from backend portability. Extended /
+    # research operators no longer become temporally unsafe merely because
+    # DuckDB or Polars support is absent.
     special_scopes = {
         "cs_resid": "cs",
         "round": "elementwise",
         "scale": "cs",
         "sigmoid": "elementwise",
-        "safe_log_null": "elementwise",
         "true_range": "ts",
     }
     for canonical in sorted(PANDAS_FIRST_PRODUCTION_CANONICALS):
