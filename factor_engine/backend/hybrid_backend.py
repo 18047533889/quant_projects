@@ -1,19 +1,10 @@
 # -*- coding: utf-8 -*-
-"""混合执行后端：SQL 下推 + Polars 算子层。
-
-``HybridBackend`` 是 ``build_backend('auto')`` / ``build_backend('hybrid')`` 的入口，
-内部委托 ``SqlBackend`` 完成 SQL 子树预计算后，以 Polars auto 路径执行剩余计划节点。
-
-当数据源提供 ``scan_polars_long`` 时，``auto`` 升级为 long hybrid（与
-``auto_long`` 相同）：SQL 子树物化为 long LazyFrame，剩余节点走原生 Polars long，
-避免 wide-panel unpivot 往返。无 long scan 时保持宽表 hybrid。
-"""
+"""Mixed SQL + Polars backend with production-safe physical routing."""
 from __future__ import annotations
 
 from typing import Any
 
 from planner.logical_plan import PlanNode
-
 from .base import Backend
 from .context import ExecutionContext
 from .sql_backend import SqlBackend
@@ -25,42 +16,64 @@ def _supports_polars_long_scan(ctx: ExecutionContext) -> bool:
     return callable(scan)
 
 
-class HybridBackend(Backend):
-    """混合 SQL + Polars 执行后端。
+def _production_long_plan_safe(plan: PlanNode, ctx: ExecutionContext) -> tuple[bool, tuple[str, ...]]:
+    """Require every physical Polars-long node to have production evidence.
 
-    执行流程：逻辑计划物理化 → 可下推子树走 DuckDB/ClickHouse SQL →
-    物化结果注入 ``ExecutionContext`` → Polars/Pandas 算子层完成根节点求值。
+    SourceRef columns intentionally stay on the logical/Pandas-Arrow boundary;
+    attempting to route them through ``scan_polars_long`` would either fail or
+    bypass source-specific PIT contracts.
     """
+    if str(getattr(ctx, "run_mode", "research") or "research").lower() != "production":
+        return True, ()
+
+    from api.source_ref import decode_source_ref
+    from backend.polars_long_production import is_polars_long_native_production_safe
+    from cleaned_operators.registry import OperatorRegistry
+
+    bad: set[str] = set()
+
+    def walk(node: PlanNode) -> None:
+        op = str(getattr(node, "op", "") or "")
+        if op == "column":
+            name = str((getattr(node, "attrs", None) or {}).get("name") or "")
+            if name and decode_source_ref(name) is not None:
+                bad.add("SourceRef")
+        elif op not in {"", "literal", "plan_ref", "materialized_series"}:
+            canon = OperatorRegistry._aliases.get(op, op)
+            if not is_polars_long_native_production_safe(canon):
+                bad.add(canon)
+        for child in getattr(node, "inputs", []) or []:
+            walk(child)
+
+    walk(plan)
+    return not bad, tuple(sorted(bad))
+
+
+class HybridBackend(Backend):
+    """SQL pushdown plus certified Polars/Pandas operator execution."""
 
     runtime_backend_label = "hybrid"
 
     def __init__(self) -> None:
-        """初始化内部 ``SqlBackend``，算子后端设为 ``auto``（优先 Polars）。"""
         self._sql = SqlBackend(operator_backend="auto")
         self._long: Backend | None = None
 
     def _long_backend(self) -> Backend:
         if self._long is None:
             from .hybrid_long_backend import HybridLongBackend
-
             self._long = HybridLongBackend()
         return self._long
 
     def execute(self, plan: PlanNode, ctx: ExecutionContext) -> Any:
-        """执行逻辑计划：SQL 下推 + Polars 算子混合路径。
-
-        参数
-        ----
-        plan : PlanNode
-            待执行的逻辑计划根节点。
-        ctx : ExecutionContext
-            执行期上下文，含数据源、缓存与运行时统计。
-
-        返回
-        ----
-        Any
-            因子计算结果，通常为 ``(timestamp, instrument)`` MultiIndex Series。
-        """
         if _supports_polars_long_scan(ctx):
-            return self._long_backend().execute(plan, ctx)
+            safe, blocked = _production_long_plan_safe(plan, ctx)
+            if safe:
+                return self._long_backend().execute(plan, ctx)
+            runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+            runtime["hybrid_long_skipped_unverified"] = True
+            runtime["hybrid_long_blocked_ops"] = list(blocked)
+            ctx.runtime_stats = runtime  # type: ignore[attr-defined]
+        # SqlBackend lowers only production-safe SQL subtrees in production and
+        # delegates residual nodes through BackendRouter, which can select only
+        # independently certified Pandas/Polars implementations.
         return self._sql.execute(plan, ctx)
