@@ -1,6 +1,5 @@
-# -*- coding: utf-8
-"""Point-in-Time 安全审计：compile 后检查 IR 是否含未来函数 / 非因果算子。"""
-
+# -*- coding: utf-8 -*-
+"""Point-in-Time safety audit for operator IR and logical SourceRef dependencies."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -10,29 +9,23 @@ from ir.nodes import IRNode
 
 
 class PitSafetyError(RuntimeError):
-    """PIT 门禁未通过。"""
-
     def __init__(self, violations: list[str]):
         self.violations = violations
         super().__init__(
-            "PIT 安全审计失败，含非因果算子: " + ", ".join(sorted(set(violations)))
+            "PIT 安全审计失败: " + ", ".join(sorted(set(violations)))
         )
 
 
 @dataclass
 class PitAuditReport:
-    """PIT 安全审计报告。"""
-
     violations: list[str] = field(default_factory=list)
     checked_ops: list[str] = field(default_factory=list)
 
     @property
     def passed(self) -> bool:
-        """是否无违规算子。"""
         return not self.violations
 
     def to_dict(self) -> dict[str, Any]:
-        """序列化为 JSON 友好字典。"""
         return {
             "passed": self.passed,
             "violations": list(self.violations),
@@ -41,20 +34,20 @@ class PitAuditReport:
 
 
 _FORWARD_FILL_OPS = frozenset({
-    "ffill",
-    "fillna_ffill",
-    "forward_fill",
-    "fill_forward",
-    "bfill",
-    "fillna_backfill",
-    "backfill",
+    "ffill", "fillna_ffill", "forward_fill", "fill_forward",
+    "bfill", "fillna_backfill", "backfill",
 })
-
 _POSITIVE_LAG_PARAMS: dict[str, tuple[str, int]] = {
     "ts_delay": ("n", 1),
     "ts_delta": ("n", 1),
     "ts_pct": ("d", 1),
 }
+_FINANCIAL_TABLES = frozenset({"StockIncome", "StockCashFlow", "StockBalance"})
+_EXACT_DAILY_TABLES = frozenset({
+    "DailyBar", "StockDailyBar", "BenchmarkIndexDailyBar", "SizeDaily", "EtfDailyBar",
+})
+_ASOF_DAILY_TABLES = frozenset({"IndustryDaily"})
+_MINUTE_TABLES = frozenset({"StockMinuteBar", "MinuteBar"})
 
 
 def _literal_number(node: IRNode, *, attr: str, input_index: int) -> float | None:
@@ -68,13 +61,155 @@ def _literal_number(node: IRNode, *, attr: str, input_index: int) -> float | Non
     return float(raw)
 
 
+def _audit_derived_field(
+    field: str,
+    *,
+    forbid_forward_fill: bool,
+    fail_on_missing: bool,
+    violations: list[str],
+    checked: list[str],
+    source_guard: set[str],
+) -> None:
+    key = f"DerivedField:{field}"
+    if key in source_guard:
+        violations.append(f"{key}(cycle)")
+        return
+    source_guard.add(key)
+    try:
+        from runtime.derived_field_registry import load_derived_field_definition
+        from api.dsl_parser import parse_factor
+        from ir.analyzer import Analyzer
+
+        definition = load_derived_field_definition(field)
+        factor = parse_factor(
+            definition.expression,
+            name=f"pit::{field}@{definition.version}",
+            surface="extended",
+            dialect="lqtp",
+            dialect_version="2026-07-19",
+        )
+        child_ir = Analyzer().lower(factor.expr).ir
+        report = audit_ir(
+            child_ir,
+            forbid_forward_fill=forbid_forward_fill,
+            fail_on_missing=fail_on_missing,
+            _source_guard=source_guard,
+        )
+        checked.extend(f"{key}->{op}" for op in report.checked_ops)
+        violations.extend(f"{key}->{item}" for item in report.violations)
+    except Exception as exc:
+        violations.append(f"{key}(unverifiable:{type(exc).__name__})")
+    finally:
+        source_guard.discard(key)
+
+
+def _audit_source_ref(
+    name: str,
+    *,
+    forbid_forward_fill: bool,
+    fail_on_missing: bool,
+    violations: list[str],
+    checked: list[str],
+    source_guard: set[str],
+) -> bool:
+    """Audit encoded logical columns. Return True when ``name`` is a SourceRef."""
+    from api.source_ref import decode_source_ref
+
+    spec = decode_source_ref(name)
+    if spec is None:
+        return False
+
+    label = f"SourceRef[{spec.table}.{spec.field}]"
+    checked.append(label)
+    params = spec.params_dict()
+    tparams = spec.transform_params_dict()
+
+    if spec.table in _EXACT_DAILY_TABLES:
+        if spec.table == "BenchmarkIndexDailyBar" and not str(params.get("index", "")).strip():
+            violations.append(f"{label}(missing_index)")
+        if spec.transform is not None:
+            violations.append(f"{label}(unexpected_transform={spec.transform})")
+        return True
+
+    if spec.table in _ASOF_DAILY_TABLES:
+        if spec.transform not in {None, "asof_backward"}:
+            violations.append(f"{label}(unsupported_transform={spec.transform})")
+        return True
+
+    if spec.table in _FINANCIAL_TABLES:
+        if spec.transform not in {None, "financial_asof", "financial_lag"}:
+            violations.append(f"{label}(unsupported_transform={spec.transform})")
+        if spec.transform == "financial_lag":
+            try:
+                quarters = int(tparams.get("quarters", 1))
+            except (TypeError, ValueError):
+                quarters = 0
+            if quarters <= 0:
+                violations.append(f"{label}(financial_lag_quarters<=0)")
+        # Resolver contract requires PubDate; this is additionally enforced by
+        # the source read implementation and its required-column schema.
+        return True
+
+    if spec.table in _MINUTE_TABLES:
+        if spec.transform not in {"minute_at", "minute_range", "minute_bar", "minute_resample"}:
+            violations.append(f"{label}(minute_transform_required)")
+            return True
+        if spec.transform == "minute_at" and not str(tparams.get("hhmm", "")).strip():
+            violations.append(f"{label}(missing_hhmm)")
+        if spec.transform == "minute_range":
+            start, end = str(tparams.get("start", "")), str(tparams.get("end", ""))
+            if not start or not end or start >= end:
+                violations.append(f"{label}(invalid_minute_range)")
+        if spec.transform in {"minute_bar", "minute_resample"}:
+            try:
+                period = int(tparams.get("period", 1))
+                index = int(tparams.get("index", 0))
+            except (TypeError, ValueError):
+                period, index = 0, -1
+            if period <= 0 or index < 0:
+                violations.append(f"{label}(invalid_minute_period_or_index)")
+        return True
+
+    if spec.table == "Intermediate":
+        try:
+            from runtime.intermediate_registry import intermediate_dependency_lineage
+            intermediate_dependency_lineage(
+                str(params.get("name", "")),
+                int(params.get("version", 0)),
+            )
+        except Exception as exc:
+            violations.append(f"{label}(unversioned:{type(exc).__name__})")
+        return True
+
+    if spec.table == "DerivedField":
+        _audit_derived_field(
+            spec.field,
+            forbid_forward_fill=forbid_forward_fill,
+            fail_on_missing=fail_on_missing,
+            violations=violations,
+            checked=checked,
+            source_guard=source_guard,
+        )
+        return True
+
+    if spec.table == "TurnoverBaseDaily":
+        if spec.transform is not None:
+            violations.append(f"{label}(unexpected_transform={spec.transform})")
+        return True
+
+    # Unknown logical tables do not have a declared availability/join policy.
+    violations.append(f"{label}(unknown_availability_contract)")
+    return True
+
+
 def audit_ir(
     ir: IRNode,
     *,
     forbid_forward_fill: bool = False,
     fail_on_missing: bool = True,
+    _source_guard: set[str] | None = None,
 ) -> PitAuditReport:
-    """遍历 IR，收集 ``pit_safe=False``、负 lag 或缺失 runtime 的算子。"""
+    """Audit operator causality and transitive logical-source availability."""
     from backend.cleaned_bridge import ensure_cleaned_loaded
     from cleaned_operators.operator_policy import infer_operator_policy
     from cleaned_operators.registry import OperatorRegistry
@@ -82,10 +217,23 @@ def audit_ir(
     ensure_cleaned_loaded()
     violations: list[str] = []
     checked: list[str] = []
+    source_guard = _source_guard if _source_guard is not None else set()
 
     def walk(node: IRNode) -> None:
-        if node.op in ("column", "literal", "plan_ref"):
+        if node.op == "column":
+            name = str((node.attrs or {}).get("name") or "")
+            _audit_source_ref(
+                name,
+                forbid_forward_fill=forbid_forward_fill,
+                fail_on_missing=fail_on_missing,
+                violations=violations,
+                checked=checked,
+                source_guard=source_guard,
+            )
             return
+        if node.op in {"literal", "plan_ref"}:
+            return
+
         checked.append(node.op)
         canon = OperatorRegistry.resolve_canonical_optional(node.op)
         op_impl = OperatorRegistry.get(canon)
@@ -102,7 +250,7 @@ def audit_ir(
             value = _literal_number(node, attr=param_name, input_index=input_index)
             if value is not None and value < 1:
                 violations.append(f"{canon}({param_name}={value:g})")
-        if canon in {"bfill", "backfill", "fillna_backfill", "fillna_bfill", "lead", "next"}:
+        if canon in {"bfill", "backfill", "fillna_backfill", "fillna_bfill", "lead", "Lead", "next"}:
             violations.append(f"{canon}(future_data)")
         if forbid_forward_fill and canon in _FORWARD_FILL_OPS:
             violations.append(f"{canon}(forward_fill)")
@@ -120,7 +268,6 @@ def assert_pit_safe(
     forbid_forward_fill: bool = False,
     fail_on_missing: bool = True,
 ) -> PitAuditReport:
-    """审计 IR；``enforce=True`` 时未通过则抛 :class:`PitSafetyError`。"""
     report = audit_ir(
         ir,
         forbid_forward_fill=forbid_forward_fill,
