@@ -11,9 +11,7 @@ from ir.nodes import IRNode
 class PitSafetyError(RuntimeError):
     def __init__(self, violations: list[str]):
         self.violations = violations
-        super().__init__(
-            "PIT 安全审计失败: " + ", ".join(sorted(set(violations)))
-        )
+        super().__init__("PIT 安全审计失败: " + ", ".join(sorted(set(violations))))
 
 
 @dataclass
@@ -26,11 +24,7 @@ class PitAuditReport:
         return not self.violations
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "passed": self.passed,
-            "violations": list(self.violations),
-            "checked_ops": list(self.checked_ops),
-        }
+        return {"passed": self.passed, "violations": list(self.violations), "checked_ops": list(self.checked_ops)}
 
 
 _FORWARD_FILL_OPS = frozenset({
@@ -38,9 +32,7 @@ _FORWARD_FILL_OPS = frozenset({
     "bfill", "fillna_backfill", "backfill",
 })
 _POSITIVE_LAG_PARAMS: dict[str, tuple[str, int]] = {
-    "ts_delay": ("n", 1),
-    "ts_delta": ("n", 1),
-    "ts_pct": ("d", 1),
+    "ts_delay": ("n", 1), "ts_delta": ("n", 1), "ts_pct": ("d", 1),
 }
 _FINANCIAL_TABLES = frozenset({"StockIncome", "StockCashFlow", "StockBalance"})
 _EXACT_DAILY_TABLES = frozenset({
@@ -84,7 +76,7 @@ def _audit_derived_field(
         factor = parse_factor(
             definition.expression,
             name=f"pit::{field}@{definition.version}",
-            surface="extended",
+            surface="compat",
             dialect="lqtp",
             dialect_version="2026-07-19",
         )
@@ -112,17 +104,14 @@ def _audit_source_ref(
     checked: list[str],
     source_guard: set[str],
 ) -> bool:
-    """Audit encoded logical columns. Return True when ``name`` is a SourceRef."""
     from api.source_ref import decode_source_ref
 
     spec = decode_source_ref(name)
     if spec is None:
         return False
-
     label = f"SourceRef[{spec.table}.{spec.field}]"
     checked.append(label)
-    params = spec.params_dict()
-    tparams = spec.transform_params_dict()
+    params, tparams = spec.params_dict(), spec.transform_params_dict()
 
     if spec.table in _EXACT_DAILY_TABLES:
         if spec.table == "BenchmarkIndexDailyBar" and not str(params.get("index", "")).strip():
@@ -130,12 +119,10 @@ def _audit_source_ref(
         if spec.transform is not None:
             violations.append(f"{label}(unexpected_transform={spec.transform})")
         return True
-
     if spec.table in _ASOF_DAILY_TABLES:
         if spec.transform not in {None, "asof_backward"}:
             violations.append(f"{label}(unsupported_transform={spec.transform})")
         return True
-
     if spec.table in _FINANCIAL_TABLES:
         if spec.transform not in {None, "financial_asof", "financial_lag"}:
             violations.append(f"{label}(unsupported_transform={spec.transform})")
@@ -146,10 +133,7 @@ def _audit_source_ref(
                 quarters = 0
             if quarters <= 0:
                 violations.append(f"{label}(financial_lag_quarters<=0)")
-        # Resolver contract requires PubDate; this is additionally enforced by
-        # the source read implementation and its required-column schema.
         return True
-
     if spec.table in _MINUTE_TABLES:
         if spec.transform not in {"minute_at", "minute_range", "minute_bar", "minute_resample"}:
             violations.append(f"{label}(minute_transform_required)")
@@ -162,25 +146,19 @@ def _audit_source_ref(
                 violations.append(f"{label}(invalid_minute_range)")
         if spec.transform in {"minute_bar", "minute_resample"}:
             try:
-                period = int(tparams.get("period", 1))
-                index = int(tparams.get("index", 0))
+                period, index = int(tparams.get("period", 1)), int(tparams.get("index", 0))
             except (TypeError, ValueError):
                 period, index = 0, -1
             if period <= 0 or index < 0:
                 violations.append(f"{label}(invalid_minute_period_or_index)")
         return True
-
     if spec.table == "Intermediate":
         try:
             from runtime.intermediate_registry import intermediate_dependency_lineage
-            intermediate_dependency_lineage(
-                str(params.get("name", "")),
-                int(params.get("version", 0)),
-            )
+            intermediate_dependency_lineage(str(params.get("name", "")), int(params.get("version", 0)))
         except Exception as exc:
             violations.append(f"{label}(unversioned:{type(exc).__name__})")
         return True
-
     if spec.table == "DerivedField":
         _audit_derived_field(
             spec.field,
@@ -191,13 +169,11 @@ def _audit_source_ref(
             source_guard=source_guard,
         )
         return True
-
     if spec.table == "TurnoverBaseDaily":
         if spec.transform is not None:
             violations.append(f"{label}(unexpected_transform={spec.transform})")
         return True
 
-    # Unknown logical tables do not have a declared availability/join policy.
     violations.append(f"{label}(unknown_availability_contract)")
     return True
 
@@ -209,7 +185,6 @@ def audit_ir(
     fail_on_missing: bool = True,
     _source_guard: set[str] | None = None,
 ) -> PitAuditReport:
-    """Audit operator causality and transitive logical-source availability."""
     from backend.cleaned_bridge import ensure_cleaned_loaded
     from cleaned_operators.operator_policy import infer_operator_policy
     from cleaned_operators.registry import OperatorRegistry
@@ -221,9 +196,8 @@ def audit_ir(
 
     def walk(node: IRNode) -> None:
         if node.op == "column":
-            name = str((node.attrs or {}).get("name") or "")
             _audit_source_ref(
-                name,
+                str((node.attrs or {}).get("name") or ""),
                 forbid_forward_fill=forbid_forward_fill,
                 fail_on_missing=fail_on_missing,
                 violations=violations,
@@ -233,7 +207,6 @@ def audit_ir(
             return
         if node.op in {"literal", "plan_ref"}:
             return
-
         checked.append(node.op)
         canon = OperatorRegistry.resolve_canonical_optional(node.op)
         op_impl = OperatorRegistry.get(canon)
@@ -268,11 +241,7 @@ def assert_pit_safe(
     forbid_forward_fill: bool = False,
     fail_on_missing: bool = True,
 ) -> PitAuditReport:
-    report = audit_ir(
-        ir,
-        forbid_forward_fill=forbid_forward_fill,
-        fail_on_missing=fail_on_missing,
-    )
+    report = audit_ir(ir, forbid_forward_fill=forbid_forward_fill, fail_on_missing=fail_on_missing)
     if enforce and not report.passed:
         raise PitSafetyError(report.violations)
     return report
