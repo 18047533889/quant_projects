@@ -2,9 +2,9 @@
 """Versioned derived-field definitions evaluated by production FactorEngine.
 
 Derived fields are transitive factor dependencies, not an escape hatch around
-PIT/backend policy.  Every definition is parsed on the Extended factor surface,
-compiled in production mode, input-DQ/PIT checked, and returns only the computed
-Series to its SourceRef resolver.
+PIT/backend policy. Every definition is parsed on the production-compatible
+Daily+Extended surface, compiled in production mode, input-DQ/PIT checked, and
+returns only the computed Series to its SourceRef resolver.
 """
 from __future__ import annotations
 
@@ -60,16 +60,10 @@ def load_derived_field_definition(
     expected = raw.get("definition_hash")
     if expected and str(expected) != digest:
         raise RuntimeError(f"derived field {name!r} definition_hash mismatch")
-    return DerivedFieldDefinition(
-        name=name,
-        version=version,
-        expression=expr,
-        definition_hash=digest,
-    )
+    return DerivedFieldDefinition(name, version, expr, digest)
 
 
 def derived_field_lineage(name: str) -> dict[str, Any]:
-    """Return stable definition metadata for parent-source lineage/cache keys."""
     definition = load_derived_field_definition(name)
     return {
         "name": definition.name,
@@ -79,7 +73,6 @@ def derived_field_lineage(name: str) -> dict[str, Any]:
 
 
 def evaluate_derived_field(name: str, data_source: Any):
-    """Evaluate one registered definition under full production contracts."""
     definition = load_derived_field_definition(name)
     active = set(getattr(_ACTIVE, "names", set()))
     if name in active:
@@ -94,20 +87,11 @@ def evaluate_derived_field(name: str, data_source: Any):
         factor = parse_factor(
             definition.expression,
             name=f"derived::{name}@{definition.version}",
-            surface="extended",
+            surface="compat",
             dialect="lqtp",
             dialect_version="2026-07-19",
         )
-        # Pandas/Numpy is the semantic-reference production backend.  The child
-        # graph deliberately runs production even when called from a research
-        # parent so a derived field can never smuggle a research-only/future
-        # operation into a later production factor.
-        engine = FactorEngine(
-            PandasBackend(),
-            data_source,
-            cache=None,
-            run_mode="production",
-        )
+        engine = FactorEngine(PandasBackend(), data_source, cache=None, run_mode="production")
         output = engine.run(
             factor,
             input_dq_check=True,
