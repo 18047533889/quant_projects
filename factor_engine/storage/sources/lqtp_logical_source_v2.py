@@ -117,9 +117,29 @@ class LQTPLogicalDataSource(_Base):
             return self._align_by_instrument(self._anchor_index(),series.rename(spec.field))
         return super()._load_source_ref(spec)
 
+    def _anchor_is_intraday(self) -> bool:
+        """Infer whether the anchor panel genuinely contains intraday timestamps."""
+        anchor=self._anchor_index()
+        if len(anchor)==0:return False
+        ts=pd.DatetimeIndex(anchor.get_level_values(0))
+        # A true daily source has all timestamps at normalized midnight. Any
+        # non-midnight observation means the execution axis can preserve an
+        # intraday sequence and minute_resample is semantically representable.
+        return bool((ts != ts.normalize()).any())
+
     def _minute_daily(self,field:str,transform:str,params:dict[str,Any])->pd.Series:
-        if transform=="minute_resample" and self.factor_freq=="1d":
-            raise MissingDataDependencyError("minute_resample returns an intraday bar sequence and cannot be silently collapsed inside a daily factor; use minute_bar(..., index) or configure an intraday run")
         if field.lower().endswith("vwap") and transform in {"minute_range","minute_bar","minute_resample"}:
             raise MissingDataDependencyError("multi-minute VWAP requires Amount/Volume weighted aggregation; refusing an incorrect average/last-fill")
+        if transform=="minute_resample" and self.factor_freq=="1d":
+            if not self._anchor_is_intraday():
+                raise MissingDataDependencyError("minute_resample returns an intraday bar sequence and cannot be silently collapsed inside a daily factor; use minute_bar(..., index) or configure an intraday anchor source")
+            # The execution axis itself proves this is an intraday run. Reuse the
+            # base implementation's sequence-return path without requiring the
+            # caller to duplicate frequency metadata outside the Factor object.
+            original=self.factor_freq
+            try:
+                self.factor_freq="intraday"
+                return super()._minute_daily(field,transform,params)
+            finally:
+                self.factor_freq=original
         return super()._minute_daily(field,transform,params)
