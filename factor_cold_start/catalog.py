@@ -18,6 +18,14 @@ from .model import ColdStartFactor, ensure_unique
 PACKAGE_ROOT = Path(__file__).resolve().parent
 CATALOG_ROOT = PACKAGE_ROOT / "catalogs"
 
+# These historical canonical spellings are deliberately migrated out of the
+# primitive registry by layer_governance and owned by FactorRecipeRegistry.
+# Do not create primitive cold-start seeds that look callable after migration.
+_RECIPE_OWNED_TA_CANONICALS = frozenset({
+    "AROON", "AROON_up", "AROON_down", "CCI",
+    "StochasticK", "StochasticD", "WilliamsR",
+})
+
 
 @lru_cache(maxsize=1)
 def _generated_catalogs():
@@ -50,7 +58,10 @@ def load_catalog(market: str, surface: str = "daily") -> tuple[ColdStartFactor, 
 
     if surface == "extended":
         from .technical_extension_seeds import technical_extension_seeds
-        rows.extend(technical_extension_seeds(market))
+        rows.extend(
+            seed for seed in technical_extension_seeds(market)
+            if not (_RECIPE_OWNED_TA_CANONICALS & set(seed.operators))
+        )
 
     # ensure_unique catches duplicate IDs and structural formula duplicates across
     # generated, committed-production and technical-extension layers. Coverage
