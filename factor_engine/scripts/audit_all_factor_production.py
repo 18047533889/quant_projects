@@ -25,7 +25,7 @@ for p in (str(FE_ROOT.parent), str(FE_ROOT)):
 PANEL_PARAM_NAMES = frozenset({
     "x","y","z","a","b","w","g","left","right","numerator","denominator",
     "ret","returns","benchmark_ret","market_ret","benchmark","market","open","high",
-    "low","close","price","volume","amount","vwap","weight","weights","signal",
+    "low","close","price","volume","amount","vwap","turnover","weight","weights","signal",
     "fallback","condition","group","industry","sector","fiscal_quarter","period_id",
     "quarter","revision_id","decision_time","available_time","available_at","exposure",
     "exposures","control","controls","factor","target","mask","event","value","values",
@@ -46,6 +46,8 @@ SCALAR_VALUES: dict[str, Any] = {
     "interpolation":"linear","center":True,"ascending":True,"inclusive":True,
     "offset":0,"require_consecutive":True,"trim_pct":0.1,"sign_policy":"strict",
     "denominator":"signed","aggr_func":"sum","lo":-2.0,"hi":2.0,
+    # Production technical-extension controls.
+    "left_window":3,"right_window":3,"history_window":40,"points":3,"std_dev":2.0,
 }
 
 SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
@@ -67,9 +69,6 @@ SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
     ("winsorize","upper"):0.95,
 }
 
-# Vararg/cross-sectional regression APIs carry panel arguments positionally and
-# static controls by keyword. This mirrors their actual canonical contract and
-# avoids ever treating a boolean/min_obs scalar as a panel to be reindexed.
 SPECIAL_POSITIONAL: dict[str, tuple[str, ...]] = {
     "cs_multi_resid": ("target","exposure","control"),
     "cs_neutralize": ("target","exposure","group","weight"),
@@ -109,13 +108,14 @@ def _panels(rows: int = 96, cols: int = 6) -> dict[str, pd.DataFrame]:
         index=dates,
         columns=assets,
     )
+    turnover = volume / float_shares
     return {
         "x":close,"y":open_,"z":control,"a":close,"b":open_,"w":weights,"g":group,
         "left":close,"right":open_,"numerator":close,"denominator":open_.abs()+1.0,
         "ret":ret,"returns":ret,"benchmark_ret":market,"market_ret":market,"benchmark":market,
         "market":market,"open":open_,"high":high,"low":low,"close":close,
         "price":(high+low+close)/3.0,"volume":volume,"amount":amount,"vwap":amount/volume,
-        "weight":weights,"weights":weights,"signal":ret,"fallback":zero,"condition":condition,
+        "turnover":turnover,"weight":weights,"weights":weights,"signal":ret,"fallback":zero,"condition":condition,
         "mask":condition,"event":condition,"group":group,"industry":group,"sector":group,
         "fiscal_quarter":quarters,"period_id":quarters,"quarter":quarters,"revision_id":revision,
         "decision_time":decision_time,"available_time":available_time,"available_at":available_time,
@@ -177,11 +177,6 @@ def _equal(a:pd.DataFrame,b:pd.DataFrame)->bool:
     if a.shape!=b.shape or not a.index.equals(b.index) or not a.columns.equals(b.columns):return False
     av,bv=a.to_numpy(),b.to_numpy()
     if av.dtype.kind in "biufc" and bv.dtype.kind in "biufc":
-        # Causality is a semantic property, not bitwise identity. Higher-order
-        # rolling moments can differ at ~1e-7 across frame lengths because of
-        # floating accumulation while still using exactly the same historical
-        # observations. The tolerance remains six orders below economically
-        # meaningful factor changes and still exposes genuine leaks (e.g. 51.0).
         return bool(np.allclose(av,bv,equal_nan=True,rtol=1e-6,atol=1e-8))
     return a.astype(object).where(pd.notna(a),None).equals(b.astype(object).where(pd.notna(b),None))
 
