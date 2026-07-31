@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Single authority for operator backend selection."""
+"""Single authority for evidence-constrained operator backend selection."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -21,7 +21,7 @@ class BackendSelection:
 
 
 class BackendRouter:
-    """Select a backend; Registry remains a storage/index service only."""
+    """Select only eligible backends; Registry remains a storage/index service."""
 
     @staticmethod
     def select(
@@ -62,8 +62,12 @@ class BackendRouter:
                 prefer=requested,
                 allow_unverified_backend=allow_unverified_backend,
             )
-        except UnsupportedOperatorBackendError:
+        except UnsupportedOperatorBackendError as exc:
             if requested == "auto" or fallback_policy != "allow":
+                if str(run_mode).lower() == "production" and requested != "auto":
+                    raise UnsupportedOperatorBackendError(
+                        f"{name!r} backend={requested!r} is not production-safe: {exc}"
+                    ) from exc
                 raise
             operator, backend = get_best_backend(
                 name,
