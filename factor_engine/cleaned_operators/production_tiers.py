@@ -79,4 +79,5 @@ LQTP_COMPAT_PARSE_CANONICALS: frozenset[str] = frozenset({
 LQTP_SOURCE_DEPENDENT_NAMES: frozenset[str] = frozenset({
     "ebitda_approx",
     "enterprise_value",
+    "turnover_base",
 })
