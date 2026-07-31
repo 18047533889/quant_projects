@@ -58,6 +58,23 @@ def test_lqtp_bare_true_range_expands_before_field_analysis() -> None:
     assert analysis.referenced_columns == {"high", "low", "close"}
 
 
+def test_real_turnover_rate_expands_to_explicit_source_inputs() -> None:
+    from api.dsl_parser import parse_expr
+    from ir.analyzer import Analyzer
+
+    expr = parse_expr("real_turnover_rate()", surface="lqtp")
+    assert expr.op == "real_turnover_rate"
+    analysis = Analyzer().lower(expr)
+    assert analysis.referenced_columns == {"volume", "turnover_base"}
+
+
+def test_minute_bar_reports_missing_frequency_source_instead_of_unknown_function() -> None:
+    from api.dsl_parser import DSLParseError, parse_expr
+
+    with pytest.raises(DSLParseError, match="minute-bar source"):
+        parse_expr("minute_bar(close, 5, 0)", surface="lqtp")
+
+
 def test_ambiguous_lqtp_names_fail_instead_of_guessing() -> None:
     from api.dsl_parser import DSLParseError, parse_expr
 
@@ -110,6 +127,8 @@ def test_data_access_preflight_blocks_operator_and_derived_field_names() -> None
     source = DataAccessSource(dataset="ashare_stock_daily")
     with pytest.raises(MissingDataDependencyError, match="derived/source-backed"):
         source._resolve_columns(["ebitda_approx"])
+    with pytest.raises(MissingDataDependencyError, match="derived/source-backed"):
+        source._resolve_columns(["turnover_base"])
     with pytest.raises(DataAccessColumnPreflightError, match="operator name"):
         source._resolve_columns(["true_range"])
 
@@ -168,7 +187,7 @@ def test_pandas_first_production_parameters_are_bounded() -> None:
         attrs={},
     )
     assert check_pandas_first_plan_signatures(valid) == []
-    assert any("[0, 1]" in x for x in check_pandas_first_plan_signatures(invalid))
+    assert any("[0, 1]" in message for message in check_pandas_first_plan_signatures(invalid))
 
 
 def test_production_source_preflight_accepts_compatible_macros_then_checks_plan() -> None:
