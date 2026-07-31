@@ -33,7 +33,7 @@ jobs:
           python -m pip install pytest pyyaml
       - name: Test, recertify and regenerate
         run: |
-          pytest -q factor_engine/tests/test_lqtp_production_runtime.py
+          pytest -q factor_engine/tests/test_lqtp_production_runtime.py factor_engine/tests/test_lqtp_v2_source_runtime.py
           python factor_engine/scripts/sync_primitive_evidence.py
           python factor_engine/scripts/certify_primitive_evidence.py
           python factor_engine/scripts/certify_recipe_evidence.py
@@ -43,6 +43,7 @@ jobs:
           python factor_engine/scripts/generate_operator_usage_report.py
           python factor_engine/scripts/sync_backend_docs.py
           python factor_engine/scripts/generate_backend_evidence_manifest.py
+          python factor_engine/scripts/generate_lqtp_compatibility_manifest.py
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add factor_engine/evidence factor_engine/cleaned_operators/docs factor_engine/docs
