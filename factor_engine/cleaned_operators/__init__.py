@@ -84,6 +84,7 @@ def load_all() -> None:
     __import__("cleaned_operators.production_repairs", fromlist=["*"])
     __import__("cleaned_operators.price_volume.technical_extensions", fromlist=["*"])
     __import__("cleaned_operators.price_volume.technical_structure_repairs", fromlist=["*"])
+    __import__("cleaned_operators.price_volume.candle_patterns_extended", fromlist=["*"])
 
     from cleaned_operators._dedupe import apply_operator_deduplication
     apply_operator_deduplication()
