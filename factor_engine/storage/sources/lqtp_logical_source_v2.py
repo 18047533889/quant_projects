@@ -1,13 +1,78 @@
 # -*- coding: utf-8 -*-
-"""PIT/sequence-safe overrides for the LQTP logical-source resolver."""
+"""PIT/sequence-safe LQTP logical-source resolver with zero native-path drift."""
 from __future__ import annotations
-from typing import Any
+from typing import Any, Iterable
 import numpy as np
 import pandas as pd
 from .data_access_source import MissingDataDependencyError
 from .lqtp_logical_source import LQTPLogicalDataSource as _Base
 
 class LQTPLogicalDataSource(_Base):
+    @staticmethod
+    def _is_source_ref_name(name: str) -> bool:
+        from api.source_ref import decode_source_ref
+        return decode_source_ref(str(name)) is not None
+
+    def load_column(self, name: str):
+        if not self._is_source_ref_name(name):
+            return self.inner.load_column(name)
+        return super().load_column(name)
+
+    def load_columns(self, names: Iterable[str]):
+        names=list(names)
+        ordinary=[n for n in names if not self._is_source_ref_name(n)]
+        refs=[n for n in names if self._is_source_ref_name(n)]
+        out={}
+        if ordinary:
+            fn=getattr(self.inner,"load_columns",None)
+            if callable(fn):out.update(fn(ordinary))
+            else:out.update({n:self.inner.load_column(n) for n in ordinary})
+        out.update({n:super(LQTPLogicalDataSource,self).load_column(n) for n in refs})
+        return out
+
+    def prefetch_columns(self, names: Iterable[str]) -> None:
+        names=list(names)
+        ordinary=[n for n in names if not self._is_source_ref_name(n)]
+        refs=[n for n in names if self._is_source_ref_name(n)]
+        if ordinary:
+            fn=getattr(self.inner,"prefetch_columns",None)
+            if callable(fn):fn(ordinary)
+            else:
+                load_many=getattr(self.inner,"load_columns",None)
+                if callable(load_many):load_many(ordinary)
+                else:
+                    for n in ordinary:self.inner.load_column(n)
+        for n in refs:super(LQTPLogicalDataSource,self).load_column(n)
+
+    def load_column_panel(self, name: str):
+        if not self._is_source_ref_name(name):
+            fn=getattr(self.inner,"load_column_panel",None)
+            if callable(fn):return fn(name)
+            return self.inner.load_column(name).unstack(level=-1)
+        series=super().load_column(name)
+        return series.unstack(level=-1)
+
+    def prefetch_panels(self, names: Iterable[str]) -> None:
+        names=list(names)
+        ordinary=[n for n in names if not self._is_source_ref_name(n)]
+        refs=[n for n in names if self._is_source_ref_name(n)]
+        if ordinary:
+            fn=getattr(self.inner,"prefetch_panels",None)
+            if callable(fn):fn(ordinary)
+            else:
+                for n in ordinary:self.load_column_panel(n)
+        for n in refs:self.load_column_panel(n)
+
+    def scan_polars_long(self, columns: list[str]):
+        if any(self._is_source_ref_name(name) for name in columns):
+            raise NotImplementedError("SourceRef columns require the logical source/Pandas-Arrow boundary")
+        return self.inner.scan_polars_long(columns)
+
+    def scan_index_long(self):
+        fn=getattr(self.inner,"scan_index_long",None)
+        if not callable(fn):raise NotImplementedError
+        return fn()
+
     def _financial(self,dataset:str,field:str,transform:str|None,params:dict[str,Any])->pd.Series:
         raw=self._financial_raw(dataset,field)
         instrument=next(c for c in ("Symbol","ticker","Ticker") if c in raw.columns)
