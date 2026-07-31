@@ -29,13 +29,16 @@ def test_lqtp_exact_aliases_share_canonical_expr() -> None:
         assert getattr(expr, "op", None) == canonical
 
 
-def test_safe_log_is_a_macro_not_a_duplicate_kernel() -> None:
+def test_safe_log_and_momentum_are_macros_not_duplicate_kernels() -> None:
     from api.dsl_parser import parse_expr
 
-    expr = parse_expr("safe_log(close)", surface="lqtp")
-    assert expr.op == "where"
+    safe_log = parse_expr("safe_log(close)", surface="lqtp")
+    momentum = parse_expr("momentum(close, 20)", surface="lqtp")
+    assert safe_log.op == "where"
+    assert momentum.op == "ts_delta"
     registry = _loaded_registry()
     assert registry.get("safe_log_null") is None
+    assert registry.get("momentum") is None
 
 
 def test_lqtp_sma_keeps_two_distinct_semantics() -> None:
