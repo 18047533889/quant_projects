@@ -35,6 +35,10 @@ _SCOPE_OVERRIDES: dict[str, str] = {
     "rolling_beta_to_market": "ts", "tail_beta": "ts", "trade_when": "ts",
     "ts_poly2_coeff": "ts", "ts_poly2_resid": "ts", "ts_sma_cn": "ts",
     "ts_sum_decay": "ts",
+    # Candle geometry is elementwise except the operators that explicitly use a
+    # previous bar or a rolling true-range baseline.
+    "candle_gap": "ts", "candle_gap_pct": "ts", "candle_range_atr": "ts",
+    "cdl_engulfing": "ts", "cdl_inside_bar": "ts", "cdl_outside_bar": "ts",
 }
 
 _FUNDAMENTAL_PERIOD_CANONICALS: frozenset[str] = frozenset({
@@ -63,7 +67,10 @@ def _infer_scope(canonical: str, catalog: dict[str, Any]) -> str:
     if canonical.startswith("period_") or canonical in _FUNDAMENTAL_PERIOD_CANONICALS:
         return "fundamental_period"
     category = str(catalog.get("category") or "").lower()
-    if category in {"time_series", "technical_signal", "price_volume", "signal"}:
+    if category in {
+        "time_series", "technical_signal", "price_volume", "price_volume_extension",
+        "ohlc_volatility", "candle_pattern", "signal",
+    }:
         return "ts"
     if category in {"cross_sectional", "group_neutralization"}:
         return "cs"
@@ -106,7 +113,6 @@ def factor_production_targets() -> frozenset[str]:
 
 
 def _remove_promoted_legacy_denials(targets: frozenset[str]) -> None:
-    """Legacy deny lists must not override a completed production review."""
     import cleaned_operators.operator_spec as spec_mod
 
     spec_mod.PRODUCTION_DENIED_CANONICALS = frozenset(
@@ -121,7 +127,6 @@ def _remove_promoted_legacy_denials(targets: frozenset[str]) -> None:
 
 
 def apply_production_hardening() -> None:
-    """Promote retained factor operators and install production contracts."""
     from cleaned_operators.operator_policy import _EXPLICIT_POLICIES
     from cleaned_operators.registry import OperatorRegistry
 
@@ -133,14 +138,17 @@ def apply_production_hardening() -> None:
         patch = _policy_patch(canonical, catalog)
         existing_policy = dict(_EXPLICIT_POLICIES.get(canonical) or {})
         merged_policy = {**patch, **existing_policy}
-        # Old fail-closed metadata sometimes labelled domain operators as
-        # elementwise.  Once the operator has been reviewed, an unambiguous
-        # ts/cs/group/fiscal name owns the scope; optional tuning fields from the
-        # existing policy still survive.
         if _scope_is_authoritative(canonical):
             merged_policy["scope"] = patch["scope"]
             if "min_periods" in patch:
                 merged_policy["min_periods"] = patch["min_periods"]
+        # Reviewed extension categories also own their time-domain scope even
+        # though their canonical names do not all start with ``ts_``.
+        if str(catalog.get("category") or "").lower() in {
+            "price_volume_extension", "ohlc_volatility", "candle_pattern",
+        }:
+            merged_policy["scope"] = patch["scope"]
+            merged_policy["min_periods"] = patch.get("min_periods", 1)
         merged_policy["pit_safe"] = True
         _EXPLICIT_POLICIES[canonical] = merged_policy
 
