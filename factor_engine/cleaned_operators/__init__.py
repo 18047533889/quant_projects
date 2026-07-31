@@ -42,6 +42,7 @@ _REVIEWED_EXTENSIONS = (
     "cleaned_operators.price_volume.liquidity_v2",
     "cleaned_operators.technical.indicators_v2",
     "cleaned_operators.fundamental.transforms_v2",
+    "cleaned_operators.fundamental.transforms_repairs_v2",
     "cleaned_operators.production_policy_extensions_v2",
 )
 
