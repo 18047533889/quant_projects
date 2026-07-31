@@ -85,11 +85,7 @@ jobs:
           pytest -q factor_engine/tests/test_operator_surface.py
           python factor_engine/scripts/validate_public_factor_formulas.py
       - name: LQTP v2 compatibility and production-routing regressions
-        run: |
-          pytest -q \
-            factor_engine/tests/test_lqtp_production_runtime.py \
-            factor_engine/tests/test_lqtp_v2_source_runtime.py \
-            factor_engine/tests/test_lqtp_v2_semantic_guards.py
+        run: pytest -q factor_engine/tests/test_lqtp_*.py
       - name: COS contract and unit regressions
         run: pytest -q dataaccess/tests/test_cos_contract_core.py
       - name: COS filing PIT regressions
