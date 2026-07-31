@@ -37,17 +37,17 @@ class ExecutionContext:
         self.run_mode = str(self.run_mode).lower()
         if self.production_fallback_policy not in {"error", "warn"}:
             raise ValueError("production_fallback_policy must be 'error' or 'warn'")
-
-        # SourceRef is encoded as an ordinary ColumnRef in the semantic DAG.  A
-        # thin runtime decorator resolves such columns to whitelisted LQTP
-        # logical tables while delegating ordinary columns unchanged.  Keeping
-        # this at the execution boundary avoids duplicating source semantics in
-        # Pandas/Polars/SQL backends.
         try:
             from storage.sources.lqtp_logical_source import LQTPLogicalDataSource
             if not isinstance(self.data_source, LQTPLogicalDataSource):
-                self.data_source = LQTPLogicalDataSource(self.data_source)
+                inner = self.data_source
+                wrapper = getattr(inner, "_factor_engine_lqtp_wrapper", None)
+                if not isinstance(wrapper, LQTPLogicalDataSource):
+                    wrapper = LQTPLogicalDataSource(inner)
+                    try:
+                        setattr(inner, "_factor_engine_lqtp_wrapper", wrapper)
+                    except Exception:
+                        pass
+                self.data_source = wrapper
         except ImportError:
-            # SourceRef support is optional for minimal embeddings of the core
-            # execution context; ordinary native-factor execution is unaffected.
             pass
