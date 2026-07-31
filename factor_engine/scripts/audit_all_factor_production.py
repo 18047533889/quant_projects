@@ -1,22 +1,13 @@
 #!/usr/bin/env python3
 """Audit every retained Factor DSL canonical against production invariants.
 
-This is intentionally broader than backend parity tests.  For every Daily or
-Extended factor operator it executes the Pandas/Numpy semantic-reference
-implementation on a deterministic synthetic panel and verifies:
-
-* a production lifecycle/PIT/shape contract exists;
-* at least one independently production-eligible backend exists;
-* the Pandas reference returns a same-shape panel;
-* repeated evaluation is deterministic;
-* prefix invariance holds (adding future rows cannot change past outputs).
-
-ResearchToolRegistry utilities are outside this audit by design.
+For every Daily or Extended factor operator this executes the Pandas/Numpy
+semantic-reference implementation on a deterministic synthetic panel and checks
+production admission, same-shape output, determinism and prefix invariance.
+ResearchToolRegistry utilities are intentionally outside this audit.
 """
 from __future__ import annotations
 
-import inspect
-import math
 import sys
 from pathlib import Path
 from typing import Any
@@ -31,61 +22,35 @@ for p in (str(FE_ROOT.parent), str(FE_ROOT)):
 
 
 PANEL_PARAM_NAMES = frozenset({
-    "x", "y", "a", "b", "left", "right", "numerator", "denominator",
-    "ret", "returns", "benchmark_ret", "market_ret", "benchmark", "market",
-    "open", "high", "low", "close", "price", "volume", "amount", "vwap",
-    "weight", "weights", "signal", "fallback", "condition", "group",
-    "industry", "sector", "fiscal_quarter", "period_id", "quarter",
+    "x", "y", "z", "a", "b", "w", "g", "left", "right",
+    "numerator", "denominator", "ret", "returns", "benchmark_ret",
+    "market_ret", "benchmark", "market", "open", "high", "low", "close",
+    "price", "volume", "amount", "vwap", "weight", "weights", "signal",
+    "fallback", "condition", "group", "industry", "sector", "fiscal_quarter",
+    "period_id", "quarter", "revision_id", "decision_time", "available_time",
     "exposure", "exposures", "control", "controls", "factor", "target",
+    "mask", "event", "value", "values",
 })
 
 SCALAR_VALUES: dict[str, Any] = {
-    "window": 20,
-    "d": 20,
-    "n": 20,
-    "m": 2,
-    "span": 20,
-    "period": 20,
-    "periods": 20,
-    "lag": 1,
-    "k": 3,
-    "q": 0.2,
-    "quantile": 0.2,
-    "threshold": 0.0,
-    "run": 2,
-    "hump": 0.02,
-    "min_periods": 5,
-    "ddof": 1,
-    "ann_factor": 252,
-    "decimals": 2,
-    "to": 1.0,
-    "lower": -2.0,
-    "upper": 2.0,
-    "eps": 1e-8,
-    "epsilon": 1e-8,
-    "alpha": 0.2,
-    "fast": 12,
-    "slow": 26,
-    "signal_span": 9,
-    "signal_window": 9,
-    "side": "lower",
-    "order": "largest",
-    "add_intercept": True,
-    "clip": 3.0,
-    "limit": 3,
-    "max_gap": 3,
-    "power": 2.0,
-    "exponent": 2.0,
-    "p": 2.0,
-    "c": 1.0,
+    "window": 20, "d": 20, "n": 20, "m": 2, "span": 20, "period": 20,
+    "periods": 20, "lag": 1, "lags": 1, "k": 3, "q": 0.2,
+    "quantile": 0.2, "threshold": 0.0, "run": 2, "hump": 0.02,
+    "min_periods": 5, "ddof": 1, "ann_factor": 252, "decimals": 2,
+    "to": 1.0, "lower": -2.0, "upper": 2.0, "eps": 1e-8,
+    "epsilon": 1e-8, "alpha": 0.2, "fast": 12, "slow": 26,
+    "fast_period": 12, "slow_period": 26, "signal_span": 9,
+    "signal_window": 9, "signal_period": 9, "side": "lower",
+    "order": "largest", "add_intercept": True, "clip": 3.0, "limit": 3,
+    "max_gap": 3, "max_periods": 3, "power": 2.0, "exponent": 2.0,
+    "p": 2.0, "c": 1.0, "annualization": 252, "annualization_factor": 252,
+    "periods_per_year": 252, "method": "average", "interpolation": "linear",
+    "center": True, "ascending": True, "inclusive": True, "offset": 0,
 }
 
+# Catalogs with a vararg-style public contract need explicit positional fixtures.
 SPECIAL_POSITIONAL: dict[str, tuple[str, ...]] = {
     "cs_multi_resid": ("target", "exposure", "control"),
-    "cs_regression": ("target", "exposure"),
-    "cs_resid": ("target", "exposure"),
-    "cs_wls_resid": ("target", "exposure", "weights"),
-    "rank_corr": ("x", "y"),
 }
 
 
@@ -97,8 +62,8 @@ def _panels(rows: int = 96, cols: int = 6) -> dict[str, pd.DataFrame]:
     base = 50.0 + 0.15 * t + 0.7 * j + np.sin(t / 5.0 + j / 3.0)
     close = pd.DataFrame(base, index=dates, columns=assets)
     open_ = close * (1.0 + 0.002 * np.cos(t / 4.0 + j))
-    high = np.maximum(open_, close) * 1.01
-    low = np.minimum(open_, close) * 0.99
+    high = pd.DataFrame(np.maximum(open_, close) * 1.01, index=dates, columns=assets)
+    low = pd.DataFrame(np.minimum(open_, close) * 0.99, index=dates, columns=assets)
     volume = pd.DataFrame(1_000_000.0 + 5000.0 * t + 10000.0 * j, index=dates, columns=assets)
     amount = volume * close
     ret = close.pct_change().fillna(0.0)
@@ -107,7 +72,10 @@ def _panels(rows: int = 96, cols: int = 6) -> dict[str, pd.DataFrame]:
         index=dates,
         columns=assets,
     )
-    group_values = np.tile(np.array(["G0", "G1", "G2", "G0", "G1", "G2"], dtype=object)[:cols], (rows, 1))
+    group_values = np.tile(
+        np.array(["G0", "G1", "G2", "G0", "G1", "G2"], dtype=object)[:cols],
+        (rows, 1),
+    )
     group = pd.DataFrame(group_values, index=dates, columns=assets)
     condition = volume.gt(volume.rolling(5, min_periods=1).mean())
     quarters = pd.DataFrame(
@@ -115,47 +83,36 @@ def _panels(rows: int = 96, cols: int = 6) -> dict[str, pd.DataFrame]:
         index=dates,
         columns=assets,
     )
+    revision = pd.DataFrame(
+        np.repeat((np.arange(rows) // 5)[:, None], cols, axis=1),
+        index=dates,
+        columns=assets,
+    )
+    decision_time = pd.DataFrame(
+        np.repeat(dates.to_numpy()[:, None], cols, axis=1),
+        index=dates,
+        columns=assets,
+    )
+    available_time = decision_time - pd.Timedelta(days=3)
     weights = volume.div(volume.sum(axis=1), axis=0)
+    control = volume.pct_change().fillna(0.0)
+    zero = pd.DataFrame(0.0, index=dates, columns=assets)
     return {
-        "x": close,
-        "y": open_,
-        "a": close,
-        "b": open_,
-        "left": close,
-        "right": open_,
-        "numerator": close,
-        "denominator": open_.abs() + 1.0,
-        "ret": ret,
-        "returns": ret,
-        "benchmark_ret": market,
-        "market_ret": market,
-        "benchmark": market,
-        "market": market,
-        "open": open_,
-        "high": pd.DataFrame(high, index=dates, columns=assets),
-        "low": pd.DataFrame(low, index=dates, columns=assets),
-        "close": close,
-        "price": (high + low + close) / 3.0,
-        "volume": volume,
-        "amount": amount,
-        "vwap": amount / volume,
-        "weight": weights,
-        "weights": weights,
-        "signal": ret,
-        "fallback": pd.DataFrame(0.0, index=dates, columns=assets),
-        "condition": condition,
-        "group": group,
-        "industry": group,
-        "sector": group,
-        "fiscal_quarter": quarters,
-        "period_id": quarters,
-        "quarter": quarters,
-        "exposure": market,
-        "exposures": market,
-        "control": volume.pct_change().fillna(0.0),
-        "controls": volume.pct_change().fillna(0.0),
-        "factor": market,
-        "target": ret,
+        "x": close, "y": open_, "z": control, "a": close, "b": open_,
+        "w": weights, "g": group, "left": close, "right": open_,
+        "numerator": close, "denominator": open_.abs() + 1.0,
+        "ret": ret, "returns": ret, "benchmark_ret": market,
+        "market_ret": market, "benchmark": market, "market": market,
+        "open": open_, "high": high, "low": low, "close": close,
+        "price": (high + low + close) / 3.0, "volume": volume, "amount": amount,
+        "vwap": amount / volume, "weight": weights, "weights": weights,
+        "signal": ret, "fallback": zero, "condition": condition, "mask": condition,
+        "event": condition, "group": group, "industry": group, "sector": group,
+        "fiscal_quarter": quarters, "period_id": quarters, "quarter": quarters,
+        "revision_id": revision, "decision_time": decision_time,
+        "available_time": available_time, "exposure": market, "exposures": market,
+        "control": control, "controls": control, "factor": market, "target": ret,
+        "value": close, "values": close,
     }
 
 
@@ -169,52 +126,44 @@ def _value_for_parameter(name: str, panels: dict[str, pd.DataFrame]) -> Any:
         return 20
     if key.startswith("min_period"):
         return 5
+    if key.endswith("_period"):
+        return 20
+    if key.endswith("_id"):
+        return panels["period_id"]
     if key in PANEL_PARAM_NAMES:
         return panels["x"]
     raise KeyError(key)
 
 
-def _build_call(canonical: str, op: Any, panels: dict[str, pd.DataFrame]) -> tuple[list[Any], dict[str, Any]]:
-    sig = inspect.signature(op.calculate)
+def _build_call(
+    canonical: str,
+    op: Any,
+    panels: dict[str, pd.DataFrame],
+) -> tuple[list[Any], dict[str, Any]]:
+    """Build calls from the canonical Registry contract, never wrapper introspection."""
+    from cleaned_operators.registry import OperatorRegistry
+
+    catalog = OperatorRegistry._catalog.get(canonical, {})
+    names = tuple(str(x) for x in (catalog.get("param_names") or ()))
+    if not names:
+        # A one-input elementwise operator may legitimately have old metadata
+        # without param_names; all multi-input production operators must declare.
+        names = ("x",)
+
+    if canonical in SPECIAL_POSITIONAL:
+        return [
+            _value_for_parameter(name, panels)
+            for name in SPECIAL_POSITIONAL[canonical]
+        ], {}
+
     positional: list[Any] = []
-    kwargs: dict[str, Any] = {}
-
-    # Regression-style varargs need explicit explanatory panels.
-    special = SPECIAL_POSITIONAL.get(canonical)
-    if special:
-        positional.extend(_value_for_parameter(name, panels) for name in special)
-
-    for param in sig.parameters.values():
-        if param.name == "self":
-            continue
-        if param.kind == inspect.Parameter.VAR_POSITIONAL:
-            if not special:
-                positional.extend([panels["exposure"]])
-            continue
-        if param.kind == inspect.Parameter.VAR_KEYWORD:
-            continue
-        # Parameters already provided by a canonical-specific positional fixture.
-        if special and param.name in special:
-            continue
-        required = param.default is inspect.Parameter.empty
-        if not required:
-            # Keep operator-declared defaults unless this is clearly a data panel.
-            if param.name not in PANEL_PARAM_NAMES:
-                continue
-        try:
-            value = _value_for_parameter(param.name, panels)
-        except KeyError:
-            if required:
-                raise
-            continue
-        kwargs[param.name] = value
-    return positional, kwargs
+    for name in names:
+        positional.append(_value_for_parameter(name, panels))
+    return positional, {}
 
 
 def _slice_value(value: Any, rows: int) -> Any:
-    if isinstance(value, pd.DataFrame):
-        return value.iloc[:rows]
-    if isinstance(value, pd.Series):
+    if isinstance(value, (pd.DataFrame, pd.Series)):
         return value.iloc[:rows]
     return value
 
@@ -241,11 +190,9 @@ def _to_frame(value: Any, template: pd.DataFrame) -> pd.DataFrame:
 def _equal(a: pd.DataFrame, b: pd.DataFrame) -> bool:
     if a.shape != b.shape or not a.index.equals(b.index) or not a.columns.equals(b.columns):
         return False
-    av = a.to_numpy()
-    bv = b.to_numpy()
+    av, bv = a.to_numpy(), b.to_numpy()
     if av.dtype.kind in "biufc" and bv.dtype.kind in "biufc":
         return bool(np.allclose(av, bv, equal_nan=True, rtol=1e-9, atol=1e-11))
-    # Object/category/bool path.
     return a.astype(object).where(pd.notna(a), None).equals(
         b.astype(object).where(pd.notna(b), None)
     )
@@ -275,8 +222,7 @@ def audit() -> list[str]:
         if not spec.allow_in_production:
             errors.append(f"{canonical}: OperatorSpec.allow_in_production=False")
             continue
-        eligible = production_eligible_backends(canonical)
-        if not eligible:
+        if not production_eligible_backends(canonical):
             errors.append(f"{canonical}: no production eligible backend")
             continue
         op = OperatorRegistry.get(canonical, "pandas_numpy")
