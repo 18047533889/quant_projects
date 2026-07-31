@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Reviewed, fail-closed operator surfaces.
+"""Reviewed, fail-closed operator authoring surfaces.
 
-This module is the only source of truth for authoring surfaces.  Import-time
-governance may validate these sets against the final registry, but must never
-rewrite them.  ``daily`` is deliberately restricted to primitives with a
-Pandas reference, native Polars execution, real DuckDB execution, edge parity,
-and a no-fallback test.  Implemented operators that have not completed that
-contract remain available on ``extended`` or ``research``.
+Surfaces answer *where an operator is visible for authoring*; they are not a
+backend portability certificate.  Production admission is evaluated separately
+from backend capability.  An extended operator may therefore be production
+safe on a certified Pandas/NumPy runtime without being forced to implement
+Polars and DuckDB as well.
 """
 from __future__ import annotations
 
@@ -47,7 +46,7 @@ EXTENDED_ONLY_CANONICALS: frozenset[str] = frozenset({
     "group_percentile", "group_weighted_mean", "group_weighted_zscore",
     "is_nan", "lerp", "log10", "log2", "period_lag", "period_stability",
     "price_spread_deviation", "real_turnover_rate", "revision_delta", "round", "scale",
-    "saturate", "sec", "sigmoid", "signed_power", "sin", "sinh",
+    "safe_log_null", "saturate", "sec", "sigmoid", "signed_power", "sin", "sinh",
     "sqrt_abs", "square", "tan", "true_range", "truncate", "ts_argmax",
     "ts_argmin", "ts_bottomk_mean", "ts_bottomk_std", "ts_bottomk_sum",
     "ts_count_if", "ts_days_since", "ts_decay_exp_window", "ts_decay_linear",
@@ -62,10 +61,12 @@ EXTENDED_ONLY_CANONICALS: frozenset[str] = frozenset({
 })
 
 RESEARCH_ONLY_CANONICALS: frozenset[str] = frozenset({
-    "coskewness_to_market", "digital_count", "group_decay_linear",
-    "idio_skew", "intraday_vwap_deviation", "residual_momentum_capm",
+    "coskewness_to_market", "digital_count", "expanding_rank",
+    "group_decay_linear", "hump_decay", "idio_skew", "idio_vol",
+    "intraday_vwap_deviation", "rank_corr", "residual_momentum_capm",
     "rolling_beta_to_market", "tail_beta", "trade_when", "ts_max_buildup",
-    "ts_moment", "ts_poly2_coeff", "ts_poly2_resid", "ts_sum_decay",
+    "ts_moment", "ts_poly2_coeff", "ts_poly2_resid", "ts_sma_cn",
+    "ts_sum_decay",
 })
 
 UNSAFE_CANONICALS: frozenset[str] = frozenset()
@@ -81,7 +82,7 @@ HIDDEN_DAILY_NAMES: frozenset[str] = frozenset({
 
 
 def classify_canonical(canonical: str) -> str:
-    """Return the reviewed surface; unknown registrations fail closed."""
+    """Return the reviewed authoring surface; unknown registrations fail closed."""
     if canonical in INTERNAL_ONLY_CANONICALS:
         return "internal"
     if canonical in EXTENDED_ONLY_CANONICALS:
