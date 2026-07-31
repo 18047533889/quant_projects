@@ -47,6 +47,8 @@ SCALAR_VALUES: dict[str, Any] = {
     "offset":0,"require_consecutive":True,"trim_pct":0.1,"sign_policy":"strict",
     "denominator":"signed","aggr_func":"sum","lo":-2.0,"hi":2.0,"a":0.05,
     "left_window":3,"right_window":3,"history_window":40,"points":3,"std_dev":2.0,
+    "scale":1.0,"skipna":True,"revision_policy":"latest_available",
+    "missing_group_policy":"raise",
 }
 
 SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
@@ -54,10 +56,15 @@ SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
     ("cs_regression","mode"):0,
     ("cs_quantile","p"):0.5,
     ("group_percentile","p"):0.5,
+    ("group_percentile","side"):"top",
+    ("group_percentile","missing_group_policy"):"raise",
     ("revision_delta","mode"):"absolute",
     ("period_change","mode"):"absolute",
+    ("period_lag","revision_policy"):"latest_available",
     ("period_stability","method"):"std",
     ("ts_nth_value","order"):"largest",
+    ("ts_mad","scale"):1.0,
+    ("ts_product","skipna"):True,
     ("MACD_line","signal"):9,
     ("MACD_signal","signal"):9,
     ("MACD_hist","signal"):9,
