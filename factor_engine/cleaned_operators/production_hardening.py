@@ -77,11 +77,28 @@ def _infer_scope(canonical: str, catalog: dict[str, Any]) -> str:
     return "elementwise"
 
 
+def _bars_from_tags(catalog: dict[str, Any]) -> int | None:
+    for tag in catalog.get("tags") or ():
+        text = str(tag).strip().lower()
+        if text.startswith("bars_"):
+            try:
+                bars = int(text.split("_", 1)[1])
+            except (TypeError, ValueError):
+                continue
+            if bars > 0:
+                return bars
+    return None
+
+
 def _policy_patch(canonical: str, catalog: dict[str, Any]) -> dict[str, Any]:
     scope = _infer_scope(canonical, catalog)
     patch: dict[str, Any] = {"scope": scope, "pit_safe": True}
     if scope in {"ts", "fundamental_period", "session_intraday"}:
         patch["min_periods"] = _MIN_PERIODS_OVERRIDES.get(canonical, 1)
+    bars = _bars_from_tags(catalog)
+    if bars is not None and bars > 1:
+        # A bars_N pattern at t uses t-(N-1)..t, so it requires N-1 warmup rows.
+        patch["lag"] = max(int(patch.get("lag", 0) or 0), bars - 1)
     if canonical in FULL_HISTORY_REPLAY_CANONICALS:
         patch["lookback_window"] = None
     if scope == "session_intraday":
@@ -124,13 +141,7 @@ def _remove_promoted_legacy_denials(targets: frozenset[str]) -> None:
 
 
 def _sync_final_runtime_contract(canonical: str, catalog: dict[str, Any]) -> None:
-    """Make the final selected implementation the public parameter authority.
-
-    Replacement kernels may change a historical call contract (for example the
-    bounded support/resistance family adds ``history_window``). Registry catalog
-    metadata must never retain parameters from an implementation that has already
-    been replaced, because parsers, audits and signature gates consume the catalog.
-    """
+    """Make the final selected implementation the public parameter authority."""
     from cleaned_operators.registry import OperatorRegistry
 
     op = OperatorRegistry.get(canonical, "pandas_numpy") or OperatorRegistry.get(canonical)
@@ -146,6 +157,9 @@ def _sync_final_runtime_contract(canonical: str, catalog: dict[str, Any]) -> Non
     category = str(getattr(meta, "category", "") or "").strip()
     if category:
         catalog["category"] = category
+    tags = [str(tag) for tag in (getattr(meta, "tags", None) or ())]
+    if tags:
+        catalog["tags"] = tags
 
 
 def apply_production_hardening() -> None:
@@ -170,6 +184,8 @@ def apply_production_hardening() -> None:
         }:
             merged_policy["scope"] = patch["scope"]
             merged_policy["min_periods"] = patch.get("min_periods", 1)
+            if "lag" in patch:
+                merged_policy["lag"] = patch["lag"]
         merged_policy["pit_safe"] = True
         _EXPLICIT_POLICIES[canonical] = merged_policy
 
