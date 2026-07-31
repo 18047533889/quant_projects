@@ -193,6 +193,8 @@
     "mean",
     "median",
     "minimum",
+    "minute_bar",
+    "momentum",
     "move",
     "multiply",
     "ne",
@@ -318,5 +320,5 @@
     "yoy_by_period",
     "zscore"
   ],
-  "count": 313
+  "count": 315
 }
