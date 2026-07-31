@@ -1,9 +1,10 @@
 """Load and filter committed cold-start factor catalogs.
 
-The generated base catalogs remain deterministic and regenerable.  Small
+The generated base catalogs remain deterministic and regenerable. Small
 supplemental production catalogs are merged at load time for newly hardened
 operators whose seeds should not disappear when the large base library is
-regenerated.
+regenerated. Reviewed technical-extension seeds are code-generated from one
+market-neutral specification so A-share and US coverage cannot drift apart.
 """
 from __future__ import annotations
 
@@ -42,13 +43,19 @@ def load_catalog(market: str, surface: str = "daily") -> tuple[ColdStartFactor, 
     path = CATALOG_ROOT / f"{market}_{surface}.json"
     base = _load_rows(path) if path.is_file() else _generated_catalogs()[(market, surface)]
 
+    rows: list[ColdStartFactor] = list(base)
     supplemental = CATALOG_ROOT / f"{market}_{surface}_production.json"
-    if not supplemental.is_file():
-        return base
-    extra = _load_rows(supplemental)
-    # ensure_unique catches both duplicate IDs and structural formula duplicates
-    # across base + supplemental layers, so coverage cannot be inflated by aliases.
-    return ensure_unique([*base, *extra])
+    if supplemental.is_file():
+        rows.extend(_load_rows(supplemental))
+
+    if surface == "extended":
+        from .technical_extension_seeds import technical_extension_seeds
+        rows.extend(technical_extension_seeds(market))
+
+    # ensure_unique catches duplicate IDs and structural formula duplicates across
+    # generated, committed-production and technical-extension layers. Coverage
+    # therefore cannot be inflated by aliases or repeated formulas.
+    return ensure_unique(rows)
 
 
 def load_all_catalogs() -> tuple[ColdStartFactor, ...]:
