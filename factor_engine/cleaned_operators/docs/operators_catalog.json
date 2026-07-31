@@ -1,10 +1,10 @@
 {
   "schema_version": 2,
-  "canonical_count": 210,
+  "canonical_count": 211,
   "surface_counts": {
     "daily": 86,
     "extended": 101,
-    "research": 19,
+    "research": 20,
     "unsafe": 0,
     "legacy": 1,
     "internal": 3,
@@ -1405,6 +1405,19 @@
         "sql"
       ],
       "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "lqtp_historical_cvar",
+      "surface": "research",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": false,
       "scope": "elementwise",
       "lookback": null,
       "min_periods": null,

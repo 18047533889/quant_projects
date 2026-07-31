@@ -5,9 +5,9 @@
 
 ## 摘要
 
-- canonical 总数：210
+- canonical 总数：211
 - daily：86
-- research：19
+- research：20
 - unsafe：0
 - legacy：1
 
@@ -106,6 +106,7 @@
 | log10 | extended | pandas_numpy, polars |  | True | elementwise | None | None | 0 |
 | log2 | extended | pandas_numpy, polars |  | True | elementwise | None | None | 0 |
 | log_abs | daily | pandas_numpy, polars, sql |  | True | elementwise | None | None | 0 |
+| lqtp_historical_cvar | research | pandas_numpy |  | False | elementwise | None | None | 0 |
 | lt | daily | pandas_numpy, polars, sql |  | True | elementwise | None | None | 0 |
 | maximum | daily | pandas_numpy, polars, sql | fmax | True | elementwise | None | None | 0 |
 | minimum | daily | pandas_numpy, polars, sql | fmin | True | elementwise | None | None | 0 |
