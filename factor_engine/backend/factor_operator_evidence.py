@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
-"""Evidence for Pandas/Numpy semantic-reference production operators.
+"""Test-backed evidence for Pandas/Numpy semantic-reference factor operators.
 
-Primitive triple-backend evidence covers the Daily core.  This artifact covers
-all retained factor-shaped operators whose first certified production path is the
-Pandas/Numpy semantic reference.  It is issued only after execution,
+Primitive triple-backend evidence covers the Daily core. This artifact covers
+all retained non-Daily factor operators whose first certified production path is
+the Pandas/Numpy semantic reference. It is issued only after execution,
 determinism, shape and prefix-causality audits pass.
+
+Generated docs/manifests are deliberately excluded from the semantic tree hash;
+otherwise regenerating a manifest after certification would immediately make the
+artifact stale and create a self-referential certification loop.
 """
 from __future__ import annotations
 
@@ -23,9 +27,17 @@ def _hashes() -> dict[str, str]:
     audit = FE_ROOT / "scripts" / "audit_all_factor_production.py"
     hardening = FE_ROOT / "cleaned_operators" / "production_hardening.py"
     return {
-        "cleaned_operator_tree_hash": _tree_hash(FE_ROOT / "cleaned_operators"),
-        "audit_source_hash": compute_implementation_hash(audit.read_text(encoding="utf-8")),
-        "hardening_source_hash": compute_implementation_hash(hardening.read_text(encoding="utf-8")),
+        # Only executable semantic source belongs in the hard identity. Generated
+        # JSON/CSV documentation is derived output and must not participate.
+        "cleaned_operator_python_tree_hash": _tree_hash(
+            FE_ROOT / "cleaned_operators", patterns=("*.py",)
+        ),
+        "audit_source_hash": compute_implementation_hash(
+            audit.read_text(encoding="utf-8")
+        ),
+        "hardening_source_hash": compute_implementation_hash(
+            hardening.read_text(encoding="utf-8")
+        ),
     }
 
 
@@ -54,6 +66,7 @@ def validation_errors() -> list[str]:
     try:
         from cleaned_operators.production_hardening import factor_production_targets
         from cleaned_operators.operator_surface import DAILY_CANONICALS
+
         expected = set(factor_production_targets()).difference(DAILY_CANONICALS)
     except Exception as exc:
         return errors + [f"target resolution failed: {type(exc).__name__}: {exc}"]
