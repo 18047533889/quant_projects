@@ -143,6 +143,42 @@ def test_pandas_first_production_is_independent_from_duckdb() -> None:
     assert cert.has_any_production_backend is True
 
 
+def test_pandas_first_production_parameters_are_bounded() -> None:
+    _loaded_registry()
+    from backend.pandas_first_signature import check_pandas_first_plan_signatures
+    from planner.logical_plan import PlanNode
+
+    x = PlanNode(op="column", inputs=[], attrs={"name": "close"})
+    valid = PlanNode(
+        op="ts_quantile",
+        inputs=[
+            x,
+            PlanNode(op="literal", inputs=[], attrs={"value": 20}),
+            PlanNode(op="literal", inputs=[], attrs={"value": 0.75}),
+        ],
+        attrs={},
+    )
+    invalid = PlanNode(
+        op="ts_quantile",
+        inputs=[
+            x,
+            PlanNode(op="literal", inputs=[], attrs={"value": 20}),
+            PlanNode(op="literal", inputs=[], attrs={"value": 1.5}),
+        ],
+        attrs={},
+    )
+    assert check_pandas_first_plan_signatures(valid) == []
+    assert any("[0, 1]" in x for x in check_pandas_first_plan_signatures(invalid))
+
+
+def test_production_source_preflight_accepts_compatible_macros_then_checks_plan() -> None:
+    from api.dsl_parser import parse_factor
+    from runtime.production_policy import assert_production_factors
+
+    factor = parse_factor("safe_log(close) + momentum(close, 20)", surface="lqtp")
+    assert_production_factors([factor], mode="production")
+
+
 def test_recursive_sma_stays_research_until_checkpointed() -> None:
     _loaded_registry()
     from cleaned_operators.operator_spec import build_operator_spec
