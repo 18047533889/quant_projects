@@ -2,11 +2,10 @@
 """Whole-plan backend routing over production-certified candidate plans.
 
 The optimizer never executes multiple backends just to discover the fastest one.
-Instead it selects among *eligible* physical plans using an offline measured cost
+Instead it selects among eligible physical plans using an offline measured cost
 baseline when that baseline matches the runtime environment, otherwise a clearly
-labelled conservative estimate. Per-operator routing remains available inside the
-mixed SQL/Python plan, but a fully portable DAG is routed as one unit to avoid
-Pandas↔Polars↔SQL conversion thrashing.
+labelled conservative estimate. Wide Polars and Polars-long are separate plans:
+not every production-safe Polars operator is long-native.
 """
 from __future__ import annotations
 
@@ -22,7 +21,7 @@ from planner.logical_plan import PlanNode
 
 @dataclass(frozen=True)
 class PlanRoute:
-    backend: str  # pandas_numpy | polars_long | duckdb_sql | hybrid
+    backend: str  # pandas_numpy | polars_panel | polars_long | duckdb_sql | hybrid
     estimated_cost: float
     routing_basis: str  # measured | estimated
     candidate_costs: tuple[tuple[str, float], ...]
@@ -67,14 +66,9 @@ def _measured_baseline() -> tuple[dict[str, Any], bool]:
     current = _runtime_family()
     for key in ("python", "numpy", "pandas", "polars", "duckdb"):
         expected = str(recorded.get(key, ""))
-        if key != "python":
-            expected = ".".join(expected.split(".")[:2])
-        else:
-            expected = ".".join(expected.split(".")[:2])
+        expected = ".".join(expected.split(".")[:2])
         if expected and expected != current.get(key):
             return payload, False
-    # Hardware identity is intentionally coarse. A deployment-specific benchmark
-    # may include it; absence does not invalidate software-family measurements.
     return payload, True
 
 
@@ -134,7 +128,6 @@ def _data_source_kind(ctx: Any) -> str:
 
 
 def estimate_plan_rows(ctx: Any) -> int:
-    """Estimate long-table rows without forcing a full read."""
     runtime = dict(getattr(ctx, "runtime_stats", None) or {})
     for key in ("row_count_estimate", "input_row_count", "estimated_rows"):
         try:
@@ -144,7 +137,6 @@ def estimate_plan_rows(ctx: Any) -> int:
         except Exception:
             pass
     ds = getattr(ctx, "data_source", None)
-    # unwrap the logical SourceRef facade
     inner = getattr(ds, "inner", None)
     if inner is not None:
         ds = inner
@@ -165,12 +157,15 @@ def estimate_plan_rows(ctx: Any) -> int:
 def _cost(canonical: str, backend: str, rows: int) -> float:
     from backend.operator_cost import estimate_backend_cost
 
-    key = "polars" if backend == "polars_long" else backend
+    if backend in {"polars_long", "polars_panel"}:
+        key = "polars"
+    else:
+        key = backend
     return estimate_backend_cost(
         canonical,
         key,
         row_count_estimate=rows,
-        requires_conversion=(backend == "polars_long"),
+        requires_conversion=backend in {"polars_long", "polars_panel"},
     )
 
 
@@ -181,18 +176,22 @@ def _candidate_is_measured(ops: tuple[str, ...], backend: str) -> bool:
     entries = payload.get("operators") or {}
     keys = (backend,)
     if backend == "polars_long":
-        keys = ("polars_long", "polars", "polars_panel")
+        keys = ("polars_long", "polars")
+    elif backend == "polars_panel":
+        keys = ("polars_panel", "polars")
     for op in ops:
         row = entries.get(op)
         if not isinstance(row, dict):
             return False
-        if not any(isinstance(row.get(key), dict) and "error" not in row.get(key, {}) for key in keys):
+        if not any(
+            isinstance(row.get(key), dict) and "error" not in row.get(key, {})
+            for key in keys
+        ):
             return False
     return True
 
 
 def choose_plan_route(plan: PlanNode, ctx: Any) -> PlanRoute:
-    """Choose the cheapest certified physical plan for the current DAG."""
     from backend.operator_capability import supports_pandas, supports_polars, supports_sql
     from backend.polars_long_production import is_polars_long_native_production_safe
 
@@ -208,13 +207,21 @@ def choose_plan_route(plan: PlanNode, ctx: Any) -> PlanRoute:
     if pandas_ok:
         candidates["pandas_numpy"] = sum(_cost(op, "pandas_numpy", rows) for op in ops)
 
-    # Long-native and full SQL are intentionally disallowed for logical SourceRef
-    # columns; those have source-specific PIT/join contracts at the Arrow/Pandas boundary.
-    polars_ok = bool(ops) and not source_ref and all(
+    # Wide Polars is valid even when an operator is not Polars-long-native. The
+    # plan remains on one wide representation, so conversion is paid once below.
+    polars_panel_ok = bool(ops) and not source_ref and all(
+        supports_polars(op, mode=mode) for op in ops
+    )
+    if polars_panel_ok:
+        cost = sum(_cost(op, "polars_panel", rows) for op in ops)
+        cost += 2.0 + 0.05 * max(rows / 1_000_000.0, 0.001)
+        candidates["polars_panel"] = cost
+
+    polars_long_ok = bool(ops) and not source_ref and all(
         is_polars_long_native_production_safe(op) if production else supports_polars(op, mode=mode)
         for op in ops
     )
-    if polars_ok:
+    if polars_long_ok:
         candidates["polars_long"] = sum(_cost(op, "polars_long", rows) for op in ops)
 
     sql_ok = bool(ops) and not source_ref and data_kind in {"duckdb", "clickhouse"} and all(
@@ -224,42 +231,44 @@ def choose_plan_route(plan: PlanNode, ctx: Any) -> PlanRoute:
     if sql_ok:
         candidates["duckdb_sql"] = sum(_cost(op, sql_backend, rows) for op in ops)
 
-    # Mixed plan: plan-level SQL pushdown plus evidence-constrained per-op routing.
-    # It is eligible whenever every operator has at least one physical path and a
-    # pushdown-capable source exists. Penalise representation boundaries so a DAG
-    # does not oscillate backends merely because individual kernels are faster.
     if data_kind in {"duckdb", "clickhouse"}:
         mixed = 0.0
         mixed_ok = True
+        previous_backend: str | None = None
+        transitions = 0
         for op in ops:
-            per_op: list[float] = []
+            per_op: list[tuple[str, float]] = []
             if supports_pandas(op, mode=mode):
-                per_op.append(_cost(op, "pandas_numpy", rows))
+                per_op.append(("pandas_numpy", _cost(op, "pandas_numpy", rows)))
             if supports_polars(op, mode=mode):
-                per_op.append(_cost(op, "polars_long", rows))
+                per_op.append(("polars_panel", _cost(op, "polars_panel", rows)))
             if not source_ref and supports_sql(op, data_source_kind=data_kind, mode=mode):
-                per_op.append(_cost(op, sql_backend, rows))
+                per_op.append(("sql", _cost(op, sql_backend, rows)))
             if not per_op:
                 mixed_ok = False
                 break
-            mixed += min(per_op)
+            chosen_backend, chosen_cost = min(per_op, key=lambda item: (item[1], item[0]))
+            if previous_backend is not None and chosen_backend != previous_backend:
+                transitions += 1
+            previous_backend = chosen_backend
+            mixed += chosen_cost
         if mixed_ok:
-            # one materialization/representation boundary budget per mixed DAG
-            mixed += 8.0 + 0.15 * max(rows / 1_000_000.0, 0.001)
+            millions = max(rows / 1_000_000.0, 0.001)
+            mixed += transitions * (3.0 + 0.10 * millions)
             candidates["hybrid"] = mixed
 
     if not candidates:
-        # Fail closed in production; research caller receives a useful capability error.
         from backend.operator_capability import UnsupportedOperatorBackendError
         raise UnsupportedOperatorBackendError(
             "no eligible physical plan for canonicals: " + ", ".join(ops)
         )
 
     chosen = min(candidates.items(), key=lambda item: (item[1], item[0]))
-    # The route is called measured only if the chosen full-plan backend has a
-    # measured baseline for every node. Hybrid remains estimated until a dedicated
-    # mixed-plan benchmark corpus is available.
-    basis = "measured" if chosen[0] != "hybrid" and _candidate_is_measured(ops, chosen[0]) else "estimated"
+    basis = (
+        "measured"
+        if chosen[0] != "hybrid" and _candidate_is_measured(ops, chosen[0])
+        else "estimated"
+    )
     return PlanRoute(
         backend=chosen[0],
         estimated_cost=float(chosen[1]),
