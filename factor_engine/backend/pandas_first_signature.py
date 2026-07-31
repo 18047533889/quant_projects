@@ -2,9 +2,8 @@
 """Bounded production call validation for single-backend/Extended operators.
 
 Production eligibility is backend-independent, but every public factor call must
-also have a static, deterministic parameter contract.  This validator runs on
-the canonical Plan after aliases/macros have been normalized and therefore
-applies equally to former Research-factor operators promoted to Extended.
+also have a static, deterministic parameter contract. This validator runs on the
+canonical Plan after aliases/macros have been normalized.
 """
 from __future__ import annotations
 
@@ -18,16 +17,14 @@ _WINDOW_NAMES = (
     "window", "d", "n", "span", "period", "periods", "lookback",
     "max_lookback", "fast", "slow", "fast_period", "slow_period",
     "signal_span", "signal_window", "signal_period",
+    "left_window", "right_window", "history_window",
 )
 
-# Names that are factor/panel inputs rather than static tuning parameters.  Some
-# names (notably ``signal`` and ``value``) are canonical-dependent and handled in
-# ``_is_panel_parameter`` below.
 _PANEL_NAMES = frozenset({
     "x", "y", "z", "a", "b", "w", "g", "left", "right",
     "numerator", "denominator", "ret", "returns", "benchmark_ret",
     "market_ret", "benchmark", "market", "open", "high", "low", "close",
-    "price", "volume", "amount", "vwap", "weight", "weights", "condition",
+    "price", "volume", "amount", "vwap", "turnover", "weight", "weights", "condition",
     "group", "industry", "sector", "fiscal_quarter", "period_id", "quarter",
     "revision_id", "decision_time", "available_time", "available_at",
     "exposure", "exposures", "control", "controls", "factor", "target",
@@ -42,6 +39,19 @@ _QUANTILE_Q = frozenset({
 _TOPK = frozenset({
     "ts_topk_sum", "ts_topk_mean", "ts_topk_std",
     "ts_bottomk_sum", "ts_bottomk_mean", "ts_bottomk_std",
+})
+_MIN_WINDOW_TWO = frozenset({
+    "AROON", "AROON_up", "AROON_down", "CCI", "efficiency_ratio",
+    "choppiness_index", "parkinson_vol", "garman_klass_vol",
+    "rogers_satchell_vol", "overnight_volatility", "intraday_volatility",
+    "range_volatility", "ulcer_index", "bollinger_pct_b", "bollinger_width",
+})
+_MIN_WINDOW_THREE = frozenset({"yang_zhang_vol"})
+_STRUCTURE_WITH_HISTORY = frozenset({
+    "ts_last_pivot_high", "ts_last_pivot_low", "ts_pivot_high_age", "ts_pivot_low_age",
+    "ts_resistance_level", "ts_support_level", "ts_resistance_slope", "ts_support_slope",
+    "ts_distance_to_resistance", "ts_distance_to_support", "ts_resistance_break",
+    "ts_support_break",
 })
 
 
@@ -62,12 +72,6 @@ def _is_panel_parameter(canonical: str, name: str) -> bool:
 
 
 def _call_values(node: PlanNode, canonical: str) -> tuple[dict[str, Any], list[str]]:
-    """Collect static literals and flag dynamic tuning parameters.
-
-    Registry ``param_names`` is the canonical public contract.  Static tuning
-    parameters must be literals in Production: a panel-driven window/quantile or
-    mode makes lookback/resource behaviour data-dependent and is not admitted.
-    """
     from cleaned_operators.registry import OperatorRegistry
 
     catalog = OperatorRegistry._catalog.get(canonical, {})
@@ -126,7 +130,6 @@ def _require_positive_int(canonical: str, values: dict[str, Any], name: str) -> 
 
 
 def validate_pandas_first_call(canonical: str, node: PlanNode) -> tuple[bool, str]:
-    """Validate one canonical Extended/single-backend production call."""
     from cleaned_operators.production_tiers import PANDAS_FIRST_PRODUCTION_CANONICALS
 
     if canonical not in PANDAS_FIRST_PRODUCTION_CANONICALS:
@@ -136,14 +139,12 @@ def validate_pandas_first_call(canonical: str, node: PlanNode) -> tuple[bool, st
     if dynamic:
         return False, f"{canonical}: production tuning parameter(s) must be literal: {', '.join(dynamic)}"
 
-    # Generic positive integer horizons.  ``n`` is deliberately included: all
-    # promoted n-parameters are a period/count, never a panel input.
     for name in _WINDOW_NAMES:
         error = _require_positive_int(canonical, values, name)
         if error:
             return False, error
 
-    for name in ("min_periods", "min_obs", "run", "buckets", "top", "k"):
+    for name in ("min_periods", "min_obs", "run", "buckets", "top", "k", "points"):
         error = _require_positive_int(canonical, values, name)
         if error:
             return False, error
@@ -155,6 +156,19 @@ def validate_pandas_first_call(canonical: str, node: PlanNode) -> tuple[bool, st
         min_periods = _integer(min_periods_raw)
         if min_periods is not None and min_periods > window:
             return False, f"{canonical}: min_periods must be <= window"
+
+    if canonical in _MIN_WINDOW_TWO and window is not None and window < 2:
+        return False, f"{canonical}: window must be >= 2"
+    if canonical in _MIN_WINDOW_THREE and window is not None and window < 3:
+        return False, f"{canonical}: window must be >= 3"
+
+    if canonical in _STRUCTURE_WITH_HISTORY:
+        history = _integer(values.get("history_window")) if "history_window" in values else None
+        points = _integer(values.get("points")) if "points" in values else None
+        if points is not None and points < 2:
+            return False, f"{canonical}: points must be >= 2"
+        if history is not None and points is not None and points > history:
+            return False, f"{canonical}: points must be <= history_window"
 
     if canonical in _QUANTILE_Q:
         for name in ("q", "quantile", "p", "fraction"):
@@ -199,6 +213,9 @@ def validate_pandas_first_call(canonical: str, node: PlanNode) -> tuple[bool, st
         if fast is not None and slow is not None and fast >= slow:
             return False, f"{canonical}: fast period must be < slow period"
 
+    if "std_dev" in values and (not _finite(values["std_dev"]) or float(values["std_dev"]) <= 0):
+        return False, f"{canonical}: std_dev must be finite and > 0"
+
     if "ddof" in values:
         ddof = _integer(values["ddof"])
         if ddof not in {0, 1}:
@@ -230,8 +247,6 @@ def validate_pandas_first_call(canonical: str, node: PlanNode) -> tuple[bool, st
     if "order" in values and str(values["order"]).lower() not in {"largest", "smallest", "asc", "desc"}:
         return False, f"{canonical}: unsupported order={values['order']!r}"
 
-    # Any remaining literal numeric tuning parameter must be finite.  This does
-    # not invent an unsupported narrow domain, but it blocks NaN/Inf config leaks.
     for name, value in values.items():
         if isinstance(value, (int, float)) and not isinstance(value, bool) and not _finite(value):
             return False, f"{canonical}: {name} must be finite"
@@ -240,7 +255,6 @@ def validate_pandas_first_call(canonical: str, node: PlanNode) -> tuple[bool, st
 
 
 def check_pandas_first_plan_signatures(plan: Any) -> list[str]:
-    """Walk a canonical plan and return bounded-signature violations."""
     from cleaned_operators.production_tiers import PANDAS_FIRST_PRODUCTION_CANONICALS
     from cleaned_operators.registry import OperatorRegistry
 
