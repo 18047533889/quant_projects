@@ -1,4 +1,10 @@
-"""Load and filter committed cold-start factor catalogs."""
+"""Load and filter committed cold-start factor catalogs.
+
+The generated base catalogs remain deterministic and regenerable.  Small
+supplemental production catalogs are merged at load time for newly hardened
+operators whose seeds should not disappear when the large base library is
+regenerated.
+"""
 from __future__ import annotations
 
 import json
@@ -15,8 +21,15 @@ CATALOG_ROOT = PACKAGE_ROOT / "catalogs"
 @lru_cache(maxsize=1)
 def _generated_catalogs():
     from .generator import build_catalogs
-
     return build_catalogs(PACKAGE_ROOT.parent)
+
+
+def _load_rows(path: Path) -> tuple[ColdStartFactor, ...]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    rows = ensure_unique(ColdStartFactor.from_dict(row) for row in data["factors"])
+    if int(data.get("factor_count", -1)) != len(rows):
+        raise ValueError(f"catalog count mismatch: {path}")
+    return rows
 
 
 @lru_cache(maxsize=8)
@@ -25,14 +38,17 @@ def load_catalog(market: str, surface: str = "daily") -> tuple[ColdStartFactor, 
         raise ValueError("market must be ashare or us")
     if surface not in {"daily", "extended"}:
         raise ValueError("surface must be daily or extended")
+
     path = CATALOG_ROOT / f"{market}_{surface}.json"
-    if not path.is_file():
-        return _generated_catalogs()[(market, surface)]
-    data = json.loads(path.read_text(encoding="utf-8"))
-    rows = ensure_unique(ColdStartFactor.from_dict(row) for row in data["factors"])
-    if int(data.get("factor_count", -1)) != len(rows):
-        raise ValueError(f"catalog count mismatch: {path}")
-    return rows
+    base = _load_rows(path) if path.is_file() else _generated_catalogs()[(market, surface)]
+
+    supplemental = CATALOG_ROOT / f"{market}_{surface}_production.json"
+    if not supplemental.is_file():
+        return base
+    extra = _load_rows(supplemental)
+    # ensure_unique catches both duplicate IDs and structural formula duplicates
+    # across base + supplemental layers, so coverage cannot be inflated by aliases.
+    return ensure_unique([*base, *extra])
 
 
 def load_all_catalogs() -> tuple[ColdStartFactor, ...]:
