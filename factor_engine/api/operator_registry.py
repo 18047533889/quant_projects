@@ -47,4 +47,6 @@ def build_dsl_allowlist(
         )
     out = augment_dsl_allowlist(allow, surface=raw_surface)
     from api.lqtp_neutralization import augment_neutralization
-    return augment_neutralization(out)
+    out = augment_neutralization(out)
+    from api.lqtp_market import augment_market
+    return augment_market(out)
