@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Post-finalization compatibility that does not widen the authoring surface."""
+"""Post-governance compatibility and backend-independent production metadata."""
 from cleaned_operators.registry import OperatorRegistry
 from research_tools.registry import ResearchToolRegistry
 
@@ -68,6 +68,45 @@ def _attach_checkpoint_contracts() -> None:
         )
 
 
+def _mark_pandas_first_production() -> None:
+    """Admit reviewed semantics without requiring SQL/Polars portability.
+
+    This updates lifecycle metadata only for active operators that actually have
+    a Pandas/NumPy runtime and remain PIT-safe according to the policy layer.
+    ``operator_spec`` will still fail closed on PIT/shape/denied rules.
+    """
+    from cleaned_operators.operator_policy import infer_operator_policy
+    from cleaned_operators.production_tiers import PANDAS_FIRST_PRODUCTION_CANONICALS
+
+    for canonical in sorted(PANDAS_FIRST_PRODUCTION_CANONICALS):
+        if "pandas_numpy" not in OperatorRegistry.backends_for(canonical):
+            continue
+        operator = OperatorRegistry.get(canonical, "pandas_numpy")
+        if operator is None:
+            continue
+        policy = infer_operator_policy(operator, canonical=canonical)
+        if not bool(getattr(policy, "pit_safe", False)):
+            continue
+        if not bool(getattr(policy, "shape_preserving", True)):
+            continue
+        catalog = OperatorRegistry._catalog.get(canonical)
+        if catalog is None:
+            continue
+        catalog["status"] = "production"
+        catalog["lifecycle_status"] = "production"
+        catalog["production_backend_policy"] = "at_least_one_certified_backend"
+        catalog["production_portability_required"] = False
+        backend_meta = dict(catalog.get("backend_meta") or {})
+        pandas_meta = dict(backend_meta.get("pandas_numpy") or {})
+        pandas_meta.update({
+            "production_certified": True,
+            "certification_tier": "pandas_first",
+            "reference_backend": True,
+        })
+        backend_meta["pandas_numpy"] = pandas_meta
+        catalog["backend_meta"] = backend_meta
+
+
 def apply_post_governance() -> None:
     global _APPLIED
     if _APPLIED:
@@ -89,4 +128,5 @@ def apply_post_governance() -> None:
 
     _normalize_research_aliases()
     _attach_checkpoint_contracts()
+    _mark_pandas_first_production()
     _APPLIED = True
