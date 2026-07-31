@@ -23,36 +23,32 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: pip
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
           python -m pip install -e ./dataaccess
           python -m pip install pytest pyyaml
-
-      - name: Verify backend and factor evidence
+      - name: Verify backend factor and recipe evidence
         run: |
           python factor_engine/scripts/certify_primitive_evidence.py --check
-          python factor_engine/scripts/certify_recipe_evidence.py --check
           python factor_engine/scripts/certify_factor_operator_evidence.py --check
-
+          python factor_engine/scripts/certify_recipe_evidence.py --check
       - name: Audit every Factor DSL production operator
         run: python factor_engine/scripts/audit_all_factor_production.py
-
-      - name: Regression test promoted and technical production operators
+      - name: Regression test promoted technical fundamental and SourceRef operators
         run: |
           pytest -q \
             factor_engine/tests/operators/test_promoted_production_repairs.py \
             factor_engine/tests/operators/test_technical_extensions.py \
             factor_engine/tests/operators/test_candle_patterns_extended.py \
+            factor_engine/tests/operators/test_v2_operator_expansion.py \
+            factor_engine/tests/operators/test_recipe_production_admission_v2.py \
             factor_engine/tests/runtime/test_logical_source_production_contracts.py
-
       - name: Verify cold-start production coverage
         run: |
           python factor_cold_start/scripts/report_coverage.py
@@ -64,41 +60,46 @@ jobs:
               if key.endswith('_extended') and row['eligible_operator_coverage_pct'] != 100.0:
                   raise SystemExit(f"{key}: missing={row['missing_eligible_operators']}")
           PY
-
       - name: Smoke deployment backend calibration
         run: |
-          python factor_engine/scripts/calibrate_backend_costs.py \
-            --rows 200 500 --repeats 1 --output /tmp/backend_cost_smoke.json
+          python factor_engine/scripts/calibrate_backend_costs.py --rows 200 500 --repeats 1 --output /tmp/backend_cost_smoke.json
           python - <<'PY'
           import json
           from pathlib import Path
           p=json.loads(Path('/tmp/backend_cost_smoke.json').read_text())
           assert p['provenance']['measured'] is True
           assert p['operators'], 'empty calibration corpus'
-          failures=[]
-          measured=0
+          failures=[];measured=0
           for canonical,row in p['operators'].items():
               for backend,result in row.items():
-                  measured += 1
-                  if isinstance(result,dict) and result.get('error'):
-                      failures.append(f"{canonical}/{backend}: {result['error']}")
-          assert measured > 0, 'no production-safe backend candidates were calibrated'
-          if failures:
-              raise SystemExit('calibration failures:\n'+'\n'.join(failures))
+                  measured+=1
+                  if isinstance(result,dict) and result.get('error'):failures.append(f"{canonical}/{backend}: {result['error']}")
+          assert measured>0,'no production-safe backend candidates were calibrated'
+          if failures:raise SystemExit('calibration failures:\n'+'\n'.join(failures))
           PY
-
-      - name: Compile new production modules
+      - name: Compile production modules
         run: |
           python -m py_compile \
             factor_engine/backend/plan_cost_router.py \
             factor_engine/backend/factor_operator_evidence.py \
+            factor_engine/backend/recipe_evidence.py \
+            factor_engine/backend/pandas_first_signature.py \
             factor_engine/cleaned_operators/production_hardening.py \
-            factor_engine/cleaned_operators/production_certification_overlay.py \
-            factor_engine/cleaned_operators/production_repairs.py \
+            factor_engine/cleaned_operators/production_policy_extensions_v2.py \
             factor_engine/cleaned_operators/price_volume/technical_extensions.py \
             factor_engine/cleaned_operators/price_volume/technical_structure_repairs.py \
-            factor_engine/cleaned_operators/price_volume/candle_patterns_extended.py \
+            factor_engine/cleaned_operators/price_volume/structure_patterns_v2.py \
+            factor_engine/cleaned_operators/price_volume/liquidity_v2.py \
+            factor_engine/cleaned_operators/price_volume/candle_geometry_v2.py \
+            factor_engine/cleaned_operators/price_volume/candle_pattern_engine_v2.py \
+            factor_engine/cleaned_operators/technical/indicators_v2.py \
+            factor_engine/cleaned_operators/fundamental/transforms_v2.py \
+            factor_engine/cleaned_operators/fundamental/transforms_repairs_v2.py \
+            factor_engine/storage/sources/intraday_feature_extension.py \
+            factor_engine/storage/sources/intraday_feature_runtime_v2.py \
+            factor_engine/api/intraday_daily.py \
+            factor_engine/api/technical_macros_v2.py \
             factor_engine/scripts/audit_all_factor_production.py \
             factor_engine/scripts/calibrate_backend_costs.py \
-            factor_cold_start/technical_extension_seeds.py \
-            factor_cold_start/candle_pattern_seeds.py
+            factor_cold_start/v2_operator_seeds.py \
+            factor_cold_start/intraday_daily_seeds.py
