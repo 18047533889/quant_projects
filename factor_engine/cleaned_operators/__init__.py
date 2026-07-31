@@ -91,8 +91,9 @@ def load_all() -> None:
     from cleaned_operators.lqtp_policy_patch import apply_lqtp_policy_patch
     apply_lqtp_policy_patch()
 
-    # Factor-shaped research operators remain executable under the research DSL;
-    # diagnostics-only utilities are still migrated into ResearchToolRegistry.
+    # Factor-shaped research operators are executable during governance so they
+    # can be audited and promoted. Diagnostics-only utilities remain in
+    # ResearchToolRegistry and never become Factor DSL production operators.
     from cleaned_operators.research_factor_enable import enable_research_factor_runtime
     enable_research_factor_runtime()
 
@@ -101,6 +102,13 @@ def load_all() -> None:
 
     from cleaned_operators.layer_governance_post import apply_post_governance
     apply_post_governance()
+
+    # Production is a semantic/operator property, not a requirement that all
+    # backends be portable. Harden every factor-shaped operator before the SQL
+    # registry and final capability snapshot are frozen; each physical backend
+    # retains an independent production-safe evidence gate.
+    from cleaned_operators.production_hardening import apply_production_hardening
+    apply_production_hardening()
 
     from backend.sql_pushdown.sql_registry import register_sql_backends
     register_sql_backends()
