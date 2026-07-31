@@ -1,16 +1,8 @@
 """表达式 → IR：Analyzer 把 ``Expr`` 树降为可执行的 ``IRNode``。
 
-支持节点
---------
-仅三种：``ColumnRef``（列引用）、``Literal``（常量）、``CleanedCall``（算子调用）。
-所有算子语义以 ``cleaned_operators`` 为准；此处不做数值计算。
-
-副作用分析
-----------
-遍历 ``CleanedCall`` 时顺带推导：
-- ``lookback``：沿表达式 DAG 的最长依赖路径递归累加，而不是只取全局最大窗口；
-- ``has_ts_op`` / ``has_cs_op``：按算子 ``metadata.category`` 与 canonical 名启发式标记；
-- ``referenced_columns``：公式依赖的数据字段集合。
+遍历 CleanedCall 时同时推导历史依赖。新增技术结构算子必须显式声明
+隐藏在算子内部的 shift / pivot-confirmation / multi-stage rolling lookback，
+避免 production warmup 只看到表面 ``window`` 而低估历史读取量。
 """
 from __future__ import annotations
 
@@ -37,14 +29,39 @@ _LAG_PARAM_NAMES: dict[str, tuple[str, ...]] = {
 _FIXED_LAGS: dict[str, int] = {
     "prev": 1,
     "ts_ratio": 1,
+    "candle_gap": 1,
+    "candle_gap_pct": 1,
+    "cdl_engulfing": 1,
+    "cdl_inside_bar": 1,
+    "cdl_outside_bar": 1,
 }
 _WINDOW_PARAM_NAMES: tuple[str, ...] = (
-    "window",
-    "d",
-    "span",
-    "period",
-    "periods",
+    "window", "d", "span", "period", "periods",
 )
+
+# Operators whose public ``window`` hides one extra historical bar because the
+# internal statistic is computed from a lagged observation or from a prior-only
+# baseline. For window=w the required historical increment is w, not w-1.
+_WINDOW_PLUS_ONE_CANONICALS: frozenset[str] = frozenset({
+    "ts_prev_high", "ts_prev_low", "ts_distance_to_high", "ts_distance_to_low",
+    "ts_breakout_high", "ts_breakdown_low", "ts_new_high", "ts_new_low",
+    "ts_channel_position", "ts_days_since_high", "ts_days_since_low",
+    "ts_range_expansion", "donchian_upper", "donchian_lower", "donchian_mid",
+    "donchian_position", "relative_volume", "volume_zscore", "dollar_volume_zscore",
+    "volume_momentum", "turnover_momentum", "turnover_zscore", "rolling_obv",
+    "rolling_pvt", "MFI", "choppiness_index", "yang_zhang_vol",
+    "overnight_volatility", "candle_range_atr",
+})
+
+_PIVOT_CONFIRM_CANONICALS: frozenset[str] = frozenset({
+    "ts_confirmed_pivot_high", "ts_confirmed_pivot_low",
+})
+_BOUNDED_STRUCTURE_CANONICALS: frozenset[str] = frozenset({
+    "ts_last_pivot_high", "ts_last_pivot_low", "ts_pivot_high_age", "ts_pivot_low_age",
+    "ts_resistance_level", "ts_support_level", "ts_resistance_slope", "ts_support_slope",
+    "ts_distance_to_resistance", "ts_distance_to_support", "ts_resistance_break",
+    "ts_support_break",
+})
 
 
 def _positive_int(value: Any) -> int | None:
@@ -62,7 +79,6 @@ def _literal_value(expr: Expr) -> Any | None:
 
 
 def _operator_param_values(node: CleanedCall, op_impl: Any) -> dict[str, Any]:
-    """Resolve literal positional/keyword parameters using operator metadata."""
     values = dict(node.kwargs_dict())
     param_names = tuple(getattr(getattr(op_impl, "metadata", None), "param_names", ()) or ())
     for index, arg in enumerate(node.args):
@@ -99,15 +115,44 @@ def _operator_lookback_increment(
                 increment = max(increment, lag)
         return increment
 
+    # Confirmed pivot at t references candidate t-right and therefore needs
+    # left+right bars of history. The signal is emitted only at t.
+    if canon in _PIVOT_CONFIRM_CANONICALS:
+        left = _positive_int(params.get("left_window")) or 0
+        right = _positive_int(params.get("right_window")) or 0
+        increment = max(increment, left + right)
+
+    # Bounded support/resistance searches confirmation events only inside an
+    # explicit history window. Oldest admissible event still needs its own
+    # left/right pivot context.
+    if canon in _BOUNDED_STRUCTURE_CANONICALS:
+        left = _positive_int(params.get("left_window")) or 0
+        right = _positive_int(params.get("right_window")) or 0
+        history = _positive_int(params.get("history_window")) or 0
+        if history:
+            increment = max(increment, max(0, history - 1) + left + right)
+
     # Rolling/window operators require w-1 rows above their deepest input.
     for name in _WINDOW_PARAM_NAMES:
         value = _positive_int(params.get(name))
         if value is not None:
             increment = max(increment, value - 1)
+            if canon in _WINDOW_PLUS_ONE_CANONICALS:
+                increment = max(increment, value)
 
-    # Multi-stage technical indicators have several literal horizons. This is
-    # still a finite warm-up approximation; stateful operators should eventually
-    # expose a dedicated lookback_fn/state contract.
+    # StochasticD = stochastic-K(window) followed by a 3-bar average.
+    if canon == "StochasticD":
+        w = _positive_int(params.get("window"))
+        if w is not None:
+            increment = max(increment, w + 1)
+
+    # Ulcer Index nests a rolling-high(window) inside a second rolling mean of
+    # squared drawdowns, so the oldest output component sees 2*(w-1) history.
+    if canon == "ulcer_index":
+        w = _positive_int(params.get("window"))
+        if w is not None:
+            increment = max(increment, 2 * (w - 1))
+
     if canon in {"MACD", "MACD_line", "MACD_signal", "MACD_hist"}:
         fast = _positive_int(params.get("fast")) or 0
         slow = _positive_int(params.get("slow")) or 0
@@ -118,11 +163,9 @@ def _operator_lookback_increment(
         lag = _positive_int(getattr(policy, "lag", None))
         if lag is not None:
             increment = max(increment, lag)
-
         lookback_window = _positive_int(getattr(policy, "lookback_window", None))
         if lookback_window is not None:
             increment = max(increment, lookback_window - 1)
-
         min_periods = _positive_int(getattr(policy, "min_periods", None))
         if min_periods is not None:
             increment = max(increment, min_periods - 1)
@@ -131,13 +174,6 @@ def _operator_lookback_increment(
 
 
 def _legacy_single_window_lookback(expr: Expr) -> int | None:
-    """Preserve the public lookback value for one direct rolling dependency.
-
-    Internally rolling operators use the precise historical-row convention
-    (``window - 1``), which composes correctly for nested expressions. Older
-    callers, however, exposed the full window for a single rolling input under
-    zero-lookback wrappers such as ``rank(ts_mean(close, 20))``.
-    """
     def visit(node: Expr) -> int | None:
         if isinstance(node, (ColumnRef, Literal)):
             return 0
@@ -151,15 +187,11 @@ def _legacy_single_window_lookback(expr: Expr) -> int | None:
         op_impl = OperatorRegistry.get(canon)
         if op_impl is None:
             return None
-        policy = None
         from cleaned_operators.operator_policy import infer_operator_policy
-
         policy = infer_operator_policy(op_impl, canonical=canon)
         increment = _operator_lookback_increment(canon, node, op_impl, policy)
         expr_children = [arg for arg in node.args if isinstance(arg, Expr)]
-        series_children = [
-            arg for arg in expr_children if not isinstance(arg, Literal)
-        ]
+        series_children = [arg for arg in expr_children if not isinstance(arg, Literal)]
         if increment > 0:
             if len(series_children) != 1 or not isinstance(series_children[0], ColumnRef):
                 return None
@@ -167,7 +199,7 @@ def _legacy_single_window_lookback(expr: Expr) -> int | None:
             for name in _WINDOW_PARAM_NAMES:
                 window = _positive_int(params.get(name))
                 if window is not None:
-                    return window
+                    return max(window, increment)
             return None
         child_windows = [visit(child) for child in series_children]
         if any(window is None for window in child_windows):
@@ -180,8 +212,6 @@ def _legacy_single_window_lookback(expr: Expr) -> int | None:
 
 @dataclass
 class AnalysisResult:
-    """``Analyzer.lower`` 的返回值：IR 树 + 副作用分析摘要。"""
-
     ir: IRNode
     lookback: int
     has_ts_op: bool
@@ -190,10 +220,9 @@ class AnalysisResult:
 
 
 class Analyzer:
-    """将 ``Expr`` 树降为 IR；所有函数调用均来自 ``cleaned_operators``。"""
+    """将 Expr 树降为 IR；所有函数调用均来自 cleaned_operators。"""
 
     def lower(self, expr: Expr) -> AnalysisResult:
-        """遍历 Expr 树，生成 IRNode 并递归推导历史依赖。"""
         cols: set[str] = set()
         has_ts = False
         has_cs = False
@@ -204,7 +233,6 @@ class Analyzer:
             if isinstance(node, ColumnRef):
                 cols.add(node.name)
                 return IRNode(op="column", attrs={"name": node.name}), 0
-
             if isinstance(node, Literal):
                 return IRNode(op="literal", attrs={"value": node.value}), 0
 
@@ -224,34 +252,17 @@ class Analyzer:
                 if op_impl is not None:
                     cat = getattr(op_impl.metadata, "category", "") or ""
                     if cat in (
-                        "time_series",
-                        "shift_diff_cum",
-                        "technical_signal",
-                        "price_volume",
-                        "intraday_microstructure",
-                        "signal",
+                        "time_series", "shift_diff_cum", "technical_signal", "price_volume",
+                        "price_volume_extension", "ohlc_volatility", "candle_pattern",
+                        "intraday_microstructure", "signal", "price_structure",
                     ):
                         has_ts = True
                     if cat in ("cross_sectional", "group_neutralization"):
                         has_cs = True
 
-                if canon.startswith("ts_") or canon in {
-                    "SMA",
-                    "EMA",
-                    "WMA",
-                    "delay",
-                    "decay_linear",
-                }:
+                if canon.startswith("ts_") or canon in {"SMA","EMA","WMA","delay","decay_linear"}:
                     has_ts = True
-                if canon in {
-                    "rank",
-                    "zscore",
-                    "scale",
-                    "normalize",
-                    "winsorize",
-                    "quantile",
-                    "neutralize",
-                } or canon.startswith("group_"):
+                if canon in {"rank","zscore","scale","normalize","winsorize","quantile","neutralize"} or canon.startswith("group_"):
                     has_cs = True
 
                 visited_inputs = [visit(arg) for arg in node.args]
@@ -272,25 +283,15 @@ class Analyzer:
                         attrs[key] = value
 
                 from backend.parameter_aliases import normalize_parameter_aliases
-
                 attrs = normalize_parameter_aliases(canon, attrs)
 
                 policy = None
                 if op_impl is not None:
                     from cleaned_operators.operator_policy import infer_operator_policy
-
                     policy = infer_operator_policy(op_impl, canonical=canon)
 
-                own_increment = _operator_lookback_increment(
-                    canon,
-                    node,
-                    op_impl,
-                    policy,
-                )
-                return (
-                    IRNode(op=canon, inputs=inputs, attrs=attrs),
-                    deepest_child + own_increment,
-                )
+                own_increment = _operator_lookback_increment(canon, node, op_impl, policy)
+                return IRNode(op=canon, inputs=inputs, attrs=attrs), deepest_child + own_increment
 
             raise NotImplementedError(f"Unsupported expr: {type(node).__name__}")
 
