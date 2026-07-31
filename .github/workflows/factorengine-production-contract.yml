@@ -1,0 +1,80 @@
+name: FactorEngine Production Contract
+
+on:
+  pull_request:
+    paths:
+      - 'factor_engine/**'
+      - 'factor_cold_start/**'
+      - '.github/workflows/factorengine-production-contract.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'factor_engine/**'
+      - 'factor_cold_start/**'
+      - '.github/workflows/factorengine-production-contract.yml'
+
+jobs:
+  production-contract:
+    runs-on: ubuntu-24.04
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/gtja191
+      FACTOR_ENGINE_DISABLE_NUMBA: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -e ./dataaccess
+          python -m pip install pytest pyyaml
+
+      - name: Verify backend and factor evidence
+        run: |
+          python factor_engine/scripts/certify_primitive_evidence.py --check
+          python factor_engine/scripts/certify_recipe_evidence.py --check
+          python factor_engine/scripts/certify_factor_operator_evidence.py --check
+
+      - name: Audit every Factor DSL production operator
+        run: python factor_engine/scripts/audit_all_factor_production.py
+
+      - name: Verify cold-start production coverage
+        run: |
+          python factor_cold_start/scripts/report_coverage.py
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report=json.loads(Path('factor_cold_start/reports/coverage.json').read_text())
+          for key,row in report['catalogs'].items():
+              if key.endswith('_extended') and row['eligible_operator_coverage_pct'] != 100.0:
+                  raise SystemExit(f"{key}: missing={row['missing_eligible_operators']}")
+          PY
+
+      - name: Smoke deployment backend calibration
+        run: |
+          python factor_engine/scripts/calibrate_backend_costs.py \
+            --rows 200 500 --repeats 1 --output /tmp/backend_cost_smoke.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('/tmp/backend_cost_smoke.json').read_text())
+          assert p['provenance']['measured'] is True
+          assert p['operators'], 'empty calibration corpus'
+          PY
+
+      - name: Compile new production modules
+        run: |
+          python -m py_compile \
+            factor_engine/backend/plan_cost_router.py \
+            factor_engine/backend/factor_operator_evidence.py \
+            factor_engine/cleaned_operators/production_hardening.py \
+            factor_engine/cleaned_operators/production_repairs.py \
+            factor_engine/scripts/audit_all_factor_production.py \
+            factor_engine/scripts/calibrate_backend_costs.py
