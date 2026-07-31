@@ -8,6 +8,11 @@ from .data_access_source import MissingDataDependencyError
 from .lqtp_logical_source import LQTPLogicalDataSource as _Base
 
 class LQTPLogicalDataSource(_Base):
+    # Panel-native execution must seed its template from the MultiIndex Series
+    # returned by this wrapper before widening. Otherwise stack() changes a
+    # source's original axis order (e.g. instrument-major -> time-major).
+    prefer_series_panel_loading = True
+
     @staticmethod
     def _is_source_ref_name(name: str) -> bool:
         from api.source_ref import decode_source_ref
