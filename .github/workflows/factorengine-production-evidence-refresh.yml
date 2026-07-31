@@ -1,0 +1,83 @@
+name: FactorEngine Production Evidence Refresh
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'agent/factorengine-production-hardening'
+    runs-on: ubuntu-24.04
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/gtja191
+      FACTOR_ENGINE_DISABLE_NUMBA: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -e ./dataaccess
+          python -m pip install pytest pyyaml
+
+      - name: Re-certify primitive evidence
+        run: |
+          python factor_engine/scripts/sync_primitive_evidence.py --check
+          python factor_engine/scripts/certify_primitive_evidence.py
+
+      - name: Regenerate governed artifacts
+        run: |
+          python factor_engine/scripts/generate_operators_catalog.py
+          python factor_engine/scripts/export_dsl_allowlist.py
+          python factor_engine/scripts/generate_layer_manifests.py
+          python factor_engine/scripts/generate_operator_usage_report.py
+          python factor_engine/scripts/sync_backend_docs.py
+          python factor_engine/scripts/generate_backend_evidence_manifest.py
+          python factor_engine/scripts/generate_lqtp_compatibility_manifest.py
+
+      - name: Validate refreshed artifacts
+        run: |
+          python factor_engine/scripts/certify_primitive_evidence.py --check
+          python factor_engine/scripts/certify_recipe_evidence.py --check
+          pytest -q factor_engine/tests/test_operator_surface.py
+
+      - name: Commit certified artifacts
+        run: |
+          if git diff --quiet; then
+            echo 'No generated evidence changes.'
+            exit 0
+          fi
+          git config user.name 'factorengine-evidence-bot'
+          git config user.email 'factorengine-evidence-bot@users.noreply.github.com'
+          git add \
+            factor_engine/evidence/primitive_verified.json \
+            factor_engine/benchmarks/operator_manifest.json \
+            factor_engine/cleaned_operators/docs/operators_catalog.md \
+            factor_engine/cleaned_operators/docs/operators_catalog.json \
+            factor_engine/docs/dsl_allowlist.json \
+            factor_engine/docs/field_manifest.json \
+            factor_engine/docs/operator_manifest.json \
+            factor_engine/docs/factor_recipe_manifest.json \
+            factor_engine/docs/research_tool_manifest.json \
+            factor_engine/docs/stateful_operator_manifest.json \
+            factor_engine/docs/operator_usage_report.json \
+            factor_engine/docs/backend_coverage.md \
+            factor_engine/docs/backend_evidence_manifest.json \
+            factor_engine/docs/sql_pushdown_coverage.md \
+            factor_engine/docs/lqtp_compatibility_manifest.json
+          git commit -m 'Refresh certified FactorEngine production evidence'
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
