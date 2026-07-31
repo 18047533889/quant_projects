@@ -18,7 +18,6 @@ def test_lqtp_exact_aliases_share_canonical_expr() -> None:
 
     cases = {
         "decay_linear(close, 5)": "ts_decay_linear",
-        "safe_log(close)": "safe_log_null",
         "ts_rank_pct(close, 5)": "ts_rank",
         "ts_ewm_mean(close, 12)": "ts_ema",
         "ts_expanding_rank(close)": "expanding_rank",
@@ -28,6 +27,15 @@ def test_lqtp_exact_aliases_share_canonical_expr() -> None:
     for formula, canonical in cases.items():
         expr = parse_expr(formula, surface="lqtp")
         assert getattr(expr, "op", None) == canonical
+
+
+def test_safe_log_is_a_macro_not_a_duplicate_kernel() -> None:
+    from api.dsl_parser import parse_expr
+
+    expr = parse_expr("safe_log(close)", surface="lqtp")
+    assert expr.op == "where"
+    registry = _loaded_registry()
+    assert registry.get("safe_log_null") is None
 
 
 def test_lqtp_sma_keeps_two_distinct_semantics() -> None:
@@ -56,18 +64,6 @@ def test_ambiguous_lqtp_names_fail_instead_of_guessing() -> None:
         parse_expr("ts_regression_slope_sequence(close, 20)", surface="lqtp")
 
 
-def test_safe_log_matches_lqtp_null_domain_contract() -> None:
-    registry = _loaded_registry()
-    op = registry.get("safe_log_null", "pandas_numpy")
-    panel = pd.DataFrame({"A": [-1.0, 0.0, 1.0, np.e, np.nan]})
-    out = op.calculate(panel)
-    assert np.isnan(out.iloc[0, 0])
-    assert np.isnan(out.iloc[1, 0])
-    assert out.iloc[2, 0] == pytest.approx(0.0)
-    assert out.iloc[3, 0] == pytest.approx(1.0)
-    assert np.isnan(out.iloc[4, 0])
-
-
 def test_chinese_sma_is_not_simple_rolling_mean() -> None:
     registry = _loaded_registry()
     op = registry.get("ts_sma_cn", "pandas_numpy")
@@ -86,7 +82,7 @@ def test_where_scalar_branches_broadcast_to_panel() -> None:
     np.testing.assert_allclose(out.to_numpy(dtype=float), expected, equal_nan=True)
 
 
-def test_fastpath_never_reintroduces_window_alias() -> None:
+def test_fastpath_output_is_canonicalized_before_execution() -> None:
     from planner.logical_plan import PlanNode
     from planner.optimizer import Optimizer
 
