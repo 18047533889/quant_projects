@@ -21,9 +21,13 @@ def _effective_minutes(dataset,session_open,session_close,cutoff):
         if end>start:total+=max(0,min(end,stop)-start)
     return max(1,total)
 def _ordinal(ts:pd.Series,dataset,session_open,session_close):
+    # Session *labels* need a one-slot separator at the boundary so an observed
+    # 11:30 and 13:00 can never land in the same N-minute bucket. Coverage uses
+    # _effective_minutes separately and therefore keeps the true 240/390-minute
+    # trading-session denominator.
     minute=ts.dt.hour*60+ts.dt.minute;out=pd.Series(np.nan,index=ts.index,dtype=float);offset=0
     for start,stop in _session_segments(dataset,session_open,session_close):
-        mask=(minute>=start)&(minute<=stop);out.loc[mask]=offset+(minute.loc[mask]-start);offset+=stop-start
+        mask=(minute>=start)&(minute<=stop);out.loc[mask]=offset+(minute.loc[mask]-start);offset+=stop-start+1
     return out
 def _clock_bars(grp:pd.DataFrame,bar_minutes:int,dataset:str,session_open:str,session_close:str):
     grp=grp.sort_values("timestamp").copy();ordv=_ordinal(grp["timestamp"],dataset,session_open,session_close);grp=grp[ordv.notna()].copy();grp["_slot"]=(ordv[ordv.notna()]//max(1,int(bar_minutes))).astype(int)
@@ -32,21 +36,16 @@ def _clock_bars(grp:pd.DataFrame,bar_minutes:int,dataset:str,session_open:str,se
         rows.append({"timestamp":g["timestamp"].iloc[-1],"open":float(g["open"].iloc[0]),"high":float(g["high"].max()),"low":float(g["low"].min()),"close":float(g["close"].iloc[-1]),"volume":float(pd.to_numeric(g["volume"],errors="coerce").fillna(0).sum()),"amount":float(pd.to_numeric(g["amount"],errors="coerce").fillna(0).sum())})
     return pd.DataFrame(rows)
 def _cache(source,name):
-    attr=f"_intraday_{name}_cache"
-    cache=getattr(source,attr,None)
+    attr=f"_intraday_{name}_cache";cache=getattr(source,attr,None)
     if cache is None:cache={};setattr(source,attr,cache)
     return cache
-
 def _grouped_bars(source,dataset,session_open,session_close,cutoff,bar_minutes,min_coverage,history_days):
-    key=(dataset,session_open,session_close,cutoff,int(bar_minutes),float(min_coverage),int(history_days))
-    cache=_cache(source,"bars")
+    key=(dataset,session_open,session_close,cutoff,int(bar_minutes),float(min_coverage),int(history_days));cache=_cache(source,"bars")
     if key in cache:return cache[key]
-    src=base._child(source,dataset,history_days);frame_key=(dataset,int(history_days))
-    frame_cache=_cache(source,"frame")
+    src=base._child(source,dataset,history_days);frame_key=(dataset,int(history_days));frame_cache=_cache(source,"frame")
     if frame_key not in frame_cache:frame_cache[frame_key]=base._wide_frame(src)
     frame=frame_cache[frame_key].copy();frame=base._hhmm_filter(frame,session_open,cutoff);frame["date"]=frame["timestamp"].dt.normalize()
-    usable=_effective_minutes(dataset,session_open,session_close,cutoff);expected=max(1,int(math.ceil(usable/bar_minutes)));min_bars=max(2,int(math.ceil(expected*min_coverage)))
-    grouped=[]
+    usable=_effective_minutes(dataset,session_open,session_close,cutoff);expected=max(1,int(math.ceil(usable/bar_minutes)));min_bars=max(2,int(math.ceil(expected*min_coverage)));grouped=[]
     for (date,inst),grp in frame.groupby(["date","instrument"],sort=True):
         bar=_clock_bars(grp,bar_minutes,dataset,session_open,session_close);coverage=len(bar)/expected
         if len(bar)>=min_bars and coverage>=min_coverage:grouped.append((pd.Timestamp(date),str(inst),bar))
