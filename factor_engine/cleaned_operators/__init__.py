@@ -12,6 +12,8 @@ _REVIEWED_EXTENSIONS=(
 "cleaned_operators.price_volume.technical_structure_repairs",
 "cleaned_operators.price_volume.candle_patterns_extended",
 "cleaned_operators.price_volume.candle_geometry_v2",
+"cleaned_operators.price_volume.candle_pattern_engine_v2",
+"cleaned_operators.price_volume.candle_pattern_engine_repairs_v2",
 "cleaned_operators.price_volume.structure_patterns_v2",
 "cleaned_operators.price_volume.liquidity_v2",
 "cleaned_operators.technical.indicators_v2",
