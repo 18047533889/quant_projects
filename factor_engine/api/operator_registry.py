@@ -45,4 +45,6 @@ def build_dsl_allowlist(
         raise ValueError(
             f"unsupported LQTP dialect_version={version!r}; supported={DEFAULT_LQTP_DIALECT_VERSION!r}"
         )
-    return augment_dsl_allowlist(allow, surface=raw_surface)
+    out = augment_dsl_allowlist(allow, surface=raw_surface)
+    from api.lqtp_neutralization import augment_neutralization
+    return augment_neutralization(out)
