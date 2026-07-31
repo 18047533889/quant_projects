@@ -97,14 +97,12 @@ def load_all() -> None:
     from cleaned_operators.layer_governance_post import apply_post_governance
     apply_post_governance()
 
-    # Late, explicit replacement of legacy compatibility kernels that failed the
-    # production causality/contract audit. Registration replaces only the chosen
-    # Pandas physical implementation while preserving canonical identity.
     __import__("cleaned_operators.production_repairs", fromlist=["*"])
 
-    # Reviewed price-structure/volume/volatility/candle extensions register late
-    # so legacy TA implementations cannot overwrite their production semantics.
+    # Reviewed extensions register after legacy governance so the final Registry
+    # cannot be overwritten by historical TA implementations.
     __import__("cleaned_operators.price_volume.technical_extensions", fromlist=["*"])
+    __import__("cleaned_operators.price_volume.technical_structure_repairs", fromlist=["*"])
 
     from cleaned_operators.production_hardening import apply_production_hardening
     apply_production_hardening()
