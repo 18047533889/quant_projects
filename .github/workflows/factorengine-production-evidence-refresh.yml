@@ -34,11 +34,15 @@ jobs:
           python -m pip install -e ./dataaccess
           python -m pip install pytest pyyaml
 
-      - name: Re-certify primitive and recipe evidence
+      - name: Refresh stale primitive and recipe evidence only
         run: |
           python factor_engine/scripts/sync_primitive_evidence.py --check
-          python factor_engine/scripts/certify_primitive_evidence.py
-          python factor_engine/scripts/certify_recipe_evidence.py
+          if ! python factor_engine/scripts/certify_primitive_evidence.py --check; then
+            python factor_engine/scripts/certify_primitive_evidence.py
+          fi
+          if ! python factor_engine/scripts/certify_recipe_evidence.py --check; then
+            python factor_engine/scripts/certify_recipe_evidence.py
+          fi
 
       - name: Regenerate governed artifacts
         run: |
