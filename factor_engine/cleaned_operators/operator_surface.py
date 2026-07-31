@@ -24,9 +24,6 @@ _PROMOTED_RESEARCH_FACTORS: frozenset[str] = frozenset({
     "ts_poly2_coeff","ts_poly2_resid","ts_sma_cn","ts_sum_decay",
 })
 
-# Reviewed primitive technical-analysis expansion. Technical composites already
-# governed by FactorRecipeRegistry (Aroon/CCI/Stochastic/WilliamsR) are excluded
-# from this primitive surface to preserve one canonical semantic owner.
 _TECHNICAL_EXTENSION_CANONICALS: frozenset[str] = frozenset({
     "ts_prev_high","ts_prev_low","ts_distance_to_high","ts_distance_to_low",
     "ts_breakout_high","ts_breakdown_low","ts_new_high","ts_new_low",
@@ -49,6 +46,10 @@ _TECHNICAL_EXTENSION_CANONICALS: frozenset[str] = frozenset({
     "candle_direction","candle_range_atr",
     "cdl_doji","cdl_hammer","cdl_inverted_hammer","cdl_shooting_star","cdl_marubozu",
     "cdl_spinning_top","cdl_engulfing","cdl_inside_bar","cdl_outside_bar",
+    "cdl_dragonfly_doji","cdl_gravestone_doji","cdl_hanging_man","cdl_harami",
+    "cdl_harami_cross","cdl_piercing","cdl_dark_cloud_cover","cdl_morning_star",
+    "cdl_evening_star","cdl_three_white_soldiers","cdl_three_black_crows",
+    "cdl_tweezer_top","cdl_tweezer_bottom",
 })
 
 EXTENDED_ONLY_CANONICALS: frozenset[str] = frozenset({
