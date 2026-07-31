@@ -4,20 +4,19 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
-x-runtime: &runtime
-  if: github.event.pull_request.head.ref == 'agent/factorengine-production-hardening'
-  runs-on: ubuntu-24.04
-  env:
-    PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/gtja191
-    FACTOR_ENGINE_DISABLE_NUMBA: '1'
-
 jobs:
   registry-import:
-    <<: *runtime
+    if: github.event.pull_request.head.ref == 'agent/factorengine-production-hardening'
+    runs-on: ubuntu-24.04
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/gtja191
+      FACTOR_ENGINE_DISABLE_NUMBA: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: {python-version: '3.11', cache: pip}
+        with:
+          python-version: '3.11'
+          cache: pip
       - run: python -m pip install -r requirements.txt && python -m pip install -e ./dataaccess
       - name: Import and freeze Registry
         run: |
@@ -30,11 +29,17 @@ jobs:
           PY
 
   technical-tests:
-    <<: *runtime
+    if: github.event.pull_request.head.ref == 'agent/factorengine-production-hardening'
+    runs-on: ubuntu-24.04
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/gtja191
+      FACTOR_ENGINE_DISABLE_NUMBA: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: {python-version: '3.11', cache: pip}
+        with:
+          python-version: '3.11'
+          cache: pip
       - run: python -m pip install -r requirements.txt && python -m pip install -e ./dataaccess && python -m pip install pytest
       - name: Technical production tests
         run: |
@@ -43,21 +48,33 @@ jobs:
             factor_engine/tests/operators/test_candle_patterns_extended.py
 
   runtime-audit:
-    <<: *runtime
+    if: github.event.pull_request.head.ref == 'agent/factorengine-production-hardening'
+    runs-on: ubuntu-24.04
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/gtja191
+      FACTOR_ENGINE_DISABLE_NUMBA: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: {python-version: '3.11', cache: pip}
+        with:
+          python-version: '3.11'
+          cache: pip
       - run: python -m pip install -r requirements.txt && python -m pip install -e ./dataaccess
       - name: All-factor runtime audit
         run: python factor_engine/scripts/audit_all_factor_production.py --runtime-only
 
   coldstart-coverage:
-    <<: *runtime
+    if: github.event.pull_request.head.ref == 'agent/factorengine-production-hardening'
+    runs-on: ubuntu-24.04
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/gtja191
+      FACTOR_ENGINE_DISABLE_NUMBA: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: {python-version: '3.11', cache: pip}
+        with:
+          python-version: '3.11'
+          cache: pip
       - run: python -m pip install -r requirements.txt && python -m pip install -e ./dataaccess
       - name: Cold-start production coverage
         run: |
