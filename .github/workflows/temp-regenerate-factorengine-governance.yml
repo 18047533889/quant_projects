@@ -30,34 +30,60 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install -e ./dataaccess
           python -m pip install pytest pyyaml
-      - name: Run focused LQTP production regressions
+      - name: Run diagnostics, recertify, regenerate and persist result
+        shell: bash
         run: |
-          pytest -q factor_engine/tests/test_lqtp_production_runtime.py
-      - name: Re-certify backend and recipe evidence
-        run: |
-          python factor_engine/scripts/sync_primitive_evidence.py
-          python factor_engine/scripts/certify_primitive_evidence.py
-          python factor_engine/scripts/certify_recipe_evidence.py
-      - name: Regenerate deterministic governance artifacts
-        run: |
-          python factor_engine/scripts/generate_operators_catalog.py
-          python factor_engine/scripts/export_dsl_allowlist.py
-          python factor_engine/scripts/generate_layer_manifests.py
-          python factor_engine/scripts/generate_operator_usage_report.py
-          python factor_engine/scripts/sync_backend_docs.py
-          python factor_engine/scripts/generate_backend_evidence_manifest.py
-          python factor_cold_start/scripts/report_coverage.py
-      - name: Commit generated artifacts
-        run: |
+          set +e
+          : > .factorengine_tmp_regen.log
+
+          echo "== focused tests ==" >> .factorengine_tmp_regen.log
+          pytest -q factor_engine/tests/test_lqtp_production_runtime.py >> .factorengine_tmp_regen.log 2>&1
+          focused_rc=$?
+          echo "focused_rc=$focused_rc" >> .factorengine_tmp_regen.log
+
+          echo "== sync primitive evidence ==" >> .factorengine_tmp_regen.log
+          python factor_engine/scripts/sync_primitive_evidence.py >> .factorengine_tmp_regen.log 2>&1
+          sync_rc=$?
+          echo "sync_rc=$sync_rc" >> .factorengine_tmp_regen.log
+
+          echo "== certify primitive evidence ==" >> .factorengine_tmp_regen.log
+          python factor_engine/scripts/certify_primitive_evidence.py >> .factorengine_tmp_regen.log 2>&1
+          primitive_rc=$?
+          echo "primitive_rc=$primitive_rc" >> .factorengine_tmp_regen.log
+
+          echo "== certify recipe evidence ==" >> .factorengine_tmp_regen.log
+          python factor_engine/scripts/certify_recipe_evidence.py >> .factorengine_tmp_regen.log 2>&1
+          recipe_rc=$?
+          echo "recipe_rc=$recipe_rc" >> .factorengine_tmp_regen.log
+
+          regen_rc=0
+          if [ "$focused_rc" -eq 0 ] && [ "$sync_rc" -eq 0 ] && [ "$primitive_rc" -eq 0 ] && [ "$recipe_rc" -eq 0 ]; then
+            echo "== regenerate deterministic governance artifacts ==" >> .factorengine_tmp_regen.log
+            python factor_engine/scripts/generate_operators_catalog.py >> .factorengine_tmp_regen.log 2>&1 || regen_rc=$?
+            python factor_engine/scripts/export_dsl_allowlist.py >> .factorengine_tmp_regen.log 2>&1 || regen_rc=$?
+            python factor_engine/scripts/generate_layer_manifests.py >> .factorengine_tmp_regen.log 2>&1 || regen_rc=$?
+            python factor_engine/scripts/generate_operator_usage_report.py >> .factorengine_tmp_regen.log 2>&1 || regen_rc=$?
+            python factor_engine/scripts/sync_backend_docs.py >> .factorengine_tmp_regen.log 2>&1 || regen_rc=$?
+            python factor_engine/scripts/generate_backend_evidence_manifest.py >> .factorengine_tmp_regen.log 2>&1 || regen_rc=$?
+            python factor_cold_start/scripts/report_coverage.py >> .factorengine_tmp_regen.log 2>&1 || regen_rc=$?
+          else
+            echo "regeneration skipped because a prerequisite failed" >> .factorengine_tmp_regen.log
+            regen_rc=99
+          fi
+          echo "regen_rc=$regen_rc" >> .factorengine_tmp_regen.log
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add factor_engine/evidence \
-                  factor_engine/cleaned_operators/docs \
-                  factor_engine/docs \
-                  factor_cold_start/reports
+          git add .factorengine_tmp_regen.log
+          if [ "$regen_rc" -eq 0 ]; then
+            git add factor_engine/evidence \
+                    factor_engine/cleaned_operators/docs \
+                    factor_engine/docs \
+                    factor_cold_start/reports
+          fi
           if git diff --cached --quiet; then
-            echo "No generated artifact changes"
+            echo "No diagnostic or generated changes"
             exit 0
           fi
-          git commit -m "Regenerate FactorEngine governance and evidence"
+          git commit -m "Record FactorEngine regeneration diagnostics"
           git push origin HEAD:agent/factorengine-production-routing-lqtp-20260731
