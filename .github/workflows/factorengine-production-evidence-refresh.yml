@@ -34,7 +34,7 @@ jobs:
           python -m pip install -e ./dataaccess
           python -m pip install pytest pyyaml
 
-      - name: Refresh stale primitive and recipe evidence only
+      - name: Refresh stale production evidence only
         run: |
           python factor_engine/scripts/sync_primitive_evidence.py --check
           if ! python factor_engine/scripts/certify_primitive_evidence.py --check; then
@@ -42,6 +42,9 @@ jobs:
           fi
           if ! python factor_engine/scripts/certify_recipe_evidence.py --check; then
             python factor_engine/scripts/certify_recipe_evidence.py
+          fi
+          if ! python factor_engine/scripts/certify_factor_operator_evidence.py --check; then
+            python factor_engine/scripts/certify_factor_operator_evidence.py
           fi
 
       - name: Regenerate governed artifacts
@@ -59,6 +62,7 @@ jobs:
         run: |
           python factor_engine/scripts/certify_primitive_evidence.py --check
           python factor_engine/scripts/certify_recipe_evidence.py --check
+          python factor_engine/scripts/certify_factor_operator_evidence.py --check
           python factor_engine/scripts/audit_all_factor_production.py
           pytest -q factor_engine/tests/test_operator_surface.py
           test "$(python - <<'PY'
@@ -80,6 +84,7 @@ jobs:
           git add \
             factor_engine/evidence/primitive_verified.json \
             factor_engine/evidence/recipe_verified.json \
+            factor_engine/evidence/factor_operator_verified.json \
             factor_engine/benchmarks/operator_manifest.json \
             factor_engine/cleaned_operators/docs/operators_catalog.md \
             factor_engine/cleaned_operators/docs/operators_catalog.json \
