@@ -2,8 +2,10 @@
 """Reviewed factor authoring surfaces.
 
 ``research`` is intentionally empty for factor-shaped operators. Anything that
-returns a factor panel and is retained in the Factor DSL must be production
-hardened; diagnostics/statistical tools live in ``ResearchToolRegistry``.
+returns a factor panel and is retained in the primitive Factor DSL must be
+production hardened. Straightforward technical composites such as Aroon/CCI/
+Stochastic/WilliamsR remain FactorRecipes and are intentionally absent here.
+Diagnostics/statistical tools live in ``ResearchToolRegistry``.
 """
 from __future__ import annotations
 from typing import Iterable, Literal
@@ -22,10 +24,9 @@ _PROMOTED_RESEARCH_FACTORS: frozenset[str] = frozenset({
     "ts_poly2_coeff","ts_poly2_resid","ts_sma_cn","ts_sum_decay",
 })
 
-# Reviewed technical-analysis expansion. These are public Factor DSL operators,
-# not research tools. Complex structure operators use Pandas/NumPy as the first
-# semantic-reference backend; simple ones can acquire Polars/SQL eligibility
-# independently as backend evidence is added.
+# Reviewed primitive technical-analysis expansion. Technical composites already
+# governed by FactorRecipeRegistry (Aroon/CCI/Stochastic/WilliamsR) are excluded
+# from this primitive surface to preserve one canonical semantic owner.
 _TECHNICAL_EXTENSION_CANONICALS: frozenset[str] = frozenset({
     "ts_prev_high","ts_prev_low","ts_distance_to_high","ts_distance_to_low",
     "ts_breakout_high","ts_breakdown_low","ts_new_high","ts_new_low",
@@ -39,8 +40,7 @@ _TECHNICAL_EXTENSION_CANONICALS: frozenset[str] = frozenset({
     "return_volume_corr","abs_return_volume_corr","signed_volume","signed_dollar_volume",
     "rolling_obv","rolling_pvt","CMF","MFI",
     "donchian_upper","donchian_lower","donchian_mid","donchian_position",
-    "bollinger_pct_b","bollinger_width","AROON_up","AROON_down","AROON","CCI",
-    "StochasticK","StochasticD","WilliamsR","efficiency_ratio","choppiness_index",
+    "bollinger_pct_b","bollinger_width","efficiency_ratio","choppiness_index",
     "parkinson_vol","garman_klass_vol","rogers_satchell_vol","yang_zhang_vol",
     "overnight_volatility","intraday_volatility","range_volatility","ulcer_index",
     "candle_body","candle_abs_body","candle_range","candle_body_ratio",
@@ -56,7 +56,6 @@ EXTENDED_ONLY_CANONICALS: frozenset[str] = frozenset({
 }) | _PROMOTED_RESEARCH_FACTORS | _TECHNICAL_EXTENSION_CANONICALS
 
 RESEARCH_ONLY_CANONICALS: frozenset[str] = frozenset()
-
 UNSAFE_CANONICALS: frozenset[str] = frozenset()
 LEGACY_ONLY_CANONICALS: frozenset[str] = frozenset({"cube"})
 INTERNAL_ONLY_CANONICALS: frozenset[str] = frozenset({"constant","identity","protected_div"})
