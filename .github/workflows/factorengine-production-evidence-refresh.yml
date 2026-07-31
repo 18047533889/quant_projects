@@ -34,10 +34,11 @@ jobs:
           python -m pip install -e ./dataaccess
           python -m pip install pytest pyyaml
 
-      - name: Re-certify primitive evidence
+      - name: Re-certify primitive and recipe evidence
         run: |
           python factor_engine/scripts/sync_primitive_evidence.py --check
           python factor_engine/scripts/certify_primitive_evidence.py
+          python factor_engine/scripts/certify_recipe_evidence.py
 
       - name: Regenerate governed artifacts
         run: |
@@ -48,12 +49,20 @@ jobs:
           python factor_engine/scripts/sync_backend_docs.py
           python factor_engine/scripts/generate_backend_evidence_manifest.py
           python factor_engine/scripts/generate_lqtp_compatibility_manifest.py
+          python factor_cold_start/scripts/report_coverage.py
 
       - name: Validate refreshed artifacts
         run: |
           python factor_engine/scripts/certify_primitive_evidence.py --check
           python factor_engine/scripts/certify_recipe_evidence.py --check
           pytest -q factor_engine/tests/test_operator_surface.py
+          test "$(python - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('factor_cold_start/reports/coverage.json').read_text())
+          print(min(v['eligible_operator_coverage_pct'] for k,v in p['catalogs'].items() if k.endswith('_extended')))
+          PY
+          )" = "100.0"
 
       - name: Commit certified artifacts
         run: |
@@ -65,6 +74,7 @@ jobs:
           git config user.email 'factorengine-evidence-bot@users.noreply.github.com'
           git add \
             factor_engine/evidence/primitive_verified.json \
+            factor_engine/evidence/recipe_verified.json \
             factor_engine/benchmarks/operator_manifest.json \
             factor_engine/cleaned_operators/docs/operators_catalog.md \
             factor_engine/cleaned_operators/docs/operators_catalog.json \
@@ -78,6 +88,8 @@ jobs:
             factor_engine/docs/backend_coverage.md \
             factor_engine/docs/backend_evidence_manifest.json \
             factor_engine/docs/sql_pushdown_coverage.md \
-            factor_engine/docs/lqtp_compatibility_manifest.json
+            factor_engine/docs/lqtp_compatibility_manifest.json \
+            factor_cold_start/reports/coverage.json \
+            factor_cold_start/reports/coverage.md
           git commit -m 'Refresh certified FactorEngine production evidence'
           git push origin HEAD:${{ github.event.pull_request.head.ref }}
