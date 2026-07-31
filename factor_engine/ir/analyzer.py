@@ -8,48 +8,33 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from typing import Any
-
 from expr.base import Expr
 from expr.cleaned_call import CleanedCall
 from expr.column import ColumnRef
 from expr.literal import Literal
 from ir.nodes import IRNode
 
-_LAG_PARAM_NAMES={
-    "ts_delay":("n","d","lag","periods","window"),"prev":(),
-    "ts_delta":("n","d","lag","periods","window"),
-    "ts_pct":("d","n","lag","periods","window"),
-    "ts_log_return":("d","n","lag","periods","window"),"ts_ratio":(),
-    "MOM":("window","d","n"),"ROC":("window","d","n"),
-}
-_FIXED_LAGS={"prev":1,"ts_ratio":1,"candle_gap":1,"candle_gap_pct":1,"cdl_engulfing":1,"cdl_inside_bar":1,"cdl_outside_bar":1}
+_LAG_PARAM_NAMES={"ts_delay":("n","d","lag","periods","window"),"prev":(),"ts_delta":("n","d","lag","periods","window"),"ts_pct":("d","n","lag","periods","window"),"ts_log_return":("d","n","lag","periods","window"),"ts_ratio":(),"MOM":("window","d","n"),"ROC":("window","d","n")}
+_FIXED_LAGS={"prev":1,"ts_ratio":1,"candle_gap":1,"candle_gap_pct":1,"cdl_engulfing":1,"cdl_inside_bar":1,"cdl_outside_bar":1,"candle_overlap_ratio":1,"candle_inside_ratio":1}
 _WINDOW_PARAM_NAMES=(
-    "window","d","span","period","periods","lookback","max_lookback","fast","slow","fast_period","slow_period","signal_span","signal_period",
-    "fast_window","slow_window","signal_window","short_window","medium_window","long_window","ema_window","atr_window","tenkan_window","kijun_window","senkou_b_window","er_window","vol_window","baseline_window","price_window","volume_window","turnover_window","adl_window","impulse_window","flag_window","max_periods","window_days","max_days",
+"window","d","span","period","periods","lookback","max_lookback","fast","slow","fast_period","slow_period","signal_span","signal_period","fast_window","slow_window","signal_window","short_window","medium_window","long_window","ema_window","atr_window","tenkan_window","kijun_window","senkou_b_window","er_window","vol_window","baseline_window","price_window","volume_window","turnover_window","adl_window","impulse_window","flag_window","max_periods","window_days","max_days","body_window","shadow_window",
 )
 _WINDOW_PLUS_ONE_CANONICALS=frozenset({
-    "ts_prev_high","ts_prev_low","ts_distance_to_high","ts_distance_to_low","ts_breakout_high","ts_breakdown_low","ts_new_high","ts_new_low","ts_channel_position","ts_days_since_high","ts_days_since_low","ts_range_expansion","donchian_upper","donchian_lower","donchian_mid","donchian_position","relative_volume","volume_zscore","dollar_volume_zscore","volume_momentum","turnover_momentum","turnover_zscore","rolling_obv","rolling_pvt","MFI","choppiness_index","yang_zhang_vol","overnight_volatility","candle_range_atr","abnormal_volume","abnormal_turnover","volume_shock","turnover_shock",
+"ts_prev_high","ts_prev_low","ts_distance_to_high","ts_distance_to_low","ts_breakout_high","ts_breakdown_low","ts_new_high","ts_new_low","ts_channel_position","ts_days_since_high","ts_days_since_low","ts_range_expansion","donchian_upper","donchian_lower","donchian_mid","donchian_position","relative_volume","volume_zscore","dollar_volume_zscore","volume_momentum","turnover_momentum","turnover_zscore","rolling_obv","rolling_pvt","MFI","choppiness_index","yang_zhang_vol","overnight_volatility","candle_range_atr","abnormal_volume","abnormal_turnover","volume_shock","turnover_shock","candle_body_zscore","candle_range_zscore","candle_upper_shadow_zscore","candle_lower_shadow_zscore","candle_body_percentile","candle_range_percentile","candle_gap_atr",
 })
 _PIVOT_CONFIRM_CANONICALS=frozenset({"ts_confirmed_pivot_high","ts_confirmed_pivot_low"})
-_BOUNDED_STRUCTURE_CANONICALS=frozenset({
-    "ts_last_pivot_high","ts_last_pivot_low","ts_pivot_high_age","ts_pivot_low_age","ts_resistance_level","ts_support_level","ts_resistance_slope","ts_support_slope","ts_distance_to_resistance","ts_distance_to_support","ts_resistance_break","ts_support_break",
-})
+_BOUNDED_STRUCTURE_CANONICALS=frozenset({"ts_last_pivot_high","ts_last_pivot_low","ts_pivot_high_age","ts_pivot_low_age","ts_resistance_level","ts_support_level","ts_resistance_slope","ts_support_slope","ts_distance_to_resistance","ts_distance_to_support","ts_resistance_break","ts_support_break"})
 _STRUCTURE_PREFIXES=("ts_nth_pivot_","ts_pivot_","ts_swing_","ts_channel_","ts_line_","ts_resistance_fit_","ts_support_fit_","ts_pattern_")
-_STRUCTURE_PATTERNS=frozenset({
-    "pattern_double_top","pattern_double_bottom","pattern_head_shoulders","pattern_inverse_head_shoulders","pattern_sym_triangle","pattern_ascending_triangle","pattern_descending_triangle","pattern_rising_wedge","pattern_falling_wedge","pattern_rectangle","pattern_rising_channel","pattern_falling_channel","pattern_broadening",
-})
+_STRUCTURE_PATTERNS=frozenset({"pattern_double_top","pattern_double_bottom","pattern_head_shoulders","pattern_inverse_head_shoulders","pattern_sym_triangle","pattern_ascending_triangle","pattern_descending_triangle","pattern_rising_wedge","pattern_falling_wedge","pattern_rectangle","pattern_rising_channel","pattern_falling_channel","pattern_broadening"})
 _FLAG_PATTERNS=frozenset({"pattern_bull_flag","pattern_bear_flag"})
 _FIN_DAILY_WINDOW_CANONICALS=frozenset({"fin_revision_count","fin_revision_magnitude","fin_restated_flag","fin_days_since_update","fin_staleness"})
-
 
 def _positive_int(value:Any)->int|None:
     if isinstance(value,bool):return None
     try:parsed=int(value)
     except (TypeError,ValueError):return None
     return parsed if parsed>0 else None
-
 def _literal_value(expr:Expr)->Any|None:return expr.value if isinstance(expr,Literal) else None
-
 def _operator_param_values(node:CleanedCall,op_impl:Any)->dict[str,Any]:
     values=dict(node.kwargs_dict());param_names=tuple(getattr(getattr(op_impl,"metadata",None),"param_names",()) or ())
     for index,arg in enumerate(node.args):
@@ -57,7 +42,6 @@ def _operator_param_values(node:CleanedCall,op_impl:Any)->dict[str,Any]:
         literal=_literal_value(arg)
         if literal is not None or isinstance(arg,Literal):values.setdefault(param_names[index],literal)
     return values
-
 def _report_period_count(canon:str,p:dict[str,Any])->int:
     def pos(name,default=0):return _positive_int(p.get(name)) or default
     if canon=="fin_growth_change":return pos("growth_periods",4)+pos("compare_periods",1)
@@ -71,7 +55,6 @@ def _financial_lookback(canon:str,p:dict[str,Any])->int:
     if not canon.startswith("fin_") or canon in _FIN_DAILY_WINDOW_CANONICALS:return 0
     rows_per_period=_positive_int(os.environ.get("FACTOR_ENGINE_REPORT_PERIOD_LOOKBACK_ROWS","80")) or 80
     return rows_per_period*_report_period_count(canon,p)
-
 
 def _operator_lookback_increment(canon:str,node:CleanedCall,op_impl:Any,policy:Any|None)->int:
     params=_operator_param_values(node,op_impl);increment=_financial_lookback(canon,params)
@@ -94,6 +77,11 @@ def _operator_lookback_increment(canon:str,node:CleanedCall,op_impl:Any,policy:A
         if value is not None:
             increment=max(increment,value-1)
             if canon in _WINDOW_PLUS_ONE_CANONICALS:increment=max(increment,value)
+    if canon=="candlestick_pattern":
+        body=_positive_int(params.get("body_window")) or 1;shadow=_positive_int(params.get("shadow_window")) or 1
+        # Adaptive thresholds exclude current bar; longest supported recipes use
+        # four historical shifts (five-candle structures).
+        increment=max(increment,max(body,shadow)+4)
     if canon=="StochasticD":
         w=_positive_int(params.get("window"));increment=max(increment,(w+1) if w else 0)
     if canon=="ulcer_index":
@@ -122,7 +110,6 @@ def _operator_lookback_increment(canon:str,node:CleanedCall,op_impl:Any,policy:A
         if min_periods is not None:increment=max(increment,min_periods-1)
     return increment
 
-
 def _legacy_single_window_lookback(expr:Expr)->int|None:
     def visit(node:Expr)->int|None:
         if isinstance(node,(ColumnRef,Literal)):return 0
@@ -149,7 +136,6 @@ def _legacy_single_window_lookback(expr:Expr)->int|None:
 @dataclass
 class AnalysisResult:
     ir:IRNode;lookback:int;has_ts_op:bool;has_cs_op:bool;referenced_columns:set[str]
-
 class Analyzer:
     def lower(self,expr:Expr)->AnalysisResult:
         cols:set[str]=set();has_ts=False;has_cs=False
