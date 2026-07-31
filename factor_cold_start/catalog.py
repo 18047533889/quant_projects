@@ -1,10 +1,10 @@
 """Load and filter committed cold-start factor catalogs.
 
-The generated base catalogs remain deterministic and regenerable. Small
-supplemental production catalogs are merged at load time for newly hardened
-operators whose seeds should not disappear when the large base library is
-regenerated. Reviewed technical/candlestick extension seeds are code-generated
-from market-neutral specifications so A-share and US coverage cannot drift.
+The generated base catalogs remain deterministic and regenerable. Supplemental
+production/technical seeds are merged structurally: if an exact formula already
+exists in the base library it is not duplicated, while operator coverage remains
+credited through the existing factor. This keeps regeneration idempotent across
+A-share and US catalogs.
 """
 from __future__ import annotations
 
@@ -38,6 +38,20 @@ def _load_rows(path: Path) -> tuple[ColdStartFactor, ...]:
     return rows
 
 
+def _extend_unique(rows: list[ColdStartFactor], additions: Iterable[ColdStartFactor]) -> None:
+    """Append only structurally new formulas and factor IDs."""
+    hashes = {row.formula_hash for row in rows}
+    ids = {row.factor_id for row in rows}
+    for row in additions:
+        if row.formula_hash in hashes:
+            continue
+        if row.factor_id in ids:
+            raise ValueError(f"duplicate cold-start factor id with distinct formula: {row.factor_id}")
+        rows.append(row)
+        hashes.add(row.formula_hash)
+        ids.add(row.factor_id)
+
+
 @lru_cache(maxsize=8)
 def load_catalog(market: str, surface: str = "daily") -> tuple[ColdStartFactor, ...]:
     if market not in {"ashare", "us"}:
@@ -51,16 +65,19 @@ def load_catalog(market: str, surface: str = "daily") -> tuple[ColdStartFactor, 
     rows: list[ColdStartFactor] = list(base)
     supplemental = CATALOG_ROOT / f"{market}_{surface}_production.json"
     if supplemental.is_file():
-        rows.extend(_load_rows(supplemental))
+        _extend_unique(rows, _load_rows(supplemental))
 
     if surface == "extended":
         from .technical_extension_seeds import technical_extension_seeds
         from .candle_pattern_seeds import candle_pattern_seeds
-        rows.extend(
-            seed for seed in technical_extension_seeds(market)
-            if not (_RECIPE_OWNED_TA_CANONICALS & set(seed.operators))
+        _extend_unique(
+            rows,
+            (
+                seed for seed in technical_extension_seeds(market)
+                if not (_RECIPE_OWNED_TA_CANONICALS & set(seed.operators))
+            ),
         )
-        rows.extend(candle_pattern_seeds(market))
+        _extend_unique(rows, candle_pattern_seeds(market))
 
     return ensure_unique(rows)
 
