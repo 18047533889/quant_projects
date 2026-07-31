@@ -29,7 +29,7 @@ PANEL_PARAM_NAMES = frozenset({
     "fallback","condition","group","industry","sector","fiscal_quarter","period_id",
     "quarter","revision_id","decision_time","available_time","available_at","exposure",
     "exposures","control","controls","factor","target","mask","event","value","values",
-    "sort_col",
+    "sort_col","float_shares",
 })
 
 SCALAR_VALUES: dict[str, Any] = {
@@ -45,7 +45,7 @@ SCALAR_VALUES: dict[str, Any] = {
     "annualization_factor":252,"periods_per_year":4,"method":"average",
     "interpolation":"linear","center":True,"ascending":True,"inclusive":True,
     "offset":0,"require_consecutive":True,"trim_pct":0.1,"sign_policy":"strict",
-    "denominator":"signed","aggr_func":"sum",
+    "denominator":"signed","aggr_func":"sum","lo":-2.0,"hi":2.0,
 }
 
 SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
@@ -57,6 +57,14 @@ SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
     ("period_change","mode"):"absolute",
     ("period_stability","method"):"mean",
     ("ts_nth_value","order"):"largest",
+    ("MACD_line","signal"):9,
+    ("MACD_signal","signal"):9,
+    ("MACD_hist","signal"):9,
+    ("fillna_const","value"):0.0,
+    ("group_winsorize","lo"):0.05,
+    ("group_winsorize","hi"):0.95,
+    ("winsorize","lower"):0.05,
+    ("winsorize","upper"):0.95,
 }
 
 # Vararg/cross-sectional regression APIs carry panel arguments positionally and
@@ -96,6 +104,11 @@ def _panels(rows: int = 96, cols: int = 6) -> dict[str, pd.DataFrame]:
     weights = volume.div(volume.sum(axis=1),axis=0)
     control = volume.pct_change().fillna(0.0)
     zero = pd.DataFrame(0.0,index=dates,columns=assets)
+    float_shares = pd.DataFrame(
+        np.repeat((100_000_000.0 + np.arange(rows,dtype=float)[:,None]*10_000.0),cols,axis=1),
+        index=dates,
+        columns=assets,
+    )
     return {
         "x":close,"y":open_,"z":control,"a":close,"b":open_,"w":weights,"g":group,
         "left":close,"right":open_,"numerator":close,"denominator":open_.abs()+1.0,
@@ -107,7 +120,7 @@ def _panels(rows: int = 96, cols: int = 6) -> dict[str, pd.DataFrame]:
         "fiscal_quarter":quarters,"period_id":quarters,"quarter":quarters,"revision_id":revision,
         "decision_time":decision_time,"available_time":available_time,"available_at":available_time,
         "exposure":market,"exposures":market,"control":control,"controls":control,"factor":market,
-        "target":ret,"sort_col":volume,"value":close,"values":close,
+        "target":ret,"sort_col":volume,"value":close,"values":close,"float_shares":float_shares,
     }
 
 
