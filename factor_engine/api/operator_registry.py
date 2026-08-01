@@ -34,12 +34,24 @@ def build_dsl_allowlist(
     for selected in surfaces:
         allow.update(build_cleaned_dsl_allowlist(set(), surface=selected))
 
+    if raw_surface in {"extended", "compat", "compat_research", "all"}:
+        from api.intraday_daily import INTRADAY_DAILY_DSL_FUNCTIONS
+        from api.technical_macros_v2 import augment_technical_macros
+        from storage.sources.intraday_clock_install import install_intraday_clock_runtime
+
+        install_intraday_clock_runtime()
+        allow.update(INTRADAY_DAILY_DSL_FUNCTIONS)
+        # Public composite names lower to primitive Expr DAGs before Analyzer/IR.
+        # The registry implementations remain semantic references only.
+        allow = augment_technical_macros(allow)
+
     if raw_dialect in {"native", ""}:
         return allow
     if raw_dialect != "lqtp":
         raise ValueError(f"unsupported factor dialect: {dialect!r}")
 
     from api.lqtp_compat import DEFAULT_LQTP_DIALECT_VERSION, augment_dsl_allowlist
+
     version = str(dialect_version or DEFAULT_LQTP_DIALECT_VERSION)
     if version != DEFAULT_LQTP_DIALECT_VERSION:
         raise ValueError(
@@ -47,8 +59,11 @@ def build_dsl_allowlist(
         )
     out = augment_dsl_allowlist(allow, surface=raw_surface)
     from api.lqtp_neutralization import augment_neutralization
+
     out = augment_neutralization(out)
     from api.lqtp_market import augment_market
+
     out = augment_market(out)
     from api.lqtp_functions_loader import augment_from_functions_yaml
+
     return augment_from_functions_yaml(out)

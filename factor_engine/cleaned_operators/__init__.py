@@ -58,6 +58,29 @@ _LOAD_MODULES = (
     "cleaned_operators.layer_composite_fixes",
 )
 
+_REVIEWED_EXTENSIONS = (
+    "cleaned_operators.production_repairs",
+    "cleaned_operators.price_volume.technical_extensions",
+    "cleaned_operators.price_volume.technical_structure_repairs",
+    "cleaned_operators.price_volume.candle_patterns_extended",
+    "cleaned_operators.price_volume.candle_geometry_v2",
+    "cleaned_operators.price_volume.candle_pattern_engine_v2",
+    "cleaned_operators.price_volume.candle_pattern_engine_repairs_v2",
+    "cleaned_operators.price_volume.structure_patterns_v2",
+    "cleaned_operators.price_volume.structure_patterns_extra_v2",
+    "cleaned_operators.price_volume.structure_patterns_extra_repairs_v2",
+    "cleaned_operators.price_volume.liquidity_v2",
+    "cleaned_operators.price_volume.liquidity_naming_v2",
+    "cleaned_operators.technical.indicators_v2",
+    "cleaned_operators.common.stable_high_moments_v2",
+    "cleaned_operators.fundamental.transforms_v2",
+    "cleaned_operators.fundamental.transforms_repairs_v2",
+    "cleaned_operators.fundamental.flow_semantics_v2",
+    "cleaned_operators.fundamental.expectation_v2",
+    "cleaned_operators.fundamental.parameter_contract_v2",
+    "cleaned_operators.production_policy_extensions_v2",
+)
+
 
 _LOADED = False
 
@@ -86,6 +109,9 @@ def load_all() -> None:
     for mod in _LOAD_MODULES:
         __import__(mod, fromlist=["*"])
 
+    for mod in _REVIEWED_EXTENSIONS:
+        __import__(mod, fromlist=["*"])
+
     from cleaned_operators._dedupe import apply_operator_deduplication
     apply_operator_deduplication()
 
@@ -103,6 +129,12 @@ def load_all() -> None:
 
     from cleaned_operators.layer_governance_post import apply_post_governance
     apply_post_governance()
+
+    from cleaned_operators.production_hardening import apply_production_hardening
+    apply_production_hardening()
+
+    from cleaned_operators.production_certification_overlay import apply_evidence_certification_overlay
+    apply_evidence_certification_overlay()
 
     from cleaned_operators.registration_audit import finalize_registration_audit
     finalize_registration_audit()

@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
-"""Backend-independent production, research-execution and LQTP compatibility tiers."""
+"""Backend-independent production and LQTP compatibility tiers."""
 from __future__ import annotations
 
-PANDAS_FIRST_PRODUCTION_CANONICALS: frozenset[str] = frozenset({
-    "cs_resid","round","scale","sigmoid","true_range","ts_argmax","ts_argmin",
-    "ts_decay_linear","ts_ema","ts_kurt","ts_mad","ts_max_buildup","ts_moment",
-    "ts_product","ts_quantile","ts_regression_slope","ts_skew","ts_time_slope","ts_topk_sum",
-})
+from cleaned_operators.operator_surface import EXTENDED_ONLY_CANONICALS
 
-# These are panel -> panel research operators, not diagnostics. They remain
-# callable from the research/LQTP DSL even when they are not production-certified.
+# Daily primitives retain triple-backend evidence.  Every extended factor
+# operator has a Pandas/Numpy semantic-reference production path; Polars/SQL are
+# promoted independently when their own parity/evidence gates pass.
+PANDAS_FIRST_PRODUCTION_CANONICALS: frozenset[str] = frozenset(EXTENDED_ONLY_CANONICALS)
+
+# Backward-compatible name used by LQTP compatibility code.  These operators are
+# no longer on a research-only factor surface; they are promoted to Extended.
 FACTOR_LIKE_RESEARCH_CANONICALS: frozenset[str] = frozenset({
     "coskewness_to_market","digital_count","expanding_rank","group_decay_linear",
     "hump_decay","idio_skew","idio_vol","intraday_vwap_deviation",
