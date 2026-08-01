@@ -1123,7 +1123,7 @@ FAILED factor_engine/tests/operators/test_candle_patterns_extended.py::test_hara
 FAILED factor_engine/tests/operators/test_candle_patterns_extended.py::test_three_bar_patterns_have_two_bar_policy_lag - AttributeError: module 'cleaned_operators.production_tiers' has no attribute 'PANDAS_FIRST_SIGNATURE_GATED'
 FAILED factor_engine/tests/operators/test_candle_patterns_extended.py::test_two_bar_patterns_have_one_bar_policy_lag - AttributeError: module 'cleaned_operators.production_tiers' has no attribute 'PANDAS_FIRST_SIGNATURE_GATED'
 FAILED factor_engine/tests/operators/test_candle_patterns_extended.py::test_extended_patterns_are_numeric_panels - AttributeError: module 'cleaned_operators.production_tiers' has no attribute 'PANDAS_FIRST_SIGNATURE_GATED'
-============================== 12 failed in 0.98s ==============================
+============================== 12 failed in 0.96s ==============================
 EXIT_CODE=1
 
 ===== v2 =====
@@ -1494,7 +1494,7 @@ E   AttributeError: module 'cleaned_operators.production_tiers' has no attribute
 factor_engine/cleaned_operators/production_policy_extensions_v2.py:66: AttributeError
 _____ test_pandas_production_status_does_not_fall_back_to_lifecycle_label ______
 
-monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f903a74a850>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fbde1a4ab10>
 
     def test_pandas_production_status_does_not_fall_back_to_lifecycle_label(monkeypatch):
         """A production target without valid evidence must remain non-routable."""
@@ -2599,7 +2599,7 @@ FAILED factor_engine/tests/runtime/test_full_history_replay_contract_v2.py::test
 FAILED factor_engine/tests/runtime/test_full_history_replay_contract_v2.py::test_incremental_watermark_is_ignored_without_checkpoint_restore - AttributeError: module 'cleaned_operators.production_tiers' has no attribute 'PANDAS_FIRST_SIGNATURE_GATED'
 FAILED factor_engine/tests/runtime/test_full_history_replay_contract_v2.py::test_production_full_history_requires_explicit_origin - AttributeError: module 'cleaned_operators.production_tiers' has no attribute 'PANDAS_FIRST_SIGNATURE_GATED'
 FAILED factor_engine/tests/runtime/test_full_history_replay_contract_v2.py::test_production_full_history_loads_from_declared_origin - AttributeError: module 'cleaned_operators.production_tiers' has no attribute 'PANDAS_FIRST_SIGNATURE_GATED'
-======================== 14 failed, 17 passed in 1.26s =========================
+======================== 14 failed, 17 passed in 1.27s =========================
 EXIT_CODE=1
 
 ===== runtime_audit =====
