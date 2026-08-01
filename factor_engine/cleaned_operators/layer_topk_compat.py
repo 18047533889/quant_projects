@@ -3,7 +3,16 @@
 from __future__ import annotations
 
 import numpy as np
-from cleaned_operators.overhaul.base import Spec, frame_pd, pl, pl_base_with, pl_cols, positive_int, register_specs
+
+from cleaned_operators.overhaul.base import (
+    Spec,
+    frame_pd,
+    pl,
+    pl_base_with,
+    pl_cols,
+    positive_int,
+    register_specs,
+)
 
 
 def _array(values, window, k, min_periods, top, stat):
@@ -11,22 +20,25 @@ def _array(values, window, k, min_periods, top, stat):
     k = window if k is None else positive_int(k, "k")
     if k > window:
         raise ValueError("k must not exceed window")
+    if stat == "std" and k < 2:
+        raise ValueError("sample Top/Bottom-K standard deviation requires k >= 2")
     min_periods = k if min_periods is None else positive_int(min_periods, "min_periods")
     if min_periods > window:
         raise ValueError("min_periods must not exceed window")
-    out = np.full(values.shape, np.nan)
+    required = max(k, min_periods, 2 if stat == "std" else 1)
+    out = np.full(values.shape, np.nan, dtype=float)
     for col in range(values.shape[1]):
         for row in range(values.shape[0]):
             sample = values[max(0, row - window + 1): row + 1, col]
             sample = np.sort(sample[np.isfinite(sample)])
-            if sample.size < max(k, min_periods):
+            if sample.size < required:
                 continue
             selected = sample[-k:] if top else sample[:k]
             if stat == "mean":
                 out[row, col] = selected.mean()
             elif stat == "sum":
                 out[row, col] = selected.sum()
-            elif selected.size >= 2:
+            else:
                 out[row, col] = selected.std(ddof=1)
     return out
 
@@ -44,8 +56,12 @@ def _pl(x, window, k=None, min_periods=None, *, top, stat, **_):
 
 def _spec(top, stat):
     return (
-        lambda x, window, k=None, min_periods=None, **kw: _pd(x, window, k, min_periods, top=top, stat=stat, **kw),
-        lambda x, window, k=None, min_periods=None, **kw: _pl(x, window, k, min_periods, top=top, stat=stat, **kw),
+        lambda x, window, k=None, min_periods=None, **kw: _pd(
+            x, window, k, min_periods, top=top, stat=stat, **kw
+        ),
+        lambda x, window, k=None, min_periods=None, **kw: _pl(
+            x, window, k, min_periods, top=top, stat=stat, **kw
+        ),
     )
 
 
@@ -54,13 +70,19 @@ def register():
     for name, top, stat, description in (
         ("ts_topk_mean", True, "mean", "mean of largest K values"),
         ("ts_topk_sum", True, "sum", "sum of largest K values"),
-        ("ts_topk_std", True, "std", "sample std of largest K values"),
+        ("ts_topk_std", True, "std", "sample std (ddof=1) of largest K values; k>=2"),
         ("ts_bottomk_mean", False, "mean", "mean of smallest K values"),
         ("ts_bottomk_sum", False, "sum", "sum of smallest K values"),
-        ("ts_bottomk_std", False, "std", "sample std of smallest K values"),
+        ("ts_bottomk_std", False, "std", "sample std (ddof=1) of smallest K values; k>=2"),
     ):
         pandas_fn, polars_fn = _spec(top, stat)
-        specs[name] = Spec("time_series_order", ["x", "window", "k", "min_periods"], description, pandas_fn, polars_fn)
+        specs[name] = Spec(
+            "time_series_order",
+            ["x", "window", "k", "min_periods"],
+            description,
+            pandas_fn,
+            polars_fn,
+        )
     register_specs(specs)
 
 
