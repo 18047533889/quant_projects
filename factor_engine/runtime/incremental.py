@@ -15,25 +15,69 @@ from storage.time_window import (
 )
 
 FULL_HISTORY_LOOKBACK_SENTINEL = 1_000_000_000
+_PENDING_INCREMENTAL_HISTORY: ContextVar[dict[str, str] | None] = ContextVar(
+    "factor_engine_pending_incremental_history", default=None
+)
 _INCREMENTAL_HISTORY_CERTIFICATE: ContextVar[bool] = ContextVar(
     "factor_engine_incremental_history_certificate", default=False
 )
 
 
-def _issue_incremental_history_certificate(plan: "IncrementalPlan") -> None:
-    """Issue a thread/task-local one-shot certificate for the immediate run."""
-    valid = bool(
-        not plan.is_full_run
-        and not plan.full_history_required
-        and plan.load_start is not None
-        and plan.output_start is not None
-        and plan.lookback_bars >= 0
+def _iso(value: Any) -> str | None:
+    if value is None:
+        return None
+    return pd.Timestamp(value).isoformat()
+
+
+def _stage_incremental_history_contract(plan: "IncrementalPlan") -> None:
+    """Stage expected window bounds; do not certify until narrowing occurs."""
+    _INCREMENTAL_HISTORY_CERTIFICATE.set(False)
+    if (
+        plan.is_full_run
+        or plan.full_history_required
+        or plan.load_start is None
+        or plan.output_start is None
+    ):
+        _PENDING_INCREMENTAL_HISTORY.set(None)
+        return
+    _PENDING_INCREMENTAL_HISTORY.set(
+        {
+            "factor_id": plan.factor_id,
+            "load_start": _iso(plan.load_start) or "",
+            "load_end": _iso(plan.load_end) or "",
+            "output_start": _iso(plan.output_start) or "",
+            "output_end": _iso(plan.output_end) or "",
+        }
     )
-    _INCREMENTAL_HISTORY_CERTIFICATE.set(valid)
+
+
+def certify_narrowed_incremental_window(
+    *,
+    start_date: Any,
+    end_date: Any,
+) -> bool:
+    """Certify only when the actual narrowed source matches the staged plan."""
+    pending = _PENDING_INCREMENTAL_HISTORY.get()
+    if not pending:
+        return False
+    actual_start = _iso(start_date) or ""
+    actual_end = _iso(end_date) or ""
+    if actual_start != pending["load_start"] or actual_end != pending["load_end"]:
+        _PENDING_INCREMENTAL_HISTORY.set(None)
+        _INCREMENTAL_HISTORY_CERTIFICATE.set(False)
+        return False
+    _PENDING_INCREMENTAL_HISTORY.set(None)
+    _INCREMENTAL_HISTORY_CERTIFICATE.set(True)
+    return True
+
+
+def clear_incremental_history_contract() -> None:
+    _PENDING_INCREMENTAL_HISTORY.set(None)
+    _INCREMENTAL_HISTORY_CERTIFICATE.set(False)
 
 
 def consume_incremental_history_certificate() -> bool:
-    """Consume and clear the current task's incremental history certificate."""
+    """Consume and clear the current task's one-shot certificate."""
     value = bool(_INCREMENTAL_HISTORY_CERTIFICATE.get())
     _INCREMENTAL_HISTORY_CERTIFICATE.set(False)
     return value
@@ -140,7 +184,7 @@ def build_incremental_plan(
         window_mode="full_history" if full_history_required else window_mode,
         full_history_required=full_history_required,
     )
-    _issue_incremental_history_certificate(plan)
+    _stage_incremental_history_contract(plan)
     return plan
 
 
