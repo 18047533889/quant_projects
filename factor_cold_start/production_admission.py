@@ -1,9 +1,10 @@
 """Fail-closed production admission for cold-start formulas.
 
 The historical ``daily``/``extended`` authoring surfaces are parser concerns, not
-production-readiness claims.  This module compiles each formula through the same
+production-readiness claims. This module compiles each formula through the same
 Expr -> IR -> PlanNode pipeline used by :class:`runtime.engine.FactorEngine`, then
-applies production policy, evidence and whole-plan routing gates.
+applies production policy, evidence, source-contract and whole-plan routing
+gates.
 """
 from __future__ import annotations
 
@@ -49,6 +50,58 @@ def _walk_plan_operators(plan) -> tuple[str, ...]:
     return tuple(sorted(names))
 
 
+def _walk_source_contracts(ir) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Return independently executable logical-source contracts in an IR DAG.
+
+    Source-backed minute-to-daily features intentionally lower to ``column`` IR
+    nodes, because aggregation belongs at the data-source boundary rather than
+    inside the factor operator registry. They therefore require their own
+    auditable production contract instead of a fake operator registration.
+    """
+    from api.intraday_daily import INTRADAY_DAILY_DSL_FUNCTIONS
+    from api.source_ref import decode_source_ref
+
+    supported_features: set[str] = set()
+    for function in INTRADAY_DAILY_DSL_FUNCTIONS.values():
+        try:
+            specification = decode_source_ref(function())
+        except Exception:
+            continue
+        if specification is None or specification.transform != "intraday_feature":
+            continue
+        feature = str(specification.transform_params_dict().get("feature") or "")
+        if feature:
+            supported_features.add(feature)
+
+    rows: set[tuple[str, tuple[str, ...]]] = set()
+
+    def visit(node) -> None:
+        if str(getattr(node, "op", "") or "") == "column":
+            attrs = dict(getattr(node, "attrs", {}) or {})
+            specification = decode_source_ref(str(attrs.get("name") or ""))
+            if specification is not None and specification.transform:
+                params = specification.transform_params_dict()
+                if specification.transform != "intraday_feature":
+                    raise ValueError(
+                        f"uncertified SourceRef transform: {specification.transform!r}"
+                    )
+                feature = str(params.get("feature") or "")
+                if feature not in supported_features:
+                    raise ValueError(
+                        f"intraday feature has no installed runtime contract: {feature!r}"
+                    )
+                logical = (
+                    f"source::{specification.table}::"
+                    f"{specification.transform}::{feature}"
+                )
+                rows.add((logical, ("source_runtime",)))
+        for child in getattr(node, "inputs", ()) or ():
+            visit(child)
+
+    visit(ir)
+    return tuple(sorted(rows))
+
+
 def _compile_production_plan(formula: str):
     from api.dsl_parser import parse_expr
     from ir.analyzer import Analyzer
@@ -75,8 +128,6 @@ def _compile_production_plan(formula: str):
 
 
 def _production_routing_context() -> SimpleNamespace:
-    # The default provider must have a safe in-memory execution route. Runtime
-    # may later select another certified SQL/hybrid route for a concrete source.
     return SimpleNamespace(
         run_mode="production",
         data_source=None,
@@ -88,7 +139,7 @@ def _production_routing_context() -> SimpleNamespace:
 def admit_formula(formula: str) -> ProductionAdmission:
     """Return current production admission for one DSL formula.
 
-    Admission is derived from checked-in implementation-bound evidence.  Stale
+    Admission is derived from checked-in implementation-bound evidence. Stale
     or missing evidence removes a formula from the default catalog instead of
     silently downgrading to an uncertified backend.
     """
@@ -102,8 +153,9 @@ def admit_formula(formula: str) -> ProductionAdmission:
         load_all()
         plan, analysis = _compile_production_plan(formula)
 
-        canonical_names: set[str] = set()
-        backend_rows: list[tuple[str, tuple[str, ...]]] = []
+        source_rows = _walk_source_contracts(analysis.ir)
+        canonical_names: set[str] = {name for name, _ in source_rows}
+        backend_rows: list[tuple[str, tuple[str, ...]]] = list(source_rows)
         violations: list[str] = []
         for raw_name in _walk_plan_operators(plan):
             try:
@@ -137,8 +189,19 @@ def admit_formula(formula: str) -> ProductionAdmission:
                 violations=tuple(violations),
             )
 
-        # Per-node capability is insufficient. Reuse the production whole-plan
-        # router and require at least one complete certified physical route.
+        operator_names = _walk_plan_operators(plan)
+        if source_rows and not operator_names:
+            return ProductionAdmission(
+                eligible=True,
+                canonical_operators=tuple(sorted(canonical_names)),
+                certified_backends=tuple(sorted(backend_rows)),
+                physical_plan_backend="source_runtime",
+                physical_plan_candidates=("source_runtime",),
+                routing_basis="source_contract",
+                lookback=lookback,
+                violations=(),
+            )
+
         route = choose_plan_route(plan, _production_routing_context())
         candidates = tuple(name for name, _ in route.candidate_costs)
         return ProductionAdmission(
