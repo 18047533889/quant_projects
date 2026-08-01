@@ -1,4 +1,4 @@
-name: FactorEngine Production Completion Audit Fix
+name: FactorEngine Production Completion Functional Fixes
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: factorengine-production-completion-audit-fix
+  group: factorengine-production-completion-functional-fixes
   cancel-in-progress: false
 
 jobs:
@@ -31,30 +31,84 @@ jobs:
           ref: agent/factorengine-production-completion-20260801
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Apply and persist audit parameter fix
+      - name: Apply deterministic functional fixes
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
 
-          path = Path('factor_engine/scripts/audit_all_factor_production.py')
-          text = path.read_text(encoding='utf-8')
-          text = text.replace('    "short_periods": 1,\n', '    "short_periods": 3,\n', 1)
-          anchor = '    ("winsorize", "upper"): 0.95,\n'
-          additions = '    ("ts_regression_slope", "retval"): "slope",\n    ("yoy_by_period", "denominator"): "signed",\n'
-          if additions not in text:
-              if anchor not in text:
-                  raise SystemExit('audit special-scalar anchor missing')
-              text = text.replace(anchor, anchor + additions, 1)
-          path.write_text(text, encoding='utf-8')
+          audit = Path('factor_engine/scripts/audit_all_factor_production.py')
+          text = audit.read_text(encoding='utf-8')
+          old = '''_SPECIAL_POSITIONAL = {
+    "cs_multi_resid": ("target", "exposure", "control"),
+    "cs_neutralize": ("target", "exposure", "control"),
+}
+_SPECIAL_KWARGS = {
+    "cs_multi_resid": {"add_intercept": True, "min_obs": 8},
+    "cs_neutralize": {"add_intercept": True, "min_obs": 8},
+}
+'''
+          new = '''_SPECIAL_POSITIONAL = {
+    "cs_multi_resid": ("target", "exposure", "control"),
+    "cs_neutralize": ("target", "exposure", "control"),
+    "ts_regression_slope": ("y", "x", "window"),
+}
+_SPECIAL_KWARGS = {
+    "cs_multi_resid": {"add_intercept": True, "min_obs": 8},
+    "cs_neutralize": {"add_intercept": True, "min_obs": 8},
+    "ts_regression_slope": {
+        "lag": 0,
+        "retval": "slope",
+        "min_periods": 20,
+        "add_intercept": True,
+    },
+}
+'''
+          if new not in text:
+              if old not in text:
+                  raise SystemExit('audit special call anchor missing')
+              audit.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          admission = Path('factor_cold_start/production_admission.py')
+          text = admission.read_text(encoding='utf-8')
+          old = '            specification = decode_source_ref(function())\n'
+          new = '            value = function()\n            specification = decode_source_ref(getattr(value, "name", ""))\n'
+          if new not in text:
+              if old not in text:
+                  raise SystemExit('source function decode anchor missing')
+              admission.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          patterns = Path('factor_engine/cleaned_operators/price_volume/structure_patterns_extra_v2.py')
+          text = patterns.read_text(encoding='utf-8')
+          old = 'def _similar(values,tol):\n    stack=np.stack([v.to_numpy(float) for v in values]);mx=np.nanmax(stack,axis=0);mn=np.nanmin(stack,axis=0);mid=np.nanmean(np.abs(stack),axis=0);score=np.clip(1-(mx-mn)/np.where(mid>0,mid,np.nan)/tol,0,1);return pd.DataFrame(score,index=values[0].index,columns=values[0].columns)\n'
+          new = '''def _similar(values,tol):
+    stack=np.stack([v.to_numpy(float) for v in values])
+    valid=np.isfinite(stack)
+    count=valid.sum(axis=0)
+    safe=np.where(valid,stack,0.0)
+    mx=np.max(np.where(valid,stack,-np.inf),axis=0)
+    mn=np.min(np.where(valid,stack,np.inf),axis=0)
+    mid=np.divide(np.abs(safe).sum(axis=0),count,out=np.full(count.shape,np.nan,dtype=float),where=count>0)
+    score=np.full(count.shape,np.nan,dtype=float)
+    complete=count==len(values)
+    denom=mid*float(tol)
+    np.divide(mx-mn,denom,out=score,where=complete&(denom>0))
+    score=np.where(complete,np.clip(1-score,0,1),np.nan)
+    return pd.DataFrame(score,index=values[0].index,columns=values[0].columns)
+'''
+          if new not in text:
+              if old not in text:
+                  raise SystemExit('structure similarity anchor missing')
+              patterns.write_text(text.replace(old, new, 1), encoding='utf-8')
           PY
+
           python -m compileall -q factor_engine factor_cold_start
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add factor_engine/scripts/audit_all_factor_production.py
+          git add factor_engine/scripts/audit_all_factor_production.py factor_cold_start/production_admission.py factor_engine/cleaned_operators/price_volume/structure_patterns_extra_v2.py
           if ! git diff --cached --quiet; then
-            git commit -m "Fix production audit parameter classification"
+            git commit -m "Fix source-backed admission and runtime audit contracts"
             git push origin HEAD:agent/factorengine-production-completion-20260801
           fi
 
@@ -70,5 +124,8 @@ jobs:
           python -m pip install -e ./dataaccess
           python -m pip install pytest
 
-      - name: Verify runtime audit
-        run: python factor_engine/scripts/audit_all_factor_production.py --runtime-only
+      - name: Verify functional fixes
+        run: |
+          python factor_engine/scripts/audit_all_factor_production.py --runtime-only
+          pytest -q factor_cold_start/tests/test_factorengine_parse.py::test_all_default_daily_formulas_are_production_admitted
+          pytest -q factor_engine/tests/operators/test_v2_macro_and_intraday_dsl.py
