@@ -1,4 +1,7 @@
-"""Runtime public surface with source-window contracts installed before lazy imports."""
+"""Runtime public surface.
+
+Source-window contracts are installed idempotently before any lazy engine import.
+"""
 
 from importlib import import_module
 
