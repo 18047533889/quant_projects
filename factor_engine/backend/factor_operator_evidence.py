@@ -1,14 +1,10 @@
 # -*- coding: utf-8 -*-
 """Test-backed evidence for Pandas/Numpy semantic-reference factor operators.
 
-Primitive triple-backend evidence covers the Daily core. This artifact covers
-all retained non-Daily factor operators whose first certified production path is
-the Pandas/Numpy semantic reference. It is issued only after execution,
-determinism, shape and prefix-causality audits pass.
-
-Generated docs/manifests are deliberately excluded from the semantic tree hash;
-otherwise regenerating a manifest after certification would immediately make the
-artifact stale and create a self-referential certification loop.
+The artifact is bound not only to numerical kernels but also to authoring,
+lowering, PIT source resolution, warmup, incremental replay and backend-admission
+semantics. Generated docs/manifests are excluded to avoid self-referential
+certification loops.
 """
 from __future__ import annotations
 
@@ -25,20 +21,36 @@ def _hashes() -> dict[str, str]:
     from backend.evidence_provenance import _tree_hash, compute_implementation_hash
 
     audit = FE_ROOT / "scripts" / "audit_all_factor_production.py"
-    hardening = FE_ROOT / "cleaned_operators" / "production_hardening.py"
-    return {
-        # Only executable semantic source belongs in the hard identity. Generated
-        # JSON/CSV documentation is derived output and must not participate.
+    files = {
+        "operator_capability_hash": FE_ROOT / "backend" / "operator_capability.py",
+        "pandas_signature_hash": FE_ROOT / "backend" / "pandas_first_signature.py",
+        "execution_context_hash": FE_ROOT / "backend" / "context.py",
+        "production_policy_hash": FE_ROOT / "runtime" / "production_policy.py",
+        "incremental_hash": FE_ROOT / "runtime" / "incremental.py",
+        "warmup_hash": FE_ROOT / "runtime" / "warmup_service.py",
+        "run_window_hash": FE_ROOT / "runtime" / "run_window.py",
+        "source_window_contract_hash": FE_ROOT / "runtime" / "source_window_contract_v2.py",
+        "time_window_hash": FE_ROOT / "storage" / "time_window.py",
+    }
+    hashes = {
         "cleaned_operator_python_tree_hash": _tree_hash(
             FE_ROOT / "cleaned_operators", patterns=("*.py",)
+        ),
+        "api_python_tree_hash": _tree_hash(FE_ROOT / "api", patterns=("*.py",)),
+        "ir_python_tree_hash": _tree_hash(FE_ROOT / "ir", patterns=("*.py",)),
+        "planner_python_tree_hash": _tree_hash(
+            FE_ROOT / "planner", patterns=("*.py",)
+        ),
+        "logical_source_python_tree_hash": _tree_hash(
+            FE_ROOT / "storage" / "sources", patterns=("*.py",)
         ),
         "audit_source_hash": compute_implementation_hash(
             audit.read_text(encoding="utf-8")
         ),
-        "hardening_source_hash": compute_implementation_hash(
-            hardening.read_text(encoding="utf-8")
-        ),
     }
+    for name, path in files.items():
+        hashes[name] = compute_implementation_hash(path.read_text(encoding="utf-8"))
+    return hashes
 
 
 def load_factor_operator_evidence() -> dict[str, Any]:
@@ -61,16 +73,18 @@ def validation_errors() -> list[str]:
     if not payload.get("passed_at"):
         errors.append("passed_at missing")
     if dict(payload.get("hashes") or {}) != _hashes():
-        errors.append("semantic/audit source hashes are stale")
+        errors.append("execution-semantic source hashes are stale")
 
     try:
         from cleaned_operators.production_hardening import factor_production_targets
         from cleaned_operators.operator_surface import DAILY_CANONICALS
 
         expected = set(factor_production_targets()).difference(DAILY_CANONICALS)
-    except Exception as exc:
-        return errors + [f"target resolution failed: {type(exc).__name__}: {exc}"]
-    observed = set(str(x) for x in (payload.get("operators") or []))
+    except Exception as error:
+        return errors + [
+            f"target resolution failed: {type(error).__name__}: {error}"
+        ]
+    observed = set(str(value) for value in (payload.get("operators") or []))
     if observed != expected:
         errors.append(
             f"operator set mismatch: missing={sorted(expected-observed)!r} "
@@ -89,7 +103,9 @@ def pandas_reference_production_safe(canonical: str) -> bool:
     if not factor_operator_evidence_valid():
         return False
     payload = load_factor_operator_evidence()
-    return str(canonical) in set(str(x) for x in (payload.get("operators") or []))
+    return str(canonical) in set(
+        str(value) for value in (payload.get("operators") or [])
+    )
 
 
 def current_hashes() -> dict[str, str]:
