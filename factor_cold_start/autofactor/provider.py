@@ -1,12 +1,88 @@
-"""AutoFactorEvaluation providers for production and opt-in research catalogs."""
+"""AutoFactorEvaluation providers for production and opt-in research catalogs.
+
+The provider can be imported by FactorEngine-only installations.  When the
+AutoFactorEvaluation package is present its canonical immutable contracts are
+used; otherwise an interface-compatible local contract is used without pulling
+an optional integration package into core test collection or runtime startup.
+"""
 from __future__ import annotations
 
 import hashlib
 import json
 import os
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Mapping
 
-from evaluation.factor_pack import FactorDefinition, FactorPack
+try:
+    from evaluation.factor_pack import FactorDefinition, FactorPack
+except ModuleNotFoundError as exc:
+    if exc.name not in {"evaluation", "evaluation.factor_pack"}:
+        raise
+
+    @dataclass(frozen=True)
+    class FactorDefinition:
+        name: str
+        formula: str
+        source_formula: str = ""
+        description: str = ""
+        formula_hash: str = ""
+        metadata: Mapping[str, Any] | None = None
+
+        def __post_init__(self) -> None:
+            object.__setattr__(
+                self,
+                "metadata",
+                {} if self.metadata is None else dict(self.metadata),
+            )
+            expected = hashlib.sha256(self.formula.encode("utf-8")).hexdigest()
+            if not self.name.strip():
+                raise ValueError("factor name must be non-empty")
+            if not self.formula.strip():
+                raise ValueError(f"factor {self.name} formula must be non-empty")
+            if self.formula_hash and self.formula_hash != expected:
+                raise ValueError(f"factor {self.name} formula hash mismatch")
+            object.__setattr__(self, "formula_hash", expected)
+            if not self.description:
+                object.__setattr__(self, "description", self.name)
+
+    @dataclass(frozen=True)
+    class FactorPack:
+        name: str
+        version: str
+        source_hash: str
+        pack_hash: str
+        factors: tuple[FactorDefinition, ...]
+        metadata: Mapping[str, Any] | None = None
+
+        def __post_init__(self) -> None:
+            object.__setattr__(
+                self,
+                "metadata",
+                {} if self.metadata is None else dict(self.metadata),
+            )
+            if not self.name.strip():
+                raise ValueError("factor-pack name must be non-empty")
+            if not self.version.strip():
+                raise ValueError(f"factor pack {self.name} version must be non-empty")
+            if not self.factors:
+                raise ValueError(f"factor pack {self.name} is empty")
+            names = self.names()
+            if len(set(names)) != len(names):
+                raise ValueError(f"factor pack {self.name} contains duplicate factor names")
+            hashes = [factor.formula_hash for factor in self.factors]
+            if len(set(hashes)) != len(hashes):
+                raise ValueError(f"factor pack {self.name} contains duplicate formulas")
+
+        @property
+        def source_catalog_hash(self) -> str:
+            return self.source_hash
+
+        def names(self) -> list[str]:
+            return [factor.name for factor in self.factors]
+
+        def by_name(self) -> dict[str, FactorDefinition]:
+            return {factor.name: factor for factor in self.factors}
+
 from factor_cold_start.catalog import load_catalog
 from factor_cold_start.production_admission import admit_factor
 
