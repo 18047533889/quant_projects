@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "description": "Fail-closed delta for shared bridge, fiscal SQL emitter, and fiscal primitive records; accepted only against the exact base blob and current source hashes.",
+  "base_git_blob_sha": "02110cc9e66354a4a55653ea46ebc17db008f2cf",
+  "source_validation_run": {
+    "workflow_run_id": 30711757915,
+    "job_id": 91400345759,
+    "certified_head": "615c3e11e1882241b30b6803719e9d4dcee5bc50"
+  },
+  "emitter_hash_overrides": {
+    "implementation_hash_duckdb_fiscal_v2": "732a6cfd496c0ea1"
+  },
+  "bridge_parameter_hash": "45fa4bffbccc6b2b",
+  "operator_overrides": {
+    "safe_div_null": {
+      "implementation_hash_pandas": "f3debdb086573ae7",
+      "implementation_hash_polars": "f3debdb086573ae7"
+    },
+    "period_average": {
+      "implementation_hash_pandas": "f3debdb086573ae7",
+      "implementation_hash_polars": "f3debdb086573ae7",
+      "parameter_domain_hash": "8a8599342dd875a0"
+    },
+    "period_cagr": {
+      "implementation_hash_pandas": "f3debdb086573ae7",
+      "implementation_hash_polars": "f3debdb086573ae7",
+      "parameter_domain_hash": "640a7eca36b57b35"
+    },
+    "period_change": {
+      "implementation_hash_pandas": "f3debdb086573ae7",
+      "implementation_hash_polars": "f3debdb086573ae7",
+      "parameter_domain_hash": "65115660e3890b6f"
+    },
+    "quarter_from_cumulative": {
+      "implementation_hash_pandas": "f3debdb086573ae7",
+      "implementation_hash_polars": "f3debdb086573ae7",
+      "parameter_domain_hash": "3b085264eb577483"
+    },
+    "ttm_from_cumulative": {
+      "implementation_hash_pandas": "f3debdb086573ae7",
+      "implementation_hash_polars": "f3debdb086573ae7",
+      "parameter_domain_hash": "bb49c2bb007f56ae"
+    },
+    "ttm_from_quarterly": {
+      "implementation_hash_pandas": "f3debdb086573ae7",
+      "implementation_hash_polars": "f3debdb086573ae7",
+      "parameter_domain_hash": "25ff90bd11ba0fd9"
+    },
+    "yoy_by_period": {
+      "implementation_hash_pandas": "f3debdb086573ae7",
+      "implementation_hash_polars": "f3debdb086573ae7",
+      "parameter_domain_hash": "6185cd5640ea6e19"
+    }
+  }
+}
