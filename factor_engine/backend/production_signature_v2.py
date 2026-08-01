@@ -4,11 +4,33 @@
 The original signature table predates revision-aware fiscal kernels and treated
 several TTM/YOY transforms as parameterless.  This module upgrades the in-memory
 signature registry before evidence or routing consumes it.  Evidence stores a
-hash of the resulting dataclass payload, so future changes remain fail-closed.
+hash of the resulting dataclass payload and the fiscal SQL overlay source, so
+future semantic changes remain fail-closed.
 """
 from __future__ import annotations
 
 _APPLIED = False
+
+
+def _install_evidence_overlay_hash() -> None:
+    from backend import evidence_provenance as ep
+
+    if getattr(ep, "_fiscal_v2_overlay_hash_installed", False):
+        return
+    original = ep.emitter_hashes
+
+    def emitter_hashes_with_fiscal_v2() -> dict[str, str]:
+        out = dict(original())
+        path = ep.FE_ROOT / "backend" / "sql_pushdown" / "fiscal_v2.py"
+        if path.is_file():
+            out["implementation_hash_duckdb_fiscal_v2"] = ep.compute_implementation_hash(
+                path.read_text(encoding="utf-8")
+            )
+        return out
+
+    ep.emitter_hashes = emitter_hashes_with_fiscal_v2
+    ep._fiscal_v2_overlay_hash_installed = True
+    ep.evidence_artifact_valid.cache_clear()
 
 
 def apply_production_signature_v2() -> None:
@@ -140,4 +162,5 @@ def apply_production_signature_v2() -> None:
         ),
         default_status="production",
     )
+    _install_evidence_overlay_hash()
     _APPLIED = True
