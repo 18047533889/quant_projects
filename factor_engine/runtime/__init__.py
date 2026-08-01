@@ -1,3 +1,5 @@
+"""Runtime public surface with source-window contracts installed before lazy imports."""
+
 from importlib import import_module
 
 from runtime.source_window_contract_v2 import install_source_window_contract
