@@ -1,5 +1,6 @@
 name: Apply and Validate Cold Start Expansion
 
+# Atomic payload staging; removed after the validated source commit lands.
 on:
   push:
     branches: [agent/expand-factor-cold-start-20260801]
