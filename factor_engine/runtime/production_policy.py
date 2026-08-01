@@ -1,10 +1,4 @@
-"""Production hard policy: semantic admission is backend independent.
-
-A factor operator may be production-safe on one certified backend without being
-portable to every backend. Backend-specific fast-path constraints are enforced
-only when that fast path is requested/selected; they must never reject an
-otherwise production-certified Pandas/Numpy execution path.
-"""
+"""Production hard policy: semantic admission is backend independent."""
 from __future__ import annotations
 
 import os
@@ -24,9 +18,9 @@ def _truthy_env(name: str) -> bool:
 def resolve_run_mode(mode: str | None = None) -> str:
     if mode is not None and str(mode).strip():
         return str(mode).lower()
-    fe = os.environ.get("FACTOR_ENGINE_RUN_MODE", "").strip().lower()
-    if fe in {"research", PRODUCTION_MODE}:
-        return fe
+    factor_engine_mode = os.environ.get("FACTOR_ENGINE_RUN_MODE", "").strip().lower()
+    if factor_engine_mode in {"research", PRODUCTION_MODE}:
+        return factor_engine_mode
     if _truthy_env("QUANT_PRODUCTION_MODE"):
         return PRODUCTION_MODE
     return "research"
@@ -48,8 +42,8 @@ def assert_columns_explicit(
         raise ProductionPolicyViolation(
             f"production 模式 {context} 必须显式指定 columns，禁止 SELECT *"
         )
-    cols = list(columns)
-    if not cols or "*" in cols:
+    names = list(columns)
+    if not names or "*" in names:
         raise ProductionPolicyViolation(
             f"production 模式 {context} 必须显式列名，禁止 SELECT * 或空 columns"
         )
@@ -65,11 +59,25 @@ def assert_production_run_flags(
 ) -> None:
     if not is_production_mode(mode):
         return
+
+    # A normal incremental call has already loaded analysis lookback + buffer.
+    # The planner issues a task-local, one-shot certificate immediately before
+    # ``run``. Direct runs cannot forge or reuse it, and full-history factors do
+    # not receive it because they require explicit auto-warmup from origin.
+    incremental_history_satisfied = False
+    if not auto_warmup:
+        try:
+            from runtime.incremental import consume_incremental_history_certificate
+
+            incremental_history_satisfied = consume_incremental_history_certificate()
+        except ImportError:
+            incremental_history_satisfied = False
+
     missing: list[str] = []
     if not input_dq_check:
         missing.append("input_dq_check")
-    if not auto_warmup:
-        missing.append("auto_warmup")
+    if not auto_warmup and not incremental_history_satisfied:
+        missing.append("auto_warmup_or_incremental_history_contract")
     if not pit_enforce:
         missing.append("pit_enforce")
     if missing:
@@ -105,7 +113,6 @@ def record_production_pandas_fallback(
     actual_backend: str,
     mode: str | None = None,
 ) -> None:
-    """Record a real fallback only; intentional cost routing is not fallback."""
     if mode is None:
         mode = getattr(ctx, "run_mode", None)
     if not is_production_mode(mode):
@@ -118,7 +125,7 @@ def record_production_pandas_fallback(
     if entry not in fallbacks:
         fallbacks.append(entry)
     runtime["production_pandas_fallbacks"] = fallbacks
-    ctx.runtime_stats = runtime  # type: ignore[attr-defined]
+    ctx.runtime_stats = runtime
 
 
 def assert_production_plan_ops(
@@ -127,11 +134,10 @@ def assert_production_plan_ops(
     mode: str | None = None,
     context: str = "compile",
 ) -> None:
-    """Semantic production gate + bounded production call signatures."""
     if not is_production_mode(mode):
         return
-    from cleaned_operators.operator_spec import check_production_plan_ops
     from backend.pandas_first_signature import check_pandas_first_plan_signatures
+    from cleaned_operators.operator_spec import check_production_plan_ops
 
     violations = check_production_plan_ops(plan)
     violations.extend(check_pandas_first_plan_signatures(plan))
@@ -153,7 +159,10 @@ def assert_production_fastpath_plan(
 ) -> None:
     if not is_production_mode(mode) or not _fastpath_gate_enabled():
         return
-    from backend.production_fastpath_gate import check_production_fastpath_plan_ops, fastpath_gate_strict
+    from backend.production_fastpath_gate import (
+        check_production_fastpath_plan_ops,
+        fastpath_gate_strict,
+    )
 
     result = check_production_fastpath_plan_ops(
         plan, strict=fastpath_gate_strict(), mode=mode
@@ -188,18 +197,12 @@ def assert_no_unapproved_map_groups_in_production(
     mode: str | None = None,
     context: str = "compile",
 ) -> None:
-    """Backend-specific map_groups gate.
-
-    This check used to run for every production plan and therefore rejected a
-    Pandas-certified operator merely because an optional Polars map_groups
-    implementation was not certified.  It now applies only when the caller
-    explicitly requires production fast paths. Normal production routing is
-    constrained later by per-backend capability evidence.
-    """
     if not is_production_mode(mode) or not _fastpath_gate_enabled():
         return
     from backend.polars_long_policy import infer_polars_long_tier
-    from backend.polars_long_production import APPROVED_POLARS_LONG_MAP_GROUPS_PRODUCTION
+    from backend.polars_long_production import (
+        APPROVED_POLARS_LONG_MAP_GROUPS_PRODUCTION,
+    )
     from cleaned_operators.registry import OperatorRegistry
 
     bad: list[str] = []
@@ -207,12 +210,12 @@ def assert_no_unapproved_map_groups_in_production(
     def walk(node: Any) -> None:
         op = str(getattr(node, "op", "") or "")
         if op:
-            canon = OperatorRegistry._aliases.get(op, op)
+            canonical = OperatorRegistry._aliases.get(op, op)
             if (
-                infer_polars_long_tier(canon) == "map_groups"
-                and canon not in APPROVED_POLARS_LONG_MAP_GROUPS_PRODUCTION
+                infer_polars_long_tier(canonical) == "map_groups"
+                and canonical not in APPROVED_POLARS_LONG_MAP_GROUPS_PRODUCTION
             ):
-                bad.append(canon)
+                bad.append(canonical)
         for child in getattr(node, "inputs", []) or []:
             walk(child)
 
@@ -224,15 +227,18 @@ def assert_no_unapproved_map_groups_in_production(
         )
 
 
-def record_production_fastpath_check(ctx: Any, plan: Any, *, mode: str | None = None) -> None:
-    # A diagnostic fastpath check must not silently reintroduce the strict dual
-    # backend policy when the production job did not request that policy.
+def record_production_fastpath_check(
+    ctx: Any, plan: Any, *, mode: str | None = None
+) -> None:
     if not _fastpath_gate_enabled():
         runtime = dict(getattr(ctx, "runtime_stats", None) or {})
         runtime["production_fastpath_required"] = False
-        ctx.runtime_stats = runtime  # type: ignore[attr-defined]
+        ctx.runtime_stats = runtime
         return
-    from backend.production_fastpath_gate import check_production_fastpath_plan_ops, fastpath_gate_strict
+    from backend.production_fastpath_gate import (
+        check_production_fastpath_plan_ops,
+        fastpath_gate_strict,
+    )
 
     result = check_production_fastpath_plan_ops(
         plan, strict=fastpath_gate_strict(), mode=mode
@@ -242,7 +248,7 @@ def record_production_fastpath_check(ctx: Any, plan: Any, *, mode: str | None = 
     runtime["production_fastpath_ok"] = result.ok
     if result.violations:
         runtime["production_fastpath_violations"] = list(result.violations)
-    ctx.runtime_stats = runtime  # type: ignore[attr-defined]
+    ctx.runtime_stats = runtime
 
 
 def assert_production_factors(
@@ -251,18 +257,17 @@ def assert_production_factors(
     mode: str | None = None,
     context: str = "run",
 ) -> None:
-    """Validate restricted syntax; canonical plan owns production admission."""
     if not is_production_mode(mode):
         return
     from api.mining_integration import validate_factor_engine_dsl
 
     violations: list[str] = []
     for factor in factors:
-        src = getattr(factor, "source_expr", None)
-        if src:
-            ok, msg = validate_factor_engine_dsl(str(src), surface="lqtp")
+        source = getattr(factor, "source_expr", None)
+        if source:
+            ok, message = validate_factor_engine_dsl(str(source), surface="lqtp")
             if not ok:
-                violations.append(f"{getattr(factor, 'name', '?')}: {msg}")
+                violations.append(f"{getattr(factor, 'name', '?')}: {message}")
     if violations:
         raise ProductionPolicyViolation(
             f"production 模式 {context} DSL 语法/兼容校验失败: {'; '.join(violations)}"
@@ -283,26 +288,31 @@ def assert_no_production_pandas_fallbacks(
     fallbacks = runtime.get("production_pandas_fallbacks") or []
     policy = str(getattr(ctx, "production_fallback_policy", "error") or "error")
     if fallbacks and policy != "warn":
-        ops = sorted({str(x.get("op", "")) for x in fallbacks if x.get("op")})
+        operators = sorted(
+            {str(item.get("op", "")) for item in fallbacks if item.get("op")}
+        )
         raise ProductionPolicyViolation(
-            f"production 模式 {context} 禁止未计划 pandas fallback，算子: {', '.join(ops)}"
+            f"production 模式 {context} 禁止未计划 pandas fallback，算子: "
+            + ", ".join(operators)
         )
 
 
 def summarize_pandas_fallbacks(ctx: Any) -> list[dict[str, str]]:
     runtime = getattr(ctx, "runtime_stats", None) or {}
     raw = runtime.get("production_pandas_fallbacks") or []
-    return [dict(x) for x in raw if isinstance(x, dict)]
+    return [dict(item) for item in raw if isinstance(item, dict)]
 
 
-def format_pandas_fallback_report(fallbacks: Iterable[dict[str, str]]) -> str:
-    items = [dict(x) for x in fallbacks if isinstance(x, dict)]
+def format_pandas_fallback_report(
+    fallbacks: Iterable[dict[str, str]],
+) -> str:
+    items = [dict(item) for item in fallbacks if isinstance(item, dict)]
     if not items:
         return ""
     lines = [f"production pandas fallbacks ({len(items)}):"]
     for entry in items:
         lines.append(
-            f"  - {entry.get('op','?')}: requested={entry.get('requested','?')} "
-            f"actual={entry.get('actual','?')}"
+            f"  - {entry.get('op', '?')}: requested={entry.get('requested', '?')} "
+            f"actual={entry.get('actual', '?')}"
         )
     return "\n".join(lines)
