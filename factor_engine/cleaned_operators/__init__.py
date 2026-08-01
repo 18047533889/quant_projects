@@ -111,11 +111,13 @@ def load_all() -> None:
     from cleaned_operators.registration_audit import finalize_registration_audit
     finalize_registration_audit()
 
-    from cleaned_operators.contract_hardening import apply_final_contract_hardening
-    apply_final_contract_hardening()
-
     from backend.sql_pushdown.sql_registry import register_sql_backends
     register_sql_backends()
+
+    # Derive one final contract only after Pandas, Polars and SQL capabilities are
+    # visible.  Generated manifests and routing consume this unified view.
+    from cleaned_operators.contract_hardening import apply_final_contract_hardening
+    apply_final_contract_hardening()
 
     OperatorRegistry.finalize()
     OperatorRegistry.freeze()
