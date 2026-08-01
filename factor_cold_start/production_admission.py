@@ -2,13 +2,14 @@
 
 The historical ``daily``/``extended`` authoring surfaces are parser concerns, not
 production-readiness claims.  This module asks the current FactorEngine policy,
-parameter-signature and backend-evidence layers whether a fully built expression
-is eligible for production routing.
+parameter-signature, backend-evidence and whole-plan routing layers whether a
+fully built expression is eligible for production execution.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import lru_cache
+from types import SimpleNamespace
 from typing import Iterable
 
 from .model import ColdStartFactor
@@ -21,6 +22,9 @@ class ProductionAdmission:
     eligible: bool
     canonical_operators: tuple[str, ...] = ()
     certified_backends: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    physical_plan_backend: str = ""
+    physical_plan_candidates: tuple[str, ...] = ()
+    routing_basis: str = ""
     violations: tuple[str, ...] = ()
 
     @property
@@ -42,6 +46,18 @@ def _walk_plan_operators(plan) -> tuple[str, ...]:
     return tuple(sorted(names))
 
 
+def _production_routing_context() -> SimpleNamespace:
+    # Cold-start admission is source-agnostic and must have a safe in-memory
+    # execution route.  SourceRef/PIT/session requirements are validated by the
+    # production policy and dedicated source-contract suites.  Runtime may later
+    # choose another certified route for a concrete DuckDB/ClickHouse source.
+    return SimpleNamespace(
+        run_mode="production",
+        data_source=None,
+        runtime_stats={"row_count_estimate": 500_000},
+    )
+
+
 @lru_cache(maxsize=16384)
 def admit_formula(formula: str) -> ProductionAdmission:
     """Return current production admission for one DSL formula.
@@ -54,6 +70,7 @@ def admit_formula(formula: str) -> ProductionAdmission:
     try:
         from api.dsl_parser import parse_expr
         from backend.operator_capability import production_eligible_backends
+        from backend.plan_cost_router import choose_plan_route
         from cleaned_operators import load_all
         from cleaned_operators.operator_spec import infer_production_policy
         from cleaned_operators.registry import OperatorRegistry
@@ -61,8 +78,8 @@ def admit_formula(formula: str) -> ProductionAdmission:
 
         load_all()
         # Production factor operators may originate from the former Extended
-        # authoring surface.  ``compat`` only permits parsing; the production
-        # policy below is the actual admission gate.
+        # authoring surface.  ``compat`` only permits parsing; production policy
+        # and physical-plan selection below are the actual admission gates.
         plan = parse_expr(str(formula), surface="compat")
         assert_production_plan_ops(plan, mode="production", context="cold_start")
 
@@ -86,11 +103,28 @@ def admit_formula(formula: str) -> ProductionAdmission:
                 continue
             backend_rows.append((canonical, backends))
 
+        if violations:
+            return ProductionAdmission(
+                eligible=False,
+                canonical_operators=tuple(sorted(canonical_names)),
+                certified_backends=tuple(sorted(backend_rows)),
+                violations=tuple(violations),
+            )
+
+        # Node-by-node capability is insufficient: two certified operators can
+        # still form a DAG for which no complete physical plan exists.  Reuse
+        # the same whole-plan router used by production execution and reject the
+        # formula unless it can produce a complete certified route.
+        route = choose_plan_route(plan, _production_routing_context())
+        candidates = tuple(name for name, _ in route.candidate_costs)
         return ProductionAdmission(
-            eligible=not violations,
+            eligible=True,
             canonical_operators=tuple(sorted(canonical_names)),
             certified_backends=tuple(sorted(backend_rows)),
-            violations=tuple(violations),
+            physical_plan_backend=route.backend,
+            physical_plan_candidates=candidates,
+            routing_basis=route.routing_basis,
+            violations=(),
         )
     except Exception as exc:
         return ProductionAdmission(eligible=False, violations=(str(exc),))
