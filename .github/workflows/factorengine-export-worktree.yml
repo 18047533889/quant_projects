@@ -1,4 +1,4 @@
-name: FactorEngine Export Worktree
+name: FactorEngine Diagnostic Export
 
 on:
   pull_request:
@@ -10,21 +10,88 @@ permissions:
   contents: read
 
 jobs:
-  export:
+  diagnose:
     if: github.event.pull_request.head.ref == 'agent/factorengine-production-completion-20260801'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/gtja191:${{ github.workspace }}/AutoFactorEvaluation-RECONSTRUCT
+      FACTOR_ENGINE_DISABLE_NUMBA: '1'
+      FACTOR_ENGINE_RUN_MODE: research
+      QUANT_PRODUCTION_MODE: '0'
     steps:
       - uses: actions/checkout@v4
         with:
           ref: agent/factorengine-production-completion-20260801
-          fetch-depth: 1
-      - name: Package worktree
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install dependencies
         run: |
-          rm -rf .git
-          tar -czf /tmp/quant-projects-worktree.tar.gz .
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -e ./dataaccess
+          python -m pip install pytest pyyaml
+      - name: Run focused diagnostics
+        shell: bash
+        run: |
+          mkdir -p diagnostics
+          set +e
+          run_case() {
+            name="$1"; shift
+            echo "===== ${name} =====" | tee "diagnostics/${name}.log"
+            "$@" >>"diagnostics/${name}.log" 2>&1
+            code=$?
+            echo "EXIT_CODE=${code}" | tee -a "diagnostics/${name}.log"
+            return 0
+          }
+          run_case cold_start_report python factor_cold_start/scripts/report_coverage.py
+          git diff -- factor_cold_start/reports > diagnostics/cold_start_generated.diff
+          run_case cold_start_tests pytest -q factor_cold_start/tests
+          run_case v2_contracts pytest -q \
+            factor_engine/tests/operators/test_v2_operator_expansion.py \
+            factor_engine/tests/operators/test_v2_macro_and_intraday_dsl.py \
+            factor_engine/tests/operators/test_evidence_fail_closed_v2.py \
+            factor_engine/tests/operators/test_fundamental_flow_semantics_v2.py \
+            factor_engine/tests/operators/test_expectation_event_semantics_v2.py \
+            factor_engine/tests/operators/test_analyzer_semantic_warmup_v2.py \
+            factor_engine/tests/operators/test_recipe_production_admission_v2.py \
+            factor_engine/tests/runtime/test_full_history_replay_contract_v2.py \
+            factor_engine/tests/runtime/test_incremental_history_contract_v2.py \
+            factor_engine/tests/runtime/test_source_window_contract_v2.py
+          run_case gtja_semantics pytest -q \
+            factor_engine/tests/test_data_scope_stability.py \
+            factor_engine/tests/test_data_access_source_snapshot_cache.py \
+            factor_engine/tests/test_gtja_compat_semantics.py \
+            factor_engine/tests/test_scalar_comparison_semantics.py
+          run_case hardening pytest -q \
+            factor_engine/tests/operators/test_contract_hardening.py \
+            factor_engine/tests/operators/test_cos_fiscal_primitives.py \
+            factor_engine/tests/operators/test_operator_overhaul.py \
+            factor_engine/tests/operators/test_layer_governance.py
+          run_case evidence_check python factor_engine/scripts/sync_primitive_evidence.py --check
+          run_case primitive_cert_check python factor_engine/scripts/certify_primitive_evidence.py --check
+          run_case recipe_cert_check python factor_engine/scripts/certify_recipe_evidence.py --check
+          run_case backend_manifest_check python factor_engine/scripts/generate_backend_evidence_manifest.py --check
+          run_case lqtp_manifest_check python factor_engine/scripts/generate_lqtp_compatibility_manifest.py --check
+          run_case operator_surface pytest -q factor_engine/tests/test_operator_surface.py
+          git status --short > diagnostics/git_status.txt
+          git diff > diagnostics/all_generated.diff
+          python - <<'PY' > diagnostics/environment.txt
+          import sys
+          print(sys.version)
+          for name in ('numpy','pandas','polars','duckdb','pyarrow'):
+              try:
+                  module=__import__(name)
+                  print(name, getattr(module,'__version__','unknown'))
+              except Exception as exc:
+                  print(name, 'ERROR', repr(exc))
+          PY
       - uses: actions/upload-artifact@v4
         with:
-          name: quant-projects-worktree
-          path: /tmp/quant-projects-worktree.tar.gz
+          name: factorengine-diagnostics
+          path: diagnostics
           if-no-files-found: error
           retention-days: 1
