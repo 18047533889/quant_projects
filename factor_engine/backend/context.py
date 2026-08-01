@@ -42,16 +42,25 @@ class ExecutionContext:
 
             if not isinstance(self.data_source, LQTPLogicalDataSource):
                 inner = self.data_source
-                # Never reuse a SourceRef value cache across executions. Secondary
-                # sources (financials, benchmarks, intermediates) can change
-                # independently from the primary daily snapshot; a fresh wrapper
-                # keeps memoisation execution-local while exposing the latest
-                # dependency manifest back to lineage through this pointer.
+                # A new wrapper is created for every execution so SourceRef,
+                # financial, benchmark and intraday memoisation cannot cross run
+                # or snapshot boundaries.
                 wrapper = LQTPLogicalDataSource(inner)
+                setattr(wrapper, "_execution_id", self.execution_id)
                 try:
                     setattr(inner, "_factor_engine_lqtp_wrapper", wrapper)
                 except Exception:
                     pass
                 self.data_source = wrapper
+            else:
+                # Explicitly supplied wrappers are still bound to this context;
+                # execution-local caches from a previous context are cleared.
+                wrapper = self.data_source
+                previous = str(getattr(wrapper, "_execution_id", ""))
+                if previous and previous != self.execution_id:
+                    for name in tuple(vars(wrapper)):
+                        if name.startswith("_intraday_") and name.endswith("_cache"):
+                            delattr(wrapper, name)
+                setattr(wrapper, "_execution_id", self.execution_id)
         except ImportError:
             pass
