@@ -55,6 +55,7 @@ _LOAD_MODULES = (
     "cleaned_operators.composite_fastpath",
     "cleaned_operators.composite_fastpath_fixes",
     "cleaned_operators.layer_primitives",
+    # Final runtime owner for strict fiscal-period semantics and backend parity.
     "cleaned_operators.layer_composite_fixes",
 )
 
@@ -76,6 +77,11 @@ def load_all() -> None:
         raise RegistryInitializationError(
             f"unloaded registry cannot initialize from {OperatorRegistry.lifecycle()!r}"
         )
+
+    # Install before importing any runtime module so every bootstrap replacement
+    # is attributable rather than silently depending on import order.
+    from cleaned_operators.registration_audit import install_registration_audit
+    install_registration_audit()
 
     for mod in _LOAD_MODULES:
         __import__(mod, fromlist=["*"])
@@ -101,6 +107,12 @@ def load_all() -> None:
 
     from cleaned_operators.layer_governance_post import apply_post_governance
     apply_post_governance()
+
+    from cleaned_operators.registration_audit import finalize_registration_audit
+    finalize_registration_audit()
+
+    from cleaned_operators.contract_hardening import apply_final_contract_hardening
+    apply_final_contract_hardening()
 
     from backend.sql_pushdown.sql_registry import register_sql_backends
     register_sql_backends()
