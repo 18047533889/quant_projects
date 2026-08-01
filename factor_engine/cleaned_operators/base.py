@@ -1,35 +1,36 @@
 # -*- coding: utf-8 -*-
-"""
-算子基类与 ``@register_operator`` 装饰器。
+"""Pandas/NumPy operator base classes and registration helpers.
 
-约定
-----
-- **输入/输出**：``calculate`` 接收宽表 ``pd.DataFrame``（index=时间, columns=标的），
-  与 ``backend/cleaned_bridge`` 的 panel 格式一致；返回同形 DataFrame 或可对齐的 Series。
-- **元数据**：``OperatorMetadata.description`` 会写入 catalog，供文档与 LLM 提示词引用。
-- **注册**：模块 import 时装饰器把实例挂到 ``OperatorRegistry``；勿在 api 层重复实现。
-
-子类选型
---------
-- ``SeriesOperator``：多参数序列算子（滚动、双序列相关等）；
-- ``TransformOperator``：单输入单输出变换（rank、abs）；
-- ``TwoVarOperator``：固定两列输入；
-- ``ScalarOperator``：输出标量（较少用于 panel 路径）。
+Runtime contracts are enforced centrally:
+- only parameters declared as integer controls are normalised to ``int``;
+- booleans cannot masquerade as windows/lags;
+- all panel axes must be unique;
+- multi-panel inputs must have exactly matching index/columns unless an
+  operator explicitly declares the ``allow_panel_broadcast`` tag;
+- ``validate_params`` is executed for every operator call.
 """
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List
+
+import numpy as np
 import pandas as pd
+
+_INTEGER_PARAM_NAMES = frozenset(
+    {
+        "window", "period", "periods", "d", "lag", "n", "m", "k",
+        "min_periods", "max_periods", "max_lookback", "periods_per_year",
+        "fast_period", "slow_period", "signal_period", "bins", "buckets",
+        "order", "degree", "ddof",
+    }
+)
+_NONNEGATIVE_INTEGER_PARAMS = frozenset({"lag", "periods", "d", "ddof"})
 
 
 @dataclass
 class OperatorMetadata:
-    """算子 catalog 元数据字段。
-
-    供 registry catalog、文档生成与 LLM 提示词引用。
-    """
-
-
     name: str
     category: str
     description: str = ""
@@ -41,39 +42,86 @@ class OperatorMetadata:
     tags: List[str] = field(default_factory=list)
 
 
+def _normalise_integer(value: Any, name: str) -> Any:
+    if name not in _INTEGER_PARAM_NAMES:
+        return value
+    if isinstance(value, (bool, np.bool_)):
+        raise TypeError(f"{name} must be an integer, not bool")
+    if not isinstance(value, (int, float, np.integer, np.floating)):
+        return value
+    if not np.isfinite(float(value)) or float(value) != float(int(value)):
+        raise ValueError(f"{name} must be an integer")
+    result = int(value)
+    lower = 0 if name in _NONNEGATIVE_INTEGER_PARAMS else 1
+    if result < lower:
+        comparator = ">= 0" if lower == 0 else ">= 1"
+        raise ValueError(f"{name} must be {comparator}")
+    return result
+
+
+def _normalise_call(metadata: OperatorMetadata, args: tuple[Any, ...], kwargs: dict[str, Any]):
+    names = list(metadata.param_names or [])
+    processed_args = [
+        _normalise_integer(value, names[index] if index < len(names) else "")
+        for index, value in enumerate(args)
+    ]
+    processed_kwargs = {
+        key: _normalise_integer(value, key)
+        for key, value in kwargs.items()
+    }
+    return tuple(processed_args), processed_kwargs
+
+
+def _validate_panel_axes(metadata: OperatorMetadata, args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
+    frames = [value for value in (*args, *kwargs.values()) if isinstance(value, pd.DataFrame)]
+    if not frames:
+        return
+    for position, frame in enumerate(frames):
+        if not frame.index.is_unique:
+            raise ValueError(f"{metadata.name}: input panel {position} has duplicate index values")
+        if not frame.columns.is_unique:
+            raise ValueError(f"{metadata.name}: input panel {position} has duplicate columns")
+    if len(frames) < 2 or "allow_panel_broadcast" in set(metadata.tags or []):
+        return
+    base = frames[0]
+    for position, frame in enumerate(frames[1:], start=1):
+        if not frame.index.equals(base.index):
+            raise ValueError(f"{metadata.name}: input panel {position} index is misaligned")
+        if not frame.columns.equals(base.columns):
+            raise ValueError(f"{metadata.name}: input panel {position} columns are misaligned")
+
+
+def _validate_common_integer_relations(metadata: OperatorMetadata, args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
+    names = list(metadata.param_names or [])
+    bound = {name: args[index] for index, name in enumerate(names[: len(args)])}
+    bound.update(kwargs)
+    window = bound.get("window")
+    minimum = bound.get("min_periods")
+    if isinstance(window, int) and isinstance(minimum, int) and minimum > window:
+        raise ValueError(f"{metadata.name}: min_periods must not exceed window")
+    k = bound.get("k")
+    if isinstance(window, int) and isinstance(k, int) and k > window:
+        raise ValueError(f"{metadata.name}: k must not exceed window")
+
+
 class Operator(ABC):
-    """所有 pandas_numpy runtime 算子的抽象基类。
-
-    子类须实现 ``calculate``，在宽表 panel 上执行计算。
-    """
-
-
     metadata: OperatorMetadata
 
     @abstractmethod
     def calculate(self, *args, **kwargs) -> pd.DataFrame:
-        """在 panel 上执行计算。
-
-        参数:
-            *args: 位置参数（通常为宽表 DataFrame 及窗口/标量参数）。
-            **kwargs: 关键字参数（如 ``window``、``periods`` 等）。
-
-        返回:
-            与输入同形的 ``pd.DataFrame`` 结果 panel。
-        """
         pass
 
     def validate_params(self, *args, **kwargs) -> bool:
-        """参数校验钩子，子类可覆盖。
-
-        参数:
-            *args: 待校验的位置参数。
-            **kwargs: 待校验的关键字参数。
-
-        返回:
-            参数合法返回 ``True``；默认放行。
-        """
         return True
+
+    def _prepare_call(self, args: tuple[Any, ...], kwargs: dict[str, Any]):
+        processed_args, processed_kwargs = _normalise_call(self.metadata, args, kwargs)
+        _validate_panel_axes(self.metadata, processed_args, processed_kwargs)
+        _validate_common_integer_relations(self.metadata, processed_args, processed_kwargs)
+        valid = self.validate_params(*processed_args, **processed_kwargs)
+        if valid is False:
+            raise ValueError(f"{self.metadata.name}: parameter validation failed")
+        return processed_args, processed_kwargs
 
     def __repr__(self):
         return f"<Operator: {self.metadata.name}>"
@@ -83,127 +131,41 @@ class Operator(ABC):
 
 
 class SeriesOperator(Operator):
-    """通用序列算子基类：规范化 float 窗口参数后调用 ``_calculate_series``。"""
-
     def calculate(self, *args, **kwargs) -> pd.DataFrame:
-        """规范化参数后委托 ``_calculate_series`` 执行。
-
-        参数:
-            *args: 输入序列及标量参数；整型窗口的 ``float`` 会转为 ``int``。
-            **kwargs: 额外关键字参数。
-
-        返回:
-            计算结果 ``pd.DataFrame``。
-        """
-        processed_args = []
-        for a in args:
-            if isinstance(a, float) and a == int(a):
-                processed_args.append(int(a))
-            elif isinstance(a, pd.DataFrame):
-                processed_args.append(a)
-            else:
-                processed_args.append(a)
-        return self._calculate_series(*processed_args, **kwargs)
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+        return self._calculate_series(*processed_args, **processed_kwargs)
 
     @abstractmethod
     def _calculate_series(self, *args, **kwargs) -> pd.DataFrame:
-        """子类实现具体 rolling / 时序 / 截面逻辑。
-
-        参数:
-            *args: 输入 panel 及算子特定参数。
-            **kwargs: 额外关键字参数。
-
-        返回:
-            计算结果 ``pd.DataFrame``。
-        """
         pass
 
 
 class ScalarOperator(Operator):
-    """标量输出算子基类（panel 路径较少使用）。"""
-
     def calculate(self, *args, **kwargs) -> Any:
-        """委托 ``_calculate_scalar`` 计算标量结果。
-
-        参数:
-            *args: 输入参数。
-            **kwargs: 额外关键字参数。
-
-        返回:
-            标量或标量序列。
-        """
-        return self._calculate_scalar(*args, **kwargs)
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+        return self._calculate_scalar(*processed_args, **processed_kwargs)
 
     @abstractmethod
     def _calculate_scalar(self, *args, **kwargs) -> Any:
-        """子类实现标量计算逻辑。
-
-        参数:
-            *args: 输入参数。
-            **kwargs: 额外关键字参数。
-
-        返回:
-            标量结果。
-        """
         pass
 
 
 class TransformOperator(Operator):
-    """单序列进、单序列出变换算子（如 ``abs``、``log``）。"""
-
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        """子类实现单输入变换逻辑。
-
-        参数:
-            x: 输入宽表 panel。
-            **kwargs: 额外关键字参数。
-
-        返回:
-            变换后的 ``pd.DataFrame``。
-        """
         raise NotImplementedError
 
     def calculate(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        """对单输入 panel 执行变换。
-
-        参数:
-            x: 输入宽表 panel。
-            **kwargs: 额外关键字参数。
-
-        返回:
-            变换后的 ``pd.DataFrame``。
-        """
-        return self._calculate_series(x, **kwargs)
+        processed_args, processed_kwargs = self._prepare_call((x,), kwargs)
+        return self._calculate_series(processed_args[0], **processed_kwargs)
 
 
 class TwoVarOperator(Operator):
-    """双序列算子基类（如 ``ts_corr(x, y, d)``）。"""
-
     def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        """子类实现双输入序列逻辑。
-
-        参数:
-            x: 第一个输入宽表 panel。
-            y: 第二个输入宽表 panel。
-            **kwargs: 额外关键字参数。
-
-        返回:
-            计算结果 ``pd.DataFrame``。
-        """
         raise NotImplementedError
 
     def calculate(self, x: pd.DataFrame, y: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        """对双输入 panel 执行计算。
-
-        参数:
-            x: 第一个输入宽表 panel。
-            y: 第二个输入宽表 panel。
-            **kwargs: 额外关键字参数。
-
-        返回:
-            计算结果 ``pd.DataFrame``。
-        """
-        return self._calculate_series(x, y, **kwargs)
+        processed_args, processed_kwargs = self._prepare_call((x, y), kwargs)
+        return self._calculate_series(processed_args[0], processed_args[1], **processed_kwargs)
 
 
 def register_operator(
@@ -215,20 +177,8 @@ def register_operator(
     backend: str | None = None,
     status: str = "implemented",
 ):
-    """类装饰器：实例化算子并注册到 ``OperatorRegistry``。
+    """Instantiate and register an operator class."""
 
-    参数:
-        name: DSL 注册名（可与 ``canonical`` 不同）。
-        category: 算子分类（如 ``time_series``）。
-        business_category: 业务分类标签。
-        canonical: registry 主键，默认取 ``name`` 或类名。
-        source: 溯源标记，写入 catalog。
-        backend: 显式 backend；未指定时按类名推断（含 ``Polars`` → ``polars``）。
-        status: 生命周期状态，默认 ``implemented``。
-
-    返回:
-        装饰器函数，包装目标算子类并完成注册。
-    """
     def decorator(cls):
         instance = cls()
         if name:
@@ -248,6 +198,7 @@ def register_operator(
             backend_explicit = False
         canon = canonical or (name if name else cls.__name__)
         from cleaned_operators.registry import OperatorRegistry
+
         name_aliases = [name] if name and name != canon else None
         OperatorRegistry.register(
             instance,
@@ -259,4 +210,5 @@ def register_operator(
             backend_explicit=backend_explicit,
         )
         return cls
+
     return decorator
