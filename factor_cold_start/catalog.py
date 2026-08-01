@@ -1,4 +1,4 @@
-"""Load and filter committed cold-start factor catalogs."""
+"""Load, admit and filter committed cold-start factor catalogs."""
 from __future__ import annotations
 
 import json
@@ -68,11 +68,10 @@ def _extended_seed_families(market: str) -> tuple[Iterable[ColdStartFactor], ...
         for seed in technical_extension_seeds(market)
         if not (_RECIPE_OWNED_TA_CANONICALS & set(seed.operators))
     )
-    filtered_v2 = v2_operator_seeds(market)
     return (
         filtered_technical,
         candle_pattern_seeds(market),
-        filtered_v2,
+        v2_operator_seeds(market),
         structure_extra_seeds(market),
         fundamental_flow_seeds(market),
         expectation_seeds(market),
@@ -81,9 +80,10 @@ def _extended_seed_families(market: str) -> tuple[Iterable[ColdStartFactor], ...
 
 
 @lru_cache(maxsize=8)
-def load_catalog(
+def load_candidate_catalog(
     market: str, surface: str = "daily"
 ) -> tuple[ColdStartFactor, ...]:
+    """Load authoring candidates without claiming production readiness."""
     if market not in {"ashare", "us"}:
         raise ValueError("market must be ashare or us")
     if surface not in {"daily", "extended"}:
@@ -108,14 +108,57 @@ def load_catalog(
     return ensure_unique(rows)
 
 
+@lru_cache(maxsize=4)
+def load_production_catalog(market: str) -> tuple[ColdStartFactor, ...]:
+    """Return all daily-output factors admitted by the current production contract.
+
+    Former Extended operators are included when their lowered expression,
+    parameter domain and evidence-backed backend route pass the current
+    FactorEngine production policy.  Conversely, an old Daily formula is
+    removed when its evidence or contract is stale.
+    """
+    from .production_admission import filter_production_factors
+
+    candidates: list[ColdStartFactor] = []
+    _extend_unique(candidates, load_candidate_catalog(market, "daily"))
+    _extend_unique(candidates, load_candidate_catalog(market, "extended"))
+    return ensure_unique(filter_production_factors(candidates))
+
+
+@lru_cache(maxsize=8)
+def load_catalog(
+    market: str, surface: str = "daily"
+) -> tuple[ColdStartFactor, ...]:
+    """Load a cold-start catalog.
+
+    ``daily`` is the default production-admitted, daily-output catalog.
+    ``extended`` is an explicitly opt-in authoring/research candidate archive
+    and makes no production-readiness claim.
+    """
+    if market not in {"ashare", "us"}:
+        raise ValueError("market must be ashare or us")
+    if surface == "daily":
+        return load_production_catalog(market)
+    if surface == "extended":
+        return load_candidate_catalog(market, "extended")
+    raise ValueError("surface must be daily or extended")
+
+
 def load_all_catalogs() -> tuple[ColdStartFactor, ...]:
     rows: list[ColdStartFactor] = []
+    by_id: dict[str, ColdStartFactor] = {}
     for market in ("ashare", "us"):
         for surface in ("daily", "extended"):
-            rows.extend(load_catalog(market, surface))
-    identifiers = [row.factor_id for row in rows]
-    if len(identifiers) != len(set(identifiers)):
-        raise ValueError("duplicate factor ids across cold-start catalogs")
+            for row in load_catalog(market, surface):
+                existing = by_id.get(row.factor_id)
+                if existing is not None:
+                    if existing.formula_hash != row.formula_hash:
+                        raise ValueError(
+                            f"duplicate factor id with distinct formula: {row.factor_id}"
+                        )
+                    continue
+                by_id[row.factor_id] = row
+                rows.append(row)
     return tuple(rows)
 
 
