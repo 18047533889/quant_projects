@@ -37,8 +37,8 @@ def _assert_semantic_production_evidence(canonical: str, run_mode: str) -> None:
     if not factor_operator_evidence_valid() or not pandas_reference_production_safe(canonical):
         detail = "; ".join(validation_errors()[:3])
         raise RuntimeError(
-            f"{canonical!r} is not semantically certified for production by "
-            f"factor_operator_verified.json{': ' + detail if detail else ''}"
+            f"{canonical!r} is not production-safe: not semantically certified "
+            f"by factor_operator_verified.json{': ' + detail if detail else ''}"
         )
 
 
