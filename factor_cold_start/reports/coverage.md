@@ -1,17 +1,35 @@
 # Factor cold-start coverage
 
-- Total factors: **4620**
-- Catalogs: **4**
+- Total factors: **5556**
+- Catalogs: **6**
+- Active daily/extended/research operators: **207/207 (100.0%)**
 - Existing GTJA/Week2 formulas excluded structurally: **453**
 
 ## Catalog summary
 
-| Catalog | Factors | Families | Fields | Eligible operators | Coverage |
+| Catalog | Factors | Families | Fields | Surface operators | Coverage |
 |---|---:|---:|---:|---:|---:|
-| `ashare_daily` | 819 | 20 | 13 | 79/79 | 100.0% |
-| `ashare_extended` | 1359 | 13 | 11 | 90/90 | 100.0% |
-| `us_daily` | 1007 | 25 | 26 | 79/79 | 100.0% |
-| `us_extended` | 1435 | 13 | 13 | 89/89 | 100.0% |
+| `ashare_daily` | 924 | 22 | 24 | 86/86 | 100.0% |
+| `ashare_extended` | 1412 | 14 | 18 | 101/101 | 100.0% |
+| `ashare_research` | 308 | 7 | 6 | 20/20 | 100.0% |
+| `us_daily` | 1112 | 27 | 37 | 86/86 | 100.0% |
+| `us_extended` | 1492 | 15 | 21 | 101/101 | 100.0% |
+| `us_research` | 308 | 7 | 6 | 20/20 | 100.0% |
+
+## Coverage policy
+
+- Every active canonical on `daily`, `extended`, and `research` appears in each market's matching catalog.
+- Fiscal operators are isolated behind the `fundamental` availability tier and require PIT-aligned disclosure data.
+- Intraday-only operators are isolated behind the `intraday` tier.
+- Singular or explosive transforms are used only on explicitly bounded, singularity-free inputs and remain research-default-off.
+- Internal implementation primitives and deprecated legacy aliases are not cold-start authoring targets.
+
+### Non-authoring exclusions
+
+- `constant`: internal implementation primitive; not exposed for factor authoring
+- `cube`: deprecated legacy alias; use power(x, 3) or signed_power explicitly
+- `identity`: internal implementation primitive; not exposed for factor authoring
+- `protected_div`: internal compatibility primitive; use safe_div_null in authored formulas
 
 ## `ashare_daily`
 
@@ -23,8 +41,10 @@
 | `liquidity_activity` | 116 |
 | `return_momentum` | 95 |
 | `volatility` | 84 |
+| `fundamental_period` | 60 |
 | `trend_location` | 60 |
 | `liquidity_impact` | 56 |
+| `fundamental_quality` | 45 |
 | `nonlinear_robust` | 41 |
 | `candle_vwap` | 40 |
 | `adjusted_price` | 32 |
@@ -46,16 +66,7 @@
 |---|---:|
 | `core` | 793 |
 | `enriched` | 26 |
-
-### Intentionally excluded operators
-
-- `period_average`: fundamental fiscal-period operator; excluded from price-volume cold start
-- `period_cagr`: fundamental fiscal-period operator; excluded from price-volume cold start
-- `period_change`: fundamental fiscal-period operator; excluded from price-volume cold start
-- `quarter_from_cumulative`: fundamental statement transformation
-- `ttm_from_cumulative`: fundamental statement transformation
-- `ttm_from_quarterly`: fundamental statement transformation
-- `yoy_by_period`: fundamental statement transformation
+| `fundamental` | 105 |
 
 ## `ashare_extended`
 
@@ -67,8 +78,9 @@
 | `rolling_regression` | 305 |
 | `decay_trend` | 192 |
 | `conditional_history` | 174 |
+| `nonlinear_experimental` | 87 |
 | `technical` | 81 |
-| `nonlinear_experimental` | 66 |
+| `fundamental_diagnostics` | 32 |
 | `price_deviation` | 32 |
 | `compounded_return` | 24 |
 | `advanced_cross_sectional` | 14 |
@@ -81,22 +93,31 @@
 
 | Tier | Count |
 |---|---:|
-| `core` | 1341 |
+| `core` | 1362 |
 | `enriched` | 18 |
+| `fundamental` | 32 |
 
-### Intentionally excluded operators
+## `ashare_research`
 
-- `arg`: complex-valued phase is not meaningful for real daily price-volume inputs
-- `cosh`: explosive transform; unsuitable for unbounded production signals
-- `cot`: singular trigonometric transform; unstable and economically unmotivated
-- `csc`: singular trigonometric transform; unstable and economically unmotivated
-- `fundamental_staleness`: fundamental availability diagnostic
-- `period_lag`: fundamental fiscal-period operator; excluded from price-volume cold start
-- `period_stability`: fundamental fiscal-period operator; excluded from price-volume cold start
-- `revision_delta`: fundamental revision diagnostic
-- `sec`: singular trigonometric transform; unstable and economically unmotivated
-- `sinh`: explosive transform; unsuitable for unbounded production signals
-- `tan`: unbounded periodic transform; unstable around singularities
+### Families
+
+| Family | Count |
+|---|---:|
+| `path_shape_research` | 144 |
+| `market_relative_research` | 84 |
+| `stateful_research` | 56 |
+| `tail_risk_research` | 9 |
+| `conditional_research` | 7 |
+| `group_relative_research` | 4 |
+| `intraday_research` | 4 |
+
+### Availability tiers
+
+| Tier | Count |
+|---|---:|
+| `core` | 300 |
+| `enriched` | 4 |
+| `intraday` | 4 |
 
 ## `us_daily`
 
@@ -109,9 +130,11 @@
 | `return_momentum` | 95 |
 | `volatility` | 84 |
 | `us_derived` | 70 |
+| `fundamental_period` | 60 |
 | `trend_location` | 60 |
 | `liquidity_impact` | 56 |
 | `overnight_intraday` | 56 |
+| `fundamental_quality` | 45 |
 | `nonlinear_robust` | 41 |
 | `candle_vwap` | 40 |
 | `microstructure` | 33 |
@@ -137,17 +160,8 @@
 | `core` | 793 |
 | `derived` | 127 |
 | `enriched` | 54 |
+| `fundamental` | 105 |
 | `microstructure` | 33 |
-
-### Intentionally excluded operators
-
-- `period_average`: fundamental fiscal-period operator; excluded from price-volume cold start
-- `period_cagr`: fundamental fiscal-period operator; excluded from price-volume cold start
-- `period_change`: fundamental fiscal-period operator; excluded from price-volume cold start
-- `quarter_from_cumulative`: fundamental statement transformation
-- `ttm_from_cumulative`: fundamental statement transformation
-- `ttm_from_quarterly`: fundamental statement transformation
-- `yoy_by_period`: fundamental statement transformation
 
 ## `us_extended`
 
@@ -159,35 +173,46 @@
 | `rolling_regression` | 305 |
 | `decay_trend` | 192 |
 | `conditional_history` | 174 |
+| `nonlinear_experimental` | 87 |
 | `technical` | 81 |
 | `overnight_intraday` | 80 |
-| `nonlinear_experimental` | 66 |
+| `fundamental_diagnostics` | 32 |
 | `price_deviation` | 32 |
 | `compounded_return` | 24 |
 | `advanced_cross_sectional` | 14 |
 | `data_quality` | 10 |
 | `cross_sectional_state` | 5 |
 | `liquidity_activity` | 4 |
+| `turnover` | 4 |
 
 ### Availability tiers
 
 | Tier | Count |
 |---|---:|
-| `core` | 1341 |
+| `capitalization` | 4 |
+| `core` | 1362 |
 | `derived` | 80 |
 | `enriched` | 14 |
+| `fundamental` | 32 |
 
-### Intentionally excluded operators
+## `us_research`
 
-- `arg`: complex-valued phase is not meaningful for real daily price-volume inputs
-- `cosh`: explosive transform; unsuitable for unbounded production signals
-- `cot`: singular trigonometric transform; unstable and economically unmotivated
-- `csc`: singular trigonometric transform; unstable and economically unmotivated
-- `fundamental_staleness`: fundamental availability diagnostic
-- `period_lag`: fundamental fiscal-period operator; excluded from price-volume cold start
-- `period_stability`: fundamental fiscal-period operator; excluded from price-volume cold start
-- `real_turnover_rate`: requires a verified free-float share-count field; the current US contract does not guarantee one
-- `revision_delta`: fundamental revision diagnostic
-- `sec`: singular trigonometric transform; unstable and economically unmotivated
-- `sinh`: explosive transform; unsuitable for unbounded production signals
-- `tan`: unbounded periodic transform; unstable around singularities
+### Families
+
+| Family | Count |
+|---|---:|
+| `path_shape_research` | 144 |
+| `market_relative_research` | 84 |
+| `stateful_research` | 56 |
+| `tail_risk_research` | 9 |
+| `conditional_research` | 7 |
+| `group_relative_research` | 4 |
+| `intraday_research` | 4 |
+
+### Availability tiers
+
+| Tier | Count |
+|---|---:|
+| `core` | 300 |
+| `enriched` | 4 |
+| `intraday` | 4 |

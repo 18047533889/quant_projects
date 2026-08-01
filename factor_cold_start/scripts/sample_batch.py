@@ -12,7 +12,7 @@ from factor_cold_start.sampler import sample_factors
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--market", required=True, choices=("ashare", "us"))
-    parser.add_argument("--surface", default="daily", choices=("daily", "extended"))
+    parser.add_argument("--surface", default="daily", choices=("daily", "extended", "research"))
     parser.add_argument("--size", type=int, default=64)
     parser.add_argument("--seed", default="0")
     parser.add_argument("--tier", action="append", dest="tiers")

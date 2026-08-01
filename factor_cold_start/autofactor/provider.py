@@ -1,4 +1,4 @@
-"""AutoFactorEvaluation provider for the FactorEngine cold-start catalog."""
+"""AutoFactorEvaluation providers for FactorEngine cold-start catalogs."""
 from __future__ import annotations
 
 import hashlib
@@ -8,6 +8,12 @@ from typing import Any
 
 from evaluation.factor_pack import FactorDefinition, FactorPack
 from factor_cold_start.catalog import load_catalog
+
+_DSL_SURFACE = {
+    "daily": "daily",
+    "extended": "compat",
+    "research": "compat_research",
+}
 
 
 def _canonical(value: Any) -> str:
@@ -20,6 +26,7 @@ def _sha(value: str) -> str:
 
 def _load(market: str, surface: str) -> FactorPack:
     rows = load_catalog(market, surface)
+    dsl_surface = _DSL_SURFACE[surface]
     factors = tuple(
         FactorDefinition(
             name=row.factor_id,
@@ -28,7 +35,7 @@ def _load(market: str, surface: str) -> FactorPack:
             description=row.rationale,
             metadata={
                 **dict(row.metadata),
-                "domain": "price_volume",
+                "domain": dict(row.metadata).get("domain", "price_volume"),
                 "market": row.market,
                 "family": row.family,
                 "subfamily": row.subfamily,
@@ -37,7 +44,7 @@ def _load(market: str, surface: str) -> FactorPack:
                 "availability_tier": row.availability_tier,
                 "required_fields": list(row.required_fields),
                 "operators": list(row.operators),
-                "dsl_surface": "daily" if surface == "daily" else "compat",
+                "dsl_surface": dsl_surface,
                 "owner": "factor_cold_start",
             },
         )
@@ -46,10 +53,19 @@ def _load(market: str, surface: str) -> FactorPack:
     source_rows = [{"name": row.factor_id, "formula_hash": row.formula_hash} for row in rows]
     source_hash = _sha(_canonical(source_rows))
     name = f"factor_cold_start_{market}_{surface}"
-    pack_hash = _sha(_canonical({"name": name, "version": "1", "source_hash": source_hash, "factors": source_rows}))
+    pack_hash = _sha(
+        _canonical(
+            {
+                "name": name,
+                "version": "2",
+                "source_hash": source_hash,
+                "factors": source_rows,
+            }
+        )
+    )
     return FactorPack(
         name=name,
-        version="1",
+        version="2",
         source_hash=source_hash,
         pack_hash=pack_hash,
         factors=factors,
@@ -57,7 +73,7 @@ def _load(market: str, surface: str) -> FactorPack:
             "owner": "factor_cold_start",
             "market": market,
             "surface": surface,
-            "dsl_surface": "daily" if surface == "daily" else "compat",
+            "dsl_surface": dsl_surface,
             "factor_count": len(factors),
         },
     )
@@ -77,6 +93,14 @@ def load_ashare_extended_pack() -> FactorPack:
 
 def load_us_extended_pack() -> FactorPack:
     return _load("us", "extended")
+
+
+def load_ashare_research_pack() -> FactorPack:
+    return _load("ashare", "research")
+
+
+def load_us_research_pack() -> FactorPack:
+    return _load("us", "research")
 
 
 def load_pack() -> FactorPack:

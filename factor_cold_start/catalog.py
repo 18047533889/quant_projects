@@ -19,12 +19,12 @@ def _generated_catalogs():
     return build_catalogs(PACKAGE_ROOT.parent)
 
 
-@lru_cache(maxsize=8)
+@lru_cache(maxsize=12)
 def load_catalog(market: str, surface: str = "daily") -> tuple[ColdStartFactor, ...]:
     if market not in {"ashare", "us"}:
         raise ValueError("market must be ashare or us")
-    if surface not in {"daily", "extended"}:
-        raise ValueError("surface must be daily or extended")
+    if surface not in {"daily", "extended", "research"}:
+        raise ValueError("surface must be daily, extended or research")
     path = CATALOG_ROOT / f"{market}_{surface}.json"
     if not path.is_file():
         return _generated_catalogs()[(market, surface)]
@@ -38,7 +38,7 @@ def load_catalog(market: str, surface: str = "daily") -> tuple[ColdStartFactor, 
 def load_all_catalogs() -> tuple[ColdStartFactor, ...]:
     rows: list[ColdStartFactor] = []
     for market in ("ashare", "us"):
-        for surface in ("daily", "extended"):
+        for surface in ("daily", "extended", "research"):
             rows.extend(load_catalog(market, surface))
     ids = [row.factor_id for row in rows]
     if len(ids) != len(set(ids)):

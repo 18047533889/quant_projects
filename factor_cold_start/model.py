@@ -55,7 +55,7 @@ class ColdStartFactor:
     def __post_init__(self) -> None:
         if self.market not in {"ashare", "us"}:
             raise ValueError(f"unsupported market: {self.market}")
-        if self.surface not in {"daily", "extended"}:
+        if self.surface not in {"daily", "extended", "research"}:
             raise ValueError(f"unsupported surface: {self.surface}")
         if self.complexity not in {"basic", "moderate", "composite"}:
             raise ValueError(f"unsupported complexity: {self.complexity}")

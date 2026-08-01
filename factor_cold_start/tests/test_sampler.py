@@ -29,7 +29,31 @@ def test_sampler_respects_available_fields_and_tiers() -> None:
     assert any(row.availability_tier == "derived" for row in rows)
 
 
+def test_research_sampler_can_isolate_intraday_and_fundamental_tiers() -> None:
+    intraday = sample_factors(
+        market="ashare",
+        surface="research",
+        size=10,
+        seed="intraday",
+        available_fields=MARKET_FIELDS["ashare"]["core"] | MARKET_FIELDS["ashare"]["intraday"],
+        availability_tiers=("intraday",),
+    )
+    assert intraday
+    assert all(row.availability_tier == "intraday" for row in intraday)
+
+    fundamental = sample_factors(
+        market="ashare",
+        surface="daily",
+        size=20,
+        seed="fundamental",
+        available_fields=MARKET_FIELDS["ashare"]["core"] | MARKET_FIELDS["ashare"]["fundamental"],
+        availability_tiers=("fundamental",),
+    )
+    assert fundamental
+    assert all(row.availability_tier == "fundamental" for row in fundamental)
+
+
 def test_sampler_returns_catalog_when_request_exceeds_pool() -> None:
-    catalog = load_catalog("ashare", "daily")
-    rows = sample_factors(market="ashare", surface="daily", size=len(catalog) + 10, seed=0)
+    catalog = load_catalog("ashare", "research")
+    rows = sample_factors(market="ashare", surface="research", size=len(catalog) + 10, seed=0)
     assert rows == catalog

@@ -21,34 +21,44 @@ MARKET_FIELDS: dict[str, dict[str, set[str]]] = {
     "ashare": {
         "core": {"open", "high", "low", "close", "pre_close", "volume", "amount", "ret", "vwap", "factor"},
         "enriched": {"turnover_ratio", "market_cap", "circulating_cap", "circulating_market_cap", "free_market_cap", "exchange", "average_volume"},
+        "fundamental": {
+            "fiscal_year", "fiscal_quarter", "effective_date", "date", "revenue", "net_income",
+            "operating_income", "gross_profit", "total_assets", "total_equity", "free_cash_flow",
+            "net_cash_from_operating_activities", "research_development", "interest_expense",
+            "inventories", "receivables", "purchase_of_property_plant_and_equipment",
+        },
+        "intraday": {"price", "volume", "close", "date"},
     },
     "us": {
         "core": {"open", "high", "low", "close", "pre_close", "volume", "amount", "ret", "vwap", "adj_factor"},
         "derived": {"ret__intra", "ret__overnight", "high__low__ratio", "upper__shadow__ratio", "vwap__close__dist"},
         "enriched": {"turnover_ratio", "market_cap", "exchange", "average_volume", "avg_daily_volume", "short_volume_ratio", "short_interest", "days_to_cover"},
+        "capitalization": {"free_cap", "free_float", "free_float_percent", "market_cap"},
+        "fundamental": {
+            "fiscal_year", "fiscal_quarter", "effective_date", "date", "revenue", "net_income",
+            "operating_income", "gross_profit", "total_assets", "total_equity", "free_cash_flow",
+            "net_cash_from_operating_activities", "research_development", "interest_expense",
+            "inventories", "receivables", "purchase_of_property_plant_and_equipment",
+        },
+        "intraday": {"price", "volume", "close", "date"},
         "microstructure": {"bid_price", "ask_price", "bid_size", "ask_size", "total_volume"},
     },
 }
 
+# Active daily/extended/research operators are all represented in the generated
+# catalogs.  Only hidden implementation primitives and deprecated legacy names
+# are excluded from cold-start authoring.
 EXCLUDED_OPERATOR_REASONS: dict[str, str] = {
-    "period_average": "fundamental fiscal-period operator; excluded from price-volume cold start",
-    "period_cagr": "fundamental fiscal-period operator; excluded from price-volume cold start",
-    "period_change": "fundamental fiscal-period operator; excluded from price-volume cold start",
-    "period_lag": "fundamental fiscal-period operator; excluded from price-volume cold start",
-    "period_stability": "fundamental fiscal-period operator; excluded from price-volume cold start",
-    "quarter_from_cumulative": "fundamental statement transformation",
-    "ttm_from_cumulative": "fundamental statement transformation",
-    "ttm_from_quarterly": "fundamental statement transformation",
-    "yoy_by_period": "fundamental statement transformation",
-    "fundamental_staleness": "fundamental availability diagnostic",
-    "revision_delta": "fundamental revision diagnostic",
-    "arg": "complex-valued phase is not meaningful for real daily price-volume inputs",
-    "cot": "singular trigonometric transform; unstable and economically unmotivated",
-    "csc": "singular trigonometric transform; unstable and economically unmotivated",
-    "sec": "singular trigonometric transform; unstable and economically unmotivated",
-    "tan": "unbounded periodic transform; unstable around singularities",
-    "cosh": "explosive transform; unsuitable for unbounded production signals",
-    "sinh": "explosive transform; unsuitable for unbounded production signals",
+    "constant": "internal implementation primitive; not exposed for factor authoring",
+    "identity": "internal implementation primitive; not exposed for factor authoring",
+    "protected_div": "internal compatibility primitive; use safe_div_null in authored formulas",
+    "cube": "deprecated legacy alias; use power(x, 3) or signed_power explicitly",
+}
+
+SURFACE_DSL = {
+    "daily": "daily",
+    "extended": "compat",
+    "research": "compat_research",
 }
 
 
@@ -173,6 +183,7 @@ class Builder:
         direction_hint: str = "unknown",
         wrappers: tuple[str, ...] = ("rank", "zscore", "mad"),
         complexity: str = "moderate",
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         variants: list[tuple[str, str]] = [(base, "raw")]
         if "rank" in wrappers:
@@ -197,6 +208,7 @@ class Builder:
                 availability_tier=availability_tier,
                 rationale=rationale,
                 direction_hint=direction_hint,
+                metadata=metadata,
             )
 
 
@@ -1289,6 +1301,337 @@ def _extended(builder: Builder) -> None:
             )
 
 
+def _fiscal_period_id() -> str:
+    """Canonical consecutive quarterly ordinal derived from registered fields."""
+    return "add(multiply(fiscal_year, 4), fiscal_quarter)"
+
+
+def _fundamental_daily(builder: Builder) -> None:
+    """Production-surface fiscal seeds using PIT-aligned fundamental panels."""
+    pid = _fiscal_period_id()
+    q_revenue = f"quarter_from_cumulative(revenue, {pid}, fiscal_quarter)"
+    q_gross_profit = f"quarter_from_cumulative(gross_profit, {pid}, fiscal_quarter)"
+    q_operating_income = f"quarter_from_cumulative(operating_income, {pid}, fiscal_quarter)"
+    ttm_revenue = f"ttm_from_cumulative(revenue, {pid}, fiscal_quarter)"
+    ttm_gross_profit = f"ttm_from_cumulative(gross_profit, {pid}, fiscal_quarter)"
+    ttm_operating_income = f"ttm_from_cumulative(operating_income, {pid}, fiscal_quarter)"
+    ttm_net_income = f"ttm_from_quarterly(net_income, {pid}, 4, True)"
+    avg_assets = f"period_average(total_assets, {pid}, 4, True)"
+    avg_equity = f"period_average(total_equity, {pid}, 4, True)"
+
+    direct = [
+        (f"period_average(total_assets, {pid}, 4, True)", "asset_period_average", 4, "Four-quarter average assets smooth balance-sheet seasonality.", "negative"),
+        (f"period_average(total_equity, {pid}, 4, True)", "equity_period_average", 4, "Four-quarter average equity provides a stable profitability denominator.", "unknown"),
+        (f"period_change(revenue, {pid}, 4, \"ratio\", True)", "revenue_period_change", 4, "Exact-quarter revenue growth using disclosed fiscal ordinals.", "positive"),
+        (f"period_change(total_assets, {pid}, 4, \"ratio\", True)", "asset_period_change", 4, "Exact-quarter balance-sheet expansion rate.", "unknown"),
+        (f"period_cagr(revenue, {pid}, 8, 4, \"strict\", True)", "revenue_two_year_cagr", 8, "Two-year revenue CAGR over consecutive fiscal quarters.", "positive"),
+        (f"period_cagr(total_assets, {pid}, 8, 4, \"absolute\", True)", "asset_two_year_cagr", 8, "Two-year asset CAGR with an absolute-value sign policy.", "unknown"),
+        (q_revenue, "quarterly_revenue_from_cumulative", 1, "Convert cumulative reported revenue into a strict single-quarter flow.", "positive"),
+        (q_gross_profit, "quarterly_gross_profit_from_cumulative", 1, "Convert cumulative gross profit into a strict single-quarter flow.", "positive"),
+        (q_operating_income, "quarterly_operating_income_from_cumulative", 1, "Convert cumulative operating income into a strict single-quarter flow.", "positive"),
+        (ttm_revenue, "revenue_ttm_from_cumulative", 4, "Trailing-four-quarter revenue reconstructed from cumulative filings.", "positive"),
+        (ttm_gross_profit, "gross_profit_ttm_from_cumulative", 4, "Trailing-four-quarter gross profit reconstructed from cumulative filings.", "positive"),
+        (ttm_operating_income, "operating_income_ttm_from_cumulative", 4, "Trailing-four-quarter operating income reconstructed from cumulative filings.", "positive"),
+        (ttm_net_income, "net_income_ttm_from_quarterly", 4, "Trailing-four-quarter net income from strict consecutive quarterly values.", "positive"),
+        (f"yoy_by_period({q_revenue}, {pid}, 4, \"signed\", True)", "quarterly_revenue_yoy", 4, "Year-over-year quarterly revenue growth with signed denominator semantics.", "positive"),
+        (f"yoy_by_period({q_operating_income}, {pid}, 4, \"absolute\", True)", "quarterly_operating_income_yoy", 4, "Year-over-year operating-income growth robust to sign changes.", "positive"),
+    ]
+    for formula, subfamily, horizon, rationale, direction in direct:
+        builder.add_wrapped(
+            formula,
+            family="fundamental_period",
+            subfamily=subfamily,
+            horizon=horizon,
+            availability_tier="fundamental",
+            rationale=rationale,
+            direction_hint=direction,
+            wrappers=("rank", "zscore", "mad"),
+            metadata={"domain": "fundamental", "requires_pit_alignment": True},
+        )
+
+    composites = [
+        (f"safe_div_null({ttm_gross_profit}, {ttm_revenue})", "ttm_gross_margin", "Trailing gross margin combines cumulative-to-TTM transformations.", "positive"),
+        (f"safe_div_null({ttm_operating_income}, {ttm_revenue})", "ttm_operating_margin", "Trailing operating margin measures recurring profitability.", "positive"),
+        (f"safe_div_null({ttm_net_income}, {avg_assets})", "ttm_return_on_assets", "TTM net income scaled by average fiscal-period assets.", "positive"),
+        (f"safe_div_null({ttm_net_income}, {avg_equity})", "ttm_return_on_equity", "TTM net income scaled by average fiscal-period equity.", "positive"),
+        (f"safe_div_null(ttm_from_quarterly(net_cash_from_operating_activities, {pid}, 4, True), {ttm_net_income})", "cash_conversion_ttm", "Operating cash flow relative to TTM earnings.", "positive"),
+        (f"multiply(yoy_by_period({q_revenue}, {pid}, 4, \"signed\", True), safe_div_null({ttm_gross_profit}, {ttm_revenue}))", "growth_quality_interaction", "Revenue growth weighted by trailing gross-margin quality.", "positive"),
+        (f"subtract(period_change(revenue, {pid}, 4, \"ratio\", True), period_change(total_assets, {pid}, 4, \"ratio\", True))", "revenue_growth_minus_asset_growth", "Growth efficiency compares sales expansion with asset expansion.", "positive"),
+        (f"safe_div_null(ttm_from_quarterly(free_cash_flow, {pid}, 4, True), {avg_assets})", "free_cash_flow_on_assets", "TTM free cash flow scaled by average assets.", "positive"),
+        (f"safe_div_null(ttm_from_quarterly(research_development, {pid}, 4, True), {ttm_revenue})", "research_intensity_ttm", "TTM research spending relative to TTM revenue.", "unknown"),
+    ]
+    for formula, subfamily, rationale, direction in composites:
+        builder.add_wrapped(
+            formula,
+            family="fundamental_quality",
+            subfamily=subfamily,
+            horizon=4,
+            availability_tier="fundamental",
+            rationale=rationale,
+            direction_hint=direction,
+            wrappers=("rank", "zscore", "mad", "winsor"),
+            complexity="composite",
+            metadata={"domain": "fundamental", "requires_pit_alignment": True},
+        )
+
+
+def _extended_completion(builder: Builder) -> None:
+    """Use every extended canonical with guarded and interpretable constructions."""
+    ret1 = "coalesce(ret, subtract(safe_div_null(close, pre_close), 1.0))"
+    pid = _fiscal_period_id()
+
+    fiscal = [
+        (f"period_lag(revenue, {pid}, 1, \"latest_available\")", "prior_quarter_revenue", "Latest visible previous-quarter revenue.", "unknown"),
+        (f"period_stability(revenue, {pid}, 8, \"cv\", True)", "revenue_stability_cv", "Coefficient of variation over eight consecutive fiscal periods.", "negative"),
+        (f"period_stability(gross_profit, {pid}, 8, \"mad\", True)", "gross_profit_stability_mad", "Robust gross-profit stability over consecutive fiscal periods.", "negative"),
+        ("fundamental_staleness(effective_date, date)", "fundamental_staleness_days", "Calendar age of the latest visible filing at the decision date.", "negative"),
+        (f"revision_delta(revenue, {pid}, effective_date, \"ratio\")", "revenue_revision_ratio", "Change between visible revisions of the same fiscal period.", "positive"),
+        (f"revision_delta(net_income, {pid}, effective_date, \"absolute\")", "net_income_revision_absolute", "Absolute earnings revision between visible versions.", "positive"),
+    ]
+    for formula, subfamily, rationale, direction in fiscal:
+        builder.add_wrapped(
+            formula,
+            family="fundamental_diagnostics",
+            subfamily=subfamily,
+            horizon=8,
+            availability_tier="fundamental",
+            rationale=rationale,
+            direction_hint=direction,
+            wrappers=("rank", "zscore", "mad"),
+            metadata={"domain": "fundamental", "requires_pit_alignment": True},
+        )
+
+    builder.add_wrapped(
+        f"safe_div_null(period_change(revenue, {pid}, 4, \"ratio\", True), add(period_stability(revenue, {pid}, 8, \"cv\", True), 0.000001))",
+        family="fundamental_diagnostics",
+        subfamily="growth_to_instability",
+        horizon=8,
+        availability_tier="fundamental",
+        rationale="Fiscal growth scaled by historical revenue instability.",
+        direction_hint="positive",
+        wrappers=("rank", "zscore", "mad"),
+        complexity="composite",
+        metadata={"domain": "fundamental", "requires_pit_alignment": True},
+    )
+    builder.add_wrapped(
+        f"multiply(revision_delta(revenue, {pid}, effective_date, \"ratio\"), exp_neg(safe_div_null(fundamental_staleness(effective_date, date), 365.0)))",
+        family="fundamental_diagnostics",
+        subfamily="freshness_weighted_revision",
+        horizon=None,
+        availability_tier="fundamental",
+        rationale="Revenue revisions receive less weight as the disclosed information becomes stale.",
+        direction_hint="positive",
+        wrappers=("rank", "zscore", "mad"),
+        complexity="composite",
+        metadata={"domain": "fundamental", "requires_pit_alignment": True},
+    )
+
+    # Previously excluded trigonometric/hyperbolic operators are admitted only
+    # on tightly bounded inputs and remain explicitly experimental.
+    z = f"clip(ts_zscore({ret1}, 20), -1.0, 1.0)"
+    safe_angle = f"add(1.0, multiply({z}, 0.25))"  # [0.75, 1.25], away from singularities
+    experimental = [
+        (f"safe_div_null(arg({z}), 3.141592653589793)", "real_signal_phase", "Phase encodes the sign regime of a real standardized return."),
+        (f"sinh({z})", "bounded_sinh", "Bounded hyperbolic sine preserves sign while mildly expanding tails."),
+        (f"cosh({z})", "bounded_cosh", "Bounded hyperbolic cosine measures symmetric tail intensity."),
+        (f"tan(multiply({z}, 0.5))", "guarded_tangent", "Tangent on [-0.5,0.5] provides a smooth tail-sensitive transform."),
+        (f"sec(multiply({z}, 0.5))", "guarded_secant", "Secant on a singularity-free interval measures symmetric nonlinear magnitude."),
+        (f"csc({safe_angle})", "guarded_cosecant", "Cosecant on [0.75,1.25] avoids zero and pi singularities."),
+        (f"cot({safe_angle})", "guarded_cotangent", "Cotangent on [0.75,1.25] supplies a bounded monotone regime map."),
+    ]
+    for formula, subfamily, rationale in experimental:
+        builder.add_wrapped(
+            formula,
+            family="nonlinear_experimental",
+            subfamily=subfamily,
+            horizon=20,
+            availability_tier="core",
+            rationale=rationale,
+            wrappers=("rank", "zscore"),
+            metadata={
+                "experimental": True,
+                "production_default": False,
+                "domain_guarded": True,
+                "warning": "nonlinear transform retained for operator coverage and research mutation only",
+            },
+        )
+
+    if builder.market == "us":
+        builder.add_wrapped(
+            "real_turnover_rate(volume, free_cap)",
+            family="turnover",
+            subfamily="optional_free_cap_turnover",
+            horizon=1,
+            availability_tier="capitalization",
+            rationale="Volume divided by an explicitly supplied free-float share-count field.",
+            wrappers=("rank", "zscore", "mad"),
+            metadata={"optional_field_contract": True},
+        )
+
+
+def _research(builder: Builder) -> None:
+    """Research-surface seeds, including benchmark, stateful and intraday operators."""
+    ret1 = "coalesce(ret, subtract(safe_div_null(close, pre_close), 1.0))"
+    benchmark = f"cs_mean({ret1})"
+    volume_change = "ts_pct(add(volume, 1.0), 1)"
+
+    # Market-relative risk and residual return mechanisms.
+    for h in (20, 60, 120):
+        market_ops = [
+            (f"rolling_beta_to_market({ret1}, {benchmark}, {h})", "rolling_market_beta", "Rolling exposure to the equal-weight market return.", "unknown"),
+            (f"residual_momentum_capm({ret1}, {benchmark}, {h})", "capm_residual_momentum", "Cumulative CAPM residual return over the estimation window.", "positive"),
+            (f"idio_vol({ret1}, {benchmark}, {h})", "idiosyncratic_volatility", "Volatility of CAPM residual returns.", "negative"),
+            (f"idio_skew({ret1}, {benchmark}, {h})", "idiosyncratic_skew", "Skewness of CAPM residual returns.", "positive"),
+            (f"coskewness_to_market({ret1}, {benchmark}, {h})", "market_coskewness", "Return coskewness relative to the equal-weight market.", "unknown"),
+            (f"tail_beta({ret1}, {benchmark}, {h}, 0.1)", "downside_tail_beta", "Market beta estimated only in the benchmark lower tail.", "negative"),
+        ]
+        for formula, subfamily, rationale, direction in market_ops:
+            builder.add_wrapped(
+                formula,
+                family="market_relative_research",
+                subfamily=subfamily,
+                horizon=h,
+                rationale=rationale,
+                direction_hint=direction,
+                wrappers=("rank", "zscore", "mad"),
+                metadata={"research_only": True, "benchmark_definition": "equal_weight_cross_section"},
+            )
+
+        beta = f"rolling_beta_to_market({ret1}, {benchmark}, {h})"
+        idvol = f"idio_vol({ret1}, {benchmark}, {h})"
+        resmom = f"residual_momentum_capm({ret1}, {benchmark}, {h})"
+        cvar = f"lqtp_historical_cvar({ret1}, {h}, 0.05)"
+        builder.add_wrapped(
+            f"safe_div_null({resmom}, add({idvol}, 0.000001))",
+            family="market_relative_research",
+            subfamily="residual_momentum_to_idio_vol",
+            horizon=h,
+            rationale="Residual momentum scaled by idiosyncratic volatility.",
+            direction_hint="positive",
+            wrappers=("rank", "zscore", "mad"),
+            complexity="composite",
+            metadata={"research_only": True, "benchmark_definition": "equal_weight_cross_section"},
+        )
+        builder.add_wrapped(
+            f"multiply(subtract({beta}, 1.0), {cvar})",
+            family="tail_risk_research",
+            subfamily="beta_deviation_times_cvar",
+            horizon=h,
+            rationale="Systematic beta deviation interacted with historical expected shortfall.",
+            direction_hint="negative",
+            wrappers=("rank", "zscore"),
+            complexity="composite",
+            metadata={"research_only": True},
+        )
+
+    # Rank dependence, expected shortfall and higher-order path shape.
+    for h in (10, 20, 60, 120):
+        for formula, subfamily, rationale, direction in (
+            (f"rank_corr({ret1}, {volume_change}, {h})", "return_volume_rank_corr", "Spearman-style rolling return-volume dependence.", "unknown"),
+            (f"lqtp_historical_cvar({ret1}, {h}, 0.05)", "historical_cvar_5pct", "Historical five-percent expected shortfall.", "negative"),
+            (f"ts_sum_decay({ret1}, {h})", "exponential_decay_return_sum", "Exponentially decayed rolling return aggregation.", "positive"),
+            (f"ts_max_buildup(close, {h})", "new_high_buildup", "Count of persistent new highs inside the trailing window.", "positive"),
+            (f"ts_moment({ret1}, {h}, 3)", "third_central_moment", "Third central moment of returns.", "unknown"),
+            (f"ts_moment({ret1}, {h}, 4)", "fourth_central_moment", "Fourth central moment of returns.", "negative"),
+            (f"ts_poly2_coeff(log(close), {h})", "quadratic_log_price_curvature", "Quadratic time coefficient of log price.", "unknown"),
+            (f"ts_poly2_resid({ret1}, {volume_change}, {h})", "nonlinear_return_volume_residual", "Residual from a quadratic return-volume fit.", "unknown"),
+            (f"digital_count({ret1}, {h}, 0.01, 3)", "small_move_run_count", "Count of persistent low-amplitude return runs.", "unknown"),
+        ):
+            builder.add_wrapped(
+                formula,
+                family="path_shape_research",
+                subfamily=subfamily,
+                horizon=h,
+                rationale=rationale,
+                direction_hint=direction,
+                wrappers=("rank", "zscore", "mad"),
+                metadata={"research_only": True},
+            )
+
+    # Stateful and expanding operators support low-turnover seed mutation.
+    for h in (5, 10, 20, 60):
+        momentum = f"ts_pct(close, {h})"
+        builder.add_wrapped(
+            f"expanding_rank({momentum})",
+            family="stateful_research",
+            subfamily="expanding_momentum_rank",
+            horizon=h,
+            rationale="Current momentum percentile within its entire causal history.",
+            wrappers=("rank", "zscore"),
+            metadata={"research_only": True, "stateful": True},
+        )
+        builder.add_wrapped(
+            f"hump_decay({momentum}, 0.01)",
+            family="stateful_research",
+            subfamily="hump_filtered_momentum",
+            horizon=h,
+            rationale="Momentum updates only after a material threshold crossing.",
+            wrappers=("rank", "zscore", "mad"),
+            metadata={"research_only": True, "stateful": True},
+        )
+        builder.add_wrapped(
+            f"subtract({momentum}, hump_decay({momentum}, 0.01))",
+            family="stateful_research",
+            subfamily="momentum_hump_residual",
+            horizon=h,
+            rationale="Short-lived momentum displacement from the threshold-filtered state.",
+            wrappers=("rank", "zscore"),
+            complexity="composite",
+            metadata={"research_only": True, "stateful": True},
+        )
+
+    for n, m in ((5, 1), (7, 2), (14, 3), (20, 5)):
+        builder.add_wrapped(
+            f"ts_sma_cn({ret1}, {n}, {m})",
+            family="stateful_research",
+            subfamily="chinese_recursive_sma_return",
+            horizon=n,
+            rationale=f"Chinese recursive SMA with n={n}, m={m} on daily returns.",
+            wrappers=("rank", "zscore", "mad"),
+            metadata={"research_only": True, "stateful": True},
+        )
+
+    high_volume = "gt(volume, ts_mean(volume, 20))"
+    breakout = "gt(close, ts_max(ts_delay(close, 1), 20))"
+    builder.add_wrapped(
+        f"trade_when({high_volume}, ts_pct(close, 20), 0.0)",
+        family="conditional_research",
+        subfamily="high_volume_momentum_gate",
+        horizon=20,
+        rationale="Twenty-day momentum is active only when volume is above its baseline.",
+        wrappers=("rank", "zscore", "mad"),
+        metadata={"research_only": True},
+    )
+    builder.add_wrapped(
+        f"trade_when({breakout}, safe_div_null(volume, ts_mean(volume, 20)), 0.0)",
+        family="conditional_research",
+        subfamily="breakout_volume_confirmation",
+        horizon=20,
+        rationale="Volume confirmation is retained only on a causal trailing-price breakout.",
+        wrappers=("rank", "zscore"),
+        metadata={"research_only": True},
+    )
+    builder.add_wrapped(
+        "group_decay_linear(ts_pct(close, 20), exchange, 5)",
+        family="group_relative_research",
+        subfamily="exchange_rank_decay_momentum",
+        horizon=20,
+        availability_tier="enriched",
+        rationale="Within-exchange momentum receives linear rank-decay weights.",
+        wrappers=("rank", "zscore", "mad"),
+        metadata={"research_only": True},
+    )
+    builder.add_wrapped(
+        "intraday_vwap_deviation(close, price, volume)",
+        family="intraday_research",
+        subfamily="session_cumulative_vwap_deviation",
+        horizon=1,
+        availability_tier="intraday",
+        rationale="Intraday close deviation from session cumulative VWAP, reset each day.",
+        wrappers=("rank", "zscore", "mad"),
+        metadata={"research_only": True, "frequency": "intraday", "requires_intraday_panel": True},
+    )
+
 def build_catalogs(repo_root: Path = ROOT) -> dict[tuple[str, str], tuple[ColdStartFactor, ...]]:
     # Exact formula reuse across markets is intentional: A-share and US factors
     # execute against different field contracts and must remain separately selectable.
@@ -1299,14 +1642,22 @@ def build_catalogs(repo_root: Path = ROOT) -> dict[tuple[str, str], tuple[ColdSt
         daily = Builder(market, "daily", excluded_keys=market_keys)
         _base_daily(daily)
         _market_daily(daily)
+        _fundamental_daily(daily)
         daily_rows = ensure_unique(daily.rows)
         output[(market, "daily")] = daily_rows
         market_keys.update(row.formula_hash for row in daily_rows)
 
         extended = Builder(market, "extended", excluded_keys=market_keys)
         _extended(extended)
+        _extended_completion(extended)
         extended_rows = ensure_unique(extended.rows)
         output[(market, "extended")] = extended_rows
+        market_keys.update(row.formula_hash for row in extended_rows)
+
+        research = Builder(market, "research", excluded_keys=market_keys)
+        _research(research)
+        research_rows = ensure_unique(research.rows)
+        output[(market, "research")] = research_rows
     return output
 
 
@@ -1316,10 +1667,10 @@ def write_catalogs(repo_root: Path = ROOT) -> dict[str, int]:
     counts: dict[str, int] = {}
     for (market, surface), rows in catalogs.items():
         payload = {
-            "schema_version": "factor_cold_start.v1",
+            "schema_version": "factor_cold_start.v2",
             "market": market,
             "surface": surface,
-            "dsl_surface": "daily" if surface == "daily" else "compat",
+            "dsl_surface": SURFACE_DSL[surface],
             "factor_count": len(rows),
             "factors": [row.to_dict() for row in rows],
         }
