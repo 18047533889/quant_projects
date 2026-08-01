@@ -65,6 +65,18 @@ jobs:
               '''_SPECIAL_SCALARS: dict[tuple[str, str], Any] = {\n    ("cs_rank_gaussian", "method"): "blom",\n''',
               '''_SPECIAL_SCALARS: dict[tuple[str, str], Any] = {\n    ("fin_trend_acceleration", "short_periods"): 4,\n    ("fin_trend_acceleration", "long_periods"): 8,\n    ("ts_regression_slope", "retval"): "slope",\n    ("yoy_by_period", "denominator"): "signed",\n    ("cs_rank_gaussian", "method"): "blom",\n''',
           )
+
+          replace_once(
+              'factor_engine/scripts/audit_all_factor_production.py',
+              '''_SPECIAL_POSITIONAL = {\n    "cs_multi_resid": ("target", "exposure", "control"),\n''',
+              '''_SPECIAL_POSITIONAL = {\n    "ts_regression_slope": ("y", "x", "window"),\n    "cs_multi_resid": ("target", "exposure", "control"),\n''',
+          )
+
+          replace_once(
+              'factor_engine/scripts/audit_all_factor_production.py',
+              '''_SPECIAL_KWARGS = {\n    "cs_multi_resid": {"add_intercept": True, "min_obs": 8},\n''',
+              '''_SPECIAL_KWARGS = {\n    "ts_regression_slope": {\n        "lag": 1,\n        "retval": "slope",\n        "min_periods": 5,\n        "add_intercept": True,\n    },\n    "cs_multi_resid": {"add_intercept": True, "min_obs": 8},\n''',
+          )
           PY
       - name: Compile FactorEngine sources
         run: |
