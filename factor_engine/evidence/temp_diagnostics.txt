@@ -1123,7 +1123,7 @@ FAILED factor_engine/tests/operators/test_candle_patterns_extended.py::test_hara
 FAILED factor_engine/tests/operators/test_candle_patterns_extended.py::test_three_bar_patterns_have_two_bar_policy_lag - AttributeError: module 'cleaned_operators.production_tiers' has no attribute 'PANDAS_FIRST_SIGNATURE_GATED'
 FAILED factor_engine/tests/operators/test_candle_patterns_extended.py::test_two_bar_patterns_have_one_bar_policy_lag - AttributeError: module 'cleaned_operators.production_tiers' has no attribute 'PANDAS_FIRST_SIGNATURE_GATED'
 FAILED factor_engine/tests/operators/test_candle_patterns_extended.py::test_extended_patterns_are_numeric_panels - AttributeError: module 'cleaned_operators.production_tiers' has no attribute 'PANDAS_FIRST_SIGNATURE_GATED'
-============================== 12 failed in 1.05s ==============================
+============================== 12 failed in 0.98s ==============================
 EXIT_CODE=1
 
 ===== v2 =====
@@ -1494,7 +1494,7 @@ E   AttributeError: module 'cleaned_operators.production_tiers' has no attribute
 factor_engine/cleaned_operators/production_policy_extensions_v2.py:66: AttributeError
 _____ test_pandas_production_status_does_not_fall_back_to_lifecycle_label ______
 
-monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f2605d46e90>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f903a74a850>
 
     def test_pandas_production_status_does_not_fall_back_to_lifecycle_label(monkeypatch):
         """A production target without valid evidence must remain non-routable."""
@@ -2599,20 +2599,19 @@ FAILED factor_engine/tests/runtime/test_full_history_replay_contract_v2.py::test
 FAILED factor_engine/tests/runtime/test_full_history_replay_contract_v2.py::test_incremental_watermark_is_ignored_without_checkpoint_restore - AttributeError: module 'cleaned_operators.production_tiers' has no attribute 'PANDAS_FIRST_SIGNATURE_GATED'
 FAILED factor_engine/tests/runtime/test_full_history_replay_contract_v2.py::test_production_full_history_requires_explicit_origin - AttributeError: module 'cleaned_operators.production_tiers' has no attribute 'PANDAS_FIRST_SIGNATURE_GATED'
 FAILED factor_engine/tests/runtime/test_full_history_replay_contract_v2.py::test_production_full_history_loads_from_declared_origin - AttributeError: module 'cleaned_operators.production_tiers' has no attribute 'PANDAS_FIRST_SIGNATURE_GATED'
-======================== 14 failed, 17 passed in 1.35s =========================
+======================== 14 failed, 17 passed in 1.26s =========================
 EXIT_CODE=1
 
 ===== runtime_audit =====
 Traceback (most recent call last):
-  File "/home/runner/work/quant_projects/quant_projects/factor_engine/scripts/audit_all_factor_production.py", line 129, in <module>
-    if __name__=="__main__":raise SystemExit(main())
-                                             ^^^^^^
-  File "/home/runner/work/quant_projects/quant_projects/factor_engine/scripts/audit_all_factor_production.py", line 122, in main
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument("--runtime-only",action="store_true");args=parser.parse_args();errors=audit(require_admission=not args.runtime_only)
-                                                                                                                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/quant_projects/quant_projects/factor_engine/scripts/audit_all_factor_production.py", line 99, in audit
-    load_all();errors=[];panels=_panels();template=panels["x"];prefix_rows=110
-    ^^^^^^^^^^
+  File "/home/runner/work/quant_projects/quant_projects/factor_engine/scripts/audit_all_factor_production.py", line 599, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/home/runner/work/quant_projects/quant_projects/factor_engine/scripts/audit_all_factor_production.py", line 579, in main
+    errors = audit(require_admission=not arguments.runtime_only)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/quant_projects/quant_projects/factor_engine/scripts/audit_all_factor_production.py", line 495, in audit
+    load_all()
   File "/home/runner/work/quant_projects/quant_projects/factor_engine/cleaned_operators/__init__.py", line 99, in load_all
     __import__(module, fromlist=["*"])
   File "/home/runner/work/quant_projects/quant_projects/factor_engine/cleaned_operators/production_policy_extensions_v2.py", line 66, in <module>
@@ -2640,15 +2639,14 @@ EXIT_CODE=1
 
 ===== factor_cert =====
 Traceback (most recent call last):
-  File "/home/runner/work/quant_projects/quant_projects/factor_engine/scripts/audit_all_factor_production.py", line 129, in <module>
-    if __name__=="__main__":raise SystemExit(main())
-                                             ^^^^^^
-  File "/home/runner/work/quant_projects/quant_projects/factor_engine/scripts/audit_all_factor_production.py", line 122, in main
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument("--runtime-only",action="store_true");args=parser.parse_args();errors=audit(require_admission=not args.runtime_only)
-                                                                                                                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/quant_projects/quant_projects/factor_engine/scripts/audit_all_factor_production.py", line 99, in audit
-    load_all();errors=[];panels=_panels();template=panels["x"];prefix_rows=110
-    ^^^^^^^^^^
+  File "/home/runner/work/quant_projects/quant_projects/factor_engine/scripts/audit_all_factor_production.py", line 599, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/home/runner/work/quant_projects/quant_projects/factor_engine/scripts/audit_all_factor_production.py", line 579, in main
+    errors = audit(require_admission=not arguments.runtime_only)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/quant_projects/quant_projects/factor_engine/scripts/audit_all_factor_production.py", line 495, in audit
+    load_all()
   File "/home/runner/work/quant_projects/quant_projects/factor_engine/cleaned_operators/__init__.py", line 99, in load_all
     __import__(module, fromlist=["*"])
   File "/home/runner/work/quant_projects/quant_projects/factor_engine/cleaned_operators/production_policy_extensions_v2.py", line 66, in <module>
