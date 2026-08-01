@@ -3,9 +3,10 @@
 
 The legacy narrowing helper correctly changes date bounds but historically
 reconstructed DataAccessSource without ``params/read_auto/lazy_scan`` and wrapped
-logical sources in a generic load-column-only adapter.  This patch preserves
-immutable read semantics while intentionally discarding caches and execution
-state.
+logical sources in a generic load-column-only adapter. This patch preserves
+immutable read semantics while discarding caches and execution state. It also
+finalizes the one-shot incremental-history certificate only after actual source
+bounds match the staged incremental plan.
 """
 from __future__ import annotations
 
@@ -68,6 +69,18 @@ def _normalise_bound(value: Any) -> str | None:
     return pd.Timestamp(value).isoformat()
 
 
+def _certify_incremental_bounds(start_date: Any, end_date: Any) -> None:
+    try:
+        from runtime.incremental import certify_narrowed_incremental_window
+
+        certify_narrowed_incremental_window(
+            start_date=start_date,
+            end_date=end_date,
+        )
+    except ImportError:
+        pass
+
+
 def install_source_window_contract() -> None:
     global _INSTALLED
     if _INSTALLED:
@@ -86,7 +99,6 @@ def install_source_window_contract() -> None:
         end_date=None,
         bar_freq=None,
     ):
-        # Logical SourceRef resolution must remain available after narrowing.
         try:
             from storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
 
@@ -106,6 +118,7 @@ def install_source_window_contract() -> None:
                 execution_id = getattr(source, "_execution_id", None)
                 if execution_id:
                     output._execution_id = execution_id
+                _certify_incremental_bounds(start_date, end_date)
                 return output
         except ImportError:
             pass
@@ -118,8 +131,6 @@ def install_source_window_contract() -> None:
         )
         _copy_recursive_contracts(source, output)
 
-        # Generic WindowedDataSource has no public bounds.  Add them so cache,
-        # lineage and subsequent warmup calculations see the narrowed scope.
         if output.__class__.__name__ == "WindowedDataSource":
             try:
                 output.start_date = _normalise_bound(start_date) or getattr(
@@ -132,6 +143,7 @@ def install_source_window_contract() -> None:
                     output.bar_freq = str(bar_freq)
             except Exception:
                 pass
+        _certify_incremental_bounds(start_date, end_date)
         return output
 
     narrow._contract_v2 = True
