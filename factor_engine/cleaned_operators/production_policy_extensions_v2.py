@@ -31,10 +31,16 @@ _STATEFUL = {
         "last_timestamp",
     ),
 }
-ph.FULL_HISTORY_REPLAY_CANONICALS = frozenset(
-    set(ph.FULL_HISTORY_REPLAY_CANONICALS) | set(_STATEFUL)
-)
 ph.STATEFUL_CHECKPOINTS.update(_STATEFUL)
+# A declared state schema is not a restore implementation. Every stateful
+# canonical without segmented-execution certification must replay from the
+# immutable history origin.
+_unrestored_stateful = set(ph.STATEFUL_CHECKPOINTS).difference(
+    ph.SEGMENTED_EXECUTION_CANONICALS
+)
+ph.FULL_HISTORY_REPLAY_CANONICALS = frozenset(
+    set(ph.FULL_HISTORY_REPLAY_CANONICALS) | _unrestored_stateful
+)
 
 for _name in surface._FUNDAMENTAL_V2_CANONICALS:
     ph._SCOPE_OVERRIDES[_name] = "fundamental_period"
@@ -115,9 +121,9 @@ analyzer._FIN_DAILY_WINDOW_CANONICALS = frozenset(
     }
 )
 
-# Existing incremental APIs receive only ``analysis.lookback``.  Preserve
+# Existing incremental APIs receive only ``analysis.lookback``. Preserve
 # backwards compatibility by encoding the orthogonal full-history flag in a
-# reserved sentinel while keeping ``requires_full_history`` explicit.  Warmup
+# reserved sentinel while keeping ``requires_full_history`` explicit. Warmup
 # and incremental planners decode this value before calendar arithmetic.
 FULL_HISTORY_LOOKBACK_SENTINEL = 1_000_000_000
 analyzer.FULL_HISTORY_LOOKBACK_SENTINEL = FULL_HISTORY_LOOKBACK_SENTINEL
