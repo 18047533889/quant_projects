@@ -52,8 +52,6 @@ _LOAD_MODULES = (
     "cleaned_operators.layer_composite_fixes",
 )
 
-# Import order is semantic: registration modules first, then the policy module
-# that reads their final reviewed surface.
 _REVIEWED_EXTENSIONS = (
     "cleaned_operators.production_repairs",
     "cleaned_operators.price_volume.technical_extensions",
@@ -65,6 +63,7 @@ _REVIEWED_EXTENSIONS = (
     "cleaned_operators.price_volume.structure_patterns_v2",
     "cleaned_operators.price_volume.structure_patterns_extra_v2",
     "cleaned_operators.price_volume.liquidity_v2",
+    "cleaned_operators.price_volume.liquidity_naming_v2",
     "cleaned_operators.technical.indicators_v2",
     "cleaned_operators.fundamental.transforms_v2",
     "cleaned_operators.fundamental.transforms_repairs_v2",
@@ -82,13 +81,11 @@ def load_all() -> None:
         if OperatorRegistry.lifecycle() == "frozen":
             return
         from cleaned_operators.registry import RegistryInitializationError
-
         raise RegistryInitializationError(
             f"loaded registry is unexpectedly {OperatorRegistry.lifecycle()!r}"
         )
     if OperatorRegistry.lifecycle() != "building":
         from cleaned_operators.registry import RegistryInitializationError
-
         raise RegistryInitializationError(
             f"unloaded registry cannot initialize from {OperatorRegistry.lifecycle()!r}"
         )
@@ -99,33 +96,22 @@ def load_all() -> None:
         __import__(module, fromlist=["*"])
 
     from cleaned_operators._dedupe import apply_operator_deduplication
-
     apply_operator_deduplication()
     from cleaned_operators.operator_overhaul import finalize_operator_overhaul
-
     finalize_operator_overhaul()
     from cleaned_operators.lqtp_policy_patch import apply_lqtp_policy_patch
-
     apply_lqtp_policy_patch()
     from cleaned_operators.research_factor_enable import enable_research_factor_runtime
-
     enable_research_factor_runtime()
     from cleaned_operators.layer_governance import finalize_layer_governance
-
     finalize_layer_governance()
     from cleaned_operators.layer_governance_post import apply_post_governance
-
     apply_post_governance()
     from cleaned_operators.production_hardening import apply_production_hardening
-
     apply_production_hardening()
-    from cleaned_operators.production_certification_overlay import (
-        apply_evidence_certification_overlay,
-    )
-
+    from cleaned_operators.production_certification_overlay import apply_evidence_certification_overlay
     apply_evidence_certification_overlay()
     from backend.sql_pushdown.sql_registry import register_sql_backends
-
     register_sql_backends()
     OperatorRegistry.finalize()
     OperatorRegistry.freeze()
