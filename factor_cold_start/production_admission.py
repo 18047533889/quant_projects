@@ -64,7 +64,9 @@ def _walk_source_contracts(ir) -> tuple[tuple[str, tuple[str, ...]], ...]:
     supported_features: set[str] = set()
     for function in INTRADAY_DAILY_DSL_FUNCTIONS.values():
         try:
-            specification = decode_source_ref(function())
+            value = function()
+            name = getattr(value, "name", None)
+            specification = decode_source_ref(name) if isinstance(name, str) else None
         except Exception:
             continue
         if specification is None or specification.transform != "intraday_feature":
