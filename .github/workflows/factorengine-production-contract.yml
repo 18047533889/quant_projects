@@ -57,16 +57,28 @@ jobs:
             factor_engine/tests/runtime/test_incremental_history_contract_v2.py \
             factor_engine/tests/runtime/test_source_window_contract_v2.py \
             factor_engine/tests/runtime/test_logical_source_production_contracts.py
-      - name: Verify cold-start production coverage
+      - name: Verify cold-start production admission and coverage
         run: |
+          pytest -q factor_cold_start/tests
           python factor_cold_start/scripts/report_coverage.py
           python - <<'PY'
           import json
           from pathlib import Path
-          report=json.loads(Path('factor_cold_start/reports/coverage.json').read_text())
-          for key,row in report['catalogs'].items():
-              if key.endswith('_extended') and row['eligible_operator_coverage_pct'] != 100.0:
-                  raise SystemExit(f"{key}: missing={row['missing_eligible_operators']}")
+
+          report = json.loads(
+              Path('factor_cold_start/reports/coverage.json').read_text()
+          )
+          for key, row in report['catalogs'].items():
+              if row['readiness'] != 'production':
+                  continue
+              if not key.endswith('_daily'):
+                  raise SystemExit(f'{key}: production catalog must be daily-output')
+              if row['production_operator_coverage_pct'] != 100.0:
+                  raise SystemExit(
+                      f"{key}: missing={row['missing_production_operators']}"
+                  )
+              if row['factor_count'] <= 0:
+                  raise SystemExit(f'{key}: empty production cold-start catalog')
           PY
       - name: Smoke deployment backend calibration
         run: |
