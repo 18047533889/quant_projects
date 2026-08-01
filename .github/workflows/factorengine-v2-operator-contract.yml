@@ -50,9 +50,12 @@ jobs:
             factor_engine/tests/operators/test_v2_macro_and_intraday_dsl.py \
             factor_engine/tests/operators/test_evidence_fail_closed_v2.py \
             factor_engine/tests/operators/test_fundamental_flow_semantics_v2.py \
+            factor_engine/tests/operators/test_expectation_event_semantics_v2.py \
             factor_engine/tests/operators/test_analyzer_semantic_warmup_v2.py \
             factor_engine/tests/operators/test_recipe_production_admission_v2.py \
-            factor_engine/tests/runtime/test_full_history_replay_contract_v2.py
+            factor_engine/tests/runtime/test_full_history_replay_contract_v2.py \
+            factor_engine/tests/runtime/test_incremental_history_contract_v2.py \
+            factor_engine/tests/runtime/test_source_window_contract_v2.py
       - name: Audit all factor-shaped runtimes
         run: python factor_engine/scripts/audit_all_factor_production.py --runtime-only
       - name: Verify public surface classification and cold-start coverage
@@ -84,4 +87,5 @@ jobs:
             factor_engine/runtime/warmup_service.py \
             factor_engine/runtime/incremental.py \
             factor_engine/runtime/run_window.py \
+            factor_engine/runtime/source_window_contract_v2.py \
             factor_engine/storage/sources/intraday_feature_runtime_v2.py
