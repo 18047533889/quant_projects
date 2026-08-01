@@ -51,6 +51,15 @@ def _load(market: str, surface: str) -> FactorPack:
                     "certified_backends": (
                         admission.backend_map if admission is not None else {}
                     ),
+                    "physical_plan_backend": (
+                        admission.physical_plan_backend if admission is not None else ""
+                    ),
+                    "physical_plan_candidates": (
+                        list(admission.physical_plan_candidates)
+                        if admission is not None
+                        else []
+                    ),
+                    "routing_basis": admission.routing_basis if admission is not None else "",
                     "owner": "factor_cold_start",
                 },
             )
