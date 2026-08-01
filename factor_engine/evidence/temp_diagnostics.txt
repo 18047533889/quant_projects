@@ -17,15 +17,59 @@ factor_engine/tests/operators/test_technical_extensions.py::test_bounded_resista
 factor_engine/tests/operators/test_technical_extensions.py::test_relative_volume_uses_only_prior_baseline PASSED [ 33%]
 factor_engine/tests/operators/test_technical_extensions.py::test_ohlc_volatility_estimators_are_nonnegative_and_causal PASSED [ 41%]
 factor_engine/tests/operators/test_technical_extensions.py::test_candle_geometry_and_engulfing_are_numeric_factors PASSED [ 50%]
-factor_engine/tests/operators/test_technical_extensions.py::test_analyzer_accounts_for_hidden_technical_warmup PASSED [ 58%]
+factor_engine/tests/operators/test_technical_extensions.py::test_analyzer_accounts_for_hidden_technical_warmup FAILED [ 58%]
 factor_engine/tests/operators/test_technical_extensions.py::test_extension_surface_has_no_unregistered_names PASSED [ 66%]
 factor_engine/tests/operators/test_candle_patterns_extended.py::test_harami_and_star_patterns_use_no_future_bar PASSED [ 75%]
 factor_engine/tests/operators/test_candle_patterns_extended.py::test_three_bar_patterns_have_two_bar_policy_lag PASSED [ 83%]
 factor_engine/tests/operators/test_candle_patterns_extended.py::test_two_bar_patterns_have_one_bar_policy_lag PASSED [ 91%]
 factor_engine/tests/operators/test_candle_patterns_extended.py::test_extended_patterns_are_numeric_panels PASSED [100%]
 
-============================== 12 passed in 2.73s ==============================
-EXIT_CODE=0
+=================================== FAILURES ===================================
+______________ test_analyzer_accounts_for_hidden_technical_warmup ______________
+
+    def test_analyzer_accounts_for_hidden_technical_warmup() -> None:
+        cases = {
+            "ts_prev_high(close, 20)": 20,
+            "ts_confirmed_pivot_high(high, 3, 3)": 6,
+            "ts_resistance_level(high, 3, 3, 60, 3)": 65,
+            "ulcer_index(close, 20)": 38,
+        }
+        analyzer = Analyzer()
+        for source, minimum in cases.items():
+>           factor = parse_factor(source, surface="extended")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_technical_extensions.py:113: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/api/dsl_parser.py:77: in parse_factor
+    def parse_factor(text:str,*,name:str="factor",freq:str="1d",universe:str|None=None,description:str|None=None,surface:str="daily",dialect:str="native",dialect_version:str|None=None)->Factor:return Factor(name=name,expr=parse_expr(text,surface=surface,dialect=dialect,dialect_version=dialect_version),freq=freq,universe=universe,description=description,source_expr=text)
+                                                                                                                                                                                                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/dsl_parser.py:76: in parse_expr
+    def parse_expr(text:str,*,surface:str="daily",dialect:str="native",dialect_version:str|None=None)->Expr:return _ExprBuilder(surface=surface,dialect=dialect,dialect_version=dialect_version).build(text)
+                                                                                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/dsl_parser.py:16: in __init__
+    self._allowed=build_dsl_allowlist(surface=self._surface,dialect=self._dialect,dialect_version=self._dialect_version)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/operator_registry.py:46: in build_dsl_allowlist
+    allow = augment_technical_macros(allow)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/technical_macros_v2.py:17: in augment_technical_macros
+    add,sub,mul,div=f("add"),f("subtract"),f("multiply"),f("divide")
+                    ^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'add'
+
+    def f(name):
+>       if name not in out:raise KeyError(name)
+                           ^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'add'
+
+factor_engine/api/technical_macros_v2.py:15: KeyError
+=========================== short test summary info ============================
+FAILED factor_engine/tests/operators/test_technical_extensions.py::test_analyzer_accounts_for_hidden_technical_warmup - KeyError: 'add'
+========================= 1 failed, 11 passed in 2.93s =========================
+EXIT_CODE=1
 
 ===== v2 =====
 ============================= test session starts ==============================
@@ -48,7 +92,7 @@ factor_engine/tests/operators/test_v2_operator_expansion.py::test_cutoff_expecte
 factor_engine/tests/operators/test_v2_operator_expansion.py::test_liquidity_operator_is_prefix_invariant PASSED [ 35%]
 factor_engine/tests/operators/test_v2_macro_and_intraday_dsl.py::test_composite_technical_names_lower_to_primitive_dag FAILED [ 38%]
 factor_engine/tests/operators/test_v2_macro_and_intraday_dsl.py::test_intraday_daily_dsl_builds_auditable_source_ref FAILED [ 41%]
-factor_engine/tests/operators/test_v2_macro_and_intraday_dsl.py::test_intraday_profile_requires_bounded_history PASSED [ 45%]
+factor_engine/tests/operators/test_v2_macro_and_intraday_dsl.py::test_intraday_profile_requires_bounded_history FAILED [ 45%]
 factor_engine/tests/operators/test_v2_macro_and_intraday_dsl.py::test_intraday_authoring_rejects_invalid_static_contracts PASSED [ 48%]
 factor_engine/tests/operators/test_evidence_fail_closed_v2.py::test_pandas_production_status_does_not_fall_back_to_lifecycle_label PASSED [ 51%]
 factor_engine/tests/operators/test_evidence_fail_closed_v2.py::test_every_unrestored_stateful_operator_is_full_replay_and_non_streaming PASSED [ 54%]
@@ -57,15 +101,15 @@ factor_engine/tests/operators/test_fundamental_flow_semantics_v2.py::test_cumula
 factor_engine/tests/operators/test_fundamental_flow_semantics_v2.py::test_same_period_cumulative_revision_changes_results_only_when_visible PASSED [ 64%]
 factor_engine/tests/operators/test_fundamental_flow_semantics_v2.py::test_reviewed_fundamental_extensions_are_registered PASSED [ 67%]
 factor_engine/tests/operators/test_fundamental_flow_semantics_v2.py::test_new_fundamental_recipes_do_not_use_ambiguous_fin_ttm PASSED [ 70%]
-factor_engine/tests/operators/test_analyzer_semantic_warmup_v2.py::test_multi_stage_chart_patterns_add_stage_histories PASSED [ 74%]
-factor_engine/tests/operators/test_analyzer_semantic_warmup_v2.py::test_fundamental_warmup_distinguishes_period_daily_and_elementwise PASSED [ 77%]
-factor_engine/tests/operators/test_analyzer_semantic_warmup_v2.py::test_recursive_indicators_declare_full_history_requirement PASSED [ 80%]
+factor_engine/tests/operators/test_analyzer_semantic_warmup_v2.py::test_multi_stage_chart_patterns_add_stage_histories FAILED [ 74%]
+factor_engine/tests/operators/test_analyzer_semantic_warmup_v2.py::test_fundamental_warmup_distinguishes_period_daily_and_elementwise FAILED [ 77%]
+factor_engine/tests/operators/test_analyzer_semantic_warmup_v2.py::test_recursive_indicators_declare_full_history_requirement FAILED [ 80%]
 factor_engine/tests/operators/test_recipe_production_admission_v2.py::test_every_production_recipe_executes_on_certified_reference_path FAILED [ 83%]
 factor_engine/tests/operators/test_recipe_production_admission_v2.py::test_production_recipe_names_are_unique_and_registered PASSED [ 87%]
-factor_engine/tests/runtime/test_full_history_replay_contract_v2.py::test_full_history_analysis_encodes_incremental_sentinel PASSED [ 90%]
-factor_engine/tests/runtime/test_full_history_replay_contract_v2.py::test_incremental_watermark_is_ignored_without_checkpoint_restore PASSED [ 93%]
-factor_engine/tests/runtime/test_full_history_replay_contract_v2.py::test_production_full_history_requires_explicit_origin PASSED [ 96%]
-factor_engine/tests/runtime/test_full_history_replay_contract_v2.py::test_production_full_history_loads_from_declared_origin PASSED [100%]
+factor_engine/tests/runtime/test_full_history_replay_contract_v2.py::test_full_history_analysis_encodes_incremental_sentinel FAILED [ 90%]
+factor_engine/tests/runtime/test_full_history_replay_contract_v2.py::test_incremental_watermark_is_ignored_without_checkpoint_restore FAILED [ 93%]
+factor_engine/tests/runtime/test_full_history_replay_contract_v2.py::test_production_full_history_requires_explicit_origin FAILED [ 96%]
+factor_engine/tests/runtime/test_full_history_replay_contract_v2.py::test_production_full_history_loads_from_declared_origin FAILED [100%]
 
 =================================== FAILURES ===================================
 ____________ test_composite_technical_names_lower_to_primitive_dag _____________
@@ -83,16 +127,37 @@ ____________ test_composite_technical_names_lower_to_primitive_dag _____________
             "ts_breakout_high(close,20)": "ts_breakout_high",
         }
         for formula, composite in cases.items():
-            factor = parse_factor(
+>           factor = parse_factor(
                 formula, name=f"macro::{composite}", surface="extended"
             )
-            ir = Analyzer().lower(factor.expr).ir
-            names = set(_ops(ir))
->           assert composite not in names, (formula, names)
-E           AssertionError: ('NATR(high,low,close,14)', {'NATR', 'column', 'literal'})
-E           assert 'NATR' not in {'NATR', 'column', 'literal'}
 
-factor_engine/tests/operators/test_v2_macro_and_intraday_dsl.py:31: AssertionError
+factor_engine/tests/operators/test_v2_macro_and_intraday_dsl.py:26: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/api/dsl_parser.py:77: in parse_factor
+    def parse_factor(text:str,*,name:str="factor",freq:str="1d",universe:str|None=None,description:str|None=None,surface:str="daily",dialect:str="native",dialect_version:str|None=None)->Factor:return Factor(name=name,expr=parse_expr(text,surface=surface,dialect=dialect,dialect_version=dialect_version),freq=freq,universe=universe,description=description,source_expr=text)
+                                                                                                                                                                                                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/dsl_parser.py:76: in parse_expr
+    def parse_expr(text:str,*,surface:str="daily",dialect:str="native",dialect_version:str|None=None)->Expr:return _ExprBuilder(surface=surface,dialect=dialect,dialect_version=dialect_version).build(text)
+                                                                                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/dsl_parser.py:16: in __init__
+    self._allowed=build_dsl_allowlist(surface=self._surface,dialect=self._dialect,dialect_version=self._dialect_version)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/operator_registry.py:46: in build_dsl_allowlist
+    allow = augment_technical_macros(allow)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/technical_macros_v2.py:17: in augment_technical_macros
+    add,sub,mul,div=f("add"),f("subtract"),f("multiply"),f("divide")
+                    ^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'add'
+
+    def f(name):
+>       if name not in out:raise KeyError(name)
+                           ^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'add'
+
+factor_engine/api/technical_macros_v2.py:15: KeyError
 _____________ test_intraday_daily_dsl_builds_auditable_source_ref ______________
 
     def test_intraday_daily_dsl_builds_auditable_source_ref():
@@ -101,32 +166,193 @@ _____________ test_intraday_daily_dsl_builds_auditable_source_ref ______________
         from ir.analyzer import Analyzer
         from runtime.quality.pit_audit import audit_ir
     
-        factor = parse_factor(
+>       factor = parse_factor(
             "intraday_realized_vol(bar_minutes=5, cutoff_time='15:50', min_coverage=0.9)",
             name="intraday::rv",
             surface="extended",
         )
-        analysis = Analyzer().lower(factor.expr)
-        assert analysis.ir.op == "column"
-        specification = decode_source_ref(analysis.ir.attrs["name"])
-        assert specification is not None
-        assert specification.table == "StockMinuteBar"
-        assert specification.transform == "intraday_feature"
-        params = specification.transform_params_dict()
-        assert params["feature"] == "realized_vol"
-        assert params["bar_minutes"] == 5
-        assert params["cutoff_time"] == "15:50"
-        assert params["min_coverage"] == 0.9
-        assert params["min_bars"] == 2
-        assert params["timestamp_convention"] == "bar_end"
-        assert params["history_days"] == 0
-        report = audit_ir(analysis.ir)
->       assert report.passed, report.violations
-E       AssertionError: ['SourceRef[StockMinuteBar.Close](history_days<=0)']
-E       assert False
-E        +  where False = PitAuditReport(violations=['SourceRef[StockMinuteBar.Close](history_days<=0)'], checked_ops=['SourceRef[StockMinuteBar.Close]']).passed
 
-factor_engine/tests/operators/test_v2_macro_and_intraday_dsl.py:61: AssertionError
+factor_engine/tests/operators/test_v2_macro_and_intraday_dsl.py:41: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/api/dsl_parser.py:77: in parse_factor
+    def parse_factor(text:str,*,name:str="factor",freq:str="1d",universe:str|None=None,description:str|None=None,surface:str="daily",dialect:str="native",dialect_version:str|None=None)->Factor:return Factor(name=name,expr=parse_expr(text,surface=surface,dialect=dialect,dialect_version=dialect_version),freq=freq,universe=universe,description=description,source_expr=text)
+                                                                                                                                                                                                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/dsl_parser.py:76: in parse_expr
+    def parse_expr(text:str,*,surface:str="daily",dialect:str="native",dialect_version:str|None=None)->Expr:return _ExprBuilder(surface=surface,dialect=dialect,dialect_version=dialect_version).build(text)
+                                                                                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/dsl_parser.py:16: in __init__
+    self._allowed=build_dsl_allowlist(surface=self._surface,dialect=self._dialect,dialect_version=self._dialect_version)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/operator_registry.py:46: in build_dsl_allowlist
+    allow = augment_technical_macros(allow)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/technical_macros_v2.py:17: in augment_technical_macros
+    add,sub,mul,div=f("add"),f("subtract"),f("multiply"),f("divide")
+                    ^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'add'
+
+    def f(name):
+>       if name not in out:raise KeyError(name)
+                           ^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'add'
+
+factor_engine/api/technical_macros_v2.py:15: KeyError
+________________ test_intraday_profile_requires_bounded_history ________________
+
+    def test_intraday_profile_requires_bounded_history():
+        from api.dsl_parser import parse_factor
+        from ir.analyzer import Analyzer
+        from runtime.quality.pit_audit import audit_ir
+    
+>       factor = parse_factor(
+            "intraday_profile_zscore(bar_minutes=5, history_days=20, cutoff_time='session_close', min_coverage=0.9)",
+            name="intraday::profile",
+            surface="extended",
+        )
+
+factor_engine/tests/operators/test_v2_macro_and_intraday_dsl.py:69: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/api/dsl_parser.py:77: in parse_factor
+    def parse_factor(text:str,*,name:str="factor",freq:str="1d",universe:str|None=None,description:str|None=None,surface:str="daily",dialect:str="native",dialect_version:str|None=None)->Factor:return Factor(name=name,expr=parse_expr(text,surface=surface,dialect=dialect,dialect_version=dialect_version),freq=freq,universe=universe,description=description,source_expr=text)
+                                                                                                                                                                                                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/dsl_parser.py:76: in parse_expr
+    def parse_expr(text:str,*,surface:str="daily",dialect:str="native",dialect_version:str|None=None)->Expr:return _ExprBuilder(surface=surface,dialect=dialect,dialect_version=dialect_version).build(text)
+                                                                                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/dsl_parser.py:16: in __init__
+    self._allowed=build_dsl_allowlist(surface=self._surface,dialect=self._dialect,dialect_version=self._dialect_version)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/operator_registry.py:46: in build_dsl_allowlist
+    allow = augment_technical_macros(allow)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/technical_macros_v2.py:17: in augment_technical_macros
+    add,sub,mul,div=f("add"),f("subtract"),f("multiply"),f("divide")
+                    ^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'add'
+
+    def f(name):
+>       if name not in out:raise KeyError(name)
+                           ^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'add'
+
+factor_engine/api/technical_macros_v2.py:15: KeyError
+_____________ test_multi_stage_chart_patterns_add_stage_histories ______________
+
+    def test_multi_stage_chart_patterns_add_stage_histories():
+>       cup = _analyze(
+            "pattern_cup_handle(close,high,low,80,15,0.10,0.05,0.02,0.15)"
+        )
+
+factor_engine/tests/operators/test_analyzer_semantic_warmup_v2.py:13: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/tests/operators/test_analyzer_semantic_warmup_v2.py:8: in _analyze
+    factor = parse_factor(formula, name=f"warmup::{formula[:20]}", surface="extended")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/dsl_parser.py:77: in parse_factor
+    def parse_factor(text:str,*,name:str="factor",freq:str="1d",universe:str|None=None,description:str|None=None,surface:str="daily",dialect:str="native",dialect_version:str|None=None)->Factor:return Factor(name=name,expr=parse_expr(text,surface=surface,dialect=dialect,dialect_version=dialect_version),freq=freq,universe=universe,description=description,source_expr=text)
+                                                                                                                                                                                                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/dsl_parser.py:76: in parse_expr
+    def parse_expr(text:str,*,surface:str="daily",dialect:str="native",dialect_version:str|None=None)->Expr:return _ExprBuilder(surface=surface,dialect=dialect,dialect_version=dialect_version).build(text)
+                                                                                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/dsl_parser.py:16: in __init__
+    self._allowed=build_dsl_allowlist(surface=self._surface,dialect=self._dialect,dialect_version=self._dialect_version)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/operator_registry.py:46: in build_dsl_allowlist
+    allow = augment_technical_macros(allow)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/technical_macros_v2.py:17: in augment_technical_macros
+    add,sub,mul,div=f("add"),f("subtract"),f("multiply"),f("divide")
+                    ^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'add'
+
+    def f(name):
+>       if name not in out:raise KeyError(name)
+                           ^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'add'
+
+factor_engine/api/technical_macros_v2.py:15: KeyError
+______ test_fundamental_warmup_distinguishes_period_daily_and_elementwise ______
+
+    def test_fundamental_warmup_distinguishes_period_daily_and_elementwise():
+>       ratio = _analyze("fin_ratio(fundamental_x,fundamental_y)")
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_analyzer_semantic_warmup_v2.py:26: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/tests/operators/test_analyzer_semantic_warmup_v2.py:8: in _analyze
+    factor = parse_factor(formula, name=f"warmup::{formula[:20]}", surface="extended")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/dsl_parser.py:77: in parse_factor
+    def parse_factor(text:str,*,name:str="factor",freq:str="1d",universe:str|None=None,description:str|None=None,surface:str="daily",dialect:str="native",dialect_version:str|None=None)->Factor:return Factor(name=name,expr=parse_expr(text,surface=surface,dialect=dialect,dialect_version=dialect_version),freq=freq,universe=universe,description=description,source_expr=text)
+                                                                                                                                                                                                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/dsl_parser.py:76: in parse_expr
+    def parse_expr(text:str,*,surface:str="daily",dialect:str="native",dialect_version:str|None=None)->Expr:return _ExprBuilder(surface=surface,dialect=dialect,dialect_version=dialect_version).build(text)
+                                                                                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/dsl_parser.py:16: in __init__
+    self._allowed=build_dsl_allowlist(surface=self._surface,dialect=self._dialect,dialect_version=self._dialect_version)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/operator_registry.py:46: in build_dsl_allowlist
+    allow = augment_technical_macros(allow)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/technical_macros_v2.py:17: in augment_technical_macros
+    add,sub,mul,div=f("add"),f("subtract"),f("multiply"),f("divide")
+                    ^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'add'
+
+    def f(name):
+>       if name not in out:raise KeyError(name)
+                           ^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'add'
+
+factor_engine/api/technical_macros_v2.py:15: KeyError
+__________ test_recursive_indicators_declare_full_history_requirement __________
+
+    def test_recursive_indicators_declare_full_history_requirement():
+        for formula in (
+            "KAMA(close,10,2,30)",
+            "Supertrend(high,low,close,10,3.0)",
+            "PSAR(high,low,0.02,0.2)",
+        ):
+>           assert _analyze(formula).requires_full_history is True
+                   ^^^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_analyzer_semantic_warmup_v2.py:44: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/tests/operators/test_analyzer_semantic_warmup_v2.py:8: in _analyze
+    factor = parse_factor(formula, name=f"warmup::{formula[:20]}", surface="extended")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/dsl_parser.py:77: in parse_factor
+    def parse_factor(text:str,*,name:str="factor",freq:str="1d",universe:str|None=None,description:str|None=None,surface:str="daily",dialect:str="native",dialect_version:str|None=None)->Factor:return Factor(name=name,expr=parse_expr(text,surface=surface,dialect=dialect,dialect_version=dialect_version),freq=freq,universe=universe,description=description,source_expr=text)
+                                                                                                                                                                                                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/dsl_parser.py:76: in parse_expr
+    def parse_expr(text:str,*,surface:str="daily",dialect:str="native",dialect_version:str|None=None)->Expr:return _ExprBuilder(surface=surface,dialect=dialect,dialect_version=dialect_version).build(text)
+                                                                                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/dsl_parser.py:16: in __init__
+    self._allowed=build_dsl_allowlist(surface=self._surface,dialect=self._dialect,dialect_version=self._dialect_version)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/operator_registry.py:46: in build_dsl_allowlist
+    allow = augment_technical_macros(allow)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/technical_macros_v2.py:17: in augment_technical_macros
+    add,sub,mul,div=f("add"),f("subtract"),f("multiply"),f("divide")
+                    ^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'add'
+
+    def f(name):
+>       if name not in out:raise KeyError(name)
+                           ^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'add'
+
+factor_engine/api/technical_macros_v2.py:15: KeyError
 ______ test_every_production_recipe_executes_on_certified_reference_path _______
 
     def test_every_production_recipe_executes_on_certified_reference_path():
@@ -158,21 +384,190 @@ ______ test_every_production_recipe_executes_on_certified_reference_path _______
                     canonical,
                     "recipe leaf has no evidence-backed production backend",
                 )
-E               AssertionError: ('accruals', 'fin_ttm_quarterly', 'recipe leaf has no evidence-backed production backend')
+E               AssertionError: ('accruals', 'fin_accrual_ratio', 'recipe leaf has no evidence-backed production backend')
 E               assert ()
-E                +  where () = <function production_eligible_backends at 0x7ff9152f0cc0>('fin_ttm_quarterly')
+E                +  where () = <function production_eligible_backends at 0x7f2dd1c00d60>('fin_accrual_ratio')
 
 factor_engine/tests/operators/test_recipe_production_admission_v2.py:188: AssertionError
+___________ test_full_history_analysis_encodes_incremental_sentinel ____________
+
+    def test_full_history_analysis_encodes_incremental_sentinel():
+        from runtime.incremental import FULL_HISTORY_LOOKBACK_SENTINEL
+    
+>       analysis = _stateful_analysis()
+                   ^^^^^^^^^^^^^^^^^^^^
+
+factor_engine/tests/runtime/test_full_history_replay_contract_v2.py:54: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/tests/runtime/test_full_history_replay_contract_v2.py:45: in _stateful_analysis
+    factor = parse_factor(
+factor_engine/api/dsl_parser.py:77: in parse_factor
+    def parse_factor(text:str,*,name:str="factor",freq:str="1d",universe:str|None=None,description:str|None=None,surface:str="daily",dialect:str="native",dialect_version:str|None=None)->Factor:return Factor(name=name,expr=parse_expr(text,surface=surface,dialect=dialect,dialect_version=dialect_version),freq=freq,universe=universe,description=description,source_expr=text)
+                                                                                                                                                                                                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/dsl_parser.py:76: in parse_expr
+    def parse_expr(text:str,*,surface:str="daily",dialect:str="native",dialect_version:str|None=None)->Expr:return _ExprBuilder(surface=surface,dialect=dialect,dialect_version=dialect_version).build(text)
+                                                                                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/dsl_parser.py:16: in __init__
+    self._allowed=build_dsl_allowlist(surface=self._surface,dialect=self._dialect,dialect_version=self._dialect_version)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/operator_registry.py:46: in build_dsl_allowlist
+    allow = augment_technical_macros(allow)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/technical_macros_v2.py:17: in augment_technical_macros
+    add,sub,mul,div=f("add"),f("subtract"),f("multiply"),f("divide")
+                    ^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'add'
+
+    def f(name):
+>       if name not in out:raise KeyError(name)
+                           ^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'add'
+
+factor_engine/api/technical_macros_v2.py:15: KeyError
+_______ test_incremental_watermark_is_ignored_without_checkpoint_restore _______
+
+    def test_incremental_watermark_is_ignored_without_checkpoint_restore():
+        from runtime.incremental import build_incremental_plan
+    
+>       analysis = _stateful_analysis()
+                   ^^^^^^^^^^^^^^^^^^^^
+
+factor_engine/tests/runtime/test_full_history_replay_contract_v2.py:62: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/tests/runtime/test_full_history_replay_contract_v2.py:45: in _stateful_analysis
+    factor = parse_factor(
+factor_engine/api/dsl_parser.py:77: in parse_factor
+    def parse_factor(text:str,*,name:str="factor",freq:str="1d",universe:str|None=None,description:str|None=None,surface:str="daily",dialect:str="native",dialect_version:str|None=None)->Factor:return Factor(name=name,expr=parse_expr(text,surface=surface,dialect=dialect,dialect_version=dialect_version),freq=freq,universe=universe,description=description,source_expr=text)
+                                                                                                                                                                                                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/dsl_parser.py:76: in parse_expr
+    def parse_expr(text:str,*,surface:str="daily",dialect:str="native",dialect_version:str|None=None)->Expr:return _ExprBuilder(surface=surface,dialect=dialect,dialect_version=dialect_version).build(text)
+                                                                                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/dsl_parser.py:16: in __init__
+    self._allowed=build_dsl_allowlist(surface=self._surface,dialect=self._dialect,dialect_version=self._dialect_version)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/operator_registry.py:46: in build_dsl_allowlist
+    allow = augment_technical_macros(allow)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/technical_macros_v2.py:17: in augment_technical_macros
+    add,sub,mul,div=f("add"),f("subtract"),f("multiply"),f("divide")
+                    ^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'add'
+
+    def f(name):
+>       if name not in out:raise KeyError(name)
+                           ^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'add'
+
+factor_engine/api/technical_macros_v2.py:15: KeyError
+____________ test_production_full_history_requires_explicit_origin _____________
+
+    def test_production_full_history_requires_explicit_origin():
+        from runtime.production_policy import ProductionPolicyViolation
+        from runtime.warmup_service import prepare_run_warmup
+    
+        with pytest.raises(ProductionPolicyViolation, match="full_history_start"):
+            prepare_run_warmup(
+                _Engine(_Source()),
+                _Factor(),
+>               _stateful_analysis(),
+                ^^^^^^^^^^^^^^^^^^^^
+                auto_warmup=True,
+                trim_warmup=True,
+                market="us",
+            )
+
+factor_engine/tests/runtime/test_full_history_replay_contract_v2.py:86: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/tests/runtime/test_full_history_replay_contract_v2.py:45: in _stateful_analysis
+    factor = parse_factor(
+factor_engine/api/dsl_parser.py:77: in parse_factor
+    def parse_factor(text:str,*,name:str="factor",freq:str="1d",universe:str|None=None,description:str|None=None,surface:str="daily",dialect:str="native",dialect_version:str|None=None)->Factor:return Factor(name=name,expr=parse_expr(text,surface=surface,dialect=dialect,dialect_version=dialect_version),freq=freq,universe=universe,description=description,source_expr=text)
+                                                                                                                                                                                                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/dsl_parser.py:76: in parse_expr
+    def parse_expr(text:str,*,surface:str="daily",dialect:str="native",dialect_version:str|None=None)->Expr:return _ExprBuilder(surface=surface,dialect=dialect,dialect_version=dialect_version).build(text)
+                                                                                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/dsl_parser.py:16: in __init__
+    self._allowed=build_dsl_allowlist(surface=self._surface,dialect=self._dialect,dialect_version=self._dialect_version)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/operator_registry.py:46: in build_dsl_allowlist
+    allow = augment_technical_macros(allow)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/technical_macros_v2.py:17: in augment_technical_macros
+    add,sub,mul,div=f("add"),f("subtract"),f("multiply"),f("divide")
+                    ^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'add'
+
+    def f(name):
+>       if name not in out:raise KeyError(name)
+                           ^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'add'
+
+factor_engine/api/technical_macros_v2.py:15: KeyError
+___________ test_production_full_history_loads_from_declared_origin ____________
+
+    def test_production_full_history_loads_from_declared_origin():
+        from runtime.warmup_service import prepare_run_warmup
+    
+        warmup = prepare_run_warmup(
+            _Engine(_Source(full_history_start="2000-01-03")),
+            _Factor(),
+>           _stateful_analysis(),
+            ^^^^^^^^^^^^^^^^^^^^
+            auto_warmup=True,
+            trim_warmup=True,
+            market="us",
+        )
+
+factor_engine/tests/runtime/test_full_history_replay_contract_v2.py:99: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/tests/runtime/test_full_history_replay_contract_v2.py:45: in _stateful_analysis
+    factor = parse_factor(
+factor_engine/api/dsl_parser.py:77: in parse_factor
+    def parse_factor(text:str,*,name:str="factor",freq:str="1d",universe:str|None=None,description:str|None=None,surface:str="daily",dialect:str="native",dialect_version:str|None=None)->Factor:return Factor(name=name,expr=parse_expr(text,surface=surface,dialect=dialect,dialect_version=dialect_version),freq=freq,universe=universe,description=description,source_expr=text)
+                                                                                                                                                                                                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/dsl_parser.py:76: in parse_expr
+    def parse_expr(text:str,*,surface:str="daily",dialect:str="native",dialect_version:str|None=None)->Expr:return _ExprBuilder(surface=surface,dialect=dialect,dialect_version=dialect_version).build(text)
+                                                                                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/dsl_parser.py:16: in __init__
+    self._allowed=build_dsl_allowlist(surface=self._surface,dialect=self._dialect,dialect_version=self._dialect_version)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/operator_registry.py:46: in build_dsl_allowlist
+    allow = augment_technical_macros(allow)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/api/technical_macros_v2.py:17: in augment_technical_macros
+    add,sub,mul,div=f("add"),f("subtract"),f("multiply"),f("divide")
+                    ^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'add'
+
+    def f(name):
+>       if name not in out:raise KeyError(name)
+                           ^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'add'
+
+factor_engine/api/technical_macros_v2.py:15: KeyError
 =========================== short test summary info ============================
-FAILED factor_engine/tests/operators/test_v2_macro_and_intraday_dsl.py::test_composite_technical_names_lower_to_primitive_dag - AssertionError: ('NATR(high,low,close,14)', {'NATR', 'column', 'literal'})
-assert 'NATR' not in {'NATR', 'column', 'literal'}
-FAILED factor_engine/tests/operators/test_v2_macro_and_intraday_dsl.py::test_intraday_daily_dsl_builds_auditable_source_ref - AssertionError: ['SourceRef[StockMinuteBar.Close](history_days<=0)']
-assert False
- +  where False = PitAuditReport(violations=['SourceRef[StockMinuteBar.Close](history_days<=0)'], checked_ops=['SourceRef[StockMinuteBar.Close]']).passed
-FAILED factor_engine/tests/operators/test_recipe_production_admission_v2.py::test_every_production_recipe_executes_on_certified_reference_path - AssertionError: ('accruals', 'fin_ttm_quarterly', 'recipe leaf has no evidence-backed production backend')
+FAILED factor_engine/tests/operators/test_v2_macro_and_intraday_dsl.py::test_composite_technical_names_lower_to_primitive_dag - KeyError: 'add'
+FAILED factor_engine/tests/operators/test_v2_macro_and_intraday_dsl.py::test_intraday_daily_dsl_builds_auditable_source_ref - KeyError: 'add'
+FAILED factor_engine/tests/operators/test_v2_macro_and_intraday_dsl.py::test_intraday_profile_requires_bounded_history - KeyError: 'add'
+FAILED factor_engine/tests/operators/test_analyzer_semantic_warmup_v2.py::test_multi_stage_chart_patterns_add_stage_histories - KeyError: 'add'
+FAILED factor_engine/tests/operators/test_analyzer_semantic_warmup_v2.py::test_fundamental_warmup_distinguishes_period_daily_and_elementwise - KeyError: 'add'
+FAILED factor_engine/tests/operators/test_analyzer_semantic_warmup_v2.py::test_recursive_indicators_declare_full_history_requirement - KeyError: 'add'
+FAILED factor_engine/tests/operators/test_recipe_production_admission_v2.py::test_every_production_recipe_executes_on_certified_reference_path - AssertionError: ('accruals', 'fin_accrual_ratio', 'recipe leaf has no evidence-backed production backend')
 assert ()
- +  where () = <function production_eligible_backends at 0x7ff9152f0cc0>('fin_ttm_quarterly')
-========================= 3 failed, 28 passed in 2.94s =========================
+ +  where () = <function production_eligible_backends at 0x7f2dd1c00d60>('fin_accrual_ratio')
+FAILED factor_engine/tests/runtime/test_full_history_replay_contract_v2.py::test_full_history_analysis_encodes_incremental_sentinel - KeyError: 'add'
+FAILED factor_engine/tests/runtime/test_full_history_replay_contract_v2.py::test_incremental_watermark_is_ignored_without_checkpoint_restore - KeyError: 'add'
+FAILED factor_engine/tests/runtime/test_full_history_replay_contract_v2.py::test_production_full_history_requires_explicit_origin - KeyError: 'add'
+FAILED factor_engine/tests/runtime/test_full_history_replay_contract_v2.py::test_production_full_history_loads_from_declared_origin - KeyError: 'add'
+======================== 11 failed, 20 passed in 3.25s =========================
 EXIT_CODE=1
 
 ===== runtime_audit =====
