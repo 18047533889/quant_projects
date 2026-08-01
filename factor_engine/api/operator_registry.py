@@ -23,7 +23,11 @@ def build_dsl_allowlist(
         raw_dialect = "lqtp"
 
     allow: dict[str, Callable[..., Any]] = {"col": col}
-    if raw_surface == "compat":
+    if raw_surface == "extended":
+        # Extended authoring is a strict superset of the daily primitive surface.
+        # Composite technical macros lower into these daily primitives before IR.
+        surfaces = ("daily", "extended")
+    elif raw_surface == "compat":
         surfaces = ("daily", "extended")
     elif raw_surface == "compat_research":
         surfaces = ("daily", "extended", "research")
