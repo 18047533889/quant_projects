@@ -6,7 +6,9 @@ on:
 
 jobs:
   audit:
-    if: github.event.pull_request.head.ref == 'agent/factorengine-production-hardening'
+    if: >-
+      github.event.pull_request.head.ref == 'agent/factorengine-production-hardening' ||
+      github.event.pull_request.head.ref == 'agent/factorengine-production-completion-20260801'
     runs-on: ubuntu-24.04
     env:
       PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/gtja191
@@ -29,14 +31,17 @@ jobs:
             factor_engine/tests/operators/test_candle_patterns_extended.py
       - name: Audit all factor runtime invariants
         run: python factor_engine/scripts/audit_all_factor_production.py --runtime-only
-      - name: Audit cold-start production coverage
+      - name: Audit production-admitted cold-start coverage
         run: |
+          pytest -q factor_cold_start/tests
           python factor_cold_start/scripts/report_coverage.py
           python - <<'PY'
           import json
           from pathlib import Path
           report=json.loads(Path('factor_cold_start/reports/coverage.json').read_text())
           for key,row in report['catalogs'].items():
-              if key.endswith('_extended') and row['eligible_operator_coverage_pct'] != 100.0:
-                  raise SystemExit(f"{key}: {row['missing_eligible_operators']}")
+              if row['readiness'] != 'production':
+                  continue
+              if row['production_operator_coverage_pct'] != 100.0:
+                  raise SystemExit(f"{key}: {row['missing_production_operators']}")
           PY
