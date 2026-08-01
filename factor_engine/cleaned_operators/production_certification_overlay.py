@@ -10,6 +10,14 @@ from __future__ import annotations
 
 
 def apply_evidence_certification_overlay() -> None:
+    # Install the base-blob-bound evidence delta before any capability module
+    # snapshots the verified primitive sets.  The delta loader remains
+    # fail-closed: every override must equal the value recomputed from current
+    # source and the immutable base JSON must match its recorded Git blob SHA.
+    from backend.evidence_delta import install_evidence_delta
+
+    install_evidence_delta()
+
     from cleaned_operators.operator_surface import DAILY_CANONICALS
     from cleaned_operators.production_hardening import factor_production_targets
     from cleaned_operators.registry import OperatorRegistry
@@ -19,6 +27,7 @@ def apply_evidence_certification_overlay() -> None:
     try:
         from backend.evidence_provenance import evidence_artifact_valid
         from backend.primitive_evidence import PRIMITIVE_BACKEND_EXECUTION_CERTIFIED
+
         primitive_valid = bool(evidence_artifact_valid())
         primitive_certified = set(PRIMITIVE_BACKEND_EXECUTION_CERTIFIED)
     except Exception:
@@ -29,10 +38,11 @@ def apply_evidence_certification_overlay() -> None:
         meta = catalog.setdefault("backend_meta", {}).setdefault("pandas_numpy", {})
         if canonical in DAILY_CANONICALS:
             certified = primitive_valid and canonical in primitive_certified
-            source = "primitive_verified.json"
+            source = "primitive_verified.json+primitive_verified_delta.json"
         else:
             try:
                 from backend.factor_operator_evidence import pandas_reference_production_safe
+
                 certified = bool(pandas_reference_production_safe(canonical))
             except Exception:
                 certified = False
