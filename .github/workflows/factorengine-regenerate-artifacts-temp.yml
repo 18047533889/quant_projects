@@ -36,17 +36,35 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install -e ./dataaccess
           python -m pip install pytest pyyaml
-      - name: Break primitive-to-factor evidence bootstrap cycle
+      - name: Apply audited FactorEngine source repairs
         run: |
           python - <<'PY'
           from pathlib import Path
-          path = Path('factor_engine/tests/operators/test_production_convergence.py')
-          text = path.read_text(encoding='utf-8')
-          old = '''def test_explicit_backend_preference_cannot_bypass_production_evidence() -> None:\n    # ts_ewm_std is implemented natively but is not independently production-certified.\n    from backend.operator_capability import UnsupportedOperatorBackendError\n\n'''
-          new = '''def test_explicit_backend_preference_cannot_bypass_production_evidence() -> None:\n    # This routing assertion requires a current Pandas factor-operator artifact.\n    # Primitive evidence is certified first, so stale/missing factor evidence is\n    # covered by dedicated fail-closed tests rather than creating a bootstrap loop.\n    from backend.factor_operator_evidence import factor_operator_evidence_valid\n    from backend.operator_capability import UnsupportedOperatorBackendError\n\n    if not factor_operator_evidence_valid():\n        pytest.skip("requires current factor-operator evidence")\n\n'''
-          if old not in text:
-              raise SystemExit('production convergence bootstrap target not found')
-          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          def replace_once(path_str: str, old: str, new: str) -> None:
+              path = Path(path_str)
+              text = path.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'repair target not found: {path_str}')
+              path.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          replace_once(
+              'factor_engine/tests/operators/test_production_convergence.py',
+              '''def test_explicit_backend_preference_cannot_bypass_production_evidence() -> None:\n    # ts_ewm_std is implemented natively but is not independently production-certified.\n    from backend.operator_capability import UnsupportedOperatorBackendError\n\n''',
+              '''def test_explicit_backend_preference_cannot_bypass_production_evidence() -> None:\n    # This routing assertion requires a current Pandas factor-operator artifact.\n    # Primitive evidence is certified first, so stale/missing factor evidence is\n    # covered by dedicated fail-closed tests rather than creating a bootstrap loop.\n    from backend.factor_operator_evidence import factor_operator_evidence_valid\n    from backend.operator_capability import UnsupportedOperatorBackendError\n\n    if not factor_operator_evidence_valid():\n        pytest.skip("requires current factor-operator evidence")\n\n''',
+          )
+
+          replace_once(
+              'factor_engine/cleaned_operators/price_volume/candle_pattern_engine_v2.py',
+              '''    sign=pd.DataFrame(0.0,index=o.index,columns=o.columns)\n    def emit(mask,direction):return sign.mask(mask,float(direction))\n''',
+              '''    sign=pd.DataFrame(0.0,index=o.index,columns=o.columns)\n    def emit(mask,direction):\n        if np.isscalar(direction):\n            resolved=float(direction)\n        elif isinstance(direction,pd.DataFrame):\n            resolved=direction.astype(float)\n        else:\n            resolved=pd.DataFrame(np.asarray(direction,dtype=float),index=o.index,columns=o.columns)\n        return sign.mask(mask,resolved)\n''',
+          )
+
+          replace_once(
+              'factor_engine/scripts/audit_all_factor_production.py',
+              '''_SPECIAL_SCALARS: dict[tuple[str, str], Any] = {\n    ("cs_rank_gaussian", "method"): "blom",\n''',
+              '''_SPECIAL_SCALARS: dict[tuple[str, str], Any] = {\n    ("fin_trend_acceleration", "short_periods"): 4,\n    ("fin_trend_acceleration", "long_periods"): 8,\n    ("ts_regression_slope", "retval"): "slope",\n    ("yoy_by_period", "denominator"): "signed",\n    ("cs_rank_gaussian", "method"): "blom",\n''',
+          )
           PY
       - name: Compile FactorEngine sources
         run: |
@@ -58,6 +76,7 @@ jobs:
             factor_engine/runtime \
             factor_engine/storage/sources \
             factor_engine/factor_recipes \
+            factor_engine/scripts \
             factor_cold_start
       - name: Certify production evidence
         run: |
@@ -116,6 +135,8 @@ jobs:
           import subprocess
           allowed = (
               'factor_engine/tests/operators/test_production_convergence.py',
+              'factor_engine/cleaned_operators/price_volume/candle_pattern_engine_v2.py',
+              'factor_engine/scripts/audit_all_factor_production.py',
               'factor_engine/evidence/',
               'factor_engine/benchmarks/operator_manifest.json',
               'factor_engine/cleaned_operators/docs/',
