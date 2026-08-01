@@ -1,14 +1,17 @@
 {
-  "schema_version": "factorengine.operator_refactor.v2",
+  "schema_version": "factorengine.operator_refactor.v2.1",
   "principles": [
     "Public DSL names may be richer than physical kernels.",
     "Composite deterministic indicators lower to existing primitives whenever possible.",
     "Reference Pandas implementations may remain for semantic parity without being the preferred physical path.",
-    "Every factor-shaped public operator is a production target; ResearchTool is reserved for diagnostics and research utilities.",
+    "Production-target lifecycle labels never grant physical backend admission; immutable execution evidence is mandatory.",
+    "Every factor-shaped public operator is a reviewed production target; ResearchTool is reserved for diagnostics and research utilities.",
     "All technical lookbacks, confirmation windows, thresholds and smoothing periods are explicit parameters.",
-    "Unbounded cumulative technical indicators are replaced by bounded or checkpointed forms.",
-    "Minute-to-daily operators are source-backed and require explicit cutoff/session/coverage contracts.",
-    "Fundamental primitives are field-agnostic period/revision transforms; accounting ratios are recipes."
+    "Recursive indicators without certified restore/resume execute by full replay from an explicit full_history_start.",
+    "Minute-to-daily operators are source-backed and require explicit cutoff, session, timestamp convention, coverage and minimum-bar contracts.",
+    "Fundamental primitives are field-agnostic period/revision transforms; accounting ratios are recipes.",
+    "Single-quarter flows and fiscal-YTD cumulative flows use different TTM operators.",
+    "Forward-filled realized surprises use event-level history rather than repeated daily observations."
   ],
   "lower_to_primitive_macro_keep_public_name": [
     "ts_prev_high", "ts_prev_low", "ts_distance_to_high", "ts_distance_to_low",
@@ -33,6 +36,12 @@
     "interest_coverage", "cash_conversion", "margin_expansion", "leverage_change",
     "capex_growth", "asset_turnover", "inventory_turnover", "receivable_turnover",
     "revenue_receivables_divergence", "earnings_cashflow_divergence", "quality_growth_combo",
+    "roa_from_cumulative", "roe_from_cumulative", "gross_profitability_from_cumulative",
+    "operating_profitability_from_cumulative", "cash_profitability_from_cumulative",
+    "accruals_from_cumulative", "rd_intensity_from_cumulative", "capex_intensity_from_cumulative",
+    "free_cash_flow_profitability_from_cumulative", "interest_coverage_from_cumulative",
+    "cash_conversion_from_cumulative", "asset_turnover_from_cumulative",
+    "inventory_turnover_from_cumulative", "receivable_turnover_from_cumulative",
     "cdl_2_crows", "cdl_3_inside", "cdl_3_outside", "cdl_3_line_strike",
     "cdl_3_stars_south", "cdl_abandoned_baby", "cdl_advance_block", "cdl_belt_hold",
     "cdl_breakaway", "cdl_closing_marubozu", "cdl_counterattack", "cdl_doji_star",
@@ -58,11 +67,15 @@
     "pattern_rounding_bottom", "pattern_rounding_top", "pattern_cup", "pattern_cup_handle",
     "pattern_123_bull", "pattern_123_bear", "pattern_breakout_retest", "pattern_breakdown_retest"
   ],
-  "keep_native_stateful_checkpointed": [
-    "KAMA", "Supertrend", "SupertrendDirection", "PSAR", "trade_when", "ts_sma_cn"
+  "keep_native_full_replay_without_segmented_resume": [
+    "KAMA", "Supertrend", "SupertrendDirection", "PSAR", "trade_when", "hump_decay", "ts_sma_cn"
+  ],
+  "checkpoint_schema_only_not_execution_certification": [
+    "KAMA", "Supertrend", "SupertrendDirection", "PSAR", "trade_when", "hump_decay", "ts_sma_cn"
   ],
   "keep_native_fundamental_period_engine": [
-    "fin_lag", "fin_diff", "fin_pct_change", "fin_log_change", "fin_qoq", "fin_yoy", "fin_ttm",
+    "fin_lag", "fin_diff", "fin_pct_change", "fin_log_change", "fin_qoq", "fin_yoy",
+    "fin_ttm_quarterly", "fin_quarter_from_cumulative", "fin_ttm_cumulative",
     "fin_average_balance", "fin_growth", "fin_cagr", "fin_growth_acceleration", "fin_growth_change",
     "fin_growth_volatility", "fin_growth_stability", "fin_growth_persistence",
     "fin_std", "fin_mad", "fin_cv", "fin_stability", "fin_range",
@@ -73,35 +86,54 @@
     "fin_cash_earnings_gap", "fin_accrual_ratio", "fin_cash_conversion", "fin_working_capital_change",
     "fin_revision_delta", "fin_revision_pct", "fin_revision_direction", "fin_revision_count",
     "fin_revision_magnitude", "fin_restated_flag", "fin_days_since_update", "fin_staleness",
-    "fin_surprise", "fin_surprise_zscore", "fin_expectation_revision", "fin_expectation_revision_pct",
-    "fin_expectation_revision_speed", "fin_expectation_dispersion",
+    "fin_surprise", "fin_surprise_event_zscore", "fin_surprise_event_percentile",
+    "fin_expectation_revision", "fin_expectation_revision_pct", "fin_expectation_revision_speed",
+    "fin_expectation_revision_count", "fin_expectation_revision_magnitude",
+    "fin_days_since_expectation_revision", "fin_expectation_dispersion",
     "fin_actual_expectation_divergence", "fin_beat_streak", "fin_miss_streak"
   ],
-  "keep_source_backed_intraday_to_daily": [
-    "intraday_realized_variance", "intraday_realized_vol", "intraday_realized_skew",
-    "intraday_realized_kurtosis", "intraday_realized_quarticity",
-    "intraday_upside_semivariance", "intraday_downside_semivariance",
-    "intraday_bipower_variation", "intraday_jump_variation", "intraday_jump_ratio",
-    "intraday_signed_jump", "intraday_max_abs_return", "intraday_tail_return_sum", "intraday_jump_count",
-    "intraday_return", "intraday_first_nmin_return", "intraday_last_nmin_return",
-    "intraday_morning_return", "intraday_afternoon_return", "intraday_morning_afternoon_reversal",
-    "intraday_trend_slope", "intraday_trend_r2", "intraday_path_efficiency",
-    "intraday_return_autocorr", "intraday_max_drawdown", "intraday_max_runup",
-    "intraday_time_of_high", "intraday_time_of_low", "intraday_close_location",
-    "intraday_opening_range", "intraday_opening_range_position", "intraday_opening_drive",
-    "intraday_gap_continuation", "intraday_gap_fill_ratio", "intraday_closing_return", "intraday_closing_ramp",
-    "intraday_vwap", "intraday_close_to_vwap", "intraday_high_to_vwap", "intraday_low_to_vwap",
-    "intraday_vwap_slope", "intraday_vwap_deviation_mean", "intraday_vwap_deviation_std",
-    "intraday_vwap_cross_count", "intraday_volume_first_share", "intraday_volume_last_share",
-    "intraday_volume_peak_time", "intraday_volume_hhi", "intraday_volume_entropy",
-    "intraday_volume_profile_skew", "intraday_volume_profile_slope",
-    "intraday_turnover_hhi", "intraday_turnover_entropy",
-    "intraday_return_volume_corr", "intraday_abs_return_volume_corr",
-    "intraday_signed_volume_imbalance", "intraday_volume_weighted_return",
-    "intraday_price_impact", "intraday_amihud", "intraday_turnover_per_volatility",
-    "intraday_profile_zscore", "intraday_profile_deviation", "intraday_abnormal_volume_profile",
-    "intraday_abnormal_return_profile", "intraday_abnormal_vol_profile"
+  "compatibility_only_ambiguous_names": [
+    {
+      "name": "fin_ttm",
+      "semantics": "single-period flow sum",
+      "preferred_replacements": ["fin_ttm_quarterly", "fin_ttm_cumulative"]
+    },
+    {
+      "name": "fin_surprise_zscore",
+      "semantics": "daily-observation rolling z-score",
+      "preferred_replacement": "fin_surprise_event_zscore"
+    }
   ],
+  "keep_source_backed_intraday_to_daily": {
+    "required_contract_parameters": [
+      "bar_minutes", "cutoff_time", "min_coverage", "min_bars", "timestamp_convention"
+    ],
+    "functions": [
+      "intraday_realized_variance", "intraday_realized_vol", "intraday_realized_skew",
+      "intraday_realized_kurtosis", "intraday_realized_quarticity",
+      "intraday_upside_semivariance", "intraday_downside_semivariance",
+      "intraday_bipower_variation", "intraday_jump_variation", "intraday_jump_ratio",
+      "intraday_signed_jump", "intraday_max_abs_return", "intraday_tail_return_sum", "intraday_jump_count",
+      "intraday_return", "intraday_first_nmin_return", "intraday_last_nmin_return",
+      "intraday_morning_return", "intraday_afternoon_return", "intraday_morning_afternoon_reversal",
+      "intraday_trend_slope", "intraday_trend_r2", "intraday_path_efficiency",
+      "intraday_return_autocorr", "intraday_max_drawdown", "intraday_max_runup",
+      "intraday_time_of_high", "intraday_time_of_low", "intraday_close_location",
+      "intraday_opening_range", "intraday_opening_range_position", "intraday_opening_drive",
+      "intraday_gap_continuation", "intraday_gap_fill_ratio", "intraday_closing_return", "intraday_closing_ramp",
+      "intraday_vwap", "intraday_close_to_vwap", "intraday_high_to_vwap", "intraday_low_to_vwap",
+      "intraday_vwap_slope", "intraday_vwap_deviation_mean", "intraday_vwap_deviation_std",
+      "intraday_vwap_cross_count", "intraday_volume_first_share", "intraday_volume_last_share",
+      "intraday_volume_peak_time", "intraday_volume_hhi", "intraday_volume_entropy",
+      "intraday_volume_profile_skew", "intraday_volume_profile_slope",
+      "intraday_turnover_hhi", "intraday_turnover_entropy",
+      "intraday_return_volume_corr", "intraday_abs_return_volume_corr",
+      "intraday_signed_volume_imbalance", "intraday_volume_weighted_return",
+      "intraday_price_impact", "intraday_amihud", "intraday_turnover_per_volatility",
+      "intraday_profile_zscore", "intraday_profile_deviation", "intraday_abnormal_volume_profile",
+      "intraday_abnormal_return_profile", "intraday_abnormal_vol_profile"
+    ]
+  },
   "deprecate_or_replace_unbounded_or_start_date_dependent": [
     {"old": "OBV", "replacement": "rolling_obv or bounded ADL/PVT family"},
     {"old": "NVI", "replacement": "bounded_nvi(close, volume, window)"},
