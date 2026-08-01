@@ -55,10 +55,11 @@ jobs:
             factor_engine/tests/operators/test_recipe_production_admission_v2.py \
             factor_engine/tests/runtime/test_full_history_replay_contract_v2.py \
             factor_engine/tests/runtime/test_incremental_history_contract_v2.py \
-            factor_engine/tests/runtime/test_source_window_contract_v2.py
+            factor_engine/tests/runtime/test_source_window_contract_v2.py \
+            factor_cold_start/tests
       - name: Audit all factor-shaped runtimes
         run: python factor_engine/scripts/audit_all_factor_production.py --runtime-only
-      - name: Verify public surface classification and cold-start coverage
+      - name: Verify public classification and production cold-start coverage
         run: |
           python factor_cold_start/scripts/report_coverage.py
           python - <<'PY'
@@ -66,17 +67,31 @@ jobs:
           from pathlib import Path
           from cleaned_operators import load_all
           from cleaned_operators.registry import OperatorRegistry
-          from cleaned_operators.operator_surface import unclassified_canonicals, RESEARCH_ONLY_CANONICALS
+          from cleaned_operators.operator_surface import (
+              RESEARCH_ONLY_CANONICALS,
+              unclassified_canonicals,
+          )
+
           load_all()
-          unclassified=unclassified_canonicals(OperatorRegistry.list_canonical())
+          unclassified = unclassified_canonicals(OperatorRegistry.list_canonical())
           if unclassified:
               raise SystemExit(f'unclassified canonicals: {unclassified}')
           if RESEARCH_ONLY_CANONICALS:
-              raise SystemExit(f'factor-shaped Research surface must remain empty: {sorted(RESEARCH_ONLY_CANONICALS)}')
-          report=json.loads(Path('factor_cold_start/reports/coverage.json').read_text())
-          for key,row in report['catalogs'].items():
-              if key.endswith('_extended') and row['eligible_operator_coverage_pct'] != 100.0:
-                  raise SystemExit(f"{key}: missing={row['missing_eligible_operators']}")
+              raise SystemExit(
+                  'factor-shaped Research surface must remain empty: '
+                  f'{sorted(RESEARCH_ONLY_CANONICALS)}'
+              )
+
+          report = json.loads(
+              Path('factor_cold_start/reports/coverage.json').read_text()
+          )
+          for key, row in report['catalogs'].items():
+              if row['readiness'] != 'production':
+                  continue
+              if row['production_operator_coverage_pct'] != 100.0:
+                  raise SystemExit(
+                      f"{key}: missing={row['missing_production_operators']}"
+                  )
           PY
       - name: Verify governance artifacts are parseable
         run: |
