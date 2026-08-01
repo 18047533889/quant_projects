@@ -1,17 +1,16 @@
-name: Inspect FactorEngine Fix Payload
+name: Export Corrupt FactorEngine Payload Part
 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
       - .github/workflows/factorengine-export-worktree.yml
-      - .factorengine-payload/**
 
 permissions:
   contents: read
 
 jobs:
-  inspect:
+  export:
     if: github.event.pull_request.head.ref == 'agent/factorengine-production-completion-20260801'
     runs-on: ubuntu-latest
     steps:
@@ -19,15 +18,15 @@ jobs:
         with:
           ref: agent/factorengine-production-completion-20260801
           fetch-depth: 1
-      - name: Record payload metadata
+      - name: Copy payload part
         run: |
-          wc -c .factorengine-payload/part*
-          sha256sum .factorengine-payload/part*
-          cat .factorengine-payload/part* > .factorengine-payload/combined.b64
-          wc -c .factorengine-payload/combined.b64
+          mkdir -p payload-export
+          cp .factorengine-payload/part02 payload-export/part02
+          wc -c payload-export/part02
+          sha256sum payload-export/part02
       - uses: actions/upload-artifact@v4
         with:
-          name: factorengine-fix-payload
-          path: .factorengine-payload
+          name: factorengine-corrupt-part02
+          path: payload-export/part02
           if-no-files-found: error
           retention-days: 1
