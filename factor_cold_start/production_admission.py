@@ -1,9 +1,9 @@
 """Fail-closed production admission for cold-start formulas.
 
 The historical ``daily``/``extended`` authoring surfaces are parser concerns, not
-production-readiness claims.  This module asks the current FactorEngine policy,
-parameter-signature, backend-evidence and whole-plan routing layers whether a
-fully built expression is eligible for production execution.
+production-readiness claims.  This module compiles each formula through the same
+Expr -> IR -> PlanNode pipeline used by :class:`runtime.engine.FactorEngine`, then
+applies production policy, evidence and whole-plan routing gates.
 """
 from __future__ import annotations
 
@@ -14,7 +14,9 @@ from typing import Iterable
 
 from .model import ColdStartFactor
 
-_NON_OPERATOR_PLAN_NODES = frozenset({"", "column", "literal"})
+_NON_OPERATOR_PLAN_NODES = frozenset(
+    {"", "column", "literal", "plan_ref", "materialized_series"}
+)
 
 
 @dataclass(frozen=True)
@@ -25,6 +27,7 @@ class ProductionAdmission:
     physical_plan_backend: str = ""
     physical_plan_candidates: tuple[str, ...] = ()
     routing_basis: str = ""
+    lookback: int | None = None
     violations: tuple[str, ...] = ()
 
     @property
@@ -46,11 +49,34 @@ def _walk_plan_operators(plan) -> tuple[str, ...]:
     return tuple(sorted(names))
 
 
+def _compile_production_plan(formula: str):
+    from api.dsl_parser import parse_expr
+    from ir.analyzer import Analyzer
+    from planner.lowerer import Lowerer
+    from planner.optimizer import Optimizer
+    from runtime.pit_audit import assert_pit_safe
+    from runtime.production_policy import (
+        assert_no_unapproved_map_groups_in_production,
+        assert_production_fastpath_plan,
+        assert_production_plan_ops,
+    )
+
+    expr = parse_expr(str(formula), surface="compat")
+    analysis = Analyzer().lower(expr)
+    assert_pit_safe(analysis.ir, enforce=True, forbid_forward_fill=False)
+    plan = Lowerer().to_logical_plan(analysis.ir)
+    plan = Optimizer().optimize(plan, production=True)
+    assert_production_plan_ops(plan, mode="production", context="cold_start")
+    assert_no_unapproved_map_groups_in_production(
+        plan, mode="production", context="cold_start"
+    )
+    assert_production_fastpath_plan(plan, mode="production", context="cold_start")
+    return plan, analysis
+
+
 def _production_routing_context() -> SimpleNamespace:
-    # Cold-start admission is source-agnostic and must have a safe in-memory
-    # execution route.  SourceRef/PIT/session requirements are validated by the
-    # production policy and dedicated source-contract suites.  Runtime may later
-    # choose another certified route for a concrete DuckDB/ClickHouse source.
+    # The default provider must have a safe in-memory execution route. Runtime
+    # may later select another certified SQL/hybrid route for a concrete source.
     return SimpleNamespace(
         run_mode="production",
         data_source=None,
@@ -62,26 +88,19 @@ def _production_routing_context() -> SimpleNamespace:
 def admit_formula(formula: str) -> ProductionAdmission:
     """Return current production admission for one DSL formula.
 
-    Admission is deliberately derived at runtime from the checked-in
-    FactorEngine evidence.  A stale or missing evidence artifact therefore
-    removes a formula from the default cold-start pack instead of silently
-    downgrading to an uncertified backend.
+    Admission is derived from checked-in implementation-bound evidence.  Stale
+    or missing evidence removes a formula from the default catalog instead of
+    silently downgrading to an uncertified backend.
     """
     try:
-        from api.dsl_parser import parse_expr
         from backend.operator_capability import production_eligible_backends
         from backend.plan_cost_router import choose_plan_route
         from cleaned_operators import load_all
         from cleaned_operators.operator_spec import infer_production_policy
         from cleaned_operators.registry import OperatorRegistry
-        from runtime.production_policy import assert_production_plan_ops
 
         load_all()
-        # Production factor operators may originate from the former Extended
-        # authoring surface.  ``compat`` only permits parsing; production policy
-        # and physical-plan selection below are the actual admission gates.
-        plan = parse_expr(str(formula), surface="compat")
-        assert_production_plan_ops(plan, mode="production", context="cold_start")
+        plan, analysis = _compile_production_plan(formula)
 
         canonical_names: set[str] = set()
         backend_rows: list[tuple[str, tuple[str, ...]]] = []
@@ -89,7 +108,7 @@ def admit_formula(formula: str) -> ProductionAdmission:
         for raw_name in _walk_plan_operators(plan):
             try:
                 canonical = OperatorRegistry.resolve_canonical_strict(raw_name)
-            except Exception as exc:  # fail closed on aliases or unregistered ops
+            except Exception as exc:
                 violations.append(f"{raw_name}: canonical resolution failed: {exc}")
                 continue
             canonical_names.add(canonical)
@@ -103,18 +122,23 @@ def admit_formula(formula: str) -> ProductionAdmission:
                 continue
             backend_rows.append((canonical, backends))
 
+        lookback_raw = getattr(analysis, "lookback", None)
+        try:
+            lookback = int(lookback_raw) if lookback_raw is not None else None
+        except (TypeError, ValueError):
+            lookback = None
+
         if violations:
             return ProductionAdmission(
                 eligible=False,
                 canonical_operators=tuple(sorted(canonical_names)),
                 certified_backends=tuple(sorted(backend_rows)),
+                lookback=lookback,
                 violations=tuple(violations),
             )
 
-        # Node-by-node capability is insufficient: two certified operators can
-        # still form a DAG for which no complete physical plan exists.  Reuse
-        # the same whole-plan router used by production execution and reject the
-        # formula unless it can produce a complete certified route.
+        # Per-node capability is insufficient. Reuse the production whole-plan
+        # router and require at least one complete certified physical route.
         route = choose_plan_route(plan, _production_routing_context())
         candidates = tuple(name for name, _ in route.candidate_costs)
         return ProductionAdmission(
@@ -124,6 +148,7 @@ def admit_formula(formula: str) -> ProductionAdmission:
             physical_plan_backend=route.backend,
             physical_plan_candidates=candidates,
             routing_basis=route.routing_basis,
+            lookback=lookback,
             violations=(),
         )
     except Exception as exc:
