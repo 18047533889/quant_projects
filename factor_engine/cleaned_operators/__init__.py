@@ -78,6 +78,11 @@ def load_all() -> None:
             f"unloaded registry cannot initialize from {OperatorRegistry.lifecycle()!r}"
         )
 
+    # Production evidence and routing must see the complete revision-aware
+    # parameter domain, not the legacy canonical-only fiscal signatures.
+    from backend.production_signature_v2 import apply_production_signature_v2
+    apply_production_signature_v2()
+
     # Install before importing any runtime module so every bootstrap replacement
     # is attributable rather than silently depending on import order.
     from cleaned_operators.registration_audit import install_registration_audit
