@@ -6,13 +6,21 @@ _REGISTERED = False
 
 
 def register_all() -> None:
+    """Register audited non-fiscal primitives.
+
+    Fiscal-period canonicals intentionally have one runtime owner:
+    ``cleaned_operators.fiscal_strict``.  The historical
+    ``overhaul.fundamental`` module is retained only as migration source code
+    and is no longer imported into the active registry; this removes the old
+    registration-order dependency where period_change/average/CAGR briefly
+    pointed at period_lag before a later layer replaced them.
+    """
     global _REGISTERED
     if _REGISTERED:
         return
     from cleaned_operators.overhaul import (
         compat,
         daily,
-        fundamental,
         polars_fixes,
         regression,
         technical,
@@ -20,7 +28,6 @@ def register_all() -> None:
 
     daily.register()
     regression.register()
-    fundamental.register()
     technical.register()
     # Targeted backend fixes and compatibility wrappers must load after the
     # audited canonical implementations so they replace only the affected slot.
