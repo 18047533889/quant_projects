@@ -24,7 +24,7 @@ factor_engine/tests/operators/test_candle_patterns_extended.py::test_three_bar_p
 factor_engine/tests/operators/test_candle_patterns_extended.py::test_two_bar_patterns_have_one_bar_policy_lag PASSED [ 91%]
 factor_engine/tests/operators/test_candle_patterns_extended.py::test_extended_patterns_are_numeric_panels PASSED [100%]
 
-============================== 12 passed in 3.11s ==============================
+============================== 12 passed in 2.73s ==============================
 EXIT_CODE=0
 
 ===== v2 =====
@@ -158,9 +158,9 @@ ______ test_every_production_recipe_executes_on_certified_reference_path _______
                     canonical,
                     "recipe leaf has no evidence-backed production backend",
                 )
-E               AssertionError: ('accruals', 'fin_average_balance', 'recipe leaf has no evidence-backed production backend')
+E               AssertionError: ('accruals', 'fin_ttm_quarterly', 'recipe leaf has no evidence-backed production backend')
 E               assert ()
-E                +  where () = <function production_eligible_backends at 0x7ff6c57f0c20>('fin_average_balance')
+E                +  where () = <function production_eligible_backends at 0x7ff9152f0cc0>('fin_ttm_quarterly')
 
 factor_engine/tests/operators/test_recipe_production_admission_v2.py:188: AssertionError
 =========================== short test summary info ============================
@@ -169,10 +169,10 @@ assert 'NATR' not in {'NATR', 'column', 'literal'}
 FAILED factor_engine/tests/operators/test_v2_macro_and_intraday_dsl.py::test_intraday_daily_dsl_builds_auditable_source_ref - AssertionError: ['SourceRef[StockMinuteBar.Close](history_days<=0)']
 assert False
  +  where False = PitAuditReport(violations=['SourceRef[StockMinuteBar.Close](history_days<=0)'], checked_ops=['SourceRef[StockMinuteBar.Close]']).passed
-FAILED factor_engine/tests/operators/test_recipe_production_admission_v2.py::test_every_production_recipe_executes_on_certified_reference_path - AssertionError: ('accruals', 'fin_average_balance', 'recipe leaf has no evidence-backed production backend')
+FAILED factor_engine/tests/operators/test_recipe_production_admission_v2.py::test_every_production_recipe_executes_on_certified_reference_path - AssertionError: ('accruals', 'fin_ttm_quarterly', 'recipe leaf has no evidence-backed production backend')
 assert ()
- +  where () = <function production_eligible_backends at 0x7ff6c57f0c20>('fin_average_balance')
-========================= 3 failed, 28 passed in 3.34s =========================
+ +  where () = <function production_eligible_backends at 0x7ff9152f0cc0>('fin_ttm_quarterly')
+========================= 3 failed, 28 passed in 2.94s =========================
 EXIT_CODE=1
 
 ===== runtime_audit =====
