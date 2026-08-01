@@ -2,6 +2,7 @@
 """Incremental factor production with watermark and causal history contracts."""
 from __future__ import annotations
 
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any
 
@@ -14,12 +15,32 @@ from storage.time_window import (
 )
 
 FULL_HISTORY_LOOKBACK_SENTINEL = 1_000_000_000
+_INCREMENTAL_HISTORY_CERTIFICATE: ContextVar[bool] = ContextVar(
+    "factor_engine_incremental_history_certificate", default=False
+)
+
+
+def _issue_incremental_history_certificate(plan: "IncrementalPlan") -> None:
+    """Issue a thread/task-local one-shot certificate for the immediate run."""
+    valid = bool(
+        not plan.is_full_run
+        and not plan.full_history_required
+        and plan.load_start is not None
+        and plan.output_start is not None
+        and plan.lookback_bars >= 0
+    )
+    _INCREMENTAL_HISTORY_CERTIFICATE.set(valid)
+
+
+def consume_incremental_history_certificate() -> bool:
+    """Consume and clear the current task's incremental history certificate."""
+    value = bool(_INCREMENTAL_HISTORY_CERTIFICATE.get())
+    _INCREMENTAL_HISTORY_CERTIFICATE.set(False)
+    return value
 
 
 @dataclass(frozen=True)
 class IncrementalPlan:
-    """Load/output window and watermark state for one incremental execution."""
-
     factor_id: str
     lookback_bars: int
     load_start: pd.Timestamp | None
@@ -79,9 +100,6 @@ def build_incremental_plan(
         if raw:
             watermark_end = str(raw)
 
-    # A recursive/full-history factor cannot be reconstructed from an arbitrary
-    # tail without a certified checkpoint restore path. Ignore the watermark and
-    # require the normal run warmup layer to load ``full_history_start``.
     window_watermark = None if full_history_required else watermark_end
     load_lookback = effective_lookback(
         finite_lookback,
@@ -89,10 +107,11 @@ def build_incremental_plan(
         source_bar_freq=source_bar_freq,
         extra=lookback_extra,
     )
-    if recompute_tail_bars is None:
-        tail_bars = max(1, finite_lookback + 1)
-    else:
-        tail_bars = max(0, int(recompute_tail_bars))
+    tail_bars = (
+        max(1, finite_lookback + 1)
+        if recompute_tail_bars is None
+        else max(0, int(recompute_tail_bars))
+    )
 
     calendar = calendar if calendar is not None else get_trading_calendar(market)
     window = resolve_incremental_window_for_bar_freq(
@@ -107,7 +126,7 @@ def build_incremental_plan(
     window_mode = str(window.get("window_mode") or "daily")
     is_full = full_history_required or watermark_end is None
 
-    return IncrementalPlan(
+    plan = IncrementalPlan(
         factor_id=factor_id,
         lookback_bars=load_lookback,
         load_start=window["load_start"],
@@ -121,13 +140,14 @@ def build_incremental_plan(
         window_mode="full_history" if full_history_required else window_mode,
         full_history_required=full_history_required,
     )
+    _issue_incremental_history_certificate(plan)
+    return plan
 
 
 def slice_factor_result_for_incremental(
     result: pd.Series,
     plan: IncrementalPlan,
 ) -> pd.Series:
-    """Trim only true tail-incremental outputs; full replay remains complete."""
     if plan.is_full_run or plan.output_start is None:
         return result
     return slice_series_time_window(
