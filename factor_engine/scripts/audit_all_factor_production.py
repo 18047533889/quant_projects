@@ -145,7 +145,7 @@ _SCALAR_VALUES: dict[str, Any] = {
     "compare_periods": 1,
     "window_periods": 8,
     "average_periods": 2,
-    "short_periods": 1,
+    "short_periods": 3,
     "long_periods": 4,
     "window_days": 60,
     "max_days": 252,
@@ -203,6 +203,8 @@ _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
     ("group_winsorize", "a"): 0.05,
     ("winsorize", "lower"): 0.05,
     ("winsorize", "upper"): 0.95,
+    ("ts_regression_slope", "retval"): "slope",
+    ("yoy_by_period", "denominator"): "signed",
 }
 _SPECIAL_POSITIONAL = {
     "cs_multi_resid": ("target", "exposure", "control"),
