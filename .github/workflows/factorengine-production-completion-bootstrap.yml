@@ -1,4 +1,4 @@
-name: FactorEngine Production Completion Source Fixes
+name: FactorEngine Production Completion Runtime Fixes
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: factorengine-production-completion-source-fixes-v2
+  group: factorengine-production-completion-runtime-fixes
   cancel-in-progress: false
 
 jobs:
@@ -31,26 +31,17 @@ jobs:
           ref: agent/factorengine-production-completion-20260801
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Apply and persist deterministic source fixes
+      - name: Apply and persist runtime fixes
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
 
-          def replace_once(path: str, old: str, new: str) -> None:
-              target = Path(path)
-              text = target.read_text(encoding='utf-8')
-              if new in text:
-                  return
-              if old not in text:
-                  raise SystemExit(f'expected patch anchor missing: {path}: {old[:100]!r}')
-              target.write_text(text.replace(old, new, 1), encoding='utf-8')
-
-          replace_once(
-              'factor_engine/cleaned_operators/price_volume/candle_pattern_engine_v2.py',
-              '    def emit(mask,direction):return sign.mask(mask,float(direction))\n',
-              '''    def emit(mask,direction):
+          candle = Path('factor_engine/cleaned_operators/price_volume/candle_pattern_engine_v2.py')
+          text = candle.read_text(encoding='utf-8')
+          old = '    def emit(mask,direction):return sign.mask(mask,float(direction))\n'
+          new = '''    def emit(mask,direction):
         if np.isscalar(direction):
             return sign.mask(mask,float(direction))
         if isinstance(direction,pd.DataFrame):
@@ -58,8 +49,12 @@ jobs:
         else:
             values=pd.DataFrame(direction,index=sign.index,columns=sign.columns)
         return sign.where(~mask,values.astype(float))
-''',
-          )
+'''
+          if new not in text:
+              if old not in text:
+                  raise SystemExit('candlestick emit anchor missing')
+              text = text.replace(old, new, 1)
+              candle.write_text(text, encoding='utf-8')
 
           audit = Path('factor_engine/scripts/audit_all_factor_production.py')
           text = audit.read_text(encoding='utf-8')
@@ -71,110 +66,14 @@ jobs:
                   raise SystemExit('audit special-scalar anchor missing')
               text = text.replace(anchor, anchor + additions, 1)
           audit.write_text(text, encoding='utf-8')
-
-          provider = Path('factor_cold_start/autofactor/provider.py')
-          text = provider.read_text(encoding='utf-8')
-          old = 'from typing import Any\n\nfrom evaluation.factor_pack import FactorDefinition, FactorPack\n'
-          new = '''from dataclasses import dataclass
-from typing import Any, Mapping
-
-try:
-    from evaluation.factor_pack import FactorDefinition, FactorPack
-except ModuleNotFoundError as exc:
-    if exc.name not in {"evaluation", "evaluation.factor_pack"}:
-        raise
-
-    @dataclass(frozen=True)
-    class FactorDefinition:
-        name: str
-        formula: str
-        source_formula: str = ""
-        description: str = ""
-        formula_hash: str = ""
-        metadata: Mapping[str, Any] | None = None
-
-        def __post_init__(self) -> None:
-            object.__setattr__(self, "metadata", {} if self.metadata is None else dict(self.metadata))
-            expected = hashlib.sha256(self.formula.encode("utf-8")).hexdigest()
-            if not self.name.strip() or not self.formula.strip():
-                raise ValueError("factor name and formula must be non-empty")
-            if self.formula_hash and self.formula_hash != expected:
-                raise ValueError(f"factor {self.name} formula hash mismatch")
-            object.__setattr__(self, "formula_hash", expected)
-            if not self.description:
-                object.__setattr__(self, "description", self.name)
-
-    @dataclass(frozen=True)
-    class FactorPack:
-        name: str
-        version: str
-        source_hash: str
-        pack_hash: str
-        factors: tuple[FactorDefinition, ...]
-        metadata: Mapping[str, Any] | None = None
-
-        def __post_init__(self) -> None:
-            object.__setattr__(self, "metadata", {} if self.metadata is None else dict(self.metadata))
-            if not self.name.strip() or not self.version.strip() or not self.factors:
-                raise ValueError("factor pack name, version and factors are required")
-            names = self.names()
-            hashes = [factor.formula_hash for factor in self.factors]
-            if len(names) != len(set(names)):
-                raise ValueError(f"factor pack {self.name} contains duplicate factor names")
-            if len(hashes) != len(set(hashes)):
-                raise ValueError(f"factor pack {self.name} contains duplicate formulas")
-
-        @property
-        def source_catalog_hash(self) -> str:
-            return self.source_hash
-
-        def names(self) -> list[str]:
-            return [factor.name for factor in self.factors]
-
-        def by_name(self) -> dict[str, FactorDefinition]:
-            return {factor.name: factor for factor in self.factors}
-'''
-          if new not in text:
-              if old not in text:
-                  raise SystemExit('provider import anchor missing')
-              text = text.replace(old, new, 1)
-          provider.write_text(text, encoding='utf-8')
-
-          test = Path('factor_engine/tests/operators/test_layer_governance.py')
-          text = test.read_text(encoding='utf-8')
-          old = '''def test_only_fused_technical_composites_remain() -> None:
-    for name in ("MACD_line", "MACD_signal", "MACD_hist", "RSI_WILDER", "ATR_WILDER", "ADX"):
-        assert OperatorRegistry.get(name) is not None
-    for name in ("KAMA", "OBV", "DPO", "TRIX", "ADXR", "ATR", "RSI"):
-        assert OperatorRegistry.get(name) is None
-'''
-          new = '''def test_stateful_or_fused_technical_operators_and_recipe_composites() -> None:
-    for name in ("MACD_line", "MACD_signal", "MACD_hist", "RSI_WILDER", "ATR_WILDER", "ADX", "KAMA"):
-        assert OperatorRegistry.get(name) is not None
-    for canonical, recipe in (
-        ("OBV", "rolling_obv"),
-        ("DPO", "dpo_causal"),
-        ("TRIX", "trix"),
-        ("ADXR", "adxr"),
-        ("ATR", "atr_sma"),
-        ("RSI", "rsi_sma"),
-    ):
-        assert OperatorRegistry.get(canonical) is None
-        assert FactorRecipeRegistry.get(recipe) is not None
-'''
-          if new not in text:
-              if old not in text:
-                  raise SystemExit('layer-governance test anchor missing')
-              text = text.replace(old, new, 1)
-          test.write_text(text, encoding='utf-8')
           PY
 
           python -m compileall -q factor_engine factor_cold_start
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add factor_engine/cleaned_operators/price_volume/candle_pattern_engine_v2.py factor_engine/scripts/audit_all_factor_production.py factor_cold_start/autofactor/provider.py factor_engine/tests/operators/test_layer_governance.py
+          git add factor_engine/cleaned_operators/price_volume/candle_pattern_engine_v2.py factor_engine/scripts/audit_all_factor_production.py
           if ! git diff --cached --quiet; then
-            git commit -m "Fix FactorEngine runtime audit and optional integration boundaries"
+            git commit -m "Fix candlestick vector output and production audit parameters"
             git push origin HEAD:agent/factorengine-production-completion-20260801
           fi
 
@@ -190,9 +89,7 @@ except ModuleNotFoundError as exc:
           python -m pip install -e ./dataaccess
           python -m pip install pytest
 
-      - name: Verify persisted fixes
+      - name: Verify runtime audit
         run: |
-          pytest -q factor_cold_start/tests/test_provider.py
-          pytest -q factor_engine/tests/operators/test_layer_governance.py
           pytest -q factor_engine/tests/operators/test_technical_extensions.py factor_engine/tests/operators/test_candle_patterns_extended.py
           python factor_engine/scripts/audit_all_factor_production.py --runtime-only
