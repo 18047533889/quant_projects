@@ -5,7 +5,6 @@ from __future__ import annotations
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
 from cleaned_operators.price_volume.liquidity_v2 import average_volume
 from cleaned_operators.registry import OperatorRegistry
-from cleaned_operators import operator_surface
 
 
 class TsAverageVolume(SeriesOperator):
@@ -45,12 +44,3 @@ OperatorRegistry.unregister("average_volume")
 for alias, target in list(OperatorRegistry._aliases.items()):
     if alias == "average_volume" or target == "average_volume":
         OperatorRegistry._aliases.pop(alias, None)
-
-operator_surface._LIQUIDITY_V2_CANONICALS = frozenset(
-    (set(operator_surface._LIQUIDITY_V2_CANONICALS) - {"average_volume"})
-    | {"ts_average_volume"}
-)
-operator_surface.EXTENDED_ONLY_CANONICALS = frozenset(
-    (set(operator_surface.EXTENDED_ONLY_CANONICALS) - {"average_volume"})
-    | {"ts_average_volume"}
-)

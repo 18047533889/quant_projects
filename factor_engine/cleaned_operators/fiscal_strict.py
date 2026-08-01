@@ -334,18 +334,57 @@ def pd_yoy_by_period(
 if pl is not None:
 
     def _pl_period_ordinal_expr(column: str):
-        text = pl.col(column).cast(pl.Utf8, strict=False).str.strip_chars().str.to_uppercase()
-        year = text.str.extract(r"(\d{4})", 1).cast(pl.Int64, strict=False)
-        quarter = text.str.extract(r"(?:Q|[^0-9]?)([1-4])$", 1).cast(pl.Int64, strict=False)
-        numeric = pl.col(column).cast(pl.Float64, strict=False)
-        parsed_date = text.str.to_date(strict=False)
-        date_ordinal = parsed_date.dt.year() * 4 + ((parsed_date.dt.month() - 1) // 3)
+        """Return the exact Polars equivalent of :func:`period_ordinal`.
+
+        Polars' format-inferred ``str.to_date`` can fail the whole expression on
+        mixed fiscal identifiers such as ``2023Q1`` and ISO dates.  Parse each
+        supported representation with anchored expressions instead, and keep
+        unknown values null rather than guessing.
+        """
+        raw = pl.col(column)
+        text = raw.cast(pl.Utf8, strict=False).str.strip_chars().str.to_uppercase()
+
+        quarter_year = text.str.extract(
+            r"^(\d{4})(?:\D*Q?)([1-4])$", 1
+        ).cast(pl.Int64, strict=False)
+        quarter_number = text.str.extract(
+            r"^(\d{4})(?:\D*Q?)([1-4])$", 2
+        ).cast(pl.Int64, strict=False)
+
+        iso_year = text.str.extract(
+            r"^(\d{4})[-/](\d{1,2})[-/]\d{1,2}(?:[ T].*)?$", 1
+        ).cast(pl.Int64, strict=False)
+        iso_month = text.str.extract(
+            r"^(\d{4})[-/](\d{1,2})[-/]\d{1,2}(?:[ T].*)?$", 2
+        ).cast(pl.Int64, strict=False)
+        compact_year = text.str.extract(
+            r"^(\d{4})(\d{2})\d{2}(?:[ T].*)?$", 1
+        ).cast(pl.Int64, strict=False)
+        compact_month = text.str.extract(
+            r"^(\d{4})(\d{2})\d{2}(?:[ T].*)?$", 2
+        ).cast(pl.Int64, strict=False)
+        date_year = pl.coalesce([iso_year, compact_year])
+        date_month = pl.coalesce([iso_month, compact_month])
+        valid_date = date_year.is_not_null() & date_month.is_between(1, 12)
+
+        numeric_int = raw.cast(pl.Int64, strict=False)
+        numeric_float = raw.cast(pl.Float64, strict=False)
+        numeric_year = numeric_int // 10
+        numeric_quarter = numeric_int % 10
+        encoded_quarter = (
+            numeric_int.is_not_null()
+            & (numeric_year >= 1000)
+            & numeric_quarter.is_between(1, 4)
+        )
+
         return (
-            pl.when(year.is_not_null() & quarter.is_not_null())
-            .then(year * 4 + quarter - 1)
-            .when(parsed_date.is_not_null())
-            .then(date_ordinal)
-            .otherwise(numeric)
+            pl.when(quarter_year.is_not_null() & quarter_number.is_not_null())
+            .then(quarter_year * 4 + quarter_number - 1)
+            .when(valid_date)
+            .then(date_year * 4 + ((date_month - 1) // 3))
+            .when(encoded_quarter)
+            .then(numeric_year * 4 + numeric_quarter - 1)
+            .otherwise(numeric_float)
             .cast(pl.Float64)
         )
 

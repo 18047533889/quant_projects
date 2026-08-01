@@ -1,11 +1,12 @@
 {
-  "field_count": 178,
+  "field_count": 188,
   "fields": [
     "a_cap",
     "a_market_cap",
     "accounts_payable",
     "accrued_and_other_current_liabilities",
     "accumulated_other_comprehensive_income",
+    "actual",
     "additional_paid_in_capital",
     "adf_short_volume",
     "adf_short_volume_exempt",
@@ -60,6 +61,9 @@
     "ev_to_sales",
     "exchange",
     "exempt_volume",
+    "expected",
+    "expected_mean",
+    "expected_std",
     "extraordinary_items",
     "factor",
     "fiscal_quarter",
@@ -69,6 +73,9 @@
     "free_float",
     "free_float_percent",
     "free_market_cap",
+    "fundamental_scale",
+    "fundamental_x",
+    "fundamental_y",
     "goodwill",
     "gross_profit",
     "high",
@@ -123,6 +130,7 @@
     "pcf_ratio2",
     "pe_ratio",
     "pe_ratio_lyr",
+    "period_id",
     "pre_close",
     "preferred_stock",
     "preferred_stock_dividends_declared",
@@ -146,6 +154,7 @@
     "return_on_equity",
     "revenue",
     "sale_of_property_plant_and_equipment",
+    "scale_base",
     "selling_general_administrative",
     "sequence_number",
     "settlement_date",
@@ -157,6 +166,7 @@
     "sip_timestamp",
     "size",
     "tape",
+    "target_period_id",
     "ticker",
     "tickers",
     "total_assets",
@@ -181,5 +191,5 @@
     "window_start"
   ],
   "schema_version": "field_manifest.v1",
-  "source": "canonical_data_fields.json"
+  "source": "canonical_data_fields.json + logical semantic inputs"
 }

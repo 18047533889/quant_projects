@@ -153,57 +153,48 @@ class ProductionDigitalCount(SeriesOperator):
     status="production",
 )
 class ProductionTSRegressionSlope(SeriesOperator):
-    """Rolling OLS slope with an explicit intercept contract."""
+    """Rolling OLS with the canonical and historical GTJA call contracts."""
 
     metadata = OperatorMetadata(
         name="ts_regression_slope",
         category="time_series",
         description=(
-            "Rolling OLS slope of y on x. add_intercept=True estimates the standard "
-            "intercept+slope regression; False fits through the origin."
+            "Pairwise-finite rolling OLS. The canonical keeps the historical "
+            "ts_regression(y, x, window, lag, retval, min_periods=...) contract."
         ),
-        param_names=["x", "y", "window", "add_intercept"],
+        param_names=[
+            "y",
+            "x",
+            "window",
+            "lag",
+            "retval",
+            "min_periods",
+            "add_intercept",
+        ],
         tags=["pit_safe", "causal", "rolling_regression", "production_repair"],
     )
 
     def _calculate_series(
         self,
-        x: pd.DataFrame,
         y: pd.DataFrame,
+        x: pd.DataFrame,
         window: int,
+        *legacy_args,
+        lag: int | None = None,
+        retval: str | None = None,
+        min_periods: int | None = None,
         add_intercept: bool = True,
+        **_,
     ) -> pd.DataFrame:
-        lookback = int(window)
-        if lookback <= 0:
-            raise ValueError("ts_regression_slope window must be positive")
-        if not isinstance(add_intercept, (bool, np.bool_)):
-            raise TypeError("ts_regression_slope add_intercept must be boolean")
-        x_frame, y_frame = _aligned_float_frames(x, y)
-        xv = x_frame.to_numpy(dtype=float)
-        yv = y_frame.to_numpy(dtype=float)
-        result = np.full(xv.shape, np.nan, dtype=float)
-        rows, cols = xv.shape
+        from cleaned_operators.overhaul.compat import ts_regression_compat
 
-        for col in range(cols):
-            for end in range(lookback - 1, rows):
-                start = end - lookback + 1
-                xs = xv[start:end + 1, col]
-                ys = yv[start:end + 1, col]
-                valid = np.isfinite(xs) & np.isfinite(ys)
-                if valid.sum() < 3:
-                    continue
-                xs = xs[valid]
-                ys = ys[valid]
-                if bool(add_intercept):
-                    centered = xs - xs.mean()
-                    denom = float(np.dot(centered, centered))
-                    if denom <= 0:
-                        continue
-                    slope = float(np.dot(centered, ys - ys.mean()) / denom)
-                else:
-                    denom = float(np.dot(xs, xs))
-                    if denom <= 0:
-                        continue
-                    slope = float(np.dot(xs, ys) / denom)
-                result[end, col] = slope
-        return pd.DataFrame(result, index=x_frame.index, columns=x_frame.columns)
+        return ts_regression_compat(
+            y,
+            x,
+            window,
+            *legacy_args,
+            lag=lag,
+            retval=retval,
+            min_periods=min_periods,
+            add_intercept=add_intercept,
+        )

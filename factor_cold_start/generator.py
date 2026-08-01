@@ -21,12 +21,16 @@ MARKET_FIELDS: dict[str, dict[str, set[str]]] = {
     "ashare": {
         "core": {"open", "high", "low", "close", "pre_close", "volume", "amount", "ret", "vwap", "factor"},
         "enriched": {"turnover_ratio", "market_cap", "circulating_cap", "circulating_market_cap", "free_market_cap", "exchange", "average_volume"},
+        "fundamental": {"fundamental_x", "fundamental_y", "fundamental_scale", "period_id", "fiscal_quarter"},
+        "analyst": {"actual", "expected", "expected_mean", "expected_std", "scale_base", "period_id", "target_period_id"},
     },
     "us": {
         "core": {"open", "high", "low", "close", "pre_close", "volume", "amount", "ret", "vwap", "adj_factor"},
         "derived": {"ret__intra", "ret__overnight", "high__low__ratio", "upper__shadow__ratio", "vwap__close__dist"},
         "enriched": {"turnover_ratio", "market_cap", "exchange", "average_volume", "avg_daily_volume", "short_volume_ratio", "short_interest", "days_to_cover"},
         "microstructure": {"bid_price", "ask_price", "bid_size", "ask_size", "total_volume"},
+        "fundamental": {"fundamental_x", "fundamental_y", "fundamental_scale", "period_id", "fiscal_quarter"},
+        "analyst": {"actual", "expected", "expected_mean", "expected_std", "scale_base", "period_id", "target_period_id"},
     },
 }
 
