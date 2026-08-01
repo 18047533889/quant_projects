@@ -48,7 +48,7 @@ ph._FUNDAMENTAL_PERIOD_CANONICALS = frozenset(
 )
 
 # Refresh surface-derived candidate tiers after every reviewed module has
-# registered.  Membership means signature/evidence-gated candidate, never
+# registered. Membership means signature/evidence-gated candidate, never
 # physical production admission by itself.
 import cleaned_operators.production_tiers as pt
 
@@ -114,3 +114,39 @@ analyzer._FIN_DAILY_WINDOW_CANONICALS = frozenset(
         "fin_days_since_expectation_revision",
     }
 )
+
+# Existing incremental APIs receive only ``analysis.lookback``.  Preserve
+# backwards compatibility by encoding the orthogonal full-history flag in a
+# reserved sentinel while keeping ``requires_full_history`` explicit.  Warmup
+# and incremental planners decode this value before calendar arithmetic.
+FULL_HISTORY_LOOKBACK_SENTINEL = 1_000_000_000
+analyzer.FULL_HISTORY_LOOKBACK_SENTINEL = FULL_HISTORY_LOOKBACK_SENTINEL
+if not getattr(analyzer.AnalysisResult, "_full_history_init_installed", False):
+    _analysis_result_init = analyzer.AnalysisResult.__init__
+
+    def _init_with_full_history_sentinel(
+        self,
+        ir,
+        lookback,
+        has_ts_op,
+        has_cs_op,
+        referenced_columns,
+        requires_full_history=False,
+    ):
+        encoded = (
+            max(int(lookback), FULL_HISTORY_LOOKBACK_SENTINEL)
+            if requires_full_history
+            else int(lookback)
+        )
+        _analysis_result_init(
+            self,
+            ir,
+            encoded,
+            has_ts_op,
+            has_cs_op,
+            referenced_columns,
+            requires_full_history,
+        )
+
+    analyzer.AnalysisResult.__init__ = _init_with_full_history_sentinel
+    analyzer.AnalysisResult._full_history_init_installed = True
