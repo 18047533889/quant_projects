@@ -5,6 +5,9 @@ on:
     branches: [agent/expand-factor-cold-start-20260801]
     paths:
       - ".github/workflows/cold-start-audit-snapshot.yml"
+  pull_request:
+    paths:
+      - ".github/workflows/cold-start-audit-snapshot.yml"
 
 permissions:
   contents: read
