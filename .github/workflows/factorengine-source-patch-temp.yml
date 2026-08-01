@@ -1,3 +1,4 @@
+# trigger: apply validated source patch
 name: FactorEngine one-shot source patch
 
 on:
