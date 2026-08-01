@@ -40,14 +40,19 @@ jobs:
           python factor_engine/scripts/certify_recipe_evidence.py --check
       - name: Audit every Factor DSL production operator
         run: python factor_engine/scripts/audit_all_factor_production.py
-      - name: Regression test promoted technical fundamental and SourceRef operators
+      - name: Regression test promoted technical fundamental SourceRef and replay contracts
         run: |
           pytest -q \
             factor_engine/tests/operators/test_promoted_production_repairs.py \
             factor_engine/tests/operators/test_technical_extensions.py \
             factor_engine/tests/operators/test_candle_patterns_extended.py \
             factor_engine/tests/operators/test_v2_operator_expansion.py \
+            factor_engine/tests/operators/test_v2_macro_and_intraday_dsl.py \
+            factor_engine/tests/operators/test_evidence_fail_closed_v2.py \
+            factor_engine/tests/operators/test_fundamental_flow_semantics_v2.py \
+            factor_engine/tests/operators/test_analyzer_semantic_warmup_v2.py \
             factor_engine/tests/operators/test_recipe_production_admission_v2.py \
+            factor_engine/tests/runtime/test_full_history_replay_contract_v2.py \
             factor_engine/tests/runtime/test_logical_source_production_contracts.py
       - name: Verify cold-start production coverage
         run: |
@@ -79,27 +84,12 @@ jobs:
           PY
       - name: Compile production modules
         run: |
-          python -m py_compile \
-            factor_engine/backend/plan_cost_router.py \
-            factor_engine/backend/factor_operator_evidence.py \
-            factor_engine/backend/recipe_evidence.py \
-            factor_engine/backend/pandas_first_signature.py \
-            factor_engine/cleaned_operators/production_hardening.py \
-            factor_engine/cleaned_operators/production_policy_extensions_v2.py \
-            factor_engine/cleaned_operators/price_volume/technical_extensions.py \
-            factor_engine/cleaned_operators/price_volume/technical_structure_repairs.py \
-            factor_engine/cleaned_operators/price_volume/structure_patterns_v2.py \
-            factor_engine/cleaned_operators/price_volume/liquidity_v2.py \
-            factor_engine/cleaned_operators/price_volume/candle_geometry_v2.py \
-            factor_engine/cleaned_operators/price_volume/candle_pattern_engine_v2.py \
-            factor_engine/cleaned_operators/technical/indicators_v2.py \
-            factor_engine/cleaned_operators/fundamental/transforms_v2.py \
-            factor_engine/cleaned_operators/fundamental/transforms_repairs_v2.py \
-            factor_engine/storage/sources/intraday_feature_extension.py \
-            factor_engine/storage/sources/intraday_feature_runtime_v2.py \
-            factor_engine/api/intraday_daily.py \
-            factor_engine/api/technical_macros_v2.py \
-            factor_engine/scripts/audit_all_factor_production.py \
-            factor_engine/scripts/calibrate_backend_costs.py \
-            factor_cold_start/v2_operator_seeds.py \
-            factor_cold_start/intraday_daily_seeds.py
+          python -m compileall -q \
+            factor_engine/backend \
+            factor_engine/cleaned_operators \
+            factor_engine/api \
+            factor_engine/ir \
+            factor_engine/runtime \
+            factor_engine/storage/sources \
+            factor_engine/factor_recipes \
+            factor_cold_start
