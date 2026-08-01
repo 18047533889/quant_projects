@@ -59,6 +59,7 @@ def _extended_seed_families(market: str) -> tuple[Iterable[ColdStartFactor], ...
     from .expectation_seeds import expectation_seeds
     from .fundamental_flow_seeds import fundamental_flow_seeds
     from .intraday_daily_seeds import intraday_daily_seeds
+    from .liquidity_naming_seeds import liquidity_naming_seeds
     from .structure_extra_seeds import structure_extra_seeds
     from .technical_extension_seeds import technical_extension_seeds
     from .v2_operator_seeds import v2_operator_seeds
@@ -68,10 +69,19 @@ def _extended_seed_families(market: str) -> tuple[Iterable[ColdStartFactor], ...
         for seed in technical_extension_seeds(market)
         if not (_RECIPE_OWNED_TA_CANONICALS & set(seed.operators))
     )
+    # The historical v2 seed used average_volume(...), which now conflicts with
+    # an authoritative physical field. Drop only that seed and replace it with
+    # collision-free ts_average_volume(...).
+    filtered_v2 = (
+        seed
+        for seed in v2_operator_seeds(market)
+        if "average_volume" not in set(seed.operators)
+    )
     return (
         filtered_technical,
         candle_pattern_seeds(market),
-        v2_operator_seeds(market),
+        filtered_v2,
+        liquidity_naming_seeds(market),
         structure_extra_seeds(market),
         fundamental_flow_seeds(market),
         expectation_seeds(market),
