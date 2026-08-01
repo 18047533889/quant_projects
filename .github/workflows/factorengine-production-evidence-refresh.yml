@@ -31,6 +31,17 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install -e ./dataaccess
           python -m pip install pytest pyyaml
+      - name: Compile semantic source before certification
+        run: |
+          python -m compileall -q \
+            factor_engine/backend \
+            factor_engine/cleaned_operators \
+            factor_engine/api \
+            factor_engine/ir \
+            factor_engine/runtime \
+            factor_engine/storage/sources \
+            factor_engine/factor_recipes \
+            factor_cold_start
       - name: Refresh stale production evidence only
         run: |
           python factor_engine/scripts/sync_primitive_evidence.py --check
@@ -64,7 +75,12 @@ jobs:
           pytest -q \
             factor_engine/tests/test_operator_surface.py \
             factor_engine/tests/operators/test_v2_operator_expansion.py \
-            factor_engine/tests/operators/test_recipe_production_admission_v2.py
+            factor_engine/tests/operators/test_v2_macro_and_intraday_dsl.py \
+            factor_engine/tests/operators/test_evidence_fail_closed_v2.py \
+            factor_engine/tests/operators/test_fundamental_flow_semantics_v2.py \
+            factor_engine/tests/operators/test_analyzer_semantic_warmup_v2.py \
+            factor_engine/tests/operators/test_recipe_production_admission_v2.py \
+            factor_engine/tests/runtime/test_full_history_replay_contract_v2.py
           test "$(python - <<'PY'
           import json
           from pathlib import Path
