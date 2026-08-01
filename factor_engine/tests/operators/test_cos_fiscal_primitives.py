@@ -31,6 +31,17 @@ def test_period_lag_revision_policy_is_explicit():
     first = _pd("period_lag").calculate(values, periods, 1, "first_available")
     assert latest.iloc[-1, 0] == 2.5 and first.iloc[-1, 0] == 2.0
 
+def test_polars_period_lag_accepts_mixed_explicit_period_identifiers():
+    pl = pytest.importorskip("polars")
+    operator = OperatorRegistry.get("period_lag", backend="polars")
+    assert operator is not None
+    values = pl.DataFrame({"A": [10.0, 20.0, 30.0, 40.0, 50.0]})
+    periods = pl.DataFrame(
+        {"A": ["2023Q1", "2023-06-30", "20233", "20231231", None]}
+    )
+    result = operator.calculate(values, periods, 1)["A"].to_list()
+    assert result == [None, 10.0, 20.0, 30.0, None]
+
 def test_true_range_first_row_has_explicit_high_low_fallback():
     high = pd.DataFrame({"A": [12.0, 13.0]})
     low = pd.DataFrame({"A": [10.0, 11.0]})
