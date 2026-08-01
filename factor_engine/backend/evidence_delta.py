@@ -3,8 +3,8 @@
 
 The primitive evidence payload is deliberately large and implementation-bound.
 When a reviewed change affects a small shared semantic input, rewriting every
-operator record obscures the actual delta.  This module supports a compact,
-base-blob-bound override document.  Overrides are accepted only when:
+operator record obscures the actual delta. This module supports a compact,
+base-blob-bound override document. Overrides are accepted only when:
 
 * the base JSON has the exact recorded Git blob SHA;
 * every override equals the value recomputed from the current source tree; and
@@ -25,6 +25,7 @@ from typing import Any, Callable
 FE_ROOT = Path(__file__).resolve().parents[1]
 BASE_PATH = FE_ROOT / "evidence" / "primitive_verified.json"
 DELTA_PATH = FE_ROOT / "evidence" / "primitive_verified_delta.json"
+FISCAL_EMITTER_PATH = FE_ROOT / "backend" / "sql_pushdown" / "fiscal_v2.py"
 
 
 def _git_blob_sha(data: bytes) -> str:
@@ -71,15 +72,13 @@ def _validate_delta_against_current_source(delta: dict[str, Any]) -> None:
             if key == "parameter_domain_hash":
                 expected = provenance.parameter_domain_hash_for(str(canonical))
             elif key.startswith("implementation_hash_"):
-                # Implementation hashes are checked again by the ordinary
-                # provenance validator after the delta is applied.
+                # The ordinary provenance validator checks these values against
+                # the recorded source path after the effective payload is built.
                 expected = str(value)
             elif key in semantic:
                 expected = semantic[key]
             else:
-                raise ValueError(
-                    f"unsupported primitive delta field {canonical}.{key}"
-                )
+                raise ValueError(f"unsupported primitive delta field {canonical}.{key}")
             if str(value) != str(expected):
                 raise ValueError(
                     f"stale primitive delta {canonical}.{key}: "
@@ -90,14 +89,14 @@ def _validate_delta_against_current_source(delta: dict[str, Any]) -> None:
 def load_effective_primitive_evidence(
     raw_loader: Callable[[], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    if raw_loader is None:
-        if not BASE_PATH.is_file():
-            raise FileNotFoundError(f"missing primitive evidence: {BASE_PATH}")
-        base_bytes = BASE_PATH.read_bytes()
-        base = json.loads(base_bytes.decode("utf-8"))
-    else:
-        base_bytes = BASE_PATH.read_bytes()
-        base = raw_loader()
+    if not BASE_PATH.is_file():
+        raise FileNotFoundError(f"missing primitive evidence: {BASE_PATH}")
+    base_bytes = BASE_PATH.read_bytes()
+    base = (
+        json.loads(base_bytes.decode("utf-8"))
+        if raw_loader is None
+        else raw_loader()
+    )
 
     delta = _load_delta()
     if not delta:
@@ -106,14 +105,14 @@ def load_effective_primitive_evidence(
     actual_base = _git_blob_sha(base_bytes)
     if not expected_base or expected_base != actual_base:
         raise ValueError(
-            f"primitive evidence delta base mismatch: "
+            "primitive evidence delta base mismatch: "
             f"expected={expected_base!r} actual={actual_base!r}"
         )
     _validate_delta_against_current_source(delta)
 
     effective = copy.deepcopy(base)
-    provenance = effective.setdefault("provenance", {})
-    emitters = provenance.setdefault("emitter_hashes", {})
+    effective_provenance = effective.setdefault("provenance", {})
+    emitters = effective_provenance.setdefault("emitter_hashes", {})
     emitters.update(dict(delta.get("emitter_hash_overrides") or {}))
 
     bridge_hash = str(delta.get("bridge_parameter_hash") or "")
@@ -133,16 +132,31 @@ def load_effective_primitive_evidence(
 
 
 def install_evidence_delta() -> None:
-    """Install the effective loader before normal provenance validation."""
+    """Install effective evidence before any capability module snapshots it."""
     from backend import evidence_provenance as provenance
 
     if getattr(provenance, "_primitive_delta_installed", False):
         return
+
     raw_loader = provenance.load_verified_artifact
+    raw_emitter_hashes = provenance.emitter_hashes
+
+    def _effective_emitters() -> dict[str, str]:
+        values = dict(raw_emitter_hashes())
+        if FISCAL_EMITTER_PATH.is_file():
+            values["implementation_hash_duckdb_fiscal_v2"] = (
+                provenance.compute_implementation_hash(
+                    FISCAL_EMITTER_PATH.read_text(encoding="utf-8")
+                )
+            )
+        return values
 
     def _effective_loader() -> dict[str, Any]:
         return load_effective_primitive_evidence(raw_loader)
 
+    # Patch both identities before validation.  This is order-independent: the
+    # fiscal source hash is bound even before its runtime lowering is installed.
+    provenance.emitter_hashes = _effective_emitters
     provenance.load_verified_artifact = _effective_loader
     provenance.evidence_artifact_valid.cache_clear()
     provenance._primitive_delta_installed = True
