@@ -96,11 +96,7 @@ def _direct_full_history_start(data_source: Any) -> str | None:
 
 
 def resolve_full_history_start(data_source: Any) -> str | None:
-    """Resolve one explicit history origin from a logical/composite source.
-
-    A top-level contract wins.  Otherwise nested source origins must agree;
-    silently choosing one child would allow another dependency to start later.
-    """
+    """Resolve one explicit history origin from a logical/composite source."""
     direct = _direct_full_history_start(data_source)
     if direct is not None:
         return direct
@@ -115,7 +111,7 @@ def resolve_full_history_start(data_source: Any) -> str | None:
         value = _direct_full_history_start(source)
         if value is not None:
             candidates.add(value)
-        for attribute in ("inner", "anchor"):
+        for attribute in ("inner", "_inner", "anchor", "anchor_source"):
             visit(getattr(source, attribute, None))
         children = getattr(source, "sources", None)
         if isinstance(children, dict):
@@ -131,6 +127,31 @@ def resolve_full_history_start(data_source: Any) -> str | None:
             + ", ".join(sorted(candidates))
         )
     return next(iter(candidates))
+
+
+def _preserve_source_contracts(original: Any, narrowed: Any) -> Any:
+    """Copy immutable read contracts, never caches or stale snapshot state."""
+    original_params = dict(getattr(original, "params", {}) or {})
+    if hasattr(narrowed, "params") and original_params:
+        narrowed.params = original_params
+    if hasattr(original, "read_auto") and hasattr(narrowed, "read_auto"):
+        narrowed.read_auto = bool(original.read_auto)
+    if hasattr(original, "lazy_scan") and hasattr(narrowed, "_lazy_scan"):
+        narrowed._lazy_scan = bool(original.lazy_scan)
+    for attribute in (
+        "full_history_start",
+        "bar_freq",
+        "session_open",
+        "session_close",
+        "session_minutes",
+        "timestamp_convention",
+    ):
+        if hasattr(original, attribute):
+            try:
+                setattr(narrowed, attribute, getattr(original, attribute))
+            except Exception:
+                pass
+    return narrowed
 
 
 def _switch_engine_to_window(
@@ -153,6 +174,7 @@ def _switch_engine_to_window(
         end_date=run_window.actual_load_end,
         bar_freq=source_bar_freq if bars_per_day > 1 else None,
     )
+    narrowed = _preserve_source_contracts(engine.data_source, narrowed)
     use_fresh_cache = not isinstance(engine.cache, PersistentPlanCache)
     return engine.with_data_source(narrowed, fresh_cache=use_fresh_cache)
 
