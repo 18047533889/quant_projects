@@ -23,7 +23,15 @@ def test_factor_pack_providers_are_immutable_and_unique() -> None:
         assert pack.metadata["readiness"] == "production"
         assert all(factor.metadata["production_admitted"] for factor in pack.factors)
         assert all(factor.metadata["certified_backends"] for factor in pack.factors)
+        assert all(factor.metadata["physical_plan_backend"] for factor in pack.factors)
+        assert all(factor.metadata["physical_plan_candidates"] for factor in pack.factors)
+        assert all(
+            factor.metadata["physical_plan_backend"]
+            in factor.metadata["physical_plan_candidates"]
+            for factor in pack.factors
+        )
 
     for pack in research_packs:
         assert pack.metadata["readiness"] == "research"
         assert all(not factor.metadata["production_admitted"] for factor in pack.factors)
+        assert all(not factor.metadata["physical_plan_backend"] for factor in pack.factors)
