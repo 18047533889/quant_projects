@@ -116,9 +116,20 @@ def test_generated_manifests_share_the_final_registry_snapshot() -> None:
 
 
 def test_explicit_backend_preference_cannot_bypass_production_evidence() -> None:
-    # ts_ewm_std is implemented natively but is not independently production-certified.
+    # Primitive certification runs before the factor-operator semantic artifact
+    # exists.  At that bootstrap point the router must fail closed, but this
+    # test cannot yet distinguish an uncertified physical backend from a missing
+    # semantic artifact.  The permanent production suite runs it again after
+    # factor_operator_verified.json has been generated.
+    from backend.factor_operator_evidence import factor_operator_evidence_valid
     from backend.operator_capability import UnsupportedOperatorBackendError
 
+    if not factor_operator_evidence_valid():
+        pytest.skip("factor-operator semantic evidence is not bootstrapped yet")
+
+    # ts_ewm_std is implemented natively but its Polars route is not
+    # independently production-certified; an explicit preference must not
+    # bypass that fact, while an allowed fallback may select certified Pandas.
     with pytest.raises(UnsupportedOperatorBackendError, match="not production-safe"):
         OperatorRegistry.get_preferred("ts_ewm_std", prefer="polars", mode="production")
     op, backend = OperatorRegistry.get_preferred(
