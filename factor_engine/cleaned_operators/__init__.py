@@ -77,6 +77,12 @@ def load_all() -> None:
             f"unloaded registry cannot initialize from {OperatorRegistry.lifecycle()!r}"
         )
 
+    from backend.production_signature_v2 import apply_production_signature_v2
+    apply_production_signature_v2()
+
+    from cleaned_operators.registration_audit import install_registration_audit
+    install_registration_audit()
+
     for mod in _LOAD_MODULES:
         __import__(mod, fromlist=["*"])
 
@@ -86,13 +92,9 @@ def load_all() -> None:
     from cleaned_operators.operator_overhaul import finalize_operator_overhaul
     finalize_operator_overhaul()
 
-    # Compatibility operators need explicit PIT/scope contracts before layer
-    # governance enriches the catalog and computes lifecycle metadata.
     from cleaned_operators.lqtp_policy_patch import apply_lqtp_policy_patch
     apply_lqtp_policy_patch()
 
-    # Factor-shaped research operators remain executable under the research DSL;
-    # diagnostics-only utilities are still migrated into ResearchToolRegistry.
     from cleaned_operators.research_factor_enable import enable_research_factor_runtime
     enable_research_factor_runtime()
 
@@ -102,8 +104,19 @@ def load_all() -> None:
     from cleaned_operators.layer_governance_post import apply_post_governance
     apply_post_governance()
 
+    from cleaned_operators.registration_audit import finalize_registration_audit
+    finalize_registration_audit()
+
     from backend.sql_pushdown.sql_registry import register_sql_backends
     register_sql_backends()
+
+    # Replace the legacy first-seen fiscal SQL lowering with exact ordinal,
+    # revision-aware semantics before evidence and final contracts are consumed.
+    from backend.sql_pushdown.fiscal_v2 import apply_fiscal_sql_v2
+    apply_fiscal_sql_v2()
+
+    from cleaned_operators.contract_hardening import apply_final_contract_hardening
+    apply_final_contract_hardening()
 
     OperatorRegistry.finalize()
     OperatorRegistry.freeze()
