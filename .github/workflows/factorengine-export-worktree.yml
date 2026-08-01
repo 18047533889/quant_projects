@@ -1,0 +1,30 @@
+name: FactorEngine Export Worktree
+
+on:
+  push:
+    branches:
+      - agent/factorengine-production-completion-20260801
+    paths:
+      - .github/workflows/factorengine-export-worktree.yml
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/factorengine-production-completion-20260801
+          fetch-depth: 1
+      - name: Package worktree
+        run: |
+          rm -rf .git
+          tar -czf /tmp/quant-projects-worktree.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quant-projects-worktree
+          path: /tmp/quant-projects-worktree.tar.gz
+          if-no-files-found: error
+          retention-days: 1
