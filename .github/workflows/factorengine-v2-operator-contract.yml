@@ -3,15 +3,7 @@ name: FactorEngine V2 Operator Contract
 on:
   pull_request:
     paths:
-      - 'factor_engine/cleaned_operators/price_volume/**'
-      - 'factor_engine/cleaned_operators/technical/**'
-      - 'factor_engine/cleaned_operators/fundamental/**'
-      - 'factor_engine/api/intraday_daily.py'
-      - 'factor_engine/api/technical_macros_v2.py'
-      - 'factor_engine/storage/sources/intraday_*'
-      - 'factor_engine/ir/analyzer.py'
-      - 'factor_engine/backend/pandas_first_signature.py'
-      - 'factor_engine/factor_recipes/**'
+      - 'factor_engine/**'
       - 'factor_cold_start/**'
       - '.github/workflows/factorengine-v2-operator-contract.yml'
   push:
@@ -43,19 +35,24 @@ jobs:
       - name: Compile v2 modules
         run: |
           python -m compileall -q \
-            factor_engine/cleaned_operators/price_volume \
-            factor_engine/cleaned_operators/technical \
-            factor_engine/cleaned_operators/fundamental \
+            factor_engine/cleaned_operators \
             factor_engine/api \
+            factor_engine/backend \
+            factor_engine/ir \
+            factor_engine/runtime \
             factor_engine/storage/sources \
             factor_engine/factor_recipes \
             factor_cold_start
-      - name: Test v2 numerical and PIT contracts
+      - name: Test v2 numerical PIT evidence and history contracts
         run: |
           pytest -q \
             factor_engine/tests/operators/test_v2_operator_expansion.py \
             factor_engine/tests/operators/test_v2_macro_and_intraday_dsl.py \
-            factor_engine/tests/operators/test_recipe_production_admission_v2.py
+            factor_engine/tests/operators/test_evidence_fail_closed_v2.py \
+            factor_engine/tests/operators/test_fundamental_flow_semantics_v2.py \
+            factor_engine/tests/operators/test_analyzer_semantic_warmup_v2.py \
+            factor_engine/tests/operators/test_recipe_production_admission_v2.py \
+            factor_engine/tests/runtime/test_full_history_replay_contract_v2.py
       - name: Audit all factor-shaped runtimes
         run: python factor_engine/scripts/audit_all_factor_production.py --runtime-only
       - name: Verify public surface classification and cold-start coverage
@@ -78,5 +75,13 @@ jobs:
               if key.endswith('_extended') and row['eligible_operator_coverage_pct'] != 100.0:
                   raise SystemExit(f"{key}: missing={row['missing_eligible_operators']}")
           PY
-      - name: Verify refactor policy file is parseable
-        run: python -m json.tool factor_engine/docs/operator_refactor_v2.json >/dev/null
+      - name: Verify governance artifacts are parseable
+        run: |
+          python -m json.tool factor_engine/docs/operator_refactor_v2.json >/dev/null
+          python -m py_compile \
+            factor_engine/cleaned_operators/fundamental/flow_semantics_v2.py \
+            factor_engine/cleaned_operators/fundamental/expectation_v2.py \
+            factor_engine/runtime/warmup_service.py \
+            factor_engine/runtime/incremental.py \
+            factor_engine/runtime/run_window.py \
+            factor_engine/storage/sources/intraday_feature_runtime_v2.py
