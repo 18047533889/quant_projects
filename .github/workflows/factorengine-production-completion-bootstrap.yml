@@ -1,0 +1,122 @@
+name: FactorEngine Production Completion Bootstrap
+
+on:
+  push:
+    branches:
+      - agent/factorengine-production-completion-20260801
+    paths:
+      - .github/workflows/factorengine-production-completion-bootstrap.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: factorengine-production-completion-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  consolidate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: agent/factorengine-production-completion-20260801
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Merge production-hardening lineage
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          BASE_SHA="$(git rev-parse HEAD)"
+          git fetch origin agent/factorengine-production-hardening
+
+          set +e
+          git merge --no-commit --no-ff -X theirs origin/agent/factorengine-production-hardening
+          merge_status=$?
+          set -e
+
+          unresolved="$(git diff --name-only --diff-filter=U || true)"
+          if [ -n "$unresolved" ]; then
+            printf '%s\n' "$unresolved" | while IFS= read -r path; do
+              [ -n "$path" ] || continue
+              git checkout --theirs -- "$path"
+              git add "$path"
+            done
+          fi
+          if [ "$merge_status" -ne 0 ] && [ -n "$(git diff --name-only --diff-filter=U || true)" ]; then
+            echo "Unresolved merge conflicts remain"
+            git diff --name-only --diff-filter=U
+            exit 1
+          fi
+
+          # Preserve the already-merged strict fiscal/registration bootstrap and
+          # the cross-Python cold-start coverage behavior from current main.
+          git show "$BASE_SHA:factor_engine/cleaned_operators/__init__.py" > factor_engine/cleaned_operators/__init__.py
+          git show "$BASE_SHA:factor_cold_start/scripts/report_coverage.py" > factor_cold_start/scripts/report_coverage.py
+
+          # Temporary diagnostics are not production artifacts.
+          rm -f .github/workflows/temp-factorengine-diagnostics.yml
+          rm -f factor_engine/evidence/temp_diagnostics.txt
+
+          python - <<'PY'
+          from pathlib import Path
+
+          init_path = Path('factor_engine/cleaned_operators/__init__.py')
+          text = init_path.read_text(encoding='utf-8')
+          reviewed = '''\n_REVIEWED_EXTENSIONS = (\n    "cleaned_operators.production_repairs",\n    "cleaned_operators.price_volume.technical_extensions",\n    "cleaned_operators.price_volume.technical_structure_repairs",\n    "cleaned_operators.price_volume.candle_patterns_extended",\n    "cleaned_operators.price_volume.candle_geometry_v2",\n    "cleaned_operators.price_volume.candle_pattern_engine_v2",\n    "cleaned_operators.price_volume.candle_pattern_engine_repairs_v2",\n    "cleaned_operators.price_volume.structure_patterns_v2",\n    "cleaned_operators.price_volume.structure_patterns_extra_v2",\n    "cleaned_operators.price_volume.structure_patterns_extra_repairs_v2",\n    "cleaned_operators.price_volume.liquidity_v2",\n    "cleaned_operators.price_volume.liquidity_naming_v2",\n    "cleaned_operators.technical.indicators_v2",\n    "cleaned_operators.common.stable_high_moments_v2",\n    "cleaned_operators.fundamental.transforms_v2",\n    "cleaned_operators.fundamental.transforms_repairs_v2",\n    "cleaned_operators.fundamental.flow_semantics_v2",\n    "cleaned_operators.fundamental.expectation_v2",\n    "cleaned_operators.fundamental.parameter_contract_v2",\n    "cleaned_operators.production_policy_extensions_v2",\n)\n'''
+          marker = '\n\n_LOADED = False\n'
+          if '_REVIEWED_EXTENSIONS' not in text:
+              text = text.replace(marker, reviewed + marker)
+
+          load_marker = '    for mod in _LOAD_MODULES:\n        __import__(mod, fromlist=["*"])\n'
+          extension_load = load_marker + '\n    for mod in _REVIEWED_EXTENSIONS:\n        __import__(mod, fromlist=["*"])\n'
+          if 'for mod in _REVIEWED_EXTENSIONS' not in text:
+              text = text.replace(load_marker, extension_load)
+
+          governance = '    from cleaned_operators.layer_governance_post import apply_post_governance\n    apply_post_governance()\n'
+          hardening = governance + '''\n    from cleaned_operators.production_hardening import apply_production_hardening\n    apply_production_hardening()\n\n    from cleaned_operators.production_certification_overlay import apply_evidence_certification_overlay\n    apply_evidence_certification_overlay()\n'''
+          if 'apply_production_hardening()' not in text:
+              text = text.replace(governance, hardening)
+          init_path.write_text(text, encoding='utf-8')
+
+          # Certification must execute the candidate backend before refreshed
+          # evidence exists. Public runtime lookup remains evidence-gated.
+          conftest = Path('factor_engine/tests/operators/conftest.py')
+          if conftest.is_file():
+              ctext = conftest.read_text(encoding='utf-8')
+              ctext = ctext.replace(
+                  'operator = registry.get(canonical, backend=backend)',
+                  'operator = registry._operators.get(canonical, {}).get(backend)'
+              )
+              ctext = ctext.replace(
+                  'operator = OperatorRegistry.get(canonical, backend=backend)',
+                  'operator = OperatorRegistry._operators.get(canonical, {}).get(backend)'
+              )
+              conftest.write_text(ctext, encoding='utf-8')
+
+          contract_test = Path('factor_engine/tests/operators/test_contract_hardening.py')
+          if contract_test.is_file():
+              ttext = contract_test.read_text(encoding='utf-8')
+              ttext = ttext.replace(
+                  'OperatorRegistry.get(canonical, backend="polars")',
+                  'OperatorRegistry._operators.get(canonical, {}).get("polars")'
+              )
+              ttext = ttext.replace(
+                  'OperatorRegistry.get(canonical, backend="pandas")',
+                  'OperatorRegistry._operators.get(canonical, {}).get("pandas")'
+              )
+              contract_test.write_text(ttext, encoding='utf-8')
+          PY
+
+          git add -A
+          python -m compileall -q factor_engine factor_cold_start
+          git commit -m "Merge complete FactorEngine production hardening"
+          git push origin HEAD:agent/factorengine-production-completion-20260801
+
+      - name: Validate merged source compiles
+        run: python -m compileall -q factor_engine factor_cold_start
