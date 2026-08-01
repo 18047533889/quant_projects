@@ -2,9 +2,31 @@
 """Cross-cutting operator certification guards."""
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import pandas as pd
 import pytest
+
+
+def _require_backend(registry, canonical: str, backend: str):
+    operator = registry.get(canonical, backend)
+    if operator is not None:
+        return operator
+    catalog = registry.catalog().get(canonical, {})
+    diagnostic = {
+        "canonical": canonical,
+        "required_backend": backend,
+        "actual_backends": registry.backends_for(canonical),
+        "backend_meta": catalog.get("backend_meta"),
+        "backend_signatures": catalog.get("backend_signatures"),
+        "replacement_history": catalog.get("replacement_history"),
+        "contract": catalog.get("contract"),
+    }
+    raise AssertionError(
+        "required fiscal backend is missing after final governance:\n"
+        + json.dumps(diagnostic, ensure_ascii=False, indent=2, default=str)
+    )
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -46,13 +68,11 @@ def strict_fiscal_parameter_domain_certification_guard() -> None:
     pl = pytest.importorskip("polars")
     pl_values = pl.DataFrame({"A": values["A"].tolist()})
     pl_periods = pl.DataFrame({"A": periods["A"].tolist()})
+    pandas_operator = _require_backend(OperatorRegistry, "period_lag", "pandas_numpy")
+    polars_operator = _require_backend(OperatorRegistry, "period_lag", "polars")
     for policy, target in expected.items():
-        pandas_result = OperatorRegistry.get("period_lag", "pandas_numpy").calculate(
-            values, periods, 1, policy
-        )
-        polars_result = OperatorRegistry.get("period_lag", "polars").calculate(
-            pl_values, pl_periods, 1, policy
-        )
+        pandas_result = pandas_operator.calculate(values, periods, 1, policy)
+        polars_result = polars_operator.calculate(pl_values, pl_periods, 1, policy)
         assert pandas_result.iloc[-1, 0] == target
         assert polars_result["A"][-1] == target
         np.testing.assert_allclose(
