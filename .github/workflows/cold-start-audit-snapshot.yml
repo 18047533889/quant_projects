@@ -5,9 +5,6 @@ on:
     branches: [agent/expand-factor-cold-start-20260801]
     paths:
       - ".github/workflows/cold-start-audit-snapshot.yml"
-  pull_request:
-    paths:
-      - ".github/workflows/cold-start-audit-snapshot.yml"
       - ".cold_start_patch/**"
 
 permissions:
@@ -34,12 +31,11 @@ jobs:
           from pathlib import Path
           import base64
           import lzma
-          parts = sorted(Path('.cold_start_patch').glob('part*.b85'))
-          if len(parts) != 8:
-              raise SystemExit(f'expected 8 patch chunks, found {len(parts)}')
-          encoded = ''.join(path.read_text(encoding='utf-8') for path in parts)
+          payload = Path('.cold_start_patch/payload.b85')
+          if not payload.is_file():
+              raise SystemExit('cold-start patch payload missing')
           Path('/tmp/cold_start_v2.patch').write_bytes(
-              lzma.decompress(base64.b85decode(encoded.encode('ascii')))
+              lzma.decompress(base64.b85decode(payload.read_text(encoding='utf-8').encode('ascii')))
           )
           PY
           patch -p1 --forward --batch < /tmp/cold_start_v2.patch
@@ -62,7 +58,6 @@ jobs:
       - name: Parse and validate all generated factors
         run: python factor_cold_start/scripts/validate_catalog.py --all
       - name: Publish validated expansion
-        if: github.event_name == 'push'
         shell: bash
         run: |
           rm -f .github/workflows/cold-start-audit-snapshot.yml
