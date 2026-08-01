@@ -1,4 +1,4 @@
-name: FactorEngine Production Completion Functional Fixes
+name: FactorEngine Final Certification Runner
 
 on:
   push:
@@ -11,16 +11,15 @@ permissions:
   contents: write
 
 concurrency:
-  group: factorengine-production-completion-functional-fixes
+  group: factorengine-final-certification
   cancel-in-progress: false
 
 jobs:
-  patch-commit-verify:
-    if: github.actor != 'github-actions[bot]'
+  certify-commit-validate:
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 180
     env:
-      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/AutoFactorEvaluation-RECONSTRUCT:${{ github.workspace }}/dataaccess
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/gtja191:${{ github.workspace }}/dataaccess
       FACTOR_ENGINE_DISABLE_NUMBA: '1'
       FACTOR_ENGINE_RUN_MODE: research
       QUANT_PRODUCTION_MODE: '0'
@@ -31,101 +30,165 @@ jobs:
           ref: agent/factorengine-production-completion-20260801
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Apply deterministic functional fixes
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install complete runtime
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -e ./dataaccess
+          python -m pip install pytest pyyaml
+
+      - name: Apply final deterministic source fixes
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
 
+          admission = Path('factor_cold_start/production_admission.py')
+          text = admission.read_text(encoding='utf-8')
+          old = '''        try:
+            specification = decode_source_ref(function())
+        except Exception:
+            continue
+'''
+          new = '''        try:
+            value = function()
+            name = getattr(value, "name", None)
+            specification = decode_source_ref(name) if isinstance(name, str) else None
+        except Exception:
+            continue
+'''
+          if old in text:
+              text = text.replace(old, new, 1)
+          elif new not in text:
+              raise SystemExit('SourceRef function decoding anchor missing')
+          admission.write_text(text, encoding='utf-8')
+
+          patterns = Path(
+              'factor_engine/cleaned_operators/price_volume/'
+              'structure_patterns_extra_v2.py'
+          )
+          text = patterns.read_text(encoding='utf-8')
+          old = '''def _similar(values,tol):
+    stack=np.stack([v.to_numpy(float) for v in values]);mx=np.nanmax(stack,axis=0);mn=np.nanmin(stack,axis=0);mid=np.nanmean(np.abs(stack),axis=0);score=np.clip(1-(mx-mn)/np.where(mid>0,mid,np.nan)/tol,0,1);return pd.DataFrame(score,index=values[0].index,columns=values[0].columns)
+'''
+          new = '''def _similar(values,tol):
+    stack=np.stack([v.to_numpy(float) for v in values])
+    valid=np.isfinite(stack)
+    count=valid.sum(axis=0)
+    mx=np.max(np.where(valid,stack,-np.inf),axis=0)
+    mn=np.min(np.where(valid,stack,np.inf),axis=0)
+    abs_sum=np.where(valid,np.abs(stack),0.0).sum(axis=0)
+    mid=np.divide(abs_sum,count,out=np.full(count.shape,np.nan,dtype=float),where=count>0)
+    complete=count==len(values)
+    denom=mid*float(tol)
+    ratio=np.full(count.shape,np.nan,dtype=float)
+    np.divide(mx-mn,denom,out=ratio,where=complete&(denom>0))
+    score=np.where(complete,np.clip(1-ratio,0,1),np.nan)
+    return pd.DataFrame(score,index=values[0].index,columns=values[0].columns)
+'''
+          if old in text:
+              text = text.replace(old, new, 1)
+          elif new not in text:
+              raise SystemExit('structure similarity anchor missing')
+          patterns.write_text(text, encoding='utf-8')
+
           audit = Path('factor_engine/scripts/audit_all_factor_production.py')
           text = audit.read_text(encoding='utf-8')
-          old = '''_SPECIAL_POSITIONAL = {
-    "cs_multi_resid": ("target", "exposure", "control"),
-    "cs_neutralize": ("target", "exposure", "control"),
-}
-_SPECIAL_KWARGS = {
-    "cs_multi_resid": {"add_intercept": True, "min_obs": 8},
-    "cs_neutralize": {"add_intercept": True, "min_obs": 8},
-}
-'''
-          new = '''_SPECIAL_POSITIONAL = {
-    "cs_multi_resid": ("target", "exposure", "control"),
-    "cs_neutralize": ("target", "exposure", "control"),
-    "ts_regression_slope": ("y", "x", "window"),
-}
-_SPECIAL_KWARGS = {
-    "cs_multi_resid": {"add_intercept": True, "min_obs": 8},
-    "cs_neutralize": {"add_intercept": True, "min_obs": 8},
-    "ts_regression_slope": {
+          text = text.replace(
+              '    "ts_regression_slope": ("y", "x", "window"),\n',
+              '    "ts_regression_slope": ("y", "x", "window"),\n',
+          )
+          text = text.replace(
+              '''    "ts_regression_slope": {
         "lag": 0,
         "retval": "slope",
         "min_periods": 20,
         "add_intercept": True,
     },
-}
-'''
-          if new not in text:
-              if old not in text:
-                  raise SystemExit('audit special call anchor missing')
-              audit.write_text(text.replace(old, new, 1), encoding='utf-8')
+''',
+              '''    "ts_regression_slope": {
+        "lag": 0,
+        "min_periods": 20,
+        "add_intercept": True,
+    },
+''',
+          )
+          audit.write_text(text, encoding='utf-8')
+          PY
+          python -m compileall -q factor_engine factor_cold_start
 
-          admission = Path('factor_cold_start/production_admission.py')
-          text = admission.read_text(encoding='utf-8')
-          old = '            specification = decode_source_ref(function())\n'
-          new = '            value = function()\n            specification = decode_source_ref(getattr(value, "name", ""))\n'
-          if new not in text:
-              if old not in text:
-                  raise SystemExit('source function decode anchor missing')
-              admission.write_text(text.replace(old, new, 1), encoding='utf-8')
+      - name: Verify runtime before certification
+        run: |
+          set -euo pipefail
+          python factor_engine/scripts/audit_all_factor_production.py --runtime-only
+          pytest -q \
+            factor_engine/tests/operators/test_v2_macro_and_intraday_dsl.py \
+            factor_engine/tests/operators/test_technical_extensions.py \
+            factor_engine/tests/operators/test_candle_patterns_extended.py \
+            factor_engine/tests/runtime/test_source_window_contract_v2.py \
+            factor_engine/tests/runtime/test_incremental_history_contract_v2.py \
+            factor_engine/tests/runtime/test_full_history_replay_contract_v2.py
 
-          patterns = Path('factor_engine/cleaned_operators/price_volume/structure_patterns_extra_v2.py')
-          text = patterns.read_text(encoding='utf-8')
-          old = 'def _similar(values,tol):\n    stack=np.stack([v.to_numpy(float) for v in values]);mx=np.nanmax(stack,axis=0);mn=np.nanmin(stack,axis=0);mid=np.nanmean(np.abs(stack),axis=0);score=np.clip(1-(mx-mn)/np.where(mid>0,mid,np.nan)/tol,0,1);return pd.DataFrame(score,index=values[0].index,columns=values[0].columns)\n'
-          new = '''def _similar(values,tol):
-    stack=np.stack([v.to_numpy(float) for v in values])
-    valid=np.isfinite(stack)
-    count=valid.sum(axis=0)
-    safe=np.where(valid,stack,0.0)
-    mx=np.max(np.where(valid,stack,-np.inf),axis=0)
-    mn=np.min(np.where(valid,stack,np.inf),axis=0)
-    mid=np.divide(np.abs(safe).sum(axis=0),count,out=np.full(count.shape,np.nan,dtype=float),where=count>0)
-    score=np.full(count.shape,np.nan,dtype=float)
-    complete=count==len(values)
-    denom=mid*float(tol)
-    np.divide(mx-mn,denom,out=score,where=complete&(denom>0))
-    score=np.where(complete,np.clip(1-score,0,1),np.nan)
-    return pd.DataFrame(score,index=values[0].index,columns=values[0].columns)
-'''
-          if new not in text:
-              if old not in text:
-                  raise SystemExit('structure similarity anchor missing')
-              patterns.write_text(text.replace(old, new, 1), encoding='utf-8')
+      - name: Rebuild implementation-bound evidence
+        run: |
+          set -euo pipefail
+          python factor_engine/scripts/sync_primitive_evidence.py --check
+          python factor_engine/scripts/certify_primitive_evidence.py
+          python factor_engine/scripts/certify_factor_operator_evidence.py
+          python factor_engine/scripts/certify_recipe_evidence.py
+          python factor_engine/scripts/generate_operators_catalog.py
+          python factor_engine/scripts/export_dsl_allowlist.py
+          python factor_engine/scripts/generate_layer_manifests.py
+          python factor_engine/scripts/generate_operator_usage_report.py
+          python factor_engine/scripts/sync_backend_docs.py
+          python factor_engine/scripts/generate_backend_evidence_manifest.py
+          python factor_engine/scripts/generate_lqtp_compatibility_manifest.py
+          python factor_cold_start/scripts/report_coverage.py
+
+      - name: Validate generated evidence
+        run: |
+          set -euo pipefail
+          python factor_engine/scripts/certify_primitive_evidence.py --check
+          python factor_engine/scripts/certify_factor_operator_evidence.py --check
+          python factor_engine/scripts/certify_recipe_evidence.py --check
+          python factor_engine/scripts/audit_all_factor_production.py
+          python factor_cold_start/scripts/validate_catalog.py
+          python factor_cold_start/scripts/report_coverage.py
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report=json.loads(Path('factor_cold_start/reports/coverage.json').read_text())
+          failures=[]
+          for key,row in report['catalogs'].items():
+              if row['readiness'] != 'production':
+                  continue
+              if row['factor_count'] <= 0:
+                  failures.append(f"{key}: empty production catalog")
+              if row['production_operator_coverage_pct'] != 100.0:
+                  failures.append(f"{key}: {row['missing_production_operators']}")
+          if failures:
+              raise SystemExit('\n'.join(failures))
           PY
 
-          python -m compileall -q factor_engine factor_cold_start
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add factor_engine/scripts/audit_all_factor_production.py factor_cold_start/production_admission.py factor_engine/cleaned_operators/price_volume/structure_patterns_extra_v2.py
+      - name: Commit certified implementation and artifacts
+        run: |
+          set -euo pipefail
+          git config user.name 'factorengine-certification-bot'
+          git config user.email 'factorengine-certification-bot@users.noreply.github.com'
+          git add -A
           if ! git diff --cached --quiet; then
-            git commit -m "Fix source-backed admission and runtime audit contracts"
+            git commit -m 'Certify FactorEngine production implementation and evidence'
             git push origin HEAD:agent/factorengine-production-completion-20260801
           fi
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: pip
-
-      - name: Install runtime
+      - name: Run complete FactorEngine test suite
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
-          python -m pip install -e ./dataaccess
-          python -m pip install pytest
-
-      - name: Verify functional fixes
-        run: |
-          python factor_engine/scripts/audit_all_factor_production.py --runtime-only
-          pytest -q factor_cold_start/tests/test_factorengine_parse.py::test_all_default_daily_formulas_are_production_admitted
-          pytest -q factor_engine/tests/operators/test_v2_macro_and_intraday_dsl.py
+          set -euo pipefail
+          pytest -q factor_engine/tests factor_cold_start/tests
