@@ -10,6 +10,14 @@ def _ops(node):
     return output
 
 
+def test_extended_surface_includes_daily_primitives_before_macro_expansion():
+    from api.operator_registry import build_dsl_allowlist
+
+    allow = build_dsl_allowlist(surface="extended")
+    for name in ("add", "subtract", "multiply", "divide", "ts_mean", "NATR"):
+        assert name in allow
+
+
 def test_composite_technical_names_lower_to_primitive_dag():
     from api.dsl_parser import parse_factor
     from ir.analyzer import Analyzer
