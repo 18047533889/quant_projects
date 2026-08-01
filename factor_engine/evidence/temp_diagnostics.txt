@@ -1290,7 +1290,7 @@ FAILED factor_engine/tests/operators/test_candle_patterns_extended.py::test_hara
 FAILED factor_engine/tests/operators/test_candle_patterns_extended.py::test_three_bar_patterns_have_two_bar_policy_lag - RuntimeError: field/operator name collisions are forbidden: ['average_volume']
 FAILED factor_engine/tests/operators/test_candle_patterns_extended.py::test_two_bar_patterns_have_one_bar_policy_lag - RuntimeError: field/operator name collisions are forbidden: ['average_volume']
 FAILED factor_engine/tests/operators/test_candle_patterns_extended.py::test_extended_patterns_are_numeric_panels - RuntimeError: field/operator name collisions are forbidden: ['average_volume']
-============================== 12 failed in 3.54s ==============================
+============================== 12 failed in 3.77s ==============================
 EXIT_CODE=1
 
 ===== v2 =====
@@ -1703,7 +1703,7 @@ E           RuntimeError: field/operator name collisions are forbidden: ['averag
 factor_engine/cleaned_operators/layer_governance.py:376: RuntimeError
 _____ test_pandas_production_status_does_not_fall_back_to_lifecycle_label ______
 
-monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f515474ea90>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fbb85179790>
 
     def test_pandas_production_status_does_not_fall_back_to_lifecycle_label(monkeypatch):
         """A production target without valid evidence must remain non-routable."""
@@ -2962,7 +2962,7 @@ FAILED factor_engine/tests/runtime/test_full_history_replay_contract_v2.py::test
 FAILED factor_engine/tests/runtime/test_full_history_replay_contract_v2.py::test_incremental_watermark_is_ignored_without_checkpoint_restore - RuntimeError: field/operator name collisions are forbidden: ['average_volume']
 FAILED factor_engine/tests/runtime/test_full_history_replay_contract_v2.py::test_production_full_history_requires_explicit_origin - RuntimeError: field/operator name collisions are forbidden: ['average_volume']
 FAILED factor_engine/tests/runtime/test_full_history_replay_contract_v2.py::test_production_full_history_loads_from_declared_origin - RuntimeError: field/operator name collisions are forbidden: ['average_volume']
-======================== 14 failed, 17 passed in 4.04s =========================
+======================== 14 failed, 17 passed in 4.19s =========================
 EXIT_CODE=1
 
 ===== runtime_audit =====
