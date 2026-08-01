@@ -21,7 +21,19 @@ def _register(name,params,fn,desc):
     cls=type(f"ChartExtra_{name}",(SeriesOperator,),{"metadata":meta,"_calculate_series":calc,"__module__":__name__})
     register_operator(name=name,category="chart_pattern",business_category="technical_structure",canonical=name,source="structure_patterns_extra_v2",backend="pandas_numpy",status="production")(cls)
 def _similar(values,tol):
-    stack=np.stack([v.to_numpy(float) for v in values]);mx=np.nanmax(stack,axis=0);mn=np.nanmin(stack,axis=0);mid=np.nanmean(np.abs(stack),axis=0);score=np.clip(1-(mx-mn)/np.where(mid>0,mid,np.nan)/tol,0,1);return pd.DataFrame(score,index=values[0].index,columns=values[0].columns)
+    stack=np.stack([v.to_numpy(float) for v in values])
+    valid=np.isfinite(stack)
+    count=valid.sum(axis=0)
+    mx=np.max(np.where(valid,stack,-np.inf),axis=0)
+    mn=np.min(np.where(valid,stack,np.inf),axis=0)
+    abs_sum=np.where(valid,np.abs(stack),0.0).sum(axis=0)
+    mid=np.divide(abs_sum,count,out=np.full(count.shape,np.nan,dtype=float),where=count>0)
+    complete=count==len(values)
+    denom=mid*float(tol)
+    ratio=np.full(count.shape,np.nan,dtype=float)
+    np.divide(mx-mn,denom,out=ratio,where=complete&(denom>0))
+    score=np.where(complete,np.clip(1-ratio,0,1),np.nan)
+    return pd.DataFrame(score,index=values[0].index,columns=values[0].columns)
 def pattern_triple_top(high,low,left_window,right_window,history_window,tolerance,min_depth,min_spacing,max_spacing):
     tol=_pf(tolerance,"tolerance",1e-12);hs=[ts_nth_pivot_high(high,left_window,right_window,history_window,n) for n in (1,2,3)];l=ts_nth_pivot_low(low,left_window,right_window,history_window,1);depth=((sum(hs)/3)/l.replace(0,np.nan)-1).ge(_pf(min_depth,"min_depth",0));spacing=ts_pivot_high_spacing(high,left_window,right_window,history_window);return _similar(hs,tol)*depth.astype(float)*spacing.between(_pi(min_spacing,"min_spacing"),_pi(max_spacing,"max_spacing")).astype(float)
 def pattern_triple_bottom(high,low,left_window,right_window,history_window,tolerance,min_depth,min_spacing,max_spacing):
