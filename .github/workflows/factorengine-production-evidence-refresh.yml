@@ -11,7 +11,8 @@ jobs:
   refresh:
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.head.ref == 'agent/factorengine-production-hardening'
+      (github.event.pull_request.head.ref == 'agent/factorengine-production-hardening' ||
+       github.event.pull_request.head.ref == 'agent/factorengine-production-completion-20260801')
     runs-on: ubuntu-24.04
     env:
       PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/gtja191
@@ -48,8 +49,6 @@ jobs:
           if ! python factor_engine/scripts/certify_primitive_evidence.py --check; then
             python factor_engine/scripts/certify_primitive_evidence.py
           fi
-          # Recipes may contain Extended leaves, therefore factor-operator
-          # evidence must exist before recipe evidence is allowed to bootstrap.
           if ! python factor_engine/scripts/certify_factor_operator_evidence.py --check; then
             python factor_engine/scripts/certify_factor_operator_evidence.py
           fi
@@ -80,14 +79,21 @@ jobs:
             factor_engine/tests/operators/test_fundamental_flow_semantics_v2.py \
             factor_engine/tests/operators/test_analyzer_semantic_warmup_v2.py \
             factor_engine/tests/operators/test_recipe_production_admission_v2.py \
-            factor_engine/tests/runtime/test_full_history_replay_contract_v2.py
-          test "$(python - <<'PY'
+            factor_engine/tests/runtime/test_full_history_replay_contract_v2.py \
+            factor_cold_start/tests
+          python - <<'PY'
           import json
           from pathlib import Path
-          p=json.loads(Path('factor_cold_start/reports/coverage.json').read_text())
-          print(min(v['eligible_operator_coverage_pct'] for k,v in p['catalogs'].items() if k.endswith('_extended')))
+          report=json.loads(Path('factor_cold_start/reports/coverage.json').read_text())
+          failures=[]
+          for key,row in report['catalogs'].items():
+              if row['readiness'] != 'production':
+                  continue
+              if row['production_operator_coverage_pct'] != 100.0:
+                  failures.append(f"{key}: {row['missing_production_operators']}")
+          if failures:
+              raise SystemExit('\n'.join(failures))
           PY
-          )" = "100.0"
       - name: Commit certified artifacts
         run: |
           if git diff --quiet; then
