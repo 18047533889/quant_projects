@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pandas as pd
+
 _INSTALLED = False
 
 _CONTRACT_ATTRIBUTES = (
@@ -25,17 +27,17 @@ _CONTRACT_ATTRIBUTES = (
 
 def _copy_direct_contracts(source: Any, target: Any) -> None:
     params = dict(getattr(source, "params", {}) or {})
-    if params and hasattr(target, "params"):
+    if params:
         try:
             target.params = params
         except Exception:
             pass
-    if hasattr(source, "read_auto") and hasattr(target, "read_auto"):
+    if hasattr(source, "read_auto"):
         try:
             target.read_auto = bool(source.read_auto)
         except Exception:
             pass
-    if hasattr(source, "lazy_scan") and hasattr(target, "_lazy_scan"):
+    if hasattr(source, "lazy_scan"):
         try:
             target._lazy_scan = bool(source.lazy_scan)
         except Exception:
@@ -58,6 +60,12 @@ def _copy_recursive_contracts(source: Any, target: Any) -> Any:
             if name in target_children:
                 _copy_recursive_contracts(child, target_children[name])
     return target
+
+
+def _normalise_bound(value: Any) -> str | None:
+    if value is None:
+        return None
+    return pd.Timestamp(value).isoformat()
 
 
 def install_source_window_contract() -> None:
@@ -89,7 +97,11 @@ def install_source_window_contract() -> None:
                     end_date=end_date,
                     bar_freq=bar_freq,
                 )
-                output = LQTPLogicalDataSource(narrowed_inner)
+                output = LQTPLogicalDataSource(
+                    narrowed_inner,
+                    factor_freq=getattr(source, "factor_freq", "1d"),
+                    factor_lake_root=getattr(source, "factor_lake_root", None),
+                )
                 _copy_direct_contracts(source, output)
                 execution_id = getattr(source, "_execution_id", None)
                 if execution_id:
@@ -104,7 +116,23 @@ def install_source_window_contract() -> None:
             end_date=end_date,
             bar_freq=bar_freq,
         )
-        return _copy_recursive_contracts(source, output)
+        _copy_recursive_contracts(source, output)
+
+        # Generic WindowedDataSource has no public bounds.  Add them so cache,
+        # lineage and subsequent warmup calculations see the narrowed scope.
+        if output.__class__.__name__ == "WindowedDataSource":
+            try:
+                output.start_date = _normalise_bound(start_date) or getattr(
+                    source, "start_date", None
+                )
+                output.end_date = _normalise_bound(end_date) or getattr(
+                    source, "end_date", None
+                )
+                if bar_freq is not None:
+                    output.bar_freq = str(bar_freq)
+            except Exception:
+                pass
+        return output
 
     narrow._contract_v2 = True
     narrow.__name__ = original.__name__
