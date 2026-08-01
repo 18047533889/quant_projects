@@ -1,4 +1,4 @@
-"""AutoFactorEvaluation provider for the FactorEngine cold-start catalog."""
+"""AutoFactorEvaluation providers for production and opt-in research catalogs."""
 from __future__ import annotations
 
 import hashlib
@@ -8,6 +8,7 @@ from typing import Any
 
 from evaluation.factor_pack import FactorDefinition, FactorPack
 from factor_cold_start.catalog import load_catalog
+from factor_cold_start.production_admission import admit_factor
 
 
 def _canonical(value: Any) -> str:
@@ -20,36 +21,58 @@ def _sha(value: str) -> str:
 
 def _load(market: str, surface: str) -> FactorPack:
     rows = load_catalog(market, surface)
-    factors = tuple(
-        FactorDefinition(
-            name=row.factor_id,
-            formula=row.formula,
-            source_formula=row.formula,
-            description=row.rationale,
-            metadata={
-                **dict(row.metadata),
-                "domain": "price_volume",
-                "market": row.market,
-                "family": row.family,
-                "subfamily": row.subfamily,
-                "horizon": row.horizon,
-                "complexity": row.complexity,
-                "availability_tier": row.availability_tier,
-                "required_fields": list(row.required_fields),
-                "operators": list(row.operators),
-                "dsl_surface": "daily" if surface == "daily" else "compat",
-                "owner": "factor_cold_start",
-            },
+    production_pack = surface == "daily"
+
+    factor_rows: list[FactorDefinition] = []
+    for row in rows:
+        admission = admit_factor(row) if production_pack else None
+        factor_rows.append(
+            FactorDefinition(
+                name=row.factor_id,
+                formula=row.formula,
+                source_formula=row.formula,
+                description=row.rationale,
+                metadata={
+                    **dict(row.metadata),
+                    "domain": "price_volume",
+                    "market": row.market,
+                    "family": row.family,
+                    "subfamily": row.subfamily,
+                    "horizon": row.horizon,
+                    "complexity": row.complexity,
+                    "availability_tier": row.availability_tier,
+                    "required_fields": list(row.required_fields),
+                    "operators": list(row.operators),
+                    "authoring_surface": row.surface,
+                    "dsl_surface": "compat",
+                    "output_frequency": "daily",
+                    "readiness": "production" if production_pack else "research",
+                    "production_admitted": bool(admission and admission.eligible),
+                    "certified_backends": (
+                        admission.backend_map if admission is not None else {}
+                    ),
+                    "owner": "factor_cold_start",
+                },
+            )
         )
-        for row in rows
-    )
+
+    factors = tuple(factor_rows)
     source_rows = [{"name": row.factor_id, "formula_hash": row.formula_hash} for row in rows]
     source_hash = _sha(_canonical(source_rows))
     name = f"factor_cold_start_{market}_{surface}"
-    pack_hash = _sha(_canonical({"name": name, "version": "1", "source_hash": source_hash, "factors": source_rows}))
+    pack_hash = _sha(
+        _canonical(
+            {
+                "name": name,
+                "version": "2",
+                "source_hash": source_hash,
+                "factors": source_rows,
+            }
+        )
+    )
     return FactorPack(
         name=name,
-        version="1",
+        version="2",
         source_hash=source_hash,
         pack_hash=pack_hash,
         factors=factors,
@@ -57,25 +80,32 @@ def _load(market: str, surface: str) -> FactorPack:
             "owner": "factor_cold_start",
             "market": market,
             "surface": surface,
-            "dsl_surface": "daily" if surface == "daily" else "compat",
+            "authoring_surface": "mixed" if production_pack else "extended",
+            "dsl_surface": "compat",
+            "output_frequency": "daily",
+            "readiness": "production" if production_pack else "research",
             "factor_count": len(factors),
         },
     )
 
 
 def load_ashare_daily_pack() -> FactorPack:
+    """Default A-share production-admitted daily-output pack."""
     return _load("ashare", "daily")
 
 
 def load_us_daily_pack() -> FactorPack:
+    """Default US production-admitted daily-output pack."""
     return _load("us", "daily")
 
 
 def load_ashare_extended_pack() -> FactorPack:
+    """Opt-in A-share research candidate archive."""
     return _load("ashare", "extended")
 
 
 def load_us_extended_pack() -> FactorPack:
+    """Opt-in US research candidate archive."""
     return _load("us", "extended")
 
 
