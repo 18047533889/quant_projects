@@ -1,17 +1,15 @@
-name: FactorEngine Final Certification Runner
+name: FactorEngine Final Certification Runner V3
 
 on:
   push:
-    branches:
-      - agent/factorengine-production-completion-20260801
-    paths:
-      - .github/workflows/factorengine-production-completion-bootstrap.yml
+    branches: [agent/factorengine-production-completion-20260801]
+    paths: [.github/workflows/factorengine-production-completion-bootstrap.yml]
 
 permissions:
   contents: write
 
 concurrency:
-  group: factorengine-final-certification
+  group: factorengine-final-certification-v3
   cancel-in-progress: false
 
 jobs:
@@ -29,12 +27,10 @@ jobs:
           fetch-depth: 0
           ref: agent/factorengine-production-completion-20260801
           token: ${{ secrets.GITHUB_TOKEN }}
-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: pip
-
       - name: Install complete runtime
         run: |
           set -euo pipefail
@@ -42,43 +38,15 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install -e ./dataaccess
           python -m pip install pytest pyyaml
-
-      - name: Apply final deterministic source fixes
-        shell: bash
+      - name: Remove all-NaN chart-pattern warnings
         run: |
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
-
-          admission = Path('factor_cold_start/production_admission.py')
-          text = admission.read_text(encoding='utf-8')
-          old = '''        try:
-            specification = decode_source_ref(function())
-        except Exception:
-            continue
-'''
-          new = '''        try:
-            value = function()
-            name = getattr(value, "name", None)
-            specification = decode_source_ref(name) if isinstance(name, str) else None
-        except Exception:
-            continue
-'''
-          if old in text:
-              text = text.replace(old, new, 1)
-          elif new not in text:
-              raise SystemExit('SourceRef function decoding anchor missing')
-          admission.write_text(text, encoding='utf-8')
-
-          patterns = Path(
-              'factor_engine/cleaned_operators/price_volume/'
-              'structure_patterns_extra_v2.py'
-          )
-          text = patterns.read_text(encoding='utf-8')
-          old = '''def _similar(values,tol):
-    stack=np.stack([v.to_numpy(float) for v in values]);mx=np.nanmax(stack,axis=0);mn=np.nanmin(stack,axis=0);mid=np.nanmean(np.abs(stack),axis=0);score=np.clip(1-(mx-mn)/np.where(mid>0,mid,np.nan)/tol,0,1);return pd.DataFrame(score,index=values[0].index,columns=values[0].columns)
-'''
-          new = '''def _similar(values,tol):
+          path=Path('factor_engine/cleaned_operators/price_volume/structure_patterns_extra_v2.py')
+          text=path.read_text(encoding='utf-8')
+          old='def _similar(values,tol):\n    stack=np.stack([v.to_numpy(float) for v in values]);mx=np.nanmax(stack,axis=0);mn=np.nanmin(stack,axis=0);mid=np.nanmean(np.abs(stack),axis=0);score=np.clip(1-(mx-mn)/np.where(mid>0,mid,np.nan)/tol,0,1);return pd.DataFrame(score,index=values[0].index,columns=values[0].columns)\n'
+          new='''def _similar(values,tol):
     stack=np.stack([v.to_numpy(float) for v in values])
     valid=np.isfinite(stack)
     count=valid.sum(axis=0)
@@ -94,33 +62,12 @@ jobs:
     return pd.DataFrame(score,index=values[0].index,columns=values[0].columns)
 '''
           if old in text:
-              text = text.replace(old, new, 1)
+              path.write_text(text.replace(old,new,1),encoding='utf-8')
           elif new not in text:
-              raise SystemExit('structure similarity anchor missing')
-          patterns.write_text(text, encoding='utf-8')
-
-          audit = Path('factor_engine/scripts/audit_all_factor_production.py')
-          text = audit.read_text(encoding='utf-8')
-          text = text.replace(
-              '''    "ts_regression_slope": {
-        "lag": 0,
-        "retval": "slope",
-        "min_periods": 20,
-        "add_intercept": True,
-    },
-''',
-              '''    "ts_regression_slope": {
-        "lag": 0,
-        "min_periods": 20,
-        "add_intercept": True,
-    },
-''',
-          )
-          audit.write_text(text, encoding='utf-8')
+              raise SystemExit('chart-pattern similarity anchor missing')
           PY
           python -m compileall -q factor_engine factor_cold_start
-
-      - name: Verify runtime before certification
+      - name: Verify implementation before certification
         run: |
           set -euo pipefail
           python factor_engine/scripts/audit_all_factor_production.py --runtime-only
@@ -131,8 +78,7 @@ jobs:
             factor_engine/tests/runtime/test_source_window_contract_v2.py \
             factor_engine/tests/runtime/test_incremental_history_contract_v2.py \
             factor_engine/tests/runtime/test_full_history_replay_contract_v2.py
-
-      - name: Rebuild implementation-bound evidence and governed artifacts
+      - name: Rebuild all implementation-bound evidence
         run: |
           set -euo pipefail
           python factor_engine/scripts/sync_primitive_evidence.py
@@ -147,19 +93,17 @@ jobs:
           python factor_engine/scripts/generate_backend_evidence_manifest.py
           python factor_engine/scripts/generate_lqtp_compatibility_manifest.py
           python factor_cold_start/scripts/report_coverage.py
-
-      - name: Persist certified source and artifacts
+      - name: Commit certified implementation and artifacts
         run: |
           set -euo pipefail
-          git config user.name 'factorengine-certification-bot'
-          git config user.email 'factorengine-certification-bot@users.noreply.github.com'
+          git config user.name factorengine-certification-bot
+          git config user.email factorengine-certification-bot@users.noreply.github.com
           git add -A
           if ! git diff --cached --quiet; then
             git commit -m 'Certify FactorEngine production implementation and evidence'
             git push origin HEAD:agent/factorengine-production-completion-20260801
           fi
-
-      - name: Validate generated evidence and production coverage
+      - name: Validate evidence and production coverage
         run: |
           set -euo pipefail
           python factor_engine/scripts/sync_primitive_evidence.py --check
@@ -173,19 +117,18 @@ jobs:
           import json
           from pathlib import Path
           report=json.loads(Path('factor_cold_start/reports/coverage.json').read_text())
-          failures=[]
+          errors=[]
           for key,row in report['catalogs'].items():
-              if row['readiness'] != 'production':
+              if row['readiness']!='production':
                   continue
-              if row['factor_count'] <= 0:
-                  failures.append(f"{key}: empty production catalog")
-              if row['production_operator_coverage_pct'] != 100.0:
-                  failures.append(f"{key}: {row['missing_production_operators']}")
-          if failures:
-              raise SystemExit('\n'.join(failures))
+              if row['factor_count']<=0:
+                  errors.append(f'{key}: empty production catalog')
+              if row['production_operator_coverage_pct']!=100.0:
+                  errors.append(f"{key}: {row['missing_production_operators']}")
+          if errors:
+              raise SystemExit('\n'.join(errors))
           PY
-
-      - name: Run complete FactorEngine and cold-start test suites
+      - name: Run complete FactorEngine and cold-start suites
         run: |
           set -euo pipefail
           pytest -q factor_engine/tests factor_cold_start/tests
