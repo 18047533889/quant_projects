@@ -100,6 +100,12 @@ def load_all() -> None:
             f"unloaded registry cannot initialize from {OperatorRegistry.lifecycle()!r}"
         )
 
+    # Capability modules build immutable module-level sets on first import.
+    # Install the base-blob-bound evidence loader before any registry module can
+    # snapshot primitive backend certification.
+    from backend.evidence_delta import install_evidence_delta
+    install_evidence_delta()
+
     from backend.production_signature_v2 import apply_production_signature_v2
     apply_production_signature_v2()
 
@@ -144,9 +150,9 @@ def load_all() -> None:
     from backend.sql_pushdown.fiscal_v2 import apply_fiscal_sql_v2
     apply_fiscal_sql_v2()
 
-    # Evidence validation must observe the final SQL emitter set, including the
-    # fiscal-v2 lowering installed above.  Running this earlier makes the
-    # implementation-bound emitter contract fail closed for the wrong reason.
+    # Evidence overlay now observes both the final implementation identity and
+    # all physical SQL registrations. The early loader install above prevents
+    # stale module-level capability snapshots.
     from cleaned_operators.production_certification_overlay import apply_evidence_certification_overlay
     apply_evidence_certification_overlay()
 
