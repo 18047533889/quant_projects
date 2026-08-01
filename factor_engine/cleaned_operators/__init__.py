@@ -133,9 +133,6 @@ def load_all() -> None:
     from cleaned_operators.production_hardening import apply_production_hardening
     apply_production_hardening()
 
-    from cleaned_operators.production_certification_overlay import apply_evidence_certification_overlay
-    apply_evidence_certification_overlay()
-
     from cleaned_operators.registration_audit import finalize_registration_audit
     finalize_registration_audit()
 
@@ -146,6 +143,12 @@ def load_all() -> None:
     # revision-aware semantics before evidence and final contracts are consumed.
     from backend.sql_pushdown.fiscal_v2 import apply_fiscal_sql_v2
     apply_fiscal_sql_v2()
+
+    # Evidence validation must observe the final SQL emitter set, including the
+    # fiscal-v2 lowering installed above.  Running this earlier makes the
+    # implementation-bound emitter contract fail closed for the wrong reason.
+    from cleaned_operators.production_certification_overlay import apply_evidence_certification_overlay
+    apply_evidence_certification_overlay()
 
     from cleaned_operators.contract_hardening import apply_final_contract_hardening
     apply_final_contract_hardening()
