@@ -1,55 +1,108 @@
 # -*- coding: utf-8 -*-
-"""Production hardening overlay for every factor-shaped operator.
+"""Production hardening overlay for factor-shaped operators.
 
-Anything that remains in the Factor DSL must have a causal/PIT contract,
-deterministic panel semantics and at least one certified execution backend.
-Diagnostics, hypothesis tests, matrix/frequency tools and other non-factor
-utilities belong in ``ResearchToolRegistry`` and are not handled here.
+A reviewed operator may be a production *target* before any physical backend is
+admitted.  This module attaches semantic/PIT contracts and candidate capability
+metadata.  Only ``production_certification_overlay`` may set
+``production_certified=True`` after validating immutable execution evidence.
 """
 from __future__ import annotations
 
 from typing import Any
 
 NON_FACTOR_PRODUCTION_CANONICALS: frozenset[str] = frozenset({
-    "Lead", "next", "bfill", "causal_bfill", "fillna_interpolate", "shuffle",
-    "dropna", "constant", "sample", "rand_exp", "rand_lognormal", "rand_normal",
-    "rand_poisson", "rand_uniform",
+    "Lead",
+    "next",
+    "bfill",
+    "causal_bfill",
+    "fillna_interpolate",
+    "shuffle",
+    "dropna",
+    "constant",
+    "sample",
+    "rand_exp",
+    "rand_lognormal",
+    "rand_normal",
+    "rand_poisson",
+    "rand_uniform",
 })
 
 FULL_HISTORY_REPLAY_CANONICALS: frozenset[str] = frozenset({
-    "expanding_rank", "trade_when", "hump_decay",
+    "expanding_rank",
+    "trade_when",
+    "hump_decay",
 })
 
+# These schemas document the minimum state needed by a future segmented runtime.
+# Presence here does not mean segmented execution is implemented or certified.
 STATEFUL_CHECKPOINTS: dict[str, tuple[str, ...]] = {
     "ts_sma_cn": ("last_value", "last_timestamp"),
     "trade_when": ("last_output", "last_timestamp"),
     "hump_decay": ("last_output", "last_timestamp"),
 }
 
+# Only operators that have real restore/resume implementations may enter this
+# set.  It is intentionally empty until segmented-parity evidence is available.
+SEGMENTED_EXECUTION_CANONICALS: frozenset[str] = frozenset()
+
 _SCOPE_OVERRIDES: dict[str, str] = {
-    "ADX": "ts", "ATR_WILDER": "ts", "MACD_hist": "ts", "MACD_line": "ts",
-    "MACD_signal": "ts", "RSI_WILDER": "ts", "coskewness_to_market": "ts",
-    "digital_count": "ts", "expanding_rank": "ts", "hump_decay": "ts",
-    "idio_skew": "ts", "idio_vol": "ts", "intraday_vwap_deviation": "session_intraday",
-    "lqtp_historical_cvar": "ts", "rank_corr": "ts", "residual_momentum_capm": "ts",
-    "rolling_beta_to_market": "ts", "tail_beta": "ts", "trade_when": "ts",
-    "ts_poly2_coeff": "ts", "ts_poly2_resid": "ts", "ts_sma_cn": "ts",
+    "ADX": "ts",
+    "ATR_WILDER": "ts",
+    "MACD_hist": "ts",
+    "MACD_line": "ts",
+    "MACD_signal": "ts",
+    "RSI_WILDER": "ts",
+    "coskewness_to_market": "ts",
+    "digital_count": "ts",
+    "expanding_rank": "ts",
+    "hump_decay": "ts",
+    "idio_skew": "ts",
+    "idio_vol": "ts",
+    "intraday_vwap_deviation": "session_intraday",
+    "lqtp_historical_cvar": "ts",
+    "rank_corr": "ts",
+    "residual_momentum_capm": "ts",
+    "rolling_beta_to_market": "ts",
+    "tail_beta": "ts",
+    "trade_when": "ts",
+    "ts_poly2_coeff": "ts",
+    "ts_poly2_resid": "ts",
+    "ts_sma_cn": "ts",
     "ts_sum_decay": "ts",
-    "candle_gap": "ts", "candle_gap_pct": "ts", "candle_range_atr": "ts",
-    "cdl_engulfing": "ts", "cdl_inside_bar": "ts", "cdl_outside_bar": "ts",
+    "candle_gap": "ts",
+    "candle_gap_pct": "ts",
+    "candle_range_atr": "ts",
+    "cdl_engulfing": "ts",
+    "cdl_inside_bar": "ts",
+    "cdl_outside_bar": "ts",
 }
 
 _FUNDAMENTAL_PERIOD_CANONICALS: frozenset[str] = frozenset({
-    "fundamental_staleness", "revision_delta", "quarter_from_cumulative",
-    "ttm_from_cumulative", "ttm_from_quarterly", "yoy_by_period",
+    "fundamental_staleness",
+    "revision_delta",
+    "quarter_from_cumulative",
+    "ttm_from_cumulative",
+    "ttm_from_quarterly",
+    "yoy_by_period",
 })
 
 _MIN_PERIODS_OVERRIDES: dict[str, int] = {
-    "ts_regression_intercept": 3, "ts_regression_r2": 3, "ts_regression_resid": 3,
-    "ts_regression_slope": 3, "ts_regression_tstat": 3, "ts_trend_tstat": 3,
-    "ts_partial_corr": 3, "ts_poly2_coeff": 3, "ts_poly2_resid": 3,
-    "rolling_beta_to_market": 2, "tail_beta": 3, "idio_vol": 5, "idio_skew": 5,
-    "residual_momentum_capm": 5, "coskewness_to_market": 5, "ts_sma_cn": 1,
+    "ts_regression_intercept": 3,
+    "ts_regression_r2": 3,
+    "ts_regression_resid": 3,
+    "ts_regression_slope": 3,
+    "ts_regression_tstat": 3,
+    "ts_trend_tstat": 3,
+    "ts_partial_corr": 3,
+    "ts_poly2_coeff": 3,
+    "ts_poly2_resid": 3,
+    "rolling_beta_to_market": 2,
+    "tail_beta": 3,
+    "idio_vol": 5,
+    "idio_skew": 5,
+    "residual_momentum_capm": 5,
+    "coskewness_to_market": 5,
+    "ts_sma_cn": 1,
 }
 
 
@@ -66,10 +119,19 @@ def _infer_scope(canonical: str, catalog: dict[str, Any]) -> str:
         return "fundamental_period"
     category = str(catalog.get("category") or "").lower()
     if category in {
-        "time_series", "technical_signal", "price_volume", "price_volume_extension",
-        "ohlc_volatility", "candle_pattern", "signal",
+        "time_series",
+        "technical_signal",
+        "price_volume",
+        "price_volume_extension",
+        "ohlc_volatility",
+        "candle_pattern",
+        "price_structure",
+        "chart_pattern",
+        "signal",
     }:
         return "ts"
+    if category in {"fundamental_period", "fundamental_expectation"}:
+        return "fundamental_period"
     if category in {"cross_sectional", "group_neutralization"}:
         return "cs"
     if category == "intraday_microstructure":
@@ -80,13 +142,14 @@ def _infer_scope(canonical: str, catalog: dict[str, Any]) -> str:
 def _bars_from_tags(catalog: dict[str, Any]) -> int | None:
     for tag in catalog.get("tags") or ():
         text = str(tag).strip().lower()
-        if text.startswith("bars_"):
-            try:
-                bars = int(text.split("_", 1)[1])
-            except (TypeError, ValueError):
-                continue
-            if bars > 0:
-                return bars
+        if not text.startswith("bars_"):
+            continue
+        try:
+            bars = int(text.split("_", 1)[1])
+        except (TypeError, ValueError):
+            continue
+        if bars > 0:
+            return bars
     return None
 
 
@@ -97,7 +160,6 @@ def _policy_patch(canonical: str, catalog: dict[str, Any]) -> dict[str, Any]:
         patch["min_periods"] = _MIN_PERIODS_OVERRIDES.get(canonical, 1)
     bars = _bars_from_tags(catalog)
     if bars is not None and bars > 1:
-        # A bars_N pattern at t uses t-(N-1)..t, so it requires N-1 warmup rows.
         patch["lag"] = max(int(patch.get("lag", 0) or 0), bars - 1)
     if canonical in FULL_HISTORY_REPLAY_CANONICALS:
         patch["lookback_window"] = None
@@ -110,19 +172,21 @@ def _policy_patch(canonical: str, catalog: dict[str, Any]) -> dict[str, Any]:
 def _scope_is_authoritative(canonical: str) -> bool:
     return (
         canonical in _SCOPE_OVERRIDES
-        or canonical.startswith(("ts_", "cs_", "group_", "period_"))
+        or canonical.startswith(("ts_", "cs_", "group_", "period_", "fin_"))
         or canonical in _FUNDAMENTAL_PERIOD_CANONICALS
     )
 
 
 def factor_production_targets() -> frozenset[str]:
     from cleaned_operators.operator_surface import (
-        DAILY_CANONICALS, EXTENDED_ONLY_CANONICALS, RESEARCH_ONLY_CANONICALS,
+        DAILY_CANONICALS,
+        EXTENDED_ONLY_CANONICALS,
+        RESEARCH_ONLY_CANONICALS,
     )
     from cleaned_operators.registry import OperatorRegistry
 
     requested = DAILY_CANONICALS | EXTENDED_ONLY_CANONICALS | RESEARCH_ONLY_CANONICALS
-    active = {c for c in requested if OperatorRegistry.backends_for(c)}
+    active = {canonical for canonical in requested if OperatorRegistry.backends_for(canonical)}
     return frozenset(active.difference(NON_FACTOR_PRODUCTION_CANONICALS))
 
 
@@ -130,7 +194,9 @@ def _remove_promoted_legacy_denials(targets: frozenset[str]) -> None:
     import cleaned_operators.operator_spec as spec_mod
 
     spec_mod.PRODUCTION_DENIED_CANONICALS = frozenset(
-        c for c in spec_mod.PRODUCTION_DENIED_CANONICALS if c not in targets
+        canonical
+        for canonical in spec_mod.PRODUCTION_DENIED_CANONICALS
+        if canonical not in targets
     )
     overlap = targets & spec_mod.PERMANENTLY_FORBIDDEN_CANONICALS
     if overlap:
@@ -141,23 +207,22 @@ def _remove_promoted_legacy_denials(targets: frozenset[str]) -> None:
 
 
 def _sync_final_runtime_contract(canonical: str, catalog: dict[str, Any]) -> None:
-    """Make the final selected implementation the public parameter authority."""
     from cleaned_operators.registry import OperatorRegistry
 
-    op = OperatorRegistry.get(canonical, "pandas_numpy") or OperatorRegistry.get(canonical)
-    if op is None:
+    operator = OperatorRegistry.get(canonical, "pandas_numpy") or OperatorRegistry.get(canonical)
+    if operator is None:
         return
-    meta = getattr(op, "metadata", None)
-    params = list(getattr(meta, "param_names", ()) or ())
+    metadata = getattr(operator, "metadata", None)
+    params = list(getattr(metadata, "param_names", ()) or ())
     if params:
         catalog["param_names"] = params
-    description = str(getattr(meta, "description", "") or "").strip()
+    description = str(getattr(metadata, "description", "") or "").strip()
     if description:
         catalog["description"] = description
-    category = str(getattr(meta, "category", "") or "").strip()
+    category = str(getattr(metadata, "category", "") or "").strip()
     if category:
         catalog["category"] = category
-    tags = [str(tag) for tag in (getattr(meta, "tags", None) or ())]
+    tags = [str(tag) for tag in (getattr(metadata, "tags", None) or ())]
     if tags:
         catalog["tags"] = tags
 
@@ -180,7 +245,13 @@ def apply_production_hardening() -> None:
             if "min_periods" in patch:
                 merged_policy["min_periods"] = patch["min_periods"]
         if str(catalog.get("category") or "").lower() in {
-            "price_volume_extension", "ohlc_volatility", "candle_pattern",
+            "price_volume_extension",
+            "ohlc_volatility",
+            "candle_pattern",
+            "price_structure",
+            "chart_pattern",
+            "fundamental_period",
+            "fundamental_expectation",
         }:
             merged_policy["scope"] = patch["scope"]
             merged_policy["min_periods"] = patch.get("min_periods", 1)
@@ -194,13 +265,17 @@ def apply_production_hardening() -> None:
         catalog["pit_safe"] = True
         catalog["production_backend_policy"] = "at_least_one_certified_backend"
         catalog["production_portability_required"] = False
-        catalog["production_hardening"] = "factor_operator_v1"
+        catalog["production_hardening"] = "factor_operator_v2"
 
         backends = set(OperatorRegistry.backends_for(canonical))
         if "pandas_numpy" in backends:
-            backend_meta = catalog.setdefault("backend_meta", {}).setdefault("pandas_numpy", {})
-            backend_meta["production_certified"] = True
-            backend_meta["certification_tier"] = "pandas_reference"
+            backend_meta = catalog.setdefault("backend_meta", {}).setdefault(
+                "pandas_numpy", {}
+            )
+            # Candidate only.  Evidence overlay is the sole promotion authority.
+            backend_meta["production_certified"] = False
+            backend_meta["certification_tier"] = "candidate"
+            backend_meta["certification_source"] = None
             backend_meta["reference_backend"] = True
             backend_meta.setdefault("execution_kind", "pandas_numpy_reference")
             backend_meta.setdefault("supports_nulls", True)
@@ -208,47 +283,61 @@ def apply_production_hardening() -> None:
             backend_meta.setdefault("supports_inf", True)
             backend_meta.setdefault("supports_scalar_broadcast", True)
             backend_meta.setdefault("supports_min_periods", True)
-            backend_meta.setdefault("supports_group", merged_policy.get("scope") in {"cs", "group"})
+            backend_meta.setdefault(
+                "supports_group", merged_policy.get("scope") in {"cs", "group"}
+            )
             backend_meta.setdefault("supports_window", merged_policy.get("scope") == "ts")
             backend_meta.setdefault("supports_lazy", False)
-            backend_meta.setdefault("supports_streaming", canonical in STATEFUL_CHECKPOINTS)
+            backend_meta["supports_streaming"] = (
+                canonical in SEGMENTED_EXECUTION_CANONICALS
+            )
             backend_meta.setdefault("materializes_full_panel", True)
 
         if canonical in FULL_HISTORY_REPLAY_CANONICALS:
             catalog["full_history_replay_required"] = True
-            catalog["incremental_strategy"] = "checkpoint_or_full_replay"
+            catalog["incremental_strategy"] = "full_replay"
 
         fields = STATEFUL_CHECKPOINTS.get(canonical)
         if fields:
+            segmented = canonical in SEGMENTED_EXECUTION_CANONICALS
             catalog["stateful"] = True
             catalog["checkpoint_contract"] = {
                 "canonical": canonical,
                 "checkpoint_fields": list(fields),
                 "checkpoint_required_for_segmented": True,
-                "segmented_execution_supported": False,
+                "segmented_execution_supported": segmented,
                 "state_schema_version": f"{canonical}.state.v1",
                 "semantic_version": str(catalog.get("semantic_version") or "1.0"),
             }
+            if not segmented:
+                catalog["incremental_strategy"] = "full_replay"
+                catalog["full_history_replay_required"] = True
 
 
 def check_factor_production_hardening() -> list[str]:
+    from backend.operator_capability import production_eligible_backends
     from cleaned_operators.operator_policy import infer_operator_policy
     from cleaned_operators.registry import OperatorRegistry
-    from backend.operator_capability import production_eligible_backends
 
     errors: list[str] = []
     for canonical in sorted(factor_production_targets()):
-        op = OperatorRegistry.get(canonical, "pandas_numpy") or OperatorRegistry.get(canonical)
-        if op is None:
+        operator = OperatorRegistry.get(canonical, "pandas_numpy") or OperatorRegistry.get(
+            canonical
+        )
+        if operator is None:
             errors.append(f"{canonical}: no runtime")
             continue
         catalog = OperatorRegistry._catalog.get(canonical, {})
-        final_params = list(getattr(getattr(op, "metadata", None), "param_names", ()) or ())
+        final_params = list(
+            getattr(getattr(operator, "metadata", None), "param_names", ()) or ()
+        )
         if final_params and list(catalog.get("param_names") or []) != final_params:
-            errors.append(f"{canonical}: catalog parameter contract does not match final runtime")
+            errors.append(
+                f"{canonical}: catalog parameter contract does not match final runtime"
+            )
         if str(catalog.get("status")) != "production":
             errors.append(f"{canonical}: status is not production")
-        policy = infer_operator_policy(op, canonical=canonical)
+        policy = infer_operator_policy(operator, canonical=canonical)
         if not policy.pit_safe:
             errors.append(f"{canonical}: pit_safe=False after hardening")
         if not policy.shape_preserving:
@@ -256,9 +345,14 @@ def check_factor_production_hardening() -> list[str]:
         if "pandas_numpy" not in OperatorRegistry.backends_for(canonical):
             errors.append(f"{canonical}: no Pandas/Numpy semantic-reference backend")
             continue
-        meta = (catalog.get("backend_meta") or {}).get("pandas_numpy") or {}
-        if not meta.get("production_certified"):
-            errors.append(f"{canonical}: pandas reference is not production certified")
         if not production_eligible_backends(canonical):
-            errors.append(f"{canonical}: no production-eligible physical backend")
+            errors.append(f"{canonical}: no evidence-backed production backend")
+        checkpoint = catalog.get("checkpoint_contract") or {}
+        pandas_meta = ((catalog.get("backend_meta") or {}).get("pandas_numpy") or {})
+        if checkpoint.get("segmented_execution_supported") is False and pandas_meta.get(
+            "supports_streaming"
+        ):
+            errors.append(
+                f"{canonical}: streaming advertised without segmented execution support"
+            )
     return errors
