@@ -3,16 +3,24 @@ name: FactorEngine Production Evidence Refresh
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - agent/factorengine-production-completion-20260801
 
 permissions:
   contents: write
 
+concurrency:
+  group: factorengine-production-evidence-refresh-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   refresh:
     if: >-
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      (github.event.pull_request.head.ref == 'agent/factorengine-production-hardening' ||
-       github.event.pull_request.head.ref == 'agent/factorengine-production-completion-20260801')
+      github.event_name == 'push' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+       (github.event.pull_request.head.ref == 'agent/factorengine-production-hardening' ||
+        github.event.pull_request.head.ref == 'agent/factorengine-production-completion-20260801'))
     runs-on: ubuntu-24.04
     env:
       PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/gtja191
@@ -20,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.ref }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
           fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
@@ -135,6 +143,8 @@ jobs:
           for key,row in report['catalogs'].items():
               if row['readiness'] != 'production':
                   continue
+              if row['factor_count'] <= 0:
+                  failures.append(f"{key}: empty production catalog")
               if row['production_operator_coverage_pct'] != 100.0:
                   failures.append(f"{key}: {row['missing_production_operators']}")
           if failures:
@@ -150,4 +160,4 @@ jobs:
           git config user.email 'factorengine-evidence-bot@users.noreply.github.com'
           git add -A
           git commit -m 'Refresh production contracts and cold-start evidence'
-          git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          git push origin HEAD:${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
