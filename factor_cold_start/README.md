@@ -1,92 +1,60 @@
 # FactorEngine 原生冷启动因子库
 
-本目录面向因子挖掘、遗传搜索、LLM/Agent迭代和AutoFactorEvaluation。它与`gtja191/`、`week2_pv_factors/`并列，不修改历史公式包。
+本目录是面向因子挖掘、遗传搜索、LLM/Agent 迭代和 AutoFactorEvaluation 的**冷启动母库**。它与 `gtja191/`、`week2_pv_factors/`并列，不修改历史公式包，也不把候选因子塞进评估框架内部。
 
-## 核心口径
+## 当前规模
 
-`daily`现在表示：**由当前FactorEngine生产合同动态准入的日频输出因子库**。
+| 市场 | 层级 | 解析 surface | 数量 | 说明 |
+|---|---|---|---:|---|
+| A股 | daily | `daily` | 819 | 仅使用production-safe daily算子 |
+| 美股 | daily | `daily` | 1007 | 增加隔夜/日内、短售、盘口和美股派生字段 |
+| A股 | extended | `compat` | 1359 | 技术指标、尾部统计、条件滚动、回归和高级截面 |
+| 美股 | extended | `compat` | 1435 | A股extended能力 + 美股隔夜/日内扩展 |
 
-它不再表示“公式只调用旧`DAILY_CANONICALS`”。一个原来归入Extended的技术指标、财务变换、分钟转日频因子或状态算子，只要满足当前生产合同，也可以进入`daily`；反过来，旧daily公式只要证据失效、参数超出认证域或生产路由不可用，就会被自动移出默认目录。
+合计 **4620** 条。公式与GTJA191/GTJA185及Week2包做AST结构哈希去重，而不是只按字符串空格去重。
 
-生产准入要求包括：
+## 设计原则
 
-- 公式完整表达式能够由当前DSL构建；
-- 全部算子调用通过`production`策略检查；
-- 参数取值落在已认证参数域内；
-- PIT、披露时间、SourceRef、交易时段、lookback和warmup合同可满足；
-- stateful/full-history算子具备对应replay或checkpoint合同；
-- 每个物理执行节点至少有一个当前证据支持的生产后端；
-- 宏和FactorRecipe已经展开，并且其叶子算子均通过生产门禁；
-- 运行时不得发生未计划、未认证的后端fallback；
-- 不含负lag、lead、backfill、shuffle等未来或非确定性路径。
+- **市场隔离**：A股使用`factor`，美股使用`adj_factor`和`ret__intra`、`ret__overnight`等双下划线canonical字段。
+- **surface隔离**：daily目录只能调用`DAILY_CANONICALS`；extended目录使用`compat`承载daily+extended组合，禁止research-only算子混入。
+- **字段分层**：`core`、`derived`、`enriched`、`microstructure`，下游可按实际数据列过滤。
+- **因果约束**：禁止负lag、lead、backfill等未来信息路径。
+- **可复现抽样**：按family、期限桶和复杂度分层轮询，不是简单随机抽取。
+- **不强行滥用算子**：报告期基本面算子、复数相位和奇异/爆炸三角函数有明确排除理由。
 
-FactorEngine当前并不要求所有生产算子都同时具备Pandas、Polars和DuckDB三套实现。生产条件是：语义通过审核，并且至少存在一个独立认证的物理后端；路由只能使用已经认证的后端。三引擎同时认证属于更强的可移植性能力，不是所有算子的统一准入前提。
+## 推荐使用边界
 
-## 目录含义
+- 模型、遗传搜索和LLM第一轮冷启动默认从`daily`目录抽样；该层只使用FactorEngine审核后的production-safe daily算子。
+- `extended`目录用于研究扩展、二阶段变异和候选增强，不代表其中每条因子可以绕过评估直接进入生产。
+- 抽样时必须传入真实`available_fields`；字段不足的因子会被过滤，而不是运行时临时补造数据。
+- A股和美股目录不得混合抽样。跨市场迁移应重新生成市场对应公式，并重新执行PIT、覆盖率和后端一致性验收。
 
-| API目录 | 实际含义 | 默认使用 |
-|---|---|---|
-| `load_catalog(market, "daily")` | 当前证据和生产合同下可投递的日频输出因子 | 是 |
-| `load_catalog(market, "extended")` | 未按生产准入过滤的研究候选档案 | 否 |
-| `load_candidate_catalog(market, "daily")` | 历史daily authoring候选 | 否 |
-| `load_candidate_catalog(market, "extended")` | 历史extended authoring候选和扩展种子 | 否 |
+## 目录
 
-因此，`extended`不再参与“生产覆盖率”统计，也不会被默认AutoFactor provider加载。它只用于研究、补算子、定位生产门禁缺口和后续认证。
-
-## 数据频率与生产状态分离
-
-以下属于数据来源或输出频率，不是可用性等级：
-
-- `daily`：日线输入、日频输出；
-- `minute_to_daily`：分钟数据聚合为日频因子；
-- `fundamental`：PIT财务报表和披露时间数据；
-- `analyst`：分析师预期、修订和分歧数据；
-- `benchmark`：指数或市场基准数据；
-- `microstructure`：Trade/Quote/L2数据。
-
-只要来源合同齐全并通过生产门禁，这些因子都可以进入默认日频输出目录。字段或SourceRef不足时，因子会在准入或抽样阶段被排除，而不是运行时临时伪造数据。
-
-## 市场隔离
-
-- A股使用A股字段、复权和交易日合同；
-- 美股使用美股字段、复权、隔夜/日内和交易时段合同；
-- 两个市场分别生成和准入；
-- 美股没有可靠自由流通股本来源时，不准入`real_turnover_rate`；
-- Quote/Trade/L2专属指标不能从分钟OHLCV近似冒充。
+```text
+factor_cold_start/
+├── catalogs/                      # build_catalog.py可生成的JSON交付目录
+├── reports/coverage.json          # 机器可读覆盖报告
+├── reports/coverage.md            # 人类可读覆盖报告
+├── autofactor/provider.py         # AutoFactorEvaluation FactorPack provider
+├── generator.py                   # 确定性公式生成器
+├── catalog.py                     # 目录加载与字段过滤
+├── sampler.py                     # 多样性分层抽样
+├── scripts/build_catalog.py       # 重建目录和报告
+├── scripts/validate_catalog.py    # 全量fail-closed校验
+├── scripts/sample_batch.py        # CLI抽样
+└── tests/
+```
 
 ## 使用
 
-### 默认生产冷启动目录
+### 加载目录（默认由生成器确定性构建并缓存）
 
 ```python
 from factor_cold_start import load_catalog
 
-ashare_production = load_catalog("ashare", "daily")
-us_production = load_catalog("us", "daily")
-```
-
-返回数量不是固定常数。它会随当前FactorEngine实现、参数合同和认证证据变化。准确数量以`reports/coverage.json`为准。
-
-### 查看研究候选档案
-
-```python
-from factor_cold_start import load_candidate_catalog
-
-ashare_extended_candidates = load_candidate_catalog("ashare", "extended")
-```
-
-候选档案中的公式能被解析，不代表能够生产执行。
-
-### 单公式生产准入检查
-
-```python
-from factor_cold_start import admit_formula
-
-result = admit_formula("ts_mean(ret, 20)")
-print(result.eligible)
-print(result.canonical_operators)
-print(result.backend_map)
-print(result.violations)
+ashare_daily = load_catalog("ashare", "daily")
+us_extended = load_catalog("us", "extended")
 ```
 
 ### 按真实字段抽样
@@ -109,17 +77,17 @@ batch = sample_factors(
 )
 ```
 
+### CLI
+
+```bash
+python factor_cold_start/scripts/sample_batch.py \
+  --market ashare --surface daily --size 64 --seed round-1
+
+python factor_cold_start/scripts/validate_catalog.py --all
+python factor_cold_start/scripts/build_catalog.py
+```
+
 ### AutoFactorEvaluation
-
-默认生产provider：
-
-- `load_ashare_daily_pack`
-- `load_us_daily_pack`
-
-显式研究provider：
-
-- `load_ashare_extended_pack`
-- `load_us_extended_pack`
 
 ```bash
 PYTHONPATH=.:factor_engine:AutoFactorEvaluation-RECONSTRUCT \
@@ -129,17 +97,16 @@ python -m evaluation.batch \
   --synthetic
 ```
 
-## 校验
+可用provider：
 
-```bash
-python factor_cold_start/scripts/validate_catalog.py --all
-python factor_cold_start/scripts/report_coverage.py
-pytest -q factor_cold_start/tests
-```
+- `load_ashare_daily_pack`
+- `load_us_daily_pack`
+- `load_ashare_extended_pack`
+- `load_us_extended_pack`
+- `load_pack`：读取`FACTOR_COLD_START_MARKET`和`FACTOR_COLD_START_SURFACE`
 
-永久CI会先校验FactorEngine的primitive、factor-operator和recipe evidence，再逐条检查默认`daily`目录的生产准入。生产覆盖率只针对当前真实可生产的公开canonical，不再针对旧daily/extended parser名单。
+## 因子族
 
-完整统计和被拒绝原因见：
+覆盖收益动量、反转、趋势位置与质量、波动与区间、成交量/成交额、流动性冲击、价量相关与beta、K线/VWAP、条件regime、稳健非线性、市场宽度、调整事件、换手与规模、分组相对值、Wilder技术指标、MACD、尾部/Top-K/Bottom-K、条件均值与streak、衰减、滚动回归、偏相关、高级加权截面，以及美股隔夜—日内、短售和盘口微观结构。
 
-- `reports/coverage.json`
-- `reports/coverage.md`
+完整统计见[`reports/coverage.md`](reports/coverage.md)。
