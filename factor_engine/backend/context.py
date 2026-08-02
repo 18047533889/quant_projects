@@ -6,6 +6,7 @@ from uuid import uuid4
 from storage.cache import CacheManager
 from storage.datasource import DataSource
 
+
 @dataclass
 class ExecutionContext:
     data_source: DataSource
@@ -31,17 +32,35 @@ class ExecutionContext:
     prefer_polars_panel: bool = False
 
     def __post_init__(self) -> None:
-        if not self.execution_id: self.execution_id = uuid4().hex
+        if not self.execution_id:
+            self.execution_id = uuid4().hex
         self.run_mode = str(self.run_mode).lower()
-        if self.production_fallback_policy not in {"error","warn"}: raise ValueError("production_fallback_policy must be 'error' or 'warn'")
+        if self.production_fallback_policy not in {"error", "warn"}:
+            raise ValueError("production_fallback_policy must be 'error' or 'warn'")
         try:
             from storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
-            if not isinstance(self.data_source,LQTPLogicalDataSource):
-                inner=self.data_source; wrapper=getattr(inner,"_factor_engine_lqtp_wrapper",None)
-                if not isinstance(wrapper,LQTPLogicalDataSource):
-                    wrapper=LQTPLogicalDataSource(inner)
-                    try: setattr(inner,"_factor_engine_lqtp_wrapper",wrapper)
-                    except Exception: pass
-                self.data_source=wrapper
+
+            if not isinstance(self.data_source, LQTPLogicalDataSource):
+                inner = self.data_source
+                # A new wrapper is created for every execution so SourceRef,
+                # financial, benchmark and intraday memoisation cannot cross run
+                # or snapshot boundaries.
+                wrapper = LQTPLogicalDataSource(inner)
+                setattr(wrapper, "_execution_id", self.execution_id)
+                try:
+                    setattr(inner, "_factor_engine_lqtp_wrapper", wrapper)
+                except Exception:
+                    pass
+                self.data_source = wrapper
+            else:
+                # Explicitly supplied wrappers are still bound to this context;
+                # execution-local caches from a previous context are cleared.
+                wrapper = self.data_source
+                previous = str(getattr(wrapper, "_execution_id", ""))
+                if previous and previous != self.execution_id:
+                    for name in tuple(vars(wrapper)):
+                        if name.startswith("_intraday_") and name.endswith("_cache"):
+                            delattr(wrapper, name)
+                setattr(wrapper, "_execution_id", self.execution_id)
         except ImportError:
             pass

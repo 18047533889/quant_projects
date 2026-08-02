@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Single authority for operator backend selection."""
+"""Single authority for evidence-constrained operator backend selection."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -20,8 +20,30 @@ class BackendSelection:
     fell_back: bool = False
 
 
+def _assert_semantic_production_evidence(canonical: str, run_mode: str) -> None:
+    """Extended factor operators require the all-factor semantic audit artifact."""
+    if str(run_mode or "research").lower() != "production":
+        return
+    from cleaned_operators.operator_surface import DAILY_CANONICALS
+
+    if canonical in DAILY_CANONICALS:
+        # Daily primitives are governed by primitive backend evidence.
+        return
+    from backend.factor_operator_evidence import (
+        factor_operator_evidence_valid,
+        pandas_reference_production_safe,
+        validation_errors,
+    )
+    if not factor_operator_evidence_valid() or not pandas_reference_production_safe(canonical):
+        detail = "; ".join(validation_errors()[:3])
+        raise RuntimeError(
+            f"{canonical!r} is not production-safe: not semantically certified "
+            f"by factor_operator_verified.json{': ' + detail if detail else ''}"
+        )
+
+
 class BackendRouter:
-    """Select a backend; Registry remains a storage/index service only."""
+    """Select only eligible backends; Registry remains a storage/index service."""
 
     @staticmethod
     def select(
@@ -41,6 +63,11 @@ class BackendRouter:
         )
 
         name = resolve_canonical(canonical)
+        try:
+            _assert_semantic_production_evidence(name, run_mode)
+        except RuntimeError as exc:
+            raise UnsupportedOperatorBackendError(str(exc)) from exc
+
         requested = str(requested_backend or "auto").lower()
         if requested == "duckdb_sql":
             requested = "sql"
@@ -62,8 +89,12 @@ class BackendRouter:
                 prefer=requested,
                 allow_unverified_backend=allow_unverified_backend,
             )
-        except UnsupportedOperatorBackendError:
+        except UnsupportedOperatorBackendError as exc:
             if requested == "auto" or fallback_policy != "allow":
+                if str(run_mode).lower() == "production" and requested != "auto":
+                    raise UnsupportedOperatorBackendError(
+                        f"{name!r} backend={requested!r} is not production-safe: {exc}"
+                    ) from exc
                 raise
             operator, backend = get_best_backend(
                 name,

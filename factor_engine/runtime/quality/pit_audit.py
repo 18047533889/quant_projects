@@ -1,6 +1,5 @@
-# -*- coding: utf-8
-"""Point-in-Time 安全审计：compile 后检查 IR 是否含未来函数 / 非因果算子。"""
-
+# -*- coding: utf-8 -*-
+"""Point-in-Time safety audit for operator IR and logical SourceRef dependencies."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -10,29 +9,21 @@ from ir.nodes import IRNode
 
 
 class PitSafetyError(RuntimeError):
-    """PIT 门禁未通过。"""
-
     def __init__(self, violations: list[str]):
         self.violations = violations
-        super().__init__(
-            "PIT 安全审计失败，含非因果算子: " + ", ".join(sorted(set(violations)))
-        )
+        super().__init__("PIT 安全审计失败: " + ", ".join(sorted(set(violations))))
 
 
 @dataclass
 class PitAuditReport:
-    """PIT 安全审计报告。"""
-
     violations: list[str] = field(default_factory=list)
     checked_ops: list[str] = field(default_factory=list)
 
     @property
     def passed(self) -> bool:
-        """是否无违规算子。"""
         return not self.violations
 
     def to_dict(self) -> dict[str, Any]:
-        """序列化为 JSON 友好字典。"""
         return {
             "passed": self.passed,
             "violations": list(self.violations),
@@ -41,20 +32,28 @@ class PitAuditReport:
 
 
 _FORWARD_FILL_OPS = frozenset({
-    "ffill",
-    "fillna_ffill",
-    "forward_fill",
-    "fill_forward",
-    "bfill",
-    "fillna_backfill",
-    "backfill",
+    "ffill", "fillna_ffill", "forward_fill", "fill_forward",
+    "bfill", "fillna_backfill", "backfill",
 })
-
-_POSITIVE_LAG_PARAMS: dict[str, tuple[str, int]] = {
+_POSITIVE_LAG_PARAMS = {
     "ts_delay": ("n", 1),
     "ts_delta": ("n", 1),
     "ts_pct": ("d", 1),
 }
+_FINANCIAL_TABLES = frozenset({"StockIncome", "StockCashFlow", "StockBalance"})
+_EXACT_DAILY_TABLES = frozenset({
+    "DailyBar", "StockDailyBar", "BenchmarkIndexDailyBar", "SizeDaily", "EtfDailyBar",
+})
+_ASOF_DAILY_TABLES = frozenset({"IndustryDaily"})
+_MINUTE_TABLES = frozenset({"StockMinuteBar", "MinuteBar"})
+_PROFILE_FEATURES = frozenset({
+    "profile_zscore",
+    "profile_deviation",
+    "abnormal_volume_profile",
+    "abnormal_return_profile",
+    "abnormal_vol_profile",
+})
+_TIMESTAMP_CONVENTIONS = frozenset({"bar_end", "bar_start"})
 
 
 def _literal_number(node: IRNode, *, attr: str, input_index: int) -> float | None:
@@ -68,13 +67,257 @@ def _literal_number(node: IRNode, *, attr: str, input_index: int) -> float | Non
     return float(raw)
 
 
+def _audit_derived_field(
+    field,
+    *,
+    forbid_forward_fill,
+    fail_on_missing,
+    violations,
+    checked,
+    source_guard,
+):
+    key = f"DerivedField:{field}"
+    if key in source_guard:
+        violations.append(f"{key}(cycle)")
+        return
+    source_guard.add(key)
+    try:
+        from runtime.derived_field_registry import load_derived_field_definition
+        from api.dsl_parser import parse_factor
+        from ir.analyzer import Analyzer
+
+        definition = load_derived_field_definition(field)
+        factor = parse_factor(
+            definition.expression,
+            name=f"pit::{field}@{definition.version}",
+            surface="compat",
+            dialect="lqtp",
+            dialect_version="2026-07-19",
+        )
+        report = audit_ir(
+            Analyzer().lower(factor.expr).ir,
+            forbid_forward_fill=forbid_forward_fill,
+            fail_on_missing=fail_on_missing,
+            _source_guard=source_guard,
+        )
+        checked.extend(f"{key}->{op}" for op in report.checked_ops)
+        violations.extend(f"{key}->{item}" for item in report.violations)
+    except Exception as exc:
+        violations.append(f"{key}(unverifiable:{type(exc).__name__})")
+    finally:
+        source_guard.discard(key)
+
+
+def _valid_hhmm(text: str) -> bool:
+    try:
+        hour, minute = (int(value) for value in text.split(":"))
+        return 0 <= hour <= 23 and 0 <= minute <= 59
+    except Exception:
+        return False
+
+
+def _audit_intraday_feature(
+    label: str,
+    transform_params: dict[str, Any],
+    violations: list[str],
+) -> None:
+    feature = str(transform_params.get("feature") or "").strip()
+    if not feature:
+        violations.append(f"{label}(missing_feature)")
+
+    try:
+        bar_minutes = int(transform_params.get("bar_minutes", 5))
+    except (TypeError, ValueError):
+        bar_minutes = 0
+    if bar_minutes <= 0:
+        violations.append(f"{label}(bar_minutes<=0)")
+
+    try:
+        minimum_bars = int(transform_params.get("min_bars", 2))
+    except (TypeError, ValueError):
+        minimum_bars = 0
+    if minimum_bars < 2:
+        violations.append(f"{label}(min_bars<2)")
+
+    try:
+        coverage = float(transform_params.get("min_coverage", 0.8))
+    except (TypeError, ValueError):
+        coverage = 0.0
+    if not 0 < coverage <= 1:
+        violations.append(f"{label}(invalid_min_coverage)")
+
+    convention = str(
+        transform_params.get("timestamp_convention", "bar_end")
+    ).lower()
+    if convention not in _TIMESTAMP_CONVENTIONS:
+        violations.append(f"{label}(invalid_timestamp_convention)")
+
+    cutoff = str(transform_params.get("cutoff_time") or "session_close")
+    if cutoff != "session_close" and not _valid_hhmm(cutoff):
+        violations.append(f"{label}(invalid_cutoff_time)")
+    for key in ("session_open", "session_close", "split_time"):
+        if (
+            key in transform_params
+            and transform_params[key] is not None
+            and not _valid_hhmm(str(transform_params[key]))
+        ):
+            violations.append(f"{label}(invalid_{key})")
+
+    # history_days=0 is valid for same-session features. Only profile features
+    # require a positive multi-day baseline.
+    if "history_days" in transform_params:
+        try:
+            history_days = int(transform_params["history_days"])
+        except (TypeError, ValueError):
+            history_days = -1
+        if history_days < 0:
+            violations.append(f"{label}(history_days<0)")
+    else:
+        history_days = 0
+
+    for key in ("minutes", "session_minutes", "lag"):
+        if key not in transform_params:
+            continue
+        try:
+            value = int(transform_params[key])
+        except (TypeError, ValueError):
+            value = 0
+        if value <= 0:
+            violations.append(f"{label}({key}<=0)")
+
+    if feature in _PROFILE_FEATURES and history_days < 2:
+        violations.append(f"{label}(profile_history_days<2)")
+
+    if "q" in transform_params:
+        try:
+            quantile = float(transform_params["q"])
+        except (TypeError, ValueError):
+            quantile = 0.0
+        if not 0 < quantile < 1:
+            violations.append(f"{label}(q_not_in_0_1)")
+
+
+def _audit_source_ref(
+    name,
+    *,
+    forbid_forward_fill,
+    fail_on_missing,
+    violations,
+    checked,
+    source_guard,
+) -> bool:
+    from api.source_ref import decode_source_ref
+
+    specification = decode_source_ref(name)
+    if specification is None:
+        return False
+    label = f"SourceRef[{specification.table}.{specification.field}]"
+    checked.append(label)
+    params = specification.params_dict()
+    transform_params = specification.transform_params_dict()
+
+    if specification.table in _EXACT_DAILY_TABLES:
+        if (
+            specification.table == "BenchmarkIndexDailyBar"
+            and not str(params.get("index", "")).strip()
+        ):
+            violations.append(f"{label}(missing_index)")
+        if specification.transform is not None:
+            violations.append(
+                f"{label}(unexpected_transform={specification.transform})"
+            )
+        return True
+
+    if specification.table in _ASOF_DAILY_TABLES:
+        if specification.transform not in {None, "asof_backward"}:
+            violations.append(
+                f"{label}(unsupported_transform={specification.transform})"
+            )
+        return True
+
+    if specification.table in _FINANCIAL_TABLES:
+        if specification.transform not in {None, "financial_asof", "financial_lag"}:
+            violations.append(
+                f"{label}(unsupported_transform={specification.transform})"
+            )
+        if specification.transform == "financial_lag":
+            try:
+                quarters = int(transform_params.get("quarters", 1))
+            except (TypeError, ValueError):
+                quarters = 0
+            if quarters <= 0:
+                violations.append(f"{label}(financial_lag_quarters<=0)")
+        return True
+
+    if specification.table in _MINUTE_TABLES:
+        if specification.transform == "intraday_feature":
+            _audit_intraday_feature(label, transform_params, violations)
+            return True
+        if specification.transform not in {
+            "minute_at", "minute_range", "minute_bar", "minute_resample"
+        }:
+            violations.append(f"{label}(minute_transform_required)")
+            return True
+        if (
+            specification.transform == "minute_at"
+            and not str(transform_params.get("hhmm", "")).strip()
+        ):
+            violations.append(f"{label}(missing_hhmm)")
+        if specification.transform == "minute_range":
+            start = str(transform_params.get("start", ""))
+            end = str(transform_params.get("end", ""))
+            if not start or not end or start >= end:
+                violations.append(f"{label}(invalid_minute_range)")
+        if specification.transform in {"minute_bar", "minute_resample"}:
+            try:
+                period = int(transform_params.get("period", 1))
+                index = int(transform_params.get("index", 0))
+            except (TypeError, ValueError):
+                period, index = 0, -1
+            if period <= 0 or index < 0:
+                violations.append(f"{label}(invalid_minute_period_or_index)")
+        return True
+
+    if specification.table == "Intermediate":
+        try:
+            from runtime.intermediate_registry import intermediate_dependency_lineage
+
+            intermediate_dependency_lineage(
+                str(params.get("name", "")), int(params.get("version", 0))
+            )
+        except Exception as exc:
+            violations.append(f"{label}(unversioned:{type(exc).__name__})")
+        return True
+
+    if specification.table == "DerivedField":
+        _audit_derived_field(
+            specification.field,
+            forbid_forward_fill=forbid_forward_fill,
+            fail_on_missing=fail_on_missing,
+            violations=violations,
+            checked=checked,
+            source_guard=source_guard,
+        )
+        return True
+
+    if specification.table == "TurnoverBaseDaily":
+        if specification.transform is not None:
+            violations.append(
+                f"{label}(unexpected_transform={specification.transform})"
+            )
+        return True
+
+    violations.append(f"{label}(unknown_availability_contract)")
+    return True
+
+
 def audit_ir(
     ir: IRNode,
     *,
     forbid_forward_fill: bool = False,
     fail_on_missing: bool = True,
+    _source_guard: set[str] | None = None,
 ) -> PitAuditReport:
-    """遍历 IR，收集 ``pit_safe=False``、负 lag 或缺失 runtime 的算子。"""
     from backend.cleaned_bridge import ensure_cleaned_loaded
     from cleaned_operators.operator_policy import infer_operator_policy
     from cleaned_operators.registry import OperatorRegistry
@@ -82,30 +325,44 @@ def audit_ir(
     ensure_cleaned_loaded()
     violations: list[str] = []
     checked: list[str] = []
+    source_guard = _source_guard if _source_guard is not None else set()
 
     def walk(node: IRNode) -> None:
-        if node.op in ("column", "literal", "plan_ref"):
+        if node.op == "column":
+            _audit_source_ref(
+                str((node.attrs or {}).get("name") or ""),
+                forbid_forward_fill=forbid_forward_fill,
+                fail_on_missing=fail_on_missing,
+                violations=violations,
+                checked=checked,
+                source_guard=source_guard,
+            )
+            return
+        if node.op in {"literal", "plan_ref"}:
             return
         checked.append(node.op)
-        canon = OperatorRegistry.resolve_canonical_optional(node.op)
-        op_impl = OperatorRegistry.get(canon)
-        if op_impl is None:
+        canonical = OperatorRegistry.resolve_canonical_optional(node.op)
+        implementation = OperatorRegistry.get(canonical)
+        if implementation is None:
             if fail_on_missing:
-                violations.append(f"{canon}(missing_runtime)")
+                violations.append(f"{canonical}(missing_runtime)")
             return
-        policy = infer_operator_policy(op_impl, canonical=canon)
+        policy = infer_operator_policy(implementation, canonical=canonical)
         if not policy.pit_safe or policy.lag < 0:
-            violations.append(canon)
-        param_rule = _POSITIVE_LAG_PARAMS.get(canon)
-        if param_rule is not None:
-            param_name, input_index = param_rule
-            value = _literal_number(node, attr=param_name, input_index=input_index)
+            violations.append(canonical)
+        rule = _POSITIVE_LAG_PARAMS.get(canonical)
+        if rule is not None:
+            parameter, index = rule
+            value = _literal_number(node, attr=parameter, input_index=index)
             if value is not None and value < 1:
-                violations.append(f"{canon}({param_name}={value:g})")
-        if canon in {"bfill", "backfill", "fillna_backfill", "fillna_bfill", "lead", "next"}:
-            violations.append(f"{canon}(future_data)")
-        if forbid_forward_fill and canon in _FORWARD_FILL_OPS:
-            violations.append(f"{canon}(forward_fill)")
+                violations.append(f"{canonical}({parameter}={value:g})")
+        if canonical in {
+            "bfill", "backfill", "fillna_backfill", "fillna_bfill",
+            "lead", "Lead", "next",
+        }:
+            violations.append(f"{canonical}(future_data)")
+        if forbid_forward_fill and canonical in _FORWARD_FILL_OPS:
+            violations.append(f"{canonical}(forward_fill)")
         for child in node.inputs:
             walk(child)
 
@@ -120,7 +377,6 @@ def assert_pit_safe(
     forbid_forward_fill: bool = False,
     fail_on_missing: bool = True,
 ) -> PitAuditReport:
-    """审计 IR；``enforce=True`` 时未通过则抛 :class:`PitSafetyError`。"""
     report = audit_ir(
         ir,
         forbid_forward_fill=forbid_forward_fill,

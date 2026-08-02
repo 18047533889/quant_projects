@@ -10,7 +10,9 @@ from factor_recipes.fundamental_ratios import (
 
 # Import declarative recipe catalogs after the registry is available.
 from factor_recipes import fundamental as _fundamental  # noqa: F401,E402
+from factor_recipes import fundamental_cumulative as _fundamental_cumulative  # noqa: F401,E402
 from factor_recipes import technical as _technical  # noqa: F401,E402
+from factor_recipes import candlestick_v2 as _candlestick_v2  # noqa: F401,E402
 
 __all__ = [
     "FactorRecipe",

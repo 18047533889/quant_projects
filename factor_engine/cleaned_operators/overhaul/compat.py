@@ -21,23 +21,33 @@ def ts_regression_compat(
     retval: str | None = None,
     **_,
 ) -> pd.DataFrame:
-    """Audited regression with the historical GTJA positional contract.
+    """Audited regression with canonical and historical positional contracts.
 
-    Historical calls use ``ts_regression(y, x, window, lag, retval,
-    min_periods=...)``.  The canonical is now ``ts_regression_slope`` but the
-    alias must remain executable without weakening the no-future-data rule.
+    Historical GTJA calls use ``ts_regression(y, x, window, lag, retval,
+    min_periods=...)``.  Registry-driven callers may supply the complete public
+    parameter sequence positionally.  Both forms are normalized before the
+    rolling kernel is invoked, while negative lag remains fail-closed.
     """
-    if len(legacy_args) > 2:
-        raise TypeError("ts_regression accepts at most legacy lag and retval arguments")
+    if len(legacy_args) > 4:
+        raise TypeError(
+            "ts_regression accepts at most lag, retval, min_periods and "
+            "add_intercept positional arguments"
+        )
     if legacy_args:
         lag = int(legacy_args[0])
-    if len(legacy_args) == 2:
+    if len(legacy_args) >= 2:
         retval = str(legacy_args[1])
+    if len(legacy_args) >= 3:
+        min_periods = int(legacy_args[2])
+    if len(legacy_args) == 4:
+        add_intercept = bool(legacy_args[3])
+
     lag_i = 0 if lag is None else int(lag)
     if lag_i < 0:
         return pd.DataFrame(np.nan, index=y.index, columns=y.columns, dtype=float)
     if lag_i:
         x = x.shift(lag_i)
+
     requested = str(retval or "slope").lower()
     output = {
         "slope": "slope",
