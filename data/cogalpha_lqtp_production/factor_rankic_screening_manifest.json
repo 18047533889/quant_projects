@@ -1,759 +1,21 @@
 {
-  "generated_at": "2026-08-02T21:26:13.931094",
+  "generated_at": "2026-08-02T23:11:38.637273",
   "threshold": 0.02,
-  "raw_count": 472,
-  "filtered_count": 294,
-  "deduped_count": 134,
+  "raw_count": 478,
+  "filtered_count": 347,
+  "deduped_count": 163,
   "overlay_stats": {
-    "linked": 410,
-    "ic_from_vwap": 408,
-    "ic_pending_vwap": 29,
+    "linked": 422,
+    "ic_from_vwap": 420,
+    "ic_pending_vwap": 23,
     "renamed": 125
   },
   "rank_ic_policy": "vwap_to_vwap_only; display_nonneg; pending_excluded",
   "factors": [
     {
-      "display_name": "week2_intraday_reversal",
-      "rank_ic": 0.3393550147597922,
-      "rank_icir": 3.1792157437315383,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/week2_intraday_reversal.html",
-      "route": "lqtp_dsl",
-      "alias": "week2:intraday_reversal"
-    },
-    {
-      "display_name": "factor_volume_reversal_rank",
-      "rank_ic": 0.308832598793836,
-      "rank_icir": 3.1673504189509556,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_volume_reversal_rank.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_volume_reversal_direct",
-      "rank_ic": 0.3007616694512883,
-      "rank_icir": 2.996300509472725,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_volume_reversal_direct.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_intraday_reversal_zscore_volume_short",
-      "rank_ic": 0.29474411080133106,
-      "rank_icir": 2.900645557129633,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_intraday_reversal_zscore_volume_short.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_dollar_pressure_range_zscore",
-      "rank_ic": 0.28850382511995215,
-      "rank_icir": 2.95677122568817,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_dollar_pressure_range_zscore.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_reversal_volume_simple",
-      "rank_ic": 0.2585084841419785,
-      "rank_icir": 2.4837959230985573,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_reversal_volume_simple.html",
-      "route": "lqtp_dsl",
-      "alias": "factor_349"
-    },
-    {
-      "display_name": "factor_reversal_volume_volregime",
-      "rank_ic": 0.25330789513238366,
-      "rank_icir": 2.517214122460865,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_reversal_volume_volregime.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "week2_tanh_gated_reversal",
-      "rank_ic": 0.2520038340725903,
-      "rank_icir": 2.844908383672422,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/week2_tanh_gated_reversal.html",
-      "route": "lqtp_dsl",
-      "alias": "week2:tanh_gated_reversal"
-    },
-    {
-      "display_name": "factor_pressure_compression_simplified_v3",
-      "rank_ic": 0.24405506318847314,
-      "rank_icir": 2.2251438855877272,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_pressure_compression_simplified_v3.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_crash_vol_body_asym",
-      "rank_ic": 0.23695976237002483,
-      "rank_icir": 2.123398389763951,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_crash_vol_body_asym.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_reversal_volume_gated",
-      "rank_ic": 0.2259138147726887,
-      "rank_icir": 2.095877405188924,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_reversal_volume_gated.html",
-      "route": "lqtp_dsl",
-      "alias": "factor_343"
-    },
-    {
-      "display_name": "factor_intraday_pressure_asym_diff",
-      "rank_ic": 0.20910152512905422,
-      "rank_icir": 2.286726761774647,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_intraday_pressure_asym_diff.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_directional_vol_volbase25_smooth_dir_range10",
-      "rank_ic": 0.19959101723887113,
-      "rank_icir": 1.5965728586670709,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_directional_vol_volbase25_smooth_dir_range10.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_adaptive_vol_directional_smooth_range10",
-      "rank_ic": 0.19948390804026284,
-      "rank_icir": 1.5878532910859773,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_adaptive_vol_directional_smooth_range10.html",
-      "route": "python",
-      "alias": "extra20:factor_adaptive_vol_directional_smooth_range10"
-    },
-    {
-      "display_name": "week2_dir_vol_volume_25d",
-      "rank_ic": 0.19324986583843837,
-      "rank_icir": 1.4868933380004596,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/week2_dir_vol_volume_25d.html",
-      "route": "lqtp_dsl",
-      "alias": "week2:dir_vol_volume_25d"
-    },
-    {
-      "display_name": "week2_vol_break_continuous_gate",
-      "rank_ic": 0.16586785344950097,
-      "rank_icir": 1.5039472492109949,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/week2_vol_break_continuous_gate.html",
-      "route": "factor_engine",
-      "alias": "week2:vol_break_continuous_gate"
-    },
-    {
-      "display_name": "factor_reversal_intraday_5d_ema",
-      "rank_ic": 0.16132190818734543,
-      "rank_icir": 1.229189816957444,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_reversal_intraday_5d_ema.html",
-      "route": "factor_engine",
-      "alias": "extra20:factor_reversal_intraday_5d_ema"
-    },
-    {
-      "display_name": "factor_intraday_reversal_vol_intensity",
-      "rank_ic": 0.15555024913851254,
-      "rank_icir": 1.2261678342834896,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_intraday_reversal_vol_intensity.html",
-      "route": "python",
-      "alias": "extra20:factor_intraday_reversal_vol_intensity"
-    },
-    {
-      "display_name": "factor_volatility_asymmetry_spike_adj_ema5",
-      "rank_ic": 0.14892078687574847,
-      "rank_icir": 1.2777162905574422,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_volatility_asymmetry_spike_adj_ema5.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_order_imbalance_volume_flow_ema",
-      "rank_ic": 0.14592959645451997,
-      "rank_icir": 1.4332563013454889,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_order_imbalance_volume_flow_ema.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_shadow_volume_confirmed",
-      "rank_ic": 0.12749866769775786,
-      "rank_icir": 1.5872056346321572,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_shadow_volume_confirmed.html",
-      "route": "lqtp_dsl",
-      "alias": "factor_91"
-    },
-    {
-      "display_name": "week2_vol_weight_price_move",
-      "rank_ic": 0.12682500333726554,
-      "rank_icir": 0.9582759294572781,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/week2_vol_weight_price_move.html",
-      "route": "lqtp_dsl",
-      "alias": "week2:vol_weight_price_move"
-    },
-    {
-      "display_name": "factor_simple_convex_momentum_log_volume",
-      "rank_ic": 0.11193526560452666,
-      "rank_icir": 0.7584550566273667,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_simple_convex_momentum_log_volume.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_crash_vol_ratio_asym",
-      "rank_ic": 0.10825146299057911,
-      "rank_icir": 0.8419071859916918,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_crash_vol_ratio_asym.html",
-      "route": "lqtp_dsl",
-      "alias": "factor_264"
-    },
-    {
-      "display_name": "factor_direction_volume_shape_mut2",
-      "rank_ic": 0.1062350617385143,
-      "rank_icir": 1.2948613466369123,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_direction_volume_shape_mut2.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "week2_adaptive_dir_vol_cross",
-      "rank_ic": 0.10463936211369436,
-      "rank_icir": 0.741416774762882,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/week2_adaptive_dir_vol_cross.html",
-      "route": "lqtp_dsl",
-      "alias": "week2:adaptive_dir_vol_cross"
-    },
-    {
-      "display_name": "week2_range_pos_vol_gate",
-      "rank_ic": 0.10042043312332516,
-      "rank_icir": 0.8448938665632757,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/week2_range_pos_vol_gate.html",
-      "route": "factor_engine",
-      "alias": "week2:range_pos_vol_gate"
-    },
-    {
-      "display_name": "week2_herd_momentum_stress",
-      "rank_ic": 0.09919824564750666,
-      "rank_icir": 0.7444611632366005,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/week2_herd_momentum_stress.html",
-      "route": "lqtp_dsl",
-      "alias": "week2:herd_momentum_stress"
-    },
-    {
-      "display_name": "factor_herding_momentum_stress",
-      "rank_ic": 0.09886420244819277,
-      "rank_icir": 0.7417236383970561,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_herding_momentum_stress.html",
-      "route": "python",
-      "alias": "extra20:factor_herding_momentum_stress"
-    },
-    {
-      "display_name": "factor_volume_adjusted_divergence_ema10",
-      "rank_ic": 0.0864007726104538,
-      "rank_icir": 0.7819705842350892,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_volume_adjusted_divergence_ema10.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_vol_gated_herding_mutated",
-      "rank_ic": 0.08530136244105399,
-      "rank_icir": 0.6487850161595042,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_vol_gated_herding_mutated.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_volume_confirmed_momentum_crossover_v2",
-      "rank_ic": 0.08403026693647435,
-      "rank_icir": 0.6281341920105314,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_volume_confirmed_momentum_crossover_v2.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_volume_confirmed_momentum_crossover_v1",
-      "rank_ic": 0.08365942379772863,
-      "rank_icir": 0.6250460087542097,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_volume_confirmed_momentum_crossover_v1.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "week2_vol_confirm_5d",
-      "rank_ic": 0.08336101705992431,
-      "rank_icir": 0.5976186384952932,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/week2_vol_confirm_5d.html",
-      "route": "lqtp_dsl",
-      "alias": "week2:vol_confirm_5d"
-    },
-    {
-      "display_name": "factor_volume_pressure_reversal",
-      "rank_ic": 0.08336101705992253,
-      "rank_icir": 0.5976186384952725,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_volume_pressure_reversal.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_liquidity_range_gated_momentum_v6",
-      "rank_ic": 0.08267959719437486,
-      "rank_icir": 0.5843341854291195,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_liquidity_range_gated_momentum_v6.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "week2_inverse_vol_momentum_v3",
-      "rank_ic": 0.08237843244904072,
-      "rank_icir": 0.5684903634249575,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/week2_inverse_vol_momentum_v3.html",
-      "route": "lqtp_dsl",
-      "alias": "week2:inverse_vol_momentum_v3"
-    },
-    {
-      "display_name": "factor_liquidity_range_gated_momentum_v5",
-      "rank_ic": 0.08233582098506938,
-      "rank_icir": 0.5837801195396732,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_liquidity_range_gated_momentum_v5.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_volume_gated_momentum_mutated_v3",
-      "rank_ic": 0.08227928524115405,
-      "rank_icir": 0.5982541149595039,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_volume_gated_momentum_mutated_v3.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_volume_confirmed_momentum",
-      "rank_ic": 0.08144399563137335,
-      "rank_icir": 0.6147294131992032,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_volume_confirmed_momentum.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_volume_confirmed_momentum_v3",
-      "rank_ic": 0.08144399563137333,
-      "rank_icir": 0.6147294131992028,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_volume_confirmed_momentum_v3.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_crash_volume_rank",
-      "rank_ic": 0.08144399563137332,
-      "rank_icir": 0.6147294131992027,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_crash_volume_rank.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "week2_vol_gated_momentum_ratio",
-      "rank_ic": 0.08114925132998616,
-      "rank_icir": 0.5909500026810915,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/week2_vol_gated_momentum_ratio.html",
-      "route": "factor_engine",
-      "alias": "week2:vol_gated_momentum_ratio"
-    },
-    {
-      "display_name": "factor_momentum_volratio",
-      "rank_ic": 0.0800398724849428,
-      "rank_icir": 0.564641477438235,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_momentum_volratio.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_regime_vol_adaptive_trend_v4",
-      "rank_ic": 0.07677642884815439,
-      "rank_icir": 0.7123816133554842,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_regime_vol_adaptive_trend_v4.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_volume_confirmed_momentum_tanh_gated",
-      "rank_ic": 0.07675505963596242,
-      "rank_icir": 0.5531673749120607,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_volume_confirmed_momentum_tanh_gated.html",
-      "route": "factor_engine",
-      "alias": "extra20:factor_volume_confirmed_momentum_tanh_gated"
-    },
-    {
-      "display_name": "factor_crossover_hybrid_magnitude",
-      "rank_ic": 0.07648826388584833,
-      "rank_icir": 0.757232775564093,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_crossover_hybrid_magnitude.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "week2_intraday_vol_ratio",
-      "rank_ic": 0.07614358773966598,
-      "rank_icir": 0.6241974177151268,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/week2_intraday_vol_ratio.html",
-      "route": "lqtp_dsl",
-      "alias": "week2:intraday_vol_ratio"
-    },
-    {
-      "display_name": "factor_regime_switch_simple",
-      "rank_ic": 0.07602546346346066,
-      "rank_icir": 0.5743251998892113,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_regime_switch_simple.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_vol_gated_herding_crossover",
-      "rank_ic": 0.0751182388890615,
-      "rank_icir": 0.5485271252092645,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_vol_gated_herding_crossover.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_intraday_volume_tanh_short",
-      "rank_ic": 0.07508511205494536,
-      "rank_icir": 0.6142378750880925,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_intraday_volume_tanh_short.html",
-      "route": "python",
-      "alias": "extra20:factor_intraday_volume_tanh_short"
-    },
-    {
-      "display_name": "factor_volume_price_divergence_cross_mut",
-      "rank_ic": 0.07109054928512315,
-      "rank_icir": 0.5197318857461827,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_volume_price_divergence_cross_mut.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_liquidity_mom_simple_2_mutated",
-      "rank_ic": 0.07074998821240516,
-      "rank_icir": 0.5191624269295899,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_liquidity_mom_simple_2_mutated.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_volume_regime_intraday_momentum",
-      "rank_ic": 0.07060014956553731,
-      "rank_icir": 0.6402315560906037,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_volume_regime_intraday_momentum.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_intraday_pressure_ema",
-      "rank_ic": 0.069344768089213,
-      "rank_icir": 0.6284010715124676,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_intraday_pressure_ema.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_stable_symmetry_reinforced",
-      "rank_ic": 0.06760908236791051,
-      "rank_icir": 0.6172568907597121,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_stable_symmetry_reinforced.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "week2_sharpe_momentum_v2",
-      "rank_ic": 0.06663280440769814,
-      "rank_icir": 0.5260207535617388,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/week2_sharpe_momentum_v2.html",
-      "route": "factor_engine",
-      "alias": "week2:sharpe_momentum_v2"
-    },
-    {
-      "display_name": "alphasage_99e8c98dc92fba46",
-      "rank_ic": 0.0626883634322771,
-      "rank_icir": 1.0554627800238978,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/alphasage_99e8c98dc92fba46.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_roughness_trend_vol_short",
-      "rank_ic": 0.061391377082006766,
-      "rank_icir": 0.4225695728703589,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_roughness_trend_vol_short.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_crash_volume_gate",
-      "rank_ic": 0.06090327901723224,
-      "rank_icir": 0.5914300160730943,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_crash_volume_gate.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_volatility_scaled_deviation",
-      "rank_ic": 0.05898483845054711,
-      "rank_icir": 0.4227474372708845,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_volatility_scaled_deviation.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_resvol_smoothed_trend",
-      "rank_ic": 0.05865168903872862,
-      "rank_icir": 0.45153792363062856,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_resvol_smoothed_trend.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "week2_order_imbalance_vol",
-      "rank_ic": 0.05463639712243386,
-      "rank_icir": 0.824390740933232,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/week2_order_imbalance_vol.html",
-      "route": "lqtp_dsl",
-      "alias": "week2:order_imbalance_vol"
-    },
-    {
-      "display_name": "factor_rsi_volume_confirmed_reversal",
-      "rank_ic": 0.05220999271651771,
-      "rank_icir": 0.37807430727860275,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_rsi_volume_confirmed_reversal.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_persistence",
-      "rank_ic": 0.051203453120415084,
-      "rank_icir": 0.322259838508788,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_persistence.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_rsi_reversal_resvol_volume",
-      "rank_ic": 0.05109708283358853,
-      "rank_icir": 0.3857044510001328,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_rsi_reversal_resvol_volume.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_persistence_ewma",
-      "rank_ic": 0.05038119970268315,
-      "rank_icir": 0.3028375133881164,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_persistence_ewma.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_volume_pressure_imbalance",
-      "rank_ic": 0.050204373719159326,
-      "rank_icir": 0.421677814147605,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_volume_pressure_imbalance.html",
-      "route": "python",
-      "alias": "extra20:factor_volume_pressure_imbalance"
-    },
-    {
-      "display_name": "factor_herding_vol_gated_momentum",
-      "rank_ic": 0.0483044936256522,
-      "rank_icir": 0.5845463620059107,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_herding_vol_gated_momentum.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_drawdown_vol_norm_clean",
-      "rank_ic": 0.04778081373839568,
-      "rank_icir": 0.33237087012356387,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_drawdown_vol_norm_clean.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_squared_range_volume_rank_smoothed_no_cuberoot",
-      "rank_ic": 0.046173117178266,
-      "rank_icir": 0.27235411810568444,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_squared_range_volume_rank_smoothed_no_cuberoot.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "week2_vol_gated_surge",
-      "rank_ic": 0.045700075742322266,
-      "rank_icir": 0.39691250564078057,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/week2_vol_gated_surge.html",
-      "route": "factor_engine",
-      "alias": "week2:vol_gated_surge"
-    },
-    {
-      "display_name": "factor_mut_cross_vwpc_z10_clip2_span8_v1",
-      "rank_ic": 0.04492851269511579,
-      "rank_icir": 0.37842724367990604,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_mut_cross_vwpc_z10_clip2_span8_v1.html",
-      "route": "python",
-      "alias": "extra20:factor_mut_cross_vwpc_z10_clip2_span8_v1"
-    },
-    {
-      "display_name": "factor_volume_adaptive_momentum",
-      "rank_ic": 0.04367589887294301,
-      "rank_icir": 0.30743840962200153,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_volume_adaptive_momentum.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_vol_price_log_range_gate_clipped_boost_5day_mut_001",
-      "rank_ic": 0.043462799304027536,
-      "rank_icir": 0.33460483443668415,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_vol_price_log_range_gate_clipped_boost_5day_mut_001.html",
-      "route": "python",
-      "alias": "weekly:factor_vol_price_log_range_gate_clipped_boost_5day_mut_001"
-    },
-    {
-      "display_name": "factor_squared_range_close_ema_cuberoot",
-      "rank_ic": 0.04324889905589588,
-      "rank_icir": 0.240960992199836,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_squared_range_close_ema_cuberoot.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "alphasage_43727f7f7b2ba487",
-      "rank_ic": 0.04238113697564239,
-      "rank_icir": 0.304907551972298,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/alphasage_43727f7f7b2ba487.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "week2_vol_weight_range_clip10",
-      "rank_ic": 0.04175386732167945,
-      "rank_icir": 0.3464140585711343,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/week2_vol_weight_range_clip10.html",
-      "route": "lqtp_dsl",
-      "alias": "week2:vol_weight_range_clip10"
-    },
-    {
-      "display_name": "week2_vol_confirm_binary",
-      "rank_ic": 0.041127061977875475,
-      "rank_icir": 0.295340344635749,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/week2_vol_confirm_binary.html",
-      "route": "lqtp_dsl",
-      "alias": "week2:vol_confirm_binary"
-    },
-    {
-      "display_name": "factor_vol_weighted_pct_range_clip_ema10",
-      "rank_ic": 0.0407764986207889,
-      "rank_icir": 0.33805964019635076,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_vol_weighted_pct_range_clip_ema10.html",
-      "route": "python",
-      "alias": "extra20:factor_vol_weighted_pct_range_clip_ema10"
-    },
-    {
-      "display_name": "factor_vol_price_log_range_gate_clipped_10day_mut_003",
-      "rank_ic": 0.04017713824536548,
-      "rank_icir": 0.3115811546933475,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_vol_price_log_range_gate_clipped_10day_mut_003.html",
-      "route": "python",
-      "alias": "extra20:factor_vol_price_log_range_gate_clipped_10day_mut_003"
-    },
-    {
-      "display_name": "factor_volume_pressure_ewm_smooth",
-      "rank_ic": 0.039087370494177175,
-      "rank_icir": 0.30490435602752614,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_volume_pressure_ewm_smooth.html",
-      "route": "python",
-      "alias": "extra20:factor_volume_pressure_ewm_smooth"
-    },
-    {
       "display_name": "factor_vwap_adjusted_range_tanh_smooth",
-      "rank_ic": 0.03849904807828228,
-      "rank_icir": 0.2770018236119826,
+      "rank_ic": 0.05749484033727655,
+      "rank_icir": 0.43825608919714615,
       "source": "screening_reeval (VWAP→VWAP)",
       "report_href": "/reports_screening_reeval/factor_vwap_adjusted_range_tanh_smooth.html",
       "route": "python",
@@ -761,422 +23,917 @@
     },
     {
       "display_name": "factor_vwap_adjusted_range_tanh_mutated_v2",
-      "rank_ic": 0.03836669210533392,
-      "rank_icir": 0.2806904925928493,
+      "rank_ic": 0.05669615583614533,
+      "rank_icir": 0.4399889747880063,
       "source": "screening_reeval (VWAP→VWAP)",
       "report_href": "/reports_screening_reeval/factor_vwap_adjusted_range_tanh_mutated_v2.html",
       "route": "python",
       "alias": ""
     },
     {
-      "display_name": "factor_resvol_volume_momentum",
-      "rank_ic": 0.03779941637170718,
-      "rank_icir": 0.2946940467300938,
+      "display_name": "factor_persistence_ewma",
+      "rank_ic": 0.05415743739388904,
+      "rank_icir": 0.34394796785640447,
       "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_resvol_volume_momentum.html",
-      "route": "python",
+      "report_href": "/reports_screening_reeval/factor_persistence_ewma.html",
+      "route": "lqtp_dsl",
       "alias": ""
     },
     {
-      "display_name": "week2_log_range_gate",
-      "rank_ic": 0.03696880403831149,
-      "rank_icir": 0.2975377166879755,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/week2_log_range_gate.html",
-      "route": "lqtp_dsl",
-      "alias": "week2:log_range_gate"
-    },
-    {
-      "display_name": "week2_reversal_cross_smooth",
-      "rank_ic": 0.03661244182841112,
-      "rank_icir": 0.6499422882761237,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/week2_reversal_cross_smooth.html",
-      "route": "lqtp_dsl",
-      "alias": "week2:reversal_cross_smooth"
-    },
-    {
-      "display_name": "factor_crossover_herding_stress_span12_volrank_clip3",
-      "rank_ic": 0.036142418231227755,
-      "rank_icir": 0.2818586464149287,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_crossover_herding_stress_span12_volrank_clip3.html",
-      "route": "python",
-      "alias": "extra20:factor_crossover_herding_stress_span12_volrank_clip3"
-    },
-    {
-      "display_name": "factor_mut_hc004_volpctrank_w8",
-      "rank_ic": 0.03614241823122771,
-      "rank_icir": 0.28185864641492836,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_mut_hc004_volpctrank_w8.html",
-      "route": "python",
-      "alias": "weekly:factor_mut_hc004_volpctrank_w8"
-    },
-    {
-      "display_name": "factor_intraday_return_volume_surge",
-      "rank_ic": 0.03606996391537769,
-      "rank_icir": 0.2891833292223357,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_intraday_return_volume_surge.html",
-      "route": "python",
-      "alias": "extra20:factor_intraday_return_volume_surge"
-    },
-    {
       "display_name": "factor_mut_hc004_volpctrank_s12_clip2_5_volwin6",
-      "rank_ic": 0.03593353225643488,
-      "rank_icir": 0.27870902399556835,
+      "rank_ic": 0.05404925451008393,
+      "rank_icir": 0.4351842798244593,
       "source": "screening_reeval (VWAP→VWAP)",
       "report_href": "/reports_screening_reeval/factor_mut_hc004_volpctrank_s12_clip2_5_volwin6.html",
       "route": "python",
       "alias": ""
     },
     {
-      "display_name": "week2_intraday_vol_surge",
-      "rank_ic": 0.035754380767613864,
-      "rank_icir": 0.2904256382817424,
+      "display_name": "factor_vol_price_log_range_gate_clipped_10day_mut_003",
+      "rank_ic": 0.05214860809774692,
+      "rank_icir": 0.41867527277431704,
       "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/week2_intraday_vol_surge.html",
-      "route": "lqtp_dsl",
-      "alias": "week2:intraday_vol_surge"
-    },
-    {
-      "display_name": "week2_log_range_gate_z10",
-      "rank_ic": 0.03543113525195221,
-      "rank_icir": 0.2856635226797014,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/week2_log_range_gate_z10.html",
-      "route": "lqtp_dsl",
-      "alias": "week2:log_range_gate_z10"
-    },
-    {
-      "display_name": "factor_volatility_compression",
-      "rank_ic": 0.03492708244903895,
-      "rank_icir": 0.29491569669899903,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_volatility_compression.html",
+      "report_href": "/reports_screening_reeval/factor_vol_price_log_range_gate_clipped_10day_mut_003.html",
       "route": "python",
-      "alias": ""
+      "alias": "extra20:factor_vol_price_log_range_gate_clipped_10day_mut_003"
     },
     {
-      "display_name": "factor_ema_vol_asymmetry_rank",
-      "rank_ic": 0.0343959263245233,
-      "rank_icir": 0.2499965841769963,
+      "display_name": "factor_persistence",
+      "rank_ic": 0.051941875895901476,
+      "rank_icir": 0.33771162552777645,
       "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_ema_vol_asymmetry_rank.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "alphasage_b0e9545fa66ab30a",
-      "rank_ic": 0.03380805244905447,
-      "rank_icir": 0.23998248705144914,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/alphasage_b0e9545fa66ab30a.html",
+      "report_href": "/reports_screening_reeval/factor_persistence.html",
       "route": "lqtp_dsl",
       "alias": ""
-    },
-    {
-      "display_name": "week2_vol_adjusted_momentum",
-      "rank_ic": 0.0334808835432019,
-      "rank_icir": 0.24098446327233386,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/week2_vol_adjusted_momentum.html",
-      "route": "lqtp_dsl",
-      "alias": "week2:vol_adjusted_momentum"
-    },
-    {
-      "display_name": "factor_volume_pressure_light_crossover",
-      "rank_ic": 0.03346563608945168,
-      "rank_icir": 0.2689507076978381,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_volume_pressure_light_crossover.html",
-      "route": "python",
-      "alias": "extra20:factor_volume_pressure_light_crossover"
-    },
-    {
-      "display_name": "factor_price_impact_stable_5d",
-      "rank_ic": 0.03303746435691883,
-      "rank_icir": 0.23393672139833974,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_price_impact_stable_5d.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_mut_cross_vwpc_z10_clip2_v3",
-      "rank_ic": 0.03266246077773396,
-      "rank_icir": 0.2767192411094014,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_mut_cross_vwpc_z10_clip2_v3.html",
-      "route": "python",
-      "alias": "extra20:factor_mut_cross_vwpc_z10_clip2_v3"
-    },
-    {
-      "display_name": "factor_intraday_volume_tanh",
-      "rank_ic": 0.032408275158658975,
-      "rank_icir": 0.26975844952358957,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_intraday_volume_tanh.html",
-      "route": "python",
-      "alias": "extra20:factor_intraday_volume_tanh"
-    },
-    {
-      "display_name": "factor_lag_vol_volatility_adjusted_gate",
-      "rank_ic": 0.03240378791776538,
-      "rank_icir": 0.26956244882245967,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_lag_vol_volatility_adjusted_gate.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_volume_weighted_range_skew",
-      "rank_ic": 0.031821332047910565,
-      "rank_icir": 0.27808333359488846,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_volume_weighted_range_skew.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_volume_surge_persistence",
-      "rank_ic": 0.03173293526730047,
-      "rank_icir": 0.3850232961065619,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_volume_surge_persistence.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_adaptive_volume_smoothness",
-      "rank_ic": 0.03146642848267984,
-      "rank_icir": 0.4801431754003305,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_adaptive_volume_smoothness.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_lagret_volratio_gated_smooth",
-      "rank_ic": 0.031168122929352077,
-      "rank_icir": 0.3128158651130104,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_lagret_volratio_gated_smooth.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_lag_response_vol_tool_adaptive",
-      "rank_ic": 0.031168001862260375,
-      "rank_icir": 0.2594787517281471,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_lag_response_vol_tool_adaptive.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_volume_weighted_price_change",
-      "rank_ic": 0.030360276667924086,
-      "rank_icir": 0.2630564278732296,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_volume_weighted_price_change.html",
-      "route": "python",
-      "alias": "extra20:factor_volume_weighted_price_change"
-    },
-    {
-      "display_name": "factor_volume_abnormality_liquidity_gated",
-      "rank_ic": 0.029711538901981957,
-      "rank_icir": 0.35125463928547285,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_volume_abnormality_liquidity_gated.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_lag_vol_ratio_smoothed_v2",
-      "rank_ic": 0.028739951105732957,
-      "rank_icir": 0.25820373549963943,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_lag_vol_ratio_smoothed_v2.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "week2_stress_range_vol",
-      "rank_ic": 0.028545403273021693,
-      "rank_icir": 0.18445090088858634,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/week2_stress_range_vol.html",
-      "route": "lqtp_dsl",
-      "alias": "week2:stress_range_vol"
-    },
-    {
-      "display_name": "factor_volume_trend_adjusted_impact",
-      "rank_ic": 0.02808399963251018,
-      "rank_icir": 0.2387709173385566,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_volume_trend_adjusted_impact.html",
-      "route": "lqtp_dsl",
-      "alias": "factor_89"
     },
     {
       "display_name": "week2_vol_quantile_stress",
-      "rank_ic": 0.02759480831679971,
-      "rank_icir": 0.2211438204618431,
+      "rank_ic": 0.051801558497819804,
+      "rank_icir": 0.4256877170121453,
       "source": "screening_reeval (VWAP→VWAP)",
       "report_href": "/reports_screening_reeval/week2_vol_quantile_stress.html",
       "route": "lqtp_dsl",
       "alias": "week2:vol_quantile_stress"
     },
     {
-      "display_name": "week2_herd_simplified",
-      "rank_ic": 0.027178181391244966,
-      "rank_icir": 0.30070892320836207,
+      "display_name": "factor_vol_price_log_range_gate_clipped_boost_5day_mut_001",
+      "rank_ic": 0.05166183065969314,
+      "rank_icir": 0.40979230025621743,
       "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/week2_herd_simplified.html",
-      "route": "factor_engine",
-      "alias": "week2:herd_simplified"
-    },
-    {
-      "display_name": "factor_adx_trend_vol_ema",
-      "rank_ic": 0.027132741227504656,
-      "rank_icir": 0.25863425261519923,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_adx_trend_vol_ema.html",
-      "route": "factor_engine",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_lag_volatility_regime_adapted",
-      "rank_ic": 0.02647512180328387,
-      "rank_icir": 0.23277153368724193,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_lag_volatility_regime_adapted.html",
+      "report_href": "/reports_screening_reeval/factor_vol_price_log_range_gate_clipped_boost_5day_mut_001.html",
       "route": "python",
-      "alias": ""
+      "alias": "weekly:factor_vol_price_log_range_gate_clipped_boost_5day_mut_001"
     },
     {
-      "display_name": "factor_abnormality_asymmetry",
-      "rank_ic": 0.02606510339665891,
-      "rank_icir": 0.2841427081179796,
+      "display_name": "factor_lag_vol_ratio_smoothed_v2",
+      "rank_ic": 0.0509078645167097,
+      "rank_icir": 0.46875047400708697,
       "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_abnormality_asymmetry.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_lag_vol_volatility_adjusted",
-      "rank_ic": 0.02602579665013836,
-      "rank_icir": 0.22790754845604813,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_lag_vol_volatility_adjusted.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_intraday_adx_momentum",
-      "rank_ic": 0.025717435293962938,
-      "rank_icir": 0.19304714234209402,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_intraday_adx_momentum.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "week2_adaptive_dir_vol",
-      "rank_ic": 0.02562723321474516,
-      "rank_icir": 0.24804377326130655,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/week2_adaptive_dir_vol.html",
-      "route": "lqtp_dsl",
-      "alias": "week2:adaptive_dir_vol"
-    },
-    {
-      "display_name": "factor_range_asym_vol_smooth",
-      "rank_ic": 0.02519845616661065,
-      "rank_icir": 0.32504055681732597,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_range_asym_vol_smooth.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_tanh_thrust_dynamic_smooth",
-      "rank_ic": 0.024528456569677663,
-      "rank_icir": 0.20998263251733884,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_tanh_thrust_dynamic_smooth.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_vol_surge_regime_gated",
-      "rank_ic": 0.023684999871666963,
-      "rank_icir": 0.20133927702827298,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_vol_surge_regime_gated.html",
-      "route": "lqtp_dsl",
-      "alias": "weekly:factor_vol_surge_regime_gated"
-    },
-    {
-      "display_name": "factor_vol_volume_asym_ewma",
-      "rank_ic": 0.0228899583760097,
-      "rank_icir": 0.3135075461331517,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_vol_volume_asym_ewma.html",
-      "route": "lqtp_dsl",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_smoothed_atr_ratio_gated",
-      "rank_ic": 0.02250839129583048,
-      "rank_icir": 0.23691063919541344,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_smoothed_atr_ratio_gated.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_downside_vol_asymmetry_smoothed",
-      "rank_ic": 0.022345414499353462,
-      "rank_icir": 0.18802782826932246,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_downside_vol_asymmetry_smoothed.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_vol_gated_momentum_v2",
-      "rank_ic": 0.022056760788104646,
-      "rank_icir": 0.15228256066946477,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_vol_gated_momentum_v2.html",
-      "route": "python",
-      "alias": ""
-    },
-    {
-      "display_name": "factor_drawdown_std60_normalized",
-      "rank_ic": 0.021979841232412766,
-      "rank_icir": 0.15194601273400835,
-      "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_drawdown_std60_normalized.html",
+      "report_href": "/reports_screening_reeval/factor_lag_vol_ratio_smoothed_v2.html",
       "route": "lqtp_dsl",
       "alias": ""
     },
     {
       "display_name": "factor_lag_vol_robust_volratio",
-      "rank_ic": 0.0213487711963589,
-      "rank_icir": 0.19627787062891613,
+      "rank_ic": 0.050650663544014964,
+      "rank_icir": 0.4824043402757823,
       "source": "screening_reeval (VWAP→VWAP)",
       "report_href": "/reports_screening_reeval/factor_lag_vol_robust_volratio.html",
       "route": "lqtp_dsl",
       "alias": ""
     },
     {
+      "display_name": "week2_intraday_vol_surge",
+      "rank_ic": 0.05018378587391502,
+      "rank_icir": 0.41494075271722547,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/week2_intraday_vol_surge.html",
+      "route": "lqtp_dsl",
+      "alias": "week2:intraday_vol_surge"
+    },
+    {
+      "display_name": "factor_squared_range_volume_rank_smoothed_no_cuberoot",
+      "rank_ic": 0.050129712098358516,
+      "rank_icir": 0.2974395211560805,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_squared_range_volume_rank_smoothed_no_cuberoot.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_vol_surge_regime_gated",
+      "rank_ic": 0.04993268414902316,
+      "rank_icir": 0.4509284922123074,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_vol_surge_regime_gated.html",
+      "route": "lqtp_dsl",
+      "alias": "weekly:factor_vol_surge_regime_gated"
+    },
+    {
+      "display_name": "factor_crossover_herding_stress_span12_volrank_clip3",
+      "rank_ic": 0.04959637476865713,
+      "rank_icir": 0.40651462511936953,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_crossover_herding_stress_span12_volrank_clip3.html",
+      "route": "lqtp_dsl",
+      "alias": "extra20:factor_crossover_herding_stress_span12_volrank_clip3"
+    },
+    {
+      "display_name": "factor_mut_hc004_volpctrank_w8",
+      "rank_ic": 0.049596374768657116,
+      "rank_icir": 0.4065146251193694,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_mut_hc004_volpctrank_w8.html",
+      "route": "lqtp_dsl",
+      "alias": "weekly:factor_mut_hc004_volpctrank_w8"
+    },
+    {
+      "display_name": "factor_tanh_thrust_dynamic_smooth",
+      "rank_ic": 0.049525213834152454,
+      "rank_icir": 0.4273799401640553,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_tanh_thrust_dynamic_smooth.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_intraday_volume_tanh",
+      "rank_ic": 0.04942320856520486,
+      "rank_icir": 0.4206008549671583,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_intraday_volume_tanh.html",
+      "route": "python",
+      "alias": "extra20:factor_intraday_volume_tanh"
+    },
+    {
+      "display_name": "alphasage_b0e9545fa66ab30a",
+      "rank_ic": 0.04935573064768332,
+      "rank_icir": 0.3596397698539507,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/alphasage_b0e9545fa66ab30a.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_volume_pressure_ewm_smooth",
+      "rank_ic": 0.04866175313403695,
+      "rank_icir": 0.39276323351610964,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volume_pressure_ewm_smooth.html",
+      "route": "lqtp_dsl",
+      "alias": "extra20:factor_volume_pressure_ewm_smooth"
+    },
+    {
+      "display_name": "week2_herd_stress_cross",
+      "rank_ic": 0.0486352817988395,
+      "rank_icir": 0.3662599135570385,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/week2_herd_stress_cross.html",
+      "route": "lqtp_dsl",
+      "alias": "week2:herd_stress_cross"
+    },
+    {
+      "display_name": "week2_vol_weight_range_clip10",
+      "rank_ic": 0.04828325533554204,
+      "rank_icir": 0.41736009110582106,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/week2_vol_weight_range_clip10.html",
+      "route": "lqtp_dsl",
+      "alias": "week2:vol_weight_range_clip10"
+    },
+    {
+      "display_name": "factor_volume_pressure_light_crossover",
+      "rank_ic": 0.04777080516415943,
+      "rank_icir": 0.3985800576826876,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volume_pressure_light_crossover.html",
+      "route": "lqtp_dsl",
+      "alias": "extra20:factor_volume_pressure_light_crossover"
+    },
+    {
+      "display_name": "factor_intraday_return_volume_surge",
+      "rank_ic": 0.04769858145159551,
+      "rank_icir": 0.39412907577703643,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_intraday_return_volume_surge.html",
+      "route": "lqtp_dsl",
+      "alias": "extra20:factor_intraday_return_volume_surge"
+    },
+    {
+      "display_name": "week2_log_range_gate",
+      "rank_ic": 0.04764621481811989,
+      "rank_icir": 0.3894942667734428,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/week2_log_range_gate.html",
+      "route": "lqtp_dsl",
+      "alias": "week2:log_range_gate"
+    },
+    {
+      "display_name": "week2_log_range_gate_z10",
+      "rank_ic": 0.04758681540283012,
+      "rank_icir": 0.391421521827021,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/week2_log_range_gate_z10.html",
+      "route": "lqtp_dsl",
+      "alias": "week2:log_range_gate_z10"
+    },
+    {
+      "display_name": "factor_ema_vol_asymmetry_rank",
+      "rank_ic": 0.04618229385734731,
+      "rank_icir": 0.3477813559705242,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_ema_vol_asymmetry_rank.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_mut_cross_vwpc_z10_clip2_v3",
+      "rank_ic": 0.04584765358202223,
+      "rank_icir": 0.414248375473663,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_mut_cross_vwpc_z10_clip2_v3.html",
+      "route": "lqtp_dsl",
+      "alias": "extra20:factor_mut_cross_vwpc_z10_clip2_v3"
+    },
+    {
+      "display_name": "factor_vol_weighted_pct_range_clip_ema10",
+      "rank_ic": 0.04584765358202221,
+      "rank_icir": 0.4142483754736629,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_vol_weighted_pct_range_clip_ema10.html",
+      "route": "lqtp_dsl",
+      "alias": "extra20:factor_vol_weighted_pct_range_clip_ema10"
+    },
+    {
+      "display_name": "factor_squared_range_close_ema_cuberoot",
+      "rank_ic": 0.045592380201936615,
+      "rank_icir": 0.2559546793353247,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_squared_range_close_ema_cuberoot.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_intraday_volume_tanh_short",
+      "rank_ic": 0.04538535352660555,
+      "rank_icir": 0.3768599943317015,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_intraday_volume_tanh_short.html",
+      "route": "python",
+      "alias": "extra20:factor_intraday_volume_tanh_short"
+    },
+    {
+      "display_name": "week2_stress_range_vol",
+      "rank_ic": 0.045328064625628085,
+      "rank_icir": 0.3056907725859474,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/week2_stress_range_vol.html",
+      "route": "lqtp_dsl",
+      "alias": "week2:stress_range_vol"
+    },
+    {
+      "display_name": "week2_intraday_vol_ratio",
+      "rank_ic": 0.044844706742751816,
+      "rank_icir": 0.37296279945452676,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/week2_intraday_vol_ratio.html",
+      "route": "lqtp_dsl",
+      "alias": "week2:intraday_vol_ratio"
+    },
+    {
+      "display_name": "factor_lag_vol_volatility_adjusted_gate",
+      "rank_ic": 0.044512087633286256,
+      "rank_icir": 0.3765676204296808,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_lag_vol_volatility_adjusted_gate.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_volume_trend_adjusted_impact",
+      "rank_ic": 0.04449943174300234,
+      "rank_icir": 0.383596130718724,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volume_trend_adjusted_impact.html",
+      "route": "lqtp_dsl",
+      "alias": "factor_89"
+    },
+    {
+      "display_name": "factor_mut_cross_vwpc_z10_clip2_span8_v1",
+      "rank_ic": 0.04414252327391887,
+      "rank_icir": 0.3923083010021858,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_mut_cross_vwpc_z10_clip2_span8_v1.html",
+      "route": "lqtp_dsl",
+      "alias": "extra20:factor_mut_cross_vwpc_z10_clip2_span8_v1"
+    },
+    {
+      "display_name": "factor_volume_weighted_price_change",
+      "rank_ic": 0.044074327826630955,
+      "rank_icir": 0.4044392055778702,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volume_weighted_price_change.html",
+      "route": "lqtp_dsl",
+      "alias": "extra20:factor_volume_weighted_price_change"
+    },
+    {
+      "display_name": "factor_vol_regime_trend_smoothed",
+      "rank_ic": 0.043689697521200714,
+      "rank_icir": 0.4370373386200428,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_vol_regime_trend_smoothed.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "week2_herd_momentum_stress",
+      "rank_ic": 0.04360518753884569,
+      "rank_icir": 0.3325584252885103,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/week2_herd_momentum_stress.html",
+      "route": "lqtp_dsl",
+      "alias": "week2:herd_momentum_stress"
+    },
+    {
+      "display_name": "factor_lag_response_vol_tool_adaptive",
+      "rank_ic": 0.04337941570445798,
+      "rank_icir": 0.36745723546672054,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_lag_response_vol_tool_adaptive.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_lag_volatility_regime_adapted",
+      "rank_ic": 0.04321050966221573,
+      "rank_icir": 0.39108870226199205,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_lag_volatility_regime_adapted.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_volume_pressure_imbalance",
+      "rank_ic": 0.042999183230581085,
+      "rank_icir": 0.36980778987006396,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volume_pressure_imbalance.html",
+      "route": "lqtp_dsl",
+      "alias": "extra20:factor_volume_pressure_imbalance"
+    },
+    {
+      "display_name": "factor_herding_volume_momentum_continuous",
+      "rank_ic": 0.042830014515296375,
+      "rank_icir": 0.350121578737938,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_herding_volume_momentum_continuous.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "week2_vol_gated_surge",
+      "rank_ic": 0.042806969853888086,
+      "rank_icir": 0.37816682359225673,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/week2_vol_gated_surge.html",
+      "route": "factor_engine",
+      "alias": "week2:vol_gated_surge"
+    },
+    {
+      "display_name": "factor_lag_vol_volatility_adjusted",
+      "rank_ic": 0.042688619869950234,
+      "rank_icir": 0.3850876458087797,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_lag_vol_volatility_adjusted.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_volume_confirmed_momentum_tanh_gated",
+      "rank_ic": 0.04175236630728818,
+      "rank_icir": 0.34460672088779626,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volume_confirmed_momentum_tanh_gated.html",
+      "route": "lqtp_dsl",
+      "alias": "extra20:factor_volume_confirmed_momentum_tanh_gated"
+    },
+    {
+      "display_name": "week2_vol_confirm_ewm",
+      "rank_ic": 0.04148695948378239,
+      "rank_icir": 0.3114112128277658,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/week2_vol_confirm_ewm.html",
+      "route": "lqtp_dsl",
+      "alias": "week2:vol_confirm_ewm"
+    },
+    {
+      "display_name": "factor_intraday_volume_spike",
+      "rank_ic": 0.04093874448984174,
+      "rank_icir": 0.33910601946188434,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_intraday_volume_spike.html",
+      "route": "lqtp_dsl",
+      "alias": "weekly:factor_intraday_volume_spike"
+    },
+    {
+      "display_name": "factor_volume_confirmed_ewm",
+      "rank_ic": 0.04092260999909701,
+      "rank_icir": 0.4791372771894773,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volume_confirmed_ewm.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_vol_regime_vol_ratio",
+      "rank_ic": 0.040871026362906356,
+      "rank_icir": 0.5543215143882239,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_vol_regime_vol_ratio.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_volume_adjusted_divergence_ema10",
+      "rank_ic": 0.04058033689162408,
+      "rank_icir": 0.3680536743420129,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volume_adjusted_divergence_ema10.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_stable_symmetry_reinforced",
+      "rank_ic": 0.04050361452034221,
+      "rank_icir": 0.40100179037808353,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_stable_symmetry_reinforced.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_corr_volume_regime",
+      "rank_ic": 0.04008987490593315,
+      "rank_icir": 0.43883985463472935,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_corr_volume_regime.html",
+      "route": "lqtp_dsl",
+      "alias": "factor_718"
+    },
+    {
+      "display_name": "factor_intraday_pressure_ema",
+      "rank_ic": 0.03971441322935357,
+      "rank_icir": 0.3609290979610498,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_intraday_pressure_ema.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "alphasage_43727f7f7b2ba487",
+      "rank_ic": 0.039681798561317455,
+      "rank_icir": 0.28507331118561086,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/alphasage_43727f7f7b2ba487.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_volume_regime_intraday_momentum",
+      "rank_ic": 0.03956445081803837,
+      "rank_icir": 0.35953324152624655,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volume_regime_intraday_momentum.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_vol_lag_ret_smoothed",
+      "rank_ic": 0.0394783509291667,
+      "rank_icir": 0.39651138708620226,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_vol_lag_ret_smoothed.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_price_impact_stable_5d",
+      "rank_ic": 0.03946985967684726,
+      "rank_icir": 0.30205683281402,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_price_impact_stable_5d.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_volume_weighted_range_skew",
+      "rank_ic": 0.03936738314809071,
+      "rank_icir": 0.3509232242305626,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volume_weighted_range_skew.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_resvol_volume_momentum",
+      "rank_ic": 0.039228343160769376,
+      "rank_icir": 0.3100130514468446,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_resvol_volume_momentum.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "week2_stress_dir_w25",
+      "rank_ic": 0.038746989556728825,
+      "rank_icir": 0.4564914508939396,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/week2_stress_dir_w25.html",
+      "route": "lqtp_dsl",
+      "alias": "week2:stress_dir_w25"
+    },
+    {
+      "display_name": "factor_asym_intraday_sma",
+      "rank_ic": 0.0384898968925419,
+      "rank_icir": 0.33261919979367,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_asym_intraday_sma.html",
+      "route": "lqtp_dsl",
+      "alias": "factor_692"
+    },
+    {
+      "display_name": "factor_asym_vol_volume_cont_30",
+      "rank_ic": 0.03845096889985087,
+      "rank_icir": 0.37216277305698237,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_asym_vol_volume_cont_30.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_volume_adaptive_momentum",
+      "rank_ic": 0.03841986533214934,
+      "rank_icir": 0.27229882625395385,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volume_adaptive_momentum.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_vol_price_coherence_v2",
+      "rank_ic": 0.038263904151994356,
+      "rank_icir": 0.425663116697626,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_vol_price_coherence_v2.html",
+      "route": "lqtp_dsl",
+      "alias": "factor_658"
+    },
+    {
+      "display_name": "factor_herding_momentum_stress",
+      "rank_ic": 0.03811457748788098,
+      "rank_icir": 0.28465383417992884,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_herding_momentum_stress.html",
+      "route": "lqtp_dsl",
+      "alias": "extra20:factor_herding_momentum_stress"
+    },
+    {
+      "display_name": "factor_volume_abnormality_liquidity_gated",
+      "rank_ic": 0.03804650414134902,
+      "rank_icir": 0.4678199255181509,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volume_abnormality_liquidity_gated.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_abnormality_asymmetry",
+      "rank_ic": 0.03787978510408518,
+      "rank_icir": 0.4546651490195442,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_abnormality_asymmetry.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "week2_vol_adjusted_momentum",
+      "rank_ic": 0.037540397113272124,
+      "rank_icir": 0.2797750328810562,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/week2_vol_adjusted_momentum.html",
+      "route": "lqtp_dsl",
+      "alias": "week2:vol_adjusted_momentum"
+    },
+    {
+      "display_name": "factor_crash_vol_ratio_asym",
+      "rank_ic": 0.037300394065496026,
+      "rank_icir": 0.2896346022725899,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_crash_vol_ratio_asym.html",
+      "route": "lqtp_dsl",
+      "alias": "factor_264"
+    },
+    {
+      "display_name": "week2_stress_dir_clip25",
+      "rank_ic": 0.03728047430313711,
+      "rank_icir": 0.45786444128253023,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/week2_stress_dir_clip25.html",
+      "route": "lqtp_dsl",
+      "alias": "week2:stress_dir_clip25"
+    },
+    {
+      "display_name": "factor_asym_vol_attenuate",
+      "rank_ic": 0.03721659421939923,
+      "rank_icir": 0.49875172886146996,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_asym_vol_attenuate.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_rsi_volume_confirmed_reversal",
+      "rank_ic": 0.03720739457936341,
+      "rank_icir": 0.2718250643145143,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_rsi_volume_confirmed_reversal.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_asym_vol_gated",
+      "rank_ic": 0.0371426801103289,
+      "rank_icir": 0.49536689437028253,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_asym_vol_gated.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_volume_confirmed_up_capture",
+      "rank_ic": 0.03686479199481368,
+      "rank_icir": 0.3136588171033471,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volume_confirmed_up_capture.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_roughness_trend_vol_short",
+      "rank_ic": 0.03676750395480186,
+      "rank_icir": 0.25812648579057196,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_roughness_trend_vol_short.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_rsi_reversal_resvol_volume",
+      "rank_ic": 0.03658962141504268,
+      "rank_icir": 0.27910152111388187,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_rsi_reversal_resvol_volume.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_intraday_adx_momentum",
+      "rank_ic": 0.03641385508070846,
+      "rank_icir": 0.28037129183192344,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_intraday_adx_momentum.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "week2_stress_accum_dir_vol",
+      "rank_ic": 0.03611521367450031,
+      "rank_icir": 0.4590746347920243,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/week2_stress_accum_dir_vol.html",
+      "route": "lqtp_dsl",
+      "alias": "week2:stress_accum_dir_vol"
+    },
+    {
+      "display_name": "factor_volatility_asymmetry_spike_adj_ema5",
+      "rank_ic": 0.035880199241057176,
+      "rank_icir": 0.2877499267567797,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volatility_asymmetry_spike_adj_ema5.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_asym_ratio_pure",
+      "rank_ic": 0.03587892434458073,
+      "rank_icir": 0.48746952552108946,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_asym_ratio_pure.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_volume_surge_persistence",
+      "rank_ic": 0.035800964566574334,
+      "rank_icir": 0.44676067554716253,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volume_surge_persistence.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_vol_gated_momentum_v2",
+      "rank_ic": 0.03547655678792529,
+      "rank_icir": 0.24850564543424103,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_vol_gated_momentum_v2.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_drawdown_vol_persistence",
+      "rank_ic": 0.03531154483892804,
+      "rank_icir": 0.2687254991186377,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_drawdown_vol_persistence.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_intraday_reversal_vol_intensity",
+      "rank_ic": 0.03525717276666303,
+      "rank_icir": 0.26349269033390005,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_intraday_reversal_vol_intensity.html",
+      "route": "lqtp_dsl",
+      "alias": "extra20:factor_intraday_reversal_vol_intensity"
+    },
+    {
+      "display_name": "factor_volatility_compression",
+      "rank_ic": 0.034678784221379384,
+      "rank_icir": 0.2963017285842541,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volatility_compression.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_reversal_intraday_5d_ema",
+      "rank_ic": 0.034668609855013105,
+      "rank_icir": 0.2491773543533256,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_reversal_intraday_5d_ema.html",
+      "route": "factor_engine",
+      "alias": "extra20:factor_reversal_intraday_5d_ema"
+    },
+    {
+      "display_name": "week2_asymmetric_range_ratio",
+      "rank_ic": 0.03466077613903922,
+      "rank_icir": 0.3866314317159192,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/week2_asymmetric_range_ratio.html",
+      "route": "factor_engine",
+      "alias": "week2:asymmetric_range_ratio"
+    },
+    {
+      "display_name": "factor_window_adjusted_momentum",
+      "rank_ic": 0.0346595237403857,
+      "rank_icir": 0.2441439322150729,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_window_adjusted_momentum.html",
+      "route": "lqtp_dsl",
+      "alias": "factor_427"
+    },
+    {
+      "display_name": "week2_vol_weight_price_move",
+      "rank_ic": 0.034657994489510055,
+      "rank_icir": 0.2582097616307012,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/week2_vol_weight_price_move.html",
+      "route": "lqtp_dsl",
+      "alias": "week2:vol_weight_price_move"
+    },
+    {
+      "display_name": "factor_simple_convex_momentum_log_volume",
+      "rank_ic": 0.03456506291304202,
+      "rank_icir": 0.23209246625906538,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_simple_convex_momentum_log_volume.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "week2_asymmetric_range_15d",
+      "rank_ic": 0.03450763354731905,
+      "rank_icir": 0.3836992028994216,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/week2_asymmetric_range_15d.html",
+      "route": "factor_engine",
+      "alias": "week2:asymmetric_range_15d"
+    },
+    {
+      "display_name": "week2_asymmetric_range_ema5",
+      "rank_ic": 0.0343476530027133,
+      "rank_icir": 0.4104345298635106,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/week2_asymmetric_range_ema5.html",
+      "route": "factor_engine",
+      "alias": "week2:asymmetric_range_ema5"
+    },
+    {
+      "display_name": "factor_adaptive_volume_smoothness",
+      "rank_ic": 0.034340771438990725,
+      "rank_icir": 0.5361619197222854,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_adaptive_volume_smoothness.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_mut_cro_asym_vol_ratio_med_15_minp3_vol10",
+      "rank_ic": 0.03407688337018877,
+      "rank_icir": 0.4211769057784039,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_mut_cro_asym_vol_ratio_med_15_minp3_vol10.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "week2_adaptive_dir_vol_cross",
+      "rank_ic": 0.03379338206569941,
+      "rank_icir": 0.23575522140288507,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/week2_adaptive_dir_vol_cross.html",
+      "route": "lqtp_dsl",
+      "alias": "week2:adaptive_dir_vol_cross"
+    },
+    {
+      "display_name": "factor_range_asym_log_vol",
+      "rank_ic": 0.03378130228364153,
+      "rank_icir": 0.4460521620975485,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_range_asym_log_vol.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_drawdown_depth_normalized",
+      "rank_ic": 0.03344981566177932,
+      "rank_icir": 0.26484543180258296,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_drawdown_depth_normalized.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_drawdown_depth_duration_range_vol",
+      "rank_ic": 0.03320229149825926,
+      "rank_icir": 0.27820611032453296,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_drawdown_depth_duration_range_vol.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "week2_range_pos_vol_gate",
+      "rank_ic": 0.03295220771169061,
+      "rank_icir": 0.2823697272763975,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/week2_range_pos_vol_gate.html",
+      "route": "factor_engine",
+      "alias": "week2:range_pos_vol_gate"
+    },
+    {
+      "display_name": "factor_crash_vol_spike_volregime_boost",
+      "rank_ic": 0.03294487549877504,
+      "rank_icir": 0.33699908714877014,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_crash_vol_spike_volregime_boost.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_liquidity_adaptive_momentum",
+      "rank_ic": 0.03249554607904296,
+      "rank_icir": 0.24250373759029975,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_liquidity_adaptive_momentum.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_downside_vol_liquidity_momentum",
+      "rank_ic": 0.032495546079042925,
+      "rank_icir": 0.24250373759029953,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_downside_vol_liquidity_momentum.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
       "display_name": "factor_drawdown_normalized",
-      "rank_ic": 0.02100813194762582,
-      "rank_icir": 0.15406665519162344,
+      "rank_ic": 0.03244384396420553,
+      "rank_icir": 0.24152487244392237,
       "source": "screening_reeval (VWAP→VWAP)",
       "report_href": "/reports_screening_reeval/factor_drawdown_normalized.html",
       "route": "lqtp_dsl",
@@ -1184,39 +941,543 @@
     },
     {
       "display_name": "factor_drawdown_recovery",
-      "rank_ic": 0.021008131947625814,
-      "rank_icir": 0.1540666551916234,
+      "rank_ic": 0.03244384396420553,
+      "rank_icir": 0.24152487244392237,
       "source": "screening_reeval (VWAP→VWAP)",
       "report_href": "/reports_screening_reeval/factor_drawdown_recovery.html",
       "route": "lqtp_dsl",
       "alias": ""
     },
     {
-      "display_name": "factor_downside_vol_liquidity_momentum",
-      "rank_ic": 0.02090206963822141,
-      "rank_icir": 0.15343136555250433,
+      "display_name": "week2_vol_regime_trend",
+      "rank_ic": 0.0324303689215083,
+      "rank_icir": 0.3286415539059842,
       "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_downside_vol_liquidity_momentum.html",
+      "report_href": "/reports_screening_reeval/week2_vol_regime_trend.html",
+      "route": "factor_engine",
+      "alias": "week2:vol_regime_trend"
+    },
+    {
+      "display_name": "factor_range_asym_vol_smooth",
+      "rank_ic": 0.032017079344602295,
+      "rank_icir": 0.4244598926828777,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_range_asym_vol_smooth.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_range_asym_log_short",
+      "rank_ic": 0.031999082822465476,
+      "rank_icir": 0.4320917393970224,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_range_asym_log_short.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_volatility_scaled_deviation",
+      "rank_ic": 0.03198510546568093,
+      "rank_icir": 0.23161858453616702,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volatility_scaled_deviation.html",
       "route": "lqtp_dsl",
       "alias": ""
     },
     {
-      "display_name": "factor_liquidity_adaptive_momentum",
-      "rank_ic": 0.020902069638221398,
-      "rank_icir": 0.15343136555250422,
+      "display_name": "factor_volume_adjusted_breakout_with_vol_filter_v2",
+      "rank_ic": 0.03168128727835674,
+      "rank_icir": 0.3955257225055707,
       "source": "screening_reeval (VWAP→VWAP)",
-      "report_href": "/reports_screening_reeval/factor_liquidity_adaptive_momentum.html",
+      "report_href": "/reports_screening_reeval/factor_volume_adjusted_breakout_with_vol_filter_v2.html",
       "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_volume_adjusted_breakout_window_001",
+      "rank_ic": 0.030922771935742697,
+      "rank_icir": 0.39074404149256525,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volume_adjusted_breakout_window_001.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_drawdown_atr_recovery",
+      "rank_ic": 0.030834330555996516,
+      "rank_icir": 0.21663739423246478,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_drawdown_atr_recovery.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_drawdown_atr_normalized_20",
+      "rank_ic": 0.030834324047998636,
+      "rank_icir": 0.21663733908450808,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_drawdown_atr_normalized_20.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_drawdown_atr_20_normalized",
+      "rank_ic": 0.030834324047998588,
+      "rank_icir": 0.21663733908450783,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_drawdown_atr_20_normalized.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_liquidity_range_gated_momentum_v6",
+      "rank_ic": 0.030768299787242513,
+      "rank_icir": 0.22123245610923734,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_liquidity_range_gated_momentum_v6.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_liquidity_range_gated_momentum_v5",
+      "rank_ic": 0.030750266467150348,
+      "rank_icir": 0.22202996535158523,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_liquidity_range_gated_momentum_v5.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_volume_confirmed_momentum_clipped",
+      "rank_ic": 0.030654345518811972,
+      "rank_icir": 0.21988890916658355,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volume_confirmed_momentum_clipped.html",
+      "route": "lqtp_dsl",
+      "alias": "weekly:factor_volume_confirmed_momentum_clipped"
+    },
+    {
+      "display_name": "factor_volume_adjusted_breakout_v3",
+      "rank_ic": 0.03065326640409355,
+      "rank_icir": 0.36893728454609315,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volume_adjusted_breakout_v3.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_volume_pressure_reversal",
+      "rank_ic": 0.030565689939979983,
+      "rank_icir": 0.22023093445188885,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volume_pressure_reversal.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "week2_vol_confirm_5d",
+      "rank_ic": 0.030565689939976427,
+      "rank_icir": 0.22023093445186706,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/week2_vol_confirm_5d.html",
+      "route": "lqtp_dsl",
+      "alias": "week2:vol_confirm_5d"
+    },
+    {
+      "display_name": "factor_volume_confirmed_momentum",
+      "rank_ic": 0.030540953946572993,
+      "rank_icir": 0.23156994557488148,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volume_confirmed_momentum.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_volume_confirmed_momentum_v3",
+      "rank_ic": 0.030540953946572982,
+      "rank_icir": 0.23156994557488134,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volume_confirmed_momentum_v3.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_crash_volume_rank",
+      "rank_ic": 0.03054095394657294,
+      "rank_icir": 0.23156994557488106,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_crash_volume_rank.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "week2_vol_gated_momentum_ratio",
+      "rank_ic": 0.03035291332974451,
+      "rank_icir": 0.22247397760352391,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/week2_vol_gated_momentum_ratio.html",
+      "route": "factor_engine",
+      "alias": "week2:vol_gated_momentum_ratio"
+    },
+    {
+      "display_name": "factor_vol_gated_momentum_volume_weighted",
+      "rank_ic": 0.030337216921771427,
+      "rank_icir": 0.22235021886493042,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_vol_gated_momentum_volume_weighted.html",
+      "route": "factor_engine",
+      "alias": "weekly:factor_vol_gated_momentum_volume_weighted"
+    },
+    {
+      "display_name": "factor_volume_price_divergence_cross_mut",
+      "rank_ic": 0.030184582909775968,
+      "rank_icir": 0.22063805935920797,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volume_price_divergence_cross_mut.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_liquidity_mom_simple_2_mutated",
+      "rank_ic": 0.030152699154892555,
+      "rank_icir": 0.22126290050827752,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_liquidity_mom_simple_2_mutated.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_volume_confirmed_momentum_crossover_v1",
+      "rank_ic": 0.03010723450217992,
+      "rank_icir": 0.22539197003033556,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volume_confirmed_momentum_crossover_v1.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_directional_vol_volbase25_smooth_dir_range10",
+      "rank_ic": 0.03007550459409097,
+      "rank_icir": 0.2185644675874536,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_directional_vol_volbase25_smooth_dir_range10.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_vol_gated_herding_crossover",
+      "rank_ic": 0.030073930780116526,
+      "rank_icir": 0.22024414234387976,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_vol_gated_herding_crossover.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_crossover_vol_impact_trend_gated",
+      "rank_ic": 0.030036139691500145,
+      "rank_icir": 0.27293642717070565,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_crossover_vol_impact_trend_gated.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_volume_confirmed_momentum_crossover_v2",
+      "rank_ic": 0.029934667171474118,
+      "rank_icir": 0.2240485056355949,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volume_confirmed_momentum_crossover_v2.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_crash_volume_gate",
+      "rank_ic": 0.029908597078383985,
+      "rank_icir": 0.2949220964385891,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_crash_volume_gate.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_downside_vol_asymmetry_smoothed",
+      "rank_ic": 0.029816627568462536,
+      "rank_icir": 0.2544726375537662,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_downside_vol_asymmetry_smoothed.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_lagret_volratio_gated_smooth",
+      "rank_ic": 0.02971638489912675,
+      "rank_icir": 0.30638320292488136,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_lagret_volratio_gated_smooth.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_adaptive_vol_directional_smooth_range10",
+      "rank_ic": 0.02967850209545711,
+      "rank_icir": 0.21525088066107612,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_adaptive_vol_directional_smooth_range10.html",
+      "route": "python",
+      "alias": "extra20:factor_adaptive_vol_directional_smooth_range10"
+    },
+    {
+      "display_name": "factor_asym_vol_down_up_volatility_gated",
+      "rank_ic": 0.029511115788538846,
+      "rank_icir": 0.388028134353397,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_asym_vol_down_up_volatility_gated.html",
+      "route": "python",
       "alias": ""
     },
     {
       "display_name": "factor_ema_trend_simple",
-      "rank_ic": 0.020887854980143086,
-      "rank_icir": 0.13448371370792933,
+      "rank_ic": 0.029373802411225558,
+      "rank_icir": 0.19055452716996912,
       "source": "screening_reeval (VWAP→VWAP)",
       "report_href": "/reports_screening_reeval/factor_ema_trend_simple.html",
       "route": "lqtp_dsl",
       "alias": "factor_865"
+    },
+    {
+      "display_name": "week2_inverse_vol_momentum_v3",
+      "rank_ic": 0.029322627001279154,
+      "rank_icir": 0.20229828415066586,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/week2_inverse_vol_momentum_v3.html",
+      "route": "lqtp_dsl",
+      "alias": "week2:inverse_vol_momentum_v3"
+    },
+    {
+      "display_name": "factor_volume_abnormality_range_interaction",
+      "rank_ic": 0.029234662061588756,
+      "rank_icir": 0.32437115022436513,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volume_abnormality_range_interaction.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_resvol_smoothed_trend",
+      "rank_ic": 0.02915564698610628,
+      "rank_icir": 0.23022206306281306,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_resvol_smoothed_trend.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_adx_trend_vol_ema",
+      "rank_ic": 0.029098383176836363,
+      "rank_icir": 0.2894384751519371,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_adx_trend_vol_ema.html",
+      "route": "factor_engine",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_vol_gated_herding_mutated",
+      "rank_ic": 0.028896422167914965,
+      "rank_icir": 0.2199320820238476,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_vol_gated_herding_mutated.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_negative_skew_stress_gated",
+      "rank_ic": 0.028761541229027136,
+      "rank_icir": 0.3894704895174474,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_negative_skew_stress_gated.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_drawdown_std60_normalized",
+      "rank_ic": 0.028159054654235093,
+      "rank_icir": 0.19344709931944462,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_drawdown_std60_normalized.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_volume_gated_momentum_mutated_v3",
+      "rank_ic": 0.02798031538712461,
+      "rank_icir": 0.20259708664779222,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volume_gated_momentum_mutated_v3.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_momentum_volratio",
+      "rank_ic": 0.027697644195881485,
+      "rank_icir": 0.195638429395728,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_momentum_volratio.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_drawdown_atr_normalized_v2",
+      "rank_ic": 0.027487593286715024,
+      "rank_icir": 0.1913221065483249,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_drawdown_atr_normalized_v2.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "week2_dir_vol_volume_25d",
+      "rank_ic": 0.026290292887716428,
+      "rank_icir": 0.1855744984679965,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/week2_dir_vol_volume_25d.html",
+      "route": "lqtp_dsl",
+      "alias": "week2:dir_vol_volume_25d"
+    },
+    {
+      "display_name": "factor_smoothed_atr_ratio_gated",
+      "rank_ic": 0.026221633930876967,
+      "rank_icir": 0.28019636908340395,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_smoothed_atr_ratio_gated.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_volume_stress_adjusted_momentum_robust",
+      "rank_ic": 0.02602663982716132,
+      "rank_icir": 0.34166773247614607,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volume_stress_adjusted_momentum_robust.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_regime_switch_simple",
+      "rank_ic": 0.025043847569857915,
+      "rank_icir": 0.22327964288114174,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_regime_switch_simple.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_simplified_robust_volume_momentum",
+      "rank_ic": 0.0248402978901286,
+      "rank_icir": 0.317188250604806,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_simplified_robust_volume_momentum.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_volume_persistence_momentum_robust",
+      "rank_ic": 0.024723017853307324,
+      "rank_icir": 0.3249614245765263,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volume_persistence_momentum_robust.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_range_volume_trend",
+      "rank_ic": 0.02430333265875603,
+      "rank_icir": 0.2781686456982022,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_range_volume_trend.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_drawdown_vol_norm_clean",
+      "rank_ic": 0.023908307356803684,
+      "rank_icir": 0.1643437324818559,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_drawdown_vol_norm_clean.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_volume_confirmed_momentum_simple_volume_deviation",
+      "rank_ic": 0.023493238000628934,
+      "rank_icir": 0.2970559828791288,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_volume_confirmed_momentum_simple_volume_deviation.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_herding_vol_gated_momentum",
+      "rank_ic": 0.022277768599741284,
+      "rank_icir": 0.3441223868415702,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_herding_vol_gated_momentum.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_directional_vol_adaptive_crossover",
+      "rank_ic": 0.021829751085746307,
+      "rank_icir": 0.1684825099175844,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_directional_vol_adaptive_crossover.html",
+      "route": "lqtp_dsl",
+      "alias": "weekly:factor_directional_vol_adaptive_crossover"
+    },
+    {
+      "display_name": "factor_vol_regime_breakout_continuous",
+      "rank_ic": 0.021802481450754637,
+      "rank_icir": 0.17899438991074304,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_vol_regime_breakout_continuous.html",
+      "route": "lqtp_dsl",
+      "alias": "weekly:factor_vol_regime_breakout_continuous"
+    },
+    {
+      "display_name": "alphasage_baec4247c71a031c",
+      "rank_ic": 0.021547547997204458,
+      "rank_icir": 0.14950413579280536,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/alphasage_baec4247c71a031c.html",
+      "route": "lqtp_dsl",
+      "alias": ""
+    },
+    {
+      "display_name": "week2_sharpe_momentum_v2",
+      "rank_ic": 0.021272365438770174,
+      "rank_icir": 0.16611886126477335,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/week2_sharpe_momentum_v2.html",
+      "route": "factor_engine",
+      "alias": "week2:sharpe_momentum_v2"
+    },
+    {
+      "display_name": "factor_pressure_compression_simplified_v3",
+      "rank_ic": 0.021161094444834414,
+      "rank_icir": 0.1755058554637677,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_pressure_compression_simplified_v3.html",
+      "route": "python",
+      "alias": ""
+    },
+    {
+      "display_name": "factor_vol_volume_asym_ewma",
+      "rank_ic": 0.020759864393593626,
+      "rank_icir": 0.2927547394166908,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_vol_volume_asym_ewma.html",
+      "route": "lqtp_dsl",
+      "alias": ""
     }
   ]
 }
