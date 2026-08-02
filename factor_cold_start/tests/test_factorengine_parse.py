@@ -3,18 +3,12 @@ from __future__ import annotations
 import ast
 
 from api.dsl_parser import parse_expr
+from cleaned_operators.operator_surface import DAILY_CANONICALS, EXTENDED_ONLY_CANONICALS
 from factor_cold_start.catalog import load_catalog
-from factor_cold_start.production_admission import admit_factor
 
 
 def _assert_no_negative_lags(formula: str) -> None:
-    positions = {
-        "ts_delay": 1,
-        "ts_delta": 1,
-        "ts_pct": 1,
-        "ts_log_return": 1,
-        "ts_autocorr": 2,
-    }
+    positions = {"ts_delay": 1, "ts_delta": 1, "ts_pct": 1, "ts_log_return": 1, "ts_autocorr": 2}
     for node in ast.walk(ast.parse(formula, mode="eval")):
         if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
             continue
@@ -26,25 +20,18 @@ def _assert_no_negative_lags(formula: str) -> None:
             assert value.value >= 0
 
 
-def test_all_default_daily_formulas_are_production_admitted() -> None:
+def test_all_daily_formulas_parse_on_daily_surface() -> None:
     for market in ("ashare", "us"):
-        rows = load_catalog(market, "daily")
-        assert rows, market
-        for row in rows:
-            # Daily-output production factors may use operators promoted from the
-            # former Extended authoring surface, therefore parsing uses compat.
-            parse_expr(row.formula, surface="compat")
-            admission = admit_factor(row)
-            assert admission.eligible, (row.factor_id, admission.violations)
-            assert admission.canonical_operators, row.factor_id
-            assert all(admission.backend_map.values()), row.factor_id
+        for row in load_catalog(market, "daily"):
+            parse_expr(row.formula, surface="daily")
+            assert set(row.operators) <= set(DAILY_CANONICALS)
             _assert_no_negative_lags(row.formula)
 
 
-def test_extended_archive_parses_but_makes_no_production_claim() -> None:
+def test_all_extended_formulas_parse_on_compat_surface_without_research_ops() -> None:
+    allowed = set(DAILY_CANONICALS) | set(EXTENDED_ONLY_CANONICALS)
     for market in ("ashare", "us"):
-        rows = load_catalog(market, "extended")
-        assert rows, market
-        for row in rows:
+        for row in load_catalog(market, "extended"):
             parse_expr(row.formula, surface="compat")
+            assert set(row.operators) <= allowed
             _assert_no_negative_lags(row.formula)

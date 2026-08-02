@@ -1,17 +1,17 @@
 # Factor cold-start coverage
 
-- Total factors: **5300**
+- Total factors: **4620**
 - Catalogs: **4**
-- Existing GTJA/Week2 formulas excluded structurally: **227**
+- Existing GTJA/Week2 formulas excluded structurally: **453**
 
 ## Catalog summary
 
 | Catalog | Factors | Families | Fields | Eligible operators | Coverage |
 |---|---:|---:|---:|---:|---:|
 | `ashare_daily` | 819 | 20 | 13 | 79/79 | 100.0% |
-| `ashare_extended` | 1699 | 23 | 23 | 377/377 | 100.0% |
+| `ashare_extended` | 1359 | 13 | 11 | 90/90 | 100.0% |
 | `us_daily` | 1007 | 25 | 26 | 79/79 | 100.0% |
-| `us_extended` | 1775 | 23 | 25 | 376/376 | 100.0% |
+| `us_extended` | 1435 | 13 | 13 | 89/89 | 100.0% |
 
 ## `ashare_daily`
 
@@ -68,20 +68,10 @@
 | `decay_trend` | 192 |
 | `conditional_history` | 174 |
 | `technical` | 81 |
-| `technical_extension` | 81 |
 | `nonlinear_experimental` | 66 |
-| `technical_structure` | 55 |
-| `fundamental_transform` | 49 |
-| `liquidity` | 38 |
 | `price_deviation` | 32 |
-| `technical_indicator` | 32 |
 | `compounded_return` | 24 |
-| `intraday_to_daily` | 24 |
-| `production_promoted` | 20 |
 | `advanced_cross_sectional` | 14 |
-| `analyst_expectation` | 14 |
-| `candlestick_pattern` | 14 |
-| `candlestick` | 13 |
 | `data_quality` | 10 |
 | `cross_sectional_state` | 5 |
 | `liquidity_activity` | 4 |
@@ -91,11 +81,8 @@
 
 | Tier | Count |
 |---|---:|
-| `analyst` | 14 |
-| `core` | 1593 |
-| `enriched` | 19 |
-| `fundamental` | 49 |
-| `minute` | 24 |
+| `core` | 1341 |
+| `enriched` | 18 |
 
 ### Intentionally excluded operators
 
@@ -173,21 +160,11 @@
 | `decay_trend` | 192 |
 | `conditional_history` | 174 |
 | `technical` | 81 |
-| `technical_extension` | 81 |
 | `overnight_intraday` | 80 |
 | `nonlinear_experimental` | 66 |
-| `technical_structure` | 55 |
-| `fundamental_transform` | 49 |
-| `liquidity` | 38 |
 | `price_deviation` | 32 |
-| `technical_indicator` | 32 |
 | `compounded_return` | 24 |
-| `intraday_to_daily` | 24 |
-| `production_promoted` | 20 |
 | `advanced_cross_sectional` | 14 |
-| `analyst_expectation` | 14 |
-| `candlestick_pattern` | 14 |
-| `candlestick` | 13 |
 | `data_quality` | 10 |
 | `cross_sectional_state` | 5 |
 | `liquidity_activity` | 4 |
@@ -196,12 +173,9 @@
 
 | Tier | Count |
 |---|---:|
-| `analyst` | 14 |
-| `core` | 1593 |
+| `core` | 1341 |
 | `derived` | 80 |
-| `enriched` | 15 |
-| `fundamental` | 49 |
-| `minute` | 24 |
+| `enriched` | 14 |
 
 ### Intentionally excluded operators
 
