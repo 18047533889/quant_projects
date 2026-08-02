@@ -85,6 +85,9 @@ jobs:
             gtja191/tests/test_gtja191.py
       - name: Platform regressions
         env:
+          # AutoFactorEvaluation ships a provider-local ``data_access`` module.
+          # Exclude that path here so DataAccess regression tests exercise the
+          # editable production package installed above, not the shadow copy.
           PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/factor_engine:${{ github.workspace }}/gtja191
         run: |
           pytest -q \
@@ -92,27 +95,3 @@ jobs:
             dataaccess/tests/unit/test_key_policy_deterministic.py \
             factor_engine/tests/test_data_scope_stability.py \
             factor_engine/tests/test_gtja_compat_semantics.py
-
-  temporary-wheelhouse-export:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Download pinned official wheels
-        run: |
-          python -m pip install --upgrade pip
-          mkdir -p wheelhouse
-          python -m pip download --only-binary=:all: --dest wheelhouse \
-            polars==1.42.1 \
-            polars-runtime-32==1.42.1 \
-            duckdb==1.5.4 \
-            pyarrow==22.0.0
-          ls -lh wheelhouse
-      - uses: actions/upload-artifact@v4
-        with:
-          name: factorengine-wheelhouse-py311-linux-x86_64
-          path: wheelhouse/*.whl
-          if-no-files-found: error
-          retention-days: 1
