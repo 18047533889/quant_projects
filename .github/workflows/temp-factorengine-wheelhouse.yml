@@ -1,0 +1,42 @@
+name: Temporary FactorEngine Wheelhouse
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/temp-factorengine-wheelhouse.yml
+
+permissions:
+  contents: read
+
+jobs:
+  wheelhouse:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download pinned official wheels
+        run: |
+          python -m pip install --upgrade pip
+          mkdir -p wheelhouse
+          python -m pip download --only-binary=:all: --dest wheelhouse \
+            polars==1.42.1 \
+            polars-runtime-32==1.42.1 \
+            duckdb==1.5.4 \
+            pyarrow==22.0.0
+          python - <<'PY'
+          from pathlib import Path
+          files = sorted(path.name for path in Path('wheelhouse').glob('*.whl'))
+          required = ('polars-', 'polars_runtime_32-', 'duckdb-', 'pyarrow-')
+          missing = [prefix for prefix in required if not any(name.startswith(prefix) for name in files)]
+          if missing:
+              raise SystemExit(f'missing wheel prefixes: {missing}; files={files}')
+          print('\n'.join(files))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: factorengine-wheelhouse-py311-linux-x86_64
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+          retention-days: 1
