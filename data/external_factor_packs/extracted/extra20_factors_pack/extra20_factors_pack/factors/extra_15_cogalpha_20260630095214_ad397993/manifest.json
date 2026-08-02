@@ -1,0 +1,36 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "cogalpha_20260630095214_ad397993",
+  "campaign_id": "cogalpha_ashare_pv_202606301800",
+  "formula": "tanh(EWMA( (close/open-1) * (volume/SMA(volume,20)), span=20, adjust=False ))",
+  "expression_type": "python",
+  "code": "def factor_intraday_volume_tanh(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    open_ = df_copy[\"open\"]\n    volume = df_copy[\"volume\"]\n    w = 20\n    intra_ret = close / open_.replace(0, np.nan) - 1\n    vol_sma = volume.rolling(w, min_periods=w).mean()\n    vol_surge = volume / vol_sma.replace(0, np.nan)\n    raw = intra_ret * vol_surge\n    factor = raw.ewm(span=w, adjust=False).mean()\n    factor = np.tanh(factor)\n    df_copy[\"factor_intraday_volume_tanh\"] = factor.fillna(0)\n    return df_copy[\"factor_intraday_volume_tanh\"]",
+  "generator_name": "cogalpha",
+  "generator_version": "2.1.0",
+  "mined_by": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "born_timestamp": "2026-06-30T09:52:14Z",
+  "metrics": {
+    "train": {
+      "ic": 0.025533529696861137,
+      "icir": 0.2504525954118104,
+      "rank_ic": 0.04578849287978434
+    },
+    "valid": {
+      "ic": 0.024416237159410114,
+      "icir": 0.22237668133090932,
+      "rank_ic": 0.045411423423101845
+    },
+    "test": {
+      "ic": 0.02071865575105533,
+      "icir": 0.16863156495787754,
+      "rank_ic": 0.05203457313713565
+    }
+  },
+  "description": "Borrows primary mechanism from MUT_AVR_001 (intraday return scaled by volume surge, smoothed by EWMA) and replaces hard clipping with tanh compression from alpha-crossover-0-1 to softly bound extremes while preserving directional signal. Targets improving IC (from 0.0253) toward the stronger IC of alpha-crossover-0-1 (0.0356) without degrading the rank stability (RankIC 0.043, RankICIR 0.371) of MUT_AVR_001.",
+  "filter_note": "CogAlpha python interim; train actual_start from lqtp_data (2016+, spec 2014)."
+}

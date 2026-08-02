@@ -1,0 +1,75 @@
+{
+  "schema_version": "factor.manifest.v1",
+  "candidate_id": "raw_ca_hash_d37770d2",
+  "campaign_id": "llm_ashare_pv_cogalpha_2026q2",
+  "generator_name": "cogalpha",
+  "producer": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_LQTP",
+  "domain_root": "price_volume",
+  "frequency_bucket": "daily",
+  "batch_id": "post_mining_translate",
+  "factor_name": "factor_volume_confirmed_momentum",
+  "formula": "(daily_return) * (safe_div(numerator=volume, denominator=ts_mean(volume, 20)))",
+  "expression_type": "lqtp_dsl",
+  "execution_platform": "lqtp",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit",
+  "code": "def factor_volume_confirmed_momentum(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(20, min_periods=20).mean()\n    signal = ret * vol_ratio\n    smoothed = signal.ewm(span=10, min_periods=10, adjust=False).mean()\n    df_copy['factor_volume_confirmed_momentum'] = smoothed\n    return df_copy['factor_volume_confirmed_momentum']",
+  "rationale": "Volume-confirmed price momentum: amplify returns when volume is above its 20-day average, dampen when below. Exponential smoothing stabilizes the signal, balancing IC and RankICIR.",
+  "lineage": {
+    "agent_skill": "alpha-price-volume-coherence",
+    "operation": "cogalpha_to_lqtp_translation"
+  },
+  "stage": "candidate_pool",
+  "fitness_label": "elite",
+  "metrics": {
+    "train": {
+      "ic": 0.024903742995501573,
+      "rank_ic": 0.04323428947900828,
+      "icir": 0.219954856289788,
+      "rank_icir": 0.3417460623012152,
+      "status": "computed",
+      "source": "cogalpha"
+    },
+    "valid": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    }
+  },
+  "validation": {
+    "status": "pending"
+  },
+  "created_at": "2026-06-21T11:25:28.457231+00:00",
+  "updated_at": "2026-06-21T16:18:19.885845+00:00",
+  "lqtp_tags": {
+    "universe": "all_a",
+    "market": "ashare"
+  },
+  "rationale_llm": {
+    "summary": "Volume-confirmed price momentum: amplify returns when volume is above its 20-day average, dampen when below. Exponential smoothing stabilizes the signal, balancing IC and RankICIR.",
+    "parsed_at": "2026-06-21T11:25:33.972658+00:00",
+    "source": "manifest_rationale"
+  },
+  "admission": {
+    "test": {
+      "checked_at": "2026-06-21T16:11:03.161971+00:00",
+      "min_rank_ic": 0.03,
+      "max_pool_correlation": 0.7,
+      "mean_ic": 0.009362184231823337,
+      "rank_ic": 0.009362184231823337,
+      "orientation": "flipped",
+      "original_mean_ic": -0.00952076252370629,
+      "pool_max_correlation": 0.9999907323617425,
+      "correlation_source": "lqtp_reference_library",
+      "reference_library_split": "test",
+      "reference_library_cached_count": 65,
+      "reference_compared_count": 65,
+      "passed_ic": false,
+      "passed_correlation": false,
+      "passed": false,
+      "split": "test"
+    }
+  }
+}

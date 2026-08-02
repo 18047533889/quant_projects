@@ -1,0 +1,75 @@
+{
+  "schema_version": "factor.manifest.v1",
+  "candidate_id": "raw_ca_hash_50cd89c1",
+  "campaign_id": "llm_ashare_pv_cogalpha_2026q2",
+  "generator_name": "cogalpha",
+  "producer": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_LQTP",
+  "domain_root": "price_volume",
+  "frequency_bucket": "daily",
+  "batch_id": "post_mining_translate",
+  "factor_name": "factor_volume_confirmed_momentum_clipped",
+  "formula": "(ts_pct(close, 5)) * (safe_div(numerator=volume, denominator=ts_mean(volume, 20)))",
+  "expression_type": "lqtp_dsl",
+  "execution_platform": "lqtp",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit",
+  "code": "def factor_volume_confirmed_momentum_clipped(df):\n    df_copy = df.copy()\n    momentum = df_copy[\"close\"] / df_copy[\"close\"].shift(5) - 1\n    vol_avg = df_copy[\"volume\"].rolling(20, min_periods=20).mean()\n    vol_ratio = df_copy[\"volume\"] / vol_avg.replace(0, np.nan)\n    factor = momentum * vol_ratio\n    factor = factor.clip(-3, 3)\n    factor.name = \"factor_volume_confirmed_momentum_clipped\"\n    return factor",
+  "rationale": "Volume-confirmed momentum with clipped extremes to improve robustness. The core mechanism (momentum scaled by volume ratio) is preserved from parent1, while the clipping from parent2 reduces outlier influence, targeting better ICIR stability.",
+  "lineage": {
+    "agent_skill": "alpha-liquidity",
+    "operation": "cogalpha_to_lqtp_translation"
+  },
+  "stage": "candidate_pool",
+  "fitness_label": "qualified",
+  "metrics": {
+    "train": {
+      "ic": 0.02494058181104102,
+      "rank_ic": 0.03616405201008425,
+      "icir": 0.2381642542495791,
+      "rank_icir": 0.2901461107605721,
+      "status": "computed",
+      "source": "cogalpha"
+    },
+    "valid": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    }
+  },
+  "validation": {
+    "status": "pending"
+  },
+  "created_at": "2026-06-21T11:25:28.478749+00:00",
+  "updated_at": "2026-06-21T16:18:18.852414+00:00",
+  "lqtp_tags": {
+    "universe": "all_a",
+    "market": "ashare"
+  },
+  "rationale_llm": {
+    "summary": "Volume-confirmed momentum with clipped extremes to improve robustness. The core mechanism (momentum scaled by volume ratio) is preserved from parent1, while the clipping from parent2 reduces outlier influence, targeting better ICIR stability.",
+    "parsed_at": "2026-06-21T11:25:33.893085+00:00",
+    "source": "manifest_rationale"
+  },
+  "admission": {
+    "test": {
+      "checked_at": "2026-06-21T14:17:15.911345+00:00",
+      "min_rank_ic": 0.03,
+      "max_pool_correlation": 0.7,
+      "mean_ic": 0.029789346915860118,
+      "rank_ic": 0.029789346915860118,
+      "orientation": "flipped",
+      "original_mean_ic": -0.02981218493389026,
+      "pool_max_correlation": 0.9718981497984435,
+      "correlation_source": "lqtp_reference_library",
+      "reference_library_split": "test",
+      "reference_library_cached_count": 48,
+      "reference_compared_count": 48,
+      "passed_ic": false,
+      "passed_correlation": false,
+      "passed": false,
+      "split": "test"
+    }
+  }
+}

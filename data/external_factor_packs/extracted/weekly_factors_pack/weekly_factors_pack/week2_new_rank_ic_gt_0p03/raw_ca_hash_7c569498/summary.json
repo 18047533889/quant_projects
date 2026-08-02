@@ -1,0 +1,27 @@
+{
+  "factor_name": "factor_vol_regime_trend_smoothed",
+  "candidate_id": "raw_ca_hash_7c569498",
+  "week": "week2",
+  "fitness_label": "qualified",
+  "source_shelf": "standard",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.016834833954730666,
+    "rank_ic": 0.03493241240361106,
+    "icir": 0.20657707281315033,
+    "rank_icir": 0.34317794998641676
+  },
+  "lqtp_test": {
+    "rank_ic": 0.04409986201308341,
+    "mean_ic": 0.04409986201308341,
+    "icir": 0.42390446698296114,
+    "orientation": "flipped",
+    "begin_date": 20230101,
+    "end_date": 20260615
+  },
+  "formula": "ema(ts_pct(close, 5) * safe_div(numerator=volume, denominator=ts_max(volume, 20)) * (safe_div(numerator=high - low, denominator=ts_quantile(high - low, 20, 0.5)) - 1), 5)",
+  "rationale": "Preserves the core regime-dependent trend-volume interaction from parent. Replaces binary high_vol indicator with continuous volatility deviation to retain more information, and applies a short EMA smoothing to reduce noise and improve rank stability.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

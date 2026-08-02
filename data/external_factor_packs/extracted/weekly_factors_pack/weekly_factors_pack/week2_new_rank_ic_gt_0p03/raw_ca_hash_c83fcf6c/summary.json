@@ -1,0 +1,27 @@
+{
+  "factor_name": "factor_vol_regime_breakout_continuous",
+  "candidate_id": "raw_ca_hash_c83fcf6c",
+  "week": "week2",
+  "fitness_label": "qualified",
+  "source_shelf": "standard",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.030866248032537742,
+    "rank_ic": 0.03535091732391188,
+    "icir": 0.33798375978827455,
+    "rank_icir": 0.33639565777258135
+  },
+  "lqtp_test": {
+    "rank_ic": 0.009286783131579159,
+    "mean_ic": 0.009286783131579159,
+    "icir": 0.06783451154551436,
+    "orientation": "flipped",
+    "begin_date": 20230101,
+    "end_date": 20260615
+  },
+  "formula": "ema((safe_div(numerator=close - low, denominator=high - low) - 0.5) * safe_div(numerator=high - low, denominator=ts_quantile(high - low, 20, 0.5)), 5)",
+  "rationale": "Preserves the parent's core idea of intraday breakout strength conditioned on volatility regime, but replaces the binary volatility gate with a continuous scaling factor (range / 20-day median). This avoids discontinuities and captures more nuanced volatility information, targeting improved MI while maintaining the ICIR and RankICIR strengths of the parent.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

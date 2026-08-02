@@ -1,0 +1,1 @@
+smoothed(price_change * (volume / SMA(volume,20)) * (1 + zscore(range,20)), 10)

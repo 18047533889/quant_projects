@@ -1,0 +1,27 @@
+{
+  "factor_name": "factor_intraday_reversal_crossover_v1",
+  "candidate_id": "raw_ca_hash_881db7aa",
+  "week": "week2",
+  "fitness_label": "qualified",
+  "source_shelf": "standard",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.030473278308538816,
+    "rank_ic": 0.03198514396439081,
+    "icir": 0.3338587686663713,
+    "rank_icir": 0.31241378993353625
+  },
+  "lqtp_test": {
+    "rank_ic": 0.005505794335582655,
+    "mean_ic": 0.005505794335582655,
+    "icir": 0.039275736656631303,
+    "orientation": "original",
+    "begin_date": 20230101,
+    "end_date": 20260615
+  },
+  "formula": "ts_mean(- safe_div(numerator=2 * close - high - low, denominator=high - low) * safe_div(numerator=ts_mean(high - low, 5), denominator=ts_mean(close, 5)), 3)",
+  "rationale": "Crossover preserving the elite intraday reversal mechanism from parent1 (factor_intraday_reversal_repair_0) and borrowing the lightweight 3-period SMA smoothing from parent2 (factor_intraday_reversal_smoothed_v2_mutation) to reduce noise and improve rank stability while maintaining the core reversal signal.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

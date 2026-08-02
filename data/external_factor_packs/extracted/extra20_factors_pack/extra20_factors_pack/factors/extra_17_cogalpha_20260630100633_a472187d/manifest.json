@@ -1,0 +1,36 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "cogalpha_20260630100633_a472187d",
+  "campaign_id": "cogalpha_ashare_pv_202606301800",
+  "formula": "tanh(EWMA( (close/open-1) * (volume/SMA(volume,20)), span=10, adjust=false ))",
+  "expression_type": "python",
+  "code": "def factor_intraday_volume_tanh_short(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    open_ = df_copy[\"open\"]\n    volume = df_copy[\"volume\"]\n    w_sma = 20\n    w_ewm = 10\n    intra_ret = close / open_.replace(0, np.nan) - 1\n    vol_sma = volume.rolling(w_sma, min_periods=w_sma).mean()\n    vol_surge = volume / vol_sma.replace(0, np.nan)\n    raw = intra_ret * vol_surge\n    factor = raw.ewm(span=w_ewm, adjust=False).mean()\n    factor = np.tanh(factor)\n    df_copy[\"factor_intraday_volume_tanh_short\"] = factor.fillna(0)\n    return df_copy[\"factor_intraday_volume_tanh_short\"]",
+  "generator_name": "cogalpha",
+  "generator_version": "2.1.0",
+  "mined_by": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "born_timestamp": "2026-06-30T10:06:33Z",
+  "metrics": {
+    "train": {
+      "ic": 0.0260522495348493,
+      "icir": 0.2592304838028626,
+      "rank_ic": 0.0453432798062553
+    },
+    "valid": {
+      "ic": 0.023471896888820076,
+      "icir": 0.22799386578970093,
+      "rank_ic": 0.04074123549858724
+    },
+    "test": {
+      "ic": 0.022828071361124157,
+      "icir": 0.1921124765111982,
+      "rank_ic": 0.04996750331884906
+    }
+  },
+  "description": "Mutation of CROSS_002: reduced EWMA smoothing span from 20 to 10 to increase responsiveness of the gated intraday return signal, targeting improved RankIC while preserving the core mechanism and IC/ICIR strengths. Parent strength: IC=0.0338, ICIR=0.4442. Bottleneck: RankIC=0.0245. Minimal change: one parameter adjustment.",
+  "filter_note": "CogAlpha python interim; train actual_start from lqtp_data (2016+, spec 2014)."
+}

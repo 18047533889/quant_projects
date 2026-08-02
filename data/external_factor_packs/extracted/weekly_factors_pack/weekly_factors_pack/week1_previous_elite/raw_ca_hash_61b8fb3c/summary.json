@@ -1,0 +1,27 @@
+{
+  "factor_name": "factor_vol_gated_momentum_volume_weighted",
+  "candidate_id": "raw_ca_hash_61b8fb3c",
+  "week": "week1",
+  "fitness_label": "elite",
+  "source_shelf": "standard",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.023250222737003477,
+    "rank_ic": 0.03645458419069725,
+    "icir": 0.2311769710935229,
+    "rank_icir": 0.2964049013821864
+  },
+  "lqtp_test": {
+    "rank_ic": 0.032083784300885654,
+    "mean_ic": 0.032083784300885654,
+    "icir": 0.2155233286771242,
+    "orientation": "flipped",
+    "begin_date": 20230101,
+    "end_date": 20260615
+  },
+  "formula": "ts_pct(close, 5) * (0.5 + 0.5 * ts_rank(safe_div(numerator=ts_mean(true_range, 14), denominator=close), 20)) * safe_div(numerator=volume, denominator=ts_mean(volume, 20))",
+  "rationale": "Combines volatility-gated momentum from vol_gated_momentum_mut_1 with volume conviction from alpha-liquidity-v1-002-mut-001. The primary mechanism is continuous volatility weighting of short-term return; the lightweight modifier is relative volume to enhance signal in high-volume regimes. This crossover targets improving IC and ICIR while preserving the strong RankICIR and MI of the volatility parent.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

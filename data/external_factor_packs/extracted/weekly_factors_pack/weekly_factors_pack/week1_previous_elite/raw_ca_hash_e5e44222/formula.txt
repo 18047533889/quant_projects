@@ -1,0 +1,1 @@
+- safe_div(numerator=2 * close - high - low, denominator=high - low) * safe_div(numerator=ts_mean(high - low, 5), denominator=ts_mean(close, 5))

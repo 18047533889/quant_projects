@@ -1,0 +1,27 @@
+{
+  "factor_name": "factor_intraday_reversal",
+  "candidate_id": "raw_ca_hash_e5e44222",
+  "week": "week1",
+  "fitness_label": "elite",
+  "source_shelf": "standard",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.03410804878979901,
+    "rank_ic": 0.039424607598805984,
+    "icir": 0.37462718429711445,
+    "rank_icir": 0.374610679454736
+  },
+  "lqtp_test": {
+    "rank_ic": 0.00544259838455681,
+    "mean_ic": 0.00544259838455681,
+    "icir": 0.03546669217163411,
+    "orientation": "original",
+    "begin_date": 20230101,
+    "end_date": 20260615
+  },
+  "formula": "- safe_div(numerator=2 * close - high - low, denominator=high - low) * safe_div(numerator=ts_mean(high - low, 5), denominator=ts_mean(close, 5))",
+  "rationale": "Intraday overreaction detection using the relative close position within the daily range, scaled by recent average range. Extreme positions (close near high/low) with wider ranges signal exhaustion and subsequent reversal.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

@@ -1,0 +1,1 @@
+sigmoid(2 * safe_div(numerator=safe_div(numerator=close - low, denominator=high - low) * volume - ts_mean(safe_div(numerator=close - low, denominator=high - low) * volume, 20), denominator=ts_std(safe_div(numerator=close - low, denominator=high - low) * volume, 20))) * 2 - 1

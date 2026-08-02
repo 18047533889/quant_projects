@@ -1,0 +1,1 @@
+tanh(EWMA( (close/open-1) * (volume/SMA(volume,20)), span=10, adjust=false ))

@@ -1,0 +1,36 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "cogalpha_20260630084303_9d606e59",
+  "campaign_id": "cogalpha_ashare_pv_202606301800",
+  "formula": "smooth_range = ewm((high-low)/close, span=10); vol_ratio = volume / rolling_mean(volume,25); fast=ewm(vol_ratio,10); slow=ewm(vol_ratio,30); weight = sigmoid(5*(vol_ratio-0.85)); smooth_vol = weight*fast + (1-weight)*slow; direction=(close-open)/close; smooth_direction=ewm(direction, span=3); factor = smooth_range * smooth_vol * smooth_direction",
+  "expression_type": "python",
+  "code": "def factor_adaptive_vol_directional_smooth_range10(df):\n    df_copy = df.copy()\n    range_pct = (df_copy['high'] - df_copy['low']) / df_copy['close']\n    smooth_range = range_pct.ewm(span=10, min_periods=10).mean()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(25, min_periods=25).mean()\n    fast = vol_ratio.ewm(span=10, min_periods=10).mean()\n    slow = vol_ratio.ewm(span=30, min_periods=30).mean()\n    weight = 1 / (1 + np.exp(-5 * (vol_ratio - 0.85)))\n    smooth_vol = weight * fast + (1 - weight) * slow\n    direction = (df_copy['close'] - df_copy['open']) / df_copy['close']\n    smooth_direction = direction.ewm(span=3, min_periods=3).mean()\n    df_copy['factor_adaptive_vol_directional_smooth_range10'] = smooth_range * smooth_vol * smooth_direction\n    return df_copy['factor_adaptive_vol_directional_smooth_range10']",
+  "generator_name": "cogalpha",
+  "generator_version": "2.1.0",
+  "mined_by": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "born_timestamp": "2026-06-30T08:43:03Z",
+  "metrics": {
+    "train": {
+      "ic": 0.02950667608088379,
+      "icir": 0.297092094851234,
+      "rank_ic": 0.04664023968354366
+    },
+    "valid": {
+      "ic": 0.021696291095242536,
+      "icir": 0.22747023349935785,
+      "rank_ic": 0.028668141716178108
+    },
+    "test": {
+      "ic": 0.024511097635538256,
+      "icir": 0.23988577829935184,
+      "rank_ic": 0.038675302416290434
+    }
+  },
+  "description": "Crossover: primary parent alpha-mutation-gen13-002 provides core directional volume-adjusted volatility mechanism with smooth_range (ewm span=10) and smooth_direction (ewm span=3). Borrowed from secondary parent alpha-mutation-gen10-002 the adaptive sigmoid blending of fast and slow volume ratio EWMA to replace the single EWMA volume smoothing, aiming to improve the volume adjustment's responsiveness and robustness. Preserves the strong rank-ordering strength from the parent by keeping the range and direction smoothing unchanged. Only one lightweight modifier (volume smoothing method) changed.",
+  "filter_note": "CogAlpha python interim; train actual_start from lqtp_data (2016+, spec 2014)."
+}

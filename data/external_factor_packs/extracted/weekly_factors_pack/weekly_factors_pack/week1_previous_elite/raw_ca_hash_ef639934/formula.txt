@@ -1,0 +1,1 @@
+ema( (close - delay(close, 1))/delay(close, 1) * (volume / ts_mean(volume,5)) * ((high-low)/close) , span=5 )

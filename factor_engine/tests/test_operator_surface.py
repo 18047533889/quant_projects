@@ -110,9 +110,19 @@ def test_runtime_registry_has_no_unreviewed_canonicals() -> None:
 
 
 def test_retained_recursive_operators_are_stateful() -> None:
-    for name in ("ema", "RSI_WILDER", "ATR_WILDER", "MACD_line", "ADX"):
+    for name in (
+        "ema",
+        "RSI_WILDER",
+        "ATR_WILDER",
+        "MACD_line",
+        "ADX",
+        "KAMA",
+        "Supertrend",
+        "SupertrendDirection",
+        "PSAR",
+    ):
         assert classify_plan_op(name) == "stateful"
-    for removed in ("KAMA", "TRIX", "ADXR"):
+    for removed in ("TRIX", "ADXR"):
         assert removed not in OperatorRegistry.list_canonical()
 
 

@@ -4,10 +4,30 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "factor-engine"
-version = "0.1.0"
+version = "0.3.0"
 description = "Quantitative factor engine: DSL, IR compilation, cleaned operators, and config-driven execution"
+readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["PyYAML>=6.0"]
+dependencies = [
+    "PyYAML>=6.0",
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "pyarrow>=14.0",
+    "scipy>=1.10",
+]
+
+[tool.setuptools]
+include-package-data = true
+py-modules = [
+    "logging_utils",
+    "pit_contract",
+    "pipeline",
+    "pipeline_event",
+    "run_pipeline",
+    "stateful_contract",
+    "stateful_runtime",
+    "workspace_paths",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -17,12 +37,19 @@ include = [
     "cache*",
     "cleaned_operators*",
     "expr*",
+    "evidence*",
+    "factor_recipes*",
     "ir*",
     "planner*",
+    "research_tools*",
     "runtime*",
     "storage*",
     "util*",
 ]
+
+[tool.setuptools.package-data]
+"factor-engine" = ["evidence/*.json", "docs/*.json", "docs/*.yaml", "cleaned_operators/docs/*", "operator_core_specs.yaml"]
+"evidence" = ["*.json", "*.yaml"]
 
 [project.optional-dependencies]
 pandas = ["pandas>=2.0", "pyarrow>=14.0", "scipy>=1.10"]

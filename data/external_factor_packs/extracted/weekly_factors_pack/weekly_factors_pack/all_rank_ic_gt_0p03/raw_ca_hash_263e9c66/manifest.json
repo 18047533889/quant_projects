@@ -1,0 +1,75 @@
+{
+  "schema_version": "factor.manifest.v1",
+  "candidate_id": "raw_ca_hash_263e9c66",
+  "campaign_id": "llm_ashare_pv_cogalpha_2026q2",
+  "generator_name": "cogalpha",
+  "producer": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_LQTP",
+  "domain_root": "price_volume",
+  "frequency_bucket": "daily",
+  "batch_id": "post_mining_translate",
+  "factor_name": "factor_imbalance_volume_ratio_ewm",
+  "formula": "ema(safe_div(numerator=close - (high + low) / 2, denominator=high - low) * safe_div(numerator=volume, denominator=ts_mean(volume, 20)), 5)",
+  "expression_type": "lqtp_dsl",
+  "execution_platform": "lqtp",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit",
+  "code": "def factor_imbalance_volume_ratio_ewm(df):\n    df_copy = df.copy()\n    midpoint = (df_copy['high'] + df_copy['low']) / 2\n    range_ = df_copy['high'] - df_copy['low']\n    imbalance = (df_copy['close'] - midpoint) / range_.replace(0, np.nan)\n    vol_ma = df_copy['volume'].rolling(20, min_periods=20).mean()\n    vol_ratio = df_copy['volume'] / vol_ma.replace(0, np.nan)\n    weighted = imbalance * vol_ratio\n    df_copy['factor_imbalance_volume_ratio_ewm'] = weighted.ewm(span=5, min_periods=3).mean()\n    return df_copy['factor_imbalance_volume_ratio_ewm']",
+  "rationale": "Preserve the core imbalance and volume confirmation mechanism. Simplify the volume adjustment by removing the absolute volume multiplication, using only the volume ratio (volume / 20-day average). This reduces the influence of large volume outliers that may cause nonlinearity, targeting an improvement in IC while maintaining rank stability from the parent. The parent strength in RankIC (0.0308) and RankICIR (0.3339) is preserved.",
+  "lineage": {
+    "agent_skill": "alpha-price-volume-coherence",
+    "operation": "cogalpha_to_lqtp_translation"
+  },
+  "stage": "candidate_pool",
+  "fitness_label": "qualified",
+  "metrics": {
+    "train": {
+      "ic": 0.028524012650709793,
+      "rank_ic": 0.030995039492380094,
+      "icir": 0.33046121626839103,
+      "rank_icir": 0.3114107192351624,
+      "status": "computed",
+      "source": "cogalpha"
+    },
+    "valid": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    }
+  },
+  "validation": {
+    "status": "pending"
+  },
+  "created_at": "2026-06-19T14:45:38.219985+00:00",
+  "updated_at": "2026-06-21T16:18:17.137181+00:00",
+  "rationale_llm": {
+    "summary": "Preserve the core imbalance and volume confirmation mechanism. Simplify the volume adjustment by removing the absolute volume multiplication, using only the volume ratio (volume / 20-day average). This reduces the influence of large volume outliers that may cause nonlinearity, targeting an improvement in IC while maintaining rank stability from the parent. The parent strength in RankIC (0.0308) and RankICIR (0.3339) is preserved.",
+    "parsed_at": "2026-06-19T17:42:59.859777+00:00",
+    "source": "manifest_rationale"
+  },
+  "lqtp_tags": {
+    "universe": "all_a",
+    "market": "ashare"
+  },
+  "admission": {
+    "test": {
+      "checked_at": "2026-06-21T13:45:48.967807+00:00",
+      "min_rank_ic": 0.03,
+      "max_pool_correlation": 0.7,
+      "mean_ic": 0.005285935902240503,
+      "rank_ic": 0.005285935902240503,
+      "orientation": "flipped",
+      "original_mean_ic": -0.005285935902240503,
+      "pool_max_correlation": 1.0,
+      "correlation_source": "lqtp_reference_library",
+      "reference_library_split": "test",
+      "reference_library_cached_count": 36,
+      "reference_compared_count": 36,
+      "passed_ic": false,
+      "passed_correlation": false,
+      "passed": false,
+      "split": "test"
+    }
+  }
+}

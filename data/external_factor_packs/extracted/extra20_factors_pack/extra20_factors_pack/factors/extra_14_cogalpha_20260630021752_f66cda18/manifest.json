@@ -1,0 +1,36 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "cogalpha_20260630021752_f66cda18",
+  "campaign_id": "cogalpha_ashare_pv_202606301800",
+  "formula": "EWM( (close/open - 1) * ( volume / rolling_max(volume,20) ), 20 )",
+  "expression_type": "python",
+  "code": "def factor_intraday_return_volume_surge(df):\n    df_copy = df.copy()\n    intday_ret = df_copy[\"close\"] / df_copy[\"open\"] - 1.0\n    vol_max = df_copy[\"volume\"].rolling(20, min_periods=20).max()\n    vol_surge = df_copy[\"volume\"] / vol_max.replace(0, np.nan)\n    raw = intday_ret * vol_surge\n    df_copy[\"factor_intraday_return_volume_surge\"] = raw.ewm(span=20, adjust=False).mean()\n    return df_copy[\"factor_intraday_return_volume_surge\"]",
+  "generator_name": "cogalpha",
+  "generator_version": "2.1.0",
+  "mined_by": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "born_timestamp": "2026-06-30T02:17:52Z",
+  "metrics": {
+    "train": {
+      "ic": 0.024779604903388062,
+      "icir": 0.20545081768486106,
+      "rank_ic": 0.04596992335121053
+    },
+    "valid": {
+      "ic": 0.02600320325353094,
+      "icir": 0.2081246512397644,
+      "rank_ic": 0.04705722181763932
+    },
+    "test": {
+      "ic": 0.020913070285867443,
+      "icir": 0.1496533212103195,
+      "rank_ic": 0.054015402906175354
+    }
+  },
+  "description": "Identify acute directional pressure by scaling intraday return (close/open - 1) by a volume surge factor: volume divided by its 20-day rolling maximum. Large positive returns with volume surge indicate strong buying; negative returns with volume surge indicate strong selling. Smoothed with EWM to reduce noise.",
+  "filter_note": "CogAlpha python interim; train actual_start from lqtp_data (2016+, spec 2014)."
+}

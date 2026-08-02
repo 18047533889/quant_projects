@@ -1,0 +1,1 @@
+EMA12( pct_change * log1p(volume/SMA5(volume)) * (1 + min(max(0, zscore5(range)), 2.0)) )

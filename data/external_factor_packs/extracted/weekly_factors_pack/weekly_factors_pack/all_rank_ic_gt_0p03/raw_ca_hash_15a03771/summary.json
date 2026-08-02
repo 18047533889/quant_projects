@@ -1,0 +1,27 @@
+{
+  "factor_name": "factor_imbalance_volume_ewm_mut",
+  "candidate_id": "raw_ca_hash_15a03771",
+  "week": "week2",
+  "fitness_label": "qualified",
+  "source_shelf": "standard",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.01421307899891861,
+    "rank_ic": 0.030840114301811695,
+    "icir": 0.23335809901418914,
+    "rank_icir": 0.33428387372095525
+  },
+  "lqtp_test": {
+    "rank_ic": 0.006042373870519713,
+    "mean_ic": 0.006042373870519713,
+    "icir": 0.05458430742341493,
+    "orientation": "flipped",
+    "begin_date": 20230101,
+    "end_date": 20260615
+  },
+  "formula": "ema(safe_div(numerator=close - (high + low) / 2, denominator=high - low) * volume * (1 + safe_div(numerator=volume, denominator=ts_mean(volume, 10)) - 1), 5)",
+  "rationale": "Preserves the core imbalance-volume interaction from the parent. Shortens the volume baseline from 20 to 10 days and replaces the 5-day SMA with an exponential moving average (span=5) to improve responsiveness and potentially boost IC while maintaining RankIC stability.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

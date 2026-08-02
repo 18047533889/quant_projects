@@ -1,0 +1,75 @@
+{
+  "schema_version": "factor.manifest.v1",
+  "candidate_id": "raw_ca_hash_0a4e4a21",
+  "campaign_id": "llm_ashare_pv_cogalpha_2026q2",
+  "generator_name": "cogalpha",
+  "producer": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_LQTP",
+  "domain_root": "price_volume",
+  "frequency_bucket": "daily",
+  "batch_id": "post_mining_translate",
+  "factor_name": "factor_volume_confirmed_momentum_tanh_gated",
+  "formula": "(sigmoid(2 * (- safe_div(numerator=2 * close - high - low, denominator=high - low) * safe_div(numerator=ts_mean(high - low, 5), denominator=ts_mean(close, 5)))) * 2 - 1)",
+  "expression_type": "lqtp_dsl",
+  "execution_platform": "lqtp",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit",
+  "code": "def factor_volume_confirmed_momentum_tanh_gated(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(20, min_periods=20).mean()\n    base = ret * vol_ratio\n    smoothed_base = base.ewm(span=10, min_periods=10, adjust=False).mean()\n    range_ = df_copy['high'] - df_copy['low']\n    range_ = range_.replace(0, np.nan)\n    intraday_pos = (df_copy['close'] - df_copy['low']) / range_\n    raw_factor = smoothed_base * intraday_pos\n    factor = np.tanh(raw_factor)\n    df_copy['factor_volume_confirmed_momentum_tanh_gated'] = factor\n    return df_copy['factor_volume_confirmed_momentum_tanh_gated']",
+  "rationale": "Preserve strong IC and RankIC from parent crossover_vcmi_1 (volume-confirmed momentum gated by intraday position). Borrow tanh nonlinearity from parent crossover_liquidity_tanh_reversal_001 to compress extreme outlier values, improving MI and rank stability without altering the core momentum mechanism.",
+  "lineage": {
+    "agent_skill": "alpha-regime-gating",
+    "operation": "cogalpha_to_lqtp_translation"
+  },
+  "stage": "candidate_pool",
+  "fitness_label": "qualified",
+  "metrics": {
+    "train": {
+      "ic": 0.03682561584328748,
+      "rank_ic": 0.04525603899007993,
+      "icir": 0.3465592328383982,
+      "rank_icir": 0.3863954706631584,
+      "status": "computed",
+      "source": "cogalpha"
+    },
+    "valid": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    }
+  },
+  "validation": {
+    "status": "pending"
+  },
+  "created_at": "2026-06-21T11:25:28.461425+00:00",
+  "updated_at": "2026-06-21T16:18:21.889283+00:00",
+  "lqtp_tags": {
+    "universe": "all_a",
+    "market": "ashare"
+  },
+  "rationale_llm": {
+    "summary": "Preserve strong IC and RankIC from parent crossover_vcmi_1 (volume-confirmed momentum gated by intraday position). Borrow tanh nonlinearity from parent crossover_liquidity_tanh_reversal_001 to compress extreme outlier values, improving MI and rank stability without altering the core momentum mechanism.",
+    "parsed_at": "2026-06-21T11:25:37.537098+00:00",
+    "source": "manifest_rationale"
+  },
+  "admission": {
+    "test": {
+      "checked_at": "2026-06-21T16:17:17.158322+00:00",
+      "min_rank_ic": 0.03,
+      "max_pool_correlation": 0.7,
+      "mean_ic": 0.005435923505080634,
+      "rank_ic": 0.005435923505080634,
+      "orientation": "original",
+      "original_mean_ic": null,
+      "pool_max_correlation": 1.0,
+      "correlation_source": "lqtp_reference_library",
+      "reference_library_split": "test",
+      "reference_library_cached_count": 66,
+      "reference_compared_count": 66,
+      "passed_ic": false,
+      "passed_correlation": false,
+      "passed": false,
+      "split": "test"
+    }
+  }
+}

@@ -1,0 +1,1 @@
+ema(ts_pct(close, 5) * safe_div(numerator=volume, denominator=ts_max(volume, 20)) * (safe_div(numerator=high - low, denominator=ts_quantile(high - low, 20, 0.5)) - 1), 5)

@@ -1,0 +1,36 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "cogalpha_20260630024020_a436b80f",
+  "campaign_id": "cogalpha_ashare_pv_202606301800",
+  "formula": "ema( (close / shift(close,1) - 1) * (volume / sma(volume,20)), 10 )",
+  "expression_type": "python",
+  "code": "def factor_volume_confirmed_momentum(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(20, min_periods=20).mean()\n    signal = ret * vol_ratio\n    smoothed = signal.ewm(span=10, min_periods=10, adjust=False).mean()\n    df_copy['factor_volume_confirmed_momentum'] = smoothed\n    return df_copy['factor_volume_confirmed_momentum']",
+  "generator_name": "cogalpha",
+  "generator_version": "2.1.0",
+  "mined_by": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "born_timestamp": "2026-06-30T02:40:20Z",
+  "metrics": {
+    "train": {
+      "ic": 0.022960607078495992,
+      "icir": 0.20307507539062275,
+      "rank_ic": 0.04463275806296013
+    },
+    "valid": {
+      "ic": 0.024205457463532105,
+      "icir": 0.22984987081912625,
+      "rank_ic": 0.04108176764026367
+    },
+    "test": {
+      "ic": 0.024036299361748337,
+      "icir": 0.20181373925767793,
+      "rank_ic": 0.052274253267237517
+    }
+  },
+  "description": "Volume-confirmed price momentum: amplify returns when volume is above its 20-day average, dampen when below. Exponential smoothing stabilizes the signal, balancing IC and RankICIR.",
+  "filter_note": "CogAlpha python interim; train actual_start from lqtp_data (2016+, spec 2014)."
+}

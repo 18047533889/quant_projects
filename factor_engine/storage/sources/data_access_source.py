@@ -15,6 +15,14 @@ from .datasource import DataSource
 logger = get_logger("storage.data_access_source")
 
 
+class DataAccessColumnPreflightError(ValueError):
+    """A logical formula dependency is not a valid physical column request."""
+
+
+class MissingDataDependencyError(DataAccessColumnPreflightError):
+    """A formula requires another logical dataset or an explicitly derived field."""
+
+
 def _ensure_data_access_importable() -> None:
     root = str(quant_projects_root())
     if root not in sys.path:
@@ -24,7 +32,6 @@ def _ensure_data_access_importable() -> None:
 def _get_store():
     _ensure_data_access_importable()
     from data_access import get_store
-
     return get_store()
 
 
@@ -40,11 +47,7 @@ def _positive_int_env(name: str, default: int) -> int:
 
 
 class DataAccessSource(DataSource):
-    """FactorEngine 的 DataAccess 数据源。
-
-    列缓存、panel 缓存与 lazy bundle 均绑定 ``DataSnapshot.snapshot_id``。底层文件
-    manifest 变化后自动清空，避免发布新数据后继续复用旧结果。
-    """
+    """FactorEngine DataAccess source with snapshot-bound caches and preflight."""
 
     def __init__(
         self,
@@ -103,7 +106,53 @@ class DataAccessSource(DataSource):
             return None
         return (self.start_date, self.end_date)
 
+    def _preflight_logical_columns(self, names: Iterable[str]) -> None:
+        """Reject known semantic mistakes before they become DuckDB Binder errors.
+
+        The dataset registry schema is intentionally *not* used as a hard gate
+        here because the LQTP StockDailyBar mirror can contain real columns that
+        lag the checked-in schema documentation.  We instead fail on two cases
+        that are unambiguously wrong:
+
+        * an active FactorEngine operator name was emitted as a bare column;
+        * a known LQTP derived/multi-source dependency was emitted as a daily-bar
+          physical column.
+        """
+        requested = [str(name) for name in names]
+        from cleaned_operators.production_tiers import LQTP_SOURCE_DEPENDENT_NAMES
+
+        derived = sorted(
+            name for name in requested
+            if name in LQTP_SOURCE_DEPENDENT_NAMES and name not in self.fields
+        )
+        if derived:
+            raise MissingDataDependencyError(
+                f"dataset={self.dataset!r} cannot satisfy derived/source-backed fields "
+                f"{derived}; configure a composite/financial/valuation source or a "
+                "versioned derived-field definition instead of querying StockDailyBar"
+            )
+
+        try:
+            from backend.cleaned_bridge import ensure_cleaned_loaded
+            from cleaned_operators.registry import OperatorRegistry
+
+            ensure_cleaned_loaded()
+            operator_names = set(OperatorRegistry.list_canonical()) | set(OperatorRegistry._aliases)
+        except Exception:
+            operator_names = set()
+        mistaken_ops = sorted(
+            name for name in requested
+            if name in operator_names and name not in self.fields
+        )
+        if mistaken_ops:
+            raise DataAccessColumnPreflightError(
+                f"dataset={self.dataset!r} received operator name(s) as physical columns: "
+                f"{mistaken_ops}. Expand the formula/template before data access."
+            )
+
     def _resolve_columns(self, names: Iterable[str]) -> tuple[list[str], dict[str, str]]:
+        names = list(names)
+        self._preflight_logical_columns(names)
         physical: list[str] = []
         output_names: dict[str, str] = {}
         for name in names:
@@ -122,7 +171,6 @@ class DataAccessSource(DataSource):
         self._snapshot_checked_at = time.monotonic()
 
     def refresh_snapshot(self, *, force: bool = False) -> str | None:
-        """检查当前文件 manifest；快照变化时自动失效全部缓存。"""
         self._assert_open()
         now = time.monotonic()
         if (
@@ -186,7 +234,6 @@ class DataAccessSource(DataSource):
 
     def read_session(self) -> "DataSourceReadSession":
         from .read_session import DataSourceReadSession
-
         return DataSourceReadSession(self)
 
     def load_column(self, name: str):
@@ -250,9 +297,7 @@ class DataAccessSource(DataSource):
         else:
             from data_access.read.adapters import arrow_table_to_multiindex_columns
 
-            all_columns = list(
-                dict.fromkeys([ds.time_column, ds.instrument_column, *physical])
-            )
+            all_columns = list(dict.fromkeys([ds.time_column, ds.instrument_column, *physical]))
             result = store.read_result(
                 self.dataset,
                 columns=all_columns,
@@ -271,9 +316,36 @@ class DataAccessSource(DataSource):
                 timestamp_unit=unit,
             )
 
+        # DataAccess exposes raw COS values for ``load_columns``.  FactorEngine
+        # must use the semantic contract before caching a logical factor input;
+        # otherwise A-share Return remains in 1/10000 units and silently
+        # contaminates every downstream return-based operator.
+        self._normalize_contract_columns(fetched, needed)
         for name in needed:
             self._put_cache(self._column_cache, name, fetched[name])
         return {name: self._column_cache[name] for name in names}
+
+    def _normalize_contract_columns(self, fetched: dict[str, Any], names: list[str]) -> None:
+        """Apply DataAccess semantic normalization to FactorEngine inputs.
+
+        Normalization is deliberately limited to declared return columns.  We
+        do not alter prices with an adjustment factor implicitly: adjusted price
+        is a separate data contract and must be requested explicitly by a
+        caller, so a factor cannot silently change its economic meaning.
+        """
+        try:
+            from data_access.cos_contract import get_cos_contract, normalize_return_values
+        except Exception:
+            return
+        contract = get_cos_contract(self.dataset)
+        if contract is None or not contract.return_column:
+            return
+        for name in names:
+            if name != contract.return_column or name not in fetched:
+                continue
+            if float(contract.return_scale) == 1.0:
+                continue
+            fetched[name] = normalize_return_values(fetched[name], self.dataset)
 
     def prefetch_columns(self, names: list[str]) -> None:
         if not names:
@@ -297,9 +369,7 @@ class DataAccessSource(DataSource):
             merged_physical = physical
             merged_output = output_names
         else:
-            merged_physical = list(
-                dict.fromkeys([*self._lazy_bundle.physical_columns, *physical])
-            )
+            merged_physical = list(dict.fromkeys([*self._lazy_bundle.physical_columns, *physical]))
             merged_output = dict(self._lazy_bundle.output_names)
             merged_output.update(output_names)
             if merged_physical == list(self._lazy_bundle.physical_columns):

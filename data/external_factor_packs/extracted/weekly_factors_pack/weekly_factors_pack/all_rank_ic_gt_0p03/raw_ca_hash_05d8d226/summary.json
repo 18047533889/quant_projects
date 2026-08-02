@@ -1,0 +1,27 @@
+{
+  "factor_name": "factor_range_position_volume_gated_smoothed",
+  "candidate_id": "raw_ca_hash_05d8d226",
+  "week": "week2",
+  "fitness_label": "qualified",
+  "source_shelf": "standard",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.03016793311270487,
+    "rank_ic": 0.03151728384830372,
+    "icir": 0.3639165552133492,
+    "rank_icir": 0.32902932466828877
+  },
+  "lqtp_test": {
+    "rank_ic": 0.006708685485970441,
+    "mean_ic": 0.006708685485970441,
+    "icir": 0.05226467917907529,
+    "orientation": "flipped",
+    "begin_date": 20230101,
+    "end_date": 20260615
+  },
+  "formula": "ema((safe_div(numerator=close - low, denominator=high - low)) - 0.5, 3) * safe_div(numerator=volume, denominator=ts_mean(volume, 20))",
+  "rationale": "Crossover: primary mechanism from AR_001_m1 (range position with EWM smoothing) and lightweight modifier from VGR-001-MUT-001 (volume ratio) applied after smoothing. This combines the clean smoothing of parent1 with volume gating of parent2, aiming to preserve high RankIC and IC while potentially improving MI through the order-of-operations change.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

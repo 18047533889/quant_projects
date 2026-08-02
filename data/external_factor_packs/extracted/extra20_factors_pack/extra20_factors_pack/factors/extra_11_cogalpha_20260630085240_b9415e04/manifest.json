@@ -1,0 +1,36 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "cogalpha_20260630085240_b9415e04",
+  "campaign_id": "cogalpha_ashare_pv_202606301800",
+  "formula": "smooth_range = ewm((high-low)/close, span=10); vol_ratio = volume / rolling_mean(volume,25); smooth_vol = ewm(vol_ratio, span=15); direction=(close-open)/close; smooth_direction=ewm(direction, span=3); factor = smooth_range * smooth_vol * smooth_direction",
+  "expression_type": "python",
+  "code": "def factor_adaptive_vol_directional_smooth_range10(df):\n    df_copy = df.copy()\n    range_pct = (df_copy['high'] - df_copy['low']) / df_copy['close']\n    smooth_range = range_pct.ewm(span=10, min_periods=10).mean()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(25, min_periods=25).mean()\n    smooth_vol = vol_ratio.ewm(span=15, min_periods=15).mean()\n    direction = (df_copy['close'] - df_copy['open']) / df_copy['close']\n    smooth_direction = direction.ewm(span=3, min_periods=3).mean()\n    df_copy['factor_adaptive_vol_directional_smooth_range10'] = smooth_range * smooth_vol * smooth_direction\n    return df_copy['factor_adaptive_vol_directional_smooth_range10']",
+  "generator_name": "cogalpha",
+  "generator_version": "2.1.0",
+  "mined_by": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "born_timestamp": "2026-06-30T08:52:40Z",
+  "metrics": {
+    "train": {
+      "ic": 0.029358982929246498,
+      "icir": 0.2957551625174669,
+      "rank_ic": 0.046316243321374774
+    },
+    "valid": {
+      "ic": 0.0232187835416072,
+      "icir": 0.23904860117823182,
+      "rank_ic": 0.02926537868577057
+    },
+    "test": {
+      "ic": 0.024875295266364564,
+      "icir": 0.24262418111855502,
+      "rank_ic": 0.03920200599160314
+    }
+  },
+  "description": "Mutation of alpha-crossover-gen14-001. Preserves core directional volume-adjusted volatility mechanism (smooth_range EWMA span=10, volume ratio baseline 25-day, smooth_direction EWMA span=3). Simplifies volume smoothing by replacing the adaptive sigmoid blending of two EWMA with a single EWMA (span=15) as in the effective parent alpha-mutation-gen13-002, aiming to reduce complexity and potentially improve IC stability while preserving strong rank-ordering strength (RankIC, RankICIR). Only one component changed; no other modifications.",
+  "filter_note": "CogAlpha python interim; train actual_start from lqtp_data (2016+, spec 2014)."
+}

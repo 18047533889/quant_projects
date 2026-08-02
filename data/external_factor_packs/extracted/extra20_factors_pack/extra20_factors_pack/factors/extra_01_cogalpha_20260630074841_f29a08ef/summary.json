@@ -1,0 +1,19 @@
+{
+  "pick_rank": 1,
+  "factor_name": "cogalpha_20260630074841_f29a08ef",
+  "candidate_id": "cogalpha_20260630074841_f29a08ef",
+  "campaign_id": "cogalpha_ashare_pv_202606301800",
+  "generator_name": "cogalpha",
+  "fitness_label": null,
+  "source": "candidate_pool_cogalpha",
+  "train_period_note": "CogAlpha fitness metrics as stored in manifest (typically 2018-2021 for cogalpha ashare)",
+  "train": {
+    "ic": 0.02699029075933178,
+    "rank_ic": 0.051539260282751735,
+    "icir": 0.23393983202254362,
+    "rank_icir": null
+  },
+  "formula": "EWM( pct_change(close) * rank_pct8(volume) * ((high-low)/close), span=12 ) clip ±3",
+  "rationale": "",
+  "not_in_previous_weekly_pack": true
+}

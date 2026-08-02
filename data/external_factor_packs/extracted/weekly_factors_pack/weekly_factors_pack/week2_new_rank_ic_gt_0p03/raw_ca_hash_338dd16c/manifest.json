@@ -1,0 +1,46 @@
+{
+  "schema_version": "factor.manifest.v1",
+  "candidate_id": "raw_ca_hash_338dd16c",
+  "campaign_id": "llm_ashare_pv_cogalpha_2026q2",
+  "generator_name": "cogalpha",
+  "producer": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_LQTP",
+  "domain_root": "price_volume",
+  "frequency_bucket": "daily",
+  "batch_id": "post_mining_translate",
+  "factor_name": "factor_directional_vol_smooth_range_mut",
+  "formula": "smooth_range = ewma((high-low)/close, span=8); vol_ratio = volume / rolling_mean(volume,25); fast=ewma(vol_ratio,10); slow=ewma(vol_ratio,30); weight = sigmoid(5*(vol_ratio-0.85)); blend=weight*fast+(1-weight)*slow; direction=(close-open)/close; factor = smooth_range * blend * direction",
+  "expression_type": "python",
+  "execution_platform": "cogalpha_panel",
+  "filter": "volume > 0 AND not is_suspend",
+  "code": "def factor_directional_vol_smooth_range_mut(df):\n    df_copy = df.copy()\n    range_pct = (df_copy['high'] - df_copy['low']) / df_copy['close']\n    smooth_range = range_pct.ewm(span=8).mean()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(25, min_periods=25).mean()\n    fast = vol_ratio.ewm(span=10).mean()\n    slow = vol_ratio.ewm(span=30).mean()\n    weight = 1 / (1 + np.exp(-5 * (vol_ratio - 0.85)))\n    smooth_vol_ratio = weight * fast + (1 - weight) * slow\n    direction = (df_copy['close'] - df_copy['open']) / df_copy['close']\n    df_copy['factor_directional_vol_smooth_range_mut'] = smooth_range * smooth_vol_ratio * direction\n    return df_copy['factor_directional_vol_smooth_range_mut']",
+  "rationale": "Mutation of parent alpha-crossover-gen10-001 by increasing the EWMA span for the range component from 5 to 8. Preserves the core directional volume-adjusted volatility mechanism with adaptive sigmoid blending, targeting improved IC stability through smoother range estimation. The parent's strong rank-ordering (RankIC, RankICIR) is maintained by keeping the volume adjustment and blending unchanged.",
+  "lineage": {
+    "agent_skill": "alpha-regime-gating",
+    "operation": "cogalpha_to_lqtp_translation"
+  },
+  "stage": "candidate_pool",
+  "fitness_label": "elite",
+  "metrics": {
+    "train": {
+      "ic": 0.024576166889521165,
+      "rank_ic": 0.03848170138308021,
+      "icir": 0.27806250148664313,
+      "rank_icir": 0.3534282791551786,
+      "status": "computed",
+      "source": "cogalpha"
+    },
+    "valid": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    }
+  },
+  "validation": {
+    "status": "pending"
+  },
+  "created_at": "2026-06-21T11:25:28.513093+00:00",
+  "updated_at": "2026-06-21T11:25:28.513093+00:00"
+}

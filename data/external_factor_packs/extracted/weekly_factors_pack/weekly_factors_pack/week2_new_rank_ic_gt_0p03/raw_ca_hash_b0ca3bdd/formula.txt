@@ -1,0 +1,1 @@
+ema( ts_pct(close) * rank_pct8(volume) * ((high-low)/close), span=12 ) clip ±3

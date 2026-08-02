@@ -1,0 +1,55 @@
+{
+  "schema_version": "factor.manifest.v1",
+  "candidate_id": "raw_ca_hash_83b7560a",
+  "campaign_id": "llm_ashare_pv_cogalpha_2026q2",
+  "generator_name": "cogalpha",
+  "producer": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_LQTP",
+  "domain_root": "price_volume",
+  "frequency_bucket": "daily",
+  "batch_id": "post_mining_translate",
+  "factor_name": "factor_volume_weighted_price_change",
+  "formula": "EMA5( (close / delay(close, 1) - 1) * (volume / SMA20(volume)) )",
+  "expression_type": "lqtp_dsl",
+  "execution_platform": "lqtp",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit",
+  "code": "def factor_volume_weighted_price_change(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    pct_change = close.pct_change()\n    vol_ma = volume.rolling(20, min_periods=20).mean().replace(0, np.nan)\n    vol_ratio = volume / vol_ma\n    raw = pct_change * vol_ratio\n    raw = raw.replace([np.inf, -np.inf], np.nan)\n    ema = raw.ewm(span=5, min_periods=5).mean()\n    df_copy['factor_volume_weighted_price_change'] = ema\n    return df_copy['factor_volume_weighted_price_change']",
+  "rationale": "Volume-weighted price change captures the coherence between price movement and volume. When price moves in the same direction as volume concentration, the signal is amplified. EMA smoothing reduces turnover and improves stability.",
+  "lineage": {
+    "agent_skill": "alpha-price-volume-coherence",
+    "operation": "cogalpha_to_lqtp_translation"
+  },
+  "stage": "candidate_pool",
+  "fitness_label": "elite",
+  "metrics": {
+    "train": {
+      "ic": 0.024356132616329615,
+      "rank_ic": 0.03906133833273069,
+      "icir": 0.2278538059234055,
+      "rank_icir": 0.30853761957629455,
+      "status": "computed",
+      "source": "cogalpha"
+    },
+    "valid": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    }
+  },
+  "validation": {
+    "status": "pending"
+  },
+  "created_at": "2026-06-21T11:25:28.506796+00:00",
+  "updated_at": "2026-06-21T16:18:22.042485+00:00",
+  "lqtp_tags": {
+    "universe": "all_a",
+    "market": "ashare"
+  },
+  "rationale_llm": {
+    "summary": "Volume-weighted price change captures the coherence between price movement and volume. When price moves in the same direction as volume concentration, the signal is amplified. EMA smoothing reduces turnover and improves stability.",
+    "parsed_at": "2026-06-21T11:25:37.573084+00:00",
+    "source": "manifest_rationale"
+  }
+}

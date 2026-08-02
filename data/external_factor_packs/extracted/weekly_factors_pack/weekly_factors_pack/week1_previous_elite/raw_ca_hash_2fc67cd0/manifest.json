@@ -1,0 +1,55 @@
+{
+  "schema_version": "factor.manifest.v1",
+  "candidate_id": "raw_ca_hash_2fc67cd0",
+  "campaign_id": "llm_ashare_pv_cogalpha_2026q2",
+  "generator_name": "cogalpha",
+  "producer": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_LQTP",
+  "domain_root": "price_volume",
+  "frequency_bucket": "daily",
+  "batch_id": "post_mining_translate",
+  "factor_name": "factor_directional_vol_adaptive_crossover",
+  "formula": "range_pct = (high-low)/close; smooth_range = ema(range_pct, span=5); vol_ratio = volume / ts_mean(volume,20); smooth_vol_ratio = if vol_ratio > 0.9 then ema(vol_ratio,10) else ema(vol_ratio,30); direction = (close-open)/close; factor = smooth_range * smooth_vol_ratio * direction",
+  "expression_type": "lqtp_dsl",
+  "execution_platform": "lqtp",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit",
+  "code": "def factor_directional_vol_adaptive_crossover(df):\n    df_copy = df.copy()\n    range_pct = (df_copy['high'] - df_copy['low']) / df_copy['close']\n    smooth_range = range_pct.ewm(span=5).mean()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(20, min_periods=20).mean()\n    smooth_vol_ratio_fast = vol_ratio.ewm(span=10).mean()\n    smooth_vol_ratio_slow = vol_ratio.ewm(span=30).mean()\n    smooth_vol_ratio = np.where(vol_ratio > 0.9, smooth_vol_ratio_fast, smooth_vol_ratio_slow)\n    direction = (df_copy['close'] - df_copy['open']) / df_copy['close']\n    df_copy['factor_directional_vol_adaptive_crossover'] = smooth_range * smooth_vol_ratio * direction\n    return df_copy['factor_directional_vol_adaptive_crossover']",
+  "rationale": "Crossover of primary (alpha_mutation_gen6_002) and secondary (alpha-mutation-gen6-002). Preserves primary's core directional volume-adjusted volatility mechanism with smooth_range (EWMA span=5) and continuous direction. Borrows the faster EWMA spans (10/30) for the volume ratio from the secondary parent to make the volume regime switching more distinctive, targeting improved IC while maintaining rank-ordering strength.",
+  "lineage": {
+    "agent_skill": "alpha-regime-gating",
+    "operation": "cogalpha_to_lqtp_translation"
+  },
+  "stage": "candidate_pool",
+  "fitness_label": "elite",
+  "metrics": {
+    "train": {
+      "ic": 0.024188799280769037,
+      "rank_ic": 0.0375179989516672,
+      "icir": 0.27489203857716477,
+      "rank_icir": 0.34380218301927146,
+      "status": "computed",
+      "source": "cogalpha"
+    },
+    "valid": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    }
+  },
+  "validation": {
+    "status": "pending"
+  },
+  "created_at": "2026-06-21T11:25:28.511155+00:00",
+  "updated_at": "2026-06-21T16:18:17.275316+00:00",
+  "lqtp_tags": {
+    "universe": "all_a",
+    "market": "ashare"
+  },
+  "rationale_llm": {
+    "summary": "Crossover of primary (alpha_mutation_gen6_002) and secondary (alpha-mutation-gen6-002). Preserves primary's core directional volume-adjusted volatility mechanism with smooth_range (EWMA span=5) and continuous direction. Borrows the faster EWMA spans (10/30) for the volume ratio from the secondary parent to make the volume regime switching more distinctive, targeting improved IC while maintaining rank-ordering strength.",
+    "parsed_at": "2026-06-21T11:25:31.600282+00:00",
+    "source": "manifest_rationale"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "cogalpha_20260702043307_1c1f15bf",
+  "campaign_id": "cogalpha_ashare_pv_202606300915_w04",
+  "formula": "- ewm(intraday_ret, span=5)",
+  "expression_type": "python",
+  "code": "def factor_reversal_intraday_5d_ema(df):\n    \"\"\"Intraday return reversal: negative of 5-period EMA of intraday returns.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    ema_intraday = intraday_ret.ewm(span=5, min_periods=5).mean()\n    df_copy[\"factor_reversal_intraday_5d_ema\"] = -ema_intraday\n    return df_copy[\"factor_reversal_intraday_5d_ema\"]",
+  "generator_name": "cogalpha",
+  "generator_version": "2.1.0",
+  "mined_by": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "born_timestamp": "2026-07-02T04:33:07Z",
+  "metrics": {
+    "train": {
+      "ic": 0.02518657007869205,
+      "icir": 0.2225785364472099,
+      "rank_ic": 0.04494544743494019
+    },
+    "valid": {
+      "ic": 0.025920560666743087,
+      "icir": 0.22206221922912125,
+      "rank_ic": 0.037594056417713725
+    },
+    "test": {
+      "ic": 0.02156539079268251,
+      "icir": 0.15657385555794423,
+      "rank_ic": 0.03847312826945772
+    }
+  },
+  "description": "Intraday overreaction: cumulative intraday price movements tend to mean-revert. Exponentially weighted moving average emphasizes recent intraday returns for sharper reversal capture, preserving the elite parent's MI while aiming to improve ICIR/RankICIR through more responsive temporal weighting.",
+  "filter_note": "CogAlpha python interim; train actual_start from lqtp_data (2016+, spec 2014)."
+}

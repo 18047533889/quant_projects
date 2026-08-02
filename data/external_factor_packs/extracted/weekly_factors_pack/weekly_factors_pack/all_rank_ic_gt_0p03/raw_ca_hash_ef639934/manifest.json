@@ -1,0 +1,55 @@
+{
+  "schema_version": "factor.manifest.v1",
+  "candidate_id": "raw_ca_hash_ef639934",
+  "campaign_id": "llm_ashare_pv_cogalpha_2026q2",
+  "generator_name": "cogalpha",
+  "producer": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_LQTP",
+  "domain_root": "price_volume",
+  "frequency_bucket": "daily",
+  "batch_id": "post_mining_translate",
+  "factor_name": "factor_herding_momentum_stress",
+  "formula": "ema( (close - delay(close, 1))/delay(close, 1) * (volume / ts_mean(volume,5)) * ((high-low)/close) , span=5 )",
+  "expression_type": "lqtp_dsl",
+  "execution_platform": "lqtp",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit",
+  "code": "def factor_herding_momentum_stress(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(5, min_periods=5).mean()\n    stress_range = (df_copy['high'] - df_copy['low']) / df_copy['close'].replace(0, np.nan)\n    raw = ret * vol_ratio * stress_range\n    smoothed = raw.ewm(span=5, min_periods=5, adjust=False).mean()\n    factor = smoothed.clip(-3, 3)\n    factor.name = 'factor_herding_momentum_stress'\n    return factor",
+  "rationale": "Volume-confirmed directional momentum amplified by intraday stress (range/close). The product captures herding behavior when price moves attract volume, and stress range magnifies crowded episodes. EMA(5) smoothing stabilizes the signal for rank consistency, while clipping controls outliers.",
+  "lineage": {
+    "agent_skill": "alpha-herding",
+    "operation": "cogalpha_to_lqtp_translation"
+  },
+  "stage": "candidate_pool",
+  "fitness_label": "elite",
+  "metrics": {
+    "train": {
+      "ic": 0.02423187014584172,
+      "rank_ic": 0.04513472830934807,
+      "icir": 0.2446354309676362,
+      "rank_icir": 0.3704255442931516,
+      "status": "computed",
+      "source": "cogalpha"
+    },
+    "valid": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    }
+  },
+  "validation": {
+    "status": "pending"
+  },
+  "created_at": "2026-06-21T11:25:28.504179+00:00",
+  "updated_at": "2026-06-21T16:18:20.206924+00:00",
+  "lqtp_tags": {
+    "universe": "all_a",
+    "market": "ashare"
+  },
+  "rationale_llm": {
+    "summary": "Volume-confirmed directional momentum amplified by intraday stress (range/close). The product captures herding behavior when price moves attract volume, and stress range magnifies crowded episodes. EMA(5) smoothing stabilizes the signal for rank consistency, while clipping controls outliers.",
+    "parsed_at": "2026-06-21T11:25:33.990618+00:00",
+    "source": "manifest_rationale"
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "schema_version": "factor.manifest.v1",
+  "candidate_id": "raw_ca_hash_881db7aa",
+  "campaign_id": "llm_ashare_pv_cogalpha_2026q2",
+  "generator_name": "cogalpha",
+  "producer": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_LQTP",
+  "domain_root": "price_volume",
+  "frequency_bucket": "daily",
+  "batch_id": "post_mining_translate",
+  "factor_name": "factor_intraday_reversal_crossover_v1",
+  "formula": "ts_mean(- safe_div(numerator=2 * close - high - low, denominator=high - low) * safe_div(numerator=ts_mean(high - low, 5), denominator=ts_mean(close, 5)), 3)",
+  "expression_type": "lqtp_dsl",
+  "execution_platform": "lqtp",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit",
+  "code": "def factor_intraday_reversal_crossover_v1(df):\n    df_copy = df.copy()\n    intraday_pos = (2*df_copy['close'] - df_copy['high'] - df_copy['low']) / (df_copy['high'] - df_copy['low']).replace(0, np.nan)\n    avg_range = (df_copy['high'] - df_copy['low']).rolling(5).mean()\n    avg_close = df_copy['close'].rolling(5).mean()\n    raw_factor = -intraday_pos * avg_range / avg_close.replace(0, np.nan)\n    smoothed = raw_factor.rolling(3, min_periods=3).mean()\n    smoothed.name = 'factor_intraday_reversal_crossover_v1'\n    return smoothed",
+  "rationale": "Crossover preserving the elite intraday reversal mechanism from parent1 (factor_intraday_reversal_repair_0) and borrowing the lightweight 3-period SMA smoothing from parent2 (factor_intraday_reversal_smoothed_v2_mutation) to reduce noise and improve rank stability while maintaining the core reversal signal.",
+  "lineage": {
+    "agent_skill": "alpha-reversal",
+    "operation": "cogalpha_to_lqtp_translation"
+  },
+  "stage": "candidate_pool",
+  "fitness_label": "qualified",
+  "metrics": {
+    "train": {
+      "ic": 0.030473278308538816,
+      "rank_ic": 0.03198514396439081,
+      "icir": 0.3338587686663713,
+      "rank_icir": 0.31241378993353625,
+      "status": "computed",
+      "source": "cogalpha"
+    },
+    "valid": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    }
+  },
+  "validation": {
+    "status": "pending"
+  },
+  "created_at": "2026-06-21T11:25:28.448338+00:00",
+  "updated_at": "2026-06-21T16:18:19.563461+00:00",
+  "lqtp_tags": {
+    "universe": "all_a",
+    "market": "ashare"
+  },
+  "rationale_llm": {
+    "summary": "Crossover preserving the elite intraday reversal mechanism from parent1 (factor_intraday_reversal_repair_0) and borrowing the lightweight 3-period SMA smoothing from parent2 (factor_intraday_reversal_smoothed_v2_mutation) to reduce noise and improve rank stability while maintaining the core reversal signal.",
+    "parsed_at": "2026-06-21T11:25:33.949964+00:00",
+    "source": "manifest_rationale"
+  },
+  "admission": {
+    "test": {
+      "checked_at": "2026-06-21T15:31:07.567939+00:00",
+      "min_rank_ic": 0.03,
+      "max_pool_correlation": 0.7,
+      "mean_ic": 0.005505794335582655,
+      "rank_ic": 0.005505794335582655,
+      "orientation": "original",
+      "original_mean_ic": null,
+      "pool_max_correlation": 1.0,
+      "correlation_source": "lqtp_reference_library",
+      "reference_library_split": "test",
+      "reference_library_cached_count": 65,
+      "reference_compared_count": 65,
+      "passed_ic": false,
+      "passed_correlation": false,
+      "passed": false,
+      "split": "test"
+    }
+  }
+}

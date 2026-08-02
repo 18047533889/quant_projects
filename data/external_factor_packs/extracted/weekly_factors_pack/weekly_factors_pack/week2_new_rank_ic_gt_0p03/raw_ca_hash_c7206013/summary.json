@@ -1,0 +1,20 @@
+{
+  "factor_name": "factor_stress_volume_cont_weight_cont_dir_w20_clip3_w40_ewm15",
+  "candidate_id": "raw_ca_hash_c7206013",
+  "week": "week2",
+  "fitness_label": "elite",
+  "source_shelf": "supplement_pending",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.024555810411677197,
+    "rank_ic": 0.03447382603010594,
+    "icir": 0.2925117405596981,
+    "rank_icir": 0.3659057405570244
+  },
+  "lqtp_test": null,
+  "formula": "((((df.copy())[\"high\"]) - ((df.copy())[\"low\"])) - (((df.copy())[\"((df.copy())[\"high\"])\"]) - ((df.copy())[\"((df.copy())[\"low\"])\"])).rolling(40, min_periods=40).mean()) / (((df.copy())[\"((df.copy())[\"high\"])\"]) - ((df.copy())[\"((df.copy())[\"low\"])\"])).rolling(40, min_periods=40).std(ddof=1).clipema(lower=0, 15) * ((df.copy())[\"volume\"]) / ((df.copy())[\"((df.copy())[\"volume\"])\"]).rolling(20, min_periods=20).mean() * (((df.copy())[\"close\"]) - ((df.copy())[\"open\"])) / (((df.copy())[\"high\"]) - ((df.copy())[\"low\"]))",
+  "rationale": "Mutation of parent mutation_stress_volume_cont_weight_cont_dir_w20_clip3_w40_001: preserve core stress accumulation, continuous volume weight, and clipped directional strength. Increase the ewm smoothing span from 10 to 15 to further smooth the stress component, reducing noise and targeting improved IC and ICIR while maintaining the strong RankIC and RankICIR. No new components introduced.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

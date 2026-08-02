@@ -1,0 +1,27 @@
+{
+  "factor_name": "factor_volume_confirmed_momentum_tanh_gated",
+  "candidate_id": "raw_ca_hash_0a4e4a21",
+  "week": "week2",
+  "fitness_label": "qualified",
+  "source_shelf": "supplement_pending",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.03682561584328748,
+    "rank_ic": 0.04525603899007993,
+    "icir": 0.3465592328383982,
+    "rank_icir": 0.3863954706631584
+  },
+  "lqtp_test": {
+    "rank_ic": 0.005435923505080634,
+    "mean_ic": 0.005435923505080634,
+    "icir": 0.035423130044795755,
+    "orientation": "original",
+    "begin_date": 20230101,
+    "end_date": 20260615
+  },
+  "formula": "(sigmoid(2 * (- safe_div(numerator=2 * close - high - low, denominator=high - low) * safe_div(numerator=ts_mean(high - low, 5), denominator=ts_mean(close, 5)))) * 2 - 1)",
+  "rationale": "Preserve strong IC and RankIC from parent crossover_vcmi_1 (volume-confirmed momentum gated by intraday position). Borrow tanh nonlinearity from parent crossover_liquidity_tanh_reversal_001 to compress extreme outlier values, improving MI and rank stability without altering the core momentum mechanism.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

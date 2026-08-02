@@ -1,0 +1,1 @@
+EWM( (close - close.shift(1))/close.shift(1) * (volume / SMA(volume,5)) * ((high-low)/close) , span=5 )

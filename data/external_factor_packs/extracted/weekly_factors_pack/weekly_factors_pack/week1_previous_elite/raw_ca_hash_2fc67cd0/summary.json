@@ -1,0 +1,20 @@
+{
+  "factor_name": "factor_directional_vol_adaptive_crossover",
+  "candidate_id": "raw_ca_hash_2fc67cd0",
+  "week": "week1",
+  "fitness_label": "elite",
+  "source_shelf": "standard",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.024188799280769037,
+    "rank_ic": 0.0375179989516672,
+    "icir": 0.27489203857716477,
+    "rank_icir": 0.34380218301927146
+  },
+  "lqtp_test": null,
+  "formula": "range_pct = (high-low)/close; smooth_range = ema(range_pct, span=5); vol_ratio = volume / ts_mean(volume,20); smooth_vol_ratio = if vol_ratio > 0.9 then ema(vol_ratio,10) else ema(vol_ratio,30); direction = (close-open)/close; factor = smooth_range * smooth_vol_ratio * direction",
+  "rationale": "Crossover of primary (alpha_mutation_gen6_002) and secondary (alpha-mutation-gen6-002). Preserves primary's core directional volume-adjusted volatility mechanism with smooth_range (EWMA span=5) and continuous direction. Borrows the faster EWMA spans (10/30) for the volume ratio from the secondary parent to make the volume regime switching more distinctive, targeting improved IC while maintaining rank-ordering strength.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

@@ -1,0 +1,36 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "cogalpha_20260702070916_4a2b9199",
+  "campaign_id": "cogalpha_ashare_pv_202606300915_w04",
+  "formula": "-EMA_5(intraday_return) * clip( std_20(close_ret) / std_60(close_ret), 0.5, 2.0 )",
+  "expression_type": "python",
+  "code": "def factor_intraday_reversal_vol_intensity(df):\n    \"\"\"Intraday reversal scaled by relative volatility intensity.\"\"\"\n    df_copy = df.copy()\n    overnight, intraday = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    intraday_ema = intraday.ewm(span=5, min_periods=5).mean()\n    rv_short = df_copy[\"close\"].pct_change().rolling(20).std()\n    rv_long = df_copy[\"close\"].pct_change().rolling(60).std()\n    vol_ratio = rv_short / rv_long.replace(0, np.nan)\n    vol_ratio = vol_ratio.clip(0.5, 2.0)\n    result = -intraday_ema * vol_ratio\n    result = result.fillna(0)\n    df_copy[\"factor_intraday_reversal_vol_intensity\"] = result\n    return df_copy[\"factor_intraday_reversal_vol_intensity\"]",
+  "generator_name": "cogalpha",
+  "generator_version": "2.1.0",
+  "mined_by": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "born_timestamp": "2026-07-02T07:09:16Z",
+  "metrics": {
+    "train": {
+      "ic": 0.029442967957120196,
+      "icir": 0.27894057716359033,
+      "rank_ic": 0.04630511635190036
+    },
+    "valid": {
+      "ic": 0.02401914205642426,
+      "icir": 0.21980854989339033,
+      "rank_ic": 0.03491994971775467
+    },
+    "test": {
+      "ic": 0.02502722343742337,
+      "icir": 0.21083630171284684,
+      "rank_ic": 0.0443643383432547
+    }
+  },
+  "description": "Combines the intraday mean-reversion signal (faded 5-day EMA of intraday returns) with a volatility intensity scaling: short-term (20-day) vs long-term (60-day) realized volatility ratio, clipped to [0.5, 2.0]. The hypothesis is that overreaction and subsequent reversal are amplified in high relative volatility regimes, making the signal stronger when recent volatility is elevated relative to its longer-term history. This borrows the volatility regime scaling from the other parent to improve signal-to-noise, while preserving the core intraday reversal ranking.",
+  "filter_note": "CogAlpha python interim; train actual_start from lqtp_data (2016+, spec 2014)."
+}

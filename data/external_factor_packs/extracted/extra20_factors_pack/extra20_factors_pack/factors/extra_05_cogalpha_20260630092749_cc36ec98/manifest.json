@@ -1,0 +1,36 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "cogalpha_20260630092749_cc36ec98",
+  "campaign_id": "cogalpha_ashare_pv_202606301800",
+  "formula": "ewm(halflife=7, min_periods=7).mean((close/open-1) * clipped(volume/rolling_median(volume,10), 0.3, 2.0))",
+  "expression_type": "python",
+  "code": "def factor_volume_pressure_ewm_smooth(df):\n    df_copy = df.copy()\n    ret = df_copy['close'] / df_copy['open'] - 1\n    vol_med = df_copy['volume'].rolling(10, min_periods=10).median().replace(0, np.nan)\n    vol_ratio = df_copy['volume'] / vol_med\n    vol_ratio_clipped = vol_ratio.clip(lower=0.3, upper=2.0)\n    raw = ret * vol_ratio_clipped\n    smooth = raw.ewm(halflife=7, min_periods=7).mean()\n    return smooth.rename('factor_volume_pressure_ewm_smooth')",
+  "generator_name": "cogalpha",
+  "generator_version": "2.1.0",
+  "mined_by": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "born_timestamp": "2026-06-30T09:27:49Z",
+  "metrics": {
+    "train": {
+      "ic": 0.02491385577041812,
+      "icir": 0.20208885921994807,
+      "rank_ic": 0.04738135975535768
+    },
+    "valid": {
+      "ic": 0.026589586025867386,
+      "icir": 0.20945556405633994,
+      "rank_ic": 0.048841110283528104
+    },
+    "test": {
+      "ic": 0.020602444825172497,
+      "icir": 0.14383559645874316,
+      "rank_ic": 0.05472704151338541
+    }
+  },
+  "description": "Mutation of alpha-crossover-gen13-0: simplify by removing the rolling mean smoothing component to reduce lag and improve signal responsiveness. Additionally, tighten the upper clipping bound from 3.0 to 2.0 to reduce extreme volume-ratio outliers. Preserves the core volume-pressure mechanism (return scaled by volume/median ratio with clipping) and EWM smoothing to maintain rank stability. Targets improved IC and ICIR while preserving RankIC strength.",
+  "filter_note": "CogAlpha python interim; train actual_start from lqtp_data (2016+, spec 2014)."
+}

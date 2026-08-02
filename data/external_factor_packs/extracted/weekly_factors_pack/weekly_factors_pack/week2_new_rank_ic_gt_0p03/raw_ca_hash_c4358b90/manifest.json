@@ -1,0 +1,75 @@
+{
+  "schema_version": "factor.manifest.v1",
+  "candidate_id": "raw_ca_hash_c4358b90",
+  "campaign_id": "llm_ashare_pv_cogalpha_2026q2",
+  "generator_name": "cogalpha",
+  "producer": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_LQTP",
+  "domain_root": "price_volume",
+  "frequency_bucket": "daily",
+  "batch_id": "post_mining_translate",
+  "factor_name": "factor_vol_surge_regime_gated",
+  "formula": "ema(intraday_return * safe_div(numerator=volume, denominator=ts_max(volume, 20)) * where(high - low > ts_quantile(high - low, 20, 0.5), 1, 0), 20)",
+  "expression_type": "lqtp_dsl",
+  "execution_platform": "lqtp",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit",
+  "code": "def factor_vol_surge_regime_gated(df):\n    df_copy = df.copy()\n    intday_ret = df_copy[\"close\"] / df_copy[\"open\"] - 1.0\n    vol_max = df_copy[\"volume\"].rolling(20, min_periods=20).max()\n    vol_surge = df_copy[\"volume\"] / vol_max.replace(0, np.nan)\n    raw = intday_ret * vol_surge\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    range_med = range_.rolling(20).median()\n    high_vol = range_ > range_med\n    factor = raw * high_vol\n    factor = factor.ewm(span=20, adjust=False).mean()\n    factor.name = \"factor_vol_surge_regime_gated\"\n    return factor",
+  "rationale": "Primary mechanism from imbalance_002: intraday return scaled by volume surge to capture directional pressure. Lightweight modifier from avr_002_mut001: volatility regime indicator (range > 20-day median) to filter out low-volatility periods where the signal may be noisy. This combination targets improved ICIR while preserving the core directional strength.",
+  "lineage": {
+    "agent_skill": "alpha-volatility-regime",
+    "operation": "cogalpha_to_lqtp_translation"
+  },
+  "stage": "candidate_pool",
+  "fitness_label": "qualified",
+  "metrics": {
+    "train": {
+      "ic": 0.024935617701461233,
+      "rank_ic": 0.04560232498456135,
+      "icir": 0.21438774703792565,
+      "rank_icir": 0.4048674982089943,
+      "status": "computed",
+      "source": "cogalpha"
+    },
+    "valid": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    }
+  },
+  "validation": {
+    "status": "pending"
+  },
+  "created_at": "2026-06-19T14:45:38.232943+00:00",
+  "updated_at": "2026-06-21T16:18:19.724525+00:00",
+  "lqtp_tags": {
+    "universe": "all_a",
+    "market": "ashare"
+  },
+  "rationale_llm": {
+    "summary": "Primary mechanism from imbalance_002: intraday return scaled by volume surge to capture directional pressure. Lightweight modifier from avr_002_mut001: volatility regime indicator (range > 20-day median) to filter out low-volatility periods where the signal may be noisy. This combination targets improved ICIR while preserving the core directional strength.",
+    "parsed_at": "2026-06-20T05:11:15.664919+00:00",
+    "source": "manifest_rationale"
+  },
+  "admission": {
+    "test": {
+      "checked_at": "2026-06-21T16:00:51.339783+00:00",
+      "min_rank_ic": 0.03,
+      "max_pool_correlation": 0.7,
+      "mean_ic": 0.03973472434247107,
+      "rank_ic": 0.03973472434247107,
+      "orientation": "flipped",
+      "original_mean_ic": -0.03973170920702552,
+      "pool_max_correlation": 0.9999999933893545,
+      "correlation_source": "lqtp_reference_library",
+      "reference_library_split": "test",
+      "reference_library_cached_count": 65,
+      "reference_compared_count": 65,
+      "passed_ic": true,
+      "passed_correlation": false,
+      "passed": false,
+      "split": "test"
+    }
+  }
+}

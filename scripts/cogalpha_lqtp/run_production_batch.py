@@ -32,8 +32,9 @@ if str(ROOT) not in sys.path:
 if str(FE_ROOT) not in sys.path:
     sys.path.insert(0, str(FE_ROOT))
 
-from api.mining_integration import default_ashare_pv_data_source_config, validate_factor_engine_dsl  # noqa: E402
+from api.mining_integration import validate_factor_engine_dsl  # noqa: E402
 
+from scripts.cogalpha_lqtp.data_access_panel import ashare_materialize_data_source_config  # noqa: E402
 from scripts.cogalpha_lqtp.factor_eval import evaluate_lqtp_formula, fetch_lqtp_close_returns, fetch_lqtp_open_returns  # noqa: E402
 from scripts.cogalpha_lqtp.ast_translator import dsl_to_lqtp, lqtp_to_fe_dsl  # noqa: E402
 from scripts.cogalpha_lqtp.lqtp_dsl_compat import eval_route_for_entry, is_lqtp_native_dsl  # noqa: E402
@@ -94,10 +95,11 @@ def _ashare_data_source(
     *,
     instrument_filter: list[str] | None = None,
 ) -> dict[str, Any]:
-    cfg = default_ashare_pv_data_source_config(start_date=start, end_date=end)
-    if instrument_filter:
-        cfg["instrument_filter"] = sorted(instrument_filter)
-    return cfg
+    return ashare_materialize_data_source_config(
+        start_date=start,
+        end_date=end,
+        instrument_filter=instrument_filter,
+    )
 
 
 def _count_bar_files(data_root: Path) -> int:

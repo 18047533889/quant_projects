@@ -1,0 +1,75 @@
+{
+  "schema_version": "factor.manifest.v1",
+  "candidate_id": "raw_ca_hash_777e86d4",
+  "campaign_id": "llm_ashare_pv_cogalpha_2026q2",
+  "generator_name": "cogalpha",
+  "producer": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_LQTP",
+  "domain_root": "price_volume",
+  "frequency_bucket": "daily",
+  "batch_id": "post_mining_translate",
+  "factor_name": "factor_volume_confirmed_momentum_binary_gate",
+  "formula": "(ema(daily_return * safe_div(numerator=volume, denominator=ts_mean(volume, 20)), 10)) * (sign(close - (high + low) / 2))",
+  "expression_type": "lqtp_dsl",
+  "execution_platform": "lqtp",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit",
+  "code": "def factor_volume_confirmed_momentum_binary_gate(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(20, min_periods=20).mean()\n    base = ret * vol_ratio\n    smoothed_base = base.ewm(span=10, min_periods=10, adjust=False).mean()\n    range_ = df_copy['high'] - df_copy['low']\n    range_ = range_.replace(0, np.nan)\n    mid_point = (df_copy['high'] + df_copy['low']) / 2\n    binary_gate = np.where(df_copy['close'] >= mid_point, 1, -1)\n    factor = smoothed_base * binary_gate\n    df_copy['factor_volume_confirmed_momentum_binary_gate'] = factor\n    return df_copy['factor_volume_confirmed_momentum_binary_gate']",
+  "rationale": "Volume-confirmed momentum with a binary intraday gate. The continuous intraday position from the parent is replaced by a binary indicator (1 if close is above midpoint, -1 if below) to reduce noise and improve MI and RankIC stability while preserving the core economic mechanism of volume-confirmed momentum gated by intraday price position.",
+  "lineage": {
+    "agent_skill": "alpha-price-volume-coherence",
+    "operation": "cogalpha_to_lqtp_translation"
+  },
+  "stage": "candidate_pool",
+  "fitness_label": "qualified",
+  "metrics": {
+    "train": {
+      "ic": 0.02898934743675182,
+      "rank_ic": 0.032017317099789465,
+      "icir": 0.412459518743127,
+      "rank_icir": 0.4415854431135401,
+      "status": "computed",
+      "source": "cogalpha"
+    },
+    "valid": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    }
+  },
+  "validation": {
+    "status": "pending"
+  },
+  "created_at": "2026-06-21T11:25:28.458769+00:00",
+  "updated_at": "2026-06-21T16:18:19.322801+00:00",
+  "lqtp_tags": {
+    "universe": "all_a",
+    "market": "ashare"
+  },
+  "rationale_llm": {
+    "summary": "Volume-confirmed momentum with a binary intraday gate. The continuous intraday position from the parent is replaced by a binary indicator (1 if close is above midpoint, -1 if below) to reduce noise and improve MI and RankIC stability while preserving the core economic mechanism of volume-confirmed momentum gated by intraday price position.",
+    "parsed_at": "2026-06-21T11:25:33.938065+00:00",
+    "source": "manifest_rationale"
+  },
+  "admission": {
+    "test": {
+      "checked_at": "2026-06-21T15:10:04.165238+00:00",
+      "min_rank_ic": 0.03,
+      "max_pool_correlation": 0.7,
+      "mean_ic": 0.005954400064614114,
+      "rank_ic": 0.005954400064614114,
+      "orientation": "flipped",
+      "original_mean_ic": -0.005992648360626128,
+      "pool_max_correlation": 0.27713802665107723,
+      "correlation_source": "lqtp_reference_library",
+      "reference_library_split": "test",
+      "reference_library_cached_count": 51,
+      "reference_compared_count": 51,
+      "passed_ic": false,
+      "passed_correlation": true,
+      "passed": false,
+      "split": "test"
+    }
+  }
+}

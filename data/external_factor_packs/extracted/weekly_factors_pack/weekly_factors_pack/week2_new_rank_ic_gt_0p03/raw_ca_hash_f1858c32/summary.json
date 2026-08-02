@@ -1,0 +1,20 @@
+{
+  "factor_name": "factor_adaptive_vol_directional_smooth_range10",
+  "candidate_id": "raw_ca_hash_f1858c32",
+  "week": "week2",
+  "fitness_label": "qualified",
+  "source_shelf": "standard",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.02974448254520689,
+    "rank_ic": 0.04320842128262164,
+    "icir": 0.30686975691482016,
+    "rank_icir": 0.3630254921993133
+  },
+  "lqtp_test": null,
+  "formula": "smooth_range = ema((high-low)/close, span=10); vol_ratio = volume / ts_mean(volume,25); smooth_vol = ema(vol_ratio, span=15); direction=(close-open)/close; smooth_direction=ema(direction, span=3); factor = smooth_range * smooth_vol * smooth_direction",
+  "rationale": "Mutation of alpha-crossover-gen14-001. Preserves core directional volume-adjusted volatility mechanism (smooth_range EWMA span=10, volume ratio baseline 25-day, smooth_direction EWMA span=3). Simplifies volume smoothing by replacing the adaptive sigmoid blending of two EWMA with a single EWMA (span=15) as in the effective parent alpha-mutation-gen13-002, aiming to reduce complexity and potentially improve IC stability while preserving strong rank-ordering strength (RankIC, RankICIR). Only one co",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

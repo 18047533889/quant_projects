@@ -1,0 +1,20 @@
+{
+  "factor_name": "factor_vol_price_log_range_gate_clipped_boost_5day_mut_001",
+  "candidate_id": "raw_ca_hash_27a292b1",
+  "week": "week2",
+  "fitness_label": "qualified",
+  "source_shelf": "supplement_pending",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.02406245229456068,
+    "rank_ic": 0.04827707789654243,
+    "icir": 0.2075760103641479,
+    "rank_icir": 0.39472257954942347
+  },
+  "lqtp_test": null,
+  "formula": "EMA12( pct_change * log1p(volume/SMA5(volume)) * (1 + min(max(0, zscore5(range)), 2.0)) )",
+  "rationale": "Mutation of parent vol_price_log_range_gate_clipped_boost_5day_cross_001: preserve core volume-weighted price change with log volume compression, 5-day rolling windows, and clipped range z-score boost (cap 2.0). Increase EMA smoothing span from 10 to 12 to further reduce noise and target improvement in ICIR while maintaining strong RankIC and RankICIR.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

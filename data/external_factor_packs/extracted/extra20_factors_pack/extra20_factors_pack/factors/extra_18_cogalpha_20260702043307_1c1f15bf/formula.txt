@@ -1,0 +1,1 @@
+- ewm(intraday_ret, span=5)

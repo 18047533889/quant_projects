@@ -1,0 +1,55 @@
+{
+  "schema_version": "factor.manifest.v1",
+  "candidate_id": "raw_ca_hash_bc141edf",
+  "campaign_id": "llm_ashare_pv_cogalpha_2026q2",
+  "generator_name": "cogalpha",
+  "producer": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_LQTP",
+  "domain_root": "price_volume",
+  "frequency_bucket": "daily",
+  "batch_id": "post_mining_translate",
+  "factor_name": "factor_mut_cro_asym_vol_ratio_med_20_minp3_vol6_ema5",
+  "formula": "(-1.0) * (((df.copy())['((df.copy())['((df.copy())['high'])'])']) - ((df.copy())['((df.copy())['((df.copy())['low'])'])'])).where((((df.copy())['((df.copy())['((df.copy())['((df.copy())['close'])'])'])']) > ((df.copy())['open'])) == 1, np.nan).rolling(20, min_periods=3).median() / (((df.copy())['((df.copy())['((df.copy())['high'])'])']) - ((df.copy())['((df.copy())['((df.copy())['low'])'])'])).where((((df.copy())['((df.copy())['((df.copy())['((df.copy())['close'])'])'])']) <= ((df.copy())['open'])) == 1, np.nan).rolling(20, min_periods=3).median() * (safe_div(numerator=volume, denominator=ts_mean(volume, 20)))",
+  "expression_type": "lqtp_dsl",
+  "execution_platform": "lqtp",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit",
+  "code": "def factor_mut_cro_asym_vol_ratio_med_20_minp3_vol6_ema5(df):\n    df_copy = df.copy()\n    high = df_copy['high']\n    low = df_copy['low']\n    close = df_copy['close']\n    open_ = df_copy['open']\n    volume = df_copy['volume']\n\n    # Asymmetry ratio using median range (window 20, min_periods=3)\n    up_day = (close > open_).astype(float)\n    down_day = (close <= open_).astype(float)\n    range_ = high - low\n    up_range = range_.where(up_day == 1, np.nan)\n    down_range = range_.where(down_day == 1, np.nan)\n    up_med = up_range.rolling(20, min_periods=3).median()\n    down_med = down_range.rolling(20, min_periods=3).median()\n    up_med = up_med.fillna(1.0)\n    down_med = down_med.fillna(1.0)\n    asym_ratio = up_med / down_med.replace(0.0, np.nan)\n    asym_ratio = asym_ratio.fillna(1.0)\n\n    # Volume ratio using median (window 6, min_periods=6)\n    vol_med6 = volume.rolling(6, min_periods=6).median()\n    vol_ratio = volume / vol_med6.replace(0.0, np.nan)\n    vol_ratio = vol_ratio.replace([np.inf, -np.inf], np.nan).fillna(1.0)\n\n    # Combine with negative sign\n    factor = -1.0 * asym_ratio * vol_ratio\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n\n    # EMA5 smoothing (increased from 3 to reduce noise)\n    factor_smoothed = factor.ewm(span=5, min_periods=5, adjust=False).mean()\n    factor_smoothed = factor_smoothed.replace([np.inf, -np.inf], np.nan).fillna(0)\n\n    df_copy['factor_mut_cro_asym_vol_ratio_med_20_minp3_vol6_ema5'] = factor_smoothed\n    return df_copy['factor_mut_cro_asym_vol_ratio_med_20_minp3_vol6_ema5']",
+  "rationale": "Mutation of mut_cro_asym_vol_ratio_med_20_minp3_vol6_001: preserve core asymmetry ratio and volume ratio mechanism, but increase EMA smoothing span from 3 to 5 to reduce noise and potentially improve IC while maintaining rank stability. Targeting IC improvement without sacrificing RankICIR.",
+  "lineage": {
+    "agent_skill": "alpha-vol-asymmetry",
+    "operation": "cogalpha_to_lqtp_translation"
+  },
+  "stage": "candidate_pool",
+  "fitness_label": "qualified",
+  "metrics": {
+    "train": {
+      "ic": 0.013777097337199024,
+      "rank_ic": 0.032789556887282516,
+      "icir": 0.21303984449165897,
+      "rank_icir": 0.4081555821004627,
+      "status": "computed",
+      "source": "cogalpha"
+    },
+    "valid": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    }
+  },
+  "validation": {
+    "status": "pending"
+  },
+  "created_at": "2026-06-21T11:25:28.493047+00:00",
+  "updated_at": "2026-06-21T16:18:27.320734+00:00",
+  "lqtp_tags": {
+    "universe": "all_a",
+    "market": "ashare"
+  },
+  "rationale_llm": {
+    "summary": "Mutation of mut_cro_asym_vol_ratio_med_20_minp3_vol6_001: preserve core asymmetry ratio and volume ratio mechanism, but increase EMA smoothing span from 3 to 5 to reduce noise and potentially improve IC while maintaining rank stability. Targeting IC improvement without sacrificing RankICIR.",
+    "parsed_at": "2026-06-21T11:25:40.511129+00:00",
+    "source": "manifest_rationale"
+  }
+}

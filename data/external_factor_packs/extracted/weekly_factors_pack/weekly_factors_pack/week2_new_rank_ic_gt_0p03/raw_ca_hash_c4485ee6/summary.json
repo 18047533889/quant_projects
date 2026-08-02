@@ -1,0 +1,20 @@
+{
+  "factor_name": "factor_stress_volume_cont_weight_cont_dir_w20_clip2_5_w40_ewm15_stressclip25",
+  "candidate_id": "raw_ca_hash_c4485ee6",
+  "week": "week2",
+  "fitness_label": "qualified",
+  "source_shelf": "supplement_pending",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.024579421766244135,
+    "rank_ic": 0.03447396895000833,
+    "icir": 0.2926458666429303,
+    "rank_icir": 0.3659068360301629
+  },
+  "lqtp_test": null,
+  "formula": "((((df.copy())[\"high\"]) - ((df.copy())[\"low\"])) - (((df.copy())[\"((df.copy())[\"high\"])\"]) - ((df.copy())[\"((df.copy())[\"low\"])\"])).rolling(40, min_periods=40).mean()) / (((df.copy())[\"((df.copy())[\"high\"])\"]) - ((df.copy())[\"((df.copy())[\"low\"])\"])).rolling(40, min_periods=40).std(ddof=1).clipema(lower=0, 15) * ((df.copy())[\"volume\"]) / ((df.copy())[\"((df.copy())[\"volume\"])\"]).rolling(20, min_periods=20).mean() * (((df.copy())[\"close\"]) - ((df.copy())[\"open\"])) / (((df.copy())[\"high\"]) - ((df.copy())[\"low\"]))",
+  "rationale": "Mutation of crossover child: preserve core stress accumulation, continuous volume weight, and ewm-smoothed stress with upper clip 2.5. Reduce directional strength clipping from ±3 to ±2.5 to mitigate extreme directional bets, targeting improved IC while maintaining the strong RankIC and RankICIR. No new components introduced.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

@@ -29,6 +29,8 @@ _LOAD_MODULES = (
     "cleaned_operators.common.daily_panel",
     "cleaned_operators.common.gtja_compat",
     "cleaned_operators.common.scalar_compare",
+    "cleaned_operators.common.scalar_where",
+    "cleaned_operators.lqtp_compat",
     "cleaned_operators.common.polars_ops",
     "cleaned_operators.common.group_polars",
     "cleaned_operators.common.shift_polars",
@@ -56,6 +58,45 @@ _LOAD_MODULES = (
     "cleaned_operators.layer_composite_fixes",
 )
 
+_REVIEWED_EXTENSIONS = (
+    "cleaned_operators.production_repairs",
+    "cleaned_operators.price_volume.technical_extensions",
+    "cleaned_operators.price_volume.technical_structure_repairs",
+    "cleaned_operators.price_volume.candle_patterns_extended",
+    "cleaned_operators.price_volume.candle_geometry_v2",
+    "cleaned_operators.price_volume.candle_pattern_engine_v2",
+    "cleaned_operators.price_volume.candle_pattern_engine_repairs_v2",
+    "cleaned_operators.price_volume.structure_patterns_v2",
+    "cleaned_operators.price_volume.structure_patterns_extra_v2",
+    "cleaned_operators.price_volume.structure_patterns_extra_repairs_v2",
+    "cleaned_operators.price_volume.liquidity_v2",
+    "cleaned_operators.price_volume.liquidity_naming_v2",
+    "cleaned_operators.technical.indicators_v2",
+    "cleaned_operators.common.stable_high_moments_v2",
+    "cleaned_operators.fundamental.transforms_v2",
+    "cleaned_operators.fundamental.transforms_repairs_v2",
+    "cleaned_operators.fundamental.flow_semantics_v2",
+    "cleaned_operators.fundamental.expectation_v2",
+    "cleaned_operators.fundamental.parameter_contract_v2",
+    "cleaned_operators.production_policy_extensions_v2",
+)
+
+
+import importlib.util
+
+
+def _optional_backend_available(module: str) -> bool:
+    """Return whether an optional backend module can be imported."""
+    return importlib.util.find_spec(module) is not None
+
+
+def _load_module_if_available(mod: str) -> None:
+    """Load an optional module only when its dependency is installed."""
+    if ".polars" in mod or mod.endswith("research_polars"):
+        if not _optional_backend_available("polars"):
+            return
+    __import__(mod, fromlist=["*"])
+
 
 _LOADED = False
 
@@ -66,36 +107,74 @@ def load_all() -> None:
         if OperatorRegistry.lifecycle() == "frozen":
             return
         from cleaned_operators.registry import RegistryInitializationError
-
         raise RegistryInitializationError(
             f"loaded registry is unexpectedly {OperatorRegistry.lifecycle()!r}"
         )
     if OperatorRegistry.lifecycle() != "building":
         from cleaned_operators.registry import RegistryInitializationError
-
         raise RegistryInitializationError(
             f"unloaded registry cannot initialize from {OperatorRegistry.lifecycle()!r}"
         )
-    for mod in _LOAD_MODULES:
-        __import__(mod, fromlist=["*"])
-    from cleaned_operators._dedupe import apply_operator_deduplication
 
+    # Capability modules build immutable module-level sets on first import.
+    # Install the base-blob-bound evidence loader before any registry module can
+    # snapshot primitive backend certification.
+    from backend.evidence_delta import install_evidence_delta
+    install_evidence_delta()
+
+    from backend.production_signature_v2 import apply_production_signature_v2
+    apply_production_signature_v2()
+
+    from cleaned_operators.registration_audit import install_registration_audit
+    install_registration_audit()
+
+    for mod in _LOAD_MODULES:
+        _load_module_if_available(mod)
+
+    for mod in _REVIEWED_EXTENSIONS:
+        _load_module_if_available(mod)
+
+    from cleaned_operators._dedupe import apply_operator_deduplication
     apply_operator_deduplication()
 
     from cleaned_operators.operator_overhaul import finalize_operator_overhaul
-
     finalize_operator_overhaul()
 
-    from cleaned_operators.layer_governance import finalize_layer_governance
+    from cleaned_operators.lqtp_policy_patch import apply_lqtp_policy_patch
+    apply_lqtp_policy_patch()
 
+    from cleaned_operators.research_factor_enable import enable_research_factor_runtime
+    enable_research_factor_runtime()
+
+    from cleaned_operators.layer_governance import finalize_layer_governance
     finalize_layer_governance()
 
     from cleaned_operators.layer_governance_post import apply_post_governance
-
     apply_post_governance()
-    from backend.sql_pushdown.sql_registry import register_sql_backends
 
+    from cleaned_operators.production_hardening import apply_production_hardening
+    apply_production_hardening()
+
+    from cleaned_operators.registration_audit import finalize_registration_audit
+    finalize_registration_audit()
+
+    from backend.sql_pushdown.sql_registry import register_sql_backends
     register_sql_backends()
+
+    # Replace the legacy first-seen fiscal SQL lowering with exact ordinal,
+    # revision-aware semantics before evidence and final contracts are consumed.
+    from backend.sql_pushdown.fiscal_v2 import apply_fiscal_sql_v2
+    apply_fiscal_sql_v2()
+
+    # Evidence overlay now observes both the final implementation identity and
+    # all physical SQL registrations. The early loader install above prevents
+    # stale module-level capability snapshots.
+    from cleaned_operators.production_certification_overlay import apply_evidence_certification_overlay
+    apply_evidence_certification_overlay()
+
+    from cleaned_operators.contract_hardening import apply_final_contract_hardening
+    apply_final_contract_hardening()
+
     OperatorRegistry.finalize()
     OperatorRegistry.freeze()
     _LOADED = True

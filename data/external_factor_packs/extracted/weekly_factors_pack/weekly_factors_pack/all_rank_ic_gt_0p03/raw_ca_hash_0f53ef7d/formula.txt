@@ -1,0 +1,1 @@
+ts_pct(close, 5) * (1.5 - 0.5 * ts_rank(ts_std(daily_return, 20), 20))

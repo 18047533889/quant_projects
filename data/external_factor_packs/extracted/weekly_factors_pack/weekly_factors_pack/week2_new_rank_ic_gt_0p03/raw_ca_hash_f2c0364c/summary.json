@@ -1,0 +1,27 @@
+{
+  "factor_name": "factor_stress_range_volume_surge",
+  "candidate_id": "raw_ca_hash_f2c0364c",
+  "week": "week2",
+  "fitness_label": "qualified",
+  "source_shelf": "standard",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.015589961218157533,
+    "rank_ic": 0.033351054814830756,
+    "icir": 0.15920059517012555,
+    "rank_icir": 0.29776813344944725
+  },
+  "lqtp_test": {
+    "rank_ic": 0.048703365883652545,
+    "mean_ic": 0.048703365883652545,
+    "icir": 0.4003798500286981,
+    "orientation": "flipped",
+    "begin_date": 20230101,
+    "end_date": 20260615
+  },
+  "formula": "safe_div(numerator=high - low, denominator=close) * safe_div(numerator=volume, denominator=ts_mean(volume, 20))",
+  "rationale": "Mutation of factor_continuous_stress_range: removed the tanh modulation to simplify the interaction between stress range and volume surge. The core economic mechanism of tail-risk expansion through intraday volatility (high-low) amplified by abnormal volume is preserved. The ablation targets improved RankIC stability by reducing non-linear distortion from tanh, while maintaining the core multiplicative structure.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

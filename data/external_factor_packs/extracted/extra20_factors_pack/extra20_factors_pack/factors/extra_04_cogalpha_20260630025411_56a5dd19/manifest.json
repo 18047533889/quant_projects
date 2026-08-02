@@ -1,0 +1,36 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "cogalpha_20260630025411_56a5dd19",
+  "campaign_id": "cogalpha_ashare_pv_202606301800",
+  "formula": "tanh(ema( (close/shift(close,1)-1) * (volume/sma(volume,20)), 10 ) * ((close-low)/(high-low)))",
+  "expression_type": "python",
+  "code": "def factor_volume_confirmed_momentum_tanh_gated(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(20, min_periods=20).mean()\n    base = ret * vol_ratio\n    smoothed_base = base.ewm(span=10, min_periods=10, adjust=False).mean()\n    range_ = df_copy['high'] - df_copy['low']\n    range_ = range_.replace(0, np.nan)\n    intraday_pos = (df_copy['close'] - df_copy['low']) / range_\n    raw_factor = smoothed_base * intraday_pos\n    factor = np.tanh(raw_factor)\n    df_copy['factor_volume_confirmed_momentum_tanh_gated'] = factor\n    return df_copy['factor_volume_confirmed_momentum_tanh_gated']",
+  "generator_name": "cogalpha",
+  "generator_version": "2.1.0",
+  "mined_by": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "born_timestamp": "2026-06-30T02:54:11Z",
+  "metrics": {
+    "train": {
+      "ic": 0.03615952701424591,
+      "icir": 0.3431552934141565,
+      "rank_ic": 0.04889932595202404
+    },
+    "valid": {
+      "ic": 0.02874475373192321,
+      "icir": 0.29394806582133504,
+      "rank_ic": 0.03828289486395933
+    },
+    "test": {
+      "ic": 0.02850716139924395,
+      "icir": 0.26254165022776244,
+      "rank_ic": 0.04896879557429967
+    }
+  },
+  "description": "Preserve strong IC and RankIC from parent crossover_vcmi_1 (volume-confirmed momentum gated by intraday position). Borrow tanh nonlinearity from parent crossover_liquidity_tanh_reversal_001 to compress extreme outlier values, improving MI and rank stability without altering the core momentum mechanism.",
+  "filter_note": "CogAlpha python interim; train actual_start from lqtp_data (2016+, spec 2014)."
+}

@@ -1,0 +1,20 @@
+{
+  "factor_name": "factor_vol_weighted_pct_range_clip_ema10",
+  "candidate_id": "raw_ca_hash_948c7055",
+  "week": "week2",
+  "fitness_label": "qualified",
+  "source_shelf": "supplement_pending",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.023944668759088114,
+    "rank_ic": 0.04500667851407581,
+    "icir": 0.22683172818664774,
+    "rank_icir": 0.3930790925014266
+  },
+  "lqtp_test": null,
+  "formula": "EMA10( pct_change * (volume/SMA20(volume)) * (1 + cap(zscore10(range), 0, 2)) )",
+  "rationale": "Mutation of price_volume_coherence_range_gate_clip_cross_001: preserve core volume-weighted price change with SMA20 volume ratio and clipped range z-score boost. Increase EMA span from 5 to 10 to reduce noise and improve ICIR and RankICIR stability while maintaining strong RankIC and IC.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

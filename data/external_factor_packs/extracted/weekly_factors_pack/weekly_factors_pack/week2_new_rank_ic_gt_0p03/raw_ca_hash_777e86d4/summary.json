@@ -1,0 +1,27 @@
+{
+  "factor_name": "factor_volume_confirmed_momentum_binary_gate",
+  "candidate_id": "raw_ca_hash_777e86d4",
+  "week": "week2",
+  "fitness_label": "qualified",
+  "source_shelf": "standard",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.02898934743675182,
+    "rank_ic": 0.032017317099789465,
+    "icir": 0.412459518743127,
+    "rank_icir": 0.4415854431135401
+  },
+  "lqtp_test": {
+    "rank_ic": 0.005954400064614114,
+    "mean_ic": 0.005954400064614114,
+    "icir": 0.06513620274359663,
+    "orientation": "flipped",
+    "begin_date": 20230101,
+    "end_date": 20260615
+  },
+  "formula": "(ema(daily_return * safe_div(numerator=volume, denominator=ts_mean(volume, 20)), 10)) * (sign(close - (high + low) / 2))",
+  "rationale": "Volume-confirmed momentum with a binary intraday gate. The continuous intraday position from the parent is replaced by a binary indicator (1 if close is above midpoint, -1 if below) to reduce noise and improve MI and RankIC stability while preserving the core economic mechanism of volume-confirmed momentum gated by intraday price position.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

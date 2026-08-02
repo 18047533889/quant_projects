@@ -1,0 +1,36 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "cogalpha_20260630091249_346a8977",
+  "campaign_id": "cogalpha_ashare_pv_202606301800",
+  "formula": "smoothed(price_change * (volume / SMA(volume,20)) * (1 + zscore(range,10).clip(-2,2)), 8)",
+  "expression_type": "python",
+  "code": "def factor_mut_cross_vwpc_z10_clip2_span8_v1(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    price_change = close.pct_change()\n    vol_ratio = volume / volume.rolling(20, min_periods=20).mean().replace(0, np.nan)\n    range_ = df_copy['high'] - df_copy['low']\n    range_mean = range_.rolling(10, min_periods=10).mean()\n    range_std = range_.rolling(10, min_periods=10).std(ddof=1)\n    range_z = (range_ - range_mean) / range_std.replace(0, np.nan)\n    raw = price_change * vol_ratio * (1 + range_z.clip(-2, 2))\n    smoothed = raw.ewm(span=8, min_periods=8).mean()\n    df_copy['factor_mut_cross_vwpc_z10_clip2_span8_v1'] = smoothed\n    return df_copy['factor_mut_cross_vwpc_z10_clip2_span8_v1']",
+  "generator_name": "cogalpha",
+  "generator_version": "2.1.0",
+  "mined_by": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "born_timestamp": "2026-06-30T09:12:49Z",
+  "metrics": {
+    "train": {
+      "ic": 0.022416324312946025,
+      "icir": 0.21872426614676108,
+      "rank_ic": 0.04620342103296348
+    },
+    "valid": {
+      "ic": 0.021264322345412433,
+      "icir": 0.22682257468418815,
+      "rank_ic": 0.044619878382727296
+    },
+    "test": {
+      "ic": 0.02628657916517408,
+      "icir": 0.23475112741627172,
+      "rank_ic": 0.05917293261985877
+    }
+  },
+  "description": "Mutation of mut_cross_vwpc_z10_clip2_v3: reduced the ewm smoothing span from 10 to 8 to increase signal responsiveness, targeting improvement in IC and ICIR while preserving the strong rank stability (RankIC, RankICIR).",
+  "filter_note": "CogAlpha python interim; train actual_start from lqtp_data (2016+, spec 2014)."
+}

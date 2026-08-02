@@ -1,0 +1,55 @@
+{
+  "schema_version": "factor.manifest.v1",
+  "candidate_id": "raw_ca_hash_948c7055",
+  "campaign_id": "llm_ashare_pv_cogalpha_2026q2",
+  "generator_name": "cogalpha",
+  "producer": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_LQTP",
+  "domain_root": "price_volume",
+  "frequency_bucket": "daily",
+  "batch_id": "post_mining_translate",
+  "factor_name": "factor_vol_weighted_pct_range_clip_ema10",
+  "formula": "EMA10( pct_change * (volume/SMA20(volume)) * (1 + cap(zscore10(range), 0, 2)) )",
+  "expression_type": "lqtp_dsl",
+  "execution_platform": "lqtp",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit",
+  "code": "def factor_vol_weighted_pct_range_clip_ema10(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    high = df_copy['high']\n    low = df_copy['low']\n    pct_change = close.pct_change()\n    vol_ma = volume.rolling(20, min_periods=20).mean().replace(0, np.nan)\n    vol_ratio = volume / vol_ma\n    raw = pct_change * vol_ratio\n    range_ = high - low\n    range_mean = range_.rolling(10, min_periods=10).mean()\n    range_std = range_.rolling(10, min_periods=10).std(ddof=1).replace(0, np.nan)\n    range_zscore = (range_ - range_mean) / range_std\n    weight = range_zscore.clip(lower=0, upper=2) + 1.0\n    raw_weighted = raw * weight\n    raw_weighted = raw_weighted.replace([np.inf, -np.inf], np.nan)\n    ema = raw_weighted.ewm(span=10, min_periods=10).mean()\n    df_copy['factor_vol_weighted_pct_range_clip_ema10'] = ema\n    return df_copy['factor_vol_weighted_pct_range_clip_ema10']",
+  "rationale": "Mutation of price_volume_coherence_range_gate_clip_cross_001: preserve core volume-weighted price change with SMA20 volume ratio and clipped range z-score boost. Increase EMA span from 5 to 10 to reduce noise and improve ICIR and RankICIR stability while maintaining strong RankIC and IC.",
+  "lineage": {
+    "agent_skill": "alpha-price-volume-coherence",
+    "operation": "cogalpha_to_lqtp_translation"
+  },
+  "stage": "candidate_pool",
+  "fitness_label": "qualified",
+  "metrics": {
+    "train": {
+      "ic": 0.023944668759088114,
+      "rank_ic": 0.04500667851407581,
+      "icir": 0.22683172818664774,
+      "rank_icir": 0.3930790925014266,
+      "status": "computed",
+      "source": "cogalpha"
+    },
+    "valid": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    }
+  },
+  "validation": {
+    "status": "pending"
+  },
+  "created_at": "2026-06-21T11:25:28.509028+00:00",
+  "updated_at": "2026-06-21T16:18:22.049156+00:00",
+  "lqtp_tags": {
+    "universe": "all_a",
+    "market": "ashare"
+  },
+  "rationale_llm": {
+    "summary": "Mutation of price_volume_coherence_range_gate_clip_cross_001: preserve core volume-weighted price change with SMA20 volume ratio and clipped range z-score boost. Increase EMA span from 5 to 10 to reduce noise and improve ICIR and RankICIR stability while maintaining strong RankIC and IC.",
+    "parsed_at": "2026-06-21T11:25:37.584008+00:00",
+    "source": "manifest_rationale"
+  }
+}

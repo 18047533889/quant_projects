@@ -1,0 +1,805 @@
+{
+  "generated_at": "2026-08-02T18:00:03.557011",
+  "pack_count": 2,
+  "factor_count": 46,
+  "summary": [
+    {
+      "zip": "/home/shw/extra20_factors_pack.zip",
+      "extracted": "/home/shw/quant_projects/data/external_factor_packs/extracted/extra20_factors_pack/extra20_factors_pack",
+      "discovered": 19,
+      "new": 17,
+      "duplicates": 2
+    },
+    {
+      "zip": "/home/shw/weekly_factors_pack.zip",
+      "extracted": "/home/shw/quant_projects/data/external_factor_packs/extracted/weekly_factors_pack/weekly_factors_pack",
+      "discovered": 42,
+      "new": 29,
+      "duplicates": 13
+    }
+  ],
+  "factors": [
+    {
+      "pack": "extra20",
+      "display_name": "extra20:factor_crossover_herding_stress_span12_volrank_clip3",
+      "function_name": "factor_crossover_herding_stress_span12_volrank_clip3",
+      "slug": "extra_01_cogalpha_20260630074841_f29a08ef",
+      "rank_ic": 0.051539260282751735,
+      "formula": "EWM( pct_change(close) * rank_pct8(volume) * ((high-low)/close), span=12 ) clip ±3",
+      "python_code": "def factor_crossover_herding_stress_span12_volrank_clip3(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_rank = df_copy['volume'].rolling(8, min_periods=8).rank(pct=True)\n    stress_range = (df_copy['high'] - df_copy['low']) / df_copy['close'].replace(0, np.nan)\n    raw = ret * vol_rank * stress_range\n    smoothed = raw.ewm(span=12, min_periods=12, adjust=False).mean()\n    factor = smoothed.clip(-3, 3)\n    factor.name = 'factor_crossover_herding_stress_span12_volrank_clip3'\n    return factor",
+      "route": "python",
+      "source_file": "factors/extra_01_cogalpha_20260630074841_f29a08ef/summary.json",
+      "extra": {
+        "candidate_id": "cogalpha_20260630074841_f29a08ef",
+        "week": null,
+        "fitness_label": null,
+        "train_ic": 0.02699029075933178
+      }
+    },
+    {
+      "pack": "extra20",
+      "display_name": "extra20:factor_vol_price_log_range_gate_clipped_10day_mut_003",
+      "function_name": "factor_vol_price_log_range_gate_clipped_10day_mut_003",
+      "slug": "extra_02_cogalpha_20260630075856_c4558a55",
+      "rank_ic": 0.050089561406746606,
+      "formula": "EMA12( pct_change * log1p(volume/SMA5(volume)) * (1 + clip(zscore10(range), 0, 2)) )",
+      "python_code": "def factor_vol_price_log_range_gate_clipped_10day_mut_003(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    high = df_copy['high']\n    low = df_copy['low']\n    pct_change = close.pct_change()\n    vol_ma = volume.rolling(5, min_periods=5).mean().replace(0, np.nan)\n    vol_ratio = volume / vol_ma\n    vol_weight = np.log1p(vol_ratio)\n    raw = pct_change * vol_weight\n    range_ = high - low\n    range_mean = range_.rolling(10, min_periods=10).mean()\n    range_std = range_.rolling(10, min_periods=10).std(ddof=1).replace(0, np.nan)\n    range_zscore = (range_ - range_mean) / range_std\n    weight = range_zscore.clip(lower=0, upper=2) + 1.0\n    raw_weighted = raw * weight\n    raw_weighted = raw_weighted.replace([np.inf, -np.inf], np.nan)\n    ema = raw_weighted.ewm(span=12, min_periods=12).mean()\n    df_copy['factor_vol_price_log_range_gate_clipped_10day_mut_003'] = ema\n    return df_copy['factor_vol_price_log_range_gate_clipped_10day_mut_003']",
+      "route": "python",
+      "source_file": "factors/extra_02_cogalpha_20260630075856_c4558a55/summary.json",
+      "extra": {
+        "candidate_id": "cogalpha_20260630075856_c4558a55",
+        "week": null,
+        "fitness_label": null,
+        "train_ic": 0.023812086155244536
+      }
+    },
+    {
+      "pack": "extra20",
+      "display_name": "extra20:factor_herding_momentum_stress",
+      "function_name": "factor_herding_momentum_stress",
+      "slug": "extra_03_cogalpha_20260630073345_a6787278",
+      "rank_ic": 0.04893937421110919,
+      "formula": "EWM( (close - close.shift(1))/close.shift(1) * (volume / SMA(volume,5)) * ((high-low)/close) , span=5 )",
+      "python_code": "def factor_herding_momentum_stress(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(5, min_periods=5).mean()\n    stress_range = (df_copy['high'] - df_copy['low']) / df_copy['close'].replace(0, np.nan)\n    raw = ret * vol_ratio * stress_range\n    smoothed = raw.ewm(span=5, min_periods=5, adjust=False).mean()\n    factor = smoothed.clip(-3, 3)\n    factor.name = 'factor_herding_momentum_stress'\n    return factor",
+      "route": "python",
+      "source_file": "factors/extra_03_cogalpha_20260630073345_a6787278/summary.json",
+      "extra": {
+        "candidate_id": "cogalpha_20260630073345_a6787278",
+        "week": null,
+        "fitness_label": null,
+        "train_ic": 0.023280713195782635
+      }
+    },
+    {
+      "pack": "extra20",
+      "display_name": "extra20:factor_volume_confirmed_momentum_tanh_gated",
+      "function_name": "factor_volume_confirmed_momentum_tanh_gated",
+      "slug": "extra_04_cogalpha_20260630025411_56a5dd19",
+      "rank_ic": 0.04889932595202404,
+      "formula": "tanh(ema( (close/shift(close,1)-1) * (volume/sma(volume,20)), 10 ) * ((close-low)/(high-low)))",
+      "python_code": "def factor_volume_confirmed_momentum_tanh_gated(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(20, min_periods=20).mean()\n    base = ret * vol_ratio\n    smoothed_base = base.ewm(span=10, min_periods=10, adjust=False).mean()\n    range_ = df_copy['high'] - df_copy['low']\n    range_ = range_.replace(0, np.nan)\n    intraday_pos = (df_copy['close'] - df_copy['low']) / range_\n    raw_factor = smoothed_base * intraday_pos\n    factor = np.tanh(raw_factor)\n    df_copy['factor_volume_confirmed_momentum_tanh_gated'] = factor\n    return df_copy['factor_volume_confirmed_momentum_tanh_gated']",
+      "route": "python",
+      "source_file": "factors/extra_04_cogalpha_20260630025411_56a5dd19/summary.json",
+      "extra": {
+        "candidate_id": "cogalpha_20260630025411_56a5dd19",
+        "week": null,
+        "fitness_label": null,
+        "train_ic": 0.03615952701424591
+      }
+    },
+    {
+      "pack": "extra20",
+      "display_name": "extra20:factor_volume_pressure_ewm_smooth",
+      "function_name": "factor_volume_pressure_ewm_smooth",
+      "slug": "extra_05_cogalpha_20260630092749_cc36ec98",
+      "rank_ic": 0.04738135975535768,
+      "formula": "ewm(halflife=7, min_periods=7).mean((close/open-1) * clipped(volume/rolling_median(volume,10), 0.3, 2.0))",
+      "python_code": "def factor_volume_pressure_ewm_smooth(df):\n    df_copy = df.copy()\n    ret = df_copy['close'] / df_copy['open'] - 1\n    vol_med = df_copy['volume'].rolling(10, min_periods=10).median().replace(0, np.nan)\n    vol_ratio = df_copy['volume'] / vol_med\n    vol_ratio_clipped = vol_ratio.clip(lower=0.3, upper=2.0)\n    raw = ret * vol_ratio_clipped\n    smooth = raw.ewm(halflife=7, min_periods=7).mean()\n    return smooth.rename('factor_volume_pressure_ewm_smooth')",
+      "route": "python",
+      "source_file": "factors/extra_05_cogalpha_20260630092749_cc36ec98/summary.json",
+      "extra": {
+        "candidate_id": "cogalpha_20260630092749_cc36ec98",
+        "week": null,
+        "fitness_label": null,
+        "train_ic": 0.02491385577041812
+      }
+    },
+    {
+      "pack": "extra20",
+      "display_name": "extra20:factor_mut_cross_vwpc_z10_clip2_v3",
+      "function_name": "factor_mut_cross_vwpc_z10_clip2_v3",
+      "slug": "extra_06_cogalpha_20260630090734_2c371ded",
+      "rank_ic": 0.04689301523755262,
+      "formula": "smoothed(price_change * (volume / SMA(volume,20)) * (1 + zscore(range,10).clip(-2,2)), 10)",
+      "python_code": "def factor_mut_cross_vwpc_z10_clip2_v3(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    price_change = close.pct_change()\n    vol_ratio = volume / volume.rolling(20, min_periods=20).mean()\n    range_ = df_copy['high'] - df_copy['low']\n    range_z = (range_ - range_.rolling(10, min_periods=10).mean()) / range_.rolling(10, min_periods=10).std(ddof=1)\n    raw = price_change * vol_ratio * (1 + range_z.clip(-2, 2))\n    smoothed = raw.ewm(span=10, min_periods=10).mean()\n    df_copy['factor_mut_cross_vwpc_z10_clip2_v3'] = smoothed\n    return df_copy['factor_mut_cross_vwpc_z10_clip2_v3']",
+      "route": "python",
+      "source_file": "factors/extra_06_cogalpha_20260630090734_2c371ded/summary.json",
+      "extra": {
+        "candidate_id": "cogalpha_20260630090734_2c371ded",
+        "week": null,
+        "fitness_label": null,
+        "train_ic": 0.022928893605877257
+      }
+    },
+    {
+      "pack": "extra20",
+      "display_name": "extra20:factor_volume_pressure_light_crossover",
+      "function_name": "factor_volume_pressure_light_crossover",
+      "slug": "extra_07_cogalpha_20260630093800_9903647e",
+      "rank_ic": 0.046703501718472464,
+      "formula": "0.95 * ewm(halflife=7, min_periods=7).mean((close/open-1) * clipped(volume/rolling_median(volume,10), 0.3, 3.0)) + 0.05 * rolling(10, min_periods=10).mean((close/open-1) * clipped(volume/rolling_median(volume,10), 0.3, 3.0))",
+      "python_code": "def factor_volume_pressure_light_crossover(df):\n    df_copy = df.copy()\n    ret = df_copy['close'] / df_copy['open'] - 1\n    vol_med = df_copy['volume'].rolling(10, min_periods=10).median().replace(0, np.nan)\n    vol_ratio = df_copy['volume'] / vol_med\n    vol_ratio_clipped = vol_ratio.clip(lower=0.3, upper=3.0)\n    raw = ret * vol_ratio_clipped\n    ewm_smooth = raw.ewm(halflife=7, min_periods=7).mean()\n    rolling_smooth = raw.rolling(10, min_periods=10).mean()\n    smooth = 0.95 * ewm_smooth + 0.05 * rolling_smooth\n    return smooth.rename('factor_volume_pressure_light_crossover')",
+      "route": "python",
+      "source_file": "factors/extra_07_cogalpha_20260630093800_9903647e/summary.json",
+      "extra": {
+        "candidate_id": "cogalpha_20260630093800_9903647e",
+        "week": null,
+        "fitness_label": null,
+        "train_ic": 0.02453794132184657
+      }
+    },
+    {
+      "pack": "extra20",
+      "display_name": "extra20:factor_adaptive_vol_directional_smooth_range10",
+      "function_name": "factor_adaptive_vol_directional_smooth_range10",
+      "slug": "extra_08_cogalpha_20260630084303_9d606e59",
+      "rank_ic": 0.04664023968354366,
+      "formula": "smooth_range = ewm((high-low)/close, span=10); vol_ratio = volume / rolling_mean(volume,25); fast=ewm(vol_ratio,10); slow=ewm(vol_ratio,30); weight = sigmoid(5*(vol_ratio-0.85)); smooth_vol = weight*fast + (1-weight)*slow; direction=(close-open)/close; smooth_direction=ewm(direction, span=3); factor = smooth_range * smooth_vol * smooth_direction",
+      "python_code": "def factor_adaptive_vol_directional_smooth_range10(df):\n    df_copy = df.copy()\n    range_pct = (df_copy['high'] - df_copy['low']) / df_copy['close']\n    smooth_range = range_pct.ewm(span=10, min_periods=10).mean()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(25, min_periods=25).mean()\n    fast = vol_ratio.ewm(span=10, min_periods=10).mean()\n    slow = vol_ratio.ewm(span=30, min_periods=30).mean()\n    weight = 1 / (1 + np.exp(-5 * (vol_ratio - 0.85)))\n    smooth_vol = weight * fast + (1 - weight) * slow\n    direction = (df_copy['close'] - df_copy['open']) / df_copy['close']\n    smooth_direction = direction.ewm(span=3, min_periods=3).mean()\n    df_copy['factor_adaptive_vol_directional_smooth_range10'] = smooth_range * smooth_vol * smooth_direction\n    return df_copy['factor_adaptive_vol_directional_smooth_range10']",
+      "route": "python",
+      "source_file": "factors/extra_08_cogalpha_20260630084303_9d606e59/summary.json",
+      "extra": {
+        "candidate_id": "cogalpha_20260630084303_9d606e59",
+        "week": null,
+        "fitness_label": null,
+        "train_ic": 0.02950667608088379
+      }
+    },
+    {
+      "pack": "extra20",
+      "display_name": "extra20:factor_vol_weighted_pct_range_clip_ema10",
+      "function_name": "factor_vol_weighted_pct_range_clip_ema10",
+      "slug": "extra_09_cogalpha_20260630080916_c4bd4f91",
+      "rank_ic": 0.04656076622703803,
+      "formula": "EMA10( pct_change * (volume/SMA20(volume)) * (1 + clip(zscore10(range), 0, 2)) )",
+      "python_code": "def factor_vol_weighted_pct_range_clip_ema10(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    high = df_copy['high']\n    low = df_copy['low']\n    pct_change = close.pct_change()\n    vol_ma = volume.rolling(20, min_periods=20).mean().replace(0, np.nan)\n    vol_ratio = volume / vol_ma\n    raw = pct_change * vol_ratio\n    range_ = high - low\n    range_mean = range_.rolling(10, min_periods=10).mean()\n    range_std = range_.rolling(10, min_periods=10).std(ddof=1).replace(0, np.nan)\n    range_zscore = (range_ - range_mean) / range_std\n    weight = range_zscore.clip(lower=0, upper=2) + 1.0\n    raw_weighted = raw * weight\n    raw_weighted = raw_weighted.replace([np.inf, -np.inf], np.nan)\n    ema = raw_weighted.ewm(span=10, min_periods=10).mean()\n    df_copy['factor_vol_weighted_pct_range_clip_ema10'] = ema\n    return df_copy['factor_vol_weighted_pct_range_clip_ema10']",
+      "route": "python",
+      "source_file": "factors/extra_09_cogalpha_20260630080916_c4bd4f91/summary.json",
+      "extra": {
+        "candidate_id": "cogalpha_20260630080916_c4bd4f91",
+        "week": null,
+        "fitness_label": null,
+        "train_ic": 0.022824139396709707
+      }
+    },
+    {
+      "pack": "extra20",
+      "display_name": "extra20:factor_intraday_reversal_vol_intensity",
+      "function_name": "factor_intraday_reversal_vol_intensity",
+      "slug": "extra_12_cogalpha_20260702070916_4a2b9199",
+      "rank_ic": 0.04630511635190036,
+      "formula": "-EMA_5(intraday_return) * clip( std_20(close_ret) / std_60(close_ret), 0.5, 2.0 )",
+      "python_code": "def factor_intraday_reversal_vol_intensity(df):\n    \"\"\"Intraday reversal scaled by relative volatility intensity.\"\"\"\n    df_copy = df.copy()\n    overnight, intraday = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    intraday_ema = intraday.ewm(span=5, min_periods=5).mean()\n    rv_short = df_copy[\"close\"].pct_change().rolling(20).std()\n    rv_long = df_copy[\"close\"].pct_change().rolling(60).std()\n    vol_ratio = rv_short / rv_long.replace(0, np.nan)\n    vol_ratio = vol_ratio.clip(0.5, 2.0)\n    result = -intraday_ema * vol_ratio\n    result = result.fillna(0)\n    df_copy[\"factor_intraday_reversal_vol_intensity\"] = result\n    return df_copy[\"factor_intraday_reversal_vol_intensity\"]",
+      "route": "python",
+      "source_file": "factors/extra_12_cogalpha_20260702070916_4a2b9199/summary.json",
+      "extra": {
+        "candidate_id": "cogalpha_20260702070916_4a2b9199",
+        "week": null,
+        "fitness_label": null,
+        "train_ic": 0.029442967957120196
+      }
+    },
+    {
+      "pack": "extra20",
+      "display_name": "extra20:factor_mut_cross_vwpc_z10_clip2_span8_v1",
+      "function_name": "factor_mut_cross_vwpc_z10_clip2_span8_v1",
+      "slug": "extra_13_cogalpha_20260630091249_346a8977",
+      "rank_ic": 0.04620342103296348,
+      "formula": "smoothed(price_change * (volume / SMA(volume,20)) * (1 + zscore(range,10).clip(-2,2)), 8)",
+      "python_code": "def factor_mut_cross_vwpc_z10_clip2_span8_v1(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    price_change = close.pct_change()\n    vol_ratio = volume / volume.rolling(20, min_periods=20).mean().replace(0, np.nan)\n    range_ = df_copy['high'] - df_copy['low']\n    range_mean = range_.rolling(10, min_periods=10).mean()\n    range_std = range_.rolling(10, min_periods=10).std(ddof=1)\n    range_z = (range_ - range_mean) / range_std.replace(0, np.nan)\n    raw = price_change * vol_ratio * (1 + range_z.clip(-2, 2))\n    smoothed = raw.ewm(span=8, min_periods=8).mean()\n    df_copy['factor_mut_cross_vwpc_z10_clip2_span8_v1'] = smoothed\n    return df_copy['factor_mut_cross_vwpc_z10_clip2_span8_v1']",
+      "route": "python",
+      "source_file": "factors/extra_13_cogalpha_20260630091249_346a8977/summary.json",
+      "extra": {
+        "candidate_id": "cogalpha_20260630091249_346a8977",
+        "week": null,
+        "fitness_label": null,
+        "train_ic": 0.022416324312946025
+      }
+    },
+    {
+      "pack": "extra20",
+      "display_name": "extra20:factor_intraday_return_volume_surge",
+      "function_name": "factor_intraday_return_volume_surge",
+      "slug": "extra_14_cogalpha_20260630021752_f66cda18",
+      "rank_ic": 0.04596992335121053,
+      "formula": "EWM( (close/open - 1) * ( volume / rolling_max(volume,20) ), 20 )",
+      "python_code": "def factor_intraday_return_volume_surge(df):\n    df_copy = df.copy()\n    intday_ret = df_copy[\"close\"] / df_copy[\"open\"] - 1.0\n    vol_max = df_copy[\"volume\"].rolling(20, min_periods=20).max()\n    vol_surge = df_copy[\"volume\"] / vol_max.replace(0, np.nan)\n    raw = intday_ret * vol_surge\n    df_copy[\"factor_intraday_return_volume_surge\"] = raw.ewm(span=20, adjust=False).mean()\n    return df_copy[\"factor_intraday_return_volume_surge\"]",
+      "route": "python",
+      "source_file": "factors/extra_14_cogalpha_20260630021752_f66cda18/summary.json",
+      "extra": {
+        "candidate_id": "cogalpha_20260630021752_f66cda18",
+        "week": null,
+        "fitness_label": null,
+        "train_ic": 0.024779604903388062
+      }
+    },
+    {
+      "pack": "extra20",
+      "display_name": "extra20:factor_intraday_volume_tanh",
+      "function_name": "factor_intraday_volume_tanh",
+      "slug": "extra_15_cogalpha_20260630095214_ad397993",
+      "rank_ic": 0.04578849287978434,
+      "formula": "tanh(EWMA( (close/open-1) * (volume/SMA(volume,20)), span=20, adjust=False ))",
+      "python_code": "def factor_intraday_volume_tanh(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    open_ = df_copy[\"open\"]\n    volume = df_copy[\"volume\"]\n    w = 20\n    intra_ret = close / open_.replace(0, np.nan) - 1\n    vol_sma = volume.rolling(w, min_periods=w).mean()\n    vol_surge = volume / vol_sma.replace(0, np.nan)\n    raw = intra_ret * vol_surge\n    factor = raw.ewm(span=w, adjust=False).mean()\n    factor = np.tanh(factor)\n    df_copy[\"factor_intraday_volume_tanh\"] = factor.fillna(0)\n    return df_copy[\"factor_intraday_volume_tanh\"]",
+      "route": "python",
+      "source_file": "factors/extra_15_cogalpha_20260630095214_ad397993/summary.json",
+      "extra": {
+        "candidate_id": "cogalpha_20260630095214_ad397993",
+        "week": null,
+        "fitness_label": null,
+        "train_ic": 0.025533529696861137
+      }
+    },
+    {
+      "pack": "extra20",
+      "display_name": "extra20:factor_volume_weighted_price_change",
+      "function_name": "factor_volume_weighted_price_change",
+      "slug": "extra_16_cogalpha_20260630090227_5baad9b2",
+      "rank_ic": 0.04559752491737367,
+      "formula": "smoothed(price_change * (volume / SMA(volume,20)) * (1 + zscore(range,20)), 10)",
+      "python_code": "def factor_volume_weighted_price_change(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    price_change = close.pct_change()\n    vol_ratio = volume / volume.rolling(20, min_periods=20).mean()\n    range_ = df_copy['high'] - df_copy['low']\n    range_z = (range_ - range_.rolling(20, min_periods=20).mean()) / range_.rolling(20, min_periods=20).std(ddof=1)\n    raw = price_change * vol_ratio * (1 + range_z.clip(-3, 3))\n    smoothed = raw.ewm(span=10, min_periods=10).mean()\n    df_copy['factor_volume_weighted_price_change'] = smoothed\n    return df_copy['factor_volume_weighted_price_change']",
+      "route": "python",
+      "source_file": "factors/extra_16_cogalpha_20260630090227_5baad9b2/summary.json",
+      "extra": {
+        "candidate_id": "cogalpha_20260630090227_5baad9b2",
+        "week": null,
+        "fitness_label": null,
+        "train_ic": 0.02254843864847131
+      }
+    },
+    {
+      "pack": "extra20",
+      "display_name": "extra20:factor_intraday_volume_tanh_short",
+      "function_name": "factor_intraday_volume_tanh_short",
+      "slug": "extra_17_cogalpha_20260630100633_a472187d",
+      "rank_ic": 0.0453432798062553,
+      "formula": "tanh(EWMA( (close/open-1) * (volume/SMA(volume,20)), span=10, adjust=false ))",
+      "python_code": "def factor_intraday_volume_tanh_short(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    open_ = df_copy[\"open\"]\n    volume = df_copy[\"volume\"]\n    w_sma = 20\n    w_ewm = 10\n    intra_ret = close / open_.replace(0, np.nan) - 1\n    vol_sma = volume.rolling(w_sma, min_periods=w_sma).mean()\n    vol_surge = volume / vol_sma.replace(0, np.nan)\n    raw = intra_ret * vol_surge\n    factor = raw.ewm(span=w_ewm, adjust=False).mean()\n    factor = np.tanh(factor)\n    df_copy[\"factor_intraday_volume_tanh_short\"] = factor.fillna(0)\n    return df_copy[\"factor_intraday_volume_tanh_short\"]",
+      "route": "python",
+      "source_file": "factors/extra_17_cogalpha_20260630100633_a472187d/summary.json",
+      "extra": {
+        "candidate_id": "cogalpha_20260630100633_a472187d",
+        "week": null,
+        "fitness_label": null,
+        "train_ic": 0.0260522495348493
+      }
+    },
+    {
+      "pack": "extra20",
+      "display_name": "extra20:factor_reversal_intraday_5d_ema",
+      "function_name": "factor_reversal_intraday_5d_ema",
+      "slug": "extra_18_cogalpha_20260702043307_1c1f15bf",
+      "rank_ic": 0.04494544743494019,
+      "formula": "- ewm(intraday_ret, span=5)",
+      "python_code": "def factor_reversal_intraday_5d_ema(df):\n    \"\"\"Intraday return reversal: negative of 5-period EMA of intraday returns.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    ema_intraday = intraday_ret.ewm(span=5, min_periods=5).mean()\n    df_copy[\"factor_reversal_intraday_5d_ema\"] = -ema_intraday\n    return df_copy[\"factor_reversal_intraday_5d_ema\"]",
+      "route": "python",
+      "source_file": "factors/extra_18_cogalpha_20260702043307_1c1f15bf/summary.json",
+      "extra": {
+        "candidate_id": "cogalpha_20260702043307_1c1f15bf",
+        "week": null,
+        "fitness_label": null,
+        "train_ic": 0.02518657007869205
+      }
+    },
+    {
+      "pack": "extra20",
+      "display_name": "extra20:factor_volume_pressure_imbalance",
+      "function_name": "factor_volume_pressure_imbalance",
+      "slug": "extra_19_cogalpha_20260630092237_0ad794d1",
+      "rank_ic": 0.04470478204670646,
+      "formula": "smoothed(ret * (volume / rolling_median(volume, 20)))",
+      "python_code": "def factor_volume_pressure_imbalance(df):\n    df_copy = df.copy()\n    ret = df_copy['close'] / df_copy['open'] - 1\n    vol_med = df_copy['volume'].rolling(20, min_periods=20).median().replace(0, np.nan)\n    vol_ratio = df_copy['volume'] / vol_med\n    raw = ret * vol_ratio\n    smooth = raw.ewm(halflife=5, min_periods=20).mean()\n    return smooth.rename('factor_volume_pressure_imbalance')",
+      "route": "python",
+      "source_file": "factors/extra_19_cogalpha_20260630092237_0ad794d1/summary.json",
+      "extra": {
+        "candidate_id": "cogalpha_20260630092237_0ad794d1",
+        "week": null,
+        "fitness_label": null,
+        "train_ic": 0.02217332437322263
+      }
+    },
+    {
+      "pack": "weekly",
+      "display_name": "weekly:factor_range_position_volume_gated_smoothed",
+      "function_name": "factor_range_position_volume_gated_smoothed",
+      "slug": "raw_ca_hash_05d8d226",
+      "rank_ic": 0.03151728384830372,
+      "formula": "ema((safe_div(numerator=close - low, denominator=high - low)) - 0.5, 3) * safe_div(numerator=volume, denominator=ts_mean(volume, 20))",
+      "python_code": "def factor_range_position_volume_gated_smoothed(df):\n    df_copy = df.copy()\n    low_ = df_copy[\"low\"]\n    high_ = df_copy[\"high\"]\n    close_ = df_copy[\"close\"]\n    volume_ = df_copy[\"volume\"]\n    range_ = high_ - low_\n    pos = (close_ - low_) / range_.replace(0.0, np.nan)\n    pos = pos - 0.5\n    smooth_pos = pos.ewm(span=3, min_periods=3, adjust=False).mean()\n    vol_20 = volume_.rolling(20, min_periods=20).mean()\n    vol_ratio = volume_ / vol_20.replace(0.0, np.nan)\n    factor = smooth_pos * vol_ratio\n    df_copy[\"factor_range_position_volume_gated_smoothed\"] = factor\n    return df_copy[\"factor_range_position_volume_gated_smoothed\"]",
+      "route": "lqtp_dsl",
+      "source_file": "all_rank_ic_gt_0p03/raw_ca_hash_05d8d226/summary.json",
+      "extra": {
+        "candidate_id": "raw_ca_hash_05d8d226",
+        "week": "week2",
+        "fitness_label": "qualified",
+        "train_ic": 0.03016793311270487
+      }
+    },
+    {
+      "pack": "weekly",
+      "display_name": "weekly:factor_vol_gated_momentum_v3",
+      "function_name": "factor_vol_gated_momentum_v3",
+      "slug": "raw_ca_hash_0f53ef7d",
+      "rank_ic": 0.03772860281393237,
+      "formula": "ts_pct(close, 5) * (1.5 - 0.5 * ts_rank(ts_std(daily_return, 20), 20))",
+      "python_code": "def factor_vol_gated_momentum_v3(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    # 5-day return\n    ret5 = close / close.shift(5) - 1\n    # 20-day rolling standard deviation of daily returns (volatility)\n    daily_ret = close.pct_change()\n    vol = daily_ret.rolling(20, min_periods=20).std(ddof=1)\n    # Time-series rank percentile\n    vol_rank = vol.rolling(20, min_periods=20).rank(pct=True)\n    # Inverse volatility weighting: low vol gets higher weight (1.0), high vol gets lower (0.5)\n    weight = 1.5 - 0.5 * vol_rank\n    gated_ret = ret5 * weight\n    df_copy['factor_vol_gated_momentum_v3'] = gated_ret\n    return df_copy['factor_vol_gated_momentum_v3']",
+      "route": "lqtp_dsl",
+      "source_file": "all_rank_ic_gt_0p03/raw_ca_hash_0f53ef7d/summary.json",
+      "extra": {
+        "candidate_id": "raw_ca_hash_0f53ef7d",
+        "week": "week2",
+        "fitness_label": "qualified",
+        "train_ic": 0.021648158727849143
+      }
+    },
+    {
+      "pack": "weekly",
+      "display_name": "weekly:factor_imbalance_volume_ewm_mut",
+      "function_name": "factor_imbalance_volume_ewm_mut",
+      "slug": "raw_ca_hash_15a03771",
+      "rank_ic": 0.030840114301811695,
+      "formula": "ema(safe_div(numerator=close - (high + low) / 2, denominator=high - low) * volume * (1 + safe_div(numerator=volume, denominator=ts_mean(volume, 10)) - 1), 5)",
+      "python_code": "def factor_imbalance_volume_ewm_mut(df):\n    df_copy = df.copy()\n    midpoint = (df_copy['high'] + df_copy['low']) / 2\n    range_ = df_copy['high'] - df_copy['low']\n    imbalance = (df_copy['close'] - midpoint) / range_.replace(0, np.nan)\n    vol_ma = df_copy['volume'].rolling(10, min_periods=10).mean()\n    vol_dev = df_copy['volume'] / vol_ma.replace(0, np.nan) - 1\n    weighted = imbalance * df_copy['volume'] * (1 + vol_dev)\n    df_copy['factor_imbalance_volume_ewm_mut'] = weighted.ewm(span=5, min_periods=3).mean()\n    return df_copy['factor_imbalance_volume_ewm_mut']",
+      "route": "lqtp_dsl",
+      "source_file": "all_rank_ic_gt_0p03/raw_ca_hash_15a03771/summary.json",
+      "extra": {
+        "candidate_id": "raw_ca_hash_15a03771",
+        "week": "week2",
+        "fitness_label": "qualified",
+        "train_ic": 0.01421307899891861
+      }
+    },
+    {
+      "pack": "weekly",
+      "display_name": "weekly:factor_imbalance_volume_ratio_ewm",
+      "function_name": "factor_imbalance_volume_ratio_ewm",
+      "slug": "raw_ca_hash_263e9c66",
+      "rank_ic": 0.030995039492380094,
+      "formula": "ema(safe_div(numerator=close - (high + low) / 2, denominator=high - low) * safe_div(numerator=volume, denominator=ts_mean(volume, 20)), 5)",
+      "python_code": "def factor_imbalance_volume_ratio_ewm(df):\n    df_copy = df.copy()\n    midpoint = (df_copy['high'] + df_copy['low']) / 2\n    range_ = df_copy['high'] - df_copy['low']\n    imbalance = (df_copy['close'] - midpoint) / range_.replace(0, np.nan)\n    vol_ma = df_copy['volume'].rolling(20, min_periods=20).mean()\n    vol_ratio = df_copy['volume'] / vol_ma.replace(0, np.nan)\n    weighted = imbalance * vol_ratio\n    df_copy['factor_imbalance_volume_ratio_ewm'] = weighted.ewm(span=5, min_periods=3).mean()\n    return df_copy['factor_imbalance_volume_ratio_ewm']",
+      "route": "lqtp_dsl",
+      "source_file": "all_rank_ic_gt_0p03/raw_ca_hash_263e9c66/summary.json",
+      "extra": {
+        "candidate_id": "raw_ca_hash_263e9c66",
+        "week": "week2",
+        "fitness_label": "qualified",
+        "train_ic": 0.028524012650709793
+      }
+    },
+    {
+      "pack": "weekly",
+      "display_name": "weekly:factor_vol_price_log_range_gate_clipped_boost_5day_mut_001",
+      "function_name": "factor_vol_price_log_range_gate_clipped_boost_5day_mut_001",
+      "slug": "raw_ca_hash_27a292b1",
+      "rank_ic": 0.04827707789654243,
+      "formula": "EMA12( pct_change * log1p(volume/SMA5(volume)) * (1 + min(max(0, zscore5(range)), 2.0)) )",
+      "python_code": "def factor_vol_price_log_range_gate_clipped_boost_5day_mut_001(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    high = df_copy['high']\n    low = df_copy['low']\n    pct_change = close.pct_change()\n    vol_ma = volume.rolling(5, min_periods=5).mean().replace(0, np.nan)\n    vol_ratio = volume / vol_ma\n    vol_weight = np.log1p(vol_ratio)\n    raw = pct_change * vol_weight\n    range_ = high - low\n    range_mean = range_.rolling(5, min_periods=5).mean()\n    range_std = range_.rolling(5, min_periods=5).std(ddof=1).replace(0, np.nan)\n    range_zscore = (range_ - range_mean) / range_std\n    boost = np.where(range_zscore > 0, np.minimum(range_zscore, 2.0), 0)\n    raw_weighted = raw * (1 + boost)\n    raw_weighted = raw_weighted.replace([np.inf, -np.inf], np.nan)\n    ema = raw_weighted.ewm(span=12, min_periods=12).mean()\n    df_copy['factor_vol_price_log_range_gate_clipped_boost_5day_mut_001'] = ema\n    return df_copy['factor_vol_price_log_range_gate_clipped_boost_5day_mut_001']",
+      "route": "lqtp_dsl",
+      "source_file": "all_rank_ic_gt_0p03/raw_ca_hash_27a292b1/summary.json",
+      "extra": {
+        "candidate_id": "raw_ca_hash_27a292b1",
+        "week": "week2",
+        "fitness_label": "qualified",
+        "train_ic": 0.02406245229456068
+      }
+    },
+    {
+      "pack": "weekly",
+      "display_name": "weekly:factor_directional_vol_adaptive_crossover",
+      "function_name": "factor_directional_vol_adaptive_crossover",
+      "slug": "raw_ca_hash_2fc67cd0",
+      "rank_ic": 0.0375179989516672,
+      "formula": "range_pct = (high-low)/close; smooth_range = ema(range_pct, span=5); vol_ratio = volume / ts_mean(volume,20); smooth_vol_ratio = if vol_ratio > 0.9 then ema(vol_ratio,10) else ema(vol_ratio,30); direction = (close-open)/close; factor = smooth_range * smooth_vol_ratio * direction",
+      "python_code": "def factor_directional_vol_adaptive_crossover(df):\n    df_copy = df.copy()\n    range_pct = (df_copy['high'] - df_copy['low']) / df_copy['close']\n    smooth_range = range_pct.ewm(span=5).mean()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(20, min_periods=20).mean()\n    smooth_vol_ratio_fast = vol_ratio.ewm(span=10).mean()\n    smooth_vol_ratio_slow = vol_ratio.ewm(span=30).mean()\n    smooth_vol_ratio = np.where(vol_ratio > 0.9, smooth_vol_ratio_fast, smooth_vol_ratio_slow)\n    direction = (df_copy['close'] - df_copy['open']) / df_copy['close']\n    df_copy['factor_directional_vol_adaptive_crossover'] = smooth_range * smooth_vol_ratio * direction\n    return df_copy['factor_directional_vol_adaptive_crossover']",
+      "route": "lqtp_dsl",
+      "source_file": "all_rank_ic_gt_0p03/raw_ca_hash_2fc67cd0/summary.json",
+      "extra": {
+        "candidate_id": "raw_ca_hash_2fc67cd0",
+        "week": "week1",
+        "fitness_label": "elite",
+        "train_ic": 0.024188799280769037
+      }
+    },
+    {
+      "pack": "weekly",
+      "display_name": "weekly:factor_volume_adjusted_momentum",
+      "function_name": "factor_volume_adjusted_momentum",
+      "slug": "raw_ca_hash_32d50b39",
+      "rank_ic": 0.038500228401905194,
+      "formula": "ema(daily_return) * (safe_div(numerator=volume, denominator=ts_mean(volume, 20)), 5)",
+      "python_code": "def factor_volume_adjusted_momentum(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol_ratio = df_copy[\"volume\"] / df_copy[\"volume\"].rolling(20, min_periods=20).mean().replace(0, np.nan)\n    raw_signal = ret * vol_ratio\n    signal = raw_signal.ewm(span=5, adjust=False).mean()\n    df_copy[\"factor_volume_adjusted_momentum\"] = signal\n    return df_copy[\"factor_volume_adjusted_momentum\"]",
+      "route": "lqtp_dsl",
+      "source_file": "all_rank_ic_gt_0p03/raw_ca_hash_32d50b39/summary.json",
+      "extra": {
+        "candidate_id": "raw_ca_hash_32d50b39",
+        "week": "week1",
+        "fitness_label": "elite",
+        "train_ic": 0.023950964715812546
+      }
+    },
+    {
+      "pack": "weekly",
+      "display_name": "weekly:factor_directional_vol_smooth_range_mut",
+      "function_name": "factor_directional_vol_smooth_range_mut",
+      "slug": "raw_ca_hash_338dd16c",
+      "rank_ic": 0.03848170138308021,
+      "formula": "smooth_range = ewma((high-low)/close, span=8); vol_ratio = volume / rolling_mean(volume,25); fast=ewma(vol_ratio,10); slow=ewma(vol_ratio,30); weight = sigmoid(5*(vol_ratio-0.85)); blend=weight*fast+(1-weight)*slow; direction=(close-open)/close; factor = smooth_range * blend * direction",
+      "python_code": "def factor_directional_vol_smooth_range_mut(df):\n    df_copy = df.copy()\n    range_pct = (df_copy['high'] - df_copy['low']) / df_copy['close']\n    smooth_range = range_pct.ewm(span=8).mean()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(25, min_periods=25).mean()\n    fast = vol_ratio.ewm(span=10).mean()\n    slow = vol_ratio.ewm(span=30).mean()\n    weight = 1 / (1 + np.exp(-5 * (vol_ratio - 0.85)))\n    smooth_vol_ratio = weight * fast + (1 - weight) * slow\n    direction = (df_copy['close'] - df_copy['open']) / df_copy['close']\n    df_copy['factor_directional_vol_smooth_range_mut'] = smooth_range * smooth_vol_ratio * direction\n    return df_copy['factor_directional_vol_smooth_range_mut']",
+      "route": "python",
+      "source_file": "all_rank_ic_gt_0p03/raw_ca_hash_338dd16c/summary.json",
+      "extra": {
+        "candidate_id": "raw_ca_hash_338dd16c",
+        "week": "week2",
+        "fitness_label": "elite",
+        "train_ic": 0.024576166889521165
+      }
+    },
+    {
+      "pack": "weekly",
+      "display_name": "weekly:factor_herding_vol_stress",
+      "function_name": "factor_herding_vol_stress",
+      "slug": "raw_ca_hash_340f0ad9",
+      "rank_ic": 0.041039005729458435,
+      "formula": "ema(safe_div(numerator=close - open, denominator=high - low) * safe_div(numerator=volume, denominator=ts_quantile(volume, 10, 0.5)) * safe_div(numerator=high - low, denominator=close), 5)",
+      "python_code": "def factor_herding_vol_stress(df):\n    df_copy = df.copy()\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    intraday_direction = (df_copy[\"close\"] - df_copy[\"open\"]) / range_.replace(0.0, np.nan)\n    vol_median = df_copy[\"volume\"].rolling(10, min_periods=10).median()\n    vol_ratio = df_copy[\"volume\"] / vol_median.replace(0.0, np.nan)\n    stress_range = (df_copy[\"high\"] - df_copy[\"low\"]) / df_copy[\"close\"].replace(0.0, np.nan)\n    herding_signal = intraday_direction * vol_ratio * stress_range\n    factor = herding_signal.ewm(span=5, min_periods=5, adjust=False).mean()\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    factor.name = \"factor_herding_vol_stress\"\n    return factor",
+      "route": "lqtp_dsl",
+      "source_file": "all_rank_ic_gt_0p03/raw_ca_hash_340f0ad9/summary.json",
+      "extra": {
+        "candidate_id": "raw_ca_hash_340f0ad9",
+        "week": "week2",
+        "fitness_label": "qualified",
+        "train_ic": 0.016923203669484275
+      }
+    },
+    {
+      "pack": "weekly",
+      "display_name": "weekly:factor_volume_confirmed_momentum_clipped",
+      "function_name": "factor_volume_confirmed_momentum_clipped",
+      "slug": "raw_ca_hash_50cd89c1",
+      "rank_ic": 0.03616405201008425,
+      "formula": "(ts_pct(close, 5)) * (safe_div(numerator=volume, denominator=ts_mean(volume, 20)))",
+      "python_code": "def factor_volume_confirmed_momentum_clipped(df):\n    df_copy = df.copy()\n    momentum = df_copy[\"close\"] / df_copy[\"close\"].shift(5) - 1\n    vol_avg = df_copy[\"volume\"].rolling(20, min_periods=20).mean()\n    vol_ratio = df_copy[\"volume\"] / vol_avg.replace(0, np.nan)\n    factor = momentum * vol_ratio\n    factor = factor.clip(-3, 3)\n    factor.name = \"factor_volume_confirmed_momentum_clipped\"\n    return factor",
+      "route": "lqtp_dsl",
+      "source_file": "all_rank_ic_gt_0p03/raw_ca_hash_50cd89c1/summary.json",
+      "extra": {
+        "candidate_id": "raw_ca_hash_50cd89c1",
+        "week": "week2",
+        "fitness_label": "qualified",
+        "train_ic": 0.02494058181104102
+      }
+    },
+    {
+      "pack": "weekly",
+      "display_name": "weekly:factor_vol_gated_momentum_volume_weighted",
+      "function_name": "factor_vol_gated_momentum_volume_weighted",
+      "slug": "raw_ca_hash_61b8fb3c",
+      "rank_ic": 0.03645458419069725,
+      "formula": "ts_pct(close, 5) * (0.5 + 0.5 * ts_rank(safe_div(numerator=ts_mean(true_range, 14), denominator=close), 20)) * safe_div(numerator=volume, denominator=ts_mean(volume, 20))",
+      "python_code": "def factor_vol_gated_momentum_volume_weighted(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    high = df_copy['high']\n    low = df_copy['low']\n    volume = df_copy['volume']\n    # 5-day return\n    ret5 = close / close.shift(5) - 1\n    # 14-day ATR\n    atr14 = talib.ATR(high.astype(float).values, low.astype(float).values, close.astype(float).values, timeperiod=14)\n    atr14 = pd.Series(atr14, index=df_copy.index)\n    # Normalized volatility\n    norm_vol = atr14 / close\n    # Time-series rank percentile (continuous gate)\n    vol_rank = norm_vol.rolling(20, min_periods=20).rank(pct=True)\n    # Weight: 0.5 (low vol) to 1.0 (high vol)\n    weight = 0.5 + 0.5 * vol_rank\n    gated_ret = ret5 * weight\n    # Volume factor: relative volume (20-day SMA)\n    vol_ma = volume.rolling(20, min_periods=20).mean()\n    rel_vol = volume / vol_ma.replace(0, np.nan)\n    # Combine: gated momentum amplified by volume conviction\n    factor = gated_ret * rel_vol\n    df_copy['factor_vol_gated_momentum_volume_weighted'] = factor\n    return df_copy['factor_vol_gated_momentum_volume_weighted']",
+      "route": "lqtp_dsl",
+      "source_file": "all_rank_ic_gt_0p03/raw_ca_hash_61b8fb3c/summary.json",
+      "extra": {
+        "candidate_id": "raw_ca_hash_61b8fb3c",
+        "week": "week1",
+        "fitness_label": "elite",
+        "train_ic": 0.023250222737003477
+      }
+    },
+    {
+      "pack": "weekly",
+      "display_name": "weekly:factor_herding_simple",
+      "function_name": "factor_herding_simple",
+      "slug": "raw_ca_hash_718ea675",
+      "rank_ic": 0.032667049040345134,
+      "formula": "ema(safe_div(numerator=close - open, denominator=high - low) * safe_div(numerator=volume, denominator=ts_quantile(volume, 10, 0.5)), 5)",
+      "python_code": "def factor_herding_simple(df):\n    df_copy = df.copy()\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    intraday_direction = (df_copy[\"close\"] - df_copy[\"open\"]) / range_.replace(0.0, np.nan)\n    vol_median = df_copy[\"volume\"].rolling(10, min_periods=10).median()\n    vol_ratio = df_copy[\"volume\"] / vol_median.replace(0.0, np.nan)\n    herding_signal = intraday_direction * vol_ratio\n    factor = herding_signal.ewm(span=5, min_periods=5, adjust=False).mean()\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    factor.name = \"factor_herding_simple\"\n    return factor",
+      "route": "lqtp_dsl",
+      "source_file": "all_rank_ic_gt_0p03/raw_ca_hash_718ea675/summary.json",
+      "extra": {
+        "candidate_id": "raw_ca_hash_718ea675",
+        "week": "week2",
+        "fitness_label": "qualified",
+        "train_ic": 0.01724269873021164
+      }
+    },
+    {
+      "pack": "weekly",
+      "display_name": "weekly:factor_volume_confirmed_momentum_binary_gate",
+      "function_name": "factor_volume_confirmed_momentum_binary_gate",
+      "slug": "raw_ca_hash_777e86d4",
+      "rank_ic": 0.032017317099789465,
+      "formula": "(ema(daily_return * safe_div(numerator=volume, denominator=ts_mean(volume, 20)), 10)) * (sign(close - (high + low) / 2))",
+      "python_code": "def factor_volume_confirmed_momentum_binary_gate(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(20, min_periods=20).mean()\n    base = ret * vol_ratio\n    smoothed_base = base.ewm(span=10, min_periods=10, adjust=False).mean()\n    range_ = df_copy['high'] - df_copy['low']\n    range_ = range_.replace(0, np.nan)\n    mid_point = (df_copy['high'] + df_copy['low']) / 2\n    binary_gate = np.where(df_copy['close'] >= mid_point, 1, -1)\n    factor = smoothed_base * binary_gate\n    df_copy['factor_volume_confirmed_momentum_binary_gate'] = factor\n    return df_copy['factor_volume_confirmed_momentum_binary_gate']",
+      "route": "lqtp_dsl",
+      "source_file": "all_rank_ic_gt_0p03/raw_ca_hash_777e86d4/summary.json",
+      "extra": {
+        "candidate_id": "raw_ca_hash_777e86d4",
+        "week": "week2",
+        "fitness_label": "qualified",
+        "train_ic": 0.02898934743675182
+      }
+    },
+    {
+      "pack": "weekly",
+      "display_name": "weekly:factor_intraday_reversal_crossover_v1",
+      "function_name": "factor_intraday_reversal_crossover_v1",
+      "slug": "raw_ca_hash_881db7aa",
+      "rank_ic": 0.03198514396439081,
+      "formula": "ts_mean(- safe_div(numerator=2 * close - high - low, denominator=high - low) * safe_div(numerator=ts_mean(high - low, 5), denominator=ts_mean(close, 5)), 3)",
+      "python_code": "def factor_intraday_reversal_crossover_v1(df):\n    df_copy = df.copy()\n    intraday_pos = (2*df_copy['close'] - df_copy['high'] - df_copy['low']) / (df_copy['high'] - df_copy['low']).replace(0, np.nan)\n    avg_range = (df_copy['high'] - df_copy['low']).rolling(5).mean()\n    avg_close = df_copy['close'].rolling(5).mean()\n    raw_factor = -intraday_pos * avg_range / avg_close.replace(0, np.nan)\n    smoothed = raw_factor.rolling(3, min_periods=3).mean()\n    smoothed.name = 'factor_intraday_reversal_crossover_v1'\n    return smoothed",
+      "route": "lqtp_dsl",
+      "source_file": "all_rank_ic_gt_0p03/raw_ca_hash_881db7aa/summary.json",
+      "extra": {
+        "candidate_id": "raw_ca_hash_881db7aa",
+        "week": "week2",
+        "fitness_label": "qualified",
+        "train_ic": 0.030473278308538816
+      }
+    },
+    {
+      "pack": "weekly",
+      "display_name": "weekly:factor_adaptive_momentum_gate_v2",
+      "function_name": "factor_adaptive_momentum_gate_v2",
+      "slug": "raw_ca_hash_946bc42a",
+      "rank_ic": 0.03253920441170887,
+      "formula": "safe_div(numerator=ts_pct(close, 5), denominator=ts_std(daily_return, 30))",
+      "python_code": "def factor_adaptive_momentum_gate_v2(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol = ret.rolling(30, min_periods=30).std()\n    momentum_5 = df_copy['close'] / df_copy['close'].shift(5) - 1\n    factor = momentum_5 / vol.replace(0, np.nan)\n    df_copy['factor_adaptive_momentum_gate_v2'] = factor\n    return df_copy['factor_adaptive_momentum_gate_v2']",
+      "route": "lqtp_dsl",
+      "source_file": "all_rank_ic_gt_0p03/raw_ca_hash_946bc42a/summary.json",
+      "extra": {
+        "candidate_id": "raw_ca_hash_946bc42a",
+        "week": "week2",
+        "fitness_label": "qualified",
+        "train_ic": 0.017318581469440725
+      }
+    },
+    {
+      "pack": "weekly",
+      "display_name": "weekly:factor_stress_volume_cont_weight_cont_dir_w25_clip2_w40_ewm15",
+      "function_name": "factor_stress_volume_cont_weight_cont_dir_w25_clip2_w40_ewm15",
+      "slug": "raw_ca_hash_a96b0966",
+      "rank_ic": 0.034449106266965464,
+      "formula": "((((df.copy())[\"high\"]) - ((df.copy())[\"low\"])) - (((df.copy())[\"((df.copy())[\"high\"])\"]) - ((df.copy())[\"((df.copy())[\"low\"])\"])).rolling(40, min_periods=40).mean()) / (((df.copy())[\"((df.copy())[\"high\"])\"]) - ((df.copy())[\"((df.copy())[\"low\"])\"])).rolling(40, min_periods=40).std(ddof=1).clipema(lower=0, 15) * ((df.copy())[\"volume\"]) / ((df.copy())[\"((df.copy())[\"volume\"])\"]).rolling(25, min_periods=25).mean() * (((df.copy())[\"close\"]) - ((df.copy())[\"open\"])) / (((df.copy())[\"high\"]) - ((df.copy())[\"low\"]))",
+      "python_code": "def factor_stress_volume_cont_weight_cont_dir_w25_clip2_w40_ewm15(df):\n    df_copy = df.copy()\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    close = df_copy[\"close\"]\n    open_ = df_copy[\"open\"]\n    volume = df_copy[\"volume\"]\n    range_ = high - low\n    mean_range = range_.rolling(40, min_periods=40).mean()\n    std_range = range_.rolling(40, min_periods=40).std(ddof=1)\n    z = (range_ - mean_range) / std_range.replace(0, np.nan)\n    stress_ewm = z.clip(lower=0).ewm(span=15, adjust=False).mean()\n    vol_mean = volume.rolling(25, min_periods=25).mean()\n    vol_weight = volume / vol_mean.replace(0, np.nan)\n    vol_weight = vol_weight.clip(upper=2)\n    cont_dir = (close - open_) / range_.replace(0, np.nan)\n    cont_dir = cont_dir.clip(lower=-2, upper=2)\n    factor = stress_ewm * vol_weight * cont_dir\n    df_copy[\"factor_stress_volume_cont_weight_cont_dir_w25_clip2_w40_ewm15\"] = factor\n    return df_copy[\"factor_stress_volume_cont_weight_cont_dir_w25_clip2_w40_ewm15\"]",
+      "route": "lqtp_dsl",
+      "source_file": "all_rank_ic_gt_0p03/raw_ca_hash_a96b0966/summary.json",
+      "extra": {
+        "candidate_id": "raw_ca_hash_a96b0966",
+        "week": "week2",
+        "fitness_label": "qualified",
+        "train_ic": 0.024531359144000852
+      }
+    },
+    {
+      "pack": "weekly",
+      "display_name": "weekly:factor_mut_cro_asym_vol_ratio_med_20_minp3_vol10_ema2",
+      "function_name": "factor_mut_cro_asym_vol_ratio_med_20_minp3_vol10_ema2",
+      "slug": "raw_ca_hash_ae211225",
+      "rank_ic": 0.03042283606995021,
+      "formula": "(-1.0) * (((df.copy())['((df.copy())['((df.copy())['high'])'])']) - ((df.copy())['((df.copy())['((df.copy())['low'])'])'])).where((((df.copy())['((df.copy())['((df.copy())['((df.copy())['close'])'])'])']) > ((df.copy())['open'])) == 1, np.nan).rolling(20, min_periods=3).median() / (((df.copy())['((df.copy())['((df.copy())['high'])'])']) - ((df.copy())['((df.copy())['((df.copy())['low'])'])'])).where((((df.copy())['((df.copy())['((df.copy())['((df.copy())['close'])'])'])']) <= ((df.copy())['open'])) == 1, np.nan).rolling(20, min_periods=3).median() * (safe_div(numerator=volume, denominator=ts_mean(volume, 20)))",
+      "python_code": "def factor_mut_cro_asym_vol_ratio_med_20_minp3_vol10_ema2(df):\n    df_copy = df.copy()\n    high = df_copy['high']\n    low = df_copy['low']\n    close = df_copy['close']\n    open_ = df_copy['open']\n    volume = df_copy['volume']\n\n    # Asymmetry ratio using median range (window 20, min_periods=3)\n    up_day = (close > open_).astype(float)\n    down_day = (close <= open_).astype(float)\n    range_ = high - low\n    up_range = range_.where(up_day == 1, np.nan)\n    down_range = range_.where(down_day == 1, np.nan)\n    up_med = up_range.rolling(20, min_periods=3).median()\n    down_med = down_range.rolling(20, min_periods=3).median()\n    up_med = up_med.fillna(1.0)\n    down_med = down_med.fillna(1.0)\n    asym_ratio = up_med / down_med.replace(0.0, np.nan)\n    asym_ratio = asym_ratio.fillna(1.0)\n\n    # Volume ratio using median (window 10, min_periods=5) - mutation: increased window for smoother volume base\n    vol_med10 = volume.rolling(10, min_periods=5).median()\n    vol_ratio = volume / vol_med10.replace(0.0, np.nan)\n    vol_ratio = vol_ratio.replace([np.inf, -np.inf], np.nan).fillna(1.0)\n\n    # Combine with negative sign\n    factor = -1.0 * asym_ratio * vol_ratio\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n\n    # EMA2 smoothing (inherited from parent)\n    factor_smoothed = factor.ewm(span=2, min_periods=2, adjust=False).mean()\n    factor_smoothed = factor_smoothed.replace([np.inf, -np.inf], np.nan).fillna(0)\n\n    df_copy['factor_mut_cro_asym_vol_ratio_med_20_minp3_vol10_ema2'] = factor_smoothed\n    return df_copy['factor_mut_cro_asym_vol_ratio_med_20_minp3_vol10_ema2']",
+      "route": "lqtp_dsl",
+      "source_file": "all_rank_ic_gt_0p03/raw_ca_hash_ae211225/summary.json",
+      "extra": {
+        "candidate_id": "raw_ca_hash_ae211225",
+        "week": "week2",
+        "fitness_label": "qualified",
+        "train_ic": 0.01393201862234656
+      }
+    },
+    {
+      "pack": "weekly",
+      "display_name": "weekly:factor_mut_hc004_volpctrank_w8",
+      "function_name": "factor_mut_hc004_volpctrank_w8",
+      "slug": "raw_ca_hash_b719027d",
+      "rank_ic": 0.04919334123022476,
+      "formula": "ema( (close - delay(close, 1))/delay(close, 1) * rank_pct8(volume) * ((high-low)/close) , span=12 )",
+      "python_code": "def factor_mut_hc004_volpctrank_w8(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_rank = df_copy['volume'].rolling(8, min_periods=8).rank(pct=True)\n    stress_range = (df_copy['high'] - df_copy['low']) / df_copy['close'].replace(0, np.nan)\n    raw = ret * vol_rank * stress_range\n    smoothed = raw.ewm(span=12, min_periods=12, adjust=False).mean()\n    factor = smoothed.clip(-3, 3)\n    factor.name = 'factor_mut_hc004_volpctrank_w8'\n    return factor",
+      "route": "lqtp_dsl",
+      "source_file": "all_rank_ic_gt_0p03/raw_ca_hash_b719027d/summary.json",
+      "extra": {
+        "candidate_id": "raw_ca_hash_b719027d",
+        "week": "week2",
+        "fitness_label": "qualified",
+        "train_ic": 0.026860174201241576
+      }
+    },
+    {
+      "pack": "weekly",
+      "display_name": "weekly:factor_pressure_tanh",
+      "function_name": "factor_pressure_tanh",
+      "slug": "raw_ca_hash_b9907c26",
+      "rank_ic": 0.03307205330065639,
+      "formula": "sigmoid(2 * safe_div(numerator=safe_div(numerator=close - low, denominator=high - low) * volume - ts_mean(safe_div(numerator=close - low, denominator=high - low) * volume, 20), denominator=ts_std(safe_div(numerator=close - low, denominator=high - low) * volume, 20))) * 2 - 1",
+      "python_code": "def factor_pressure_tanh(df):\n    df_copy = df.copy()\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    safe_range = range_.replace(0, np.nan)\n    intra_pressure = (df_copy[\"close\"] - df_copy[\"low\"]) / safe_range * df_copy[\"volume\"]\n    rolling_mean = intra_pressure.rolling(20, min_periods=20).mean()\n    rolling_std = intra_pressure.rolling(20, min_periods=20).std(ddof=1)\n    z = (intra_pressure - rolling_mean) / rolling_std.replace(0, np.nan)\n    factor = np.tanh(z)\n    factor = factor.fillna(0)\n    df_copy[\"factor_pressure_tanh\"] = factor\n    return df_copy[\"factor_pressure_tanh\"]",
+      "route": "lqtp_dsl",
+      "source_file": "all_rank_ic_gt_0p03/raw_ca_hash_b9907c26/summary.json",
+      "extra": {
+        "candidate_id": "raw_ca_hash_b9907c26",
+        "week": "week2",
+        "fitness_label": "qualified",
+        "train_ic": 0.015995840628002
+      }
+    },
+    {
+      "pack": "weekly",
+      "display_name": "weekly:factor_mut_cro_asym_vol_ratio_med_20_minp3_vol6_ema5",
+      "function_name": "factor_mut_cro_asym_vol_ratio_med_20_minp3_vol6_ema5",
+      "slug": "raw_ca_hash_bc141edf",
+      "rank_ic": 0.032789556887282516,
+      "formula": "(-1.0) * (((df.copy())['((df.copy())['((df.copy())['high'])'])']) - ((df.copy())['((df.copy())['((df.copy())['low'])'])'])).where((((df.copy())['((df.copy())['((df.copy())['((df.copy())['close'])'])'])']) > ((df.copy())['open'])) == 1, np.nan).rolling(20, min_periods=3).median() / (((df.copy())['((df.copy())['((df.copy())['high'])'])']) - ((df.copy())['((df.copy())['((df.copy())['low'])'])'])).where((((df.copy())['((df.copy())['((df.copy())['((df.copy())['close'])'])'])']) <= ((df.copy())['open'])) == 1, np.nan).rolling(20, min_periods=3).median() * (safe_div(numerator=volume, denominator=ts_mean(volume, 20)))",
+      "python_code": "def factor_mut_cro_asym_vol_ratio_med_20_minp3_vol6_ema5(df):\n    df_copy = df.copy()\n    high = df_copy['high']\n    low = df_copy['low']\n    close = df_copy['close']\n    open_ = df_copy['open']\n    volume = df_copy['volume']\n\n    # Asymmetry ratio using median range (window 20, min_periods=3)\n    up_day = (close > open_).astype(float)\n    down_day = (close <= open_).astype(float)\n    range_ = high - low\n    up_range = range_.where(up_day == 1, np.nan)\n    down_range = range_.where(down_day == 1, np.nan)\n    up_med = up_range.rolling(20, min_periods=3).median()\n    down_med = down_range.rolling(20, min_periods=3).median()\n    up_med = up_med.fillna(1.0)\n    down_med = down_med.fillna(1.0)\n    asym_ratio = up_med / down_med.replace(0.0, np.nan)\n    asym_ratio = asym_ratio.fillna(1.0)\n\n    # Volume ratio using median (window 6, min_periods=6)\n    vol_med6 = volume.rolling(6, min_periods=6).median()\n    vol_ratio = volume / vol_med6.replace(0.0, np.nan)\n    vol_ratio = vol_ratio.replace([np.inf, -np.inf], np.nan).fillna(1.0)\n\n    # Combine with negative sign\n    factor = -1.0 * asym_ratio * vol_ratio\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n\n    # EMA5 smoothing (increased from 3 to reduce noise)\n    factor_smoothed = factor.ewm(span=5, min_periods=5, adjust=False).mean()\n    factor_smoothed = factor_smoothed.replace([np.inf, -np.inf], np.nan).fillna(0)\n\n    df_copy['factor_mut_cro_asym_vol_ratio_med_20_minp3_vol6_ema5'] = factor_smoothed\n    return df_copy['factor_mut_cro_asym_vol_ratio_med_20_minp3_vol6_ema5']",
+      "route": "lqtp_dsl",
+      "source_file": "all_rank_ic_gt_0p03/raw_ca_hash_bc141edf/summary.json",
+      "extra": {
+        "candidate_id": "raw_ca_hash_bc141edf",
+        "week": "week2",
+        "fitness_label": "qualified",
+        "train_ic": 0.013777097337199024
+      }
+    },
+    {
+      "pack": "weekly",
+      "display_name": "weekly:factor_vol_surge_regime_gated",
+      "function_name": "factor_vol_surge_regime_gated",
+      "slug": "raw_ca_hash_c4358b90",
+      "rank_ic": 0.04560232498456135,
+      "formula": "ema(intraday_return * safe_div(numerator=volume, denominator=ts_max(volume, 20)) * where(high - low > ts_quantile(high - low, 20, 0.5), 1, 0), 20)",
+      "python_code": "def factor_vol_surge_regime_gated(df):\n    df_copy = df.copy()\n    intday_ret = df_copy[\"close\"] / df_copy[\"open\"] - 1.0\n    vol_max = df_copy[\"volume\"].rolling(20, min_periods=20).max()\n    vol_surge = df_copy[\"volume\"] / vol_max.replace(0, np.nan)\n    raw = intday_ret * vol_surge\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    range_med = range_.rolling(20).median()\n    high_vol = range_ > range_med\n    factor = raw * high_vol\n    factor = factor.ewm(span=20, adjust=False).mean()\n    factor.name = \"factor_vol_surge_regime_gated\"\n    return factor",
+      "route": "lqtp_dsl",
+      "source_file": "all_rank_ic_gt_0p03/raw_ca_hash_c4358b90/summary.json",
+      "extra": {
+        "candidate_id": "raw_ca_hash_c4358b90",
+        "week": "week2",
+        "fitness_label": "qualified",
+        "train_ic": 0.024935617701461233
+      }
+    },
+    {
+      "pack": "weekly",
+      "display_name": "weekly:factor_stress_volume_cont_weight_cont_dir_w20_clip2_5_w40_ewm15_stressclip25",
+      "function_name": "factor_stress_volume_cont_weight_cont_dir_w20_clip2_5_w40_ewm15_stressclip25",
+      "slug": "raw_ca_hash_c4485ee6",
+      "rank_ic": 0.03447396895000833,
+      "formula": "((((df.copy())[\"high\"]) - ((df.copy())[\"low\"])) - (((df.copy())[\"((df.copy())[\"high\"])\"]) - ((df.copy())[\"((df.copy())[\"low\"])\"])).rolling(40, min_periods=40).mean()) / (((df.copy())[\"((df.copy())[\"high\"])\"]) - ((df.copy())[\"((df.copy())[\"low\"])\"])).rolling(40, min_periods=40).std(ddof=1).clipema(lower=0, 15) * ((df.copy())[\"volume\"]) / ((df.copy())[\"((df.copy())[\"volume\"])\"]).rolling(20, min_periods=20).mean() * (((df.copy())[\"close\"]) - ((df.copy())[\"open\"])) / (((df.copy())[\"high\"]) - ((df.copy())[\"low\"]))",
+      "python_code": "def factor_stress_volume_cont_weight_cont_dir_w20_clip2_5_w40_ewm15_stressclip25(df):\n    df_copy = df.copy()\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    close = df_copy[\"close\"]\n    open_ = df_copy[\"open\"]\n    volume = df_copy[\"volume\"]\n    range_ = high - low\n    mean_range = range_.rolling(40, min_periods=40).mean()\n    std_range = range_.rolling(40, min_periods=40).std(ddof=1)\n    z = (range_ - mean_range) / std_range.replace(0, np.nan)\n    stress_ewm = z.clip(lower=0).ewm(span=15, adjust=False).mean()\n    stress_ewm = stress_ewm.clip(upper=2.5)\n    vol_mean = volume.rolling(20, min_periods=20).mean()\n    vol_weight = volume / vol_mean.replace(0, np.nan)\n    vol_weight = vol_weight.clip(upper=2)\n    cont_dir = (close - open_) / range_.replace(0, np.nan)\n    cont_dir = cont_dir.clip(lower=-2.5, upper=2.5)\n    factor = stress_ewm * vol_weight * cont_dir\n    df_copy[\"factor_stress_volume_cont_weight_cont_dir_w20_clip2_5_w40_ewm15_stressclip25\"] = factor\n    return df_copy[\"factor_stress_volume_cont_weight_cont_dir_w20_clip2_5_w40_ewm15_stressclip25\"]",
+      "route": "lqtp_dsl",
+      "source_file": "all_rank_ic_gt_0p03/raw_ca_hash_c4485ee6/summary.json",
+      "extra": {
+        "candidate_id": "raw_ca_hash_c4485ee6",
+        "week": "week2",
+        "fitness_label": "qualified",
+        "train_ic": 0.024579421766244135
+      }
+    },
+    {
+      "pack": "weekly",
+      "display_name": "weekly:factor_stress_volume_cont_weight_cont_dir_w20_clip3_w40_ewm15_stressclip25",
+      "function_name": "factor_stress_volume_cont_weight_cont_dir_w20_clip3_w40_ewm15_stressclip25",
+      "slug": "raw_ca_hash_c6320c09",
+      "rank_ic": 0.03447396895000833,
+      "formula": "((((df.copy())[\"high\"]) - ((df.copy())[\"low\"])) - (((df.copy())[\"((df.copy())[\"high\"])\"]) - ((df.copy())[\"((df.copy())[\"low\"])\"])).rolling(40, min_periods=40).mean()) / (((df.copy())[\"((df.copy())[\"high\"])\"]) - ((df.copy())[\"((df.copy())[\"low\"])\"])).rolling(40, min_periods=40).std(ddof=1).clipema(lower=0, 15) * ((df.copy())[\"volume\"]) / ((df.copy())[\"((df.copy())[\"volume\"])\"]).rolling(20, min_periods=20).mean() * (((df.copy())[\"close\"]) - ((df.copy())[\"open\"])) / (((df.copy())[\"high\"]) - ((df.copy())[\"low\"]))",
+      "python_code": "def factor_stress_volume_cont_weight_cont_dir_w20_clip3_w40_ewm15_stressclip25(df):\n    df_copy = df.copy()\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    close = df_copy[\"close\"]\n    open_ = df_copy[\"open\"]\n    volume = df_copy[\"volume\"]\n    range_ = high - low\n    mean_range = range_.rolling(40, min_periods=40).mean()\n    std_range = range_.rolling(40, min_periods=40).std(ddof=1)\n    z = (range_ - mean_range) / std_range.replace(0, np.nan)\n    stress_ewm = z.clip(lower=0).ewm(span=15, adjust=False).mean()\n    stress_ewm = stress_ewm.clip(upper=2.5)\n    vol_mean = volume.rolling(20, min_periods=20).mean()\n    vol_weight = volume / vol_mean.replace(0, np.nan)\n    vol_weight = vol_weight.clip(upper=2)\n    cont_dir = (close - open_) / range_.replace(0, np.nan)\n    cont_dir = cont_dir.clip(lower=-3, upper=3)\n    factor = stress_ewm * vol_weight * cont_dir\n    df_copy[\"factor_stress_volume_cont_weight_cont_dir_w20_clip3_w40_ewm15_stressclip25\"] = factor\n    return df_copy[\"factor_stress_volume_cont_weight_cont_dir_w20_clip3_w40_ewm15_stressclip25\"]",
+      "route": "lqtp_dsl",
+      "source_file": "all_rank_ic_gt_0p03/raw_ca_hash_c6320c09/summary.json",
+      "extra": {
+        "candidate_id": "raw_ca_hash_c6320c09",
+        "week": "week2",
+        "fitness_label": "qualified",
+        "train_ic": 0.024579421766244135
+      }
+    },
+    {
+      "pack": "weekly",
+      "display_name": "weekly:factor_stress_volume_cont_weight_cont_dir_w20_clip3_w40_ewm15",
+      "function_name": "factor_stress_volume_cont_weight_cont_dir_w20_clip3_w40_ewm15",
+      "slug": "raw_ca_hash_c7206013",
+      "rank_ic": 0.03447382603010594,
+      "formula": "((((df.copy())[\"high\"]) - ((df.copy())[\"low\"])) - (((df.copy())[\"((df.copy())[\"high\"])\"]) - ((df.copy())[\"((df.copy())[\"low\"])\"])).rolling(40, min_periods=40).mean()) / (((df.copy())[\"((df.copy())[\"high\"])\"]) - ((df.copy())[\"((df.copy())[\"low\"])\"])).rolling(40, min_periods=40).std(ddof=1).clipema(lower=0, 15) * ((df.copy())[\"volume\"]) / ((df.copy())[\"((df.copy())[\"volume\"])\"]).rolling(20, min_periods=20).mean() * (((df.copy())[\"close\"]) - ((df.copy())[\"open\"])) / (((df.copy())[\"high\"]) - ((df.copy())[\"low\"]))",
+      "python_code": "def factor_stress_volume_cont_weight_cont_dir_w20_clip3_w40_ewm15(df):\n    df_copy = df.copy()\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    close = df_copy[\"close\"]\n    open_ = df_copy[\"open\"]\n    volume = df_copy[\"volume\"]\n    range_ = high - low\n    mean_range = range_.rolling(40, min_periods=40).mean()\n    std_range = range_.rolling(40, min_periods=40).std(ddof=1)\n    z = (range_ - mean_range) / std_range.replace(0, np.nan)\n    stress_ewm = z.clip(lower=0).ewm(span=15, adjust=False).mean()\n    vol_mean = volume.rolling(20, min_periods=20).mean()\n    vol_weight = volume / vol_mean.replace(0, np.nan)\n    vol_weight = vol_weight.clip(upper=2)\n    cont_dir = (close - open_) / range_.replace(0, np.nan)\n    cont_dir = cont_dir.clip(lower=-3, upper=3)\n    factor = stress_ewm * vol_weight * cont_dir\n    df_copy[\"factor_stress_volume_cont_weight_cont_dir_w20_clip3_w40_ewm15\"] = factor\n    return df_copy[\"factor_stress_volume_cont_weight_cont_dir_w20_clip3_w40_ewm15\"]",
+      "route": "lqtp_dsl",
+      "source_file": "all_rank_ic_gt_0p03/raw_ca_hash_c7206013/summary.json",
+      "extra": {
+        "candidate_id": "raw_ca_hash_c7206013",
+        "week": "week2",
+        "fitness_label": "elite",
+        "train_ic": 0.024555810411677197
+      }
+    },
+    {
+      "pack": "weekly",
+      "display_name": "weekly:factor_vol_regime_breakout_continuous",
+      "function_name": "factor_vol_regime_breakout_continuous",
+      "slug": "raw_ca_hash_c83fcf6c",
+      "rank_ic": 0.03535091732391188,
+      "formula": "ema((safe_div(numerator=close - low, denominator=high - low) - 0.5) * safe_div(numerator=high - low, denominator=ts_quantile(high - low, 20, 0.5)), 5)",
+      "python_code": "def factor_vol_regime_breakout_continuous(df):\n    df_copy = df.copy()\n    range_ = df_copy['high'] - df_copy['low']\n    range_med = range_.rolling(20).median()\n    pos = (df_copy['close'] - df_copy['low']) / range_.replace(0, np.nan)\n    vol_ratio = range_ / range_med.replace(0, np.nan)\n    factor = (pos - 0.5) * vol_ratio\n    factor = factor.ewm(span=5, min_periods=5).mean()\n    factor.name = 'factor_vol_regime_breakout_continuous'\n    return factor",
+      "route": "lqtp_dsl",
+      "source_file": "all_rank_ic_gt_0p03/raw_ca_hash_c83fcf6c/summary.json",
+      "extra": {
+        "candidate_id": "raw_ca_hash_c83fcf6c",
+        "week": "week2",
+        "fitness_label": "qualified",
+        "train_ic": 0.030866248032537742
+      }
+    },
+    {
+      "pack": "weekly",
+      "display_name": "weekly:factor_range_position_volume_gated_smoothed_mut",
+      "function_name": "factor_range_position_volume_gated_smoothed_mut",
+      "slug": "raw_ca_hash_d8e639c3",
+      "rank_ic": 0.030903102181840388,
+      "formula": "ema((safe_div(numerator=close - low, denominator=high - low)) - 0.5, 3) * safe_div(numerator=volume, denominator=ts_mean(volume, 20))",
+      "python_code": "def factor_range_position_volume_gated_smoothed_mut(df):\n    df_copy = df.copy()\n    low_ = df_copy[\"low\"]\n    high_ = df_copy[\"high\"]\n    close_ = df_copy[\"close\"]\n    volume_ = df_copy[\"volume\"]\n    range_ = high_ - low_\n    pos = (close_ - low_) / range_.replace(0.0, np.nan)\n    pos = pos - 0.5\n    smooth_pos = pos.ewm(span=5, min_periods=5, adjust=False).mean()\n    vol_20 = volume_.rolling(20, min_periods=20).mean()\n    vol_ratio = volume_ / vol_20.replace(0.0, np.nan)\n    factor = smooth_pos * vol_ratio\n    df_copy[\"factor_range_position_volume_gated_smoothed_mut\"] = factor\n    return df_copy[\"factor_range_position_volume_gated_smoothed_mut\"]",
+      "route": "lqtp_dsl",
+      "source_file": "all_rank_ic_gt_0p03/raw_ca_hash_d8e639c3/summary.json",
+      "extra": {
+        "candidate_id": "raw_ca_hash_d8e639c3",
+        "week": "week2",
+        "fitness_label": "qualified",
+        "train_ic": 0.030608385639969454
+      }
+    },
+    {
+      "pack": "weekly",
+      "display_name": "weekly:factor_intraday_reversal",
+      "function_name": "factor_intraday_reversal",
+      "slug": "raw_ca_hash_e5e44222",
+      "rank_ic": 0.039424607598805984,
+      "formula": "- safe_div(numerator=2 * close - high - low, denominator=high - low) * safe_div(numerator=ts_mean(high - low, 5), denominator=ts_mean(close, 5))",
+      "python_code": "def factor_intraday_reversal(df):\n    df_copy = df.copy()\n    intraday_pos = (2*df_copy['close'] - df_copy['high'] - df_copy['low']) / (df_copy['high'] - df_copy['low']).replace(0, np.nan)\n    avg_range = (df_copy['high'] - df_copy['low']).rolling(5).mean()\n    avg_close = df_copy['close'].rolling(5).mean()\n    factor = -intraday_pos * avg_range / avg_close.replace(0, np.nan)\n    factor.name = 'factor_intraday_reversal'\n    return factor",
+      "route": "lqtp_dsl",
+      "source_file": "all_rank_ic_gt_0p03/raw_ca_hash_e5e44222/summary.json",
+      "extra": {
+        "candidate_id": "raw_ca_hash_e5e44222",
+        "week": "week1",
+        "fitness_label": "elite",
+        "train_ic": 0.03410804878979901
+      }
+    },
+    {
+      "pack": "weekly",
+      "display_name": "weekly:factor_intraday_volume_spike",
+      "function_name": "factor_intraday_volume_spike",
+      "slug": "raw_ca_hash_e9cbfd57",
+      "rank_ic": 0.04295737873798425,
+      "formula": "ema(intraday_return * safe_div(numerator=volume, denominator=ts_mean(volume, 20)), 10)",
+      "python_code": "def factor_intraday_volume_spike(df):\n    df_copy = df.copy()\n    intday_ret = df_copy[\"close\"] / df_copy[\"open\"] - 1.0\n    vol_mean = df_copy[\"volume\"].rolling(20, min_periods=20).mean()\n    vol_surge = df_copy[\"volume\"] / vol_mean.replace(0, np.nan)\n    raw = intday_ret * vol_surge\n    df_copy[\"factor_intraday_volume_spike\"] = raw.ewm(span=10, adjust=False).mean()\n    return df_copy[\"factor_intraday_volume_spike\"]",
+      "route": "lqtp_dsl",
+      "source_file": "all_rank_ic_gt_0p03/raw_ca_hash_e9cbfd57/summary.json",
+      "extra": {
+        "candidate_id": "raw_ca_hash_e9cbfd57",
+        "week": "week2",
+        "fitness_label": "qualified",
+        "train_ic": 0.02533248363080693
+      }
+    },
+    {
+      "pack": "weekly",
+      "display_name": "weekly:factor_stress_range_volume_surge",
+      "function_name": "factor_stress_range_volume_surge",
+      "slug": "raw_ca_hash_f2c0364c",
+      "rank_ic": 0.033351054814830756,
+      "formula": "safe_div(numerator=high - low, denominator=close) * safe_div(numerator=volume, denominator=ts_mean(volume, 20))",
+      "python_code": "def factor_stress_range_volume_surge(df):\n    df_copy = df.copy()\n    stress_range = (df_copy['high'] - df_copy['low']) / df_copy['close'].replace(0, np.nan)\n    vol_ma = df_copy['volume'].rolling(20, min_periods=20).mean().replace(0, np.nan)\n    vol_surge = df_copy['volume'] / vol_ma\n    factor = stress_range * vol_surge\n    df_copy['factor_stress_range_volume_surge'] = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    return df_copy['factor_stress_range_volume_surge']",
+      "route": "lqtp_dsl",
+      "source_file": "all_rank_ic_gt_0p03/raw_ca_hash_f2c0364c/summary.json",
+      "extra": {
+        "candidate_id": "raw_ca_hash_f2c0364c",
+        "week": "week2",
+        "fitness_label": "qualified",
+        "train_ic": 0.015589961218157533
+      }
+    }
+  ]
+}

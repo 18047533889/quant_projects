@@ -1,0 +1,44 @@
+{
+  "generated_at": "2026-07-26T17:08:50+08:00",
+  "server": "110.42.223.26:50051",
+  "portfolio_definition": {
+    "top_fraction": 0.1,
+    "bottom_fraction": 0.1,
+    "max_names_per_side": 50,
+    "submitted_leg_weight": 1.0,
+    "ls_daily_return": "0.5 * (top leg - bottom leg)",
+    "signal_to_execution_lag": 1,
+    "execution_price": "OPEN",
+    "commission_buy_lqtp_units": 0.01,
+    "commission_sell_lqtp_units": 0.01,
+    "short_selling": false,
+    "platform_constraint": "negative weights rejected; top/bottom submitted separately",
+    "tradability_filter": "point-in-time positive OPEN and IsSuspend=false on T+1",
+    "stock_root": "/Users/xiangyurui/projects/kuantu/ashare_lqtp_kit-main/workspaces/factor_rankic_ge_003/market/StockDailyBar"
+  },
+  "selected_count": 15,
+  "succeeded": [
+    "b0e9545fa66ab30a",
+    "76c2850ef12db3e8",
+    "89d1bc9b29c9d35a",
+    "8208112fae4e0b20",
+    "13c328d6a93e822c",
+    "58de3d016aa7633c",
+    "222a8dd82489d8b1",
+    "0c05924d28358990",
+    "67bc8e5bfe6e5237",
+    "baec4247c71a031c",
+    "74b9b588c2cfeb3e",
+    "c14fed9d6503cb5a",
+    "154a51fe952b5243",
+    "5de2f47bc5cd6c66"
+  ],
+  "skipped": [],
+  "prepared": [],
+  "failed": [
+    {
+      "factor_key": "3e74b4fa2831dc36",
+      "error": "保存回测每日结果失败: 完成 BacktestDailyResult 写入失败"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "factor_name": "factor_volume_weighted_price_change",
+  "candidate_id": "raw_ca_hash_83b7560a",
+  "week": "week2",
+  "fitness_label": "elite",
+  "source_shelf": "supplement_pending",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.024356132616329615,
+    "rank_ic": 0.03906133833273069,
+    "icir": 0.2278538059234055,
+    "rank_icir": 0.30853761957629455
+  },
+  "lqtp_test": null,
+  "formula": "EMA5( (close / delay(close, 1) - 1) * (volume / SMA20(volume)) )",
+  "rationale": "Volume-weighted price change captures the coherence between price movement and volume. When price moves in the same direction as volume concentration, the signal is amplified. EMA smoothing reduces turnover and improves stability.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

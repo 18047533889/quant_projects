@@ -1,0 +1,27 @@
+{
+  "factor_name": "factor_intraday_volume_spike",
+  "candidate_id": "raw_ca_hash_e9cbfd57",
+  "week": "week2",
+  "fitness_label": "qualified",
+  "source_shelf": "standard",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.02533248363080693,
+    "rank_ic": 0.04295737873798425,
+    "icir": 0.24316155416468616,
+    "rank_icir": 0.36669979474494163
+  },
+  "lqtp_test": {
+    "rank_ic": 0.03296207189051624,
+    "mean_ic": 0.03296207189051624,
+    "icir": 0.25749131685453436,
+    "orientation": "flipped",
+    "begin_date": 20230101,
+    "end_date": 20260615
+  },
+  "formula": "ema(intraday_return * safe_div(numerator=volume, denominator=ts_mean(volume, 20)), 10)",
+  "rationale": "Measures intraday directional pressure scaled by volume relative to its 20-day average. Volume spikes relative to average indicate conviction behind the move. Smoothed with a shorter 10-period EWMA to balance responsiveness and noise reduction, targeting improved ICIR while preserving the core mechanism of the parent.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

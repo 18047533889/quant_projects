@@ -1,0 +1,27 @@
+{
+  "factor_name": "factor_range_position_volume_gated_smoothed_mut",
+  "candidate_id": "raw_ca_hash_d8e639c3",
+  "week": "week2",
+  "fitness_label": "qualified",
+  "source_shelf": "standard",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.030608385639969454,
+    "rank_ic": 0.030903102181840388,
+    "icir": 0.3589892628452611,
+    "rank_icir": 0.3193694435839571
+  },
+  "lqtp_test": {
+    "rank_ic": 0.006708685485970441,
+    "mean_ic": 0.006708685485970441,
+    "icir": 0.05226467917907529,
+    "orientation": "flipped",
+    "begin_date": 20230101,
+    "end_date": 20260615
+  },
+  "formula": "ema((safe_div(numerator=close - low, denominator=high - low)) - 0.5, 3) * safe_div(numerator=volume, denominator=ts_mean(volume, 20))",
+  "rationale": "Mutation of CROSS_VGR_AR_001: increase EWM smoothing span from 3 to 5 to further reduce noise and improve rank stability (RankIC, RankICIR) while preserving the core volume-gated range position reversal mechanism. This targets the bottleneck of moderate RankICIR by smoothing more aggressively.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

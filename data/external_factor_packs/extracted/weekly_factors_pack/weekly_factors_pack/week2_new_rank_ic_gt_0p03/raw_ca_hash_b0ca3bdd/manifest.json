@@ -1,0 +1,55 @@
+{
+  "schema_version": "factor.manifest.v1",
+  "candidate_id": "raw_ca_hash_b0ca3bdd",
+  "campaign_id": "llm_ashare_pv_cogalpha_2026q2",
+  "generator_name": "cogalpha",
+  "producer": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_LQTP",
+  "domain_root": "price_volume",
+  "frequency_bucket": "daily",
+  "batch_id": "post_mining_translate",
+  "factor_name": "factor_crossover_herding_stress_span12_volrank_clip3",
+  "formula": "ema( ts_pct(close) * rank_pct8(volume) * ((high-low)/close), span=12 ) clip ±3",
+  "expression_type": "lqtp_dsl",
+  "execution_platform": "lqtp",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit",
+  "code": "def factor_crossover_herding_stress_span12_volrank_clip3(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_rank = df_copy['volume'].rolling(8, min_periods=8).rank(pct=True)\n    stress_range = (df_copy['high'] - df_copy['low']) / df_copy['close'].replace(0, np.nan)\n    raw = ret * vol_rank * stress_range\n    smoothed = raw.ewm(span=12, min_periods=12, adjust=False).mean()\n    factor = smoothed.clip(-3, 3)\n    factor.name = 'factor_crossover_herding_stress_span12_volrank_clip3'\n    return factor",
+  "rationale": "Crossover preserving primary parent mut_herding_momentum_stress_span12's core stress momentum mechanism with smoothing span 12 and clipping at ±3 to maintain strong RankICIR (0.4211), and borrowing the volume percentile rank normalization (rolling 8-day rank) from secondary parent crossover_hc004_volpctrank_s12_clip2_5 to potentially improve ranking stability and reduce outlier impact. Targets improved IC and RankIC while preserving the high RankICIR.",
+  "lineage": {
+    "agent_skill": "alpha-herding",
+    "operation": "cogalpha_to_lqtp_translation"
+  },
+  "stage": "candidate_pool",
+  "fitness_label": "qualified",
+  "metrics": {
+    "train": {
+      "ic": 0.026860174201241576,
+      "rank_ic": 0.04919334123022476,
+      "icir": 0.23789467873792738,
+      "rank_icir": 0.4182087395433627,
+      "status": "computed",
+      "source": "cogalpha"
+    },
+    "valid": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    }
+  },
+  "validation": {
+    "status": "pending"
+  },
+  "created_at": "2026-06-21T11:25:28.506142+00:00",
+  "updated_at": "2026-06-21T16:18:27.131153+00:00",
+  "lqtp_tags": {
+    "universe": "all_a",
+    "market": "ashare"
+  },
+  "rationale_llm": {
+    "summary": "Crossover preserving primary parent mut_herding_momentum_stress_span12's core stress momentum mechanism with smoothing span 12 and clipping at ±3 to maintain strong RankICIR (0.4211), and borrowing the volume percentile rank normalization (rolling 8-day rank) from secondary parent crossover_hc004_volpctrank_s12_clip2_5 to potentially improve ranking stability and reduce outlier impact. Targets improved IC and RankIC while preserving the high RankICIR.",
+    "parsed_at": "2026-06-21T11:25:40.465335+00:00",
+    "source": "manifest_rationale"
+  }
+}

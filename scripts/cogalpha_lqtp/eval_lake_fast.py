@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Fast lake eval: DuckDB panel RankIC / groups / LS (data_access engine stack).
 
-Preloads forward close-to-close returns once, then evaluates each factor_lake
-parquet with a single DuckDB join+window query (~1s/factor). Parallel workers.
+Preloads forward VWAP→VWAP (default) or close-to-close returns once, then
+evaluates each factor_lake parquet with a single DuckDB join+window query.
 """
 from __future__ import annotations
 
@@ -24,11 +24,27 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from scripts.cogalpha_lqtp.data_access_panel import (  # noqa: E402
+    ashare_materialize_data_source_config,
+    build_close_returns_cache_data_access,
+    build_vwap_returns_cache_data_access,
+    factor_values_cte_sql,
+    resolve_factor_values_parquet,
+)
+from scripts.cogalpha_lqtp.eval_extensions import (  # noqa: E402
+    compute_extended_eval,
+    ensure_eval_aux_cache,
+    merge_extended_into_analysis,
+)
 from scripts.cogalpha_lqtp.lqtp_dsl_compat import eval_route_for_entry  # noqa: E402
 from scripts.cogalpha_lqtp.report_html import (  # noqa: E402
     render_factor_report,
     render_index,
     render_production_summary,
+)
+from scripts.cogalpha_lqtp.reconcile_ic_signs import (  # noqa: E402
+    _unwrap_formula,
+    _unwrap_python_code,
 )
 from scripts.cogalpha_lqtp.run_production_batch import (  # noqa: E402
     LOOKAHEAD_DEFERRED_FACTORS,
@@ -64,9 +80,31 @@ def _sharpe(arr: np.ndarray) -> float:
     return m / s * np.sqrt(252) if s > 1e-12 else 0.0
 
 
-def build_fwd_returns_cache(close_returns_path: Path, fwd_path: Path) -> Path:
-    """signal_date T → close(T+1)/close(T)-1 labeled on exit date in source cache."""
-    if fwd_path.exists() and fwd_path.stat().st_mtime >= close_returns_path.stat().st_mtime:
+def build_fwd_returns_cache(
+    returns_path: Path,
+    fwd_path: Path,
+    *,
+    lead_days: int = 1,
+    force: bool = False,
+) -> Path:
+    """Map signal_date T → return labeled on the *lead_days*-th next session.
+
+    - close panel (lead_days=1): close(T+1)/close(T)-1
+    - VWAP panel (lead_days=2): vwap(T+2)/vwap(T+1)-1
+
+    VWAP must use lead_days=2: factor is known after close T, so same-day Vwap_T
+    cannot enter the return (Vwap_{T+1}/Vwap_T leaks intraday structure into RankIC).
+    """
+    if lead_days < 1:
+        raise ValueError("lead_days must be >= 1")
+    marker = fwd_path.with_suffix(fwd_path.suffix + f".lead{lead_days}")
+    if (
+        not force
+        and fwd_path.exists()
+        and marker.exists()
+        and fwd_path.stat().st_mtime >= returns_path.stat().st_mtime
+        and marker.stat().st_mtime >= fwd_path.stat().st_mtime
+    ):
         return fwd_path
     con = duckdb.connect()
     try:
@@ -77,12 +115,12 @@ def build_fwd_returns_cache(close_returns_path: Path, fwd_path: Path) -> Path:
                 SELECT trade_date::INTEGER AS trade_date,
                        symbol::VARCHAR AS symbol,
                        value::DOUBLE AS value
-                FROM read_parquet('{close_returns_path.as_posix()}')
+                FROM read_parquet('{returns_path.as_posix()}')
               ),
               cal AS (SELECT DISTINCT trade_date FROM ret),
               nxt AS (
                 SELECT trade_date,
-                       lead(trade_date) OVER (ORDER BY trade_date) AS exit_date
+                       lead(trade_date, {int(lead_days)}) OVER (ORDER BY trade_date) AS exit_date
                 FROM cal
               )
               SELECT n.trade_date AS signal_date,
@@ -96,29 +134,13 @@ def build_fwd_returns_cache(close_returns_path: Path, fwd_path: Path) -> Path:
         )
     finally:
         con.close()
+    marker.write_text(f"lead_days={lead_days}\n", encoding="utf-8")
     return fwd_path
 
 
 def _factor_cte_sql(factor_path: Path) -> str:
     """Branch on parquet schema via pyarrow footer (no full scan)."""
-    import pyarrow.parquet as pq
-
-    path = factor_path.as_posix().replace("'", "''")
-    cols = set(pq.ParquetFile(factor_path).schema.names)
-    if "trade_date" in cols and "symbol" in cols:
-        return f"""
-        SELECT trade_date::INTEGER AS trade_date,
-               symbol::VARCHAR AS symbol,
-               value::DOUBLE AS value
-        FROM read_parquet('{path}')
-        """
-    # Prefer integer date math over strftime for speed
-    return f"""
-    SELECT (year(datetime) * 10000 + month(datetime) * 100 + day(datetime))::INTEGER AS trade_date,
-           asset::VARCHAR AS symbol,
-           value::DOUBLE AS value
-    FROM read_parquet('{path}')
-    """
+    return factor_values_cte_sql(factor_path)
 
 
 def analyze_factor_long_df_duckdb(
@@ -179,6 +201,7 @@ def analyze_factor_parquet_duckdb(
     min_names: int = 30,
     con: duckdb.DuckDBPyConnection | None = None,
     factor_sql: str | None = None,
+    return_kind: str = "vwap_to_vwap",
 ) -> dict[str, Any]:
     """Vectorized RankIC / deciles / G10−G1 via DuckDB (average-rank Spearman)."""
     fac_sql = factor_sql if factor_sql else _factor_cte_sql(factor_path)
@@ -327,11 +350,20 @@ def analyze_factor_parquet_duckdb(
         "coverages": coverages,
         "group_mean_returns": group_mean_returns,
         "group_pnls": group_pnls,
-        "return_kind": "close_to_close_T_plus_1",
-        "return_mode": "close_to_close",
+        "return_kind": (
+            "vwap_to_vwap_T1_T2"
+            if return_kind == "vwap_to_vwap"
+            else f"{return_kind}_T_plus_1"
+        ),
+        "return_mode": return_kind,
         "signal_lag_note": (
-            "Factor after close T → forward return close(T+1)/close(T)-1 "
-            "(DuckDB panel RankIC); LS net assumes 40% one-way turnover × commission; "
+            (
+                "Factor after close T → trade VWAP(T+1)→VWAP(T+2) "
+                "(forward return vwap(T+2)/vwap(T+1)-1; not vwap(T+1)/vwap(T) which leaks) "
+                if return_kind == "vwap_to_vwap"
+                else "Factor after close T → forward return close(T+1)/close(T)-1 "
+            )
+            + "(DuckDB panel RankIC); LS net assumes 40% one-way turnover × commission; "
             "TopK backtest uses OPEN execution separately"
         ),
         "commission_buy": commission_buy,
@@ -344,7 +376,7 @@ def analyze_factor_parquet_duckdb(
 _WORKER: dict[str, Any] = {}
 
 
-def _init_worker(fwd_path: str) -> None:
+def _init_worker(fwd_path: str, industry_path: str = "", market_cap_path: str = "") -> None:
     """Load forward-return parquet into an in-memory DuckDB table once per worker."""
     con = duckdb.connect()
     path = Path(fwd_path).as_posix().replace("'", "''")
@@ -359,6 +391,35 @@ def _init_worker(fwd_path: str) -> None:
     )
     _WORKER["con"] = con
     _WORKER["fwd"] = Path(fwd_path)
+    _WORKER["industry_path"] = industry_path
+    _WORKER["market_cap_path"] = market_cap_path
+
+
+def _apply_extended_eval(
+    analysis: dict[str, Any],
+    *,
+    factor_path: Path,
+    fwd: Path,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    if not payload.get("extended_eval", True):
+        return analysis
+    ind_p = (_WORKER.get("industry_path") or "").strip()
+    mcap_p = (_WORKER.get("market_cap_path") or "").strip()
+    try:
+        extended = compute_extended_eval(
+            factor_path=factor_path,
+            fwd_returns_path=fwd,
+            industry_path=Path(ind_p) if ind_p else None,
+            market_cap_path=Path(mcap_p) if mcap_p else None,
+            con=_WORKER.get("con"),
+        )
+        merged = merge_extended_into_analysis(analysis, extended)
+        return merged
+    except Exception as ext_exc:  # noqa: BLE001
+        out = dict(analysis)
+        out["extended_eval_error"] = str(ext_exc)
+        return out
 
 
 def _eval_one(payload: dict[str, Any]) -> dict[str, Any]:
@@ -367,12 +428,13 @@ def _eval_one(payload: dict[str, Any]) -> dict[str, Any]:
     try:
         work = Path(payload["work_dir"])
         lake = work / "factor_lake"
-        report_dir = work / "reports"
+        report_subdir = payload.get("report_subdir") or "reports"
+        report_dir = work / report_subdir
         report_dir.mkdir(parents=True, exist_ok=True)
         fwd = Path(payload["fwd_path"])
-        out_path = lake / name / "values.parquet"
-        if not out_path.exists():
-            raise RuntimeError(f"missing values: {out_path}")
+        out_path = resolve_factor_values_parquet(work, name)
+        if out_path is None:
+            raise RuntimeError(f"missing values for {name} under factor_lake/")
 
         entry = dict(payload["entry"])
         py_code = payload.get("python_code") or entry.get("python_code") or ""
@@ -392,31 +454,49 @@ def _eval_one(payload: dict[str, Any]) -> dict[str, Any]:
         if route == "lqtp_dsl":
             engine = "lqtp_dsl"
 
+        return_kind = str(payload.get("return_kind") or "vwap_to_vwap")
+        # t1t2 = enter next-session VWAP, exit following VWAP (no same-day Vwap_T leak)
+        eval_mode = (
+            "duckdb_panel_vwap_to_vwap_t1t2"
+            if return_kind == "vwap_to_vwap"
+            else f"duckdb_panel_{return_kind}"
+        )
         analysis = analyze_factor_parquet_duckdb(
             factor_path=out_path,
             fwd_returns_path=fwd,
             con=_WORKER.get("con"),
+            return_kind=return_kind,
         )
+        analysis = _apply_extended_eval(analysis, factor_path=out_path, fwd=fwd, payload=payload)
         flip_patch: dict[str, Any] | None = None
         ic = _mean_ic_value(analysis)
-        if payload.get("flip_negative_ic") and ic < 0 and ic == ic and not entry.get("ic_sign_flipped"):
-            flip_patch = {"ic_sign_flipped": True}
-            entry["ic_sign_flipped"] = True
+        # Heal negative RankIC: toggle lake values + formula, then re-run the full
+        # panel (RankIC + deciles + LS) so report charts match the signed definition.
+        if payload.get("flip_negative_ic") and ic < 0 and ic == ic:
+            already = bool(entry.get("ic_sign_flipped"))
+            new_flipped = not already
+            flip_patch = {
+                "ic_sign_flipped": new_flipped,
+                "values_negated": True,
+                "sign_action": "unflip" if already else "flip",
+            }
+            entry["ic_sign_flipped"] = new_flipped
             if dsl_used and dsl_used != "(python only)":
-                dsl_used = _negate_formula(dsl_used)
+                dsl_used = _unwrap_formula(dsl_used) if already else _negate_formula(dsl_used)
                 entry["dsl"] = dsl_used
                 flip_patch["dsl"] = dsl_used
             if py_code.strip():
-                py_code = _negate_python_code(py_code)
+                py_code = _unwrap_python_code(py_code) if already else _negate_python_code(py_code)
                 entry["python_code"] = py_code
                 flip_patch["python_code"] = py_code
             _negate_values_parquet(out_path)
-            flip_patch["values_negated"] = True
             analysis = analyze_factor_parquet_duckdb(
                 factor_path=out_path,
                 fwd_returns_path=fwd,
                 con=_WORKER.get("con"),
+                return_kind=return_kind,
             )
+            analysis = _apply_extended_eval(analysis, factor_path=out_path, fwd=fwd, payload=payload)
             flip_patch["ic_before_flip"] = ic
             flip_patch["mean_ic_after_flip"] = _mean_ic_value(analysis)
 
@@ -428,11 +508,13 @@ def _eval_one(payload: dict[str, Any]) -> dict[str, Any]:
             "date_range": [payload["start"], payload["end"]],
             "formula": dsl_used if dsl_used != "(python only)" else "",
             "eval_engine": "duckdb_panel",
+            "return_kind": return_kind,
         }
+        meta["ic_sign_flipped"] = bool(entry.get("ic_sign_flipped"))
         if flip_patch:
-            meta["ic_sign_flipped"] = True
             meta["ic_before_flip"] = flip_patch.get("ic_before_flip")
             meta["mean_ic_after_flip"] = flip_patch.get("mean_ic_after_flip")
+            meta["sign_action"] = flip_patch.get("sign_action")
 
         report_path = report_dir / f"{name}.html"
         render_factor_report(
@@ -441,7 +523,7 @@ def _eval_one(payload: dict[str, Any]) -> dict[str, Any]:
             analysis=analysis,
             backtest_rows=[],
             out_path=report_path,
-            eval_mode="duckdb_panel_close_to_close",
+            eval_mode=eval_mode,
             materialize_meta=meta,
             topk_summary={},
             python_code=py_code,
@@ -454,7 +536,7 @@ def _eval_one(payload: dict[str, Any]) -> dict[str, Any]:
             "report": report_path.name,
             "engine": engine,
             "eval_route": route,
-            "eval_mode": "duckdb_panel_close_to_close",
+            "eval_mode": eval_mode,
             "ic_sign_flipped": bool(entry.get("ic_sign_flipped")),
             "mean_ic": _json_float(analysis.get("mean_rank_ic")),
             "mean_rank_ic": _json_float(analysis.get("mean_rank_ic")),
@@ -463,6 +545,14 @@ def _eval_one(payload: dict[str, Any]) -> dict[str, Any]:
             "rank_ic_positive_ratio": _json_float(analysis.get("rank_ic_positive_ratio")),
             "long_short_sharpe": _json_float(analysis.get("long_short_sharpe")),
             "long_short_return": _json_float(analysis.get("long_short_return")),
+            "industry_neutral_mean_rank_ic": _json_float(analysis.get("industry_neutral_mean_rank_ic")),
+            "size_neutral_mean_rank_ic": _json_float(analysis.get("size_neutral_mean_rank_ic")),
+            "ic_half_life_days": _json_float(analysis.get("ic_half_life_days")),
+            "factor_rank_turnover": _json_float(analysis.get("factor_rank_turnover")),
+            "size_exposure_corr": _json_float(analysis.get("size_exposure_corr")),
+            "decile_monotonicity": _json_float(analysis.get("decile_monotonicity")),
+            "ls_max_drawdown": _json_float(analysis.get("ls_max_drawdown")),
+            "ic_t_stat": _json_float(analysis.get("ic_t_stat")),
             "backtest_total_ret": float("nan"),
             "backtest_sharpe": float("nan"),
             "backtest_max_drawdown": float("nan"),
@@ -487,26 +577,97 @@ def main() -> int:
     parser.add_argument("--flip-negative-ic", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--only", nargs="*", default=None)
     parser.add_argument("--skip-lookahead", action="store_true", default=True)
+    parser.add_argument(
+        "--returns-source",
+        choices=("lqtp", "data_access", "auto"),
+        default="auto",
+        help="Close returns cache: LQTP API, data_access ashare_stock_daily, or auto",
+    )
+    parser.add_argument("--skip-extended", action="store_true", help="Skip neutral IC / heatmap / half-life")
+    parser.add_argument("--force-aux-cache", action="store_true", help="Re-sync industry/mcap panels from COS")
+    parser.add_argument("--catalog", type=Path, default=None, help="DSL catalog JSON (default: work-dir/dsl_catalog.json)")
+    parser.add_argument("--parsed-json", type=Path, default=None, help="Parsed python factors JSON")
+    parser.add_argument("--progress-file", type=Path, default=None, help="Progress checkpoint JSON")
+    parser.add_argument("--report-subdir", default="reports", help="Reports subdirectory under work-dir")
+    parser.add_argument(
+        "--return-kind",
+        choices=("vwap", "close"),
+        default="vwap",
+        help="Forward return for RankIC/LS: vwap→vwap (default) or close→close",
+    )
     args = parser.parse_args()
 
     work = args.work_dir
-    catalog = json.loads((work / "dsl_catalog.json").read_text(encoding="utf-8"))
+    catalog_path = args.catalog or (work / "dsl_catalog.json")
+    parsed_path = args.parsed_json or (work / "parsed_factors.json")
+    progress_path = args.progress_file or (work / "production_progress.json")
+    return_kind = "vwap_to_vwap" if args.return_kind == "vwap" else "close_to_close"
+    eval_mode = (
+        "duckdb_panel_vwap_to_vwap_t1t2"
+        if return_kind == "vwap_to_vwap"
+        else f"duckdb_panel_{return_kind}"
+    )
+    catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
     python_map = {
         r["function_name"]: r["python_code"]
-        for r in json.loads((work / "parsed_factors.json").read_text(encoding="utf-8"))
-    }
-    progress_path = work / "production_progress.json"
+        for r in json.loads(parsed_path.read_text(encoding="utf-8"))
+    } if parsed_path.exists() else {}
     progress = json.loads(progress_path.read_text(encoding="utf-8")) if progress_path.exists() else {}
     flip_state: dict[str, Any] = progress.setdefault("flip_state", {})
     _apply_flip_state_to_catalog(catalog, flip_state, python_map)
     entry_by_name = {e["function_name"]: e for e in catalog}
 
-    close_cache = work / "lqtp_close_returns_cache.parquet"
-    if not close_cache.exists():
-        raise SystemExit(f"missing close returns cache: {close_cache}")
-    fwd_path = work / "lqtp_fwd_close_returns_cache.parquet"
-    print(f"building fwd returns cache → {fwd_path.name}")
-    build_fwd_returns_cache(close_cache, fwd_path)
+    if return_kind == "vwap_to_vwap":
+        ret_cache = work / "lqtp_vwap_returns_cache.parquet"
+        fwd_path = work / "lqtp_fwd_vwap_returns_cache.parquet"
+        # Signal after close T → earn vwap(T+2)/vwap(T+1)-1 (lead 2 on daily VWAP returns).
+        fwd_lead_days = 2
+        if args.returns_source == "data_access" or (
+            args.returns_source == "auto" and not ret_cache.exists()
+        ):
+            print(f"building VWAP returns from data_access → {ret_cache.name}")
+            build_vwap_returns_cache_data_access(
+                ret_cache,
+                start=args.start,
+                end=args.end,
+            )
+        elif not ret_cache.exists():
+            raise SystemExit(
+                f"missing VWAP returns cache: {ret_cache} "
+                "(pass --returns-source data_access)"
+            )
+    else:
+        ret_cache = work / "lqtp_close_returns_cache.parquet"
+        fwd_path = work / "lqtp_fwd_close_returns_cache.parquet"
+        fwd_lead_days = 1
+        if args.returns_source == "data_access" or (
+            args.returns_source == "auto" and not ret_cache.exists()
+        ):
+            print(f"building close returns from data_access → {ret_cache.name}")
+            build_close_returns_cache_data_access(
+                ret_cache,
+                start=args.start,
+                end=args.end,
+            )
+        elif not ret_cache.exists():
+            raise SystemExit(
+                f"missing close returns cache: {ret_cache} "
+                "(run production batch or pass --returns-source data_access)"
+            )
+    print(
+        f"building fwd returns cache ({return_kind}, lead_days={fwd_lead_days}) → {fwd_path.name}"
+    )
+    build_fwd_returns_cache(ret_cache, fwd_path, lead_days=fwd_lead_days, force=True)
+
+    aux_paths = {"industry": Path(), "market_cap": Path()}
+    if not args.skip_extended:
+        print("building eval aux cache (industry + market cap via data_access)...")
+        aux_paths = ensure_eval_aux_cache(
+            work,
+            start=args.start,
+            end=args.end,
+            force=args.force_aux_cache,
+        )
 
     skipped = set(progress.get("skipped", []))
     if args.skip_lookahead:
@@ -515,21 +676,25 @@ def main() -> int:
         _save_progress(progress_path, progress)
 
     lake = work / "factor_lake"
-    names = sorted(p.name for p in lake.iterdir() if (p / "values.parquet").exists())
+    names = sorted(
+        p.name
+        for p in lake.iterdir()
+        if resolve_factor_values_parquet(work, p.name) is not None
+    )
     names = [n for n in names if n not in skipped]
     already = set(progress.get("completed", []))
     if args.only:
         only = set(args.only)
         names = [n for n in names if n in only]
-    # Resume: skip factors already in completed with a duckdb_panel row
+    # Resume: skip factors already evaluated under the same return kind / eval_mode
     if not args.only:
         done_panel = {
             r.get("factor_name")
             for r in progress.get("index_rows", [])
-            if r.get("eval_mode") == "duckdb_panel_close_to_close"
+            if r.get("eval_mode") == eval_mode
         }
         names = [n for n in names if n not in done_panel]
-        print(f"resume skip already-panel={len(done_panel)} remaining={len(names)}")
+        print(f"resume skip already-panel={len(done_panel)} remaining={len(names)} mode={eval_mode}")
 
     payloads = []
     for name in names:
@@ -550,10 +715,16 @@ def main() -> int:
                 "start": args.start,
                 "end": args.end,
                 "flip_negative_ic": args.flip_negative_ic,
+                "extended_eval": not args.skip_extended,
+                "report_subdir": args.report_subdir,
+                "return_kind": return_kind,
             }
         )
 
-    print(f"eval {len(payloads)} factors workers={args.workers} engine=duckdb_panel")
+    print(
+        f"eval {len(payloads)} factors workers={args.workers} "
+        f"engine=duckdb_panel return_kind={return_kind} extended={not args.skip_extended}"
+    )
     t0 = time.time()
     index_rows: list[dict[str, Any]] = list(progress.get("index_rows", []))
     failed: dict[str, str] = dict(progress.get("failed", {}))
@@ -562,7 +733,11 @@ def main() -> int:
     with ProcessPoolExecutor(
         max_workers=max(1, args.workers),
         initializer=_init_worker,
-        initargs=(str(fwd_path),),
+        initargs=(
+            str(fwd_path),
+            str(aux_paths.get("industry", "")),
+            str(aux_paths.get("market_cap", "")),
+        ),
     ) as pool:
         futures = {pool.submit(_eval_one, p): p["name"] for p in payloads}
         done_n = 0
@@ -585,7 +760,12 @@ def main() -> int:
                 progress["failed"] = failed
                 progress["index_rows"] = index_rows
                 progress["flip_state"] = flip_state
-                progress["eval_methodology"] = "rankic_close_to_close_Tplus1_duckdb_panel_v1"
+                progress["eval_methodology"] = (
+                    "rankic_vwap_to_vwap_T1T2_duckdb_panel_v1"
+                    if return_kind == "vwap_to_vwap"
+                    else f"rankic_{return_kind}_Tplus1_duckdb_panel_v1"
+                )
+                progress["return_kind"] = return_kind
                 progress["regen_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 _save_progress(progress_path, progress)
                 print(f"  checkpoint {done_n}/{len(payloads)} ok={len(completed)} fail={len(failed)}")
@@ -594,15 +774,21 @@ def main() -> int:
     progress["failed"] = failed
     progress["index_rows"] = index_rows
     progress["flip_state"] = flip_state
-    progress["eval_methodology"] = "rankic_close_to_close_Tplus1_duckdb_panel_v1"
+    progress["eval_methodology"] = (
+        "rankic_vwap_to_vwap_T1T2_duckdb_panel_v1"
+        if return_kind == "vwap_to_vwap"
+        else f"rankic_{return_kind}_Tplus1_duckdb_panel_v1"
+    )
+    progress["return_kind"] = return_kind
     progress["regen_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     _save_progress(progress_path, progress)
 
-    report_dir = work / "reports"
+    report_dir = work / args.report_subdir
     summary_meta = {
         "generated_at": progress["regen_at"],
         "eval_methodology": progress["eval_methodology"],
-        "note": "Fast DuckDB panel RankIC from factor_lake (cached fwd close returns)",
+        "return_kind": return_kind,
+        "note": f"Fast DuckDB panel RankIC from factor_lake (cached fwd {return_kind} returns)",
         "elapsed_sec": round(time.time() - t0, 1),
     }
     render_index(index_rows, report_dir / "index.html")

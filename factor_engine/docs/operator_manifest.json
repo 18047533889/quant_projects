@@ -1,5 +1,5 @@
 {
-  "operator_count": 205,
+  "operator_count": 211,
   "operators": {
     "ADX": {
       "aliases": [
@@ -2033,7 +2033,10 @@
       "aliases": [],
       "backend_meta": {
         "pandas_numpy": {
+          "certification_tier": "pandas_first",
           "explicit": false,
+          "production_certified": true,
+          "reference_backend": true,
           "source": "factor_dsl_np"
         },
         "sql": {
@@ -2060,19 +2063,21 @@
       "canonical": "cs_resid",
       "description": "截面线性回归残差 y - (α + βx)",
       "earliest_trade_time": "input_dependent",
-      "lifecycle_status": "experimental",
+      "lifecycle_status": "production",
       "lookback_fn": null,
       "param_names": [
         "y",
         "x"
       ],
       "pit_safe": true,
+      "production_backend_policy": "at_least_one_certified_backend",
+      "production_portability_required": false,
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "input_dependent",
       "scope": "cross_sectional",
       "semantic_version": "1.0",
       "stateful": false,
-      "status": "experimental",
+      "status": "production",
       "surface": "extended"
     },
     "cs_std": {
@@ -2703,6 +2708,37 @@
       "stateful": false,
       "status": "experimental",
       "surface": "extended"
+    },
+    "expanding_rank": {
+      "aliases": [
+        "cum_rank"
+      ],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backend_status": "implemented",
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "expanding_rank",
+      "description": "扩展窗口排名（当前值在历史中的百分位排名）",
+      "earliest_trade_time": "input_dependent",
+      "lifecycle_status": "research",
+      "lookback_fn": null,
+      "param_names": [
+        "x"
+      ],
+      "pit_safe": true,
+      "replacement_policy": "sealed_after_bootstrap",
+      "required_cutoff": "input_dependent",
+      "scope": "time_series",
+      "semantic_version": "1.0",
+      "stateful": false,
+      "status": "research",
+      "surface": "research"
     },
     "ffill_limit": {
       "aliases": [],
@@ -4051,6 +4087,36 @@
       "status": "production",
       "surface": "daily"
     },
+    "hump_decay": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backend_status": "implemented",
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "hump_decay",
+      "description": "阈值衰减：仅当变化量绝对值超过hump时才更新值",
+      "earliest_trade_time": "input_dependent",
+      "lifecycle_status": "research",
+      "lookback_fn": null,
+      "param_names": [
+        "x",
+        "hump"
+      ],
+      "pit_safe": true,
+      "replacement_policy": "sealed_after_bootstrap",
+      "required_cutoff": "input_dependent",
+      "scope": "time_series",
+      "semantic_version": "1.0",
+      "stateful": false,
+      "status": "research",
+      "surface": "research"
+    },
     "identity": {
       "aliases": [],
       "backend_meta": {
@@ -4126,6 +4192,37 @@
       ],
       "canonical": "idio_skew",
       "description": "特质偏度：CAPM 残差滚动偏度",
+      "earliest_trade_time": "input_dependent",
+      "lifecycle_status": "research",
+      "lookback_fn": "window",
+      "param_names": [
+        "ret",
+        "benchmark_ret",
+        "window"
+      ],
+      "pit_safe": true,
+      "replacement_policy": "sealed_after_bootstrap",
+      "required_cutoff": "input_dependent",
+      "scope": "time_series",
+      "semantic_version": "1.0",
+      "stateful": false,
+      "status": "research",
+      "surface": "research"
+    },
+    "idio_vol": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backend_status": "implemented",
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "idio_vol",
+      "description": "特质波动率：CAPM 残差滚动标准差",
       "earliest_trade_time": "input_dependent",
       "lifecycle_status": "research",
       "lookback_fn": "window",
@@ -4875,6 +4972,37 @@
       "stateful": false,
       "status": "production",
       "surface": "daily"
+    },
+    "lqtp_historical_cvar": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": true,
+          "source": "lqtp_compat"
+        }
+      },
+      "backend_status": "implemented",
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "lqtp_historical_cvar",
+      "description": "historical CVaR/Expected Shortfall: -mean(lower-tail returns)",
+      "earliest_trade_time": "input_dependent",
+      "lifecycle_status": "research",
+      "lookback_fn": "window",
+      "param_names": [
+        "x",
+        "window",
+        "q"
+      ],
+      "pit_safe": false,
+      "replacement_policy": "sealed_after_bootstrap",
+      "required_cutoff": "input_dependent",
+      "scope": "elementwise",
+      "semantic_version": "1.0",
+      "stateful": false,
+      "status": "research",
+      "surface": "research"
     },
     "lt": {
       "aliases": [],
@@ -6019,6 +6147,41 @@
       "status": "production",
       "surface": "daily"
     },
+    "rank_corr": {
+      "aliases": [
+        "RANKCORR",
+        "RANK_CORR",
+        "rankcorr"
+      ],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": false,
+          "source": "factor_dsl_np"
+        }
+      },
+      "backend_status": "implemented",
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "rank_corr",
+      "description": "秩相关系数",
+      "earliest_trade_time": "input_dependent",
+      "lifecycle_status": "research",
+      "lookback_fn": null,
+      "param_names": [
+        "x",
+        "y",
+        "d"
+      ],
+      "pit_safe": true,
+      "replacement_policy": "sealed_after_bootstrap",
+      "required_cutoff": "input_dependent",
+      "scope": "time_series",
+      "semantic_version": "1.0",
+      "stateful": false,
+      "status": "research",
+      "surface": "research"
+    },
     "real_turnover_rate": {
       "aliases": [],
       "backend_meta": {
@@ -6201,7 +6364,10 @@
       ],
       "backend_meta": {
         "pandas_numpy": {
+          "certification_tier": "pandas_first",
           "explicit": false,
+          "production_certified": true,
+          "reference_backend": true,
           "source": "factor_dsl_np"
         },
         "polars": {
@@ -6228,19 +6394,21 @@
       "canonical": "round",
       "description": "四舍五入（保留 decimals 位小数）",
       "earliest_trade_time": "input_dependent",
-      "lifecycle_status": "experimental",
+      "lifecycle_status": "production",
       "lookback_fn": null,
       "param_names": [
         "x",
         "decimals"
       ],
       "pit_safe": true,
+      "production_backend_policy": "at_least_one_certified_backend",
+      "production_portability_required": false,
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "input_dependent",
       "scope": "elementwise",
       "semantic_version": "1.0",
       "stateful": false,
-      "status": "experimental",
+      "status": "production",
       "surface": "extended"
     },
     "safe_div_null": {
@@ -6361,7 +6529,10 @@
       ],
       "backend_meta": {
         "pandas_numpy": {
+          "certification_tier": "pandas_first",
           "explicit": false,
+          "production_certified": true,
+          "reference_backend": true,
           "source": "factor_dsl_np"
         },
         "polars": {
@@ -6404,19 +6575,21 @@
       "canonical": "scale",
       "description": "缩放数据使sum(abs(x))=指定值（与c_scale相同）",
       "earliest_trade_time": "input_dependent",
-      "lifecycle_status": "experimental",
+      "lifecycle_status": "production",
       "lookback_fn": null,
       "param_names": [
         "x",
         "to"
       ],
       "pit_safe": true,
+      "production_backend_policy": "at_least_one_certified_backend",
+      "production_portability_required": false,
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "input_dependent",
       "scope": "cross_sectional",
       "semantic_version": "1.0",
       "stateful": false,
-      "status": "experimental",
+      "status": "production",
       "surface": "extended"
     },
     "sec": {
@@ -6468,7 +6641,10 @@
       "aliases": [],
       "backend_meta": {
         "pandas_numpy": {
+          "certification_tier": "pandas_first",
           "explicit": false,
+          "production_certified": true,
+          "reference_backend": true,
           "source": "factor_dsl_np"
         },
         "polars": {
@@ -6495,18 +6671,20 @@
       "canonical": "sigmoid",
       "description": "Sigmoid 映射",
       "earliest_trade_time": "input_dependent",
-      "lifecycle_status": "experimental",
+      "lifecycle_status": "production",
       "lookback_fn": null,
       "param_names": [
         "x"
       ],
       "pit_safe": true,
+      "production_backend_policy": "at_least_one_certified_backend",
+      "production_portability_required": false,
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "input_dependent",
       "scope": "elementwise",
       "semantic_version": "1.0",
       "stateful": false,
-      "status": "experimental",
+      "status": "production",
       "surface": "extended"
     },
     "sign": {
@@ -7236,7 +7414,10 @@
       "aliases": [],
       "backend_meta": {
         "pandas_numpy": {
+          "certification_tier": "pandas_first",
           "explicit": true,
+          "production_certified": true,
+          "reference_backend": true,
           "source": "operator_overhaul_audited"
         },
         "polars": {
@@ -7263,20 +7444,22 @@
       "canonical": "true_range",
       "description": "真实波幅基础算子",
       "earliest_trade_time": "next_session_open",
-      "lifecycle_status": "experimental",
+      "lifecycle_status": "production",
       "lookback_fn": null,
       "param_names": [
         "high",
         "low",
         "close"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
+      "production_backend_policy": "at_least_one_certified_backend",
+      "production_portability_required": false,
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "close",
-      "scope": "elementwise",
+      "scope": "time_series",
       "semantic_version": "1.0",
       "stateful": false,
-      "status": "experimental",
+      "status": "production",
       "surface": "extended"
     },
     "truncate": {
@@ -7348,7 +7531,10 @@
       ],
       "backend_meta": {
         "pandas_numpy": {
+          "certification_tier": "pandas_first",
           "explicit": true,
+          "production_certified": true,
+          "reference_backend": true,
           "source": "operator_overhaul_audited"
         },
         "sql": {
@@ -7375,19 +7561,21 @@
       "canonical": "ts_argmax",
       "description": "窗口内最大值偏移",
       "earliest_trade_time": "input_dependent",
-      "lifecycle_status": "experimental",
+      "lifecycle_status": "production",
       "lookback_fn": null,
       "param_names": [
         "x",
         "d"
       ],
       "pit_safe": true,
+      "production_backend_policy": "at_least_one_certified_backend",
+      "production_portability_required": false,
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "input_dependent",
       "scope": "time_series",
       "semantic_version": "1.0",
       "stateful": false,
-      "status": "experimental",
+      "status": "production",
       "surface": "extended"
     },
     "ts_argmin": {
@@ -7397,7 +7585,10 @@
       ],
       "backend_meta": {
         "pandas_numpy": {
+          "certification_tier": "pandas_first",
           "explicit": true,
+          "production_certified": true,
+          "reference_backend": true,
           "source": "operator_overhaul_audited"
         },
         "sql": {
@@ -7424,19 +7615,21 @@
       "canonical": "ts_argmin",
       "description": "窗口内最小值偏移",
       "earliest_trade_time": "input_dependent",
-      "lifecycle_status": "experimental",
+      "lifecycle_status": "production",
       "lookback_fn": null,
       "param_names": [
         "x",
         "d"
       ],
       "pit_safe": true,
+      "production_backend_policy": "at_least_one_certified_backend",
+      "production_portability_required": false,
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "input_dependent",
       "scope": "time_series",
       "semantic_version": "1.0",
       "stateful": false,
-      "status": "experimental",
+      "status": "production",
       "surface": "extended"
     },
     "ts_autocorr": {
@@ -7975,7 +8168,10 @@
       ],
       "backend_meta": {
         "pandas_numpy": {
+          "certification_tier": "pandas_first",
           "explicit": false,
+          "production_certified": true,
+          "reference_backend": true,
           "source": "factor_dsl_np"
         },
         "sql": {
@@ -8002,19 +8198,21 @@
       "canonical": "ts_decay_linear",
       "description": "线性加权滚动平均",
       "earliest_trade_time": "input_dependent",
-      "lifecycle_status": "experimental",
+      "lifecycle_status": "production",
       "lookback_fn": "window",
       "param_names": [
         "x",
         "window"
       ],
       "pit_safe": true,
+      "production_backend_policy": "at_least_one_certified_backend",
+      "production_portability_required": false,
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "input_dependent",
       "scope": "time_series",
       "semantic_version": "1.0",
       "stateful": false,
-      "status": "experimental",
+      "status": "production",
       "surface": "extended"
     },
     "ts_delay": {
@@ -8164,7 +8362,10 @@
       ],
       "backend_meta": {
         "pandas_numpy": {
+          "certification_tier": "pandas_first",
           "explicit": false,
+          "production_certified": true,
+          "reference_backend": true,
           "source": "factor_dsl_np"
         },
         "polars": {
@@ -8221,13 +8422,15 @@
       },
       "description": "计算n期指数移动平均",
       "earliest_trade_time": "input_dependent",
-      "lifecycle_status": "experimental",
+      "lifecycle_status": "production",
       "lookback_fn": null,
       "param_names": [
         "x",
         "span"
       ],
       "pit_safe": true,
+      "production_backend_policy": "at_least_one_certified_backend",
+      "production_portability_required": false,
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "input_dependent",
       "scope": "time_series",
@@ -8235,7 +8438,7 @@
       "segmented_execution_supported": true,
       "semantic_version": "1.0",
       "stateful": true,
-      "status": "experimental",
+      "status": "production",
       "surface": "extended"
     },
     "ts_ewm_corr": {
@@ -8570,7 +8773,10 @@
       ],
       "backend_meta": {
         "pandas_numpy": {
+          "certification_tier": "pandas_first",
           "explicit": false,
+          "production_certified": true,
+          "reference_backend": true,
           "source": "factor_dsl_np"
         }
       },
@@ -8581,19 +8787,21 @@
       "canonical": "ts_kurt",
       "description": "计算n期移动峰度",
       "earliest_trade_time": "input_dependent",
-      "lifecycle_status": "experimental",
+      "lifecycle_status": "production",
       "lookback_fn": "window",
       "param_names": [
         "x",
         "window"
       ],
       "pit_safe": true,
+      "production_backend_policy": "at_least_one_certified_backend",
+      "production_portability_required": false,
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "input_dependent",
       "scope": "time_series",
       "semantic_version": "1.0",
       "stateful": false,
-      "status": "experimental",
+      "status": "production",
       "surface": "extended"
     },
     "ts_last_if": {
@@ -8715,7 +8923,10 @@
       ],
       "backend_meta": {
         "pandas_numpy": {
+          "certification_tier": "pandas_first",
           "explicit": true,
+          "production_certified": true,
+          "reference_backend": true,
           "source": "semantic_hardening"
         },
         "sql": {
@@ -8742,19 +8953,21 @@
       "canonical": "ts_mad",
       "description": "计算n期移动平均绝对离差",
       "earliest_trade_time": "input_dependent",
-      "lifecycle_status": "experimental",
+      "lifecycle_status": "production",
       "lookback_fn": "window",
       "param_names": [
         "x",
         "window"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
+      "production_backend_policy": "at_least_one_certified_backend",
+      "production_portability_required": false,
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "input_dependent",
       "scope": "time_series",
       "semantic_version": "1.0",
       "stateful": false,
-      "status": "experimental",
+      "status": "production",
       "surface": "extended"
     },
     "ts_max": {
@@ -8828,7 +9041,10 @@
       "aliases": [],
       "backend_meta": {
         "pandas_numpy": {
+          "certification_tier": "pandas_first",
           "explicit": false,
+          "production_certified": true,
+          "reference_backend": true,
           "source": "factor_dsl_np"
         }
       },
@@ -8839,19 +9055,21 @@
       "canonical": "ts_max_buildup",
       "description": "窗口内持续创新高次数",
       "earliest_trade_time": "input_dependent",
-      "lifecycle_status": "research",
+      "lifecycle_status": "production",
       "lookback_fn": null,
       "param_names": [
         "x",
         "d"
       ],
       "pit_safe": true,
+      "production_backend_policy": "at_least_one_certified_backend",
+      "production_portability_required": false,
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "input_dependent",
       "scope": "time_series",
       "semantic_version": "1.0",
       "stateful": false,
-      "status": "research",
+      "status": "production",
       "surface": "research"
     },
     "ts_max_drawdown": {
@@ -9174,7 +9392,10 @@
       "aliases": [],
       "backend_meta": {
         "pandas_numpy": {
+          "certification_tier": "pandas_first",
           "explicit": false,
+          "production_certified": true,
+          "reference_backend": true,
           "source": "factor_dsl_np"
         }
       },
@@ -9185,7 +9406,7 @@
       "canonical": "ts_moment",
       "description": "窗口 k 阶中心矩",
       "earliest_trade_time": "input_dependent",
-      "lifecycle_status": "research",
+      "lifecycle_status": "production",
       "lookback_fn": null,
       "param_names": [
         "x",
@@ -9193,12 +9414,14 @@
         "k"
       ],
       "pit_safe": true,
+      "production_backend_policy": "at_least_one_certified_backend",
+      "production_portability_required": false,
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "input_dependent",
       "scope": "time_series",
       "semantic_version": "1.0",
       "stateful": false,
-      "status": "research",
+      "status": "production",
       "surface": "research"
     },
     "ts_nth_value": {
@@ -9432,7 +9655,10 @@
       "aliases": [],
       "backend_meta": {
         "pandas_numpy": {
+          "certification_tier": "pandas_first",
           "explicit": true,
+          "production_certified": true,
+          "reference_backend": true,
           "source": "semantic_hardening"
         },
         "sql": {
@@ -9459,19 +9685,21 @@
       "canonical": "ts_product",
       "description": "滚动乘积",
       "earliest_trade_time": "input_dependent",
-      "lifecycle_status": "experimental",
+      "lifecycle_status": "production",
       "lookback_fn": "window",
       "param_names": [
         "x",
         "window"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
+      "production_backend_policy": "at_least_one_certified_backend",
+      "production_portability_required": false,
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "input_dependent",
       "scope": "time_series",
       "semantic_version": "1.0",
       "stateful": false,
-      "status": "experimental",
+      "status": "production",
       "surface": "extended"
     },
     "ts_quantile": {
@@ -9483,7 +9711,10 @@
       ],
       "backend_meta": {
         "pandas_numpy": {
+          "certification_tier": "pandas_first",
           "explicit": false,
+          "production_certified": true,
+          "reference_backend": true,
           "source": "factor_dsl_np"
         },
         "polars": {
@@ -9526,7 +9757,7 @@
       "canonical": "ts_quantile",
       "description": "滚动分位数",
       "earliest_trade_time": "input_dependent",
-      "lifecycle_status": "experimental",
+      "lifecycle_status": "production",
       "lookback_fn": null,
       "param_names": [
         "x",
@@ -9534,12 +9765,14 @@
         "q"
       ],
       "pit_safe": true,
+      "production_backend_policy": "at_least_one_certified_backend",
+      "production_portability_required": false,
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "input_dependent",
       "scope": "time_series",
       "semantic_version": "1.0",
       "stateful": false,
-      "status": "experimental",
+      "status": "production",
       "surface": "extended"
     },
     "ts_rank": {
@@ -9748,7 +9981,10 @@
       ],
       "backend_meta": {
         "pandas_numpy": {
+          "certification_tier": "pandas_first",
           "explicit": true,
+          "production_certified": true,
+          "reference_backend": true,
           "source": "operator_overhaul_compat"
         },
         "sql": {
@@ -9775,7 +10011,7 @@
       "canonical": "ts_regression_slope",
       "description": "滚动 OLS 斜率",
       "earliest_trade_time": "input_dependent",
-      "lifecycle_status": "experimental",
+      "lifecycle_status": "production",
       "lookback_fn": "window",
       "param_names": [
         "y",
@@ -9785,12 +10021,14 @@
         "add_intercept"
       ],
       "pit_safe": true,
+      "production_backend_policy": "at_least_one_certified_backend",
+      "production_portability_required": false,
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "input_dependent",
       "scope": "time_series",
       "semantic_version": "1.0",
       "stateful": false,
-      "status": "experimental",
+      "status": "production",
       "surface": "extended"
     },
     "ts_regression_tstat": {
@@ -9915,7 +10153,10 @@
       ],
       "backend_meta": {
         "pandas_numpy": {
+          "certification_tier": "pandas_first",
           "explicit": false,
+          "production_certified": true,
+          "reference_backend": true,
           "source": "factor_dsl_np"
         },
         "polars": {
@@ -9958,11 +10199,44 @@
       "canonical": "ts_skew",
       "description": "计算n期移动偏度",
       "earliest_trade_time": "input_dependent",
-      "lifecycle_status": "experimental",
+      "lifecycle_status": "production",
       "lookback_fn": "window",
       "param_names": [
         "x",
         "window"
+      ],
+      "pit_safe": true,
+      "production_backend_policy": "at_least_one_certified_backend",
+      "production_portability_required": false,
+      "replacement_policy": "sealed_after_bootstrap",
+      "required_cutoff": "input_dependent",
+      "scope": "time_series",
+      "semantic_version": "1.0",
+      "stateful": false,
+      "status": "production",
+      "surface": "extended"
+    },
+    "ts_sma_cn": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "explicit": true,
+          "source": "lqtp_compat"
+        }
+      },
+      "backend_status": "implemented",
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "ts_sma_cn",
+      "description": "recursive SMA: y=(m*x+(n-m)*prev)/n",
+      "earliest_trade_time": "input_dependent",
+      "lifecycle_status": "research",
+      "lookback_fn": null,
+      "param_names": [
+        "x",
+        "n",
+        "m"
       ],
       "pit_safe": true,
       "replacement_policy": "sealed_after_bootstrap",
@@ -9970,8 +10244,8 @@
       "scope": "time_series",
       "semantic_version": "1.0",
       "stateful": false,
-      "status": "experimental",
-      "surface": "extended"
+      "status": "research",
+      "surface": "research"
     },
     "ts_std": {
       "aliases": [
@@ -10315,7 +10589,10 @@
       ],
       "backend_meta": {
         "pandas_numpy": {
+          "certification_tier": "pandas_first",
           "explicit": true,
+          "production_certified": true,
+          "reference_backend": true,
           "source": "operator_overhaul_audited"
         },
         "sql": {
@@ -10342,19 +10619,21 @@
       "canonical": "ts_time_slope",
       "description": "窗口内序列对时间位置的 OLS 斜率",
       "earliest_trade_time": "input_dependent",
-      "lifecycle_status": "experimental",
+      "lifecycle_status": "production",
       "lookback_fn": null,
       "param_names": [
         "x",
         "d"
       ],
       "pit_safe": true,
+      "production_backend_policy": "at_least_one_certified_backend",
+      "production_portability_required": false,
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "input_dependent",
       "scope": "time_series",
       "semantic_version": "1.0",
       "stateful": false,
-      "status": "experimental",
+      "status": "production",
       "surface": "extended"
     },
     "ts_topk_mean": {
@@ -10434,7 +10713,10 @@
       ],
       "backend_meta": {
         "pandas_numpy": {
+          "certification_tier": "pandas_first",
           "explicit": true,
+          "production_certified": true,
+          "reference_backend": true,
           "source": "operator_overhaul_audited"
         }
       },
@@ -10445,7 +10727,7 @@
       "canonical": "ts_topk_sum",
       "description": "滚动 Top-K 求和",
       "earliest_trade_time": "input_dependent",
-      "lifecycle_status": "experimental",
+      "lifecycle_status": "production",
       "lookback_fn": null,
       "param_names": [
         "x",
@@ -10453,12 +10735,14 @@
         "k"
       ],
       "pit_safe": true,
+      "production_backend_policy": "at_least_one_certified_backend",
+      "production_portability_required": false,
       "replacement_policy": "sealed_after_bootstrap",
       "required_cutoff": "input_dependent",
       "scope": "time_series",
       "semantic_version": "1.0",
       "stateful": false,
-      "status": "experimental",
+      "status": "production",
       "surface": "extended"
     },
     "ts_trend_tstat": {
@@ -10846,8 +11130,8 @@
       ],
       "backend_meta": {
         "pandas_numpy": {
-          "explicit": false,
-          "source": "factor_dsl_np"
+          "explicit": true,
+          "source": "scalar_where"
         },
         "polars": {
           "execution_kind": "expression_native",

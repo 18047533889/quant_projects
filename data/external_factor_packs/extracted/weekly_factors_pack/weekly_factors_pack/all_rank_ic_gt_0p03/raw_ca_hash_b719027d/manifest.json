@@ -1,0 +1,55 @@
+{
+  "schema_version": "factor.manifest.v1",
+  "candidate_id": "raw_ca_hash_b719027d",
+  "campaign_id": "llm_ashare_pv_cogalpha_2026q2",
+  "generator_name": "cogalpha",
+  "producer": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_LQTP",
+  "domain_root": "price_volume",
+  "frequency_bucket": "daily",
+  "batch_id": "post_mining_translate",
+  "factor_name": "factor_mut_hc004_volpctrank_w8",
+  "formula": "ema( (close - delay(close, 1))/delay(close, 1) * rank_pct8(volume) * ((high-low)/close) , span=12 )",
+  "expression_type": "lqtp_dsl",
+  "execution_platform": "lqtp",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit",
+  "code": "def factor_mut_hc004_volpctrank_w8(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_rank = df_copy['volume'].rolling(8, min_periods=8).rank(pct=True)\n    stress_range = (df_copy['high'] - df_copy['low']) / df_copy['close'].replace(0, np.nan)\n    raw = ret * vol_rank * stress_range\n    smoothed = raw.ewm(span=12, min_periods=12, adjust=False).mean()\n    factor = smoothed.clip(-3, 3)\n    factor.name = 'factor_mut_hc004_volpctrank_w8'\n    return factor",
+  "rationale": "Mutation of mut_hc004_volpctrank_w12: reduced volume rank window from 12 to 8 to increase responsiveness of the volume confirmation signal, targeting improved IC while preserving the smoothing span (12) and clipping threshold (±3) that support strong RankICIR. The parent-strength target is RankICIR=0.4211, and the bottleneck is IC=0.0270. This compact parameter change avoids adding new components and keeps the core volume rank stress momentum mechanism intact.",
+  "lineage": {
+    "agent_skill": "alpha-herding",
+    "operation": "cogalpha_to_lqtp_translation"
+  },
+  "stage": "candidate_pool",
+  "fitness_label": "qualified",
+  "metrics": {
+    "train": {
+      "ic": 0.026860174201241576,
+      "rank_ic": 0.04919334123022476,
+      "icir": 0.23789467873792738,
+      "rank_icir": 0.4182087395433627,
+      "status": "computed",
+      "source": "cogalpha"
+    },
+    "valid": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    }
+  },
+  "validation": {
+    "status": "pending"
+  },
+  "created_at": "2026-06-21T11:25:28.504825+00:00",
+  "updated_at": "2026-06-21T16:18:27.138238+00:00",
+  "lqtp_tags": {
+    "universe": "all_a",
+    "market": "ashare"
+  },
+  "rationale_llm": {
+    "summary": "Mutation of mut_hc004_volpctrank_w12: reduced volume rank window from 12 to 8 to increase responsiveness of the volume confirmation signal, targeting improved IC while preserving the smoothing span (12) and clipping threshold (±3) that support strong RankICIR. The parent-strength target is RankICIR=0.4211, and the bottleneck is IC=0.0270. This compact parameter change avoids adding new components and keeps the core volume rank stress momentum mechanism intact.",
+    "parsed_at": "2026-06-21T11:25:40.472397+00:00",
+    "source": "manifest_rationale"
+  }
+}

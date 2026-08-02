@@ -1,0 +1,1 @@
+smoothed(ret * (volume / rolling_median(volume, 20)))

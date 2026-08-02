@@ -1,0 +1,20 @@
+{
+  "factor_name": "factor_mut_hc004_volpctrank_s12_clip2_5_volwin6",
+  "candidate_id": "raw_ca_hash_53a3e3f7",
+  "week": "week2",
+  "fitness_label": "qualified",
+  "source_shelf": "supplement_pending",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.027175264154197215,
+    "rank_ic": 0.04986724548002547,
+    "icir": 0.23961291917026598,
+    "rank_icir": 0.42108146868308477
+  },
+  "lqtp_test": null,
+  "formula": "ema( (close - delay(close, 1))/delay(close, 1) * rank_pct6(volume) * ((high-low)/close) , span=12 ) clip ±2.5",
+  "rationale": "Mutation adjusting volume rank window from 8 to 6 to increase responsiveness of the volume confirmation signal, targeting improved IC while preserving the strong RankICIR (0.4182) observed in the parent. Keeps smoothing span (12) and clipping (±2.5) unchanged.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

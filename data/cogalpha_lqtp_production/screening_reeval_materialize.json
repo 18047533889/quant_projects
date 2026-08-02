@@ -1,0 +1,1442 @@
+{
+  "completed": [
+    "alphasage_154a51fe952b5243",
+    "alphasage_3aaad1a1bf9ce8a2",
+    "alphasage_3e74b4fa2831dc36",
+    "alphasage_43727f7f7b2ba487",
+    "alphasage_58079cceee41ce6d",
+    "alphasage_5de2f47bc5cd6c66",
+    "alphasage_89d1bc9b29c9d35a",
+    "alphasage_99e8c98dc92fba46",
+    "alphasage_b0e9545fa66ab30a",
+    "alphasage_baec4247c71a031c",
+    "factor_abnormality_asymmetry",
+    "factor_adaptive_momentum_gate_v2",
+    "factor_adaptive_volume_smoothness",
+    "factor_adx_trend_vol_ema",
+    "factor_asym_intraday_sma",
+    "factor_asym_ratio_pure",
+    "factor_asym_vol_attenuate",
+    "factor_asym_vol_cont_gate_30",
+    "factor_asym_vol_down_up_volatility_gated",
+    "factor_asym_vol_gated",
+    "factor_asym_vol_volume_cont_30",
+    "factor_corr_volume_regime",
+    "factor_crash_vol_body_asym",
+    "factor_crash_vol_ratio_asym",
+    "factor_crash_vol_spike_volregime_boost",
+    "factor_crash_volume_gate",
+    "factor_crash_volume_rank",
+    "factor_crossover_herding_stress_span12_volrank_clip3",
+    "factor_crossover_hybrid_magnitude",
+    "factor_crossover_vol_impact_trend_gated",
+    "factor_direction_volume_shape_mut2",
+    "factor_directional_vol_adaptive_crossover",
+    "factor_directional_vol_volbase25_smooth_dir_range10",
+    "factor_dollar_pressure_range_zscore",
+    "factor_downside_vol_asymmetry_smoothed",
+    "factor_downside_vol_liquidity_momentum",
+    "factor_drawdown_atr_20_normalized",
+    "factor_drawdown_atr_normalized_20",
+    "factor_drawdown_atr_normalized_v2",
+    "factor_drawdown_atr_recovery",
+    "factor_drawdown_depth_duration_range_vol",
+    "factor_drawdown_depth_normalized",
+    "factor_drawdown_normalized",
+    "factor_drawdown_recovery",
+    "factor_drawdown_std60_normalized",
+    "factor_drawdown_vol_norm_clean",
+    "factor_drawdown_vol_persistence",
+    "factor_ema_trend_simple",
+    "factor_ema_vol_asymmetry_rank",
+    "factor_fear_adjusted_dollar_pressure_short_ema",
+    "factor_herding_momentum_stress",
+    "factor_herding_simple",
+    "factor_herding_vol_gated_momentum",
+    "factor_herding_volume_momentum_continuous",
+    "factor_imbalance_volume_ratio_ewm",
+    "factor_intraday_adx_momentum",
+    "factor_intraday_pressure_asym_diff",
+    "factor_intraday_pressure_ema",
+    "factor_intraday_return_volume_surge",
+    "factor_intraday_reversal_crossover_v1",
+    "factor_intraday_reversal_vol_intensity",
+    "factor_intraday_reversal_zscore_volume_short",
+    "factor_intraday_volume_spike",
+    "factor_lag_response_vol_tool_adaptive",
+    "factor_lag_vol_ratio_smoothed_v2",
+    "factor_lag_vol_robust_volratio",
+    "factor_lag_vol_volatility_adjusted",
+    "factor_lag_vol_volatility_adjusted_gate",
+    "factor_lag_volatility_regime_adapted",
+    "factor_lagret_volratio_gated_smooth",
+    "factor_liquidity_adaptive_momentum",
+    "factor_liquidity_mom_simple_2_mutated",
+    "factor_liquidity_range_gated_momentum_v5",
+    "factor_liquidity_range_gated_momentum_v6",
+    "factor_momentum_volratio",
+    "factor_mut_cro_asym_vol_ratio_med_15_minp3_vol10",
+    "factor_mut_cro_asym_vol_ratio_med_20_minp3_vol6_ema5",
+    "factor_mut_cross_vwpc_z10_clip2_span8_v1",
+    "factor_mut_cross_vwpc_z10_clip2_v3",
+    "factor_mut_hc004_volpctrank_s12_clip2_5_volwin6",
+    "factor_mut_hc004_volpctrank_w8",
+    "factor_negative_skew_stress_gated",
+    "factor_order_imbalance_volume_flow_ema",
+    "factor_persistence",
+    "factor_persistence_ewma",
+    "factor_pressure_compression_simplified_v3",
+    "factor_pressure_tanh",
+    "factor_price_impact_stable_5d",
+    "factor_range_asym_log_short",
+    "factor_range_asym_log_vol",
+    "factor_range_asym_vol_smooth",
+    "factor_range_position_volume_gated_smoothed",
+    "factor_range_position_volume_gated_smoothed_mut",
+    "factor_range_volume_trend",
+    "factor_regime_switch_simple",
+    "factor_regime_vol_adaptive_trend_v4",
+    "factor_resvol_smoothed_trend",
+    "factor_resvol_volume_momentum",
+    "factor_reversal_intraday_5d_ema",
+    "factor_reversal_volume_gated",
+    "factor_reversal_volume_simple",
+    "factor_reversal_volume_volregime",
+    "factor_roughness_trend_vol_short",
+    "factor_rsi_reversal_resvol_volume",
+    "factor_rsi_volume_confirmed_reversal",
+    "factor_shadow_volume_confirmed",
+    "factor_simple_convex_momentum_log_volume",
+    "factor_simplified_robust_volume_momentum",
+    "factor_smoothed_atr_ratio_gated",
+    "factor_squared_range_close_ema_cuberoot",
+    "factor_squared_range_volume_rank_smoothed_no_cuberoot",
+    "factor_stable_symmetry_reinforced",
+    "factor_stress_range_volume_surge",
+    "factor_stress_volume_cont_weight_cont_dir_w20_clip2_5_w40_ewm15_stressclip25",
+    "factor_stress_volume_cont_weight_cont_dir_w20_clip3_w40_ewm15",
+    "factor_stress_volume_cont_weight_cont_dir_w20_clip3_w40_ewm15_stressclip25",
+    "factor_stress_volume_cont_weight_cont_dir_w25_clip2_w40_ewm15",
+    "factor_tanh_thrust_dynamic_smooth",
+    "factor_vol_gated_herding_crossover",
+    "factor_vol_gated_herding_mutated",
+    "factor_vol_gated_momentum_v2",
+    "factor_vol_gated_momentum_volume_weighted",
+    "factor_vol_lag_ret_smoothed",
+    "factor_vol_price_coherence_v2",
+    "factor_vol_regime_breakout_continuous",
+    "factor_vol_regime_trend_smoothed",
+    "factor_vol_regime_vol_ratio",
+    "factor_vol_surge_regime_gated",
+    "factor_vol_volume_asym_ewma",
+    "factor_vol_weighted_pct_range_clip_ema10",
+    "factor_volatility_asymmetry_spike_adj_ema5",
+    "factor_volatility_compression",
+    "factor_volatility_scaled_deviation",
+    "factor_volume_abnormality_liquidity_gated",
+    "factor_volume_abnormality_range_interaction",
+    "factor_volume_adaptive_momentum",
+    "factor_volume_adjusted_breakout_v3",
+    "factor_volume_adjusted_breakout_window_001",
+    "factor_volume_adjusted_breakout_with_vol_filter_v2",
+    "factor_volume_adjusted_divergence_ema10",
+    "factor_volume_confirmed_ewm",
+    "factor_volume_confirmed_momentum",
+    "factor_volume_confirmed_momentum_binary_gate",
+    "factor_volume_confirmed_momentum_clipped",
+    "factor_volume_confirmed_momentum_crossover_v1",
+    "factor_volume_confirmed_momentum_crossover_v2",
+    "factor_volume_confirmed_momentum_simple_volume_deviation",
+    "factor_volume_confirmed_momentum_tanh_gated",
+    "factor_volume_confirmed_momentum_v3",
+    "factor_volume_confirmed_up_capture",
+    "factor_volume_gated_momentum_mutated_v3",
+    "factor_volume_persistence_momentum_robust",
+    "factor_volume_pressure_ewm_smooth",
+    "factor_volume_pressure_imbalance",
+    "factor_volume_pressure_light_crossover",
+    "factor_volume_pressure_reversal",
+    "factor_volume_price_divergence_cross_mut",
+    "factor_volume_regime_intraday_momentum",
+    "factor_volume_reversal_direct",
+    "factor_volume_reversal_rank",
+    "factor_volume_stress_adjusted_momentum_robust",
+    "factor_volume_surge_persistence",
+    "factor_volume_trend_adjusted_impact",
+    "factor_volume_weighted_price_change",
+    "factor_volume_weighted_range_skew",
+    "factor_vwap_adjusted_range_tanh_mutated_v2",
+    "factor_vwap_adjusted_range_tanh_smooth",
+    "factor_window_adjusted_momentum",
+    "week2_adaptive_dir_vol",
+    "week2_adaptive_dir_vol_cross",
+    "week2_asymmetric_range_15d",
+    "week2_asymmetric_range_ema5",
+    "week2_asymmetric_range_ratio",
+    "week2_dir_vol_volume_25d",
+    "week2_herd_momentum_stress",
+    "week2_herd_simplified",
+    "week2_herd_stress_cross",
+    "week2_herd_vol_stress",
+    "week2_intraday_reversal",
+    "week2_intraday_vol_ratio",
+    "week2_intraday_vol_surge",
+    "week2_inverse_vol_momentum_v3",
+    "week2_log_range_gate",
+    "week2_log_range_gate_z10",
+    "week2_order_imbalance_vol",
+    "week2_range_pos_vol_gate",
+    "week2_reversal_cross_smooth",
+    "week2_sharpe_momentum_v2",
+    "week2_sigmoid_vol_blend",
+    "week2_stress_accum_dir_vol",
+    "week2_stress_dir_clip25",
+    "week2_stress_dir_w25",
+    "week2_stress_range_vol",
+    "week2_tanh_gated_reversal",
+    "week2_vol_adjusted_momentum",
+    "week2_vol_break_continuous_gate",
+    "week2_vol_confirm_5d",
+    "week2_vol_confirm_binary",
+    "week2_vol_confirm_ewm",
+    "week2_vol_gated_momentum_ratio",
+    "week2_vol_gated_surge",
+    "week2_vol_quantile_stress",
+    "week2_vol_regime_trend",
+    "week2_vol_weight_price_move",
+    "week2_vol_weight_range_clip10"
+  ],
+  "failed": {},
+  "details": {
+    "week2_vol_quantile_stress": {
+      "engine": "factor_engine",
+      "dsl": "cap(ema(ts_delta(close, 1) / delay(close, 1) * ts_rank(volume, 6) * (high - low), 12), -2.5, 2.5)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_vol_quantile_stress/values.parquet",
+      "at": "2026-08-02T01:36:57.021915"
+    },
+    "factor_crossover_hybrid_magnitude": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_crossover_hybrid_magnitude/values.parquet",
+      "at": "2026-08-02T01:52:56.745823"
+    },
+    "factor_dollar_pressure_range_zscore": {
+      "engine": "factor_engine",
+      "dsl": "((((((((close))) - ((((((high)))) + ((((low)))) + ((((close))))) / 3)) * ((volume))) / (ts_mean((((((high)))) - ((((low))))), 20))) - (ts_mean((((((((close)))) - (((((((high))))) + (((((low))))) + (((",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_dollar_pressure_range_zscore/values.parquet",
+      "at": "2026-08-02T01:55:38.033582"
+    },
+    "factor_volume_reversal_rank": {
+      "engine": "factor_engine",
+      "dsl": "((-(((((((close)))) - ((((low))))) / ((((((high))))) - (((((low))))))) - 0.5)) * (ts_rank(volume, 20)))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_reversal_rank/values.parquet",
+      "at": "2026-08-02T02:05:17.946243"
+    },
+    "factor_crash_vol_body_asym": {
+      "engine": "factor_engine",
+      "dsl": "(-(volume / ts_mean(volume, 10)) * ((close - open) / (high - low)))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_crash_vol_body_asym/values.parquet",
+      "at": "2026-08-02T02:06:27.913162"
+    },
+    "factor_shadow_volume_confirmed": {
+      "engine": "factor_engine",
+      "dsl": "safe_div(safe_div(min(open, close) - low, min(open, close) - low + high - max(open, close) + 1e-8) - ts_mean(safe_div(min(open, close) - low, min(open, close) - low + high - max(open, close) + 1e-8), ",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_shadow_volume_confirmed/values.parquet",
+      "at": "2026-08-02T02:10:47.866862"
+    },
+    "factor_reversal_volume_volregime": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_reversal_volume_volregime/values.parquet",
+      "at": "2026-08-02T02:13:03.898063"
+    },
+    "factor_reversal_volume_simple": {
+      "engine": "factor_engine",
+      "dsl": "(((0.5 - (ema(((close - low) / ((high - low))), 3))) * (ts_rank((volume / (ts_mean(volume, 21))), 21))))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_reversal_volume_simple/values.parquet",
+      "at": "2026-08-02T02:15:24.699104"
+    },
+    "factor_pressure_compression_simplified_v3": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_pressure_compression_simplified_v3/values.parquet",
+      "at": "2026-08-02T02:17:38.665958"
+    },
+    "factor_intraday_reversal_zscore_volume_short": {
+      "engine": "factor_engine",
+      "dsl": "((-(((((((close)))) - ((((low))))) / ((((((high))))) - (((((low))))))) - 0.5) / (ts_std((((((close))) - ((((low))))) / (((((high)))) - (((((low))))))), 10))) * (ts_rank(((((volume))) / ts_mean((((volu",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_intraday_reversal_zscore_volume_short/values.parquet",
+      "at": "2026-08-02T02:26:05.093099"
+    },
+    "factor_volume_reversal_direct": {
+      "engine": "factor_engine",
+      "dsl": "((-(((((((close)))) - ((((low))))) / ((((((high))))) - (((((low))))))) - 0.5)) * (ts_rank((volume / ts_mean(volume, 20)), 20)))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_reversal_direct/values.parquet",
+      "at": "2026-08-02T02:34:27.696729"
+    },
+    "factor_intraday_pressure_asym_diff": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_intraday_pressure_asym_diff/values.parquet",
+      "at": "2026-08-02T02:37:41.767980"
+    },
+    "factor_vwap_adjusted_range_tanh_smooth": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_vwap_adjusted_range_tanh_smooth/values.parquet",
+      "at": "2026-08-02T02:39:54.644432"
+    },
+    "factor_vwap_adjusted_range_tanh_mutated_v2": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_vwap_adjusted_range_tanh_mutated_v2/values.parquet",
+      "at": "2026-08-02T02:42:07.061869"
+    },
+    "alphasage_b0e9545fa66ab30a": {
+      "engine": "factor_engine",
+      "dsl": "abs((ts_max(ret, 30) * 100))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alphasage_b0e9545fa66ab30a/values.parquet",
+      "at": "2026-08-02T02:44:19.315260"
+    },
+    "factor_mut_hc004_volpctrank_s12_clip2_5_volwin6": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_mut_hc004_volpctrank_s12_clip2_5_volwin6/values.parquet",
+      "at": "2026-08-02T02:47:33.875282"
+    },
+    "alphasage_43727f7f7b2ba487": {
+      "engine": "factor_engine",
+      "dsl": "ts_cov(amount, open, 30)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alphasage_43727f7f7b2ba487/values.parquet",
+      "at": "2026-08-02T02:52:38.399022"
+    },
+    "alphasage_89d1bc9b29c9d35a": {
+      "engine": "factor_engine",
+      "dsl": "power(5, (-2 + cs_demean(volume)))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alphasage_89d1bc9b29c9d35a/values.parquet",
+      "at": "2026-08-02T02:53:47.806024"
+    },
+    "factor_persistence_ewma": {
+      "engine": "factor_engine",
+      "dsl": "-ema(abs(ts_delta(ts_pct(close, 1), 1)), 10)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_persistence_ewma/values.parquet",
+      "at": "2026-08-02T02:55:48.493207"
+    },
+    "factor_squared_range_volume_rank_smoothed_no_cuberoot": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_squared_range_volume_rank_smoothed_no_cuberoot/values.parquet",
+      "at": "2026-08-02T02:57:46.128614"
+    },
+    "factor_ema_vol_asymmetry_rank": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_ema_vol_asymmetry_rank/values.parquet",
+      "at": "2026-08-02T02:59:51.242241"
+    },
+    "factor_vol_regime_vol_ratio": {
+      "engine": "factor_engine",
+      "dsl": "rank((-((ts_mean((high - low), 5)) / (ts_mean((high - low), 20))) * ((volume > (ts_mean(volume, 30)) * 1.5))))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_vol_regime_vol_ratio/values.parquet",
+      "at": "2026-08-02T03:29:06.924711"
+    },
+    "factor_stable_symmetry_reinforced": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_stable_symmetry_reinforced/values.parquet",
+      "at": "2026-08-02T03:31:11.980561"
+    },
+    "factor_reversal_volume_gated": {
+      "engine": "factor_engine",
+      "dsl": "((0.5 - (ema(((close - low) / ((high - low))), 5))) * (volume / ts_mean(volume, 20)))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_reversal_volume_gated/values.parquet",
+      "at": "2026-08-02T03:33:25.617009"
+    },
+    "factor_persistence": {
+      "engine": "factor_engine",
+      "dsl": "-ts_mean(abs(ts_delta(ts_pct(close, 1), 1)), 10)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_persistence/values.parquet",
+      "at": "2026-08-02T03:34:35.651123"
+    },
+    "factor_negative_skew_stress_gated": {
+      "engine": "factor_engine",
+      "dsl": "((-(ts_skew((ts_pct(close, 1)), 40))) * (volume / ts_mean(volume, 20))) * (where((1) > 0, 1.2, 0.8))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_negative_skew_stress_gated/values.parquet",
+      "at": "2026-08-02T03:35:48.507602"
+    },
+    "factor_lag_vol_volatility_adjusted_gate": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_lag_vol_volatility_adjusted_gate/values.parquet",
+      "at": "2026-08-02T03:39:12.176187"
+    },
+    "factor_herding_volume_momentum_continuous": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_herding_volume_momentum_continuous/values.parquet",
+      "at": "2026-08-02T03:41:17.177477"
+    },
+    "factor_vol_regime_trend_smoothed": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_vol_regime_trend_smoothed/values.parquet",
+      "at": "2026-08-02T03:43:21.257760"
+    },
+    "factor_squared_range_close_ema_cuberoot": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_squared_range_close_ema_cuberoot/values.parquet",
+      "at": "2026-08-02T03:45:22.418423"
+    },
+    "week2_herd_stress_cross": {
+      "engine": "factor_engine",
+      "dsl": "cap(ema((close / delay(close, 5) - 1) * ts_rank(volume, 8) * (high - low), 12), -3, 3)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_herd_stress_cross/values.parquet",
+      "at": "2026-08-02T03:47:41.095888"
+    },
+    "factor_volatility_compression": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volatility_compression/values.parquet",
+      "at": "2026-08-02T03:51:03.199933"
+    },
+    "factor_abnormality_asymmetry": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_abnormality_asymmetry/values.parquet",
+      "at": "2026-08-02T03:54:18.967721"
+    },
+    "factor_volume_weighted_range_skew": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_weighted_range_skew/values.parquet",
+      "at": "2026-08-02T03:57:29.363494"
+    },
+    "factor_volume_confirmed_ewm": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_confirmed_ewm/values.parquet",
+      "at": "2026-08-02T03:59:29.447290"
+    },
+    "factor_volume_abnormality_liquidity_gated": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_abnormality_liquidity_gated/values.parquet",
+      "at": "2026-08-02T04:01:32.568999"
+    },
+    "week2_vol_gated_surge": {
+      "engine": "factor_engine",
+      "dsl": "ema(where((high - low) > median(high - low, 20), close / open - 1, 0) * ts_max(volume, 20) / volume, 20)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_vol_gated_surge/values.parquet",
+      "at": "2026-08-02T04:03:52.996273"
+    },
+    "factor_volume_confirmed_up_capture": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_confirmed_up_capture/values.parquet",
+      "at": "2026-08-02T04:06:07.232376"
+    },
+    "factor_volume_surge_persistence": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_surge_persistence/values.parquet",
+      "at": "2026-08-02T04:08:06.718086"
+    },
+    "week2_tanh_gated_reversal": {
+      "engine": "factor_engine",
+      "dsl": "(2 * sigmoid(2 * (2 * (high - low) / (2 * close - high - low) * ts_mean(close, 5) / ts_mean(high - low, 5))) - 1)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_tanh_gated_reversal/values.parquet",
+      "at": "2026-08-02T04:09:27.543462"
+    },
+    "week2_intraday_vol_surge": {
+      "engine": "factor_engine",
+      "dsl": "ema((close / open - 1) * volume / ts_max(volume, 20), 20)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_intraday_vol_surge/values.parquet",
+      "at": "2026-08-02T04:11:38.013919"
+    },
+    "week2_herd_momentum_stress": {
+      "engine": "factor_engine",
+      "dsl": "ema(ts_delta(close, 1) / delay(close, 1) * volume / ts_mean(volume, 5) * (high - low) / close, 5)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_herd_momentum_stress/values.parquet",
+      "at": "2026-08-02T04:13:52.904911"
+    },
+    "factor_volume_abnormality_range_interaction": {
+      "engine": "factor_engine",
+      "dsl": "(where(is_nan(((where((ts_std((log(volume + 1)), 20)) > 0, ((log(volume + 1)) - (ts_quantile((log(volume + 1)), 20, 0.5))) / (ts_std((log(volume + 1)), 20)), 0.0)) * (((high - low) + 1e-8) / ((ts_mean",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_abnormality_range_interaction/values.parquet",
+      "at": "2026-08-02T04:16:17.762466"
+    },
+    "factor_intraday_pressure_ema": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_intraday_pressure_ema/values.parquet",
+      "at": "2026-08-02T04:20:29.710692"
+    },
+    "week2_adaptive_dir_vol": {
+      "engine": "factor_engine",
+      "dsl": "ema(close / (high - low), 10) * ema(volume / ts_mean(volume, 25), 15) * ema(close / (close - open), 3)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_adaptive_dir_vol/values.parquet",
+      "at": "2026-08-02T04:23:52.697339"
+    },
+    "week2_dir_vol_volume_25d": {
+      "engine": "factor_engine",
+      "dsl": "ema(close / (high - low), 10) * ema(volume / ts_mean(volume, 25), 15) * ema((close - open) / close, 3)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_dir_vol_volume_25d/values.parquet",
+      "at": "2026-08-02T04:26:13.590545"
+    },
+    "week2_vol_confirm_ewm": {
+      "engine": "factor_engine",
+      "dsl": "ema((close / delay(close, 5) - 1) * volume / ts_mean(volume, 20), 10)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_vol_confirm_ewm/values.parquet",
+      "at": "2026-08-02T04:28:23.639753"
+    },
+    "factor_simple_convex_momentum_log_volume": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_simple_convex_momentum_log_volume/values.parquet",
+      "at": "2026-08-02T04:30:29.891561"
+    },
+    "factor_window_adjusted_momentum": {
+      "engine": "factor_engine",
+      "dsl": "zscore(((ema((((((((close))))) / delay((((((close))))), 15) - 1) * (((((volume)))) / (ts_mean((((((volume))))), 15)))), 5))))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_window_adjusted_momentum/values.parquet",
+      "at": "2026-08-02T04:32:43.384582"
+    },
+    "week2_intraday_vol_ratio": {
+      "engine": "factor_engine",
+      "dsl": "ema((close / open - 1) * volume / ts_mean(volume, 20), 10)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_intraday_vol_ratio/values.parquet",
+      "at": "2026-08-02T04:34:53.708287"
+    },
+    "factor_lag_volatility_regime_adapted": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_lag_volatility_regime_adapted/values.parquet",
+      "at": "2026-08-02T04:37:10.045142"
+    },
+    "factor_lag_vol_volatility_adjusted": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_lag_vol_volatility_adjusted/values.parquet",
+      "at": "2026-08-02T04:39:22.671192"
+    },
+    "week2_herd_vol_stress": {
+      "engine": "factor_engine",
+      "dsl": "ema(close / (close - open) * median(volume, 10) / volume, 5)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_herd_vol_stress/values.parquet",
+      "at": "2026-08-02T04:42:38.609135"
+    },
+    "factor_vol_lag_ret_smoothed": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_vol_lag_ret_smoothed/values.parquet",
+      "at": "2026-08-02T04:44:47.018269"
+    },
+    "alphasage_baec4247c71a031c": {
+      "engine": "factor_engine",
+      "dsl": "ts_delta((low + -1), 60)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alphasage_baec4247c71a031c/values.parquet",
+      "at": "2026-08-02T04:49:00.350091"
+    },
+    "factor_price_impact_stable_5d": {
+      "engine": "factor_engine",
+      "dsl": "safe_div(ts_quantile(abs(ts_pct(close, 1)), 5, 0.5), ts_mean(log((volume + 1)), 5))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_price_impact_stable_5d/values.parquet",
+      "at": "2026-08-02T04:50:14.149337"
+    },
+    "week2_intraday_reversal": {
+      "engine": "factor_engine",
+      "dsl": "-1 * (2 * close - high - low) / (high - low) * ts_mean(high - low, 5) / ts_mean(close, 5)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_intraday_reversal/values.parquet",
+      "at": "2026-08-02T04:51:25.683671"
+    },
+    "factor_drawdown_depth_duration_range_vol": {
+      "engine": "factor_engine",
+      "dsl": "rank(((1.0 - (((ts_max(close, 20)) - close) / (ts_max(close, 20)))) * (1.0 - (ts_sum((close < (ts_max(close, 20))), 20) / 20.0)) * ((ts_mean((high - low), 5)) / (ts_mean((high - low), 30))) * (volume ",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_drawdown_depth_duration_range_vol/values.parquet",
+      "at": "2026-08-02T05:00:19.582098"
+    },
+    "week2_vol_weight_price_move": {
+      "engine": "factor_engine",
+      "dsl": "ema(ts_delta(close, 1) / delay(close, 1) * volume / ts_mean(volume, 20), 5)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_vol_weight_price_move/values.parquet",
+      "at": "2026-08-02T05:02:27.109507"
+    },
+    "factor_mut_cro_asym_vol_ratio_med_15_minp3_vol10": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_mut_cro_asym_vol_ratio_med_15_minp3_vol10/values.parquet",
+      "at": "2026-08-02T05:05:53.121132"
+    },
+    "factor_asym_vol_cont_gate_30": {
+      "engine": "factor_engine",
+      "dsl": "zscore((((log((ts_std(((ts_pct(close, 1))), 60)) / (ts_std(((ts_pct(close, 1))), 60)))) * ((volume / (ts_mean(volume, 20)))))))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_asym_vol_cont_gate_30/values.parquet",
+      "at": "2026-08-02T05:08:07.808360"
+    },
+    "week2_vol_adjusted_momentum": {
+      "engine": "factor_engine",
+      "dsl": "ema((close / delay(close, 3) - 1) * volume / ts_mean(volume, 20), 5)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_vol_adjusted_momentum/values.parquet",
+      "at": "2026-08-02T05:14:36.619070"
+    },
+    "factor_asym_intraday_sma": {
+      "engine": "factor_engine",
+      "dsl": "safe_div(ts_mean(open - low, 40), ts_mean(high - open, 40))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_asym_intraday_sma/values.parquet",
+      "at": "2026-08-02T05:16:54.998827"
+    },
+    "factor_momentum_volratio": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_momentum_volratio/values.parquet",
+      "at": "2026-08-02T05:19:00.264326"
+    },
+    "factor_asym_ratio_pure": {
+      "engine": "factor_engine",
+      "dsl": "rank((log((((ts_sum((where(((ts_pct(close, 1)) < 0), (high - low), 0)), 20)) / (ts_sum(((ts_pct(close, 1)) < 0), 20))) / ((ts_sum((where(((ts_pct(close, 1)) >= 0), (high - low), 0)), 20)) / (ts_sum(((",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_asym_ratio_pure/values.parquet",
+      "at": "2026-08-02T05:54:38.059881"
+    },
+    "factor_asym_vol_volume_cont_30": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_asym_vol_volume_cont_30/values.parquet",
+      "at": "2026-08-02T05:56:46.528137"
+    },
+    "week2_inverse_vol_momentum_v3": {
+      "engine": "factor_engine",
+      "dsl": "(close / delay(close, 5) - 1) * (1.5 - 0.5 * ts_rank(ts_std(ts_delta(close, 1), 20), 20))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_inverse_vol_momentum_v3/values.parquet",
+      "at": "2026-08-02T06:04:26.845896"
+    },
+    "week2_adaptive_dir_vol_cross": {
+      "engine": "factor_engine",
+      "dsl": "ema(close / (high - low), 8) * ema((close - open) / close, 10) * ema(volume / ts_mean(volume, 25), 15)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_adaptive_dir_vol_cross/values.parquet",
+      "at": "2026-08-02T06:06:43.434100"
+    },
+    "factor_drawdown_vol_persistence": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_drawdown_vol_persistence/values.parquet",
+      "at": "2026-08-02T06:10:17.200249"
+    },
+    "week2_vol_confirm_5d": {
+      "engine": "factor_engine",
+      "dsl": "(close / delay(close, 5) - 1) * volume / ts_mean(volume, 20)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_vol_confirm_5d/values.parquet",
+      "at": "2026-08-02T06:11:32.108168"
+    },
+    "factor_vol_gated_momentum_v2": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_vol_gated_momentum_v2/values.parquet",
+      "at": "2026-08-02T06:13:48.425832"
+    },
+    "factor_directional_vol_volbase25_smooth_dir_range10": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_directional_vol_volbase25_smooth_dir_range10/values.parquet",
+      "at": "2026-08-02T06:15:52.244810"
+    },
+    "factor_volatility_scaled_deviation": {
+      "engine": "factor_engine",
+      "dsl": "(2 * sigmoid(2 * (safe_div(close - ts_mean(close, 20), ts_std(ts_pct(close, 1), 20) * ts_mean(close, 20) + 1e-8))) - 1)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volatility_scaled_deviation/values.parquet",
+      "at": "2026-08-02T06:17:11.348434"
+    },
+    "factor_range_asym_log_vol": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_range_asym_log_vol/values.parquet",
+      "at": "2026-08-02T06:19:22.127288"
+    },
+    "week2_vol_break_continuous_gate": {
+      "engine": "factor_engine",
+      "dsl": "ema((divide(close - low, high - low) - 0.5) * divide(median(high - low, 20), high - low), 5)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_vol_break_continuous_gate/values.parquet",
+      "at": "2026-08-02T06:22:40.739353"
+    },
+    "factor_volume_price_divergence_cross_mut": {
+      "engine": "factor_engine",
+      "dsl": "((2 * sigmoid(2 * ((-(close - delay(close, 5)) * (volume / (ema(volume, 20)))))) - 1))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_price_divergence_cross_mut/values.parquet",
+      "at": "2026-08-02T06:25:11.379269"
+    },
+    "factor_volume_pressure_reversal": {
+      "engine": "factor_engine",
+      "dsl": "(-(ts_pct(close, 5)) * (volume / (ts_mean(volume, 20))))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_pressure_reversal/values.parquet",
+      "at": "2026-08-02T06:26:22.473306"
+    },
+    "factor_range_volume_trend": {
+      "engine": "factor_engine",
+      "dsl": "(((high - low) / (delay(ts_mean((high - low), 20), 1))) * ((volume - (delay(ts_mean(volume, 20), 1))) / ((delay(ts_std(volume, 20), 1)) + 1e-8)) * (volume / ((delay(ts_mean(volume, 200), 1)) + 1e-8)))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_range_volume_trend/values.parquet",
+      "at": "2026-08-02T06:27:39.607117"
+    },
+    "week2_vol_regime_trend": {
+      "engine": "factor_engine",
+      "dsl": "ema((close / delay(close, 5) - 1) * ts_max(volume, 20) / volume * (divide(median(high - low, 20), high - low) - 1), 5)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_vol_regime_trend/values.parquet",
+      "at": "2026-08-02T06:47:47.328263"
+    },
+    "factor_range_asym_log_short": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_range_asym_log_short/values.parquet",
+      "at": "2026-08-02T06:49:55.486453"
+    },
+    "factor_range_asym_vol_smooth": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_range_asym_vol_smooth/values.parquet",
+      "at": "2026-08-02T06:55:28.929806"
+    },
+    "factor_liquidity_range_gated_momentum_v6": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_liquidity_range_gated_momentum_v6/values.parquet",
+      "at": "2026-08-02T06:59:46.281346"
+    },
+    "factor_liquidity_range_gated_momentum_v5": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_liquidity_range_gated_momentum_v5/values.parquet",
+      "at": "2026-08-02T07:03:36.950911"
+    },
+    "factor_vol_gated_herding_crossover": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_vol_gated_herding_crossover/values.parquet",
+      "at": "2026-08-02T07:06:52.343587"
+    },
+    "week2_stress_range_vol": {
+      "engine": "factor_engine",
+      "dsl": "(high - low) * volume / ts_mean(volume, 20)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_stress_range_vol/values.parquet",
+      "at": "2026-08-02T07:08:14.753885"
+    },
+    "factor_drawdown_depth_normalized": {
+      "engine": "factor_engine",
+      "dsl": "(((-(close / (ts_max(close, 252)) - 1)) / (ts_std((ts_pct(close, 1)), 20))))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_drawdown_depth_normalized/values.parquet",
+      "at": "2026-08-02T07:09:39.450730"
+    },
+    "factor_crash_volume_rank": {
+      "engine": "factor_engine",
+      "dsl": "(-(ts_pct(close, 5)) * (ts_rank((volume / (ts_mean(volume, 20))), 20)))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_crash_volume_rank/values.parquet",
+      "at": "2026-08-02T07:20:20.711638"
+    },
+    "factor_volume_confirmed_momentum": {
+      "engine": "factor_engine",
+      "dsl": "(ts_pct(close, 5)) * (ts_rank((volume / (ts_mean(volume, 20))), 20))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_confirmed_momentum/values.parquet",
+      "at": "2026-08-02T07:28:47.785575"
+    },
+    "factor_volume_confirmed_momentum_v3": {
+      "engine": "factor_engine",
+      "dsl": "(ts_pct(close, 5)) * (ts_rank((volume / (ts_mean(volume, 20))), 20))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_confirmed_momentum_v3/values.parquet",
+      "at": "2026-08-02T07:36:32.649755"
+    },
+    "week2_asymmetric_range_ratio": {
+      "engine": "factor_engine",
+      "dsl": "-1 * ema(divide(divide(ts_sum(where(close <= open, high - low, 0), 20), ts_sum(where(close <= open, 1, 0), 20)), divide(ts_sum(where(close > open, high - low, 0), 20), ts_sum(where(close > open, 1, 0)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_asymmetric_range_ratio/values.parquet",
+      "at": "2026-08-02T07:39:30.349556"
+    },
+    "week2_asymmetric_range_ema5": {
+      "engine": "factor_engine",
+      "dsl": "-1 * ema(divide(divide(ts_sum(where(close <= open, high - low, 0), 20), ts_sum(where(close <= open, 1, 0), 20)), divide(ts_sum(where(close > open, high - low, 0), 20), ts_sum(where(close > open, 1, 0)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_asymmetric_range_ema5/values.parquet",
+      "at": "2026-08-02T07:42:30.915846"
+    },
+    "week2_herd_simplified": {
+      "engine": "factor_engine",
+      "dsl": "ema((high - low) / (close - open) * median(volume, 10) / volume, 5)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_herd_simplified/values.parquet",
+      "at": "2026-08-02T07:45:44.690280"
+    },
+    "factor_drawdown_normalized": {
+      "engine": "factor_engine",
+      "dsl": "((close / (ts_max(close, 60)) - 1.0) / (ts_std((ts_pct(close, 1)), 20)))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_drawdown_normalized/values.parquet",
+      "at": "2026-08-02T07:46:56.524337"
+    },
+    "factor_drawdown_recovery": {
+      "engine": "factor_engine",
+      "dsl": "((close / (ts_max(close, 60)) - 1.0) / (ts_std((ts_pct(close, 1)), 20)))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_drawdown_recovery/values.parquet",
+      "at": "2026-08-02T07:48:07.013548"
+    },
+    "week2_sharpe_momentum_v2": {
+      "engine": "factor_engine",
+      "dsl": "divide(close / delay(close, 5) - 1, ts_std(ts_delta(close, 1), 30))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_sharpe_momentum_v2/values.parquet",
+      "at": "2026-08-02T07:49:17.677173"
+    },
+    "week2_reversal_cross_smooth": {
+      "engine": "factor_engine",
+      "dsl": "ts_mean((high - low) / (2 * close - high - low) * ts_mean(close, 5) / ts_mean(high - low, 5), 3)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_reversal_cross_smooth/values.parquet",
+      "at": "2026-08-02T07:52:43.997406"
+    },
+    "week2_vol_confirm_binary": {
+      "engine": "factor_engine",
+      "dsl": "(close / delay(close, 5) - 1) * volume / ts_mean(volume, 20) * sign(close - (high + low) / 2)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_vol_confirm_binary/values.parquet",
+      "at": "2026-08-02T07:53:56.597102"
+    },
+    "factor_volume_gated_momentum_mutated_v3": {
+      "engine": "factor_engine",
+      "dsl": "(((((((close))) / delay((((close))), 5) - 1) / (1 + abs((cap((((ts_std((((((((((high))))))) - ((((((((low))))))))) / ((((((close))))))), 10)) - (ts_mean((ts_std(((((((((((high)))))))) - (((((((((low))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_gated_momentum_mutated_v3/values.parquet",
+      "at": "2026-08-02T08:09:24.020098"
+    },
+    "week2_asymmetric_range_15d": {
+      "engine": "factor_engine",
+      "dsl": "-1 * ema(divide(divide(ts_sum(where(close <= open, high - low, 0), 15), ts_sum(where(close <= open, 1, 0), 15)), divide(ts_sum(where(close > open, high - low, 0), 15), ts_sum(where(close > open, 1, 0)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_asymmetric_range_15d/values.parquet",
+      "at": "2026-08-02T08:16:18.169103"
+    },
+    "factor_resvol_smoothed_trend": {
+      "engine": "factor_engine",
+      "dsl": "(((close - delay(close, 10)) / (ts_std(close, 20))) * (1.0))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_resvol_smoothed_trend/values.parquet",
+      "at": "2026-08-02T08:17:30.960375"
+    },
+    "week2_order_imbalance_vol": {
+      "engine": "factor_engine",
+      "dsl": "ema((high - low) / (close - (high + low) / 2) * volume / ts_mean(volume, 20), 5)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_order_imbalance_vol/values.parquet",
+      "at": "2026-08-02T08:19:47.820715"
+    },
+    "factor_downside_vol_asymmetry_smoothed": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_downside_vol_asymmetry_smoothed/values.parquet",
+      "at": "2026-08-02T08:21:54.291274"
+    },
+    "factor_drawdown_atr_20_normalized": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_drawdown_atr_20_normalized/values.parquet",
+      "at": "2026-08-02T08:24:01.174362"
+    },
+    "factor_drawdown_atr_normalized_20": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_drawdown_atr_normalized_20/values.parquet",
+      "at": "2026-08-02T08:26:10.226483"
+    },
+    "factor_drawdown_atr_recovery": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_drawdown_atr_recovery/values.parquet",
+      "at": "2026-08-02T08:28:16.151353"
+    },
+    "week2_range_pos_vol_gate": {
+      "engine": "factor_engine",
+      "dsl": "ema(divide(close - low, high - low) * volume / ts_mean(volume, 20), 5)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_range_pos_vol_gate/values.parquet",
+      "at": "2026-08-02T08:30:27.423134"
+    },
+    "factor_crash_volume_gate": {
+      "engine": "factor_engine",
+      "dsl": "(where((ts_rank((volume / (ts_mean(volume, 20))), 20)) > 0.5, -(ts_pct(close, 5)) * (volume / (ts_mean(volume, 20))), 0.0))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_crash_volume_gate/values.parquet",
+      "at": "2026-08-02T08:39:21.229196"
+    },
+    "factor_volume_trend_adjusted_impact": {
+      "engine": "factor_engine",
+      "dsl": "(ema(((close - open) * (volume / ((ts_mean(volume, 20)) + 1e-10))), 21))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_trend_adjusted_impact/values.parquet",
+      "at": "2026-08-02T08:41:27.150339"
+    },
+    "factor_volume_confirmed_momentum_crossover_v1": {
+      "engine": "factor_engine",
+      "dsl": "(ts_pct(close, 5)) * (ts_rank((volume / (ts_mean(volume, 20))), 10))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_confirmed_momentum_crossover_v1/values.parquet",
+      "at": "2026-08-02T08:50:44.551222"
+    },
+    "factor_volume_confirmed_momentum_crossover_v2": {
+      "engine": "factor_engine",
+      "dsl": "(ts_pct(close, 5)) * (ts_rank((volume / (ts_mean(volume, 30))), 10))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_confirmed_momentum_crossover_v2/values.parquet",
+      "at": "2026-08-02T08:58:59.638595"
+    },
+    "factor_liquidity_mom_simple_2_mutated": {
+      "engine": "factor_engine",
+      "dsl": "((((close)) - delay(((close)), 5)) * (((volume)) / ts_mean(((volume)), 20)))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_liquidity_mom_simple_2_mutated/values.parquet",
+      "at": "2026-08-02T09:00:09.149374"
+    },
+    "factor_drawdown_atr_normalized_v2": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_drawdown_atr_normalized_v2/values.parquet",
+      "at": "2026-08-02T09:02:20.263100"
+    },
+    "factor_herding_vol_gated_momentum": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_herding_vol_gated_momentum/values.parquet",
+      "at": "2026-08-02T09:04:41.511852"
+    },
+    "factor_drawdown_std60_normalized": {
+      "engine": "factor_engine",
+      "dsl": "rank((((close - (ts_max(close, 60))) / (ts_max(close, 60))) / (ts_std(close, 60))))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_drawdown_std60_normalized/values.parquet",
+      "at": "2026-08-02T09:11:17.445726"
+    },
+    "factor_fear_adjusted_dollar_pressure_short_ema": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_fear_adjusted_dollar_pressure_short_ema/values.parquet",
+      "at": "2026-08-02T09:13:33.826072"
+    },
+    "factor_smoothed_atr_ratio_gated": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_smoothed_atr_ratio_gated/values.parquet",
+      "at": "2026-08-02T09:15:48.013476"
+    },
+    "factor_regime_switch_simple": {
+      "engine": "factor_engine",
+      "dsl": "(where((close > (ts_mean(close, 20))), (close / delay(close, 10) - 1), ((open - close) / open)))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_regime_switch_simple/values.parquet",
+      "at": "2026-08-02T09:17:01.355733"
+    },
+    "factor_vol_volume_asym_ewma": {
+      "engine": "factor_engine",
+      "dsl": "(delay(((ema((high - low), 10)) / (ema((high - low), 40)) - 1), 1) * delay(((ema(volume, 10)) / (ema(volume, 40)) - 1), 1) * delay((((ema((where(((ts_pct(close, 1)) > 0), (high - low), 0)), 20)) / ((e",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_vol_volume_asym_ewma/values.parquet",
+      "at": "2026-08-02T09:19:49.244969"
+    },
+    "factor_volume_confirmed_momentum_simple_volume_deviation": {
+      "engine": "factor_engine",
+      "dsl": "(ts_pct(close, 10)) * (volume / (ts_mean(volume, 20)) - 1)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_confirmed_momentum_simple_volume_deviation/values.parquet",
+      "at": "2026-08-02T09:21:06.348383"
+    },
+    "factor_asym_vol_down_up_volatility_gated": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_asym_vol_down_up_volatility_gated/values.parquet",
+      "at": "2026-08-02T09:23:10.294079"
+    },
+    "factor_ema_trend_simple": {
+      "engine": "factor_engine",
+      "dsl": "((((ema(((((close)))), 20)) - (ema(((((close)))), 40))) / (ema(((((close)))), 40))))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_ema_trend_simple/values.parquet",
+      "at": "2026-08-02T09:25:20.654236"
+    },
+    "factor_drawdown_vol_norm_clean": {
+      "engine": "factor_engine",
+      "dsl": "rank(((((ts_max(high, 21)) - close) / (ts_max(high, 21))) / (ts_std(close, 21))))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_drawdown_vol_norm_clean/values.parquet",
+      "at": "2026-08-02T09:57:10.845944"
+    },
+    "factor_order_imbalance_volume_flow_ema": {
+      "engine": "factor_engine",
+      "dsl": "ema((((2 * close - high - low) / ((high - low))) * volume), 10)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_order_imbalance_volume_flow_ema/values.parquet",
+      "at": "2026-08-02T09:59:29.372687"
+    },
+    "factor_direction_volume_shape_mut2": {
+      "engine": "python",
+      "dsl": "(((ema((ts_pct(close, 1)), 10)) * (((2 * sigmoid(2 * (((volume - (ts_mean(volume, 20))) / (ts_std(volume, 20))))) - 1)) * ((2 * sigmoid(2 * (((((high - low) / (ts_mean((high - low), 20))) - (ts_mean((",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_direction_volume_shape_mut2/values.parquet",
+      "at": "2026-08-02T13:40:54.431217"
+    },
+    "factor_tanh_thrust_dynamic_smooth": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_tanh_thrust_dynamic_smooth/values.parquet",
+      "at": "2026-08-02T13:43:07.128539"
+    },
+    "factor_corr_volume_regime": {
+      "engine": "python",
+      "dsl": "ts_corr(ts_pct(close, 1), ts_pct(volume, 1), 20) * safe_div(volume, ema(volume, 20))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_corr_volume_regime/values.parquet",
+      "at": "2026-08-02T13:47:14.129022"
+    },
+    "factor_vol_price_coherence_v2": {
+      "engine": "python",
+      "dsl": "ts_corr(ts_pct(close, 1), ts_pct(volume, 1), 20) * safe_div(volume, ema(volume, 20))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_vol_price_coherence_v2/values.parquet",
+      "at": "2026-08-02T13:51:20.875213"
+    },
+    "factor_lag_vol_robust_volratio": {
+      "engine": "python",
+      "dsl": "(EMA(((close / delay(close, 5) - 1) * (((high - low) - (ts_quantile((high - low), 20, 0.5))) / (((high - low) - (ts_quantile((high - low), 20, 0.5))).ts_mean(abs(), 20))) * (safe_div(volume, ema(volum",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_lag_vol_robust_volratio/values.parquet",
+      "at": "2026-08-02T13:53:37.415317"
+    },
+    "factor_lag_vol_ratio_smoothed_v2": {
+      "engine": "python",
+      "dsl": "(EMA(((close / delay(close, 5) - 1) * (((high - low) - (ts_quantile((high - low), 30, 0.5))) / (((high - low) - (ts_quantile((high - low), 30, 0.5))).ts_mean(abs(), 30))) * (safe_div(volume, ema(volum",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_lag_vol_ratio_smoothed_v2/values.parquet",
+      "at": "2026-08-02T13:55:51.307907"
+    },
+    "factor_lag_response_vol_tool_adaptive": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_lag_response_vol_tool_adaptive/values.parquet",
+      "at": "2026-08-02T13:58:10.424802"
+    },
+    "factor_volume_adaptive_momentum": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_adaptive_momentum/values.parquet",
+      "at": "2026-08-02T14:00:21.643252"
+    },
+    "week2_log_range_gate": {
+      "engine": "factor_engine",
+      "dsl": "ema(ts_delta(close, 1) * log(1 + volume / ts_mean(volume, 5)) * (1 + min(2, max(0, (high - low - ts_mean(high - low, 5)) / ts_std(high - low, 5)))), 12)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_log_range_gate/values.parquet",
+      "at": "2026-08-02T14:02:56.965952"
+    },
+    "week2_log_range_gate_z10": {
+      "engine": "factor_engine",
+      "dsl": "ema(ts_delta(close, 1) * log(1 + volume / ts_mean(volume, 5)) * (1 + min(2, max(0, (high - low - ts_mean(high - low, 10)) / ts_std(high - low, 10)))), 12)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_log_range_gate_z10/values.parquet",
+      "at": "2026-08-02T14:05:29.533748"
+    },
+    "week2_vol_weight_range_clip10": {
+      "engine": "factor_engine",
+      "dsl": "ema(ts_delta(close, 1) / delay(close, 1) * volume / ts_mean(volume, 20) * (1 + min(2, max(0, (high - low - ts_mean(high - low, 10)) / ts_std(high - low, 10)))), 10)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_vol_weight_range_clip10/values.parquet",
+      "at": "2026-08-02T14:07:58.029310"
+    },
+    "factor_intraday_adx_momentum": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_intraday_adx_momentum/values.parquet",
+      "at": "2026-08-02T14:10:30.642665"
+    },
+    "factor_crash_vol_spike_volregime_boost": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_crash_vol_spike_volregime_boost/values.parquet",
+      "at": "2026-08-02T14:12:43.250361"
+    },
+    "factor_volume_regime_intraday_momentum": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_regime_intraday_momentum/values.parquet",
+      "at": "2026-08-02T14:14:52.779590"
+    },
+    "factor_volume_adjusted_divergence_ema10": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_adjusted_divergence_ema10/values.parquet",
+      "at": "2026-08-02T14:17:05.246343"
+    },
+    "factor_lagret_volratio_gated_smooth": {
+      "engine": "python",
+      "dsl": "(where(((1)), (ema(((close.delay(pct_change(5), 1)) * (log((volume / (ema(volume, 15)))))), 10)), (ema(((close.delay(pct_change(5), 1)) * (log((volume / (ema(volume, 15)))))), 5))))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_lagret_volratio_gated_smooth/values.parquet",
+      "at": "2026-08-02T14:19:13.876608"
+    },
+    "factor_asym_vol_gated": {
+      "engine": "python",
+      "dsl": "rank((where(((safe_div(volume, ema(volume, 20))) == \"high\"), (log(((ts_sum((where(((ts_pct(close, 1)) < 0), (high - low), 0)), 20) / ts_sum(((ts_pct(close, 1)) < 0), 20)) / (ts_sum((where(((ts_pct(clo",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_asym_vol_gated/values.parquet",
+      "at": "2026-08-02T14:24:57.795290"
+    },
+    "alphasage_99e8c98dc92fba46": {
+      "engine": "factor_engine",
+      "dsl": "(high < pre_close)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alphasage_99e8c98dc92fba46/values.parquet",
+      "at": "2026-08-02T14:26:11.351414"
+    },
+    "factor_adaptive_volume_smoothness": {
+      "engine": "python",
+      "dsl": "(-(ts_std(volume / ts_mean(volume, 20)), (ts_std(volume, 10) / ts_mean(volume, 10))))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_adaptive_volume_smoothness/values.parquet",
+      "at": "2026-08-02T14:28:27.130182"
+    },
+    "factor_asym_vol_attenuate": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_asym_vol_attenuate/values.parquet",
+      "at": "2026-08-02T14:30:59.645607"
+    },
+    "factor_rsi_reversal_resvol_volume": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_rsi_reversal_resvol_volume/values.parquet",
+      "at": "2026-08-02T14:33:19.139697"
+    },
+    "week2_sigmoid_vol_blend": {
+      "engine": "factor_engine",
+      "dsl": "ema(close / (high - low), 8) * (sigmoid(5 * (volume - 0.85 * ts_mean(volume, 25))) * ema(volume, 10) + (1 - sigmoid(5 * (volume - 0.85 * ts_mean(volume, 25)))) * ema(volume, 30))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_sigmoid_vol_blend/values.parquet",
+      "at": "2026-08-02T14:36:24.773679"
+    },
+    "factor_volatility_asymmetry_spike_adj_ema5": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volatility_asymmetry_spike_adj_ema5/values.parquet",
+      "at": "2026-08-02T14:38:36.148306"
+    },
+    "factor_roughness_trend_vol_short": {
+      "engine": "python",
+      "dsl": "(((ts_mean((max(high - low, abs(high - delay(close, 1)), abs(low - delay(close, 1)))), 5)) / (ts_mean((max(high - low, abs(high - delay(close, 1)), abs(low - delay(close, 1)))), 20))) * ((close / (ts_",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_roughness_trend_vol_short/values.parquet",
+      "at": "2026-08-02T14:42:01.268524"
+    },
+    "factor_resvol_volume_momentum": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_resvol_volume_momentum/values.parquet",
+      "at": "2026-08-02T14:44:13.713749"
+    },
+    "alphasage_154a51fe952b5243": {
+      "engine": "factor_engine",
+      "dsl": "winsorize(where(ret, -2, power(log(power(high_limit, 2)), 0.01)), 0.01)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alphasage_154a51fe952b5243/values.parquet",
+      "at": "2026-08-02T14:46:29.945527"
+    },
+    "factor_vol_gated_herding_mutated": {
+      "engine": "python",
+      "dsl": "(((((((((close)))) / delay(((((close)))), 5) - 1) / (1 + abs((clip(((((ts_mean((max((((((((high))))))) - (((((((low))))))), max(abs(((((((((high))))))) - delay(((((((close)))))), 1))), abs(((((((((low",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_vol_gated_herding_mutated/values.parquet",
+      "at": "2026-08-02T15:08:17.906937"
+    },
+    "week2_stress_dir_clip25": {
+      "engine": "factor_engine",
+      "dsl": "ema(max(0, (high - low - ts_mean(high - low, 40)) / ts_std(high - low, 40)) * min(2, volume / ts_mean(volume, 20)) * cap((high - low) / (close - open), -2.5, 2.5), 15)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_stress_dir_clip25/values.parquet",
+      "at": "2026-08-02T15:10:45.789633"
+    },
+    "week2_stress_accum_dir_vol": {
+      "engine": "factor_engine",
+      "dsl": "ema(max(0, (high - low - ts_mean(high - low, 40)) / ts_std(high - low, 40)) * min(2, volume / ts_mean(volume, 20)) * cap((high - low) / (close - open), -3, 3), 15)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_stress_accum_dir_vol/values.parquet",
+      "at": "2026-08-02T15:13:17.770094"
+    },
+    "factor_downside_vol_liquidity_momentum": {
+      "engine": "python",
+      "dsl": "(((((close))) / delay((((close))), 21) - 1.0) / (where(((ts_std((where((ts_pct((((((close)))))) < 0, (ts_pct((((((close))))), 1)), 0)), 21)), (ts_std((where((ts_pct((((((close))))), 1)) < 0, (ts_pct((",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_downside_vol_liquidity_momentum/values.parquet",
+      "at": "2026-08-02T15:15:25.243843"
+    },
+    "factor_liquidity_adaptive_momentum": {
+      "engine": "python",
+      "dsl": "((((close)) / delay(((close)), 21) - 1.0) / (where(((ts_std(((where((ts_pct(((((((close))))))) < 0, (ts_pct(((((((close)))))), 1)), 0))), 21)), (ts_std(((where((ts_pct(((((((close)))))), 1)) < 0, (ts_",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_liquidity_adaptive_momentum/values.parquet",
+      "at": "2026-08-02T15:17:28.592904"
+    },
+    "week2_stress_dir_w25": {
+      "engine": "factor_engine",
+      "dsl": "ema(max(0, (high - low - ts_mean(high - low, 40)) / ts_std(high - low, 40)) * min(2, volume / ts_mean(volume, 25)) * cap((high - low) / (close - open), -2, 2), 15)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_stress_dir_w25/values.parquet",
+      "at": "2026-08-02T15:19:56.360544"
+    },
+    "factor_crash_vol_ratio_asym": {
+      "engine": "factor_engine",
+      "dsl": "(-(volume / ts_mean(volume, 10)) * (((ema((max(0, close - open)), 10)) - (ema((max(0, open - close)), 10))) / (ema((high - low), 10))))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_crash_vol_ratio_asym/values.parquet",
+      "at": "2026-08-02T15:22:15.216216"
+    },
+    "alphasage_3aaad1a1bf9ce8a2": {
+      "engine": "factor_engine",
+      "dsl": "power((ret + volume), low_limit)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alphasage_3aaad1a1bf9ce8a2/values.parquet",
+      "at": "2026-08-02T15:24:22.114237"
+    },
+    "factor_rsi_volume_confirmed_reversal": {
+      "engine": "python",
+      "dsl": "(python only)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_rsi_volume_confirmed_reversal/values.parquet",
+      "at": "2026-08-02T15:26:41.906919"
+    },
+    "factor_volume_adjusted_breakout_with_vol_filter_v2": {
+      "engine": "python",
+      "dsl": "rank(ts_sum((((close > (delay(ts_max(high, 20), 1))) & ((volume / ts_mean(volume, 20)) > 1) & ((log(((ts_std((where((ts_pct(close, 1)) < 0, (ts_pct(close, 1)), 0)), 20)) / (ts_std((where((ts_pct(close",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_adjusted_breakout_with_vol_filter_v2/values.parquet",
+      "at": "2026-08-02T15:28:59.960401"
+    },
+    "factor_volume_adjusted_breakout_v3": {
+      "engine": "python",
+      "dsl": "rank(ts_sum((((close > (delay(ts_max(high, 10), 1))) & ((volume / ts_mean(volume, 10)) > 1) & ((log(((ts_std((where((ts_pct(close, 1)) < 0, (ts_pct(close, 1)), 0)), 20)) / (ts_std((where((ts_pct(close",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_adjusted_breakout_v3/values.parquet",
+      "at": "2026-08-02T15:31:21.664930"
+    },
+    "alphasage_5de2f47bc5cd6c66": {
+      "engine": "factor_engine",
+      "dsl": "(pre_close * power(where((10 < amount), amount, low_limit), high_limit))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alphasage_5de2f47bc5cd6c66/values.parquet",
+      "at": "2026-08-02T15:33:38.116699"
+    },
+    "alphasage_58079cceee41ce6d": {
+      "engine": "factor_engine",
+      "dsl": "(low_limit + (low_limit * power(amount, high_limit)))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alphasage_58079cceee41ce6d/values.parquet",
+      "at": "2026-08-02T15:35:47.410657"
+    },
+    "factor_volume_adjusted_breakout_window_001": {
+      "engine": "python",
+      "dsl": "rank(ts_sum((((close > (delay(ts_max(high, 20), 1))) & ((volume / ts_mean(volume, 20)) > 1) & ((log(((ts_std((where((ts_pct(close, 1)) < 0, (ts_pct(close, 1)), 0)), 10)) / (ts_std((where((ts_pct(close",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_adjusted_breakout_window_001/values.parquet",
+      "at": "2026-08-02T15:38:18.049389"
+    },
+    "factor_adx_trend_vol_ema": {
+      "engine": "python",
+      "dsl": "ADX(high, low, close, 14) * sign(ts_pct(close, 10)) * clip(safe_div(volume, ema(volume, 20)), 0.5, 2.0)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_adx_trend_vol_ema/values.parquet",
+      "at": "2026-08-02T15:44:21.443562"
+    },
+    "alphasage_3e74b4fa2831dc36": {
+      "engine": "factor_engine",
+      "dsl": "power(volume, high_limit)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alphasage_3e74b4fa2831dc36/values.parquet",
+      "at": "2026-08-02T15:46:24.896014"
+    },
+    "factor_crossover_vol_impact_trend_gated": {
+      "engine": "python",
+      "dsl": "(abs(((safe_div(open) - 1) + (safe_div(close, open) - 1))) * (safe_div(volume, ema(volume, 20)))), ((((ema(close, 10)) - (ema(close, 30))) / (ema(close, 30))) * ((safe_div(volume, ema(volume, 20))))))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_crossover_vol_impact_trend_gated/values.parquet",
+      "at": "2026-08-02T15:48:45.607346"
+    },
+    "factor_regime_vol_adaptive_trend_v4": {
+      "engine": "python",
+      "dsl": "((((ts_mean(((close - open) / (high - low + 1e-8))) * (safe_div(volume, ema(volume, 20))), (close / delay(close, 10) - 1) * (safe_div(volume, ema(volume, 20)))))))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_regime_vol_adaptive_trend_v4/values.parquet",
+      "at": "2026-08-02T15:51:01.136548"
+    },
+    "factor_volume_stress_adjusted_momentum_robust": {
+      "engine": "python",
+      "dsl": "(ts_pct(close, 10)) * (((volume - (ts_quantile(volume, 20, 0.5))) / (((volume - (ts_quantile(volume, 20, 0.5))).ts_quantile(abs(), 20, 0.5)) * 1.4826))) * (1 - (((ts_std(((ts_pct(close, 1))), 20)) / (",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_stress_adjusted_momentum_robust/values.parquet",
+      "at": "2026-08-02T15:53:18.924144"
+    },
+    "factor_volume_persistence_momentum_robust": {
+      "engine": "python",
+      "dsl": "((ts_pct(close, 10)) * (((volume - (ts_quantile(volume, 20, 0.5))) / ((volume - (ts_quantile(volume, 20, 0.5))).ts_quantile(abs(), 20, 0.5)))) * (ts_sum(((ts_pct(close, 1)) > 0), 10) / 10))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_persistence_momentum_robust/values.parquet",
+      "at": "2026-08-02T15:55:35.472711"
+    },
+    "factor_simplified_robust_volume_momentum": {
+      "engine": "python",
+      "dsl": "(ts_pct(close, 10)) * (((volume - (ts_quantile(volume, 20, 0.5))) / ((volume - (ts_quantile(volume, 20, 0.5))).ts_quantile(abs(), 20, 0.5))))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_simplified_robust_volume_momentum/values.parquet",
+      "at": "2026-08-02T15:57:44.601058"
+    },
+    "week2_vol_gated_momentum_ratio": {
+      "engine": "factor_engine",
+      "dsl": "(close / delay(close, 5) - 1) * (0.5 + 0.5 * ts_rank(ts_mean(true_range(high, low, close), 14) / close, 20)) * volume / ts_mean(volume, 20)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_vol_gated_momentum_ratio/values.parquet",
+      "at": "2026-08-02T16:01:53.302055"
+    },
+    "factor_crossover_herding_stress_span12_volrank_clip3": {
+      "engine": "lqtp_dsl",
+      "dsl": "(ema(((ts_pct(close, 1)) * (ts_rank(volume, 8)) * ((high - low) / close)), 12))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_crossover_herding_stress_span12_volrank_clip3/values.parquet",
+      "at": "2026-08-02T19:40:42.271077"
+    },
+    "factor_mut_hc004_volpctrank_w8": {
+      "engine": "lqtp_dsl",
+      "dsl": "(ema(((ts_pct(close, 1)) * (ts_rank(volume, 8)) * ((high - low) / close)), 12))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_mut_hc004_volpctrank_w8/values.parquet",
+      "at": "2026-08-02T19:55:09.025699"
+    },
+    "factor_herding_momentum_stress": {
+      "engine": "lqtp_dsl",
+      "dsl": "(ema(((ts_pct(close, 1)) * (volume / ts_mean(volume, 5)) * ((high - low) / close)), 5))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_herding_momentum_stress/values.parquet",
+      "at": "2026-08-02T20:00:36.222525"
+    },
+    "factor_volume_confirmed_momentum_tanh_gated": {
+      "engine": "python",
+      "dsl": "(2 * (1 / (1 + exp(-(2 * (ema( (close/delay(close,1)-1) * (volume/ts_mean(volume,20)), 10 ) * ((close-low)/(high-low))))))) - 1)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_confirmed_momentum_tanh_gated/values.parquet",
+      "at": "2026-08-02T20:04:49.772283"
+    },
+    "factor_volume_pressure_ewm_smooth": {
+      "engine": "lqtp_dsl",
+      "dsl": "ema((close / open - 1) * cap(volume / ts_quantile(volume, 10, 0.5), 0.3, 2.0), 20)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_pressure_ewm_smooth/values.parquet",
+      "at": "2026-08-02T20:10:15.577054"
+    },
+    "factor_mut_cross_vwpc_z10_clip2_v3": {
+      "engine": "lqtp_dsl",
+      "dsl": "(ema(((ts_pct((((close))), 1)) * ((((volume))) / ts_mean((((volume))), 20)) * (1 + (((high - low) - ts_mean((high - low), 10)) / ts_std((high - low), 10)))), 10))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_mut_cross_vwpc_z10_clip2_v3/values.parquet",
+      "at": "2026-08-02T20:15:32.538186"
+    },
+    "factor_volume_pressure_light_crossover": {
+      "engine": "lqtp_dsl",
+      "dsl": "0.95 * ema((close / open - 1) * cap(volume / ts_quantile(volume, 10, 0.5), 0.3, 3.0), 20) + 0.05 * ts_mean((close / open - 1) * cap(volume / ts_quantile(volume, 10, 0.5), 0.3, 3.0), 10)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_pressure_light_crossover/values.parquet",
+      "at": "2026-08-02T20:21:10.444070"
+    },
+    "factor_vol_weighted_pct_range_clip_ema10": {
+      "engine": "lqtp_dsl",
+      "dsl": "(ema(((((ts_pct(((((close)))), 1)) * (((((volume)))) / (ts_mean(((((volume)))), 20)))) * ((((((((((high)))))) - ((((((low))))))) - (ts_mean(((((((((high))))))) - (((((((low)))))))), 10))) / (ts_std(((",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_vol_weighted_pct_range_clip_ema10/values.parquet",
+      "at": "2026-08-02T20:26:27.447432"
+    },
+    "factor_intraday_reversal_vol_intensity": {
+      "engine": "python",
+      "dsl": "((-(ema((safe_div(close, open) - 1), 5)) * (((close.ts_std(pct_change(), 20)) / (close.ts_std(pct_change(), 60))))))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_intraday_reversal_vol_intensity/values.parquet",
+      "at": "2026-08-02T20:28:57.690938"
+    },
+    "factor_mut_cross_vwpc_z10_clip2_span8_v1": {
+      "engine": "lqtp_dsl",
+      "dsl": "(ema(((ts_pct((((close))), 1)) * ((((volume))) / ts_mean((((volume))), 20)) * (1 + (((high - low) - (ts_mean((high - low), 10))) / (ts_std((high - low), 10))))), 8))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_mut_cross_vwpc_z10_clip2_span8_v1/values.parquet",
+      "at": "2026-08-02T20:34:16.840495"
+    },
+    "factor_intraday_return_volume_surge": {
+      "engine": "lqtp_dsl",
+      "dsl": "ema(((close / open - 1.0) * (volume / (ts_max(volume, 20)))), 20)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_intraday_return_volume_surge/values.parquet",
+      "at": "2026-08-02T20:39:42.807397"
+    },
+    "factor_vol_surge_regime_gated": {
+      "engine": "lqtp_dsl",
+      "dsl": "ema(((close - open) / open) * safe_div(volume, ts_max(volume, 20)) * where(high - low > ts_quantile(high - low, 20, 0.5), 1, 0), 20)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_vol_surge_regime_gated/values.parquet",
+      "at": "2026-08-02T20:46:02.657622"
+    },
+    "factor_volume_weighted_price_change": {
+      "engine": "lqtp_dsl",
+      "dsl": "(ema(((ts_pct((((close))), 1)) * ((((volume))) / ts_mean((((volume))), 20)) * (1 + (((high - low) - ts_mean((high - low), 20)) / ts_std((high - low), 20)))), 10))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_weighted_price_change/values.parquet",
+      "at": "2026-08-02T20:52:24.537782"
+    },
+    "factor_reversal_intraday_5d_ema": {
+      "engine": "lqtp_dsl",
+      "dsl": "-ema((close - open) / open, 5)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_reversal_intraday_5d_ema/values.parquet",
+      "at": "2026-08-02T20:58:13.912731"
+    },
+    "factor_volume_pressure_imbalance": {
+      "engine": "lqtp_dsl",
+      "dsl": "ema((close / open - 1) * (volume / ts_quantile(volume, 20, 0.5)), 14)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_pressure_imbalance/values.parquet",
+      "at": "2026-08-02T21:03:43.773078"
+    },
+    "factor_intraday_volume_spike": {
+      "engine": "lqtp_dsl",
+      "dsl": "ema(((close - open) / open) * safe_div(volume, ts_mean(volume, 20)), 10)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_intraday_volume_spike/values.parquet",
+      "at": "2026-08-02T21:09:04.493193"
+    },
+    "factor_directional_vol_adaptive_crossover": {
+      "engine": "lqtp_dsl",
+      "dsl": "ema((high - low) / close, 5) * where(volume / ts_mean(volume, 20) > 0.9, ema(volume / ts_mean(volume, 20), 10), ema(volume / ts_mean(volume, 20), 30)) * ((close - open) / close)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_directional_vol_adaptive_crossover/values.parquet",
+      "at": "2026-08-02T21:14:19.467866"
+    },
+    "factor_vol_gated_momentum_volume_weighted": {
+      "engine": "factor_engine",
+      "dsl": "ts_pct(close, 5) * (0.5 + 0.5 * ts_rank(safe_div(ts_mean(true_range(high, low, close), 14), close), 20)) * safe_div(volume, ts_mean(volume, 20))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_vol_gated_momentum_volume_weighted/values.parquet",
+      "at": "2026-08-02T21:16:18.511980"
+    },
+    "factor_volume_confirmed_momentum_clipped": {
+      "engine": "lqtp_dsl",
+      "dsl": "(ts_pct(close, 5)) * (safe_div(volume, ts_mean(volume, 20)))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_confirmed_momentum_clipped/values.parquet",
+      "at": "2026-08-02T21:21:43.127307"
+    },
+    "factor_vol_regime_breakout_continuous": {
+      "engine": "lqtp_dsl",
+      "dsl": "ema((safe_div(close - low, high - low) - 0.5) * safe_div(high - low, ts_quantile(high - low, 20, 0.5)), 5)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_vol_regime_breakout_continuous/values.parquet",
+      "at": "2026-08-02T21:26:47.464008"
+    },
+    "factor_stress_volume_cont_weight_cont_dir_w20_clip2_5_w40_ewm15_stressclip25": {
+      "engine": "lqtp_dsl",
+      "dsl": "(((ema(((((((((high))))) - (((((low)))))) - (ts_mean((((((((high)))))) - ((((((low))))))), 40))) / (ts_std((((((((high)))))) - ((((((low))))))), 40))), 15))) * (((((volume))) / (ts_mean(((((volume))))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_stress_volume_cont_weight_cont_dir_w20_clip2_5_w40_ewm15_stressclip25/values.parquet",
+      "at": "2026-08-02T21:32:44.728656"
+    },
+    "factor_stress_volume_cont_weight_cont_dir_w20_clip3_w40_ewm15_stressclip25": {
+      "engine": "lqtp_dsl",
+      "dsl": "(((ema(((((((((high))))) - (((((low)))))) - (ts_mean((((((((high)))))) - ((((((low))))))), 40))) / (ts_std((((((((high)))))) - ((((((low))))))), 40))), 15))) * (((((volume))) / (ts_mean(((((volume))))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_stress_volume_cont_weight_cont_dir_w20_clip3_w40_ewm15_stressclip25/values.parquet",
+      "at": "2026-08-02T21:39:51.608168"
+    },
+    "factor_stress_volume_cont_weight_cont_dir_w20_clip3_w40_ewm15": {
+      "engine": "lqtp_dsl",
+      "dsl": "((ema((((((((high)))) - ((((low))))) - (ts_mean(((((((high))))) - (((((low)))))), 40))) / (ts_std(((((((high))))) - (((((low)))))), 40))), 15)) * (((((volume))) / (ts_mean(((((volume)))), 20)))) * (((",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_stress_volume_cont_weight_cont_dir_w20_clip3_w40_ewm15/values.parquet",
+      "at": "2026-08-02T21:46:57.185682"
+    },
+    "factor_stress_volume_cont_weight_cont_dir_w25_clip2_w40_ewm15": {
+      "engine": "lqtp_dsl",
+      "dsl": "((ema((((((((high)))) - ((((low))))) - (ts_mean(((((((high))))) - (((((low)))))), 40))) / (ts_std(((((((high))))) - (((((low)))))), 40))), 15)) * (((((volume))) / (ts_mean(((((volume)))), 25)))) * (((",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_stress_volume_cont_weight_cont_dir_w25_clip2_w40_ewm15/values.parquet",
+      "at": "2026-08-02T21:54:10.465231"
+    },
+    "factor_stress_range_volume_surge": {
+      "engine": "lqtp_dsl",
+      "dsl": "safe_div(high - low, close) * safe_div(volume, ts_mean(volume, 20))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_stress_range_volume_surge/values.parquet",
+      "at": "2026-08-02T22:01:37.709204"
+    },
+    "factor_pressure_tanh": {
+      "engine": "python",
+      "dsl": "(1 / (1 + exp(-(2 * safe_div(safe_div(numerator=close - low, denominator=high - low) * volume - ts_mean(safe_div(numerator=close - low, denominator=high - low) * volume, 20), ts_std(safe_div(numerator",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_pressure_tanh/values.parquet",
+      "at": "2026-08-02T22:20:22.000343"
+    },
+    "factor_mut_cro_asym_vol_ratio_med_20_minp3_vol6_ema5": {
+      "engine": "lqtp_dsl",
+      "dsl": "((ema(((-1.0 * ((((ts_quantile((where((((((((((((((close))))))))))) > (open))) == 1, ((((((((((((high))))))))))) - (((((((((((low)))))))))))), 0)), 20, 0.5))) / ((ts_quantile((where((((((((((((((close",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_mut_cro_asym_vol_ratio_med_20_minp3_vol6_ema5/values.parquet",
+      "at": "2026-08-02T22:25:00.353825"
+    },
+    "factor_herding_simple": {
+      "engine": "lqtp_dsl",
+      "dsl": "ema(safe_div(close - open, high - low) * safe_div(volume, ts_quantile(volume, 10, 0.5)), 5)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_herding_simple/values.parquet",
+      "at": "2026-08-02T22:32:19.047087"
+    },
+    "factor_adaptive_momentum_gate_v2": {
+      "engine": "lqtp_dsl",
+      "dsl": "safe_div(ts_pct(close, 5), ts_std(ts_pct(close, 1), 30))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_adaptive_momentum_gate_v2/values.parquet",
+      "at": "2026-08-02T22:39:23.152790"
+    },
+    "factor_volume_confirmed_momentum_binary_gate": {
+      "engine": "lqtp_dsl",
+      "dsl": "(ema(ts_pct(close, 1) * safe_div(volume, ts_mean(volume, 20)), 10)) * (sign(close - (high + low) / 2))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_volume_confirmed_momentum_binary_gate/values.parquet",
+      "at": "2026-08-02T22:44:57.410206"
+    },
+    "factor_intraday_reversal_crossover_v1": {
+      "engine": "lqtp_dsl",
+      "dsl": "ts_mean(- safe_div(2 * close - high - low, high - low) * safe_div(ts_mean(high - low, 5), ts_mean(close, 5)), 3)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_intraday_reversal_crossover_v1/values.parquet",
+      "at": "2026-08-02T22:50:54.237335"
+    },
+    "factor_range_position_volume_gated_smoothed": {
+      "engine": "lqtp_dsl",
+      "dsl": "ema((safe_div(close - low, high - low)) - 0.5, 3) * safe_div(volume, ts_mean(volume, 20))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_range_position_volume_gated_smoothed/values.parquet",
+      "at": "2026-08-02T22:56:10.145314"
+    },
+    "factor_imbalance_volume_ratio_ewm": {
+      "engine": "lqtp_dsl",
+      "dsl": "ema(safe_div(close - (high + low) / 2, high - low) * safe_div(volume, ts_mean(volume, 20)), 5)",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_imbalance_volume_ratio_ewm/values.parquet",
+      "at": "2026-08-02T23:01:44.829074"
+    },
+    "factor_range_position_volume_gated_smoothed_mut": {
+      "engine": "lqtp_dsl",
+      "dsl": "ema((safe_div(close - low, high - low)) - 0.5, 3) * safe_div(volume, ts_mean(volume, 20))",
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_range_position_volume_gated_smoothed_mut/values.parquet",
+      "at": "2026-08-02T23:08:45.044074"
+    }
+  }
+}

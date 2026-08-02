@@ -1,0 +1,27 @@
+{
+  "factor_name": "factor_volume_confirmed_momentum",
+  "candidate_id": "raw_ca_hash_d37770d2",
+  "week": "week1",
+  "fitness_label": "elite",
+  "source_shelf": "standard",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.024903742995501573,
+    "rank_ic": 0.04323428947900828,
+    "icir": 0.219954856289788,
+    "rank_icir": 0.3417460623012152
+  },
+  "lqtp_test": {
+    "rank_ic": 0.009362184231823337,
+    "mean_ic": 0.009362184231823337,
+    "icir": 0.06313592531816113,
+    "orientation": "flipped",
+    "begin_date": 20230101,
+    "end_date": 20260615
+  },
+  "formula": "(daily_return) * (safe_div(numerator=volume, denominator=ts_mean(volume, 20)))",
+  "rationale": "Volume-confirmed price momentum: amplify returns when volume is above its 20-day average, dampen when below. Exponential smoothing stabilizes the signal, balancing IC and RankICIR.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

@@ -1,0 +1,1 @@
+safe_div(numerator=ts_pct(close, 5), denominator=ts_std(daily_return, 30))

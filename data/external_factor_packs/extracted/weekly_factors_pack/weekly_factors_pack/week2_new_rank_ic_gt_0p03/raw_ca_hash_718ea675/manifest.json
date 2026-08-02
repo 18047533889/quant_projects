@@ -1,0 +1,75 @@
+{
+  "schema_version": "factor.manifest.v1",
+  "candidate_id": "raw_ca_hash_718ea675",
+  "campaign_id": "llm_ashare_pv_cogalpha_2026q2",
+  "generator_name": "cogalpha",
+  "producer": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_LQTP",
+  "domain_root": "price_volume",
+  "frequency_bucket": "daily",
+  "batch_id": "post_mining_translate",
+  "factor_name": "factor_herding_simple",
+  "formula": "ema(safe_div(numerator=close - open, denominator=high - low) * safe_div(numerator=volume, denominator=ts_quantile(volume, 10, 0.5)), 5)",
+  "expression_type": "lqtp_dsl",
+  "execution_platform": "lqtp",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit",
+  "code": "def factor_herding_simple(df):\n    df_copy = df.copy()\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    intraday_direction = (df_copy[\"close\"] - df_copy[\"open\"]) / range_.replace(0.0, np.nan)\n    vol_median = df_copy[\"volume\"].rolling(10, min_periods=10).median()\n    vol_ratio = df_copy[\"volume\"] / vol_median.replace(0.0, np.nan)\n    herding_signal = intraday_direction * vol_ratio\n    factor = herding_signal.ewm(span=5, min_periods=5, adjust=False).mean()\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    factor.name = \"factor_herding_simple\"\n    return factor",
+  "rationale": "Mutation of crossover_herding_vol_stress_001: removed the stress_range component (high-low)/close to simplify the factor and reduce noise. The parent's strength in RankIC and ICIR is partly from the herding direction and volume confirmation, and the stress_range may have introduced instability. By ablating this modifier, we aim to improve IC and MI while preserving the core herding mechanism and its strong RankIC profile.",
+  "lineage": {
+    "agent_skill": "alpha-regime-gating",
+    "operation": "cogalpha_to_lqtp_translation"
+  },
+  "stage": "candidate_pool",
+  "fitness_label": "qualified",
+  "metrics": {
+    "train": {
+      "ic": 0.01724269873021164,
+      "rank_ic": 0.032667049040345134,
+      "icir": 0.2094303026823923,
+      "rank_icir": 0.2897143319223067,
+      "status": "computed",
+      "source": "cogalpha"
+    },
+    "valid": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    }
+  },
+  "validation": {
+    "status": "pending"
+  },
+  "created_at": "2026-06-19T14:45:38.246830+00:00",
+  "updated_at": "2026-06-21T16:18:19.243004+00:00",
+  "lqtp_tags": {
+    "universe": "all_a",
+    "market": "ashare"
+  },
+  "rationale_llm": {
+    "summary": "Mutation of crossover_herding_vol_stress_001: removed the stress_range component (high-low)/close to simplify the factor and reduce noise. The parent's strength in RankIC and ICIR is partly from the herding direction and volume confirmation, and the stress_range may have introduced instability. By ablating this modifier, we aim to improve IC and MI while preserving the core herding mechanism and its strong RankIC profile.",
+    "parsed_at": "2026-06-20T03:52:19.993858+00:00",
+    "source": "manifest_rationale"
+  },
+  "admission": {
+    "test": {
+      "checked_at": "2026-06-21T14:59:28.938599+00:00",
+      "min_rank_ic": 0.03,
+      "max_pool_correlation": 0.7,
+      "mean_ic": 0.021212074524518284,
+      "rank_ic": 0.021212074524518284,
+      "orientation": "flipped",
+      "original_mean_ic": -0.021212074758855774,
+      "pool_max_correlation": 0.9999999999999944,
+      "correlation_source": "lqtp_reference_library",
+      "reference_library_split": "test",
+      "reference_library_cached_count": 50,
+      "reference_compared_count": 50,
+      "passed_ic": false,
+      "passed_correlation": false,
+      "passed": false,
+      "split": "test"
+    }
+  }
+}

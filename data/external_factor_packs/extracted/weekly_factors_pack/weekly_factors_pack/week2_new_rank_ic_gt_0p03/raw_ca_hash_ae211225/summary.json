@@ -1,0 +1,20 @@
+{
+  "factor_name": "factor_mut_cro_asym_vol_ratio_med_20_minp3_vol10_ema2",
+  "candidate_id": "raw_ca_hash_ae211225",
+  "week": "week2",
+  "fitness_label": "qualified",
+  "source_shelf": "supplement_pending",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.01393201862234656,
+    "rank_ic": 0.03042283606995021,
+    "icir": 0.2120942683012785,
+    "rank_icir": 0.35598623350265174
+  },
+  "lqtp_test": null,
+  "formula": "(-1.0) * (((df.copy())['((df.copy())['((df.copy())['high'])'])']) - ((df.copy())['((df.copy())['((df.copy())['low'])'])'])).where((((df.copy())['((df.copy())['((df.copy())['((df.copy())['close'])'])'])']) > ((df.copy())['open'])) == 1, np.nan).rolling(20, min_periods=3).median() / (((df.copy())['((df.copy())['((df.copy())['high'])'])']) - ((df.copy())['((df.copy())['((df.copy())['low'])'])'])).where((((df.copy())['((df.copy())['((df.copy())['((df.copy())['close'])'])'])']) <= ((df.copy())['open'])) == 1, np.nan).rolling(20, min_periods=3).median() * (safe_div(numerator=volume, denominator=ts_mean(volume, 20)))",
+  "rationale": "Mutation of cro_asym_vol_ratio_med_20_minp3_vol6_ema2_001. Preserve core asymmetry ratio mechanism (window 20) and EMA2 smoothing from parent. Increase volume median window from 6 to 10 to obtain a smoother denominator for the volume ratio, reducing noise in the volume component. This targets improved IC by providing a more stable volume signal while preserving the high RankIC and RankICIR inherited from the parents. The change is a compact window adjustment.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

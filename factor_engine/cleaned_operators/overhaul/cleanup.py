@@ -28,8 +28,6 @@ DEDUPE = {
     "quantile": "cs_quantile",
     "is_inf": "is_infinite",
     "div_or_null": "safe_div_null",
-    # Omitted K is handled as K=window by the final top/bottom-K layer, so old
-    # two-argument formulas preserve their historical numerical result.
     "ts_top_n_avg": "ts_topk_mean",
     "ts_top_n_std": "ts_topk_std",
     "ts_bottom_n_avg": "ts_bottomk_mean",
@@ -74,28 +72,92 @@ def alias_and_remove(old: str, new: str) -> None:
     OperatorRegistry.register_alias(old, new)
 
 
-def finalize() -> None:
-    global _FINALIZED
-    if _FINALIZED:
-        return
+def _remove_declared_bridges() -> None:
+    """Remove only implementations explicitly declared as compatibility bridges.
+
+    Previous versions inspected Python source text for tokens such as ``np.`` or
+    ``to_numpy``.  That produced both false positives (a native Polars function
+    sharing a module with NumPy validation helpers) and false negatives (an
+    indirect helper call).  Runtime evidence, not source spelling, is now the
+    production admission authority.
+    """
     for canonical, catalog in list(OperatorRegistry._catalog.items()):
-        source = str(((catalog.get("backend_meta") or {}).get("polars") or {}).get("source", ""))
+        meta = ((catalog.get("backend_meta") or {}).get("polars") or {})
+        source = str(meta.get("source", ""))
+        declared_bridge = bool(meta.get("pandas_bridge")) or bool(meta.get("uses_pandas_fallback"))
         if (
             source in FAKE_POLARS_SOURCES
             or "bridge" in source.lower()
             or canonical in PANDAS_BRIDGE_POLARS_CANONICALS
+            or declared_bridge
         ):
             remove_backend(canonical, "polars")
+
+
+def _attach_explicit_polars_contracts() -> None:
+    """Attach conservative execution metadata without inferring from source text."""
+    from cleaned_operators.operator_policy import infer_operator_policy
+
+    for canonical, implementations in OperatorRegistry._operators.items():
+        operator = implementations.get("polars")
+        if operator is None:
+            continue
+        entry = OperatorRegistry._catalog.get(canonical, {})
+        policy = infer_operator_policy(operator, canonical=canonical)
+        scope = getattr(policy, "scope", "unknown")
+        params = set(entry.get("param_names") or ())
+        backend_meta = dict(entry.get("backend_meta") or {})
+        polars_meta = dict(backend_meta.get("polars") or {})
+
+        # Default to the least permissive truthful contract.  Individual native
+        # expression implementations may explicitly opt into lazy/streaming by
+        # setting these fields at registration time.  No capability is inferred
+        # merely from function source code.
+        execution_kind = str(polars_meta.get("execution_kind") or "polars_eager_native")
+        supports_lazy = bool(polars_meta.get("supports_lazy", False))
+        supports_streaming = bool(polars_meta.get("supports_streaming", False))
+        materializes = bool(
+            polars_meta.get("materializes_full_panel", execution_kind != "expression_native")
+        )
+        if execution_kind == "expression_native":
+            supports_lazy = bool(polars_meta.get("supports_lazy", True))
+            supports_streaming = bool(polars_meta.get("supports_streaming", True))
+            materializes = bool(polars_meta.get("materializes_full_panel", False))
+
+        polars_meta.update({
+            "execution_kind": execution_kind,
+            "supports_lazy": supports_lazy,
+            "materializes_full_panel": materializes,
+            "supports_streaming": supports_streaming,
+            "supports_nulls": True,
+            "supports_nan": True,
+            "supports_inf": True,
+            "supports_scalar_broadcast": True,
+            "supports_group": scope in {"group", "cs"},
+            "supports_window": scope == "ts",
+            "supports_min_periods": "min_periods" in params,
+            "native_contract_source": "explicit_registration_and_runtime_evidence",
+        })
+        backend_meta["polars"] = polars_meta
+        entry["backend_meta"] = backend_meta
+
+
+def finalize() -> None:
+    global _FINALIZED
+    if _FINALIZED:
+        return
+
+    _remove_declared_bridges()
+
     for old, new in DEDUPE.items():
         alias_and_remove(old, new)
-    # These historical names claimed industry+size regression but the target
-    # only performs a group demean.  Silently resolving them is numerically
-    # wrong, so fail closed instead.
+
     for misleading in ("industry_size_neutralize", "size_industry_neutralize"):
         OperatorRegistry._aliases.pop(misleading, None)
         for catalog in OperatorRegistry._catalog.values():
             if misleading in (catalog.get("aliases") or []):
                 catalog["aliases"] = [a for a in catalog["aliases"] if a != misleading]
+
     for alias, target in {
         "Beta": "ts_beta", "rolling_beta": "ts_beta", "beta": "ts_beta",
         "Slope": "ts_time_slope", "slope": "ts_time_slope",
@@ -105,100 +167,34 @@ def finalize() -> None:
     }.items():
         if target in OperatorRegistry._operators:
             OperatorRegistry.register_alias(alias, target)
+
     for canonical in RECIPE_CANONICALS:
         catalog = OperatorRegistry._catalog.get(canonical)
         if catalog is not None:
             catalog["status"] = "deprecated_recipe"
             catalog["selected_source"] = "factor_recipes.fundamental_ratios"
-    from cleaned_operators import operator_policy, operator_surface
-    # A registered Polars backend is a promise that the implementation stays
-    # inside the Polars engine.  NumPy materialisation and Python callbacks are
-    # useful research fallbacks, but advertising them as Polars is misleading
-    # and prevents lazy/streaming execution.  Fail closed by removing them.
-    import inspect
 
-    def implementation_source(operator) -> str:
-        """Include wrapped functions and their local helper call graph."""
-        seen: set[int] = set()
-        chunks: list[str] = []
+    _attach_explicit_polars_contracts()
 
-        def visit(obj, depth: int = 0) -> None:
-            if obj is None or id(obj) in seen or depth > 3:
-                return
-            seen.add(id(obj))
-            try:
-                chunks.append(inspect.getsource(obj))
-            except (OSError, TypeError):
-                pass
-            if not callable(obj):
-                return
-            try:
-                closure = inspect.getclosurevars(obj)
-            except (TypeError, ValueError):
-                return
-            module = getattr(obj, "__module__", "")
-            for value in (*closure.nonlocals.values(), *closure.globals.values()):
-                if inspect.isfunction(value) and getattr(value, "__module__", "") == module:
-                    visit(value, depth + 1)
-
-        visit(operator.__class__)
-        visit(getattr(operator, "_fn", None))
-        return "\n".join(chunks)
-
-    for canonical, implementations in OperatorRegistry._operators.items():
-        operator = implementations.get("polars")
-        if operator is None:
-            continue
-        implementation = implementation_source(operator)
-        forbidden_bridge = any(token in implementation for token in (
-            "to_numpy(", "np.", "rolling_map(", "map_elements(", "to_pandas(",
-            "panel_pandas_bridge", "bridge_pandas", "bridge_registry",
-        ))
-        if forbidden_bridge:
-            remove_backend(canonical, "polars")
-            continue
-        materialized = any(token in implementation for token in (
-            ".unpivot(", ".pivot(", ".collect(",
-            "_cs_long_transform(", "_group_long_transform(",
-        ))
-        execution_kind = "polars_eager_native" if materialized else "expression_native"
-        entry = OperatorRegistry._catalog.get(canonical, {})
-        from cleaned_operators.operator_policy import infer_operator_policy
-
-        policy = infer_operator_policy(operator, canonical=canonical)
-        scope = getattr(policy, "scope", "unknown")
-        params = set(entry.get("param_names") or ())
-        backend_meta = dict(entry.get("backend_meta") or {})
-        polars_meta = dict(backend_meta.get("polars") or {})
-        polars_meta.update({
-            "execution_kind": execution_kind,
-            "supports_lazy": execution_kind == "expression_native",
-            "materializes_full_panel": materialized,
-            "supports_streaming": execution_kind == "expression_native",
-            "supports_nulls": True,
-            "supports_nan": True,
-            "supports_inf": True,
-            "supports_scalar_broadcast": True,
-            "supports_group": scope == "group",
-            "supports_window": scope == "ts",
-            "supports_min_periods": "min_periods" in params,
-        })
-        backend_meta["polars"] = polars_meta
-        entry["backend_meta"] = backend_meta
+    from cleaned_operators import operator_policy
     from backend.primitive_evidence import (
         POLARS_EDGE_VERIFIED,
         POLARS_NO_FALLBACK_VERIFIED,
         POLARS_REFERENCE_PARITY_VERIFIED,
     )
+
     native = frozenset(
-        c for c in OperatorRegistry._operators
-        if "polars" in OperatorRegistry.backends_for(c)
+        canonical
+        for canonical in OperatorRegistry._operators
+        if "polars" in OperatorRegistry.backends_for(canonical)
     )
     operator_policy.POLARS_PARITY_VERIFIED.intersection_update(
         native & POLARS_REFERENCE_PARITY_VERIFIED
     )
     operator_policy.POLARS_PRODUCTION_SAFE.intersection_update(
-        native & POLARS_REFERENCE_PARITY_VERIFIED
-        & POLARS_EDGE_VERIFIED & POLARS_NO_FALLBACK_VERIFIED
+        native
+        & POLARS_REFERENCE_PARITY_VERIFIED
+        & POLARS_EDGE_VERIFIED
+        & POLARS_NO_FALLBACK_VERIFIED
     )
     _FINALIZED = True

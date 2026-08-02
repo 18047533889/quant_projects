@@ -5,7 +5,7 @@
 
 ## Summary
 
-- active canonical: **205**
+- active canonical: **211**
 - daily surface: **86**
 - Polars registered: **147**
 - Polars non-bridge implementation: **147**
@@ -71,6 +71,7 @@
 | eq | daily | yes | yes | expression_native | yes | yes | yes | yes | no | yes | yes | yes |
 | exp | daily | yes | yes | expression_native | yes | yes | yes | yes | no | yes | yes | yes |
 | exp_neg | extended | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| expanding_rank | research | yes | no | unsupported | no | no | no | no | no | no | no | no |
 | ffill_limit | extended | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | fillna_const | daily | yes | yes | expression_native | yes | yes | yes | yes | no | yes | yes | yes |
 | fix | extended | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
@@ -95,8 +96,10 @@
 | group_winsorize | daily | yes | yes | polars_eager_native | yes | yes | no | no | yes | yes | yes | yes |
 | group_zscore | daily | yes | yes | expression_native | yes | yes | yes | yes | no | yes | yes | yes |
 | gt | daily | yes | yes | expression_native | yes | yes | yes | yes | no | yes | yes | yes |
+| hump_decay | research | yes | no | unsupported | no | no | no | no | no | no | no | no |
 | identity | internal | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | idio_skew | research | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| idio_vol | research | yes | no | unsupported | no | no | no | no | no | no | no | no |
 | intraday_vwap_deviation | research | yes | no | unsupported | no | no | no | no | no | no | no | no |
 | inverse | daily | yes | yes | expression_native | yes | yes | yes | yes | no | yes | yes | yes |
 | is_finite | daily | yes | yes | expression_native | yes | yes | yes | yes | no | yes | yes | yes |
@@ -110,6 +113,7 @@
 | log10 | extended | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | log2 | extended | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | log_abs | daily | yes | yes | expression_native | yes | yes | yes | yes | no | yes | yes | yes |
+| lqtp_historical_cvar | research | yes | no | unsupported | no | no | no | no | no | no | no | no |
 | lt | daily | yes | yes | expression_native | yes | yes | yes | yes | no | yes | yes | yes |
 | maximum | daily | yes | yes | expression_native | yes | yes | yes | yes | no | yes | yes | yes |
 | minimum | daily | yes | yes | expression_native | yes | yes | yes | yes | no | yes | yes | yes |
@@ -129,6 +133,7 @@
 | protected_div | internal | yes | no | unsupported | no | no | no | no | no | yes | no | no |
 | quarter_from_cumulative | daily | yes | yes | expression_native | yes | yes | yes | yes | no | yes | yes | yes |
 | rank | daily | yes | yes | expression_native | yes | yes | yes | yes | no | yes | yes | yes |
+| rank_corr | research | yes | no | unsupported | no | no | no | no | no | no | no | no |
 | real_turnover_rate | extended | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | residual_momentum_capm | research | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | revision_delta | extended | yes | no | unsupported | no | no | no | no | no | no | no | no |
@@ -203,6 +208,7 @@
 | ts_regression_tstat | extended | yes | no | unsupported | no | no | no | no | no | yes | no | no |
 | ts_sharpe | daily | yes | yes | expression_native | yes | yes | yes | yes | no | yes | yes | yes |
 | ts_skew | extended | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
+| ts_sma_cn | research | yes | no | unsupported | no | no | no | no | no | no | no | no |
 | ts_std | daily | yes | yes | expression_native | yes | yes | yes | yes | no | yes | yes | yes |
 | ts_std_if | extended | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | ts_sum | daily | yes | yes | expression_native | yes | yes | yes | yes | no | yes | yes | yes |

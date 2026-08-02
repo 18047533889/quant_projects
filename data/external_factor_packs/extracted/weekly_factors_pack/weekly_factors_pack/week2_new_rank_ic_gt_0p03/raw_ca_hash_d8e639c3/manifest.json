@@ -1,0 +1,75 @@
+{
+  "schema_version": "factor.manifest.v1",
+  "candidate_id": "raw_ca_hash_d8e639c3",
+  "campaign_id": "llm_ashare_pv_cogalpha_2026q2",
+  "generator_name": "cogalpha",
+  "producer": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_LQTP",
+  "domain_root": "price_volume",
+  "frequency_bucket": "daily",
+  "batch_id": "post_mining_translate",
+  "factor_name": "factor_range_position_volume_gated_smoothed_mut",
+  "formula": "ema((safe_div(numerator=close - low, denominator=high - low)) - 0.5, 3) * safe_div(numerator=volume, denominator=ts_mean(volume, 20))",
+  "expression_type": "lqtp_dsl",
+  "execution_platform": "lqtp",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit",
+  "code": "def factor_range_position_volume_gated_smoothed_mut(df):\n    df_copy = df.copy()\n    low_ = df_copy[\"low\"]\n    high_ = df_copy[\"high\"]\n    close_ = df_copy[\"close\"]\n    volume_ = df_copy[\"volume\"]\n    range_ = high_ - low_\n    pos = (close_ - low_) / range_.replace(0.0, np.nan)\n    pos = pos - 0.5\n    smooth_pos = pos.ewm(span=5, min_periods=5, adjust=False).mean()\n    vol_20 = volume_.rolling(20, min_periods=20).mean()\n    vol_ratio = volume_ / vol_20.replace(0.0, np.nan)\n    factor = smooth_pos * vol_ratio\n    df_copy[\"factor_range_position_volume_gated_smoothed_mut\"] = factor\n    return df_copy[\"factor_range_position_volume_gated_smoothed_mut\"]",
+  "rationale": "Mutation of CROSS_VGR_AR_001: increase EWM smoothing span from 3 to 5 to further reduce noise and improve rank stability (RankIC, RankICIR) while preserving the core volume-gated range position reversal mechanism. This targets the bottleneck of moderate RankICIR by smoothing more aggressively.",
+  "lineage": {
+    "agent_skill": "alpha-reversal",
+    "operation": "cogalpha_to_lqtp_translation"
+  },
+  "stage": "candidate_pool",
+  "fitness_label": "qualified",
+  "metrics": {
+    "train": {
+      "ic": 0.030608385639969454,
+      "rank_ic": 0.030903102181840388,
+      "icir": 0.3589892628452611,
+      "rank_icir": 0.3193694435839571,
+      "status": "computed",
+      "source": "cogalpha"
+    },
+    "valid": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    }
+  },
+  "validation": {
+    "status": "pending"
+  },
+  "created_at": "2026-06-19T14:45:38.239931+00:00",
+  "updated_at": "2026-06-21T16:18:19.965093+00:00",
+  "lqtp_tags": {
+    "universe": "all_a",
+    "market": "ashare"
+  },
+  "rationale_llm": {
+    "summary": "Mutation of CROSS_VGR_AR_001: increase EWM smoothing span from 3 to 5 to further reduce noise and improve rank stability (RankIC, RankICIR) while preserving the core volume-gated range position reversal mechanism. This targets the bottleneck of moderate RankICIR by smoothing more aggressively.",
+    "parsed_at": "2026-06-20T05:12:01.908028+00:00",
+    "source": "manifest_rationale"
+  },
+  "admission": {
+    "test": {
+      "checked_at": "2026-06-21T16:11:19.036132+00:00",
+      "min_rank_ic": 0.03,
+      "max_pool_correlation": 0.7,
+      "mean_ic": 0.006708685485970441,
+      "rank_ic": 0.006708685485970441,
+      "orientation": "flipped",
+      "original_mean_ic": -0.006708684461220237,
+      "pool_max_correlation": 0.9999999999999658,
+      "correlation_source": "lqtp_reference_library",
+      "reference_library_split": "test",
+      "reference_library_cached_count": 65,
+      "reference_compared_count": 65,
+      "passed_ic": false,
+      "passed_correlation": false,
+      "passed": false,
+      "split": "test"
+    }
+  }
+}

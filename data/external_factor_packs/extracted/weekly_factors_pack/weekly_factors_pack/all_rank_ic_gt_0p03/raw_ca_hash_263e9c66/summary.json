@@ -1,0 +1,27 @@
+{
+  "factor_name": "factor_imbalance_volume_ratio_ewm",
+  "candidate_id": "raw_ca_hash_263e9c66",
+  "week": "week2",
+  "fitness_label": "qualified",
+  "source_shelf": "standard",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.028524012650709793,
+    "rank_ic": 0.030995039492380094,
+    "icir": 0.33046121626839103,
+    "rank_icir": 0.3114107192351624
+  },
+  "lqtp_test": {
+    "rank_ic": 0.005285935902240503,
+    "mean_ic": 0.005285935902240503,
+    "icir": 0.041548742226261155,
+    "orientation": "flipped",
+    "begin_date": 20230101,
+    "end_date": 20260615
+  },
+  "formula": "ema(safe_div(numerator=close - (high + low) / 2, denominator=high - low) * safe_div(numerator=volume, denominator=ts_mean(volume, 20)), 5)",
+  "rationale": "Preserve the core imbalance and volume confirmation mechanism. Simplify the volume adjustment by removing the absolute volume multiplication, using only the volume ratio (volume / 20-day average). This reduces the influence of large volume outliers that may cause nonlinearity, targeting an improvement in IC while maintaining rank stability from the parent. The parent strength in RankIC (0.0308) and RankICIR (0.3339) is preserved.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

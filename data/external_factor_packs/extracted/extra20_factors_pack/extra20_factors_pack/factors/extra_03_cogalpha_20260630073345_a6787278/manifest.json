@@ -1,0 +1,36 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "cogalpha_20260630073345_a6787278",
+  "campaign_id": "cogalpha_ashare_pv_202606301800",
+  "formula": "EWM( (close - close.shift(1))/close.shift(1) * (volume / SMA(volume,5)) * ((high-low)/close) , span=5 )",
+  "expression_type": "python",
+  "code": "def factor_herding_momentum_stress(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(5, min_periods=5).mean()\n    stress_range = (df_copy['high'] - df_copy['low']) / df_copy['close'].replace(0, np.nan)\n    raw = ret * vol_ratio * stress_range\n    smoothed = raw.ewm(span=5, min_periods=5, adjust=False).mean()\n    factor = smoothed.clip(-3, 3)\n    factor.name = 'factor_herding_momentum_stress'\n    return factor",
+  "generator_name": "cogalpha",
+  "generator_version": "2.1.0",
+  "mined_by": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "born_timestamp": "2026-06-30T07:33:45Z",
+  "metrics": {
+    "train": {
+      "ic": 0.023280713195782635,
+      "icir": 0.2313204882103819,
+      "rank_ic": 0.04893937421110919
+    },
+    "valid": {
+      "ic": 0.021635332106185207,
+      "icir": 0.23626277014033284,
+      "rank_ic": 0.04098360093912944
+    },
+    "test": {
+      "ic": 0.018930179857587902,
+      "icir": 0.16399663233490824,
+      "rank_ic": 0.04625321967487007
+    }
+  },
+  "description": "Volume-confirmed directional momentum amplified by intraday stress (range/close). The product captures herding behavior when price moves attract volume, and stress range magnifies crowded episodes. EMA(5) smoothing stabilizes the signal for rank consistency, while clipping controls outliers.",
+  "filter_note": "CogAlpha python interim; train actual_start from lqtp_data (2016+, spec 2014)."
+}

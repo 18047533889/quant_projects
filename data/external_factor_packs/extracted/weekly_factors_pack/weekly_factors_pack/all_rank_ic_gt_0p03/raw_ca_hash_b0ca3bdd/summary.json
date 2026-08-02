@@ -1,0 +1,20 @@
+{
+  "factor_name": "factor_crossover_herding_stress_span12_volrank_clip3",
+  "candidate_id": "raw_ca_hash_b0ca3bdd",
+  "week": "week2",
+  "fitness_label": "qualified",
+  "source_shelf": "supplement_pending",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.026860174201241576,
+    "rank_ic": 0.04919334123022476,
+    "icir": 0.23789467873792738,
+    "rank_icir": 0.4182087395433627
+  },
+  "lqtp_test": null,
+  "formula": "ema( ts_pct(close) * rank_pct8(volume) * ((high-low)/close), span=12 ) clip ±3",
+  "rationale": "Crossover preserving primary parent mut_herding_momentum_stress_span12's core stress momentum mechanism with smoothing span 12 and clipping at ±3 to maintain strong RankICIR (0.4211), and borrowing the volume percentile rank normalization (rolling 8-day rank) from secondary parent crossover_hc004_volpctrank_s12_clip2_5 to potentially improve ranking stability and reduce outlier impact. Targets improved IC and RankIC while preserving the high RankICIR.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

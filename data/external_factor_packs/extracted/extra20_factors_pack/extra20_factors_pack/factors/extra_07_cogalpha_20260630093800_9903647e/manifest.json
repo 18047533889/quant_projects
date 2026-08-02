@@ -1,0 +1,36 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "cogalpha_20260630093800_9903647e",
+  "campaign_id": "cogalpha_ashare_pv_202606301800",
+  "formula": "0.95 * ewm(halflife=7, min_periods=7).mean((close/open-1) * clipped(volume/rolling_median(volume,10), 0.3, 3.0)) + 0.05 * rolling(10, min_periods=10).mean((close/open-1) * clipped(volume/rolling_median(volume,10), 0.3, 3.0))",
+  "expression_type": "python",
+  "code": "def factor_volume_pressure_light_crossover(df):\n    df_copy = df.copy()\n    ret = df_copy['close'] / df_copy['open'] - 1\n    vol_med = df_copy['volume'].rolling(10, min_periods=10).median().replace(0, np.nan)\n    vol_ratio = df_copy['volume'] / vol_med\n    vol_ratio_clipped = vol_ratio.clip(lower=0.3, upper=3.0)\n    raw = ret * vol_ratio_clipped\n    ewm_smooth = raw.ewm(halflife=7, min_periods=7).mean()\n    rolling_smooth = raw.rolling(10, min_periods=10).mean()\n    smooth = 0.95 * ewm_smooth + 0.05 * rolling_smooth\n    return smooth.rename('factor_volume_pressure_light_crossover')",
+  "generator_name": "cogalpha",
+  "generator_version": "2.1.0",
+  "mined_by": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "born_timestamp": "2026-06-30T09:38:00Z",
+  "metrics": {
+    "train": {
+      "ic": 0.02453794132184657,
+      "icir": 0.2090045770461111,
+      "rank_ic": 0.046703501718472464
+    },
+    "valid": {
+      "ic": 0.024261447661832847,
+      "icir": 0.20245696664034812,
+      "rank_ic": 0.047687483033928536
+    },
+    "test": {
+      "ic": 0.020394760302451645,
+      "icir": 0.15076037991579005,
+      "rank_ic": 0.053646266378087275
+    }
+  },
+  "description": "Preserving parent strength (alpha-mutation-gen13-1: high RankIC=0.0450, IC=0.0241) and targeting improved ICIR by borrowing a lightweight rolling mean smoothing (5% weight) from the secondary parent (alpha-crossover-gen13-0) to add stability without disrupting the dominant EWM signal. The minimal rolling component reduces noise while keeping the core volume-pressure mechanism intact.",
+  "filter_note": "CogAlpha python interim; train actual_start from lqtp_data (2016+, spec 2014)."
+}

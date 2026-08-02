@@ -1,0 +1,75 @@
+{
+  "schema_version": "factor.manifest.v1",
+  "candidate_id": "raw_ca_hash_61b8fb3c",
+  "campaign_id": "llm_ashare_pv_cogalpha_2026q2",
+  "generator_name": "cogalpha",
+  "producer": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_LQTP",
+  "domain_root": "price_volume",
+  "frequency_bucket": "daily",
+  "batch_id": "post_mining_translate",
+  "factor_name": "factor_vol_gated_momentum_volume_weighted",
+  "formula": "ts_pct(close, 5) * (0.5 + 0.5 * ts_rank(safe_div(numerator=ts_mean(true_range, 14), denominator=close), 20)) * safe_div(numerator=volume, denominator=ts_mean(volume, 20))",
+  "expression_type": "lqtp_dsl",
+  "execution_platform": "lqtp",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit",
+  "code": "def factor_vol_gated_momentum_volume_weighted(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    high = df_copy['high']\n    low = df_copy['low']\n    volume = df_copy['volume']\n    # 5-day return\n    ret5 = close / close.shift(5) - 1\n    # 14-day ATR\n    atr14 = talib.ATR(high.astype(float).values, low.astype(float).values, close.astype(float).values, timeperiod=14)\n    atr14 = pd.Series(atr14, index=df_copy.index)\n    # Normalized volatility\n    norm_vol = atr14 / close\n    # Time-series rank percentile (continuous gate)\n    vol_rank = norm_vol.rolling(20, min_periods=20).rank(pct=True)\n    # Weight: 0.5 (low vol) to 1.0 (high vol)\n    weight = 0.5 + 0.5 * vol_rank\n    gated_ret = ret5 * weight\n    # Volume factor: relative volume (20-day SMA)\n    vol_ma = volume.rolling(20, min_periods=20).mean()\n    rel_vol = volume / vol_ma.replace(0, np.nan)\n    # Combine: gated momentum amplified by volume conviction\n    factor = gated_ret * rel_vol\n    df_copy['factor_vol_gated_momentum_volume_weighted'] = factor\n    return df_copy['factor_vol_gated_momentum_volume_weighted']",
+  "rationale": "Combines volatility-gated momentum from vol_gated_momentum_mut_1 with volume conviction from alpha-liquidity-v1-002-mut-001. The primary mechanism is continuous volatility weighting of short-term return; the lightweight modifier is relative volume to enhance signal in high-volume regimes. This crossover targets improving IC and ICIR while preserving the strong RankICIR and MI of the volatility parent.",
+  "lineage": {
+    "agent_skill": "alpha-regime-gating",
+    "operation": "cogalpha_to_lqtp_translation"
+  },
+  "stage": "candidate_pool",
+  "fitness_label": "elite",
+  "metrics": {
+    "train": {
+      "ic": 0.023250222737003477,
+      "rank_ic": 0.03645458419069725,
+      "icir": 0.2311769710935229,
+      "rank_icir": 0.2964049013821864,
+      "status": "computed",
+      "source": "cogalpha"
+    },
+    "valid": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    }
+  },
+  "validation": {
+    "status": "pending"
+  },
+  "created_at": "2026-06-19T14:45:38.227455+00:00",
+  "updated_at": "2026-06-21T16:18:18.995041+00:00",
+  "lqtp_tags": {
+    "universe": "all_a",
+    "market": "ashare"
+  },
+  "rationale_llm": {
+    "summary": "Combines volatility-gated momentum from vol_gated_momentum_mut_1 with volume conviction from alpha-liquidity-v1-002-mut-001. The primary mechanism is continuous volatility weighting of short-term return; the lightweight modifier is relative volume to enhance signal in high-volume regimes. This crossover targets improving IC and ICIR while preserving the strong RankICIR and MI of the volatility parent.",
+    "parsed_at": "2026-06-20T03:45:12.596449+00:00",
+    "source": "manifest_rationale"
+  },
+  "admission": {
+    "test": {
+      "checked_at": "2026-06-21T14:27:46.660109+00:00",
+      "min_rank_ic": 0.03,
+      "max_pool_correlation": 0.7,
+      "mean_ic": 0.032083784300885654,
+      "rank_ic": 0.032083784300885654,
+      "orientation": "flipped",
+      "original_mean_ic": -0.03210576812849083,
+      "pool_max_correlation": 0.9999996207644243,
+      "correlation_source": "lqtp_reference_library",
+      "reference_library_split": "test",
+      "reference_library_cached_count": 49,
+      "reference_compared_count": 49,
+      "passed_ic": true,
+      "passed_correlation": false,
+      "passed": false,
+      "split": "test"
+    }
+  }
+}

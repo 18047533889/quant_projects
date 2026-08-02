@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>因子统一回测报告</title>
+  <style>
+    :root{--fg:#18202a;--muted:#5d6878;--line:#d9dee7;--bg:#f6f8fb;--panel:#fff;--blue:#255f9e;--green:#287a52}
+    *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",Arial,sans-serif;color:var(--fg);background:var(--bg);line-height:1.65}
+    header{padding:36px 48px 24px;background:#fff;border-bottom:1px solid var(--line)}main{max-width:1400px;margin:0 auto;padding:24px}h1{margin:0 0 8px;font-size:28px}h2{margin:32px 0 14px;font-size:20px;border-left:4px solid var(--blue);padding-left:10px}h3{margin:0 0 8px;font-size:16px}.muted{color:var(--muted)}
+    .cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin:20px 0}.metric{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px}.metric b{display:block;font-size:26px;color:var(--blue)}.metric span{color:var(--muted);font-size:13px}
+    .notice{background:#eef6ff;border:1px solid #c9def5;padding:12px 15px;border-radius:8px;margin:16px 0}.explain,.fcard{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px 18px;margin:12px 0}.explain ul{margin:8px 0 0 20px;padding:0}.explain li{margin:5px 0}
+    table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);font-size:13px}th,td{padding:8px 10px;border-bottom:1px solid #edf0f5;text-align:right;vertical-align:top}th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}th{background:#f0f3f8;position:sticky;top:0}tr:hover td{background:#fbfcff}a{color:#165a9f;text-decoration:none}a:hover{text-decoration:underline}code{font-size:12px;background:#f4f6fa;padding:2px 5px;border-radius:4px;word-break:break-all}
+    .tag{display:inline-block;padding:2px 8px;border-radius:999px;background:#eaf3fc;color:var(--blue);font-size:11px}.fcard{padding:15px 18px}.fhead{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.fmetrics{color:var(--muted);font-size:13px}.ftheme{margin:12px 0 4px;color:#263f73}.fcalc,.fread{margin:7px 0}.formula{color:var(--muted);font-size:12px;word-break:break-word}.toc{columns:2;column-gap:24px;font-size:14px}.toc a{display:block;margin:4px 0}
+    .heatmap-wrap{overflow:auto;background:#fff;border:1px solid var(--line);border-radius:8px;padding:12px}.heatmap{border-collapse:separate;border-spacing:2px;width:auto;border:0}.heatmap th,.heatmap td{position:static;border:0;padding:3px;min-width:28px;height:28px;text-align:center;font-size:9px}.heatmap th{max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:#f0f3f8}.heatmap td{color:#172235}
+    @media(max-width:900px){.cards{grid-template-columns:1fr 1fr}header{padding:20px}.toc{columns:1}}
+  </style>
+</head>
+<body>
+<header><h1>因子统一回测报告</h1><p class="muted" id="subtitle">加载中…</p></header>
+<main>
+  <section><div class="cards">
+    <div class="metric"><b id="count">—</b><span>入选因子</span></div>
+    <div class="metric"><b id="mean-ic">—</b><span>|Mean RankIC| 均值</span></div>
+    <div class="metric"><b id="mean-backtest">—</b><span>回测 Sharpe 均值</span></div>
+    <div class="metric"><b id="mean-ac1">—</b><span>平均 ACF(1)</span></div>
+    <div class="metric"><b id="backtest-available">—</b><span>回测 Sharpe 已覆盖</span></div>
+  </div></section>
+
+  <div class="notice"><b>本轮筛选：</b>从已完成互相IC去重的因子池中，按绝对RankIC降序、可用回测Sharpe作为同分项，选取表现最好的30个因子。<span id="dedup-note"></span></div>
+
+  <section><h2>一、评估口径</h2><div class="explain"><ul>
+    <li><b>RankIC：</b>每日计算因子值与下一交易日收盘收益的截面 Spearman，并应用因子池固定方向；优先复用已有成功评估，缺失项再本地计算。</li>
+    <li><b>十分组：</b>每日从低到高分为G1—G10；多空诊断为G10−G1，使用下一交易日收盘收益。</li>
+    <li><b>回测 Sharpe（非 CogAlpha）：</b>全A股排除ST，方向调整后每日持有排名最高10%的股票并等权；收盘生成信号，滞后1个交易周期，以后复权VWAP日频执行，初始资金1,000万元。</li>
+    <li><b>交易成本（非 CogAlpha）：</b>佣金0.025%、印花税0.05%、过户费0.001%、最低佣金5元、滑点0.1%；缺失VWAP时当期不可交易，已有持仓按最近后复权收盘价估值。</li>
+    <li><b>自相关：</b>计算截面排名在lag 1/5/20的相关性并按日期平均。</li>
+    <li><b>CogAlpha：</b>原始记录未提供 Sharpe；报告使用当前因子值的本地G10−G1 gross日收益补齐回测 Sharpe，不套用上述多头组合交易成本。</li>
+  </ul></div></section>
+
+  <section><h2>二、因子排行（按 |Mean RankIC| 降序）</h2><div style="overflow:auto"><table>
+    <thead><tr><th>#</th><th>因子</th><th>路径</th><th>Mean RankIC</th><th>RankICIR</th><th>胜率</th><th>回测 Sharpe</th><th>ACF(1)</th><th>ACF(5)</th><th>ACF(20)</th></tr></thead>
+    <tbody id="ranking"></tbody>
+  </table></div></section>
+
+  <section><h2>三、因子逐一概览</h2><p class="muted">按方向调整后 |Mean RankIC| 从高到低排列。每个因子说明：经济含义、计算步骤（白话）、公式摘要，以及对本页指标的简要读法。</p><nav class="toc muted" id="toc"></nav><div id="factor-cards"></div></section>
+
+  <section><h2>四、因子相关性</h2><p class="muted">每日共同股票截面Spearman相关，再按日期平均。矩阵覆盖本页全部因子。</p><div id="correlation" class="heatmap-wrap">相关性矩阵待计算</div></section>
+</main>
+<script src="report_data.js"></script><script src="factor_explanations.js"></script>
+<script>
+(()=>{
+ const data=window.REPORT_DATA||{}, factors=[...(data.factors||[])].sort((a,b)=>Math.abs(Number(b.metrics?.mean_rank_ic)||0)-Math.abs(Number(a.metrics?.mean_rank_ic)||0));
+ const num=v=>v==null?NaN:Number(v), valid=v=>Number.isFinite(num(v)), fmt=(v,d=4)=>!valid(v)?'—':num(v).toFixed(d), pct=v=>!valid(v)?'—':(num(v)*100).toFixed(2)+'%';
+ const avg=xs=>{const a=xs.filter(Number.isFinite);return a.length?a.reduce((x,y)=>x+y,0)/a.length:null};
+ const esc=s=>String(s??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const resultRead=f=>{const m=f.metrics||{},a=f.autocorrelation||{},q=f.evaluation_quality||{},ic=num(m.mean_rank_ic),bt=num(m.backtest_sharpe),ac=num(a.lag_1);const icText=q.warning?q.warning:!Number.isFinite(ic)?'RankIC待补':Math.abs(ic)>=.05?'|RankIC|处于本批前列，选股区分度较强':Math.abs(ic)>=.04?'|RankIC|中等偏上，具备一定选股区分度':'RankIC通过因子池筛选，可作为候选信号';const btText=Number.isFinite(bt)?(f.route==='python'?`CogAlpha按G10−G1 gross日收益补齐的回测Sharpe为 ${fmt(bt,3)}`:`来源AlphaSAGE多头组合回测Sharpe为 ${fmt(bt,3)}`):'回测Sharpe待补';const acText=Number.isFinite(ac)?(ac>=.8?'ACF(1)很高，信号持久但可能带有较强平滑重叠':ac>=.4?'ACF(1)中等，信号具有一定短期延续性':'ACF(1)较低，信号变化快、预期换手更高'):'截面不足，无法计算可靠自相关';return `${icText}；${btText}；${acText}。`;};
+ document.querySelector('#subtitle').textContent=`样本区间 ${data.meta?.sample_begin||'—'} ~ ${data.meta?.sample_end||'—'} · 共 ${factors.length} 个因子 · 生成时间 ${data.meta?.generated_at||'—'}`;
+ const selection=data.meta?.selection||{},routes=data.meta?.route_counts||{};document.querySelector('#dedup-note').textContent=` 因子池 ${selection.input_pool_count||'—'} 个，本页 Factor Engine ${routes.factor_engine||0} 个、CogAlpha Python ${routes.python||0} 个；完整回测缺失项以“—”显示。`;
+ const backtestAvailable=factors.filter(f=>valid(f.metrics?.backtest_sharpe));document.querySelector('#count').textContent=factors.length;document.querySelector('#mean-ic').textContent=fmt(avg(factors.map(f=>Math.abs(num(f.metrics?.mean_rank_ic)))),4);document.querySelector('#mean-backtest').textContent=fmt(avg(factors.map(f=>num(f.metrics?.backtest_sharpe))),3);document.querySelector('#mean-ac1').textContent=fmt(avg(factors.map(f=>num(f.autocorrelation?.lag_1))),3);document.querySelector('#backtest-available').textContent=`${backtestAvailable.length}/${factors.length}`;
+ const href=f=>`${f.factor_id}.html`;
+ document.querySelector('#ranking').innerHTML=factors.map((f,i)=>{const m=f.metrics||{},a=f.autocorrelation||{};return `<tr><td>${i+1}</td><td><a href="${href(f)}"><b>${f.factor_name}</b></a><br><span class="muted">${f.factor_key}</span></td><td><span class="tag">${f.route_label||f.route}</span></td><td>${fmt(m.mean_rank_ic)}</td><td>${fmt(m.rank_ic_ir)}</td><td>${pct(m.rank_ic_positive_ratio)}</td><td>${fmt(m.backtest_sharpe,3)}</td><td>${fmt(a.lag_1,3)}</td><td>${fmt(a.lag_5,3)}</td><td>${fmt(a.lag_20,3)}</td></tr>`}).join('');
+ document.querySelector('#toc').innerHTML=factors.map((f,i)=>`<a href="#f-${i}">${i+1}. ${f.factor_name}</a>`).join('');
+ document.querySelector('#factor-cards').innerHTML=factors.map((f,i)=>{const m=f.metrics||{},a=f.autocorrelation||{},e=window.FACTOR_EXPLANATIONS?.[f.factor_key]||{};return `<article class="fcard" id="f-${i}"><div class="fhead"><div><h3>${i+1}. ${esc(f.factor_name)}</h3><span class="tag">${esc(f.route_label||f.route)}</span></div><div class="fmetrics">RankIC ${fmt(m.mean_rank_ic)} · 回测 Sharpe ${fmt(m.backtest_sharpe,3)} · ACF(1) ${fmt(a.lag_1,3)}</div></div><p class="ftheme"><b>主题：</b>${esc(e.theme||f.factor_name)}</p><p class="fcalc"><b>怎么算：</b>${esc(e.calculation||'参见因子公式与详情页。')}</p><p class="formula"><b>公式：</b><code>${esc(e.formula_short||f.source_payload||'—')}</code></p><p class="fread"><b>结果怎么读：</b>${esc(resultRead(f))}${e.note?` ${esc(e.note)}`:''}</p><a href="${href(f)}">查看完整图表 →</a></article>`}).join('');
+ const corr=data.correlation||{},keys=corr.factor_keys||[],matrix=corr.matrix||[];
+ if(keys.length){const short=k=>k.length>15?k.slice(0,15)+'…':k;const color=v=>{if(!Number.isFinite(v))return '#f2f3f5';const x=Math.max(-1,Math.min(1,v));return x>=0?`rgba(202,58,49,${.08+.72*x})`:`rgba(37,95,158,${.08+.72*-x})`};document.querySelector('#correlation').innerHTML=`<table class="heatmap"><thead><tr><th></th>${keys.map(k=>`<th title="${k}">${short(k)}</th>`).join('')}</tr></thead><tbody>${keys.map((k,i)=>`<tr><th title="${k}">${short(k)}</th>${keys.map((_,j)=>`<td style="background:${color(Number(matrix[i]?.[j]))}" title="${k} / ${keys[j]}: ${fmt(matrix[i]?.[j],3)}">${i===j&&valid(matrix[i]?.[j])?'1':fmt(matrix[i]?.[j],1)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;}
+})();
+</script>
+</body></html>

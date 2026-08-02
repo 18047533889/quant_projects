@@ -1,0 +1,1 @@
+ewm(halflife=7, min_periods=7).mean((close/open-1) * clipped(volume/rolling_median(volume,10), 0.3, 2.0))

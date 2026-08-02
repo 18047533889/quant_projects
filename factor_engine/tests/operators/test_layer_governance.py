@@ -57,11 +57,27 @@ def test_simple_composites_are_recipes_not_operators() -> None:
         assert FactorRecipeRegistry.get(recipe) is not None
 
 
-def test_only_fused_technical_composites_remain() -> None:
-    for name in ("MACD_line", "MACD_signal", "MACD_hist", "RSI_WILDER", "ATR_WILDER", "ADX"):
+def test_stateful_or_fused_technical_operators_and_recipe_composites() -> None:
+    for name in (
+        "MACD_line",
+        "MACD_signal",
+        "MACD_hist",
+        "RSI_WILDER",
+        "ATR_WILDER",
+        "ADX",
+        "KAMA",
+    ):
         assert OperatorRegistry.get(name) is not None
-    for name in ("KAMA", "OBV", "DPO", "TRIX", "ADXR", "ATR", "RSI"):
-        assert OperatorRegistry.get(name) is None
+    for canonical, recipe in (
+        ("OBV", "rolling_obv"),
+        ("DPO", "dpo_causal"),
+        ("TRIX", "trix"),
+        ("ADXR", "adxr"),
+        ("ATR", "atr_sma"),
+        ("RSI", "rsi_sma"),
+    ):
+        assert OperatorRegistry.get(canonical) is None
+        assert FactorRecipeRegistry.get(recipe) is not None
 
 
 def test_cross_sectional_dialect_is_canonicalized() -> None:
@@ -94,7 +110,7 @@ def test_period_primitives_require_consecutive_quarters() -> None:
 
     change = OperatorRegistry.get("period_change").calculate(value, period, 1, "absolute", True)
     assert change["A"].iloc[2] == 10.0
-    assert np.isnan(change["A"].iloc[4])  # Q3 is missing.
+    assert np.isnan(change["A"].iloc[4])
     assert change["A"].iloc[6] == 10.0
 
     ttm = OperatorRegistry.get("ttm_from_quarterly").calculate(value, period, 4, True)

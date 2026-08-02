@@ -1,0 +1,20 @@
+{
+  "factor_name": "factor_stress_volume_cont_weight_cont_dir_w20_clip3_w40_ewm15_stressclip25",
+  "candidate_id": "raw_ca_hash_c6320c09",
+  "week": "week2",
+  "fitness_label": "qualified",
+  "source_shelf": "supplement_pending",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.024579421766244135,
+    "rank_ic": 0.03447396895000833,
+    "icir": 0.2926458666429303,
+    "rank_icir": 0.3659068360301629
+  },
+  "lqtp_test": null,
+  "formula": "((((df.copy())[\"high\"]) - ((df.copy())[\"low\"])) - (((df.copy())[\"((df.copy())[\"high\"])\"]) - ((df.copy())[\"((df.copy())[\"low\"])\"])).rolling(40, min_periods=40).mean()) / (((df.copy())[\"((df.copy())[\"high\"])\"]) - ((df.copy())[\"((df.copy())[\"low\"])\"])).rolling(40, min_periods=40).std(ddof=1).clipema(lower=0, 15) * ((df.copy())[\"volume\"]) / ((df.copy())[\"((df.copy())[\"volume\"])\"]).rolling(20, min_periods=20).mean() * (((df.copy())[\"close\"]) - ((df.copy())[\"open\"])) / (((df.copy())[\"high\"]) - ((df.copy())[\"low\"]))",
+  "rationale": "Crossover: primary parent (elite, mutation_stress_volume_cont_weight_cont_dir_w20_clip3_w40_ewm15_001) provides core stress accumulation, volume weight, and directional clip at 3. Secondary parent (qualified, mutation_stress_volume_cont_weight_cont_dir_w20_clip3_w40_ewm15_dirclip25_001) contributes the concept of tighter control (clip value 2.5), applied here to the stress component instead of directional strength, to limit extreme stress influence while preserving the strong RankIC and RankICIR",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

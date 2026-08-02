@@ -1,19 +1,7 @@
-"""表达式 → IR：Analyzer 把 ``Expr`` 树降为可执行的 ``IRNode``。
-
-支持节点
---------
-仅三种：``ColumnRef``（列引用）、``Literal``（常量）、``CleanedCall``（算子调用）。
-所有算子语义以 ``cleaned_operators`` 为准；此处不做数值计算。
-
-副作用分析
-----------
-遍历 ``CleanedCall`` 时顺带推导：
-- ``lookback``：沿表达式 DAG 的最长依赖路径递归累加，而不是只取全局最大窗口；
-- ``has_ts_op`` / ``has_cs_op``：按算子 ``metadata.category`` 与 canonical 名启发式标记；
-- ``referenced_columns``：公式依赖的数据字段集合。
-"""
+"""Lower expression trees to IR and derive causal history requirements."""
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -23,8 +11,7 @@ from expr.column import ColumnRef
 from expr.literal import Literal
 from ir.nodes import IRNode
 
-
-_LAG_PARAM_NAMES: dict[str, tuple[str, ...]] = {
+_LAG_PARAM_NAMES = {
     "ts_delay": ("n", "d", "lag", "periods", "window"),
     "prev": (),
     "ts_delta": ("n", "d", "lag", "periods", "window"),
@@ -34,17 +21,211 @@ _LAG_PARAM_NAMES: dict[str, tuple[str, ...]] = {
     "MOM": ("window", "d", "n"),
     "ROC": ("window", "d", "n"),
 }
-_FIXED_LAGS: dict[str, int] = {
+_FIXED_LAGS = {
     "prev": 1,
     "ts_ratio": 1,
+    "candle_gap": 1,
+    "candle_gap_pct": 1,
+    "cdl_engulfing": 1,
+    "cdl_inside_bar": 1,
+    "cdl_outside_bar": 1,
+    "candle_overlap_ratio": 1,
+    "candle_inside_ratio": 1,
+    "fin_revision_delta": 1,
+    "fin_revision_pct": 1,
+    "fin_revision_direction": 1,
+    "fin_expectation_revision": 1,
+    "fin_expectation_revision_pct": 1,
 }
-_WINDOW_PARAM_NAMES: tuple[str, ...] = (
+_WINDOW_PARAM_NAMES = (
     "window",
     "d",
     "span",
     "period",
     "periods",
+    "lookback",
+    "max_lookback",
+    "fast",
+    "slow",
+    "fast_period",
+    "slow_period",
+    "signal_span",
+    "signal_period",
+    "fast_window",
+    "slow_window",
+    "signal_window",
+    "short_window",
+    "medium_window",
+    "long_window",
+    "ema_window",
+    "atr_window",
+    "tenkan_window",
+    "kijun_window",
+    "senkou_b_window",
+    "er_window",
+    "vol_window",
+    "baseline_window",
+    "price_window",
+    "volume_window",
+    "turnover_window",
+    "adl_window",
+    "impulse_window",
+    "flag_window",
+    "cup_window",
+    "handle_window",
+    "pennant_window",
+    "max_wait",
+    "max_periods",
+    "window_days",
+    "max_days",
+    "body_window",
+    "shadow_window",
 )
+_WINDOW_PLUS_ONE_CANONICALS = frozenset({
+    "ts_prev_high",
+    "ts_prev_low",
+    "ts_distance_to_high",
+    "ts_distance_to_low",
+    "ts_breakout_high",
+    "ts_breakdown_low",
+    "ts_new_high",
+    "ts_new_low",
+    "ts_channel_position",
+    "ts_days_since_high",
+    "ts_days_since_low",
+    "ts_range_expansion",
+    "donchian_upper",
+    "donchian_lower",
+    "donchian_mid",
+    "donchian_position",
+    "relative_volume",
+    "volume_zscore",
+    "dollar_volume_zscore",
+    "volume_momentum",
+    "turnover_momentum",
+    "turnover_zscore",
+    "rolling_obv",
+    "rolling_pvt",
+    "MFI",
+    "choppiness_index",
+    "yang_zhang_vol",
+    "overnight_volatility",
+    "candle_range_atr",
+    "abnormal_volume",
+    "abnormal_turnover",
+    "volume_shock",
+    "turnover_shock",
+    "candle_body_zscore",
+    "candle_range_zscore",
+    "candle_upper_shadow_zscore",
+    "candle_lower_shadow_zscore",
+    "candle_body_percentile",
+    "candle_range_percentile",
+    "candle_gap_atr",
+})
+_PIVOT_CONFIRM_CANONICALS = frozenset({
+    "ts_confirmed_pivot_high",
+    "ts_confirmed_pivot_low",
+})
+_BOUNDED_STRUCTURE_CANONICALS = frozenset({
+    "ts_last_pivot_high",
+    "ts_last_pivot_low",
+    "ts_pivot_high_age",
+    "ts_pivot_low_age",
+    "ts_resistance_level",
+    "ts_support_level",
+    "ts_resistance_slope",
+    "ts_support_slope",
+    "ts_distance_to_resistance",
+    "ts_distance_to_support",
+    "ts_resistance_break",
+    "ts_support_break",
+})
+_STRUCTURE_PREFIXES = (
+    "ts_nth_pivot_",
+    "ts_pivot_",
+    "ts_swing_",
+    "ts_channel_",
+    "ts_line_",
+    "ts_resistance_fit_",
+    "ts_support_fit_",
+    "ts_pattern_",
+)
+_STRUCTURE_PATTERNS = frozenset({
+    "pattern_double_top",
+    "pattern_double_bottom",
+    "pattern_triple_top",
+    "pattern_triple_bottom",
+    "pattern_head_shoulders",
+    "pattern_inverse_head_shoulders",
+    "pattern_123_bull",
+    "pattern_123_bear",
+    "pattern_sym_triangle",
+    "pattern_ascending_triangle",
+    "pattern_descending_triangle",
+    "pattern_rising_wedge",
+    "pattern_falling_wedge",
+    "pattern_rectangle",
+    "pattern_rising_channel",
+    "pattern_falling_channel",
+    "pattern_broadening",
+})
+_FLAG_PATTERNS = frozenset({"pattern_bull_flag", "pattern_bear_flag"})
+_PENNANT_PATTERNS = frozenset({"pattern_bull_pennant", "pattern_bear_pennant"})
+_RETEST_PATTERNS = frozenset({"pattern_breakout_retest", "pattern_breakdown_retest"})
+
+# Report-period operators need a conservative conversion from report count to
+# pre-start trading rows. Daily-window and elementwise fundamental operators do
+# not use this budget.
+_FIN_REPORT_PERIOD_CANONICALS = frozenset({
+    "fin_lag",
+    "fin_diff",
+    "fin_pct_change",
+    "fin_log_change",
+    "fin_qoq",
+    "fin_yoy",
+    "fin_ttm",
+    "fin_ttm_quarterly",
+    "fin_quarter_from_cumulative",
+    "fin_ttm_cumulative",
+    "fin_average_balance",
+    "fin_growth",
+    "fin_cagr",
+    "fin_growth_acceleration",
+    "fin_growth_change",
+    "fin_growth_volatility",
+    "fin_growth_stability",
+    "fin_growth_persistence",
+    "fin_std",
+    "fin_mad",
+    "fin_cv",
+    "fin_stability",
+    "fin_range",
+    "fin_zscore_history",
+    "fin_percentile_history",
+    "fin_trend_slope",
+    "fin_trend_r2",
+    "fin_trend_tstat",
+    "fin_trend_acceleration",
+    "fin_monotonicity",
+    "fin_positive_streak",
+    "fin_negative_streak",
+    "fin_sign_change_count",
+    "fin_turnover",
+    "fin_divergence",
+    "fin_working_capital_change",
+    "fin_beat_streak",
+    "fin_miss_streak",
+})
+_FIN_DAILY_WINDOW_CANONICALS = frozenset({
+    "fin_revision_count",
+    "fin_revision_magnitude",
+    "fin_restated_flag",
+    "fin_days_since_update",
+    "fin_staleness",
+    "fin_surprise_zscore",
+    "fin_expectation_revision_speed",
+})
 
 
 def _positive_int(value: Any) -> int | None:
@@ -62,112 +243,214 @@ def _literal_value(expr: Expr) -> Any | None:
 
 
 def _operator_param_values(node: CleanedCall, op_impl: Any) -> dict[str, Any]:
-    """Resolve literal positional/keyword parameters using operator metadata."""
     values = dict(node.kwargs_dict())
-    param_names = tuple(getattr(getattr(op_impl, "metadata", None), "param_names", ()) or ())
-    for index, arg in enumerate(node.args):
+    param_names = tuple(
+        getattr(getattr(op_impl, "metadata", None), "param_names", ()) or ()
+    )
+    for index, argument in enumerate(node.args):
         if index >= len(param_names):
             break
-        literal = _literal_value(arg)
-        if literal is not None or isinstance(arg, Literal):
+        literal = _literal_value(argument)
+        if literal is not None or isinstance(argument, Literal):
             values.setdefault(param_names[index], literal)
     return values
 
 
+def _report_period_count(canonical: str, params: dict[str, Any]) -> int:
+    def value(name: str, default: int = 0) -> int:
+        return _positive_int(params.get(name)) or default
+
+    if canonical == "fin_growth_change":
+        return value("growth_periods", 4) + value("compare_periods", 1)
+    if canonical in {
+        "fin_growth_volatility",
+        "fin_growth_stability",
+        "fin_growth_persistence",
+    }:
+        return value("growth_periods", 1) + value("window_periods", 8)
+    if canonical == "fin_trend_acceleration":
+        return max(value("short_periods", 4), value("long_periods", 8))
+    if canonical == "fin_turnover":
+        return value("average_periods", 2)
+    if canonical in {"fin_positive_streak", "fin_negative_streak", "fin_beat_streak", "fin_miss_streak"}:
+        return value("max_periods", 8)
+    if canonical in {"fin_yoy", "fin_ttm", "fin_ttm_quarterly", "fin_ttm_cumulative"}:
+        return value("periods_per_year", 4)
+    if canonical == "fin_quarter_from_cumulative":
+        return 2
+    return max(
+        1,
+        value("periods"),
+        value("window_periods"),
+        value("average_periods"),
+        value("long_periods"),
+        value("max_periods"),
+    )
+
+
+def _financial_lookback(canonical: str, params: dict[str, Any]) -> int:
+    if canonical not in _FIN_REPORT_PERIOD_CANONICALS:
+        return 0
+    rows_per_period = (
+        _positive_int(os.environ.get("FACTOR_ENGINE_REPORT_PERIOD_LOOKBACK_ROWS", "80"))
+        or 80
+    )
+    return rows_per_period * _report_period_count(canonical, params)
+
+
 def _operator_lookback_increment(
-    canon: str,
+    canonical: str,
     node: CleanedCall,
     op_impl: Any,
     policy: Any | None,
 ) -> int:
-    """Return additional historical rows required above the deepest child."""
     params = _operator_param_values(node, op_impl)
-    increment = 0
+    increment = _financial_lookback(canonical, params)
 
-    if canon in _FIXED_LAGS:
-        increment = max(increment, _FIXED_LAGS[canon])
+    if canonical in _FIXED_LAGS:
+        increment = max(increment, _FIXED_LAGS[canonical])
 
-    lag_names = _LAG_PARAM_NAMES.get(canon)
+    lag_names = _LAG_PARAM_NAMES.get(canonical)
     if lag_names is not None:
         for name in lag_names:
-            value = _positive_int(params.get(name))
-            if value is not None:
-                increment = max(increment, value)
-        if policy is not None:
-            lag = _positive_int(getattr(policy, "lag", None))
+            lag = _positive_int(params.get(name))
             if lag is not None:
                 increment = max(increment, lag)
+        if policy is not None:
+            policy_lag = _positive_int(getattr(policy, "lag", None))
+            if policy_lag is not None:
+                increment = max(increment, policy_lag)
         return increment
 
-    # Rolling/window operators require w-1 rows above their deepest input.
-    for name in _WINDOW_PARAM_NAMES:
-        value = _positive_int(params.get(name))
-        if value is not None:
-            increment = max(increment, value - 1)
+    left = _positive_int(params.get("left_window")) or 0
+    right = _positive_int(params.get("right_window")) or 0
+    history = _positive_int(params.get("history_window")) or 0
+    if canonical in _PIVOT_CONFIRM_CANONICALS:
+        increment = max(increment, left + right)
+    if (
+        canonical in _BOUNDED_STRUCTURE_CANONICALS
+        or canonical in _STRUCTURE_PATTERNS
+        or canonical.startswith(_STRUCTURE_PREFIXES)
+    ) and history:
+        increment = max(increment, history - 1 + left + right)
 
-    # Multi-stage technical indicators have several literal horizons. This is
-    # still a finite warm-up approximation; stateful operators should eventually
-    # expose a dedicated lookback_fn/state contract.
-    if canon in {"MACD", "MACD_line", "MACD_signal", "MACD_hist"}:
+    for name in _WINDOW_PARAM_NAMES:
+        window = _positive_int(params.get(name))
+        if window is None:
+            continue
+        increment = max(increment, window - 1)
+        if canonical in _WINDOW_PLUS_ONE_CANONICALS:
+            increment = max(increment, window)
+
+    if canonical == "candlestick_pattern":
+        body = _positive_int(params.get("body_window")) or 1
+        shadow = _positive_int(params.get("shadow_window")) or 1
+        increment = max(increment, max(body, shadow) + 4)
+    if canonical == "StochasticD":
+        window = _positive_int(params.get("window"))
+        if window:
+            increment = max(increment, window + 1)
+    if canonical == "ulcer_index":
+        window = _positive_int(params.get("window"))
+        if window:
+            increment = max(increment, 2 * (window - 1))
+    if canonical in {"MACD", "MACD_line", "MACD_signal", "MACD_hist"}:
         fast = _positive_int(params.get("fast")) or 0
         slow = _positive_int(params.get("slow")) or 0
         signal = _positive_int(params.get("signal")) or 0
         increment = max(increment, max(fast, slow) - 1 + max(signal - 1, 0))
+    if canonical in {"PPO", "PPO_signal", "PPO_hist", "PVO", "PVO_signal", "PVO_hist"}:
+        slow = _positive_int(params.get("slow_window")) or 0
+        signal = _positive_int(params.get("signal_window")) or 0
+        increment = max(increment, max(0, slow - 1) + max(0, signal - 1))
+    if canonical in {"TSI", "TSI_signal"}:
+        long_window = _positive_int(params.get("long_window")) or 0
+        short_window = _positive_int(params.get("short_window")) or 0
+        signal_window = _positive_int(params.get("signal_window")) or 0
+        increment = max(
+            increment,
+            max(0, long_window - 1)
+            + max(0, short_window - 1)
+            + max(0, signal_window - 1),
+        )
+    if canonical in {"DEMA", "TEMA"}:
+        window = _positive_int(params.get("window")) or 0
+        multiplier = 3 if canonical == "TEMA" else 2
+        increment = max(increment, multiplier * max(0, window - 1))
+    if canonical.startswith("ichimoku_"):
+        for name in ("tenkan_window", "kijun_window", "senkou_b_window"):
+            window = _positive_int(params.get(name))
+            increment = max(increment, max(0, (window or 1) - 1))
+    if canonical in _FLAG_PATTERNS:
+        impulse = _positive_int(params.get("impulse_window")) or 0
+        flag = _positive_int(params.get("flag_window")) or 0
+        increment = max(increment, impulse + flag)
+    if canonical in _PENNANT_PATTERNS:
+        impulse = _positive_int(params.get("impulse_window")) or 0
+        pennant = _positive_int(params.get("pennant_window")) or 0
+        increment = max(increment, impulse + pennant)
+    if canonical == "pattern_cup_handle":
+        cup = _positive_int(params.get("cup_window")) or 0
+        handle = _positive_int(params.get("handle_window")) or 0
+        increment = max(increment, cup + handle)
+    if canonical in _RETEST_PATTERNS:
+        window = _positive_int(params.get("window")) or 0
+        wait = _positive_int(params.get("max_wait")) or 0
+        increment = max(increment, window + wait)
+    if canonical == "ts_impulse_volume":
+        window = _positive_int(params.get("window")) or 0
+        baseline = _positive_int(params.get("baseline_window")) or 0
+        increment = max(increment, window + baseline)
+    if canonical == "ts_channel_width_slope" and history:
+        window = _positive_int(params.get("window")) or 1
+        increment = max(increment, history - 1 + left + right + window - 1)
 
     if policy is not None:
-        lag = _positive_int(getattr(policy, "lag", None))
-        if lag is not None:
-            increment = max(increment, lag)
-
+        policy_lag = _positive_int(getattr(policy, "lag", None))
         lookback_window = _positive_int(getattr(policy, "lookback_window", None))
+        min_periods = _positive_int(getattr(policy, "min_periods", None))
+        if policy_lag is not None:
+            increment = max(increment, policy_lag)
         if lookback_window is not None:
             increment = max(increment, lookback_window - 1)
-
-        min_periods = _positive_int(getattr(policy, "min_periods", None))
         if min_periods is not None:
             increment = max(increment, min_periods - 1)
-
     return increment
 
 
 def _legacy_single_window_lookback(expr: Expr) -> int | None:
-    """Preserve the public lookback value for one direct rolling dependency.
-
-    Internally rolling operators use the precise historical-row convention
-    (``window - 1``), which composes correctly for nested expressions. Older
-    callers, however, exposed the full window for a single rolling input under
-    zero-lookback wrappers such as ``rank(ts_mean(close, 20))``.
-    """
     def visit(node: Expr) -> int | None:
         if isinstance(node, (ColumnRef, Literal)):
             return 0
         if not isinstance(node, CleanedCall):
             return None
         from backend.cleaned_bridge import ensure_cleaned_loaded
+        from cleaned_operators.operator_policy import infer_operator_policy
         from cleaned_operators.registry import OperatorRegistry
 
         ensure_cleaned_loaded()
-        canon = OperatorRegistry.resolve_canonical_strict(node.op)
-        op_impl = OperatorRegistry.get(canon)
-        if op_impl is None:
+        canonical = OperatorRegistry.resolve_canonical_strict(node.op)
+        implementation = OperatorRegistry.get(canonical)
+        if implementation is None:
             return None
-        policy = None
-        from cleaned_operators.operator_policy import infer_operator_policy
-
-        policy = infer_operator_policy(op_impl, canonical=canon)
-        increment = _operator_lookback_increment(canon, node, op_impl, policy)
-        expr_children = [arg for arg in node.args if isinstance(arg, Expr)]
+        increment = _operator_lookback_increment(
+            canonical,
+            node,
+            implementation,
+            infer_operator_policy(implementation, canonical=canonical),
+        )
+        expression_children = [argument for argument in node.args if isinstance(argument, Expr)]
         series_children = [
-            arg for arg in expr_children if not isinstance(arg, Literal)
+            argument for argument in expression_children if not isinstance(argument, Literal)
         ]
         if increment > 0:
             if len(series_children) != 1 or not isinstance(series_children[0], ColumnRef):
                 return None
-            params = _operator_param_values(node, op_impl)
+            params = _operator_param_values(node, implementation)
             for name in _WINDOW_PARAM_NAMES:
                 window = _positive_int(params.get(name))
                 if window is not None:
-                    return window
+                    return max(window, increment)
             return None
         child_windows = [visit(child) for child in series_children]
         if any(window is None for window in child_windows):
@@ -180,119 +463,125 @@ def _legacy_single_window_lookback(expr: Expr) -> int | None:
 
 @dataclass
 class AnalysisResult:
-    """``Analyzer.lower`` 的返回值：IR 树 + 副作用分析摘要。"""
-
     ir: IRNode
     lookback: int
     has_ts_op: bool
     has_cs_op: bool
     referenced_columns: set[str]
+    requires_full_history: bool = False
 
 
 class Analyzer:
-    """将 ``Expr`` 树降为 IR；所有函数调用均来自 ``cleaned_operators``。"""
+    """Lower Expr trees to IR and derive deterministic causal history."""
 
     def lower(self, expr: Expr) -> AnalysisResult:
-        """遍历 Expr 树，生成 IRNode 并递归推导历史依赖。"""
-        cols: set[str] = set()
+        columns: set[str] = set()
         has_ts = False
         has_cs = False
+        requires_full_history = False
 
         def visit(node: Expr) -> tuple[IRNode, int]:
-            nonlocal has_ts, has_cs
+            nonlocal has_ts, has_cs, requires_full_history
 
             if isinstance(node, ColumnRef):
-                cols.add(node.name)
+                columns.add(node.name)
                 return IRNode(op="column", attrs={"name": node.name}), 0
-
             if isinstance(node, Literal):
                 return IRNode(op="literal", attrs={"value": node.value}), 0
+            if not isinstance(node, CleanedCall):
+                raise NotImplementedError(f"Unsupported expr: {type(node).__name__}")
 
-            if isinstance(node, CleanedCall):
-                from backend.cleaned_bridge import ensure_cleaned_loaded
-                from cleaned_operators.registry import OperatorRegistry
+            from backend.cleaned_bridge import ensure_cleaned_loaded
+            from cleaned_operators.registry import OperatorRegistry
 
-                ensure_cleaned_loaded()
-                if node.op in {"bfill", "causal_bfill"}:
-                    from backend.polars_long_policy import UnsupportedCausalOperatorError
-                    raise UnsupportedCausalOperatorError(
-                        f"{node.op} is disabled: backward-looking fill is not point-in-time safe"
-                    )
-                canon = OperatorRegistry.resolve_canonical_strict(node.op)
-                op_impl = OperatorRegistry.get(canon)
+            ensure_cleaned_loaded()
+            if node.op in {"bfill", "causal_bfill"}:
+                from backend.polars_long_policy import UnsupportedCausalOperatorError
 
-                if op_impl is not None:
-                    cat = getattr(op_impl.metadata, "category", "") or ""
-                    if cat in (
-                        "time_series",
-                        "shift_diff_cum",
-                        "technical_signal",
-                        "price_volume",
-                        "intraday_microstructure",
-                        "signal",
-                    ):
-                        has_ts = True
-                    if cat in ("cross_sectional", "group_neutralization"):
-                        has_cs = True
+                raise UnsupportedCausalOperatorError(
+                    f"{node.op} is disabled: backward-looking fill is not point-in-time safe"
+                )
+            canonical = OperatorRegistry.resolve_canonical_strict(node.op)
+            implementation = OperatorRegistry.get(canonical)
 
-                if canon.startswith("ts_") or canon in {
-                    "SMA",
-                    "EMA",
-                    "WMA",
-                    "delay",
-                    "decay_linear",
+            if implementation is not None:
+                category = getattr(implementation.metadata, "category", "") or ""
+                if category in {
+                    "time_series",
+                    "technical_signal",
+                    "price_volume",
+                    "price_volume_extension",
+                    "ohlc_volatility",
+                    "candle_pattern",
+                    "intraday_microstructure",
+                    "signal",
+                    "price_structure",
+                    "chart_pattern",
+                    "fundamental_period",
                 }:
                     has_ts = True
-                if canon in {
-                    "rank",
-                    "zscore",
-                    "scale",
-                    "normalize",
-                    "winsorize",
-                    "quantile",
-                    "neutralize",
-                } or canon.startswith("group_"):
+                if category in {"cross_sectional", "group_neutralization"}:
                     has_cs = True
+            if canonical.startswith("ts_") or canonical in {
+                "SMA",
+                "EMA",
+                "WMA",
+                "delay",
+                "decay_linear",
+            }:
+                has_ts = True
+            if canonical in {
+                "rank",
+                "zscore",
+                "scale",
+                "normalize",
+                "winsorize",
+                "quantile",
+                "neutralize",
+            } or canonical.startswith("group_"):
+                has_cs = True
 
-                visited_inputs = [visit(arg) for arg in node.args]
-                inputs = tuple(item[0] for item in visited_inputs)
-                deepest_child = max((item[1] for item in visited_inputs), default=0)
-
-                attrs: dict[str, Any] = {}
-                for key, value in node.kwargs_dict().items():
-                    if isinstance(value, Expr):
-                        lowered, kw_lookback = visit(value)
-                        if lowered.op != "literal":
-                            raise NotImplementedError(
-                                f"cleaned op {node.op!r} kwargs must be literals, got {key!r}"
-                            )
-                        attrs[key] = lowered.attrs["value"]
-                        deepest_child = max(deepest_child, kw_lookback)
-                    else:
-                        attrs[key] = value
-
-                from backend.parameter_aliases import normalize_parameter_aliases
-
-                attrs = normalize_parameter_aliases(canon, attrs)
-
-                policy = None
-                if op_impl is not None:
-                    from cleaned_operators.operator_policy import infer_operator_policy
-
-                    policy = infer_operator_policy(op_impl, canonical=canon)
-
-                own_increment = _operator_lookback_increment(
-                    canon,
-                    node,
-                    op_impl,
-                    policy,
-                )
-                return (
-                    IRNode(op=canon, inputs=inputs, attrs=attrs),
-                    deepest_child + own_increment,
+            try:
+                from cleaned_operators.production_hardening import (
+                    FULL_HISTORY_REPLAY_CANONICALS,
                 )
 
-            raise NotImplementedError(f"Unsupported expr: {type(node).__name__}")
+                if canonical in FULL_HISTORY_REPLAY_CANONICALS:
+                    requires_full_history = True
+            except ImportError:
+                pass
+
+            visited_inputs = [visit(argument) for argument in node.args]
+            inputs = tuple(item[0] for item in visited_inputs)
+            deepest_child = max((item[1] for item in visited_inputs), default=0)
+            attrs: dict[str, Any] = {}
+            for key, value in node.kwargs_dict().items():
+                if isinstance(value, Expr):
+                    lowered, keyword_lookback = visit(value)
+                    if lowered.op != "literal":
+                        raise NotImplementedError(
+                            f"cleaned op {node.op!r} kwargs must be literals, got {key!r}"
+                        )
+                    attrs[key] = lowered.attrs["value"]
+                    deepest_child = max(deepest_child, keyword_lookback)
+                else:
+                    attrs[key] = value
+
+            from backend.parameter_aliases import normalize_parameter_aliases
+
+            attrs = normalize_parameter_aliases(canonical, attrs)
+            policy = None
+            if implementation is not None:
+                from cleaned_operators.operator_policy import infer_operator_policy
+
+                policy = infer_operator_policy(implementation, canonical=canonical)
+            own_increment = _operator_lookback_increment(
+                canonical, node, implementation, policy
+            )
+            return (
+                IRNode(op=canonical, inputs=inputs, attrs=attrs),
+                deepest_child + own_increment,
+            )
 
         ir, lookback = visit(expr)
         legacy_window = _legacy_single_window_lookback(expr)
@@ -303,5 +592,6 @@ class Analyzer:
             lookback=lookback,
             has_ts_op=has_ts,
             has_cs_op=has_cs,
-            referenced_columns=cols,
+            referenced_columns=columns,
+            requires_full_history=requires_full_history,
         )

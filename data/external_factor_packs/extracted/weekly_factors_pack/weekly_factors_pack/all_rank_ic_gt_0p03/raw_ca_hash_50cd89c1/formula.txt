@@ -1,0 +1,1 @@
+(ts_pct(close, 5)) * (safe_div(numerator=volume, denominator=ts_mean(volume, 20)))

@@ -1,0 +1,395 @@
+{
+  "generated_at": "2026-08-02",
+  "sources": {
+    "cogalpha_lqtp_batch": {
+      "path": "data/cogalpha_lqtp_batch/dsl_catalog.json",
+      "entries": 176,
+      "unique_function_names": 170,
+      "completed_eval": 117,
+      "failed_eval": 53
+    },
+    "week2_pv": {
+      "path": "week2_pv_factors/source/week2_factors_catalog.json",
+      "count": 37
+    },
+    "report_7_26": {
+      "path": "data/cogalpha_lqtp_production/reports_7_26",
+      "selected_count": 30,
+      "html_reports": 32,
+      "meta": {
+        "title": "本周优选 30 因子统一回测",
+        "generated_at": "2026-07-26T17:20:12+08:00",
+        "factor_pool_updated_at": "2026-07-24T10:56:43.943469+00:00",
+        "sample_begin": "2019-01-02",
+        "sample_end": "2026-06-25",
+        "factor_count": 30,
+        "route_counts": {
+          "factor_engine": 10,
+          "python": 20
+        },
+        "evaluation_status": "source_backtest_complete",
+        "completed_factor_count": 30,
+        "failed_factor_count": 0,
+        "pending_factor_count": 0,
+        "selection": {
+          "input_pool_count": 179,
+          "selected_count": 30,
+          "primary_metric": "absolute_rank_ic",
+          "tie_breaker": "backtest_sharpe_ratio",
+          "pool_deduplication": {
+            "metric": "absolute mean daily mutual IC",
+            "threshold": 0.7,
+            "method": "incremental greedy",
+            "quality_priority": [
+              "absolute_rank_ic",
+              "backtest_sharpe_ratio"
+            ]
+          }
+        },
+        "quality_warning_factor_count": 0,
+        "lqtp_completed_factor_count": 30,
+        "lqtp_missing_factor_count": 0,
+        "lqtp_failed_factor_count": 0
+      }
+    },
+    "screening_top30": {
+      "path": "data/cogalpha_lqtp_production/reports/cogalpha_factor_screening_top30.html",
+      "unique_factor_ids_in_doc": 66,
+      "top30_ids": [
+        "factor_718",
+        "factor_658",
+        "factor_489",
+        "factor_314",
+        "factor_572",
+        "factor_805",
+        "factor_122",
+        "factor_89",
+        "factor_570",
+        "factor_749",
+        "factor_315",
+        "factor_544",
+        "factor_892",
+        "factor_573",
+        "factor_790",
+        "factor_215",
+        "factor_70",
+        "factor_299",
+        "factor_209",
+        "factor_302",
+        "factor_247",
+        "factor_248",
+        "factor_828",
+        "factor_646",
+        "factor_735",
+        "factor_546",
+        "factor_879",
+        "factor_643",
+        "factor_104",
+        "factor_644"
+      ]
+    }
+  },
+  "totals": {},
+  "report_7_26_factors": [
+    {
+      "rank": 1,
+      "factor_key": "9b8b5080bb51fd0d",
+      "factor_id": "9b8b5080bb51fd0d",
+      "factor_name": "factor_intraday_pressure_asym_diff",
+      "route": "python",
+      "mean_rank_ic": 0.0729356801571994,
+      "pool_backtest_sharpe": null,
+      "value_artifact": "/Users/xiangyurui/projects/factor_evaluation/factor_pool/factors/9b8b5080bb51fd0d/factor_values.parquet"
+    },
+    {
+      "rank": 2,
+      "factor_key": "b0e9545fa66ab30a",
+      "factor_id": "alphasage_b0e9545fa66ab30a",
+      "factor_name": "alphasage_b0e9545fa66ab30a",
+      "route": "factor_engine",
+      "mean_rank_ic": 0.06196573254266884,
+      "pool_backtest_sharpe": 0.6473509544200613,
+      "value_artifact": "/Users/xiangyurui/projects/factor_evaluation/factor_pool/factors/alphasage_b0e9545fa66ab30a/factor_values.parquet"
+    },
+    {
+      "rank": 3,
+      "factor_key": "559a3c3183ad9e42",
+      "factor_id": "559a3c3183ad9e42",
+      "factor_name": "factor_tanh_thrust_dynamic_smooth",
+      "route": "python",
+      "mean_rank_ic": 0.06193183342389114,
+      "pool_backtest_sharpe": null,
+      "value_artifact": "/Users/xiangyurui/projects/factor_evaluation/factor_pool/factors/559a3c3183ad9e42/factor_values.parquet"
+    },
+    {
+      "rank": 4,
+      "factor_key": "76c2850ef12db3e8",
+      "factor_id": "76c2850ef12db3e8",
+      "factor_name": "factor_mut_hc004_volpctrank_s12_clip2_5_volwin6",
+      "route": "python",
+      "mean_rank_ic": 0.06161673303633597,
+      "pool_backtest_sharpe": null,
+      "value_artifact": "/Users/xiangyurui/projects/factor_evaluation/factor_pool/factors/76c2850ef12db3e8/factor_values.parquet"
+    },
+    {
+      "rank": 5,
+      "factor_key": "43727f7f7b2ba487",
+      "factor_id": "alphasage_43727f7f7b2ba487",
+      "factor_name": "alphasage_43727f7f7b2ba487",
+      "route": "factor_engine",
+      "mean_rank_ic": 0.05834701811140468,
+      "pool_backtest_sharpe": 0.5591958574467375,
+      "value_artifact": "/Users/xiangyurui/projects/factor_evaluation/factor_pool/factors/alphasage_43727f7f7b2ba487/factor_values.parquet"
+    },
+    {
+      "rank": 6,
+      "factor_key": "89d1bc9b29c9d35a",
+      "factor_id": "alphasage_89d1bc9b29c9d35a",
+      "factor_name": "alphasage_89d1bc9b29c9d35a",
+      "route": "factor_engine",
+      "mean_rank_ic": 0.056708321971171136,
+      "pool_backtest_sharpe": 0.7269048547259361,
+      "value_artifact": "/Users/xiangyurui/projects/factor_evaluation/factor_pool/factors/alphasage_89d1bc9b29c9d35a/factor_values.parquet"
+    },
+    {
+      "rank": 7,
+      "factor_key": "a88aa2d40d4e3aee",
+      "factor_id": "a88aa2d40d4e3aee",
+      "factor_name": "factor_ema_vol_asymmetry_rank",
+      "route": "python",
+      "mean_rank_ic": 0.05520901630526634,
+      "pool_backtest_sharpe": null,
+      "value_artifact": "/Users/xiangyurui/projects/factor_evaluation/factor_pool/factors/a88aa2d40d4e3aee/factor_values.parquet"
+    },
+    {
+      "rank": 8,
+      "factor_key": "8208112fae4e0b20",
+      "factor_id": "8208112fae4e0b20",
+      "factor_name": "factor_herding_volume_momentum_continuous",
+      "route": "python",
+      "mean_rank_ic": 0.05055705590887793,
+      "pool_backtest_sharpe": null,
+      "value_artifact": "/Users/xiangyurui/projects/factor_evaluation/factor_pool/factors/8208112fae4e0b20/factor_values.parquet"
+    },
+    {
+      "rank": 9,
+      "factor_key": "b54a384026c507e5",
+      "factor_id": "b54a384026c507e5",
+      "factor_name": "factor_vol_regime_trend_smoothed",
+      "route": "python",
+      "mean_rank_ic": 0.04988897280888106,
+      "pool_backtest_sharpe": null,
+      "value_artifact": "/Users/xiangyurui/projects/factor_evaluation/factor_pool/factors/b54a384026c507e5/factor_values.parquet"
+    },
+    {
+      "rank": 10,
+      "factor_key": "13c328d6a93e822c",
+      "factor_id": "13c328d6a93e822c",
+      "factor_name": "factor_volume_adaptive_momentum",
+      "route": "python",
+      "mean_rank_ic": 0.04917055055127945,
+      "pool_backtest_sharpe": null,
+      "value_artifact": "/Users/xiangyurui/projects/factor_evaluation/factor_pool/factors/13c328d6a93e822c/factor_values.parquet"
+    },
+    {
+      "rank": 11,
+      "factor_key": "2717b38912db1376",
+      "factor_id": "2717b38912db1376",
+      "factor_name": "factor_volatility_compression",
+      "route": "python",
+      "mean_rank_ic": 0.0491019909285227,
+      "pool_backtest_sharpe": null,
+      "value_artifact": "/Users/xiangyurui/projects/factor_evaluation/factor_pool/factors/2717b38912db1376/factor_values.parquet"
+    },
+    {
+      "rank": 12,
+      "factor_key": "58de3d016aa7633c",
+      "factor_id": "58de3d016aa7633c",
+      "factor_name": "factor_volume_weighted_range_skew",
+      "route": "python",
+      "mean_rank_ic": 0.047198965745102184,
+      "pool_backtest_sharpe": null,
+      "value_artifact": "/Users/xiangyurui/projects/factor_evaluation/factor_pool/factors/58de3d016aa7633c/factor_values.parquet"
+    },
+    {
+      "rank": 13,
+      "factor_key": "e495067d51905b93",
+      "factor_id": "e495067d51905b93",
+      "factor_name": "factor_volume_confirmed_ewm",
+      "route": "python",
+      "mean_rank_ic": 0.04647134187588065,
+      "pool_backtest_sharpe": null,
+      "value_artifact": "/Users/xiangyurui/projects/factor_evaluation/factor_pool/factors/e495067d51905b93/factor_values.parquet"
+    },
+    {
+      "rank": 14,
+      "factor_key": "222a8dd82489d8b1",
+      "factor_id": "222a8dd82489d8b1",
+      "factor_name": "factor_volume_confirmed_up_capture",
+      "route": "python",
+      "mean_rank_ic": 0.04550218890644891,
+      "pool_backtest_sharpe": null,
+      "value_artifact": "/Users/xiangyurui/projects/factor_evaluation/factor_pool/factors/222a8dd82489d8b1/factor_values.parquet"
+    },
+    {
+      "rank": 15,
+      "factor_key": "fe304ef9dfcf0fa1",
+      "factor_id": "fe304ef9dfcf0fa1",
+      "factor_name": "factor_volume_surge_persistence",
+      "route": "python",
+      "mean_rank_ic": 0.045329973777350194,
+      "pool_backtest_sharpe": null,
+      "value_artifact": "/Users/xiangyurui/projects/factor_evaluation/factor_pool/factors/fe304ef9dfcf0fa1/factor_values.parquet"
+    },
+    {
+      "rank": 16,
+      "factor_key": "0c05924d28358990",
+      "factor_id": "0c05924d28358990",
+      "factor_name": "factor_intraday_adx_momentum",
+      "route": "python",
+      "mean_rank_ic": 0.04376416367561853,
+      "pool_backtest_sharpe": null,
+      "value_artifact": "/Users/xiangyurui/projects/factor_evaluation/factor_pool/factors/0c05924d28358990/factor_values.parquet"
+    },
+    {
+      "rank": 17,
+      "factor_key": "438ecd5ee61b1007",
+      "factor_id": "438ecd5ee61b1007",
+      "factor_name": "factor_crash_vol_spike_volregime_boost",
+      "route": "python",
+      "mean_rank_ic": 0.043511125523362226,
+      "pool_backtest_sharpe": null,
+      "value_artifact": "/Users/xiangyurui/projects/factor_evaluation/factor_pool/factors/438ecd5ee61b1007/factor_values.parquet"
+    },
+    {
+      "rank": 18,
+      "factor_key": "67bc8e5bfe6e5237",
+      "factor_id": "67bc8e5bfe6e5237",
+      "factor_name": "factor_simple_convex_momentum_log_volume",
+      "route": "python",
+      "mean_rank_ic": 0.0431288984585464,
+      "pool_backtest_sharpe": null,
+      "value_artifact": "/Users/xiangyurui/projects/factor_evaluation/factor_pool/factors/67bc8e5bfe6e5237/factor_values.parquet"
+    },
+    {
+      "rank": 19,
+      "factor_key": "34cb4926158cbd1e",
+      "factor_id": "34cb4926158cbd1e",
+      "factor_name": "factor_volume_adjusted_divergence_ema10",
+      "route": "python",
+      "mean_rank_ic": 0.04223921137467081,
+      "pool_backtest_sharpe": null,
+      "value_artifact": "/Users/xiangyurui/projects/factor_evaluation/factor_pool/factors/34cb4926158cbd1e/factor_values.parquet"
+    },
+    {
+      "rank": 20,
+      "factor_key": "baec4247c71a031c",
+      "factor_id": "alphasage_baec4247c71a031c",
+      "factor_name": "alphasage_baec4247c71a031c",
+      "route": "factor_engine",
+      "mean_rank_ic": 0.03960804123941295,
+      "pool_backtest_sharpe": 0.5153872892878522,
+      "value_artifact": "/Users/xiangyurui/projects/factor_evaluation/factor_pool/factors/alphasage_baec4247c71a031c/factor_values.parquet"
+    },
+    {
+      "rank": 21,
+      "factor_key": "99e8c98dc92fba46",
+      "factor_id": "alphasage_99e8c98dc92fba46",
+      "factor_name": "alphasage_99e8c98dc92fba46",
+      "route": "factor_engine",
+      "mean_rank_ic": 0.03937766506864317,
+      "pool_backtest_sharpe": 0.5566109047679979,
+      "value_artifact": "/Users/xiangyurui/projects/factor_evaluation/factor_pool/factors/alphasage_99e8c98dc92fba46/factor_values.parquet"
+    },
+    {
+      "rank": 22,
+      "factor_key": "74b9b588c2cfeb3e",
+      "factor_id": "74b9b588c2cfeb3e",
+      "factor_name": "factor_mut_cro_asym_vol_ratio_med_15_minp3_vol10",
+      "route": "python",
+      "mean_rank_ic": 0.038559266679463224,
+      "pool_backtest_sharpe": null,
+      "value_artifact": "/Users/xiangyurui/projects/factor_evaluation/factor_pool/factors/74b9b588c2cfeb3e/factor_values.parquet"
+    },
+    {
+      "rank": 23,
+      "factor_key": "094895e9ecb6de45",
+      "factor_id": "094895e9ecb6de45",
+      "factor_name": "factor_volatility_asymmetry_spike_adj_ema5",
+      "route": "python",
+      "mean_rank_ic": 0.03831986651047248,
+      "pool_backtest_sharpe": null,
+      "value_artifact": "/Users/xiangyurui/projects/factor_evaluation/factor_pool/factors/094895e9ecb6de45/factor_values.parquet"
+    },
+    {
+      "rank": 24,
+      "factor_key": "c14fed9d6503cb5a",
+      "factor_id": "c14fed9d6503cb5a",
+      "factor_name": "factor_momentum_volratio",
+      "route": "python",
+      "mean_rank_ic": 0.038017966304089566,
+      "pool_backtest_sharpe": null,
+      "value_artifact": "/Users/xiangyurui/projects/factor_evaluation/factor_pool/factors/c14fed9d6503cb5a/factor_values.parquet"
+    },
+    {
+      "rank": 25,
+      "factor_key": "11603b8502e45835",
+      "factor_id": "11603b8502e45835",
+      "factor_name": "factor_directional_vol_volbase25_smooth_dir_range10",
+      "route": "python",
+      "mean_rank_ic": 0.03595589162695473,
+      "pool_backtest_sharpe": null,
+      "value_artifact": "/Users/xiangyurui/projects/factor_evaluation/factor_pool/factors/11603b8502e45835/factor_values.parquet"
+    },
+    {
+      "rank": 26,
+      "factor_key": "154a51fe952b5243",
+      "factor_id": "alphasage_154a51fe952b5243",
+      "factor_name": "alphasage_154a51fe952b5243",
+      "route": "factor_engine",
+      "mean_rank_ic": 0.03499042703842177,
+      "pool_backtest_sharpe": 0.9123226033860129,
+      "value_artifact": "/Users/xiangyurui/projects/factor_evaluation/factor_pool/factors/alphasage_154a51fe952b5243/factor_values.parquet"
+    },
+    {
+      "rank": 27,
+      "factor_key": "3aaad1a1bf9ce8a2",
+      "factor_id": "alphasage_3aaad1a1bf9ce8a2",
+      "factor_name": "alphasage_3aaad1a1bf9ce8a2",
+      "route": "factor_engine",
+      "mean_rank_ic": 0.03354577587859498,
+      "pool_backtest_sharpe": 0.5788130901251692,
+      "value_artifact": "/Users/xiangyurui/projects/factor_evaluation/factor_pool/factors/alphasage_3aaad1a1bf9ce8a2/factor_values.parquet"
+    },
+    {
+      "rank": 28,
+      "factor_key": "5de2f47bc5cd6c66",
+      "factor_id": "alphasage_5de2f47bc5cd6c66",
+      "factor_name": "alphasage_5de2f47bc5cd6c66",
+      "route": "factor_engine",
+      "mean_rank_ic": 0.03207917428416467,
+      "pool_backtest_sharpe": 0.6287361931528357,
+      "value_artifact": "/Users/xiangyurui/projects/factor_evaluation/factor_pool/factors/alphasage_5de2f47bc5cd6c66/factor_values.parquet"
+    },
+    {
+      "rank": 29,
+      "factor_key": "58079cceee41ce6d",
+      "factor_id": "alphasage_58079cceee41ce6d",
+      "factor_name": "alphasage_58079cceee41ce6d",
+      "route": "factor_engine",
+      "mean_rank_ic": 0.03207157569136626,
+      "pool_backtest_sharpe": 0.6017833372773255,
+      "value_artifact": "/Users/xiangyurui/projects/factor_evaluation/factor_pool/factors/alphasage_58079cceee41ce6d/factor_values.parquet"
+    },
+    {
+      "rank": 30,
+      "factor_key": "3e74b4fa2831dc36",
+      "factor_id": "alphasage_3e74b4fa2831dc36",
+      "factor_name": "alphasage_3e74b4fa2831dc36",
+      "route": "factor_engine",
+      "mean_rank_ic": 0.030077298749068095,
+      "pool_backtest_sharpe": 0.6140022122144764,
+      "value_artifact": "/Users/xiangyurui/projects/factor_evaluation/factor_pool/factors/alphasage_3e74b4fa2831dc36/factor_values.parquet"
+    }
+  ]
+}

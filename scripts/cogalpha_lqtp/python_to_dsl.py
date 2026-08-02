@@ -265,10 +265,35 @@ def _finalize_entry(
     notes: str = "",
 ) -> DslEntry:
     dsl = sanitize_dsl(dsl)
-    # Accept either FE or LQTP naming; validate against factor_engine form.
     fe_dsl = lqtp_to_fe_dsl(dsl)
-    ok, msg = validate_factor_engine_dsl(fe_dsl)
+    lqtp = MANUAL_LQTP_FORMULA.get(function_name) or dsl_to_lqtp(fe_dsl)
+    if is_lqtp_native_dsl(lqtp):
+        return _annotate_eval_route(
+            DslEntry(
+                factor_id=factor_id,
+                function_name=function_name,
+                dsl=lqtp,
+                lqtp_formula=lqtp,
+                status="ready",
+                source=source,
+                notes=notes,
+            )
+        )
+    ok, msg = validate_factor_engine_dsl(fe_dsl, surface="daily")
     if not ok:
+        ok_compat, _ = validate_factor_engine_dsl(lqtp, surface="compat")
+        if ok_compat:
+            return _annotate_eval_route(
+                DslEntry(
+                    factor_id=factor_id,
+                    function_name=function_name,
+                    dsl=lqtp,
+                    lqtp_formula=lqtp,
+                    status="ready",
+                    source=source,
+                    notes=notes or "compat_surface",
+                )
+            )
         return _python_entry(
             factor_id=factor_id,
             function_name=function_name,

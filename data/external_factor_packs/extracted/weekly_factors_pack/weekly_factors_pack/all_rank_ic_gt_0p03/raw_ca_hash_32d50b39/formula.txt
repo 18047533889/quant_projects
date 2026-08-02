@@ -1,0 +1,1 @@
+ema(daily_return) * (safe_div(numerator=volume, denominator=ts_mean(volume, 20)), 5)

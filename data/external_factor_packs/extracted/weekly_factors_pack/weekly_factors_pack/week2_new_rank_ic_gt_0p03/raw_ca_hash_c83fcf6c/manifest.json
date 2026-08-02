@@ -1,0 +1,75 @@
+{
+  "schema_version": "factor.manifest.v1",
+  "candidate_id": "raw_ca_hash_c83fcf6c",
+  "campaign_id": "llm_ashare_pv_cogalpha_2026q2",
+  "generator_name": "cogalpha",
+  "producer": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_LQTP",
+  "domain_root": "price_volume",
+  "frequency_bucket": "daily",
+  "batch_id": "post_mining_translate",
+  "factor_name": "factor_vol_regime_breakout_continuous",
+  "formula": "ema((safe_div(numerator=close - low, denominator=high - low) - 0.5) * safe_div(numerator=high - low, denominator=ts_quantile(high - low, 20, 0.5)), 5)",
+  "expression_type": "lqtp_dsl",
+  "execution_platform": "lqtp",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit",
+  "code": "def factor_vol_regime_breakout_continuous(df):\n    df_copy = df.copy()\n    range_ = df_copy['high'] - df_copy['low']\n    range_med = range_.rolling(20).median()\n    pos = (df_copy['close'] - df_copy['low']) / range_.replace(0, np.nan)\n    vol_ratio = range_ / range_med.replace(0, np.nan)\n    factor = (pos - 0.5) * vol_ratio\n    factor = factor.ewm(span=5, min_periods=5).mean()\n    factor.name = 'factor_vol_regime_breakout_continuous'\n    return factor",
+  "rationale": "Preserves the parent's core idea of intraday breakout strength conditioned on volatility regime, but replaces the binary volatility gate with a continuous scaling factor (range / 20-day median). This avoids discontinuities and captures more nuanced volatility information, targeting improved MI while maintaining the ICIR and RankICIR strengths of the parent.",
+  "lineage": {
+    "agent_skill": "alpha-volatility-regime",
+    "operation": "cogalpha_to_lqtp_translation"
+  },
+  "stage": "candidate_pool",
+  "fitness_label": "qualified",
+  "metrics": {
+    "train": {
+      "ic": 0.030866248032537742,
+      "rank_ic": 0.03535091732391188,
+      "icir": 0.33798375978827455,
+      "rank_icir": 0.33639565777258135,
+      "status": "computed",
+      "source": "cogalpha"
+    },
+    "valid": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    }
+  },
+  "validation": {
+    "status": "pending"
+  },
+  "created_at": "2026-06-19T14:45:38.231742+00:00",
+  "updated_at": "2026-06-21T16:18:19.806484+00:00",
+  "lqtp_tags": {
+    "universe": "all_a",
+    "market": "ashare"
+  },
+  "rationale_llm": {
+    "summary": "Preserves the parent's core idea of intraday breakout strength conditioned on volatility regime, but replaces the binary volatility gate with a continuous scaling factor (range / 20-day median). This avoids discontinuities and captures more nuanced volatility information, targeting improved MI while maintaining the ICIR and RankICIR strengths of the parent.",
+    "parsed_at": "2026-06-20T05:11:34.777903+00:00",
+    "source": "manifest_rationale"
+  },
+  "admission": {
+    "test": {
+      "checked_at": "2026-06-21T16:01:15.799812+00:00",
+      "min_rank_ic": 0.03,
+      "max_pool_correlation": 0.7,
+      "mean_ic": 0.009286783131579159,
+      "rank_ic": 0.009286783131579159,
+      "orientation": "flipped",
+      "original_mean_ic": -0.009286791887667227,
+      "pool_max_correlation": 0.9999999999997742,
+      "correlation_source": "lqtp_reference_library",
+      "reference_library_split": "test",
+      "reference_library_cached_count": 65,
+      "reference_compared_count": 65,
+      "passed_ic": false,
+      "passed_correlation": false,
+      "passed": false,
+      "split": "test"
+    }
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "schema_version": "factor.manifest.v1",
+  "candidate_id": "raw_ca_hash_f1858c32",
+  "campaign_id": "llm_ashare_pv_cogalpha_2026q2",
+  "generator_name": "cogalpha",
+  "producer": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_LQTP",
+  "domain_root": "price_volume",
+  "frequency_bucket": "daily",
+  "batch_id": "post_mining_translate",
+  "factor_name": "factor_adaptive_vol_directional_smooth_range10",
+  "formula": "smooth_range = ema((high-low)/close, span=10); vol_ratio = volume / ts_mean(volume,25); smooth_vol = ema(vol_ratio, span=15); direction=(close-open)/close; smooth_direction=ema(direction, span=3); factor = smooth_range * smooth_vol * smooth_direction",
+  "expression_type": "lqtp_dsl",
+  "execution_platform": "lqtp",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit",
+  "code": "def factor_adaptive_vol_directional_smooth_range10(df):\n    df_copy = df.copy()\n    range_pct = (df_copy['high'] - df_copy['low']) / df_copy['close']\n    smooth_range = range_pct.ewm(span=10, min_periods=10).mean()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(25, min_periods=25).mean()\n    smooth_vol = vol_ratio.ewm(span=15, min_periods=15).mean()\n    direction = (df_copy['close'] - df_copy['open']) / df_copy['close']\n    smooth_direction = direction.ewm(span=3, min_periods=3).mean()\n    df_copy['factor_adaptive_vol_directional_smooth_range10'] = smooth_range * smooth_vol * smooth_direction\n    return df_copy['factor_adaptive_vol_directional_smooth_range10']",
+  "rationale": "Mutation of alpha-crossover-gen14-001. Preserves core directional volume-adjusted volatility mechanism (smooth_range EWMA span=10, volume ratio baseline 25-day, smooth_direction EWMA span=3). Simplifies volume smoothing by replacing the adaptive sigmoid blending of two EWMA with a single EWMA (span=15) as in the effective parent alpha-mutation-gen13-002, aiming to reduce complexity and potentially improve IC stability while preserving strong rank-ordering strength (RankIC, RankICIR). Only one component changed; no other modifications.",
+  "lineage": {
+    "agent_skill": "alpha-regime-gating",
+    "operation": "cogalpha_to_lqtp_translation"
+  },
+  "stage": "candidate_pool",
+  "fitness_label": "qualified",
+  "metrics": {
+    "train": {
+      "ic": 0.02974448254520689,
+      "rank_ic": 0.04320842128262164,
+      "icir": 0.30686975691482016,
+      "rank_icir": 0.3630254921993133,
+      "status": "computed",
+      "source": "cogalpha"
+    },
+    "valid": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    }
+  },
+  "validation": {
+    "status": "pending"
+  },
+  "created_at": "2026-06-21T11:25:28.519791+00:00",
+  "updated_at": "2026-06-21T16:18:21.063374+00:00",
+  "lqtp_tags": {
+    "universe": "all_a",
+    "market": "ashare"
+  },
+  "rationale_llm": {
+    "summary": "Mutation of alpha-crossover-gen14-001. Preserves core directional volume-adjusted volatility mechanism (smooth_range EWMA span=10, volume ratio baseline 25-day, smooth_direction EWMA span=3). Simplifies volume smoothing by replacing the adaptive sigmoid blending of two EWMA with a single EWMA (span=15) as in the effective parent alpha-mutation-gen13-002, aiming to reduce complexity and potentially improve IC stability while preserving strong rank-ordering strength (RankIC, RankICIR). Only one co",
+    "parsed_at": "2026-06-21T11:25:34.802133+00:00",
+    "source": "manifest_rationale"
+  }
+}

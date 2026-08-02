@@ -1,0 +1,22 @@
+{
+  "started_at": "2026-08-02T01:52:09+08:00",
+  "status": "running",
+  "target_factors": 171,
+  "batch_pid": 215623,
+  "supervisor_pid": 240069,
+  "notes": [
+    "落值+扩展评估全自动进行中，断点续跑已启用",
+    "若主进程崩溃，supervisor 每 5 分钟自动重启",
+    "完成后自动生成 screening_reeval_DONE.json 并刷新索引 HTML",
+    "当前无 LQTP 凭证，落值走 factor_engine（不受 30min token 影响）",
+    "若配置 LQTP_USERNAME/PASSWORD，token 每 25 分钟自动刷新"
+  ],
+  "monitor": {
+    "overnight_log": "data/cogalpha_lqtp_production/screening_reeval_overnight.log",
+    "batch_log": "data/cogalpha_lqtp_production/screening_reeval_batch.log",
+    "materialize_progress": "data/cogalpha_lqtp_production/screening_reeval_materialize.json",
+    "eval_progress": "data/cogalpha_lqtp_production/screening_reeval_progress.json",
+    "reports": "data/cogalpha_lqtp_production/reports_screening_reeval/",
+    "index": "data/cogalpha_lqtp_production/reports/factor_rankic_screening_index.html"
+  }
+}

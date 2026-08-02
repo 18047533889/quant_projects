@@ -1,0 +1,27 @@
+{
+  "factor_name": "factor_herding_vol_stress",
+  "candidate_id": "raw_ca_hash_340f0ad9",
+  "week": "week2",
+  "fitness_label": "qualified",
+  "source_shelf": "standard",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.016923203669484275,
+    "rank_ic": 0.041039005729458435,
+    "icir": 0.22722436694679832,
+    "rank_icir": 0.35276852771144634
+  },
+  "lqtp_test": {
+    "rank_ic": 0.02688409234700629,
+    "mean_ic": 0.02688409234700629,
+    "icir": 0.18808204075363402,
+    "orientation": "flipped",
+    "begin_date": 20230101,
+    "end_date": 20260615
+  },
+  "formula": "ema(safe_div(numerator=close - open, denominator=high - low) * safe_div(numerator=volume, denominator=ts_quantile(volume, 10, 0.5)) * safe_div(numerator=high - low, denominator=close), 5)",
+  "rationale": "Crossover: primary mechanism from mutation_herding_v2 (directional herding scaled by volume ratio, smoothed with EMA) combined with volatility normalization from candidate_004 (stress_range = (high-low)/close). The stress_range scaling amplifies the herding signal in high-volatility regimes, aiming to improve ICIR and RankICIR while preserving the parent's strong RankIC and IC.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

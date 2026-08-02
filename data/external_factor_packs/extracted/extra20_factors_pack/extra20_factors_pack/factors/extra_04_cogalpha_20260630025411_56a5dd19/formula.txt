@@ -1,0 +1,1 @@
+tanh(ema( (close/shift(close,1)-1) * (volume/sma(volume,20)), 10 ) * ((close-low)/(high-low)))

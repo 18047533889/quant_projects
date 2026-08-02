@@ -1,0 +1,75 @@
+{
+  "schema_version": "factor.manifest.v1",
+  "candidate_id": "raw_ca_hash_b9907c26",
+  "campaign_id": "llm_ashare_pv_cogalpha_2026q2",
+  "generator_name": "cogalpha",
+  "producer": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_LQTP",
+  "domain_root": "price_volume",
+  "frequency_bucket": "daily",
+  "batch_id": "post_mining_translate",
+  "factor_name": "factor_pressure_tanh",
+  "formula": "sigmoid(2 * safe_div(numerator=safe_div(numerator=close - low, denominator=high - low) * volume - ts_mean(safe_div(numerator=close - low, denominator=high - low) * volume, 20), denominator=ts_std(safe_div(numerator=close - low, denominator=high - low) * volume, 20))) * 2 - 1",
+  "expression_type": "lqtp_dsl",
+  "execution_platform": "lqtp",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit",
+  "code": "def factor_pressure_tanh(df):\n    df_copy = df.copy()\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    safe_range = range_.replace(0, np.nan)\n    intra_pressure = (df_copy[\"close\"] - df_copy[\"low\"]) / safe_range * df_copy[\"volume\"]\n    rolling_mean = intra_pressure.rolling(20, min_periods=20).mean()\n    rolling_std = intra_pressure.rolling(20, min_periods=20).std(ddof=1)\n    z = (intra_pressure - rolling_mean) / rolling_std.replace(0, np.nan)\n    factor = np.tanh(z)\n    factor = factor.fillna(0)\n    df_copy[\"factor_pressure_tanh\"] = factor\n    return df_copy[\"factor_pressure_tanh\"]",
+  "rationale": "Mutation of pressure_zscore: replace signed sqrt with tanh to bound extremes and improve nonlinear stability while preserving volume-weighted intraday pressure core. Preserves parent strength (RankICIR) and targets MI improvement through bounded nonlinearity.",
+  "lineage": {
+    "agent_skill": "alpha-volume-structure",
+    "operation": "cogalpha_to_lqtp_translation"
+  },
+  "stage": "candidate_pool",
+  "fitness_label": "qualified",
+  "metrics": {
+    "train": {
+      "ic": 0.015995840628002,
+      "rank_ic": 0.03307205330065639,
+      "icir": 0.19890196044190864,
+      "rank_icir": 0.35676889638254666,
+      "status": "computed",
+      "source": "cogalpha"
+    },
+    "valid": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    }
+  },
+  "validation": {
+    "status": "pending"
+  },
+  "created_at": "2026-06-21T11:25:28.480043+00:00",
+  "updated_at": "2026-06-21T16:18:27.157428+00:00",
+  "lqtp_tags": {
+    "universe": "all_a",
+    "market": "ashare"
+  },
+  "rationale_llm": {
+    "summary": "Mutation of pressure_zscore: replace signed sqrt with tanh to bound extremes and improve nonlinear stability while preserving volume-weighted intraday pressure core. Preserves parent strength (RankICIR) and targets MI improvement through bounded nonlinearity.",
+    "parsed_at": "2026-06-21T11:25:40.495575+00:00",
+    "source": "manifest_rationale"
+  },
+  "admission": {
+    "test": {
+      "checked_at": "2026-06-21T16:17:45.298129+00:00",
+      "min_rank_ic": 0.03,
+      "max_pool_correlation": 0.7,
+      "mean_ic": 0.02576438941719697,
+      "rank_ic": 0.02576438941719697,
+      "orientation": "flipped",
+      "original_mean_ic": -0.025764387107695408,
+      "pool_max_correlation": 0.999999999999838,
+      "correlation_source": "lqtp_reference_library",
+      "reference_library_split": "test",
+      "reference_library_cached_count": 66,
+      "reference_compared_count": 66,
+      "passed_ic": false,
+      "passed_correlation": false,
+      "passed": false,
+      "split": "test"
+    }
+  }
+}

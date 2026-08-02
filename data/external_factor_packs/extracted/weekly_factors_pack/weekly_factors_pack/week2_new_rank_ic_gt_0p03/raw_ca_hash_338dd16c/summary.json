@@ -1,0 +1,20 @@
+{
+  "factor_name": "factor_directional_vol_smooth_range_mut",
+  "candidate_id": "raw_ca_hash_338dd16c",
+  "week": "week2",
+  "fitness_label": "elite",
+  "source_shelf": "equivalence_review",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.024576166889521165,
+    "rank_ic": 0.03848170138308021,
+    "icir": 0.27806250148664313,
+    "rank_icir": 0.3534282791551786
+  },
+  "lqtp_test": null,
+  "formula": "smooth_range = ewma((high-low)/close, span=8); vol_ratio = volume / rolling_mean(volume,25); fast=ewma(vol_ratio,10); slow=ewma(vol_ratio,30); weight = sigmoid(5*(vol_ratio-0.85)); blend=weight*fast+(1-weight)*slow; direction=(close-open)/close; factor = smooth_range * blend * direction",
+  "rationale": "Mutation of parent alpha-crossover-gen10-001 by increasing the EWMA span for the range component from 5 to 8. Preserves the core directional volume-adjusted volatility mechanism with adaptive sigmoid blending, targeting improved IC stability through smoother range estimation. The parent's strong rank-ordering (RankIC, RankICIR) is maintained by keeping the volume adjustment and blending unchanged.",
+  "expression_type": "python",
+  "filter": "volume > 0 AND not is_suspend"
+}

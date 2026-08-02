@@ -1,0 +1,20 @@
+{
+  "factor_name": "factor_mut_cro_asym_vol_ratio_med_15_minp3_vol10",
+  "candidate_id": "raw_ca_hash_bcbd6919",
+  "week": "week2",
+  "fitness_label": "qualified",
+  "source_shelf": "supplement_pending",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.015021365179551199,
+    "rank_ic": 0.031113400149858573,
+    "icir": 0.22490099832896104,
+    "rank_icir": 0.3674840657769969
+  },
+  "lqtp_test": null,
+  "formula": "(-1.0) * (((df.copy())['((df.copy())['((df.copy())['high'])'])']) - ((df.copy())['((df.copy())['((df.copy())['low'])'])'])).where((((df.copy())['((df.copy())['((df.copy())['((df.copy())['close'])'])'])']) > ((df.copy())['open'])) == 1, np.nan).rolling(15, min_periods=3).median() / (((df.copy())['((df.copy())['((df.copy())['high'])'])']) - ((df.copy())['((df.copy())['((df.copy())['low'])'])'])).where((((df.copy())['((df.copy())['((df.copy())['((df.copy())['close'])'])'])']) <= ((df.copy())['open'])) == 1, np.nan).rolling(15, min_periods=3).median() * (safe_div(numerator=volume, denominator=ts_mean(volume, 20)))",
+  "rationale": "Parent strength: high RankICIR (~0.3795) from robust asymmetry and volume ratio mechanism. Bottleneck: low IC (0.0138). Mutation: increase volume ratio median window from 6 to 10 to obtain a more stable volume ratio, aiming to reduce noise and improve IC while preserving rank stability. All other parameters unchanged.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

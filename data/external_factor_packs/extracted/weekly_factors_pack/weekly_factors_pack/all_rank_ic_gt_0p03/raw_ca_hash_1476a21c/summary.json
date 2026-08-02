@@ -1,0 +1,20 @@
+{
+  "factor_name": "factor_directional_vol_volbase25_smooth_dir_range10",
+  "candidate_id": "raw_ca_hash_1476a21c",
+  "week": "week1",
+  "fitness_label": "elite",
+  "source_shelf": "standard",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.02974448254520689,
+    "rank_ic": 0.04320842128262164,
+    "icir": 0.30686975691482016,
+    "rank_icir": 0.3630254921993133
+  },
+  "lqtp_test": null,
+  "formula": "range_pct = (high-low)/close; smooth_range = ema(range_pct, span=10); vol_ratio = volume / ts_mean(volume,25); smooth_vol = ema(vol_ratio, span=15); direction = (close-open)/close; smooth_direction = ema(direction, span=3); factor = smooth_range * smooth_vol * smooth_direction",
+  "rationale": "Mutation of alpha-crossover-gen13-001. Preserves core directional volume-adjusted volatility mechanism (smooth_range EWMA span=8 increased to span=10, volume ratio baseline 25-day, single EWMA vol_ratio smoothing span=15, direction, smooth_direction EWMA span=3). The mutation increases the EWMA span for range smoothing from 8 to 10 to further stabilize the range component, aiming to improve IC consistency while preserving the strong rank-ordering strength (RankIC, RankICIR) inherited from the pa",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

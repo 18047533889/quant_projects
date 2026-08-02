@@ -1,0 +1,1 @@
+smooth_range = ewm((high-low)/close, span=10); vol_ratio = volume / rolling_mean(volume,25); fast=ewm(vol_ratio,10); slow=ewm(vol_ratio,30); weight = sigmoid(5*(vol_ratio-0.85)); smooth_vol = weight*fast + (1-weight)*slow; direction=(close-open)/close; smooth_direction=ewm(direction, span=3); factor = smooth_range * smooth_vol * smooth_direction

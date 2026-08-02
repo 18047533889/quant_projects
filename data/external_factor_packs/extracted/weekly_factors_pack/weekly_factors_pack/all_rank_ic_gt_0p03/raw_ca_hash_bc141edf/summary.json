@@ -1,0 +1,20 @@
+{
+  "factor_name": "factor_mut_cro_asym_vol_ratio_med_20_minp3_vol6_ema5",
+  "candidate_id": "raw_ca_hash_bc141edf",
+  "week": "week2",
+  "fitness_label": "qualified",
+  "source_shelf": "supplement_pending",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.013777097337199024,
+    "rank_ic": 0.032789556887282516,
+    "icir": 0.21303984449165897,
+    "rank_icir": 0.4081555821004627
+  },
+  "lqtp_test": null,
+  "formula": "(-1.0) * (((df.copy())['((df.copy())['((df.copy())['high'])'])']) - ((df.copy())['((df.copy())['((df.copy())['low'])'])'])).where((((df.copy())['((df.copy())['((df.copy())['((df.copy())['close'])'])'])']) > ((df.copy())['open'])) == 1, np.nan).rolling(20, min_periods=3).median() / (((df.copy())['((df.copy())['((df.copy())['high'])'])']) - ((df.copy())['((df.copy())['((df.copy())['low'])'])'])).where((((df.copy())['((df.copy())['((df.copy())['((df.copy())['close'])'])'])']) <= ((df.copy())['open'])) == 1, np.nan).rolling(20, min_periods=3).median() * (safe_div(numerator=volume, denominator=ts_mean(volume, 20)))",
+  "rationale": "Mutation of mut_cro_asym_vol_ratio_med_20_minp3_vol6_001: preserve core asymmetry ratio and volume ratio mechanism, but increase EMA smoothing span from 3 to 5 to reduce noise and potentially improve IC while maintaining rank stability. Targeting IC improvement without sacrificing RankICIR.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

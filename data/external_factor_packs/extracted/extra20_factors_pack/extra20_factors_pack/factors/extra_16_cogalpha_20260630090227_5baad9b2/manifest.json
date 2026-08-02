@@ -1,0 +1,36 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "cogalpha_20260630090227_5baad9b2",
+  "campaign_id": "cogalpha_ashare_pv_202606301800",
+  "formula": "smoothed(price_change * (volume / SMA(volume,20)) * (1 + zscore(range,20)), 10)",
+  "expression_type": "python",
+  "code": "def factor_volume_weighted_price_change(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    price_change = close.pct_change()\n    vol_ratio = volume / volume.rolling(20, min_periods=20).mean()\n    range_ = df_copy['high'] - df_copy['low']\n    range_z = (range_ - range_.rolling(20, min_periods=20).mean()) / range_.rolling(20, min_periods=20).std(ddof=1)\n    raw = price_change * vol_ratio * (1 + range_z.clip(-3, 3))\n    smoothed = raw.ewm(span=10, min_periods=10).mean()\n    df_copy['factor_volume_weighted_price_change'] = smoothed\n    return df_copy['factor_volume_weighted_price_change']",
+  "generator_name": "cogalpha",
+  "generator_version": "2.1.0",
+  "mined_by": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "born_timestamp": "2026-06-30T09:02:27Z",
+  "metrics": {
+    "train": {
+      "ic": 0.02254843864847131,
+      "icir": 0.22193603439441176,
+      "rank_ic": 0.04559752491737367
+    },
+    "valid": {
+      "ic": 0.021480606977471763,
+      "icir": 0.23143053016753268,
+      "rank_ic": 0.0456349607678898
+    },
+    "test": {
+      "ic": 0.023803603400002857,
+      "icir": 0.2243233262049803,
+      "rank_ic": 0.05594345605740834
+    }
+  },
+  "description": "This factor measures the coherence between price movement and volume behavior by weighting the raw price change with a volume ratio (current volume relative to its 20-day average) and boosting it when the daily price range is anomalously high (via a z-score). The product is then smoothed with an EMA over 10 days to reduce noise and improve rank stability, as suggested by prior effective candidates.",
+  "filter_note": "CogAlpha python interim; train actual_start from lqtp_data (2016+, spec 2014)."
+}

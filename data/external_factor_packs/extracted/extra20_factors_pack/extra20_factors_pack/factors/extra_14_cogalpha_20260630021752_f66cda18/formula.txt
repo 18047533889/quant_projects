@@ -1,0 +1,1 @@
+EWM( (close/open - 1) * ( volume / rolling_max(volume,20) ), 20 )

@@ -554,16 +554,31 @@ def _replace_func_calls(expr: str, name: str, replacer) -> str:
 def dsl_to_lqtp(dsl: str) -> str:
     """Best-effort factor_engine DSL -> LQTP formula (nested-call safe).
 
-    Keep ``ts_pct`` as-is: LQTP documents and accepts it natively.
+    Naming follows LQTP-backtest 因子服务用户手册（2026-07-19）：
+    ``cap`` / ``delay`` / ``ema`` / ``rank`` / ``zscore`` / ``safe_div`` /
+    infix ``and`` ``or`` ``not``.  ``tanh(x)`` → ``2*sigmoid(2*x)-1``.
     """
     out = (dsl or "").strip()
     if not out:
         return out
 
     # Same-arity renames (safe even with nested commas).
-    out = out.replace("protected_div(", "safe_div(")
-    out = out.replace("ewm_mean(", "ema(")
-    out = out.replace("SMA(", "ts_mean(")
+    for src, dst in (
+        ("protected_div(", "safe_div("),
+        ("safe_div_null(", "safe_div("),
+        ("ewm_mean(", "ema("),
+        ("ts_ema(", "ema("),
+        ("SMA(", "ts_mean("),
+        ("sma(", "ts_mean("),
+        ("ts_delay(", "delay("),
+        ("clip(", "cap("),
+        ("clamp(", "cap("),
+        ("cs_rank(", "rank("),
+        ("cs_zscore(", "zscore("),
+        ("if_else(", "where("),
+        ("trade_when(", "where("),
+    ):
+        out = out.replace(src, dst)
 
     def _median(args: list[str]) -> str | None:
         if len(args) != 2:
@@ -580,23 +595,53 @@ def dsl_to_lqtp(dsl: str) -> str:
             return None
         return f"(not ({args[0]}))"
 
+    def _and(args: list[str]) -> str | None:
+        if len(args) < 2:
+            return None
+        body = " and ".join(f"({a})" for a in args)
+        return f"({body})"
+
+    def _or(args: list[str]) -> str | None:
+        if len(args) < 2:
+            return None
+        body = " or ".join(f"({a})" for a in args)
+        return f"({body})"
+
+    def _tanh(args: list[str]) -> str | None:
+        if len(args) != 1:
+            return None
+        # Exact identity: tanh(x) = 2*sigmoid(2*x) - 1; sigmoid is LQTP-native.
+        return f"(2 * sigmoid(2 * ({args[0]})) - 1)"
+
+    def _gaussian(args: list[str]) -> str | None:
+        # No inverse-normal on LQTP; fall back to cross-sectional rank.
+        if not args:
+            return None
+        return f"rank({args[0]})"
+
     out = _replace_func_calls(out, "ts_median", _median)
     out = _replace_func_calls(out, "add", _add)
     out = _replace_func_calls(out, "not_", _not)
+    out = _replace_func_calls(out, "and_", _and)
+    out = _replace_func_calls(out, "or_", _or)
+    out = _replace_func_calls(out, "tanh", _tanh)
+    out = _replace_func_calls(out, "cs_rank_gaussian", _gaussian)
     return out
 
 
 def lqtp_to_fe_dsl(dsl: str) -> str:
     """Map LQTP names to FE where needed; LQTP-aligned names stay as-is.
 
-    ``ema`` / ``safe_div`` / ``delay`` / ``cap`` / ``decay_linear`` are now FE
-    primary names. ``protected_div`` remains FE-only (fill-default ≠ LQTP NULL).
+    ``ema`` / ``safe_div`` / ``delay`` / ``cap`` / ``decay_linear`` are FE
+    aliases. ``protected_div`` remains FE-only (fill-default ≠ LQTP NULL).
     """
     out = (dsl or "").strip()
     if not out:
         return out
     # Historical ewm_mean → ema (alias still works; prefer primary).
     out = out.replace("ewm_mean(", "ema(")
+    # LQTP cap → FE clip (canonical)
+    out = out.replace("cap(", "clip(")
 
     def _quantile_median(args: list[str]) -> str | None:
         if len(args) != 3 or args[2].strip() != "0.5":

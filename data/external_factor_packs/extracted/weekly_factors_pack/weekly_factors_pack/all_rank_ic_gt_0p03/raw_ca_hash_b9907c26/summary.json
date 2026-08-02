@@ -1,0 +1,27 @@
+{
+  "factor_name": "factor_pressure_tanh",
+  "candidate_id": "raw_ca_hash_b9907c26",
+  "week": "week2",
+  "fitness_label": "qualified",
+  "source_shelf": "supplement_pending",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.015995840628002,
+    "rank_ic": 0.03307205330065639,
+    "icir": 0.19890196044190864,
+    "rank_icir": 0.35676889638254666
+  },
+  "lqtp_test": {
+    "rank_ic": 0.02576438941719697,
+    "mean_ic": 0.02576438941719697,
+    "icir": 0.20949808753545052,
+    "orientation": "flipped",
+    "begin_date": 20230101,
+    "end_date": 20260615
+  },
+  "formula": "sigmoid(2 * safe_div(numerator=safe_div(numerator=close - low, denominator=high - low) * volume - ts_mean(safe_div(numerator=close - low, denominator=high - low) * volume, 20), denominator=ts_std(safe_div(numerator=close - low, denominator=high - low) * volume, 20))) * 2 - 1",
+  "rationale": "Mutation of pressure_zscore: replace signed sqrt with tanh to bound extremes and improve nonlinear stability while preserving volume-weighted intraday pressure core. Preserves parent strength (RankICIR) and targets MI improvement through bounded nonlinearity.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

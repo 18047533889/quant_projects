@@ -1,0 +1,20 @@
+{
+  "factor_name": "factor_mut_hc004_volpctrank_w8",
+  "candidate_id": "raw_ca_hash_b719027d",
+  "week": "week2",
+  "fitness_label": "qualified",
+  "source_shelf": "supplement_pending",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.026860174201241576,
+    "rank_ic": 0.04919334123022476,
+    "icir": 0.23789467873792738,
+    "rank_icir": 0.4182087395433627
+  },
+  "lqtp_test": null,
+  "formula": "ema( (close - delay(close, 1))/delay(close, 1) * rank_pct8(volume) * ((high-low)/close) , span=12 )",
+  "rationale": "Mutation of mut_hc004_volpctrank_w12: reduced volume rank window from 12 to 8 to increase responsiveness of the volume confirmation signal, targeting improved IC while preserving the smoothing span (12) and clipping threshold (±3) that support strong RankICIR. The parent-strength target is RankICIR=0.4211, and the bottleneck is IC=0.0270. This compact parameter change avoids adding new components and keeps the core volume rank stress momentum mechanism intact.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

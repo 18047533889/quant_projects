@@ -1,0 +1,40 @@
+{
+  "generated_at": "2026-07-26T16:50:38+08:00",
+  "server": "110.42.223.26:50051",
+  "portfolio_definition": {
+    "top_fraction": 0.1,
+    "bottom_fraction": 0.1,
+    "max_names_per_side": 50,
+    "submitted_leg_weight": 1.0,
+    "ls_daily_return": "0.5 * (top leg - bottom leg)",
+    "signal_to_execution_lag": 1,
+    "execution_price": "OPEN",
+    "commission_buy_lqtp_units": 0.01,
+    "commission_sell_lqtp_units": 0.01,
+    "short_selling": false,
+    "platform_constraint": "negative weights rejected; top/bottom submitted separately",
+    "tradability_filter": "point-in-time positive OPEN and IsSuspend=false on T+1",
+    "stock_root": "/Users/xiangyurui/projects/kuantu/ashare_lqtp_kit-main/workspaces/factor_rankic_ge_003/market/StockDailyBar"
+  },
+  "selected_count": 15,
+  "succeeded": [
+    "9b8b5080bb51fd0d",
+    "559a3c3183ad9e42",
+    "43727f7f7b2ba487",
+    "a88aa2d40d4e3aee",
+    "b54a384026c507e5",
+    "2717b38912db1376",
+    "e495067d51905b93",
+    "fe304ef9dfcf0fa1",
+    "438ecd5ee61b1007",
+    "34cb4926158cbd1e",
+    "99e8c98dc92fba46",
+    "094895e9ecb6de45",
+    "11603b8502e45835",
+    "3aaad1a1bf9ce8a2",
+    "58079cceee41ce6d"
+  ],
+  "skipped": [],
+  "prepared": [],
+  "failed": []
+}

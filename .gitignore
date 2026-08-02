@@ -48,5 +48,18 @@ factor_engine/util/workspace_data/
 *_token*
 **/lqtp_platform_full_response.json
 
+# 本地备份 / 可重建缓存 / 体积过大产物
+.replace_backup_*/
+**/*.bak_*
+**/*.bak
+data/**/eval_cache/
+data/**/factor_lake/
+data/**/lqtp_*_returns_cache.parquet*
+*.tar.gz
+coscli_output/
+
+# 自引用 symlink（避免把 reports/reports 打进仓库）
+data/**/reports/reports
+
 # 文档构建产物
 docs/team_docs/node_modules/

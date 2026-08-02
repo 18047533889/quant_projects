@@ -1,0 +1,27 @@
+{
+  "factor_name": "factor_intraday_return_volume_surge",
+  "candidate_id": "raw_ca_hash_6b0f76d3",
+  "week": "week1",
+  "fitness_label": "elite",
+  "source_shelf": "standard",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.025354312767389323,
+    "rank_ic": 0.0452175918013862,
+    "icir": 0.2100077334955269,
+    "rank_icir": 0.37443071388365434
+  },
+  "lqtp_test": {
+    "rank_ic": 0.037985823689438036,
+    "mean_ic": 0.037985823689438036,
+    "icir": 0.30689733808262903,
+    "orientation": "flipped",
+    "begin_date": 20230101,
+    "end_date": 20260615
+  },
+  "formula": "ema(intraday_return * safe_div(numerator=volume, denominator=ts_max(volume, 20)), 20)",
+  "rationale": "Identify acute directional pressure by scaling intraday return (close/open - 1) by a volume surge factor: volume divided by its 20-day rolling maximum. Large positive returns with volume surge indicate strong buying; negative returns with volume surge indicate strong selling. Smoothed with EWM to reduce noise.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

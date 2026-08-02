@@ -1,0 +1,1 @@
+safe_div(numerator=high - low, denominator=close) * safe_div(numerator=volume, denominator=ts_mean(volume, 20))

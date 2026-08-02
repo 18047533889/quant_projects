@@ -1,0 +1,36 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "cogalpha_20260630092237_0ad794d1",
+  "campaign_id": "cogalpha_ashare_pv_202606301800",
+  "formula": "smoothed(ret * (volume / rolling_median(volume, 20)))",
+  "expression_type": "python",
+  "code": "def factor_volume_pressure_imbalance(df):\n    df_copy = df.copy()\n    ret = df_copy['close'] / df_copy['open'] - 1\n    vol_med = df_copy['volume'].rolling(20, min_periods=20).median().replace(0, np.nan)\n    vol_ratio = df_copy['volume'] / vol_med\n    raw = ret * vol_ratio\n    smooth = raw.ewm(halflife=5, min_periods=20).mean()\n    return smooth.rename('factor_volume_pressure_imbalance')",
+  "generator_name": "cogalpha",
+  "generator_version": "2.1.0",
+  "mined_by": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "born_timestamp": "2026-06-30T09:22:37Z",
+  "metrics": {
+    "train": {
+      "ic": 0.02217332437322263,
+      "icir": 0.23753439436899473,
+      "rank_ic": 0.04470478204670646
+    },
+    "valid": {
+      "ic": 0.021911261278436636,
+      "icir": 0.23349766824314336,
+      "rank_ic": 0.044556471185358236
+    },
+    "test": {
+      "ic": 0.02092313199216192,
+      "icir": 0.20156500475130515,
+      "rank_ic": 0.05179607456204907
+    }
+  },
+  "description": "Directional pressure from intraday return scaled by volume surge relative to its 20-day median, smoothed with EWM to stabilize rank IC.",
+  "filter_note": "CogAlpha python interim; train actual_start from lqtp_data (2016+, spec 2014)."
+}

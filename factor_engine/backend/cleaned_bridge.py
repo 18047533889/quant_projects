@@ -1,23 +1,9 @@
-"""factor_engine × cleaned_operators 执行桥。
+"""FactorEngine ↔ cleaned_operators execution bridge.
 
-职责
-----
-把引擎内部的 **MultiIndex Series** ``(timestamp, instrument)`` 与 cleaned 算子期望的
-**宽表 panel** ``DataFrame(index=time, columns=instrument)`` 互转，并调用
-``OperatorRegistry.get(op).calculate(...)``。
-
-数据流::
-
-    PandasBackend._eval(PlanNode)
-        → make_cleaned_kernel(op)(node, ctx)
-        → series_to_panel(子节点 Series…)
-        → operator.calculate(*panels, **attrs)
-        → panel_to_series(result, template=…)
-
-``build_cleaned_dsl_allowlist`` 与 ``api.operator_registry.build_dsl_allowlist`` 共用本模块，
-确保 **白名单名 = 有 runtime 的算子**。
+The bridge converts engine Series/panels to the selected physical operator
+backend and normalises results back to the FactorEngine panel contract.
+Production backend selection is evidence constrained and workload-cost aware.
 """
-
 from __future__ import annotations
 
 from typing import Any, Callable
@@ -25,9 +11,7 @@ from typing import Any, Callable
 import numpy as np
 
 from .pandas_compat import pd
-
 from planner.logical_plan import PlanNode
-
 from .context import ExecutionContext
 from .panel_native import panel_native_enabled, to_panel
 from cache.panel_cache import series_panel_cache_key
@@ -36,37 +20,15 @@ _CLEANED_LOADED = False
 
 
 def ensure_cleaned_loaded() -> None:
-    """惰性 import 全部 ``cleaned_operators`` 子模块并注册别名（进程内只执行一次）。"""
     global _CLEANED_LOADED
     if _CLEANED_LOADED:
         return
     from cleaned_operators import load_all
-
     load_all()
     _CLEANED_LOADED = True
 
 
-
 def series_to_panel(s: pd.Series, ctx: ExecutionContext) -> pd.DataFrame:
-    """将 ``(timestamp, instrument)`` MultiIndex Series 转为宽表 panel。
-
-    参数
-    ----
-    s : pd.Series
-        输入 Series，index 必须为两级 MultiIndex。
-    ctx : ExecutionContext
-        执行上下文，提供 ``panel_cache`` 与列名配置。
-
-    返回
-    ----
-    pd.DataFrame
-        宽表 panel，index 为时间，columns 为标的。
-
-    异常
-    ----
-    TypeError
-        输入 Series 的 index 不是 MultiIndex 时抛出。
-    """
     if not isinstance(s.index, pd.MultiIndex):
         raise TypeError("cleaned_bridge expects MultiIndex (timestamp, instrument) Series")
     cache = ctx.panel_cache
@@ -75,15 +37,11 @@ def series_to_panel(s: pd.Series, ctx: ExecutionContext) -> pd.DataFrame:
         hit = cache.get(cache_key)
         if hit is not None:
             return hit
-    tcol = ctx.timestamp_col
-    icol = ctx.instrument_col
+    tcol, icol = ctx.timestamp_col, ctx.instrument_col
     if s.index.names != [tcol, icol]:
         s = s.copy()
         s.index = s.index.set_names([tcol, icol])
     panel = s.unstack(level=icol)
-    # ``unstack`` normally preserves the source ordering. Only sort when the
-    # input is demonstrably non-monotonic; wide panels can make unconditional
-    # sorting a material part of execution time.
     if not panel.index.is_monotonic_increasing:
         panel = panel.sort_index()
     if cache is not None:
@@ -91,28 +49,7 @@ def series_to_panel(s: pd.Series, ctx: ExecutionContext) -> pd.DataFrame:
     return panel
 
 
-def panel_to_series(
-    panel: pd.DataFrame,
-    ctx: ExecutionContext,
-    *,
-    template: pd.Series,
-) -> pd.Series:
-    """将宽表 panel 转为与 ``template`` index 对齐的 MultiIndex Series。
-
-    参数
-    ----
-    panel : pd.DataFrame
-        宽表 panel，index 为时间，columns 为标的。
-    ctx : ExecutionContext
-        执行上下文，提供 ``timestamp_col`` / ``instrument_col``。
-    template : pd.Series
-        对齐模板，决定输出 Series 的 index 形态。
-
-    返回
-    ----
-    pd.Series
-        stack 后与 ``template.index`` 对齐的 MultiIndex Series。
-    """
+def panel_to_series(panel: pd.DataFrame, ctx: ExecutionContext, *, template: pd.Series) -> pd.Series:
     stacked = panel.stack(future_stack=True)
     stacked.index.names = [ctx.timestamp_col, ctx.instrument_col]
     if len(stacked) == len(template.index) and stacked.index.equals(template.index):
@@ -121,113 +58,87 @@ def panel_to_series(
 
 
 def _resolve_canonical(op: str) -> str:
-    """将算子名（含别名）解析为 canonical 名称。
-
-    参数
-    ----
-    op : str
-        逻辑计划或 DSL 中的算子名。
-
-    返回
-    ----
-    str
-        ``OperatorRegistry`` 中的 canonical 算子名。
-    """
     from cleaned_operators.registry import OperatorRegistry
-
     return OperatorRegistry.resolve_canonical_strict(op)
 
 
-def _call_cleaned_operator(
-    canonical: str,
-    operator: Any,
-    call_args: list[Any],
-    kw: dict[str, Any],
-) -> Any:
-    """Call an operator with parameters normalized before execution.
-
-    参数
-    ----
-    operator
-        cleaned 算子实例，需提供 ``calculate`` 方法。
-    call_args : list[Any]
-        位置参数列表（panel 或标量）。
-    kw : dict[str, Any]
-        关键字参数（来自 ``PlanNode.attrs``）。
-
-    返回
-    ----
-    Any
-        算子 ``calculate`` 的返回值。
-
-    异常
-    ----
-    TypeError
-        原始调用与重映射后均失败时抛出。
-    """
+def _call_cleaned_operator(canonical: str, operator: Any, call_args: list[Any], kw: dict[str, Any]) -> Any:
     from backend.parameter_aliases import reject_runtime_parameter_aliases
-
     reject_runtime_parameter_aliases(canonical, kw)
     return operator.calculate(*call_args, **kw)
 
 
 def _operator_backend_preference(ctx: ExecutionContext) -> str:
-    """从执行上下文读取算子后端偏好。
-
-    参数
-    ----
-    ctx : ExecutionContext
-        执行期上下文。
-
-    返回
-    ----
-    str
-        ``perf.operator_backend`` 值，未配置时返回 ``"auto"``。
-    """
     perf = getattr(ctx, "perf", None)
     if perf is not None and getattr(perf, "operator_backend", None):
         return str(perf.operator_backend)
     return "auto"
 
 
-def _record_polars_op(ctx: ExecutionContext, op: str) -> None:
-    """记录一次 Polars 算子热路径调用（写入缓存会话统计）。
+def _data_source_kind(ctx: ExecutionContext) -> str:
+    ds = getattr(ctx, "data_source", None)
+    seen: set[int] = set()
+    while ds is not None and id(ds) not in seen:
+        seen.add(id(ds))
+        name = type(ds).__name__.lower()
+        if "clickhouse" in name:
+            return "clickhouse"
+        if "duckdb" in name or "dataaccess" in name or "parquet" in name:
+            return "duckdb"
+        ds = getattr(ds, "inner", None) or getattr(ds, "_inner", None)
+    return "memory"
 
-    参数
-    ----
-    ctx : ExecutionContext
-        执行期上下文，``runtime_stats.cache`` 可能持有统计会话。
-    op : str
-        被调用的算子名。
+
+def _estimate_row_count(evaluated: list[Any]) -> int | None:
+    """Estimate scalar operator workload after child evaluation.
+
+    A wide panel is costed by cells rather than dates because Pandas↔Polars
+    conversion and elementwise/rolling work scale with date×instrument cells.
     """
-    runtime = getattr(ctx, "runtime_stats", None) or {}
-    cache_stats = runtime.get("cache")
-    if cache_stats is not None and hasattr(cache_stats, "record_polars_op"):
-        cache_stats.record_polars_op(op)
+    from .panel_polars import is_polars_frame
+
+    estimates: list[int] = []
+    for val in evaluated:
+        if isinstance(val, pd.Series):
+            estimates.append(int(len(val)))
+        elif isinstance(val, pd.DataFrame):
+            estimates.append(int(val.shape[0] * max(1, val.shape[1])))
+        elif is_polars_frame(val):
+            height = int(getattr(val, "height", 0) or 0)
+            width = int(getattr(val, "width", 1) or 1)
+            estimates.append(height * max(1, width))
+    return max(estimates) if estimates else None
 
 
-def _resolve_operator(canonical: str, ctx: ExecutionContext):
-    """按后端偏好从 ``OperatorRegistry`` 解析算子实例与后端标签。
+def _record_backend_route(
+    ctx: ExecutionContext,
+    *,
+    canonical: str,
+    backend: str,
+    row_count_estimate: int | None,
+) -> None:
+    runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+    routes = dict(runtime.get("operator_backend_route_counts") or {})
+    key = f"{canonical}:{backend}"
+    routes[key] = int(routes.get(key, 0)) + 1
+    runtime["operator_backend_route_counts"] = routes
+    runtime["last_operator_backend_route"] = {
+        "canonical": canonical,
+        "backend": backend,
+        "row_count_estimate": row_count_estimate,
+    }
+    ctx.runtime_stats = runtime  # type: ignore[attr-defined]
 
-    参数
-    ----
-    canonical : str
-        canonical 算子名。
-    ctx : ExecutionContext
-        执行期上下文，决定 ``get_preferred`` 的偏好参数。
 
-    返回
-    ----
-    tuple
-        ``(operator, backend)`` 二元组，``backend`` 为 ``"polars"`` 或 ``"pandas_numpy"``。
-    """
+def _resolve_operator(
+    canonical: str,
+    ctx: ExecutionContext,
+    *,
+    row_count_estimate: int | None = None,
+):
     from backend.backend_router import BackendRouter
 
     prefer = _operator_backend_preference(ctx)
-    runtime = getattr(ctx, "runtime_stats", None) or {}
-    if runtime.get("backend") == "polars" and prefer == "auto":
-        # PolarsBackend：与 registry.get_preferred("auto") 一致，尊重 POLARS_PRODUCTION_SAFE
-        pass
     run_mode = str(getattr(ctx, "run_mode", "research") or "research").lower()
     fallback = "allow" if getattr(ctx, "production_fallback_policy", "error") == "warn" else "error"
     selection = BackendRouter.select(
@@ -235,9 +146,24 @@ def _resolve_operator(canonical: str, ctx: ExecutionContext):
         requested_backend=prefer,
         run_mode=run_mode,
         fallback_policy=fallback,
+        data_source_kind=_data_source_kind(ctx),
+        row_count_estimate=row_count_estimate,
         allow_unverified_backend=run_mode != "production",
     )
+    _record_backend_route(
+        ctx,
+        canonical=selection.canonical,
+        backend=selection.backend,
+        row_count_estimate=row_count_estimate,
+    )
     return selection.operator, selection.backend
+
+
+def _record_polars_op(ctx: ExecutionContext, op: str) -> None:
+    runtime = getattr(ctx, "runtime_stats", None) or {}
+    cache_stats = runtime.get("cache")
+    if cache_stats is not None and hasattr(cache_stats, "record_polars_op"):
+        cache_stats.record_polars_op(op)
 
 
 def _prepare_call_args(
@@ -246,28 +172,11 @@ def _prepare_call_args(
     *,
     backend: str,
 ) -> tuple[list[Any], pd.Series | None, pd.DataFrame | None]:
-    """将子节点求值结果转换为算子 ``calculate`` 所需的位置参数。
-
-    参数
-    ----
-    evaluated : list[Any]
-        子节点递归求值结果列表。
-    ctx : ExecutionContext
-        执行期上下文。
-    backend : str
-        目标算子后端（``"polars"`` 或 ``"pandas_numpy"``）。
-
-    返回
-    ----
-    tuple[list[Any], pd.Series | None, pd.DataFrame | None]
-        ``(call_args, template_series, template_panel)`` 三元组。
-    """
     from .panel_polars import is_polars_frame
 
     call_args: list[Any] = []
     template: pd.Series | None = None
     template_panel: pd.DataFrame | None = None
-
     for val in evaluated:
         if isinstance(val, (pd.Series, pd.DataFrame)) or is_polars_frame(val):
             panel = to_panel(val, ctx) if isinstance(val, (pd.Series, pd.DataFrame)) else val
@@ -280,7 +189,6 @@ def _prepare_call_args(
                     template_panel = panel
                 if backend == "polars":
                     from .panel_polars import panel_to_polars
-
                     call_args.append(panel_to_polars(panel))
                 else:
                     call_args.append(panel)
@@ -290,7 +198,6 @@ def _prepare_call_args(
                 template = ctx.template_series
         else:
             call_args.append(val)
-
     return call_args, template, template_panel
 
 
@@ -302,41 +209,14 @@ def _normalize_operator_result(
     template_panel: pd.DataFrame | None,
     ctx: ExecutionContext,
 ) -> Any:
-    """将算子返回值规范化为引擎统一的输出形态。
-
-    参数
-    ----
-    result : Any
-        算子 ``calculate`` 的原始返回值。
-    backend : str
-        实际使用的算子后端。
-    template : pd.Series
-        对齐模板 Series。
-    template_panel : pd.DataFrame | None
-        宽表对齐模板（Polars 路径必需）。
-    ctx : ExecutionContext
-        执行期上下文。
-
-    返回
-    ----
-    Any
-        MultiIndex Series 或 panel-native 模式下的 DataFrame。
-
-    异常
-    ----
-    ValueError
-        Polars 后端返回 DataFrame 但缺少 ``template_panel`` 时抛出。
-    """
     if backend == "polars":
         from .panel_polars import is_polars_frame, polars_to_panel
-
         if is_polars_frame(result):
             if template_panel is None:
                 raise ValueError("polars operator requires a DataFrame template panel")
             result = polars_to_panel(result, template=template_panel)
 
     from backend.operator_errors import OperatorShapeError
-
     if isinstance(result, pd.DataFrame):
         if template_panel is None:
             raise OperatorShapeError("DataFrame result requires a panel template")
@@ -353,9 +233,7 @@ def _normalize_operator_result(
                 raise OperatorShapeError("operator result index does not match the input template")
             return result
         if len(result) != len(template):
-            raise OperatorShapeError(
-                f"operator result length {len(result)} does not match template {len(template)}"
-            )
+            raise OperatorShapeError(f"operator result length {len(result)} does not match template {len(template)}")
         if not result.index.equals(template.index):
             raise OperatorShapeError("operator returned an indexless/misaligned Series")
         return result
@@ -364,103 +242,46 @@ def _normalize_operator_result(
     array = np.asarray(result)
     if array.ndim == 1:
         if len(array) != len(template):
-            raise OperatorShapeError(
-                f"operator 1D result length {len(array)} does not match template {len(template)}"
-            )
+            raise OperatorShapeError(f"operator 1D result length {len(array)} does not match template {len(template)}")
         return pd.Series(array, index=template.index)
     if array.ndim == 2:
         if template_panel is None:
             raise OperatorShapeError("operator 2D result requires a panel template")
         if tuple(array.shape) != tuple(template_panel.shape):
-            raise OperatorShapeError(
-                f"operator 2D result shape {array.shape} does not match panel {template_panel.shape}"
-            )
-        frame = pd.DataFrame(
-            array,
-            index=template_panel.index,
-            columns=template_panel.columns,
-        )
+            raise OperatorShapeError(f"operator 2D result shape {array.shape} does not match panel {template_panel.shape}")
+        frame = pd.DataFrame(array, index=template_panel.index, columns=template_panel.columns)
         if panel_native_enabled(ctx):
             return frame
         return panel_to_series(frame, ctx, template=template)
-    raise OperatorShapeError(
-        f"unsupported operator result type/shape: {type(result).__name__} {array.shape}"
-    )
+    raise OperatorShapeError(f"unsupported operator result type/shape: {type(result).__name__} {array.shape}")
 
 
 def make_cleaned_kernel(eval_fn: Callable[[PlanNode, ExecutionContext], Any], op: str):
-    """为逻辑计划算子名 ``op`` 生成 PandasBackend 用的 kernel 闭包。
-
-    参数
-    ----
-    eval_fn : Callable
-        子节点递归求值函数，签名为 ``(node, ctx) -> Any``。
-    op : str
-        算子名，用于查找 ``OperatorRegistry`` 中的实现。
-
-    返回
-    ----
-    Callable
-        kernel 闭包，签名为 ``(node: PlanNode, ctx: ExecutionContext) -> pd.Series``。
-    """
-
     def _kernel(node: PlanNode, ctx: ExecutionContext) -> pd.Series:
-        """cleaned 算子 kernel：求值子节点、调用算子并规范化输出。
-
-        参数
-        ----
-        node : PlanNode
-            当前逻辑计划节点，``inputs`` 为子节点，``attrs`` 为算子参数。
-        ctx : ExecutionContext
-            执行期上下文。
-
-        返回
-        ----
-        pd.Series
-            与输入模板对齐的 MultiIndex Series（panel-native 模式下可能为 DataFrame）。
-
-        异常
-        ----
-        NotImplementedError
-            算子在 ``OperatorRegistry`` 中无实现时抛出。
-        ValueError
-            算子无 Series 输入且 ``template_series`` 未配置时抛出。
-        """
         ensure_cleaned_loaded()
-
         canonical = _resolve_canonical(op)
-        operator, backend = _resolve_operator(canonical, ctx)
+
+        # Evaluate children first so routing sees the actual workload size rather
+        # than a hard-coded global row estimate.
+        evaluated: list[Any] = [eval_fn(child, ctx) for child in node.inputs]
+        row_count_estimate = _estimate_row_count(evaluated)
+        operator, backend = _resolve_operator(
+            canonical,
+            ctx,
+            row_count_estimate=row_count_estimate,
+        )
         if operator is None:
             raise NotImplementedError(f"cleaned operator not implemented: {op!r}")
-
-        from backend.polars_hot_ops import is_polars_backend_ctx
-        from runtime.production_policy import record_production_pandas_fallback
-
-        if is_polars_backend_ctx(ctx) and backend == "pandas_numpy":
-            record_production_pandas_fallback(
-                ctx,
-                op=canonical,
-                requested_backend="polars",
-                actual_backend=backend,
-            )
-
         if backend == "polars":
             _record_polars_op(ctx, op)
 
-        evaluated: list[Any] = [eval_fn(child, ctx) for child in node.inputs]
         kw = dict(node.attrs)
-
-        call_args, template, template_panel = _prepare_call_args(
-            evaluated, ctx, backend=backend
-        )
-
+        call_args, template, template_panel = _prepare_call_args(evaluated, ctx, backend=backend)
         result = _call_cleaned_operator(canonical, operator, call_args, kw)
-
         if template is None:
             template = getattr(ctx, "template_series", None)
         if template is None:
             raise ValueError(f"cleaned op {op!r} requires at least one Series input")
-
         return _normalize_operator_result(
             result,
             backend=backend,
@@ -468,103 +289,56 @@ def make_cleaned_kernel(eval_fn: Callable[[PlanNode, ExecutionContext], Any], op
             template_panel=template_panel,
             ctx=ctx,
         )
-
     return _kernel
 
 
 def list_cleaned_ops_for_backend(skip: set[str]) -> list[str]:
-    """列出可挂到 ``KernelRegistry`` 的全部已实现算子名（canonical + 别名）。
-
-    参数
-    ----
-    skip : set[str]
-        需要排除的算子名集合。
-
-    返回
-    ----
-    list[str]
-        已排序的可用算子名列表。
-    """
     ensure_cleaned_loaded()
     from cleaned_operators.registry import OperatorRegistry
-
     names: set[str] = set()
     for canon in OperatorRegistry.list_canonical():
-        if canon in skip:
-            continue
-        if OperatorRegistry.get(canon) is None:
-            continue
-        names.add(canon)
+        if canon not in skip and OperatorRegistry.get(canon) is not None:
+            names.add(canon)
     for alias, canon in OperatorRegistry._aliases.items():
-        if alias in skip:
-            continue
-        if OperatorRegistry.get(canon) is None:
-            continue
-        names.add(alias)
+        if alias not in skip and OperatorRegistry.get(canon) is not None:
+            names.add(alias)
     return sorted(names)
 
 
-def build_cleaned_dsl_allowlist(
-    skip: set[str] | None = None,
-    *,
-    surface: str = "daily",
-) -> dict[str, Any]:
-    """Build a surface-filtered DSL mapping from the runtime registry.
-
-    ``daily`` is the normal factor submission surface.  ``research``,
-    ``unsafe`` and ``legacy`` are explicit opt-in surfaces; ``all`` exists only
-    for compatibility tooling and runtime audits.
-    """
+def build_cleaned_dsl_allowlist(skip: set[str] | None = None, *, surface: str = "daily") -> dict[str, Any]:
     ensure_cleaned_loaded()
     from cleaned_operators.operator_surface import is_dsl_name_allowed
     from cleaned_operators.registry import OperatorRegistry
     from api.cleaned_ops import make_cleaned_call_factory
 
     skip = skip or set()
-    # Historical public imports remain available for formula compatibility,
-    # while operator_surface still classifies these canonicals as research.
-    # Production allowlists are independently fail-closed below.
-    # NOTE: do NOT leak research-only names (e.g. group_decay_linear) into
-    # the daily DSL surface — use surface="compat" / research opt-in instead.
     out: dict[str, Any] = {}
     for canon in OperatorRegistry.list_canonical():
-        if canon in skip or canon in out:
+        if canon in skip or canon in out or OperatorRegistry.get(canon) is None:
             continue
-        if OperatorRegistry.get(canon) is None:
-            continue
-        if not is_dsl_name_allowed(canon, canon, surface=surface):
-            continue
-        out[canon] = make_cleaned_call_factory(canon)
+        if is_dsl_name_allowed(canon, canon, surface=surface):
+            out[canon] = make_cleaned_call_factory(canon)
     for alias, canon in OperatorRegistry._aliases.items():
-        if alias in skip or alias in out:
+        if alias in skip or alias in out or OperatorRegistry.get(canon) is None:
             continue
-        if OperatorRegistry.get(canon) is None:
-            continue
-        if not is_dsl_name_allowed(alias, canon, surface=surface):
-            continue
-        out[alias] = make_cleaned_call_factory(canon)
+        if is_dsl_name_allowed(alias, canon, surface=surface):
+            out[alias] = make_cleaned_call_factory(canon)
     return out
 
+
 def build_production_dsl_allowlist(skip: set[str] | None = None) -> dict[str, Any]:
-    """构建 production 投递白名单：仅 ``PRODUCTION_CORE`` 内且 ``allow_in_production`` 为真的算子。
-
-    composite 虽可在 execution gate 放行，但不得进入 DSL 投递白名单（fail-closed）。
-    """
-    from cleaned_operators.operator_spec import PRODUCTION_CORE_CANONICALS, build_operator_spec
-
-    full = build_cleaned_dsl_allowlist(skip, surface="daily")
+    """Expose every production-admitted factor operator, not only daily core."""
+    from cleaned_operators.operator_spec import build_operator_spec
     from cleaned_operators.registry import OperatorRegistry
 
+    full = build_cleaned_dsl_allowlist(skip, surface="all")
     out: dict[str, Any] = {}
     for name, factory in full.items():
         canon = OperatorRegistry._aliases.get(name, name)
-        if canon not in PRODUCTION_CORE_CANONICALS:
-            continue
         spec = build_operator_spec(canon)
         if spec is not None and spec.allow_in_production:
             out[name] = factory
     return out
 
 
-# 兼容旧 import 名
 build_cleaned_dsl_extensions = build_cleaned_dsl_allowlist

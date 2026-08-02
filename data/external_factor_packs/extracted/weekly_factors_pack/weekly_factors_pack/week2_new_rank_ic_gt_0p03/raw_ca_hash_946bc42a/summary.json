@@ -1,0 +1,27 @@
+{
+  "factor_name": "factor_adaptive_momentum_gate_v2",
+  "candidate_id": "raw_ca_hash_946bc42a",
+  "week": "week2",
+  "fitness_label": "qualified",
+  "source_shelf": "standard",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.017318581469440725,
+    "rank_ic": 0.03253920441170887,
+    "icir": 0.1564674410872278,
+    "rank_icir": 0.2681875204920605
+  },
+  "lqtp_test": {
+    "rank_ic": 0.028116813265687716,
+    "mean_ic": 0.028116813265687716,
+    "icir": 0.18636161969759948,
+    "orientation": "flipped",
+    "begin_date": 20230101,
+    "end_date": 20260615
+  },
+  "formula": "safe_div(numerator=ts_pct(close, 5), denominator=ts_std(daily_return, 30))",
+  "rationale": "Mutation of alpha_regime_gating_1: shortened momentum lookback from 10 to 5 days to capture higher-frequency trends, preserving volatility-gated momentum intuition with long (30-day) volatility estimate for stability. Targets improved IC and MI while maintaining RankIC.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

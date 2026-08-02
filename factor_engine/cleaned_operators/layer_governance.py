@@ -186,6 +186,21 @@ def formula_field_names() -> set[str]:
     # VWAP is an authoritative field even when a market-specific generated scan
     # has not yet refreshed it into every domain scope.
     fields.add("vwap")
+    # Logical semantic inputs are bound to physical source columns by the data
+    # adapter.  They remain valid, explicit authoring names for audited
+    # fundamental and analyst-event formulas.
+    fields.update({
+        "fundamental_x",
+        "fundamental_y",
+        "fundamental_scale",
+        "period_id",
+        "actual",
+        "expected",
+        "expected_mean",
+        "expected_std",
+        "scale_base",
+        "target_period_id",
+    })
     return fields
 
 

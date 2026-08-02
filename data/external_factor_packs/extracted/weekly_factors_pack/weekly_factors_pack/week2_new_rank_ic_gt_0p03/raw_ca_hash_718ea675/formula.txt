@@ -1,0 +1,1 @@
+ema(safe_div(numerator=close - open, denominator=high - low) * safe_div(numerator=volume, denominator=ts_quantile(volume, 10, 0.5)), 5)

@@ -1,0 +1,55 @@
+{
+  "schema_version": "factor.manifest.v1",
+  "candidate_id": "raw_ca_hash_c4485ee6",
+  "campaign_id": "llm_ashare_pv_cogalpha_2026q2",
+  "generator_name": "cogalpha",
+  "producer": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_LQTP",
+  "domain_root": "price_volume",
+  "frequency_bucket": "daily",
+  "batch_id": "post_mining_translate",
+  "factor_name": "factor_stress_volume_cont_weight_cont_dir_w20_clip2_5_w40_ewm15_stressclip25",
+  "formula": "((((df.copy())[\"high\"]) - ((df.copy())[\"low\"])) - (((df.copy())[\"((df.copy())[\"high\"])\"]) - ((df.copy())[\"((df.copy())[\"low\"])\"])).rolling(40, min_periods=40).mean()) / (((df.copy())[\"((df.copy())[\"high\"])\"]) - ((df.copy())[\"((df.copy())[\"low\"])\"])).rolling(40, min_periods=40).std(ddof=1).clipema(lower=0, 15) * ((df.copy())[\"volume\"]) / ((df.copy())[\"((df.copy())[\"volume\"])\"]).rolling(20, min_periods=20).mean() * (((df.copy())[\"close\"]) - ((df.copy())[\"open\"])) / (((df.copy())[\"high\"]) - ((df.copy())[\"low\"]))",
+  "expression_type": "lqtp_dsl",
+  "execution_platform": "lqtp",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit",
+  "code": "def factor_stress_volume_cont_weight_cont_dir_w20_clip2_5_w40_ewm15_stressclip25(df):\n    df_copy = df.copy()\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    close = df_copy[\"close\"]\n    open_ = df_copy[\"open\"]\n    volume = df_copy[\"volume\"]\n    range_ = high - low\n    mean_range = range_.rolling(40, min_periods=40).mean()\n    std_range = range_.rolling(40, min_periods=40).std(ddof=1)\n    z = (range_ - mean_range) / std_range.replace(0, np.nan)\n    stress_ewm = z.clip(lower=0).ewm(span=15, adjust=False).mean()\n    stress_ewm = stress_ewm.clip(upper=2.5)\n    vol_mean = volume.rolling(20, min_periods=20).mean()\n    vol_weight = volume / vol_mean.replace(0, np.nan)\n    vol_weight = vol_weight.clip(upper=2)\n    cont_dir = (close - open_) / range_.replace(0, np.nan)\n    cont_dir = cont_dir.clip(lower=-2.5, upper=2.5)\n    factor = stress_ewm * vol_weight * cont_dir\n    df_copy[\"factor_stress_volume_cont_weight_cont_dir_w20_clip2_5_w40_ewm15_stressclip25\"] = factor\n    return df_copy[\"factor_stress_volume_cont_weight_cont_dir_w20_clip2_5_w40_ewm15_stressclip25\"]",
+  "rationale": "Mutation of crossover child: preserve core stress accumulation, continuous volume weight, and ewm-smoothed stress with upper clip 2.5. Reduce directional strength clipping from ±3 to ±2.5 to mitigate extreme directional bets, targeting improved IC while maintaining the strong RankIC and RankICIR. No new components introduced.",
+  "lineage": {
+    "agent_skill": "alpha-tail-risk",
+    "operation": "cogalpha_to_lqtp_translation"
+  },
+  "stage": "candidate_pool",
+  "fitness_label": "qualified",
+  "metrics": {
+    "train": {
+      "ic": 0.024579421766244135,
+      "rank_ic": 0.03447396895000833,
+      "icir": 0.2926458666429303,
+      "rank_icir": 0.3659068360301629,
+      "status": "computed",
+      "source": "cogalpha"
+    },
+    "valid": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    }
+  },
+  "validation": {
+    "status": "pending"
+  },
+  "created_at": "2026-06-21T11:25:28.488846+00:00",
+  "updated_at": "2026-06-21T16:18:30.046154+00:00",
+  "lqtp_tags": {
+    "universe": "all_a",
+    "market": "ashare"
+  },
+  "rationale_llm": {
+    "summary": "Mutation of crossover child: preserve core stress accumulation, continuous volume weight, and ewm-smoothed stress with upper clip 2.5. Reduce directional strength clipping from ±3 to ±2.5 to mitigate extreme directional bets, targeting improved IC while maintaining the strong RankIC and RankICIR. No new components introduced.",
+    "parsed_at": "2026-06-21T11:25:43.909008+00:00",
+    "source": "manifest_rationale"
+  }
+}

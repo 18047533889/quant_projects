@@ -1,0 +1,75 @@
+{
+  "schema_version": "factor.manifest.v1",
+  "candidate_id": "raw_ca_hash_7c569498",
+  "campaign_id": "llm_ashare_pv_cogalpha_2026q2",
+  "generator_name": "cogalpha",
+  "producer": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_LQTP",
+  "domain_root": "price_volume",
+  "frequency_bucket": "daily",
+  "batch_id": "post_mining_translate",
+  "factor_name": "factor_vol_regime_trend_smoothed",
+  "formula": "ema(ts_pct(close, 5) * safe_div(numerator=volume, denominator=ts_max(volume, 20)) * (safe_div(numerator=high - low, denominator=ts_quantile(high - low, 20, 0.5)) - 1), 5)",
+  "expression_type": "lqtp_dsl",
+  "execution_platform": "lqtp",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit",
+  "code": "def factor_vol_regime_trend_smoothed(df):\n    df_copy = df.copy()\n    price_ratio = df_copy['close'] / df_copy['close'].rolling(20, min_periods=20).mean() - 1\n    volume_surge = df_copy['volume'] / df_copy['volume'].rolling(20, min_periods=20).mean()\n    range_ = df_copy['high'] - df_copy['low']\n    median_range = range_.rolling(20, min_periods=20).median()\n    vol_dev = range_ / median_range - 1\n    signal = price_ratio * volume_surge * vol_dev\n    smoothed = signal.ewm(span=5, adjust=False).mean()\n    df_copy['factor_vol_regime_trend_smoothed'] = smoothed.fillna(0.0)\n    return df_copy['factor_vol_regime_trend_smoothed']",
+  "rationale": "Preserves the core regime-dependent trend-volume interaction from parent. Replaces binary high_vol indicator with continuous volatility deviation to retain more information, and applies a short EMA smoothing to reduce noise and improve rank stability.",
+  "lineage": {
+    "agent_skill": "alpha-volatility-regime",
+    "operation": "cogalpha_to_lqtp_translation"
+  },
+  "stage": "candidate_pool",
+  "fitness_label": "qualified",
+  "metrics": {
+    "train": {
+      "ic": 0.016834833954730666,
+      "rank_ic": 0.03493241240361106,
+      "icir": 0.20657707281315033,
+      "rank_icir": 0.34317794998641676,
+      "status": "computed",
+      "source": "cogalpha"
+    },
+    "valid": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    }
+  },
+  "validation": {
+    "status": "pending"
+  },
+  "created_at": "2026-06-21T11:25:28.481488+00:00",
+  "updated_at": "2026-06-21T16:18:19.403006+00:00",
+  "lqtp_tags": {
+    "universe": "all_a",
+    "market": "ashare"
+  },
+  "rationale_llm": {
+    "summary": "Preserves the core regime-dependent trend-volume interaction from parent. Replaces binary high_vol indicator with continuous volatility deviation to retain more information, and applies a short EMA smoothing to reduce noise and improve rank stability.",
+    "parsed_at": "2026-06-21T11:25:33.943688+00:00",
+    "source": "manifest_rationale"
+  },
+  "admission": {
+    "test": {
+      "checked_at": "2026-06-21T15:20:32.600336+00:00",
+      "min_rank_ic": 0.03,
+      "max_pool_correlation": 0.7,
+      "mean_ic": 0.04409986201308341,
+      "rank_ic": 0.04409986201308341,
+      "orientation": "flipped",
+      "original_mean_ic": -0.044099867463716275,
+      "pool_max_correlation": 0.9999999999992889,
+      "correlation_source": "lqtp_reference_library",
+      "reference_library_split": "test",
+      "reference_library_cached_count": 64,
+      "reference_compared_count": 64,
+      "passed_ic": true,
+      "passed_correlation": false,
+      "passed": false,
+      "split": "test"
+    }
+  }
+}

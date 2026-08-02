@@ -24,14 +24,24 @@ EPS = 1e-12
 
 
 def positive_int(value: Any, name: str) -> int:
-    out = int(value)
+    if isinstance(value, (bool, np.bool_)):
+        raise TypeError(f"{name} must be an integer, not bool")
+    try:
+        out = int(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise TypeError(f"{name} must be a positive integer") from exc
     if out < 1 or float(value) != float(out):
         raise ValueError(f"{name} must be a positive integer")
     return out
 
 
 def nonnegative_int(value: Any, name: str) -> int:
-    out = int(value)
+    if isinstance(value, (bool, np.bool_)):
+        raise TypeError(f"{name} must be an integer, not bool")
+    try:
+        out = int(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise TypeError(f"{name} must be a non-negative integer") from exc
     if out < 0 or float(value) != float(out):
         raise ValueError(f"{name} must be a non-negative integer")
     return out
@@ -46,10 +56,24 @@ def window_params(window: Any, min_periods: Any | None, *, default_mp: int = 1) 
 
 
 def aligned_pd(*frames: pd.DataFrame) -> tuple[pd.DataFrame, ...]:
+    """Validate exact panel alignment instead of silently dropping/reindexing data."""
     if not frames:
         return ()
     base = frames[0]
-    return tuple([base] + [f.reindex(index=base.index, columns=base.columns) for f in frames[1:]])
+    if not isinstance(base, pd.DataFrame):
+        raise TypeError("aligned_pd requires pandas DataFrame inputs")
+    if not base.index.is_unique or not base.columns.is_unique:
+        raise ValueError("primary panel axes must be unique")
+    for position, frame in enumerate(frames[1:], start=1):
+        if not isinstance(frame, pd.DataFrame):
+            raise TypeError(f"panel input {position} must be a pandas DataFrame")
+        if not frame.index.is_unique or not frame.columns.is_unique:
+            raise ValueError(f"panel input {position} axes must be unique")
+        if not frame.index.equals(base.index):
+            raise ValueError(f"panel input {position} index does not match the primary panel")
+        if not frame.columns.equals(base.columns):
+            raise ValueError(f"panel input {position} columns do not match the primary panel")
+    return tuple(frames)
 
 
 def finite_pd(x: pd.DataFrame) -> pd.DataFrame:
@@ -115,7 +139,8 @@ class PandasFunctionOperator(PandasOperator):
         )
 
     def calculate(self, *args: Any, **kwargs: Any) -> pd.DataFrame:
-        return self._fn(*args, **kwargs)
+        processed_args, processed_kwargs = self._prepare_call(tuple(args), dict(kwargs))
+        return self._fn(*processed_args, **processed_kwargs)
 
 
 class PolarsFunctionOperator(PolarsOperator):
@@ -140,6 +165,9 @@ class PolarsFunctionOperator(PolarsOperator):
     def calculate(self, *args: Any, **kwargs: Any) -> "pl.DataFrame":
         if pl is None:
             raise ImportError("polars is required for the Polars backend")
+        prepare = getattr(self, "_prepare_call", None)
+        if prepare is not None:
+            args, kwargs = prepare(tuple(args), dict(kwargs))
         return self._fn(*args, **kwargs)
 
 

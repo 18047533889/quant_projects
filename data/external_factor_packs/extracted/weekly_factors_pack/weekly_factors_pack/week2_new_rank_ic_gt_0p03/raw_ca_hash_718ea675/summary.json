@@ -1,0 +1,27 @@
+{
+  "factor_name": "factor_herding_simple",
+  "candidate_id": "raw_ca_hash_718ea675",
+  "week": "week2",
+  "fitness_label": "qualified",
+  "source_shelf": "standard",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.01724269873021164,
+    "rank_ic": 0.032667049040345134,
+    "icir": 0.2094303026823923,
+    "rank_icir": 0.2897143319223067
+  },
+  "lqtp_test": {
+    "rank_ic": 0.021212074524518284,
+    "mean_ic": 0.021212074524518284,
+    "icir": 0.1537667166872936,
+    "orientation": "flipped",
+    "begin_date": 20230101,
+    "end_date": 20260615
+  },
+  "formula": "ema(safe_div(numerator=close - open, denominator=high - low) * safe_div(numerator=volume, denominator=ts_quantile(volume, 10, 0.5)), 5)",
+  "rationale": "Mutation of crossover_herding_vol_stress_001: removed the stress_range component (high-low)/close to simplify the factor and reduce noise. The parent's strength in RankIC and ICIR is partly from the herding direction and volume confirmation, and the stress_range may have introduced instability. By ablating this modifier, we aim to improve IC and MI while preserving the core herding mechanism and its strong RankIC profile.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

@@ -1,0 +1,1 @@
+-EMA_5(intraday_return) * clip( std_20(close_ret) / std_60(close_ret), 0.5, 2.0 )

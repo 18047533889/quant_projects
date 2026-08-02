@@ -1,0 +1,75 @@
+{
+  "schema_version": "factor.manifest.v1",
+  "candidate_id": "raw_ca_hash_15a03771",
+  "campaign_id": "llm_ashare_pv_cogalpha_2026q2",
+  "generator_name": "cogalpha",
+  "producer": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_LQTP",
+  "domain_root": "price_volume",
+  "frequency_bucket": "daily",
+  "batch_id": "post_mining_translate",
+  "factor_name": "factor_imbalance_volume_ewm_mut",
+  "formula": "ema(safe_div(numerator=close - (high + low) / 2, denominator=high - low) * volume * (1 + safe_div(numerator=volume, denominator=ts_mean(volume, 10)) - 1), 5)",
+  "expression_type": "lqtp_dsl",
+  "execution_platform": "lqtp",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit",
+  "code": "def factor_imbalance_volume_ewm_mut(df):\n    df_copy = df.copy()\n    midpoint = (df_copy['high'] + df_copy['low']) / 2\n    range_ = df_copy['high'] - df_copy['low']\n    imbalance = (df_copy['close'] - midpoint) / range_.replace(0, np.nan)\n    vol_ma = df_copy['volume'].rolling(10, min_periods=10).mean()\n    vol_dev = df_copy['volume'] / vol_ma.replace(0, np.nan) - 1\n    weighted = imbalance * df_copy['volume'] * (1 + vol_dev)\n    df_copy['factor_imbalance_volume_ewm_mut'] = weighted.ewm(span=5, min_periods=3).mean()\n    return df_copy['factor_imbalance_volume_ewm_mut']",
+  "rationale": "Preserves the core imbalance-volume interaction from the parent. Shortens the volume baseline from 20 to 10 days and replaces the 5-day SMA with an exponential moving average (span=5) to improve responsiveness and potentially boost IC while maintaining RankIC stability.",
+  "lineage": {
+    "agent_skill": "alpha-price-volume-coherence",
+    "operation": "cogalpha_to_lqtp_translation"
+  },
+  "stage": "candidate_pool",
+  "fitness_label": "qualified",
+  "metrics": {
+    "train": {
+      "ic": 0.01421307899891861,
+      "rank_ic": 0.030840114301811695,
+      "icir": 0.23335809901418914,
+      "rank_icir": 0.33428387372095525,
+      "status": "computed",
+      "source": "cogalpha"
+    },
+    "valid": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    }
+  },
+  "validation": {
+    "status": "pending"
+  },
+  "created_at": "2026-06-19T14:45:38.221379+00:00",
+  "updated_at": "2026-06-21T16:18:16.967230+00:00",
+  "rationale_llm": {
+    "summary": "Preserves the core imbalance-volume interaction from the parent. Shortens the volume baseline from 20 to 10 days and replaces the 5-day SMA with an exponential moving average (span=5) to improve responsiveness and potentially boost IC while maintaining RankIC stability.",
+    "parsed_at": "2026-06-19T17:42:52.025689+00:00",
+    "source": "manifest_rationale"
+  },
+  "admission": {
+    "test": {
+      "checked_at": "2026-06-21T13:35:19.930498+00:00",
+      "min_rank_ic": 0.03,
+      "max_pool_correlation": 0.7,
+      "mean_ic": 0.006042373870519713,
+      "rank_ic": 0.006042373870519713,
+      "orientation": "flipped",
+      "original_mean_ic": -0.006042373870519713,
+      "pool_max_correlation": 0.8485971869204586,
+      "correlation_source": "lqtp_reference_library",
+      "reference_library_split": "test",
+      "reference_library_cached_count": 13,
+      "reference_compared_count": 13,
+      "passed_ic": false,
+      "passed_correlation": false,
+      "passed": false,
+      "split": "test"
+    }
+  },
+  "lqtp_tags": {
+    "universe": "all_a",
+    "market": "ashare"
+  }
+}

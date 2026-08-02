@@ -1,0 +1,1 @@
+ema((safe_div(numerator=close - low, denominator=high - low) - 0.5) * safe_div(numerator=high - low, denominator=ts_quantile(high - low, 20, 0.5)), 5)

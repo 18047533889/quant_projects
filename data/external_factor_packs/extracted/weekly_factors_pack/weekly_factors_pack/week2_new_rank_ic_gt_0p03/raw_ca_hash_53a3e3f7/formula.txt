@@ -1,0 +1,1 @@
+ema( (close - delay(close, 1))/delay(close, 1) * rank_pct6(volume) * ((high-low)/close) , span=12 ) clip ±2.5

@@ -1,0 +1,36 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "cogalpha_20260630074841_f29a08ef",
+  "campaign_id": "cogalpha_ashare_pv_202606301800",
+  "formula": "EWM( pct_change(close) * rank_pct8(volume) * ((high-low)/close), span=12 ) clip ±3",
+  "expression_type": "python",
+  "code": "def factor_crossover_herding_stress_span12_volrank_clip3(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_rank = df_copy['volume'].rolling(8, min_periods=8).rank(pct=True)\n    stress_range = (df_copy['high'] - df_copy['low']) / df_copy['close'].replace(0, np.nan)\n    raw = ret * vol_rank * stress_range\n    smoothed = raw.ewm(span=12, min_periods=12, adjust=False).mean()\n    factor = smoothed.clip(-3, 3)\n    factor.name = 'factor_crossover_herding_stress_span12_volrank_clip3'\n    return factor",
+  "generator_name": "cogalpha",
+  "generator_version": "2.1.0",
+  "mined_by": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "born_timestamp": "2026-06-30T07:48:41Z",
+  "metrics": {
+    "train": {
+      "ic": 0.02699029075933178,
+      "icir": 0.23393983202254362,
+      "rank_ic": 0.051539260282751735
+    },
+    "valid": {
+      "ic": 0.025317076159382633,
+      "icir": 0.2265047922303055,
+      "rank_ic": 0.04884873592225912
+    },
+    "test": {
+      "ic": 0.022216840431113726,
+      "icir": 0.1647239644174859,
+      "rank_ic": 0.05696260712585645
+    }
+  },
+  "description": "Crossover preserving primary parent mut_herding_momentum_stress_span12's core stress momentum mechanism with smoothing span 12 and clipping at ±3 to maintain strong RankICIR (0.4211), and borrowing the volume percentile rank normalization (rolling 8-day rank) from secondary parent crossover_hc004_volpctrank_s12_clip2_5 to potentially improve ranking stability and reduce outlier impact. Targets improved IC and RankIC while preserving the high RankICIR.",
+  "filter_note": "CogAlpha python interim; train actual_start from lqtp_data (2016+, spec 2014)."
+}

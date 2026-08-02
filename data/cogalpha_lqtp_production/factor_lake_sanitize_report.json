@@ -1,0 +1,201 @@
+{
+  "generated_at": "2026-08-02T18:54:32.312685",
+  "n": 194,
+  "sanitized": 24,
+  "empty": 0,
+  "errors": 0,
+  "details": [
+    {
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alphasage_3aaad1a1bf9ce8a2/values.parquet",
+      "status": "sanitized",
+      "before": 8356266,
+      "after": 7801125,
+      "removed": 555141,
+      "inf_or_nonfinite": 555141
+    },
+    {
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alphasage_3e74b4fa2831dc36/values.parquet",
+      "status": "sanitized",
+      "before": 8356301,
+      "after": 7410503,
+      "removed": 945798,
+      "inf_or_nonfinite": 945798
+    },
+    {
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alphasage_58079cceee41ce6d/values.parquet",
+      "status": "sanitized",
+      "before": 8356301,
+      "after": 7045499,
+      "removed": 1310802,
+      "inf_or_nonfinite": 1310802
+    },
+    {
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alphasage_5de2f47bc5cd6c66/values.parquet",
+      "status": "sanitized",
+      "before": 8356301,
+      "after": 7044958,
+      "removed": 1311343,
+      "inf_or_nonfinite": 1311343
+    },
+    {
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alphasage_89d1bc9b29c9d35a/values.parquet",
+      "status": "sanitized",
+      "before": 8356301,
+      "after": 6265889,
+      "removed": 2090412,
+      "inf_or_nonfinite": 2090412
+    },
+    {
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_dollar_pressure_range_zscore/values.parquet",
+      "status": "sanitized",
+      "before": 8336507,
+      "after": 8336505,
+      "removed": 2,
+      "inf_or_nonfinite": 2
+    },
+    {
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_drawdown_depth_normalized/values.parquet",
+      "status": "sanitized",
+      "before": 8341874,
+      "after": 8334650,
+      "removed": 7224,
+      "inf_or_nonfinite": 7224
+    },
+    {
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_drawdown_normalized/values.parquet",
+      "status": "sanitized",
+      "before": 8337906,
+      "after": 8334650,
+      "removed": 3256,
+      "inf_or_nonfinite": 3256
+    },
+    {
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_drawdown_recovery/values.parquet",
+      "status": "sanitized",
+      "before": 8337906,
+      "after": 8334650,
+      "removed": 3256,
+      "inf_or_nonfinite": 3256
+    },
+    {
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_intraday_reversal_zscore_volume_short/values.parquet",
+      "status": "sanitized",
+      "before": 8296625,
+      "after": 8295990,
+      "removed": 635,
+      "inf_or_nonfinite": 635
+    },
+    {
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_range_volume_trend/values.parquet",
+      "status": "sanitized",
+      "before": 8332782,
+      "after": 8332535,
+      "removed": 247,
+      "inf_or_nonfinite": 247
+    },
+    {
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_vol_volume_asym_ewma/values.parquet",
+      "status": "sanitized",
+      "before": 8340507,
+      "after": 8333724,
+      "removed": 6783,
+      "inf_or_nonfinite": 6783
+    },
+    {
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_adaptive_dir_vol/values.parquet",
+      "status": "sanitized",
+      "before": 403856,
+      "after": 398508,
+      "removed": 5348,
+      "inf_or_nonfinite": 5348
+    },
+    {
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_adaptive_dir_vol_cross/values.parquet",
+      "status": "sanitized",
+      "before": 3111346,
+      "after": 3107580,
+      "removed": 3766,
+      "inf_or_nonfinite": 3766
+    },
+    {
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_asymmetric_range_15d/values.parquet",
+      "status": "sanitized",
+      "before": 6681392,
+      "after": 6679669,
+      "removed": 1723,
+      "inf_or_nonfinite": 1723
+    },
+    {
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_asymmetric_range_ema5/values.parquet",
+      "status": "sanitized",
+      "before": 6681532,
+      "after": 6679808,
+      "removed": 1724,
+      "inf_or_nonfinite": 1724
+    },
+    {
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_asymmetric_range_ratio/values.parquet",
+      "status": "sanitized",
+      "before": 6681532,
+      "after": 6679808,
+      "removed": 1724,
+      "inf_or_nonfinite": 1724
+    },
+    {
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_dir_vol_volume_25d/values.parquet",
+      "status": "sanitized",
+      "before": 3111346,
+      "after": 3107580,
+      "removed": 3766,
+      "inf_or_nonfinite": 3766
+    },
+    {
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_herd_simplified/values.parquet",
+      "status": "sanitized",
+      "before": 474279,
+      "after": 468924,
+      "removed": 5355,
+      "inf_or_nonfinite": 5355
+    },
+    {
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_herd_vol_stress/values.parquet",
+      "status": "sanitized",
+      "before": 404253,
+      "after": 398892,
+      "removed": 5361,
+      "inf_or_nonfinite": 5361
+    },
+    {
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_order_imbalance_vol/values.parquet",
+      "status": "sanitized",
+      "before": 873511,
+      "after": 868256,
+      "removed": 5255,
+      "inf_or_nonfinite": 5255
+    },
+    {
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_reversal_cross_smooth/values.parquet",
+      "status": "sanitized",
+      "before": 8273216,
+      "after": 7994576,
+      "removed": 278640,
+      "inf_or_nonfinite": 278640
+    },
+    {
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_sigmoid_vol_blend/values.parquet",
+      "status": "sanitized",
+      "before": 1647154,
+      "after": 1646558,
+      "removed": 596,
+      "inf_or_nonfinite": 596
+    },
+    {
+      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/week2_vol_regime_trend/values.parquet",
+      "status": "sanitized",
+      "before": 3405777,
+      "after": 3402093,
+      "removed": 3684,
+      "inf_or_nonfinite": 3684
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "factor_name": "factor_herding_momentum_stress",
+  "candidate_id": "raw_ca_hash_ef639934",
+  "week": "week1",
+  "fitness_label": "elite",
+  "source_shelf": "standard",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.02423187014584172,
+    "rank_ic": 0.04513472830934807,
+    "icir": 0.2446354309676362,
+    "rank_icir": 0.3704255442931516
+  },
+  "lqtp_test": null,
+  "formula": "ema( (close - delay(close, 1))/delay(close, 1) * (volume / ts_mean(volume,5)) * ((high-low)/close) , span=5 )",
+  "rationale": "Volume-confirmed directional momentum amplified by intraday stress (range/close). The product captures herding behavior when price moves attract volume, and stress range magnifies crowded episodes. EMA(5) smoothing stabilizes the signal for rank consistency, while clipping controls outliers.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

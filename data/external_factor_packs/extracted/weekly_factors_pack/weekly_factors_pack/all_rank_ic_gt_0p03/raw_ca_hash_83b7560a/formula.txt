@@ -1,0 +1,1 @@
+EMA5( (close / delay(close, 1) - 1) * (volume / SMA20(volume)) )

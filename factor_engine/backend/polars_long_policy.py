@@ -130,6 +130,9 @@ POLARS_LONG_NATIVE: frozenset[str] = frozenset(
 
 POLARS_LONG_STATEFUL: frozenset[str] = frozenset(
     {
+        'Supertrend',
+        'SupertrendDirection',
+        'PSAR',
         'ADX',
         'ADXR',
         'ATR_WILDER',

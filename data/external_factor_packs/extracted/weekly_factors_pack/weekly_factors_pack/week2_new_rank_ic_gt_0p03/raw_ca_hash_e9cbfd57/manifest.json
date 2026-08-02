@@ -1,0 +1,75 @@
+{
+  "schema_version": "factor.manifest.v1",
+  "candidate_id": "raw_ca_hash_e9cbfd57",
+  "campaign_id": "llm_ashare_pv_cogalpha_2026q2",
+  "generator_name": "cogalpha",
+  "producer": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_LQTP",
+  "domain_root": "price_volume",
+  "frequency_bucket": "daily",
+  "batch_id": "post_mining_translate",
+  "factor_name": "factor_intraday_volume_spike",
+  "formula": "ema(intraday_return * safe_div(numerator=volume, denominator=ts_mean(volume, 20)), 10)",
+  "expression_type": "lqtp_dsl",
+  "execution_platform": "lqtp",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit",
+  "code": "def factor_intraday_volume_spike(df):\n    df_copy = df.copy()\n    intday_ret = df_copy[\"close\"] / df_copy[\"open\"] - 1.0\n    vol_mean = df_copy[\"volume\"].rolling(20, min_periods=20).mean()\n    vol_surge = df_copy[\"volume\"] / vol_mean.replace(0, np.nan)\n    raw = intday_ret * vol_surge\n    df_copy[\"factor_intraday_volume_spike\"] = raw.ewm(span=10, adjust=False).mean()\n    return df_copy[\"factor_intraday_volume_spike\"]",
+  "rationale": "Measures intraday directional pressure scaled by volume relative to its 20-day average. Volume spikes relative to average indicate conviction behind the move. Smoothed with a shorter 10-period EWMA to balance responsiveness and noise reduction, targeting improved ICIR while preserving the core mechanism of the parent.",
+  "lineage": {
+    "agent_skill": "alpha-order-imbalance",
+    "operation": "cogalpha_to_lqtp_translation"
+  },
+  "stage": "candidate_pool",
+  "fitness_label": "qualified",
+  "metrics": {
+    "train": {
+      "ic": 0.02533248363080693,
+      "rank_ic": 0.04295737873798425,
+      "icir": 0.24316155416468616,
+      "rank_icir": 0.36669979474494163,
+      "status": "computed",
+      "source": "cogalpha"
+    },
+    "valid": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    }
+  },
+  "validation": {
+    "status": "pending"
+  },
+  "created_at": "2026-06-21T11:25:28.454386+00:00",
+  "updated_at": "2026-06-21T16:18:20.127206+00:00",
+  "lqtp_tags": {
+    "universe": "all_a",
+    "market": "ashare"
+  },
+  "rationale_llm": {
+    "summary": "Measures intraday directional pressure scaled by volume relative to its 20-day average. Volume spikes relative to average indicate conviction behind the move. Smoothed with a shorter 10-period EWMA to balance responsiveness and noise reduction, targeting improved ICIR while preserving the core mechanism of the parent.",
+    "parsed_at": "2026-06-21T11:25:33.986233+00:00",
+    "source": "manifest_rationale"
+  },
+  "admission": {
+    "test": {
+      "checked_at": "2026-06-21T16:11:38.891404+00:00",
+      "min_rank_ic": 0.03,
+      "max_pool_correlation": 0.7,
+      "mean_ic": 0.03296207189051624,
+      "rank_ic": 0.03296207189051624,
+      "orientation": "flipped",
+      "original_mean_ic": -0.03296207189051624,
+      "pool_max_correlation": 1.0,
+      "correlation_source": "lqtp_reference_library",
+      "reference_library_split": "test",
+      "reference_library_cached_count": 65,
+      "reference_compared_count": 65,
+      "passed_ic": true,
+      "passed_correlation": false,
+      "passed": false,
+      "split": "test"
+    }
+  }
+}

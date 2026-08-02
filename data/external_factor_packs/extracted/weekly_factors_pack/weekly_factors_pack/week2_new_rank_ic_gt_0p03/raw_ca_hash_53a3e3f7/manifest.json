@@ -1,0 +1,55 @@
+{
+  "schema_version": "factor.manifest.v1",
+  "candidate_id": "raw_ca_hash_53a3e3f7",
+  "campaign_id": "llm_ashare_pv_cogalpha_2026q2",
+  "generator_name": "cogalpha",
+  "producer": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_LQTP",
+  "domain_root": "price_volume",
+  "frequency_bucket": "daily",
+  "batch_id": "post_mining_translate",
+  "factor_name": "factor_mut_hc004_volpctrank_s12_clip2_5_volwin6",
+  "formula": "ema( (close - delay(close, 1))/delay(close, 1) * rank_pct6(volume) * ((high-low)/close) , span=12 ) clip ±2.5",
+  "expression_type": "lqtp_dsl",
+  "execution_platform": "lqtp",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit",
+  "code": "def factor_mut_hc004_volpctrank_s12_clip2_5_volwin6(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_rank = df_copy['volume'].rolling(6, min_periods=6).rank(pct=True)\n    stress_range = (df_copy['high'] - df_copy['low']) / df_copy['close'].replace(0, np.nan)\n    raw = ret * vol_rank * stress_range\n    smoothed = raw.ewm(span=12, min_periods=12, adjust=False).mean()\n    factor = smoothed.clip(-2.5, 2.5)\n    factor.name = 'factor_mut_hc004_volpctrank_s12_clip2_5_volwin6'\n    return factor",
+  "rationale": "Mutation adjusting volume rank window from 8 to 6 to increase responsiveness of the volume confirmation signal, targeting improved IC while preserving the strong RankICIR (0.4182) observed in the parent. Keeps smoothing span (12) and clipping (±2.5) unchanged.",
+  "lineage": {
+    "agent_skill": "alpha-herding",
+    "operation": "cogalpha_to_lqtp_translation"
+  },
+  "stage": "candidate_pool",
+  "fitness_label": "qualified",
+  "metrics": {
+    "train": {
+      "ic": 0.027175264154197215,
+      "rank_ic": 0.04986724548002547,
+      "icir": 0.23961291917026598,
+      "rank_icir": 0.42108146868308477,
+      "status": "computed",
+      "source": "cogalpha"
+    },
+    "valid": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    }
+  },
+  "validation": {
+    "status": "pending"
+  },
+  "created_at": "2026-06-21T11:25:28.505495+00:00",
+  "updated_at": "2026-06-21T16:18:22.039125+00:00",
+  "lqtp_tags": {
+    "universe": "all_a",
+    "market": "ashare"
+  },
+  "rationale_llm": {
+    "summary": "Mutation adjusting volume rank window from 8 to 6 to increase responsiveness of the volume confirmation signal, targeting improved IC while preserving the strong RankICIR (0.4182) observed in the parent. Keeps smoothing span (12) and clipping (±2.5) unchanged.",
+    "parsed_at": "2026-06-21T11:25:37.567158+00:00",
+    "source": "manifest_rationale"
+  }
+}

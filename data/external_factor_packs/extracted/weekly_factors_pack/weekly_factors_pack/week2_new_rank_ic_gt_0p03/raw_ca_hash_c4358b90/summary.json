@@ -1,0 +1,27 @@
+{
+  "factor_name": "factor_vol_surge_regime_gated",
+  "candidate_id": "raw_ca_hash_c4358b90",
+  "week": "week2",
+  "fitness_label": "qualified",
+  "source_shelf": "standard",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.024935617701461233,
+    "rank_ic": 0.04560232498456135,
+    "icir": 0.21438774703792565,
+    "rank_icir": 0.4048674982089943
+  },
+  "lqtp_test": {
+    "rank_ic": 0.03973472434247107,
+    "mean_ic": 0.03973472434247107,
+    "icir": 0.3429509369272559,
+    "orientation": "flipped",
+    "begin_date": 20230101,
+    "end_date": 20260615
+  },
+  "formula": "ema(intraday_return * safe_div(numerator=volume, denominator=ts_max(volume, 20)) * where(high - low > ts_quantile(high - low, 20, 0.5), 1, 0), 20)",
+  "rationale": "Primary mechanism from imbalance_002: intraday return scaled by volume surge to capture directional pressure. Lightweight modifier from avr_002_mut001: volatility regime indicator (range > 20-day median) to filter out low-volatility periods where the signal may be noisy. This combination targets improved ICIR while preserving the core directional strength.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}

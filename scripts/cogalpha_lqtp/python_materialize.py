@@ -16,10 +16,10 @@ if str(ROOT) not in sys.path:
 if str(FE_ROOT) not in sys.path:
     sys.path.insert(0, str(FE_ROOT))
 
-from api.mining_integration import default_ashare_pv_data_source_config  # noqa: E402
-from runtime.config import DataSourceConfig  # noqa: E402
-from storage.factory import build_data_source  # noqa: E402
-
+from scripts.cogalpha_lqtp.data_access_panel import (  # noqa: E402
+    ashare_materialize_data_source_config,
+    build_materialize_data_source,
+)
 from scripts.cogalpha_lqtp.materialize import _normalize_symbol  # noqa: E402
 from scripts.cogalpha_lqtp.memory_utils import release_memory  # noqa: E402
 from scripts.cogalpha_lqtp.python_runtime import (  # noqa: E402
@@ -37,11 +37,12 @@ def _build_data_source(
     end: str,
     instrument_filter: list[str] | None = None,
 ):
-    cfg = default_ashare_pv_data_source_config(start_date=start, end_date=end)
-    if instrument_filter:
-        cfg["instrument_filter"] = sorted(instrument_filter)
-    ds_type = str(cfg.pop("type", "data_access"))
-    return build_data_source(DataSourceConfig(type=ds_type, options=cfg))
+    cfg = ashare_materialize_data_source_config(
+        start_date=start,
+        end_date=end,
+        instrument_filter=instrument_filter,
+    )
+    return build_materialize_data_source(cfg)
 
 
 def load_symbol_panel(
@@ -186,6 +187,9 @@ def materialize_python_factor(
     out_dir = lake_root / function_name
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / "values.parquet"
+    # Clear stale chunk parts from interrupted runs
+    for stale in out_dir.glob("_part_*.parquet"):
+        stale.unlink(missing_ok=True)
     part_paths: list[Path] = []
 
     filter_list = sorted(allowed_symbols) if allowed_symbols else None
@@ -206,6 +210,12 @@ def materialize_python_factor(
             workers=workers,
         )
         release_memory(panel)
+        if chunk_df.empty:
+            continue
+        if "value" in chunk_df.columns:
+            chunk_df = chunk_df.copy()
+            chunk_df["value"] = pd.to_numeric(chunk_df["value"], errors="coerce")
+            chunk_df = chunk_df[chunk_df["value"].apply(lambda x: x == x and abs(x) != float("inf"))]
         if chunk_df.empty:
             continue
         part_path = out_dir / f"_part_{chunk_idx:04d}.parquet"

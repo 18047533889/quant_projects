@@ -1,0 +1,1 @@
+range_pct = (high-low)/close; smooth_range = ema(range_pct, span=5); vol_ratio = volume / ts_mean(volume,20); smooth_vol_ratio = if vol_ratio > 0.9 then ema(vol_ratio,10) else ema(vol_ratio,30); direction = (close-open)/close; factor = smooth_range * smooth_vol_ratio * direction

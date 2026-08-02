@@ -1,0 +1,55 @@
+{
+  "schema_version": "factor.manifest.v1",
+  "candidate_id": "raw_ca_hash_32d50b39",
+  "campaign_id": "llm_ashare_pv_cogalpha_2026q2",
+  "generator_name": "cogalpha",
+  "producer": "zhangjiayin",
+  "market": "ashare",
+  "universe_id": "A_SHARE_LQTP",
+  "domain_root": "price_volume",
+  "frequency_bucket": "daily",
+  "batch_id": "post_mining_translate",
+  "factor_name": "factor_volume_adjusted_momentum",
+  "formula": "ema(daily_return) * (safe_div(numerator=volume, denominator=ts_mean(volume, 20)), 5)",
+  "expression_type": "lqtp_dsl",
+  "execution_platform": "lqtp",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit",
+  "code": "def factor_volume_adjusted_momentum(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol_ratio = df_copy[\"volume\"] / df_copy[\"volume\"].rolling(20, min_periods=20).mean().replace(0, np.nan)\n    raw_signal = ret * vol_ratio\n    signal = raw_signal.ewm(span=5, adjust=False).mean()\n    df_copy[\"factor_volume_adjusted_momentum\"] = signal\n    return df_copy[\"factor_volume_adjusted_momentum\"]",
+  "rationale": "Volume-adjusted momentum: multiplies daily price return by the ratio of current volume to its 20-day rolling average. High volume confirms price movement, low volume attenuates it. An EWMA(5) smoothing stabilizes the signal, capturing price-volume coherence in short-term momentum.",
+  "lineage": {
+    "agent_skill": "alpha-price-volume-coherence",
+    "operation": "cogalpha_to_lqtp_translation"
+  },
+  "stage": "candidate_pool",
+  "fitness_label": "elite",
+  "metrics": {
+    "train": {
+      "ic": 0.023950964715812546,
+      "rank_ic": 0.038500228401905194,
+      "icir": 0.22485817385379245,
+      "rank_icir": 0.30417312604291413,
+      "status": "computed",
+      "source": "cogalpha"
+    },
+    "valid": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    }
+  },
+  "validation": {
+    "status": "pending"
+  },
+  "created_at": "2026-06-21T11:25:28.472418+00:00",
+  "updated_at": "2026-06-21T16:18:17.963341+00:00",
+  "lqtp_tags": {
+    "universe": "all_a",
+    "market": "ashare"
+  },
+  "rationale_llm": {
+    "summary": "Volume-adjusted momentum: multiplies daily price return by the ratio of current volume to its 20-day rolling average. High volume confirms price movement, low volume attenuates it. An EWMA(5) smoothing stabilizes the signal, capturing price-volume coherence in short-term momentum.",
+    "parsed_at": "2026-06-21T11:25:32.911174+00:00",
+    "source": "manifest_rationale"
+  }
+}

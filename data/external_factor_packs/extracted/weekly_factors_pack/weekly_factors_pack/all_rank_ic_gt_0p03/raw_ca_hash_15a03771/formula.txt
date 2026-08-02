@@ -1,0 +1,1 @@
+ema(safe_div(numerator=close - (high + low) / 2, denominator=high - low) * volume * (1 + safe_div(numerator=volume, denominator=ts_mean(volume, 10)) - 1), 5)

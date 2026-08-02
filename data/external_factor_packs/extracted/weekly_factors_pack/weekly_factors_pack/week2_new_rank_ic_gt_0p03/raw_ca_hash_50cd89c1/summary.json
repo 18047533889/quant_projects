@@ -1,0 +1,27 @@
+{
+  "factor_name": "factor_volume_confirmed_momentum_clipped",
+  "candidate_id": "raw_ca_hash_50cd89c1",
+  "week": "week2",
+  "fitness_label": "qualified",
+  "source_shelf": "standard",
+  "train_period": "2018-01-01 ~ 2021-12-31 (CogAlpha fitness)",
+  "test_period_lqtp": "2023-01-01 ~ 2026-06-15 (if available)",
+  "train": {
+    "ic": 0.02494058181104102,
+    "rank_ic": 0.03616405201008425,
+    "icir": 0.2381642542495791,
+    "rank_icir": 0.2901461107605721
+  },
+  "lqtp_test": {
+    "rank_ic": 0.029789346915860118,
+    "mean_ic": 0.029789346915860118,
+    "icir": 0.19052484554855692,
+    "orientation": "flipped",
+    "begin_date": 20230101,
+    "end_date": 20260615
+  },
+  "formula": "(ts_pct(close, 5)) * (safe_div(numerator=volume, denominator=ts_mean(volume, 20)))",
+  "rationale": "Volume-confirmed momentum with clipped extremes to improve robustness. The core mechanism (momentum scaled by volume ratio) is preserved from parent1, while the clipping from parent2 reduces outlier influence, targeting better ICIR stability.",
+  "expression_type": "lqtp_dsl",
+  "filter": "volume > 0 AND not is_suspend AND close < high_limit AND close > low_limit"
+}
