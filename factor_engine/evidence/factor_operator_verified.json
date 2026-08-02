@@ -39,6 +39,7 @@
     "factor_engine/cleaned_operators/price_volume/structure_patterns_extra_v2.py": "5ce44ec0bb0561ebcd2437b69137012ecbf6ac8a",
     "factor_engine/cleaned_operators/production_certification_overlay.py": "eb661ef33dc923fd33306e3adcc1939bae923816",
     "factor_engine/evidence/primitive_verified_delta.json": "3d43c6507897c8a6588710ad75d76e6e1dca53e1",
+    "factor_engine/evidence/recipe_verified.json": "aa032ce00f8abd14d845f5d850fb72ee3b98f065",
     "factor_engine/runtime/__init__.py": "169408280ee505daa3825b0c1ed9b65195887cdd"
   },
   "allowed_unhashed_artifact_paths": [
