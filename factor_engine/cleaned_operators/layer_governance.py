@@ -52,7 +52,6 @@ RECIPE_CANONICALS = frozenset({
     "vp_weighted_price",
     "vpmacd",
     "vpmacd_signal",
-    "size_neutralize",
 })
 
 # Tools retained for analysis but removed from Factor DSL, catalog and LLM authoring.

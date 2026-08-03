@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from expr.base import Expr
@@ -10,6 +10,7 @@ from expr.cleaned_call import CleanedCall
 from expr.column import ColumnRef
 from expr.literal import Literal
 from ir.nodes import IRNode
+from ir.schema import DEFAULT_COLUMN_SCHEMA, Schema
 
 _LAG_PARAM_NAMES = {
     "ts_delay": ("n", "d", "lag", "periods", "window"),
@@ -469,6 +470,8 @@ class AnalysisResult:
     has_cs_op: bool
     referenced_columns: set[str]
     requires_full_history: bool = False
+    referenced_fields: dict[str, Any] = field(default_factory=dict)
+    column_schemas: dict[str, Schema] = field(default_factory=dict)
 
 
 class Analyzer:
@@ -476,6 +479,8 @@ class Analyzer:
 
     def lower(self, expr: Expr) -> AnalysisResult:
         columns: set[str] = set()
+        referenced_fields: dict[str, Any] = {}
+        column_schemas: dict[str, Schema] = {}
         has_ts = False
         has_cs = False
         requires_full_history = False
@@ -485,7 +490,21 @@ class Analyzer:
 
             if isinstance(node, ColumnRef):
                 columns.add(node.name)
-                return IRNode(op="column", attrs={"name": node.name}), 0
+                from fields import resolve_field
+
+                spec = resolve_field(node)
+                schema = Schema.from_field(spec) if spec is not None else DEFAULT_COLUMN_SCHEMA
+                column_schemas[node.name] = schema
+                if spec is not None:
+                    referenced_fields[node.name] = spec
+                attrs = {"name": node.name}
+                if spec is not None:
+                    attrs["field"] = spec.name
+                    attrs["dtype"] = schema.dtype
+                    attrs["unit"] = spec.unit
+                    attrs["source_table"] = spec.table
+                    attrs["source_field"] = spec.source_name
+                return IRNode(op="column", attrs=attrs), 0
             if isinstance(node, Literal):
                 return IRNode(op="literal", attrs={"value": node.value}), 0
             if not isinstance(node, CleanedCall):
@@ -594,4 +613,6 @@ class Analyzer:
             has_cs_op=has_cs,
             referenced_columns=columns,
             requires_full_history=requires_full_history,
+            referenced_fields=referenced_fields,
+            column_schemas=column_schemas,
         )

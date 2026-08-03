@@ -84,7 +84,9 @@ cleaned_operators/
 |------|----------------|----------------------|
 | 时序滚动 | `ts_mean`, `ts_var`, `ts_pct` | `SMA`, `m_var`, `returns`, `pct_change` |
 | 截面 | `rank`, `zscore` | `CS_RANK`, `standardize`, `panel_zscore` |
-| 分组中性 | `group_neutralize` | `neutralize`, `group_demean`, `industry_neutralize` |
+| 分组中性 | `group_neutralize` | `industry_neutralize`, `neutralize`, `group_demean` |
+| 市值中性 | `size_neutralize` | `market_cap_neutralize`, `cap_neutralize` |
+| 行业+市值 | `industry_size_neutralize` | `size_industry_neutralize` |
 | 裁剪 | `clip` | `cap`, `clamp`, `CLIP` |
 | 扩展统计 | `expanding_mean`, `expanding_zscore` | `cum_avg`, `cum_standardize` |
 | 技术指标 | `RSI`, `MACD`, `WMA` | `ts_rsi`, `ts_macd`, `ts_wma` |

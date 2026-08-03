@@ -108,16 +108,21 @@ def test_minute_resample_does_not_silently_collapse_to_daily() -> None:
         source._minute_daily("Close", "minute_resample", {"period": 5})
 
 
-def test_multiminute_vwap_is_fail_closed_until_weighted_aggregation() -> None:
+def test_multiminute_vwap_is_amount_over_volume() -> None:
     from storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
-    from storage.sources.data_access_source import MissingDataDependencyError
 
-    class DummyInner:
-        pass
+    source = LQTPLogicalDataSource(object(), factor_freq="1d")
+    amount = pd.Series([1000.0], index=pd.MultiIndex.from_tuples(
+        [(pd.Timestamp("2024-01-02"), "A")], names=["timestamp", "instrument"]
+    ))
+    volume = pd.Series([10.0], index=amount.index)
 
-    source = LQTPLogicalDataSource(DummyInner(), factor_freq="1d")
-    with pytest.raises(MissingDataDependencyError, match="weighted aggregation"):
-        source._minute_daily("Vwap", "minute_bar", {"period": 5, "index": 0})
+    def fake_minute(field: str, transform: str, params: dict):
+        return {"Amount": amount, "Volume": volume}[field]
+
+    source._minute_daily = fake_minute
+    out = LQTPLogicalDataSource._minute_weighted_vwap(source, "minute_bar", {"period": 5})
+    assert out.iloc[0] == pytest.approx(100.0)
 
 
 def test_blocked_lqtp_names_are_classified_not_unknown() -> None:
@@ -138,4 +143,11 @@ def test_machine_readable_manifest_distinguishes_blocked_from_production() -> No
     assert manifest["dialect_version"] == "2026-07-19"
     assert "ts_sumac" in manifest["recognized_blocked"]
     assert "l2_sum" in manifest["recognized_blocked"]
-    assert manifest["canonical_operators"]["ts_mean"]["production_allowed"] is True
+    # Stable neutralize one-arg forms are sourced, not blocked.
+    assert "size_neutralize" not in manifest["recognized_blocked"]
+    assert "industry_size_neutralize" not in manifest["recognized_blocked"]
+    assert "industry_neutralize(x)" in manifest["source_aware"]
+    assert "size_neutralize(x)" in manifest["source_aware"]
+    assert "industry_size_neutralize(x)" in manifest["source_aware"]
+    assert "size_neutralize" in manifest["canonical_operators"]
+    assert "industry_size_neutralize" in manifest["canonical_operators"]

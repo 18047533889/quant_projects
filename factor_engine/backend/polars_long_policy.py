@@ -30,6 +30,8 @@ POLARS_LONG_NATIVE: frozenset[str] = frozenset(
         'cs_pct_rank',
         'cs_regression',
         'cs_resid',
+        'size_neutralize',
+        'industry_size_neutralize',
         'cum_delta',
         'cum_max',
         'cum_min',

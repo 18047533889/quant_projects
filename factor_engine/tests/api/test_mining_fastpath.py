@@ -60,6 +60,33 @@ def test_default_mining_search_space_config(_loaded):
     assert "ts_mean" in cfg["operators"]
 
 
+def test_typed_mining_search_space_v2_preserves_v1_allowlist(_loaded):
+    from api.mining_integration import default_mining_search_space_config
+
+    v1 = default_mining_search_space_config(tier="research")
+    v2 = default_mining_search_space_config(tier="research", version="v2", max_cost=1)
+    assert v2["schema_version"] == "factor_engine.mining_search_space.v2"
+    assert v2["v1_allowlist"] == v1["operators"]
+    assert v2["constraints"]["max_domains"] == 2
+    assert v2["field_dq_policy"] == "drop"
+    assert all({"frequency", "domain", "cardinality", "unit", "dq_policy"} <= set(field) for field in v2["fields"])
+    assert all({"signature", "inputs", "output", "cost", "domains"} <= set(op) for op in v2["operators"])
+    earnings = next(op for op in v2["operators"] if op["name"] == "earnings_yield")
+    assert earnings["domains"] == ["valuation"]
+    assert earnings["unit"] == "ratio"
+
+
+def test_typed_mining_rejects_invalid_constraints(_loaded):
+    from api.mining_integration import default_mining_search_space_config
+
+    with pytest.raises(ValueError, match="max_domains"):
+        default_mining_search_space_config(tier="research", version="v2", max_domains=3)
+    with pytest.raises(ValueError, match="missing required metadata"):
+        default_mining_search_space_config(
+            tier="research", version="v2", fields=[{"name": "close"}]
+        )
+
+
 def test_validate_formula_in_mining_allowlist(_loaded):
     from api.mining_integration import validate_formula_in_mining_allowlist
 

@@ -454,13 +454,81 @@ class GroupNeutralizeNative(SeriesOperator):
     def _calculate_series(
         self, x: pl.DataFrame, group: pl.DataFrame | None = None, **kwargs
     ) -> pl.DataFrame:
-        def _xform(long: pl.DataFrame) -> pl.DataFrame:
-            # When group is missing, demean over the full cross-section.
-            key = ["_r", "_g"] if "_g" in long.columns else ["_r"]
-            mu = pl.col("_v").mean().over(key)
-            return long.with_columns((pl.col("_v") - mu).alias("_v"))
+        # Wide-panel Polars unpivot is far slower than the vectorized numpy kernel;
+        # bridge to pandas_numpy for eager wide frames. Long-table / SQL keep their
+        # native emitters in polars_expr_emitter / sql_pushdown.
+        from cleaned_operators.common._polars_bridge import bridge_registry
 
-        return _group_long_transform(x, group, _xform)
+        if group is None:
+            return bridge_registry("group_neutralize", x)
+        return bridge_registry("group_neutralize", x, group)
+
+
+@register_operator(
+    name="size_neutralize",
+    category="group_neutralization",
+    business_category="group_neutralization",
+    canonical="size_neutralize",
+    source=_SRC,
+    backend="polars",
+)
+class SizeNeutralizeNative(SeriesOperator):
+    """Size neutralize: residual vs log(max(market_cap, 1))."""
+
+    metadata = OperatorMetadata(
+        name="size_neutralize",
+        category="group_neutralization",
+        description="市值中性化（Polars 原生）",
+        param_names=["x", "market_cap"],
+        return_type="series",
+        tags=["group", "size", "polars", "native"],
+    )
+
+    def _calculate_series(
+        self,
+        x: pl.DataFrame,
+        market_cap: pl.DataFrame | None = None,
+        **kwargs,
+    ) -> pl.DataFrame:
+        if market_cap is None:
+            raise ValueError("size_neutralize requires market_cap")
+        from cleaned_operators.common._polars_bridge import bridge_registry
+
+        return bridge_registry("size_neutralize", x, market_cap)
+
+
+@register_operator(
+    name="industry_size_neutralize",
+    category="group_neutralization",
+    business_category="group_neutralization",
+    canonical="industry_size_neutralize",
+    source=_SRC,
+    backend="polars",
+)
+class IndustrySizeNeutralizeNative(SeriesOperator):
+    """Industry demean then size residual (Polars native)."""
+
+    metadata = OperatorMetadata(
+        name="industry_size_neutralize",
+        category="group_neutralization",
+        description="行业+市值双中性（Polars 原生）",
+        param_names=["x", "industry", "market_cap"],
+        return_type="series",
+        tags=["group", "industry", "size", "polars", "native"],
+    )
+
+    def _calculate_series(
+        self,
+        x: pl.DataFrame,
+        industry: pl.DataFrame | None = None,
+        market_cap: pl.DataFrame | None = None,
+        **kwargs,
+    ) -> pl.DataFrame:
+        if industry is None or market_cap is None:
+            raise ValueError("industry_size_neutralize requires (x, industry, market_cap)")
+        from cleaned_operators.common._polars_bridge import bridge_registry
+
+        return bridge_registry("industry_size_neutralize", x, industry, market_cap)
 
 
 @register_operator(

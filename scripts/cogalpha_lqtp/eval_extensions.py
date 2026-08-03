@@ -618,7 +618,13 @@ def enrich_post_analysis(analysis: dict[str, Any]) -> dict[str, Any]:
 
 
 def ic_half_life(daily_ic: list[float], max_lag: int = 60) -> dict[str, float]:
-    """Estimate IC half-life (days) from autocorrelation decay."""
+    """Estimate IC half-life (days) from autocorrelation decay of the daily IC series.
+
+    Uses only the initial positive-ACF segment (stop at first non-positive lag).
+    Previously, negative ACFs were clamped to 1e-6 and fit over 60 lags, which
+    made lambda non-positive for most factors (half-life shown as missing) and
+    occasionally produced absurd multi-hundred-day estimates.
+    """
     arr = np.asarray([x for x in daily_ic if np.isfinite(x)], dtype=float)
     if len(arr) < 10:
         return {"ic_half_life_days": float("nan"), "ic_decay_lambda": float("nan")}
@@ -626,28 +632,40 @@ def ic_half_life(daily_ic: list[float], max_lag: int = 60) -> dict[str, float]:
     var = float(np.dot(centered, centered))
     if var < 1e-18:
         return {"ic_half_life_days": float("nan"), "ic_decay_lambda": float("nan")}
+
     lags: list[int] = []
     acfs: list[float] = []
     for lag in range(1, min(max_lag, len(arr) - 1)):
         ac = float(np.dot(centered[:-lag], centered[lag:]) / var)
-        if not np.isfinite(ac):
-            continue
+        if not np.isfinite(ac) or ac <= 0.0:
+            break
         lags.append(lag)
-        acfs.append(max(ac, 1e-6))
-    if len(lags) < 3:
+        acfs.append(float(ac))
+
+    if not lags:
+        # No positive persistence in the IC series (often mean-reverting after lag 0).
         return {"ic_half_life_days": float("nan"), "ic_decay_lambda": float("nan")}
-    # Fit ln(acf) ~ -lambda * lag
-    x = np.asarray(lags, dtype=float)
-    y = np.log(np.asarray(acfs, dtype=float))
-    slope, _ = np.polyfit(x, y, 1)
-    lam = -float(slope)
-    if lam <= 1e-9:
-        half_life = float("nan")  # avoid JSON/HTML inf
+
+    if len(lags) == 1:
+        rho = min(max(acfs[0], 1e-12), 1.0 - 1e-12)
+        lam = -math.log(rho)
     else:
-        half_life = float(math.log(2.0) / lam)
-        if not np.isfinite(half_life) or half_life > 1e6:
-            half_life = float("nan")
-    return {"ic_half_life_days": half_life, "ic_decay_lambda": lam}
+        x = np.asarray(lags, dtype=float)
+        y = np.log(np.asarray(acfs, dtype=float))
+        slope, _ = np.polyfit(x, y, 1)
+        lam = -float(slope)
+        if lam <= 1e-9:
+            # Flat/rising positive segment — fall back to AR(1) at lag 1.
+            rho = min(max(acfs[0], 1e-12), 1.0 - 1e-12)
+            lam = -math.log(rho)
+
+    half_life = float(math.log(2.0) / lam) if lam > 1e-9 else float("nan")
+    # Cap at one trading year; slower decay is reported as this ceiling.
+    if np.isfinite(half_life) and half_life > 252.0:
+        half_life = 252.0
+    if not np.isfinite(half_life):
+        half_life = float("nan")
+    return {"ic_half_life_days": half_life, "ic_decay_lambda": float(lam) if lam == lam else float("nan")}
 
 
 def factor_rank_turnover(factor_path: Path, con: duckdb.DuckDBPyConnection | None = None) -> dict[str, float]:

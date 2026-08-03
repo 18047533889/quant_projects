@@ -24,7 +24,7 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from .cleaned_ops import make_cleaned_call_factory
-from .columns import col
+from .columns import col, field
 from .factor import Factor
 
 # 高频算子显式导出；其余算子通过 ``__getattr__`` 按白名单懒加载
@@ -38,6 +38,7 @@ delay = make_cleaned_call_factory("delay")
 __all__ = [
     "Factor",
     "col",
+    "field",
     "delay",
     "make_cleaned_call_factory",
     "rank",

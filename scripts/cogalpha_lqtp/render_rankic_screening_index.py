@@ -389,6 +389,11 @@ def _apply_reeval_overlay(work: Path, rows: list[FactorRow]) -> dict[str, int]:
                 row.rank_icir = abs(icir) if icir is not None else None
                 row.source = "screening_reeval (VWAP→VWAP)"
                 row.route = str(meta.get("engine") or meta.get("eval_route") or row.route or "")
+                ex = dict(row.extra or {})
+                for k in ("mean_daily_coverage", "ls_mean_one_way_turnover", "long_short_sharpe"):
+                    if meta.get(k) is not None:
+                        ex[k] = meta.get(k)
+                row.extra = ex
                 stats["ic_from_vwap"] += 1
                 continue
 
@@ -409,6 +414,18 @@ def dedupe_rows(rows: list[FactorRow]) -> list[FactorRow]:
     return sorted(best.values(), key=lambda r: r.rank_ic, reverse=True)
 
 
+def _fmt_opt(v: Any, *, pct: bool = False, digits: int = 4) -> str:
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return "—"
+    if f != f:
+        return "—"
+    if pct:
+        return f"{f:.1%}"
+    return f"{f:.{digits}f}"
+
+
 def render_html(
     *,
     rows: list[FactorRow],
@@ -416,6 +433,7 @@ def render_html(
     threshold: float,
     out_path: Path,
     work_dir: Path,
+    corr_fragment: str = "",
 ) -> None:
     from scripts.cogalpha_lqtp.report_theme import SUMMARY_CSS  # noqa: E402
 
@@ -425,6 +443,7 @@ def render_html(
     toc_items = []
     for i, r in enumerate(rows, 1):
         icir = f"{r.rank_icir:.4f}" if r.rank_icir is not None else "—"
+        ex = r.extra or {}
         table_rows.append(
             "<tr>"
             f"<td>{i}</td>"
@@ -433,6 +452,9 @@ def render_html(
             f"<td>{html_lib.escape(r.route or '—')}</td>"
             f"<td>{r.rank_ic:.4f}</td>"
             f"<td>{icir}</td>"
+            f"<td>{_fmt_opt(ex.get('mean_daily_coverage'), pct=True)}</td>"
+            f"<td>{_fmt_opt(ex.get('ls_mean_one_way_turnover'), pct=True)}</td>"
+            f"<td>{_fmt_opt(ex.get('long_short_sharpe'), digits=3)}</td>"
             "</tr>"
         )
         toc_items.append(
@@ -469,13 +491,18 @@ def render_html(
     .toc {{ columns: 2; column-gap: 28px; font-size: 14px; margin: 16px 0; }}
     .toc li {{ margin: 6px 0; break-inside: avoid; }}
     .week2-section {{ margin-top: 40px; }}
+    .corr-embed {{ margin: 40px 0 12px; padding: 18px 20px; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; }}
+    .corr-embed img.corr-heat {{ max-width: 100%; height: auto; display: block; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; }}
+    .corr-embed .corr-pair-wrap {{ max-height: 70vh; overflow: auto; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; }}
+    .corr-embed table.list {{ border-collapse: collapse; width: 100%; margin-top: 12px; }}
+    .corr-embed table.list th, .corr-embed table.list td {{ border: 1px solid #e2e8f0; padding: 6px 8px; font-size: 13px; word-break: break-all; }}
     @media (max-width:900px) {{ .toc {{ columns: 1; }} }}
   </style>
 </head>
 <body>
 <header class="hero">
   <h1>因子精选汇总（RankIC &gt; {threshold:.0%}）</h1>
-  <p class="hero-sub muted">合并 CogAlpha 主批 · 7/26 factor_pool · screening Top · Week2 目录；按 RankIC 降序，同名去重保留更高 IC</p>
+  <p class="hero-sub muted">VWAP→VWAP 面板筛选；按 RankIC 降序，同名去重保留更高 IC</p>
   <p class="muted">生成时间 {generated} · 工作目录 <code>{html_lib.escape(str(work_dir))}</code></p>
 </header>
 <main>
@@ -484,18 +511,14 @@ def render_html(
       <div class="metric"><b>{len(rows)}</b><span>入选因子（去重后）</span></div>
       <div class="metric"><b>{threshold:.0%}</b><span>RankIC 阈值</span></div>
       <div class="metric"><b>{pos}</b><span>RankIC &gt; 0</span></div>
-      <div class="metric"><b>{len([r for r in rows if r.source.startswith('cogalpha')])}</b><span>7/18 主批</span></div>
-      <div class="metric"><b>{len([r for r in rows if '7/26' in r.source])}</b><span>7/26 优选</span></div>
-      <div class="metric"><b>{len([r for r in rows if 'screening' in r.source])}</b><span>screening</span></div>
-      <div class="metric"><b>{len([r for r in rows if 'Week2' in r.source])}</b><span>Week2</span></div>
     </div>
     <div class="notice">
-      <p><b>链接说明</b>：有扩展评估页时直达 <code>reports_screening_reeval/</code>；否则 7/18 在 <code>reports/</code>，7/26 在 <code>reports_7_26/</code>。
-      旧 screening 总报告仅 Top30 有页内锚点，已不再用失效的 <code>#factor_NNN</code> 跳转。</p>
       <p><b>收益口径</b>：本页 RankIC / RankICIR <b>全部</b>为 VWAP→VWAP（收盘 T 信号 →
       vwap(T+2)/vwap(T+1)-1，避免 vwap(T+1)/vwap(T) 把当日 VWAP 泄漏进收益）。不混用 close。
       尚未完成 VWAP 重评的因子不进入本表。负向因子已在公式/落值取负，表中 RankIC≥0。</p>
-      <p><b>因子相关</b>：见 <a href="/reports/factor_rank_corr_matrix.html">截面秩相关矩阵</a>。</p>
+      <p><b>多空扣费</b>：按真实 G10/G1 等权组合日换手扣佣金（非固定 40%）。表中「多空换手」为两腿单边换手之和的日均。</p>
+      <p><b>覆盖率</b>：当日（因子∩收益）股票数 / 收益宇宙股票数。</p>
+      <p><b>因子相关</b>：见文末热力图与高相关对表，或 <a href="/reports/factor_rank_corr_matrix.html">完整页</a>。</p>
     </div>
   </section>
 
@@ -510,6 +533,7 @@ def render_html(
       <thead>
         <tr>
           <th>#</th><th>因子</th><th>来源</th><th>算值路径</th><th>Mean RankIC</th><th>RankICIR</th>
+          <th>日覆盖率</th><th>多空换手</th><th>多空Sharpe</th>
         </tr>
       </thead>
       <tbody>
@@ -519,6 +543,8 @@ def render_html(
   </section>
 
   {"<section class='week2-section'><h2>Week2 因子详情（页内）</h2>" + ''.join(w2_blocks) + "</section>" if w2_blocks else ""}
+
+  {corr_fragment}
 </main>
 </body>
 </html>
@@ -536,6 +562,17 @@ def main() -> int:
         type=Path,
         default=None,
         help="Output HTML (default: work-dir/reports/factor_rankic_screening_index.html)",
+    )
+    parser.add_argument(
+        "--skip-corr",
+        action="store_true",
+        help="Skip in-process corr matrix (reuse existing fragment/link; avoids OOM)",
+    )
+    parser.add_argument(
+        "--corr-sample-days",
+        type=int,
+        default=40,
+        help="Sample days for corr matrix when not --skip-corr (default 40)",
     )
     args = parser.parse_args()
     work = args.work_dir
@@ -568,14 +605,89 @@ def main() -> int:
                 route=str(item.get("engine") or item.get("eval_route") or ""),
                 rank_icir=abs(icir) if icir is not None else None,
                 dedupe_key=name.strip().lower(),
+                extra={
+                    "mean_daily_coverage": item.get("mean_daily_coverage"),
+                    "ls_mean_one_way_turnover": item.get("ls_mean_one_way_turnover"),
+                    "long_short_sharpe": item.get("long_short_sharpe"),
+                },
             )
         )
 
     # Overlay: force every listed factor onto VWAP panel IC (or drop if pending).
     overlay_stats = _apply_reeval_overlay(work, all_rows)
+    # Attach coverage / LS turnover from VWAP progress when available.
+    for r in all_rows:
+        item = preferred_map.get(r.display_name) or preferred_map.get(r.factor_id)
+        if not item:
+            continue
+        ex = dict(r.extra or {})
+        for k in ("mean_daily_coverage", "ls_mean_one_way_turnover", "long_short_sharpe"):
+            if item.get(k) is not None:
+                ex[k] = item.get(k)
+        r.extra = ex
     finite_rows = [r for r in all_rows if r.rank_ic == r.rank_ic]
     filtered = [r for r in finite_rows if r.rank_ic > args.threshold]
     deduped = dedupe_rows(filtered)
+
+    corr_fragment = ""
+    corr_html_path = work / "reports" / "factor_rank_corr_matrix.html"
+    if args.skip_corr:
+        if corr_html_path.is_file():
+            corr_fragment = (
+                '<section class="corr-embed"><h2>因子截面秩相关矩阵</h2>'
+                '<p class="muted">见独立页 '
+                '<a href="/reports/factor_rank_corr_matrix.html">factor_rank_corr_matrix.html</a>'
+                "（本次跳过重算以控制内存）。</p></section>"
+            )
+            print("corr skipped (--skip-corr); linking existing page")
+        else:
+            corr_fragment = (
+                '<section class="corr-embed"><h2>因子截面秩相关矩阵</h2>'
+                '<p class="muted">尚未生成；重评完成后单独跑 '
+                "<code>python -m scripts.cogalpha_lqtp.compute_factor_corr_matrix</code></p></section>"
+            )
+            print("corr skipped (--skip-corr); no existing page")
+    else:
+        try:
+            from scripts.cogalpha_lqtp.compute_factor_corr_matrix import (  # noqa: E402
+                compute_corr,
+                render_corr_html,
+            )
+
+            corr_json = work / "reports" / "factor_rank_corr_matrix.json"
+            corr_payload = None
+            if corr_json.is_file():
+                try:
+                    corr_payload = json.loads(corr_json.read_text(encoding="utf-8"))
+                    if not (corr_payload.get("factors") and corr_payload.get("matrix")):
+                        corr_payload = None
+                except Exception:  # noqa: BLE001
+                    corr_payload = None
+            if corr_payload is None:
+                corr_names = [r.display_name for r in deduped]
+                corr_payload = compute_corr(
+                    work, corr_names, sample_days=max(20, int(args.corr_sample_days))
+                )
+                corr_json.write_text(
+                    json.dumps(corr_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+                )
+            corr_fragment = render_corr_html(corr_payload, corr_html_path)
+            # persist rebuilt high_corr_pairs (older JSON may have been truncated)
+            corr_json.write_text(
+                json.dumps(corr_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            print(
+                f"corr n={corr_payload.get('n_factors')} pairs={corr_payload.get('n_pairs')} "
+                f"high={len(corr_payload.get('high_corr_pairs') or [])} "
+                f"mean_abs={corr_payload.get('mean_abs_offdiag')}"
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(f"corr matrix skipped: {exc}")
+            corr_fragment = (
+                '<section class="corr-embed"><h2>因子截面秩相关矩阵</h2>'
+                f'<p class="muted">生成失败：{html_lib.escape(str(exc))}；可稍后重跑 '
+                "<code>python -m scripts.cogalpha_lqtp.compute_factor_corr_matrix</code></p></section>"
+            )
 
     manifest = {
         "generated_at": datetime.now().isoformat(),
@@ -594,6 +706,9 @@ def main() -> int:
                 "report_href": r.report_href,
                 "route": r.route,
                 "alias": (r.extra or {}).get("alias", ""),
+                "mean_daily_coverage": (r.extra or {}).get("mean_daily_coverage"),
+                "ls_mean_one_way_turnover": (r.extra or {}).get("ls_mean_one_way_turnover"),
+                "long_short_sharpe": (r.extra or {}).get("long_short_sharpe"),
             }
             for r in deduped
         ],
@@ -608,6 +723,7 @@ def main() -> int:
         threshold=args.threshold,
         out_path=out,
         work_dir=work,
+        corr_fragment=corr_fragment,
     )
     print(
         f"ok {len(deduped)} factors "

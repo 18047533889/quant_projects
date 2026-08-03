@@ -2008,6 +2008,61 @@ def _compile_polars_impl(
             .alias(_VAL)
         ).select(_TS, _INST, _VAL)
 
+    if op == "size_neutralize":
+        # size_neutralize(x, market_cap) == cs_resid(x, log(max(market_cap, 1)))
+        if len(node.inputs) < 2:
+            return None
+        y_layer = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        cap_layer = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+        if y_layer is None or cap_layer is None:
+            return None
+        joined = y_layer.join(
+            cap_layer.rename({_VAL: "_cap"}), on=[_TS, _INST], how="left"
+        ).with_columns(pl.col("_cap").clip(lower_bound=1.0).log().alias("_ln"))
+        beta, alpha, n_valid = _cs_ols_exprs(_VAL, "_ln")
+        fit = alpha + beta * pl.col("_ln")
+        return joined.with_columns(
+            pl.when(pl.col(_VAL).is_null() | pl.col("_cap").is_null())
+            .then(None)
+            .when(n_valid < 3)
+            .then(None)
+            .otherwise(pl.col(_VAL) - fit)
+            .alias(_VAL)
+        ).select(_TS, _INST, _VAL)
+
+    if op == "industry_size_neutralize":
+        # Sequential dual: industry demean, then size residual (eval-aligned).
+        if len(node.inputs) < 3:
+            return None
+        y_layer = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        ind_layer = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+        cap_layer = _compile_child(node, 2, base, parent_op=op, ctx=ctx, memo=memo)
+        if y_layer is None or ind_layer is None or cap_layer is None:
+            return None
+        joined = (
+            y_layer.join(ind_layer.rename({_VAL: _GRP}), on=[_TS, _INST], how="left")
+            .join(cap_layer.rename({_VAL: "_cap"}), on=[_TS, _INST], how="left")
+            .with_columns(
+                pl.when(pl.col(_VAL).is_null())
+                .then(None)
+                .otherwise(
+                    pl.col(_VAL) - pl.col(_VAL).mean().over(_TS, _GRP, order_by=_INST)
+                )
+                .alias("_dm"),
+                pl.col("_cap").clip(lower_bound=1.0).log().alias("_ln"),
+            )
+        )
+        beta, alpha, n_valid = _cs_ols_exprs("_dm", "_ln")
+        fit = alpha + beta * pl.col("_ln")
+        return joined.with_columns(
+            pl.when(pl.col("_dm").is_null() | pl.col("_cap").is_null())
+            .then(None)
+            .when(n_valid < 3)
+            .then(None)
+            .otherwise(pl.col("_dm") - fit)
+            .alias(_VAL)
+        ).select(_TS, _INST, _VAL)
+
     if op in {
         "group_rank",
         "group_mean",

@@ -17,6 +17,13 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from runtime.ashare_intraday import (
+    ashare_limit_prices,
+    limit_touch_fraction,
+    return_path_features,
+    trade_structure_features,
+)
+
 from .data_access_source import DataAccessSource, MissingDataDependencyError
 
 _EPS=1e-12
@@ -173,7 +180,9 @@ def _calc(feature,bar,params,*,prev_close=np.nan):
     slope,r2=_trend(np.log(np.where(close>0,close,np.nan)))
     if feature=="trend_slope":return slope
     if feature=="trend_r2":return r2
-    if feature=="path_efficiency":return float(abs(close[-1]-close[0])/np.nansum(np.abs(np.diff(close)))) if n>1 and np.nansum(np.abs(np.diff(close)))>_EPS else np.nan
+    if feature=="path_length":return return_path_features(close)["path_length"]
+    if feature=="path_efficiency":return return_path_features(close)["path_efficiency"]
+    if feature=="reversal_count":return return_path_features(close)["reversal_count"]
     if feature=="return_autocorr":
         lag=max(1,int(params.get("lag",1))); return _corr(finite[lag:],finite[:-lag]) if len(finite)>lag else np.nan
     if feature=="max_drawdown":return _max_drawdown(close)
@@ -193,6 +202,14 @@ def _calc(feature,bar,params,*,prev_close=np.nan):
         op=float(bar["open"].iloc[0]); gap=op-prev_close
         if abs(gap)<=_EPS:return 1.0
         best=np.nanmin(low) if gap>0 else np.nanmax(high); filled=(op-best)/gap if gap>0 else (best-op)/(-gap); return float(np.clip(filled,0,1))
+    if feature in {"limit_up_touch_fraction","limit_down_touch_fraction","limit_up_close","limit_down_close"}:
+        instrument=str(params.get("instrument") or "")
+        trade_date=params.get("trade_date") or bar["timestamp"].iloc[-1]
+        upper,lower=ashare_limit_prices(prev_close,instrument,trade_date,is_st=bool(params.get("is_st",False)))
+        if feature=="limit_up_touch_fraction":return limit_touch_fraction(bar,upper,direction="up")
+        if feature=="limit_down_touch_fraction":return limit_touch_fraction(bar,lower,direction="down")
+        if feature=="limit_up_close":return float(close[-1]>=upper-_EPS) if np.isfinite(upper) else np.nan
+        return float(close[-1]<=lower+_EPS) if np.isfinite(lower) else np.nan
     if feature=="closing_return":return float(close[-1]/close[max(0,n-bars-1)]-1.0) if n>1 else np.nan
     if feature=="closing_ramp":return _trend(np.log(np.where(close[-bars:]>0,close[-bars:],np.nan)))[0] if n else np.nan
     vwap=np.nansum(amount)/np.nansum(volume) if np.nansum(volume)>_EPS else np.nan
@@ -222,7 +239,8 @@ def _calc(feature,bar,params,*,prev_close=np.nan):
     aligned_r=np.nan_to_num(r,nan=0.0)
     if feature=="return_volume_corr":return _corr(aligned_r,volume)
     if feature=="abs_return_volume_corr":return _corr(np.abs(aligned_r),volume)
-    if feature=="signed_volume_imbalance":return float(np.nansum(np.sign(aligned_r)*volume)/total_v) if total_v>_EPS else np.nan
+    structure=trade_structure_features(aligned_r,volume,amount)
+    if feature in structure:return structure[feature]
     if feature=="volume_weighted_return":return float(np.nansum(aligned_r*volume)/total_v) if total_v>_EPS else np.nan
     if feature in {"price_impact","amihud"}:return float(np.nanmean(np.abs(aligned_r)/np.where(amount>0,amount,np.nan)))
     if feature=="turnover_per_volatility":return float(total_a/np.sqrt(rv)) if np.isfinite(rv) and rv>_EPS else np.nan
@@ -286,11 +304,5 @@ def load_intraday_feature(source,params: dict[str,Any]):
 
 
 def install_intraday_feature_runtime():
-    from .lqtp_logical_source_v2 import LQTPLogicalDataSource
-    if getattr(LQTPLogicalDataSource,"_intraday_feature_v2_installed",False): return
-    original=LQTPLogicalDataSource._minute_daily
-    def patched(self,field,transform,params):
-        if transform=="intraday_feature": return load_intraday_feature(self,dict(params))
-        return original(self,field,transform,params)
-    LQTPLogicalDataSource._minute_daily=patched
-    LQTPLogicalDataSource._intraday_feature_v2_installed=True
+    """Compatibility no-op; v2 uses an explicit logical-source dispatcher."""
+    return None

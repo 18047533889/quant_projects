@@ -109,11 +109,14 @@ def _attach_explicit_polars_contracts() -> None:
         backend_meta = dict(entry.get("backend_meta") or {})
         polars_meta = dict(backend_meta.get("polars") or {})
 
-        # Default to the least permissive truthful contract.  Individual native
-        # expression implementations may explicitly opt into lazy/streaming by
-        # setting these fields at registration time.  No capability is inferred
-        # merely from function source code.
-        execution_kind = str(polars_meta.get("execution_kind") or "polars_eager_native")
+        # Default to the least permissive truthful contract.  Elementwise and
+        # time-series native implementations are expression-shaped and can be
+        # evaluated lazily; cross-sectional/group kernels reshape the whole
+        # panel and therefore remain explicitly eager.
+        execution_kind = str(
+            polars_meta.get("execution_kind")
+            or ("polars_eager_native" if scope in {"cs", "group"} else "expression_native")
+        )
         supports_lazy = bool(polars_meta.get("supports_lazy", False))
         supports_streaming = bool(polars_meta.get("supports_streaming", False))
         materializes = bool(
@@ -152,18 +155,20 @@ def finalize() -> None:
     for old, new in DEDUPE.items():
         alias_and_remove(old, new)
 
-    for misleading in ("industry_size_neutralize", "size_industry_neutralize"):
-        OperatorRegistry._aliases.pop(misleading, None)
-        for catalog in OperatorRegistry._catalog.values():
-            if misleading in (catalog.get("aliases") or []):
-                catalog["aliases"] = [a for a in catalog["aliases"] if a != misleading]
-
     for alias, target in {
         "Beta": "ts_beta", "rolling_beta": "ts_beta", "beta": "ts_beta",
         "Slope": "ts_time_slope", "slope": "ts_time_slope",
         "ts_regression": "ts_regression_slope",
         "neutralize": "group_neutralize",
         "rolling_residual": "ts_regression_resid", "safe_div": "safe_div_null",
+        # Stable neutralize surface: industry_* → group_neutralize;
+        # size_* → size_neutralize; dual → industry_size_neutralize.
+        "size_industry_neutralize": "industry_size_neutralize",
+        "market_cap_neutralize": "size_neutralize",
+        "cap_neutralize": "size_neutralize",
+        "CAP_NEUTRALIZE": "size_neutralize",
+        "MARKET_CAP_NEUTRALIZE": "size_neutralize",
+        "SIZE_NEUTRALIZE": "size_neutralize",
     }.items():
         if target in OperatorRegistry._operators:
             OperatorRegistry.register_alias(alias, target)

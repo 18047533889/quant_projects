@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 
 from . import intraday_feature_extension as base
+from runtime.session_calendar import SessionCalendar
 
 _TIMESTAMP_CONVENTIONS = frozenset({"bar_end", "bar_start"})
 _PROFILE_FEATURES = frozenset({
@@ -81,6 +82,24 @@ def _timestamp_convention(source: Any, params: dict[str, Any]) -> str:
     return value
 
 
+def _session_calendar(
+    dataset: str,
+    session_open: str,
+    session_close: str,
+    timestamp_convention: str,
+) -> SessionCalendar:
+    segments = _session_segments(dataset, session_open, session_close)
+    rendered = tuple(
+        (f"{start // 60:02d}:{start % 60:02d}", f"{stop // 60:02d}:{stop % 60:02d}")
+        for start, stop in segments
+    )
+    return SessionCalendar(
+        market="CN" if dataset == "ashare_stock_minute" else "CUSTOM",
+        segments=rendered,
+        timestamp_convention=timestamp_convention,
+    )
+
+
 def _effective_minutes(
     dataset: str,
     session_open: str,
@@ -102,23 +121,14 @@ def _ordinal(
     session_close: str,
     timestamp_convention: str = "bar_end",
 ) -> pd.Series:
-    convention = str(timestamp_convention).lower()
-    if convention not in _TIMESTAMP_CONVENTIONS:
-        raise ValueError("unsupported timestamp convention")
-
-    minute_of_day = timestamps.dt.hour * 60 + timestamps.dt.minute
-    output = pd.Series(np.nan, index=timestamps.index, dtype=float)
-    offset = 0
-    for start, stop in _session_segments(dataset, session_open, session_close):
-        if convention == "bar_end":
-            mask = (minute_of_day > start) & (minute_of_day <= stop)
-            local = minute_of_day.loc[mask] - start - 1
-        else:
-            mask = (minute_of_day >= start) & (minute_of_day < stop)
-            local = minute_of_day.loc[mask] - start
-        output.loc[mask] = offset + local
-        offset += stop - start
-    return output
+    calendar = _session_calendar(
+        dataset, session_open, session_close, timestamp_convention
+    )
+    ordinal = pd.Series(
+        calendar.minute_ordinal(timestamps), index=timestamps.index, dtype=int
+    )
+    ordinal = ordinal.mask(ordinal < 0)
+    return ordinal
 
 
 def _clock_bars(
@@ -133,20 +143,26 @@ def _clock_bars(
     if width <= 0:
         raise ValueError("bar_minutes must be positive")
     group = group.sort_values("timestamp").copy()
-    ordinal = _ordinal(
-        group["timestamp"],
-        dataset,
-        session_open,
-        session_close,
-        timestamp_convention,
+    calendar = _session_calendar(
+        dataset, session_open, session_close, timestamp_convention
     )
-    valid = ordinal.notna()
+    ordinal = pd.Series(
+        calendar.segment_ordinal(group["timestamp"]), index=group.index, dtype=int
+    )
+    segment = pd.Series(
+        calendar.segment_id(group["timestamp"]), index=group.index, dtype=int
+    )
+    valid = (ordinal >= 0) & (segment >= 0)
     group = group.loc[valid].copy()
     if group.empty:
         return pd.DataFrame(
             columns=["timestamp", "open", "high", "low", "close", "volume", "amount"]
         )
-    group["_slot"] = (ordinal.loc[valid].astype(int) // width).to_numpy()
+    group["_slot"] = (
+        segment.loc[valid].astype(int).astype(str)
+        + ":"
+        + (ordinal.loc[valid].astype(int) // width).astype(str)
+    ).to_numpy()
 
     rows: list[dict[str, float | pd.Timestamp]] = []
     for _, bars in group.groupby("_slot", sort=True):
@@ -333,10 +349,15 @@ def load_intraday_feature(source: Any, params: dict[str, Any]):
     else:
         previous_close: dict[str, float] = {}
         for date, instrument, bars in grouped:
+            calculation_params = {
+                **params,
+                "instrument": instrument,
+                "trade_date": date,
+            }
             values[(date, instrument)] = base._calc(
                 feature,
                 bars,
-                params,
+                calculation_params,
                 prev_close=previous_close.get(instrument, np.nan),
             )
             previous_close[instrument] = float(bars["close"].iloc[-1])
@@ -368,16 +389,5 @@ def load_intraday_feature(source: Any, params: dict[str, Any]):
 
 
 def install_intraday_feature_runtime() -> None:
-    from .lqtp_logical_source_v2 import LQTPLogicalDataSource
-
-    if getattr(LQTPLogicalDataSource, "_intraday_feature_v2_installed", False):
-        return
-    original = LQTPLogicalDataSource._minute_daily
-
-    def patched(self, field, transform, params):
-        if transform == "intraday_feature":
-            return load_intraday_feature(self, dict(params))
-        return original(self, field, transform, params)
-
-    LQTPLogicalDataSource._minute_daily = patched
-    LQTPLogicalDataSource._intraday_feature_v2_installed = True
+    """Compatibility no-op; dispatch is explicit on LQTPLogicalDataSource v2."""
+    return None

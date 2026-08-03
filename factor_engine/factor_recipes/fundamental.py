@@ -257,15 +257,6 @@ _RECIPES = (
             "periods_per_year",
         ),
     ),
-    _recipe(
-        "size_neutralize",
-        "市值中性化残差",
-        "cs_multi_resid(factor, market_cap)",
-        ("factor", "market_cap"),
-        category="cross_sectional",
-        status="pending",
-        replacement_for=("size_neutralize",),
-    ),
 )
 
 for _item in _RECIPES:

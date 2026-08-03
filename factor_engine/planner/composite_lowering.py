@@ -88,13 +88,14 @@ def _ensure_lowerings_loaded() -> None:
     if _LOWERINGS_LOADED:
         return
     from planner.lowerings import (  # noqa: F401
+        ashare,
         fundamental,
         microstructure,
         technical,
         timeseries,
     )
 
-    _ = fundamental, microstructure, technical, timeseries
+    _ = ashare, fundamental, microstructure, technical, timeseries
     _LOWERINGS_LOADED = True
 
 

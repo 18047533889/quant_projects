@@ -120,13 +120,25 @@ for _canon in (
     "stdp",
     "varp",
     "sem",
-    "size_neutralize",
     "weighted_mean",
     "winsorize_mean",
     "wsum",
     "ts_ratio",
 ):
     _register_bridge(_canon, param_names=["real", "imag"] if _canon == "complex" else None)
+
+_register_bridge(
+    "size_neutralize",
+    category="group_neutralization",
+    business_category="group_neutralization",
+    param_names=["x", "market_cap"],
+)
+_register_bridge(
+    "industry_size_neutralize",
+    category="group_neutralization",
+    business_category="group_neutralization",
+    param_names=["x", "industry", "market_cap"],
+)
 
 _register_bridge(
     "protected_div",

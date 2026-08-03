@@ -48,9 +48,15 @@ def validate_production_dsl(formula: str) -> tuple[bool, str]:
     """
     from cleaned_operators.operator_spec import check_production_formula_ops
 
+    from backend.cleaned_bridge import ensure_cleaned_loaded
+
     ok, msg = validate_factor_engine_dsl(formula)
     if not ok:
         return False, msg
+    # Parsing may finalize/bootstrap operator metadata; refresh the certified
+    # runtime view afterwards so production evidence is evaluated on the final
+    # registry state rather than a partially loaded catalog.
+    ensure_cleaned_loaded()
     violations = check_production_formula_ops(formula)
     if violations:
         return False, "; ".join(violations)
@@ -1022,15 +1028,134 @@ def resolve_mining_allowlist_tier(tier: str | None = None) -> str:
     return "production_fastpath"
 
 
-def default_mining_search_space_config(*, tier: str | None = None) -> dict[str, Any]:
-    """Campaign / DSL 生成器默认搜索空间（含 allowlist tier）。"""
+def default_mining_search_space_config(
+    *,
+    tier: str | None = None,
+    version: str = "v1",
+    fields: list[dict[str, Any]] | None = None,
+    max_domains: int = 2,
+    max_cost: float | None = None,
+    field_dq_policy: str = "drop",
+) -> dict[str, Any]:
+    """Campaign / DSL 生成器搜索空间。
+
+    ``version='v1'`` 保留原始 allowlist 契约；``version='v2'`` 输出带字段和
+    算子签名的 typed mining 契约。
+    """
     tier_key = resolve_mining_allowlist_tier(tier)
     ops = default_mining_operator_allowlist(tier=tier_key)
+    if str(version).lower() in {"v2", "2", "typed_v2"}:
+        return default_typed_mining_search_space_config(
+            tier=tier_key,
+            fields=fields,
+            max_domains=max_domains,
+            max_cost=max_cost,
+            field_dq_policy=field_dq_policy,
+        )
     return {
         "schema_version": "factor_engine.mining_search_space.v1",
         "allowlist_tier": tier_key,
         "operators": ops,
         "count": len(ops),
+        "require_fastpath_validation": tier_key == "production_fastpath",
+    }
+
+
+_TYPED_FIELD_DEFAULTS: tuple[dict[str, Any], ...] = (
+    {"name": "open", "frequency": "daily", "domain": "price", "cardinality": "panel", "unit": "price"},
+    {"name": "high", "frequency": "daily", "domain": "price", "cardinality": "panel", "unit": "price"},
+    {"name": "low", "frequency": "daily", "domain": "price", "cardinality": "panel", "unit": "price"},
+    {"name": "close", "frequency": "daily", "domain": "price", "cardinality": "panel", "unit": "price"},
+    {"name": "volume", "frequency": "daily", "domain": "liquidity", "cardinality": "panel", "unit": "shares"},
+    {"name": "ret", "frequency": "daily", "domain": "return", "cardinality": "panel", "unit": "return"},
+    {"name": "pe", "frequency": "daily", "domain": "valuation", "cardinality": "panel", "unit": "ratio"},
+    {"name": "pb", "frequency": "daily", "domain": "valuation", "cardinality": "panel", "unit": "ratio"},
+    {"name": "free_float_shares", "frequency": "daily", "domain": "capital", "cardinality": "panel", "unit": "shares"},
+    {"name": "benchmark_ret", "frequency": "daily", "domain": "benchmark", "cardinality": "broadcast", "unit": "return"},
+)
+
+
+def _typed_tag_values(tags: list[str] | None) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for tag in tags or []:
+        text = str(tag)
+        if ":" in text:
+            key, value = text.split(":", 1)
+            if key in {"signature", "domain", "unit", "cost"}:
+                values[key] = value
+    return values
+
+
+def default_typed_mining_search_space_config(
+    *,
+    tier: str | None = None,
+    fields: list[dict[str, Any]] | None = None,
+    max_domains: int = 2,
+    max_cost: float | None = None,
+    field_dq_policy: str = "drop",
+) -> dict[str, Any]:
+    """构建 typed mining v2 搜索空间。
+
+    字段显式携带 frequency/domain/cardinality/unit/DQ policy；算子签名优先
+    读取 metadata tags，基础层没有 signature/cost 字段时回退 catalog。
+    """
+    from cleaned_operators import load_all
+    from cleaned_operators.registry import OperatorRegistry
+
+    load_all()
+    domains_limit = int(max_domains)
+    if domains_limit < 1 or domains_limit > 2:
+        raise ValueError("max_domains must be 1 or 2")
+    dq = str(field_dq_policy or "drop").lower()
+    if dq not in {"drop", "mask", "reject", "allow"}:
+        raise ValueError("field_dq_policy must be drop, mask, reject, or allow")
+
+    typed_fields: list[dict[str, Any]] = []
+    for raw in fields or list(_TYPED_FIELD_DEFAULTS):
+        field = dict(raw)
+        missing = [key for key in ("name", "frequency", "domain", "cardinality", "unit") if not field.get(key)]
+        if missing:
+            raise ValueError(f"typed field missing required metadata: {missing}")
+        field.setdefault("dq_policy", dq)
+        typed_fields.append(field)
+
+    tier_key = resolve_mining_allowlist_tier(tier)
+    allowed = default_mining_operator_allowlist(tier=tier_key)
+    catalog = OperatorRegistry.catalog()
+    signatures: list[dict[str, Any]] = []
+    for canonical in allowed:
+        entry = catalog.get(canonical) or {}
+        op = OperatorRegistry.get(canonical)
+        meta = getattr(op, "metadata", None) if op is not None else None
+        tags = list(getattr(meta, "tags", None) or [])
+        values = _typed_tag_values(tags)
+        params = list(entry.get("param_names") or getattr(meta, "param_names", None) or [])
+        cost = float(values.get("cost", entry.get("cost", 1.0)))
+        if max_cost is not None and cost > float(max_cost):
+            continue
+        domains = [values["domain"]] if values.get("domain") else []
+        signatures.append({
+            "name": canonical,
+            "inputs": params,
+            "output": getattr(meta, "return_type", None) or entry.get("return_type") or "series",
+            "signature": values.get("signature") or f"{','.join(params)}->series",
+            "domains": domains,
+            "frequency": "daily",
+            "cardinality": "panel",
+            "unit": values.get("unit", "inherit"),
+            "cost": cost,
+        })
+
+    return {
+        "schema_version": "factor_engine.mining_search_space.v2",
+        "typing": "strict",
+        "allowlist_tier": tier_key,
+        "v1_allowlist": allowed,
+        "fields": typed_fields,
+        "operators": signatures,
+        "constraints": {"max_domains": domains_limit, "max_cost": max_cost},
+        "field_dq_policy": dq,
+        "count": len(signatures),
         "require_fastpath_validation": tier_key == "production_fastpath",
     }
 

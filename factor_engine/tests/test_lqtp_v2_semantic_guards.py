@@ -40,17 +40,44 @@ def test_industry_neutralize_injects_industry_source() -> None:
     )
 
 
-def test_one_arg_neutralize_and_size_aliases_fail_closed() -> None:
+def test_size_neutralize_injects_size_source() -> None:
+    from api.source_ref import decode_source_ref
+    analysis = _analysis("size_neutralize(close)")
+    specs = [decode_source_ref(name) for name in analysis.referenced_columns]
+    assert any(
+        spec is not None
+        and spec.table == "SizeDaily"
+        and spec.field == "MarketCap"
+        for spec in specs
+    )
+
+
+def test_industry_size_neutralize_injects_both_sources() -> None:
+    from api.source_ref import decode_source_ref
+    analysis = _analysis("industry_size_neutralize(close)")
+    specs = [s for s in (decode_source_ref(n) for n in analysis.referenced_columns) if s]
+    tables = {(s.table, s.field) for s in specs}
+    assert ("IndustryDaily", "IndustryCode") in tables
+    assert ("SizeDaily", "MarketCap") in tables
+
+
+def test_legacy_neutralize_aliases_redirect_to_stable_names() -> None:
+    from api.source_ref import decode_source_ref
+    # market_cap_neutralize → size_neutralize
+    analysis = _analysis("market_cap_neutralize(close)")
+    specs = [decode_source_ref(name) for name in analysis.referenced_columns]
+    assert any(s is not None and s.table == "SizeDaily" for s in specs)
+    # size_industry_neutralize → industry_size_neutralize
+    analysis = _analysis("size_industry_neutralize(close)")
+    specs = [s for s in (decode_source_ref(n) for n in analysis.referenced_columns) if s]
+    tables = {s.table for s in specs}
+    assert "IndustryDaily" in tables and "SizeDaily" in tables
+
+
+def test_one_arg_neutralize_fails_closed() -> None:
     from api.dsl_parser import DSLParseError, parse_expr
-    formulas = [
-        "neutralize(close)",
-        "size_neutralize(close)",
-        "market_cap_neutralize(close)",
-        "size_industry_neutralize(close)",
-    ]
-    for formula in formulas:
-        with pytest.raises(DSLParseError):
-            parse_expr(formula, surface="lqtp")
+    with pytest.raises(DSLParseError, match="stable"):
+        parse_expr("neutralize(close)", surface="lqtp")
 
 
 def test_default_market_return_uses_registered_return_field() -> None:

@@ -120,6 +120,9 @@ if not getattr(analyzer.AnalysisResult, "_full_history_init_installed", False):
         has_cs_op,
         referenced_columns,
         requires_full_history=False,
+        referenced_fields=None,
+        column_schemas=None,
+        **kwargs,
     ):
         encoded = (
             max(int(lookback), FULL_HISTORY_LOOKBACK_SENTINEL)
@@ -134,6 +137,8 @@ if not getattr(analyzer.AnalysisResult, "_full_history_init_installed", False):
             has_cs_op,
             referenced_columns,
             requires_full_history,
+            referenced_fields or {},
+            column_schemas or {},
         )
 
     analyzer.AnalysisResult.__init__ = _init_with_full_history_sentinel

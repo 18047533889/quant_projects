@@ -836,7 +836,7 @@
   {
     "factor_id": "factor_315",
     "function_name": "factor_fear_adjusted_dollar_pressure_short_ema",
-    "python_code": "def factor_fear_adjusted_dollar_pressure_short_ema(df):\n    df_copy = df.copy()\n    dollar_imb = (df_copy['close'] - df_copy['open']) * df_copy['volume']\n    smoothed_imb = dollar_imb.ewm(span=10, adjust=False).mean()\n    price_decline = (df_copy['close'].shift(1) - df_copy['close']) / df_copy['close'].shift(1)\n    fear_adj_imb = smoothed_imb * (1 + price_decline)\n    high = df_copy['high'].values.astype(np.float64)\n    low = df_copy['low'].values.astype(np.float64)\n    close = df_copy['close'].values.astype(np.float64)\n    atr = talib.ATR(high, low, close, timeperiod=21)\n    atr_series = pd.Series(atr, index=df_copy.index)\n    raw = fear_adj_imb / atr_series.replace(0, np.nan)\n    df_copy['factor_fear_adjusted_dollar_pressure_short_ema'] = raw.rank(pct=True) * 2 - 1\n    return df_copy['factor_fear_adjusted_dollar_pressure_short_ema']",
+    "python_code": "def factor_fear_adjusted_dollar_pressure_short_ema(df):\n    df_copy = df.copy()\n    dollar_imb = (df_copy['close'] - df_copy['open']) * df_copy['volume']\n    smoothed_imb = dollar_imb.ewm(span=10, adjust=False).mean()\n    price_decline = (df_copy['close'].shift(1) - df_copy['close']) / df_copy['close'].shift(1)\n    fear_adj_imb = smoothed_imb * (1 + price_decline)\n    high = df_copy['high'].values.astype(np.float64)\n    low = df_copy['low'].values.astype(np.float64)\n    close = df_copy['close'].values.astype(np.float64)\n    atr = talib.ATR(high, low, close, timeperiod=21)\n    atr_series = pd.Series(atr, index=df_copy.index)\n    raw = fear_adj_imb / atr_series.replace(0, np.nan)\n    df_copy['factor_fear_adjusted_dollar_pressure_short_ema'] = raw.rolling(252, min_periods=20).rank(pct=True) * 2 - 1\n    return df_copy['factor_fear_adjusted_dollar_pressure_short_ema']",
     "tools": ""
   },
   {
@@ -1018,5 +1018,71 @@
     "function_name": "factor_lagret_volratio_gated_smooth",
     "python_code": "def factor_lagret_volratio_gated_smooth(df):\n    df_copy = df.copy()\n    lag_ret = df_copy['close'].pct_change(5).shift(1)\n    vol_ema = df_copy['volume'].ewm(span=15, adjust=False).mean()\n    vol_ratio = np.log((df_copy['volume'] / vol_ema).clip(lower=1e-12))\n    raw = lag_ret * vol_ratio\n    use_long_smooth = (df_copy['style_gate_resvol_high'] > 0)\n    smooth_short = raw.ewm(span=5, adjust=False).mean()\n    smooth_long = raw.ewm(span=10, adjust=False).mean()\n    factor = np.where(use_long_smooth, smooth_long, smooth_short)\n    df_copy['factor_lagret_volratio_gated_smooth'] = factor\n    return df_copy['factor_lagret_volratio_gated_smooth']",
     "tools": ""
+  },
+  {
+    "factor_id": "factor_70",
+    "function_name": "factor_adaptive_vol_volume_asym",
+    "python_code": "def factor_adaptive_vol_volume_asym(df):\n    df_copy = df.copy()\n    # Log returns for volatility estimation\n    log_ret = np.log(df_copy['close'] / df_copy['close'].shift(1))\n    # Rolling 20-day volatility (std of log returns)\n    vol = log_ret.rolling(window=20, min_periods=10).std()\n    # Adaptive span: base 10, increase with volatility, bounded between 5 and 30\n    vol_ratio = vol / vol.rolling(window=60, min_periods=20).mean()\n    span = (10 * (1 + vol_ratio)).clip(5, 30)\n    # Handle NaNs at the start\n    span = span.fillna(10)\n    # Up and down days\n    up_day = df_copy['close'] >= df_copy['open']\n    down_day = ~up_day\n    # Volume on up/down days (zero otherwise)\n    vol_up = df_copy['volume'].where(up_day, 0)\n    vol_down = df_copy['volume'].where(down_day, 0)\n    # Compute EWMA with adaptive span using ewm (span must be scalar, so we loop over each row - but vectorized alternative: use expanding window approach?)\n    # Since span is a series, we need to compute EWMA for each row with different decay. This is not directly vectorizable with ewm.\n    # Alternative: Use a fixed span of 10 and add a volatility modulation factor to the ratio.\n    # Simpler mutation: use fixed span 10, but take log of ratio and scale by rank of range.\n    # Let's simplify: keep span fixed at 10, but use log ratio and rank scale.\n    span = 10\n    alpha = 2.0 / (span + 1)\n    ewma_up = vol_up.ewm(span=span, adjust=False).mean()\n    ewma_down = vol_down.ewm(span=span, adjust=False).mean()\n    # Avoid division by zero\n    ratio = np.where(ewma_down > 0, ewma_up / ewma_down, 1.0)\n    # Log ratio for nonlinearity\n    log_ratio = np.log(ratio + 1e-10)\n    # Range\n    range_ = df_copy['high'] - df_copy['low']\n    # Rank-normalize range to preserve rank stability\n    range_rank = range_.rolling(252, min_periods=20).rank(pct=True)\n    factor = log_ratio * range_rank\n    df_copy['factor_adaptive_vol_volume_asym'] = factor\n    return df_copy['factor_adaptive_vol_volume_asym']",
+    "tools": "library_functions=np.log, np.where"
+  },
+  {
+    "factor_id": "factor_571",
+    "function_name": "factor_drawdown_vol_simple",
+    "python_code": "def factor_drawdown_vol_simple(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    running_max = close.expanding().max()\n    drawdown = (running_max - close) / running_max\n    vol_ma = volume.rolling(20).mean()\n    vol_ratio = volume / vol_ma\n    rank_dd = drawdown.rolling(252, min_periods=20).rank(pct=True)\n    rank_vol = vol_ratio.rolling(252, min_periods=20).rank(pct=True)\n    factor = rank_dd * rank_vol\n    factor.name = \"factor_drawdown_vol_simple\"\n    return factor",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_71",
+    "function_name": "factor_drawdown_volume_complexity",
+    "python_code": "def factor_drawdown_volume_complexity(df):\n    \"\"\"Mutated drawdown geometry with volume-confirmed recovery.\"\"\"\n    df_copy = df.copy()\n    rolling_high = df_copy[\"close\"].rolling(window=252, min_periods=20).max()\n    drawdown = (rolling_high - df_copy[\"close\"]) / rolling_high\n    new_peak = df_copy[\"close\"] >= rolling_high\n    group = new_peak.cumsum()\n    duration = new_peak.groupby(group).cumcount()\n    recovery = -drawdown.diff(5)\n    vol_ma = df_copy[\"volume\"].rolling(window=20).mean()\n    rel_volume = df_copy[\"volume\"] / vol_ma\n    rank_dd = drawdown.rolling(252, min_periods=20).rank(pct=True)\n    rank_dur = duration.rolling(252, min_periods=20).rank(pct=True)\n    rank_rec = recovery.rolling(252, min_periods=20).rank(pct=True)\n    rank_vol = rel_volume.rolling(252, min_periods=20).rank(pct=True)\n    confirmed_recovery = rank_rec * rank_vol\n    df_copy[\"factor_drawdown_volume_complexity\"] = rank_dd + rank_dur + confirmed_recovery\n    return df_copy[\"factor_drawdown_volume_complexity\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_103",
+    "function_name": "factor_drawdown_volume_geometry",
+    "python_code": "def factor_drawdown_volume_geometry(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    running_max = close.expanding().max()\n    depth = (running_max - close) / running_max\n    new_high = close == running_max\n    group = new_high.cumsum()\n    duration = df_copy.groupby(group).cumcount()\n    depth_chg = depth.diff(10).fillna(0)\n    vol_ma = volume.rolling(20).mean()\n    vol_ratio = volume / vol_ma\n    rank_depth = depth.rolling(252, min_periods=20).rank()\n    rank_duration = duration.rolling(252, min_periods=20).rank()\n    rank_recovery = depth_chg.rolling(252, min_periods=20).rank()\n    rank_vol = vol_ratio.rolling(252, min_periods=20).rank()\n    depth_vol = rank_depth * rank_vol\n    factor = depth_vol + rank_duration + rank_recovery\n    df_copy['factor_drawdown_volume_geometry'] = factor\n    return df_copy['factor_drawdown_volume_geometry']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_586",
+    "function_name": "factor_drawdown_volume_geometry_rolling",
+    "python_code": "def factor_drawdown_volume_geometry_rolling(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    rolling_max = close.rolling(window=252, min_periods=20).max()\n    depth = (rolling_max - close) / rolling_max\n    new_high = close == rolling_max\n    group = new_high.cumsum()\n    duration = df_copy.groupby(group).cumcount()\n    depth_chg = depth.diff(10).fillna(0)\n    vol_ma = volume.rolling(20).mean()\n    vol_ratio = volume / vol_ma\n    rank_depth = depth.rolling(252, min_periods=20).rank()\n    rank_duration = duration.rolling(252, min_periods=20).rank()\n    rank_recovery = depth_chg.rolling(252, min_periods=20).rank()\n    rank_vol = vol_ratio.rolling(252, min_periods=20).rank()\n    depth_vol = rank_depth * rank_vol\n    factor = depth_vol + rank_duration + rank_recovery\n    df_copy['factor_drawdown_volume_geometry_rolling'] = factor\n    return df_copy['factor_drawdown_volume_geometry_rolling']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_76",
+    "function_name": "factor_drawdown_volume_modulated",
+    "python_code": "def factor_drawdown_volume_modulated(df):\n    df_copy = df.copy()\n    rolling_high = df_copy[\"close\"].rolling(window=252, min_periods=20).max()\n    drawdown = (rolling_high - df_copy[\"close\"]) / rolling_high\n    new_peak = df_copy[\"close\"] >= rolling_high\n    group = new_peak.cumsum()\n    duration = new_peak.groupby(group).cumcount()\n    recovery = -drawdown.diff(5)\n    vol_ma = df_copy[\"volume\"].rolling(20).mean()\n    vol_ratio = df_copy[\"volume\"] / vol_ma\n    rank_dd = drawdown.rolling(252, min_periods=20).rank(pct=True)\n    rank_dur = duration.rolling(252, min_periods=20).rank(pct=True)\n    rank_rec = recovery.rolling(252, min_periods=20).rank(pct=True)\n    rank_vol = vol_ratio.rolling(252, min_periods=20).rank(pct=True)\n    drawdown_score = (rank_dd + rank_dur + rank_rec) / 3.0\n    df_copy[\"factor_drawdown_volume_modulated\"] = drawdown_score * (1 + rank_vol)\n    return df_copy[\"factor_drawdown_volume_modulated\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_104",
+    "function_name": "factor_herding_pressure",
+    "python_code": "def factor_herding_pressure(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_chg = df_copy['volume'].pct_change()\n    rank_ret = ret.rolling(252, min_periods=20).rank()\n    rank_vol = vol_chg.rolling(252, min_periods=20).rank()\n    rank_corr = rank_ret.rolling(20).corr(rank_vol)\n    imbalance = (df_copy['close'] - df_copy['open']) * df_copy['volume']\n    ema_imb = imbalance.ewm(span=5).mean()\n    std_imb = imbalance.rolling(20).std()\n    dp = ema_imb / (std_imb + 1e-10)\n    rank_dp = dp.rolling(252, min_periods=20).rank()\n    factor = rank_corr * rank_dp\n    factor.name = 'factor_herding_pressure'\n    return factor",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_570",
+    "function_name": "factor_pressure_ema_mutation",
+    "python_code": "def factor_pressure_ema_mutation(df):\n    df_copy = df.copy()\n    # Dollar imbalance\n    dollar_imb = (df_copy['close'] - df_copy['open']) * df_copy['volume']\n    # Exponential moving average of dollar imbalance (21 days) instead of SMA\n    smoothed_imb = dollar_imb.ewm(span=21, min_periods=21, adjust=False).mean()\n    # Short-term price decline (positive when price falls)\n    price_decline = (df_copy['close'].shift(1) - df_copy['close']) / df_copy['close'].shift(1)\n    # Fear-adjusted dollar pressure\n    fear_adj_imb = smoothed_imb * (1 + price_decline)\n    # ATR for normalization\n    high = df_copy['high'].values.astype(np.float64)\n    low = df_copy['low'].values.astype(np.float64)\n    close = df_copy['close'].values.astype(np.float64)\n    atr = talib.ATR(high, low, close, timeperiod=21)\n    atr_series = pd.Series(atr, index=df_copy.index)\n    raw = fear_adj_imb / atr_series.replace(0, np.nan)\n    # Rank transform for cross-sectional stability\n    df_copy['factor_pressure_ema_mutation'] = raw.rolling(252, min_periods=20).rank(pct=True) * 2 - 1\n    return df_copy['factor_pressure_ema_mutation']",
+    "tools": "library_functions=pd.Series, talib.ATR"
+  },
+  {
+    "factor_id": "factor_317",
+    "function_name": "factor_simplified_fear_pressure",
+    "python_code": "def factor_simplified_fear_pressure(df):\n    df_copy = df.copy()\n    # Dollar imbalance\n    dollar_imb = (df_copy['close'] - df_copy['open']) * df_copy['volume']\n    # Simple moving average of dollar imbalance (21 days) instead of EMA\n    smoothed_imb = dollar_imb.rolling(21, min_periods=21).mean()\n    # Short-term price decline (positive when price falls)\n    price_decline = (df_copy['close'].shift(1) - df_copy['close']) / df_copy['close'].shift(1)\n    # Fear-adjusted dollar pressure\n    fear_adj_imb = smoothed_imb * (1 + price_decline)\n    # ATR for normalization\n    high = df_copy['high'].values.astype(np.float64)\n    low = df_copy['low'].values.astype(np.float64)\n    close = df_copy['close'].values.astype(np.float64)\n    atr = talib.ATR(high, low, close, timeperiod=21)\n    atr_series = pd.Series(atr, index=df_copy.index)\n    raw = fear_adj_imb / atr_series.replace(0, np.nan)\n    # Rank transform for cross-sectional stability\n    df_copy['factor_simplified_fear_pressure'] = raw.rolling(252, min_periods=20).rank(pct=True) * 2 - 1\n    return df_copy['factor_simplified_fear_pressure']",
+    "tools": "library_functions=pd.Series, talib.ATR"
+  },
+  {
+    "factor_id": "factor_106",
+    "function_name": "factor_stability_crash_guard",
+    "python_code": "def factor_stability_crash_guard(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    ret = close.pct_change()\n    # SDC: smooth directional consistency\n    ema_ret = ret.ewm(span=21, min_periods=21).mean()\n    ema_absret = ret.abs().ewm(span=21, min_periods=21).mean()\n    ratio = ema_ret / ema_absret.replace(0, np.nan)\n    sma_vol = volume.rolling(21, min_periods=21).mean()\n    vol_factor = volume / sma_vol.replace(0, np.nan)\n    sdc = ratio * vol_factor\n    # CS: crash skew (negative skewness, inverted so high values = high crash risk)\n    N = 20\n    rolling_mean = ret.rolling(N).mean()\n    rolling_m2 = (ret**2).rolling(N).mean()\n    rolling_m3 = (ret**3).rolling(N).mean()\n    central_m3 = rolling_m3 - 3*rolling_mean*rolling_m2 + 2*rolling_mean**3\n    rolling_var_pop = ret.rolling(N).var(ddof=0)\n    rolling_std_pop = rolling_var_pop ** 0.5\n    skewness = central_m3 / (rolling_std_pop**3).replace(0, np.nan)\n    cs = -skewness\n    # Normalize cs to [0,1] using rank\n    cs_rank = cs.rolling(252, min_periods=20).rank(pct=True).fillna(0.5)\n    # Combine: reduce SDC when crash risk is high\n    factor = sdc * (1 - cs_rank)\n    factor = factor.fillna(0)\n    df_copy['factor_stability_crash_guard'] = factor\n    return df_copy['factor_stability_crash_guard']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_314",
+    "function_name": "factor_volatility_adjusted_dollar_pressure",
+    "python_code": "def factor_volatility_adjusted_dollar_pressure(df):\n    df_copy = df.copy()\n    dollar_imb = (df_copy['close'] - df_copy['open']) * df_copy['volume']\n    smoothed_imb = dollar_imb.ewm(span=21, adjust=False).mean()\n    high = df_copy['high'].values.astype(np.float64)\n    low = df_copy['low'].values.astype(np.float64)\n    close = df_copy['close'].values.astype(np.float64)\n    atr = talib.ATR(high, low, close, timeperiod=21)\n    atr_series = pd.Series(atr, index=df_copy.index)\n    raw = smoothed_imb / atr_series.replace(0, np.nan)\n    df_copy['factor_volatility_adjusted_dollar_pressure'] = raw.rolling(252, min_periods=20).rank(pct=True) * 2 - 1\n    return df_copy['factor_volatility_adjusted_dollar_pressure']",
+    "tools": "library_functions=pd.Series, talib.ATR"
   }
 ]

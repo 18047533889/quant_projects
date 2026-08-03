@@ -74,7 +74,7 @@ def _fmt(value: Any) -> str:
         return "—"
     if isinstance(value, float):
         if value != value:
-            return "nan"
+            return "—"
         if abs(value) >= 1000 or (abs(value) < 1e-4 and value != 0):
             return f"{value:.6g}"
         return f"{value:.6f}"
@@ -374,6 +374,10 @@ def _extended_metrics_cards(ext: dict[str, Any], analysis: dict[str, Any]) -> st
         ("IC 衰减 λ", "ic_decay_lambda"),
         ("因子 Rank 换手", "factor_rank_turnover"),
         ("因子 Rank 自相关", "factor_rank_autocorr"),
+        ("多空单边换手（日均）", "ls_mean_one_way_turnover"),
+        ("多空日成本（日均）", "ls_mean_daily_cost"),
+        ("每日覆盖率（均值）", "mean_daily_coverage"),
+        ("每日覆盖率（中位）", "median_daily_coverage"),
         ("市值暴露 (corr)", "size_exposure_corr"),
         ("分层单调性", "decile_monotonicity"),
         ("分层 Spread", "decile_spread"),
@@ -384,8 +388,17 @@ def _extended_metrics_cards(ext: dict[str, Any], analysis: dict[str, Any]) -> st
         ("IC 自相关 lag20", "ic_autocorr_lag20"),
     ):
         val = ext.get(k) if k in ext else analysis.get(k)
-        if val is not None:
-            items.append((label, val))
+        if val is None:
+            continue
+        try:
+            if isinstance(val, float) and val != val:
+                # Keep half-life visible as "—" rather than omitting the card.
+                if k in {"ic_half_life_days", "ic_decay_lambda"}:
+                    items.append((label, float("nan")))
+                continue
+        except (TypeError, ValueError):
+            pass
+        items.append((label, val))
     if not items:
         return ""
     return _metrics_cards(items)
@@ -614,6 +627,11 @@ def render_factor_report(
             ("RankIC 胜率", rank_ic_pos),
             ("多空累计（G10−G1 净）", analysis.get("long_short_return")),
             ("多空 Sharpe（净）", analysis.get("long_short_sharpe")),
+            ("多空单边换手（日均）", analysis.get("ls_mean_one_way_turnover")),
+            ("多空日成本（日均）", analysis.get("ls_mean_daily_cost")),
+            ("每日覆盖率（均值）", analysis.get("mean_daily_coverage")),
+            ("每日覆盖率（中位）", analysis.get("median_daily_coverage")),
+            ("日均重叠股票数", analysis.get("mean_overlap_names")),
         ]
     )
 
@@ -833,10 +851,13 @@ def render_factor_report(
     + f'''<p class="note">
       <b>计算步骤（DuckDB 面板，非 LQTP 平台回测）：</b><br/>
       1) 每个交易日 T，对全市场股票按因子值升序分成 {n_groups} 组（G1 最低 … G10 最高）；<br/>
-      2) 各组内股票等权，组收益 = 组内个股 T+1 相对 T 的前瞻收益均值；<br/>
+      2) 各组内股票等权，组收益 = 组内个股前瞻收益均值（VWAP T+1→T+2）；<br/>
       3) 当日多空 gross = mean(G10 收益) − mean(G1 收益)；<br/>
-      4) 扣费：假设每日单边换手 40%，日成本 = 2 × 40% × (买{comm_buy}% + 卖{comm_sell}%) = {2 * 0.4 * (float(comm_buy) + float(comm_sell)):.4f}% ；net = gross − 日成本；<br/>
+      4) 扣费：按 <b>真实</b> G10/G1 等权组合相对前日的单边换手
+      （0.5·Σ|w_t−w_{{t-1}}|，多空两腿相加）× (买{comm_buy}% + 卖{comm_sell}%)；
+      net = gross − 日成本。日均换手/成本见上方卡片；<br/>
       5) 多空 Sharpe = mean(日 net) / std(日 net) × √252；多空累计 = ∏(1+日 net) − 1。<br/>
+      覆盖率 = 当日（因子∩收益）股票数 / 收益宇宙股票数。<br/>
       <b>注意</b>：这是研究用十分位多空曲线，用于观察因子单调性与分组收益。
     </p>'''
     + _img_b64(ls_img, "Cumulative long-short"),

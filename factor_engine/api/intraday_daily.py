@@ -9,9 +9,6 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from api.source_ref import source_col, transform_source_col
-from storage.sources.intraday_clock_install import install_intraday_clock_runtime
-
-install_intraday_clock_runtime()
 
 _TIMESTAMP_CONVENTIONS = frozenset({"bar_end", "bar_start"})
 
@@ -116,7 +113,9 @@ intraday_morning_afternoon_reversal = _factory(
 )
 intraday_trend_slope = _factory("trend_slope", _COMMON)
 intraday_trend_r2 = _factory("trend_r2", _COMMON)
+intraday_path_length = _factory("path_length", _COMMON)
 intraday_path_efficiency = _factory("path_efficiency", _COMMON)
+intraday_reversal_count = _factory("reversal_count", _COMMON)
 intraday_return_autocorr = _factory("return_autocorr", {**_COMMON, "lag": 1})
 intraday_max_drawdown = _factory("max_drawdown", _COMMON)
 intraday_max_runup = _factory("max_runup", _COMMON)
@@ -130,6 +129,10 @@ intraday_opening_range_position = _factory(
 intraday_opening_drive = _factory("opening_drive", {**_COMMON, "minutes": 30})
 intraday_gap_continuation = _factory("gap_continuation", _COMMON)
 intraday_gap_fill_ratio = _factory("gap_fill_ratio", _COMMON)
+intraday_limit_up_touch_fraction = _factory("limit_up_touch_fraction", _COMMON)
+intraday_limit_down_touch_fraction = _factory("limit_down_touch_fraction", _COMMON)
+intraday_limit_up_close = _factory("limit_up_close", _COMMON)
+intraday_limit_down_close = _factory("limit_down_close", _COMMON)
 intraday_closing_return = _factory("closing_return", {**_COMMON, "minutes": 30})
 intraday_closing_ramp = _factory("closing_ramp", {**_COMMON, "minutes": 30})
 intraday_vwap = _factory("vwap", _COMMON)
@@ -156,6 +159,8 @@ intraday_turnover_entropy = _factory("turnover_entropy", _COMMON)
 intraday_return_volume_corr = _factory("return_volume_corr", _COMMON)
 intraday_abs_return_volume_corr = _factory("abs_return_volume_corr", _COMMON)
 intraday_signed_volume_imbalance = _factory("signed_volume_imbalance", _COMMON)
+intraday_average_trade_price = _factory("average_trade_price", _COMMON)
+intraday_active_volume_share = _factory("active_volume_share", _COMMON)
 intraday_volume_weighted_return = _factory("volume_weighted_return", _COMMON)
 intraday_price_impact = _factory("price_impact", _COMMON)
 intraday_amihud = _factory("amihud", _COMMON)

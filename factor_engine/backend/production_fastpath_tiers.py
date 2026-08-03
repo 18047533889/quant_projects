@@ -145,7 +145,16 @@ P1_BINARY_TS_CANONICALS: frozenset[str] = frozenset(
 )
 
 # 截面/滚动 OLS — 须 pairwise-null parity 后才可 production safe
-P1_REGRESSION_PARITY_PENDING: frozenset[str] = frozenset({"ts_regression_slope", "ts_time_slope", "cs_resid", "cs_regression"})
+P1_REGRESSION_PARITY_PENDING: frozenset[str] = frozenset(
+    {
+        "ts_regression_slope",
+        "ts_time_slope",
+        "cs_resid",
+        "cs_regression",
+        "size_neutralize",
+        "industry_size_neutralize",
+    }
+)
 
 P1_GOLDEN_VERIFIED_REGRESSION: frozenset[str] = frozenset()
 

@@ -144,15 +144,88 @@ def cs_resid_(y, x) -> np.ndarray:
     x_arr = _to_array(x)
     valid = ~(np.isnan(y_arr) | np.isnan(x_arr))
     result = np.full_like(y_arr, np.nan)
-    if valid.sum() < 3:
+    n = int(valid.sum())
+    if n < 3:
         return result
-    A = np.vstack([x_arr[valid], np.ones(valid.sum())]).T
-    try:
-        beta, alpha = np.linalg.lstsq(A, y_arr[valid], rcond=None)[0]
-        result[valid] = y_arr[valid] - (alpha + beta * x_arr[valid])
-    except np.linalg.LinAlgError:
-        pass
+    yv = y_arr[valid]
+    xv = x_arr[valid]
+    mx = xv.mean()
+    my = yv.mean()
+    xc = xv - mx
+    var_x = float((xc * xc).mean())
+    if var_x == 0.0 or var_x != var_x:
+        return result
+    beta = float((xc * (yv - my)).mean()) / var_x
+    alpha = my - beta * mx
+    result[valid] = yv - (alpha + beta * xv)
     return result
+
+
+def group_demean_panel_(x: np.ndarray, group: np.ndarray | None = None) -> np.ndarray:
+    """Panel group demean: each row ``x - group_mean`` (or full-row mean if group is None).
+
+    ``group`` may be numeric or object/string labels. Output shape matches ``x``.
+    """
+    xv = np.asarray(x, dtype=float)
+    out = np.full(xv.shape, np.nan, dtype=float)
+    if xv.ndim != 2:
+        raise ValueError("group_demean_panel_ expects a 2D panel")
+    if group is None:
+        with np.errstate(all="ignore"):
+            means = np.nanmean(xv, axis=1, keepdims=True)
+        return xv - means
+
+    gv = np.asarray(group)
+    if gv.shape != xv.shape:
+        raise ValueError("group panel shape must match x")
+    for i in range(xv.shape[0]):
+        row = xv[i]
+        g = gv[i]
+        finite = np.isfinite(row)
+        if not finite.any():
+            continue
+        # pd.notna handles None/NaN for object and float groups
+        g_ok = pd.notna(g)
+        valid = finite & g_ok
+        if not valid.any():
+            # no usable group labels → demean over the full finite cross-section
+            mu = float(np.nanmean(row))
+            out[i, finite] = row[finite] - mu
+            continue
+        codes = pd.factorize(pd.Series(g[valid]), use_na_sentinel=True)[0]
+        ok = codes >= 0
+        if not ok.any():
+            mu = float(np.nanmean(row[valid]))
+            out[i, valid] = row[valid] - mu
+            continue
+        pos = np.flatnonzero(valid)[ok]
+        c = codes[ok]
+        vals = row[valid][ok]
+        sums = np.bincount(c, weights=vals)
+        cnts = np.bincount(c).astype(float)
+        means = sums / cnts
+        out[i, pos] = vals - means[c]
+    return out
+
+
+def size_resid_panel_(y: np.ndarray, market_cap: np.ndarray) -> np.ndarray:
+    """Panel size neutralize: each row residual of ``y ~ log(max(market_cap, 1))``."""
+    yv = np.asarray(y, dtype=float)
+    cv = np.log(np.maximum(np.asarray(market_cap, dtype=float), 1.0))
+    if yv.shape != cv.shape:
+        raise ValueError("size_resid_panel_ shape mismatch")
+    out = np.full(yv.shape, np.nan, dtype=float)
+    for i in range(yv.shape[0]):
+        out[i] = cs_resid_(yv[i], cv[i])
+    return out
+
+
+def industry_size_resid_panel_(
+    y: np.ndarray, industry: np.ndarray, market_cap: np.ndarray
+) -> np.ndarray:
+    """Sequential dual neutralize: industry demean, then size residual."""
+    ind = group_demean_panel_(y, industry)
+    return size_resid_panel_(ind, market_cap)
 
 def cs_regression_(y, x, mode: int = 0) -> np.ndarray:
     """截面 OLS 回归，按 mode 返回不同量。
@@ -169,19 +242,25 @@ def cs_regression_(y, x, mode: int = 0) -> np.ndarray:
     x_arr = _to_array(x)
     valid = ~(np.isnan(y_arr) | np.isnan(x_arr))
     result = np.full_like(y_arr, np.nan)
-    if valid.sum() < 3:
+    n = int(valid.sum())
+    if n < 3:
         return result
-    A = np.vstack([x_arr[valid], np.ones(valid.sum())]).T
-    try:
-        beta, alpha = np.linalg.lstsq(A, y_arr[valid], rcond=None)[0]
-        if mode == 0:
-            result[valid] = y_arr[valid] - (alpha + beta * x_arr[valid])
-        elif mode == 1:
-            result[valid] = beta
-        else:
-            result[valid] = alpha + beta * x_arr[valid]
-    except np.linalg.LinAlgError:
-        pass
+    yv = y_arr[valid]
+    xv = x_arr[valid]
+    mx = xv.mean()
+    my = yv.mean()
+    xc = xv - mx
+    var_x = float((xc * xc).mean())
+    if var_x == 0.0 or var_x != var_x:
+        return result
+    beta = float((xc * (yv - my)).mean()) / var_x
+    alpha = my - beta * mx
+    if mode == 0:
+        result[valid] = yv - (alpha + beta * xv)
+    elif mode == 1:
+        result[valid] = beta
+    else:
+        result[valid] = alpha + beta * xv
     return result
 
 def price_spread_deviation_(x, d: int) -> np.ndarray:

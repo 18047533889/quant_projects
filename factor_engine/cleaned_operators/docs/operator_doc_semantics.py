@@ -181,9 +181,14 @@ _EXPLICIT: dict[str, OpDoc] = {
         r"\tilde{X}_{i,t} = X_{i,t} - \bar{X}_{\mathrm{ind}(i),t}",
     ),
     "size_neutralize": OpDoc(
-        "市值中性化（对 log(cap) 截面回归残差）。",
-        "每个交易日 Y 对 log(市值) 回归，取残差。",
-        r"Y_{i,t} = \alpha_t + \beta_t \ln(\mathrm{cap}_{i,t}) + \varepsilon_{i,t}",
+        "市值中性化（对 log(max(cap, 1)) 截面回归残差）。",
+        "每个交易日 Y 对 log(max(市值, 1)) 回归，取残差。稳定公开名之一。",
+        r"Y_{i,t} = \alpha_t + \beta_t \ln(\max(\mathrm{cap}_{i,t}, 1)) + \varepsilon_{i,t}",
+    ),
+    "industry_size_neutralize": OpDoc(
+        "行业+市值双中性（先行业 demean，再市值残差）。",
+        "稳定公开名：先 group_neutralize，再 size_neutralize。",
+        r"\varepsilon^{(s)}_{i,t}\!\left(X_{i,t}-\bar{X}_{\mathrm{ind}(i),t}\right)",
     ),
     # --- 元素级 ---
     "clip": OpDoc(

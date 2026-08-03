@@ -47,6 +47,8 @@ SQL_IMPLEMENTED_CANONICALS: frozenset[str] = frozenset(
         "cs_demean",
         "cs_resid",
         "cs_regression",
+        "size_neutralize",
+        "industry_size_neutralize",
         "group_neutralize",
         "where",
         "if_else",

@@ -2410,6 +2410,74 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_ts_partition=True,
         )
 
+    if op == "size_neutralize":
+        # size_neutralize(x, market_cap) == cs_resid(x, ln(greatest(market_cap, 1)))
+        if len(node.inputs) < 2:
+            return None
+        y_layer = _compile_layer(node.inputs[0], dialect=dialect)
+        cap_layer = _compile_layer(node.inputs[1], dialect=dialect)
+        if y_layer is None or cap_layer is None:
+            return None
+        ln = _dialect_fn(dialect, "ln")
+        g = _dialect_fn(dialect, "greatest")
+        ln_cap = f"{ln}({g}(c._v, 1))"
+        part = "PARTITION BY y.ts"
+        beta, alpha, n_valid = _cs_ols_components(
+            dialect, y_col="y._v", x_col=ln_cap, partition=part
+        )
+        fit = f"({alpha}) + ({beta}) * ({ln_cap})"
+        expr = (
+            f"CASE WHEN y._v IS NULL OR c._v IS NULL THEN NULL "
+            f"WHEN {n_valid} < 3 THEN NULL "
+            f"ELSE y._v - ({fit}) END"
+        )
+        return _Layer(
+            f"SELECT y.ts, y.inst, {expr} AS _v "
+            f"FROM ({y_layer.sql}) y LEFT JOIN ({cap_layer.sql}) c USING (ts, inst)",
+            has_inst_window=y_layer.has_inst_window or cap_layer.has_inst_window,
+            has_ts_partition=True,
+        )
+
+    if op == "industry_size_neutralize":
+        # Sequential dual: industry demean then size residual.
+        if len(node.inputs) < 3:
+            return None
+        y_layer = _compile_layer(node.inputs[0], dialect=dialect)
+        ind_layer = _compile_layer(node.inputs[1], dialect=dialect)
+        cap_layer = _compile_layer(node.inputs[2], dialect=dialect)
+        if y_layer is None or ind_layer is None or cap_layer is None:
+            return None
+        ln = _dialect_fn(dialect, "ln")
+        g = _dialect_fn(dialect, "greatest")
+        ln_cap = f"{ln}({g}(d.cap, 1))"
+        demeaned_sql = (
+            f"SELECT x.ts AS ts, x.inst AS inst, "
+            f"(x._v - AVG(x._v) OVER (PARTITION BY x.ts, g._v)) AS dm, "
+            f"c._v AS cap "
+            f"FROM ({y_layer.sql}) x "
+            f"LEFT JOIN ({ind_layer.sql}) g USING (ts, inst) "
+            f"LEFT JOIN ({cap_layer.sql}) c USING (ts, inst)"
+        )
+        part = "PARTITION BY d.ts"
+        beta, alpha, n_valid = _cs_ols_components(
+            dialect, y_col="d.dm", x_col=ln_cap, partition=part
+        )
+        fit = f"({alpha}) + ({beta}) * ({ln_cap})"
+        expr = (
+            f"CASE WHEN d.dm IS NULL OR d.cap IS NULL THEN NULL "
+            f"WHEN {n_valid} < 3 THEN NULL "
+            f"ELSE d.dm - ({fit}) END"
+        )
+        return _Layer(
+            f"SELECT d.ts, d.inst, {expr} AS _v FROM ({demeaned_sql}) d",
+            has_inst_window=(
+                y_layer.has_inst_window
+                or ind_layer.has_inst_window
+                or cap_layer.has_inst_window
+            ),
+            has_ts_partition=True,
+        )
+
     if op == "scale":
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:

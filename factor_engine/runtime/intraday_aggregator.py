@@ -107,15 +107,32 @@ class IntradayAggregator:
         grouped.index.names = ["timestamp", "instrument"]
         return grouped.rename(column)
 
-    def vwap(self, *, price: str = "close", volume: str = "volume") -> pd.Series:
-        """成交量加权均价：sum(price*volume)/sum(volume)。"""
-        if price not in self.panels or volume not in self.panels:
-            raise KeyError(f"vwap 需要 {price!r} 与 {volume!r} 列")
+    def vwap(
+        self,
+        *,
+        amount: str = "amount",
+        volume: str = "volume",
+        price: str = "close",
+    ) -> pd.Series:
+        """成交额加权均价：优先 ``sum(Amount) / sum(Volume)``。
+
+        ``price`` is retained for backward compatibility with callers whose
+        minute source has no amount column.  Production multi-minute bars
+        should always provide amount because close×volume is not bar VWAP.
+        """
+        if volume not in self.panels:
+            raise KeyError(f"vwap 需要 {volume!r} 列")
         df = self._stack_frame()
-        df["_pv"] = df[price] * df[volume]
-        num = df.groupby(["trade_date", "asset"])["_pv"].sum()
-        den = df.groupby(["trade_date", "asset"])[volume].sum()
-        vwap = (num / den.replace(0, pd.NA)).rename("vwap")
+        if amount in self.panels:
+            numerator = df.groupby(["trade_date", "asset"])[amount].sum()
+        elif price in self.panels:
+            numerator = (df[price] * df[volume]).groupby(
+                [df["trade_date"], df["asset"]]
+            ).sum()
+        else:
+            raise KeyError(f"vwap 需要 {amount!r} 或 {price!r} 列")
+        denominator = df.groupby(["trade_date", "asset"])[volume].sum()
+        vwap = (numerator / denominator.replace(0, pd.NA)).rename("vwap")
         vwap.index.names = ["timestamp", "instrument"]
         return vwap
 
@@ -153,9 +170,17 @@ class IntradayAggregatedDataSource(DataSource):
 
     def _build_aggregator(self) -> IntradayAggregator:
         load_columns = getattr(self.inner, "load_columns", None)
-        base_cols = ["open", "high", "low", "close", "volume"]
+        base_cols = ["open", "high", "low", "close", "volume", "amount"]
         if callable(load_columns):
-            panels = load_columns([c for c in base_cols if c != "open"] + ["close", "volume"])
+            try:
+                panels = load_columns(base_cols)
+            except (FileNotFoundError, KeyError, NotImplementedError):
+                panels = {}
+                for col in base_cols:
+                    try:
+                        panels[col] = self.inner.load_column(col)
+                    except (FileNotFoundError, KeyError, NotImplementedError):
+                        continue
         else:
             panels = {}
             missing: list[str] = []

@@ -512,6 +512,8 @@ _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
     "log10": {"scope": "elementwise", "pit_safe": True},
     "log2": {"scope": "elementwise", "pit_safe": True},
     "cs_neutralize": {"scope": "cs", "pit_safe": True},
+    "size_neutralize": {"scope": "cs", "pit_safe": True},
+    "industry_size_neutralize": {"scope": "cs", "pit_safe": True},
     "ffill_limit": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "ts_argmax": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "ts_argmin": {"scope": "ts", "pit_safe": True, "min_periods": 1},

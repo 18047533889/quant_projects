@@ -36,6 +36,10 @@ class OperatorSignature:
     output: TypeKind = TypeKind.SERIES_FLOAT
     allow_dynamic_window: bool = False
     allow_string_group: bool = True
+    # Optional semantic compatibility metadata; old signatures remain valid.
+    input_units: tuple[str | None, ...] = ()
+    output_unit: str | None = None
+    compatible_units: tuple[tuple[str, ...], ...] = ()
 
     def validate_node(self, node: PlanNode) -> list[str]:
         """校验 plan 节点输入类型/形状（literal vs series）。"""

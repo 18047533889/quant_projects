@@ -214,13 +214,22 @@ def analyze_factor_parquet_duckdb(
     table_names = {r[0] for r in con.execute("SHOW TABLES").fetchall()}
     fwd_src = "fwd" if "fwd" in table_names else f"read_parquet('{fwd}')"
 
-    # Keep result sets small: IC + group means + LS only (no per-name books).
-    # Net LS uses assumed one-way turnover (A-share top-decile ~40%) × commission.
-    assumed_one_way_turnover = 0.40
-    daily_cost = 2.0 * assumed_one_way_turnover * roundtrip / 100.0
-
+    # Net LS cost uses *realized* one-way turnover of equal-weight G10 / G1 books
+    # (0.5 * L1 weight change per leg), not a fixed 40% assumption.
     sql = f"""
     WITH fac AS ({fac_sql}),
+    univ AS (
+      SELECT signal_date AS trade_date, count(*)::INTEGER AS n_univ
+      FROM {fwd_src}
+      WHERE value IS NOT NULL
+      GROUP BY 1
+    ),
+    fac_day AS (
+      SELECT trade_date, count(*)::INTEGER AS n_fac
+      FROM fac
+      WHERE value IS NOT NULL
+      GROUP BY 1
+    ),
     m AS (
       SELECT f.trade_date,
              f.symbol,
@@ -232,7 +241,7 @@ def analyze_factor_parquet_duckdb(
       WHERE f.value IS NOT NULL AND g.value IS NOT NULL
     ),
     day_n AS (
-      SELECT trade_date, count(*) AS n FROM m GROUP BY 1
+      SELECT trade_date, count(*)::INTEGER AS n FROM m GROUP BY 1
     ),
     scored AS (
       SELECT m.trade_date, m.symbol, m.fv, m.rv, d.n,
@@ -269,6 +278,55 @@ def analyze_factor_parquet_duckdb(
                - max(CASE WHEN grp = 1 THEN gret END) AS ls_gross
       FROM daily_grp
       GROUP BY trade_date
+    ),
+    -- Equal-weight G10/G1 one-way turnover computed in-DB (avoid shipping memberships).
+    weights AS (
+      SELECT trade_date, symbol, grp,
+             1.0 / count(*) OVER (PARTITION BY trade_date, grp) AS w
+      FROM ranked
+      WHERE grp IN (1, {n_groups})
+    ),
+    cal AS (
+      SELECT trade_date,
+             lag(trade_date) OVER (ORDER BY trade_date) AS prev_date
+      FROM (SELECT DISTINCT trade_date FROM ranked)
+    ),
+    w_union AS (
+      SELECT c.trade_date, w.grp, w.symbol, w.w AS w_t, 0.0 AS w_p
+      FROM cal c
+      JOIN weights w ON w.trade_date = c.trade_date
+      UNION ALL
+      SELECT c.trade_date, w.grp, w.symbol, 0.0 AS w_t, w.w AS w_p
+      FROM cal c
+      JOIN weights w ON w.trade_date = c.prev_date
+      WHERE c.prev_date IS NOT NULL
+    ),
+    w_merged AS (
+      SELECT trade_date, grp, symbol, sum(w_t) AS w_t, sum(w_p) AS w_p
+      FROM w_union
+      GROUP BY 1, 2, 3
+    ),
+    to_leg AS (
+      SELECT trade_date, grp, 0.5 * sum(abs(w_t - w_p)) AS one_way
+      FROM w_merged
+      GROUP BY 1, 2
+    ),
+    daily_to AS (
+      SELECT trade_date,
+             coalesce(max(CASE WHEN grp = {n_groups} THEN one_way END), 0.0) AS to_long,
+             coalesce(max(CASE WHEN grp = 1 THEN one_way END), 0.0) AS to_short
+      FROM to_leg
+      GROUP BY trade_date
+    ),
+    cov AS (
+      SELECT d.trade_date,
+             d.n AS n_overlap,
+             coalesce(f.n_fac, 0) AS n_fac,
+             coalesce(u.n_univ, 0) AS n_univ
+      FROM day_n d
+      LEFT JOIN fac_day f USING (trade_date)
+      LEFT JOIN univ u USING (trade_date)
+      WHERE d.n >= {max(min_names, n_groups * 3)}
     )
     SELECT
       (SELECT list(struct_pack(trade_date := trade_date, n := n, rank_ic := rank_ic)
@@ -276,7 +334,13 @@ def analyze_factor_parquet_duckdb(
       (SELECT list(struct_pack(trade_date := trade_date, ls_gross := ls_gross)
                    ORDER BY trade_date) FROM daily_ls) AS ls_rows,
       (SELECT list(struct_pack(trade_date := trade_date, grp := grp, gret := gret)
-                   ORDER BY trade_date, grp) FROM daily_grp) AS grp_rows
+                   ORDER BY trade_date, grp) FROM daily_grp) AS grp_rows,
+      (SELECT list(struct_pack(trade_date := trade_date, to_long := to_long, to_short := to_short)
+                   ORDER BY trade_date) FROM daily_to) AS to_rows,
+      (SELECT list(struct_pack(
+                   trade_date := trade_date, n_overlap := n_overlap,
+                   n_fac := n_fac, n_univ := n_univ)
+                   ORDER BY trade_date) FROM cov) AS cov_rows
     """
     try:
         row = con.execute(sql).fetchone()
@@ -289,13 +353,36 @@ def analyze_factor_parquet_duckdb(
     ic_rows = row[0]
     ls_rows = row[1] or []
     grp_rows = row[2] or []
+    to_rows = row[3] or []
+    cov_rows = row[4] or []
 
     trade_dates = [int(r["trade_date"]) for r in ic_rows]
     daily_rank_ic = [float(r["rank_ic"]) if r["rank_ic"] is not None else float("nan") for r in ic_rows]
     sample_counts = [int(r["n"]) for r in ic_rows]
     ls_by_date = {int(r["trade_date"]): float(r["ls_gross"]) for r in ls_rows if r["ls_gross"] is not None}
     daily_ls_gross = [ls_by_date.get(td, 0.0) for td in trade_dates]
-    daily_ls_net = [g - daily_cost for g in daily_ls_gross]
+
+    to_by_date = {
+        int(r["trade_date"]): (float(r["to_long"] or 0.0), float(r["to_short"] or 0.0))
+        for r in to_rows
+    }
+    daily_to_long = [to_by_date.get(td, (0.0, 0.0))[0] for td in trade_dates]
+    daily_to_short = [to_by_date.get(td, (0.0, 0.0))[1] for td in trade_dates]
+    # roundtrip is percent points (e.g. 0.02); convert to decimal return units.
+    daily_cost = [(tl + ts) * roundtrip / 100.0 for tl, ts in zip(daily_to_long, daily_to_short)]
+    daily_ls_net = [g - c for g, c in zip(daily_ls_gross, daily_cost)]
+
+    cov_by_date = {int(r["trade_date"]): r for r in cov_rows}
+    coverages: list[float] = []
+    n_fac_list: list[int] = []
+    n_univ_list: list[int] = []
+    for td, n_ov in zip(trade_dates, sample_counts):
+        cr = cov_by_date.get(td) or {}
+        n_univ = int(cr.get("n_univ") or 0)
+        n_fac = int(cr.get("n_fac") or 0)
+        n_univ_list.append(n_univ)
+        n_fac_list.append(n_fac)
+        coverages.append(float(n_ov) / float(n_univ) if n_univ > 0 else float("nan"))
 
     # Group equity curves
     grp_by_date: dict[int, dict[int, float]] = {}
@@ -321,9 +408,10 @@ def analyze_factor_parquet_duckdb(
     rank_icir = mean_rank_ic / std_rank_ic if std_rank_ic > 1e-12 else 0.0
     rank_ic_pos = float(np.mean(ic_arr > 0))
     ls_cum = float(np.prod(1.0 + ls_net) - 1.0) if len(ls_net) else 0.0
-
-    # coverage proxy: names / typical day names from samples
-    coverages = [1.0] * len(sample_counts)
+    cov_arr = np.asarray(coverages, dtype=float)
+    to_l = np.asarray(daily_to_long, dtype=float)
+    to_s = np.asarray(daily_to_short, dtype=float)
+    to_sum = to_l + to_s
 
     return {
         "mean_rank_ic": mean_rank_ic,
@@ -334,16 +422,27 @@ def analyze_factor_parquet_duckdb(
         "std_ic": std_rank_ic,
         "icir": rank_icir,
         "ic_positive_ratio": rank_ic_pos,
-        "coverage": float(np.mean(coverages)) if coverages else 0.0,
+        "coverage": float(np.nanmean(cov_arr)) if len(cov_arr) else float("nan"),
+        "mean_daily_coverage": float(np.nanmean(cov_arr)) if len(cov_arr) else float("nan"),
+        "median_daily_coverage": float(np.nanmedian(cov_arr)) if len(cov_arr) else float("nan"),
+        "mean_overlap_names": float(np.nanmean(sample_counts)) if sample_counts else float("nan"),
+        "mean_universe_names": float(np.nanmean(n_univ_list)) if n_univ_list else float("nan"),
+        "mean_factor_names": float(np.nanmean(n_fac_list)) if n_fac_list else float("nan"),
         "long_short_return": ls_cum,
         "long_short_return_sum": float(np.nansum(ls_net)),
         "long_short_sharpe": _sharpe(ls_net),
         "long_short_return_gross_sum": float(np.nansum(ls_gross)),
         "long_short_sharpe_gross": _sharpe(ls_gross),
+        "ls_mean_one_way_turnover": float(np.nanmean(to_sum)) if len(to_sum) else float("nan"),
+        "ls_mean_long_turnover": float(np.nanmean(to_l)) if len(to_l) else float("nan"),
+        "ls_mean_short_turnover": float(np.nanmean(to_s)) if len(to_s) else float("nan"),
+        "ls_mean_daily_cost": float(np.nanmean(daily_cost)) if daily_cost else float("nan"),
         "daily_ic": daily_rank_ic,
         "daily_rank_ic": daily_rank_ic,
         "daily_ls_returns": ls_net.tolist(),
         "daily_ls_gross": ls_gross.tolist(),
+        "daily_ls_turnover": to_sum.tolist(),
+        "daily_ls_cost": list(daily_cost),
         "trade_dates": trade_dates,
         "quote_times": [0] * len(trade_dates),
         "sample_counts": sample_counts,
@@ -363,13 +462,14 @@ def analyze_factor_parquet_duckdb(
                 if return_kind == "vwap_to_vwap"
                 else "Factor after close T → forward return close(T+1)/close(T)-1 "
             )
-            + "(DuckDB panel RankIC); LS net assumes 40% one-way turnover × commission; "
+            + "(DuckDB panel RankIC); LS net costs use realized G10/G1 one-way turnover × commission; "
             "TopK backtest uses OPEN execution separately"
         ),
         "commission_buy": commission_buy,
         "commission_sell": commission_sell,
         "n_groups": n_groups,
         "eval_engine": "duckdb_panel",
+        "ls_cost_model": "realized_decile_turnover",
     }
 
 
@@ -379,6 +479,9 @@ _WORKER: dict[str, Any] = {}
 def _init_worker(fwd_path: str, industry_path: str = "", market_cap_path: str = "") -> None:
     """Load forward-return parquet into an in-memory DuckDB table once per worker."""
     con = duckdb.connect()
+    # Soft cap per worker (host has ~30Gi; keep headroom, not ultra-conservative).
+    con.execute("SET threads TO 4")
+    con.execute("SET memory_limit = '4GB'")
     path = Path(fwd_path).as_posix().replace("'", "''")
     con.execute(
         f"""
@@ -457,7 +560,7 @@ def _eval_one(payload: dict[str, Any]) -> dict[str, Any]:
         return_kind = str(payload.get("return_kind") or "vwap_to_vwap")
         # t1t2 = enter next-session VWAP, exit following VWAP (no same-day Vwap_T leak)
         eval_mode = (
-            "duckdb_panel_vwap_to_vwap_t1t2"
+            "duckdb_panel_vwap_to_vwap_t1t2_realto"
             if return_kind == "vwap_to_vwap"
             else f"duckdb_panel_{return_kind}"
         )
@@ -545,6 +648,12 @@ def _eval_one(payload: dict[str, Any]) -> dict[str, Any]:
             "rank_ic_positive_ratio": _json_float(analysis.get("rank_ic_positive_ratio")),
             "long_short_sharpe": _json_float(analysis.get("long_short_sharpe")),
             "long_short_return": _json_float(analysis.get("long_short_return")),
+            "long_short_sharpe_gross": _json_float(analysis.get("long_short_sharpe_gross")),
+            "ls_mean_one_way_turnover": _json_float(analysis.get("ls_mean_one_way_turnover")),
+            "ls_mean_daily_cost": _json_float(analysis.get("ls_mean_daily_cost")),
+            "mean_daily_coverage": _json_float(analysis.get("mean_daily_coverage")),
+            "median_daily_coverage": _json_float(analysis.get("median_daily_coverage")),
+            "mean_overlap_names": _json_float(analysis.get("mean_overlap_names")),
             "industry_neutral_mean_rank_ic": _json_float(analysis.get("industry_neutral_mean_rank_ic")),
             "size_neutral_mean_rank_ic": _json_float(analysis.get("size_neutral_mean_rank_ic")),
             "ic_half_life_days": _json_float(analysis.get("ic_half_life_days")),
@@ -576,7 +685,12 @@ def main() -> int:
     parser.add_argument("--workers", type=int, default=max(2, min(6, (os.cpu_count() or 4) - 1)))
     parser.add_argument("--flip-negative-ic", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--only", nargs="*", default=None)
-    parser.add_argument("--skip-lookahead", action="store_true", default=True)
+    parser.add_argument(
+        "--skip-lookahead",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Skip LOOKAHEAD_DEFERRED_FACTORS (default on). Use --no-skip-lookahead to evaluate them.",
+    )
     parser.add_argument(
         "--returns-source",
         choices=("lqtp", "data_access", "auto"),
@@ -603,7 +717,7 @@ def main() -> int:
     progress_path = args.progress_file or (work / "production_progress.json")
     return_kind = "vwap_to_vwap" if args.return_kind == "vwap" else "close_to_close"
     eval_mode = (
-        "duckdb_panel_vwap_to_vwap_t1t2"
+        "duckdb_panel_vwap_to_vwap_t1t2_realto"
         if return_kind == "vwap_to_vwap"
         else f"duckdb_panel_{return_kind}"
     )
@@ -755,7 +869,8 @@ def main() -> int:
                     flip_state[name] = {**flip_state.get(name, {}), **fp}
             else:
                 failed[name] = result.get("error") or "unknown"
-            if done_n % 10 == 0 or done_n == len(payloads):
+            # Checkpoint every factor so a worker death loses at most one result.
+            if True:
                 progress["completed"] = completed
                 progress["failed"] = failed
                 progress["index_rows"] = index_rows
@@ -767,8 +882,13 @@ def main() -> int:
                 )
                 progress["return_kind"] = return_kind
                 progress["regen_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                progress["note"] = (
+                    f"realto in progress {done_n}/{len(payloads)} "
+                    f"(workers capped, duckdb mem limited)"
+                )
                 _save_progress(progress_path, progress)
-                print(f"  checkpoint {done_n}/{len(payloads)} ok={len(completed)} fail={len(failed)}")
+                if done_n % 5 == 0 or done_n == len(payloads):
+                    print(f"  checkpoint {done_n}/{len(payloads)} ok={len(completed)} fail={len(failed)}")
 
     progress["completed"] = completed
     progress["failed"] = failed

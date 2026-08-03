@@ -12,6 +12,7 @@ import pandas as pd
 from .data_access_source import MissingDataDependencyError
 from .lqtp_logical_source import LQTPLogicalDataSource as _Base
 from .lqtp_logical_source import _TABLE_DATASETS
+from .logical_tables import logical_table_contract
 
 
 class LQTPLogicalDataSource(_Base):
@@ -284,7 +285,7 @@ class LQTPLogicalDataSource(_Base):
             )
             return self._align_exact_by_instrument(anchor, series)
 
-        if table in {"StockIncome", "StockCashFlow", "StockBalance"}:
+        if table in {"StockIncome", "StockCashFlow", "StockBalance", "StockIndicator"}:
             return self._financial(_TABLE_DATASETS[table], field, transform, tparams)
 
         if table in {"StockMinuteBar", "MinuteBar"}:
@@ -300,36 +301,79 @@ class LQTPLogicalDataSource(_Base):
                 f"no FactorEngine dataset mapping for LQTP DataTable {table!r}"
             )
         params = spec.params_dict()
-        filt = [str(params["index"])] if table == "BenchmarkIndexDailyBar" and "index" in params else None
+        contract = logical_table_contract(table)
+        required_param = contract.required_parameter
+        if required_param and required_param not in params:
+            legacy = {"IndexSymbol": "index", "IndustrySource": "industry_source"}.get(required_param)
+            if legacy is None or legacy not in params:
+                raise MissingDataDependencyError(
+                    f"LQTP DataTable {table!r} requires exact {required_param} parameter"
+                )
+            params[required_param] = params[legacy]
+        filt = None
+        if contract.required_parameter == "IndexSymbol" and table != "IndexConstituent":
+            filt = [str(params["IndexSymbol"])]
         child = self._child(dataset, instrument_filter=filt)
-        series = child.load_column(field)
+        if table == "IndexConstituent":
+            loaded = child.load_columns([field, "IndexSymbol"])
+            series = loaded[field].where(
+                loaded["IndexSymbol"].astype(str) == str(params["IndexSymbol"])
+            ).dropna()
+        elif contract.required_parameter == "IndustrySource":
+            loaded = child.load_columns([field, "IndustrySource"])
+            series = loaded[field].where(
+                loaded["IndustrySource"].astype(str) == str(params["IndustrySource"])
+            ).dropna()
+        else:
+            series = child.load_column(field)
         snapshot = getattr(child, "data_snapshot_id", None)
 
-        if table == "BenchmarkIndexDailyBar":
+        if contract.join_policy == "exact_date":
             self._record_dependency(
-                f"{dataset}:{params.get('index','')}",
+                f"{dataset}:{params.get('IndexSymbol','')}",
                 kind="benchmark_daily",
                 snapshot_id=snapshot,
                 field=field,
                 join_policy="exact_date",
             )
             return self._broadcast_exact_by_date(anchor, series)
-        if table in {"SizeDaily", "EtfDailyBar"}:
+        if contract.join_policy == "exact":
             self._record_dependency(
                 dataset,
                 kind="daily_exact",
                 snapshot_id=snapshot,
                 field=field,
                 join_policy="exact",
+                **({"IndexSymbol": str(params["IndexSymbol"])} if "IndexSymbol" in params else {}),
             )
             return self._align_exact_by_instrument(anchor, series)
-        if table == "IndustryDaily":
+        if contract.join_policy == "effective_only":
             self._record_dependency(
                 dataset,
-                kind="classification_asof",
+                kind="dividend_effective_only",
+                snapshot_id=snapshot,
+                field=field,
+                join_policy="exact",
+                effective_only=True,
+            )
+            return self._align_exact_by_instrument(anchor, series)
+        if contract.join_policy == "relation_pit":
+            self._record_dependency(
+                dataset,
+                kind="shareholder_relation_pit",
                 snapshot_id=snapshot,
                 field=field,
                 join_policy="asof_backward",
+            )
+            return self._align_by_instrument(anchor, series)
+        if contract.join_policy == "asof_backward":
+            self._record_dependency(
+                dataset,
+                kind="classification_asof" if contract.required_parameter == "IndustrySource" else "relation_asof",
+                snapshot_id=snapshot,
+                field=field,
+                join_policy="asof_backward",
+                **({"IndustrySource": str(params["IndustrySource"])} if "IndustrySource" in params else {}),
             )
             return self._align_by_instrument(anchor, series)
 
@@ -379,13 +423,46 @@ class LQTPLogicalDataSource(_Base):
         ).astype(int)
         return out
 
+    def _minute_weighted_vwap(
+        self,
+        transform: str,
+        params: dict[str, Any],
+    ) -> pd.Series:
+        """Aggregate multi-minute VWAP from additive Amount and Volume legs."""
+        amount = self._minute_daily("Amount", transform, params)
+        volume = self._minute_daily("Volume", transform, params)
+        output = amount / volume.replace(0, np.nan)
+        output.name = "Vwap"
+        return output
+
+    def _minute_dispatch(
+        self,
+        field: str,
+        transform: str,
+        params: dict[str, Any],
+    ) -> pd.Series | None:
+        """Explicit extension dispatcher; ``None`` delegates to legacy transforms."""
+        if transform == "intraday_feature":
+            from .intraday_feature_runtime_v2 import load_intraday_feature
+
+            return load_intraday_feature(self, dict(params))
+        return None
+
     def _minute_daily(self, field: str, transform: str, params: dict[str, Any]) -> pd.Series:
+        dispatched = self._minute_dispatch(field, transform, params)
+        if dispatched is not None:
+            return dispatched
+
+        if transform == "minute_resample" and self.factor_freq == "1d" and not self._anchor_is_intraday():
+            raise MissingDataDependencyError(
+                "minute_resample returns an intraday bar sequence; use minute_bar(..., index) "
+                "for a daily factor or configure an intraday anchor"
+            )
+
         if field.lower().endswith("vwap") and transform in {
             "minute_range", "minute_bar", "minute_resample"
         }:
-            raise MissingDataDependencyError(
-                "multi-minute VWAP requires Amount/Volume weighted aggregation"
-            )
+            return self._minute_weighted_vwap(transform, params)
 
         src = self._child("ashare_stock_minute")
         series = src.load_column(field)

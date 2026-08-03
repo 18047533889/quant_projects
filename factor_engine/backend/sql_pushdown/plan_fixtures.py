@@ -54,8 +54,10 @@ def _minimal_plan_raw(op: str) -> PlanNode:
         "minimum",
     }:
         return PlanNode(op=op, inputs=[close, volume], attrs={"d": 3, "window": 3, "span": 3})
-    if op in {"cs_resid", "cs_regression"}:
+    if op in {"cs_resid", "cs_regression", "size_neutralize"}:
         return PlanNode(op=op, inputs=[close, volume], attrs={"d": 3})
+    if op == "industry_size_neutralize":
+        return PlanNode(op=op, inputs=[close, industry, volume], attrs={})
     if op in {"ts_sum_if", "ts_mean_if", "ts_std_if", "ts_last_if"}:
         return PlanNode(
             op=op,

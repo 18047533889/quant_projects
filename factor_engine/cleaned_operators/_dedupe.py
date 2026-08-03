@@ -151,6 +151,7 @@ DEDUPE_ALIASES: dict[str, str] = {
     "IND_NEUTRALIZE": "group_neutralize",
     "market_cap_neutralize": "size_neutralize",
     "cap_neutralize": "size_neutralize",
+    "size_industry_neutralize": "industry_size_neutralize",
     # --- 累计 / 扩展 ---
     "mean_agg": "avg",
     "cum_avg": "expanding_mean",

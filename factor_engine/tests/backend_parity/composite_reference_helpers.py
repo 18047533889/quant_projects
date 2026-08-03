@@ -23,7 +23,6 @@ class CompositeReferenceCase:
     calc_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
-# 全部 16 个已注册 composite lowering
 COMPOSITE_REFERENCE_CASES: tuple[CompositeReferenceCase, ...] = (
     CompositeReferenceCase("MOM", ("close",), window=3),
     CompositeReferenceCase("ROC", ("close",), window=3),
@@ -45,6 +44,17 @@ COMPOSITE_REFERENCE_CASES: tuple[CompositeReferenceCase, ...] = (
     CompositeReferenceCase("MACD_signal", ("close",), window=3, extra_attrs={"fast": 2, "slow": 3, "signal": 2}, calc_kwargs={"fast": 2, "slow": 3, "signal": 2}),
     CompositeReferenceCase("MACD_hist", ("close",), window=3, extra_attrs={"fast": 2, "slow": 3, "signal": 2}, calc_kwargs={"fast": 2, "slow": 3, "signal": 2}),
     CompositeReferenceCase("ts_ratio", ("close",), window=1),
+    # A 股 composite lowerings
+    CompositeReferenceCase("earnings_yield", ("one", "pe")),
+    CompositeReferenceCase("book_to_price", ("one", "pb")),
+    CompositeReferenceCase("float_share_ratio", ("float_shares", "total_shares")),
+    CompositeReferenceCase("free_float_share_ratio", ("free_float_shares", "total_shares")),
+    CompositeReferenceCase("true_turnover_rate", ("volume", "free_float_shares")),
+    CompositeReferenceCase("limit_up_state", ("close", "upper_limit")),
+    CompositeReferenceCase("limit_down_state", ("close", "lower_limit")),
+    CompositeReferenceCase("benchmark_excess_return", ("ret", "benchmark_ret")),
+    CompositeReferenceCase("benchmark_relative_price", ("price", "benchmark_price")),
+    CompositeReferenceCase("holder_concentration", ("top_holder_shares", "total_shares")),
 )
 
 

@@ -103,6 +103,7 @@ def compute_implementation_hash(source: str) -> str:
 def emitter_hashes() -> dict[str, str]:
     polars_path = FE_ROOT / "backend" / "polars_expr_emitter.py"
     duck_path = FE_ROOT / "backend" / "sql_pushdown" / "emitter.py"
+    fiscal_v2_path = FE_ROOT / "backend" / "sql_pushdown" / "fiscal_v2.py"
     out: dict[str, str] = {}
     if polars_path.is_file():
         out["implementation_hash_polars_emitter"] = compute_implementation_hash(
@@ -111,6 +112,10 @@ def emitter_hashes() -> dict[str, str]:
     if duck_path.is_file():
         out["implementation_hash_duckdb_emitter"] = compute_implementation_hash(
             duck_path.read_text(encoding="utf-8")
+        )
+    if fiscal_v2_path.is_file():
+        out["implementation_hash_duckdb_fiscal_v2"] = compute_implementation_hash(
+            fiscal_v2_path.read_text(encoding="utf-8")
         )
     return out
 
@@ -419,8 +424,13 @@ def semantic_hashes_for(canonical: str) -> dict[str, str]:
 def parameter_domain_hash_for(canonical: str) -> str:
     """Recompute the exact signature-domain digest stored in evidence."""
     from backend.operator_evidence_schema import compute_implementation_hash
+    from backend.production_signature_v2 import apply_production_signature_v2
     from backend.production_signature import signature_for
 
+    # The fiscal v2 contract is part of the canonical signature.  Apply it here
+    # as well as during registry bootstrap so evidence validation is independent
+    # of which module happened to be imported first.
+    apply_production_signature_v2()
     sig = signature_for(canonical)
     if sig is None:
         return ""

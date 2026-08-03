@@ -57,6 +57,18 @@ def ref_source():
             "total_debt": pd.Series([30.0, 31.0, 32.0, 33.0, 60.0, 61.0, 62.0, 63.0], index=idx),
             "total_equity": pd.Series([70.0, 0.0, 72.0, 73.0, 140.0, 141.0, 142.0, 143.0], index=idx),
             "float_shares": pd.Series([1e6, 1e6, 0.0, 1e6, 2e6, 2e6, 2e6, 2e6], index=idx),
+            # A 股 composite reference data
+            "one": pd.Series([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], index=idx),
+            "pe": pd.Series([20.0, 22.0, 18.0, 25.0, 30.0, 28.0, 32.0, 35.0], index=idx),
+            "pb": pd.Series([2.0, 2.2, 1.8, 2.5, 3.0, 2.8, 3.2, 3.5], index=idx),
+            "total_shares": pd.Series([5e6, 5e6, 5e6, 5e6, 1e7, 1e7, 1e7, 1e7], index=idx),
+            "free_float_shares": pd.Series([3e6, 3e6, 3e6, 3e6, 6e6, 6e6, 6e6, 6e6], index=idx),
+            "upper_limit": pd.Series([11.0, 12.1, 11.55, 13.2, 22.0, 20.9, 23.1, 24.2], index=idx),
+            "lower_limit": pd.Series([9.0, 9.9, 9.45, 10.8, 18.0, 17.1, 18.9, 19.8], index=idx),
+            "ret": pd.Series([0.01, 0.02, -0.01, 0.03, 0.02, -0.02, 0.05, 0.02], index=idx),
+            "benchmark_ret": pd.Series([0.005, 0.01, -0.005, 0.02, 0.005, -0.01, 0.03, 0.01], index=idx),
+            "benchmark_price": pd.Series([100.0, 101.0, 100.5, 102.0, 100.0, 101.0, 100.5, 102.0], index=idx),
+            "top_holder_shares": pd.Series([1e6, 1e6, 1e6, 1e6, 2e6, 2e6, 2e6, 2e6], index=idx),
         }
     )
 
@@ -68,7 +80,7 @@ def test_composite_reference_cases_cover_all_registered_lowerings():
     extra = sorted(covered - registered)
     assert not missing, f"reference cases 缺少: {missing}"
     assert not extra, f"reference cases 多余: {extra}"
-    assert len(covered) >= 17
+    assert len(covered) >= 27
 
 
 @pytest.mark.parametrize("case", COMPOSITE_REFERENCE_CASES, ids=lambda c: c.canon)

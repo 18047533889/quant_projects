@@ -32,13 +32,26 @@ def test_intraday_last_close_is_end_of_day():
     assert daily.iloc[-1] == pytest.approx(99.0)
 
 
-def test_intraday_vwap():
+def test_intraday_vwap_uses_amount_over_volume():
+    close, volume = _intraday_close_volume()
+    # Deliberately differs from close*volume to prove that bar VWAP is not
+    # reconstructed from the closing print.
+    amount = pd.Series(
+        [1005.0, 2050.0, 3000.0] * 2,
+        index=close.index,
+    )
+    agg = IntradayAggregator.from_panel(
+        {"close": close, "volume": volume, "amount": amount}
+    )
+    vwap = agg.vwap()
+    assert vwap.iloc[0] == pytest.approx((1005 + 2050 + 3000) / 60)
+
+
+def test_intraday_vwap_keeps_legacy_price_volume_fallback():
     close, volume = _intraday_close_volume()
     agg = IntradayAggregator.from_panel({"close": close, "volume": volume})
-    vwap = agg.vwap()
-    # 2024-01-02: (100*10 + 102*20 + 99*30) / 60
     expected = (100 * 10 + 102 * 20 + 99 * 30) / 60
-    assert vwap.iloc[0] == pytest.approx(expected)
+    assert agg.vwap().iloc[0] == pytest.approx(expected)
 
 
 def test_aggregate_features_keys():

@@ -121,31 +121,13 @@ class GroupDemean(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, **kwargs) -> pd.DataFrame:
-        result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
+        from cleaned_operators._numpy_kernels import group_demean_panel_
 
-        for date in x.index:
-            x_slice = x.loc[date]
-
-            if group is not None and date in group.index:
-                group_slice = group.loc[date]
-            else:
-                group_slice = None
-
-            if group_slice is None or group_slice.isna().all():
-                valid_mask = x_slice.notna()
-                if valid_mask.sum() > 0:
-                    mean_val = x_slice[valid_mask].mean()
-                    result.loc[date, valid_mask] = x_slice[valid_mask] - mean_val
-                continue
-
-            for group_val in group_slice.dropna().unique():
-                mask = (group_slice == group_val) & x_slice.notna()
-                if mask.sum() > 0:
-                    group_data = x_slice[mask]
-                    mean_val = group_data.mean()
-                    result.loc[date, group_data.index] = group_data - mean_val
-
-        return result
+        g = None
+        if group is not None:
+            g = group.reindex(index=x.index, columns=x.columns).to_numpy()
+        out = group_demean_panel_(x.to_numpy(dtype=float, copy=False), g)
+        return pd.DataFrame(out, index=x.index, columns=x.columns)
 
 
 
@@ -792,11 +774,11 @@ class IndustryNeutralize(SeriesOperator):
 
 @register_operator(name="size_neutralize", category="group_neutralization", business_category="group_neutralization", canonical="size_neutralize", source="factor_dsl_np")
 class SizeNeutralize(SeriesOperator):
-    """市值中性化（对 log(market_cap) 做截面回归残差）"""
+    """市值中性化：每日对 log(max(MarketCap, 1)) 做截面 OLS，取残差。"""
     metadata = OperatorMetadata(
         name="size_neutralize",
         category="group_neutralization",
-        description="市值中性化（对 log(market_cap) 做截面回归残差）",
+        description="市值中性化（对 log(max(market_cap, 1)) 做截面回归残差）",
         examples=["size_neutralize(factor, market_cap)"],
         param_names=["x", "market_cap"],
         return_type="series",
@@ -804,12 +786,55 @@ class SizeNeutralize(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, market_cap: pd.DataFrame | None = None, **kwargs) -> pd.DataFrame:
-        from cleaned_operators._numpy_kernels import cs_resid_
+        from cleaned_operators._numpy_kernels import size_resid_panel_
 
         if market_cap is None:
-            return x.sub(x.mean(axis=1), axis=0)
-        result = pd.DataFrame(np.nan, index=x.index, columns=x.columns, dtype=float)
-        for idx in x.index:
-            cap_slice = np.log(market_cap.loc[idx].astype(float).values + 1.0)
-            result.loc[idx] = cs_resid_(x.loc[idx].values, cap_slice)
-        return result
+            raise ValueError("size_neutralize requires market_cap; use size_neutralize(x, market_cap)")
+        cap = market_cap.reindex(index=x.index, columns=x.columns)
+        out = size_resid_panel_(
+            x.to_numpy(dtype=float, copy=False),
+            cap.to_numpy(dtype=float, copy=False),
+        )
+        return pd.DataFrame(out, index=x.index, columns=x.columns)
+
+
+@register_operator(
+    name="industry_size_neutralize",
+    category="group_neutralization",
+    business_category="group_neutralization",
+    canonical="industry_size_neutralize",
+    source="factor_dsl_np",
+)
+class IndustrySizeNeutralize(SeriesOperator):
+    """行业+市值双中性：先行业组内 demean，再对 log(max(MarketCap, 1)) 取残差。"""
+    metadata = OperatorMetadata(
+        name="industry_size_neutralize",
+        category="group_neutralization",
+        description="行业中性后再做市值中性（与评估双中性语义一致）",
+        examples=["industry_size_neutralize(factor, industry, market_cap)"],
+        param_names=["x", "industry", "market_cap"],
+        return_type="series",
+        tags=["group", "industry", "size", "neutralize"],
+    )
+
+    def _calculate_series(
+        self,
+        x: pd.DataFrame,
+        industry: pd.DataFrame | None = None,
+        market_cap: pd.DataFrame | None = None,
+        **kwargs,
+    ) -> pd.DataFrame:
+        from cleaned_operators._numpy_kernels import industry_size_resid_panel_
+
+        if industry is None or market_cap is None:
+            raise ValueError(
+                "industry_size_neutralize requires (x, industry, market_cap)"
+            )
+        ind = industry.reindex(index=x.index, columns=x.columns)
+        cap = market_cap.reindex(index=x.index, columns=x.columns)
+        out = industry_size_resid_panel_(
+            x.to_numpy(dtype=float, copy=False),
+            ind.to_numpy(),
+            cap.to_numpy(dtype=float, copy=False),
+        )
+        return pd.DataFrame(out, index=x.index, columns=x.columns)

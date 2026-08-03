@@ -24,18 +24,34 @@ from scripts.cogalpha_lqtp.ast_translator import (  # noqa: E402
     lqtp_to_fe_dsl,
     translate_python,
 )
+from scripts.cogalpha_lqtp._python_fe_dsl_map import EXTRA_PYTHON_FE_DSL  # noqa: E402
 from scripts.cogalpha_lqtp.dsl_sanitize import sanitize_dsl  # noqa: E402
 from scripts.cogalpha_lqtp.lqtp_dsl_compat import fe_only_operators, is_lqtp_native_dsl  # noqa: E402
+
+
+def _normalize_fe_compat_ops(dsl: str) -> str:
+    """Map common TA-lib / LQTP names onto factor_engine compat allowlist."""
+    import re
+
+    text = dsl
+    text = re.sub(r"\bATR\(", "ATR_WILDER(", text)
+    text = re.sub(r"\bRSI\(", "RSI_WILDER(", text)
+    text = re.sub(r"\bROC\(", "ts_pct(", text)
+    text = re.sub(r"\bEMA\(", "ts_ema(", text)
+    text = re.sub(r"(?<![\w.])ema\(", "ts_ema(", text)
+    return text
 
 # Hand-tuned DSL. Prefer LQTP operator names when equivalent (safe_div/ema/ts_quantile/ts_mean).
 # Keep factor_engine-only ops (ATR/ADX/RSI/ROC/tanh/...) when LQTP has no counterpart.
 EXTRA_MANUAL_DSL: dict[str, str] = {
     "factor_shadow_volume_confirmed": (
+        "clip("
         "safe_div("
         "safe_div(min(open, close) - low, min(open, close) - low + high - max(open, close) + 1e-8)"
         " - ts_mean(safe_div(min(open, close) - low, min(open, close) - low + high - max(open, close) + 1e-8), 20),"
         " ts_std(safe_div(min(open, close) - low, min(open, close) - low + high - max(open, close) + 1e-8), 20) + 1e-8)"
         " * safe_div(volume, ts_mean(volume, 20) + 1e-8)"
+        ", -5, 5)"
     ),
     "factor_vol_asym_confirmed_range": (
         "(log(1 + sqrt(ts_mean(pow(where(ts_pct(close, 1) < 0, ts_pct(close, 1), 0), 2), 60)))"
@@ -66,52 +82,52 @@ EXTRA_MANUAL_DSL: dict[str, str] = {
     ),
     "factor_adx_trend_vol_ema": (
         "ADX(high, low, close, 14) * sign(ts_pct(close, 10))"
-        " * cap(safe_div(volume, ema(volume, 20)), 0.5, 2.0)"
+        " * cap(safe_div(volume, ts_ema(volume, 20)), 0.5, 2.0)"
     ),
     "factor_pressure_compression_simplified_v3": (
         "safe_div((close - open) * volume, ts_mean(abs((close - open) * volume), 21))"
         " * tanh(safe_div(volume, ts_mean(volume, 21)))"
-        " * tanh(safe_div(ATR(high, low, close, 21), close))"
+        " * tanh(safe_div(ATR_WILDER(high, low, close, 21), close))"
     ),
     "factor_drawdown_atr_normalized_20": (
-        "-safe_div(safe_div(close - ts_max(close, 60), ts_max(close, 60)), ATR(high, low, close, 20))"
+        "-safe_div(safe_div(close, ts_max(close, 60)) - 1, ATR_WILDER(high, low, close, 20))"
     ),
     "factor_drawdown_atr_normalized_v2": (
-        "-safe_div(safe_div(close - ts_max(close, 60), ts_max(close, 60)), ATR(high, low, close, 60))"
+        "-safe_div(safe_div(close, ts_max(close, 60)) - 1, ATR_WILDER(high, low, close, 60))"
     ),
     "factor_drawdown_atr_20_normalized": (
-        "-safe_div(safe_div(close - ts_max(close, 60), ts_max(close, 60)), ATR(high, low, close, 20))"
+        "-safe_div(safe_div(close, ts_max(close, 60)) - 1, ATR_WILDER(high, low, close, 20))"
     ),
     "factor_smoothed_atr_ratio_gated": (
-        "EMA(safe_div(ATR(high, low, close, 20), ATR(high, low, close, 60)), 5)"
+        "ts_ema(safe_div(ATR_WILDER(high, low, close, 20), ATR_WILDER(high, low, close, 60)), 5)"
     ),
     "factor_resvol_volume_momentum": (
-        "ROC(close, 20) * safe_div(volume, ema(volume, 20))"
+        "ts_pct(close, 20) * safe_div(volume, ts_ema(volume, 20))"
     ),
     "factor_vol_lag_ret_smoothed": (
-        "ema("
+        "ts_ema("
         "(safe_div(close, delay(close, 5)) - 1)"
-        " * log(safe_div(volume, ema(volume, 20)))"
-        " * (1 + safe_div(ATR(high, low, close, 20), close)),"
+        " * log(safe_div(volume, ts_ema(volume, 20)))"
+        " * (1 + safe_div(ATR_WILDER(high, low, close, 20), close)),"
         " 5)"
     ),
     "factor_lagret_vol_trend_gated": (
-        "ema((safe_div(close, delay(close, 5)) - 1) * log(safe_div(volume, ema(volume, 20))), 5)"
+        "ts_ema((safe_div(close, delay(close, 5)) - 1) * log(safe_div(volume, ts_ema(volume, 20))), 5)"
         " * where(ts_std(ts_pct(close, 1), 20) > ts_quantile(ts_std(ts_pct(close, 1), 20), 60, 0.5), 1, -1)"
     ),
     "factor_lagret_vol_trend_gated_v2": (
-        "ema((safe_div(close, delay(close, 5)) - 1) * log(safe_div(volume, ema(volume, 20))), 5)"
+        "ts_ema((safe_div(close, delay(close, 5)) - 1) * log(safe_div(volume, ts_ema(volume, 20))), 5)"
         " * where(ts_std(ts_pct(close, 1), 20) > ts_quantile(ts_std(ts_pct(close, 1), 20), 60, 0.5), 1, -1)"
     ),
     "factor_vol_lag_ret_resvol_gated": (
-        "ema((safe_div(close, delay(close, 5)) - 1) * log(safe_div(volume, ema(volume, 20))), 5)"
+        "ts_ema((safe_div(close, delay(close, 5)) - 1) * log(safe_div(volume, ts_ema(volume, 20))), 5)"
     ),
     "factor_asym_vol_gated_by_volume_pressure": (
         "log(cap(safe_div("
-        "sqrt(ema(pow(where(ts_pct(close, 1) < 0, ts_pct(close, 1), 0), 2), 20)),"
-        " sqrt(ema(pow(where(ts_pct(close, 1) > 0, ts_pct(close, 1), 0), 2), 20))),"
+        "sqrt(ts_ema(pow(where(ts_pct(close, 1) < 0, ts_pct(close, 1), 0), 2), 20)),"
+        " sqrt(ts_ema(pow(where(ts_pct(close, 1) > 0, ts_pct(close, 1), 0), 2), 20))),"
         " 1e-6, 1e6))"
-        " * safe_div(volume, ema(volume, 20))"
+        " * safe_div(volume, ts_ema(volume, 20))"
     ),
     "factor_asym_intraday_sma": (
         "safe_div(ts_mean(open - low, 40), ts_mean(high - open, 40))"
@@ -119,25 +135,25 @@ EXTRA_MANUAL_DSL: dict[str, str] = {
     "factor_liquidity_adaptive_asym_momentum": (
         "safe_div(safe_div(close, delay(close, 21)) - 1,"
         " ts_std(where(ts_pct(close, 1) < 0, ts_pct(close, 1), 0), 21))"
-        " / (1 + safe_div(EMA(open - low, 20), EMA(high - open, 20)))"
+        " / (1 + safe_div(ts_ema(open - low, 20), ts_ema(high - open, 20)))"
     ),
 }
 
 MANUAL_DSL: dict[str, str] = {
     "factor_persistence": "-ts_mean(abs(ts_delta(ts_pct(close, 1), 1)), 10)",
-    "factor_persistence_ewma": "-ema(abs(ts_delta(ts_pct(close, 1), 1)), 10)",
+    "factor_persistence_ewma": "-ts_ema(abs(ts_delta(ts_pct(close, 1), 1)), 10)",
     "factor_price_impact_stable_5d": (
         "safe_div(ts_quantile(abs(ts_pct(close, 1)), 5, 0.5), ts_mean(log(volume + 1), 5))"
     ),
     "factor_smooth_asymmetry_persistence": (
-        "ema(abs(ts_pct(close, 1)), 10)"
+        "ts_ema(abs(ts_pct(close, 1)), 10)"
         " * safe_div(volume, ts_mean(volume, 20))"
         " * (1 + safe_div("
-        "ema(where(close > open, high - low, 0), 20),"
-        " ema(where(close <= open, high - low, 0), 20) + 1e-8))"
+        "ts_ema(where(close > open, high - low, 0), 20),"
+        " ts_ema(where(close <= open, high - low, 0), 20) + 1e-8))"
     ),
     "factor_roughness_trend_vol_short": (
-        "safe_div(ATR(high, low, close, 5), ATR(high, low, close, 20))"
+        "safe_div(ATR_WILDER(high, low, close, 5), ATR_WILDER(high, low, close, 20))"
         " * (safe_div(close, ts_mean(close, 20)) - 1)"
         " * safe_div(volume, ts_mean(volume, 10))"
     ),
@@ -155,13 +171,15 @@ MANUAL_DSL: dict[str, str] = {
     ),
     "factor_corr_volume_regime": (
         "ts_corr(ts_pct(close, 1), ts_pct(volume, 1), 20)"
-        " * safe_div(volume, ema(volume, 20))"
+        " * safe_div(volume, ts_ema(volume, 20))"
     ),
     "factor_vol_price_coherence_v2": (
         "ts_corr(ts_pct(close, 1), ts_pct(volume, 1), 20)"
-        " * safe_div(volume, ema(volume, 20))"
+        " * safe_div(volume, ts_ema(volume, 20))"
     ),
     **EXTRA_MANUAL_DSL,
+    # Python→FE hand/auto map wins for former local_python factors.
+    **EXTRA_PYTHON_FE_DSL,
 }
 
 # Optional hand overrides when auto dsl_to_lqtp is insufficient.
@@ -226,18 +244,28 @@ def _python_entry(
 
 def _annotate_eval_route(entry: DslEntry) -> DslEntry:
     """Route on LQTP formula when rename-compatible; keep FE-only ops from materialize DSL."""
-    lqtp = (entry.lqtp_formula or entry.dsl or "").strip()
-    fe = lqtp_to_fe_dsl(entry.dsl or lqtp)
+    raw = (entry.dsl or "").strip()
+    lqtp = (entry.lqtp_formula or raw).strip()
+    fe = _normalize_fe_compat_ops(lqtp_to_fe_dsl(raw or lqtp))
     ops = fe_only_operators(fe) if fe else []
+    # tanh/ATR_WILDER/RSI_WILDER etc. must stay on FE; dsl_to_lqtp may rewrite tanh→sigmoid.
+    fe_markers = (
+        "ATR_WILDER",
+        "RSI_WILDER",
+        "ADX(",
+        "ts_adx",
+        "tanh(",
+        "rolling_vwap",
+        "NATR",
+    )
+    force_fe = any(m in fe for m in fe_markers) or bool(ops)
     entry.fe_only_ops = ",".join(ops)
-    if entry.status == "ready" and is_lqtp_native_dsl(lqtp):
+    if entry.status == "ready" and is_lqtp_native_dsl(lqtp) and not force_fe:
         entry.eval_route = "lqtp_dsl"
         entry.lqtp_native = True
-        # Canonical catalog formula uses LQTP naming when fully compatible.
         entry.dsl = lqtp
         entry.lqtp_formula = lqtp
     else:
-        # Keep factor_engine naming for local materialize; store best-effort LQTP text.
         entry.dsl = fe
         entry.lqtp_formula = lqtp
         entry.eval_route = "local_dsl" if entry.status == "ready" and entry.dsl else "local_python"
@@ -264,43 +292,22 @@ def _finalize_entry(
     source: str,
     notes: str = "",
 ) -> DslEntry:
-    dsl = sanitize_dsl(dsl)
-    fe_dsl = lqtp_to_fe_dsl(dsl)
+    dsl = _normalize_fe_compat_ops(sanitize_dsl(dsl))
+    fe_dsl = _normalize_fe_compat_ops(lqtp_to_fe_dsl(dsl))
     lqtp = MANUAL_LQTP_FORMULA.get(function_name) or dsl_to_lqtp(fe_dsl)
-    if is_lqtp_native_dsl(lqtp):
-        return _annotate_eval_route(
-            DslEntry(
-                factor_id=factor_id,
-                function_name=function_name,
-                dsl=lqtp,
-                lqtp_formula=lqtp,
-                status="ready",
-                source=source,
-                notes=notes,
-            )
-        )
-    ok, msg = validate_factor_engine_dsl(fe_dsl, surface="daily")
-    if not ok:
-        ok_compat, _ = validate_factor_engine_dsl(lqtp, surface="compat")
-        if ok_compat:
-            return _annotate_eval_route(
-                DslEntry(
-                    factor_id=factor_id,
-                    function_name=function_name,
-                    dsl=lqtp,
-                    lqtp_formula=lqtp,
-                    status="ready",
-                    source=source,
-                    notes=notes or "compat_surface",
-                )
-            )
+    ok_daily, msg_daily = validate_factor_engine_dsl(fe_dsl, surface="daily")
+    ok_compat, msg_compat = (False, "")
+    if not ok_daily:
+        ok_compat, msg_compat = validate_factor_engine_dsl(fe_dsl, surface="compat")
+    if not (ok_daily or ok_compat):
         return _python_entry(
             factor_id=factor_id,
             function_name=function_name,
             source=source,
-            notes=msg or notes or "dsl_invalid",
+            notes=msg_compat or msg_daily or notes or "dsl_invalid",
         )
-    lqtp = MANUAL_LQTP_FORMULA.get(function_name) or dsl_to_lqtp(fe_dsl)
+    # Always annotate from FE dsl (not LQTP rewrite) so tanh/ATR_WILDER are preserved
+    # when choosing local_dsl vs lqtp_dsl.
     return _annotate_eval_route(
         DslEntry(
             factor_id=factor_id,
@@ -309,7 +316,7 @@ def _finalize_entry(
             lqtp_formula=lqtp,
             status="ready",
             source=source,
-            notes=notes,
+            notes=notes if ok_daily else (notes or "compat_surface"),
         )
     )
 

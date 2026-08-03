@@ -381,11 +381,72 @@ def _normalize_code(code: str) -> str:
     return code
 
 
+def _needs_paren_wrap(expr: str) -> bool:
+    """Only wrap substituted env values when they contain operators."""
+    s = expr.strip()
+    if not s:
+        return False
+    if re.fullmatch(r"[A-Za-z_][\w]*", s):
+        return False
+    if re.fullmatch(r"-?\d+(?:\.\d+)?(?:e[+-]?\d+)?", s, flags=re.I):
+        return False
+    # Already a single call/group.
+    if s.startswith("(") and _find_matching_paren(s, 0) == len(s) - 1:
+        return False
+    if re.fullmatch(r"[A-Za-z_][\w]*\([^()]*\)", s):
+        return False
+    return any(op in s for op in "+-*/,<>=&|")
+
+
 def _sub_env(expr: str, env: dict[str, str]) -> str:
     work = expr
     for name in sorted(env, key=len, reverse=True):
-        work = re.sub(rf"\b{re.escape(name)}\b", f"({env[name]})", work)
+        val = env[name]
+        repl = f"({val})" if _needs_paren_wrap(val) else val
+        work = re.sub(rf"\b{re.escape(name)}\b", repl, work)
     return work
+
+
+def _rewrite_series_clip(expr: str) -> str:
+    """Convert pandas Series.clip(...) into cap(receiver, lo, hi)."""
+    out = expr
+    guard = 0
+    while ".clip(" in out and guard < 64:
+        guard += 1
+        idx = out.find(".clip(")
+        span = _balanced_expr_before_dot_method(out, idx)
+        if span is None:
+            break
+        recv_start, dot_idx = span
+        receiver = out[recv_start:dot_idx]
+        parsed = _extract_call_args(out, idx + 1)  # at 'clip'
+        if not parsed:
+            break
+        args, call_end = parsed
+        lo = "None"
+        hi = "None"
+        positionals: list[str] = []
+        for a in args:
+            a = a.strip()
+            if a.startswith("lower"):
+                lo = a.split("=", 1)[1].strip() if "=" in a else a
+            elif a.startswith("upper"):
+                hi = a.split("=", 1)[1].strip() if "=" in a else a
+            else:
+                positionals.append(a)
+        if lo == "None" and hi == "None" and len(positionals) >= 2:
+            lo, hi = positionals[0], positionals[1]
+        elif lo == "None" and hi == "None" and len(positionals) == 1:
+            # ambiguous single-arg clip — keep as-is rather than drop
+            break
+        # returns.clip(upper=0) → where(receiver < 0, receiver, 0) style via cap bounds
+        if lo == "None":
+            lo = "-1e18"
+        if hi == "None":
+            hi = "1e18"
+        repl = f"cap({receiver}, {lo}, {hi})"
+        out = out[:recv_start] + repl + out[call_end:]
+    return out
 
 
 def _strip_noise(expr: str) -> str:
@@ -397,7 +458,7 @@ def _strip_noise(expr: str) -> str:
     work = re.sub(r"\.replace\(\s*0\.0\s*,\s*(?:np\.)?nan\s*\)", "", work)
     work = re.sub(r"\.replace\(\s*0\s*,\s*(?:np\.)?nan\s*\)", "", work)
     work = re.sub(r"\.fillna\([^)]*\)", "", work)
-    work = re.sub(r"\.clip\([^)]*\)", "", work)
+    # Do NOT strip .clip — rewrite to cap() in _translate_expr / assignment pass.
     work = re.sub(r"\.astype\([^)]*\)", "", work)
     work = re.sub(r"\.name\s*=\s*['\"][^'\"]+['\"]", "", work)
     return work
@@ -418,6 +479,7 @@ def _translate_expr(expr: str, env: dict[str, str]) -> str:
     work = re.sub(r"np\.minimum\(([^,]+),\s*([^)]+)\)", r"min(\1, \2)", work)
     work = re.sub(r"np\.clip\(([^,]+),\s*([^,]+),\s*([^)]+)\)", r"cap(\1, \2, \3)", work)
     work = re.sub(r"np\.nan_to_num\(([^)]+)\)", r"nan_to_num(\1)", work)
+    work = _rewrite_series_clip(work)
     work = _rewrite_series_where(work)
 
     work = re.sub(r"(\w+)\s*/\s*\((\w+)\s*\+\s*1e-8\)", r"protected_div(\1, \2)", work)
@@ -444,8 +506,7 @@ def _extract_return_expr(code: str) -> str | None:
 def _should_skip_assignment(line: str) -> bool:
     if any(m in line for m in SKIP_ASSIGNMENT_MARKERS):
         return True
-    if re.search(r"\bfactor\s*=\s*factor\.clip\(", line):
-        return True
+    # Keep factor = factor.clip(...) so outer clips survive translation.
     return False
 
 
@@ -502,6 +563,13 @@ def translate_python(code: str, tools: str = "") -> TranslateResult:
 
     if not dsl or any(tok in dsl for tok in RESIDUAL_MARKERS):
         return TranslateResult("", "needs_review", "ast", "residual python in expression")
+
+    try:
+        from scripts.cogalpha_lqtp.dsl_sanitize import sanitize_dsl
+
+        dsl = sanitize_dsl(dsl)
+    except Exception:
+        pass
 
     return TranslateResult(dsl, "ready", "ast")
 

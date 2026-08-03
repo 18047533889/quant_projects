@@ -248,6 +248,22 @@ def materialize_with_priority(
         dsl = entry.get("dsl") or "(python only)"
         return out_path, engine, dsl
 
+    # Prefer Python when catalog says so (before DSL prep, which may rewrite eval_route).
+    prefer_python = entry.get("eval_route") == "local_python" and bool(python_code.strip())
+    if prefer_python:
+        out = materialize_python_factor(
+            function_name=name,
+            python_code=python_code,
+            start=start,
+            end=end,
+            lake_root=lake_root,
+            symbol_chunk=symbol_chunk,
+            workers=python_workers,
+        )
+        entry["materialized_via"] = "python"
+        entry["eval_route"] = "local_python"
+        return out, "python", (entry.get("dsl") or "(python only)")
+
     dsl = _prepare_entry_dsl(entry, python_code)
 
     # 1) LQTP RunFactor when formula is native after normalize / python→dsl
@@ -378,6 +394,7 @@ def run_eval_phase(
     only: set[str] | None,
     workers: int,
     force_aux_cache: bool,
+    skip_lookahead: bool = True,
 ) -> int:
     cmd = [
         sys.executable,
@@ -408,6 +425,7 @@ def run_eval_phase(
         cmd.append("--force-aux-cache")
     if only:
         cmd.extend(["--only", *sorted(only)])
+    cmd.append("--skip-lookahead" if skip_lookahead else "--no-skip-lookahead")
     print("eval:", " ".join(cmd))
     return subprocess.call(cmd)
 
@@ -427,6 +445,12 @@ def main() -> int:
     parser.add_argument("--symbol-chunk", type=int, default=400)
     parser.add_argument("--python-workers", type=int, default=4)
     parser.add_argument("--workers", type=int, default=4, help="eval_lake_fast workers")
+    parser.add_argument(
+        "--skip-lookahead",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Defer LOOKAHEAD_DEFERRED_FACTORS (default). Pass --no-skip-lookahead to include them.",
+    )
     args = parser.parse_args()
 
     work = args.work_dir
@@ -496,6 +520,7 @@ def main() -> int:
         only=only,
         workers=args.workers,
         force_aux_cache=args.force_aux_cache,
+        skip_lookahead=args.skip_lookahead,
     )
     if rc == 0:
         subprocess.call([sys.executable, "-m", "scripts.cogalpha_lqtp.render_rankic_screening_index"])

@@ -1,64 +1,243 @@
 {
   "canonical_operators": {
-    "ADX": {
-      "production_allowed": false,
+    "ADL": {
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
+    },
+    "ADX": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
     },
     "ATR_WILDER": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
+    },
+    "CMF": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "CMO": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ChaikinOscillator": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "DEMA": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "DMI_minus": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "DMI_plus": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "DX": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "EaseOfMovement": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ForceIndex": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "KAMA": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "KeltnerLower": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "KeltnerMid": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "KeltnerPosition": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "KeltnerUpper": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
     },
     "MACD_hist": {
       "production_allowed": false,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "MACD_line": {
       "production_allowed": false,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "MACD_signal": {
       "production_allowed": false,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
+    },
+    "MFI": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "NATR": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "PPO": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "PPO_hist": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "PPO_signal": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "PSAR": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "PVO": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "PVO_hist": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "PVO_signal": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
     },
     "RSI_WILDER": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
+    },
+    "Supertrend": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "SupertrendDirection": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "TEMA": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "TSI": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "TSI_signal": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "UltimateOscillator": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "VortexMinus": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "VortexPlus": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "abnormal_turnover": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "abnormal_volume": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
     },
     "abs": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
+      "surface": "production"
+    },
+    "abs_return_volume_corr": {
+      "production_allowed": true,
+      "production_backends": [],
       "surface": "production"
     },
     "acos": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "add": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
-    "and_": {
+    "adv": {
       "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "amihud_illiquidity": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "and_": {
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
@@ -68,49 +247,333 @@
       "surface": "experimental"
     },
     "asin": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "atan": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "atan2": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "average_turnover": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "benchmark_excess_return": {
       "production_allowed": false,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
+    },
+    "benchmark_relative_price": {
+      "production_allowed": false,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "bollinger_pct_b": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "bollinger_width": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "book_to_price": {
+      "production_allowed": false,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "bounded_nvi": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "bounded_pvi": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "candle_abs_body": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "candle_body": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "candle_body_percentile": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "candle_body_position": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "candle_body_ratio": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "candle_body_zscore": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "candle_close_location": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "candle_close_strength": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "candle_direction": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "candle_gap": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "candle_gap_atr": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "candle_gap_pct": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "candle_inside_ratio": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "candle_lower_shadow": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "candle_lower_shadow_ratio": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "candle_lower_shadow_zscore": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "candle_overlap_ratio": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "candle_range": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "candle_range_atr": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "candle_range_percentile": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "candle_range_zscore": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "candle_rejection_lower": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "candle_rejection_upper": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "candle_upper_shadow": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "candle_upper_shadow_ratio": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "candle_upper_shadow_zscore": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "candlestick_pattern": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
     },
     "cbrt": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
+    },
+    "cdl_dark_cloud_cover": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "cdl_doji": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "cdl_dragonfly_doji": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "cdl_engulfing": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "cdl_evening_star": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "cdl_gravestone_doji": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "cdl_hammer": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "cdl_hanging_man": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "cdl_harami": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "cdl_harami_cross": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "cdl_inside_bar": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "cdl_inverted_hammer": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "cdl_marubozu": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "cdl_morning_star": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "cdl_outside_bar": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "cdl_piercing": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "cdl_shooting_star": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "cdl_spinning_top": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "cdl_three_black_crows": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "cdl_three_white_soldiers": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "cdl_tweezer_bottom": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "cdl_tweezer_top": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
     },
     "ceil": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
-    "clip": {
+    "choppiness_index": {
       "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "clip": {
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "coalesce": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
@@ -119,10 +582,15 @@
       "production_backends": [],
       "surface": "experimental"
     },
-    "cos": {
-      "production_allowed": false,
+    "corwin_schultz_spread": {
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
+    },
+    "cos": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
     },
     "cosh": {
       "production_allowed": false,
@@ -130,9 +598,9 @@
       "surface": "experimental"
     },
     "coskewness_to_market": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "research"
+      "surface": "production"
     },
     "cot": {
       "production_allowed": false,
@@ -140,143 +608,125 @@
       "surface": "experimental"
     },
     "cs_bucket": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "cs_count": {
-      "production_allowed": true,
-      "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
-      ],
-      "surface": "production"
-    },
-    "cs_demean": {
-      "production_allowed": true,
-      "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
-      ],
-      "surface": "production"
-    },
-    "cs_fill_mean": {
       "production_allowed": false,
-      "production_backends": [],
-      "surface": "experimental"
-    },
-    "cs_fill_median": {
-      "production_allowed": false,
-      "production_backends": [],
-      "surface": "experimental"
-    },
-    "cs_mad": {
-      "production_allowed": true,
-      "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
-      ],
-      "surface": "production"
-    },
-    "cs_mad_zscore": {
-      "production_allowed": true,
-      "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
-      ],
-      "surface": "production"
-    },
-    "cs_mean": {
-      "production_allowed": true,
-      "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
-      ],
-      "surface": "production"
-    },
-    "cs_multi_resid": {
-      "production_allowed": false,
-      "production_backends": [],
-      "surface": "experimental"
-    },
-    "cs_neutralize": {
-      "production_allowed": false,
-      "production_backends": [],
-      "surface": "experimental"
-    },
-    "cs_pct_rank": {
-      "production_allowed": true,
-      "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
-      ],
-      "surface": "production"
-    },
-    "cs_quantile": {
-      "production_allowed": false,
-      "production_backends": [],
-      "surface": "experimental"
-    },
-    "cs_rank_gaussian": {
-      "production_allowed": false,
-      "production_backends": [],
-      "surface": "experimental"
-    },
-    "cs_regression": {
-      "production_allowed": false,
-      "production_backends": [],
-      "surface": "experimental"
-    },
-    "cs_resid": {
-      "production_allowed": true,
       "production_backends": [
         "pandas_numpy"
       ],
       "surface": "production"
     },
-    "cs_std": {
-      "production_allowed": true,
+    "cs_demean": {
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
+      ],
+      "surface": "production"
+    },
+    "cs_fill_mean": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "cs_fill_median": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "cs_mad": {
+      "production_allowed": false,
+      "production_backends": [
+        "pandas_numpy"
+      ],
+      "surface": "production"
+    },
+    "cs_mad_zscore": {
+      "production_allowed": false,
+      "production_backends": [
+        "pandas_numpy"
+      ],
+      "surface": "production"
+    },
+    "cs_mean": {
+      "production_allowed": false,
+      "production_backends": [
+        "pandas_numpy"
+      ],
+      "surface": "production"
+    },
+    "cs_multi_resid": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "cs_neutralize": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "cs_pct_rank": {
+      "production_allowed": false,
+      "production_backends": [
+        "pandas_numpy"
+      ],
+      "surface": "production"
+    },
+    "cs_quantile": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "cs_rank_gaussian": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "cs_regression": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "cs_resid": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "cs_std": {
+      "production_allowed": false,
+      "production_backends": [
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "cs_sum": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "cs_weighted_demean": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "cs_weighted_mean": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "cs_weighted_zscore": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "cs_wls_resid": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "csc": {
       "production_allowed": false,
@@ -289,231 +739,620 @@
       "surface": "deprecated"
     },
     "digital_count": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "research"
+      "surface": "production"
     },
     "divide": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
-    "eq": {
+    "dollar_volume": {
       "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "dollar_volume_zscore": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "donchian_lower": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "donchian_mid": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "donchian_position": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "donchian_upper": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "down_volume_ratio": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "earnings_yield": {
+      "production_allowed": false,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "efficiency_ratio": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "eq": {
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "exp": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "exp_neg": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "expanding_rank": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "research"
+      "surface": "production"
     },
     "ffill_limit": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "fillna_const": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
+      "surface": "production"
+    },
+    "fin_accrual_ratio": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_actual_expectation_divergence": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_average_balance": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_beat_streak": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_cagr": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_cash_conversion": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_cash_earnings_gap": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_common_size": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_cv": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_days_since_expectation_revision": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_days_since_update": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_diff": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_divergence": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_expectation_dispersion": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_expectation_revision": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_expectation_revision_count": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_expectation_revision_magnitude": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_expectation_revision_pct": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_expectation_revision_speed": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_growth": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_growth_acceleration": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_growth_change": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_growth_persistence": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_growth_stability": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_growth_volatility": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_lag": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_log_change": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_mad": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_miss_streak": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_monotonicity": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_negative_streak": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_pct_change": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_percentile_history": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_positive_streak": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_qoq": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_quarter_from_cumulative": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_range": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_ratio": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_restated_flag": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_revision_count": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_revision_delta": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_revision_direction": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_revision_magnitude": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_revision_pct": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_sign_change_count": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_stability": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_staleness": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_std": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_surprise": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_surprise_event_percentile": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_surprise_event_zscore": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_surprise_zscore": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_trend_acceleration": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_trend_r2": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_trend_slope": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_trend_tstat": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_ttm": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_ttm_cumulative": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_ttm_quarterly": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_turnover": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_working_capital_change": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_yoy": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "fin_zscore_history": {
+      "production_allowed": true,
+      "production_backends": [],
       "surface": "production"
     },
     "fix": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "flex_max": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "flex_min": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "float_share_ratio": {
       "production_allowed": false,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "floor": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
-    "fundamental_staleness": {
+    "free_float_share_ratio": {
       "production_allowed": false,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
+    },
+    "fundamental_staleness": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "garman_klass_vol": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
     },
     "ge": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "group_count": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "group_decay_linear": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "research"
+      "surface": "production"
     },
     "group_max": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "group_mean": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "group_min": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "group_neutralize": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "group_normalize": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "group_percentile": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "group_rank": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "group_std": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "group_sum": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "group_weighted_mean": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "group_weighted_zscore": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "group_winsorize": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "group_zscore": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "gt": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
-    "hump_decay": {
+    "high_low_spread_proxy": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "holder_concentration": {
       "production_allowed": false,
       "production_backends": [],
-      "surface": "research"
+      "surface": "production"
+    },
+    "holder_concentration_change": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "holder_count_change_rate": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "hump_decay": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ichimoku_cloud_position": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ichimoku_cloud_width": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ichimoku_kijun": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ichimoku_senkou_a": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ichimoku_senkou_b": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ichimoku_tenkan": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
     },
     "identity": {
       "production_allowed": false,
@@ -521,248 +1360,386 @@
       "surface": "experimental"
     },
     "idio_skew": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "research"
+      "surface": "production"
     },
     "idio_vol": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "research"
+      "surface": "production"
+    },
+    "industry_size_neutralize": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "intraday_volatility": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
     },
     "intraday_vwap_deviation": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "research"
+      "surface": "production"
     },
     "inverse": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "is_finite": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "is_infinite": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "is_nan": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "is_not_null": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "is_null": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "le": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "lerp": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "limit_down_state": {
       "production_allowed": false,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
+    },
+    "limit_up_state": {
+      "production_allowed": false,
+      "production_backends": [],
+      "surface": "production"
     },
     "log": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "log10": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "log2": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "log_abs": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "lqtp_historical_cvar": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "research"
+      "surface": "production"
     },
     "lt": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "maximum": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "minimum": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "multiply": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "ne": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "neg": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "normalize": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "not_": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "or_": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
-    "period_average": {
+    "overnight_volatility": {
       "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "parkinson_vol": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "pattern_123_bear": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "pattern_123_bull": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "pattern_ascending_triangle": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "pattern_bear_flag": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "pattern_bear_pennant": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "pattern_breakdown_retest": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "pattern_breakout_retest": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "pattern_broadening": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "pattern_bull_flag": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "pattern_bull_pennant": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "pattern_cup": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "pattern_cup_handle": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "pattern_descending_triangle": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "pattern_double_bottom": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "pattern_double_top": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "pattern_falling_channel": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "pattern_falling_wedge": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "pattern_head_shoulders": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "pattern_inverse_head_shoulders": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "pattern_rectangle": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "pattern_rising_channel": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "pattern_rising_wedge": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "pattern_rounding_bottom": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "pattern_rounding_top": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "pattern_sym_triangle": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "pattern_triple_bottom": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "pattern_triple_top": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "period_average": {
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "period_cagr": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "period_change": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "period_lag": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "period_stability": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "power": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
-    "price_spread_deviation": {
-      "production_allowed": false,
+    "price_impact": {
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
+    },
+    "price_spread_deviation": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "price_turnover_divergence": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "price_volume_divergence": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
     },
     "protected_div": {
       "production_allowed": false,
@@ -770,74 +1747,119 @@
       "surface": "experimental"
     },
     "quarter_from_cumulative": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
-    "rank": {
+    "range_volatility": {
       "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "rank": {
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "rank_corr": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "research"
+      "surface": "production"
     },
     "real_turnover_rate": {
       "production_allowed": false,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
+    },
+    "relative_volume": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
     },
     "residual_momentum_capm": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "research"
+      "surface": "production"
+    },
+    "return_per_turnover": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "return_turnover_beta": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "return_volume_beta": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "return_volume_corr": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
     },
     "revision_delta": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
+    },
+    "rogers_satchell_vol": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "roll_spread_proxy": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
     },
     "rolling_beta_to_market": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "research"
+      "surface": "production"
+    },
+    "rolling_obv": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "rolling_pvt": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "rolling_vwap": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
     },
     "round": {
       "production_allowed": true,
-      "production_backends": [
-        "pandas_numpy"
-      ],
+      "production_backends": [],
       "surface": "production"
     },
     "safe_div_null": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "saturate": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "scale": {
       "production_allowed": true,
-      "production_backends": [
-        "pandas_numpy"
-      ],
+      "production_backends": [],
       "surface": "production"
     },
     "sec": {
@@ -847,85 +1869,93 @@
     },
     "sigmoid": {
       "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "sign": {
+      "production_allowed": false,
       "production_backends": [
         "pandas_numpy"
       ],
       "surface": "production"
     },
-    "sign": {
+    "signed_dollar_volume": {
       "production_allowed": true,
-      "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
-      ],
+      "production_backends": [],
       "surface": "production"
     },
     "signed_log": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "signed_power": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "signed_sqrt": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
-    "sin": {
-      "production_allowed": false,
+    "signed_volume": {
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
+    },
+    "signed_volume_imbalance": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "sin": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
     },
     "sinh": {
       "production_allowed": false,
       "production_backends": [],
       "surface": "experimental"
     },
-    "sqrt": {
+    "size_neutralize": {
       "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "sqrt": {
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "sqrt_abs": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "square": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "subtract": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "tail_beta": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "research"
+      "surface": "production"
     },
     "tan": {
       "production_allowed": false,
@@ -933,507 +1963,822 @@
       "surface": "experimental"
     },
     "tanh": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
+      "surface": "production"
+    },
+    "tradable_state": {
+      "production_allowed": true,
+      "production_backends": [],
       "surface": "production"
     },
     "trade_when": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "research"
+      "surface": "production"
     },
     "true_range": {
       "production_allowed": true,
-      "production_backends": [
-        "pandas_numpy"
-      ],
+      "production_backends": [],
+      "surface": "production"
+    },
+    "true_turnover_rate": {
+      "production_allowed": false,
+      "production_backends": [],
       "surface": "production"
     },
     "truncate": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "ts_argmax": {
       "production_allowed": true,
-      "production_backends": [
-        "pandas_numpy"
-      ],
+      "production_backends": [],
       "surface": "production"
     },
     "ts_argmin": {
       "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_autocorr": {
+      "production_allowed": false,
       "production_backends": [
         "pandas_numpy"
       ],
       "surface": "production"
     },
-    "ts_autocorr": {
+    "ts_average_volume": {
       "production_allowed": true,
-      "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
-      ],
+      "production_backends": [],
       "surface": "production"
     },
     "ts_beta": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "ts_bottomk_mean": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "ts_bottomk_std": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "ts_bottomk_sum": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
+    },
+    "ts_breakdown_low": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_breakout_high": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_channel_position": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_channel_width": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_channel_width_atr": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_channel_width_pct": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_channel_width_slope": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_confirmed_pivot_high": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_confirmed_pivot_low": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_consolidation_slope": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_consolidation_volume_decay": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_consolidation_width": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
     },
     "ts_corr": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "ts_count_if": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "ts_cov": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "ts_days_since": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
+    },
+    "ts_days_since_high": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_days_since_low": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
     },
     "ts_decay_exp_window": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "ts_decay_linear": {
       "production_allowed": true,
-      "production_backends": [
-        "pandas_numpy"
-      ],
+      "production_backends": [],
       "surface": "production"
     },
     "ts_delay": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "ts_delta": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
+      "surface": "production"
+    },
+    "ts_distance_to_high": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_distance_to_low": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_distance_to_resistance": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_distance_to_support": {
+      "production_allowed": true,
+      "production_backends": [],
       "surface": "production"
     },
     "ts_ema": {
       "production_allowed": true,
-      "production_backends": [
-        "pandas_numpy"
-      ],
+      "production_backends": [],
       "surface": "production"
     },
     "ts_ewm_corr": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "ts_ewm_cov": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "ts_ewm_std": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "ts_ewm_var": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
+    },
+    "ts_impulse_return": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_impulse_strength": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_impulse_volume": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
     },
     "ts_kurt": {
       "production_allowed": true,
-      "production_backends": [
-        "pandas_numpy"
-      ],
+      "production_backends": [],
       "surface": "production"
     },
     "ts_last_if": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
+    },
+    "ts_last_pivot_high": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_last_pivot_low": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_line_convergence": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_line_parallelism": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
     },
     "ts_log_return": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "ts_mad": {
       "production_allowed": true,
-      "production_backends": [
-        "pandas_numpy"
-      ],
+      "production_backends": [],
       "surface": "production"
     },
     "ts_max": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "ts_max_buildup": {
       "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_max_drawdown": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_mean": {
+      "production_allowed": false,
       "production_backends": [
         "pandas_numpy"
       ],
       "surface": "production"
     },
-    "ts_max_drawdown": {
-      "production_allowed": false,
-      "production_backends": [],
-      "surface": "experimental"
-    },
-    "ts_mean": {
+    "ts_mean_if": {
       "production_allowed": true,
-      "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
-      ],
+      "production_backends": [],
       "surface": "production"
     },
-    "ts_mean_if": {
-      "production_allowed": false,
-      "production_backends": [],
-      "surface": "experimental"
-    },
     "ts_median": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "ts_min": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "ts_moment": {
       "production_allowed": true,
-      "production_backends": [
-        "pandas_numpy"
-      ],
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_new_high": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_new_low": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_nth_pivot_high": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_nth_pivot_high_age": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_nth_pivot_low": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_nth_pivot_low_age": {
+      "production_allowed": true,
+      "production_backends": [],
       "surface": "production"
     },
     "ts_nth_value": {
-      "production_allowed": false,
-      "production_backends": [],
-      "surface": "experimental"
-    },
-    "ts_partial_corr": {
-      "production_allowed": false,
-      "production_backends": [],
-      "surface": "experimental"
-    },
-    "ts_pct": {
       "production_allowed": true,
-      "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
-      ],
+      "production_backends": [],
       "surface": "production"
     },
-    "ts_poly2_coeff": {
-      "production_allowed": false,
-      "production_backends": [],
-      "surface": "research"
-    },
-    "ts_poly2_resid": {
-      "production_allowed": false,
-      "production_backends": [],
-      "surface": "research"
-    },
-    "ts_product": {
+    "ts_partial_corr": {
       "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_pattern_symmetry": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_pct": {
+      "production_allowed": false,
       "production_backends": [
         "pandas_numpy"
       ],
+      "surface": "production"
+    },
+    "ts_pivot_high_age": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_pivot_high_count": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_pivot_high_spacing": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_pivot_low_age": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_pivot_low_count": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_pivot_low_spacing": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_poly2_coeff": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_poly2_resid": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_prev_high": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_prev_low": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_product": {
+      "production_allowed": true,
+      "production_backends": [],
       "surface": "production"
     },
     "ts_quantile": {
       "production_allowed": true,
-      "production_backends": [
-        "pandas_numpy"
-      ],
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_range_expansion": {
+      "production_allowed": true,
+      "production_backends": [],
       "surface": "production"
     },
     "ts_rank": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "ts_ratio": {
       "production_allowed": false,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "ts_regression_intercept": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "ts_regression_r2": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "ts_regression_resid": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "ts_regression_slope": {
       "production_allowed": true,
-      "production_backends": [
-        "pandas_numpy"
-      ],
+      "production_backends": [],
       "surface": "production"
     },
     "ts_regression_tstat": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
+    },
+    "ts_resistance_break": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_resistance_fit_r2": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_resistance_level": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_resistance_slope": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
     },
     "ts_sharpe": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "ts_skew": {
       "production_allowed": true,
-      "production_backends": [
-        "pandas_numpy"
-      ],
+      "production_backends": [],
       "surface": "production"
     },
     "ts_sma_cn": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "research"
+      "surface": "production"
     },
     "ts_std": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "ts_std_if": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "ts_sum": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "ts_sum_decay": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "research"
+      "surface": "production"
     },
     "ts_sum_if": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
+    },
+    "ts_support_break": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_support_fit_r2": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_support_level": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_support_slope": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_swing_amplitude": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_swing_amplitude_atr": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_swing_amplitude_pct": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_swing_duration": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ts_swing_velocity": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
     },
     "ts_tail_mean": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "ts_time_slope": {
       "production_allowed": true,
-      "production_backends": [
-        "pandas_numpy"
-      ],
+      "production_backends": [],
       "surface": "production"
     },
     "ts_topk_mean": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "ts_topk_std": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "ts_topk_sum": {
       "production_allowed": true,
-      "production_backends": [
-        "pandas_numpy"
-      ],
+      "production_backends": [],
       "surface": "production"
     },
     "ts_trend_tstat": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "ts_true_streak": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
     },
     "ts_var": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "ts_zscore": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "ttm_from_cumulative": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "ttm_from_quarterly": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
-    "unitize": {
-      "production_allowed": false,
+    "turnover_acceleration": {
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
+    },
+    "turnover_adjusted_volatility": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "turnover_autocorr": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "turnover_momentum": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "turnover_shock": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "turnover_volatility": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "turnover_zscore": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "ulcer_index": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "unitize": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "up_down_volume_ratio": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "up_volume_ratio": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "volume_acceleration": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "volume_autocorr": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "volume_momentum": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "volume_shock": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "volume_to_range": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "volume_volatility": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "volume_weighted_momentum": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "volume_weighted_return": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "volume_zscore": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "vwap_deviation": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
     },
     "where": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "winsorize": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
     "winsorize_mean": {
-      "production_allowed": false,
+      "production_allowed": true,
       "production_backends": [],
-      "surface": "experimental"
+      "surface": "production"
+    },
+    "yang_zhang_vol": {
+      "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
     },
     "yoy_by_period": {
-      "production_allowed": true,
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     },
-    "zscore": {
+    "zero_return_ratio": {
       "production_allowed": true,
+      "production_backends": [],
+      "surface": "production"
+    },
+    "zscore": {
+      "production_allowed": false,
       "production_backends": [
-        "pandas_numpy",
-        "polars",
-        "duckdb_sql"
+        "pandas_numpy"
       ],
       "surface": "production"
     }
@@ -1463,18 +2808,13 @@
     "historical_var"
   ],
   "recognized_blocked": {
-    "cap_neutralize": "exact SizeDaily exposure transform is not pinned",
     "group_minmax": "named by manual but exact compatibility contract not installed",
     "group_quantile_mask": "named by manual but exact compatibility contract not installed",
-    "industry_size_neutralize": "combined exposure contract is not pinned",
     "l2_count": "requires StockTransaction/L2 source contract",
     "l2_count_if": "requires StockTransaction/L2 source contract",
     "l2_sum": "requires StockTransaction/L2 source contract",
     "l2_sum_if": "requires StockTransaction/L2 source contract",
-    "market_cap_neutralize": "exact SizeDaily exposure transform is not pinned",
-    "neutralize(x)": "one-argument LQTP size/industry exposure contract is not pinned; explicit neutralize(x, exposure) works",
-    "size_industry_neutralize": "combined exposure contract is not pinned",
-    "size_neutralize": "exact SizeDaily exposure transform is not pinned",
+    "neutralize(x)": "retired public name; use industry_neutralize / size_neutralize / industry_size_neutralize",
     "ts_regression_slope_sequence": "exact semantic definition absent from supplied LQTP manual",
     "ts_sumac": "exact semantic definition absent from supplied LQTP manual"
   },
@@ -1487,6 +2827,7 @@
     "enterprise_value": "DerivedFieldRegistry (definition required)",
     "financial_lag(financial_field,q)": "StockIncome/StockCashFlow/StockBalance",
     "industry_neutralize(x)": "IndustryDaily.IndustryCode",
+    "industry_size_neutralize(x)": "IndustryDaily.IndustryCode + SizeDaily.MarketCap",
     "intermediate(name,version)": "FactorLake + intermediate registry",
     "market_ret": "BenchmarkIndexDailyBar.Return",
     "minute_at": "StockMinuteBar",
@@ -1496,6 +2837,7 @@
     "real_turnover_rate()": "TurnoverBaseDaily",
     "residual_momentum_capm(ret,window)": "BenchmarkIndexDailyBar.Return",
     "rolling_beta_to_market(ret,window)": "BenchmarkIndexDailyBar.Return",
+    "size_neutralize(x)": "SizeDaily.MarketCap",
     "tail_beta(ret,window,q)": "BenchmarkIndexDailyBar.Return"
   },
   "state_model": [

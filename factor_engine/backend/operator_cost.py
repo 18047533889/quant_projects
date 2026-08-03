@@ -74,6 +74,8 @@ _COSTS: dict[str, OperatorCost] = {
     "corr_test": OperatorCost("O(NW)", "high", False, 3, False, False),
     "cs_regression": OperatorCost("O(NK^2)", "high", False, 3, False, False),
     "cs_resid": OperatorCost("O(NK^2)", "high", False, 3, False, False),
+    "size_neutralize": OperatorCost("O(NK^2)", "high", False, 3, False, False),
+    "industry_size_neutralize": OperatorCost("O(NK^2)", "high", False, 3, False, False),
     "cum_delta": OperatorCost("O(N)", "low", True, 2, True, False),
     "cum_first": OperatorCost("O(N)", "low", True, 2, True, False),
     "cum_prod": OperatorCost("O(N)", "low", True, 2, True, False),

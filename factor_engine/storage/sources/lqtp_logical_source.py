@@ -11,18 +11,7 @@ import pandas as pd
 
 from .datasource import DataSource
 from .data_access_source import DataAccessSource, MissingDataDependencyError
-
-_TABLE_DATASETS = {
-    "BenchmarkIndexDailyBar": "ashare_index_daily",
-    "StockIncome": "ashare_stock_income",
-    "StockCashFlow": "ashare_stock_cashflow",
-    "StockBalance": "ashare_stock_balance",
-    "StockMinuteBar": "ashare_stock_minute",
-    "MinuteBar": "ashare_stock_minute",
-    "IndustryDaily": "ashare_stock_industry",
-    "SizeDaily": "ashare_stock_valuation_daily",
-    "EtfDailyBar": "ashare_etf_daily",
-}
+from .logical_tables import TABLE_DATASETS as _TABLE_DATASETS
 
 
 class LQTPLogicalDataSource(DataSource):

@@ -40,6 +40,12 @@ class OperatorMetadata:
     return_type: str = "series"
     enabled: bool = True
     tags: List[str] = field(default_factory=list)
+    # Optional field-semantic metadata.  Existing operators may omit these.
+    input_fields: List[str] = field(default_factory=list)
+    output_field: str | None = None
+    input_units: Dict[str, str] = field(default_factory=dict)
+    output_unit: str | None = None
+    compatible_units: Dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 def _normalise_integer(value: Any, name: str) -> Any:
