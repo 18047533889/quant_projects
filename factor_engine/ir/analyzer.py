@@ -8,6 +8,7 @@ from typing import Any
 from expr.base import Expr
 from expr.cleaned_call import CleanedCall
 from expr.column import ColumnRef
+from expr.field import FieldRef
 from expr.literal import Literal
 from ir.nodes import IRNode
 from ir.schema import DEFAULT_COLUMN_SCHEMA, Schema
@@ -498,6 +499,16 @@ class Analyzer:
                 if spec is not None:
                     referenced_fields[node.name] = spec
                 attrs = {"name": node.name}
+                if isinstance(node, FieldRef):
+                    attrs.update(
+                        {
+                            "field_id": node.field_id,
+                            "field": node.canonical_name,
+                            "source_table": node.table,
+                            "source_field": node.source_name,
+                            "field_registry_hash": node.catalog_hash,
+                        }
+                    )
                 if spec is not None:
                     attrs["field"] = spec.name
                     attrs["dtype"] = schema.dtype

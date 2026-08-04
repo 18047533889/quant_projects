@@ -125,6 +125,13 @@ class LongTableDataSource(DataSource):
 
         return long_table_to_polars_lazy(renamed, float_cols=columns)
 
+    def scan_index_long(self):
+        """代理 inner.scan_index_long（universe 对齐用，不落列缓存）。"""
+        fn = getattr(self._inner, "scan_index_long", None)
+        if not callable(fn):
+            raise NotImplementedError
+        return fn()
+
     def load_column_panel(self, name: str):
         """按需 unstack 一次并缓存（panel-native / 宽表算子热路径）。
         

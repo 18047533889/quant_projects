@@ -21,8 +21,12 @@ def main()->int:
     if args.check:
         if not recipe_evidence_valid(require_commit_ancestor=False):print("recipe_verified.json invalid or stale",file=sys.stderr);return 1
         print("recipe evidence valid (one-backend production + portable three-backend subset)");return 0
-    # Primitive and factor-operator evidence are hard prerequisites for recipe
-    # certification; recipes cannot bootstrap trust in their own leaves.
+    # Bootstrap the registry and its production signature overlays before
+    # validating primitive evidence.  Validation imports signatures lazily, and
+    # checking it against a half-initialized module can produce false circular
+    # import failures in a fresh subprocess.
+    from cleaned_operators import load_all
+    load_all()
     from backend.evidence_provenance import evidence_artifact_valid
     from backend.factor_operator_evidence import factor_operator_evidence_valid
     if not evidence_artifact_valid():print("primitive evidence must be valid before recipe certification",file=sys.stderr);return 1

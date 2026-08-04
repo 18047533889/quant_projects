@@ -197,8 +197,8 @@ def test_pandas_first_production_is_independent_from_duckdb() -> None:
     assert backend_certification("ts_quantile").pandas_numpy == "production"
 
 
-def test_recursive_sma_stays_research_until_checkpointed() -> None:
+def test_recursive_sma_is_production_hardened() -> None:
     _loaded_registry()
     from cleaned_operators.operator_spec import build_operator_spec
     spec = build_operator_spec("ts_sma_cn")
-    assert spec is not None and spec.status == "research" and spec.allow_in_production is False
+    assert spec is not None and spec.status == "production" and spec.allow_in_production is True

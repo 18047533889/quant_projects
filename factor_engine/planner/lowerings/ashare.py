@@ -25,16 +25,22 @@ for _name in (
 
 @register_lowering("earnings_yield")
 def lower_earnings_yield(node: PlanNode) -> PlanNode:
-    if len(node.inputs) < 2:
+    if not node.inputs:
         return node
-    return H.safe_div(node.inputs[0], node.inputs[1])
+    pe = node.inputs[-1]
+    positive = H.binop("gt", pe, H.literal(0.0))
+    ratio = H.safe_div(H.literal(1.0), pe)
+    return PlanNode(op="where", inputs=[positive, ratio, H.literal(float("nan"))], attrs={})
 
 
 @register_lowering("book_to_price")
 def lower_book_to_price(node: PlanNode) -> PlanNode:
-    if len(node.inputs) < 2:
+    if not node.inputs:
         return node
-    return H.safe_div(node.inputs[0], node.inputs[1])
+    pb = node.inputs[-1]
+    positive = H.binop("gt", pb, H.literal(0.0))
+    ratio = H.safe_div(H.literal(1.0), pb)
+    return PlanNode(op="where", inputs=[positive, ratio, H.literal(float("nan"))], attrs={})
 
 
 @register_lowering("benchmark_excess_return")

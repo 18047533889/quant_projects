@@ -2,13 +2,6 @@
 """可独立交付的统一算子库（唯一 production runtime 层）。"""
 from cleaned_operators.registry import OperatorRegistry
 
-# Install signature v2 before importing operator modules.  Several production
-# capability sets are constructed at module import time, so applying the fiscal
-# parameter contracts later inside load_all() leaves stale module-level snapshots.
-from backend.production_signature_v2 import apply_production_signature_v2
-
-apply_production_signature_v2()
-
 from cleaned_operators import common  # noqa: F401
 from cleaned_operators import price_volume  # noqa: F401
 from cleaned_operators import technical  # noqa: F401

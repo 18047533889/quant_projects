@@ -266,7 +266,7 @@ def default_ashare_pv_valuation_data_source_config(
     start_date: str | None = None,
     end_date: str | None = None,
 ) -> dict[str, Any]:
-    """A 股日线 + 估值复合数据源（锚点日线，估值 asof 对齐）。"""
+    """A 股日线 + 估值复合数据源（锚点日线，估值严格按交易日对齐）。"""
     pv = default_ashare_pv_data_source_config(
         start_date=start_date,
         end_date=end_date,
@@ -296,7 +296,7 @@ def default_ashare_pv_valuation_data_source_config(
             "valuation": valuation,
         },
         "joins": {
-            "valuation": "asof_backward",
+            "valuation": "exact",
         },
         "aliases": dict(_VALUATION_FIELD_ALIASES),
     }
@@ -404,6 +404,7 @@ def default_us_pv_valuation_data_source_config(
 
 def default_ashare_pv_universe_data_source_config(
     *,
+    index_symbol: str,
     start_date: str | None = None,
     end_date: str | None = None,
 ) -> dict[str, Any]:
@@ -420,6 +421,8 @@ def default_ashare_pv_universe_data_source_config(
         "type": "data_access",
         "dataset": "ashare_stock_status",
         "fields": {
+            "public_status": "ListedState",
+            # Compatibility alias for formulas that still request listed_state.
             "listed_state": "ListedState",
         },
     }
@@ -430,6 +433,7 @@ def default_ashare_pv_universe_data_source_config(
             "index_symbol": "IndexSymbol",
             "weight": "Weight",
         },
+        "params": {"IndexSymbol": str(index_symbol)},
     }
     if start_date is not None:
         status["start_date"] = start_date
@@ -449,7 +453,7 @@ def default_ashare_pv_universe_data_source_config(
         },
         "joins": {
             "status": "asof_backward",
-            "constituent": "asof_backward",
+            "constituent": "exact",
         },
     }
 
@@ -1279,18 +1283,39 @@ def validate_mining_label_formula(formula: str, *, enforce: bool = True) -> tupl
 
 
 def audit_composite_join_policies(config: dict[str, Any]) -> list[str]:
-    """审计 composite 配置：非 anchor 源应使用 asof_backward（PiT 安全）。"""
+    """Audit composite joins against explicit per-source contracts.
+
+    A-share daily valuation is an exact date×instrument table.  Other legacy
+    presets remain backward-asof unless they opt into an explicit ``join_policy``
+    contract on the child source.
+    """
     violations: list[str] = []
     if str(config.get("type", "")).lower() != "composite":
         return violations
     joins = config.get("joins") or {}
+    sources = config.get("sources") or {}
     anchor = str(config.get("anchor") or config.get("anchor_source") or "pv")
+    dataset_policies = {
+        "ashare_stock_valuation_daily": "exact",
+        "ashare_stock_status": "asof_backward",
+        "ashare_index_constituent": "exact",
+    }
     for name, mode in joins.items():
         if str(name) == anchor:
             continue
-        if str(mode).lower() not in {"asof_backward", "backward", "asof"}:
-            violations.append(f"{name}: join={mode!r} (expected asof_backward)")
-    for name, sub in (config.get("sources") or {}).items():
+        child = sources.get(name) if isinstance(sources, dict) else None
+        child = child if isinstance(child, dict) else {}
+        expected = str(
+            child.get("join_policy")
+            or dataset_policies.get(str(child.get("dataset") or ""))
+            or "asof_backward"
+        ).lower()
+        actual = str(mode).lower()
+        aliases = {"backward": "asof_backward", "asof": "asof_backward"}
+        actual = aliases.get(actual, actual)
+        if actual != expected:
+            violations.append(f"{name}: join={mode!r} (expected {expected})")
+    for name, sub in sources.items():
         if isinstance(sub, dict):
             violations.extend(audit_composite_join_policies(sub))
     return violations
@@ -1323,7 +1348,9 @@ def default_mining_data_source_presets() -> dict[str, dict[str, Any]]:
     return {
         "ashare_pv": default_ashare_pv_data_source_config(),
         "ashare_pv_valuation": default_ashare_pv_valuation_data_source_config(),
-        "ashare_pv_universe": default_ashare_pv_universe_data_source_config(),
+        "ashare_pv_universe": default_ashare_pv_universe_data_source_config(
+            index_symbol="000300.SH"
+        ),
         "us_pv": default_us_pv_data_source_config(),
         "us_pv_valuation": default_us_pv_valuation_data_source_config(),
         "us_pv_universe": default_us_pv_universe_data_source_config(),

@@ -68,7 +68,7 @@ def test_production_run_many_validates_source_expr():
             expr=shuffle(col("close"), 1),
             source_expr="shuffle(close, 1)",
         )
-        with pytest.raises(ProductionPolicyViolation, match="DSL 校验失败"):
+        with pytest.raises(ProductionPolicyViolation, match="DSL 语法/兼容校验失败"):
             assert_production_factors([bad], mode="production", context="run_many")
         good = Factor(
             name="ok",

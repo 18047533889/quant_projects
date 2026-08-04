@@ -149,7 +149,7 @@ def _seed_market_data(ashare_root: Path, us_root: Path) -> None:
     ash_val.mkdir(parents=True)
     pd.DataFrame(
         {
-            "TradeDate": pd.to_datetime(["2024-01-01", "2024-01-01"]).date,
+            "TradeDate": pd.to_datetime(["2024-01-02", "2024-01-02"]).date,
             "Symbol": ["000001.SZ", "000002.SZ"],
             "PeRatio": [8.0, 12.0],
         }
@@ -189,7 +189,7 @@ def _seed_market_data(ashare_root: Path, us_root: Path) -> None:
     ash_idx.mkdir(parents=True)
     pd.DataFrame(
         {
-            "TradeDate": pd.to_datetime(["2024-01-01", "2024-01-01"]).date,
+            "TradeDate": pd.to_datetime(["2024-01-02", "2024-01-02"]).date,
             "Symbol": ["000001.SZ", "000002.SZ"],
             "IndexSymbol": ["000300.SH", "000300.SH"],
             "Weight": [0.6, 0.4],
@@ -277,7 +277,9 @@ def test_composite_us_valuation_pe_alias(market_env):
 def test_composite_ashare_universe_asof(market_env):
     from api.mining_integration import default_ashare_pv_universe_data_source_config
 
-    source = build_data_source(default_ashare_pv_universe_data_source_config())
+    source = build_data_source(
+        default_ashare_pv_universe_data_source_config(index_symbol="000300.SH")
+    )
     weight = source.load_column("constituent.weight")
     assert weight.loc[(pd.Timestamp("2024-01-02"), "000001.SZ")] == pytest.approx(0.6)
     listed = source.load_column("status.listed_state")
@@ -301,8 +303,8 @@ def test_local_ashare_parquet_smoke_if_present():
     from api.mining_integration import default_ashare_pv_data_source_config
 
     cfg = default_ashare_pv_data_source_config(
-        start_date="2016-01-04",
-        end_date="2016-01-04",
+        start_date="2019-01-02",
+        end_date="2019-01-02",
     )
     source = build_data_source(cfg)
     close = source.load_column("close")

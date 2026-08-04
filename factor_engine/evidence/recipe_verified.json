@@ -1,17 +1,20 @@
 {
-  "schema_version": 3,
-  "artifact_kind": "derived_from_leaf_evidence",
-  "certification_mode": "expanded_dag_runtime_evidence",
-  "source_runtime_audit_commit": "46a867d1b7e8f8cb52f7c699a17e6b277c1aeaca",
-  "factor_operator_evidence": "factor_operator_verified.json",
-  "description": "Production recipes own no numerical kernels. Each recipe is admitted only when its recursively expanded DAG is acyclic and every operator leaf has an evidence-backed production route. Common backends are derived at runtime; otherwise the certified hybrid plan router is used.",
+  "schema_version": 2,
+  "artifact_kind": "test_passed",
+  "commit_sha": "1762445dd92f455c7ec29a936ab2879ae8ee59d3",
+  "passed_at": "2026-08-03T17:47:55.935043+00:00",
   "recipes": [
     "accruals",
     "accruals_from_cumulative",
+    "adxr",
     "annualized_volatility",
+    "aroon_down",
+    "aroon_oscillator",
+    "aroon_up",
     "asset_growth",
     "asset_turnover",
     "asset_turnover_from_cumulative",
+    "atr_sma",
     "bollinger_lower",
     "bollinger_mid",
     "bollinger_upper",
@@ -23,6 +26,7 @@
     "cash_profitability",
     "cash_profitability_from_cumulative",
     "cashflow_growth",
+    "cci",
     "cdl_2_crows",
     "cdl_3_inside",
     "cdl_3_line_strike",
@@ -61,6 +65,7 @@
     "cdl_xside_gap_3_methods",
     "current_ratio",
     "debt_to_equity",
+    "dpo_causal",
     "earnings_cashflow_divergence",
     "earnings_growth",
     "free_cash_flow_profitability",
@@ -98,12 +103,16 @@
     "roe",
     "roe_from_cumulative",
     "roic_proxy",
+    "rolling_obv",
     "rolling_sharpe",
+    "rsi_sma",
     "stochastic_d",
     "stochastic_k",
+    "trix",
+    "weighted_moving_average",
     "williams_r"
   ],
-  "portable_three_backend_case_registry": [
+  "portable_three_backend_recipes": [
     "annualized_volatility",
     "bollinger_lower",
     "bollinger_mid",
@@ -121,5 +130,376 @@
     "stochastic_d",
     "stochastic_k",
     "williams_r"
-  ]
+  ],
+  "certified_backends": {
+    "accruals": [
+      "pandas_numpy"
+    ],
+    "accruals_from_cumulative": [
+      "pandas_numpy"
+    ],
+    "adxr": [
+      "pandas_numpy"
+    ],
+    "annualized_volatility": [
+      "pandas_numpy",
+      "polars_long_native",
+      "duckdb_real_sql"
+    ],
+    "aroon_down": [
+      "pandas_numpy"
+    ],
+    "aroon_oscillator": [
+      "pandas_numpy"
+    ],
+    "aroon_up": [
+      "pandas_numpy"
+    ],
+    "asset_growth": [
+      "pandas_numpy"
+    ],
+    "asset_turnover": [
+      "pandas_numpy"
+    ],
+    "asset_turnover_from_cumulative": [
+      "pandas_numpy"
+    ],
+    "atr_sma": [
+      "pandas_numpy"
+    ],
+    "bollinger_lower": [
+      "pandas_numpy",
+      "polars_long_native",
+      "duckdb_real_sql"
+    ],
+    "bollinger_mid": [
+      "pandas_numpy",
+      "polars_long_native",
+      "duckdb_real_sql"
+    ],
+    "bollinger_upper": [
+      "pandas_numpy",
+      "polars_long_native",
+      "duckdb_real_sql"
+    ],
+    "capex_growth": [
+      "pandas_numpy"
+    ],
+    "capex_intensity": [
+      "pandas_numpy"
+    ],
+    "capex_intensity_from_cumulative": [
+      "pandas_numpy"
+    ],
+    "cash_conversion": [
+      "pandas_numpy"
+    ],
+    "cash_conversion_from_cumulative": [
+      "pandas_numpy"
+    ],
+    "cash_profitability": [
+      "pandas_numpy"
+    ],
+    "cash_profitability_from_cumulative": [
+      "pandas_numpy"
+    ],
+    "cashflow_growth": [
+      "pandas_numpy"
+    ],
+    "cci": [
+      "pandas_numpy"
+    ],
+    "cdl_2_crows": [
+      "pandas_numpy"
+    ],
+    "cdl_3_inside": [
+      "pandas_numpy"
+    ],
+    "cdl_3_line_strike": [
+      "pandas_numpy"
+    ],
+    "cdl_3_outside": [
+      "pandas_numpy"
+    ],
+    "cdl_3_stars_south": [
+      "pandas_numpy"
+    ],
+    "cdl_abandoned_baby": [
+      "pandas_numpy"
+    ],
+    "cdl_advance_block": [
+      "pandas_numpy"
+    ],
+    "cdl_belt_hold": [
+      "pandas_numpy"
+    ],
+    "cdl_breakaway": [
+      "pandas_numpy"
+    ],
+    "cdl_closing_marubozu": [
+      "pandas_numpy"
+    ],
+    "cdl_counterattack": [
+      "pandas_numpy"
+    ],
+    "cdl_doji_star": [
+      "pandas_numpy"
+    ],
+    "cdl_evening_doji_star": [
+      "pandas_numpy"
+    ],
+    "cdl_high_wave": [
+      "pandas_numpy"
+    ],
+    "cdl_homing_pigeon": [
+      "pandas_numpy"
+    ],
+    "cdl_identical_3_crows": [
+      "pandas_numpy"
+    ],
+    "cdl_in_neck": [
+      "pandas_numpy"
+    ],
+    "cdl_ladder_bottom": [
+      "pandas_numpy"
+    ],
+    "cdl_long_legged_doji": [
+      "pandas_numpy"
+    ],
+    "cdl_long_line": [
+      "pandas_numpy"
+    ],
+    "cdl_mat_hold": [
+      "pandas_numpy"
+    ],
+    "cdl_matching_low": [
+      "pandas_numpy"
+    ],
+    "cdl_on_neck": [
+      "pandas_numpy"
+    ],
+    "cdl_rickshaw_man": [
+      "pandas_numpy"
+    ],
+    "cdl_rise_fall_3_methods": [
+      "pandas_numpy"
+    ],
+    "cdl_separating_lines": [
+      "pandas_numpy"
+    ],
+    "cdl_short_line": [
+      "pandas_numpy"
+    ],
+    "cdl_stalled_pattern": [
+      "pandas_numpy"
+    ],
+    "cdl_stick_sandwich": [
+      "pandas_numpy"
+    ],
+    "cdl_takuri": [
+      "pandas_numpy"
+    ],
+    "cdl_tasuki_gap": [
+      "pandas_numpy"
+    ],
+    "cdl_thrusting": [
+      "pandas_numpy"
+    ],
+    "cdl_tristar": [
+      "pandas_numpy"
+    ],
+    "cdl_unique_3_river": [
+      "pandas_numpy"
+    ],
+    "cdl_upside_gap_2_crows": [
+      "pandas_numpy"
+    ],
+    "cdl_xside_gap_3_methods": [
+      "pandas_numpy"
+    ],
+    "current_ratio": [
+      "pandas_numpy",
+      "polars_long_native",
+      "duckdb_real_sql"
+    ],
+    "debt_to_equity": [
+      "pandas_numpy",
+      "polars_long_native",
+      "duckdb_real_sql"
+    ],
+    "dpo_causal": [
+      "pandas_numpy"
+    ],
+    "earnings_cashflow_divergence": [
+      "pandas_numpy"
+    ],
+    "earnings_growth": [
+      "pandas_numpy"
+    ],
+    "free_cash_flow_profitability": [
+      "pandas_numpy"
+    ],
+    "free_cash_flow_profitability_from_cumulative": [
+      "pandas_numpy"
+    ],
+    "gross_margin": [
+      "pandas_numpy"
+    ],
+    "gross_profitability": [
+      "pandas_numpy"
+    ],
+    "gross_profitability_from_cumulative": [
+      "pandas_numpy"
+    ],
+    "interest_coverage": [
+      "pandas_numpy"
+    ],
+    "interest_coverage_from_cumulative": [
+      "pandas_numpy"
+    ],
+    "intraday_return": [
+      "pandas_numpy",
+      "polars_long_native",
+      "duckdb_real_sql"
+    ],
+    "inventory_growth": [
+      "pandas_numpy"
+    ],
+    "inventory_turnover": [
+      "pandas_numpy"
+    ],
+    "inventory_turnover_from_cumulative": [
+      "pandas_numpy"
+    ],
+    "leverage_change": [
+      "pandas_numpy"
+    ],
+    "margin_expansion": [
+      "pandas_numpy"
+    ],
+    "momentum": [
+      "pandas_numpy",
+      "polars_long_native",
+      "duckdb_real_sql"
+    ],
+    "net_debt_ratio": [
+      "pandas_numpy",
+      "polars_long_native",
+      "duckdb_real_sql"
+    ],
+    "net_margin": [
+      "pandas_numpy"
+    ],
+    "operating_margin": [
+      "pandas_numpy",
+      "polars_long_native",
+      "duckdb_real_sql"
+    ],
+    "operating_profitability": [
+      "pandas_numpy"
+    ],
+    "operating_profitability_from_cumulative": [
+      "pandas_numpy"
+    ],
+    "overnight_gap": [
+      "pandas_numpy",
+      "polars_long_native",
+      "duckdb_real_sql"
+    ],
+    "quality_growth_combo": [
+      "pandas_numpy"
+    ],
+    "quick_ratio": [
+      "pandas_numpy",
+      "polars_long_native",
+      "duckdb_real_sql"
+    ],
+    "rate_of_change": [
+      "pandas_numpy",
+      "polars_long_native",
+      "duckdb_real_sql"
+    ],
+    "rd_intensity": [
+      "pandas_numpy"
+    ],
+    "rd_intensity_from_cumulative": [
+      "pandas_numpy"
+    ],
+    "receivable_turnover": [
+      "pandas_numpy"
+    ],
+    "receivable_turnover_from_cumulative": [
+      "pandas_numpy"
+    ],
+    "receivables_growth": [
+      "pandas_numpy"
+    ],
+    "revenue_growth": [
+      "pandas_numpy"
+    ],
+    "revenue_receivables_divergence": [
+      "pandas_numpy"
+    ],
+    "roa": [
+      "pandas_numpy"
+    ],
+    "roa_from_cumulative": [
+      "pandas_numpy"
+    ],
+    "roe": [
+      "pandas_numpy"
+    ],
+    "roe_from_cumulative": [
+      "pandas_numpy"
+    ],
+    "roic_proxy": [
+      "pandas_numpy"
+    ],
+    "rolling_obv": [
+      "pandas_numpy"
+    ],
+    "rolling_sharpe": [
+      "pandas_numpy",
+      "polars_long_native",
+      "duckdb_real_sql"
+    ],
+    "rsi_sma": [
+      "pandas_numpy"
+    ],
+    "stochastic_d": [
+      "pandas_numpy",
+      "polars_long_native",
+      "duckdb_real_sql"
+    ],
+    "stochastic_k": [
+      "pandas_numpy",
+      "polars_long_native",
+      "duckdb_real_sql"
+    ],
+    "trix": [
+      "pandas_numpy"
+    ],
+    "weighted_moving_average": [
+      "pandas_numpy"
+    ],
+    "williams_r": [
+      "pandas_numpy",
+      "polars_long_native",
+      "duckdb_real_sql"
+    ]
+  },
+  "checks": [
+    "safe_ast_expansion",
+    "pandas_reference_execution",
+    "underlying_operator_evidence",
+    "portable_subset_three_backend_parity"
+  ],
+  "hashes": {
+    "case_registry_hash": "d101f40a4e6a6a78643c7168d1ff2bf24ddf941d18b406ca38e7d075f38f5675",
+    "recipe_source_hash": "7790f303935d9647912909db658addaf8b93baf2c5ce7cc3493572bf69effcfb",
+    "portable_test_source_hash": "f0c89a47588aabff5946dc3f61104855fa7ae3ebee0b9d13ed5986e9d7bcccf7",
+    "production_test_source_hash": "999aaa096300349a5279a58f6400819fff3b5960433570e786061ee5167af462",
+    "primitive_evidence_hash": "93659bbc344d444b33f7952b5b443265d2f666fa1bc7c89911b0a158ea3bd9fb",
+    "factor_operator_evidence_hash": "cc0939becdb336ec51b70c12fe3a831d4d38582becf3923c59404f6a07ffd81e"
+  }
 }

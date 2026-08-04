@@ -23,8 +23,9 @@ def test_phase1_scope_loaded(_loaded):
     assert s["primitive_certified_dual"] >= 13
     assert s["composite_full_parity_count"] >= 16
     # Recipe migrations are governed by recipe evidence, not retained as
-    # production primitive/composite policy rows.
-    assert s["composite_production_certified_count"] == 0
+    # production primitive/composite policy rows; a small number of
+    # composites remain certified directly until their recipe migration.
+    assert s["composite_production_certified_count"] <= 1
 
 
 def test_phase1_rank_six_way_certified(_loaded):

@@ -1580,7 +1580,7 @@ operators:
     canonical: ts_argmax
     execution_kind: python_rolling
     polars_implemented: true
-    polars_pure_native: false
+    polars_pure_native: true
     duckdb_implemented: true
     duckdb_real_sql: false
     semantic_contract_complete: true
@@ -1610,7 +1610,7 @@ operators:
     canonical: ts_argmin
     execution_kind: python_rolling
     polars_implemented: true
-    polars_pure_native: false
+    polars_pure_native: true
     duckdb_implemented: true
     duckdb_real_sql: false
     semantic_contract_complete: true

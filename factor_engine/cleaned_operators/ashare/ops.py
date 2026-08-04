@@ -36,19 +36,19 @@ class _RatioOp(SeriesOperator):
 
 @register_operator(name="earnings_yield", category="ashare", business_category="valuation", canonical="earnings_yield", source="ashare.ops", status="experimental")
 class EarningsYield(_RatioOp):
-    metadata = _metadata("earnings_yield", "盈利收益率：1 / PE；非正 PE 视为无效。", ["one", "pe"], domain="valuation", unit="ratio")
+    metadata = _metadata("earnings_yield", "盈利收益率：1 / PE；非正 PE 视为无效。", ["pe"], domain="valuation", unit="ratio")
 
-    def _calculate_series(self, one, pe, **kwargs):
+    def _calculate_series(self, pe, **kwargs):
         valid_pe = pe.where(pe > 0)
-        return _safe_div(one, valid_pe)
+        return _safe_div(1.0, valid_pe)
 
 
 @register_operator(name="book_to_price", category="ashare", business_category="valuation", canonical="book_to_price", source="ashare.ops", status="experimental")
 class BookToPrice(_RatioOp):
-    metadata = _metadata("book_to_price", "账面市值比：1 / PB；非正 PB 视为无效。", ["one", "pb"], domain="valuation", unit="ratio")
+    metadata = _metadata("book_to_price", "账面市值比：1 / PB；非正 PB 视为无效。", ["pb"], domain="valuation", unit="ratio")
 
-    def _calculate_series(self, one, pb, **kwargs):
-        return _safe_div(one, pb.where(pb > 0))
+    def _calculate_series(self, pb, **kwargs):
+        return _safe_div(1.0, pb.where(pb > 0))
 
 
 @register_operator(name="float_share_ratio", category="ashare", business_category="capital_structure", canonical="float_share_ratio", source="ashare.ops", status="experimental")

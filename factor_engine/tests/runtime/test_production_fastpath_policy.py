@@ -27,7 +27,8 @@ def loaded():
     register_sql_backends()
 
 
-def test_map_groups_blocked_in_production(loaded):
+def test_map_groups_blocked_in_production(loaded, monkeypatch):
+    monkeypatch.setenv("FACTOR_ENGINE_PRODUCTION_REQUIRE_FASTPATH", "1")
     plan = minimal_plan("ts_kurt")
     with pytest.raises(ProductionPolicyViolation):
         assert_no_unapproved_map_groups_in_production(plan, mode="production")

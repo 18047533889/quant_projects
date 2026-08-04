@@ -20,8 +20,7 @@ def test_ashare_ratio_and_state_operators():
     from cleaned_operators.registry import OperatorRegistry
 
     pe = _panel([[10.0, -2.0], [20.0, 0.0]])
-    one = _panel([[1.0, 1.0], [1.0, 1.0]])
-    out = OperatorRegistry.get("earnings_yield").calculate(one, pe)
+    out = OperatorRegistry.get("earnings_yield").calculate(pe)
     assert out.iloc[0, 0] == pytest.approx(0.1)
     assert np.isnan(out.iloc[0, 1])
 
@@ -48,6 +47,6 @@ def test_true_turnover_and_shareholder_change():
 def test_ashare_lowerings_registered():
     from planner.composite_lowering import lowered_primitives
 
-    assert lowered_primitives("earnings_yield") == ("safe_div_null",)
+    assert lowered_primitives("earnings_yield") == ("where", "gt", "safe_div_null")
     assert lowered_primitives("benchmark_excess_return") == ("subtract",)
     assert lowered_primitives("limit_up_state") == ("ge",)

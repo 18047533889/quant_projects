@@ -24,6 +24,7 @@ SQL_IMPLEMENTED_CANONICALS: frozenset[str] = frozenset(
         "subtract",
         "multiply",
         "divide",
+        "fin_ratio",
         "neg",
         "abs",
         "sign",

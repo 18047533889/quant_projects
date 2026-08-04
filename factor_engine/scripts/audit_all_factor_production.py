@@ -41,7 +41,9 @@ _PANEL_PARAMETERS = frozenset({
     "operating_income", "revenue", "gross_profit", "net_income",
     "operating_cash_flow", "research_development", "capex", "invested_capital",
     "nopat", "receivables", "cost_of_goods_sold", "interest_expense",
-    "market_cap",
+    "market_cap", "one", "pe", "pb", "total_shares", "free_float_shares",
+    "upper_limit", "lower_limit", "top_holder_shares", "listed", "suspended", "limit_up", "limit_down", "benchmark_price",
+    "holder_count", "concentration",
 })
 
 _SCALAR_VALUES: dict[str, Any] = {

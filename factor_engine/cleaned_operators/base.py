@@ -18,6 +18,8 @@ from typing import Any, Dict, List
 import numpy as np
 import pandas as pd
 
+from backend.operator_errors import OperatorParameterError
+
 _INTEGER_PARAM_NAMES = frozenset(
     {
         "window", "period", "periods", "d", "lag", "n", "m", "k",
@@ -52,16 +54,16 @@ def _normalise_integer(value: Any, name: str) -> Any:
     if name not in _INTEGER_PARAM_NAMES:
         return value
     if isinstance(value, (bool, np.bool_)):
-        raise TypeError(f"{name} must be an integer, not bool")
+        raise OperatorParameterError(f"{name} must be an integer, not bool")
     if not isinstance(value, (int, float, np.integer, np.floating)):
         return value
     if not np.isfinite(float(value)) or float(value) != float(int(value)):
-        raise ValueError(f"{name} must be an integer")
+        raise OperatorParameterError(f"{name} must be an integer")
     result = int(value)
     lower = 0 if name in _NONNEGATIVE_INTEGER_PARAMS else 1
     if result < lower:
         comparator = ">= 0" if lower == 0 else ">= 1"
-        raise ValueError(f"{name} must be {comparator}")
+        raise OperatorParameterError(f"{name} must be {comparator}")
     return result
 
 

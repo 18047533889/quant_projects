@@ -24,7 +24,6 @@ def test_recipe_expands_to_primitives() -> None:
     nested = FactorRecipeRegistry.expand(
         "aroon_oscillator",
         {"high": "high", "low": "low", "window": 25},
-        allowed_statuses=("pending",),
     )
     assert "ts_argmax(high, 25)" in nested
     assert "ts_argmin(low, 25)" in nested
@@ -33,7 +32,9 @@ def test_recipe_expands_to_primitives() -> None:
 
 def test_optional_recipe_requires_explicit_status_opt_in() -> None:
     with pytest.raises(RecipeExpansionError, match="status"):
-        FactorRecipeRegistry.expand("dpo_causal", {"close": "close", "window": 20})
+        FactorRecipeRegistry.expand(
+            "dpo_causal", {"close": "close", "window": 20}, allowed_statuses=("test",)
+        )
     expanded = FactorRecipeRegistry.expand(
         "dpo_causal", {"close": "close", "window": 20},
         allowed_statuses=("production", "optional"),
@@ -101,9 +102,10 @@ def test_compiled_batch_executes_each_shared_operator_once() -> None:
 def test_dag_node_ids_are_deterministic() -> None:
     requests = {"factor": ("gross_profitability", {
         "gross_profit": "gross_profit", "total_assets": "total_assets", "period_id": "period_id",
+        "periods_per_year": 4,
     })}
-    first = FactorRecipeRegistry.compile_batch(requests, allowed_statuses=("pending",))
-    second = FactorRecipeRegistry.compile_batch(requests, allowed_statuses=("pending",))
+    first = FactorRecipeRegistry.compile_batch(requests)
+    second = FactorRecipeRegistry.compile_batch(requests)
     assert first.roots == second.roots
     assert first.nodes == second.nodes
 

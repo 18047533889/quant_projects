@@ -424,13 +424,18 @@ def semantic_hashes_for(canonical: str) -> dict[str, str]:
 def parameter_domain_hash_for(canonical: str) -> str:
     """Recompute the exact signature-domain digest stored in evidence."""
     from backend.operator_evidence_schema import compute_implementation_hash
-    from backend.production_signature_v2 import apply_production_signature_v2
+    import sys
+
+    # Signature v2 is normally installed during cleaned-operator bootstrap.  In
+    # a fresh provenance-only process install it here too, but never touch a
+    # partially initialized production_signature module during import cycles.
+    signature_module = sys.modules.get("backend.production_signature")
+    if signature_module is None or hasattr(signature_module, "PRODUCTION_SIGNATURES"):
+        from backend.production_signature_v2 import apply_production_signature_v2
+
+        apply_production_signature_v2()
     from backend.production_signature import signature_for
 
-    # The fiscal v2 contract is part of the canonical signature.  Apply it here
-    # as well as during registry bootstrap so evidence validation is independent
-    # of which module happened to be imported first.
-    apply_production_signature_v2()
     sig = signature_for(canonical)
     if sig is None:
         return ""

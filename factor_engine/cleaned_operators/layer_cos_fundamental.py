@@ -145,6 +145,10 @@ def pl_period_stability(x, period_id, periods=8, method="mad", require_consecuti
 
 
 def pd_safe_div(x, y, epsilon=EPS, **_):
+    if not isinstance(x, pd.DataFrame) and isinstance(y, pd.DataFrame):
+        x = pd.DataFrame(x, index=y.index, columns=y.columns, dtype=float)
+    elif not isinstance(y, pd.DataFrame) and isinstance(x, pd.DataFrame):
+        y = pd.DataFrame(y, index=x.index, columns=x.columns, dtype=float)
     x, y = aligned_pd(x, y)
     epsilon = float(epsilon)
     if not np.isfinite(epsilon) or epsilon <= 0:

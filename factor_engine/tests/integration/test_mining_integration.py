@@ -125,12 +125,13 @@ def test_default_ashare_pv_data_source():
 def test_default_ashare_pv_universe_composite():
     from api.mining_integration import default_ashare_pv_universe_data_source_config
 
-    cfg = default_ashare_pv_universe_data_source_config()
+    cfg = default_ashare_pv_universe_data_source_config(index_symbol="000300.SH")
     assert cfg["type"] == "composite"
     assert cfg["joins"]["status"] == "asof_backward"
-    assert cfg["joins"]["constituent"] == "asof_backward"
+    assert cfg["joins"]["constituent"] == "exact"
     assert cfg["sources"]["constituent"]["dataset"] == "ashare_index_constituent"
-    assert cfg["sources"]["status"]["dataset"] == "ashare_stock_status"
+    assert cfg["sources"]["constituent"]["params"]["IndexSymbol"] == "000300.SH"
+    assert cfg["sources"]["status"]["fields"]["public_status"] == "ListedState"
 
 
 def test_default_us_sip_day_ratios_composite():

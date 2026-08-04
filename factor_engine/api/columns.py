@@ -1,6 +1,7 @@
 """列引用：``col('close')`` → ``ColumnRef``，字段语义可由 ``field()`` 校验。"""
 
 from expr.column import ColumnRef
+from expr.field import FieldRef
 
 
 def col(name: str) -> ColumnRef:
@@ -19,13 +20,13 @@ def col(name: str) -> ColumnRef:
     return ColumnRef(name=name)
 
 
-def field(name: str, *, table: str | None = None, strict: bool = True) -> ColumnRef:
-    """Construct a semantically resolved field reference.
+def field(name: str, *, table: str | None = None, strict: bool = True) -> FieldRef | ColumnRef:
+    """Construct a catalog-bound field reference.
 
-    With no ``table``, the canonical field name is emitted as a normal
-    :class:`ColumnRef`, preserving the old DSL/runtime representation.  With a
-    table, the reference uses the existing encoded ``SourceRef`` transport so
-    no new expression node or IR opcode is introduced.
+    Unlike :func:`col`, a resolved field keeps its canonical table and physical
+    source identity in the expression tree.  The runtime transport name stays a
+    normal logical column for anchor fields and an encoded ``SourceRef`` for
+    secondary tables, preserving compatibility with existing data sources.
     """
 
     from fields import FIELD_REGISTRY
@@ -33,11 +34,20 @@ def field(name: str, *, table: str | None = None, strict: bool = True) -> Column
     spec = FIELD_REGISTRY.get(name, table=table, strict=strict)
     if spec is None:
         return col(name)
-    if table is None:
-        return col(spec.name)
-    from api.source_ref import source_col
+    if table is None and spec.table == "StockDailyBar":
+        transport = spec.name
+    else:
+        from api.source_ref import source_col
 
-    return source_col(spec.table, spec.source_name)
+        transport = source_col(spec.table, spec.source_name).name
+    return FieldRef(
+        name=transport,
+        field_id=f"{spec.table}.{spec.name}",
+        canonical_name=spec.name,
+        table=spec.table,
+        source_name=spec.source_name,
+        catalog_hash=FIELD_REGISTRY.catalog_hash(),
+    )
 
 
 __all__ = ["col", "field"]

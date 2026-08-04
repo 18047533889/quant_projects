@@ -1376,7 +1376,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_ts_partition=left.has_ts_partition or right.has_ts_partition,
         )
 
-    if op in {"safe_div_null", "safe_div"}:
+    if op in {"safe_div_null", "safe_div", "fin_ratio"}:
         if len(node.inputs) != 2:
             return None
         left = _compile_layer(node.inputs[0], dialect=dialect)

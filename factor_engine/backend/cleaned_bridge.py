@@ -171,6 +171,7 @@ def _prepare_call_args(
     ctx: ExecutionContext,
     *,
     backend: str,
+    broadcast_scalars: bool = False,
 ) -> tuple[list[Any], pd.Series | None, pd.DataFrame | None]:
     from .panel_polars import is_polars_frame
 
@@ -197,7 +198,14 @@ def _prepare_call_args(
             elif template is None and getattr(ctx, "template_series", None) is not None:
                 template = ctx.template_series
         else:
-            call_args.append(val)
+            if broadcast_scalars and template_panel is not None:
+                call_args.append(pd.DataFrame(
+                    val, index=template_panel.index, columns=template_panel.columns
+                ))
+            else:
+                # Scalar literals used by panel operators (e.g. ts_delay(..., n))
+                # remain scalar; cleaned operators validate them directly.
+                call_args.append(val)
     return call_args, template, template_panel
 
 
@@ -276,8 +284,19 @@ def make_cleaned_kernel(eval_fn: Callable[[PlanNode, ExecutionContext], Any], op
             _record_polars_op(ctx, op)
 
         kw = dict(node.attrs)
-        call_args, template, template_panel = _prepare_call_args(evaluated, ctx, backend=backend)
+        call_args, template, template_panel = _prepare_call_args(
+            evaluated, ctx, backend=backend,
+            broadcast_scalars=canonical in {"maximum", "minimum"},
+        )
         result = _call_cleaned_operator(canonical, operator, call_args, kw)
+        # Keep literal-only arithmetic scalar.  Promoting an intermediate such as
+        # ``floor(window / 2) + 1`` to a panel makes it an invalid lag/window
+        # argument when it is later consumed by a time-series operator.
+        if template is None and template_panel is None and not any(
+            isinstance(value, (pd.Series, pd.DataFrame))
+            for value in evaluated
+        ):
+            return result
         if template is None:
             template = getattr(ctx, "template_series", None)
         if template is None:

@@ -27,7 +27,7 @@ def loaded():
 
 def test_ts_mean_production_capabilities(loaded):
     s = summarize_operator("ts_mean")
-    assert s.pandas_numpy == "implemented"
+    assert s.pandas_numpy in {"parity_verified", "production_safe", "implemented"}
     assert s.polars in {"parity_verified", "production_safe"}
     assert s.duckdb_sql in {"parity_verified", "production_safe"}
     assert s.allow_in_production

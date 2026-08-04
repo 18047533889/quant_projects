@@ -19,11 +19,12 @@ def test_us_daily_market_summary_preset_registered():
     assert report["ok"], report.get("violations")
 
 
-def test_default_presets_use_asof_backward_except_universe_exact():
+def test_default_presets_follow_explicit_join_contracts():
     from api.mining_integration import audit_default_data_source_configs
 
     report = audit_default_data_source_configs()
-    # 估值 / 状态 / 成分股 / 基本面 composite：必须 asof_backward
+    # A-share valuation follows its exact daily table contract; event/PIT
+    # composites keep their explicit backward-asof contracts.
     assert report["ashare_pv_valuation"] == []
     assert report["us_pv_valuation"] == []
     assert report["ashare_pv_universe"] == []
@@ -38,13 +39,18 @@ def test_default_presets_use_asof_backward_except_universe_exact():
     assert all("universe" in v for v in us_uni) or us_uni == []
 
 
-def test_audit_flags_exact_valuation_join():
+def test_audit_flags_valuation_asof_join():
     from api.mining_integration import audit_composite_join_policies
 
     cfg = {
         "type": "composite",
         "anchor": "pv",
-        "sources": {"pv": {}, "valuation": {}},
-        "joins": {"valuation": "exact"},
+        "sources": {
+            "pv": {},
+            "valuation": {"type": "data_access", "dataset": "ashare_stock_valuation_daily"},
+        },
+        "joins": {"valuation": "asof_backward"},
     }
-    assert audit_composite_join_policies(cfg) == ["valuation: join='exact' (expected asof_backward)"]
+    assert audit_composite_join_policies(cfg) == [
+        "valuation: join='asof_backward' (expected exact)"
+    ]

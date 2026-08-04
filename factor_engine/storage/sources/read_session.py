@@ -53,9 +53,9 @@ class DataSourceReadSession:
         from runtime.input_dq import assert_input_dq
         return assert_input_dq(self._source,columns,raise_on_fail=raise_on_fail,thresholds=thresholds)
     def cached_columns(self) -> frozenset[str]:
-        cache=getattr(self._source,"_cache",None)
-        if isinstance(cache,dict): return frozenset(cache)
         cache=getattr(self._source,"_column_cache",None)
+        if isinstance(cache,dict): return frozenset(cache)
+        cache=getattr(self._source,"_cache",None)
         return frozenset(cache) if isinstance(cache,dict) else frozenset()
     def cache_stats(self) -> dict[str,int]:
         fn=getattr(self._source,"column_cache_stats",None)
