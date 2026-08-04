@@ -2,10 +2,14 @@
 
 These templates are examples only. Replace the image, secret references, data/cache
 volumes, resource limits, TLS, ingress and COS credentials in the deployment system.
-Never commit a real API key, COS secret, certificate or private hostname.
+Never commit COS secrets, certificates or private hostnames.
+
+**Team HTTP API key (agreed):** `quantsociety`  
+Set as `DATA_ACCESS_API_KEY` / request header `X-API-Key`. This is also the package
+default when the env var is unset. Override via secret manager in real production if needed.
 
 - `Dockerfile`: non-root container image.
-- `docker-compose.yml`: local smoke deployment.
+- `docker-compose.yml`: local smoke deployment (`DATA_ACCESS_API_KEY=quantsociety`).
 - `kubernetes.yaml`: Deployment and Service with probes and resource limits.
 - `data-access.service`: systemd unit for a host installation.
 

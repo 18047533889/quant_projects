@@ -27,11 +27,15 @@ def _env_int(name: str, default: int) -> int:
     return value
 
 
+# 团队统一 HTTP 读数密钥（可用环境变量 DATA_ACCESS_API_KEY 覆盖；设空字符串关闭默认密钥）
+DEFAULT_API_KEY = "quantsociety"
+
+
 @dataclass(frozen=True)
 class ServiceSettings:
     """Immutable service settings, resolved when the app is created."""
 
-    api_key: str = ""
+    api_key: str = DEFAULT_API_KEY
     production_mode: bool = False
     allow_open: bool = False
     max_rows: int = 500_000
@@ -41,8 +45,13 @@ class ServiceSettings:
 
     @classmethod
     def from_env(cls) -> "ServiceSettings":
+        raw_key = os.environ.get("DATA_ACCESS_API_KEY")
+        if raw_key is None:
+            api_key = DEFAULT_API_KEY
+        else:
+            api_key = raw_key.strip()
         return cls(
-            api_key=os.environ.get("DATA_ACCESS_API_KEY", "").strip(),
+            api_key=api_key,
             production_mode=_env_flag("QUANT_PRODUCTION_MODE"),
             allow_open=_env_flag("DATA_ACCESS_API_ALLOW_OPEN"),
             max_rows=_env_int("DATA_ACCESS_API_MAX_ROWS", 500_000),

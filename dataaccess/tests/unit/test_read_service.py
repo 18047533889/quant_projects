@@ -131,23 +131,51 @@ def test_read_json(mock_get_store, client):
     assert len(body["data"]) == 1
 
 
-def test_production_requires_api_key_when_unset(monkeypatch):
+def test_production_requires_api_key_when_explicitly_empty(monkeypatch):
+    from data_access.service.app import create_app
+    from data_access.service.config import ServiceSettings
+
     monkeypatch.setattr("data_access.service.app.API_KEY", "")
-    monkeypatch.setenv("QUANT_PRODUCTION_MODE", "1")
     monkeypatch.delenv("DATA_ACCESS_API_ALLOW_OPEN", raising=False)
+    monkeypatch.delenv("QUANT_PRODUCTION_MODE", raising=False)
     monkeypatch.setenv("DATA_ACCESS_SKIP_COS_MIRROR", "1")
-    client = TestClient(app)
+    local_app = create_app(
+        ServiceSettings(api_key="", production_mode=True, allow_open=False)
+    )
+    client = TestClient(local_app)
     resp = client.get("/v1/datasets")
     assert resp.status_code == 503
     assert "DATA_ACCESS_API_KEY" in resp.json()["detail"]
 
 
-def test_production_allow_open_escape(monkeypatch):
+def test_default_team_api_key_is_quantsociety(monkeypatch):
+    from data_access.service.app import create_app
+    from data_access.service.config import ServiceSettings
+
     monkeypatch.setattr("data_access.service.app.API_KEY", "")
-    monkeypatch.setenv("QUANT_PRODUCTION_MODE", "1")
-    monkeypatch.setenv("DATA_ACCESS_API_ALLOW_OPEN", "1")
+    monkeypatch.delenv("DATA_ACCESS_API_KEY", raising=False)
+    monkeypatch.delenv("DATA_ACCESS_API_ALLOW_OPEN", raising=False)
     monkeypatch.setenv("DATA_ACCESS_SKIP_COS_MIRROR", "1")
+    settings = ServiceSettings.from_env()
+    assert settings.api_key == "quantsociety"
+    local_app = create_app(settings)
     with patch("data_access.service.app.get_store", return_value=_mock_store()):
-        client = TestClient(app)
+        client = TestClient(local_app)
+        assert client.get("/v1/datasets").status_code == 401
+        ok = client.get("/v1/datasets", headers={"X-API-Key": "quantsociety"})
+        assert ok.status_code == 200
+
+
+def test_production_allow_open_escape(monkeypatch):
+    from data_access.service.app import create_app
+    from data_access.service.config import ServiceSettings
+
+    monkeypatch.setattr("data_access.service.app.API_KEY", "")
+    monkeypatch.setenv("DATA_ACCESS_SKIP_COS_MIRROR", "1")
+    local_app = create_app(
+        ServiceSettings(api_key="", production_mode=True, allow_open=True)
+    )
+    with patch("data_access.service.app.get_store", return_value=_mock_store()):
+        client = TestClient(local_app)
         resp = client.get("/v1/datasets")
         assert resp.status_code == 200

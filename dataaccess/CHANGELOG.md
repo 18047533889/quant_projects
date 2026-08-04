@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1
+
+- HTTP 团队统一密钥默认改为 `quantsociety`（`DATA_ACCESS_API_KEY` / `X-API-Key`）；文档与 docker-compose 同步。
+
 ## 0.3.0
 
 - 包版本对齐 monorepo `dataaccess/`（Python 包名仍为 `data_access`）。

@@ -4,7 +4,7 @@ services:
     ports:
       - "8765:8765"
     environment:
-      DATA_ACCESS_API_KEY: "change-me-in-a-secret-store"
+      DATA_ACCESS_API_KEY: "quantsociety"
       QUANT_PRODUCTION_MODE: "1"
       DATA_ACCESS_API_MAX_CONCURRENCY: "4"
       DATA_ACCESS_COS_CACHE_ROOT: /var/lib/dataaccess/cos-cache

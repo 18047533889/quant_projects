@@ -16,13 +16,13 @@
 - 通过 `pipeline.py` 输出统一的运行摘要、结果 JSON 和配置快照。
 
 不负责：
-- HTTP / RPC 服务入口。
-- 异步调度与任务队列。
-- 平台级 Query API。
+- 平台级异步调度与任务队列（进程内 Job 适配除外）。
+- 平台级 Query API / 鉴权配额（HTTP 适配层提供最小只读与任务接口）。
 - 调用方鉴权与配额控制。
 
 ## 2. Public Service Entries
 
+### Python library
 - `pipeline.run`
 - `pipeline.run_pipeline`
 - `pipeline.run_from_config`
@@ -40,6 +40,16 @@
 - `runtime.engine.FactorEngine.materialize_many_from_config` / `materialize_many_from_config_parallel`（`batch_run=True` 时共享 `run_many`）
 - `runtime.engine.FactorEngine.materialize_incremental_many_from_config`
 - `runtime.config_runtime.PipelineConfigOverrides` / `ResolvedMaterializeKwargs.to_engine_materialize_kwargs` / `to_incremental_materialize_kwargs`
+
+### HTTP adapter (`service/`, optional extra `[service]`)
+- `GET /health`
+- `GET /factor-engine/operators`
+- `POST /factor-engine/validate-spec`
+- `POST /factor-engine/jobs/compute`
+- `POST /factor-engine/jobs/materialize`
+- `GET /factor-engine/jobs/{run_id}`
+- `GET /factor-engine/jobs/{run_id}/artifacts`
+- CLI: `factor-engine-serve` / `python -m service.app`
 
 ### `pipeline.run_config_directory(config_dir)`
 

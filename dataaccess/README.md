@@ -1,11 +1,11 @@
 # `data_access` — 团队统一数据读写入口
 
 > **一句话定位**：所有读写 parquet 的代码，都应该走这里。  
-> **磁盘目录**：本仓库为 **`dataaccess/`**；代码里永远 `import data_access`。  
-> **对外使用说明**：**[docs/用户使用手册.md](docs/用户使用手册.md)**（只看这一份即可）。  
-> **Monorepo 总览**：[docs/量化平台使用总览.md](../docs/量化平台使用总览.md)  
+> **仓库**：https://github.com/HKUST-QUANT-SOCIETY/data_access （组织私有仓，需有权限）  
+> **磁盘目录**：本仓库根目录即包内容；代码里永远 `import data_access`。  
+> **对外使用说明**：**[docs/用户使用手册.md](docs/用户使用手册.md)**（只看这一份即可；含完整 HTTP 服务）。  
 > 文档索引：[docs/README.md](docs/README.md)  
-> 维护：量化基础平台组｜更新：2026-07-19｜包版本：**0.3.0**
+> 维护：量化基础平台组｜更新：2026-08-04｜包版本：**0.3.1**
 
 ## 为什么有这个模块
 
@@ -55,18 +55,20 @@ dataaccess/                 # 磁盘名；Python 包 = data_access
 ## pip 安装
 
 ```bash
-# 本地 editable
-cd dataaccess && pip install -e ".[all]"
-# 或在 monorepo 根：
-pip install -e "./dataaccess[all]"
+# 从组织仓安装（推荐）
+git clone https://github.com/HKUST-QUANT-SOCIETY/data_access.git
+cd data_access
+pip install -e ".[all]"
 
-# 只装远程客户端
-pip install "data-access[client] @ git+https://github.com/18047533889/quant_projects.git#subdirectory=dataaccess"
+# 私有仓一次性安装（把 <TOKEN> 换成有 repo 权限的 GitHub PAT）
+# pip install "data-access[all] @ git+https://<TOKEN>@github.com/HKUST-QUANT-SOCIETY/data_access.git"
+# pip install "data-access[client] @ git+https://<TOKEN>@github.com/HKUST-QUANT-SOCIETY/data_access.git"
 
-# 读数服务
-pip install -e "./dataaccess[service]"
-export DATA_ACCESS_API_KEY=团队密钥
+# 读数 HTTP 服务
+pip install -e ".[service]"
+export DATA_ACCESS_API_KEY=quantsociety
 data-access-server --host 0.0.0.0 --port 8765
+# 完整接口与路径见 docs/用户使用手册.md §10
 ```
 
 | extra | 包含 |
@@ -110,7 +112,7 @@ df = store.read_frame(
 
 ```python
 from data_access.service.client import DataAccessClient
-client = DataAccessClient("http://host:8765", api_key="...")
+client = DataAccessClient("http://host:8765", api_key="quantsociety")
 df = client.read_frame("ashare_stock_daily", columns=["Close"], time_range=("2024-01-01", "2024-01-31"))
 ```
 

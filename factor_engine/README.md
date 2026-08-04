@@ -1,25 +1,81 @@
 # Factor Engine
 
-可扩展的量化因子引擎框架，支持表达式树构建、编译优化、多后端执行与配置驱动运行。
+可扩展的量化因子引擎：DSL / 表达式树、编译优化、多后端执行、配置驱动运行，并提供可选 HTTP 服务适配层。
 
-> **Monorepo 总使用文档** → [`../docs/量化平台使用总览.md`](../docs/量化平台使用总览.md)  
-> **本模块总指南** → [`docs/FactorEngine完全指南.md`](docs/FactorEngine完全指南.md)
+仓库：https://github.com/HKUST-QUANT-SOCIETY/factor_engine （组织私有仓，需有权限）
 
-**文档索引**：[`docs/README.md`](docs/README.md) · [`docs/源码注释导读.md`](docs/源码注释导读.md) · 挖掘投递 [`docs/miner_delivery_spec.md`](docs/miner_delivery_spec.md) · 算子写法 [`docs/算子与导入教程.md`](docs/算子与导入教程.md) · 白名单 [`docs/dsl_operators_reference.md`](docs/dsl_operators_reference.md) · 语义 [`docs/operators_semantics.md`](docs/operators_semantics.md) · 回测 ADR [`docs/adr_backtest_target_position.md`](docs/adr_backtest_target_position.md) · 变更 [`docs/changelog_shw.md`](docs/changelog_shw.md)
+> **本模块总指南** → [`docs/FactorEngine完全指南.md`](docs/FactorEngine完全指南.md)  
+> **HTTP 服务** → [`service/README.md`](service/README.md)
 
 ### 协作者速览（新人约 5 分钟）
 
-> **完全不了解 factor_engine？** 请先读 **[`docs/FactorEngine完全指南.md`](docs/FactorEngine完全指南.md)**；若还不了解读数层，先看 **[量化平台使用总览](../docs/量化平台使用总览.md)**。
-
-1. **数据流**：`api`（`Factor` / DSL / 算子工厂，经 **`cleaned_operators`**）→ `expr` → `ir` → `planner` → `backend` → **MultiIndex 因子序列**；编排入口 **`runtime/FactorEngine`**。读数经 **`data_access`**（磁盘目录 `dataaccess/`）。
-2. **Backend**：默认 `auto`（DuckDB SQL 下推 + Polars/Pandas）。覆盖见 [`docs/sql_pushdown_coverage.md`](docs/sql_pushdown_coverage.md)、[`docs/backend_coverage.md`](docs/backend_coverage.md)。
-3. **规范**：能否写入 manifest 以 [`docs/dsl_operators_reference.md`](docs/dsl_operators_reference.md) 为准；参数语义见 [`docs/operators_semantics.md`](docs/operators_semantics.md)。
-4. **动手跑**：[`examples/simple_factor.py`](examples/simple_factor.py)；配置驱动 `FactorEngine.run_from_config`；批量见 [`runtime/README.md`](runtime/README.md) §8；A 股 preset：`api.mining_integration.default_ashare_pv_data_source_config`。
-5. **版本与变更**：[`docs/changelog_shw.md`](docs/changelog_shw.md)
+1. **库调用**：`pip install -e .` 后用 `api` + `runtime.engine.FactorEngine`。  
+2. **服务调用**：`pip install -e ".[service]"` 后 `factor-engine-serve --port 8088`。  
+3. **规范**：算子白名单见 [`docs/dsl_operators_reference.md`](docs/dsl_operators_reference.md)。
 
 ---
 
-## 快速开始
+## 别人怎么拿到并调用
+
+### A. 当 Python 库用（推荐）
+
+```bash
+git clone https://github.com/HKUST-QUANT-SOCIETY/factor_engine.git
+cd factor_engine
+pip install -e .
+# 或私有仓一次性安装：
+# pip install "git+https://<GITHUB_TOKEN>@github.com/HKUST-QUANT-SOCIETY/factor_engine.git"
+```
+
+```python
+from api import col, rank, ts_mean
+from api.factor import Factor
+from backend.factory import build_backend
+from runtime.engine import FactorEngine
+from storage.factory import build_data_source
+
+source = build_data_source(
+    {
+        "type": "data_access",
+        "dataset": "us_stocks_sip_day_aggs",
+        "fields": {"close": "close"},
+        "start_date": "2024-01-01",
+        "end_date": "2024-01-31",
+    }
+)
+engine = FactorEngine(backend=build_backend("auto"), data_source=source)
+factor = Factor(name="mom3_rank", expr=rank(ts_mean(col("close"), 3)))
+result = engine.run(factor)
+print(result["result"].head())
+```
+
+校验 DSL（不跑数）：
+
+```python
+from api.mining_integration import validate_factor_engine_dsl
+ok, msg = validate_factor_engine_dsl("rank(ts_mean(close, 5))")
+```
+
+### B. 当 HTTP 服务用
+
+```bash
+pip install -e ".[service]"
+PYTHONPATH=. factor-engine-serve --host 0.0.0.0 --port 8088
+```
+
+```bash
+curl -s localhost:8088/health
+curl -s localhost:8088/factor-engine/operators | head
+curl -s -X POST localhost:8088/factor-engine/validate-spec \
+  -H 'content-type: application/json' \
+  -d '{"formula":"rank(ts_mean(close, 5))"}'
+```
+
+接口说明见 [`service/README.md`](service/README.md)。内核仍是 `FactorEngine`；HTTP 只是薄适配层（见 `IT_HANDOFF.md` §8–9）。
+
+---
+
+## 快速开始（库）
 
 ```python
 from api import col, rank, ts_mean

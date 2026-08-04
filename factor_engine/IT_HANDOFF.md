@@ -2,22 +2,20 @@
 
 ## 1. 这是什么
 
-`factor_engine` 当前是一个可编译、可执行、可落盘的因子计算引擎，不是服务。
+`factor_engine` 当前是一个可编译、可执行、可落盘的因子计算引擎；对外可按 **Python 库** 或 **可选 HTTP 适配层**（`service/`）使用。
 
-它现在已经实现了四类能力：
+它现在已经实现了五类能力：
 - 因子表达式构建与 DSL 解析。
 - 因子编译、执行、多因子批量执行。
 - 因子结果物化到 factor lake，并维护 catalog 与 watermark。
 - 一层薄的 pipeline 编排，可统一输出 `run_summary.json`、单项结果 JSON 和配置快照。
+- 可选 HTTP 服务适配（`pip install 'factor-engine[service]'`，见 `service/README.md`）：operators / validate-spec / compute|materialize jobs。
 
 它当前没有实现：
-- 没有 HTTP / RPC 服务入口。
-- 没有 Job API。
-- 没有 Query API。
-- 没有统一 `run_id`。
-- 没有标准 Manifest。
-- 没有事件通知。
-- 没有调用方权限控制。
+- 没有平台级 Job 队列 / 跨进程调度。
+- 没有统一平台鉴权与配额。
+- 没有事件总线广播。
+- 没有平台级 artifact registry（进程内会落本地 manifest）。
 
 ## 2. 现在已经实现的功能
 

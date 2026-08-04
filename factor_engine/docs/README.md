@@ -1,18 +1,20 @@
 # `docs` — 文档中心
 
-> **零基础读者**：先读 monorepo **[`../../docs/量化平台使用总览.md`](../../docs/量化平台使用总览.md)**，再读本模块 **[`FactorEngine完全指南.md`](FactorEngine完全指南.md)**。
+> **零基础读者**：先读 **[`FactorEngine完全指南.md`](FactorEngine完全指南.md)**；HTTP 直接看 [`../service/README.md`](../service/README.md)。  
+> **仓库**：https://github.com/HKUST-QUANT-SOCIETY/factor_engine · 读数 https://github.com/HKUST-QUANT-SOCIETY/data_access
 
 **规范正文**以本目录 Markdown / JSON 为准；算子 **唯一合法写法** = `build_dsl_allowlist()` + `parse_expr`（见 [`算子与导入教程.md`](算子与导入教程.md)）。
 
 ### 协作者速览（约 5 分钟）
 
-1. **平台怎么串起来**：[`量化平台使用总览.md`](../../docs/量化平台使用总览.md)
-2. **完全不懂 factor_engine**：[`FactorEngine完全指南.md`](FactorEngine完全指南.md)
-3. **挖掘 / 投递**：[`miner_delivery_spec.md`](miner_delivery_spec.md) → [`算子与导入教程.md`](算子与导入教程.md) → [`dsl_operators_reference.md`](dsl_operators_reference.md)
-4. **算子语义**：[`operators_semantics.md`](operators_semantics.md)
-5. **字段命名**：[`canonical_data_fields.md`](canonical_data_fields.md)
-6. **版本沿革**：[`changelog_shw.md`](changelog_shw.md)
-7. **源码导读**：[`源码注释导读.md`](源码注释导读.md)
+1. **仓库**：https://github.com/HKUST-QUANT-SOCIETY/factor_engine · 读数 https://github.com/HKUST-QUANT-SOCIETY/data_access
+2. **完全不懂 factor_engine**：[`FactorEngine完全指南.md`](FactorEngine完全指南.md)（含 §6.5 HTTP）
+3. **HTTP 服务完整说明**：[`../service/README.md`](../service/README.md)
+4. **挖掘 / 投递**：[`miner_delivery_spec.md`](miner_delivery_spec.md) → [`算子与导入教程.md`](算子与导入教程.md) → [`dsl_operators_reference.md`](dsl_operators_reference.md)
+5. **算子语义**：[`operators_semantics.md`](operators_semantics.md)
+6. **字段命名**：[`canonical_data_fields.md`](canonical_data_fields.md)
+7. **版本沿革**：[`changelog_shw.md`](changelog_shw.md)
+8. **源码导读**：[`源码注释导读.md`](源码注释导读.md)
 
 ---
 
@@ -20,10 +22,11 @@
 
 | 文档 | 用途 |
 |------|------|
-| **[`../../docs/量化平台使用总览.md`](../../docs/量化平台使用总览.md)** | Monorepo 总使用文档（data_access + factor_engine） |
-| **[`FactorEngine完全指南.md`](FactorEngine完全指南.md)** | 本模块总文档：架构、上手、目录、角色表、FAQ |
+| **[`FactorEngine完全指南.md`](FactorEngine完全指南.md)** | 本模块总文档：架构、上手、HTTP、目录、角色表、FAQ |
+| **[`../service/README.md`](../service/README.md)** | HTTP 服务完整使用（clone / 接口 / curl） |
 | [`源码注释导读.md`](源码注释导读.md) | 读源码时的注释约定与模块索引 |
 | [`算子与导入教程.md`](算子与导入教程.md) | import、DSL 写法、校验 CLI |
+| https://github.com/HKUST-QUANT-SOCIETY/data_access | 读数层与其 HTTP `/v1/read` |
 
 ## 2. 必读（挖掘与投递）
 
@@ -34,7 +37,7 @@
 | [`dsl_allowlist.json`](dsl_allowlist.json) | 机器可读白名单 |
 | [`canonical_data_fields.md`](canonical_data_fields.md) | manifest 字段 ↔ parquet 列 |
 | [`../api/mining_integration.py`](../api/mining_integration.py) | 投递校验 API、默认 data_source（含 A 股 preset） |
-| [`../../dataaccess/config/datasets.yaml`](../../dataaccess/config/datasets.yaml) | 登记数据集 schema（读端契约） |
+| https://github.com/HKUST-QUANT-SOCIETY/data_access/blob/main/config/datasets.yaml | 登记数据集 schema（读端契约） |
 | [`mining_data_source_presets.json`](mining_data_source_presets.json) | mining preset 快照 |
 | [`sql_pushdown_coverage.md`](sql_pushdown_coverage.md) | SQL 下推清单 |
 | [`backend_coverage.md`](backend_coverage.md) | Backend 覆盖 |
@@ -76,7 +79,7 @@
 | `examples/` | [`examples/README.md`](../examples/README.md) |
 | `scripts/` | [`scripts/README.md`](../scripts/README.md) |
 
-读数层文档：[`../../dataaccess/docs/README.md`](../../dataaccess/docs/README.md)。
+读数层文档：https://github.com/HKUST-QUANT-SOCIETY/data_access/tree/main/docs
 
 ---
 

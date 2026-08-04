@@ -64,4 +64,4 @@ from importlib.metadata import PackageNotFoundError, version as _package_version
 try:
     __version__ = _package_version("data-access")
 except PackageNotFoundError:
-    __version__ = "0.3.0+local"
+    __version__ = "0.3.1+local"

@@ -1,11 +1,12 @@
 # Factor Engine 完全指南
 
-> **给完全不了解 factor_engine 的读者**：本文是本模块 **推荐入口**。读完后应能回答：它是什么、在 monorepo 里干什么、数据怎么流、怎么跑第一个因子、代码从哪读起、遇到问题查哪份文档。
+> **给完全不了解 factor_engine 的读者**：本文是本模块 **推荐入口**。读完后应能回答：它是什么、怎么装、数据怎么流、怎么跑第一个因子、怎么起 HTTP 服务、代码从哪读起。
 >
-> **平台总入口**（data_access + factor_engine 怎么串）：[`../../docs/量化平台使用总览.md`](../../docs/量化平台使用总览.md)  
+> **仓库**：https://github.com/HKUST-QUANT-SOCIETY/factor_engine  
+> **读数层**：https://github.com/HKUST-QUANT-SOCIETY/data_access  
 > **预计阅读时间**：通读约 30 分钟；只看 §1–§6 约 10 分钟可动手跑示例。
 
-**文档关系**：本文 = 本模块总览 · 细节见各包 [`README.md`](../README.md) · 源码注释见 [`源码注释导读.md`](源码注释导读.md) · 写公式见 [`算子与导入教程.md`](算子与导入教程.md)
+**文档关系**：本文 = 本模块总览 · 细节见 [`README.md`](../README.md) · **HTTP 完整说明**见 [`service/README.md`](../service/README.md) · 源码注释见 [`源码注释导读.md`](源码注释导读.md) · 写公式见 [`算子与导入教程.md`](算子与导入教程.md)
 
 ---
 
@@ -133,9 +134,12 @@ flowchart LR
 ### 6.1 环境
 
 ```bash
-cd ~/quant_projects/factor_engine
+git clone https://github.com/HKUST-QUANT-SOCIETY/factor_engine.git
+cd factor_engine
+pip install -e .
 export PYTHONPATH=.:${PYTHONPATH}
-source ~/quant_projects/env.sh   # 可选：DuckDB、data_access 路径
+# 读数推荐同时安装：
+# pip install "data-access @ git+https://<TOKEN>@github.com/HKUST-QUANT-SOCIETY/data_access.git"
 ```
 
 ### 6.2 方式 A：Python 最小示例
@@ -199,6 +203,39 @@ python run_pipeline.py run-dir examples/configs/   # 目录批量
 
 ---
 
+### 6.5 方式 D：HTTP 服务
+
+仓库路径：https://github.com/HKUST-QUANT-SOCIETY/factor_engine  
+完整接口契约（请求体 / 轮询 / 环境变量）：[`service/README.md`](../service/README.md)
+
+```bash
+git clone https://github.com/HKUST-QUANT-SOCIETY/factor_engine.git
+cd factor_engine
+pip install -e ".[service]"
+PYTHONPATH=. factor-engine-serve --host 0.0.0.0 --port 8088
+```
+
+| 方法 | 路径 | 用途 |
+|------|------|------|
+| GET | `/health` | 存活 |
+| GET | `/factor-engine/operators` | DSL 白名单 |
+| POST | `/factor-engine/validate-spec` | 校验公式（不跑数） |
+| POST | `/factor-engine/jobs/compute` | 提交计算 |
+| POST | `/factor-engine/jobs/materialize` | 提交物化 |
+| GET | `/factor-engine/jobs/{run_id}` | 查状态 |
+| GET | `/factor-engine/jobs/{run_id}/artifacts` | 查产物 |
+
+```bash
+curl -s localhost:8088/health
+curl -s -X POST localhost:8088/factor-engine/validate-spec \
+  -H 'content-type: application/json' \
+  -d '{"formula":"rank(ts_mean(close, 5))"}'
+```
+
+读数数据集仍由 **data_access** 提供：https://github.com/HKUST-QUANT-SOCIETY/data_access （其 HTTP 读数服务见该仓 `docs/用户使用手册.md` §10）。
+
+---
+
 ## 7. 公式怎么写（DSL 规则摘要）
 
 1. **列名**：`close`、`volume`（小写逻辑名；YAML 里用 `fields` 映射到 parquet 列如 `Close`）
@@ -214,11 +251,12 @@ python run_pipeline.py run-dir examples/configs/   # 目录批量
 
 ### 8.1 读数据（经 data_access）
 
-- 登记在 `dataaccess/config/datasets.yaml`
+- 仓库：https://github.com/HKUST-QUANT-SOCIETY/data_access
+- 登记在该仓 `config/datasets.yaml`
 - A 股日线：`ashare_stock_daily`（`TradeDate` + `Symbol`）
 - 已发布因子：`factor_lake`，参数 `factor_id=gtja191_alpha_001`
 
-**禁止**业务代码直接 `pd.read_parquet`；统一 `get_store().read_frame(...)`。见 monorepo [`dataaccess/README.md`](../../dataaccess/README.md)。
+**禁止**业务代码直接 `pd.read_parquet`；统一 `get_store().read_frame(...)`。详见 data_access 仓 README / `docs/用户使用手册.md`。
 
 ### 8.2 写因子（落盘）
 
@@ -241,7 +279,7 @@ engine.materialize(factor)
 | **研究员** | 写 YAML 跑因子 | 本文 §6–§7 → [`算子与导入教程.md`](算子与导入教程.md) |
 | **挖掘/投递** | 产 manifest JSON | [`miner_delivery_spec.md`](miner_delivery_spec.md) → [`dsl_operators_reference.md`](dsl_operators_reference.md) |
 | **算子开发** | 新增/改算子 | [`cleaned_operators/README.md`](../cleaned_operators/README.md) → [`operators_semantics.md`](operators_semantics.md) |
-| **平台/运维** | 批量落盘、对账 | [`runtime/README.md`](../runtime/README.md) · [`examples/profiles/prod.yaml`](../examples/profiles/prod.yaml) |
+| **平台/运维** | 批量落盘、对账、HTTP | [`service/README.md`](../service/README.md) · [`runtime/README.md`](../runtime/README.md) · [`examples/profiles/prod.yaml`](../examples/profiles/prod.yaml) |
 | **读源码** | 理解实现 | [`源码注释导读.md`](源码注释导读.md) → 各包 README |
 
 ---
@@ -308,9 +346,18 @@ A：测试前 `unset FACTOR_LAKE_ROOT`，避免污染 `data_access` 路径。
 | [`canonical_data_fields.md`](canonical_data_fields.md) | manifest 字段 ↔ parquet 列 |
 | [`changelog_shw.md`](changelog_shw.md) | 分版变更记录 |
 
+### HTTP / 对接
+
+| 文档 | 用途 |
+|------|------|
+| [`service/README.md`](../service/README.md) | **HTTP 服务完整使用**（HKUST 仓路径、接口、curl） |
+| [`IT_HANDOFF.md`](../IT_HANDOFF.md) | IT 对接与服务化边界 |
+| [`INTERFACE.md`](../INTERFACE.md) | 模块级接口清单 |
+| https://github.com/HKUST-QUANT-SOCIETY/data_access | 读数层与其 HTTP `/v1/read` |
+
 ### 包内 README
 
-根 [`README.md`](../README.md) · [`api/`](../api/README.md) · [`backend/`](../backend/README.md) · [`runtime/`](../runtime/README.md) · [`storage/`](../storage/README.md) · [`planner/`](../planner/README.md) · [`cleaned_operators/`](../cleaned_operators/README.md) · [`docs/README.md`](README.md)
+根 [`README.md`](../README.md) · [`service/`](../service/README.md) · [`api/`](../api/README.md) · [`backend/`](../backend/README.md) · [`runtime/`](../runtime/README.md) · [`storage/`](../storage/README.md) · [`planner/`](../planner/README.md) · [`cleaned_operators/`](../cleaned_operators/README.md) · [`docs/README.md`](README.md)
 
 ---
 
