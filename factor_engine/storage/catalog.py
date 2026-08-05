@@ -48,37 +48,46 @@ def _parse_json_field(raw: Any) -> dict[str, Any]:
 # IR Hash 工具
 # ---------------------------------------------------------------------------
 
-def compute_ir_hash(ir_node) -> str:
+def compute_ir_hash(ir_node, *, structural_only: bool = False) -> str:
     """将 IR 树序列化后计算 SHA-256 摘要。
-    
+
     参数:
         ir_node: 因子 IR 树根节点
-    
+        structural_only: 若为 True，忽略 FieldRef 特有的 catalog 元数据，
+                        只比较算子拓扑结构（用于 source_expr 一致性检查）
+
     返回:
         str
     """
+    _CATALOG_ATTRS = frozenset({
+        "field_id", "field_registry_hash", "source_table", "source_field",
+        "domain", "frequency", "cardinality", "temporal_model", "pit_safe"
+    })
 
     def _serialize(node) -> dict:
         """递归序列化 IR 节点为字典。
-        
+
         参数:
             node: 见函数签名
-        
+
         返回:
             dict
         """
+        attrs = node.attrs
+        if structural_only:
+            attrs = {k: v for k, v in attrs.items() if k not in _CATALOG_ATTRS}
         return {
             "op": node.op,
-            "attrs": {k: _normalize(v) for k, v in sorted(node.attrs.items())},
+            "attrs": {k: _normalize(v) for k, v in sorted(attrs.items())},
             "inputs": [_serialize(inp) for inp in node.inputs],
         }
 
     def _normalize(v: Any) -> Any:
         """规范化不可 JSON 序列化的属性值。
-        
+
         参数:
             v: 见函数签名
-        
+
         返回:
             Any
         """
@@ -127,6 +136,7 @@ CREATE TABLE IF NOT EXISTS factor_run (
     factor_name             TEXT,
     ast_hash                TEXT NOT NULL,
     operator_catalog_hash   TEXT,
+    field_catalog_hash      TEXT,
     expression              TEXT,
     lookback                INTEGER,
     referenced_columns_json TEXT,
@@ -207,6 +217,13 @@ class FactorCatalog:
         if "data_source_json" not in cols:
             self._conn.execute(
                 "ALTER TABLE factor_registry ADD COLUMN data_source_json TEXT"
+            )
+        run_cols = {
+            row[1] for row in self._conn.execute("PRAGMA table_info(factor_run)")
+        }
+        if "field_catalog_hash" not in run_cols:
+            self._conn.execute(
+                "ALTER TABLE factor_run ADD COLUMN field_catalog_hash TEXT"
             )
         ck_cols = {
             row[1]
@@ -480,16 +497,17 @@ class FactorCatalog:
         now = lineage.get("created_at") or datetime.now(timezone.utc).isoformat()
         self._conn.execute(
             "INSERT INTO factor_run "
-            "(run_id, factor_id, factor_name, ast_hash, operator_catalog_hash, expression, "
+            "(run_id, factor_id, factor_name, ast_hash, operator_catalog_hash, field_catalog_hash, expression, "
             "lookback, referenced_columns_json, dq_passed, row_count, non_null_count, "
             "created_at, extra_json) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 lineage["run_id"],
                 lineage["factor_id"],
                 lineage.get("factor_name"),
                 lineage["ast_hash"],
                 lineage.get("operator_catalog_hash"),
+                lineage.get("field_catalog_hash"),
                 lineage.get("expression"),
                 lineage.get("lookback"),
                 json.dumps(lineage.get("referenced_columns", []), ensure_ascii=False),

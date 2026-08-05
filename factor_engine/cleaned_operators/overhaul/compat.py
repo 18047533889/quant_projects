@@ -34,8 +34,14 @@ def ts_regression_compat(
             "add_intercept positional arguments"
         )
     if legacy_args:
-        lag = int(legacy_args[0])
-    if len(legacy_args) >= 2:
+        # The repaired public contract is (y, x, window, add_intercept).
+        # Preserve the historical lag-first form for non-boolean arguments.
+        if len(legacy_args) == 1 and isinstance(legacy_args[0], (bool, np.bool_)):
+            add_intercept = bool(legacy_args[0])
+            legacy_args = ()
+        else:
+            lag = int(legacy_args[0])
+    if legacy_args and len(legacy_args) >= 2:
         retval = str(legacy_args[1])
     if len(legacy_args) >= 3:
         min_periods = int(legacy_args[2])

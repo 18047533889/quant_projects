@@ -50,8 +50,9 @@ def test_ts_regression_slope_explicit_intercept_contract() -> None:
     x = _panel([1, 2, 3, 4, 5, 6, 7, 8])
     y = x * 2.0 + 5.0
 
-    with_intercept = op.calculate(x, y, 5, True)
-    through_origin = op.calculate(x, y, 5, False)
+    # ts_regression_slope signature is (y, x, window, add_intercept)
+    with_intercept = op.calculate(y, x, 5, True)
+    through_origin = op.calculate(y, x, 5, False)
 
     assert np.isclose(float(with_intercept.iloc[-1, 0]), 2.0, atol=1e-12)
     # Through-origin fit is intentionally different because y contains +5 intercept.

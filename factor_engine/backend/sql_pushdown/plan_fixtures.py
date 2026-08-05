@@ -46,6 +46,7 @@ def _minimal_plan_raw(op: str) -> PlanNode:
         "protected_div",
         "div_or_default",
         "safe_div_null",
+        "fin_ratio",
         "ts_regression_slope",
         "Slope",
         "power",

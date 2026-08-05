@@ -1,16 +1,29 @@
 {
   "schema_version": 2,
-  "canonical_count": 211,
+  "canonical_count": 541,
   "surface_counts": {
     "daily": 86,
-    "extended": 101,
-    "research": 20,
-    "unsafe": 0,
+    "extended": 442,
+    "research": 2,
+    "unsafe": 7,
     "legacy": 1,
     "internal": 3,
     "unclassified": 0
   },
   "operators": [
+    {
+      "canonical": "ADL",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
     {
       "canonical": "ADX",
       "surface": "extended",
@@ -21,10 +34,10 @@
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
-      "scope": "elementwise",
+      "pit_safe": true,
+      "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 2,
       "lag": 0
     },
     {
@@ -41,7 +54,190 @@
       "pit_safe": true,
       "scope": "ts",
       "lookback": null,
-      "min_periods": 2,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "CMF",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "CMO",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ChaikinOscillator",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "DEMA",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "DMI_minus",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "DMI_plus",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "DX",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "EaseOfMovement",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ForceIndex",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "KAMA",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "KeltnerLower",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "KeltnerMid",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "KeltnerPosition",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "KeltnerUpper",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -52,10 +248,10 @@
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
-      "scope": "elementwise",
+      "pit_safe": true,
+      "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -68,10 +264,10 @@
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
-      "scope": "elementwise",
+      "pit_safe": true,
+      "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -82,10 +278,127 @@
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
-      "scope": "elementwise",
+      "pit_safe": true,
+      "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "MFI",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "NATR",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "PPO",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "PPO_hist",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "PPO_signal",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "PSAR",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "PVO",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "PVO_hist",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "PVO_signal",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -102,7 +415,137 @@
       "pit_safe": true,
       "scope": "ts",
       "lookback": null,
-      "min_periods": 2,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "Supertrend",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "SupertrendDirection",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "TEMA",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "TSI",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "TSI_signal",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "UltimateOscillator",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "VortexMinus",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "VortexPlus",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "abnormal_turnover",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "abnormal_volume",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -123,6 +566,19 @@
       "lag": 0
     },
     {
+      "canonical": "abs_return_volume_corr",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
       "canonical": "acos",
       "surface": "extended",
       "aliases": [],
@@ -130,7 +586,7 @@
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "elementwise",
       "lookback": null,
       "min_periods": null,
@@ -152,6 +608,32 @@
       "lag": 0
     },
     {
+      "canonical": "adv",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "amihud_illiquidity",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
       "canonical": "and_",
       "surface": "daily",
       "aliases": [],
@@ -168,12 +650,12 @@
     },
     {
       "canonical": "arg",
-      "surface": "extended",
+      "surface": "unsafe",
       "aliases": [],
       "backends": [
         "pandas_numpy"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "elementwise",
       "lookback": null,
       "min_periods": null,
@@ -187,7 +669,7 @@
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "elementwise",
       "lookback": null,
       "min_periods": null,
@@ -201,7 +683,7 @@
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "elementwise",
       "lookback": null,
       "min_periods": null,
@@ -214,10 +696,478 @@
       "backends": [
         "pandas_numpy"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "elementwise",
       "lookback": null,
       "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "average_turnover",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "benchmark_excess_return",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "benchmark_relative_price",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "bollinger_pct_b",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "bollinger_width",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "book_to_price",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "bounded_nvi",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "bounded_pvi",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "candle_abs_body",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "candle_body",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "candle_body_percentile",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "candle_body_position",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "candle_body_ratio",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "candle_body_zscore",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "candle_close_location",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "candle_close_strength",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "candle_direction",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "candle_gap",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "candle_gap_atr",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "candle_gap_pct",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "candle_inside_ratio",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "candle_lower_shadow",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "candle_lower_shadow_ratio",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "candle_lower_shadow_zscore",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "candle_overlap_ratio",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "candle_range",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "candle_range_atr",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "candle_range_percentile",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "candle_range_zscore",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "candle_rejection_lower",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "candle_rejection_upper",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "candle_upper_shadow",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "candle_upper_shadow_ratio",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "candle_upper_shadow_zscore",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "candlestick_pattern",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "cash_flow_lifecycle_stage",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -236,6 +1186,292 @@
       "lag": 0
     },
     {
+      "canonical": "cdl_dark_cloud_cover",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 1
+    },
+    {
+      "canonical": "cdl_doji",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "cdl_dragonfly_doji",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "cdl_engulfing",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "cdl_evening_star",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 2
+    },
+    {
+      "canonical": "cdl_gravestone_doji",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "cdl_hammer",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "cdl_hanging_man",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "cdl_harami",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 1
+    },
+    {
+      "canonical": "cdl_harami_cross",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 1
+    },
+    {
+      "canonical": "cdl_inside_bar",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "cdl_inverted_hammer",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "cdl_marubozu",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "cdl_morning_star",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 2
+    },
+    {
+      "canonical": "cdl_outside_bar",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "cdl_piercing",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 1
+    },
+    {
+      "canonical": "cdl_shooting_star",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "cdl_spinning_top",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "cdl_three_black_crows",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 2
+    },
+    {
+      "canonical": "cdl_three_white_soldiers",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 2
+    },
+    {
+      "canonical": "cdl_tweezer_bottom",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 1
+    },
+    {
+      "canonical": "cdl_tweezer_top",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 1
+    },
+    {
       "canonical": "ceil",
       "surface": "daily",
       "aliases": [],
@@ -248,6 +1484,19 @@
       "scope": "elementwise",
       "lookback": null,
       "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "choppiness_index",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -300,6 +1549,19 @@
       "lag": 0
     },
     {
+      "canonical": "corwin_schultz_spread",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
       "canonical": "cos",
       "surface": "extended",
       "aliases": [],
@@ -307,7 +1569,7 @@
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "elementwise",
       "lookback": null,
       "min_periods": null,
@@ -315,13 +1577,13 @@
     },
     {
       "canonical": "cosh",
-      "surface": "extended",
+      "surface": "unsafe",
       "aliases": [],
       "backends": [
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "elementwise",
       "lookback": null,
       "min_periods": null,
@@ -329,7 +1591,7 @@
     },
     {
       "canonical": "coskewness_to_market",
-      "surface": "research",
+      "surface": "extended",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -343,13 +1605,13 @@
     },
     {
       "canonical": "cot",
-      "surface": "extended",
+      "surface": "unsafe",
       "aliases": [],
       "backends": [
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "elementwise",
       "lookback": null,
       "min_periods": null,
@@ -413,7 +1675,7 @@
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "cs",
       "lookback": null,
       "min_periods": null,
@@ -427,7 +1689,7 @@
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "cs",
       "lookback": null,
       "min_periods": null,
@@ -546,9 +1808,10 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "cs",
       "lookback": null,
       "min_periods": null,
@@ -560,6 +1823,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -574,6 +1838,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -621,9 +1886,10 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "cs",
       "lookback": null,
       "min_periods": null,
@@ -634,9 +1900,10 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "cs",
       "lookback": null,
       "min_periods": null,
@@ -647,9 +1914,10 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "cs",
       "lookback": null,
       "min_periods": null,
@@ -671,13 +1939,13 @@
     },
     {
       "canonical": "csc",
-      "surface": "extended",
+      "surface": "unsafe",
       "aliases": [],
       "backends": [
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "elementwise",
       "lookback": null,
       "min_periods": null,
@@ -698,8 +1966,21 @@
       "lag": 0
     },
     {
+      "canonical": "date_diff_days",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
       "canonical": "digital_count",
-      "surface": "research",
+      "surface": "extended",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -724,6 +2005,123 @@
       "scope": "elementwise",
       "lookback": null,
       "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "dollar_volume",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "dollar_volume_zscore",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "donchian_lower",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "donchian_mid",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "donchian_position",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "donchian_upper",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "down_volume_ratio",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "earnings_yield",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "efficiency_ratio",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -764,7 +2162,7 @@
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "elementwise",
       "lookback": null,
       "min_periods": null,
@@ -772,17 +2170,18 @@
     },
     {
       "canonical": "expanding_rank",
-      "surface": "research",
+      "surface": "extended",
       "aliases": [
         "cum_rank"
       ],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -794,7 +2193,7 @@
         "polars"
       ],
       "pit_safe": true,
-      "scope": "ts",
+      "scope": "elementwise",
       "lookback": null,
       "min_periods": 1,
       "lag": 0
@@ -815,6 +2214,1034 @@
       "lag": 0
     },
     {
+      "canonical": "fin_accrual_ratio",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_actual_expectation_divergence",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_average_balance",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_beat_streak",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_cagr",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_cash_conversion",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_cash_earnings_gap",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_common_size",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_cv",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_days_since_expectation_revision",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_days_since_update",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_diff",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_divergence",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_expectation_dispersion",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_expectation_revision",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_expectation_revision_count",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_expectation_revision_magnitude",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_expectation_revision_pct",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_expectation_revision_speed",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_growth",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_growth_acceleration",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_growth_change",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_growth_persistence",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_growth_stability",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_growth_volatility",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_lag",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_log_change",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_mad",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_miss_streak",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_monotonicity",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_negative_streak",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_pct_change",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_percentile_history",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_positive_streak",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_qoq",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_quarter_from_cumulative",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_range",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_ratio",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy",
+        "sql"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_restated_flag",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_revision_count",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_revision_delta",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_revision_direction",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_revision_magnitude",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_revision_pct",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_seasonal_percentile",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_seasonal_zscore",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_sign_change_count",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_stability",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_staleness",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_std",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_surprise",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_surprise_event_percentile",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_surprise_event_zscore",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_surprise_zscore",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_trend_acceleration",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_trend_r2",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_trend_slope",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_trend_tstat",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_ttm",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_ttm_cumulative",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_ttm_quarterly",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_turnover",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_working_capital_change",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_yoy",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_zscore_history",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fiscal_accrual_quality",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fiscal_ar_resid_std",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fiscal_asymmetric_elasticity",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fiscal_autocorr",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fiscal_change_direction_agreement",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fiscal_direction_consistency",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fiscal_pair_direction_agreement",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fiscal_perpetual_inventory",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fiscal_regression_resid_std",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fiscal_reversal_ratio",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fiscal_sign_agreement",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fiscal_sign_consistency",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fiscal_standardized_surprise",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fiscal_true_streak",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
       "canonical": "fix",
       "surface": "extended",
       "aliases": [],
@@ -822,7 +3249,7 @@
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "elementwise",
       "lookback": null,
       "min_periods": null,
@@ -861,6 +3288,19 @@
       "lag": 0
     },
     {
+      "canonical": "float_share_ratio",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
       "canonical": "floor",
       "surface": "daily",
       "aliases": [],
@@ -868,6 +3308,19 @@
         "pandas_numpy",
         "polars",
         "sql"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "free_float_share_ratio",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
       ],
       "pit_safe": true,
       "scope": "elementwise",
@@ -885,6 +3338,19 @@
       ],
       "pit_safe": true,
       "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "garman_klass_vol",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
       "lookback": null,
       "min_periods": 1,
       "lag": 0
@@ -921,7 +3387,7 @@
     },
     {
       "canonical": "group_decay_linear",
-      "surface": "research",
+      "surface": "extended",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -929,7 +3395,7 @@
         "sql"
       ],
       "pit_safe": true,
-      "scope": "cs",
+      "scope": "group",
       "lookback": null,
       "min_periods": null,
       "lag": 0
@@ -959,7 +3425,7 @@
         "sql"
       ],
       "pit_safe": true,
-      "scope": "cs",
+      "scope": "group",
       "lookback": null,
       "min_periods": null,
       "lag": 0
@@ -1001,7 +3467,7 @@
         "sql"
       ],
       "pit_safe": true,
-      "scope": "cs",
+      "scope": "group",
       "lookback": null,
       "min_periods": null,
       "lag": 0
@@ -1016,7 +3482,7 @@
         "sql"
       ],
       "pit_safe": true,
-      "scope": "cs",
+      "scope": "group",
       "lookback": null,
       "min_periods": null,
       "lag": 0
@@ -1027,10 +3493,11 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
-      "scope": "cs",
+      "scope": "group",
       "lookback": null,
       "min_periods": null,
       "lag": 0
@@ -1045,7 +3512,7 @@
         "sql"
       ],
       "pit_safe": true,
-      "scope": "cs",
+      "scope": "group",
       "lookback": null,
       "min_periods": null,
       "lag": 0
@@ -1060,7 +3527,7 @@
         "sql"
       ],
       "pit_safe": true,
-      "scope": "cs",
+      "scope": "group",
       "lookback": null,
       "min_periods": null,
       "lag": 0
@@ -1085,9 +3552,10 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "group",
       "lookback": null,
       "min_periods": null,
@@ -1098,9 +3566,10 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "group",
       "lookback": null,
       "min_periods": null,
@@ -1116,7 +3585,7 @@
         "sql"
       ],
       "pit_safe": true,
-      "scope": "cs",
+      "scope": "group",
       "lookback": null,
       "min_periods": null,
       "lag": 0
@@ -1131,7 +3600,7 @@
         "sql"
       ],
       "pit_safe": true,
-      "scope": "cs",
+      "scope": "group",
       "lookback": null,
       "min_periods": null,
       "lag": 0
@@ -1152,8 +3621,139 @@
       "lag": 0
     },
     {
-      "canonical": "hump_decay",
+      "canonical": "high_low_spread_proxy",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "holder_concentration",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "holder_concentration_change",
       "surface": "research",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": false,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "holder_count_change_rate",
+      "surface": "research",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": false,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "hump_decay",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ichimoku_cloud_position",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ichimoku_cloud_width",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ichimoku_kijun",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ichimoku_senkou_a",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ichimoku_senkou_b",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ichimoku_tenkan",
+      "surface": "extended",
       "aliases": [],
       "backends": [
         "pandas_numpy"
@@ -1180,7 +3780,7 @@
     },
     {
       "canonical": "idio_skew",
-      "surface": "research",
+      "surface": "extended",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -1194,10 +3794,11 @@
     },
     {
       "canonical": "idio_vol",
-      "surface": "research",
+      "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -1206,14 +3807,44 @@
       "lag": 0
     },
     {
-      "canonical": "intraday_vwap_deviation",
-      "surface": "research",
+      "canonical": "industry_size_neutralize",
+      "surface": "extended",
+      "aliases": [
+        "size_industry_neutralize"
+      ],
+      "backends": [
+        "pandas_numpy",
+        "polars",
+        "sql"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "intraday_volatility",
+      "surface": "extended",
       "aliases": [],
       "backends": [
         "pandas_numpy"
       ],
       "pit_safe": true,
       "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "intraday_vwap_deviation",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "session_intraday",
       "lookback": null,
       "min_periods": 1,
       "lag": 0
@@ -1248,7 +3879,7 @@
       "pit_safe": true,
       "scope": "elementwise",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -1343,7 +3974,37 @@
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "limit_down_close",
+      "surface": "extended",
+      "aliases": [
+        "limit_down_state"
+      ],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "limit_up_close",
+      "surface": "extended",
+      "aliases": [
+        "limit_up_state"
+      ],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
       "scope": "elementwise",
       "lookback": null,
       "min_periods": null,
@@ -1412,15 +4073,15 @@
     },
     {
       "canonical": "lqtp_historical_cvar",
-      "surface": "research",
+      "surface": "extended",
       "aliases": [],
       "backends": [
         "pandas_numpy"
       ],
-      "pit_safe": false,
-      "scope": "elementwise",
+      "pit_safe": true,
+      "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -1566,6 +4227,383 @@
       "lag": 0
     },
     {
+      "canonical": "overnight_volatility",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "parkinson_vol",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "pattern_123_bear",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "pattern_123_bull",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "pattern_ascending_triangle",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "pattern_bear_flag",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "pattern_bear_pennant",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "pattern_breakdown_retest",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "pattern_breakout_retest",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "pattern_broadening",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "pattern_bull_flag",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "pattern_bull_pennant",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "pattern_cup",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "pattern_cup_handle",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "pattern_descending_triangle",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "pattern_double_bottom",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "pattern_double_top",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "pattern_falling_channel",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "pattern_falling_wedge",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "pattern_head_shoulders",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "pattern_inverse_head_shoulders",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "pattern_rectangle",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "pattern_rising_channel",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "pattern_rising_wedge",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "pattern_rounding_bottom",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "pattern_rounding_top",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "pattern_sym_triangle",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "pattern_triple_bottom",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "pattern_triple_top",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
       "canonical": "period_average",
       "surface": "daily",
       "aliases": [],
@@ -1592,7 +4630,7 @@
       "pit_safe": true,
       "scope": "fundamental_period",
       "lookback": null,
-      "min_periods": 2,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -1630,12 +4668,13 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "fundamental_period",
       "lookback": null,
-      "min_periods": 2,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -1657,12 +4696,51 @@
       "lag": 0
     },
     {
+      "canonical": "price_impact",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
       "canonical": "price_spread_deviation",
       "surface": "extended",
       "aliases": [],
       "backends": [
         "pandas_numpy",
         "polars"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "price_turnover_divergence",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "price_volume_divergence",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -1700,6 +4778,19 @@
       "lag": 0
     },
     {
+      "canonical": "range_volatility",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
       "canonical": "rank",
       "surface": "daily",
       "aliases": [
@@ -1723,19 +4814,20 @@
     },
     {
       "canonical": "rank_corr",
-      "surface": "research",
+      "surface": "extended",
       "aliases": [
         "RANKCORR",
         "RANK_CORR",
         "rankcorr"
       ],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
       "lookback": null,
-      "min_periods": 2,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -1749,12 +4841,25 @@
       "pit_safe": true,
       "scope": "elementwise",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "relative_volume",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
       "canonical": "residual_momentum_capm",
-      "surface": "research",
+      "surface": "extended",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -1767,11 +4872,64 @@
       "lag": 0
     },
     {
-      "canonical": "revision_delta",
+      "canonical": "return_per_turnover",
       "surface": "extended",
       "aliases": [],
       "backends": [
         "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "return_turnover_beta",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "return_volume_beta",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "return_volume_corr",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "revision_delta",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "fundamental_period",
@@ -1780,8 +4938,34 @@
       "lag": 0
     },
     {
+      "canonical": "rogers_satchell_vol",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "roll_spread_proxy",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
       "canonical": "rolling_beta_to_market",
-      "surface": "research",
+      "surface": "extended",
       "aliases": [
         "FP_BETA",
         "ROLLING_BETA_TO_MARKET",
@@ -1798,6 +4982,45 @@
       "lag": 0
     },
     {
+      "canonical": "rolling_obv",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "rolling_pvt",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "rolling_vwap",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
       "canonical": "round",
       "surface": "extended",
       "aliases": [
@@ -1806,6 +5029,21 @@
       "backends": [
         "pandas_numpy",
         "polars"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "row_sum_skipna",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy",
+        "polars",
+        "sql"
       ],
       "pit_safe": true,
       "scope": "elementwise",
@@ -1865,13 +5103,13 @@
     },
     {
       "canonical": "sec",
-      "surface": "extended",
+      "surface": "unsafe",
       "aliases": [],
       "backends": [
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "elementwise",
       "lookback": null,
       "min_periods": null,
@@ -1909,6 +5147,19 @@
       "lag": 0
     },
     {
+      "canonical": "signed_dollar_volume",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
       "canonical": "signed_log",
       "surface": "daily",
       "aliases": [],
@@ -1920,7 +5171,7 @@
       "pit_safe": true,
       "scope": "elementwise",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -1953,6 +5204,32 @@
       "lag": 0
     },
     {
+      "canonical": "signed_volume",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "signed_volume_imbalance",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
       "canonical": "sin",
       "surface": "extended",
       "aliases": [],
@@ -1960,7 +5237,7 @@
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "elementwise",
       "lookback": null,
       "min_periods": null,
@@ -1968,13 +5245,34 @@
     },
     {
       "canonical": "sinh",
-      "surface": "extended",
+      "surface": "unsafe",
       "aliases": [],
       "backends": [
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "size_neutralize",
+      "surface": "extended",
+      "aliases": [
+        "CAP_NEUTRALIZE",
+        "MARKET_CAP_NEUTRALIZE",
+        "SIZE_NEUTRALIZE",
+        "cap_neutralize",
+        "market_cap_neutralize"
+      ],
+      "backends": [
+        "pandas_numpy",
+        "polars",
+        "sql"
+      ],
+      "pit_safe": true,
       "scope": "elementwise",
       "lookback": null,
       "min_periods": null,
@@ -2004,7 +5302,7 @@
       "backends": [
         "pandas_numpy"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "elementwise",
       "lookback": null,
       "min_periods": null,
@@ -2043,10 +5341,11 @@
     },
     {
       "canonical": "tail_beta",
-      "surface": "research",
+      "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -2056,13 +5355,13 @@
     },
     {
       "canonical": "tan",
-      "surface": "extended",
+      "surface": "unsafe",
       "aliases": [],
       "backends": [
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "elementwise",
       "lookback": null,
       "min_periods": null,
@@ -2084,8 +5383,21 @@
       "lag": 0
     },
     {
+      "canonical": "tradable_state",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
       "canonical": "trade_when",
-      "surface": "research",
+      "surface": "extended",
       "aliases": [],
       "backends": [
         "pandas_numpy",
@@ -2112,6 +5424,19 @@
       "lag": 0
     },
     {
+      "canonical": "true_turnover_rate",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
       "canonical": "truncate",
       "surface": "extended",
       "aliases": [],
@@ -2135,6 +5460,7 @@
       ],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -2152,6 +5478,7 @@
       ],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -2172,8 +5499,21 @@
       "pit_safe": true,
       "scope": "ts",
       "lookback": null,
-      "min_periods": 3,
+      "min_periods": 1,
       "lag": 1
+    },
+    {
+      "canonical": "ts_average_volume",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
     },
     {
       "canonical": "ts_beta",
@@ -2191,7 +5531,7 @@
       "pit_safe": true,
       "scope": "ts",
       "lookback": null,
-      "min_periods": 2,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -2201,7 +5541,8 @@
         "ts_bottom_n_avg"
       ],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -2214,7 +5555,8 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -2228,6 +5570,163 @@
       "aliases": [
         "ts_bottom_n_sum"
       ],
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_breakdown_low",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_breakout_high",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_channel_position",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_channel_width",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_channel_width_atr",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_channel_width_pct",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_channel_width_slope",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_confirmed_pivot_high",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_confirmed_pivot_low",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_consolidation_slope",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_consolidation_volume_decay",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_consolidation_width",
+      "surface": "extended",
+      "aliases": [],
       "backends": [
         "pandas_numpy"
       ],
@@ -2312,11 +5811,38 @@
       "lag": 0
     },
     {
-      "canonical": "ts_decay_exp_window",
+      "canonical": "ts_days_since_high",
       "surface": "extended",
       "aliases": [],
       "backends": [
         "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_days_since_low",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_decay_exp_window",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -2336,6 +5862,7 @@
       ],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -2364,7 +5891,7 @@
       "pit_safe": true,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 1
     },
     {
@@ -2385,8 +5912,60 @@
       "pit_safe": true,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 1
+    },
+    {
+      "canonical": "ts_distance_to_high",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_distance_to_low",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_distance_to_resistance",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_distance_to_support",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
     },
     {
       "canonical": "ts_ema",
@@ -2421,7 +6000,7 @@
       "pit_safe": true,
       "scope": "ts",
       "lookback": null,
-      "min_periods": 2,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -2437,7 +6016,7 @@
       "pit_safe": true,
       "scope": "ts",
       "lookback": null,
-      "min_periods": 2,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -2454,7 +6033,7 @@
       "pit_safe": true,
       "scope": "ts",
       "lookback": null,
-      "min_periods": 2,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -2471,7 +6050,46 @@
       "pit_safe": true,
       "scope": "ts",
       "lookback": null,
-      "min_periods": 2,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_impulse_return",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_impulse_strength",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_impulse_volume",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -2485,7 +6103,8 @@
         "ts_kurtosis"
       ],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -2499,7 +6118,60 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_last_pivot_high",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_last_pivot_low",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_line_convergence",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_line_parallelism",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -2521,7 +6193,7 @@
       "pit_safe": true,
       "scope": "ts",
       "lookback": null,
-      "min_periods": 2,
+      "min_periods": 1,
       "lag": 1
     },
     {
@@ -2534,6 +6206,7 @@
       ],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -2564,7 +6237,7 @@
     },
     {
       "canonical": "ts_max_buildup",
-      "surface": "research",
+      "surface": "extended",
       "aliases": [],
       "backends": [
         "pandas_numpy"
@@ -2586,7 +6259,7 @@
       "pit_safe": true,
       "scope": "ts",
       "lookback": null,
-      "min_periods": 2,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -2670,7 +6343,86 @@
     },
     {
       "canonical": "ts_moment",
-      "surface": "research",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_new_high",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_new_low",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_nth_pivot_high",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_nth_pivot_high_age",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_nth_pivot_low",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_nth_pivot_low_age",
+      "surface": "extended",
       "aliases": [],
       "backends": [
         "pandas_numpy"
@@ -2710,6 +6462,19 @@
       "lag": 0
     },
     {
+      "canonical": "ts_pattern_symmetry",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
       "canonical": "ts_pct",
       "surface": "daily",
       "aliases": [
@@ -2727,12 +6492,90 @@
       "pit_safe": true,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 1
     },
     {
+      "canonical": "ts_pivot_high_age",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_pivot_high_count",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_pivot_high_spacing",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_pivot_low_age",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_pivot_low_count",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_pivot_low_spacing",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
       "canonical": "ts_poly2_coeff",
-      "surface": "research",
+      "surface": "extended",
       "aliases": [],
       "backends": [
         "pandas_numpy"
@@ -2745,7 +6588,7 @@
     },
     {
       "canonical": "ts_poly2_resid",
-      "surface": "research",
+      "surface": "extended",
       "aliases": [],
       "backends": [
         "pandas_numpy"
@@ -2757,11 +6600,38 @@
       "lag": 0
     },
     {
+      "canonical": "ts_prev_high",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_prev_low",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
       "canonical": "ts_product",
       "surface": "extended",
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -2783,6 +6653,19 @@
         "pandas_numpy",
         "polars",
         "sql"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_range_expansion",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -2820,7 +6703,7 @@
       "pit_safe": true,
       "scope": "ts",
       "lookback": null,
-      "min_periods": 2,
+      "min_periods": 1,
       "lag": 1
     },
     {
@@ -2898,6 +6781,58 @@
       "lag": 0
     },
     {
+      "canonical": "ts_resistance_break",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_resistance_fit_r2",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_resistance_level",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_resistance_slope",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
       "canonical": "ts_sharpe",
       "surface": "daily",
       "aliases": [],
@@ -2909,7 +6844,7 @@
       "pit_safe": true,
       "scope": "ts",
       "lookback": null,
-      "min_periods": 2,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -2935,7 +6870,7 @@
     },
     {
       "canonical": "ts_sma_cn",
-      "surface": "research",
+      "surface": "extended",
       "aliases": [],
       "backends": [
         "pandas_numpy"
@@ -2983,7 +6918,7 @@
       "pit_safe": true,
       "scope": "ts",
       "lookback": null,
-      "min_periods": 2,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -3011,10 +6946,11 @@
     },
     {
       "canonical": "ts_sum_decay",
-      "surface": "research",
+      "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -3038,11 +6974,129 @@
       "lag": 0
     },
     {
-      "canonical": "ts_tail_mean",
+      "canonical": "ts_support_break",
       "surface": "extended",
       "aliases": [],
       "backends": [
         "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_support_fit_r2",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_support_level",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_support_slope",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_swing_amplitude",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_swing_amplitude_atr",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_swing_amplitude_pct",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_swing_duration",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_swing_velocity",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_tail_mean",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -3060,12 +7114,13 @@
       ],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
       "scope": "ts",
       "lookback": null,
-      "min_periods": 2,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -3076,7 +7131,8 @@
         "ts_top_n_avg"
       ],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -3091,7 +7147,8 @@
         "ts_top_n_std"
       ],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -3108,7 +7165,8 @@
         "tm_top_n_sum"
       ],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -3136,6 +7194,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -3211,16 +7270,276 @@
       "lag": 0
     },
     {
+      "canonical": "turnover_acceleration",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "turnover_adjusted_volatility",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "turnover_autocorr",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "turnover_momentum",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "turnover_shock",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "turnover_volatility",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "turnover_zscore",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ulcer_index",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
       "canonical": "unitize",
       "surface": "extended",
       "aliases": [],
       "backends": [
         "pandas_numpy"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "elementwise",
       "lookback": null,
       "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "up_down_volume_ratio",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "up_volume_ratio",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "volume_acceleration",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "volume_autocorr",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "volume_momentum",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "volume_shock",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "volume_to_range",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "volume_volatility",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "volume_weighted_momentum",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "volume_weighted_return",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "volume_zscore",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "vwap_deviation",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -3269,10 +7588,23 @@
       "backends": [
         "pandas_numpy"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "elementwise",
       "lookback": null,
       "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "yang_zhang_vol",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -3287,7 +7619,20 @@
       "pit_safe": true,
       "scope": "fundamental_period",
       "lookback": null,
-      "min_periods": 5,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "zero_return_ratio",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
       "lag": 0
     },
     {

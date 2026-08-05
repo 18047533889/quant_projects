@@ -16,6 +16,12 @@ class Schema:
     field_name: str | None = None
     source_table: str | None = None
     source_field: str | None = None
+    frequency: str = "daily"
+    temporal_model: str = "exact"
+    cardinality: str = "many_to_one"
+    domain: str = "auxiliary"
+    pit_safe: bool = True
+    nullable: bool = True
 
     @classmethod
     def from_field(cls, spec, *, value_type: ValueType = ValueType.PANEL) -> "Schema":
@@ -29,6 +35,12 @@ class Schema:
             field_name=spec.name,
             source_table=spec.table,
             source_field=spec.source_name,
+            frequency=spec.frequency,
+            temporal_model=spec.temporal_model,
+            cardinality=spec.cardinality,
+            domain=spec.domain,
+            pit_safe=spec.strict_pit_allowed,
+            nullable=spec.nullable,
         )
 
 

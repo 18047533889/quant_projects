@@ -192,7 +192,7 @@ def _seed_market_data(ashare_root: Path, us_root: Path) -> None:
             "TradeDate": pd.to_datetime(["2024-01-02", "2024-01-02"]).date,
             "Symbol": ["000001.SZ", "000002.SZ"],
             "IndexSymbol": ["000300.SH", "000300.SH"],
-            "Weight": [0.6, 0.4],
+            "Weight": [60.0, 40.0],
         }
     ).to_parquet(ash_idx / "2024-01-01.parquet")
 

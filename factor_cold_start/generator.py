@@ -826,6 +826,16 @@ def _extended(builder: Builder) -> None:
     range_pct = "safe_div_null(subtract(high, low), pre_close)"
     vol_change = "ts_pct(add(volume, 1.0), 1)"
 
+    # Explicit ts_average_volume for collision-free operator naming
+    builder.add_wrapped(
+        "ts_average_volume(volume,20)",
+        family="liquidity_activity",
+        subfamily="average_volume_explicit",
+        horizon=20,
+        rationale="Trailing 20-day average volume using collision-free operator name.",
+        wrappers=("rank", "zscore", "mad"),
+    )
+
     # Technical indicators and Wilder stateful signals.
     for h in (7, 14, 21, 28):
         builder.add_wrapped(

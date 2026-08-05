@@ -708,7 +708,7 @@ class TSCorr(TSCorrelation):
         description="滚动相关系数 (ts_correlation的别名)",
         examples=["ts_corr(close, volume, 20)"],
         param_names=["x", "y", "window"], return_type="series",
-        tags=["time_series", "ts_", "corr"]
+        tags=["time_series", "ts_", "corr", "allow_panel_broadcast"]
     )
 
 # aliases: TS_CORR, correlation, m_cor, ts_correlation
@@ -1373,7 +1373,7 @@ class TSCorrPolars(TSCorrelation):
         description="滚动相关系数 (ts_correlation的别名)",
         examples=["ts_corr(close, volume, 20)"],
         param_names=["x", "y", "window"], return_type="series",
-        tags=["time_series", "ts_", "corr"]
+        tags=["time_series", "ts_", "corr", "allow_panel_broadcast"]
     )
 
 # aliases: TS_CORR, correlation, m_cor, ts_correlation

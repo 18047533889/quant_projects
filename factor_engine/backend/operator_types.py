@@ -40,6 +40,12 @@ class OperatorSignature:
     input_units: tuple[str | None, ...] = ()
     output_unit: str | None = None
     compatible_units: tuple[tuple[str, ...], ...] = ()
+    input_frequencies: tuple[tuple[str, ...], ...] = ()
+    input_cardinalities: tuple[tuple[str, ...], ...] = ()
+    input_domains: tuple[tuple[str, ...], ...] = ()
+    require_pit_safe: bool = True
+    lookback_rule: str = "metadata"
+    cost: float = 1.0
 
     def validate_node(self, node: PlanNode) -> list[str]:
         """校验 plan 节点输入类型/形状（literal vs series）。"""
@@ -59,6 +65,12 @@ class OperatorSignature:
                 f"{self.canonical}: 需要 {required_inputs} 个输入，收到 {len(node.inputs)}"
             )
             return violations
+        maximum_inputs = sum(1 for arg in self.inputs if not (arg.type_kind == TypeKind.WINDOW and has_window_attr))
+        if len(node.inputs) > maximum_inputs:
+            violations.append(
+                f"{self.canonical}: 最多接受 {maximum_inputs} 个输入，收到 {len(node.inputs)}"
+            )
+            return violations
 
         for idx, arg in enumerate(self.inputs):
             if arg.type_kind == TypeKind.WINDOW and has_window_attr:
@@ -71,6 +83,24 @@ class OperatorSignature:
             err = _check_input(child, arg, canonical=self.canonical, arg_name=arg.name)
             if err:
                 violations.append(err)
+            semantic_index = idx
+            semantic_checks = (
+                (self.compatible_units, "unit"),
+                (self.input_frequencies, "frequency"),
+                (self.input_cardinalities, "cardinality"),
+                (self.input_domains, "domain"),
+            )
+            for contracts, attr_name in semantic_checks:
+                if semantic_index >= len(contracts) or not contracts[semantic_index]:
+                    continue
+                actual = str((child.attrs or {}).get(attr_name) or "")
+                if actual and actual not in contracts[semantic_index]:
+                    violations.append(
+                        f"{self.canonical}: {arg.name} {attr_name}={actual!r} "
+                        f"不兼容 {contracts[semantic_index]!r}"
+                    )
+            if self.require_pit_safe and (child.attrs or {}).get("pit_safe") is False:
+                violations.append(f"{self.canonical}: {arg.name} 不是 strict PIT safe")
 
         if not self.allow_dynamic_window:
             for idx, child in enumerate(node.inputs):
@@ -111,14 +141,30 @@ def _check_input(
         TypeKind.SERIES_DATETIME,
         TypeKind.GROUP_KEY,
     }:
-        if child.op == "literal" and not arg.allow_scalar_broadcast:
+        if child.op == "literal":
             raw = child.attrs.get("value")
-            if arg.type_kind == TypeKind.GROUP_KEY:
-                return f"{canonical}: {arg_name} 须为 group Series，收到 literal {raw!r}"
-            if arg.type_kind == TypeKind.SERIES_BOOL and not isinstance(raw, (bool, int, float)):
-                return f"{canonical}: {arg_name} 须为 bool Series"
-        if child.op not in {"column", "literal", "materialized_series", "plan_ref"} and child.op:
+            if not arg.allow_scalar_broadcast:
+                return f"{canonical}: {arg_name} 须为 Series，收到 literal {raw!r}"
+            if arg.type_kind == TypeKind.SERIES_BOOL and not isinstance(raw, bool):
+                return f"{canonical}: {arg_name} 须为 bool Series/scalar"
+            if arg.type_kind == TypeKind.SERIES_FLOAT and (
+                isinstance(raw, bool) or not isinstance(raw, (int, float))
+            ):
+                return f"{canonical}: {arg_name} 须为 numeric Series/scalar"
             return None
+        dtype = str((child.attrs or {}).get("dtype") or "").lower()
+        if dtype:
+            is_bool = dtype in {"bool", "boolean"}
+            is_string = dtype in {"str", "string", "object", "category"}
+            is_datetime = dtype.startswith("date") or dtype.startswith("datetime")
+            if arg.type_kind == TypeKind.SERIES_BOOL and not is_bool:
+                return f"{canonical}: {arg_name} 须为 bool Series，收到 {dtype}"
+            if arg.type_kind == TypeKind.SERIES_FLOAT and (is_bool or is_string or is_datetime):
+                return f"{canonical}: {arg_name} 须为 numeric Series，收到 {dtype}"
+            if arg.type_kind in {TypeKind.SERIES_STRING, TypeKind.GROUP_KEY} and not is_string:
+                return f"{canonical}: {arg_name} 须为 string/group Series，收到 {dtype}"
+            if arg.type_kind == TypeKind.SERIES_DATETIME and not is_datetime:
+                return f"{canonical}: {arg_name} 须为 datetime Series，收到 {dtype}"
         return None
 
     if arg.type_kind in {TypeKind.SCALAR_INT, TypeKind.SCALAR_FLOAT}:
@@ -247,18 +293,22 @@ OPERATOR_SIGNATURES: dict[str, OperatorSignature] = {
     "and_": OperatorSignature(
         "and_",
         (
-            ArgSpec("a", TypeKind.SERIES_FLOAT),
-            ArgSpec("b", TypeKind.SERIES_FLOAT),
+            ArgSpec("a", TypeKind.SERIES_BOOL),
+            ArgSpec("b", TypeKind.SERIES_BOOL),
         ),
+        output=TypeKind.SERIES_BOOL,
     ),
     "or_": OperatorSignature(
         "or_",
         (
-            ArgSpec("a", TypeKind.SERIES_FLOAT),
-            ArgSpec("b", TypeKind.SERIES_FLOAT),
+            ArgSpec("a", TypeKind.SERIES_BOOL),
+            ArgSpec("b", TypeKind.SERIES_BOOL),
         ),
+        output=TypeKind.SERIES_BOOL,
     ),
-    "not_": OperatorSignature("not_", (ArgSpec("x", TypeKind.SERIES_FLOAT),)),
+    "not_": OperatorSignature(
+        "not_", (ArgSpec("x", TypeKind.SERIES_BOOL),), output=TypeKind.SERIES_BOOL
+    ),
 }
 
 from backend.operator_signatures_phase1 import phase1_operator_signatures

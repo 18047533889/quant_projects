@@ -39,9 +39,19 @@ def test_true_turnover_and_shareholder_change():
     turnover = OperatorRegistry.get("true_turnover_rate").calculate(volume, shares)
     assert np.allclose(turnover.to_numpy(), [[0.1, 0.1], [0.2, 0.2]])
 
-    concentration = _panel([[0.4, 0.5], [0.45, 0.4]])
-    change = OperatorRegistry.get("holder_concentration_change").calculate(concentration, 1)
-    assert change.iloc[1].tolist() == pytest.approx([0.05, -0.1])
+
+def test_holder_change_is_snapshot_based():
+    from storage.sources.relation import relation_snapshot_change
+
+    rows = pd.DataFrame({
+        "instrument": ["A", "A", "A"],
+        "snapshot_id": [1, 2, 2],
+        "available_at": ["2024-01-01", "2024-04-01", "2024-04-02"],
+        "concentration": [0.4, 0.45, 0.45],
+    })
+    result = relation_snapshot_change(rows, value_column="concentration")
+    assert len(result) == 2
+    assert result.iloc[-1]["concentration_change"] == pytest.approx(0.05)
 
 
 def test_ashare_lowerings_registered():
@@ -49,4 +59,5 @@ def test_ashare_lowerings_registered():
 
     assert lowered_primitives("earnings_yield") == ("where", "gt", "safe_div_null")
     assert lowered_primitives("benchmark_excess_return") == ("subtract",)
-    assert lowered_primitives("limit_up_state") == ("ge",)
+    assert lowered_primitives("limit_up_state") == ("ge", "subtract")
+    assert lowered_primitives("limit_up_close") == ("ge", "subtract")

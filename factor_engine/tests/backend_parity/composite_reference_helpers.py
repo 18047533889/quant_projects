@@ -52,6 +52,8 @@ COMPOSITE_REFERENCE_CASES: tuple[CompositeReferenceCase, ...] = (
     CompositeReferenceCase("true_turnover_rate", ("volume", "free_float_shares")),
     CompositeReferenceCase("limit_up_state", ("close", "upper_limit")),
     CompositeReferenceCase("limit_down_state", ("close", "lower_limit")),
+    CompositeReferenceCase("limit_up_close", ("close", "upper_limit")),
+    CompositeReferenceCase("limit_down_close", ("close", "lower_limit")),
     CompositeReferenceCase("benchmark_excess_return", ("ret", "benchmark_ret")),
     CompositeReferenceCase("benchmark_relative_price", ("price", "benchmark_price")),
     CompositeReferenceCase("holder_concentration", ("top_holder_shares", "total_shares")),

@@ -148,7 +148,7 @@ def test_production_requires_api_key_when_explicitly_empty(monkeypatch):
     assert "DATA_ACCESS_API_KEY" in resp.json()["detail"]
 
 
-def test_default_team_api_key_is_quantsociety(monkeypatch):
+def test_no_default_team_api_key(monkeypatch):
     from data_access.service.app import create_app
     from data_access.service.config import ServiceSettings
 
@@ -157,12 +157,25 @@ def test_default_team_api_key_is_quantsociety(monkeypatch):
     monkeypatch.delenv("DATA_ACCESS_API_ALLOW_OPEN", raising=False)
     monkeypatch.setenv("DATA_ACCESS_SKIP_COS_MIRROR", "1")
     settings = ServiceSettings.from_env()
-    assert settings.api_key == "quantsociety"
+    assert settings.api_key == ""
     local_app = create_app(settings)
     with patch("data_access.service.app.get_store", return_value=_mock_store()):
         client = TestClient(local_app)
+        assert client.get("/v1/datasets").status_code == 200
+
+
+def test_explicit_api_key_is_required_when_configured(monkeypatch):
+    from data_access.service.app import create_app
+    from data_access.service.config import ServiceSettings
+
+    monkeypatch.setattr("data_access.service.app.API_KEY", "")
+    monkeypatch.setenv("DATA_ACCESS_API_KEY", "test-only-secret")
+    monkeypatch.setenv("DATA_ACCESS_SKIP_COS_MIRROR", "1")
+    local_app = create_app(ServiceSettings.from_env())
+    with patch("data_access.service.app.get_store", return_value=_mock_store()):
+        client = TestClient(local_app)
         assert client.get("/v1/datasets").status_code == 401
-        ok = client.get("/v1/datasets", headers={"X-API-Key": "quantsociety"})
+        ok = client.get("/v1/datasets", headers={"X-API-Key": "test-only-secret"})
         assert ok.status_code == 200
 
 

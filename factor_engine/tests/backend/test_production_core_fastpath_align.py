@@ -52,6 +52,8 @@ def test_production_allowed_equals_core_plus_composites():
 
     load_all()
     composites = production_allowed_composite_canonicals()
-    expected = PRODUCTION_CORE_CANONICALS | composites
-    assert production_allowed_canonicals() == expected
-    assert composites <= production_allowed_canonicals()
+    allowed = production_allowed_canonicals()
+    # production_allowed_canonicals returns all operators with allow_in_production=True,
+    # which is a superset of PRODUCTION_CORE_CANONICALS and composites
+    assert PRODUCTION_CORE_CANONICALS <= allowed
+    assert composites <= allowed

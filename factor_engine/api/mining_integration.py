@@ -47,12 +47,44 @@ def validate_production_dsl(formula: str) -> tuple[bool, str]:
         ``(True, "OK")`` 或 ``(False, 错误说明)``。
     """
     from cleaned_operators.operator_spec import check_production_formula_ops
+    from ir.analyzer import Analyzer
 
     from backend.cleaned_bridge import ensure_cleaned_loaded
+
+    import ast
+    from fields import FIELD_REGISTRY
+
+    try:
+        tree = ast.parse(str(formula), mode="eval")
+    except SyntaxError as exc:
+        return False, str(exc)
+    bare_secondary = []
+    for node in ast.walk(tree):
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "col"
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+            and isinstance(node.args[0].value, str)
+        ):
+            continue
+        spec = FIELD_REGISTRY.get(node.args[0].value, strict=False)
+        if spec is not None and spec.table != "StockDailyBar":
+            bare_secondary.append(spec.name)
+    if bare_secondary:
+        return False, (
+            "production DSL requires field(...) for cataloged non-anchor fields: "
+            + ", ".join(sorted(set(bare_secondary)))
+        )
 
     ok, msg = validate_factor_engine_dsl(formula)
     if not ok:
         return False, msg
+    try:
+        Analyzer().lower(parse_expr(str(formula), surface="daily"))
+    except (DSLParseError, KeyError, ValueError, TypeError, SyntaxError) as exc:
+        return False, str(exc)
     # Parsing may finalize/bootstrap operator metadata; refresh the certified
     # runtime view afterwards so production evidence is evaluated on the final
     # registry state rather than a partially loaded catalog.
@@ -433,7 +465,7 @@ def default_ashare_pv_universe_data_source_config(
             "index_symbol": "IndexSymbol",
             "weight": "Weight",
         },
-        "params": {"IndexSymbol": str(index_symbol)},
+        "semantic_filters": {"IndexSymbol": str(index_symbol)},
     }
     if start_date is not None:
         status["start_date"] = start_date
@@ -978,7 +1010,9 @@ def validate_manifest_for_execution(
     mkt = str(market or "").strip()
     et = str(expression_type or "dsl").strip() or "dsl"
     if et == "python":
-        return True, "skip: python intermediate; translate to dsl before delivery"
+        if require_production or require_fastpath:
+            return False, "python expression is research-only; translate to validated DSL before production delivery"
+        return True, "research-only: translation_required=true; valid_for_production=false"
     if et not in ("dsl", "lqtp_dsl", ""):
         return False, f"unsupported expression_type: {et!r}"
 
@@ -1035,7 +1069,7 @@ def resolve_mining_allowlist_tier(tier: str | None = None) -> str:
 def default_mining_search_space_config(
     *,
     tier: str | None = None,
-    version: str = "v1",
+    version: str = "typed_v2",
     fields: list[dict[str, Any]] | None = None,
     max_domains: int = 2,
     max_cost: float | None = None,
@@ -1043,8 +1077,8 @@ def default_mining_search_space_config(
 ) -> dict[str, Any]:
     """Campaign / DSL 生成器搜索空间。
 
-    ``version='v1'`` 保留原始 allowlist 契约；``version='v2'`` 输出带字段和
-    算子签名的 typed mining 契约。
+    ``version='typed_v2'`` 是新 campaign 默认契约；``version='v1'`` 仅保留
+    历史 allowlist 兼容。
     """
     tier_key = resolve_mining_allowlist_tier(tier)
     ops = default_mining_operator_allowlist(tier=tier_key)
@@ -1115,7 +1149,31 @@ def default_typed_mining_search_space_config(
         raise ValueError("field_dq_policy must be drop, mask, reject, or allow")
 
     typed_fields: list[dict[str, Any]] = []
-    for raw in fields or list(_TYPED_FIELD_DEFAULTS):
+    if fields is None:
+        from fields import FIELD_REGISTRY
+
+        raw_fields = [
+            {
+                "name": spec.name,
+                "field_id": spec.field_id,
+                "field_expr": f"field({spec.name!r})",
+                "table": spec.table,
+                "source_name": spec.source_name,
+                "frequency": spec.frequency,
+                "domain": spec.domain,
+                "cardinality": spec.cardinality,
+                "unit": spec.canonical_unit,
+                "value_kind": spec.value_kind,
+                "temporal_model": spec.temporal_model,
+                "strict_pit_allowed": spec.strict_pit_allowed,
+                "required_filters": list(spec.required_filters),
+            }
+            for spec in FIELD_REGISTRY.fields()
+            if spec.mining_allowed and spec.cardinality != "one_to_many"
+        ]
+    else:
+        raw_fields = list(fields)
+    for raw in raw_fields:
         field = dict(raw)
         missing = [key for key in ("name", "frequency", "domain", "cardinality", "unit") if not field.get(key)]
         if missing:
@@ -1135,18 +1193,29 @@ def default_typed_mining_search_space_config(
         values = _typed_tag_values(tags)
         params = list(entry.get("param_names") or getattr(meta, "param_names", None) or [])
         cost = float(values.get("cost", entry.get("cost", 1.0)))
+        if not cost > 0:
+            raise ValueError(f"operator {canonical!r} has invalid mining cost {cost!r}")
         if max_cost is not None and cost > float(max_cost):
             continue
+        policy = entry.get("contract") or {}
         domains = [values["domain"]] if values.get("domain") else []
+        if not domains and getattr(meta, "input_fields", None):
+            domains = sorted({str(value) for value in meta.input_fields if value})
+        input_units = dict(getattr(meta, "input_units", None) or {})
+        output_unit = getattr(meta, "output_unit", None) or values.get("unit") or "inherit"
+        scope = str(policy.get("scope") or entry.get("scope") or "unknown")
+        frequency = "minute" if scope == "session_intraday" else "daily"
+        cardinality = "group" if scope in {"group", "cross_sectional"} else "panel"
         signatures.append({
             "name": canonical,
             "inputs": params,
+            "input_units": input_units,
             "output": getattr(meta, "return_type", None) or entry.get("return_type") or "series",
             "signature": values.get("signature") or f"{','.join(params)}->series",
             "domains": domains,
-            "frequency": "daily",
-            "cardinality": "panel",
-            "unit": values.get("unit", "inherit"),
+            "frequency": frequency,
+            "cardinality": cardinality,
+            "unit": output_unit,
             "cost": cost,
         })
 
@@ -1159,6 +1228,7 @@ def default_typed_mining_search_space_config(
         "operators": signatures,
         "constraints": {"max_domains": domains_limit, "max_cost": max_cost},
         "field_dq_policy": dq,
+        "field_catalog_hash": FIELD_REGISTRY.catalog_hash(),
         "count": len(signatures),
         "require_fastpath_validation": tier_key == "production_fastpath",
     }
@@ -1168,6 +1238,7 @@ def validate_formula_in_mining_allowlist(
     formula: str,
     *,
     tier: str | None = None,
+    max_domains: int = 2,
 ) -> tuple[bool, str]:
     """校验公式算子是否在指定 tier allowlist 内。
 
@@ -1204,13 +1275,22 @@ def validate_formula_in_mining_allowlist(
     for node in ast.walk(tree):
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
             name = node.func.id
-            if name == "col":
+            if name in {"col", "field"}:
                 continue
             canon = OperatorRegistry._aliases.get(name, name)
             if canon not in allowed and canon not in {"column", "literal"}:
                 unknown.append(canon)
     if unknown:
         return False, f"operators not in {tier_key} allowlist: {sorted(set(unknown))}"
+    from ir.analyzer import Analyzer, validate_max_domains
+
+    try:
+        analysis = Analyzer().lower(parse_expr(text, surface="daily"))
+    except Exception as exc:
+        return False, str(exc)
+    domain_errors = validate_max_domains(analysis, max_domains=max_domains)
+    if domain_errors:
+        return False, "; ".join(domain_errors)
     if tier_key == "production_fastpath":
         return validate_production_fastpath_dsl(text)
     if tier_key == "production":
@@ -1218,12 +1298,29 @@ def validate_formula_in_mining_allowlist(
     return True, "OK"
 
 
-def write_mining_search_space(path: str | Path, *, tier: str | None = None) -> Path:
-    """将 ``default_mining_search_space_config`` 写入 JSON 文件。"""
+def write_mining_search_space(
+    path: str | Path,
+    *,
+    tier: str | None = None,
+    version: str = "typed_v2",
+    fields: list[dict[str, Any]] | None = None,
+    max_domains: int = 2,
+    max_cost: float | None = None,
+    field_dq_policy: str = "drop",
+) -> Path:
+    """Write a deterministic versioned mining search-space document."""
     out = Path(path)
     out.parent.mkdir(parents=True, exist_ok=True)
+    payload = default_mining_search_space_config(
+        tier=tier,
+        version=version,
+        fields=fields,
+        max_domains=max_domains,
+        max_cost=max_cost,
+        field_dq_policy=field_dq_policy,
+    )
     out.write_text(
-        json.dumps(default_mining_search_space_config(tier=tier), ensure_ascii=False, indent=2) + "\n",
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
     return out

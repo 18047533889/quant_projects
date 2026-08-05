@@ -586,12 +586,6 @@
       "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_mut_cro_asym_vol_ratio_med_15_minp3_vol10/values.parquet",
       "at": "2026-08-02T05:05:53.121132"
     },
-    "factor_asym_vol_cont_gate_30": {
-      "engine": "factor_engine",
-      "dsl": "zscore((((log((ts_std(((ts_pct(close, 1))), 60)) / (ts_std(((ts_pct(close, 1))), 60)))) * ((volume / (ts_mean(volume, 20)))))))",
-      "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/factor_asym_vol_cont_gate_30/values.parquet",
-      "at": "2026-08-02T05:08:07.808360"
-    },
     "week2_vol_adjusted_momentum": {
       "engine": "factor_engine",
       "dsl": "ema((close / delay(close, 3) - 1) * volume / ts_mean(volume, 20), 5)",
@@ -1563,6 +1557,12 @@
       "dsl": "ema(safe_div((high - low), close), 8) * ((1 / (1 + exp(-(5 * (safe_div(volume, ts_mean(volume, 25)) - 0.85))))) * ema(safe_div(volume, ts_mean(volume, 25)), 10) + (1 - (1 / (1 + exp(-(5 * (safe_div(vo",
       "path": "data/cogalpha_lqtp_production/factor_lake/factor_directional_vol_smooth_range_mut/values.parquet",
       "at": "2026-08-03T03:50:09.907493"
+    },
+    "factor_asym_vol_cont_gate_30": {
+      "engine": "python",
+      "dsl": "log(safe_div(ts_std(where(ts_pct(close, 1) < 0, ts_pct(close, 1), 0), 60), ts_std(where(ts_pct(close, 1) > 0, ts_pct(close, 1), 0), 60) + 1e-10)) * clip(safe_div(volume, ts_mean(volume, 20)), 0, 3)",
+      "path": "data/cogalpha_lqtp_production/factor_lake/factor_asym_vol_cont_gate_30/values.parquet",
+      "at": "2026-08-04T19:10:00.801169"
     }
   }
 }

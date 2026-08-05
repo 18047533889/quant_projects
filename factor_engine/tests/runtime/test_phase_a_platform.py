@@ -66,7 +66,11 @@ def test_production_run_requires_all_flags(monkeypatch):
         data_source=InMemorySeriesSource(data=_panel()),
         run_mode="production",
     )
-    f = Factor(name="m", expr=rank(ts_mean(col("close"), 2)))
+    f = Factor(
+        name="m",
+        expr=rank(ts_mean(col("close"), 2)),
+        source_expr="rank(ts_mean(close, 2))",
+    )
     with pytest.raises(ProductionPolicyViolation):
         eng.run(f, input_dq_check=True, auto_warmup=False, pit_enforce=False)
     out = eng.run(

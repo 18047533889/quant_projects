@@ -110,6 +110,7 @@ class RecipeCompiler:
         if (
             recipe.status == "production"
             and os.getenv("FACTOR_ENGINE_CERTIFY_RECIPE_EVIDENCE") != "1"
+            and os.getenv("FACTOR_ENGINE_EXPAND_RECIPE_USAGE") != "1"
         ):
             from backend.recipe_evidence import recipe_execution_verified
 

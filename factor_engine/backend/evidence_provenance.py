@@ -303,6 +303,21 @@ def evidence_artifact_valid(*, require_commit_match: bool = False) -> bool:
     )
 
 
+def production_evidence_artifact_valid() -> bool:
+    """Production startup gate with optional strict commit binding.
+
+    Semantic source hashes remain authoritative for local/rebased development.
+    Deployments set ``FACTOR_ENGINE_EVIDENCE_REQUIRE_COMMIT_MATCH=1`` to bind the
+    artifact to the exact release commit as well.
+    """
+    import os
+
+    strict = os.environ.get(
+        "FACTOR_ENGINE_EVIDENCE_REQUIRE_COMMIT_MATCH", ""
+    ).strip().lower() in {"1", "true", "yes", "on"}
+    return evidence_artifact_valid(require_commit_match=strict)
+
+
 @lru_cache(maxsize=256)
 def _source_hash(path: Path) -> str:
     if not path.is_file():

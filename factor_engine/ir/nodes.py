@@ -13,8 +13,17 @@ from typing import Any
 
 @dataclass(frozen=True)
 class IRNode:
-    """单棵 IR 子树：算子名 + 子节点元组 + 属性（窗口 d、filter 等）。"""
+    """单棵 IR 子树：算子名 + 子节点元组 + 属性（窗口 d、filter 等）。
+
+    ``attrs`` participates in IR hashing and plan cache keys — keep only operator
+    parameters (window, d, …) here.  ``semantic_attrs`` carries field-catalog
+    metadata (domain, frequency, cardinality, pit_safe, unit) that is useful for
+    type-checking passes but must NOT affect hash identity.
+    """
 
     op: str
     inputs: tuple["IRNode", ...] = ()
     attrs: dict[str, Any] = field(default_factory=dict)
+    semantic_attrs: dict[str, Any] = field(
+        default_factory=dict, compare=False, hash=False
+    )

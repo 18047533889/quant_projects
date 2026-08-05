@@ -54,16 +54,19 @@ def test_default_mining_search_space_config(_loaded):
     from api.mining_integration import default_mining_search_space_config
 
     cfg = default_mining_search_space_config(tier="production_fastpath")
+    assert cfg["schema_version"] == "factor_engine.mining_search_space.v2"
     assert cfg["allowlist_tier"] == "production_fastpath"
     assert cfg["require_fastpath_validation"] is True
     assert cfg["count"] == len(cfg["operators"])
-    assert "ts_mean" in cfg["operators"]
+    assert "ts_mean" in cfg["v1_allowlist"]
+    assert cfg["fields"]
+    assert all(field["field_expr"].startswith("field(") for field in cfg["fields"])
 
 
 def test_typed_mining_search_space_v2_preserves_v1_allowlist(_loaded):
     from api.mining_integration import default_mining_search_space_config
 
-    v1 = default_mining_search_space_config(tier="research")
+    v1 = default_mining_search_space_config(tier="research", version="v1")
     v2 = default_mining_search_space_config(tier="research", version="v2", max_cost=1)
     assert v2["schema_version"] == "factor_engine.mining_search_space.v2"
     assert v2["v1_allowlist"] == v1["operators"]
@@ -87,6 +90,26 @@ def test_typed_mining_rejects_invalid_constraints(_loaded):
         )
 
 
+def test_typed_mining_uses_field_catalog_hash_and_filters_cost(tmp_path, _loaded):
+    from api.mining_integration import (
+        default_mining_search_space_config,
+        write_mining_search_space,
+    )
+    from fields import compute_field_catalog_hash
+
+    cfg = default_mining_search_space_config(
+        tier="research", version="v2", max_cost=0.5
+    )
+    assert cfg["field_catalog_hash"] == compute_field_catalog_hash()
+    assert all(op["cost"] <= 0.5 for op in cfg["operators"])
+
+    target = tmp_path / "space.json"
+    write_mining_search_space(target, tier="research", version="v2", max_cost=0.5)
+    first = target.read_bytes()
+    write_mining_search_space(target, tier="research", version="v2", max_cost=0.5)
+    assert target.read_bytes() == first
+
+
 def test_validate_formula_in_mining_allowlist(_loaded):
     from api.mining_integration import validate_formula_in_mining_allowlist
 
@@ -102,6 +125,24 @@ def test_validate_formula_in_mining_allowlist(_loaded):
     )
     assert ok_bad is False
     assert "ewm_corr" in msg_bad
+
+
+def test_validate_manifest_python_is_research_only():
+    from api.mining_integration import validate_manifest_for_execution
+
+    ok, msg = validate_manifest_for_execution(
+        market="ashare", expression_type="python", formula="close.mean()"
+    )
+    assert ok is True
+    assert "valid_for_production=false" in msg
+    prod_ok, prod_msg = validate_manifest_for_execution(
+        market="ashare",
+        expression_type="python",
+        formula="close.mean()",
+        require_production=True,
+    )
+    assert prod_ok is False
+    assert "research-only" in prod_msg
 
 
 def test_resolve_mining_allowlist_tier_env(monkeypatch, _loaded):

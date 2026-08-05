@@ -108,8 +108,12 @@ def _operator_namespace() -> str:
     """
     try:
         from cleaned_operators.operator_policy import compute_operator_catalog_hash
+        from fields import compute_field_catalog_hash
 
-        return compute_operator_catalog_hash()[:16]
+        return (
+            f"{compute_operator_catalog_hash()[:16]}-"
+            f"{compute_field_catalog_hash()[:16]}"
+        )
     except Exception:
         return "unknown_ops"
 

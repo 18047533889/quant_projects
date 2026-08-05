@@ -130,7 +130,7 @@ def test_default_ashare_pv_universe_composite():
     assert cfg["joins"]["status"] == "asof_backward"
     assert cfg["joins"]["constituent"] == "exact"
     assert cfg["sources"]["constituent"]["dataset"] == "ashare_index_constituent"
-    assert cfg["sources"]["constituent"]["params"]["IndexSymbol"] == "000300.SH"
+    assert cfg["sources"]["constituent"]["semantic_filters"]["IndexSymbol"] == "000300.SH"
     assert cfg["sources"]["status"]["fields"]["public_status"] == "ListedState"
 
 

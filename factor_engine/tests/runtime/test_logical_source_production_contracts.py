@@ -24,11 +24,30 @@ def test_benchmark_daily_broadcast_is_exact_not_stale_asof() -> None:
     assert np.isnan(out.loc[(pd.Timestamp("2026-07-31"), "B")])
 
 
+def test_benchmark_daily_broadcast_normalizes_intraday_anchor_date() -> None:
+    anchor = pd.MultiIndex.from_tuples(
+        [
+            (pd.Timestamp("2026-07-30 10:15:00"), "A"),
+            (pd.Timestamp("2026-07-30 14:30:00"), "B"),
+        ],
+        names=["timestamp", "instrument"],
+    )
+    benchmark = pd.Series(
+        [0.012],
+        index=pd.MultiIndex.from_tuples(
+            [(pd.Timestamp("2026-07-30"), "SPX")],
+            names=["timestamp", "instrument"],
+        ),
+    )
+    out = LQTPLogicalDataSource._broadcast_exact_by_date(anchor, benchmark)
+    assert out.tolist() == [0.012, 0.012]
+
+
 def test_minute_sessions_never_collide_across_lunch_boundary() -> None:
     frame = pd.DataFrame(
         {
             "timestamp": pd.to_datetime(
-                ["2026-07-31 11:30:00", "2026-07-31 13:00:00"]
+                ["2026-07-31 11:29:00", "2026-07-31 13:00:00"]
             ),
             "instrument": ["A", "A"],
             "value": [1.0, 2.0],

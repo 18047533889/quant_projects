@@ -75,6 +75,13 @@ def structural_key(node: PlanNode, memo: dict[int, str] | None = None) -> str:
         "in": child_keys,
         "operator_contract": _operator_semantic_contract(node.op),
     }
+    if node.op == "column":
+        try:
+            from fields import compute_field_catalog_hash
+
+            payload["field_catalog_hash"] = compute_field_catalog_hash()
+        except (ImportError, RuntimeError, ValueError):
+            payload["field_catalog_hash"] = "unavailable"
     s = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     key = hashlib.sha256(s.encode("utf-8")).hexdigest()
     memo[nid] = key

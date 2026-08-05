@@ -27,8 +27,9 @@ def _env_int(name: str, default: int) -> int:
     return value
 
 
-# 团队统一 HTTP 读数密钥（可用环境变量 DATA_ACCESS_API_KEY 覆盖；设空字符串关闭默认密钥）
-DEFAULT_API_KEY = "quantsociety"
+# No deployable shared secret is embedded in source.  Production startup fails
+# closed when DATA_ACCESS_API_KEY is absent and open mode was not explicitly set.
+DEFAULT_API_KEY = ""
 
 
 @dataclass(frozen=True)

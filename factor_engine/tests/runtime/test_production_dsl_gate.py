@@ -80,6 +80,18 @@ def test_production_run_many_validates_source_expr():
         os.environ.pop("QUANT_PRODUCTION_MODE", None)
 
 
+def test_production_rejects_source_expr_mismatch():
+    from api import ts_mean
+
+    factor = Factor(
+        name="mismatch",
+        expr=ts_mean(col("close"), 2),
+        source_expr="ts_mean(close, 3)",
+    )
+    with pytest.raises(ProductionPolicyViolation, match="does not match"):
+        assert_production_factors([factor], mode="production")
+
+
 def test_warmup_uses_market_bars_per_day():
     from ir.analyzer import Analyzer
 

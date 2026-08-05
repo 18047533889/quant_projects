@@ -49,11 +49,12 @@ class SessionCalendar:
             raise ValueError("timestamp_convention must be bar_end or bar_start")
         segments = self.segments
         if segments is None:
-            segments = (
-                (("09:30", "11:30"), ("13:00", "15:00"))
-                if market in {"CN", "ASHARE", "A_SHARE"}
-                else (("09:30", "16:00"),)
-            )
+            if market in {"CN", "ASHARE", "A_SHARE"}:
+                segments = (("09:30", "11:30"), ("13:00", "15:00"))
+            elif market in {"HK", "HONG_KONG"}:
+                segments = (("09:30", "12:00"), ("13:00", "16:00"))
+            else:
+                segments = (("09:30", "16:00"),)
         parsed = tuple((str(start), str(stop)) for start, stop in segments)
         if not parsed or any(_minute(stop) <= _minute(start) for start, stop in parsed):
             raise ValueError("session segments must be non-empty increasing intervals")

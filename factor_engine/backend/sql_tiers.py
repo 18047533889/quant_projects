@@ -25,6 +25,7 @@ SQL_IMPLEMENTED_CANONICALS: frozenset[str] = frozenset(
         "multiply",
         "divide",
         "fin_ratio",
+        "row_sum_skipna",
         "neg",
         "abs",
         "sign",

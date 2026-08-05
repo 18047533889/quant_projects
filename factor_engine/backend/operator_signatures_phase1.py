@@ -40,15 +40,14 @@ _UNARY = frozenset(
     count is_null is_not_null is_nan is_finite is_infinite nan_to_num
     cs_demean cs_mad cs_mad_zscore cs_pct_rank cs_mean cs_std cs_sum cs_count
     cs_mean cs_std cs_sum cs_count log_returns ts_log_return tanh
-    protected_log protected_sqrt not_ log_abs signed_log signed_sqrt
-    fillna_const ffill
+    protected_log protected_sqrt log_abs signed_log signed_sqrt
+    ffill
     """.split()
 )
 
 _BINARY = frozenset(
     """
-    add subtract multiply divide maximum minimum gt lt eq ge le ne and_ or_
-    power protected_div safe_div_null coalesce
+    add subtract multiply divide maximum minimum power protected_div safe_div_null coalesce
     """.split()
 )
 
@@ -69,6 +68,30 @@ _GROUP = frozenset(
 )
 
 _SPECIAL: dict[str, OperatorSignature] = {
+    **{
+        name: OperatorSignature(name, _B, output=TypeKind.SERIES_BOOL)
+        for name in ("gt", "lt", "eq", "ge", "le", "ne")
+    },
+    "and_": OperatorSignature(
+        "and_",
+        (ArgSpec("a", TypeKind.SERIES_BOOL), ArgSpec("b", TypeKind.SERIES_BOOL)),
+        output=TypeKind.SERIES_BOOL,
+    ),
+    "or_": OperatorSignature(
+        "or_",
+        (ArgSpec("a", TypeKind.SERIES_BOOL), ArgSpec("b", TypeKind.SERIES_BOOL)),
+        output=TypeKind.SERIES_BOOL,
+    ),
+    "not_": OperatorSignature(
+        "not_", (ArgSpec("x", TypeKind.SERIES_BOOL),), output=TypeKind.SERIES_BOOL
+    ),
+    "fillna_const": OperatorSignature(
+        "fillna_const",
+        (
+            ArgSpec("x", TypeKind.SERIES_FLOAT),
+            ArgSpec("value", TypeKind.SCALAR_FLOAT, allow_scalar_broadcast=True),
+        ),
+    ),
     "where": OperatorSignature(
         "where",
         (

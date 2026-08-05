@@ -40,11 +40,17 @@ _POSITIVE_LAG_PARAMS = {
     "ts_delta": ("n", 1),
     "ts_pct": ("d", 1),
 }
-_FINANCIAL_TABLES = frozenset({"StockIncome", "StockCashFlow", "StockBalance"})
+_FINANCIAL_TABLES = frozenset({"StockIncome", "StockCashFlow", "StockBalance", "StockIndicator"})
 _EXACT_DAILY_TABLES = frozenset({
-    "DailyBar", "StockDailyBar", "BenchmarkIndexDailyBar", "SizeDaily", "EtfDailyBar",
+    "DailyBar", "StockDailyBar", "StockValuationDaily", "SizeDaily",
+    "StockCapitalDaily", "IndexConstituent", "BenchmarkIndexDailyBar",
+    "IndexDailyBar", "EtfDailyBar", "ETFDailyBar", "Calendar",
 })
-_ASOF_DAILY_TABLES = frozenset({"IndustryDaily"})
+_ASOF_DAILY_TABLES = frozenset({
+    "IndustryDaily", "StockIndustry", "StockStatus", "StockList", "ETFList", "IndexList",
+})
+_RELATION_TABLES = frozenset({"StockTopTenShareholder", "StockTopTenFloatShareholder"})
+_EFFECTIVE_TABLES = frozenset({"StockDividend"})
 _MINUTE_TABLES = frozenset({"StockMinuteBar", "MinuteBar"})
 _PROFILE_FEATURES = frozenset({
     "profile_zscore",
@@ -217,11 +223,13 @@ def _audit_source_ref(
     transform_params = specification.transform_params_dict()
 
     if specification.table in _EXACT_DAILY_TABLES:
-        if (
-            specification.table == "BenchmarkIndexDailyBar"
-            and not str(params.get("index", "")).strip()
-        ):
-            violations.append(f"{label}(missing_index)")
+        if specification.table in {"BenchmarkIndexDailyBar", "IndexDailyBar", "IndexConstituent"}:
+            canonical_index = str(params.get("IndexSymbol", "")).strip()
+            legacy_index = str(params.get("index", "")).strip()
+            if not canonical_index and not legacy_index:
+                violations.append(f"{label}(missing_IndexSymbol)")
+            if canonical_index and legacy_index and canonical_index != legacy_index:
+                violations.append(f"{label}(conflicting_IndexSymbol)")
         if specification.transform is not None:
             violations.append(
                 f"{label}(unexpected_transform={specification.transform})"
@@ -247,6 +255,15 @@ def _audit_source_ref(
                 quarters = 0
             if quarters <= 0:
                 violations.append(f"{label}(financial_lag_quarters<=0)")
+        return True
+
+    if specification.table in _RELATION_TABLES:
+        if specification.transform not in {None, "relation_asof", "relation_aggregate"}:
+            violations.append(f"{label}(unsupported_relation_transform={specification.transform})")
+        return True
+
+    if specification.table in _EFFECTIVE_TABLES:
+        violations.append(f"{label}(effective_only_not_strict_pit)")
         return True
 
     if specification.table in _MINUTE_TABLES:

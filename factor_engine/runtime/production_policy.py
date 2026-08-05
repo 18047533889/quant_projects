@@ -259,15 +259,42 @@ def assert_production_factors(
 ) -> None:
     if not is_production_mode(mode):
         return
-    from api.mining_integration import validate_factor_engine_dsl
+    from api.mining_integration import validate_production_dsl
+    from api.dsl_parser import parse_expr
+    from ir.analyzer import Analyzer
+    from storage.catalog import compute_ir_hash
 
     violations: list[str] = []
     for factor in factors:
         source = getattr(factor, "source_expr", None)
-        if source:
-            ok, message = validate_factor_engine_dsl(str(source), surface="lqtp")
-            if not ok:
-                violations.append(f"{getattr(factor, 'name', '?')}: {message}")
+        if not source:
+            violations.append(
+                f"{getattr(factor, 'name', '?')}: missing source_expr required for production validation"
+            )
+            continue
+        ok, message = validate_production_dsl(str(source))
+        if not ok:
+            violations.append(f"{getattr(factor, 'name', '?')}: {message}")
+            continue
+        try:
+            source_hash = compute_ir_hash(
+                Analyzer().lower(parse_expr(str(source), surface="daily")).ir,
+                structural_only=True
+            )
+            actual_hash = compute_ir_hash(
+                Analyzer().lower(factor.expr).ir,
+                structural_only=True
+            )
+        except Exception as exc:
+            violations.append(
+                f"{getattr(factor, 'name', '?')}: source_expr consistency check failed: {exc}"
+            )
+            continue
+        if source_hash != actual_hash:
+            violations.append(
+                f"{getattr(factor, 'name', '?')}: source_expr does not match factor.expr "
+                f"({source_hash[:12]} != {actual_hash[:12]})"
+            )
     if violations:
         raise ProductionPolicyViolation(
             f"production 模式 {context} DSL 语法/兼容校验失败: {'; '.join(violations)}"

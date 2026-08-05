@@ -656,6 +656,9 @@ def _eval_one(payload: dict[str, Any]) -> dict[str, Any]:
             "mean_overlap_names": _json_float(analysis.get("mean_overlap_names")),
             "industry_neutral_mean_rank_ic": _json_float(analysis.get("industry_neutral_mean_rank_ic")),
             "size_neutral_mean_rank_ic": _json_float(analysis.get("size_neutral_mean_rank_ic")),
+            "industry_size_neutral_mean_rank_ic": _json_float(
+                analysis.get("industry_size_neutral_mean_rank_ic")
+            ),
             "ic_half_life_days": _json_float(analysis.get("ic_half_life_days")),
             "factor_rank_turnover": _json_float(analysis.get("factor_rank_turnover")),
             "size_exposure_corr": _json_float(analysis.get("size_exposure_corr")),

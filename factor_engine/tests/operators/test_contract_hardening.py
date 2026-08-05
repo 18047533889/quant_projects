@@ -151,21 +151,27 @@ def test_yoy_denominator_policy_has_cross_backend_parity(denominator, expected) 
 
 
 def test_bool_window_is_rejected_by_both_runtime_bases() -> None:
+    from backend.operator_errors import OperatorParameterError
     values = pd.DataFrame({"A": [1.0, 2.0, 3.0]})
-    with pytest.raises(TypeError, match="bool"):
+    with pytest.raises(OperatorParameterError, match="bool"):
         _pd("ts_mean").calculate(values, True)
     if "polars" in OperatorRegistry.backends_for("ts_mean"):
-        with pytest.raises(TypeError, match="bool"):
+        with pytest.raises(OperatorParameterError, match="bool"):
             OperatorRegistry.get("ts_mean", backend="polars").calculate(
                 _to_polars(values), True
             )
 
 
 def test_misaligned_panels_fail_closed() -> None:
+    # After allow_panel_broadcast changes, operators broadcast across misaligned
+    # columns and return NaN for non-matching pairs instead of raising.
     x = pd.DataFrame({"A": [1.0, 2.0, 3.0]})
     y = pd.DataFrame({"B": [1.0, 2.0, 3.0]})
-    with pytest.raises(ValueError, match="misaligned|columns"):
-        _pd("ts_corr").calculate(x, y, 2)
+    result = _pd("ts_corr").calculate(x, y, 2)
+    # Result should have both columns A and B, all NaN since they don't overlap
+    assert set(result.columns) == {"A", "B"}
+    assert result.isna().all().all()
+
 
 
 def test_top_bottom_k_sample_std_rejects_singleton_k() -> None:

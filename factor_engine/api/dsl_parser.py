@@ -2,7 +2,7 @@
 from __future__ import annotations
 import ast
 from typing import Any
-from api.columns import col
+from api.columns import field
 from api.factor import Factor
 from api.operator_registry import build_dsl_allowlist
 from expr.base import Expr
@@ -37,7 +37,7 @@ class _ExprBuilder:
         if isinstance(node,ast.Name):
             if node.id in self._allowed:raise DSLParseError(f"Bare name {node.id!r} is not a column reference; use {node.id}(...) for operators.")
             if not _is_field_identifier(node.id):raise DSLParseError(f"Unsupported name: {node.id}")
-            return col(node.id)
+            return field(node.id, strict=False)
         if isinstance(node,ast.Attribute):raise DSLParseError("Unsupported data-source attribute. Under dialect='lqtp', only registered DataTable.Field or parameterized DataTable(...).Field references are accepted.")
         raise DSLParseError(f"Unsupported syntax node: {type(node).__name__}")
     def _visit_call(self,node:ast.Call)->Any:

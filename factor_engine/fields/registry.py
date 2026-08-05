@@ -5,7 +5,7 @@ import hashlib
 import json
 from collections.abc import Iterable
 
-from .spec import FieldSpec, TableSpec
+from .spec import FIELD_CATALOG_SCHEMA_VERSION, FieldSpec, TableSpec
 
 
 class FieldRegistry:
@@ -26,6 +26,7 @@ class FieldRegistry:
         return str(value).strip().lower()
 
     def register_table(self, spec: TableSpec, *, replace: bool = False) -> TableSpec:
+        self._validate_table(spec)
         key = self._key(spec.name)
         if key in self._tables and not replace:
             raise ValueError(f"table already registered: {spec.name}")
@@ -41,6 +42,7 @@ class FieldRegistry:
         return spec
 
     def register(self, spec: FieldSpec, *, replace: bool = False) -> FieldSpec:
+        self._validate_field(spec)
         identity = self._identity(spec.table, spec.name)
         if identity in self._fields and not replace:
             raise ValueError(f"field already registered: {spec.table}.{spec.name}")
@@ -59,6 +61,31 @@ class FieldRegistry:
         table_key = self._table_aliases.get(self._key(table), self._key(table))
         return f"{table_key}.{self._key(field)}"
 
+    def _validate_table(self, spec: TableSpec) -> None:
+        if not spec.name or not spec.dataset:
+            raise ValueError("table name and dataset must be non-empty")
+        if spec.join_policy in {"financial_pit", "relation_pit"} and not spec.knowledge_time_column:
+            raise ValueError(f"{spec.name}: {spec.join_policy} requires knowledge_time_column")
+        if spec.join_policy == "financial_pit" and not spec.period_id_column:
+            raise ValueError(f"{spec.name}: financial_pit requires period_id_column")
+        if spec.cardinality not in {"one_to_one", "many_to_one", "one_to_many"}:
+            raise ValueError(f"{spec.name}: unsupported cardinality {spec.cardinality!r}")
+
+    def _validate_field(self, spec: FieldSpec) -> None:
+        table = self.resolve_table(spec.table)
+        if table is None:
+            raise ValueError(f"field {spec.name!r} references unknown table {spec.table!r}")
+        if spec.dataset and spec.dataset != table.dataset:
+            raise ValueError(
+                f"{spec.field_id}: dataset {spec.dataset!r} does not match table dataset {table.dataset!r}"
+            )
+        if spec.scale_to_canonical is None or spec.scale_to_canonical <= 0:
+            raise ValueError(f"{spec.field_id}: scale_to_canonical must be positive")
+        if spec.cardinality == "one_to_many" and spec.mining_allowed:
+            raise ValueError(
+                f"{spec.field_id}: one-to-many fields must be aggregated before mining"
+            )
+
     def resolve_table(self, name: str) -> TableSpec | None:
         key = self._table_aliases.get(self._key(name), self._key(name))
         return self._tables.get(key)
@@ -68,10 +95,10 @@ class FieldRegistry:
         if table is not None:
             table_spec = self.resolve_table(table)
             table_name = table_spec.name if table_spec else table
-            candidates = {
-                identity for identity in self._field_aliases.get(self._key(name), set())
-                if identity.startswith(self._identity(table_name, "").rsplit(".", 1)[0] + ".")
+            allowed_identities = {
+                self._identity(spec.table, spec.name) for spec in self.fields(table=table_name)
             }
+            candidates = set(self._field_aliases.get(self._key(name), set())) & allowed_identities
             direct = self._fields.get(self._identity(table_name, name))
             if direct is not None:
                 candidates.add(self._identity(table_name, direct.name))
@@ -115,7 +142,7 @@ class FieldRegistry:
 
     def export_catalog(self) -> dict[str, object]:
         return {
-            "schema_version": "factor_engine.fields.v1",
+            "schema_version": FIELD_CATALOG_SCHEMA_VERSION,
             "tables": [item.to_dict() for item in self.tables()],
             "fields": [item.to_dict() for item in self.fields()],
         }

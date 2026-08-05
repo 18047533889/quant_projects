@@ -2262,6 +2262,7 @@ class AddOp(SeriesOperator):
         description="Basic runtime operator",
         param_names=[],
         return_type="series",
+        tags=["allow_panel_broadcast"],
     )
 
     def _calculate_series(self, *args, **kwargs):
@@ -2283,6 +2284,7 @@ class SubtractOp(SeriesOperator):
         description="Basic runtime operator",
         param_names=[],
         return_type="series",
+        tags=["allow_panel_broadcast"],
     )
 
     def _calculate_series(self, *args, **kwargs):
@@ -2304,6 +2306,7 @@ class MultiplyOp(SeriesOperator):
         description="Basic runtime operator",
         param_names=[],
         return_type="series",
+        tags=["allow_panel_broadcast"],
     )
 
     def _calculate_series(self, *args, **kwargs):
@@ -2325,6 +2328,7 @@ class DivideOp(TwoVarOperator):
         description="Basic runtime operator",
         param_names=[],
         return_type="series",
+        tags=["allow_panel_broadcast"],
     )
 
     def _calculate_series(self, x, y, **kwargs):

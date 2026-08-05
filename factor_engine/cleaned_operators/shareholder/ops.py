@@ -35,18 +35,23 @@ class HolderConcentration(SeriesOperator):
         return _safe_div(top_holder_shares, total_shares)
 
 
-@register_operator(name="holder_concentration_change", category="shareholder", business_category="shareholder", canonical="holder_concentration_change", source="shareholder.ops", status="experimental")
+@register_operator(name="holder_concentration_change", category="shareholder", business_category="shareholder", canonical="holder_concentration_change", source="shareholder.ops", status="deprecated")
 class HolderConcentrationChange(SeriesOperator):
-    metadata = _meta("holder_concentration_change", "股东集中度较上一已披露时点的变化。", ["concentration", "lag"], unit="ratio_change")
+    metadata = _meta("holder_concentration_change", "Deprecated: use source-side relation_snapshot_change on distinct snapshots.", ["concentration", "lag"], unit="ratio_change")
 
     def _calculate_series(self, concentration, lag=1, **kwargs):
-        return concentration - concentration.shift(int(lag))
+        raise ValueError(
+            "holder_concentration_change cannot operate on daily panels; use "
+            "storage.sources.relation.relation_snapshot_change"
+        )
 
 
-@register_operator(name="holder_count_change_rate", category="shareholder", business_category="shareholder", canonical="holder_count_change_rate", source="shareholder.ops", status="experimental")
+@register_operator(name="holder_count_change_rate", category="shareholder", business_category="shareholder", canonical="holder_count_change_rate", source="shareholder.ops", status="deprecated")
 class HolderCountChangeRate(SeriesOperator):
-    metadata = _meta("holder_count_change_rate", "股东户数较上一已披露时点的变化率。", ["holder_count", "lag"], unit="return")
+    metadata = _meta("holder_count_change_rate", "Deprecated: TopTen rows are not total shareholder count; use snapshot entity-count metrics.", ["holder_count", "lag"], unit="return")
 
     def _calculate_series(self, holder_count, lag=1, **kwargs):
-        previous = holder_count.shift(int(lag))
-        return _safe_div(holder_count - previous, previous)
+        raise ValueError(
+            "holder_count_change_rate is undefined for TopTen rows; use distinct holder "
+            "snapshot metrics from storage.sources.relation"
+        )

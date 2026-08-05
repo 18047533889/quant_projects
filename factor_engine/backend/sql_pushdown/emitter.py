@@ -2997,6 +2997,29 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_ts_partition=inner.has_ts_partition,
         )
 
+    if op == "row_sum_skipna":
+        if not node.inputs:
+            return None
+        min_count = int(node.attrs.get("min_count", 1))
+        if min_count < 1:
+            return None
+        layers = [_compile_layer(inp, dialect=dialect) for inp in node.inputs]
+        if any(layer is None for layer in layers):
+            return None
+        layers = [layer for layer in layers if layer is not None]
+        aliases = [f"t{i}" for i in range(len(layers))]
+        join = f"FROM ({layers[0].sql}) {aliases[0]}"
+        for alias, layer in zip(aliases[1:], layers[1:], strict=True):
+            join += f" INNER JOIN ({layer.sql}) {alias} USING (ts, inst)"
+        finite = [f"{alias}._v IS NOT NULL AND NOT isnan({alias}._v) AND NOT isinf({alias}._v)" for alias in aliases]
+        count = " + ".join(f"CASE WHEN {expr} THEN 1 ELSE 0 END" for expr in finite)
+        total = " + ".join(f"CASE WHEN {expr} THEN {alias}._v ELSE 0.0 END" for alias, expr in zip(aliases, finite, strict=True))
+        return _Layer(
+            f"SELECT {aliases[0]}.ts, {aliases[0]}.inst, CASE WHEN ({count}) >= {min_count} THEN ({total}) ELSE NULL END AS _v {join}",
+            has_inst_window=any(layer.has_inst_window for layer in layers),
+            has_ts_partition=any(layer.has_ts_partition for layer in layers),
+        )
+
     if op == "coalesce":
         if len(node.inputs) < 2:
             return None

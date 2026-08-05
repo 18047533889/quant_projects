@@ -30,6 +30,7 @@ def test_record_and_list_runs():
                 "factor_name": "test_factor",
                 "ast_hash": "abc123",
                 "operator_catalog_hash": "ophash",
+                "field_catalog_hash": "fieldhash",
                 "expression": "rank(close)",
                 "lookback": 20,
                 "referenced_columns": ["close"],
@@ -43,4 +44,5 @@ def test_record_and_list_runs():
         assert len(runs) == 1
         assert runs[0]["run_id"] == "run001"
         assert runs[0]["dq_passed"] == 1
+        assert runs[0]["field_catalog_hash"] == "fieldhash"
         cat.close()

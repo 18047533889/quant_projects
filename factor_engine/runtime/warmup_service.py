@@ -60,7 +60,7 @@ def _build_intraday_run_window(
     from cleaned_operators.operator_policy import normalize_bars_market
 
     calendar = SessionBarCalendar(
-        bar_freq, market=normalize_bars_market(market)
+        market=normalize_bars_market(market), bar_freq=bar_freq
     )
     load_start = calendar.warmup_load_start(
         requested_start, lookback_bars=lookback

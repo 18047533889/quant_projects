@@ -32,7 +32,11 @@ def test_only_fused_composite_fastpaths_remain_active() -> None:
         if "polars" in OperatorRegistry.backends_for(name):
             assert catalog["backend_meta"]["polars"]["source"] == "composite_fastpath_native_polars"
 
-    for recipe_name in ("BollingerUpper", "StochasticD", "TRIX", "KAMA", "vpmacd", "volatility", "vwap"):
+    # KAMA is intentionally excluded: it has no factor_recipes replacement and
+    # is registered as a real stateful operator via technical_indicators_v2
+    # (extended canonical), unlike the other names below which are simple
+    # recipe-replaced or deleted canonicals.
+    for recipe_name in ("BollingerUpper", "StochasticD", "TRIX", "vpmacd", "volatility", "vwap"):
         assert OperatorRegistry.get(recipe_name) is None
 
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from api.columns import col
+from api.columns import col, field
 from backend.cleaned_bridge import build_cleaned_dsl_allowlist
 
 STUB_IR_OPS: frozenset[str] = frozenset()
@@ -22,7 +22,7 @@ def build_dsl_allowlist(
         raw_surface = "compat_research"
         raw_dialect = "lqtp"
 
-    allow: dict[str, Callable[..., Any]] = {"col": col}
+    allow: dict[str, Callable[..., Any]] = {"col": col, "field": field}
     if raw_surface == "extended":
         # Extended authoring is a strict superset of the daily primitive surface.
         # Composite technical macros lower into these daily primitives before IR.

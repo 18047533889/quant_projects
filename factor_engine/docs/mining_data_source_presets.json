@@ -19,7 +19,7 @@
     "anchor": "pv",
     "anchor_column": "close",
     "joins": {
-      "constituent": "asof_backward",
+      "constituent": "exact",
       "status": "asof_backward"
     },
     "sources": {
@@ -28,6 +28,9 @@
         "fields": {
           "index_symbol": "IndexSymbol",
           "weight": "Weight"
+        },
+        "semantic_filters": {
+          "IndexSymbol": "000300.SH"
         },
         "type": "data_access"
       },
@@ -50,7 +53,8 @@
       "status": {
         "dataset": "ashare_stock_status",
         "fields": {
-          "listed_state": "ListedState"
+          "listed_state": "ListedState",
+          "public_status": "ListedState"
         },
         "type": "data_access"
       }
@@ -68,7 +72,7 @@
     "anchor": "pv",
     "anchor_column": "close",
     "joins": {
-      "valuation": "asof_backward"
+      "valuation": "exact"
     },
     "sources": {
       "pv": {

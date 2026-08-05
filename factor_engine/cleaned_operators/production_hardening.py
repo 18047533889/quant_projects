@@ -25,6 +25,10 @@ NON_FACTOR_PRODUCTION_CANONICALS: frozenset[str] = frozenset({
     "rand_normal",
     "rand_poisson",
     "rand_uniform",
+    # Source-side relation transforms.  Their legacy DSL names are retained only
+    # to fail with a precise migration error; they are not factor-panel targets.
+    "holder_concentration_change",
+    "holder_count_change_rate",
 })
 
 FULL_HISTORY_REPLAY_CANONICALS: frozenset[str] = frozenset({

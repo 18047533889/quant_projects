@@ -42,7 +42,7 @@ def field(name: str, *, table: str | None = None, strict: bool = True) -> FieldR
         transport = source_col(spec.table, spec.source_name).name
     return FieldRef(
         name=transport,
-        field_id=f"{spec.table}.{spec.name}",
+        field_id=str(spec.field_id),
         canonical_name=spec.name,
         table=spec.table,
         source_name=spec.source_name,

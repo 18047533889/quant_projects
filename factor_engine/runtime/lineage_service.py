@@ -11,6 +11,8 @@ from cleaned_operators.operator_policy import compute_operator_catalog_hash, eff
 from runtime.lineage import build_run_lineage, hash_data_source_config, resolve_git_commit_hash
 from storage.catalog import compute_ir_hash
 from storage.composite_source import CompositeDataSource
+from planner.lowerer import Lowerer
+from planner.plan_hash import structural_key
 
 
 def resolve_lineage_expression(factor: Factor, expression: str | None) -> str | None:
@@ -148,6 +150,34 @@ def build_materialize_lineage(
         extra_kwargs["incremental"] = output.get("incremental")
     if output.get("run_window") is not None:
         extra_kwargs["run_window"] = output.get("run_window")
+
+    plan = Lowerer().to_logical_plan(analysis.ir)
+    field_ids = sorted(
+        str(spec.field_id) for spec in getattr(analysis, "referenced_fields", {}).values()
+    )
+    physical_sources = sorted({
+        f"{spec.table}.{spec.source_name}"
+        for spec in getattr(analysis, "referenced_fields", {}).values()
+    })
+    unit_normalizations = sorted(
+        {
+            "field_id": str(spec.field_id),
+            "source_unit": str(spec.source_unit),
+            "canonical_unit": str(spec.canonical_unit),
+            "scale": float(spec.scale_to_canonical),
+        }.items()
+        for spec in getattr(analysis, "referenced_fields", {}).values()
+    )
+    extra_kwargs.update({
+        "canonical_expression_source": "lowered_ir",
+        "expression_structural_hash": compute_ir_hash(analysis.ir),
+        "lowered_plan_hash": structural_key(plan),
+        "field_ids": field_ids,
+        "physical_sources": physical_sources,
+        "unit_normalizations": [dict(items) for items in unit_normalizations],
+        "source_contract_hash": hash_data_source_config(data_source_config or {}),
+        "original_source_expr": getattr(factor, "source_expr", None),
+    })
 
     return build_run_lineage(
         factor_id=factor_id or factor.name,

@@ -472,7 +472,28 @@ class AnalysisResult:
     referenced_columns: set[str]
     requires_full_history: bool = False
     referenced_fields: dict[str, Any] = field(default_factory=dict)
+    referenced_field_ids: set[str] = field(default_factory=set)
     column_schemas: dict[str, Schema] = field(default_factory=dict)
+
+
+class FieldCatalogMismatchError(ValueError):
+    """A persisted FieldRef was built against a different field catalog."""
+
+
+def validate_max_domains(analysis: AnalysisResult, *, max_domains: int = 2) -> list[str]:
+    if max_domains < 1:
+        raise ValueError("max_domains must be positive")
+    auxiliary = {"auxiliary", "calendar", "reference", "status", "classification"}
+    domains = {
+        str(spec.domain) for spec in analysis.referenced_fields.values()
+        if str(spec.domain or "auxiliary") not in auxiliary
+    }
+    if len(domains) <= max_domains:
+        return []
+    return [
+        f"formula uses {len(domains)} primary domains {sorted(domains)} "
+        f"exceeding max_domains={max_domains}"
+    ]
 
 
 class Analyzer:
@@ -491,7 +512,7 @@ class Analyzer:
 
             if isinstance(node, ColumnRef):
                 columns.add(node.name)
-                from fields import resolve_field
+                from fields import FIELD_REGISTRY, resolve_field
 
                 spec = resolve_field(node)
                 schema = Schema.from_field(spec) if spec is not None else DEFAULT_COLUMN_SCHEMA
@@ -500,6 +521,19 @@ class Analyzer:
                     referenced_fields[node.name] = spec
                 attrs = {"name": node.name}
                 if isinstance(node, FieldRef):
+                    from fields import FIELD_REGISTRY
+
+                    current_hash = FIELD_REGISTRY.catalog_hash()
+                    if not node.catalog_hash or node.catalog_hash != current_hash:
+                        raise FieldCatalogMismatchError(
+                            f"field {node.field_id or node.canonical_name!r} catalog hash "
+                            f"{node.catalog_hash or '<missing>'} does not match active catalog "
+                            f"{current_hash}"
+                        )
+                    if spec is None or str(spec.field_id) != node.field_id:
+                        raise FieldCatalogMismatchError(
+                            f"field identity {node.field_id!r} no longer resolves to the active catalog"
+                        )
                     attrs.update(
                         {
                             "field_id": node.field_id,
@@ -510,11 +544,20 @@ class Analyzer:
                         }
                     )
                 if spec is not None:
-                    attrs["field"] = spec.name
-                    attrs["dtype"] = schema.dtype
-                    attrs["unit"] = spec.unit
-                    attrs["source_table"] = spec.table
-                    attrs["source_field"] = spec.source_name
+                    attrs.update({
+                        "field_id": str(spec.field_id),
+                        "field_registry_hash": FIELD_REGISTRY.catalog_hash(),
+                        "field": spec.name,
+                        "dtype": schema.dtype,
+                        "unit": spec.unit,
+                        "source_table": spec.table,
+                        "source_field": spec.source_name,
+                        "domain": spec.domain,
+                        "frequency": spec.frequency,
+                        "cardinality": spec.cardinality,
+                        "temporal_model": spec.temporal_model,
+                        "pit_safe": spec.strict_pit_allowed,
+                    })
                 return IRNode(op="column", attrs=attrs), 0
             if isinstance(node, Literal):
                 return IRNode(op="literal", attrs={"value": node.value}), 0
@@ -608,8 +651,36 @@ class Analyzer:
             own_increment = _operator_lookback_increment(
                 canonical, node, implementation, policy
             )
+            from backend.operator_types import OPERATOR_SIGNATURES
+
+            signature = OPERATOR_SIGNATURES.get(canonical)
+            if signature is not None:
+                if signature.output.value == "Series[Bool]":
+                    attrs["dtype"] = "bool"
+                elif signature.output.value == "Series[String]":
+                    attrs["dtype"] = "string"
+                elif signature.output.value == "Series[Datetime]":
+                    attrs["dtype"] = "datetime64[ns]"
+
+            # Propagate field-catalog metadata into semantic_attrs (never attrs, to
+            # preserve IR hash stability across DSL / manual-construction paths).
+            semantic: dict[str, Any] = {}
+            if inputs:
+                first_sem = inputs[0].semantic_attrs or {}
+                first_col = inputs[0].attrs or {}
+                for key in ("domain", "frequency", "cardinality", "temporal_model", "unit"):
+                    val = first_sem.get(key) if first_sem.get(key) is not None else first_col.get(key)
+                    if val is not None:
+                        semantic[key] = val
+                semantic["pit_safe"] = all(
+                    child.semantic_attrs.get("pit_safe", (child.attrs or {}).get("pit_safe", True))
+                    for child in inputs
+                )
+            if signature is not None and signature.output_unit and signature.output_unit != "inherit":
+                semantic["unit"] = signature.output_unit
+
             return (
-                IRNode(op=canonical, inputs=inputs, attrs=attrs),
+                IRNode(op=canonical, inputs=inputs, attrs=attrs, semantic_attrs=semantic),
                 deepest_child + own_increment,
             )
 
@@ -625,5 +696,6 @@ class Analyzer:
             referenced_columns=columns,
             requires_full_history=requires_full_history,
             referenced_fields=referenced_fields,
+            referenced_field_ids={str(spec.field_id) for spec in referenced_fields.values()},
             column_schemas=column_schemas,
         )

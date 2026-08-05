@@ -323,6 +323,15 @@ def _compute_allow_in_production(
 
         if composite_production_safe(resolved):
             return pit_safe
+        # A composite may retain an independently audited Pandas reference even
+        # when its lowered Polars/DuckDB fast path is not yet certified.  Admit
+        # that physical reference only when the current factor evidence binds it
+        # to the exact runtime sources; routing still keeps uncertified lowerings
+        # unavailable in production.
+        if status == "production":
+            from backend.factor_operator_evidence import pandas_reference_production_safe
+
+            return bool(pit_safe and pandas_reference_production_safe(resolved))
         return False
     if resolved in PRODUCTION_CORE_CANONICALS:
         from backend.evidence_provenance import evidence_artifact_valid

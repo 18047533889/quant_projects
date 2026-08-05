@@ -20,9 +20,10 @@ class RunLineage:
     factor_name: str
     ast_hash: str
     operator_catalog_hash: str
-    expression: str | None
-    lookback: int
-    referenced_columns: list[str]
+    field_catalog_hash: str = ""
+    expression: str | None = None
+    lookback: int = 0
+    referenced_columns: list[str] = field(default_factory=list)
     dq_passed: bool | None = None
     row_count: int | None = None
     non_null_count: int | None = None
@@ -46,9 +47,10 @@ def build_run_lineage(
     factor_name: str,
     ast_hash: str,
     operator_catalog_hash: str,
-    expression: str | None,
-    lookback: int,
-    referenced_columns: set[str] | list[str],
+    field_catalog_hash: str | None = None,
+    expression: str | None = None,
+    lookback: int = 0,
+    referenced_columns: set[str] | list[str] = (),
     result=None,
     dq_report=None,
     run_id: str | None = None,
@@ -58,12 +60,20 @@ def build_run_lineage(
     row_count = len(result) if result is not None else None
     non_null = int(result.notna().sum()) if result is not None and hasattr(result, "notna") else None
     dq_passed = dq_report.passed if dq_report is not None else None
+    if field_catalog_hash is None:
+        try:
+            from fields import compute_field_catalog_hash
+
+            field_catalog_hash = compute_field_catalog_hash()
+        except Exception:
+            field_catalog_hash = ""
     return RunLineage(
         run_id=run_id or new_run_id(),
         factor_id=factor_id,
         factor_name=factor_name,
         ast_hash=ast_hash,
         operator_catalog_hash=operator_catalog_hash,
+        field_catalog_hash=field_catalog_hash,
         expression=expression,
         lookback=int(lookback),
         referenced_columns=sorted(referenced_columns),

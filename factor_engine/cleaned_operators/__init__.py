@@ -58,6 +58,7 @@ _LOAD_MODULES = (
     "cleaned_operators.composite_fastpath_fixes",
     "cleaned_operators.layer_primitives",
     "cleaned_operators.layer_composite_fixes",
+    "cleaned_operators.fiscal_event_ops",
 )
 
 _REVIEWED_EXTENSIONS = (
@@ -101,10 +102,11 @@ def _load_module_if_available(mod: str) -> None:
 
 
 _LOADED = False
+_INITIALIZING = False
 
 
 def load_all() -> None:
-    global _LOADED
+    global _LOADED, _INITIALIZING
     if _LOADED:
         if OperatorRegistry.lifecycle() == "frozen":
             return
@@ -112,12 +114,15 @@ def load_all() -> None:
         raise RegistryInitializationError(
             f"loaded registry is unexpectedly {OperatorRegistry.lifecycle()!r}"
         )
+    if _INITIALIZING:
+        return
     if OperatorRegistry.lifecycle() != "building":
         from cleaned_operators.registry import RegistryInitializationError
         raise RegistryInitializationError(
             f"unloaded registry cannot initialize from {OperatorRegistry.lifecycle()!r}"
         )
 
+    _INITIALIZING = True
     # Capability modules build immutable module-level sets on first import.
     # Install the base-blob-bound evidence loader before any registry module can
     # snapshot primitive backend certification.
@@ -157,6 +162,27 @@ def load_all() -> None:
     from cleaned_operators.production_hardening import apply_production_hardening
     apply_production_hardening()
 
+    # Later compatibility layers can overwrite the strict fiscal primitives.
+    # Remove only their in-memory backend slots, then re-register the audited
+    # ordinal/revision implementation before the final signature audit.
+    from cleaned_operators import fiscal_strict, fiscal_event_ops
+    for _canonical in (
+        "period_lag", "period_change", "period_average", "period_cagr",
+        "quarter_from_cumulative", "ttm_from_quarterly", "ttm_from_cumulative",
+        "yoy_by_period",
+    ):
+        _backends = OperatorRegistry._operators.get(_canonical)
+        if _backends is not None:
+            _backends.pop("pandas_numpy", None)
+            _backends.pop("polars", None)
+    fiscal_strict.register()
+    fiscal_event_ops.register()
+
+    # Strict fiscal implementations are registered after the general cleanup
+    # pass, so attach the same explicit native capability contract here.
+    from cleaned_operators.overhaul.cleanup import _attach_explicit_polars_contracts
+    _attach_explicit_polars_contracts()
+
     from cleaned_operators.registration_audit import finalize_registration_audit
     finalize_registration_audit()
 
@@ -180,3 +206,4 @@ def load_all() -> None:
     OperatorRegistry.finalize()
     OperatorRegistry.freeze()
     _LOADED = True
+    _INITIALIZING = False

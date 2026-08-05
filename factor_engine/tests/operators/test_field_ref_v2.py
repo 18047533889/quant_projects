@@ -37,3 +37,39 @@ def test_unknown_field_remains_strict_by_default():
 
     with pytest.raises(KeyError, match="unknown field"):
         field("definitely_not_a_field")
+
+
+def test_string_dsl_field_preserves_catalog_identity():
+    from api.dsl_parser import parse_expr
+    from expr.field import FieldRef
+    from ir.analyzer import Analyzer
+
+    expr = parse_expr("field('pe_ratio')")
+    assert isinstance(expr, FieldRef)
+    analysis = Analyzer().lower(expr)
+    assert analysis.ir.attrs["field_id"] == "StockValuationDaily.pe_ratio"
+    assert analysis.ir.attrs["source_table"] == "StockValuationDaily"
+
+
+def test_production_rejects_bare_secondary_catalog_field():
+    from api.mining_integration import validate_production_dsl
+
+    ok, msg = validate_production_dsl("rank(col('pe_ratio'))")
+    assert ok is False
+    assert "requires field(...)" in msg
+
+
+def test_stale_field_ref_is_rejected():
+    from expr.field import FieldRef
+    from ir.analyzer import Analyzer, FieldCatalogMismatchError
+
+    stale = FieldRef(
+        name="close",
+        field_id="StockDailyBar.close",
+        canonical_name="close",
+        table="StockDailyBar",
+        source_name="Close",
+        catalog_hash="stale",
+    )
+    with pytest.raises(FieldCatalogMismatchError, match="does not match active catalog"):
+        Analyzer().lower(stale)

@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-08-03T03:55:33.817676",
+  "generated_at": "2026-08-04T19:11:23.318223",
   "threshold": 0.02,
-  "raw_count": 510,
-  "filtered_count": 377,
-  "deduped_count": 179,
+  "raw_count": 511,
+  "filtered_count": 380,
+  "deduped_count": 180,
   "overlay_stats": {
-    "linked": 480,
-    "ic_from_vwap": 478,
-    "ic_pending_vwap": 2,
+    "linked": 481,
+    "ic_from_vwap": 481,
+    "ic_pending_vwap": 0,
     "renamed": 129
   },
   "rank_ic_policy": "vwap_to_vwap_only; display_nonneg; pending_excluded",
@@ -935,6 +935,18 @@
       "mean_daily_coverage": 1.0,
       "ls_mean_one_way_turnover": 0.6926001247990508,
       "long_short_sharpe": 2.0734063427234304
+    },
+    {
+      "display_name": "factor_asym_vol_cont_gate_30",
+      "rank_ic": 0.03683677566155493,
+      "rank_icir": 0.36880342303326435,
+      "source": "screening_reeval (VWAP→VWAP)",
+      "report_href": "/reports_screening_reeval/factor_asym_vol_cont_gate_30.html",
+      "route": "lqtp_dsl",
+      "alias": "",
+      "mean_daily_coverage": 1.0,
+      "ls_mean_one_way_turnover": 0.5263881027737216,
+      "long_short_sharpe": 2.4759042994533917
     },
     {
       "display_name": "factor_roughness_trend_vol_short",

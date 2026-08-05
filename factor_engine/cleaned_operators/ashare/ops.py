@@ -66,22 +66,38 @@ class TrueTurnoverRate(_RatioOp):
     metadata = _metadata("true_turnover_rate", "真实换手率：成交量 / 自由流通股本。", ["volume", "free_float_shares"], domain="liquidity", unit="ratio")
 
 
-@register_operator(name="limit_up_state", category="ashare", business_category="trading_state", canonical="limit_up_state", source="ashare.ops", status="experimental")
-class LimitUpState(SeriesOperator):
-    metadata = _metadata("limit_up_state", "收盘价达到或超过涨停价。", ["close", "upper_limit"], domain="trading_state", unit="boolean")
+@register_operator(name="limit_up_close", category="ashare", business_category="trading_state", canonical="limit_up_close", source="ashare.ops", status="experimental")
+class LimitUpClose(SeriesOperator):
+    metadata = _metadata("limit_up_close", "收盘价在 tick 容差内达到实际涨停价。", ["close", "upper_limit", "tick_tolerance"], domain="trading_state", unit="boolean")
 
-    def _calculate_series(self, close, upper_limit, **kwargs):
+    def _calculate_series(self, close, upper_limit, tick_tolerance=0.005, **kwargs):
+        tolerance = float(tick_tolerance)
+        if tolerance < 0:
+            raise ValueError("tick_tolerance must be non-negative")
         valid = close.notna() & upper_limit.notna()
-        return (close >= upper_limit).astype(float).where(valid)
+        return (close >= upper_limit - tolerance).astype(float).where(valid)
 
 
-@register_operator(name="limit_down_state", category="ashare", business_category="trading_state", canonical="limit_down_state", source="ashare.ops", status="experimental")
-class LimitDownState(SeriesOperator):
-    metadata = _metadata("limit_down_state", "收盘价达到或低于跌停价。", ["close", "lower_limit"], domain="trading_state", unit="boolean")
+@register_operator(name="limit_up_state", category="ashare", business_category="trading_state", canonical="limit_up_close", source="ashare.ops", status="deprecated")
+class LimitUpState(LimitUpClose):
+    metadata = _metadata("limit_up_state", "Deprecated alias of limit_up_close.", ["close", "upper_limit", "tick_tolerance"], domain="trading_state", unit="boolean")
 
-    def _calculate_series(self, close, lower_limit, **kwargs):
+
+@register_operator(name="limit_down_close", category="ashare", business_category="trading_state", canonical="limit_down_close", source="ashare.ops", status="experimental")
+class LimitDownClose(SeriesOperator):
+    metadata = _metadata("limit_down_close", "收盘价在 tick 容差内达到实际跌停价。", ["close", "lower_limit", "tick_tolerance"], domain="trading_state", unit="boolean")
+
+    def _calculate_series(self, close, lower_limit, tick_tolerance=0.005, **kwargs):
+        tolerance = float(tick_tolerance)
+        if tolerance < 0:
+            raise ValueError("tick_tolerance must be non-negative")
         valid = close.notna() & lower_limit.notna()
-        return (close <= lower_limit).astype(float).where(valid)
+        return (close <= lower_limit + tolerance).astype(float).where(valid)
+
+
+@register_operator(name="limit_down_state", category="ashare", business_category="trading_state", canonical="limit_down_close", source="ashare.ops", status="deprecated")
+class LimitDownState(LimitDownClose):
+    metadata = _metadata("limit_down_state", "Deprecated alias of limit_down_close.", ["close", "lower_limit", "tick_tolerance"], domain="trading_state", unit="boolean")
 
 
 @register_operator(name="tradable_state", category="ashare", business_category="trading_state", canonical="tradable_state", source="ashare.ops", status="experimental")

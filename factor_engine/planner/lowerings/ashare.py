@@ -50,15 +50,21 @@ def lower_benchmark_excess_return(node: PlanNode) -> PlanNode:
     return H.binop("subtract", node.inputs[0], node.inputs[1])
 
 
+@register_lowering("limit_up_close")
 @register_lowering("limit_up_state")
 def lower_limit_up_state(node: PlanNode) -> PlanNode:
     if len(node.inputs) < 2:
         return node
-    return H.binop("ge", node.inputs[0], node.inputs[1])
+    tolerance = node.inputs[2] if len(node.inputs) > 2 else H.literal(0.005)
+    threshold = H.binop("subtract", node.inputs[1], tolerance)
+    return H.binop("ge", node.inputs[0], threshold)
 
 
+@register_lowering("limit_down_close")
 @register_lowering("limit_down_state")
 def lower_limit_down_state(node: PlanNode) -> PlanNode:
     if len(node.inputs) < 2:
         return node
-    return H.binop("le", node.inputs[0], node.inputs[1])
+    tolerance = node.inputs[2] if len(node.inputs) > 2 else H.literal(0.005)
+    threshold = H.binop("add", node.inputs[1], tolerance)
+    return H.binop("le", node.inputs[0], threshold)

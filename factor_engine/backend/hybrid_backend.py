@@ -12,9 +12,18 @@ from .polars_backend import PolarsBackend
 from .sql_backend import SqlBackend
 
 
-def _supports_polars_long_scan(ctx: ExecutionContext) -> bool:
+def _inner_data_source(ctx: ExecutionContext) -> Any:
+    """Return the real underlying data source, unwrapping the LQTP logical layer."""
     ds = getattr(ctx, "data_source", None)
-    return callable(getattr(ds, "scan_polars_long", None))
+    return getattr(ds, "inner", ds)
+
+
+def _supports_polars_long_scan(ctx: ExecutionContext) -> bool:
+    return callable(getattr(_inner_data_source(ctx), "scan_polars_long", None))
+
+
+def _supports_load_column(ctx: ExecutionContext) -> bool:
+    return callable(getattr(_inner_data_source(ctx), "load_column", None))
 
 
 class HybridBackend(Backend):
@@ -38,6 +47,23 @@ class HybridBackend(Backend):
         from backend.plan_cost_router import choose_plan_route, record_plan_route
 
         route = choose_plan_route(plan, ctx)
+        if route.backend == "pandas_numpy" and not route.ops and not _supports_load_column(ctx):
+            from dataclasses import replace
+
+            if _supports_polars_long_scan(ctx):
+                route = replace(
+                    route,
+                    backend="polars_long",
+                    routing_basis="estimated",
+                    reason="pandas candidate removed: data source lacks load_column; long scan available",
+                )
+            else:
+                route = replace(
+                    route,
+                    backend="hybrid",
+                    routing_basis="estimated",
+                    reason="pandas candidate removed: data source lacks load_column; using certified hybrid",
+                )
         if route.backend == "polars_long" and not _supports_polars_long_scan(ctx):
             from dataclasses import replace
 

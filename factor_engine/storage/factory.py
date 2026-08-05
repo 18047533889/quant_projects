@@ -221,6 +221,8 @@ def build_data_source(config: Any):
         normalize_timestamp = _pop_option(options, "normalize_timestamp", default=None)
         timestamp_unit = _pop_option(options, "timestamp_unit", default=None)
         params = _pop_option(options, "params", default=None)
+        semantic_filters = _pop_option(options, "semantic_filters", default=None)
+        read_mode = _pop_option(options, "read_mode", default="panel")
         read_auto = _pop_option(options, "read_auto", default=None)
         kind = _pop_option(options, "kind", default=None)
         if kind is not None:
@@ -238,6 +240,8 @@ def build_data_source(config: Any):
             timestamp_unit=timestamp_unit,
             read_auto=read_auto,
             params=params,
+            semantic_filters=semantic_filters,
+            read_mode=str(read_mode),
         )
         _ensure_no_extra_options(source_type, options)
         return _wrap_long_table(_attach_bar_freq(source, bar_freq), long_table=long_table)

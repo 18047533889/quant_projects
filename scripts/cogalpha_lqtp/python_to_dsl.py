@@ -72,13 +72,10 @@ EXTRA_MANUAL_DSL: dict[str, str] = {
         ")))"
     ),
     "factor_asym_vol_cont_gate_30": (
-        "zscore("
         "log(safe_div("
         "ts_std(where(ts_pct(close, 1) < 0, ts_pct(close, 1), 0), 60),"
-        "ts_std(where(ts_pct(close, 1) > 0, ts_pct(close, 1), 0), 60)"
-        "))"
-        " * cap(safe_div(volume, ts_mean(volume, 20)), 0, 3)"
-        ")"
+        "ts_std(where(ts_pct(close, 1) > 0, ts_pct(close, 1), 0), 60) + 1e-10"
+        ")) * clip(safe_div(volume, ts_mean(volume, 20)), 0, 3)"
     ),
     "factor_adx_trend_vol_ema": (
         "ADX(high, low, close, 14) * sign(ts_pct(close, 10))"

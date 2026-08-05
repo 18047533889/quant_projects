@@ -86,7 +86,6 @@ def _production_sets() -> tuple[set[str], set[str]]:
     if (
         OperatorRegistry.lifecycle() == "building"
         and not getattr(cleaned_operators, "_LOADED", False)
-        and not OperatorRegistry.list_canonical()
     ):
         cleaned_operators.load_all()
     all_targets = set(factor_production_targets())

@@ -82,6 +82,24 @@ def aggregate_holder_rows(
     ordered = rows.copy()
     ordered[amount_column] = pd.to_numeric(ordered[amount_column], errors="coerce")
     ordered[ratio_column] = pd.to_numeric(ordered[ratio_column], errors="coerce")
+    finite_ratio = ordered[ratio_column].replace([np.inf, -np.inf], np.nan)
+    # COS holder ratios are percentages.  Canonical relation metrics operate on
+    # decimal ratios; tolerate already-normalized input without scaling it twice.
+    if finite_ratio.abs().max(skipna=True) > 1.0:
+        ordered[ratio_column] = finite_ratio * 0.01
+    else:
+        ordered[ratio_column] = finite_ratio
+    entity_column = next(
+        (name for name in ("holder_entity_id", "entity_id", "holder_name") if name in ordered.columns),
+        None,
+    )
+    if entity_column is not None:
+        ordered = ordered.dropna(subset=[entity_column])
+        ordered = (
+            ordered.groupby([*groups, entity_column], sort=False, dropna=False)
+            .agg({amount_column: "sum", ratio_column: "sum"})
+            .reset_index()
+        )
     ordered = ordered.sort_values([*groups, amount_column], ascending=[True] * len(groups) + [False], kind="stable")
     top = ordered.groupby(list(groups), sort=False, dropna=False).head(top_n)
     result = top.groupby(list(groups), sort=False, dropna=False).agg(
@@ -94,6 +112,38 @@ def aggregate_holder_rows(
         list(groups), sort=False, dropna=False
     )["_ratio_sq"].sum().reset_index(name="top_ten_concentration_hhi")
     return result.merge(squares, on=list(groups), how="left", validate="one_to_one")
+
+
+def relation_snapshot_change(
+    rows: pd.DataFrame,
+    *,
+    value_column: str,
+    instrument_column: str = "instrument",
+    snapshot_column: str = "snapshot_id",
+    available_column: str = "available_at",
+    periods: int = 1,
+    pct: bool = False,
+) -> pd.DataFrame:
+    """Change across distinct visible relation snapshots, never trading-day rows."""
+    if periods <= 0:
+        raise ValueError("periods must be positive")
+    required = {instrument_column, snapshot_column, available_column, value_column}
+    missing = sorted(required - set(rows.columns))
+    if missing:
+        raise ValueError(f"relation snapshot rows missing columns: {missing}")
+    out = rows.copy()
+    out[available_column] = pd.to_datetime(out[available_column], errors="raise", utc=True)
+    out = out.sort_values(
+        [instrument_column, available_column, snapshot_column], kind="stable"
+    ).drop_duplicates([instrument_column, snapshot_column], keep="last")
+    previous = out.groupby(instrument_column, sort=False)[value_column].shift(periods)
+    change = out[value_column] - previous
+    if pct:
+        change = change / previous.replace(0, np.nan)
+    out[f"{value_column}_{'pct_change' if pct else 'change'}"] = change.replace(
+        [np.inf, -np.inf], np.nan
+    )
+    return out
 
 
 def top_ten_features_asof(

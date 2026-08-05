@@ -61,6 +61,8 @@ class DataAccessSource(DataSource):
         timestamp_unit: str | None = None,
         read_auto: bool | None = None,
         params: dict[str, Any] | None = None,
+        semantic_filters: dict[str, Any] | None = None,
+        read_mode: str = "panel",
     ) -> None:
         self.dataset = dataset
         self.fields = dict(fields or {})
@@ -70,6 +72,9 @@ class DataAccessSource(DataSource):
         self.normalize_timestamp = normalize_timestamp
         self.timestamp_unit = timestamp_unit
         self.params = dict(params or {})
+        self.semantic_filters = dict(semantic_filters or {})
+        self.read_mode = str(read_mode or "panel").lower()
+        self._validate_semantic_contract()
         self.read_auto = (
             bool(read_auto)
             if read_auto is not None
@@ -88,6 +93,42 @@ class DataAccessSource(DataSource):
             "FACTOR_ENGINE_DATA_CACHE_MAX_COLUMNS", 64
         )
         self._closed = False
+
+    def _validate_semantic_contract(self) -> None:
+        """Apply COS panel/event and required-filter policy at construction."""
+        try:
+            _ensure_data_access_importable()
+            from data_access.cos_contract import (
+                get_cos_contract,
+                resolve_event_clock,
+                validate_event_filters,
+                validate_panel_request,
+            )
+        except ImportError:
+            return
+        contract = get_cos_contract(self.dataset)
+        if contract is None:
+            return
+        if self.read_mode == "panel":
+            validate_panel_request(
+                self.dataset,
+                semantic_filters=self.semantic_filters,
+            )
+        elif self.read_mode in {"event", "pit"}:
+            resolve_event_clock(
+                self.dataset,
+                allow_effective_time=self.read_mode == "event",
+            )
+            validate_event_filters(contract, self.semantic_filters)
+        else:
+            raise ValueError("read_mode must be panel, event, or pit")
+        for name, value in self.semantic_filters.items():
+            existing = self.params.get(name)
+            if existing is not None and existing != value:
+                raise ValueError(
+                    f"conflicting semantic filter {name}: params={existing!r} filter={value!r}"
+                )
+            self.params[name] = value
 
     @property
     def data_snapshot_id(self) -> str | None:
@@ -156,7 +197,17 @@ class DataAccessSource(DataSource):
         physical: list[str] = []
         output_names: dict[str, str] = {}
         for name in names:
-            src = self.fields.get(name, name)
+            src = self.fields.get(name)
+            if src is None:
+                try:
+                    from fields import FIELD_REGISTRY
+
+                    spec = FIELD_REGISTRY.get(name)
+                except Exception:
+                    spec = None
+                if spec is not None and spec.dataset == self.dataset:
+                    src = spec.source_name
+            src = src or name
             physical.append(src)
             if src != name:
                 output_names[src] = name
@@ -326,13 +377,25 @@ class DataAccessSource(DataSource):
         return {name: self._column_cache[name] for name in names}
 
     def _normalize_contract_columns(self, fetched: dict[str, Any], names: list[str]) -> None:
-        """Apply DataAccess semantic normalization to FactorEngine inputs.
+        """Normalize every registered logical field before it enters the cache."""
+        normalized: set[str] = set()
+        try:
+            from fields import FIELD_REGISTRY
 
-        Normalization is deliberately limited to declared return columns.  We
-        do not alter prices with an adjustment factor implicitly: adjusted price
-        is a separate data contract and must be requested explicitly by a
-        caller, so a factor cannot silently change its economic meaning.
-        """
+            for name in names:
+                spec = FIELD_REGISTRY.get(name)
+                if spec is None or spec.dataset != self.dataset or name not in fetched:
+                    continue
+                scale = float(spec.scale_to_canonical or 1.0)
+                if scale != 1.0:
+                    fetched[name] = fetched[name] * scale
+                normalized.add(name)
+        except Exception:
+            # External/non-catalog datasets retain their adapter-defined values.
+            pass
+
+        # Compatibility for external DataAccess contracts that are not represented
+        # in FactorEngine's field registry yet.
         try:
             from data_access.cos_contract import get_cos_contract, normalize_return_values
         except Exception:
@@ -341,11 +404,23 @@ class DataAccessSource(DataSource):
         if contract is None or not contract.return_column:
             return
         for name in names:
-            if name != contract.return_column or name not in fetched:
+            if name in normalized or name not in fetched:
                 continue
-            if float(contract.return_scale) == 1.0:
+            physical_name = self.fields.get(name)
+            if physical_name is None:
+                try:
+                    from fields import FIELD_REGISTRY
+
+                    spec = FIELD_REGISTRY.get(name)
+                    if spec is not None and spec.dataset == self.dataset:
+                        physical_name = spec.source_name
+                except Exception:
+                    physical_name = None
+            physical_name = physical_name or name
+            if physical_name != contract.return_column:
                 continue
-            fetched[name] = normalize_return_values(fetched[name], self.dataset)
+            if float(contract.return_scale) != 1.0:
+                fetched[name] = normalize_return_values(fetched[name], self.dataset)
 
     def prefetch_columns(self, names: list[str]) -> None:
         if not names:
@@ -376,6 +451,7 @@ class DataAccessSource(DataSource):
                 fetched = self._lazy_bundle.materialize_columns(
                     physical, output_names=output_names or None
                 )
+                self._normalize_contract_columns(fetched, needed)
                 for name in needed:
                     self._put_cache(self._column_cache, name, fetched[name])
                 return
@@ -397,6 +473,7 @@ class DataAccessSource(DataSource):
         fetched = self._lazy_bundle.materialize_columns(
             physical, output_names=output_names or None
         )
+        self._normalize_contract_columns(fetched, needed)
         for name in needed:
             self._put_cache(self._column_cache, name, fetched[name])
 
@@ -431,7 +508,7 @@ class DataAccessSource(DataSource):
         ds = store.get_dataset(self.dataset)
         from backend.polars_lazy import build_scan_polars_long
 
-        return build_scan_polars_long(
+        lf = build_scan_polars_long(
             store,
             self.dataset,
             logical_columns=columns,
@@ -443,6 +520,23 @@ class DataAccessSource(DataSource):
             instrument_filter=self.instrument_filter,
             params=dict(self.params),
         )
+        try:
+            import polars as pl
+            from fields import FIELD_REGISTRY
+
+            expressions = []
+            for name in columns:
+                spec = FIELD_REGISTRY.get(name)
+                if spec is None or spec.dataset != self.dataset:
+                    continue
+                scale = float(spec.scale_to_canonical or 1.0)
+                if scale != 1.0:
+                    expressions.append((pl.col(name).cast(pl.Float64) * scale).alias(name))
+            if expressions:
+                lf = lf.with_columns(expressions)
+        except ImportError:
+            pass
+        return lf
 
     def scan_index_long(self):
         self.refresh_snapshot()

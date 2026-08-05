@@ -131,9 +131,9 @@ class LQTPLogicalDataSource(_Base):
         """Exact benchmark-date broadcast; missing benchmark dates remain missing."""
         right = series.rename("value").reset_index()
         right.columns = ["timestamp", "_source_instrument", "value"]
-        right["timestamp"] = pd.to_datetime(right["timestamp"])
+        right["timestamp"] = pd.to_datetime(right["timestamp"]).dt.normalize()
         values = right.sort_values("timestamp").drop_duplicates("timestamp", keep="last").set_index("timestamp")["value"]
-        ts = pd.DatetimeIndex(anchor.get_level_values(0))
+        ts = pd.DatetimeIndex(anchor.get_level_values(0)).normalize()
         return pd.Series(values.reindex(ts).to_numpy(), index=anchor, name=series.name)
 
     def _financial_raw(self, dataset: str, field: str) -> pd.DataFrame:
@@ -303,13 +303,20 @@ class LQTPLogicalDataSource(_Base):
         params = spec.params_dict()
         contract = logical_table_contract(table)
         required_param = contract.required_parameter
-        if required_param and required_param not in params:
+        if required_param:
             legacy = {"IndexSymbol": "index", "IndustrySource": "industry_source"}.get(required_param)
-            if legacy is None or legacy not in params:
+            canonical_value = params.get(required_param)
+            legacy_value = params.get(legacy) if legacy else None
+            if canonical_value is not None and legacy_value is not None and str(canonical_value) != str(legacy_value):
                 raise MissingDataDependencyError(
-                    f"LQTP DataTable {table!r} requires exact {required_param} parameter"
+                    f"LQTP DataTable {table!r} has conflicting {required_param} and {legacy}"
                 )
-            params[required_param] = params[legacy]
+            if canonical_value is None:
+                if legacy_value is None:
+                    raise MissingDataDependencyError(
+                        f"LQTP DataTable {table!r} requires exact {required_param} parameter"
+                    )
+                params[required_param] = legacy_value
         filt = None
         if contract.required_parameter == "IndexSymbol" and table != "IndexConstituent":
             filt = [str(params["IndexSymbol"])]
@@ -377,10 +384,9 @@ class LQTPLogicalDataSource(_Base):
             )
             return self._align_by_instrument(anchor, series)
 
-        # Unknown mapped tables are research-compatible only; production PIT
-        # audit rejects tables without an explicit availability contract.
-        self._record_dependency(dataset, kind="unclassified", snapshot_id=snapshot, field=field)
-        return super()._load_source_ref(spec)
+        raise MissingDataDependencyError(
+            f"logical table {table!r} has unhandled join policy {contract.join_policy!r}"
+        )
 
     def _anchor_is_intraday(self) -> bool:
         anchor = self._anchor_index()
@@ -407,20 +413,20 @@ class LQTPLogicalDataSource(_Base):
 
     @staticmethod
     def _session_slots(frame: pd.DataFrame) -> pd.DataFrame:
+        from runtime.session_calendar import SessionCalendar
+
         out = frame.copy()
-        ts = pd.to_datetime(out["timestamp"])
-        minute = ts.dt.hour * 60 + ts.dt.minute
-        has_open_labels = bool((minute == 570).any() or (minute == 780).any())
-        label_offset = 0 if has_open_labels else 1
-        am = (minute >= 570 + label_offset) & (minute <= 690)
-        pm = (minute >= 780 + label_offset) & (minute <= 900)
-        valid = am | pm
+        timestamps = pd.to_datetime(out["timestamp"])
+        minute = timestamps.dt.hour * 60 + timestamps.dt.minute
+        has_start_labels = bool((minute == 570).any() or (minute == 780).any())
+        convention = "bar_start" if has_start_labels else "bar_end"
+        calendar = SessionCalendar.ashare(timestamp_convention=convention)
+        segment = calendar.segment_id(timestamps)
+        slot = calendar.segment_ordinal(timestamps)
+        valid = segment >= 0
         out = out.loc[valid].copy()
-        minute = minute.loc[valid]
-        out["session"] = np.where(am.loc[valid], "am", "pm")
-        out["session_slot"] = np.where(
-            am.loc[valid], minute - (570 + label_offset), minute - (780 + label_offset)
-        ).astype(int)
+        out["session"] = np.where(segment[valid] == 0, "am", "pm")
+        out["session_slot"] = slot[valid].astype(int)
         return out
 
     def _minute_weighted_vwap(

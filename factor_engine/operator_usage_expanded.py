@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import os
 import json
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
@@ -110,10 +111,17 @@ def expand_formula_recipes(formula: str) -> str | None:
                 raise RecipeExpansionError(f"missing recipe parameters for {recipe.name}: {missing}")
             return compiler.expand_ast(recipe.name, bindings)
 
+    previous_usage_mode = os.environ.get("FACTOR_ENGINE_EXPAND_RECIPE_USAGE")
+    os.environ["FACTOR_ENGINE_EXPAND_RECIPE_USAGE"] = "1"
     try:
         expanded = Expander().visit(parsed.body)
     except (RecipeExpansionError, SyntaxError, TypeError, ValueError):
         return None
+    finally:
+        if previous_usage_mode is None:
+            os.environ.pop("FACTOR_ENGINE_EXPAND_RECIPE_USAGE", None)
+        else:
+            os.environ["FACTOR_ENGINE_EXPAND_RECIPE_USAGE"] = previous_usage_mode
     return ast.unparse(ast.fix_missing_locations(expanded))
 
 

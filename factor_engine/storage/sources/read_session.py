@@ -10,11 +10,11 @@ class DataSourceReadSession:
         if isinstance(data_source, LQTPLogicalDataSource):
             self._source = data_source
         else:
-            wrapper = getattr(data_source, "_factor_engine_lqtp_wrapper", None)
-            if not isinstance(wrapper, LQTPLogicalDataSource):
-                wrapper = LQTPLogicalDataSource(data_source)
-                try: setattr(data_source, "_factor_engine_lqtp_wrapper", wrapper)
-                except Exception: pass
+            wrapper = LQTPLogicalDataSource(data_source)
+            try:
+                setattr(data_source, "_factor_engine_lqtp_wrapper", wrapper)
+            except Exception:
+                pass
             self._source = wrapper
         self._last_scope_key: str | None = None
 

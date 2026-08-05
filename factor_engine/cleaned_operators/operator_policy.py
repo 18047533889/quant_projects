@@ -1170,8 +1170,15 @@ def bars_per_day(
     if lowered in table:
         return table[lowered]
     if lowered.endswith("d"):
-        return 1
-    return 1
+        try:
+            days = int(lowered[:-1] or "1")
+        except ValueError as exc:
+            raise ValueError(f"unsupported bar frequency {freq!r}") from exc
+        if days > 0:
+            return 1
+    raise ValueError(
+        f"unsupported bar frequency {freq!r} for market={mkt!r} session={sess!r}"
+    )
 
 
 def normalize_bars_market(market: str | None) -> str:

@@ -18,7 +18,7 @@ ASHARE_COS_CONTRACTS = {
     "ashare_etf_list": _c("ashare_etf_list", "ashare", "D1", "equi", "Symbol", storage_layout=D),
     "ashare_index_daily": _c("ashare_index_daily", "ashare", "D1", "equi", "Symbol", return_column="Return", return_scale=1 / 10000, storage_layout=D),
     "ashare_index_list": _c("ashare_index_list", "ashare", "D1", "equi", "Symbol", storage_layout=D),
-    "ashare_index_constituent": _c("ashare_index_constituent", "ashare", "D1", "equi", "Symbol", storage_layout=D),
+    "ashare_index_constituent": _c("ashare_index_constituent", "ashare", "D1", "equi", "Symbol", required_panel_filters=("IndexSymbol",), storage_layout=D),
     "ashare_universe_daily": _c("ashare_universe_daily", "ashare", "D1", "equi", "Symbol"),
     "ashare_stock_topten_shareholder": _c("ashare_stock_topten_shareholder", "ashare", "S1", "equi", "Symbol", storage_layout=D),
     "ashare_stock_topten_float_shareholder": _c("ashare_stock_topten_float_shareholder", "ashare", "S1", "equi", "Symbol", storage_layout=D),
