@@ -90,6 +90,31 @@ def test_intraday_segment_return_morning():
     assert out.loc[pd.Timestamp("2024-01-02"), "A"] == pytest.approx(10.5 / 10.0 - 1.0, rel=1e-9)
 
 
+def test_intraday_segment_handles_utc_index():
+    """A-share COS minute data is UTC; segments are defined in Asia/Shanghai wall-clock."""
+    from cleaned_operators.microstructure.intraday_agg import IntraSegmentReturn, IntraLunchGapReturn
+
+    # 01:31 UTC = 09:31 Beijing (morning), 03:00 UTC = 11:00 Beijing (morning),
+    # 05:00 UTC = 13:00 Beijing (afternoon).
+    idx = pd.DatetimeIndex(
+        [
+            pd.Timestamp("2024-01-02 01:31", tz="UTC"),
+            pd.Timestamp("2024-01-02 03:00", tz="UTC"),
+            pd.Timestamp("2024-01-02 05:00", tz="UTC"),
+        ]
+    )
+    close = pd.DataFrame({"A": [10.0, 10.5, 11.0]}, index=idx)
+    out_morning = IntraSegmentReturn()._calculate_series(close, segment="morning")
+    assert out_morning.loc[pd.Timestamp("2024-01-02"), "A"] == pytest.approx(10.5 / 10.0 - 1.0, rel=1e-9)
+    out_afternoon = IntraSegmentReturn()._calculate_series(close, segment="afternoon")
+    assert out_afternoon.loc[pd.Timestamp("2024-01-02"), "A"] == pytest.approx(11.0 / 11.0 - 1.0, rel=1e-9)
+
+    # lunch gap: afternoon first open vs morning last close.
+    open_px = pd.DataFrame({"A": [10.0, 10.4, 11.05]}, index=idx)
+    out_lunch = IntraLunchGapReturn()._calculate_series(close, open_px)
+    assert out_lunch.loc[pd.Timestamp("2024-01-02"), "A"] == pytest.approx(11.05 / 10.5 - 1.0, rel=1e-9)
+
+
 def test_intraday_path_efficiency_single_direction_is_one():
     from cleaned_operators.microstructure.intraday_agg import IntraPathEfficiency
 
