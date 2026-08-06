@@ -40,8 +40,107 @@ def _stack(panels: list[pd.DataFrame]) -> np.ndarray:
     return np.stack(arrays, axis=0)
 
 
+def _stack_ids(panels: list[pd.DataFrame]) -> np.ndarray:
+    """Stack shareholder-ID panels preserving string / object values."""
+    base = panels[0]
+    arrays = [np.asarray(p.reindex(index=base.index, columns=base.columns).to_numpy(dtype=object)) for p in panels]
+    return np.stack(arrays, axis=0)
+
+
 def _frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
     return pd.DataFrame(values, index=template.index, columns=template.columns, dtype=float)
+
+
+_ID_SLOTS = 10
+
+
+def _id_key(value: Any) -> str | None:
+    """Normalise a shareholder-ID cell to a string key or None if empty."""
+    if value is None:
+        return None
+    s = str(value)
+    if s in ("", "nan", "None", "NaN"):
+        return None
+    return s
+
+
+def _split_id_args(args: tuple[Any, ...]) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Parse ``(s1..s10, sid1..sid10, p1..p10, psid1..psid10)`` into
+    (cur_ratio, cur_id, prev_ratio, prev_id) object/float arrays."""
+    cur_r = _stack(list(args[:_ID_SLOTS]))
+    cur_id = _stack_ids(list(args[_ID_SLOTS : 2 * _ID_SLOTS]))
+    prev_r = _stack(list(args[2 * _ID_SLOTS : 3 * _ID_SLOTS]))
+    prev_id = _stack_ids(list(args[3 * _ID_SLOTS : 4 * _ID_SLOTS]))
+    return cur_r, cur_id, prev_r, prev_id
+
+
+def _ratio_map(ratios: np.ndarray, ids: np.ndarray, row: int, col: int) -> dict[str, float]:
+    """Build ``{id: share_ratio}`` for one (row, col), zero-filling missing ratios."""
+    out: dict[str, float] = {}
+    for k in range(ratios.shape[0]):
+        key = _id_key(ids[k, row, col])
+        if key is None:
+            continue
+        r = ratios[k, row, col]
+        out[key] = float(r) if np.isfinite(r) else 0.0
+    return out
+
+
+def _rank_of(ids: np.ndarray, row: int, col: int, key: str) -> int | None:
+    for k in range(ids.shape[0]):
+        if _id_key(ids[k, row, col]) == key:
+            return k
+    return None
+
+
+def _id_matched(*args, stat: str) -> pd.DataFrame:
+    cur_r, cur_id, prev_r, prev_id = _split_id_args(args)
+    _, rows, cols = cur_r.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
+    for row in range(rows):
+        for col in range(cols):
+            cur = _ratio_map(cur_r, cur_id, row, col)
+            prev = _ratio_map(prev_r, prev_id, row, col)
+            if not cur and not prev:
+                continue
+            ids = set(cur) | set(prev)
+            if stat == "churn":
+                out[row, col] = 0.5 * sum(abs(cur.get(i, 0.0) - prev.get(i, 0.0)) for i in ids)
+            elif stat == "entry":
+                out[row, col] = sum(r for i, r in cur.items() if i not in prev)
+            elif stat == "exit":
+                out[row, col] = sum(r for i, r in prev.items() if i not in cur)
+            elif stat == "overlap":
+                if not ids:
+                    out[row, col] = np.nan
+                else:
+                    out[row, col] = len(set(cur) & set(prev)) / len(ids)
+            elif stat == "rank_migration":
+                common = [i for i in ids if i in cur and i in prev]
+                if not common:
+                    out[row, col] = np.nan
+                    continue
+                denom = sum(min(cur[i], prev[i]) for i in common)
+                if denom <= _EPS:
+                    out[row, col] = np.nan
+                    continue
+                num = 0.0
+                for i in common:
+                    rc = _rank_of(cur_id, row, col, i)
+                    rp = _rank_of(prev_id, row, col, i)
+                    if rc is None or rp is None:
+                        continue
+                    num += min(cur[i], prev[i]) * abs(rc - rp)
+                out[row, col] = num / denom
+    return _frame_like(args[0], out)
+
+
+_ID_PARAMS = [
+    "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10",
+    "sid1", "sid2", "sid3", "sid4", "sid5", "sid6", "sid7", "sid8", "sid9", "sid10",
+    "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10",
+    "psid1", "psid2", "psid3", "psid4", "psid5", "psid6", "psid7", "psid8", "psid9", "psid10",
+]
 
 
 def _safe_div(num, den):
@@ -401,4 +500,46 @@ _mk(
     "共同股东 / 总股东数（重叠率）。",
     ["shared_holders", "total_holders"],
     _shareholder_overlap_ratio,
+)
+
+
+# ---------------------------------------------------------------------------
+# Shareholder-ID matched turnover (source-side two-period ShareholderId ->
+# ShareRatio union matching, instead of the rank-slot comparison used by the
+# historic holder_*_churn family).  A pure rank swap with unchanged holdings
+# yields zero turnover here.
+# ---------------------------------------------------------------------------
+
+def _mk_id(name: str, description: str, stat: str):
+    _mk(
+        name, description, _ID_PARAMS,
+        lambda *args, stat=stat: _id_matched(*args, stat=stat),
+        unit="ratio",
+    )
+
+
+_mk_id(
+    "holder_id_matched_churn",
+    "按股东 ID 匹配的持股变动：0.5*Σ|ShareRatio_cur - ShareRatio_prev|（同 ID 跨期配对，缺失侧补0）。",
+    "churn",
+)
+_mk_id(
+    "holder_id_matched_entry_share",
+    "新进入股东（ID 不在上期）本期持股比例合计。",
+    "entry",
+)
+_mk_id(
+    "holder_id_matched_exit_share",
+    "退出股东（ID 不在本期）上期持股比例合计。",
+    "exit",
+)
+_mk_id(
+    "holder_id_overlap_ratio",
+    "股东 ID 交集 / 并集（跨期股东重合率）。",
+    "overlap",
+)
+_mk_id(
+    "holder_share_weighted_rank_migration",
+    "以 min(两期持股比例) 加权的股东排名位移均值。",
+    "rank_migration",
 )

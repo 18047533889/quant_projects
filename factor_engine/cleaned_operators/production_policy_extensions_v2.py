@@ -50,15 +50,10 @@ ph._FUNDAMENTAL_PERIOD_CANONICALS = frozenset(
     | set(surface._FUNDAMENTAL_V2_CANONICALS)
 )
 
-# ``production_tiers`` owns only the candidate set. Signature and backend
-# admission are implemented by their respective modules and must not be written
-# as phantom attributes here.
-import cleaned_operators.production_tiers as pt
-
-_all_extended = set(surface.EXTENDED_ONLY_CANONICALS)
-pt.PANDAS_FIRST_PRODUCTION_CANONICALS = frozenset(
-    set(pt.PANDAS_FIRST_PRODUCTION_CANONICALS) | _all_extended
-)
+# ``production_tiers`` owns the candidate set:
+# ``PANDAS_FIRST_PRODUCTION_CANONICALS = frozenset(EXTENDED_ONLY_CANONICALS)``.
+# It is deliberately NOT re-assigned here; a previous union-with-self rewrite
+# was redundant and hid the real owner.
 
 import backend.pandas_first_signature as ps
 

@@ -43,7 +43,9 @@ def _member(panel: pd.DataFrame) -> pd.DataFrame:
 @pytest.mark.parametrize("name", sorted(P1_CANONICALS))
 def test_p1_operator_registered_and_extended_surface(name: str) -> None:
     assert OperatorRegistry.get(name) is not None
-    assert classify_canonical(name) == "extended"
+    # Daily migration promotes non-fail-closed factor operators to daily; fail-closed
+    # (experimental/isolation) ones remain extended.
+    assert classify_canonical(name) in {"daily", "extended"}
 
 
 def test_relation_hhi_and_topk() -> None:

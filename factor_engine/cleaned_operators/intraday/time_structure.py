@@ -386,6 +386,65 @@ def _profile_emd(mat: pd.DataFrame, window: int) -> pd.Series:
     return pd.Series(out, dtype=float)
 
 
+def _within_day_log_returns(close: pd.DataFrame) -> pd.DataFrame:
+    """Per-column within-day log returns.
+
+    The return at the first bar of each trading day is NaN so overnight gaps do
+    not pollute the intraday return profile.  (The historic
+    ``intra_return_profile_cosine`` fed whatever panel the caller passed
+    straight into the profile kernel, so passing Close produced a *price-level*
+    curve similarity instead of a return-curve one; these ops compute the
+    returns explicitly.)
+    """
+    v = close.to_numpy(dtype=float)
+    days = np.asarray(pd.DatetimeIndex(close.index).normalize())
+    out = np.full_like(v, np.nan, dtype=float)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        for i in range(1, len(close.index)):
+            if days[i] == days[i - 1]:
+                out[i] = np.log(v[i] / v[i - 1])
+    return pd.DataFrame(out, index=close.index, columns=close.columns)
+
+
+def _return_profile_cosine(close: pd.DataFrame, window: int, absolute: bool) -> pd.DataFrame:
+    rets = _within_day_log_returns(close)
+    if absolute:
+        rets = rets.abs()
+    return _profile_daily(rets, int(window), _profile_cosine)
+
+
+def _mk_profile_close_op(name: str, description: str, absolute: bool):
+    @register_operator(
+        name=name,
+        category="intraday_microstructure",
+        business_category="intraday_microstructure",
+        canonical=name,
+        source="intraday.time_structure",
+        backend="pandas_numpy",
+        status="experimental",
+    )
+    class _ProfileCloseOp(SeriesOperator):
+        metadata = metadata(name, description, ["close", "window"], unit="cosine", cost=7)
+
+        def _calculate_series(self, close, window=20, session_tz=None, **_):
+            from cleaned_operators.intraday._core import session_local
+            return _return_profile_cosine(session_local(close, session_tz), int(window), absolute)
+
+    return _ProfileCloseOp
+
+
+_mk_profile_close_op(
+    "intra_signed_return_profile_cosine",
+    "分钟有符号收益曲线与历史均值曲线余弦相似度（内部计算日内收益）。",
+    False,
+)
+_mk_profile_close_op(
+    "intra_abs_return_profile_cosine",
+    "分钟绝对收益曲线与历史均值曲线余弦相似度（内部计算日内收益）。",
+    True,
+)
+
+
 def _profile_daily(values: pd.DataFrame, window: int, fn: Callable[[pd.DataFrame, int], pd.Series]) -> pd.DataFrame:
     out: dict[str, pd.Series] = {}
     for inst in values.columns:
@@ -438,6 +497,8 @@ _CANONICALS.extend(
         "intra_volume_profile_jsd",
         "intra_amount_profile_jsd",
         "intra_profile_earth_mover_distance",
+        "intra_signed_return_profile_cosine",
+        "intra_abs_return_profile_cosine",
     ]
 )
 

@@ -111,7 +111,7 @@ class MicroRealizedVolOp(SeriesOperator):
         mp = max(2, int(min_periods))
 
         def _rv(col: pd.Series) -> pd.Series:
-            ret = col.pct_change()
+            ret = col.pct_change(fill_method=None)
             sq = ret.pow(2)
             rolled = rolling_by_session(sq, w, "sum", min_periods=mp)
             return rolled.pow(0.5)

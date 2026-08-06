@@ -348,9 +348,10 @@ class TsCusumBreakScore(SeriesOperator):
                 sd = float(np.std(vals))
                 if sd <= 0.0:
                     continue
-                # 到当前为止的累计标准化偏差
+                # 到当前为止的累计标准化偏差。窗口总偏差对自身均值为 0，
+                # 因此取路径上 |cumsum| 的最大值（末尾值无信息量）。
                 running = np.cumsum(vals - mean) / (sd * np.sqrt(np.arange(1, len(vals) + 1)))
-                out[row, col] = float(np.abs(running[-1]))
+                out[row, col] = float(np.max(np.abs(running)))
         return _frame_like(x, out)
 
 

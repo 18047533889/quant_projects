@@ -119,13 +119,37 @@ _mk(
 
 
 def _valuation_cashflow_disagreement(pe_ratio, pcf_ratio, pcf_ratio2, ocf_yield, earnings_yield):
-    # per-cell dispersion across the five definitions
-    stacked = np.stack([np.log(pe_ratio.abs().replace(0, np.nan)) * -1.0,
-                        np.log(pcf_ratio.abs().replace(0, np.nan)) * -1.0,
-                        np.log(pcf_ratio2.abs().replace(0, np.nan)) * -1.0,
-                        ocf_yield, earnings_yield], axis=0)
+    # The five components are scale-heterogeneous: the log transforms sit around
+    # 1-5 while the yields are ~0.01-0.10, so a raw nanstd would be dominated by
+    # the log-transformed terms.  Standardize every component cross-sectionally
+    # (row-wise winsorize at 1/99, then z-score) before measuring dispersion.
+    frames = {
+        "pe": np.log(pe_ratio.abs().replace(0, np.nan)) * -1.0,
+        "pcf": np.log(pcf_ratio.abs().replace(0, np.nan)) * -1.0,
+        "pcf2": np.log(pcf_ratio2.abs().replace(0, np.nan)) * -1.0,
+        "ocf": ocf_yield,
+        "ey": earnings_yield,
+    }
+    standardized = []
+    for frame in frames.values():
+        arr = frame.to_numpy(dtype=float).copy()
+        for row in range(arr.shape[0]):
+            finite = arr[row][np.isfinite(arr[row])]
+            if finite.size < 5:
+                continue
+            lo, hi = np.quantile(finite, [0.01, 0.99])
+            clipped = np.clip(arr[row], lo, hi)
+            sd = np.nanstd(clipped)
+            if sd > 0:
+                arr[row] = (clipped - np.nanmean(clipped)) / sd
+        standardized.append(arr)
     with np.errstate(invalid="ignore"):
-        return pd.DataFrame(np.nanstd(stacked, axis=0), index=pe_ratio.index, columns=pe_ratio.columns, dtype=float)
+        return pd.DataFrame(
+            np.nanstd(np.stack(standardized, axis=0), axis=0),
+            index=pe_ratio.index,
+            columns=pe_ratio.columns,
+            dtype=float,
+        )
 
 
 _mk(
@@ -145,18 +169,27 @@ _mk(
 
 
 def _valuation_quality_mismatch(valuation, quality, weight):
-    """估值对质量横截面回归残差。"""
+    """估值对质量横截面 WLS 回归残差（weight 真正参与加权）。"""
     v = valuation.to_numpy(dtype=float)
     q = quality.to_numpy(dtype=float)
-    wv = np.where(np.isfinite(weight.to_numpy(dtype=float)), weight.to_numpy(dtype=float), 0.0)
+    w = weight.to_numpy(dtype=float)
     rows, cols = v.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     for row in range(rows):
-        valid = np.isfinite(v[row]) & np.isfinite(q[row]) & (wv[row] > 0)
+        valid = (
+            np.isfinite(v[row])
+            & np.isfinite(q[row])
+            & np.isfinite(w[row])
+            & (w[row] > 0)
+        )
         if valid.sum() < 5 or np.var(q[row][valid]) <= _EPS:
             continue
-        design = np.column_stack([np.ones(valid.sum()), q[row][valid]])
-        beta, *_ = np.linalg.lstsq(design, v[row][valid], rcond=None)
+        y, x, wts = v[row][valid], q[row][valid], w[row][valid]
+        root = np.sqrt(wts)
+        design = np.column_stack([np.ones(valid.sum()), x])
+        # WLS: scale design and target by sqrt(weight) so the weight actually
+        # enters the fit instead of serving only as a positive-mask filter.
+        beta, *_ = np.linalg.lstsq(design * root[:, None], y * root, rcond=None)
         out[row] = np.where(np.isfinite(q[row]), v[row] - (beta[0] + beta[1] * q[row]), np.nan)
     return pd.DataFrame(out, index=valuation.index, columns=valuation.columns, dtype=float)
 

@@ -202,6 +202,27 @@ _mk(
 )
 
 
+def _knn_blockwise(Xn: np.ndarray, k: int, block: int = 500) -> np.ndarray:
+    """k-NN mean distances over a standardised matrix, computed in row blocks.
+
+    A single ``N x N`` distance matrix for a 5000-instrument cross-section is
+    ~200 MB of float64; blockwise rows bound peak memory while keeping the
+    result identical.
+    """
+    n = Xn.shape[0]
+    out = np.full(n, np.nan, dtype=float)
+    for lo in range(0, n, block):
+        hi = min(lo + block, n)
+        d2 = np.sum((Xn[lo:hi, None, :] - Xn[None, :, :]) ** 2, axis=2)
+        np.fill_diagonal(d2, np.inf)
+        kk = min(k, n - 1)
+        if kk < 1:
+            continue
+        part = np.partition(d2, kth=kk - 1, axis=1)[:, :kk]
+        out[lo:hi] = np.sqrt(part).mean(axis=1)
+    return out
+
+
 def _cs_knn_distance(*features, k=5):
     kk = max(2, int(k))
     fv = [f.to_numpy(dtype=float) for f in features]
@@ -216,12 +237,7 @@ def _cs_knn_distance(*features, k=5):
         Xv = X[valid]
         sd = np.std(Xv, axis=0)
         Xn = Xv / np.where(sd > _EPS, sd, 1.0)
-        # pairwise euclidean
-        d2 = np.sum((Xn[:, None, :] - Xn[None, :, :]) ** 2, axis=2)
-        np.fill_diagonal(d2, np.inf)
-        idx = np.argsort(d2, axis=1)[:, :kk]
-        dist = np.sqrt(np.take_along_axis(d2, idx, axis=1)).mean(axis=1)
-        out[row, valid] = dist
+        out[row, valid] = _knn_blockwise(Xn, kk)
     return _frame_like(features[0], out)
 
 
@@ -244,4 +260,200 @@ _mk(
     "多特征空间局部密度异常度（负对数 KNN 距离）。",
     ["f1", "f2", "f3", "f4", "k"],
     lambda f1, f2=None, f3=None, f4=None, k=5: _cs_local_density_score(*[v for v in (f1, f2, f3, f4) if v is not None], k=int(k)),
+)
+
+
+def _cs_shrinkage_mahalanobis(*features, shrinkage=0.1):
+    s = float(shrinkage)
+    if not (0.0 <= s < 1.0):
+        raise ValueError("shrinkage must be in [0, 1)")
+    fv = [f.to_numpy(dtype=float) for f in features]
+    n, n_cols = fv[0].shape
+    p = len(fv)
+    out = np.full((n, n_cols), np.nan, dtype=float)
+    for row in range(n):
+        X = np.column_stack([f[row] for f in fv])
+        valid = np.all(np.isfinite(X), axis=1)
+        if valid.sum() < p + 3:
+            continue
+        Xv = X[valid]
+        mu = Xv.mean(axis=0)
+        cov = np.atleast_2d(np.cov(Xv.T))  # single-feature cross-sections -> 1x1
+        shrunk = (1.0 - s) * cov + s * np.diag(np.diag(cov))
+        try:
+            icov = np.linalg.inv(shrunk + _EPS * np.eye(p))
+        except np.linalg.LinAlgError:
+            continue
+        d = np.sqrt(np.einsum("ij,jk,ik->i", Xv - mu, icov, Xv - mu))
+        out[row, valid] = d
+    return _frame_like(features[0], out)
+
+
+_mk(
+    "cs_shrinkage_mahalanobis",
+    "收缩协方差的马氏距离（向对角收缩，缓解病态协方差）。",
+    ["f1", "f2", "f3", "f4", "shrinkage"],
+    lambda f1, f2=None, f3=None, f4=None, shrinkage=0.1: _cs_shrinkage_mahalanobis(
+        *[v for v in (f1, f2, f3, f4) if v is not None], shrinkage=float(shrinkage)),
+    unit="distance",
+)
+
+
+def _cs_robust_mahalanobis_mad(*features):
+    """MAD-based robust Mahalanobis: median centre + per-dimension MAD scale."""
+    fv = [f.to_numpy(dtype=float) for f in features]
+    n, n_cols = fv[0].shape
+    p = len(fv)
+    out = np.full((n, n_cols), np.nan, dtype=float)
+    for row in range(n):
+        X = np.column_stack([f[row] for f in fv])
+        valid = np.all(np.isfinite(X), axis=1)
+        if valid.sum() < p + 3:
+            continue
+        Xv = X[valid]
+        center = np.median(Xv, axis=0)
+        mad = 1.4826 * np.median(np.abs(Xv - center), axis=0)
+        mad = np.where(mad > _EPS, mad, 1.0)
+        z = (Xv - center) / mad
+        d = np.sqrt(np.sum(z * z, axis=1))
+        out[row, valid] = d
+    return _frame_like(features[0], out)
+
+
+_mk(
+    "cs_robust_mahalanobis_mad",
+    "MAD 稳健马氏距离（中位数中心 + MAD 尺度）。",
+    ["f1", "f2", "f3", "f4"],
+    lambda f1, f2=None, f3=None, f4=None: _cs_robust_mahalanobis_mad(
+        *[v for v in (f1, f2, f3, f4) if v is not None]),
+    unit="distance",
+)
+
+
+def _knn_full(Xn: np.ndarray, k: int, block: int = 500) -> tuple[np.ndarray, np.ndarray]:
+    """k nearest neighbours (indices + distances) over a standardised matrix,
+    computed in row blocks."""
+    n = Xn.shape[0]
+    kk = max(1, min(k, n - 1))
+    idx = np.zeros((n, kk), dtype=int)
+    dist = np.zeros((n, kk), dtype=float)
+    for lo in range(0, n, block):
+        hi = min(lo + block, n)
+        d2 = np.sum((Xn[lo:hi, None, :] - Xn[None, :, :]) ** 2, axis=2)
+        for i in range(lo, hi):
+            d2[i - lo, i] = np.inf
+        part = np.argpartition(d2, kth=kk - 1, axis=1)[:, :kk]
+        pd2 = np.take_along_axis(d2, part, axis=1)
+        order = np.argsort(pd2, axis=1)
+        part = np.take_along_axis(part, order, axis=1)
+        pd2 = np.take_along_axis(pd2, order, axis=1)
+        idx[lo:hi] = part
+        dist[lo:hi] = np.sqrt(pd2)
+    return idx, dist
+
+
+def _lof_row(Xn: np.ndarray, k: int) -> np.ndarray:
+    kk = max(1, min(k, Xn.shape[0] - 1))
+    n = Xn.shape[0]
+    if n < kk + 1:
+        return np.full(n, np.nan)
+    idx, dist = _knn_full(Xn, kk)
+    k_dist = dist[:, -1]  # distance to kth neighbour
+    # local reachability density = 1 / mean reachability distance
+    reach = np.maximum(k_dist[idx], dist)
+    lrd = 1.0 / np.maximum(reach.mean(axis=1), _EPS)
+    # LOF = mean(neighbour lrd) / lrd_i
+    lof = lrd[idx].mean(axis=1) / np.maximum(lrd, _EPS)
+    return lof
+
+
+def _cs_actual_lof(*features, k=20):
+    kk = max(2, int(k))
+    fv = [f.to_numpy(dtype=float) for f in features]
+    n, n_cols = fv[0].shape
+    p = len(fv)
+    out = np.full((n, n_cols), np.nan, dtype=float)
+    for row in range(n):
+        X = np.column_stack([f[row] for f in fv])
+        valid = np.all(np.isfinite(X), axis=1)
+        nv = int(valid.sum())
+        eff_k = max(1, min(kk, nv - 1))
+        if nv < eff_k + 2:
+            continue
+        Xv = X[valid]
+        sd = np.std(Xv, axis=0)
+        Xn = Xv / np.where(sd > _EPS, sd, 1.0)
+        out[row, valid] = _lof_row(Xn, eff_k)
+    return _frame_like(features[0], out)
+
+
+_mk(
+    "cs_actual_lof_score",
+    "局部离群因子 LOF（分块计算，避免全量距离矩阵）。",
+    ["f1", "f2", "f3", "f4", "k"],
+    lambda f1, f2=None, f3=None, f4=None, k=20: _cs_actual_lof(
+        *[v for v in (f1, f2, f3, f4) if v is not None], k=int(k)),
+    unit="level",
+)
+
+
+def _relative_density_row(Xn: np.ndarray, k: int) -> np.ndarray:
+    kk = max(1, min(k, Xn.shape[0] - 1))
+    n = Xn.shape[0]
+    if n < kk + 1:
+        return np.full(n, np.nan)
+    idx, dist = _knn_full(Xn, kk)
+    dens = 1.0 / np.maximum(dist.mean(axis=1), _EPS)  # own density proxy
+    neigh_dens = dens[idx].mean(axis=1)               # mean neighbour density
+    return dens / np.maximum(neigh_dens, _EPS)
+
+
+def _cs_relative_density(*features, k=20):
+    kk = max(2, int(k))
+    fv = [f.to_numpy(dtype=float) for f in features]
+    n, n_cols = fv[0].shape
+    p = len(fv)
+    out = np.full((n, n_cols), np.nan, dtype=float)
+    for row in range(n):
+        X = np.column_stack([f[row] for f in fv])
+        valid = np.all(np.isfinite(X), axis=1)
+        nv = int(valid.sum())
+        eff_k = max(1, min(kk, nv - 1))
+        if nv < eff_k + 2:
+            continue
+        Xv = X[valid]
+        sd = np.std(Xv, axis=0)
+        Xn = Xv / np.where(sd > _EPS, sd, 1.0)
+        out[row, valid] = _relative_density_row(Xn, eff_k)
+    return _frame_like(features[0], out)
+
+
+_mk(
+    "cs_relative_density_ratio",
+    "局部密度相对其 k 近邻平均密度的比值。",
+    ["f1", "f2", "f3", "f4", "k"],
+    lambda f1, f2=None, f3=None, f4=None, k=20: _cs_relative_density(
+        *[v for v in (f1, f2, f3, f4) if v is not None], k=int(k)),
+)
+
+
+def _cs_residual_percentile(resid: pd.DataFrame) -> pd.DataFrame:
+    rv = resid.to_numpy(dtype=float)
+    rows, cols = rv.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
+    for row in range(rows):
+        a = rv[row]
+        valid = np.isfinite(a)
+        if valid.sum() < 2:
+            continue
+        order = np.argsort(np.argsort(a[valid]))
+        out[row, valid] = order / (valid.sum() - 1.0)
+    return _frame_like(resid, out)
+
+
+_mk(
+    "cs_residual_percentile",
+    "横截面残差分位（0~1，横截面 rank 归一化）。",
+    ["resid"],
+    _cs_residual_percentile,
 )

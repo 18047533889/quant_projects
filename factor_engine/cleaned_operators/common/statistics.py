@@ -83,7 +83,9 @@ class ACF(SeriesOperator):
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, lag: int = 1, **kwargs) -> pd.DataFrame:
         lag = int(lag)
         if lag < 0:
-            return pd.DataFrame(np.nan, index=x.index, columns=x.columns)
+            from backend.operator_errors import FutureReferenceError
+
+            raise FutureReferenceError(f"negative lag {lag} references future data")
 
         def acf_func(s, lag):
             n = len(s)
@@ -466,7 +468,9 @@ class autocorr(SeriesOperator):
     def _calculate_series(self, x: pd.DataFrame, lag: int = 1, **kwargs) -> pd.DataFrame:
         lag = int(lag)
         if lag < 0:
-            return pd.DataFrame(np.nan, index=x.index, columns=x.columns)
+            from backend.operator_errors import FutureReferenceError
+
+            raise FutureReferenceError(f"negative lag {lag} references future data")
         return expanding_univariate(
             x,
             lambda v: pd.Series(v).autocorr(lag=lag),
@@ -714,7 +718,9 @@ class granger_causality(SeriesOperator):
     def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, lag: int = 5, **kwargs) -> pd.DataFrame:
         lag = int(lag)
         if lag < 1:
-            return pd.DataFrame(np.nan, index=x.index, columns=x.columns)
+            from backend.operator_errors import OperatorParameterError
+
+            raise OperatorParameterError(f"granger maxlag must be >= 1, got {lag}")
 
         def _granger_pval(a, b):
             from statsmodels.tsa.stattools import grangercausalitytests
@@ -996,7 +1002,9 @@ class pacf(SeriesOperator):
 
         lag = int(lag)
         if lag < 0:
-            return pd.DataFrame(np.nan, index=x.index, columns=x.columns)
+            from backend.operator_errors import FutureReferenceError
+
+            raise FutureReferenceError(f"negative lag {lag} references future data")
 
         def _pacf_at_lag(v):
             pacf_vals = sm_pacf(v, nlags=lag)

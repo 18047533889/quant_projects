@@ -690,7 +690,9 @@ _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
     "expanding_rank": {"scope": "ts", "pit_safe": True},
     "rank_corr": {"scope": "ts", "pit_safe": True, "min_periods": 2},
     "vp_weighted_price": {"scope": "ts", "pit_safe": True},
-    "real_turnover_rate": {"scope": "ts", "pit_safe": True},
+    # NOTE: real_turnover_rate (volume / float_shares) is a per-day elementwise
+    # rate and is defined once below under the elementwise section.  A previous
+    # duplicate ts-scoped entry was silently overriding it; removed.
     "micro_realized_vol": {
         "scope": "ts",
         "pit_safe": True,

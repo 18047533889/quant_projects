@@ -92,6 +92,18 @@ def _mark_pandas_first_production() -> None:
         catalog = OperatorRegistry._catalog.get(canonical)
         if catalog is None:
             continue
+        from cleaned_operators.semantic_certification import should_fail_closed
+
+        if should_fail_closed(canonical):
+            # Registered experimental/research or isolated: never force-promote
+            # here.  ``apply_production_hardening`` keeps these experimental
+            # and non-PIT-safe; ``apply_evidence_certification_overlay`` is the
+            # only authority that can set ``production_certified``.
+            catalog["status"] = "experimental"
+            catalog["lifecycle_status"] = "experimental"
+            catalog["pit_safe"] = False
+            catalog["production_certified"] = False
+            continue
         catalog["status"] = "production"
         catalog["lifecycle_status"] = "production"
         catalog["production_backend_policy"] = "at_least_one_certified_backend"

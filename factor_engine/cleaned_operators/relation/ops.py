@@ -309,8 +309,8 @@ class RelationEntryCount(SeriesOperator):
         unit="count",
     )
 
-    def _calculate_series(self, member: pd.DataFrame, window: int = 60, **_: Any) -> pd.DataFrame:
-        return _transition_count(member, window, forward=True)
+    def _calculate_series(self, member: pd.DataFrame, window: int = 60, missing_policy: str = "break", **_: Any) -> pd.DataFrame:
+        return _transition_count(member, window, forward=True, missing_policy=missing_policy)
 
 
 @register_operator(
@@ -333,12 +333,16 @@ class RelationExitCount(SeriesOperator):
         unit="count",
     )
 
-    def _calculate_series(self, member: pd.DataFrame, window: int = 60, **_: Any) -> pd.DataFrame:
-        return _transition_count(member, window, forward=False)
+    def _calculate_series(self, member: pd.DataFrame, window: int = 60, missing_policy: str = "break", **_: Any) -> pd.DataFrame:
+        return _transition_count(member, window, forward=False, missing_policy=missing_policy)
 
 
-def _transition_count(member: pd.DataFrame, window: int, forward: bool) -> pd.DataFrame:
+def _transition_count(
+    member: pd.DataFrame, window: int, forward: bool, missing_policy: str = "break"
+) -> pd.DataFrame:
     w = int(window)
+    if missing_policy not in {"break", "false"}:
+        raise ValueError("missing_policy must be 'break' or 'false'")
     mv = member.to_numpy(dtype=float)
     rows, cols = mv.shape
     out = np.full((rows, cols), np.nan, dtype=float)
@@ -349,8 +353,19 @@ def _transition_count(member: pd.DataFrame, window: int, forward: bool) -> pd.Da
             valid = np.isfinite(segment)
             if valid.sum() < 2:
                 continue
-            truth = valid & (segment != 0)
-            transitions = np.sum(truth[1:] & ~truth[:-1]) if forward else np.sum(~truth[1:] & truth[:-1])
+            if missing_policy == "break":
+                # 逐对有效：仅当相邻两 bar 均已知时才计一次进入/退出。NaN 打断序列，
+                # 避免把缺失当作非成员而制造虚假转换（与 index_reconstitution_churn 一致）。
+                current = segment[1:] != 0
+                previous = segment[:-1] != 0
+                pair_valid = valid[1:] & valid[:-1]
+                entry = pair_valid & current & ~previous
+                exit_ = pair_valid & ~current & previous
+            else:  # legacy "false": NaN 视为非成员
+                truth = valid & (segment != 0)
+                entry = truth[1:] & ~truth[:-1]
+                exit_ = ~truth[1:] & truth[:-1]
+            transitions = np.sum(entry) if forward else np.sum(exit_)
             out[row, col] = float(transitions)
     return _frame_like(member, out)
 
@@ -545,7 +560,7 @@ class EventCumulativeReturnPast(SeriesOperator):
 
     metadata = _metadata(
         "event_cumulative_return_past",
-        "事件触发后（含 event_effective_lag 错位）窗口内收益累计。",
+        "事件触发后（含 event_effective_lag 错位）窗口内收益累计（算术和；复利见 event_return_since_last）。",
         ["ret", "event", "window", "event_effective_lag"],
         category="event",
         domain="event",
@@ -587,7 +602,7 @@ class EventAbnormalReturnPast(SeriesOperator):
 
     metadata = _metadata(
         "event_abnormal_return_past",
-        "事件触发后（含 event_effective_lag 错位）窗口内超额收益累计。",
+        "事件触发后（含 event_effective_lag 错位）窗口内超额收益累计（算术和）。",
         ["ret", "benchmark_ret", "event", "window", "event_effective_lag"],
         category="event",
         domain="event",
@@ -616,6 +631,144 @@ class EventAbnormalReturnPast(SeriesOperator):
                         if valid.any():
                             out[row, col] = float(np.nansum(segment))
         return _frame_like(ret, out)
+
+
+def _event_since_last_agg(
+    ret: pd.DataFrame,
+    event: pd.DataFrame,
+    window: int,
+    lag: int,
+    mode: str,
+) -> pd.DataFrame:
+    """自最近一次事件（含 event_effective_lag 错位）起的聚合。
+
+    ``mode``: ``"compounded"``=复利 Π(1+r)-1、``"sum"``=算术和 Σr、
+    ``"logsum"``=Σln(1+r)、``"count"``=有效 bar 数。只统计窗口内的有限收益。
+    """
+    w = int(window)
+    lag = max(0, int(lag))
+    rv = ret.to_numpy(dtype=float)
+    ev = event.to_numpy(dtype=float)
+    rows, cols = rv.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
+    for col in range(cols):
+        last_event = -1
+        for row in range(rows):
+            if np.isfinite(ev[row, col]) and ev[row, col] != 0:
+                last_event = row
+            if last_event < 0:
+                continue
+            start = last_event + lag
+            if start <= row and row - last_event < w + lag:
+                segment = rv[start : row + 1, col]
+                finite = np.isfinite(segment)
+                if mode == "count":
+                    out[row, col] = float(finite.sum())
+                elif not finite.any():
+                    continue
+                elif mode == "compounded":
+                    out[row, col] = float(np.prod(1.0 + segment[finite]) - 1.0)
+                elif mode == "sum":
+                    out[row, col] = float(np.sum(segment[finite]))
+                elif mode == "logsum":
+                    out[row, col] = float(np.sum(np.log1p(segment[finite])))
+    return _frame_like(ret, out)
+
+
+@register_operator(
+    name="event_return_since_last",
+    category="event",
+    business_category="event",
+    canonical="event_return_since_last",
+    source="relation.ops",
+    status="experimental",
+)
+class EventReturnSinceLast(SeriesOperator):
+    """自最近事件起的**复利**收益 Π(1+r)-1（事件触发后含错位）。"""
+
+    metadata = _metadata(
+        "event_return_since_last",
+        "自最近事件（含 event_effective_lag 错位）起的复利收益 Π(1+r)-1。",
+        ["ret", "event", "window", "event_effective_lag"],
+        category="event",
+        domain="event",
+        unit="return",
+    )
+
+    def _calculate_series(self, ret: pd.DataFrame, event: pd.DataFrame, window: int = 20, event_effective_lag: int = 1, **_: Any) -> pd.DataFrame:
+        return _event_since_last_agg(ret, event, window, event_effective_lag, "compounded")
+
+
+@register_operator(
+    name="event_arithmetic_return_sum",
+    category="event",
+    business_category="event",
+    canonical="event_arithmetic_return_sum",
+    source="relation.ops",
+    status="experimental",
+)
+class EventArithmeticReturnSum(SeriesOperator):
+    """自最近事件起的**算术**收益和 Σ ret。"""
+
+    metadata = _metadata(
+        "event_arithmetic_return_sum",
+        "自最近事件（含 event_effective_lag 错位）起的算术收益和。",
+        ["ret", "event", "window", "event_effective_lag"],
+        category="event",
+        domain="event",
+        unit="return",
+    )
+
+    def _calculate_series(self, ret: pd.DataFrame, event: pd.DataFrame, window: int = 20, event_effective_lag: int = 1, **_: Any) -> pd.DataFrame:
+        return _event_since_last_agg(ret, event, window, event_effective_lag, "sum")
+
+
+@register_operator(
+    name="event_log_return_sum",
+    category="event",
+    business_category="event",
+    canonical="event_log_return_sum",
+    source="relation.ops",
+    status="experimental",
+)
+class EventLogReturnSum(SeriesOperator):
+    """自最近事件起的对数收益和 Σ ln(1+ret)。"""
+
+    metadata = _metadata(
+        "event_log_return_sum",
+        "自最近事件（含 event_effective_lag 错位）起的对数收益和。",
+        ["ret", "event", "window", "event_effective_lag"],
+        category="event",
+        domain="event",
+        unit="return",
+    )
+
+    def _calculate_series(self, ret: pd.DataFrame, event: pd.DataFrame, window: int = 20, event_effective_lag: int = 1, **_: Any) -> pd.DataFrame:
+        return _event_since_last_agg(ret, event, window, event_effective_lag, "logsum")
+
+
+@register_operator(
+    name="event_active_count",
+    category="event",
+    business_category="event",
+    canonical="event_active_count",
+    source="relation.ops",
+    status="experimental",
+)
+class EventActiveCount(SeriesOperator):
+    """自最近事件起的有效 bar 数。"""
+
+    metadata = _metadata(
+        "event_active_count",
+        "自最近事件（含 event_effective_lag 错位）起的有效观测 bar 数。",
+        ["ret", "event", "window", "event_effective_lag"],
+        category="event",
+        domain="event",
+        unit="count",
+    )
+
+    def _calculate_series(self, ret: pd.DataFrame, event: pd.DataFrame, window: int = 20, event_effective_lag: int = 1, **_: Any) -> pd.DataFrame:
+        return _event_since_last_agg(ret, event, window, event_effective_lag, "count")
 
 
 @register_operator(
@@ -835,5 +988,13 @@ from cleaned_operators import operator_surface as _surface  # noqa: E402
 
 _surface.EXTENDED_ONLY_CANONICALS = frozenset(
     set(_surface.EXTENDED_ONLY_CANONICALS)
-    | {"relation_distinct_count", "relation_overlap_ratio", "index_weight"}
+    | {
+        "relation_distinct_count", "relation_overlap_ratio", "index_weight",
+        "event_return_since_last", "event_arithmetic_return_sum",
+        "event_log_return_sum", "event_active_count",
+    }
 )
+
+# ``event_compounded_return`` 是 ``event_return_since_last`` 的语义别名（复利口径）。
+from cleaned_operators.registry import OperatorRegistry as _registry  # noqa: E402
+_registry.register_alias("event_compounded_return", "event_return_since_last")

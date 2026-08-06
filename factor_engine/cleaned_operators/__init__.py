@@ -70,6 +70,7 @@ _LOAD_MODULES = (
     "cleaned_operators.layer_primitives",
     "cleaned_operators.layer_composite_fixes",
     "cleaned_operators.fiscal_event_ops",
+    "cleaned_operators.safe_ops",
     # Operator expansion (2026-08): robust statistics, conditional, state/event,
     # downside risk, group ex-self, return decomposition, limit behavior.
     "cleaned_operators.robust_stats",
@@ -134,16 +135,8 @@ _REVIEWED_EXTENSIONS = (
     "cleaned_operators.technical.polars_indicators_v2",
     "cleaned_operators.technical.polars_tech_misc",
     "cleaned_operators.technical.polars_misc_v2",
-    "cleaned_operators.price_volume.liquidity_v2",
-    "cleaned_operators.price_volume.liquidity_naming_v2",
     "cleaned_operators.price_volume.polars_liquidity_v2",
-    "cleaned_operators.price_volume.candle_geometry_v2",
-    "cleaned_operators.price_volume.candle_patterns_extended",
     "cleaned_operators.price_volume.polars_candle",
-    "cleaned_operators.price_volume.structure_patterns_v2",
-    "cleaned_operators.price_volume.structure_patterns_extra_v2",
-    "cleaned_operators.price_volume.structure_patterns_extra_repairs_v2",
-    "cleaned_operators.price_volume.technical_structure_repairs",
     "cleaned_operators.price_volume.polars_structure",
     "cleaned_operators.common.stable_high_moments_v2",
     "cleaned_operators.fundamental.transforms_v2",
@@ -221,6 +214,17 @@ def load_all() -> None:
         )
 
     _INITIALIZING = True
+    try:
+        _load_all_impl()
+    finally:
+        # ``_INITIALIZING`` must always be reset even when a module raises
+        # mid-load, so a later load_all() can retry instead of deadlocking.
+        _INITIALIZING = False
+
+
+def _load_all_impl() -> None:
+    """Run the registry initialisation sequence (wrapped by ``load_all``)."""
+    global _LOADED
     # Capability modules build immutable module-level sets on first import.
     # Install the base-blob-bound evidence loader before any registry module can
     # snapshot primitive backend certification.
@@ -238,6 +242,15 @@ def load_all() -> None:
 
     for mod in _REVIEWED_EXTENSIONS:
         _load_module_if_available(mod)
+
+    # Snapshot the raw registered lifecycle status now, before any promotion
+    # layer (dedupe / overhaul / layer_governance* / production_hardening)
+    # rewrites ``catalog["status"]``.  ``apply_production_hardening`` uses this
+    # snapshot to refuse to blanket-promote operators that were registered as
+    # experimental/research (model families, next-stage kernels).
+    from cleaned_operators.semantic_certification import snapshot_registered_statuses
+
+    snapshot_registered_statuses()
 
     from cleaned_operators._dedupe import apply_operator_deduplication
     apply_operator_deduplication()
@@ -304,4 +317,3 @@ def load_all() -> None:
     OperatorRegistry.finalize()
     OperatorRegistry.freeze()
     _LOADED = True
-    _INITIALIZING = False

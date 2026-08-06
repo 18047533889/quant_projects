@@ -227,6 +227,51 @@ def pl_cs_bucket(x, buckets=10, ascending=True, **_):
     return pl_base_with(x, {c: wide[c] for c in cols})
 
 
+def pd_cs_bucket_fixed(x, breaks, **_):
+    """固定边界分桶：值 <= breaks[0] → 1；> breaks[-1] → len(breaks)+1；其余按所在区间。
+
+    与等频 ``cs_bucket``（横截面排名分桶）不同，固定边界是明确数值断点。
+    """
+    b = np.asarray(list(breaks), dtype=float)
+    if b.ndim != 1 or b.size == 0:
+        raise ValueError("breaks must be a non-empty 1D sequence")
+    if np.any(np.diff(b) <= 0):
+        raise ValueError("breaks must be strictly increasing")
+    arr = x.to_numpy(dtype=float)
+    out = np.full(x.shape, np.nan, dtype=float)
+    idx = np.searchsorted(b, arr, side="right") + 1.0
+    out = np.where(np.isfinite(arr), idx, np.nan)
+    return frame_pd(x, out)
+
+
+def pd_cs_bucket_historical(x, window=20, quantiles=(0.2, 0.4, 0.6, 0.8), min_periods=5, **_):
+    """基于**历史边界**分桶：对每只股票取 trailing window 内经验分位数断点，
+    当前值落入哪个历史分位区间即输出对应桶号（PIT：只用截至当日的 x）。
+
+    与等频 ``cs_bucket``（横截面）和固定边界 ``cs_bucket_fixed`` 语义不同。
+    """
+    w = positive_int(window, "window")
+    q = tuple(float(v) for v in quantiles)
+    if not q or any(not 0 < v < 1 for v in q):
+        raise ValueError("quantiles must be strictly inside (0, 1)")
+    mp = max(1, int(min_periods))
+    arr = x.to_numpy(dtype=float)
+    out = np.full(x.shape, np.nan, dtype=float)
+    for col in range(arr.shape[1]):
+        for row in range(arr.shape[0]):
+            start = max(0, row - w + 1)
+            seg = arr[start:row, col]  # 历史窗不含当前行
+            valid = seg[np.isfinite(seg)]
+            if valid.size < mp:
+                continue
+            breaks = np.quantile(valid, q)
+            val = arr[row, col]
+            if not np.isfinite(val):
+                continue
+            out[row, col] = float(np.searchsorted(breaks, val, side="right") + 1)
+    return frame_pd(x, out)
+
+
 def pd_argext(x, window, pick, min_periods=1):
     w, mp = window_params(window, min_periods)
     arr, out = x.to_numpy(dtype=float), np.full(x.shape, np.nan)
@@ -355,6 +400,8 @@ def register() -> None:
         "ts_days_since": Spec("time_series_event", ["condition", "max_lookback"], "距最近一次条件成立的交易行数", pd_days_since, pl_days_since),
         "ts_true_streak": Spec("time_series_event", ["condition"], "截至当前连续条件成立长度", pd_true_streak, pl_true_streak),
         "cs_bucket": Spec("cross_sectional", ["x", "buckets", "ascending"], "横截面零到一排名分桶", pd_cs_bucket, pl_cs_bucket),
+        "cs_bucket_fixed": Spec("cross_sectional", ["x", "breaks"], "固定边界分桶", pd_cs_bucket_fixed),
+        "cs_bucket_historical": Spec("cross_sectional", ["x", "window", "quantiles", "min_periods"], "基于历史边界分桶（PIT）", pd_cs_bucket_historical),
         "ts_argmax": Spec("time_series_order", ["x", "window", "min_periods"], "距最近一次窗口最大值的交易行数", pd_argmax, pl_argmax),
         "ts_argmin": Spec("time_series_order", ["x", "window", "min_periods"], "距最近一次窗口最小值的交易行数", pd_argmin, pl_argmin),
         "ts_tail_mean": Spec("time_series_risk", ["x", "window", "q", "side", "min_periods"], "当前窗口统一阈值下的尾部均值", pd_tail_mean, pl_tail_mean),

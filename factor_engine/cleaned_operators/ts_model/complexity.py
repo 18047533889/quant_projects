@@ -223,7 +223,10 @@ def _cusum_vol_break(vals: np.ndarray, window: int, min_periods: int) -> float:
     if sd <= 1e-12:
         return np.nan
     running = np.cumsum(v - mean) / (sd * np.sqrt(np.arange(1, len(v) + 1)))
-    return float(np.abs(running[-1]))
+    # The last cumulative sum is mechanically ~0 because the window's total
+    # deviation from its own mean is zero; the informative statistic is the
+    # largest magnitude reached along the path.
+    return float(np.max(np.abs(running)))
 
 
 _register("ts_cusum_vol_break_score", "平方收益 CUSUM 波动突变得分。", ["x", "window", "min_periods"], "level",

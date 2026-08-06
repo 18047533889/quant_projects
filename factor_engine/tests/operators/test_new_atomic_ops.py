@@ -49,7 +49,9 @@ def _cond(panel: pd.DataFrame) -> pd.DataFrame:
 @pytest.mark.parametrize("name", sorted(P0_CANONICALS))
 def test_p0_operator_registered_and_extended_surface(name: str) -> None:
     assert OperatorRegistry.get(name) is not None
-    assert classify_canonical(name) == "extended"
+    # Daily production migration promotes the non-fail-closed P0 factor operators to the
+    # daily surface; fail-closed (experimental/isolation) ones remain extended.
+    assert classify_canonical(name) in {"daily", "extended"}
 
 
 def test_p0_operators_preserve_shape_and_are_deterministic() -> None:

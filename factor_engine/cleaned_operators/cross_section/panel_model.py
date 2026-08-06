@@ -19,18 +19,27 @@ _EPS = 1e-12
 _CANONICALS: list[str] = []
 
 
-def _meta(name: str, description: str, params: list[str], *, unit: str = "level") -> OperatorMetadata:
+def _meta(name: str, description: str, params: list[str], *, unit: str = "level", pit_safe: bool = True) -> OperatorMetadata:
+    tags = [
+        "panel_model", "daily", "causal", "typed_v2",
+        f"signature:{','.join(params)}->series", "domain:panel_model",
+        f"unit:{unit}", "cost:10",
+    ]
+    if pit_safe:
+        tags.append("pit_safe")
+    else:
+        # Supervised panel forecasts carry a label panel whose training window
+        # is *not* re-lagged by the operator; they must not be advertised as
+        # point-in-time safe for default mining.
+        tags.append("supervised_model")
+        tags.append("not_pit_certified")
     return OperatorMetadata(
         name=name,
         category="panel_model",
         description=description,
         param_names=params,
         return_type="series",
-        tags=[
-            "panel_model", "daily", "pit_safe", "causal", "typed_v2",
-            f"signature:{','.join(params)}->series", "domain:panel_model",
-            f"unit:{unit}", "cost:10",
-        ],
+        tags=tags,
     )
 
 
@@ -38,8 +47,8 @@ def _frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
     return pd.DataFrame(values, index=template.index, columns=template.columns, dtype=float)
 
 
-def _mk(name: str, description: str, params: list[str], fn, *, unit: str = "level"):
-    metadata = _meta(name, description, params, unit=unit)
+def _mk(name: str, description: str, params: list[str], fn, *, unit: str = "level", pit_safe: bool = True):
+    metadata = _meta(name, description, params, unit=unit, pit_safe=pit_safe)
 
     def _calculate_series(self, *args, **kwargs):
         return fn(*args, **kwargs)
@@ -68,11 +77,19 @@ def _mk(name: str, description: str, params: list[str], fn, *, unit: str = "leve
 
 
 def _pca_svd(X: np.ndarray, n_components: int):
-    """Standardised SVD PCA; returns (loadings, explained_ratio, proj_fn)."""
-    mu = X.mean(axis=0)
-    sd = np.std(X, axis=0)
+    """Standardised SVD PCA; returns (loadings, explained_ratio, proj_fn).
+
+    Missing values are handled per column: the mean / std are estimated from
+    each column's finite rows and any still-missing entry is imputed with that
+    column mean before the SVD (suspended / halted instruments keep a neutral
+    contribution instead of poisoning the factor space).  Columns with zero
+    variance are kept with unit scale so the SVD is never singular.
+    """
+    mu = np.nanmean(X, axis=0)
+    sd = np.nanstd(X, axis=0)
     sd = np.where(sd > _EPS, sd, 1.0)
-    Xs = (X - mu) / sd
+    Xc = np.where(np.isfinite(X), X, mu)
+    Xs = (Xc - mu) / sd
     n = Xs.shape[0]
     if n < 2:
         return None
@@ -88,13 +105,24 @@ def _pca_transform(pca, row: np.ndarray) -> np.ndarray:
     return pca["loadings"] @ z
 
 
-def _rolling_pca(ret: pd.DataFrame, window: int, fn) -> pd.DataFrame:
+def _rolling_pca(ret: pd.DataFrame, window: int, fn, *, fit_lag: int = 1) -> pd.DataFrame:
+    """Rolling PCA evaluated row by row.
+
+    ``fit_lag>=1`` (default) trains the PCA on rows ``[start, row-1]`` and
+    evaluates the *current* row against that historical model, so the current
+    observation never enters its own training set (no in-sample projection).
+    ``fit_lag=0`` reproduces the legacy in-sample behaviour.
+    """
     rv = ret.to_numpy(dtype=float)
     rows, cols = rv.shape
     out = np.full((rows, cols), np.nan, dtype=float)
+    lag = max(0, int(fit_lag))
     for row in range(rows):
-        start = max(0, row - int(window) + 1)
-        X = rv[start : row + 1]
+        fit_end = row - lag
+        if fit_end < 0:
+            continue
+        start = max(0, fit_end - int(window) + 1)
+        X = rv[start : fit_end + 1]
         out[row] = fn(X, rv[row])
     return _frame_like(ret, out)
 
@@ -138,25 +166,57 @@ _mk(
 )
 
 
-def _pca_explained_ratio(X: np.ndarray, cur: np.ndarray, n_components: int) -> np.ndarray:
+def _pca_commonality(X: np.ndarray, cur: np.ndarray, n_components: int) -> np.ndarray:
+    """Per-stock commonality ``1 - Var(resid_i)/Var(ret_i)`` over the training window.
+
+    Unlike the previous implementation this returns a *per-stock* value (each
+    instrument's own time-series variance decomposition) instead of one scalar
+    broadcast to every column.
+    """
     pca = _pca_svd(X, min(int(n_components), X.shape[1]))
     if pca is None:
         return np.full(len(cur), np.nan)
-    score = _pca_transform(pca, cur)
-    z = (cur - pca["mu"]) / pca["sd"]
-    recon = pca["mu"] + pca["sd"] * (pca["loadings"].T @ score)
-    resid = cur - recon
-    tot = np.sum((cur - pca["mu"]) ** 2)
+    z = (X - pca["mu"]) / pca["sd"]           # (n_rows, n_features)
+    score = pca["loadings"] @ z.T             # (n_components, n_rows)
+    recon = (pca["mu"][:, None] + pca["sd"][:, None] * (pca["loadings"].T @ score)).T  # (n_rows, n_features)
+    resid = X - recon
+    var_resid = np.nanvar(resid, axis=0)
+    var_ret = np.nanvar(X, axis=0)
     with np.errstate(divide="ignore", invalid="ignore"):
-        return np.where(tot > _EPS, 1.0 - np.sum(resid * resid) / tot, np.nan)
+        return np.where(var_ret > _EPS, 1.0 - var_resid / var_ret, np.nan)
 
 
 _mk(
     "panel_rolling_pca_explained_ratio",
-    "每股被共同因子解释的比例（1 - 残差方差/总方差）。",
+    "每股被共同因子解释的比例（1 - 残差方差/总方差，每股独立）。",
     ["ret", "window", "n_components"],
-    lambda ret, window=120, n_components=5: _rolling_pca(ret, int(window), lambda X, c: _pca_explained_ratio(X, c, int(n_components))),
+    lambda ret, window=120, n_components=5: _rolling_pca(ret, int(window), lambda X, c: _pca_commonality(X, c, int(n_components))),
 )
+
+
+def _industry_pca_loading(ret, group, window, component):
+    rv = ret.to_numpy(dtype=float)
+    gv = group.to_numpy()
+    rows, cols = rv.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
+    for row in range(rows):
+        fit_end = row - 1
+        if fit_end < 0:
+            continue
+        start = max(0, fit_end - int(window) + 1)
+        for col in range(cols):
+            g = gv[row, col]
+            mask = gv[row] == g
+            members = np.flatnonzero(mask)
+            if len(members) < 4:
+                continue
+            # Local position of ``col`` inside the industry members; correct
+            # even when the industry's columns are not contiguous in the panel.
+            local = int(np.where(members == col)[0][0])
+            X = rv[start : fit_end + 1][:, members]
+            loading = _pca_loading(X, rv[row][members], int(component))
+            out[row, col] = loading[local] if np.isfinite(loading).any() else np.nan
+    return _frame_like(ret, out)
 
 
 def _pca_resid_vol(ret: pd.DataFrame, window: int, n_components: int) -> pd.DataFrame:
@@ -186,27 +246,9 @@ _mk(
 )
 
 
-def _industry_pca_loading(ret, group, window, component):
-    rv = ret.to_numpy(dtype=float)
-    gv = group.to_numpy()
-    rows, cols = rv.shape
-    out = np.full((rows, cols), np.nan, dtype=float)
-    for row in range(rows):
-        start = max(0, row - int(window) + 1)
-        for col in range(cols):
-            g = gv[row, col]
-            mask = gv[row] == g
-            if mask.sum() < 4:
-                continue
-            X = rv[start : row + 1][:, mask]
-            loading = _pca_loading(X, rv[row][mask], int(component))
-            out[row, col] = loading[col - int(np.flatnonzero(mask)[0])] if np.isfinite(loading).any() else np.nan
-    return _frame_like(ret, out)
-
-
 _mk(
     "industry_rolling_pca_loading",
-    "行业内部滚动 PCA 载荷。",
+    "行业内部滚动 PCA 载荷（训练窗口截至前一日，局部索引按成员定位）。",
     ["ret", "group", "window", "component"],
     lambda ret, group, window=120, component=0: _industry_pca_loading(ret, group, int(window), int(component)),
     unit="loading",
@@ -224,21 +266,32 @@ def _gather(args: tuple[Any, ...], count: int, y: Any) -> tuple[np.ndarray, np.n
     return feats, yv, y
 
 
-def _forecast_loop(feats, yv, window, fn_train_predict) -> np.ndarray:
+def _forecast_loop(feats, yv, window, fn_train_predict, fit_lag: int = 1) -> np.ndarray:
+    """Walk-forward supervised forecast loop.
+
+    ``fit_lag>=1`` (default) trains each model on rows strictly before the
+    current row and predicts the *current* row's features, so the current
+    label/features never enter the model that produces the current prediction
+    (no same-row leakage even when the caller hands in an un-lagged label).
+    """
     n_rows, n_cols = yv.shape
     out = np.full((n_rows, n_cols), np.nan, dtype=float)
+    lag = max(0, int(fit_lag))
     for col in range(n_cols):
         Xstock = np.column_stack([f[:, col] for f in feats])
         ystock = yv[:, col]
         for row in range(n_rows):
-            start = max(0, row - int(window) + 1)
-            X = Xstock[start : row + 1]
-            y = ystock[start : row + 1]
-            out[row, col] = fn_train_predict(X, y)
+            fit_end = row - lag
+            if fit_end < 0:
+                continue
+            start = max(0, fit_end - int(window) + 1)
+            X = Xstock[start : fit_end + 1]
+            y = ystock[start : fit_end + 1]
+            out[row, col] = fn_train_predict(X, y, Xstock[row])
     return out
 
 
-def _model_predict(X: np.ndarray, y: np.ndarray, method: str, n_components: int, alpha: float, l1_ratio: float) -> float:
+def _model_predict(X: np.ndarray, y: np.ndarray, x_cur: np.ndarray, method: str, n_components: int, alpha: float, l1_ratio: float) -> float:
     valid = np.all(np.isfinite(X), axis=1) & np.isfinite(y)
     if valid.sum() < 10:
         return np.nan
@@ -253,13 +306,13 @@ def _model_predict(X: np.ndarray, y: np.ndarray, method: str, n_components: int,
             return np.nan
         score = pca["loadings"] @ Xs.T
         beta, *_ = np.linalg.lstsq(np.column_stack([np.ones(score.shape[1]), score.T]), yv, rcond=None)
-        z = (X[-1] - mu) / sd
+        z = (x_cur - mu) / sd
         s = pca["loadings"] @ z
         return float(beta[0] + beta[1:] @ s)
     if method == "pls":
-        return _pls1_predict(Xs, yv, int(n_components), (X[-1] - mu) / sd)
+        return _pls1_predict(Xs, yv, int(n_components), (x_cur - mu) / sd)
     if method == "enet":
-        return _enet_predict(Xs, yv, float(alpha), float(l1_ratio), (X[-1] - mu) / sd)
+        return _enet_predict(Xs, yv, float(alpha), float(l1_ratio), (x_cur - mu) / sd)
     raise ValueError(f"unknown model: {method}")
 
 
@@ -294,7 +347,7 @@ def _enet_predict(X: np.ndarray, y: np.ndarray, alpha: float, l1_ratio: float, x
 
 def _mk_forecast(name: str, method: str, description: str, params: list[str]):
     _mk(
-        name, description, params, unit="forecast",
+        name, description, params, unit="forecast", pit_safe=False,
         fn=lambda y, x1=None, x2=None, x3=None, x4=None, window=120, n_components=5, alpha=0.01, l1_ratio=0.5: _forecast_generic(
             y, (x1, x2, x3, x4), int(window), method, int(n_components), float(alpha), float(l1_ratio),
         ),
@@ -305,7 +358,7 @@ def _forecast_generic(y, feats, window, method, n_components, alpha, l1_ratio):
     yv = y.to_numpy(dtype=float)
     collected = [f.to_numpy(dtype=float) for f in feats if f is not None]
     return _frame_like(y, _forecast_loop(collected, yv, window,
-                                         lambda X, yy: _model_predict(X, yy, method, n_components, alpha, l1_ratio)))
+                                         lambda X, yy, xc: _model_predict(X, yy, xc, method, n_components, alpha, l1_ratio)))
 
 
 _mk_forecast("panel_rolling_pcr_forecast", "pcr", "滚动 PCR 预测（训练标签须已结束）。", ["y", "x1", "x2", "x3", "x4", "window", "n_components"])
@@ -322,26 +375,28 @@ def _regime_forecast(y, feats, market_state, window, n_regimes):
         # regime of current row is the last value of market_state column
         return np.nan
 
-    # per-stock, per-row regime assignment from market_state quantiles.  Regime
-    # edges are computed causally from the window ending at the current row so
-    # earlier rows do not change when later data is appended (prefix-invariance).
+    # per-stock, per-row regime assignment from market_state quantiles.  Both
+    # the regime quantile edges and the training rows use the window *ending at
+    # the previous row* (``start:row``), so the current market state is never
+    # used to place itself into a regime and the current label never trains the
+    # model that predicts it.
     n_rows, n_cols = yv.shape
     out = np.full((n_rows, n_cols), np.nan, dtype=float)
     nr = max(2, int(n_regimes))
     for col in range(n_cols):
         ms = mv[:, col]
         for row in range(n_rows):
-            start = max(0, row - int(window) + 1)
-            if not np.isfinite(ms[row]):
+            if row < 1 or not np.isfinite(ms[row]):
                 continue
-            win_ms = ms[start : row + 1]
+            start = max(0, row - int(window))
+            win_ms = ms[start:row]
             win_valid = np.isfinite(win_ms)
             if win_valid.sum() < nr * 5:
                 continue
             edges = np.quantile(win_ms[win_valid], np.linspace(0, 1, nr + 1)[1:-1])
             reg = int(np.digitize(ms[row], edges))
-            Xc = np.column_stack([f[start : row + 1, col] for f in collected])
-            yc = yv[start : row + 1, col]
+            Xc = np.column_stack([f[start:row, col] for f in collected])
+            yc = yv[start:row, col]
             mask = (
                 np.all(np.isfinite(Xc), axis=1)
                 & np.isfinite(yc)
@@ -355,18 +410,20 @@ def _regime_forecast(y, feats, market_state, window, n_regimes):
             sd = np.where(sd > _EPS, sd, 1.0)
             Xs = (Xm - mu) / sd
             beta, *_ = np.linalg.lstsq(np.column_stack([np.ones(len(ym)), Xs]), ym, rcond=None)
-            z = (Xc[-1] - mu) / sd
+            x_cur = np.array([f[row, col] for f in collected], dtype=float)
+            z = (x_cur - mu) / sd
             out[row, col] = float(beta[0] + beta[1:] @ z)
     return _frame_like(y, out)
 
 
 _mk(
     "panel_regime_conditioned_forecast",
-    "按市场状态分 regime 训练的条件线性预测。",
+    "按市场状态分 regime 训练的条件线性预测（训练窗口截至前一日）。",
     ["y", "x1", "x2", "x3", "x4", "market_state", "window", "n_regimes"],
     lambda y, x1=None, x2=None, x3=None, x4=None, market_state=None, window=120, n_regimes=3: _regime_forecast(
         y, (x1, x2, x3, x4), market_state, int(window), int(n_regimes)),
     unit="forecast",
+    pit_safe=False,
 )
 
 
@@ -380,20 +437,22 @@ def _moe_forecast(y, feats, market_state, window, n_experts):
     for col in range(n_cols):
         ms = mv[:, col]
         for row in range(n_rows):
-            start = max(0, row - int(window) + 1)
-            if not np.isfinite(ms[row]):
+            if row < 1 or not np.isfinite(ms[row]):
                 continue
-            win_ms = ms[start : row + 1]
+            start = max(0, row - int(window))
+            win_ms = ms[start:row]
             win_valid = np.isfinite(win_ms)
             if win_valid.sum() < ne * 6:
                 continue
             # Expert centers and gating scale are computed causally from the
-            # window ending at the current row (prefix-invariance).
+            # window ending at the previous row (the current market state never
+            # places itself into an expert bin).
             centers = np.quantile(win_ms[win_valid], np.linspace(0, 1, ne + 1)[1:-1])
-            Xc = np.column_stack([f[start : row + 1, col] for f in collected])
-            yc = yv[start : row + 1, col]
+            Xc = np.column_stack([f[start:row, col] for f in collected])
+            yc = yv[start:row, col]
             if Xc.shape[1] == 0 or len(yc) < 15:
                 continue
+            x_cur = np.array([f[row, col] for f in collected], dtype=float)
             preds = []
             for e in range(ne):
                 if e < len(centers):
@@ -407,7 +466,7 @@ def _moe_forecast(y, feats, market_state, window, n_experts):
                 mu, sd = Xm.mean(axis=0), np.std(Xm, axis=0)
                 sd = np.where(sd > _EPS, sd, 1.0)
                 beta, *_ = np.linalg.lstsq(np.column_stack([np.ones(len(ym)), (Xm - mu) / sd]), ym, rcond=None)
-                z = (Xc[-1] - mu) / sd
+                z = (x_cur - mu) / sd
                 preds.append(float(beta[0] + beta[1:] @ z))
             valid_preds = [p for p in preds if np.isfinite(p)]
             if not valid_preds:
@@ -429,25 +488,31 @@ def _moe_forecast(y, feats, market_state, window, n_experts):
 
 _mk(
     "panel_mixture_of_experts_score",
-    "基于市场状态的 Mixture-of-Experts 加权预测。",
+    "基于市场状态的 Mixture-of-Experts 加权预测（训练窗口截至前一日）。",
     ["y", "x1", "x2", "x3", "x4", "market_state", "window", "n_experts"],
     lambda y, x1=None, x2=None, x3=None, x4=None, market_state=None, window=120, n_experts=3: _moe_forecast(
         y, (x1, x2, x3, x4), market_state, int(window), int(n_experts)),
     unit="forecast",
+    pit_safe=False,
 )
 
 
-def _autoencoder_error(feats, window):
-    """Linear (PCA) autoencoder reconstruction error baseline.
+def _autoencoder_error(feats, window, n_components: int = 2):
+    """Per-stock feature PCA reconstruction error.
 
     Each input panel is a (timestamp x instrument) cross-section; the feature
     vector for one instrument is built by stacking that instrument's value
     across the supplied panels, so reconstruction error is per-instrument and
-    preserves the input panel shape.
+    preserves the input panel shape.  The number of retained principal
+    components is ``n_components`` (must be strictly less than the feature
+    count) so the reconstruction is a genuine low-rank compression instead of a
+    near-perfect copy.
     """
     collected = [f.to_numpy(dtype=float) for f in feats if f is not None]
     if not collected:
         raise ValueError("at least one feature panel is required")
+    p = collected[0].shape[1]
+    rank = max(1, min(int(n_components), p - 1))
     n_rows, n_cols = collected[0].shape
     out = np.full((n_rows, n_cols), np.nan, dtype=float)
     for col in range(n_cols):
@@ -457,21 +522,34 @@ def _autoencoder_error(feats, window):
             Xw = X[start:row]
             if Xw.shape[0] < 10:
                 continue
-            mu = Xw.mean(axis=0)
-            sd = np.std(Xw, axis=0)
+            mu = np.nanmean(Xw, axis=0)
+            sd = np.nanstd(Xw, axis=0)
             sd = np.where(sd > _EPS, sd, 1.0)
-            Xs = (Xw - mu) / sd
+            Xc = np.where(np.isfinite(Xw), Xw, mu)
+            Xs = (Xc - mu) / sd
             _, _, Vt = np.linalg.svd(Xs, full_matrices=False)
-            rank = min(5, Vt.shape[0])
+            r = min(rank, Vt.shape[0])
             z = (X[row] - mu) / sd
-            recon = Vt[:rank].T @ (Vt[:rank] @ z)
+            recon = Vt[:r].T @ (Vt[:r] @ z)
             out[row, col] = float(np.sqrt(np.sum((z - recon) ** 2)))
     return _frame_like(feats[0], out)
 
 
 _mk(
+    "ts_feature_pca_reconstruction_error",
+    "每股多特征时序 PCA 低秩重构误差（n_components < 特征数）。",
+    ["f1", "f2", "f3", "f4", "window", "n_components"],
+    lambda f1, f2=None, f3=None, f4=None, window=120, n_components=2: _autoencoder_error(
+        (f1, f2, f3, f4), int(window), int(n_components)),
+    unit="distance",
+)
+
+
+# Historic name for the same kernel; kept registered for backward
+# compatibility.  The honest name is ``ts_feature_pca_reconstruction_error``.
+_mk(
     "cs_autoencoder_reconstruction_error",
-    "线性自编码器（PCA 基准）重构误差。",
+    "线性自编码器（PCA 基准）重构误差（deprecated，请用 ts_feature_pca_reconstruction_error）。",
     ["f1", "f2", "f3", "f4", "window"],
     lambda f1, f2=None, f3=None, f4=None, window=120: _autoencoder_error((f1, f2, f3, f4), int(window)),
     unit="distance",

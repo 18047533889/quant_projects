@@ -95,9 +95,11 @@ def test_misleading_or_experimental_ops_are_not_daily(canonical):
 
 
 def test_audited_nonproduction_ops_remain_fail_closed():
-    assert classify_canonical("ts_product") == "extended"
-    assert classify_canonical("ts_mad") == "extended"
-    assert classify_canonical("group_percentile") == "extended"
+    # 2026-08 daily migration: these audited factor operators are production targets and
+    # now live on the daily surface; they must never be research/unsafe.
+    assert classify_canonical("ts_product") == "daily"
+    assert classify_canonical("ts_mad") == "daily"
+    assert classify_canonical("group_percentile") == "daily"
     assert classify_canonical("div_or_null") != "daily"
 
 

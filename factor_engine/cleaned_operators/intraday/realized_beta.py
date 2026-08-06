@@ -53,11 +53,33 @@ def _aligned_market(close: pd.DataFrame, weights: pd.DataFrame) -> tuple[pd.Data
     return rets, mkt
 
 
-def _beta_daily(close: pd.DataFrame, weights: pd.DataFrame, fn: Callable[[np.ndarray, np.ndarray], float]) -> pd.DataFrame:
+def _market_return_ex_self(rets: pd.DataFrame, w_bc: pd.DataFrame, w_ret: pd.DataFrame, inst: str) -> pd.Series:
+    """Value-weighted market minute return excluding ``inst`` itself.
+
+    ``w_ret`` is ``w_bc`` masked to minutes where the stock return is finite,
+    mirroring the ``den`` convention of ``_aligned_market``.  Removing the
+    instrument's own contribution prevents large-capitalisation names from
+    mechanically inflating their own market beta / commonality.
+    """
+    num = (rets * w_bc).sum(axis=1) - rets[inst] * w_bc[inst]
+    den = w_ret.sum(axis=1) - w_ret[inst]
+    with np_errstate():
+        m = pd.Series(
+            np.where(np.isfinite(den) & (np.abs(den) > _EPS), num / den, np.nan),
+            index=rets.index,
+            dtype=float,
+        )
+    return m
+
+
+def _beta_daily(close: pd.DataFrame, weights: pd.DataFrame, fn: Callable[[np.ndarray, np.ndarray], float], *, ex_self: bool = False) -> pd.DataFrame:
     rets, mkt = _aligned_market(close, weights)
+    w_bc = broadcast_daily_panel(close, weights)
+    w_ret = w_bc.where(rets.notna())
     out: dict[str, pd.Series] = {}
     for inst in close.columns:
-        joined = pd.concat([rets[inst], mkt], axis=1, keys=["r", "m"]).dropna(subset=["m"])
+        m = _market_return_ex_self(rets, w_bc, w_ret, inst) if ex_self else mkt
+        joined = pd.concat([rets[inst], m], axis=1, keys=["r", "m"]).dropna(subset=["m"])
         joined["day"] = joined.index.normalize()
         per_day: dict[pd.Timestamp, float] = {}
         for day, group in joined.groupby("day"):
@@ -269,6 +291,47 @@ class IntraMarketModelR2(SeriesOperator):
         return _beta_daily(close, free_market_cap, _market_r2)
 
 
+# ---------------------------------------------------------------------------
+# Leave-one-out market return variants.  Each stock's market minute return is
+# recomputed excluding the stock itself, so large caps no longer mechanically
+# inflate their own beta / correlation / market-model fit.
+# ---------------------------------------------------------------------------
+@_op("intra_realized_beta_ex_self", "日内已实现 Beta(市场收益剔除自身)。", "level")
+class IntraRealizedBetaExSelf(SeriesOperator):
+    def _calculate_series(self, close, free_market_cap, **_):
+        return _beta_daily(close, free_market_cap, _realized_beta, ex_self=True)
+
+
+@_op("intra_realized_correlation_ex_self", "日内已实现相关系数(市场收益剔除自身)。", "corr")
+class IntraRealizedCorrelationExSelf(SeriesOperator):
+    def _calculate_series(self, close, free_market_cap, **_):
+        return _beta_daily(close, free_market_cap, _realized_corr, ex_self=True)
+
+
+@_op("intra_idiosyncratic_variance_ex_self", "分钟市场模型残差方差(市场收益剔除自身)。", "variance")
+class IntraIdiosyncraticVarianceExSelf(SeriesOperator):
+    def _calculate_series(self, close, free_market_cap, **_):
+        return _beta_daily(close, free_market_cap, _idio_variance, ex_self=True)
+
+
+@_op("intra_idiosyncratic_skewness_ex_self", "分钟市场模型残差偏度(市场收益剔除自身)。", "level")
+class IntraIdiosyncraticSkewnessExSelf(SeriesOperator):
+    def _calculate_series(self, close, free_market_cap, **_):
+        return _beta_daily(close, free_market_cap, _idio_skewness, ex_self=True)
+
+
+@_op("intra_idiosyncratic_kurtosis_ex_self", "分钟市场模型残差峰度(市场收益剔除自身)。", "level")
+class IntraIdiosyncraticKurtosisExSelf(SeriesOperator):
+    def _calculate_series(self, close, free_market_cap, **_):
+        return _beta_daily(close, free_market_cap, _idio_kurtosis, ex_self=True)
+
+
+@_op("intra_market_model_r2_ex_self", "分钟市场模型 R²(市场收益剔除自身)。", "r2")
+class IntraMarketModelR2ExSelf(SeriesOperator):
+    def _calculate_series(self, close, free_market_cap, **_):
+        return _beta_daily(close, free_market_cap, _market_r2, ex_self=True)
+
+
 _CANONICALS.extend(
     [
         "intra_realized_beta",
@@ -282,6 +345,12 @@ _CANONICALS.extend(
         "intra_idiosyncratic_skewness",
         "intra_idiosyncratic_kurtosis",
         "intra_market_model_r2",
+        "intra_realized_beta_ex_self",
+        "intra_realized_correlation_ex_self",
+        "intra_idiosyncratic_variance_ex_self",
+        "intra_idiosyncratic_skewness_ex_self",
+        "intra_idiosyncratic_kurtosis_ex_self",
+        "intra_market_model_r2_ex_self",
     ]
 )
 

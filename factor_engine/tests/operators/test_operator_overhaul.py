@@ -137,8 +137,8 @@ def test_native_polars_matches_pandas(operator, args) -> None:
     pl = pytest.importorskip("polars")
     if "polars" not in OperatorRegistry.backends_for(operator):
         from cleaned_operators.operator_surface import classify_canonical
-        assert classify_canonical(operator) == "extended"
-        pytest.skip("extended operator has no certified pure-Polars implementation")
+        assert classify_canonical(operator) in {"daily", "extended"}
+        pytest.skip("operator has no certified pure-Polars implementation")
     pandas_result = OperatorRegistry.get(operator, backend="pandas_numpy").calculate(*args)
     polars_args = [
         pl.DataFrame({c: arg[c].to_numpy() for c in arg.columns})

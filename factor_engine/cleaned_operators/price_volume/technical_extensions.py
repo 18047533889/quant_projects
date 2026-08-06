@@ -393,7 +393,7 @@ def _rolling_obv(close, volume, window):
 
 
 def _rolling_pvt(close, volume, window):
-    flow = close.pct_change() * volume
+    flow = close.pct_change(fill_method=None) * volume
     return flow.rolling(_w(window), min_periods=_w(window)).sum()
 
 

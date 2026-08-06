@@ -93,6 +93,64 @@ def pd_reg_resid(y, x, window, min_periods=None, add_intercept=True, **_):
     return _rolling_regression(y, x, window, min_periods, add_intercept, "resid")
 
 
+def pd_reg_in_sample_resid(y, x, window, min_periods=None, add_intercept=True, **_):
+    """样本内当前残差：训练窗含当前行（与 ``ts_regression_resid`` 一致）。"""
+    return _rolling_regression(y, x, window, min_periods, add_intercept, "resid")
+
+
+def _rolling_forecast_error(
+    y: pd.DataFrame,
+    x: pd.DataFrame,
+    window: int,
+    min_periods: int | None,
+    add_intercept: bool,
+    zscore: bool,
+) -> pd.DataFrame:
+    """out-of-sample 预测误差：训练窗截止 t-1，预测 t，误差 = y_t - ŷ_t。
+
+    ``zscore=True`` 时输出误差除以样本内残差标准差（ddof=1）。
+    """
+    y, x = aligned_pd(y, x)
+    w, mp = window_params(window, min_periods, default_mp=3)
+    yv, xv = y.to_numpy(dtype=float), x.to_numpy(dtype=float)
+    out = np.full(y.shape, np.nan, dtype=float)
+    for col in range(y.shape[1]):
+        for row in range(y.shape[0]):
+            start = max(0, row - w + 1)
+            yy, xx = yv[start:row, col], xv[start:row, col]  # 训练数据：t-window 至 t-1
+            if int(np.sum(np.isfinite(yy) & np.isfinite(xx))) < mp:
+                continue
+            fit = _fit_1d(yy, xx, bool(add_intercept))
+            if fit is None:
+                continue
+            slope, intercept, _, _, _ = fit
+            if not (np.isfinite(yv[row, col]) and np.isfinite(xv[row, col])):
+                continue
+            err = yv[row, col] - (intercept + slope * xv[row, col])
+            if not zscore:
+                out[row, col] = float(err)
+                continue
+            pair = np.isfinite(yy) & np.isfinite(xx)
+            r = yy[pair] - (intercept + slope * xx[pair])
+            sd = float(np.std(r, ddof=1)) if r.size > 2 else np.nan
+            out[row, col] = float(err / sd) if (sd and sd > 0) else np.nan
+    return frame_pd(y, out)
+
+
+def pd_reg_forecast_error(y, x, window, min_periods=None, add_intercept=True, **_):
+    return _rolling_forecast_error(y, x, window, min_periods, bool(add_intercept), zscore=False)
+
+
+def pd_reg_forecast_error_z(y, x, window, min_periods=None, add_intercept=True, **_):
+    return _rolling_forecast_error(y, x, window, min_periods, bool(add_intercept), zscore=True)
+
+
+def pd_reg_resid_mean(y, x, window, min_periods=None, add_intercept=True, **_):
+    resid = _rolling_regression(y, x, window, min_periods, add_intercept, "resid")
+    w, mp = window_params(window, min_periods, default_mp=3)
+    return resid.rolling(w, min_periods=max(1, int(mp))).mean()
+
+
 def pd_reg_r2(y, x, window, min_periods=None, add_intercept=True, **_):
     return _rolling_regression(y, x, window, min_periods, add_intercept, "r2")
 
@@ -322,6 +380,10 @@ def register() -> None:
         "ts_regression_slope": Spec("time_series_regression", regression_params, "滚动 OLS 斜率", pd_reg_slope),
         "ts_regression_intercept": Spec("time_series_regression", regression_params, "滚动 OLS 截距", pd_reg_intercept),
         "ts_regression_resid": Spec("time_series_regression", regression_params, "滚动 OLS 当前残差", pd_reg_resid),
+        "ts_regression_in_sample_resid": Spec("time_series_regression", regression_params, "样本内 OLS 当前残差（fit 含当前行）", pd_reg_in_sample_resid),
+        "ts_regression_forecast_error": Spec("time_series_regression", regression_params, "out-of-sample OLS 预测误差（fit 截止 t-1）", pd_reg_forecast_error),
+        "ts_regression_forecast_error_z": Spec("time_series_regression", regression_params, "OLS 预测误差 / 样本内残差 std", pd_reg_forecast_error_z),
+        "ts_regression_resid_mean": Spec("time_series_regression", regression_params, "滚动 OLS 当前残差的窗口均值", pd_reg_resid_mean),
         "ts_regression_r2": Spec("time_series_regression", regression_params, "滚动 OLS 决定系数", pd_reg_r2),
         "ts_regression_tstat": Spec("time_series_regression", regression_params, "滚动 OLS 斜率 t 值", pd_reg_tstat),
         "ts_time_slope": Spec("time_series_regression", ["x", "window", "min_periods"], "缺失感知滚动时间斜率", pd_time_slope, pl_time_slope),

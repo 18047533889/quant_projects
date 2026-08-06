@@ -29,7 +29,7 @@ def abnormal_volume(volume,window):
     base=volume.shift(1).rolling(_pi(window,"window"),min_periods=_pi(window,"window")).mean(); return volume/base.replace(0,np.nan)-1.0
 def abnormal_turnover(turnover,window): return abnormal_volume(turnover,window)
 def volume_volatility(volume,window):
-    w=_pi(window,"window",2); return volume.pct_change().rolling(w,min_periods=w).std()
+    w=_pi(window,"window",2); return volume.pct_change(fill_method=None).rolling(w,min_periods=w).std()
 def turnover_volatility(turnover,window): return volume_volatility(turnover,window)
 def volume_autocorr(volume,window,lag):
     w=_pi(window,"window",3); l=_pi(lag,"lag"); return volume.rolling(w,min_periods=w).corr(volume.shift(l))
@@ -56,12 +56,12 @@ def signed_volume_imbalance(ret,volume,window): return up_volume_ratio(ret,volum
 def up_down_volume_ratio(ret,volume,window): return up_volume_ratio(ret,volume,window)/down_volume_ratio(ret,volume,window).replace(0,np.nan)
 def volume_weighted_return(ret,volume,window):
     w=_pi(window,"window"); return (ret*volume).rolling(w,min_periods=w).sum()/volume.abs().rolling(w,min_periods=w).sum().replace(0,np.nan)
-def volume_weighted_momentum(close,volume,window): return volume_weighted_return(close.pct_change(),volume,window)
+def volume_weighted_momentum(close,volume,window): return volume_weighted_return(close.pct_change(fill_method=None),volume,window)
 def price_volume_divergence(close,volume,price_window,volume_window):
     pw,vw=_pi(price_window,"price_window"),_pi(volume_window,"volume_window"); pr=close/close.shift(pw)-1.0; vr=volume/volume.shift(vw).replace(0,np.nan)-1.0; return pr-vr
 def price_turnover_divergence(close,turnover,price_window,turnover_window): return price_volume_divergence(close,turnover,price_window,turnover_window)
 def return_volume_beta(ret,volume,window):
-    w=_pi(window,"window",3); vc=volume.pct_change(); cov=ret.rolling(w,min_periods=w).cov(vc); var=vc.rolling(w,min_periods=w).var(); return cov/var.replace(0,np.nan)
+    w=_pi(window,"window",3); vc=volume.pct_change(fill_method=None); cov=ret.rolling(w,min_periods=w).cov(vc); var=vc.rolling(w,min_periods=w).var(); return cov/var.replace(0,np.nan)
 def return_turnover_beta(ret,turnover,window): return return_volume_beta(ret,turnover,window)
 def _mf_multiplier(high,low,close): return ((close-low)-(high-close))/(high-low).replace(0,np.nan)
 def ADL(high,low,close,volume,window):
@@ -75,9 +75,9 @@ def ForceIndex(close,volume,window):
 def EaseOfMovement(high,low,volume,window,volume_scale=1.0):
     w=_pi(window,"window",2); midpoint=(high+low)/2.0; distance=midpoint.diff(); box=(high-low)/(volume.replace(0,np.nan)/float(volume_scale)); raw=distance*box; return raw.rolling(w,min_periods=w).mean()
 def bounded_nvi(close,volume,window):
-    w=_pi(window,"window",2); r=close.pct_change().where(volume<volume.shift(1),0.0); return np.exp(np.log1p(r.clip(lower=-0.999999)).rolling(w,min_periods=w).sum())-1.0
+    w=_pi(window,"window",2); r=close.pct_change(fill_method=None).where(volume<volume.shift(1),0.0); return np.exp(np.log1p(r.clip(lower=-0.999999)).rolling(w,min_periods=w).sum())-1.0
 def bounded_pvi(close,volume,window):
-    w=_pi(window,"window",2); r=close.pct_change().where(volume>volume.shift(1),0.0); return np.exp(np.log1p(r.clip(lower=-0.999999)).rolling(w,min_periods=w).sum())-1.0
+    w=_pi(window,"window",2); r=close.pct_change(fill_method=None).where(volume>volume.shift(1),0.0); return np.exp(np.log1p(r.clip(lower=-0.999999)).rolling(w,min_periods=w).sum())-1.0
 def zero_return_ratio(ret,window,epsilon=1e-12):
     w=_pi(window,"window"); return ret.abs().le(float(epsilon)).astype(float).rolling(w,min_periods=w).mean()
 def roll_spread_proxy(ret,window):

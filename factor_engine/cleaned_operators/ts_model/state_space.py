@@ -66,11 +66,15 @@ def _kalman_level(vals: np.ndarray, q: float, r: float, out_stat: str) -> np.nda
             continue
         p_pred = p_prev + q
         k = p_pred / (p_pred + r)
-        mu_prev = mu_prev + k * (x - mu_prev)
+        # Innovation is the difference between the observation and the
+        # *predicted* state (mu_prev before the Kalman update), not the filtered
+        # state.  Computing it after the update would shrink every innovation by
+        # (1 - k) and corrupt the standardised innovation.
+        innov = x - mu_prev
+        mu_prev = mu_prev + k * innov
         p_prev = (1.0 - k) * p_pred
         mu[t] = mu_prev
         p[t] = p_prev
-        innov = x - mu_prev
         innov_z[t] = innov / np.sqrt(max(p_pred + r, 1e-12))
     if out_stat == "level":
         return mu

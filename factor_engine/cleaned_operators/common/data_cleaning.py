@@ -358,7 +358,13 @@ class FillNA(SeriesOperator):
         elif method == 'bfill':
             raise ValueError("fillna(method='bfill') was removed because it is not point-in-time safe")
         else:
-            return x.fillna(method='zero')
+            # A misspelled or unsupported method must fail loudly, never silently
+            # collapse to a zero-fill (that turns config errors into a constant
+            # factor and masks the mistake).
+            raise ValueError(
+                f"unknown fillna method: {method!r} "
+                "(supported: 'mean', 'median', 'zero', 'ffill' or a constant value)"
+            )
 
 # aliases: FillNA
 

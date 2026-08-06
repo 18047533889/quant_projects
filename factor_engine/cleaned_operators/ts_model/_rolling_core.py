@@ -64,7 +64,22 @@ def ols_fit(design: np.ndarray, y: np.ndarray) -> np.ndarray | None:
     return beta
 
 
-def huber_fit(design: np.ndarray, y: np.ndarray, *, delta: float = 1.345, iterations: int = 5) -> np.ndarray | None:
+def huber_fit(
+    design: np.ndarray,
+    y: np.ndarray,
+    *,
+    delta: float = 1.345,
+    iterations: int = 20,
+    tolerance: float = 1e-6,
+) -> np.ndarray | None:
+    """Huber M-estimator via IRLS.
+
+    Standard weighted least squares multiplies design and y by ``sqrt(weight)``;
+    multiplying by ``weight`` itself would square the influence weights.  The
+    iteration is monotone; if it does not converge within ``iterations`` steps
+    the fit is treated as degenerate and ``None`` is returned (callers then emit
+    NaN rather than a half-converged coefficient).
+    """
     beta = ols_fit(design, y)
     if beta is None:
         return None
@@ -79,18 +94,28 @@ def huber_fit(design: np.ndarray, y: np.ndarray, *, delta: float = 1.345, iterat
         abs_z = np.abs(z)
         with np.errstate(divide="ignore", invalid="ignore"):
             weight = np.where(abs_z <= delta, 1.0, delta / abs_z)
-        beta = ols_fit(design * weight[:, None], y * weight)
-        if beta is None:
+        sqrt_w = np.sqrt(weight)
+        beta_new = ols_fit(design * sqrt_w[:, None], y * sqrt_w)
+        if beta_new is None:
             return None
+        if np.max(np.abs(beta_new - beta)) < tolerance:
+            return beta_new
+        beta = beta_new
     return beta
 
 
-def ridge_fit(design: np.ndarray, y: np.ndarray, alpha: float) -> np.ndarray | None:
-    """Ridge OLS with L2 penalty on non-intercept coefficients."""
+def ridge_fit(design: np.ndarray, y: np.ndarray, alpha: float, *, has_intercept: bool = True) -> np.ndarray | None:
+    """Ridge OLS with L2 penalty on non-intercept coefficients.
+
+    The intercept column is only exempt from the penalty when the design
+    actually starts with an intercept (``has_intercept=True``).  Penalising the
+    first *feature* column when no intercept is present would wrongly shrink a
+    real regressor.
+    """
     if design.shape[0] < design.shape[1]:
         return None
     penalty = float(alpha) * np.eye(design.shape[1])
-    if design.shape[1] >= 1:
+    if has_intercept and design.shape[1] >= 1:
         penalty[0, 0] = 0.0  # do not penalise the intercept
     lhs = design.T @ design + penalty
     rhs = design.T @ y
@@ -104,6 +129,14 @@ def ridge_fit(design: np.ndarray, y: np.ndarray, alpha: float) -> np.ndarray | N
 
 
 def quantile_fit(design: np.ndarray, y: np.ndarray, q: float, iterations: int = 8) -> np.ndarray | None:
+    """IRLS asymmetric-weighted least squares.
+
+    This minimises an asymmetric *squared*-error objective, i.e. it is an
+    **expectile** regression (Neyman--Pearson asymmetric loss), not a
+    pinball-loss quantile regression.  It is kept under the historic
+    ``quantile_*`` operator names for backward compatibility, with the honest
+    ``expectile_*`` names exposed alongside; both must be read as expectiles.
+    """
     beta = ols_fit(design, y)
     if beta is None:
         return None
@@ -115,6 +148,11 @@ def quantile_fit(design: np.ndarray, y: np.ndarray, q: float, iterations: int = 
         if beta is None:
             return None
     return beta
+
+
+# The IRLS asymmetric-weighted fit above is an expectile fit; expose an
+# explicitly-named alias so factor authors can call the honest name.
+expectile_fit = quantile_fit
 
 
 def build_design(features: list[np.ndarray], add_intercept: bool) -> np.ndarray:
@@ -144,12 +182,16 @@ def rolling_fit(
     fit_fn: Any = ols_fit,
     add_intercept: bool = True,
     extra: Any = None,
+    fit_lag: int = 0,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Rolling regression over a 1-D series.
 
     Returns ``(beta, resid, resid_std)`` arrays aligned to ``y``.  ``beta`` has
     shape (len(y), n_coeffs).  Each window uses the last ``window`` rows ending
-    at the current row.  If fewer than ``min_periods`` finite rows, NaN.
+    at ``row - fit_lag`` (``fit_lag=0`` is the legacy in-sample fit whose
+    training set includes the current row; ``fit_lag>=1`` fits only on rows
+    strictly before the current one and reports the out-of-sample residual at
+    the current row).  If fewer than ``min_periods`` finite rows, NaN.
     """
     n = len(y)
     n_coeffs = len(xs) + (1 if add_intercept else 0)
@@ -160,10 +202,14 @@ def rolling_fit(
         return beta, resid, resid_std
     w = int(window)
     mp = max(int(min_periods), n_coeffs + 1)
+    lag = max(0, int(fit_lag))
     for row in range(n):
-        start = max(0, row - w + 1)
-        seg_y = y[start : row + 1]
-        seg_xs = [x[start : row + 1] for x in xs]
+        fit_end = row - lag
+        if fit_end < 0:
+            continue
+        start = max(0, fit_end - w + 1)
+        seg_y = y[start : fit_end + 1]
+        seg_xs = [x[start : fit_end + 1] for x in xs]
         valid = np.isfinite(seg_y)
         for x in seg_xs:
             valid &= np.isfinite(x)
@@ -186,10 +232,10 @@ def rolling_fit(
         resid_std[row] = sd
         # Residual at the current row uses current x values, only if current
         # y is finite (current x is implicitly finite because row is finite).
-        if np.isfinite(seg_y[-1]):
-            cur_xs = [x[-1] for x in seg_xs]
+        if np.isfinite(y[row]):
+            cur_xs = [x[row] for x in xs]
             pred_cur = current_prediction(cur_xs, b, add_intercept)
-            resid[row] = float(seg_y[-1] - pred_cur)
+            resid[row] = float(y[row] - pred_cur)
     return beta, resid, resid_std
 
 

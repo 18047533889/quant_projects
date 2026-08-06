@@ -177,7 +177,7 @@ def ts_pattern_symmetry(high,low,left_window,right_window,history_window):
 
 def ts_impulse_return(close,window): return close/close.shift(_pi(window,"window"))-1.0
 def ts_impulse_strength(close,window,vol_window):
-    ret=ts_impulse_return(close,window); rv=close.pct_change().rolling(_pi(vol_window,"vol_window",2),min_periods=_pi(vol_window,"vol_window",2)).std()
+    ret=ts_impulse_return(close,window); rv=close.pct_change(fill_method=None).rolling(_pi(vol_window,"vol_window",2),min_periods=_pi(vol_window,"vol_window",2)).std()
     return ret/(rv*np.sqrt(_pi(window,"window"))).replace(0,np.nan)
 def ts_impulse_volume(volume,window,baseline_window):
     w=_pi(window,"window"); b=_pi(baseline_window,"baseline_window")

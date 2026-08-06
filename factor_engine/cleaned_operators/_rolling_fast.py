@@ -127,7 +127,9 @@ def rolling_regression(
     指定回归统计量的 panel。
 """
     if lag < 0:
-        return pd.DataFrame(np.nan, index=y.index, columns=y.columns)
+        from backend.operator_errors import FutureReferenceError
+
+        raise FutureReferenceError(f"rolling_regression: negative lag {lag} references future data")
     if lag > 0:
         x = x.shift(lag)
     r_cov = y.rolling(window=window, min_periods=min_periods).cov(x)

@@ -25,7 +25,12 @@ def causal_lag(x: pd.DataFrame, n: int) -> pd.DataFrame:
 """
     lag = int(n)
     if lag < 0:
-        return pd.DataFrame(np.nan, index=x.index, columns=x.columns)
+        # A negative lag is a future reference.  Reject it instead of silently
+        # returning an all-NaN panel, which hides the illegal formula as a
+        # factor with zero backtest coverage.
+        from backend.operator_errors import FutureReferenceError
+
+        raise FutureReferenceError(f"causal_lag: negative lag {lag} references future data")
     if lag == 0:
         return x
     return x.shift(lag)

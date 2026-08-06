@@ -49,7 +49,20 @@ _register(
 _register(
     "suspension_frequency", "停牌频率（Polars）。", ["is_suspend", "window"],
     lambda is_s, window=60: is_s.with_columns(
-        [is_s[c].fill_null(0.0).rolling_mean(int(window)).alias(c) for c in _cols(is_s)]
+        [
+            pl.when(
+                is_s[c].is_not_null().cast(pl.Float64).rolling_sum(int(window)) == 0
+            )
+            .then(None)
+            .otherwise(
+                (is_s[c].is_not_null() & (is_s[c] != 0))
+                .cast(pl.Float64)
+                .rolling_sum(int(window))
+                / is_s[c].is_not_null().cast(pl.Float64).rolling_sum(int(window))
+            )
+            .alias(c)
+            for c in _cols(is_s)
+        ]
     ),
 )
 

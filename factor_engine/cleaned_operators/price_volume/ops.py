@@ -42,7 +42,7 @@ class CumulativeReturns(SeriesOperator):
     )
 
     def _calculate_series(self, price: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        returns = price.pct_change().fillna(0)
+        returns = price.pct_change(fill_method=None).fillna(0)
         return (1 + returns).cumprod() - 1
 
 
@@ -84,7 +84,7 @@ class Returns(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        return x.pct_change()
+        return x.pct_change(fill_method=None)
 
 
 # canonical=log_returns backend=pandas_numpy selected=log_returns source=financial/__init__.py

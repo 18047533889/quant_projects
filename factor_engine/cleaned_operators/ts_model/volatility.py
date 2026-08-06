@@ -49,7 +49,13 @@ def _register(name: str, description: str, params: list[str], unit: str, fn):
 
 
 def _fit_garch(rets: np.ndarray) -> tuple[float, float, float] | None:
-    """Return (omega, alpha, beta) for GARCH(1,1) via variance-targeting MLE."""
+    """Return (omega, alpha, beta) for GARCH(1,1) via variance-targeting MLE.
+
+    The optimisation result is only accepted when the solver reports success
+    and the parameters lie in the stationary region (alpha, beta >= 0 and
+    alpha + beta < 1).  A failed / non-converged fit returns ``None`` so the
+    caller emits NaN rather than the solver's last (possibly invalid) iterate.
+    """
     if _minimize is None or len(rets) < 10 or np.std(rets) <= 1e-12:
         return None
     long_var = float(np.var(rets))
@@ -67,7 +73,13 @@ def _fit_garch(rets: np.ndarray) -> tuple[float, float, float] | None:
     try:
         res = _minimize(_nll, np.array([0.05, 0.9]), method="Nelder-Mead",
                         options={"maxiter": 200, "xatol": 1e-4, "fatol": 1e-6})
+        if not getattr(res, "success", False):
+            return None
         a, b = float(res.x[0]), float(res.x[1])
+        if not (np.isfinite(a) and np.isfinite(b)):
+            return None
+        if a < 1e-6 or b < 1e-6 or a + b >= 0.999:
+            return None
         w = max(long_var * (1 - a - b), 1e-12)
         return w, a, b
     except Exception:
@@ -75,6 +87,14 @@ def _fit_garch(rets: np.ndarray) -> tuple[float, float, float] | None:
 
 
 def _garch_path(rets: np.ndarray, window: int, stat: str, asymmetric: bool, r: float) -> float:
+    """Rolling GARCH(1,1) / GJR statistic.
+
+    Timing convention: ``h_prev`` is the conditional variance for the *last*
+    observed return (computed from information strictly before it), and ``h``
+    afterwards is the one-step-ahead forecast for the next period.  The
+    standardised shock therefore divides by ``sqrt(h_prev)``, the variance that
+    actually governed the observed return.
+    """
     if len(rets) < max(window, 12):
         return np.nan
     seg = rets[-int(window):]
@@ -91,21 +111,26 @@ def _garch_path(rets: np.ndarray, window: int, stat: str, asymmetric: bool, r: f
     else:
         w, a, b = params
     h = float(np.var(seg))
+    h_prev = h
     for i in range(1, len(seg)):
         prev_r = seg[i - 1]
         if asymmetric:
             lev = gamma if prev_r < 0 else 0.0
-            h = w + (a + lev) * prev_r ** 2 + b * h
+            h_new = w + (a + lev) * prev_r ** 2 + b * h
         else:
-            h = w + a * prev_r ** 2 + b * h
+            h_new = w + a * prev_r ** 2 + b * h
+        if i == len(seg) - 1:
+            h_prev = h  # conditional variance of the last observed return
+        h = h_new
     if stat == "forecast":
+        # h now conditions on the last observed return -> next-period forecast.
         return float(np.sqrt(max(h, 1e-12)))
     if stat == "persistence":
         return float(a + b) if not asymmetric else float(a + 0.5 * gamma + b)
-    # standardized shock of the last return
+    # standardized shock of the last return uses the variance that governed it
     if not np.isfinite(seg[-1]):
         return np.nan
-    return float(seg[-1] / np.sqrt(max(h, 1e-12)))
+    return float(seg[-1] / np.sqrt(max(h_prev, 1e-12)))
 
 
 def _fit_gjr(rets: np.ndarray) -> tuple[float, float, float, float] | None:
@@ -127,7 +152,13 @@ def _fit_gjr(rets: np.ndarray) -> tuple[float, float, float, float] | None:
     try:
         res = _minimize(_nll, np.array([0.03, 0.05, 0.9]), method="Nelder-Mead",
                         options={"maxiter": 300, "xatol": 1e-4, "fatol": 1e-6})
+        if not getattr(res, "success", False):
+            return None
         a, g, b = float(res.x[0]), float(res.x[1]), float(res.x[2])
+        if not (np.isfinite(a) and np.isfinite(g) and np.isfinite(b)):
+            return None
+        if min(a, b, g) < 1e-6 or a + 0.5 * g + b >= 0.999:
+            return None
         w = max(long_var * (1 - a - 0.5 * g - b), 1e-12)
         return w, a, g, b
     except Exception:
@@ -144,16 +175,47 @@ def _apply(x: pd.DataFrame, fn) -> pd.DataFrame:
     return frame_like(x, out)
 
 
-_register("ts_garch_vol_forecast", "GARCH(1,1) 下一期条件波动率。", ["x", "window"], "volatility",
+_register("ts_garch_next_vol_forecast", "GARCH(1,1) 下一期条件波动率（观测最后收益之后）。", ["x", "window"], "volatility",
            lambda x, window=120: _apply(x, lambda v: _garch_path(v, int(window), "forecast", False, 0.0)))
+_register("ts_garch_vol_surprise", "GARCH 波动率意外：最近收益平方 / 条件方差 - 1。", ["x", "window"], "level",
+           lambda x, window=120: _apply(x, lambda v: _garch_vol_surprise(v, int(window))))
 _register("ts_garch_persistence", "GARCH(1,1) 波动持续 alpha+beta。", ["x", "window"], "level",
            lambda x, window=120: _apply(x, lambda v: _garch_path(v, int(window), "persistence", False, 0.0)))
-_register("ts_garch_standardized_shock", "GARCH 标准化冲击 return/条件波动率。", ["x", "window"], "level",
+_register("ts_garch_standardized_shock", "GARCH 标准化冲击 return/条件波动率（该收益的 h_t）。", ["x", "window"], "level",
            lambda x, window=120: _apply(x, lambda v: _garch_path(v, int(window), "shock", False, 0.0)))
+# Deprecated alias for the next-period forecast (kept registered).
+_register("ts_garch_vol_forecast", "GARCH(1,1) 下一期条件波动率（deprecated 别名）。", ["x", "window"], "volatility",
+           lambda x, window=120: _apply(x, lambda v: _garch_path(v, int(window), "forecast", False, 0.0)))
 _register("ts_gjr_garch_vol_forecast", "GJR-GARCH 波动预测（杠杆效应）。", ["x", "window"], "volatility",
            lambda x, window=120: _apply(x, lambda v: _garch_path(v, int(window), "forecast", True, 0.0)))
 _register("ts_gjr_leverage", "GJR 负收益冲击系数。", ["x", "window"], "level",
            lambda x, window=120: _apply(x, lambda v: _gjr_leverage(v, int(window))))
+
+
+def _garch_vol_surprise(vals: np.ndarray, window: int) -> float:
+    """Realised variance of the last return relative to its conditional variance.
+
+    ``rv_t / h_t - 1`` where ``h_t`` is the GARCH variance that governed the
+    last observed return (information strictly before it).
+    """
+    if len(vals) < max(window, 12):
+        return np.nan
+    seg = vals[-int(window):]
+    params = _fit_garch(seg)
+    if params is None:
+        return np.nan
+    w, a, b = params
+    h = float(np.var(seg))
+    h_prev = h
+    for i in range(1, len(seg)):
+        prev_r = seg[i - 1]
+        h_new = w + a * prev_r ** 2 + b * h
+        if i == len(seg) - 1:
+            h_prev = h
+        h = h_new
+    if not np.isfinite(seg[-1]) or h_prev <= 1e-12:
+        return np.nan
+    return float(seg[-1] ** 2 / h_prev - 1.0)
 
 
 def _gjr_leverage(vals: np.ndarray, window: int) -> float:
@@ -163,18 +225,25 @@ def _gjr_leverage(vals: np.ndarray, window: int) -> float:
     return np.nan if params is None else float(params[2])
 
 
-def _har_rv(rets: np.ndarray, window: int, stat: str) -> float:
-    seg = rets[-int(window):]
+def _har_rv(rv: np.ndarray, window: int, stat: str) -> float:
+    """HAR model whose input is a *realized variance* series (not squared here).
+
+    Features are RV_t, weekly mean and monthly mean of RV; the target is
+    RV_{t+1}, so the model genuinely forecasts next-period RV from today's
+    components.  This is the ``ts_har_rv_*`` / ``ts_har_from_return_*`` family
+    contract.  ``ts_har_from_return_*`` squares its return input before calling
+    this kernel.
+    """
+    seg = rv[-int(window):]
     if len(seg) < 30:
         return np.nan
-    rv = seg ** 2
-    daily = rv
-    weekly = pd.Series(rv).rolling(5).mean().to_numpy()
-    monthly = pd.Series(rv).rolling(22).mean().to_numpy()
+    daily = seg
+    weekly = pd.Series(seg).rolling(5).mean().to_numpy()
+    monthly = pd.Series(seg).rolling(22).mean().to_numpy()
     X = np.column_stack([np.ones(len(seg)), daily, weekly, monthly])
     valid = np.all(np.isfinite(X), axis=1) & np.isfinite(seg)
-    # HAR predicts future RV using today's components
-    target = np.concatenate([seg[1:] ** 2, [np.nan]])
+    # HAR predicts future RV using today's components: target = next RV.
+    target = np.concatenate([seg[1:], [np.nan]])
     valid_t = np.isfinite(target) & valid
     if valid_t.sum() < 25:
         return np.nan
@@ -184,14 +253,31 @@ def _har_rv(rets: np.ndarray, window: int, stat: str) -> float:
     pred = float(np.dot(X[-1], beta))
     if stat == "forecast":
         return float(np.sqrt(max(pred, 0.0)))
-    # innovation z on current RV
+    # standardised forecast error of the *last* RV against the historical fit
     sd = float(np.std(y - Xs @ beta))
     if not np.isfinite(sd) or sd <= 1e-12:
         return np.nan
-    return float((seg[-1] ** 2 - pred) / sd)
+    return float((seg[-1] - pred) / sd)
 
 
-_register("ts_har_rv_forecast", "HAR-RV 已实现方差预测（平方根）。", ["rv", "window"], "volatility",
+def _har_from_return(rets: np.ndarray, window: int, stat: str) -> float:
+    """HAR over daily returns: squares them into an RV series internally."""
+    return _har_rv(rets ** 2, window, stat)
+
+
+# The historic operators accept a realized-variance panel (parameter named
+# ``rv``); they no longer square it a second time.
+_register("ts_har_rv_next_forecast", "HAR-RV 下一期已实现方差预测（平方根，输入已实现方差）。", ["rv", "window"], "volatility",
            lambda x, window=120: _apply(x, lambda v: _har_rv(v, int(window), "forecast")))
-_register("ts_har_rv_innovation_z", "RV 相对 HAR 预测的标准化偏差。", ["rv", "window"], "level",
+_register("ts_har_rv_forecast_error_z", "RV 相对 HAR 预测的标准化偏差（输入已实现方差）。", ["rv", "window"], "level",
+           lambda x, window=120: _apply(x, lambda v: _har_rv(v, int(window), "innovation_z")))
+# The from-return variants square the daily return panel internally.
+_register("ts_har_from_return_next_vol", "HAR 基于日收益的下一期波动预测（内部平方为 RV）。", ["ret", "window"], "volatility",
+           lambda x, window=120: _apply(x, lambda v: _har_from_return(v, int(window), "forecast")))
+_register("ts_har_from_return_forecast_error_z", "日收益平方 RV 相对 HAR 预测的标准化偏差。", ["ret", "window"], "level",
+           lambda x, window=120: _apply(x, lambda v: _har_from_return(v, int(window), "innovation_z")))
+# Deprecated aliases (kept registered); use the *_next_forecast names.
+_register("ts_har_rv_forecast", "HAR-RV 已实现方差预测（平方根，deprecated 别名）。", ["rv", "window"], "volatility",
+           lambda x, window=120: _apply(x, lambda v: _har_rv(v, int(window), "forecast")))
+_register("ts_har_rv_innovation_z", "RV 相对 HAR 预测的标准化偏差（deprecated 别名）。", ["rv", "window"], "level",
            lambda x, window=120: _apply(x, lambda v: _har_rv(v, int(window), "innovation_z")))

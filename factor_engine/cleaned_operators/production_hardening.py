@@ -10,6 +10,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from cleaned_operators.semantic_certification import (
+    attach_four_certificates,
+    should_fail_closed,
+)
+
 # Operators that require a specific source dataset (minute bars, relation/
 # shareholder tables, index constituent weights).  The A-share sources are
 # confirmed in COS (StockMinuteBar / StockTopTenShareholder / IndexConstituent)
@@ -285,6 +290,24 @@ def _sync_final_runtime_contract(canonical: str, catalog: dict[str, Any]) -> Non
         catalog["tags"] = tags
 
 
+def _mark_experimental(canonical: str, catalog: dict[str, Any]) -> None:
+    """Fail-closed lifecycle: an operator that was registered as
+    experimental/research (or is in the isolation manifest) must not be
+    blanket-promoted to production or marked PIT-safe.  Its four certificates
+    are already attached as all-negative by ``attach_four_certificates``.
+    """
+    from cleaned_operators.operator_policy import _EXPLICIT_POLICIES
+
+    catalog["status"] = "experimental"
+    catalog["lifecycle_status"] = "experimental"
+    catalog["pit_safe"] = False
+    catalog["production_certified"] = False
+    existing_policy = dict(_EXPLICIT_POLICIES.get(canonical) or {})
+    existing_policy["pit_safe"] = False
+    existing_policy["scope"] = existing_policy.get("scope", _infer_scope(canonical, catalog))
+    _EXPLICIT_POLICIES[canonical] = existing_policy
+
+
 def apply_production_hardening() -> None:
     from cleaned_operators.operator_policy import _EXPLICIT_POLICIES
     from cleaned_operators.registry import OperatorRegistry
@@ -295,6 +318,12 @@ def apply_production_hardening() -> None:
     for canonical in sorted(targets):
         catalog = OperatorRegistry._catalog.setdefault(canonical, {})
         _sync_final_runtime_contract(canonical, catalog)
+        if should_fail_closed(canonical):
+            # Registered experimental/research or isolated: do not promote.
+            attach_four_certificates(canonical, catalog)
+            _mark_experimental(canonical, catalog)
+            continue
+        attach_four_certificates(canonical, catalog)
         patch = _policy_patch(canonical, catalog)
         existing_policy = dict(_EXPLICIT_POLICIES.get(canonical) or {})
         merged_policy = {**patch, **existing_policy}
@@ -315,12 +344,13 @@ def apply_production_hardening() -> None:
             merged_policy["min_periods"] = patch.get("min_periods", 1)
             if "lag" in patch:
                 merged_policy["lag"] = patch["lag"]
-        merged_policy["pit_safe"] = True
+        merged_policy["pit_safe"] = bool(catalog.get("pit_safe", False))
         _EXPLICIT_POLICIES[canonical] = merged_policy
 
-        catalog["status"] = "production"
-        catalog["lifecycle_status"] = "production"
-        catalog["pit_safe"] = True
+        certified = bool(catalog.get("pit_safe", False))
+        catalog["status"] = "production" if certified else "experimental"
+        catalog["lifecycle_status"] = "production" if certified else "experimental"
+        catalog["pit_safe"] = certified
         catalog["production_backend_policy"] = "at_least_one_certified_backend"
         catalog["production_portability_required"] = False
         catalog["production_hardening"] = "factor_operator_v2"
@@ -411,6 +441,15 @@ def check_factor_production_hardening() -> list[str]:
             errors.append(
                 f"{canonical}: catalog parameter contract does not match final runtime"
             )
+        if should_fail_closed(canonical):
+            # Registered experimental/research or isolated: hardening must keep
+            # them experimental and non-PIT-safe (the whole point of the gate).
+            if str(catalog.get("status")) != "experimental":
+                errors.append(f"{canonical}: experimental-registered status is not experimental")
+            policy = infer_operator_policy(operator, canonical=canonical)
+            if policy.pit_safe:
+                errors.append(f"{canonical}: experimental-registered pit_safe must stay False")
+            continue
         if str(catalog.get("status")) != "production":
             errors.append(f"{canonical}: status is not production")
         policy = infer_operator_policy(operator, canonical=canonical)

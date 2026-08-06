@@ -123,6 +123,9 @@ OperatorRegistry.register_alias("sum_n", "ts_sum")
 OperatorRegistry.register_alias("std_n", "ts_std")
 OperatorRegistry.register_alias("industry_neutral", "group_neutralize")
 OperatorRegistry.register_alias("ind_neutralize", "group_neutralize")
+# ``group_rank_linear_weighted_value`` / ``event_compounded_return`` 别名在其
+# canonical 定义模块内注册（group.py / relation/ops.py），因为这些 canonical 在
+# _aliases 导入之后才被加载。
 OperatorRegistry.register_alias("market_cap_neutralize", "size_neutralize")
 OperatorRegistry.register_alias("cap_neutralize", "size_neutralize")
 # LQTP-aligned primary names are applied in _dedupe.py (ts_ema→ema, clip→cap, …).

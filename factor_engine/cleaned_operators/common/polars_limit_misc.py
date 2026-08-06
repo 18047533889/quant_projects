@@ -264,18 +264,33 @@ def fin_announcement_lag(period_end_date, pub_date):
 # ---------------------------------------------------------------------------
 
 
-def event_decay_asof(event, half_life=20.0):
+def event_decay_asof(event, half_life=20.0, missing_policy="carry"):
     hl = _pf(half_life, "half_life", 1.0)
+    if missing_policy not in {"carry", "break"}:
+        raise ValueError("missing_policy must be 'carry' or 'break'")
     weight = 0.5 ** (1.0 / hl)
     cols = _cols(event)
     rows = event.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
         ev = event[c].to_numpy()
-        series = np.where(np.isfinite(ev), ev, 0.0)
         acc = 0.0
+        seen = False
         for t in range(rows):
-            acc = acc * weight + series[t]
+            finite = bool(np.isfinite(ev[t]))
+            if finite:
+                seen = True
+                acc = acc * weight + float(ev[t])
+            elif not seen:
+                out[t, i] = np.nan
+                continue
+            elif missing_policy == "break":
+                out[t, i] = np.nan
+                seen = False
+                acc = 0.0
+                continue
+            else:  # "carry"（默认）
+                acc = acc * weight
             out[t, i] = acc
     return _make(event, cols, out)
 
@@ -296,7 +311,7 @@ _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
     ("benchmark_relative_price", ("numerator", "denominator"), benchmark_relative_price, "Numerator over denominator."),
     ("fin_applicability_mask", ("value", "threshold"), fin_applicability_mask, "1 where value exceeds threshold."),
     ("cash_flow_lifecycle_stage", ("operating", "investing", "financing"), cash_flow_lifecycle_stage, "Cash-flow lifecycle stage 1-5."),
-    ("event_decay_asof", ("event", "half_life"), event_decay_asof, "Exponential decay of past events (preserving sign/magnitude)."),
+    ("event_decay_asof", ("event", "half_life", "missing_policy"), event_decay_asof, "Exponential decay of past events (preserving sign/magnitude)."),
 )
 
 

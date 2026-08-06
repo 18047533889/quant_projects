@@ -117,13 +117,18 @@ _mk(
 
 
 def _peer_deviation_index(*args):
-    """多标准化偏离聚合：逐日截面 zscore 后求和。"""
+    """多标准化偏离聚合：逐日截面 zscore 后求和。
+
+    初始值为 NaN;只有某个成分在当日截面内有有效 zscore 时才累加,全缺失的
+    格子保持 NaN,绝不伪造 0 作为有效因子。
+    """
     frames = _aligned(*args)
     base = frames[0]
     stacked = np.stack([f.to_numpy(dtype=float) for f in frames], axis=0)
     rows, cols = stacked.shape[1], stacked.shape[2]
-    out = np.zeros((rows, cols), dtype=float)
+    out = np.full((rows, cols), np.nan, dtype=float)
     for row in range(rows):
+        acc = np.full(cols, np.nan, dtype=float)
         for k in range(stacked.shape[0]):
             a = stacked[k, row]
             valid = np.isfinite(a)
@@ -133,9 +138,10 @@ def _peer_deviation_index(*args):
             if sd <= _EPS:
                 continue
             z = np.where(valid, (a - np.mean(a[valid])) / sd, np.nan)
-            with np.errstate(invalid="ignore"):
-                out[row] = np.where(np.isnan(out[row]) & np.isfinite(z), z,
-                                    np.where(np.isfinite(z), out[row] + z, out[row]))
+            nz = np.isfinite(z)
+            if np.any(nz):
+                acc[nz] = np.where(np.isnan(acc[nz]), z[nz], acc[nz] + z[nz])
+        out[row] = acc
     return _frame_like(base, out)
 
 
@@ -167,15 +173,37 @@ def _rolling_regression(y: pd.DataFrame, x: pd.DataFrame, window: int, min_perio
     return _frame_like(y, out)
 
 
-def _group_peer_information_diffusion(own_ret, peer_ret, group, window, lag):
-    peer = peer_ret.shift(int(lag))
+def _group_ex_self_mean_panel(own_ret: pd.DataFrame, group: pd.DataFrame) -> pd.DataFrame:
+    """Per-cell leave-one-out group mean of ``own_ret`` (unweighted)."""
+    own_ret, group = _aligned(own_ret, group)
+    xv = own_ret.to_numpy(dtype=float)
+    gv = group.to_numpy()
+    rows, cols = xv.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
+    for row in range(rows):
+        x_row, g_row = xv[row], gv[row]
+        for label in pd.unique(g_row):
+            idx = np.flatnonzero((g_row == label) & np.isfinite(x_row))
+            if len(idx) <= 1:
+                continue
+            total = float(np.sum(x_row[idx]))
+            for j in idx:
+                out[row, j] = (total - x_row[j]) / (len(idx) - 1.0)
+    return _frame_like(own_ret, out)
+
+
+def _group_peer_information_diffusion(own_ret, group, window, lag):
+    """Peer return is built *from the group panel* (industry ex-self mean), so
+    the ``group`` input is actually used and the name matches the contract."""
+    peer = _group_ex_self_mean_panel(own_ret, group)
+    peer = peer.shift(int(lag))
     return _rolling_regression(own_ret, peer, int(window), max(3, int(window) // 5))
 
 
 _mk(
     "group_peer_information_diffusion",
-    "个股收益对同行过去收益的滚动回归 Beta（信息扩散）。",
-    ["own_return", "peer_return", "group", "window", "lag"],
+    "个股收益对行业 ex-self 同行过去收益的滚动回归 Beta（信息扩散）。",
+    ["own_return", "group", "window", "lag"],
     _group_peer_information_diffusion,
     unit="level",
 )
@@ -209,13 +237,21 @@ _mk(
 )
 
 
-def _within_group_rank(x_row: np.ndarray, g_row: np.ndarray, gvalue: Any) -> float:
-    idx = g_row == gvalue
-    vals = x_row[idx]
-    if len(vals) < 3:
+def _within_group_rank(x_row: np.ndarray, g_row: np.ndarray, gvalue: Any, target_col: int) -> float:
+    """Rank of the *target stock* (``target_col``) inside its group.
+
+    The previous implementation returned ``order[-1]``, i.e. the rank of the
+    last stock of the group in panel order, not the target stock's rank.
+    """
+    idx = np.flatnonzero(g_row == gvalue)
+    if len(idx) < 3:
         return np.nan
+    pos = int(np.where(idx == target_col)[0][0]) if target_col in idx else -1
+    if pos < 0:
+        return np.nan
+    vals = x_row[idx]
     order = np.argsort(np.argsort(vals))
-    return float(order[-1] / (len(vals) - 1))
+    return float(order[pos] / (len(vals) - 1))
 
 
 def _group_multi_level_rank_consistency(x, group1, group2, group3):
@@ -227,9 +263,9 @@ def _group_multi_level_rank_consistency(x, group1, group2, group3):
     for row in range(rows):
         for col in range(cols):
             ranks = np.array([
-                _within_group_rank(xv[row], g1v[row], g1v[row, col]),
-                _within_group_rank(xv[row], g2v[row], g2v[row, col]),
-                _within_group_rank(xv[row], g3v[row], g3v[row, col]),
+                _within_group_rank(xv[row], g1v[row], g1v[row, col], col),
+                _within_group_rank(xv[row], g2v[row], g2v[row, col], col),
+                _within_group_rank(xv[row], g3v[row], g3v[row, col], col),
             ])
             if np.any(~np.isfinite(ranks)):
                 continue
@@ -247,8 +283,11 @@ _mk(
 )
 
 
-def _liquidity_beta(own_ret, market_liquidity, window):
-    return _rolling_regression(own_ret, market_liquidity, int(window), max(3, int(window) // 5))
+def _liquidity_beta(own_ret, liquidity, window):
+    # The operator description promises a beta against the *change* in
+    # liquidity; regress on delta(liquidity), not the raw level.
+    d_liquidity = liquidity - liquidity.shift(1)
+    return _rolling_regression(own_ret, d_liquidity, int(window), max(3, int(window) // 5))
 
 
 _mk(

@@ -131,8 +131,8 @@ def test_surface_and_alias_hardening() -> None:
     assert classify_canonical("ceil") == "daily"
     assert classify_canonical("identity") == "internal"
     assert OperatorRegistry._aliases["reverse"] == "neg"
-    assert classify_canonical("size_neutralize") == "extended"
-    assert classify_canonical("industry_size_neutralize") == "extended"
+    assert classify_canonical("size_neutralize") == "daily"
+    assert classify_canonical("industry_size_neutralize") == "daily"
     assert OperatorRegistry._aliases.get("size_industry_neutralize") == "industry_size_neutralize"
     assert OperatorRegistry._aliases.get("market_cap_neutralize") == "size_neutralize"
     assert OperatorRegistry._aliases.get("industry_neutralize") == "group_neutralize"
@@ -141,9 +141,12 @@ def test_surface_and_alias_hardening() -> None:
 def test_legacy_formula_compat_does_not_widen_daily_authoring() -> None:
     from api.dsl_parser import DSLParseError, parse_expr
 
-    with pytest.raises(DSLParseError, match="flex_max"):
-        parse_expr("flex_max(col('x'), col('y'))")
-    assert parse_expr("flex_max(col('x'), col('y'))", surface="compat") is not None
+    # flex_max was migrated to the daily surface in the 2026-08 daily production
+    # pass; use a still-extended (fail-closed) operator to keep the gate's intent:
+    # legacy/extended authoring must not widen the strict daily surface.
+    with pytest.raises(DSLParseError, match="ts_transition_count"):
+        parse_expr("ts_transition_count(col('x'), 3)")
+    assert parse_expr("ts_transition_count(col('x'), 3)", surface="compat") is not None
 
 
 def test_daily_scope_is_never_unknown() -> None:

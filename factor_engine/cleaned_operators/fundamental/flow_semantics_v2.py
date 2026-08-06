@@ -51,12 +51,23 @@ def fin_ttm_quarterly(x, period_id, periods_per_year=4):
     return _walk_periods(x, period_id, calculate)
 
 
+def _period_year(value) -> int | None:
+    """Fiscal year of a report period when the period id is a date-like key."""
+    key = _period_key(value)
+    if isinstance(key, pd.Timestamp):
+        return key.year
+    return None
+
+
 def fin_quarter_from_cumulative(x, period_id, fiscal_quarter):
     """Convert fiscal YTD cumulative values to one-quarter flow values.
 
     A non-Q1 period is emitted only when the immediately preceding visible report
-    period carries the preceding fiscal-quarter number.  Missing/out-of-order
-    reports fail closed instead of treating a cumulative value as a quarter.
+    period carries the preceding fiscal-quarter number AND belongs to the same
+    fiscal year.  Requiring ``same_fiscal_year`` prevents subtracting Q1 of the
+    previous year from Q2 of the current year just because both quarter numbers
+    differ by one.  Missing/out-of-order reports fail closed instead of treating
+    a cumulative value as a quarter.
     """
     period_id = period_id.reindex(index=x.index, columns=x.columns)
     fiscal_quarter = fiscal_quarter.reindex(index=x.index, columns=x.columns)
@@ -66,6 +77,7 @@ def fin_quarter_from_cumulative(x, period_id, fiscal_quarter):
         order: list[object] = []
         visible: OrderedDict[object, float] = OrderedDict()
         quarters: OrderedDict[object, int] = OrderedDict()
+        years: OrderedDict[object, int | None] = OrderedDict()
         values = pd.to_numeric(x[column], errors="coerce").to_numpy(dtype=float)
         periods = period_id[column].to_numpy()
         quarter_values = fiscal_quarter[column].to_numpy()
@@ -81,6 +93,7 @@ def fin_quarter_from_cumulative(x, period_id, fiscal_quarter):
                     order.append(key)
                 visible[key] = float(value)
                 quarters[key] = quarter
+                years[key] = _period_year(raw_period)
             if key is None or key not in visible or key not in quarters:
                 continue
 
@@ -95,8 +108,17 @@ def fin_quarter_from_cumulative(x, period_id, fiscal_quarter):
             previous_key = order[position - 1]
             previous_quarter = quarters.get(previous_key)
             previous_value = visible.get(previous_key, np.nan)
+            # Same fiscal year guard: when both period ids carry a year, require
+            # them to match (Q2 of YYYY cannot subtract Q1 of YYYY-1).  Period
+            # ids without a derivable year fall back to the quarter-only check.
+            same_year = (
+                years.get(previous_key) == years.get(key)
+                if years.get(key) is not None and years.get(previous_key) is not None
+                else True
+            )
             if (
                 previous_quarter == current_quarter - 1
+                and same_year
                 and np.isfinite(previous_value)
             ):
                 result[index] = float(visible[key] - previous_value)

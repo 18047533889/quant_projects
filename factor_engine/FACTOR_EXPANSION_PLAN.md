@@ -462,3 +462,353 @@ max drawdown·drawup），**剩余 62 个仅 pandas**。按"凡是合理能加�
   （audit 848 通过，762 写回），production 门控 **77/77 intra_* 重新可用**。
 - 我负责的测试组全绿：intraday parity / expansion gap / intraday next-stage /
   feature extensions / intraday golden / DSL **252 passed, 1 skipped**。
+
+---
+
+# 9. 模型类算子专项整改(2026-08 审查驱动)
+
+依据外部 AI 审查对模型类算子数学语义的逐条核实,本阶段**优先修复 P0 正确性问题**,
+而非继续扩张算子数量。
+
+## 9.1 已修复的数学缺陷
+
+### 回归 / AR 内核(`ts_model/_rolling_core.py`、`dynamic_regression.py`、`ar_meanrev.py`)
+- **Huber 权重 bug**:IRLS 更新由 `design*weight, y*weight` 改为 `sqrt(weight)`
+  (原实现把权重平方),并增加收敛检查(不收敛返回 None → NaN)。
+- **Ridge 截距惩罚**:`penalty[0,0]=0` 仅在 `has_intercept=True` 时生效;
+  `add_intercept=False` 时第一列特征不再被错误豁免。
+- **样本内拟合 → prior-window**:`rolling_fit` / `_multi_regression` / `_ar_apply`
+  新增 `fit_lag` 参数。`fit_lag=0` 保留原样本内行为;`fit_lag=1` 用 `[t-window, t-1]`
+  训练、预测当前 t,输出真正的**样本外**预测误差。
+- 新增算子: `ts_multi_regression_{coeff,forecast_error,forecast_error_z,r2_prior,
+  adjusted_r2_prior,coeff_stability}_*`、`ts_huber_*_prior`、`ts_ridge_*_prior`、
+  `ts_ar_prior_{forecast,innovation,innovation_z,coeff}`、`ts_ar_coeff_stability`。
+  旧 in-sample 版本保留注册(deprecated),不破坏既有契约。
+
+### 分位数回归更名(expectile)
+- 现有 `quantile_fit` 是 IRLS 非对称加权最小二乘,数学上是 **expectile** 而非
+  pinball-loss 分位数回归。新增诚实命名 `ts_expectile_regression_{coeff,resid,
+  coeff_prior,forecast_error}` 与 `ts_expectile_beta_spread`(同一内核),
+  旧 `quantile_*` 名称保留并注明语义。
+
+### PCA 家族(`cross_section/panel_model.py`)
+- `_rolling_pca` 默认 `fit_lag=1`:训练窗口排除当前观测,消除样本内投影。
+- `panel_rolling_pca_explained_ratio` 由"整体标量广播"改为**每股独立**
+  `1 - Var(resid_i)/Var(ret_i)`(commonality)。
+- `industry_rolling_pca_loading` 修正行业局部索引映射(`np.where(members==col)`,
+  不再假设行业列连续)且训练窗口截至前一日。
+- `cs_autoencoder_reconstruction_error` 实为逐股时序 PCA;rank 改为
+  `n_components < 特征数`(默认 2),不再"满秩重构≈0"。新增诚实名称
+  `ts_feature_pca_reconstruction_error`。
+- 监督预测 `panel_rolling_{pcr,pls,elastic_net}_forecast`、
+  `panel_regime_conditioned_forecast`、`panel_mixture_of_experts_score`:
+  训练窗口排除当前行(预测 t 的模型只用 `[t-window, t-1]`),移除 `pit_safe` 标签,
+  打上 `supervised_model` / `not_pit_certified`。regime/MoE 的边界分位数
+  同样只用前一日市场状态,当前观测不能把自己分进 regime。
+- `_pca_svd` 改为逐列 NaN 安全(均值/标准差按列有限值估计,缺失以列均值填充)。
+
+### 在线 / 波动率模型(`ts_model/state_space.py`、`volatility.py`)
+- **Kalman innovation 修正**:innovation 用**预测态**(更新前)而非滤波态
+  (原实现 `x - mu_updated` 被 `(1-k)` 因子污染)。
+- **GARCH optimizer 校验**:仅接受 `success=True` 且 `alpha,beta>=0`、
+  `alpha+beta<1`(GJR 为 `a+0.5γ+b<1`)的参数,失败返回 NaN。
+- **GARCH 标准化冲击修正**:用 `h_t`(观测该收益之前的条件方差),非 `h_{t+1}`。
+  新增 `ts_garch_next_vol_forecast`(显式下一期)与 `ts_garch_vol_surprise`
+  (`rv_t/h_t - 1`)。
+- **HAR 输入语义**:输入按"已实现方差"处理,不再内部二次平方。新增
+  `ts_har_rv_next_forecast` / `ts_har_rv_forecast_error_z`(RV 输入)与
+  `ts_har_from_return_next_vol` / `ts_har_from_return_forecast_error_z`(日收益输入)。
+
+### CUSUM(`ts_model/complexity.py`、`regression_models.py`)
+- `running[-1]`(窗口总偏差对自身均值≈0,无信息量)→ `max(|running|)`。
+
+### 同行 / 组内(`cross_section/peer_ops.py`)
+- `group_multi_level_rank_consistency`:排名取**目标股票**在组内的 rank,
+  不再返回组内末位股票的 rank。
+- `group_peer_information_diffusion`:现在**使用 group** 计算行业 ex-self 同行收益,
+  输入契约改为 `(own_return, group, window, lag)`,名称与实现一致。
+- `group_peer_deviation_index`:初始 NaN,全缺失保持 NaN,不再伪造 0。
+- `ts_market/industry_liquidity_beta`:对 **delta(流动性)** 回归(与描述"变化"一致),
+  polars 后端同步(pandas/polars parity 通过)。
+
+### 基础设施
+- `load_all()` 拆分出 `_load_all_impl()`,`_INITIALIZING` 在 `finally` 中复位,
+  中途异常不再导致后续 `load_all()` 死锁。
+- `_REVIEWED_EXTENSIONS` 去除 8 处重复模块导入。
+
+### 日内(`intraday/vwap_path.py`、`realized_beta.py`)
+- VWAP 系列内核统一 `valid = finite(close)&finite(amount)&finite(volume)&volume>0`
+  掩码,价格与成交额/量不再错位。
+- 新增 `intra_*_ex_self` 系列:市场分钟收益按股票逐一剔除自身后再算
+  realized beta / corr / idio 方差 / 偏度 / 峰度 / r²,消除大市值自包含偏差。
+
+## 9.2 测试
+
+新增 `tests/operators/test_model_semantics_fixes.py`(18 例)锁定语义:
+prior-window 误差 > 样本内残差、prior 系数不受当前冲击影响、AR prior 与手算一致、
+Huber 稳健、Ridge 无截距仍惩罚首列、PCA prior-window 前序行不变、commonality 逐股、
+行业局部索引、autoencoder 低秩、Kalman 预测态 innovation、GARCH h_t 冲击、
+CUSUM max、peer 目标 rank、group 用 group、liquidity delta、PCR 忽略当前标签。
+
+受影响的既有测试组全绿:**378 passed, 1 skipped**
+(ts_model / regression_models / cs_model / polars parity / model semantics / intraday)。
+
+## 9.3 证据与生产状态
+
+- 本次改动涉及的算子均为 extended/research/experimental,**不属于 production targets**;
+  `factor_operator_verified.json` 的 `implementation_hash` 校验 0 失配。
+- 全量测试中 `test_factorengine_hardening.py::test_production_sql_lowering_is_fail_closed`
+  等 production fail-closed 失败为**既有证据失效**问题(并发 AI 编辑测试文件后
+  artifact 的 `test_source_hash` 未重生成,87 处失配),与本次改动无关。
+
+---
+
+# 10. 第二轮整改:上轮暂缓项(2026-08 审查驱动)
+
+§9 暂缓/后续方向的落地执行。
+
+## 10.1 日内回撤峰谷识别(真实最大回撤)
+
+`vwap_path.py` + `polars_intraday_full.py` 同步修复:
+
+- **原缺陷**:先取全天全局最高点、再取其后的最低点,当真实最大回撤的峰在更晚的
+  全局新高之前时会被漏掉(如 `[5,10,6,11]`:真实最大回撤 10→6 对全局峰搜索不可见)。
+- **修复**:`dd_t = price_t / running_peak_t - 1`,trough = argmin(dd),peak =
+  trough 处的 running peak(即截至 trough 的最大价)。depth/duration/recovery 三个
+  算子统一采用该定位,polars 端用 `cum_max` + join 复刻,pandas/polars parity 保持
+  ≤1e-8。
+
+## 10.2 股东 ID 匹配(取代排名槽位)
+
+`shareholder/churn_network.py` 新增 5 个算子,输入契约 `(s1..s10, sid1..sid10,
+p1..p10, psid1..psid10)`(两期比例 + 两期股东 ID):
+
+- `holder_id_matched_churn`:同 ID 跨期配对,缺失侧补 0,`0.5*Σ|Δratio|`。
+- `holder_id_matched_entry_share` / `exit_share`:按 ID 集合差判进入/退出。
+- `holder_id_overlap_ratio`:ID 交集 / 并集。
+- `holder_share_weighted_rank_migration`:以 min(两期比例)加权的排名位移均值。
+
+**验证**:股东 X(5%)/Y(3%)两期排名互换但持股不变 → ID 匹配 churn=0,
+而槽位法 `holder_weighted_churn` 报 0.04 的假换手。ID 面板按字符串保留(object dtype)。
+
+## 10.3 VWAP 尺度无关变体
+
+`vwap_path.py` 新增 `intra_vwap_path_slope_pct` / `intra_vwap_path_curvature_pct`:
+先算 `cum_vwap / first_price - 1` 再拟合斜率/曲率,100 元与 5 元股票可比。
+
+## 10.4 跳跃/尾部诚实命名
+
+阈值跳跃算子(`|r|>threshold*sqrt(RV/N)` 的平方和)本质是**尾部收益**统计,不是
+BNS 跳跃分解,`positive+negative ≠ intra_jump_variation=max(RV-BV,0)`。新增:
+`intra_positive_tail_variation` / `intra_negative_tail_variation` /
+`intra_signed_tail_variation_ratio` / `intra_tail_event_count`;旧 `*_jump_variation`
+名称保留为别名并更新描述。
+
+## 10.5 收益 profile 输入语义
+
+`time_structure.py` 新增 `intra_signed_return_profile_cosine` /
+`intra_abs_return_profile_cosine`:输入 `close`,**内部计算日内 log 收益**
+(跨日边界置 NaN),再算曲线余弦。旧 `intra_return_profile_cosine` 直接把调用方
+传入的 `x` 喂给 profile 内核,传 Close 会得到价格水平曲线相似度而非收益曲线相似度。
+
+## 10.6 稳健横截面异常值
+
+`cross_section/robust_cs.py` 新增:
+
+- `cs_shrinkage_mahalanobis`:样本协方差向对角收缩后的马氏距离。
+- `cs_robust_mahalanobis_mad`:中位数中心 + MAD 尺度的稳健马氏距离。
+- `cs_actual_lof_score`:标准局部离群因子 LOF。
+- `cs_relative_density_ratio`:局部密度 / k 近邻平均密度。
+- `cs_residual_percentile`:横截面残差 rank 归一化(0~1)。
+
+KNN 改为**分块计算**(`_knn_blockwise`/`_knn_full`),避免 5000×5000 全量距离矩阵。
+
+## 10.7 测试与结果
+
+- 新增 `tests/operators/test_model_semantics_fixes_round2.py`(10 例):running-peak
+  回撤、ID 匹配换手 0 假换手、VWAP pct 尺度不变、tail 别名一致性、profile 输入
+  close、LOF 离群检测、MAD 马氏/残差分位、KNN 分块与全量一致。
+- 受影响的既有测试组全绿:**392 passed, 1 skipped**。
+- 第二轮新增 18 个 canonical,全部 extended/research 分类正确。
+
+---
+
+# §11 全算子 Daily Production 化整改(2026-08-06)
+
+## 11.1 目标
+
+所有具有独立因子构造价值、能输出「交易日 × 股票」面板的算子最终必须达到:
+
+```
+surface = daily · lifecycle_status = production · pit_safe = true
+production_certified = true · output_shape = trade_date × instrument
+output_frequency = daily
+```
+
+这**不等于**把状态字段批量改成 daily。必须:确定性缺陷先修、语义错误的改名/拆分、
+重复/随机/未来函数/非因子工具删除或降级,然后才允许 surface 晋级。晋级的前提是
+实现、语义、时序、PIT、边界、后端六维认证全部通过。
+
+## 11.2 审查点逐条核实结论(对照当前代码)
+
+### A. 已核实为「已修复」的审查点(审查文本过时)
+
+| 审查点 | 现状 |
+|---|---|
+| ts_argmax/ts_argmin「0=最旧位置」 | 已改为**距离语义**:`values.size-1-hit`,0=当前行,tie 取最近(`overhaul/daily.py:238-242`);另有 `ts_argmax_age`/`ts_argmin_age`/`ts_argmax_index_from_oldest`/`ts_argmin_index_from_oldest`(`safe_ops.py`),并有测试 `test_s19_unambiguous_extreme_position`。全 NaN 返回 NaN。 |
+| Top-K/Bottom-K 退化 | `pd_topbottom`(`overhaul/daily.py:274-288`)取**有效值排序后前/后 K**,非全窗口统计;`k>window` 报错;有效样本 < max(mp,k) 返回 NaN。 |
+| ts_time_slope 位置未重中心化 | `pd_time_slope`(`overhaul/regression.py:104-119`)已对**有效位置**重新中心化(`t = np.arange(values.size)[mask]; t -= t.mean()`)。 |
+| ts_average_volume/average_volume 双 canonical | `price_volume/liquidity_naming_v2.py` 已统一:注册 `ts_average_volume`,unregister `average_volume` 并注册为 alias。 |
+| 分钟 VWAP Amount/Volume 填 0 | 第一轮已改为联合有效掩码 `_vwap_valid`。 |
+| Ichimoku senkou 向未来位移 | `polars_misc_v2.py` 已注明 "Raw Senkou A without chart-forward shift"。 |
+| cs_rank_gaussian 逆 CDF 产生 Inf | Blom/van_der_Waerden 公式保证 p∈(0,1) 严格内点,不会 Inf(仍补显式 clip 兜底,见 §11.4)。 |
+| 生产晋级「pit_safe=True 一刀切」 | `production_hardening.py` 已 fail-closed:`pit_safe` 读 catalog 自身值;experimental/隔离集经 `should_fail_closed` 强制 experimental+pit_safe=False。 |
+| index_entry_exit_event NaN→False | 已正确:NaN 时 `prev_state=None` 打断序列,不产生虚假事件(`relation/ops.py:459-481`)。 |
+| fin_ttm 模糊口径 | 已隔离(`ISOLATED_FROM_DEFAULT_MINING`),fail-closed;已有 `fin_ttm_quarterly`/`fin_ttm_cumulative`。 |
+
+### B. 已核实为「真实缺陷」的审查点(本轮必须修)
+
+| # | 审查点 | 证据 | 修复 |
+|---|---|---|---|
+| B1 | group_decay_linear 是排名加权非时间衰减,window 参数未用 | `group.py:63-101` | 补真实时间衰减算子 `group_ts_decay_linear`;`group_decay_linear` 诚实化描述并加 `group_rank_linear_weighted_value` 别名 |
+| B2 | group_* 整列 group 缺失时静默退化为全市场 | `group.py:74-76`(group_mean)等 | 加 `fallback_policy=nan\|global\|keep_original`、`min_group_size`、`unknown_group_policy`;默认 production 用 nan |
+| B3 | relation_entry_count/exit_count 把 NaN 当 False,制造虚假进出 | `relation/ops.py:340-355` | 改为逐对有效掩码 `pair_valid=valid[1:]&valid[:-1]` + `missing_policy`(默认 break),与 `index_reconstitution_churn` 语义一致 |
+| B4 | event_decay_asof 缺失事件转 0,首次有效观测前输出 0 | `state_event.py:246` | 首次有效观测前输出 NaN;缺失按 missing_policy 衰减 |
+| B5 | event_cumulative_return_past 只记最近事件、重叠覆盖;算术和语义不明 | `relation/ops.py:563-574` | 拆 `event_return_since_last`/`event_arithmetic_return_sum`/`event_log_return_sum`/`event_compounded_return`/`event_active_count` |
+| B6 | ts_regression_resid 只有样本内残差,无预测误差变体 | `overhaul/regression.py:92-93` | 新增 `ts_regression_in_sample_resid`/`ts_regression_forecast_error`/`ts_regression_forecast_error_z`/`ts_regression_resid_mean` |
+| B7 | cs_bucket 仅等频语义,固定边界/历史边界未拆分 | `overhaul/daily.py:198-206` | 新增 `cs_bucket_fixed`/`cs_bucket_historical` 独立 canonical(等频保留为 `cs_bucket`) |
+| B8 | cube 冗余 production canonical | 已 legacy | 保留 legacy 名称 + 明确文档指向 `power(x,3)`,不进入 daily |
+| B9 | 关系集合算子输入契约(行内多列当实体 ID) | `relation/ops.py` relation_distinct_count 等 | 架构级:须由 source 层完成 entity-set 聚合;算子层保持注册、标记隔离,不动输入契约(见 §11.6) |
+
+### C. 架构级(不在算子层修,记录边界)
+
+1. **递归/状态族**(KAMA/Supertrend/PSAR/ts_ema/ts_ewm_*/MACD_*/RSI_WILDER/ATR_WILDER/ADX/
+   expanding_rank/trade_when/hump_decay/ts_sma_cn):需要分段执行 + checkpoint 恢复的运行时基础设施,
+   在完成前保持 extended(排除在 daily 迁移之外),属 review P2。
+2. **治理产物重生成**(evidence/backend coverage/surface policy):属并发 AI 在途编辑域,
+   重跑会被覆盖;本轮只做算子层修复与分类,不改证据 artifact。
+3. **完整 Model Layer**(model_walk_forward_*):独立训练/embargo/label_horizon 架构,非算子正确性。
+
+## 11.3 执行顺序
+
+- **P0(本轮先做)** 确定性缺陷:§11.4 的 B1–B8。
+- **P1(本轮做)** daily 迁移:§11.5 全量 factor-shaped extended → daily。
+- **P2(本轮做)** 认证门:§11.7 六维 `OperatorCertification` 兼容层。
+- **P3(记录/部分)** 清理:cube 文档、argmax 别名去重、零 unclassified 校验、文档与测试。
+
+## 11.4 P0 修复明细
+
+### B1 group_decay_linear
+- 新增 `group_ts_decay_linear(x, group, window, decay=...)`:组内按**时间位置**线性衰减
+  (最近权重最高),真正使用 window;仅用当前行及之前的 `x` 值(PIT)。
+- `group_decay_linear` 描述改为「组内按排名线性加权」;注册别名
+  `group_rank_linear_weighted_value` → `group_decay_linear`(审查建议的诚实名)。
+
+### B2 group fallback
+- 在 group 算子的 pandas 路径加入参数:
+  - `fallback_policy`:整列 group 缺失时的行为。`nan`=整日输出 NaN;`global`=全市场统计(旧行为);`keep_original`=返回原值。
+  - `min_group_size`:组内有效样本少于该值 → 该组 NaN。
+  - `unknown_group_policy`:单股 group 缺失时 `nan`(旧行为已是)。
+- 参数默认与 API 兼容:默认 `fallback_policy="global"`(保留既有 DSL 行为,不破坏 SQL/Polars 后端);
+  在 policy 层对可确证 PIT 的组算子可覆盖为 `nan`。文档明确生产推荐 `nan`。
+
+### B3 relation transition
+`_transition_count` 改为:
+```
+pair_valid = valid[1:] & valid[:-1]
+entry = pair_valid & current[1:] & ~previous[:-1]
+exit_  = pair_valid & ~current[1:] & previous[:-1]
+```
+新增 `missing_policy="break"`(默认)。`break`=NaN 打断序列,不跨 NaN 计数。
+
+### B4 event_decay_asof
+- 首次有效(有限)观测前 → NaN。
+- 有限值按 `acc = acc*weight + value` 累积;缺失值按 `missing_policy`:
+  `carry`(默认,衰减但不贡献)、`break`(重设为 NaN)。
+
+### B5 事件累计收益拆分
+- `event_return_since_last`:自最近事件(含 event_effective_lag)起的收益,**复利**(prod(1+r)-1),最近事件更新后重算(保留旧值不再被覆盖的语义:以最近事件为准,但输出区间明确)。
+- `event_arithmetic_return_sum` / `event_log_return_sum` / `event_compounded_return`:显式算术和 / log 和 / 复利。
+- `event_active_count`:最近事件起至今的有效 bar 数。
+- 旧 `event_cumulative_return_past` / `event_abnormal_return_past` 保留为兼容别名,文档改为指向新算子。
+
+### B6 回归残差族
+新增(基于 `_fit_1d` 的两变量滚动 OLS):
+- `ts_regression_in_sample_resid(y, x, window, min_periods, add_intercept)` = 现行 `ts_regression_resid`(fit 含 t)。
+- `ts_regression_forecast_error(y, x, window, min_periods, add_intercept)` = fit 到 t-1,预测 t: `y_t - ŷ_t`(out-of-sample)。
+- `ts_regression_forecast_error_z`:预测误差除以样本内残差 std。
+- `ts_regression_resid_mean`:滚动残差均值(原常见误用)。
+- `ts_regression_resid` 保留为 in-sample 残差的别名(向后兼容)。
+- 全部新算子注册为 extended;分类正确。
+
+### B7 cs_bucket
+- 保留 `cs_bucket` = 等频(现有实现)。
+- 新增 `cs_bucket_fixed(x, breaks)`(固定边界)与 `cs_bucket_historical(x, window, quantiles)`(历史边界),均为新 canonical。
+
+### B8 cube
+- 保留 legacy 注册(测试 `test_production_all_runtime_excludes_research_tools` 依赖 `cube in all_runtime`);
+  文档明示 deprecated,使用 `power(x,3)`。
+
+## 11.5 P1:factor-shaped extended → daily 迁移
+
+**机制**:在 `operator_surface.py` 增加独立迁移集 `DAILY_FACTOR_MIGRATED`,`classify_canonical`
+先于 EXTENDED 判断返回 `daily`。**不移除** `EXTENDED_ONLY_CANONICALS` 成员(该集被
+`PANDAS_FIRST_PRODUCTION_CANONICALS` 消费,保持证据分级不变);`factor_production_targets`
+由 DAILY|EXTENDED|RESEARCH 并集得出,迁移前后不变。
+
+**迁移范围**:`EXTENDED_ONLY_CANONICALS` 中除以下之外的 **423 个**(逐项核实后固化在
+`DAILY_FACTOR_MIGRATED` frozenset,新增算子需显式迁移):
+- 递归/状态族(FULL_HISTORY_REPLAY_CANONICALS):ts_ema/ts_ewm_*/RSI_WILDER/ATR_WILDER/ADX/
+  MACD_line/signal/hist/KAMA/Supertrend/SupertrendDirection/PSAR/expanding_rank/trade_when/
+  hump_decay/ts_sma_cn
+- source-blocked: intraday_volatility, intraday_vwap_deviation
+- 非因子/随机:rand_*/shuffle/sample 等(NON_FACTOR_PRODUCTION_CANONICALS)
+- fail-closed(experimental/隔离清单,含 round-1/round-2 模型族)与
+  `_PROMOTED_RESEARCH_FACTORS`(review P2 仍需进一步认证;测试
+  `test_misleading_or_experimental_ops_are_not_daily` 守卫)
+
+**验收**:`classify_canonical` 对迁移集返回 daily;`unclassified == 0`;
+`test_removed_names_are_not_in_public_daily_dsl`(含 KAMA)仍通过;DSL daily 表面可用这些算子。
+
+## 11.6 关系集合算子(source 层)边界
+
+`relation_distinct_count`/`relation_overlap_ratio`/`holder_*` 依赖「行内列作为实体槽位」,
+违反标准面板契约,已在 `ISOLATED_FROM_DEFAULT_MINING` 隔离。正确形态是 source 层完成:
+
+```
+Raw shareholder rows → group by (TradeDate, Symbol, SnapshotId) → entity-set 聚合
+→ 输出 distinct_holder_count / current_snapshot_ids / previous_snapshot_ids 等 daily 面板
+```
+
+本轮不重写输入契约(属数据源层,需真实 COS 表);算子层保持注册 + 隔离。
+
+## 11.7 P2:六维认证门(兼容层)
+
+在 `semantic_certification.py` 的 `SemanticCert` 上**追加**(不删除既有四字段,保持
+`test_s2_four_certificates_attached` 兼容):
+- `edge_case_passed`:由 `edge_requirements.production_edge_evidence_complete` 计算。
+- `backend_passed`:由 `operator_capability.production_eligible_backends` 非空计算。
+- 新增属性 `operator_certification`(六维全真)。
+- `production_hardening.apply_production_hardening` 在覆盖 `catalog["status"]="production"`
+  前检查六维;缺维度则 `status="experimental"` + `pit_safe=False`(fail-closed)。
+
+## 11.8 测试与验证
+
+- 新增 `tests/operators/test_daily_production_migration.py`:
+  - group_ts_decay_linear 真实时间衰减 golden case;
+  - group fallback_policy 三态;
+  - relation transition 逐对有效(NaN 不产生虚假进出);
+  - event_decay_asof 首次有效前 NaN、carry/break;
+  - event 收益拆分(复利 vs 算术和 golden);
+  - ts_regression_forecast_error out-of-sample golden;
+  - cs_bucket_fixed / cs_bucket_historical;
+  - 迁移集 `classify_canonical=="daily"`、排除集保持 extended、unclassified==0。
+- 全量 `tests/operators/`:**1010 passed / 378 skipped / 20 failed**。失败集与基线同域:
+  19 例 recipe 三后端证据 + 1 例 tanh 生产 SQL,均依赖 `evidence_artifact_valid()`(stale
+  artifact:87 处 operator_policy_hash + 35 处实现文件 hash 失配,属并发 AI 证据域),
+  **0 新增逻辑失败**。新增 `test_daily_production_migration.py` 17 例全绿。
+- 额外修复:`suspension_frequency` pandas/polars 不一致(pandas 用 `==1`,polars 用
+  `rolling_mean` 原始值)——统一为「已知且非零视为停牌、分母为已知状态日」,parity 通过。
+- 边界说明:`test_production_sql_lowering_is_fail_closed`(tanh 生产 SQL)与 recipe 三后端
+  证据测试依赖 `evidence_artifact_valid()`;当前 artifact 因算子策略/实现 hash 失配失效,
+  需并发 AI 重新认证后才恢复,非本轮代码缺陷。

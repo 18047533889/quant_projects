@@ -120,17 +120,27 @@ def _half_life(x, window, min_periods):
 
 def _pairwise_rolling(y, x, window, min_periods):
     """Rolling slope via the covariance identity (matches the pandas
-    reference ddof convention: sample cov / population var)."""
+    reference ddof convention: sample cov / population var).
+
+    Both series are first masked to the *pairwise-valid* set (rows where both
+    y and x are finite), so the four moments are computed over the same rows as
+    the pandas reference.  The covariance identity with per-series means would
+    otherwise diverge whenever the null patterns of the two inputs differ (e.g.
+    a liquidity-delta panel whose first row is NaN).
+    """
     w = max(3, int(window))
     mp = max(3, int(min_periods))
     cols = align_cols(y, x)
     out = []
     for c in cols:
-        mean_ab = (y[c] * x[c]).rolling_mean(window_size=w, min_samples=mp)
-        mean_a = y[c].rolling_mean(window_size=w, min_samples=mp)
-        mean_b = x[c].rolling_mean(window_size=w, min_samples=mp)
-        mean_b2 = (x[c] * x[c]).rolling_mean(window_size=w, min_samples=mp)
-        n = (y[c].is_not_null() & x[c].is_not_null()).cast(pl.Float64).rolling_sum(window_size=w, min_samples=mp)
+        both = y[c].is_not_null() & x[c].is_not_null()
+        ym = pl.when(both).then(y[c]).otherwise(None)
+        xm = pl.when(both).then(x[c]).otherwise(None)
+        mean_ab = (ym * xm).rolling_mean(window_size=w, min_samples=mp)
+        mean_a = ym.rolling_mean(window_size=w, min_samples=mp)
+        mean_b = xm.rolling_mean(window_size=w, min_samples=mp)
+        mean_b2 = (xm * xm).rolling_mean(window_size=w, min_samples=mp)
+        n = ym.is_not_null().cast(pl.Float64).rolling_sum(window_size=w, min_samples=mp)
         pop_cov = mean_ab - mean_a * mean_b
         sample_cov = pop_cov * n / (n - 1.0)
         pop_var = mean_b2 - mean_b * mean_b
@@ -143,7 +153,12 @@ _register("ts_mean_reversion_half_life", "均值回复半衰期（Polars rolling
           lambda x, window=120, min_periods=20: _half_life(x, int(window), int(min_periods)))
 _register("ts_variance_ratio_slope", "方差比斜率（Polars rolling_map）。", ["x", "window", "max_q", "min_periods"],
           lambda x, window=120, max_q=10, min_periods=20: _vr_slope(x, int(window), int(max_q), int(min_periods)))
-_register("ts_market_liquidity_beta", "收益对市场流动性 Beta（Polars rolling_cov/var）。", ["own_return", "market_liquidity", "window"],
-          lambda y, m, window=60: _pairwise_rolling(y, m, int(window), max(3, int(window) // 5)))
-_register("ts_industry_liquidity_beta", "收益对行业流动性 Beta（Polars rolling_cov/var）。", ["own_return", "industry_liquidity", "window"],
-          lambda y, m, window=60: _pairwise_rolling(y, m, int(window), max(3, int(window) // 5)))
+def _liquidity_delta(x):
+    """Regress on the *change* in liquidity to match the pandas reference."""
+    return x.with_columns([x[c].diff(1).alias(c) for c in _cols(x)])
+
+
+_register("ts_market_liquidity_beta", "收益对市场流动性变化 Beta（Polars rolling_cov/var）。", ["own_return", "market_liquidity", "window"],
+          lambda y, m, window=60: _pairwise_rolling(y, _liquidity_delta(m), int(window), max(3, int(window) // 5)))
+_register("ts_industry_liquidity_beta", "收益对行业流动性变化 Beta（Polars rolling_cov/var）。", ["own_return", "industry_liquidity", "window"],
+          lambda y, m, window=60: _pairwise_rolling(y, _liquidity_delta(m), int(window), max(3, int(window) // 5)))

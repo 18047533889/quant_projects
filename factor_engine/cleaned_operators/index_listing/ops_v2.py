@@ -80,10 +80,27 @@ _mk(
 
 
 def _reconstitution_churn(member, window=60):
+    """窗口内指数纳入+剔除次数。
+
+    Unknown membership (NaN) must NOT be treated as a non-member: doing so
+    fabricates entry/exit events at the boundary of a data gap.  Only count a
+    transition when both the current and the previous status are known.
+    """
     m = member.copy()
-    m = m.fillna(0)
-    entries = ((m == 1) & (m.shift(1).fillna(0) != 1)).astype(float)
-    exits = ((m != 1) & (m.shift(1).fillna(0) == 1)).astype(float)
+    known = m.notna()
+    # Previous-row known mask: build explicitly to avoid shift+fillna
+    # downcast deprecation.
+    prev_known = pd.DataFrame(False, index=m.index, columns=m.columns)
+    if len(m) > 1:
+        prev_known.iloc[1:] = known.iloc[:-1].to_numpy()
+    prev_known = prev_known.astype(bool)
+    m_cur = m.where(known)
+    m_prev = m.shift(1).where(prev_known)
+    both_known = known & prev_known
+    # Count a transition only when both sides are known; all other positions are
+    # 0 (not NaN) so the rolling sum still aggregates countable transitions.
+    entries = ((m_cur == 1) & (m_prev != 1)).astype(float).where(both_known, 0.0)
+    exits = ((m_cur != 1) & (m_prev == 1)).astype(float).where(both_known, 0.0)
     return entries.rolling(int(window)).sum() + exits.rolling(int(window)).sum()
 
 
@@ -121,8 +138,12 @@ def _listing_age(listing_date, index_dates):
         base = pos.get(first_date)
         if base is None:
             continue
-        out[col] = np.arange(len(out)) - base
-    return out.clip(lower=0)
+        ages = np.arange(len(out), dtype=float) - base
+        # Pre-listing rows are UNKNOWN (the stock does not trade yet), not an
+        # age of zero.  Returning 0 conflates "just listed" with "not listed".
+        ages[ages < 0] = np.nan
+        out[col] = ages
+    return out
 
 
 _mk(
@@ -135,14 +156,40 @@ _mk(
 
 
 def _suspension_frequency(is_suspend, window=60):
-    return is_suspend.fillna(0).rolling(int(window)).mean()
+    """停牌频率：已知状态日中停牌日占比。
+
+    Unknown status (NaN) must not be counted as a normal trading day — doing so
+    turns data gaps into a spurious "rarely suspended" factor.  The denominator
+    is the number of days with a known status; the numerator is the number of
+    those days flagged as suspended.  ``!= 0``（已知且非零）视为停牌，与 Polars
+    后端保持一致（0/1 指标下与 ``== 1`` 等价）。
+    """
+    m = is_suspend.copy()
+    known = m.notna().astype(float)
+    num = ((m != 0) & m.notna()).astype(float).rolling(int(window)).sum()
+    den = known.rolling(int(window)).sum()
+    return (num / den.replace(0, np.nan)).where(den > 0)
+
+
+def _suspension_status_coverage(is_suspend, window=60):
+    """已知状态覆盖率：窗口内非 NaN 状态日占比。"""
+    known = is_suspend.notna().astype(float)
+    return known.rolling(int(window)).mean()
 
 
 _mk(
     "suspension_frequency",
-    "停牌频率：窗口内 IsSuspend=1 占比。",
+    "停牌频率：已知状态日中停牌日占比。",
     ["is_suspend", "window"],
     _suspension_frequency,
+)
+
+
+_mk(
+    "suspension_status_coverage",
+    "停牌状态覆盖率：窗口内已知状态日占比。",
+    ["is_suspend", "window"],
+    _suspension_status_coverage,
 )
 
 

@@ -18,6 +18,7 @@ import numpy as np
 import polars as pl
 
 from cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.fundamental.flow_semantics_v2 import _period_year
 from cleaned_operators.fundamental.transforms_v2 import _period_key
 
 _SKIP = frozenset({"date", "stock_code"})
@@ -882,6 +883,7 @@ def fin_quarter_from_cumulative(x, period_id, fiscal_quarter):
         order: list = []
         visible: OrderedDict = OrderedDict()
         quarters: OrderedDict = OrderedDict()
+        years: OrderedDict = OrderedDict()
         result = np.full(rows, np.nan, dtype=float)
         for t, (value, raw_period, raw_quarter) in enumerate(zip(xv, pv, qv)):
             key = _period_key(raw_period)
@@ -891,6 +893,7 @@ def fin_quarter_from_cumulative(x, period_id, fiscal_quarter):
                     order.append(key)
                 visible[key] = float(value)
                 quarters[key] = quarter
+                years[key] = _period_year(raw_period)
             if key is None or key not in visible or key not in quarters:
                 continue
             current_quarter = quarters[key]
@@ -903,7 +906,18 @@ def fin_quarter_from_cumulative(x, period_id, fiscal_quarter):
             previous_key = order[position - 1]
             previous_quarter = quarters.get(previous_key)
             previous_value = visible.get(previous_key, np.nan)
-            if previous_quarter == current_quarter - 1 and np.isfinite(previous_value):
+            # Same fiscal year guard (mirrors the pandas path).
+            cur_year, prev_year = years.get(key), years.get(previous_key)
+            same_year = (
+                prev_year == cur_year
+                if cur_year is not None and prev_year is not None
+                else True
+            )
+            if (
+                previous_quarter == current_quarter - 1
+                and same_year
+                and np.isfinite(previous_value)
+            ):
                 result[t] = float(visible[key] - previous_value)
         out[:, i] = result
     return _make(x, cols, out)

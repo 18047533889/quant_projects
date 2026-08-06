@@ -440,15 +440,15 @@ class Csc(SeriesOperator):
 # canonical=cube backend=pandas_numpy selected=cube source=math/utility_ops.py
 @register_operator(name="cube", category="math", business_category="elementwise_math", canonical="cube", source="factor_dsl_np")
 class Cube(SeriesOperator):
-    """返回x的立方"""
+    """返回x的立方（已弃用：请使用 power(x, 3)）。保留注册仅为兼容显式引用。"""
     metadata = OperatorMetadata(
         name="cube",
         category="math",
-        description="返回x的立方",
+        description="返回x的立方（deprecated，使用 power(x, 3)）",
         examples=["cube(x)"],
         param_names=["x"],
         return_type="series",
-        tags=["math", "utility"]
+        tags=["math", "utility", "deprecated"]
     )
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:

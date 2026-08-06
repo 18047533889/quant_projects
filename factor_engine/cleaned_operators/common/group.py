@@ -45,22 +45,25 @@ class Deltas(SeriesOperator):
 # canonical=group_decay_linear backend=pandas_numpy selected=group_decay_linear source=cross_sectional/group_ops.py
 @register_operator(name="group_decay_linear", category="cross_sectional", business_category="group_neutralization", canonical="group_decay_linear", source="factor_dsl_np")
 class GroupDecayLinear(SeriesOperator):
-    """在指定分组内进行线性衰减加权，按排名赋予线性递减权重"""
+    """在指定分组内按**排名**赋予线性递减权重（非时间衰减）。
+
+    ``window`` 参数仅为兼容保留、不参与计算；真实时间衰减见
+    ``group_ts_decay_linear``。组内第 j 小值权重 ∝ j。"""
 
     metadata = OperatorMetadata(
         name="group_decay_linear",
         category="cross_sectional",
-        description="在指定分组内进行线性衰减加权，按排名赋予线性递减权重",
+        description="组内按排名线性加权（窗口参数仅为兼容保留；真实时间衰减用 group_ts_decay_linear）",
         examples=[
             "group_decay_linear(ROE, industry_code, 5)",
             "group_decay_linear(returns, get('industry_sw'), 10)"
         ],
         param_names=["x", "group", "window"],
         return_type="series",
-        tags=["cross_sectional", "decay", "linear", "group"]
+        tags=["cross_sectional", "decay", "linear", "group", "rank_weighted"]
     )
 
-    def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, window: int = 5, **kwargs) -> pd.DataFrame:
+    def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, window: int = 5, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
 
         for date in x.index:
@@ -72,6 +75,13 @@ class GroupDecayLinear(SeriesOperator):
                 group_slice = None
 
             if group_slice is None or group_slice.isna().all():
+                # 整列 group 缺失：按 fallback_policy 决定行为。PIT 生产默认 nan
+                # （与 SQL/Polars 路径一致，未知分组不参与计算）。
+                if fallback_policy == "nan":
+                    continue
+                if fallback_policy == "keep_original":
+                    result.loc[date] = x_slice
+                    continue
                 valid_mask = x_slice.notna()
                 if valid_mask.sum() > 0:
                     data = x_slice[valid_mask]
@@ -102,6 +112,73 @@ class GroupDecayLinear(SeriesOperator):
 
 
 
+# canonical=group_ts_decay_linear backend=pandas_numpy selected=group_ts_decay_linear source=cross_sectional/group_ops.py
+@register_operator(name="group_ts_decay_linear", category="cross_sectional", business_category="group_neutralization", canonical="group_ts_decay_linear", source="factor_dsl_np")
+class GroupTSDecayLinear(SeriesOperator):
+    """组内**时间位置**线性衰减加权（真实时间衰减，窗口参数参与计算）。
+
+    每只股票取截至当前行的 trailing ``window`` bar，权重按时间线性衰减
+    （最近 bar 权重最高，w_j = 1..window，缺失值剔除后归一化）。``group``
+    用于 gate:股票当日分组未知 → NaN；``normalize=True`` 时在当日组内做
+    横截面 z-score。整列分组缺失时按 ``fallback_policy``（PIT 默认 nan）。"""
+
+    metadata = OperatorMetadata(
+        name="group_ts_decay_linear",
+        category="cross_sectional",
+        description="组内按时间位置线性衰减加权（真实时间衰减；窗口参与计算）",
+        examples=[
+            "group_ts_decay_linear(close, industry_code, 20)",
+            "group_ts_decay_linear(returns, get('industry_sw'), 10, normalize=True)"
+        ],
+        param_names=["x", "group", "window", "normalize", "fallback_policy"],
+        return_type="series",
+        tags=["cross_sectional", "decay", "linear", "group", "time_decay"]
+    )
+
+    def _calculate_series(
+        self,
+        x: pd.DataFrame,
+        group: pd.DataFrame = None,
+        window: int = 20,
+        normalize: bool = False,
+        fallback_policy: str = "nan",
+        **kwargs,
+    ) -> pd.DataFrame:
+        from cleaned_operators._rolling_fast import rolling_linear_weighted
+
+        w = max(1, int(window))
+        decay = rolling_linear_weighted(x, w).reindex(index=x.index, columns=x.columns)
+        if group is None:
+            # 无分组输入：纯时间衰减，不做任何横截面 gate。
+            return decay
+
+        g = group.reindex(index=x.index, columns=x.columns)
+        result = decay.copy()
+        for date in x.index:
+            group_slice = g.loc[date]
+            if group_slice.isna().all():
+                if fallback_policy == "global":
+                    continue  # 保留纯时间衰减
+                if fallback_policy == "keep_original":
+                    result.loc[date] = x.loc[date]
+                else:  # "nan"（默认）
+                    result.loc[date] = np.nan
+                continue
+            # 单股分组未知 → NaN（unknown_group_policy=nan）
+            result.loc[date, group_slice.isna()] = np.nan
+            if normalize:
+                for group_val in group_slice.dropna().unique():
+                    mask = (group_slice == group_val)
+                    values = result.loc[date, mask]
+                    mu = float(values.mean())
+                    sd = float(values.std(ddof=0))
+                    if sd > 0:
+                        result.loc[date, mask] = (values - mu) / sd
+                    else:
+                        result.loc[date, mask] = np.nan
+        return result
+
+
 # canonical=group_demean backend=pandas_numpy selected=group_demean source=cross_sectional/group_ops.py
 @register_operator(name="group_demean", category="cross_sectional", business_category="group_neutralization", canonical="group_neutralize", source="factor_dsl_np")
 class GroupDemean(SeriesOperator):
@@ -120,13 +197,15 @@ class GroupDemean(SeriesOperator):
         tags=["cross_sectional", "demean", "group", "industry"]
     )
 
-    def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, **kwargs) -> pd.DataFrame:
+    def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
         from cleaned_operators._numpy_kernels import group_demean_panel_
 
         g = None
         if group is not None:
             g = group.reindex(index=x.index, columns=x.columns).to_numpy()
-        out = group_demean_panel_(x.to_numpy(dtype=float, copy=False), g)
+        out = group_demean_panel_(
+            x.to_numpy(dtype=float, copy=False), g, fallback=fallback_policy
+        )
         return pd.DataFrame(out, index=x.index, columns=x.columns)
 
 
@@ -146,7 +225,7 @@ class GroupMean(SeriesOperator):
         tags=["cross_sectional", "mean", "group", "aggregate"]
     )
 
-    def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, **kwargs) -> pd.DataFrame:
+    def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
 
         for date in x.index:
@@ -158,6 +237,12 @@ class GroupMean(SeriesOperator):
                 group_slice = None
 
             if group_slice is None or group_slice.isna().all():
+                if fallback_policy == "nan":
+                    continue
+                if fallback_policy == "keep_original":
+                    result.loc[date] = x_slice
+                    continue
+
                 mean_val = x_slice.mean()
                 result.loc[date] = mean_val
                 continue
@@ -187,12 +272,18 @@ class GroupSum(SeriesOperator):
         tags=["cross_sectional", "sum", "group", "aggregate"],
     )
 
-    def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, **kwargs) -> pd.DataFrame:
+    def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
         for date in x.index:
             x_slice = x.loc[date]
             group_slice = group.loc[date] if group is not None and date in group.index else None
             if group_slice is None or group_slice.isna().all():
+                if fallback_policy == "nan":
+                    continue
+                if fallback_policy == "keep_original":
+                    result.loc[date] = x_slice
+                    continue
+
                 result.loc[date] = x_slice.sum()
                 continue
             for group_val in group_slice.dropna().unique():
@@ -218,12 +309,18 @@ class GroupMin(SeriesOperator):
         tags=["cross_sectional", "min", "group", "aggregate"],
     )
 
-    def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, **kwargs) -> pd.DataFrame:
+    def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
         for date in x.index:
             x_slice = x.loc[date]
             group_slice = group.loc[date] if group is not None and date in group.index else None
             if group_slice is None or group_slice.isna().all():
+                if fallback_policy == "nan":
+                    continue
+                if fallback_policy == "keep_original":
+                    result.loc[date] = x_slice
+                    continue
+
                 result.loc[date] = x_slice.min()
                 continue
             for group_val in group_slice.dropna().unique():
@@ -249,12 +346,18 @@ class GroupMax(SeriesOperator):
         tags=["cross_sectional", "max", "group", "aggregate"],
     )
 
-    def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, **kwargs) -> pd.DataFrame:
+    def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
         for date in x.index:
             x_slice = x.loc[date]
             group_slice = group.loc[date] if group is not None and date in group.index else None
             if group_slice is None or group_slice.isna().all():
+                if fallback_policy == "nan":
+                    continue
+                if fallback_policy == "keep_original":
+                    result.loc[date] = x_slice
+                    continue
+
                 result.loc[date] = x_slice.max()
                 continue
             for group_val in group_slice.dropna().unique():
@@ -280,12 +383,18 @@ class GroupCount(SeriesOperator):
         tags=["cross_sectional", "count", "group", "aggregate"],
     )
 
-    def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, **kwargs) -> pd.DataFrame:
+    def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
         for date in x.index:
             x_slice = x.loc[date]
             group_slice = group.loc[date] if group is not None and date in group.index else None
             if group_slice is None or group_slice.isna().all():
+                if fallback_policy == "nan":
+                    continue
+                if fallback_policy == "keep_original":
+                    result.loc[date] = x_slice
+                    continue
+
                 result.loc[date] = x_slice.notna().sum()
                 continue
             for group_val in group_slice.dropna().unique():
@@ -313,7 +422,7 @@ class GroupNormalize(SeriesOperator):
         tags=["cross_sectional", "normalize", "group", "industry"]
     )
 
-    def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, **kwargs) -> pd.DataFrame:
+    def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
 
         for date in x.index:
@@ -325,6 +434,12 @@ class GroupNormalize(SeriesOperator):
                 group_slice = None
 
             if group_slice is None or group_slice.isna().all():
+                if fallback_policy == "nan":
+                    continue
+                if fallback_policy == "keep_original":
+                    result.loc[date] = x_slice
+                    continue
+
                 valid_mask = x_slice.notna()
                 if valid_mask.sum() > 0:
                     data = x_slice[valid_mask]
@@ -391,6 +506,12 @@ class GroupPercentile(SeriesOperator):
                 group_slice = None
 
             if group_slice is None or group_slice.isna().all():
+                if fallback_policy == "nan":
+                    continue
+                if fallback_policy == "keep_original":
+                    result.loc[date] = x_slice
+                    continue
+
                 # 全截面判断
                 valid_mask = x_slice.notna()
                 if valid_mask.sum() > 0:
@@ -429,7 +550,7 @@ class GroupRank(SeriesOperator):
         tags=["cross_sectional", "rank", "group", "industry"]
     )
 
-    def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, **kwargs) -> pd.DataFrame:
+    def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
         """
         参数:
             x: 待排名的因子值DataFrame (dates x stocks)
@@ -449,6 +570,12 @@ class GroupRank(SeriesOperator):
                 group_slice = None
 
             if group_slice is None or group_slice.isna().all():
+                if fallback_policy == "nan":
+                    continue
+                if fallback_policy == "keep_original":
+                    result.loc[date] = x_slice
+                    continue
+
                 # 如果没有分组信息，进行全截面排名
                 valid_mask = x_slice.notna()
                 if valid_mask.sum() > 0:
@@ -483,7 +610,7 @@ class GroupStd(SeriesOperator):
         tags=["cross_sectional", "std", "group", "aggregate"]
     )
 
-    def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, **kwargs) -> pd.DataFrame:
+    def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
 
         for date in x.index:
@@ -495,6 +622,12 @@ class GroupStd(SeriesOperator):
                 group_slice = None
 
             if group_slice is None or group_slice.isna().all():
+                if fallback_policy == "nan":
+                    continue
+                if fallback_policy == "keep_original":
+                    result.loc[date] = x_slice
+                    continue
+
                 std_val = x_slice.std()
                 result.loc[date] = std_val if not pd.isna(std_val) else 0
                 continue
@@ -541,6 +674,12 @@ class GroupWinsorize(SeriesOperator):
                 group_slice = None
 
             if group_slice is None or group_slice.isna().all():
+                if fallback_policy == "nan":
+                    continue
+                if fallback_policy == "keep_original":
+                    result.loc[date] = x_slice
+                    continue
+
                 valid_mask = x_slice.notna()
                 if valid_mask.sum() > 0:
                     data = x_slice[valid_mask]
@@ -579,7 +718,7 @@ class GroupZScore(SeriesOperator):
         tags=["cross_sectional", "zscore", "group", "industry", "standardize"]
     )
 
-    def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, **kwargs) -> pd.DataFrame:
+    def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
         """
         参数:
             x: 待标准化的因子值DataFrame (dates x stocks)
@@ -598,6 +737,12 @@ class GroupZScore(SeriesOperator):
                 group_slice = None
 
             if group_slice is None or group_slice.isna().all():
+                if fallback_policy == "nan":
+                    continue
+                if fallback_policy == "keep_original":
+                    result.loc[date] = x_slice
+                    continue
+
                 # 全截面标准化
                 valid_mask = x_slice.notna()
                 if valid_mask.sum() > 0:
@@ -762,6 +907,12 @@ class IndustryNeutralize(SeriesOperator):
             x_slice = x.loc[date]
             group_slice = group.loc[date] if date in group.index else None
             if group_slice is None or group_slice.isna().all():
+                if fallback_policy == "nan":
+                    continue
+                if fallback_policy == "keep_original":
+                    result.loc[date] = x_slice
+                    continue
+
                 result.loc[date] = x_slice - x_slice.mean()
                 continue
             for group_val in group_slice.dropna().unique():
@@ -838,3 +989,9 @@ class IndustrySizeNeutralize(SeriesOperator):
             cap.to_numpy(dtype=float, copy=False),
         )
         return pd.DataFrame(out, index=x.index, columns=x.columns)
+
+
+# ``group_rank_linear_weighted_value`` 是 ``group_decay_linear``（组内按排名线性
+# 加权）的诚实名称；``group_ts_decay_linear`` 才是真实时间衰减。
+from cleaned_operators.registry import OperatorRegistry as _group_registry  # noqa: E402
+_group_registry.register_alias("group_rank_linear_weighted_value", "group_decay_linear")

@@ -161,16 +161,24 @@ def cs_resid_(y, x) -> np.ndarray:
     return result
 
 
-def group_demean_panel_(x: np.ndarray, group: np.ndarray | None = None) -> np.ndarray:
-    """Panel group demean: each row ``x - group_mean`` (or full-row mean if group is None).
+def group_demean_panel_(x: np.ndarray, group: np.ndarray | None = None, fallback: str = "nan") -> np.ndarray:
+    """Panel group demean: each row ``x - group_mean``.
 
     ``group`` may be numeric or object/string labels. Output shape matches ``x``.
+    When a row has no usable group labels (``group is None`` or all-NA), the
+    ``fallback`` policy decides: ``"nan"`` (default, PIT-correct — matches the
+    SQL/Polars path, unknown membership never participates), ``"global"``
+    (demean over the full finite row, legacy behavior), ``"keep_original"``.
     """
     xv = np.asarray(x, dtype=float)
     out = np.full(xv.shape, np.nan, dtype=float)
     if xv.ndim != 2:
         raise ValueError("group_demean_panel_ expects a 2D panel")
     if group is None:
+        if fallback == "nan":
+            return out
+        if fallback == "keep_original":
+            return np.where(np.isfinite(xv), xv, np.nan)
         with np.errstate(all="ignore"):
             means = np.nanmean(xv, axis=1, keepdims=True)
         return xv - means
@@ -188,9 +196,13 @@ def group_demean_panel_(x: np.ndarray, group: np.ndarray | None = None) -> np.nd
         g_ok = pd.notna(g)
         valid = finite & g_ok
         if not valid.any():
-            # no usable group labels → demean over the full finite cross-section
-            mu = float(np.nanmean(row))
-            out[i, finite] = row[finite] - mu
+            # no usable group labels → PIT-correct default: leave NaN.  Only the
+            # explicit ``fallback="global"`` policy demeans over the full row.
+            if fallback == "global":
+                mu = float(np.nanmean(row))
+                out[i, finite] = row[finite] - mu
+            elif fallback == "keep_original":
+                out[i, finite] = row[finite]
             continue
         codes = pd.factorize(pd.Series(g[valid]), use_na_sentinel=True)[0]
         ok = codes >= 0

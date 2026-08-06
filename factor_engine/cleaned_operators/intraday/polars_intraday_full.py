@@ -1312,60 +1312,72 @@ _mk("intra_interval_illiquidity", "区间 Amihud 非流动性（Polars）。",
 # ---------------------------------------------------------------------------
 
 def _drawdown_stats(close: pl.DataFrame, kind: str) -> pl.DataFrame:
+    """Drawdown statistics via the running peak (matches the pandas reference).
+
+    ``dd = close / running_peak - 1``; the trough is ``argmin(dd)`` (first
+    occurrence) and the peak is the running peak *at* the trough, i.e. the
+    maximum price seen up to and including the trough.  This is the true max
+    drawdown definition and is robust to a later global high.
+    """
     long = _with_date(_melt(close, "close")).filter(pl.col("close").is_finite())
     long = long.sort(["date", "instrument", "ts"]).with_columns(
-        pl.col("close").cum_count().over(["date", "instrument"]).cast(pl.Float64).alias("pos")
-    )
+        pl.col("close").cum_count().over(["date", "instrument"]).cast(pl.Float64).alias("pos"),
+        pl.col("close").cum_max().over(["date", "instrument"]).alias("run_peak"),
+    ).with_columns((pl.col("close") / pl.col("run_peak") - 1.0).alias("dd"))
     g = long.group_by(["date", "instrument"]).agg(
         pl.len().alias("n"),
-        pl.col("close").max().alias("peak"),
-        pl.col("close").arg_max().alias("peak_pos"),
-    ).with_columns(pl.col("peak_pos").cast(pl.Float64))
-    joined = long.join(g.select(["date", "instrument", "peak", "peak_pos"]), on=["date", "instrument"], how="left")
-    # peak_pos is a 0-based index while ``pos`` is 1-based; pandas slices from peak.
-    joined = joined.with_columns(
-        (pl.col("pos") >= pl.col("peak_pos") + 1.0).alias("after_peak")
-    )
-    g2 = joined.group_by(["date", "instrument"]).agg(
-        pl.len().alias("n"),
-        pl.col("peak").first().alias("peak"),
-        pl.col("peak_pos").first().alias("peak_pos"),
-        pl.when(pl.col("after_peak")).then(pl.col("close")).otherwise(None).min().alias("trough"),
-        pl.when(pl.col("after_peak")).then(pl.col("close")).otherwise(None).arg_min().alias("trough_pos"),
+        pl.col("dd").arg_min().alias("trough_pos"),  # 0-based first minimum
+        pl.col("dd").min().alias("min_dd"),
     ).with_columns(pl.col("trough_pos").cast(pl.Float64))
+    j = long.join(g.select(["date", "instrument", "trough_pos", "n", "min_dd"]), on=["date", "instrument"], how="left")
+    # trough value = close at the trough position (pos == trough_pos + 1)
+    j = j.with_columns((pl.col("pos") == pl.col("trough_pos") + 1.0).alias("is_trough"))
+    trough_val = j.filter(pl.col("is_trough")).select(["date", "instrument", "close"]).rename({"close": "trough"})
+    j = j.join(trough_val, on=["date", "instrument"], how="left")
+    # peak value = running peak at the trough; peak position = first ``pos`` within
+    # [1, trough_pos+1] where close equals that peak (the first time the peak was hit).
+    peak_v = j.filter(pl.col("is_trough")).select(["date", "instrument", "run_peak"]).rename({"run_peak": "peak"})
+    j = j.join(peak_v, on=["date", "instrument"], how="left").with_columns(
+        (pl.col("close") == pl.col("peak")).alias("is_peak")
+    )
+    peak_pos = (
+        j.filter(pl.col("is_peak") & (pl.col("pos") <= pl.col("trough_pos") + 1.0))
+        .group_by(["date", "instrument"])
+        .agg(pl.col("pos").min().alias("peak_pos"))
+    )
+    j = j.join(peak_pos, on=["date", "instrument"], how="left")
     if kind == "depth":
-        out = g2.with_columns(
-            pl.when((pl.col("n") >= 2) & (pl.col("peak") > _EPS) & (pl.col("trough") < pl.col("peak")))
-            .then(pl.col("trough") / pl.col("peak") - 1.0)
-            .otherwise(None)
-            .alias("v")
+        out = j.group_by(["date", "instrument"]).agg(
+            pl.col("n").first().alias("n"),
+            pl.col("peak").first().alias("peak"),
+            pl.col("min_dd").first().alias("min_dd"),
+        ).with_columns(
+            pl.when((pl.col("n") >= 2) & pl.col("peak").is_not_null() & (pl.col("peak") > _EPS))
+            .then(pl.col("min_dd")).otherwise(None).alias("v")
         )
         return _pivot(out, "v")
     if kind == "duration":
-        out = g2.with_columns(
+        out = j.group_by(["date", "instrument"]).agg(
+            pl.col("n").first().alias("n"),
+            pl.col("trough_pos").first().alias("trough_pos"),
+            pl.col("peak_pos").first().alias("peak_pos"),
+        ).with_columns(
             pl.when(pl.col("n") >= 2)
-            .then(pl.when(pl.col("trough_pos") > pl.col("peak_pos")).then(pl.col("trough_pos") - pl.col("peak_pos")).otherwise(0.0))
-            .otherwise(None)
-            .alias("v")
+            .then(pl.when(pl.col("peak_pos").is_not_null()).then(pl.col("trough_pos") - pl.col("peak_pos") + 1.0).otherwise(0.0))
+            .otherwise(None).alias("v")
         )
         return _pivot(out, "v")
-    # recovery half-life
-    joined2 = joined.join(
-        g2.select(["date", "instrument", "peak", "trough", "trough_pos"]), on=["date", "instrument"], how="left"
-    ).with_columns(
-        (pl.col("trough") + 0.5 * (pl.col("peak") - pl.col("trough"))).alias("halfway")
-    )
-    out = joined2.group_by(["date", "instrument"]).agg(
-        pl.len().alias("n"),
-        pl.col("peak").first().alias("peak"),
-        pl.col("trough").first().alias("trough"),
+    # recovery half-life: first pos >= trough_pos + 1 whose close reaches halfway,
+    # expressed as the offset from the trough (matches ``finite[trough_idx:]``).
+    j = j.with_columns((pl.col("trough") + 0.5 * (pl.col("peak") - pl.col("trough"))).alias("halfway"))
+    out = j.group_by(["date", "instrument"]).agg(
+        pl.col("n").first().alias("n"),
         pl.col("trough_pos").first().alias("trough_pos"),
-        pl.when(
-            (pl.col("pos") >= pl.col("trough_pos") + 1.0)
-            & (pl.col("close") >= pl.col("halfway"))
-        ).then(pl.col("pos")).otherwise(None).min().alias("recovered"),
+        pl.col("trough").first().alias("trough"),
+        pl.col("peak").first().alias("peak"),
+        pl.when((pl.col("pos") >= pl.col("trough_pos") + 1.0) & (pl.col("close") >= pl.col("halfway")))
+        .then(pl.col("pos")).otherwise(None).min().alias("recovered"),
     ).with_columns(
-        # pandas slices finite[trough_idx:] and returns the offset from the trough.
         pl.when(
             (pl.col("n") >= 2) & (pl.col("trough") > _EPS) & (pl.col("peak") > pl.col("trough")) & pl.col("recovered").is_not_null()
         ).then(pl.col("recovered") - 1.0 - pl.col("trough_pos")).otherwise(None).alias("v")

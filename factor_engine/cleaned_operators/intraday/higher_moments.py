@@ -277,10 +277,10 @@ def _signed_jump_stats(close_v: np.ndarray, threshold_scale: float) -> tuple[flo
     status="experimental",
 )
 class IntraPositiveJumpVariation(SeriesOperator):
-    """日内正向跳跃平方和（阈值判定）。"""
+    """日内正向尾部收益平方和（阈值判定；非 BNS 跳跃分解，见 tail 别名）。"""
 
     metadata = metadata(
-        "intra_positive_jump_variation", "日内正跳跃方差分量。", ["close", "threshold_scale"], unit="variance"
+        "intra_positive_jump_variation", "日内正尾部收益平方和（阈值判定，非跳跃方差分解）。", ["close", "threshold_scale"], unit="variance"
     )
 
     def _calculate_series(self, close, threshold_scale=3.0, **_):
@@ -302,10 +302,10 @@ class IntraPositiveJumpVariation(SeriesOperator):
     status="experimental",
 )
 class IntraNegativeJumpVariation(SeriesOperator):
-    """日内负向跳跃平方和（阈值判定）。"""
+    """日内负向尾部收益平方和（阈值判定；非 BNS 跳跃分解，见 tail 别名）。"""
 
     metadata = metadata(
-        "intra_negative_jump_variation", "日内负跳跃方差分量。", ["close", "threshold_scale"], unit="variance"
+        "intra_negative_jump_variation", "日内负尾部收益平方和（阈值判定，非跳跃方差分解）。", ["close", "threshold_scale"], unit="variance"
     )
 
     def _calculate_series(self, close, threshold_scale=3.0, **_):
@@ -365,6 +365,84 @@ class IntraJumpCount(SeriesOperator):
 
         def _fn(v, t):
             return _signed_jump_stats(v, ts)[2]
+
+        return daily_agg(close, _fn)
+
+
+# ---------------------------------------------------------------------------
+# Tail-variation aliases.  The ``intra_positive/negative_jump_variation``
+# operators are *threshold-tail* measures (sum of squared returns whose |r|
+# exceeds ``threshold_scale * sqrt(RV/N)``) and are *not* a signed decomposition
+# of ``intra_jump_variation = max(RV - BV, 0)``.  The ``*_tail_variation`` names
+# below carry the honest label; the historic names remain as aliases.
+# ---------------------------------------------------------------------------
+
+def _tail_op(name: str, description: str, unit: str, index: int):
+    @register_operator(
+        name=name,
+        category="intraday_microstructure",
+        business_category="intraday_microstructure",
+        canonical=name,
+        source="intraday.higher_moments",
+        backend="pandas_numpy",
+        status="experimental",
+    )
+    class _TailOp(SeriesOperator):
+        metadata = metadata(name, description, ["close", "threshold_scale"], unit=unit)
+
+        def _calculate_series(self, close, threshold_scale=3.0, **_):
+            ts = float(threshold_scale)
+
+            def _fn(v, t):
+                return _signed_jump_stats(v, ts)[index]
+
+            return daily_agg(close, _fn)
+
+    _CANONICALS.append(name)
+    return _TailOp
+
+
+_tail_op(
+    "intra_positive_tail_variation",
+    "正向尾部收益平方和：|r|>threshold*sqrt(RV/N) 且 r>0。",
+    "variance", 0,
+)
+_tail_op(
+    "intra_negative_tail_variation",
+    "负向尾部收益平方和：|r|>threshold*sqrt(RV/N) 且 r<0。",
+    "variance", 1,
+)
+_tail_op(
+    "intra_tail_event_count",
+    "尾部事件分钟数：|r|>threshold*sqrt(RV/N)。",
+    "count", 2,
+)
+
+
+@register_operator(
+    name="intra_signed_tail_variation_ratio",
+    category="intraday_microstructure",
+    business_category="intraday_microstructure",
+    canonical="intra_signed_tail_variation_ratio",
+    source="intraday.higher_moments",
+    backend="pandas_numpy",
+    status="experimental",
+)
+class IntraSignedTailVariationRatio(SeriesOperator):
+    """有符号尾部比 (pos-neg)/(pos+neg+eps)。"""
+
+    metadata = metadata(
+        "intra_signed_tail_variation_ratio", "有符号尾部比。", ["close", "threshold_scale"], unit="ratio"
+    )
+
+    def _calculate_series(self, close, threshold_scale=3.0, **_):
+        ts = float(threshold_scale)
+
+        def _fn(v, t):
+            pos, neg, *_ = _signed_jump_stats(v, ts)
+            if not np.isfinite(pos) or not np.isfinite(neg):
+                return np.nan
+            return float((pos - neg) / (pos + neg + _EPS))
 
         return daily_agg(close, _fn)
 
@@ -483,6 +561,10 @@ _CANONICALS.extend(
         "intra_jump_count",
         "intra_jump_concentration",
         "intra_jump_first_time",
+        "intra_positive_tail_variation",
+        "intra_negative_tail_variation",
+        "intra_tail_event_count",
+        "intra_signed_tail_variation_ratio",
         "intra_jump_last_time",
         "intra_jump_clustering",
     ]

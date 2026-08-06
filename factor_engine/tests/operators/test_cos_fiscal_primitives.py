@@ -77,7 +77,7 @@ def test_new_polars_backends_are_real_registrations():
     for name in ("fundamental_staleness", "revision_delta", "period_stability", "cs_weighted_mean", "cs_weighted_zscore", "group_weighted_mean", "ts_topk_mean", "ts_bottomk_std", "safe_div_null"):
         assert "pandas_numpy" in OperatorRegistry.backends_for(name)
         if "polars" not in OperatorRegistry.backends_for(name):
-            assert classify_canonical(name) == "extended"
+            assert classify_canonical(name) in {"daily", "extended"}
             continue
         source = OperatorRegistry.catalog()[name]["backend_meta"]["polars"]["source"]
         assert "bridge" not in source.lower() and source != "daily_panel_polars"

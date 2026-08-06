@@ -63,8 +63,12 @@ def _safe_div(num: pl.Expr, den: pl.Expr) -> pl.Expr:
 
 
 def _pct_change(col: pl.Expr) -> pl.Expr:
-    """pandas Series.pct_change with default fill_method='pad'."""
-    return col.fill_nan(None).fill_null(strategy="forward").pct_change()
+    """pandas Series.pct_change with fill_method=None (no forward fill).
+
+    pandas >= 2.x defaults ``pct_change(fill_method=None)``; mirror that exactly
+    instead of the removed forward-fill default.
+    """
+    return col.fill_nan(None).pct_change()
 
 
 def _ewm_span(col: pl.Expr, span: int) -> pl.Expr:

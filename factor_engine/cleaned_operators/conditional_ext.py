@@ -184,13 +184,22 @@ def _pair_condition_rolling(
                     cov = float(np.mean((xs - np.mean(xs)) * (ys - np.mean(ys))))
                     out[row, col] = cov / var_x
             elif kind == "resid":
-                if np.std(xs) > 0 and xs.size >= 2:
-                    coeffs = np.polyfit(xs, ys, 1)
-                    # 当前样本残差：仅当当前 condition 为真时输出
-                    x_cur = x[row, col]
-                    y_cur = y[row, col]
-                    if m_chunk[-1] and np.isfinite(x_cur) and np.isfinite(y_cur):
-                        out[row, col] = float(y_cur - np.polyval(coeffs, x_cur))
+                # 当前样本的 out-of-sample 残差：拟合只用当前行之前的
+                # condition 有效样本（剔除当前行），再对当前行求残差。
+                # 把当前行放进拟合会得到样本内（自拟合）残差，污染因子。
+                x_fit = x_chunk[:-1][m_chunk[:-1]]
+                y_fit = y_chunk[:-1][m_chunk[:-1]]
+                x_cur = x[row, col]
+                y_cur = y[row, col]
+                if (
+                    m_chunk[-1]
+                    and np.isfinite(x_cur)
+                    and np.isfinite(y_cur)
+                    and x_fit.size >= 2
+                    and np.std(x_fit) > 0
+                ):
+                    coeffs = np.polyfit(x_fit, y_fit, 1)
+                    out[row, col] = float(y_cur - np.polyval(coeffs, x_cur))
     return out
 
 

@@ -15,3 +15,12 @@ class OperatorShapeError(OperatorExecutionError, ValueError):
 
 class OperatorDomainError(OperatorExecutionError, ValueError):
     """Operator input is outside its mathematical domain."""
+
+
+class FutureReferenceError(OperatorParameterError):
+    """A parameter (e.g. a negative lag) would reference future data.
+
+    Negative lags must be rejected at validation time instead of silently
+    returning an all-NaN panel, which turns an illegal formula into a factor
+    that only happens to have zero backtest coverage.
+    """

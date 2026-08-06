@@ -241,7 +241,10 @@ def fin_zscore_history(x, period_id, periods=8):
         if len(vals) != n:
             return np.nan
         sd = float(np.std(vals, ddof=1))
-        return (float(vals[-1]) - float(np.mean(vals))) / sd if sd > _EPS else 0.0
+        # Zero variance -> the z-score is undefined; 0 would masquerade as
+        # "exactly at the historical mean".  Return NaN and let a dedicated
+        # constant-flag operator surface the degenerate case.
+        return (float(vals[-1]) - float(np.mean(vals))) / sd if sd > _EPS else np.nan
     return _walk_periods(x, period_id, calc)
 
 
@@ -273,7 +276,9 @@ def _trend_stat(x, period_id, periods, which: str):
         resid = y-fitted
         ss_res = float(np.sum(resid**2)); ss_tot=float(np.sum((y-yb)**2))
         if which == "r2":
-            return 1.0-ss_res/ss_tot if ss_tot > _EPS else 1.0
+            # Constant series has no identifiable trend; a perfect "fit" of 1.0
+            # would be meaningless, so return NaN instead.
+            return 1.0 - ss_res / ss_tot if ss_tot > _EPS else np.nan
         if n <= 2:
             return np.nan
         mse = ss_res/(n-2)

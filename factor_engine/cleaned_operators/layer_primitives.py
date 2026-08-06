@@ -257,6 +257,9 @@ def _rank_gaussian_array(values: np.ndarray, method: str) -> np.ndarray:
             probability = ranks / (n + 1.0)
         else:
             raise ValueError("method must be 'blom' or 'van_der_waerden'")
+        # 显式 clamp 到 (0,1) 内点，防止逆正态 CDF 因浮点边界产生 ±Inf。
+        eps = 1e-12
+        probability = np.clip(probability, eps, 1.0 - eps)
         out[row, valid] = np.array([normal.inv_cdf(float(p)) for p in probability])
     return out
 

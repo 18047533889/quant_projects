@@ -50,7 +50,9 @@ def ts_regression_compat(
 
     lag_i = 0 if lag is None else int(lag)
     if lag_i < 0:
-        return pd.DataFrame(np.nan, index=y.index, columns=y.columns, dtype=float)
+        from backend.operator_errors import FutureReferenceError
+
+        raise FutureReferenceError(f"ts_regression_compat: negative lag {lag_i} references future data")
     if lag_i:
         x = x.shift(lag_i)
 

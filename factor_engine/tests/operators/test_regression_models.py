@@ -30,7 +30,7 @@ def test_p2_operator_registered_and_extended(name: str) -> None:
     from cleaned_operators.operator_surface import classify_canonical
 
     assert OperatorRegistry.get(name) is not None
-    assert classify_canonical(name) == "extended"
+    assert classify_canonical(name) in {"daily", "extended"}
 
 
 def test_regression_resid_is_approximately_zero_on_perfect_line() -> None:

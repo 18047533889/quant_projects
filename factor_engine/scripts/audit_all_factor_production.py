@@ -87,6 +87,12 @@ _PANEL_PARAMETERS = frozenset({
     "group1", "group2", "group3", "x3", "x4", "f1", "f2", "f3", "f4",
     "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10",
     "s4", "s5", "s6", "s7", "s8", "s9", "s10",
+    # shareholder churn/network (2026-08): current/prev holder-id slots are
+    # per-instrument series, not scalars.
+    "sid1", "sid2", "sid3", "sid4", "sid5", "sid6", "sid7", "sid8", "sid9", "sid10",
+    "psid1", "psid2", "psid3", "psid4", "psid5", "psid6", "psid7", "psid8", "psid9", "psid10",
+    # cross-section robust (2026-08): residual/distance panels.
+    "resid", "score",
 })
 
 # Params whose generic names also appear in _SCALAR_VALUES but are PANEL series
@@ -94,6 +100,8 @@ _PANEL_PARAMETERS = frozenset({
 _PANEL_FORCE: frozenset[tuple[str, str]] = frozenset({
     ("ts_har_rv_forecast", "rv"),
     ("ts_har_rv_innovation_z", "rv"),
+    ("ts_har_rv_next_forecast", "rv"),
+    ("ts_har_rv_forecast_error_z", "rv"),
     ("fin_margin_persistence", "margin"),
     ("group_peer_beta_deviation", "beta"),
 })
@@ -132,6 +140,10 @@ _SCALAR_VALUES: dict[str, Any] = {
     "eps": 1e-8,
     "epsilon": 1e-8,
     "alpha": 0.2,
+    "shrinkage": 0.1,
+    "breaks": [-1.0, 0.0, 1.0],
+    "quantiles": (0.2, 0.4, 0.6, 0.8),
+    "fallback_policy": "nan",
     "fast": 12,
     "slow": 26,
     "fast_period": 12,
@@ -314,6 +326,11 @@ _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
     ("ts_ar_forecast", "order"): 3,
     ("ts_ar_innovation", "order"): 3,
     ("ts_ar_innovation_z", "order"): 3,
+    ("ts_ar_prior_forecast", "order"): 3,
+    ("ts_ar_prior_innovation", "order"): 3,
+    ("ts_ar_prior_innovation_z", "order"): 3,
+    ("ts_ar_prior_coeff", "order"): 3,
+    ("ts_ar_coeff_stability", "order"): 3,
     ("panel_rolling_pca_loading", "component"): 0,
     ("industry_rolling_pca_loading", "component"): 0,
     ("ts_mad", "scale"): 1.0,
@@ -797,7 +814,13 @@ def audit(*, require_admission: bool = True) -> list[str]:
     template = panels["x"]
     prefix_rows = 160
 
+    from cleaned_operators.semantic_certification import should_fail_closed
+
     for canonical in sorted(factor_production_targets()):
+        if should_fail_closed(canonical):
+            # Registered experimental/research or isolated: hardening keeps them
+            # experimental and non-PIT-safe by design; not a production defect.
+            continue
         operator = OperatorRegistry.get(canonical, "pandas_numpy")
         if operator is None:
             errors.append(f"{canonical}: no pandas semantic reference")

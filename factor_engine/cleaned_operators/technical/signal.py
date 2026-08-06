@@ -964,7 +964,7 @@ class VPWeightedPrice(SeriesOperator):
             price_range = open_ - close
             ri = price_range.abs() / amplitude.replace(0, np.nan)
         else:
-            ret = close.pct_change().fillna(0)
+            ret = close.pct_change(fill_method=None).fillna(0)
             ri = (ret > 0).astype(float) * 0.7 + (ret < 0).astype(float) * 0.3
         
         ri = ri.fillna(0.5)
@@ -1018,7 +1018,7 @@ class VPMACD(SeriesOperator):
             price_range = open_ - close
             ri = price_range.abs() / amplitude.replace(0, np.nan)
         else:
-            ret = close.pct_change().fillna(0)
+            ret = close.pct_change(fill_method=None).fillna(0)
             ri = (ret > 0).astype(float) * 0.7 + (ret < 0).astype(float) * 0.3
         
         ri = ri.fillna(0.5)
@@ -1080,7 +1080,7 @@ class VPMACDSignal(SeriesOperator):
             price_range = open_ - close
             ri = price_range.abs() / amplitude.replace(0, np.nan)
         else:
-            ret = close.pct_change().fillna(0)
+            ret = close.pct_change(fill_method=None).fillna(0)
             ri = (ret > 0).astype(float) * 0.7 + (ret < 0).astype(float) * 0.3
         
         ri = ri.fillna(0.5)

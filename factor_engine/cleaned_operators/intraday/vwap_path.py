@@ -47,12 +47,29 @@ def _path_slope(cum_vwap: np.ndarray, degree: int, coeff_idx: int) -> float:
     return float(beta[coeff_idx])
 
 
+def _vwap_valid(close_v, amt_v, vol_v) -> np.ndarray:
+    """Common finite mask so price, amount and volume stay aligned.
+
+    The previous code dropped NaN prices but left amount/volume unfiltered and
+    then truncated by length, which could pair a price minute with the wrong
+    amount/volume minute.  All three series must be indexed by the same mask.
+    """
+    return (
+        np.isfinite(close_v)
+        & np.isfinite(amt_v)
+        & np.isfinite(vol_v)
+        & (vol_v > 0)
+    )
+
+
 def _vwap_path_common(close_v, amt_v, vol_v, degree: int, coeff_idx: int) -> float:
-    c = close_v[np.isfinite(close_v)]
-    if len(c) < 2:
+    valid = _vwap_valid(close_v, amt_v, vol_v)
+    if valid.sum() < 2:
         return np.nan
-    cv = _cum_vwap(c, amt_v, vol_v)
-    cv = cv[: len(c)]
+    c = close_v[valid]
+    amt = amt_v[valid]
+    vol = vol_v[valid]
+    cv = _cum_vwap(c, amt, vol)
     return _path_slope(cv, degree, coeff_idx)
 
 
@@ -96,16 +113,72 @@ class IntraVwapPathCurvature(SeriesOperator):
         return daily_agg_three(close, amount, volume, lambda a, b, c: _vwap_path_common(a, b, c, 2, 2))
 
 
+def _vwap_path_pct_common(close_v, amt_v, vol_v, degree: int, coeff_idx: int) -> float:
+    """Fit the cum-VWAP path *relative to the first valid price*.
+
+    ``cum_vwap / first_price - 1`` removes the price level, so the fitted slope
+    / curvature is comparable across a 100-yuan and a 5-yuan stock (the raw
+    variants report absolute price units and are not cross-sectionally
+    comparable).
+    """
+    valid = _vwap_valid(close_v, amt_v, vol_v)
+    if valid.sum() < 2:
+        return np.nan
+    c = close_v[valid]
+    first = float(c[0])
+    if not np.isfinite(first) or first <= _EPS:
+        return np.nan
+    cv = _cum_vwap(c, amt_v[valid], vol_v[valid])
+    pct = cv / first - 1.0
+    return _path_slope(pct, degree, coeff_idx)
+
+
+@register_operator(
+    name="intra_vwap_path_slope_pct",
+    category="intraday_microstructure",
+    business_category="intraday_microstructure",
+    canonical="intra_vwap_path_slope_pct",
+    source="intraday.vwap_path",
+    backend="pandas_numpy",
+    status="experimental",
+)
+class IntraVwapPathSlopePct(SeriesOperator):
+    """累计 VWAP 相对首价路径斜率（尺度无关）。"""
+
+    metadata = metadata("intra_vwap_path_slope_pct", "VWAP 路径斜率（%首价）。", ["close", "amount", "volume"], unit="ratio")
+
+    def _calculate_series(self, close, amount, volume, **_):
+        return daily_agg_three(close, amount, volume, lambda a, b, c: _vwap_path_pct_common(a, b, c, 1, 1))
+
+
+@register_operator(
+    name="intra_vwap_path_curvature_pct",
+    category="intraday_microstructure",
+    business_category="intraday_microstructure",
+    canonical="intra_vwap_path_curvature_pct",
+    source="intraday.vwap_path",
+    backend="pandas_numpy",
+    status="experimental",
+)
+class IntraVwapPathCurvaturePct(SeriesOperator):
+    """累计 VWAP 相对首价路径曲率（尺度无关）。"""
+
+    metadata = metadata("intra_vwap_path_curvature_pct", "VWAP 路径曲率（%首价）。", ["close", "amount", "volume"], unit="ratio")
+
+    def _calculate_series(self, close, amount, volume, **_):
+        return daily_agg_three(close, amount, volume, lambda a, b, c: _vwap_path_pct_common(a, b, c, 2, 2))
+
+
 def _vwap_excursion(close_v, amt_v, vol_v, side: str) -> float:
-    c = close_v[np.isfinite(close_v)]
-    if len(c) < 2:
+    valid = _vwap_valid(close_v, amt_v, vol_v)
+    if valid.sum() < 2:
         return np.nan
-    cv = _cum_vwap(c, amt_v, vol_v)
-    cv = cv[: len(c)]
-    valid = np.isfinite(cv) & (cv > _EPS)
-    if valid.sum() == 0:
+    c = close_v[valid]
+    cv = _cum_vwap(c, amt_v[valid], vol_v[valid])
+    ok = np.isfinite(cv) & (cv > _EPS)
+    if ok.sum() == 0:
         return np.nan
-    dev = c[valid] / cv[valid] - 1.0
+    dev = c[ok] / cv[ok] - 1.0
     return float(np.max(dev)) if side == "max" else float(np.min(dev))
 
 
@@ -150,14 +223,15 @@ class IntraPriceVwapMaxNegativeExcursion(SeriesOperator):
 
 
 def _time_above_vwap(close_v, amt_v, vol_v) -> float:
-    c = close_v[np.isfinite(close_v)]
-    if len(c) < 2:
+    valid = _vwap_valid(close_v, amt_v, vol_v)
+    if valid.sum() < 2:
         return np.nan
-    cv = _cum_vwap(c, amt_v, vol_v)[: len(c)]
-    valid = np.isfinite(cv)
-    if valid.sum() == 0:
+    c = close_v[valid]
+    cv = _cum_vwap(c, amt_v[valid], vol_v[valid])
+    ok = np.isfinite(cv)
+    if ok.sum() == 0:
         return np.nan
-    return float(np.mean(c[valid] > cv[valid]))
+    return float(np.mean(c[ok] > cv[ok]))
 
 
 @register_operator(
@@ -179,14 +253,15 @@ class IntraTimeAboveVwap(SeriesOperator):
 
 
 def _longest_streak(close_v, amt_v, vol_v, side: str) -> float:
-    c = close_v[np.isfinite(close_v)]
-    if len(c) < 2:
+    valid = _vwap_valid(close_v, amt_v, vol_v)
+    if valid.sum() < 2:
         return np.nan
-    cv = _cum_vwap(c, amt_v, vol_v)[: len(c)]
-    valid = np.isfinite(cv)
-    if valid.sum() == 0:
+    c = close_v[valid]
+    cv = _cum_vwap(c, amt_v[valid], vol_v[valid])
+    ok = np.isfinite(cv)
+    if ok.sum() == 0:
         return np.nan
-    above = c[valid] > cv[valid]
+    above = c[ok] > cv[ok]
     if side == "below":
         above = ~above
     best = cur = 0
@@ -237,13 +312,15 @@ class IntraLongestBelowVwapStreak(SeriesOperator):
 
 
 def _vwap_reversion_speed(close_v, amt_v, vol_v) -> float:
-    c = close_v[np.isfinite(close_v)]
-    if len(c) < 5:
+    valid = _vwap_valid(close_v, amt_v, vol_v)
+    if valid.sum() < 5:
         return np.nan
-    cv = _cum_vwap(c, amt_v, vol_v)[: len(c)]
-    valid = np.isfinite(cv)
-    d = (c[valid] / cv[valid] - 1.0)[1:]
-    dprev = (c[valid] / cv[valid] - 1.0)[:-1]
+    c = close_v[valid]
+    cv = _cum_vwap(c, amt_v[valid], vol_v[valid])
+    ok = np.isfinite(cv)
+    dev = (c[ok] / cv[ok] - 1.0)
+    d = dev[1:]
+    dprev = dev[:-1]
     if len(d) < 3 or np.std(dprev) <= _EPS:
         return np.nan
     b = float(np.cov(d, dprev)[0, 1] / np.var(dprev))
@@ -320,36 +397,48 @@ class IntraMaxDrawup(SeriesOperator):
         return daily_agg(close, lambda v, t: _max_drawdown(v, "up"))
 
 
+def _drawdown_locate(finite: np.ndarray) -> tuple[int, int]:
+    """Locate (trough_idx, peak_idx) of the *true* max drawdown.
+
+    The correct definition uses the running peak: ``dd_t = price_t / running_peak_t - 1``,
+    the trough is ``argmin(dd)``, and the peak is the running peak at that trough
+    (the maximum price seen up to and including the trough).  The previous code
+    took the global maximum first and then the minimum *after* it, which misses
+    drawdowns whose peak precedes a later global high (e.g. prices
+    ``[5, 10, 6, 11]``: the real max drawdown 10 -> 6 is invisible to a
+    global-peak search whose peak is the final 11).
+    """
+    running = np.maximum.accumulate(finite)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        dd = finite / running - 1.0
+    trough_idx = int(np.argmin(dd))
+    peak_idx = int(np.argmax(finite[: trough_idx + 1]))
+    return trough_idx, peak_idx
+
+
 def _drawdown_depth(close_v: np.ndarray) -> float:
     finite = close_v[np.isfinite(close_v)]
     if len(finite) < 2:
         return np.nan
-    peak_idx = int(np.argmax(finite))
-    trough_idx = int(np.argmin(finite[peak_idx:]) + peak_idx)
-    if peak_idx == trough_idx or finite[peak_idx] <= _EPS:
+    trough_idx, peak_idx = _drawdown_locate(finite)
+    if finite[peak_idx] <= _EPS:
         return np.nan
     return float(finite[trough_idx] / finite[peak_idx] - 1.0)
 
 
 def _drawdown_duration(close_v: np.ndarray) -> float:
     finite = close_v[np.isfinite(close_v)]
-    n = len(finite)
-    if n < 2:
+    if len(finite) < 2:
         return np.nan
-    peak_idx = int(np.argmax(finite))
-    trough_idx = int(np.argmin(finite[peak_idx:]) + peak_idx)
-    if peak_idx == trough_idx:
-        return 0.0
+    trough_idx, peak_idx = _drawdown_locate(finite)
     return float(trough_idx - peak_idx)
 
 
 def _drawdown_recovery_half_life(close_v: np.ndarray) -> float:
     finite = close_v[np.isfinite(close_v)]
-    n = len(finite)
-    if n < 2:
+    if len(finite) < 2:
         return np.nan
-    peak_idx = int(np.argmax(finite))
-    trough_idx = int(np.argmin(finite[peak_idx:]) + peak_idx)
+    trough_idx, peak_idx = _drawdown_locate(finite)
     peak, trough = finite[peak_idx], finite[trough_idx]
     if trough <= _EPS or peak <= trough:
         return np.nan
@@ -418,6 +507,8 @@ _CANONICALS.extend(
     [
         "intra_vwap_path_slope",
         "intra_vwap_path_curvature",
+        "intra_vwap_path_slope_pct",
+        "intra_vwap_path_curvature_pct",
         "intra_price_vwap_max_positive_excursion",
         "intra_price_vwap_max_negative_excursion",
         "intra_time_above_vwap",

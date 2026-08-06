@@ -230,29 +230,51 @@ class EventDecayAsOf(SeriesOperator):
 
     metadata = _metadata(
         "event_decay_asof",
-        "sum_{s<=t} event_s * 0.5^((t-s)/half_life)。",
-        ["event", "half_life"],
+        "sum_{s<=t} event_s * 0.5^((t-s)/half_life)。首次有效观测前输出 NaN；缺失按 missing_policy。",
+        ["event", "half_life", "missing_policy"],
         domain="event",
         unit="level",
     )
 
-    def _calculate_series(self, event: pd.DataFrame, half_life: float = 20.0, **_: Any) -> pd.DataFrame:
+    def _calculate_series(
+        self,
+        event: pd.DataFrame,
+        half_life: float = 20.0,
+        missing_policy: str = "carry",
+        **_: Any,
+    ) -> pd.DataFrame:
         hl = float(half_life)
         if hl < 1.0:
             raise ValueError("half_life must be >= 1")
+        if missing_policy not in {"carry", "break"}:
+            raise ValueError("missing_policy must be 'carry' or 'break'")
         weight = 0.5 ** (1.0 / hl)
         arr = event.to_numpy(dtype=float)
-        # 保留事件符号与幅度；缺失视为 0（不贡献衰减）。
-        arr = np.where(np.isfinite(arr), arr, 0.0)
         out = np.full(arr.shape, np.nan)
         for col in range(arr.shape[1]):
             series = arr[:, col]
             if len(series) == 0:
                 continue
             acc = 0.0
+            seen = False
             row = np.empty(len(series), dtype=float)
             for i, value in enumerate(series):
-                acc = acc * weight + value
+                finite = bool(np.isfinite(value))
+                if finite:
+                    seen = True
+                    acc = acc * weight + value
+                elif not seen:
+                    # 首次有效观测之前：NaN，而不是 0。
+                    row[i] = np.nan
+                    continue
+                elif missing_policy == "break":
+                    # 缺失打断衰减序列：输出 NaN 并重置，直到下一次有效事件重启。
+                    row[i] = np.nan
+                    seen = False
+                    acc = 0.0
+                    continue
+                else:  # "carry"（默认）：有历史观测时缺失不贡献、仅按半衰期衰减
+                    acc = acc * weight
                 row[i] = acc
             out[:, col] = row
         return _frame_like(event, out)
