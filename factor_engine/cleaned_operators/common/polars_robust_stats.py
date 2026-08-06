@@ -467,12 +467,23 @@ def _pair_condition(x, y, condition, window, min_periods, kind):
                     cov = float(np.mean((xs - np.mean(xs)) * (ys - np.mean(ys))))
                     out[t, i] = cov / var_x
             elif kind == "resid":
-                if np.std(xs) > 0 and xs.size >= 2:
-                    coeffs = np.polyfit(xs, ys, 1)
-                    x_cur = xv[t]
-                    y_cur = yv[t]
-                    if bool(mask[t]) and np.isfinite(x_cur) and np.isfinite(y_cur):
-                        out[t, i] = float(y_cur - np.polyval(coeffs, x_cur))
+                # Out-of-sample residual: fit on condition-valid samples strictly
+                # BEFORE the current row, then evaluate the current row against
+                # that fit.  Including the current row would be an in-sample
+                # (self-fit) residual and breaks pandas parity.
+                x_fit = xv[start:t][mask[start:t]]
+                y_fit = yv[start:t][mask[start:t]]
+                x_cur = xv[t]
+                y_cur = yv[t]
+                if (
+                    bool(mask[t])
+                    and np.isfinite(x_cur)
+                    and np.isfinite(y_cur)
+                    and x_fit.size >= 2
+                    and np.std(x_fit) > 0
+                ):
+                    coeffs = np.polyfit(x_fit, y_fit, 1)
+                    out[t, i] = float(y_cur - np.polyval(coeffs, x_cur))
     return _make(y if kind in ("beta", "resid") else x, cols, out)
 
 

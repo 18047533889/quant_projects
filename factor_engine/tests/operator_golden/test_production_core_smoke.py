@@ -25,6 +25,15 @@ _SKIP_SMOKE: frozenset[str] = frozenset(
         "group_mean",
         "group_zscore",
         "group_neutralize",
+        # Two-input group aggregators (x, group): unary smoke cannot exercise
+        # them; they are covered by the group parity/golden suites instead.
+        "group_count",
+        "group_max",
+        "group_min",
+        "group_std",
+        "group_sum",
+        "group_normalize",
+        "group_winsorize",
         "where",
         "coalesce",
         "protected_div",

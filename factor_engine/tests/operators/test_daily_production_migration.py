@@ -194,16 +194,20 @@ def test_migrated_factor_ops_classify_daily() -> None:
         "ts_argmax", "ts_argmin", "ts_regression_forecast_error", "ts_time_slope",
         "cs_bucket", "cs_bucket_fixed", "fin_yoy", "fin_ttm_quarterly",
         "group_ts_decay_linear", "cdl_doji", "pattern_double_top", "amihud_illiquidity",
+        # second-round promotion: experimental factor operators now daily
+        "cs_robust_resid", "ts_transition_count", "suspension_frequency",
+        "listing_age", "index_reconstitution_churn", "intra_realized_variance",
     ):
         assert S.classify_canonical(name) == "daily", name
 
 
 def test_excluded_ops_stay_extended() -> None:
+    # 递归/状态族（需分段运行时）、promoted-research（待认证）、隔离缺陷算子。
     for name in (
         "KAMA", "Supertrend", "PSAR", "ts_ema", "RSI_WILDER", "MACD_line",
         "trade_when", "hump_decay", "expanding_rank", "ts_sma_cn",
         "rolling_beta_to_market", "group_decay_linear", "rank_corr",
-        "cs_robust_resid", "ts_transition_count", "fin_ttm",
+        "fin_ttm", "relation_distinct_count", "holder_weighted_churn",
     ):
         assert S.classify_canonical(name) != "daily", name
 

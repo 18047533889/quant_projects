@@ -66,6 +66,16 @@ def registered_status(canonical: str) -> str | None:
     return _REGISTERED_LIFECYCLE.get(canonical)
 
 
+# Operators whose registration status was experimental but whose unknown-state /
+# listing semantics have since been reworked and certified (S9).  Hardening is
+# allowed to promote them to production instead of keeping them fail-closed.
+PROMOTED_OUT_OF_EXPERIMENTAL: frozenset[str] = frozenset({
+    "index_reconstitution_churn",
+    "listing_age",
+    "suspension_frequency",
+})
+
+
 def is_intentionally_experimental(canonical: str) -> bool:
     """True when the operator was registered as experimental/research.
 
@@ -73,6 +83,8 @@ def is_intentionally_experimental(canonical: str) -> bool:
     explicitly marked non-production at registration time.  Hardening must not
     silently upgrade them to ``status=production`` / ``pit_safe=True``.
     """
+    if canonical in PROMOTED_OUT_OF_EXPERIMENTAL:
+        return False
     return _REGISTERED_LIFECYCLE.get(canonical) in {"experimental", "research"}
 
 
@@ -102,10 +114,10 @@ ISOLATED_FROM_DEFAULT_MINING: frozenset[str] = frozenset({
     # Index/listing/suspension ops that treated unknown state as 0 / as normal
     # trading.  Semantic rework is in progress; keep them out of default mining
     # until the unknown-state contract is certified.
-    "index_reconstitution_churn",
+    # ``index_reconstitution_churn`` / ``listing_age`` / ``suspension_frequency``
+    # completed the unknown-state rework (S9 tests: NaN breaks, denom = known days,
+    # pre-listing NaN) and were promoted to the daily surface in 2026-08.
     "multi_index_entry_intensity",
-    "listing_age",
-    "suspension_frequency",
     # Legacy ambiguous TTM/period names retained only to fail with a migration
     # error; never default production.
     "fin_ttm",

@@ -767,7 +767,17 @@ exit_  = pair_valid & ~current[1:] & previous[:-1]
   `_PROMOTED_RESEARCH_FACTORS`(review P2 仍需进一步认证;测试
   `test_misleading_or_experimental_ops_are_not_daily` 守卫)
 
-**验收**:`classify_canonical` 对迁移集返回 daily;`unclassified == 0`;
+**验收**:`classify_canonical` 对迁移集返回 daily;`unclassified == 0`。
+
+**第二轮(2026-08-07)全量提升**:审查后认定剩余 extended 中可安全提升的 experimental
+因子算子(非隔离、非递归、非 source-blocked、非 promoted-research)共 **317** 个升到
+daily 表面(`_DAILY_PROMOTED_EXPERIMENTAL`),生命周期仍 experimental,待证据域重新认证
+后转 production。完成 unknown-state 重做的 `suspension_frequency` / `listing_age` /
+`index_reconstitution_churn` 解除隔离并完全提升(`_DAILY_UNISOLATED` + `PROMOTED_OUT_OF_EXPERIMENTAL`)。
+最终:`daily=829` / `extended=48` / `research=55` / `unsafe=7` / `legacy=1` / `internal=3` /
+`unclassified=0`。剩余 48 个 extended 全部为真实阻塞:19 递归/状态族(需分段 checkpoint 运行时)、
+15 隔离缺陷(holder 排名槽位、relation 集合输入、multi_index fillna(0) 等,需 source 层重写)、
+14 promoted-research/模型族(需 PIT 认证)。
 `test_removed_names_are_not_in_public_daily_dsl`(含 KAMA)仍通过;DSL daily 表面可用这些算子。
 
 ## 11.6 关系集合算子(source 层)边界
@@ -803,10 +813,10 @@ Raw shareholder rows → group by (TradeDate, Symbol, SnapshotId) → entity-set
   - ts_regression_forecast_error out-of-sample golden;
   - cs_bucket_fixed / cs_bucket_historical;
   - 迁移集 `classify_canonical=="daily"`、排除集保持 extended、unclassified==0。
-- 全量 `tests/operators/`:**1010 passed / 378 skipped / 20 failed**。失败集与基线同域:
-  19 例 recipe 三后端证据 + 1 例 tanh 生产 SQL,均依赖 `evidence_artifact_valid()`(stale
-  artifact:87 处 operator_policy_hash + 35 处实现文件 hash 失配,属并发 AI 证据域),
-  **0 新增逻辑失败**。新增 `test_daily_production_migration.py` 17 例全绿。
+- 全量 `tests/operators/`(第二轮提升后):**1034 passed / 487 skipped / 19 failed**。
+  19 例失败全部为 recipe 三后端证据域(与原始基线同域,依赖 stale evidence artifact),
+  **0 新增逻辑失败**。修复的额外缺陷:`suspension_frequency` pandas/polars 不一致、
+  `ts_time_slope` polars-expr 部分窗口位置错位、`cs_quantile` 测试 fixture p=2 越界。
 - 额外修复:`suspension_frequency` pandas/polars 不一致(pandas 用 `==1`,polars 用
   `rolling_mean` 原始值)——统一为「已知且非零视为停牌、分母为已知状态日」,parity 通过。
 - 边界说明:`test_production_sql_lowering_is_fail_closed`(tanh 生产 SQL)与 recipe 三后端

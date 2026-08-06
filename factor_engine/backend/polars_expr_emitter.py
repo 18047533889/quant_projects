@@ -413,26 +413,29 @@ def _rolling_mean_abs_dev_expr(w: int) -> pl.Expr:
     return pl.col(_VAL).rolling_map(_fn, window_size=w, min_samples=1).over(_INST, order_by=_TS)
 
 
-def _rolling_time_slope_expr(w: int) -> pl.Expr:
-    """构造窗口内时间序列线性回归斜率 expr（x 为等距时间索引）。"""
-    t = np.arange(w, dtype=np.float64)
-    t = t - t.mean()
-    denom = float(np.dot(t, t))
-    if denom == 0.0:
-        return pl.lit(None).cast(pl.Float64)
-    weights = t / denom
+def _rolling_time_slope_expr(w: int, *, min_periods: int = 2) -> pl.Expr:
+    """构造窗口内时间序列线性回归斜率 expr（x 为等距时间索引）。
 
-    def _dot(arr: np.ndarray) -> float:
+    位置以**实际窗口**为基准（0..len-1，缺失值剔除后重中心化），与 pandas
+    参考 ``pd_time_slope`` 一致：部分窗口同样从 2 个有效点起算。旧的实现把
+    部分窗口按完整窗口的尾部权重对齐，导致窗口起始处与 pandas 不一致。
+    """
+
+    def _dot(arr) -> float:
         arr = np.asarray(arr, dtype=np.float64)
-        if len(arr) == 0:
+        valid = np.isfinite(arr)
+        n = int(valid.sum())
+        if n < min_periods:
             return np.nan
-        ww = weights[-len(arr) :]
-        valid = ~np.isnan(arr)
-        if not valid.any():
+        t = np.arange(arr.size, dtype=np.float64)[valid]
+        y = arr[valid]
+        t = t - t.mean()
+        denom = float(t @ t)
+        if denom <= 0.0:
             return np.nan
-        return float(np.dot(arr[valid], ww[valid]))
+        return float(t @ (y - y.mean()) / denom)
 
-    return pl.col(_VAL).rolling_map(_dot, window_size=w, min_samples=w).over(_INST, order_by=_TS)
+    return pl.col(_VAL).rolling_map(_dot, window_size=w, min_samples=min_periods).over(_INST, order_by=_TS)
 
 
 def _rolling_argext_expr(w: int, *, pick: str) -> pl.Expr:

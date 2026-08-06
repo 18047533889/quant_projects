@@ -50,7 +50,6 @@ def test_s2_isolated_ops_not_promoted():
     from cleaned_operators.semantic_certification import should_fail_closed
 
     for name in ("relation_weighted_change", "holder_weighted_churn",
-                 "index_reconstitution_churn", "listing_age", "suspension_frequency",
                  "fin_ttm", "nan_to_num"):
         assert should_fail_closed(name), name
         # Registered operators get the experimental lifecycle; unclassified ones
@@ -60,6 +59,17 @@ def test_s2_isolated_ops_not_promoted():
             continue
         assert str(catalog.get("status")) == "experimental", name
         assert catalog.get("pit_safe") is False, name
+
+
+def test_s2_reworked_unknown_state_ops_are_promoted():
+    # index_reconstitution_churn / listing_age / suspension_frequency completed the
+    # unknown-state rework (S9) and are now on the daily surface, not fail-closed.
+    from cleaned_operators.semantic_certification import should_fail_closed
+    from cleaned_operators.operator_surface import classify_canonical
+
+    for name in ("index_reconstitution_churn", "listing_age", "suspension_frequency"):
+        assert not should_fail_closed(name), name
+        assert classify_canonical(name) == "daily", name
 
 
 def test_s2_legitimate_production_surface_kept():

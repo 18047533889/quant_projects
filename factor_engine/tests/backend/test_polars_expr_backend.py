@@ -143,7 +143,7 @@ def test_polars_expr_capable_subset_of_production_ops():
         ("ts_moment", lambda: make_cleaned_call_factory("ts_moment")(col("x"), 3, 2)),
         ("ts_max_buildup", lambda: make_cleaned_call_factory("ts_max_buildup")(col("x"), 2)),
         ("expanding_rank", lambda: make_cleaned_call_factory("expanding_rank")(col("x"))),
-        ("quantile", lambda: make_cleaned_call_factory("quantile")(col("x"), 2)),
+        ("quantile", lambda: make_cleaned_call_factory("quantile")(col("x"), 0.5)),
         ("causal_linear_extrapolate", lambda: make_cleaned_call_factory("causal_linear_extrapolate")(col("x"))),
         ("RSI_WILDER", lambda: make_cleaned_call_factory("RSI_WILDER")(col("close"), 2)),
     ],

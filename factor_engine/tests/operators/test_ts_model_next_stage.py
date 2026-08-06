@@ -44,7 +44,9 @@ def test_registered_and_classified(name: str) -> None:
     from cleaned_operators.operator_surface import classify_canonical
 
     assert OperatorRegistry.get(name) is not None, name
-    assert classify_canonical(name) in ("extended", "research"), name
+    # 2026-08 daily migration promoted many experimental model operators to the daily
+    # surface; research remains for the source-side relation transforms.
+    assert classify_canonical(name) in ("daily", "extended", "research"), name
 
 
 def test_multi_regression_recovers_coefficient() -> None:

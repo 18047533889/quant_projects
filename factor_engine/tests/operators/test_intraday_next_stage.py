@@ -86,7 +86,8 @@ def test_registered_and_classified(name: str) -> None:
     from cleaned_operators.operator_surface import classify_canonical
 
     assert OperatorRegistry.get(name) is not None, name
-    assert classify_canonical(name) in ("extended", "research"), name
+    # 2026-08 daily migration promoted the intra_* factor operators to daily.
+    assert classify_canonical(name) in ("daily", "extended", "research"), name
 
 
 @pytest.mark.parametrize("name", sorted(set(MOMENT_CANONICALS)))
