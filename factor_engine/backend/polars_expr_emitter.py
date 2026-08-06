@@ -2613,7 +2613,7 @@ def _compile_polars_impl(
             return None
         return inner.with_columns(_expanding_non_null_count().alias(_VAL))
 
-    if op in {"ewm_corr", "ewm_cov"}:
+    if op in {"ewm_corr", "ewm_cov", "ts_ewm_corr", "ts_ewm_cov"}:
         if len(node.inputs) < 2:
             return None
         left = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
@@ -2622,7 +2622,8 @@ def _compile_polars_impl(
             return None
         span = max(_window_int(node, default=20), 2)
         joined = _join_binary(left, right)
-        return _ewm_binary_map_groups(joined, span, corr=(op == "ewm_corr"))
+        corr = op in {"ewm_corr", "ts_ewm_corr"}
+        return _ewm_binary_map_groups(joined, span, corr=corr)
 
     if op == "ts_ratio":
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
@@ -2669,9 +2670,28 @@ def _compile_polars_impl(
         if inner is None:
             return None
         w = _window_int(node)
-        from cleaned_operators._numpy_kernels import ts_max_buildup_
 
-        return _unary_inst_map_groups(inner, lambda arr: ts_max_buildup_(arr, w))
+        def _buildup(arr: np.ndarray) -> np.ndarray:
+            # Production per-window record-high count (production_repairs):
+            # each trailing window resets its record maximum, so appending future
+            # rows never alters past outputs.  The legacy ts_max_buildup_ kernel
+            # accumulated over the whole series and is not PIT-safe.
+            out = np.full(arr.shape, np.nan, dtype=float)
+            for end in range(arr.shape[0]):
+                start = max(0, end - w + 1)
+                current_max = -np.inf
+                count = 0
+                for value in arr[start : end + 1]:
+                    if not np.isfinite(value):
+                        continue
+                    if value >= current_max:
+                        current_max = value
+                        count += 1
+                if count > 0:
+                    out[end] = float(count)
+            return out
+
+        return _unary_inst_map_groups(inner, _buildup)
 
     if op == "expanding_rank":
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)

@@ -203,7 +203,14 @@ def fin_applicability_mask(value, threshold=0.0):
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
         values = value[c].to_numpy()
-        out[:, i] = np.where(np.isfinite(values) & (values > thr), 1.0, 0.0)
+        finite = np.isfinite(values)
+        # Unknown (NaN) stays NaN; 1 when finite and > threshold, 0 when finite
+        # and <= threshold (audit §4.6) — mirrors the pandas backend.
+        out[:, i] = np.where(
+            finite,
+            np.where(values > thr, 1.0, 0.0),
+            np.nan,
+        )
     return _make(value, cols, out)
 
 

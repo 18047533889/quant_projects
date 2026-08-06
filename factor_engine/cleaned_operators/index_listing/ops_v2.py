@@ -114,7 +114,16 @@ _mk(
 
 
 def _multi_index_entry_intensity(entry_a, entry_b, entry_c, window=20):
-    total = entry_a.fillna(0) + entry_b.fillna(0) + entry_c.fillna(0)
+    # Unknown state (NaN) must not be silently treated as "not entered": a missing
+    # index-membership datum could mask a real entry.  Sum entries only over the
+    # index flags that are known, and emit NaN on days where none of the three
+    # index statuses are known (S9 unknown-state contract).
+    known = entry_a.notna() | entry_b.notna() | entry_c.notna()
+    total = (
+        entry_a.where(entry_a.notna(), 0.0)
+        + entry_b.where(entry_b.notna(), 0.0)
+        + entry_c.where(entry_c.notna(), 0.0)
+    ).where(known)
     return total.rolling(int(window)).sum()
 
 

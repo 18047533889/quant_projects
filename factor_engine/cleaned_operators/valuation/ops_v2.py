@@ -70,18 +70,65 @@ def _log_abs(x: pd.DataFrame) -> pd.DataFrame:
     return np.log(x.abs().replace(0, np.nan))
 
 
+def _signed_log(x: pd.DataFrame) -> pd.DataFrame:
+    """``sign(x) * log1p(|x|)``: preserves the profit/loss economic sign.
+
+    ``log(|x|)`` collapses +PE and -PE onto the same value; the signed transform
+    keeps gain vs loss distinguishable for the gap factor (audit §5.1).
+    """
+    return np.sign(x) * np.log1p(x.abs())
+
+
+def _positive_log_gap(a: pd.DataFrame, b: pd.DataFrame) -> pd.DataFrame:
+    """Gap defined only when both multiples are strictly positive (loss → NaN)."""
+    valid = a.gt(0) & b.gt(0)
+    out = np.log(a.where(valid)) - np.log(b.where(valid))
+    return out.where(valid)
+
+
 _mk(
     "valuation_pe_ttm_lyr_gap",
-    "log|PeRatio| - log|PeRatioLyr|（口径差异）。",
+    "log|PeRatio| - log|PeRatioLyr|（口径差异；log|x| 塌缩盈亏符号，建议用 *_gap_signed_log）。",
     ["pe_ratio", "pe_ratio_lyr"],
     lambda a, b: _log_abs(a) - _log_abs(b),
     unit="level",
 )
 _mk(
     "valuation_pcf_definition_gap",
-    "log|PcfRatio| - log|PcfRatio2|（口径差异）。",
+    "log|PcfRatio| - log|PcfRatio2|（口径差异；建议用 *_gap_signed_log）。",
     ["pcf_ratio", "pcf_ratio2"],
     lambda a, b: _log_abs(a) - _log_abs(b),
+    unit="level",
+)
+# Sign-aware and positive-only gap variants (audit §5.1): log|x| treats a
+# profitable +10x and a loss-making -10x as identical, discarding the
+# economic meaning of profit vs loss for long/short factor interpretation.
+_mk(
+    "valuation_pe_gap_signed_log",
+    "sign(PeRatio)*log1p|PeRatio| - sign(PeRatioLyr)*log1p|PeRatioLyr|。",
+    ["pe_ratio", "pe_ratio_lyr"],
+    lambda a, b: _signed_log(a) - _signed_log(b),
+    unit="level",
+)
+_mk(
+    "valuation_pe_gap_positive",
+    "log(PeRatio) - log(PeRatioLyr)，仅两值均 >0（亏损侧 NaN）。",
+    ["pe_ratio", "pe_ratio_lyr"],
+    _positive_log_gap,
+    unit="level",
+)
+_mk(
+    "valuation_pcf_gap_signed_log",
+    "sign(PcfRatio)*log1p|PcfRatio| - sign(PcfRatio2)*log1p|PcfRatio2|。",
+    ["pcf_ratio", "pcf_ratio2"],
+    lambda a, b: _signed_log(a) - _signed_log(b),
+    unit="level",
+)
+_mk(
+    "valuation_pcf_gap_positive",
+    "log(PcfRatio) - log(PcfRatio2)，仅两值均 >0（负侧 NaN）。",
+    ["pcf_ratio", "pcf_ratio2"],
+    _positive_log_gap,
     unit="level",
 )
 _mk(
@@ -159,11 +206,22 @@ _mk(
     _valuation_cashflow_disagreement,
     unit="level",
 )
+def _growth_mismatch(ey, g, scale=1.0):
+    scale = float(scale)
+    if not np.isfinite(scale) or scale <= 0:
+        raise ValueError("valuation_growth_mismatch scale must be a positive finite number")
+    # Both inputs must be decimal ratios by contract (field layer divides
+    # percent-based StockIndicator growth by 100).  A free ``scale`` would let a
+    # caller silently mask a percent/ratio unit mismatch (audit §5.2), so the
+    # default 1.0 is the only production-meaningful value.
+    return ey - g / scale
+
+
 _mk(
     "valuation_growth_mismatch",
-    "盈利收益率 - 标准化利润增长（估值成长错配）。",
+    "盈利收益率 - 利润增长（输入须为小数比率，字段层 /100；scale 仅向后兼容，应保持 1.0）。",
     ["earnings_yield", "profit_growth", "scale"],
-    lambda ey, g, scale=1.0: ey - g / float(scale),
+    _growth_mismatch,
     unit="level",
 )
 
@@ -204,18 +262,24 @@ _mk(
 
 
 def _capital_change_age(change_date, index_dates):
-    """距最近股本变动日的交易日数。"""
-    pos = {ts: i for i, ts in enumerate(index_dates)}
+    """距最近股本变动生效日的交易日数。
+
+    A ChangeDate on a weekend/holiday is mapped to the first trading day on or
+    after it (audit §5.3) instead of dropping the change and producing NaN until
+    the next in-index date.  A future-dated ChangeDate (not yet knowable) yields
+    NaN rather than a negative age.
+    """
+    index_array = np.asarray(index_dates, dtype="datetime64[ns]")
     out = pd.DataFrame(np.nan, index=change_date.index, columns=change_date.columns, dtype=float)
     for col in change_date.columns:
-        last_change: pd.Timestamp | None = None
         last_pos: int | None = None
-        for i, (dt, cd) in enumerate(zip(change_date.index, change_date[col])):
+        for i, cd in enumerate(change_date[col]):
             if pd.notna(cd):
                 try:
-                    cd_ts = pd.Timestamp(cd).normalize()
-                    if cd_ts in pos:
-                        last_pos = pos[cd_ts]
+                    cd_ts = pd.Timestamp(cd).normalize().to_datetime64()
+                    pos_arr = np.searchsorted(index_array, cd_ts, side="left")
+                    if 0 <= pos_arr < len(index_array) and pos_arr <= i:
+                        last_pos = int(pos_arr)
                     else:
                         last_pos = None
                 except Exception:
@@ -227,20 +291,45 @@ def _capital_change_age(change_date, index_dates):
 
 _mk(
     "capital_change_age",
-    "距 ChangeDate 的交易日数。",
+    "距最近股本变动生效日的交易日数（周末/节假日 ChangeDate 顺延至下一交易日）。",
     ["change_date"],
     lambda cd: _capital_change_age(cd, cd.index),
     unit="count",
 )
 _mk(
     "capital_change_magnitude",
-    "TotalCapital / 上期 - 1。",
+    "较上一交易日的股本变化（日状态差分，非快照事件）。",
     ["total_capital"],
     lambda tc: tc / tc.shift(1).replace(0, np.nan) - 1.0,
 )
 _mk(
-    "circulating_cap_unlock_proxy",
-    "流通股本 / 总股本 的变化（解禁代理）。",
+    "circulating_cap_ratio_change",
+    "流通股本 / 总股本 的日间变化（状态变化，非解禁事件；解禁需真实事件源）。",
     ["circulating_capital", "total_capital"],
     lambda cc, tc: (_safe_div(cc, tc) - _safe_div(cc, tc).shift(1)),
 )
+_mk(
+    "circulating_cap_unlock_proxy",
+    "流通股本 / 总股本 的变化（旧名；名称过度解释为解禁，改用 circulating_cap_ratio_change）。",
+    ["circulating_capital", "total_capital"],
+    lambda cc, tc: (_safe_div(cc, tc) - _safe_div(cc, tc).shift(1)),
+)
+
+# Deprecation notes for the sign-collapsing / over-named legacy variants so the
+# registry advertises the honest replacements (audit §5.1 / §5.5).
+from cleaned_operators.registry import OperatorRegistry as _registry  # noqa: E402
+
+for _old, _new in (
+    ("valuation_pe_ttm_lyr_gap", "valuation_pe_gap_signed_log"),
+    ("valuation_pcf_definition_gap", "valuation_pcf_gap_signed_log"),
+    ("circulating_cap_unlock_proxy", "circulating_cap_ratio_change"),
+):
+    _entry = _registry._catalog.get(_old)
+    if _entry is not None:
+        _entry["compatibility_only"] = True
+        _entry["preferred_replacements"] = [_new]
+        _entry.setdefault(
+            "semantic_note",
+            "旧公式 log|x| 塌缩盈亏符号 / 名称过度解释；新因子使用 *_gap_signed_log 或 "
+            "circulating_cap_ratio_change",
+        )

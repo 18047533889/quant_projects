@@ -66,14 +66,112 @@ def registered_status(canonical: str) -> str | None:
     return _REGISTERED_LIFECYCLE.get(canonical)
 
 
-# Operators whose registration status was experimental but whose unknown-state /
-# listing semantics have since been reworked and certified (S9).  Hardening is
+# Operators whose registration status was experimental but whose semantics have
+# since been reworked and certified (S9 unknown-state rework; 2026-08 holder
+# ShareholderId-matched rework; market-model PIT certification).  Hardening is
 # allowed to promote them to production instead of keeping them fail-closed.
 PROMOTED_OUT_OF_EXPERIMENTAL: frozenset[str] = frozenset({
     "index_reconstitution_churn",
     "listing_age",
     "suspension_frequency",
+    # 2026-08: holder_* reworked to ShareholderId-matched union pair.
+    "holder_weighted_churn",
+    "holder_entry_share",
+    "holder_exit_share",
+    "holder_net_entry_share",
+    "holder_rank_stability",
+    # 2026-08: relation deltas verified pair-valid (PIT); multi-index intensity
+    # reworked to unknown-state semantics.
+    "relation_entry_count",
+    "relation_exit_count",
+    "relation_weighted_change",
+    "multi_index_entry_intensity",
+    # 2026-08: CAPM-family operators certified causal (trailing-window kernels).
+    "tail_beta",
+    "residual_momentum_capm",
+    "coskewness_to_market",
+    "idio_vol",
+    "idio_skew",
 })
+
+
+# --------------------------------------------------------------------------
+# Honesty metadata for legacy in-sample / over-named variants (audit §10.1,
+# §9.3-§9.5).  Stamped at load time without changing surface or lifecycle: these
+# operators stay experimental and fail-closed for production; the metadata makes
+# the registry advertise that they are diagnostic/benchmark-only and names the
+# preferred replacements.
+# --------------------------------------------------------------------------
+_DIAGNOSTIC_IN_SAMPLE = frozenset({
+    "ts_multi_regression_coeff", "ts_multi_regression_resid",
+    "ts_multi_regression_resid_z", "ts_multi_regression_r2",
+    "ts_huber_regression_coeff", "ts_huber_regression_resid",
+    "ts_huber_regression_resid_z", "ts_ridge_regression_coeff",
+    "ts_ridge_regression_resid", "ts_ridge_regression_resid_z",
+    "ts_ar_forecast", "ts_ar_innovation", "ts_ar_innovation_z",
+    "ts_mean_reversion_half_life",
+})
+_IN_SAMPLE_REPLACEMENTS = {
+    "ts_multi_regression_coeff": "ts_multi_regression_coeff_prior",
+    "ts_multi_regression_resid": "ts_multi_regression_forecast_error",
+    "ts_multi_regression_resid_z": "ts_multi_regression_forecast_error_z",
+    "ts_multi_regression_r2": "ts_multi_regression_r2_prior",
+    "ts_huber_regression_coeff": "ts_huber_regression_coeff_prior",
+    "ts_huber_regression_resid": "ts_huber_regression_forecast_error",
+    "ts_huber_regression_resid_z": "ts_huber_regression_forecast_error_z",
+    "ts_ridge_regression_coeff": "ts_ridge_regression_coeff_prior",
+    "ts_ridge_regression_resid": "ts_ridge_regression_forecast_error",
+    "ts_ridge_regression_resid_z": "ts_ridge_regression_forecast_error_z",
+    "ts_ar_forecast": "ts_ar_prior_forecast",
+    "ts_ar_innovation": "ts_ar_prior_innovation",
+    "ts_ar_innovation_z": "ts_ar_prior_innovation_z",
+}
+_JUMP_ALIAS_DEPRECATED = frozenset({
+    "intra_positive_jump_variation", "intra_negative_jump_variation",
+    "intra_signed_jump_ratio", "intra_return_profile_cosine",
+})
+_JUMP_REPLACEMENTS = {
+    "intra_positive_jump_variation": "intra_positive_tail_variation",
+    "intra_negative_jump_variation": "intra_negative_tail_variation",
+    "intra_signed_jump_ratio": "intra_signed_tail_variation_ratio",
+    "intra_return_profile_cosine": "intra_signed_return_profile_cosine",
+}
+_BENCHMARK_ONLY = frozenset({
+    "intra_realized_beta", "intra_realized_correlation",
+    "intra_idiosyncratic_variance",
+})
+
+
+def stamp_compatibility_metadata() -> None:
+    """Stamp honest diagnostic/benchmark metadata onto legacy registry entries."""
+    from cleaned_operators.registry import OperatorRegistry
+
+    for canon in _DIAGNOSTIC_IN_SAMPLE:
+        entry = OperatorRegistry._catalog.get(canon)
+        if entry is None:
+            continue
+        entry["in_sample"] = True
+        entry["diagnostic_only"] = True
+        entry["hidden_from_default_mining"] = True
+        replacement = _IN_SAMPLE_REPLACEMENTS.get(canon)
+        if replacement is not None:
+            entry["preferred_replacements"] = [replacement]
+        entry.setdefault("semantic_note", "训练窗口含当前样本(旧 in-sample);默认挖掘与生产应使用 *_prior / *_forecast_error")
+    for canon in _JUMP_ALIAS_DEPRECATED:
+        entry = OperatorRegistry._catalog.get(canon)
+        if entry is None:
+            continue
+        entry["compatibility_only"] = True
+        replacement = _JUMP_REPLACEMENTS.get(canon)
+        if replacement is not None:
+            entry["preferred_replacements"] = [replacement]
+        entry.setdefault("semantic_note", "旧别名(阈值尾部法/含义模糊);使用显式 *_tail_variation / *_signed_return_profile_cosine")
+    for canon in _BENCHMARK_ONLY:
+        entry = OperatorRegistry._catalog.get(canon)
+        if entry is None:
+            continue
+        entry["benchmark_only"] = True
+        entry.setdefault("semantic_note", "非 ex-self 市场模型仅作 benchmark/legacy;默认搜索使用 *_ex_self 版本")
 
 
 def is_intentionally_experimental(canonical: str) -> bool:
@@ -97,29 +195,12 @@ def is_intentionally_experimental(canonical: str) -> bool:
 ISOLATED_FROM_DEFAULT_MINING: frozenset[str] = frozenset({
     # Panel-contract violation: per-row entity counts broadcast across all
     # instrument columns; must become a source aggregation or a dedicated type.
+    # They are relation-domain tools, not factor-panel targets, so they stay off
+    # the daily surface.
     "relation_distinct_count",
     "relation_overlap_ratio",
-    # Shareholder "churn" computed from rank slots without ShareholderId; rank
-    # changes are misread as entry/exit until an ID-matched source layer exists.
-    "holder_weighted_churn",
-    "holder_entry_share",
-    "holder_exit_share",
-    "holder_net_entry_share",
-    "holder_rank_stability",
-    # Relation/snapshot deltas measured against the previous trading row rather
-    # than the previous published snapshot.
-    "relation_weighted_change",
-    "relation_entry_count",
-    "relation_exit_count",
-    # Index/listing/suspension ops that treated unknown state as 0 / as normal
-    # trading.  Semantic rework is in progress; keep them out of default mining
-    # until the unknown-state contract is certified.
-    # ``index_reconstitution_churn`` / ``listing_age`` / ``suspension_frequency``
-    # completed the unknown-state rework (S9 tests: NaN breaks, denom = known days,
-    # pre-listing NaN) and were promoted to the daily surface in 2026-08.
-    "multi_index_entry_intensity",
     # Legacy ambiguous TTM/period names retained only to fail with a migration
-    # error; never default production.
+    # error; never default production (prefer fin_ttm_quarterly / fin_ttm_cumulative).
     "fin_ttm",
     "ttm",
     "quarter",

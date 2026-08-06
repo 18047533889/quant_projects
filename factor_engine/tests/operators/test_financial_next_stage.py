@@ -107,20 +107,36 @@ def test_piotroski_f_score_bounded() -> None:
 
 
 def test_shareholder_churn() -> None:
+    # ID-matched ShareholderId form: 10 current ratios, 10 current ids,
+    # 10 previous ratios, 10 previous ids.
     dates = pd.date_range("2024-01-01", periods=30, freq="D")
-    cur = [pd.DataFrame(np.zeros((30, 2)), index=dates, columns=["A", "B"]) for _ in range(5)]
-    prev = [pd.DataFrame(np.zeros((30, 2)), index=dates, columns=["A", "B"]) for _ in range(5)]
-    vals = [0.3, 0.2, 0.1, 0.05, 0.0]
-    pvals = [0.25, 0.2, 0.15, 0.05, 0.1]
-    for i in range(5):
-        cur[i]["A"], cur[i]["B"] = vals[i], 0.2
-        prev[i]["A"], prev[i]["B"] = pvals[i], 0.2
-    churn = OperatorRegistry.get("holder_weighted_churn").calculate(*cur, *prev)
-    assert churn["A"].iloc[-1] == pytest.approx(0.5 * 0.2, abs=1e-9)  # |0.3-0.25|+|0.2-0.2|+|0.1-0.15|+|0.05-0.05|+|0-0.1| = 0.2
-    entry = OperatorRegistry.get("holder_entry_share").calculate(*cur, *prev)
+    cols = ["A", "B"]
+    nan = pd.DataFrame(np.nan, index=dates, columns=cols)
+    blank = pd.DataFrame(np.nan, index=dates, columns=cols, dtype=object)
+
+    def _ratio(vals):
+        f = pd.DataFrame(np.nan, index=dates, columns=cols)
+        f["A"], f["B"] = vals[0], 0.2
+        return f
+
+    def _id(ids):
+        f = pd.DataFrame(np.nan, index=dates, columns=cols, dtype=object)
+        f["A"], f["B"] = ids[0], "SHARED"
+        return f
+
+    cur_r = [_ratio(v) for v in [(0.3,), (0.2,), (0.1,), (0.05,), (0.0,)]] + [nan] * 5
+    cur_id = [_id(i) for i in [("S1",), ("S2",), ("S3",), ("S4",), ("NONE",)]] + [blank] * 5
+    prev_r = [_ratio(v) for v in [(0.25,), (0.2,), (0.15,), (0.05,), (0.1,)]] + [nan] * 5
+    prev_id = [_id(i) for i in [("S1",), ("S2",), ("S3",), ("S4",), ("E5",)]] + [blank] * 5
+    args = cur_r + cur_id + prev_r + prev_id
+    churn = OperatorRegistry.get("holder_weighted_churn").calculate(*args)
+    assert churn["A"].iloc[-1] == pytest.approx(0.5 * 0.2, abs=1e-9)  # 0.5*Σ|ratio_cur - ratio_prev| = 0.5*0.2
+    entry = OperatorRegistry.get("holder_entry_share").calculate(*args)
     assert entry["A"].iloc[-1] == pytest.approx(0.0, abs=1e-9)
-    exit_ = OperatorRegistry.get("holder_exit_share").calculate(*cur, *prev)
-    assert exit_["A"].iloc[-1] == pytest.approx(0.1, abs=1e-9)
+    exit_ = OperatorRegistry.get("holder_exit_share").calculate(*args)
+    assert exit_["A"].iloc[-1] == pytest.approx(0.1, abs=1e-9)  # E5 在上期不在本期 → 0.1
+    net = OperatorRegistry.get("holder_net_entry_share").calculate(*args)
+    assert net["A"].iloc[-1] == pytest.approx(-0.1, abs=1e-9)
 
 
 def test_valuation_gap_operators() -> None:

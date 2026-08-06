@@ -62,8 +62,12 @@ def test_complex_group_ops_remain_map_groups(op):
 
 
 def test_recursive_ewm_corr_is_not_admitted_to_segmented_long_execution():
-    assert classify_plan_op("ts_ewm_corr") == "other"
-    assert infer_polars_long_tier("ts_ewm_corr") == "unsupported"
+    # 2026-08: ts_ewm_corr was promoted to daily and the polars-expr emitter now
+    # handles it via full-series per-instrument pandas ewm (map_groups tier).
+    # It is still NOT native segmented execution, so it stays out of the native
+    # fastpath tiers (stateful / python_rolling / native).
+    assert classify_plan_op("ts_ewm_corr") == "map_groups"
+    assert infer_polars_long_tier("ts_ewm_corr") == "map_groups"
 
 
 @pytest.mark.parametrize(

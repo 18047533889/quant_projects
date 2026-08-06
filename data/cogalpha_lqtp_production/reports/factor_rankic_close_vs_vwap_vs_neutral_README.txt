@@ -20,3 +20,16 @@
 - scripts/cogalpha_lqtp/add_yearly_double_neutral_to_csv.py
 行数 228
 文件 reports/factor_rankic_close_vs_vwap_vs_neutral.csv
+
+LQTP 提交标记（汇总列，紧跟 display_name）：
+- LQTP提交状态：已提交 / 未提交
+- LQTP已提交：Y / N
+- LQTP未提交原因码：unsupported_operator / no_formula / duplicate_formula / broken_formula 等
+- LQTP未提交原因：中文短因
+- LQTP问题说明：具体算子问题或平台报错（可转发）
+- LQTP未知算子：阻塞算子名
+- LQTP_definition_id / LQTP平台状态：已入库时的 UUID 与 validated 等
+- LQTP重复于因子：因公式完全重复而未用新名入库时指向已有因子
+
+状态来源：/home/shw/reports/lqtp_factor_submit_status.json
+转发清单：/home/shw/reports/lqtp_NOT_SUBMITTED_for_forward.md

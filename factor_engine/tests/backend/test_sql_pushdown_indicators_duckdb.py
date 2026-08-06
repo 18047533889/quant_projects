@@ -209,6 +209,93 @@ def test_duckdb_candle_geometry_match_pandas(tmp_path, monkeypatch):
     _run_pair(tmp_path, monkeypatch, _c("candle_inside_ratio")(col("High"), col("Low")), "candle_inside_ratio")
 
 
+def test_duckdb_candlestick_patterns_match_pandas(tmp_path, monkeypatch):
+    _run_pair(tmp_path, monkeypatch, _c("cdl_doji")(col("Open"), col("High"), col("Low"), col("Close")), "cdl_doji")
+    _run_pair(tmp_path, monkeypatch, _c("cdl_hammer")(col("Open"), col("High"), col("Low"), col("Close")), "cdl_hammer")
+    _run_pair(tmp_path, monkeypatch, _c("cdl_inverted_hammer")(col("Open"), col("High"), col("Low"), col("Close")), "cdl_inverted_hammer")
+    _run_pair(tmp_path, monkeypatch, _c("cdl_shooting_star")(col("Open"), col("High"), col("Low"), col("Close")), "cdl_shooting_star")
+    _run_pair(tmp_path, monkeypatch, _c("cdl_marubozu")(col("Open"), col("High"), col("Low"), col("Close")), "cdl_marubozu")
+    _run_pair(tmp_path, monkeypatch, _c("cdl_spinning_top")(col("Open"), col("High"), col("Low"), col("Close")), "cdl_spinning_top")
+    _run_pair(tmp_path, monkeypatch, _c("cdl_engulfing")(col("Open"), col("High"), col("Low"), col("Close")), "cdl_engulfing")
+    _run_pair(tmp_path, monkeypatch, _c("cdl_inside_bar")(col("Open"), col("High"), col("Low"), col("Close")), "cdl_inside_bar")
+    _run_pair(tmp_path, monkeypatch, _c("cdl_outside_bar")(col("Open"), col("High"), col("Low"), col("Close")), "cdl_outside_bar")
+    _run_pair(tmp_path, monkeypatch, _c("cdl_dragonfly_doji")(col("Open"), col("High"), col("Low"), col("Close")), "cdl_dragonfly_doji")
+    _run_pair(tmp_path, monkeypatch, _c("cdl_gravestone_doji")(col("Open"), col("High"), col("Low"), col("Close")), "cdl_gravestone_doji")
+    _run_pair(tmp_path, monkeypatch, _c("cdl_hanging_man")(col("Open"), col("High"), col("Low"), col("Close")), "cdl_hanging_man")
+    _run_pair(tmp_path, monkeypatch, _c("cdl_harami")(col("Open"), col("High"), col("Low"), col("Close")), "cdl_harami")
+    _run_pair(tmp_path, monkeypatch, _c("cdl_harami_cross")(col("Open"), col("High"), col("Low"), col("Close")), "cdl_harami_cross")
+    _run_pair(tmp_path, monkeypatch, _c("cdl_piercing")(col("Open"), col("High"), col("Low"), col("Close")), "cdl_piercing")
+    _run_pair(tmp_path, monkeypatch, _c("cdl_dark_cloud_cover")(col("Open"), col("High"), col("Low"), col("Close")), "cdl_dark_cloud_cover")
+    _run_pair(tmp_path, monkeypatch, _c("cdl_morning_star")(col("Open"), col("High"), col("Low"), col("Close")), "cdl_morning_star")
+    _run_pair(tmp_path, monkeypatch, _c("cdl_evening_star")(col("Open"), col("High"), col("Low"), col("Close")), "cdl_evening_star")
+    _run_pair(tmp_path, monkeypatch, _c("cdl_three_white_soldiers")(col("Open"), col("High"), col("Low"), col("Close")), "cdl_three_white_soldiers")
+    _run_pair(tmp_path, monkeypatch, _c("cdl_three_black_crows")(col("Open"), col("High"), col("Low"), col("Close")), "cdl_three_black_crows")
+    _run_pair(tmp_path, monkeypatch, _c("cdl_tweezer_top")(col("Open"), col("High"), col("Low"), col("Close")), "cdl_tweezer_top")
+    _run_pair(tmp_path, monkeypatch, _c("cdl_tweezer_bottom")(col("Open"), col("High"), col("Low"), col("Close")), "cdl_tweezer_bottom")
+
+
+def test_duckdb_ichimoku_match_pandas(tmp_path, monkeypatch):
+    _run_pair(tmp_path, monkeypatch, _c("ichimoku_tenkan")(col("High"), col("Low"), 9), "ichimoku_tenkan")
+    _run_pair(tmp_path, monkeypatch, _c("ichimoku_kijun")(col("High"), col("Low"), 26), "ichimoku_kijun")
+    _run_pair(tmp_path, monkeypatch, _c("ichimoku_senkou_a")(col("High"), col("Low"), 9, 26), "ichimoku_senkou_a")
+    _run_pair(tmp_path, monkeypatch, _c("ichimoku_senkou_b")(col("High"), col("Low"), 52), "ichimoku_senkou_b")
+    _run_pair(tmp_path, monkeypatch, _c("ichimoku_cloud_width")(col("High"), col("Low"), 9, 26, 52), "ichimoku_cloud_width")
+    _run_pair(tmp_path, monkeypatch, _c("ichimoku_cloud_position")(col("High"), col("Low"), col("Close"), 9, 26, 52), "ichimoku_cloud_position")
+
+
+def test_duckdb_efficiency_choppiness_coskew_match_pandas(tmp_path, monkeypatch):
+    _run_pair(tmp_path, monkeypatch, _c("efficiency_ratio")(col("Close"), 20), "efficiency_ratio")
+    _run_pair(tmp_path, monkeypatch, _c("choppiness_index")(col("High"), col("Low"), col("Close"), 20), "choppiness_index")
+    _run_pair(tmp_path, monkeypatch, _c("coskewness_to_market")(col("Ret"), col("Close"), 20), "coskewness_to_market")
+
+
+def test_duckdb_ts_window_stats_match_pandas(tmp_path, monkeypatch):
+    _run_pair(tmp_path, monkeypatch, _c("ts_valid_count")(col("Ret"), 20), "ts_valid_count")
+    _run_pair(tmp_path, monkeypatch, _c("ts_coverage_ratio")(col("Ret"), 20), "ts_coverage_ratio")
+    _run_pair(tmp_path, monkeypatch, _c("ts_abs_concentration")(col("Ret"), 20), "ts_abs_concentration")
+    _run_pair(tmp_path, monkeypatch, _c("ts_abs_entropy")(col("Ret"), 20), "ts_abs_entropy")
+    _run_pair(tmp_path, monkeypatch, _c("ts_downside_deviation")(col("Ret"), 20, 0.0), "ts_downside_deviation")
+    _run_pair(tmp_path, monkeypatch, _c("ts_upside_deviation")(col("Ret"), 20, 0.0), "ts_upside_deviation")
+    _run_pair(tmp_path, monkeypatch, _c("ts_impulse_return")(col("Close"), 10), "ts_impulse_return")
+    _run_pair(tmp_path, monkeypatch, _c("ts_impulse_strength")(col("Close"), 10, 20), "ts_impulse_strength")
+    _run_pair(tmp_path, monkeypatch, _c("ts_impulse_volume")(col("Volume"), 10, 20), "ts_impulse_volume")
+
+
+def test_duckdb_ts_prior_extreme_match_pandas(tmp_path, monkeypatch):
+    _run_pair(tmp_path, monkeypatch, _c("ts_prev_high")(col("Close"), 20), "ts_prev_high")
+    _run_pair(tmp_path, monkeypatch, _c("ts_prev_low")(col("Close"), 20), "ts_prev_low")
+    _run_pair(tmp_path, monkeypatch, _c("ts_distance_to_high")(col("Close"), 20), "ts_distance_to_high")
+    _run_pair(tmp_path, monkeypatch, _c("ts_distance_to_low")(col("Close"), 20), "ts_distance_to_low")
+    _run_pair(tmp_path, monkeypatch, _c("ts_breakout_high")(col("Close"), 20), "ts_breakout_high")
+    _run_pair(tmp_path, monkeypatch, _c("ts_breakdown_low")(col("Close"), 20), "ts_breakdown_low")
+    _run_pair(tmp_path, monkeypatch, _c("ts_channel_position")(col("Close"), 20), "ts_channel_position")
+    _run_pair(tmp_path, monkeypatch, _c("ts_new_high")(col("Close"), 20), "ts_new_high")
+    _run_pair(tmp_path, monkeypatch, _c("ts_new_low")(col("Close"), 20), "ts_new_low")
+
+
+def test_duckdb_ts_extreme_position_match_pandas(tmp_path, monkeypatch):
+    _run_pair(tmp_path, monkeypatch, _c("ts_argmax_age")(col("Close"), 20), "ts_argmax_age")
+    _run_pair(tmp_path, monkeypatch, _c("ts_argmin_age")(col("Close"), 20), "ts_argmin_age")
+    _run_pair(tmp_path, monkeypatch, _c("ts_argmax_index_from_oldest")(col("Close"), 20), "ts_argmax_index_from_oldest")
+    _run_pair(tmp_path, monkeypatch, _c("ts_argmin_index_from_oldest")(col("Close"), 20), "ts_argmin_index_from_oldest")
+    _run_pair(tmp_path, monkeypatch, _c("ts_staleness")(col("Close"), 20), "ts_staleness")
+    _run_pair(tmp_path, monkeypatch, _c("ts_days_since_high")(col("Close"), 20), "ts_days_since_high")
+    _run_pair(tmp_path, monkeypatch, _c("ts_days_since_low")(col("Close"), 20), "ts_days_since_low")
+
+
+def test_duckdb_cs_cross_sectional_match_pandas(tmp_path, monkeypatch):
+    _run_pair(tmp_path, monkeypatch, _c("cs_valid_count")(col("Close")), "cs_valid_count")
+    _run_pair(tmp_path, monkeypatch, _c("cs_coverage_ratio")(col("Close")), "cs_coverage_ratio")
+    _run_pair(tmp_path, monkeypatch, _c("cs_fill_mean")(col("Close")), "cs_fill_mean")
+    _run_pair(tmp_path, monkeypatch, _c("cs_fill_median")(col("Close")), "cs_fill_median")
+    _run_pair(tmp_path, monkeypatch, _c("cs_impute_mean")(col("Close")), "cs_impute_mean")
+    _run_pair(tmp_path, monkeypatch, _c("cs_impute_median")(col("Close")), "cs_impute_median")
+    _run_pair(tmp_path, monkeypatch, _c("cs_residual_percentile")(col("Ret")), "cs_residual_percentile")
+    _run_pair(tmp_path, monkeypatch, _c("cs_weighted_mean")(col("Close"), col("Volume")), "cs_weighted_mean")
+    _run_pair(tmp_path, monkeypatch, _c("cs_weighted_demean")(col("Close"), col("Volume")), "cs_weighted_demean")
+    _run_pair(tmp_path, monkeypatch, _c("cs_weighted_zscore")(col("Close"), col("Volume")), "cs_weighted_zscore")
+
+
 def test_duckdb_return_decomp_match_pandas(tmp_path, monkeypatch):
     _run_pair(tmp_path, monkeypatch, _c("open_close_return")(col("Open"), col("Close")), "open_close_return")
     _run_pair(tmp_path, monkeypatch, _c("limit_up_close")(col("Close"), col("High"), 0.005), "limit_up_close")

@@ -3640,6 +3640,737 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_inst_window=True,
         )
 
+    if op in {
+        "cdl_doji",
+        "cdl_hammer",
+        "cdl_inverted_hammer",
+        "cdl_shooting_star",
+        "cdl_marubozu",
+        "cdl_spinning_top",
+        "cdl_engulfing",
+        "cdl_inside_bar",
+        "cdl_outside_bar",
+        "cdl_dragonfly_doji",
+        "cdl_gravestone_doji",
+        "cdl_hanging_man",
+        "cdl_harami",
+        "cdl_harami_cross",
+        "cdl_piercing",
+        "cdl_dark_cloud_cover",
+        "cdl_morning_star",
+        "cdl_evening_star",
+        "cdl_three_white_soldiers",
+        "cdl_three_black_crows",
+        "cdl_tweezer_top",
+        "cdl_tweezer_bottom",
+    }:
+        # 全部 4-input (open, high, low, close)。元素级 OHLC 几何 + 至多 LAG(2)。
+        if len(node.inputs) < 4:
+            return None
+        o_l, h_l, l_l, c_l = (
+            _compile_layer(node.inputs[0], dialect=dialect),
+            _compile_layer(node.inputs[1], dialect=dialect),
+            _compile_layer(node.inputs[2], dialect=dialect),
+            _compile_layer(node.inputs[3], dialect=dialect),
+        )
+        if any(x is None for x in (o_l, h_l, l_l, c_l)):
+            return None
+        _eps = 1e-12
+        o, h, l, c = "o._v", "h._v", "l._v", "c._v"
+        lag1 = "LAG({}, 1) OVER (PARTITION BY o.inst ORDER BY o.ts)"
+        lag2 = "LAG({}, 2) OVER (PARTITION BY o.inst ORDER BY o.ts)"
+        o1, c1 = lag1.format(o), lag1.format(c)
+        h1, l1 = lag1.format(h), lag1.format(l)
+        o2, c2 = lag2.format(o), lag2.format(c)
+        h2, l2 = lag2.format(h), lag2.format(l)
+        body = f"{_abs_fn}({c} - {o})"
+        rng = f"({h} - {l})"
+        upper = f"({h} - {_g}({o}, {c}))"
+        lower = f"({_l_fn}({o}, {c}) - {l})"
+        sign_expr = (
+            f"CASE WHEN {c} > {o} THEN 1.0 WHEN {c} < {o} THEN -1.0 ELSE 0.0 END"
+        )
+        sign0_expr = f"CASE WHEN {c} >= {o} THEN 1.0 ELSE -1.0 END"
+
+        def _flag(cond: str) -> str:
+            return f"CASE WHEN {cond} THEN 1.0 ELSE 0.0 END"
+
+        def _sflag(cond: str) -> str:
+            return f"-{_flag(cond)}"
+
+        def _sign_flag(cond: str, signed: str) -> str:
+            return f"CASE WHEN {cond} THEN {signed} ELSE 0.0 END"
+
+        if op == "cdl_doji":
+            expr = _flag(f"{body} <= 0.10 * {rng}")
+        elif op == "cdl_hammer":
+            expr = _flag(
+                f"{body} <= 0.35 * {rng} AND {lower} >= 2.0 * {body} "
+                f"AND {upper} <= 0.35 * {_g}({body}, {_eps})"
+            )
+        elif op == "cdl_inverted_hammer":
+            expr = _flag(
+                f"{body} <= 0.35 * {rng} AND {upper} >= 2.0 * {body} "
+                f"AND {lower} <= 0.35 * {_g}({body}, {_eps})"
+            )
+        elif op == "cdl_shooting_star":
+            expr = _sflag(
+                f"{body} <= 0.35 * {rng} AND {upper} >= 2.0 * {body} "
+                f"AND {lower} <= 0.35 * {_g}({body}, {_eps})"
+            )
+        elif op == "cdl_marubozu":
+            expr = _sign_flag(
+                f"{body} >= 0.90 * {rng} AND {upper} <= 0.05 * {rng} "
+                f"AND {lower} <= 0.05 * {rng}",
+                sign_expr,
+            )
+        elif op == "cdl_spinning_top":
+            expr = _sign_flag(
+                f"{body} <= 0.35 * {rng} AND {upper} >= {body} AND {lower} >= {body}",
+                sign0_expr,
+            )
+        elif op == "cdl_engulfing":
+            bull = f"({c} > {o}) AND ({c1} < {o1}) AND ({o} <= {c1}) AND ({c} >= {o1})"
+            bear = f"({c} < {o}) AND ({c1} > {o1}) AND ({o} >= {c1}) AND ({c} <= {o1})"
+            expr = f"({_flag(bull)}) - ({_flag(bear)})"
+        elif op == "cdl_inside_bar":
+            expr = _flag(f"({h} < {h1}) AND ({l} > {l1})")
+        elif op == "cdl_outside_bar":
+            expr = _sign_flag(f"({h} > {h1}) AND ({l} < {l1})", sign_expr)
+        elif op == "cdl_dragonfly_doji":
+            expr = _flag(
+                f"{body} <= 0.10 * {rng} AND {lower} >= 0.60 * {rng} "
+                f"AND {upper} <= 0.10 * {rng}"
+            )
+        elif op == "cdl_gravestone_doji":
+            expr = _flag(
+                f"{body} <= 0.10 * {rng} AND {upper} >= 0.60 * {rng} "
+                f"AND {lower} <= 0.10 * {rng}"
+            )
+        elif op == "cdl_hanging_man":
+            expr = _sflag(
+                f"{body} <= 0.35 * {rng} AND {lower} >= 2.0 * {body} "
+                f"AND {upper} <= 0.35 * {_g}({body}, {_eps})"
+            )
+        elif op == "cdl_harami":
+            prev_hi = f"{_g}({o1}, {c1})"
+            prev_lo = f"{_l_fn}({o1}, {c1})"
+            cur_hi = f"{_g}({o}, {c})"
+            cur_lo = f"{_l_fn}({o}, {c})"
+            inside = f"({cur_hi} < {prev_hi}) AND ({cur_lo} > {prev_lo})"
+            bullish = f"{inside} AND ({c1} < {o1}) AND ({c} > {o})"
+            bearish = f"{inside} AND ({c1} > {o1}) AND ({c} < {o})"
+            expr = f"({_flag(bullish)}) - ({_flag(bearish)})"
+        elif op == "cdl_harami_cross":
+            prev_hi = f"{_g}({o1}, {c1})"
+            prev_lo = f"{_l_fn}({o1}, {c1})"
+            cur_hi = f"{_g}({o}, {c})"
+            cur_lo = f"{_l_fn}({o}, {c})"
+            inside = f"({cur_hi} < {prev_hi}) AND ({cur_lo} > {prev_lo})"
+            bullish = f"{inside} AND ({c1} < {o1}) AND ({c} > {o})"
+            bearish = f"{inside} AND ({c1} > {o1}) AND ({c} < {o})"
+            base = f"({_flag(bullish)}) - ({_flag(bearish)})"
+            doji = f"{body} <= 0.10 * {rng}"
+            expr = f"({base}) * ({_flag(doji)})"
+        elif op == "cdl_piercing":
+            midpoint = f"(({o1} + {c1}) / 2.0)"
+            expr = _flag(
+                f"({c1} < {o1}) AND ({c} > {o}) AND ({o} <= {c1}) "
+                f"AND ({c} > {midpoint}) AND ({c} < {o1})"
+            )
+        elif op == "cdl_dark_cloud_cover":
+            midpoint = f"(({o1} + {c1}) / 2.0)"
+            expr = _sflag(
+                f"({c1} > {o1}) AND ({c} < {o}) AND ({o} >= {c1}) "
+                f"AND ({c} < {midpoint}) AND ({c} > {o1})"
+            )
+        elif op == "cdl_morning_star":
+            body2 = f"{_abs_fn}({c2} - {o2})"
+            body1 = f"{_abs_fn}({c1} - {o1})"
+            range2 = f"({h2} - {l2})"
+            range1 = f"({h1} - {l1})"
+            midpoint2 = f"(({o2} + {c2}) / 2.0)"
+            expr = _flag(
+                f"({c2} < {o2}) AND ({body2} >= 0.50 * {nf}({range2}, 0.0)) "
+                f"AND ({body1} <= 0.35 * {nf}({range1}, 0.0)) "
+                f"AND ({c} > {o}) AND ({c} > {midpoint2})"
+            )
+        elif op == "cdl_evening_star":
+            body2 = f"{_abs_fn}({c2} - {o2})"
+            body1 = f"{_abs_fn}({c1} - {o1})"
+            range2 = f"({h2} - {l2})"
+            range1 = f"({h1} - {l1})"
+            midpoint2 = f"(({o2} + {c2}) / 2.0)"
+            expr = _sflag(
+                f"({c2} > {o2}) AND ({body2} >= 0.50 * {nf}({range2}, 0.0)) "
+                f"AND ({body1} <= 0.35 * {nf}({range1}, 0.0)) "
+                f"AND ({c} < {o}) AND ({c} < {midpoint2})"
+            )
+        elif op == "cdl_three_white_soldiers":
+            expr = _flag(
+                f"({c} > {o}) AND ({c1} > {o1}) AND ({c2} > {o2}) "
+                f"AND ({c} > {c1}) AND ({c1} > {c2}) "
+                f"AND ({o} >= {o1}) AND ({o} <= {c1}) "
+                f"AND ({o1} >= {o2}) AND ({o1} <= {c2})"
+            )
+        elif op == "cdl_three_black_crows":
+            expr = _sflag(
+                f"({c} < {o}) AND ({c1} < {o1}) AND ({c2} < {o2}) "
+                f"AND ({c} < {c1}) AND ({c1} < {c2}) "
+                f"AND ({o} <= {o1}) AND ({o} >= {c1}) "
+                f"AND ({o1} <= {o2}) AND ({o1} >= {c2})"
+            )
+        elif op == "cdl_tweezer_top":
+            scale = f"{_g}({_abs_fn}({h}), {_abs_fn}({h1}))"
+            same_high = f"{_abs_fn}({h} - {h1}) <= 1e-4 * {_g}({scale}, 1.0)"
+            reversal = f"({c1} > {o1}) AND ({c} < {o})"
+            expr = _sflag(f"{same_high} AND {reversal}")
+        else:  # cdl_tweezer_bottom
+            scale = f"{_g}({_abs_fn}({l}), {_abs_fn}({l1}))"
+            same_low = f"{_abs_fn}({l} - {l1}) <= 1e-4 * {_g}({scale}, 1.0)"
+            reversal = f"({c1} < {o1}) AND ({c} > {o})"
+            expr = _flag(f"{same_low} AND {reversal}")
+
+        full_expr = (
+            f"CASE WHEN {o} IS NULL OR {h} IS NULL OR {l} IS NULL OR {c} IS NULL "
+            f"THEN NULL ELSE {expr} END"
+        )
+        has_win = any(x.has_inst_window for x in (o_l, h_l, l_l, c_l))
+        has_ts = any(x.has_ts_partition for x in (o_l, h_l, l_l, c_l))
+        return _Layer(
+            f"SELECT o.ts, o.inst, {full_expr} AS _v "
+            f"FROM ({o_l.sql}) o "
+            f"LEFT JOIN ({h_l.sql}) h USING (ts, inst) "
+            f"LEFT JOIN ({l_l.sql}) l USING (ts, inst) "
+            f"LEFT JOIN ({c_l.sql}) c USING (ts, inst)",
+            has_inst_window=True,
+            has_ts_partition=has_ts,
+        )
+
+    if op in {
+        "ichimoku_tenkan",
+        "ichimoku_kijun",
+        "ichimoku_senkou_a",
+        "ichimoku_senkou_b",
+        "ichimoku_cloud_width",
+        "ichimoku_cloud_position",
+    }:
+        # Ichimoku 族 = (rolling_max(high, w) + rolling_min(low, w)) / 2 的组合，
+        # 均为因果（min_periods=w），无 chart-forward 位移。
+        if len(node.inputs) < 2:
+            return None
+        h_l = _compile_layer(node.inputs[0], dialect=dialect)
+        l_l = _compile_layer(node.inputs[1], dialect=dialect)
+        if h_l is None or l_l is None:
+            return None
+
+        def _midpoint(w: int) -> _Layer:
+            hmax = _Layer(
+                _inst_window(dialect, w, "MAX", h_l.sql, min_periods=w),
+                has_inst_window=True,
+            )
+            lmin = _Layer(
+                _inst_window(dialect, w, "MIN", l_l.sql, min_periods=w),
+                has_inst_window=True,
+            )
+            return _Layer(
+                f"SELECT a.ts, a.inst, ((a._v + b._v) / 2.0) AS _v "
+                f"FROM ({hmax.sql}) a LEFT JOIN ({lmin.sql}) b USING (ts, inst)",
+                has_inst_window=True,
+            )
+
+        if op == "ichimoku_tenkan":
+            w = int(_literal_positional(node, 1, default=9) or 9)
+            return _midpoint(w)
+        if op == "ichimoku_kijun":
+            w = int(_literal_positional(node, 1, default=26) or 26)
+            return _midpoint(w)
+        if op == "ichimoku_senkou_b":
+            w = int(_literal_positional(node, 1, default=52) or 52)
+            return _midpoint(w)
+        if op == "ichimoku_senkou_a":
+            w1 = int(_literal_positional(node, 1, default=9) or 9)
+            w2 = int(_literal_positional(node, 2, default=26) or 26)
+            t = _midpoint(w1)
+            k = _midpoint(w2)
+            return _Layer(
+                f"SELECT a.ts, a.inst, ((a._v + b._v) / 2.0) AS _v "
+                f"FROM ({t.sql}) a LEFT JOIN ({k.sql}) b USING (ts, inst)",
+                has_inst_window=True,
+            )
+        # cloud_width / cloud_position
+        if op == "ichimoku_cloud_width":
+            w1 = int(_literal_positional(node, 1, default=9) or 9)
+            w2 = int(_literal_positional(node, 2, default=26) or 26)
+            w3 = int(_literal_positional(node, 3, default=52) or 52)
+        else:  # cloud_position: params [high, low, close, tenkan, kijun, senkou_b]
+            if len(node.inputs) < 3:
+                return None
+            w1 = int(_literal_positional(node, 2, default=9) or 9)
+            w2 = int(_literal_positional(node, 3, default=26) or 26)
+            w3 = int(_literal_positional(node, 4, default=52) or 52)
+        t = _midpoint(w1)
+        k = _midpoint(w2)
+        b = _midpoint(w3)
+        sa = _Layer(
+            f"SELECT a.ts, a.inst, ((a._v + b._v) / 2.0) AS _v "
+            f"FROM ({t.sql}) a LEFT JOIN ({k.sql}) b USING (ts, inst)",
+            has_inst_window=True,
+        )
+        if op == "ichimoku_cloud_width":
+            return _Layer(
+                f"SELECT a.ts, a.inst, {_abs_fn}(a._v - b._v) AS _v "
+                f"FROM ({sa.sql}) a LEFT JOIN ({b.sql}) b USING (ts, inst)",
+                has_inst_window=True,
+            )
+        c_l = _compile_layer(node.inputs[2], dialect=dialect)
+        if c_l is None:
+            return None
+        lo_expr = f"{_l_fn}(a._v, b._v)"
+        hi_expr = f"{_g}(a._v, b._v)"
+        expr = (
+            f"CASE WHEN a._v IS NULL OR b._v IS NULL OR c._v IS NULL THEN NULL "
+            f"WHEN ({hi_expr} - {lo_expr}) = 0 THEN NULL "
+            f"ELSE (c._v - {lo_expr}) / ({hi_expr} - {lo_expr}) END"
+        )
+        return _Layer(
+            f"SELECT a.ts, a.inst, {expr} AS _v "
+            f"FROM ({sa.sql}) a LEFT JOIN ({b.sql}) b USING (ts, inst) "
+            f"LEFT JOIN ({c_l.sql}) c USING (ts, inst)",
+            has_inst_window=True,
+        )
+
+    if op == "efficiency_ratio":
+        # Kaufman efficiency ratio = |close - close.shift(w)| / rolling_sum(|diff|, w)
+        if len(node.inputs) < 1:
+            return None
+        c_l = _compile_layer(node.inputs[0], dialect=dialect)
+        if c_l is None:
+            return None
+        w = int(_literal_positional(node, 0, default=20) or 20)
+        diff_sql = f"SELECT ts, inst, {_abs_fn}(_v - LAG(_v, 1) OVER (PARTITION BY inst ORDER BY ts)) AS _v FROM ({c_l.sql}) _e"
+        path_l = _Layer(_inst_window(dialect, w, "SUM", diff_sql, min_periods=w), has_inst_window=True)
+        change_l = _Layer(
+            f"SELECT ts, inst, {_abs_fn}(_v - LAG(_v, {w}) OVER (PARTITION BY inst ORDER BY ts)) AS _v FROM ({c_l.sql}) _c",
+            has_inst_window=True,
+        )
+        expr = (
+            f"CASE WHEN a._v IS NULL OR b._v IS NULL OR b._v = 0 THEN NULL "
+            f"ELSE a._v / b._v END"
+        )
+        return _Layer(
+            f"SELECT a.ts, a.inst, {expr} AS _v "
+            f"FROM ({change_l.sql}) a LEFT JOIN ({path_l.sql}) b USING (ts, inst)",
+            has_inst_window=True,
+        )
+
+    if op == "choppiness_index":
+        # 100 * log10( (ΣTR / (max(h)-min(l))) clip(lower=EPS) ) / log10(w)
+        if len(node.inputs) < 3:
+            return None
+        h_l = _compile_layer(node.inputs[0], dialect=dialect)
+        l_l = _compile_layer(node.inputs[1], dialect=dialect)
+        c_l = _compile_layer(node.inputs[2], dialect=dialect)
+        if h_l is None or l_l is None or c_l is None:
+            return None
+        w = int(_literal_positional(node, 2, default=20) or 20)
+        _eps = 1e-12
+        tr_node = PlanNode(op="true_range", inputs=[node.inputs[0], node.inputs[1], node.inputs[2]], attrs={})
+        tr_l = _compile_layer(tr_node, dialect=dialect)
+        if tr_l is None:
+            return None
+        num_l = _Layer(_inst_window(dialect, w, "SUM", tr_l.sql, min_periods=w), has_inst_window=True)
+        hmax_l = _Layer(_inst_window(dialect, w, "MAX", h_l.sql, min_periods=w), has_inst_window=True)
+        lmin_l = _Layer(_inst_window(dialect, w, "MIN", l_l.sql, min_periods=w), has_inst_window=True)
+        expr = (
+            f"CASE WHEN a._v IS NULL OR b._v IS NULL OR c._v IS NULL THEN NULL "
+            f"WHEN b._v - c._v <= 0 THEN NULL "
+            f"ELSE 100.0 * LOG10({_g}(a._v / (b._v - c._v), {_eps})) / LOG10({w}) END"
+        )
+        return _Layer(
+            f"SELECT a.ts, a.inst, {expr} AS _v "
+            f"FROM ({num_l.sql}) a "
+            f"LEFT JOIN ({hmax_l.sql}) b USING (ts, inst) "
+            f"LEFT JOIN ({lmin_l.sql}) c USING (ts, inst)",
+            has_inst_window=True,
+        )
+
+    if op == "coskewness_to_market":
+        # 协偏度 = E[(r-μ_r)(m-μ_m)²] / (σ_r · var(m))，窗口内 ≥5 对有效观测。
+        # 展开交叉项为独立窗口聚合（避免嵌套窗口函数）：
+        # numer = E[rm²] - 2·μ_m·E[rm] - μ_r·E[m²] + 2·μ_r·μ_m²
+        if len(node.inputs) < 2:
+            return None
+        r_l = _compile_layer(node.inputs[0], dialect=dialect)
+        m_l = _compile_layer(node.inputs[1], dialect=dialect)
+        if r_l is None or m_l is None:
+            return None
+        w = int(_literal_positional(node, 1, default=60) or 60)
+        over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+        sub = (
+            f"SELECT r.ts, r.inst, "
+            f"CASE WHEN r._v IS NULL OR m._v IS NULL THEN NULL ELSE r._v END AS r, "
+            f"CASE WHEN r._v IS NULL OR m._v IS NULL THEN NULL ELSE m._v END AS m "
+            f"FROM ({r_l.sql}) r LEFT JOIN ({m_l.sql}) m USING (ts, inst)"
+        )
+        agg = (
+            f"SELECT t.ts, t.inst, "
+            f"COUNT(r) OVER ({over}) AS cnt, "
+            f"AVG(r) OVER ({over}) AS mr, "
+            f"AVG(m) OVER ({over}) AS mm, "
+            f"AVG(r*m) OVER ({over}) AS mrm, "
+            f"AVG(r*m*m) OVER ({over}) AS mrm2, "
+            f"AVG(m*m) OVER ({over}) AS mm2, "
+            f"STDDEV(r) OVER ({over}) AS sr, "
+            f"VAR(m) OVER ({over}) AS vm "
+            f"FROM ({sub}) t"
+        )
+        expr = (
+            f"CASE WHEN a.cnt < 5 THEN NULL "
+            f"WHEN a.sr IS NULL OR a.vm IS NULL OR a.sr * a.vm <= 0 THEN NULL "
+            f"ELSE (a.mrm2 - 2.0 * a.mm * a.mrm - a.mr * a.mm2 + 2.0 * a.mr * a.mm * a.mm) / (a.sr * a.vm) END"
+        )
+        return _Layer(
+            f"SELECT a.ts, a.inst, {expr} AS _v FROM ({agg}) a",
+            has_inst_window=True,
+        )
+
+    if op in {
+        "ts_valid_count",
+        "ts_coverage_ratio",
+        "ts_abs_concentration",
+        "ts_abs_entropy",
+        "ts_downside_deviation",
+        "ts_upside_deviation",
+        "ts_impulse_return",
+        "ts_impulse_strength",
+        "ts_impulse_volume",
+    }:
+        # 窗口内聚合统计（ts_valid_count / coverage / concentration / entropy /
+        # downside·upside deviation / impulse 族）。仅需单一输入列 + literal 参数。
+        if len(node.inputs) < 1:
+            return None
+        x_l = _compile_layer(node.inputs[0], dialect=dialect)
+        if x_l is None:
+            return None
+        w = int(_literal_positional(node, 0, default=20) or 20)
+        over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+        cnt = f"COUNT(_v) OVER ({over})"
+
+        if op == "ts_valid_count":
+            mp = int(_literal_positional(node, 1, default=1) or 1)
+            expr = f"CASE WHEN {cnt} < {mp} THEN NULL ELSE {cnt} END"
+        elif op == "ts_coverage_ratio":
+            mp = int(_literal_positional(node, 1, default=1) or 1)
+            expr = f"CASE WHEN {cnt} < {mp} THEN NULL ELSE {cnt} / {w} END"
+        elif op == "ts_abs_concentration":
+            mp = int(_literal_positional(node, 1, default=1) or 1)
+            s_abs = f"SUM({_abs_fn}(_v)) OVER ({over})"
+            s_sq = f"SUM(POW({_abs_fn}(_v), 2)) OVER ({over})"
+            expr = (
+                f"CASE WHEN {cnt} < {mp} THEN NULL "
+                f"WHEN {s_abs} IS NULL OR {s_abs} <= 0 THEN NULL "
+                f"ELSE {s_sq} / ({s_abs} * {s_abs}) END"
+            )
+        elif op == "ts_abs_entropy":
+            mp = int(_literal_positional(node, 2, default=1) or 1)
+            norm = bool(_literal_positional(node, 1, default=1.0) or 1.0)
+            a = f"{_abs_fn}(_v)"
+            s_abs = f"SUM({a}) OVER ({over})"
+            s_ln = (
+                f"SUM(CASE WHEN {a} = 0 THEN 0.0 "
+                f"ELSE ({a} / {s_abs}) * LN({a} / {s_abs} + 1e-300) END) OVER ({over})"
+            )
+            entropy = f"(-1.0 * {s_ln})"
+            if norm:
+                entropy = f"(CASE WHEN {cnt} > 1 THEN {entropy} / LN({cnt}) ELSE {entropy} END)"
+            expr = (
+                f"CASE WHEN {cnt} < {mp} THEN NULL "
+                f"WHEN {s_abs} IS NULL OR {s_abs} <= 0 THEN NULL "
+                f"ELSE {entropy} END"
+            )
+        elif op in {"ts_downside_deviation", "ts_upside_deviation"}:
+            tgt = _literal_positional(node, 1, default=0.0) or 0.0
+            mp = int(_literal_positional(node, 2, default=2) or 2)
+            wf = f"LEAST(_v - {tgt}, 0.0)" if op == "ts_downside_deviation" else f"GREATEST(_v - {tgt}, 0.0)"
+            avg = f"AVG(POW({wf}, 2)) OVER ({over})"
+            expr = f"CASE WHEN {cnt} < {mp} THEN NULL WHEN {avg} IS NULL THEN NULL ELSE SQRT({avg}) END"
+        elif op == "ts_impulse_return":
+            prev = f"LAG(_v, {w}) OVER (PARTITION BY inst ORDER BY ts)"
+            expr = f"CASE WHEN {prev} IS NULL THEN NULL ELSE _v / {prev} - 1.0 END"
+        elif op == "ts_impulse_strength":
+            vol_w = int(_literal_positional(node, 1, default=20) or 20)
+            prev_w = f"LAG(_v, {w}) OVER (PARTITION BY inst ORDER BY ts)"
+            impulse = f"CASE WHEN {prev_w} IS NULL THEN NULL ELSE _v / {prev_w} - 1.0 END"
+            ret = f"CASE WHEN {prev_w} IS NULL THEN NULL ELSE _v / LAG(_v, 1) OVER (PARTITION BY inst ORDER BY ts) - 1.0 END"
+            rv_over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {vol_w - 1} PRECEDING AND CURRENT ROW"
+            rv = f"STDDEV({ret}) OVER ({rv_over})"
+            rv_cnt = f"COUNT({ret}) OVER ({rv_over})"
+            expr = (
+                f"CASE WHEN {impulse} IS NULL THEN NULL "
+                f"WHEN {rv_cnt} < {vol_w} THEN NULL "
+                f"WHEN {rv} IS NULL OR {rv} * SQRT({w}) = 0 THEN NULL "
+                f"ELSE {impulse} / ({rv} * SQRT({w})) END"
+            )
+        else:  # ts_impulse_volume
+            b = int(_literal_positional(node, 1, default=20) or 20)
+            recent = f"AVG(_v) OVER ({over})"
+            recent_cnt = f"COUNT(_v) OVER ({over})"
+            lagged = f"SELECT ts, inst, LAG(_v, {w}) OVER (PARTITION BY inst ORDER BY ts) AS _v FROM ({x_l.sql}) _t"
+            base_l = _Layer(_inst_window(dialect, b, "AVG", lagged, min_periods=b), has_inst_window=True)
+            expr = (
+                f"CASE WHEN {recent_cnt} < {w} THEN NULL "
+                f"WHEN {recent} IS NULL OR c._v IS NULL OR c._v = 0 THEN NULL "
+                f"ELSE {recent} / c._v - 1.0 END"
+            )
+            return _Layer(
+                f"SELECT a.ts, a.inst, {expr} AS _v "
+                f"FROM ({x_l.sql}) a LEFT JOIN ({base_l.sql}) c USING (ts, inst)",
+                has_inst_window=True,
+            )
+        return _Layer(
+            f"SELECT ts, inst, {expr} AS _v FROM ({x_l.sql}) t",
+            has_inst_window=True,
+        )
+
+    if op in {
+        "ts_argmax_age",
+        "ts_argmin_age",
+        "ts_argmax_index_from_oldest",
+        "ts_argmin_index_from_oldest",
+        "ts_staleness",
+    }:
+        # 极值年龄 / 极值位置 / 最近有限值 bar 数。
+        # DuckDB 禁止嵌套窗口函数，用三级子查询：先求窗口极值 + 计数，
+        # 再标记命中行号，最后在窗口内取命中行号的极值。
+        if len(node.inputs) < 1:
+            return None
+        x_l = _compile_layer(node.inputs[0], dialect=dialect)
+        if x_l is None:
+            return None
+        w = int(_literal_positional(node, 0, default=20) or 20)
+        over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+        rn_sql = f"SELECT ts, inst, _v, ROW_NUMBER() OVER (PARTITION BY inst ORDER BY ts) AS rn FROM ({x_l.sql}) _s"
+        if op == "ts_staleness":
+            mp = 0
+            sub1 = f"SELECT ts, inst, _v, rn, COUNT(_v) OVER ({over}) AS cnt FROM ({rn_sql}) _1"
+            sub2 = f"SELECT ts, inst, rn, cnt, CASE WHEN _v IS NOT NULL THEN rn END AS hit_rn FROM ({sub1}) _2"
+            gate = "WHEN cnt = 0 THEN NULL"
+        else:
+            mp = int(_literal_positional(node, 1, default=1) or 1)
+            agg = "MAX" if op in {"ts_argmax_age", "ts_argmax_index_from_oldest"} else "MIN"
+            sub1 = (
+                f"SELECT ts, inst, _v, rn, {agg}(_v) OVER ({over}) AS wmax, "
+                f"COUNT(_v) OVER ({over}) AS cnt FROM ({rn_sql}) _1"
+            )
+            sub2 = f"SELECT ts, inst, rn, wmax, cnt, CASE WHEN _v = wmax THEN rn END AS hit_rn FROM ({sub1}) _2"
+            gate = f"WHEN cnt < {mp} THEN NULL"
+        sub3 = f"SELECT ts, inst, rn, cnt, MAX(hit_rn) OVER ({over}) AS last_hit FROM ({sub2}) _3"
+        if op == "ts_staleness":
+            expr = f"CASE {gate} ELSE rn - last_hit END"
+        elif op in {"ts_argmax_age", "ts_argmin_age"}:
+            expr = f"CASE {gate} WHEN last_hit IS NULL THEN NULL ELSE rn - last_hit END"
+        else:  # index_from_oldest
+            start_rn = f"GREATEST(1, rn - {w} + 1)"
+            expr = f"CASE {gate} WHEN last_hit IS NULL THEN NULL ELSE last_hit - {start_rn} END"
+        return _Layer(
+            f"SELECT ts, inst, {expr} AS _v FROM ({sub3}) _4",
+            has_inst_window=True,
+        )
+
+    if op in {"ts_days_since_high", "ts_days_since_low"}:
+        # x.shift(1).rolling(w, min_periods=w)：在「前 w 个 bar」里找极值，
+        # 返回距最近一个 prior bar 的 bar 数。nanargmax → 平手取最早命中。
+        if len(node.inputs) < 1:
+            return None
+        x_l = _compile_layer(node.inputs[0], dialect=dialect)
+        if x_l is None:
+            return None
+        w = int(_literal_positional(node, 0, default=20) or 20)
+        over_prev = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w} PRECEDING AND 1 PRECEDING"
+        agg = "MAX" if op == "ts_days_since_high" else "MIN"
+        rn_sql = f"SELECT ts, inst, _v, ROW_NUMBER() OVER (PARTITION BY inst ORDER BY ts) AS rn FROM ({x_l.sql}) _s"
+        sub0 = f"SELECT ts, inst, rn, LAG(_v, 1) OVER (PARTITION BY inst ORDER BY ts) AS sh FROM ({rn_sql}) _0"
+        sub1 = f"SELECT ts, inst, rn, sh, {agg}(sh) OVER ({over_prev}) AS pxt, COUNT(sh) OVER ({over_prev}) AS pcnt FROM ({sub0}) _1"
+        sub2 = f"SELECT ts, inst, rn, pxt, pcnt, CASE WHEN sh = pxt THEN rn END AS hit_rn FROM ({sub1}) _2"
+        sub3 = f"SELECT ts, inst, rn, pcnt, MIN(hit_rn) OVER ({over_prev}) AS first_hit FROM ({sub2}) _3"
+        expr = f"CASE WHEN pcnt < {w} THEN NULL ELSE (rn - 1) - first_hit END"
+        return _Layer(
+            f"SELECT ts, inst, {expr} AS _v FROM ({sub3}) _4",
+            has_inst_window=True,
+        )
+
+    if op in {
+        "cs_valid_count",
+        "cs_coverage_ratio",
+        "cs_fill_mean",
+        "cs_fill_median",
+        "cs_impute_mean",
+        "cs_impute_median",
+        "cs_residual_percentile",
+    }:
+        # 横截面（同一 ts 内所有 inst）聚合。partition by ts。
+        if len(node.inputs) < 1:
+            return None
+        x_l = _compile_layer(node.inputs[0], dialect=dialect)
+        if x_l is None:
+            return None
+        p = "PARTITION BY ts"
+        if op == "cs_valid_count":
+            expr = f"COUNT(_v) OVER ({p})"
+        elif op == "cs_coverage_ratio":
+            expr = f"COUNT(_v) OVER ({p}) / COUNT(*) OVER ({p})"
+        elif op in {"cs_fill_mean", "cs_impute_mean"}:
+            expr = f"CASE WHEN _v IS NULL THEN AVG(_v) OVER ({p}) ELSE _v END"
+        elif op in {"cs_fill_median", "cs_impute_median"}:
+            expr = f"CASE WHEN _v IS NULL THEN MEDIAN(_v) OVER ({p}) ELSE _v END"
+        else:  # cs_residual_percentile
+            rn = f"ROW_NUMBER() OVER ({p} ORDER BY _v)"
+            cnt = f"COUNT(_v) OVER ({p})"
+            expr = (
+                f"CASE WHEN {cnt} < 2 THEN NULL "
+                f"WHEN _v IS NULL THEN NULL "
+                f"ELSE ({rn} - 1) / ({cnt} - 1) END"
+            )
+        return _Layer(
+            f"SELECT ts, inst, {expr} AS _v FROM ({x_l.sql}) t",
+            has_inst_window=x_l.has_inst_window,
+            has_ts_partition=True,
+        )
+
+    if op in {"cs_weighted_mean", "cs_weighted_demean", "cs_weighted_zscore"}:
+        # 横截面加权统计：仅对 x 有限、weight 有限且 >0 的位置聚合并输出；
+        # 权重和 <= EPS 时整行 NaN。
+        if len(node.inputs) < 2:
+            return None
+        x_l = _compile_layer(node.inputs[0], dialect=dialect)
+        w_l = _compile_layer(node.inputs[1], dialect=dialect)
+        if x_l is None or w_l is None:
+            return None
+        _eps = 1e-12
+        p = "PARTITION BY ts"
+        sub = (
+            f"SELECT x.ts, x.inst, "
+            f"CASE WHEN x._v IS NULL OR w._v IS NULL OR w._v <= 0 THEN NULL ELSE x._v END AS x, "
+            f"CASE WHEN x._v IS NULL OR w._v IS NULL OR w._v <= 0 THEN NULL ELSE w._v END AS w "
+            f"FROM ({x_l.sql}) x LEFT JOIN ({w_l.sql}) w USING (ts, inst)"
+        )
+        sub2 = (
+            f"SELECT ts, inst, x, w, "
+            f"SUM(x*w) OVER ({p}) AS swx, SUM(w) OVER ({p}) AS sw FROM ({sub}) _1"
+        )
+        sub3 = (
+            f"SELECT ts, inst, x, w, swx, sw, "
+            f"CASE WHEN sw IS NULL OR sw <= {_eps} THEN NULL ELSE swx / sw END AS m, "
+            f"x - CASE WHEN sw IS NULL OR sw <= {_eps} THEN NULL ELSE swx / sw END AS dx "
+            f"FROM ({sub2}) _2"
+        )
+        if op == "cs_weighted_mean":
+            expr = "CASE WHEN x IS NULL THEN NULL ELSE m END"
+        elif op == "cs_weighted_demean":
+            expr = "CASE WHEN x IS NULL THEN NULL ELSE dx END"
+        else:
+            sub4 = (
+                f"SELECT ts, inst, x, dx, sw, "
+                f"SUM(dx*dx*w) OVER ({p}) AS sdx2 FROM ({sub3}) _3"
+            )
+            expr = (
+                f"CASE WHEN x IS NULL THEN NULL "
+                f"WHEN sw IS NULL OR sw <= {_eps} THEN NULL "
+                f"WHEN sdx2 / sw <= {_eps} THEN NULL "
+                f"ELSE dx / SQRT(sdx2 / sw) END"
+            )
+            return _Layer(
+                f"SELECT ts, inst, {expr} AS _v FROM ({sub4}) _4",
+                has_inst_window=x_l.has_inst_window or w_l.has_inst_window,
+                has_ts_partition=True,
+            )
+        return _Layer(
+            f"SELECT ts, inst, {expr} AS _v FROM ({sub3}) _3",
+            has_inst_window=x_l.has_inst_window or w_l.has_inst_window,
+            has_ts_partition=True,
+        )
+
+    if op in {
+        "ts_prev_high",
+        "ts_prev_low",
+        "ts_distance_to_high",
+        "ts_distance_to_low",
+        "ts_breakout_high",
+        "ts_breakdown_low",
+        "ts_channel_position",
+        "ts_new_high",
+        "ts_new_low",
+    }:
+        # Prior-window 极值族：x.shift(1).rolling(w, min_periods=w)（排除当前 bar）。
+        if len(node.inputs) < 1:
+            return None
+        x_l = _compile_layer(node.inputs[0], dialect=dialect)
+        if x_l is None:
+            return None
+        w = max(int(_literal_positional(node, 0, default=20) or 20), 1)
+        lagged = f"SELECT ts, inst, LAG(_v, 1) OVER (PARTITION BY inst ORDER BY ts) AS _v FROM ({x_l.sql}) _t"
+        hi = _inst_window(dialect, w, "MAX", lagged, min_periods=w)
+        lo = _inst_window(dialect, w, "MIN", lagged, min_periods=w)
+        if op == "ts_prev_high":
+            return _Layer(hi, has_inst_window=True)
+        if op == "ts_prev_low":
+            return _Layer(lo, has_inst_window=True)
+        if op == "ts_new_high":
+            return _Layer(
+                f"SELECT x.ts, x.inst, "
+                f"CASE WHEN x._v > h._v THEN 1.0 ELSE 0.0 END AS _v "
+                f"FROM ({x_l.sql}) x LEFT JOIN ({hi}) h USING (ts, inst)",
+                has_inst_window=True,
+            )
+        if op == "ts_new_low":
+            return _Layer(
+                f"SELECT x.ts, x.inst, "
+                f"CASE WHEN x._v < l._v THEN 1.0 ELSE 0.0 END AS _v "
+                f"FROM ({x_l.sql}) x LEFT JOIN ({lo}) l USING (ts, inst)",
+                has_inst_window=True,
+            )
+        if op == "ts_channel_position":
+            return _Layer(
+                f"SELECT x.ts, x.inst, "
+                f"CASE WHEN h._v IS NULL OR l._v IS NULL OR (h._v - l._v) = 0 THEN NULL "
+                f"ELSE (x._v - l._v) / (h._v - l._v) END AS _v "
+                f"FROM ({x_l.sql}) x LEFT JOIN ({hi}) h USING (ts, inst) LEFT JOIN ({lo}) l USING (ts, inst)",
+                has_inst_window=True,
+            )
+        if op == "ts_breakout_high":
+            return _Layer(
+                f"SELECT x.ts, x.inst, "
+                f"CASE WHEN h._v IS NULL THEN NULL WHEN h._v = 0 THEN NULL "
+                f"ELSE {_g}(x._v / h._v - 1.0, 0.0) END AS _v "
+                f"FROM ({x_l.sql}) x LEFT JOIN ({hi}) h USING (ts, inst)",
+                has_inst_window=True,
+            )
+        if op == "ts_breakdown_low":
+            return _Layer(
+                f"SELECT x.ts, x.inst, "
+                f"CASE WHEN l._v IS NULL THEN NULL WHEN x._v = 0 THEN NULL "
+                f"ELSE {_g}(l._v / x._v - 1.0, 0.0) END AS _v "
+                f"FROM ({x_l.sql}) x LEFT JOIN ({lo}) l USING (ts, inst)",
+                has_inst_window=True,
+            )
+        # ts_distance_to_high / ts_distance_to_low
+        if op == "ts_distance_to_high":
+            return _Layer(
+                f"SELECT x.ts, x.inst, "
+                f"CASE WHEN h._v IS NULL THEN NULL WHEN h._v = 0 THEN NULL "
+                f"ELSE x._v / h._v - 1.0 END AS _v "
+                f"FROM ({x_l.sql}) x LEFT JOIN ({hi}) h USING (ts, inst)",
+                has_inst_window=True,
+            )
+        return _Layer(
+            f"SELECT x.ts, x.inst, "
+            f"CASE WHEN l._v IS NULL THEN NULL WHEN l._v = 0 THEN NULL "
+            f"ELSE x._v / l._v - 1.0 END AS _v "
+            f"FROM ({x_l.sql}) x LEFT JOIN ({lo}) l USING (ts, inst)",
+            has_inst_window=True,
+        )
+
     if op in {"open_close_return", "overnight_return", "open_to_vwap_return", "vwap_to_close_return"}:
         if len(node.inputs) != 2:
             return None

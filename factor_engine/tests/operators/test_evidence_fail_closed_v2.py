@@ -57,24 +57,28 @@ def test_segmented_execution_set_matches_runtime_restore_implementations():
 
 
 def test_stateful_operators_without_runtime_fail_closed():
-    """``trade_when`` is registered for checkpoint management but has no restore
-    implementation, so it must not advertise segmented execution and must stay
-    full-replay / non-streaming."""
+    """``KAMA`` is documented stateful (checkpoint schema in STATEFUL_CHECKPOINTS)
+    but has no restore implementation, so it must not advertise segmented
+    execution and must stay full-replay / non-streaming.  ``trade_when`` was
+    audited 2026-08 as a pure elementwise conditional (np.where), so it is no
+    longer treated as stateful."""
     from cleaned_operators import load_all
     from cleaned_operators.production_hardening import STATEFUL_CHECKPOINTS
     from cleaned_operators.registry import OperatorRegistry
     from stateful_contract import StatefulCheckpointRegistry
 
     load_all()
-    spec = StatefulCheckpointRegistry.get("trade_when")
+    spec = StatefulCheckpointRegistry.get("KAMA")
     assert spec is not None
     assert spec.segmented_execution_supported is False
-    assert "trade_when" in STATEFUL_CHECKPOINTS
-    catalog = OperatorRegistry.catalog()["trade_when"]
+    assert "KAMA" in STATEFUL_CHECKPOINTS
+    catalog = OperatorRegistry.catalog()["KAMA"]
     assert catalog["segmented_execution_supported"] is False
     assert catalog["backend_meta"]["pandas_numpy"]["supports_streaming"] is False
     assert catalog["full_history_replay_required"] is True
     assert catalog["incremental_strategy"] == "full_replay"
+    # trade_when is elementwise, not stateful, so it is absent from the checkpoint map.
+    assert "trade_when" not in STATEFUL_CHECKPOINTS
 
 
 def test_pandas_production_status_does_not_fall_back_to_lifecycle_label(monkeypatch):

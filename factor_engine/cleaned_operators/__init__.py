@@ -248,9 +248,13 @@ def _load_all_impl() -> None:
     # rewrites ``catalog["status"]``.  ``apply_production_hardening`` uses this
     # snapshot to refuse to blanket-promote operators that were registered as
     # experimental/research (model families, next-stage kernels).
-    from cleaned_operators.semantic_certification import snapshot_registered_statuses
+    from cleaned_operators.semantic_certification import (
+        snapshot_registered_statuses,
+        stamp_compatibility_metadata,
+    )
 
     snapshot_registered_statuses()
+    stamp_compatibility_metadata()
 
     from cleaned_operators._dedupe import apply_operator_deduplication
     apply_operator_deduplication()

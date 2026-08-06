@@ -23,12 +23,12 @@ from cleaned_operators.semantic_certification import (
 # surface that is NOT yet mirrored/readable; runtime execution still enforces
 # the dataset/column contract (see storage.sources.data_access_source).
 SOURCE_BLOCKED_CANONICALS: frozenset[str] = frozenset({
-    # ``intraday_*`` session-aware operators are lifecycle-experimental and are
-    # not part of the factor production target set.  All ``intra_*`` minute→daily
-    # operators were admitted to production once ``audit_all_factor_production.py``
-    # gained a minute-panel fixture (they aggregate one scalar per (TradeDate,
-    # Symbol) from the day's minute bars).
-    "intraday_volatility", "intraday_vwap_deviation",
+    # ``intraday_vwap_deviation`` is genuinely session-aware (close relative to
+    # the intraday cumulative VWAP) and needs minute bars; it stays off the daily
+    # surface.  ``intraday_volatility`` was audited 2026-08 and is actually the
+    # daily close-to-open rolling volatility (open/close inputs, no minute bars),
+    # so it was removed from this set and promoted.
+    "intraday_vwap_deviation",
 })
 
 NON_FACTOR_PRODUCTION_CANONICALS: frozenset[str] = frozenset({
@@ -54,7 +54,6 @@ NON_FACTOR_PRODUCTION_CANONICALS: frozenset[str] = frozenset({
 
 FULL_HISTORY_REPLAY_CANONICALS: frozenset[str] = frozenset({
     "expanding_rank",
-    "trade_when",
     "hump_decay",
     # Recursive technical operators are fail-closed until their checkpoint
     # restore path is wired into the production DAG executor.
@@ -73,13 +72,13 @@ FULL_HISTORY_REPLAY_CANONICALS: frozenset[str] = frozenset({
     "Supertrend",
     "SupertrendDirection",
     "PSAR",
+    "ts_sma_cn",
 })
 
 # These schemas document the minimum state needed by a future segmented runtime.
 # Presence here does not mean segmented execution is implemented or certified.
 STATEFUL_CHECKPOINTS: dict[str, tuple[str, ...]] = {
     "ts_sma_cn": ("last_value", "last_timestamp"),
-    "trade_when": ("last_output", "last_timestamp"),
     "hump_decay": ("last_output", "last_timestamp"),
 }
 

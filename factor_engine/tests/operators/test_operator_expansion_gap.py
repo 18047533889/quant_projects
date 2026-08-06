@@ -168,20 +168,21 @@ def test_intraday_empty_day_is_nan_not_zero():
 
 
 def test_intraday_source_blocked_operators_are_not_production_targets():
-    """Daily-argument minute-aggregation operators (``intraday_volatility`` /
-    ``intraday_vwap_deviation``) consume a minute panel that the runtime-only
-    daily synthetic audit cannot exercise, so they remain source-blocked.  The
-    ``intra_*`` minute→daily family and the relation/index panel operators are
-    eligible production targets."""
+    """``intraday_vwap_deviation`` is genuinely session-aware (close relative to
+    the intraday cumulative VWAP) and needs minute bars, so it remains
+    source-blocked.  ``intraday_volatility`` was audited 2026-08 and is actually
+    the daily close-to-open rolling volatility (open/close inputs), so it was
+    unblocked and is a production target.  The ``intra_*`` minute→daily family and
+    the relation/index panel operators are eligible production targets."""
     from cleaned_operators.production_hardening import factor_production_targets
 
-    assert "intraday_volatility" in SOURCE_BLOCKED_CANONICALS
+    assert "intraday_volatility" not in SOURCE_BLOCKED_CANONICALS
     assert "intraday_vwap_deviation" in SOURCE_BLOCKED_CANONICALS
     targets = factor_production_targets()
-    assert "intraday_volatility" not in targets
+    assert "intraday_volatility" in targets
     assert "intraday_vwap_deviation" not in targets
     for name in ("intra_realized_variance", "intra_limit_reopen_count", "intra_amihud",
-                 "relation_distinct_count", "relation_overlap_ratio", "index_weight"):
+                 "index_weight"):
         assert name in targets, name
 
 

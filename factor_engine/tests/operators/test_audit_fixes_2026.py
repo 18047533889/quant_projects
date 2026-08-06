@@ -49,8 +49,8 @@ def test_s2_experimental_registered_ops_not_promoted():
 def test_s2_isolated_ops_not_promoted():
     from cleaned_operators.semantic_certification import should_fail_closed
 
-    for name in ("relation_weighted_change", "holder_weighted_churn",
-                 "fin_ttm", "nan_to_num"):
+    # fin_ttm / nan_to_num remain isolated (legacy stub / NaN sink conflation).
+    for name in ("fin_ttm", "nan_to_num"):
         assert should_fail_closed(name), name
         # Registered operators get the experimental lifecycle; unclassified ones
         # are simply absent from the catalog (never promoted either way).
@@ -59,6 +59,18 @@ def test_s2_isolated_ops_not_promoted():
             continue
         assert str(catalog.get("status")) == "experimental", name
         assert catalog.get("pit_safe") is False, name
+
+
+def test_s2_reworked_isolated_ops_are_promoted():
+    # 2026-08 第三轮:relation_weighted_change / holder_weighted_churn 完成
+    # 语义重写(ID 匹配),已从隔离清单解除并升到 daily。
+    from cleaned_operators.semantic_certification import should_fail_closed
+    from cleaned_operators.operator_surface import classify_canonical
+
+    for name in ("relation_weighted_change", "holder_weighted_churn",
+                 "relation_entry_count", "multi_index_entry_intensity"):
+        assert not should_fail_closed(name), name
+        assert classify_canonical(name) == "daily", name
 
 
 def test_s2_reworked_unknown_state_ops_are_promoted():

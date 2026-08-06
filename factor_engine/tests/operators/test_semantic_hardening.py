@@ -79,10 +79,8 @@ def test_div_or_null_really_returns_null():
 @pytest.mark.parametrize(
     "canonical",
     [
-        "group_decay_linear",
-        "ts_sum_decay",
-        "trade_when",
-        "rank_corr",
+        # 2026-08 第三轮:group_decay_linear / ts_sum_decay / trade_when / rank_corr
+        # 已通过生产认证升到 daily,移出本守卫。
         "vp_weighted_price",
         "vpmacd",
         "vpmacd_signal",

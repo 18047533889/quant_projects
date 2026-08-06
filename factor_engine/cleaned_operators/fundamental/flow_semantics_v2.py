@@ -7,130 +7,74 @@ quarter panel.  Both advance by ``period_id`` rather than by trading rows.
 """
 from __future__ import annotations
 
-from collections import OrderedDict
 from typing import Iterable
 
-import numpy as np
-import pandas as pd
-
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
-from cleaned_operators.fundamental.transforms_v2 import (
-    _period_key,
-    _pos_int,
-    _values,
-    _walk_periods,
+from cleaned_operators.fiscal_strict import (
+    pd_quarter_from_cumulative,
+    pd_ttm_from_quarterly,
 )
+from cleaned_operators.fundamental.transforms_v2 import _pos_int
 
 
-def _quarter_number(value) -> int | None:
-    if pd.isna(value):
-        return None
-    if isinstance(value, str):
-        text = value.strip().upper()
-        if text.startswith("Q"):
-            text = text[1:]
-        try:
-            value = int(text)
-        except ValueError:
-            return None
-    try:
-        quarter = int(value)
-    except (TypeError, ValueError):
-        return None
-    return quarter if quarter in {1, 2, 3, 4} else None
+def _aligned(*frames):
+    """Reindex every auxiliary frame onto the primary panel's axes."""
+    primary = frames[0]
+    aligned = []
+    for frame in frames:
+        if frame is primary:
+            aligned.append(frame)
+        else:
+            aligned.append(frame.reindex(index=primary.index, columns=primary.columns))
+    return tuple(aligned)
 
 
 def fin_ttm_quarterly(x, period_id, periods_per_year=4):
-    """Sum the latest complete set of single-period flow observations."""
+    """TTM over the latest consecutive single-period flow observations.
+
+    Delegates to the strict fiscal kernel: the sequence is walked by fiscal
+    ordinal (year*4+quarter) and a skipped/missing quarter fails closed
+    (require_consecutive=True) instead of summing non-adjacent periods.
+    """
     periods = _pos_int(periods_per_year, "periods_per_year")
-
-    def calculate(order, visible, current):
-        values = _values(order, visible, current, periods)
-        return float(np.sum(values)) if len(values) == periods else np.nan
-
-    return _walk_periods(x, period_id, calculate)
-
-
-def _period_year(value) -> int | None:
-    """Fiscal year of a report period when the period id is a date-like key."""
-    key = _period_key(value)
-    if isinstance(key, pd.Timestamp):
-        return key.year
-    return None
+    x, period_id = _aligned(x, period_id)
+    return pd_ttm_from_quarterly(x, period_id, periods=periods, require_consecutive=True)
 
 
 def fin_quarter_from_cumulative(x, period_id, fiscal_quarter):
     """Convert fiscal YTD cumulative values to one-quarter flow values.
 
     A non-Q1 period is emitted only when the immediately preceding visible report
-    period carries the preceding fiscal-quarter number AND belongs to the same
-    fiscal year.  Requiring ``same_fiscal_year`` prevents subtracting Q1 of the
-    previous year from Q2 of the current year just because both quarter numbers
-    differ by one.  Missing/out-of-order reports fail closed instead of treating
-    a cumulative value as a quarter.
+    period carries the preceding fiscal ordinal (Q1 of YYYY cannot be subtracted
+    from Q2 of a different year).  Missing/out-of-order reports fail closed instead
+    of treating a cumulative value as a quarter.
     """
-    period_id = period_id.reindex(index=x.index, columns=x.columns)
-    fiscal_quarter = fiscal_quarter.reindex(index=x.index, columns=x.columns)
-    output = pd.DataFrame(np.nan, index=x.index, columns=x.columns, dtype=float)
-
-    for column in x.columns:
-        order: list[object] = []
-        visible: OrderedDict[object, float] = OrderedDict()
-        quarters: OrderedDict[object, int] = OrderedDict()
-        years: OrderedDict[object, int | None] = OrderedDict()
-        values = pd.to_numeric(x[column], errors="coerce").to_numpy(dtype=float)
-        periods = period_id[column].to_numpy()
-        quarter_values = fiscal_quarter[column].to_numpy()
-        result = np.full(len(x), np.nan, dtype=float)
-
-        for index, (value, raw_period, raw_quarter) in enumerate(
-            zip(values, periods, quarter_values)
-        ):
-            key = _period_key(raw_period)
-            quarter = _quarter_number(raw_quarter)
-            if key is not None and np.isfinite(value) and quarter is not None:
-                if key not in visible:
-                    order.append(key)
-                visible[key] = float(value)
-                quarters[key] = quarter
-                years[key] = _period_year(raw_period)
-            if key is None or key not in visible or key not in quarters:
-                continue
-
-            current_quarter = quarters[key]
-            if current_quarter == 1:
-                result[index] = visible[key]
-                continue
-
-            position = order.index(key)
-            if position <= 0:
-                continue
-            previous_key = order[position - 1]
-            previous_quarter = quarters.get(previous_key)
-            previous_value = visible.get(previous_key, np.nan)
-            # Same fiscal year guard: when both period ids carry a year, require
-            # them to match (Q2 of YYYY cannot subtract Q1 of YYYY-1).  Period
-            # ids without a derivable year fall back to the quarter-only check.
-            same_year = (
-                years.get(previous_key) == years.get(key)
-                if years.get(key) is not None and years.get(previous_key) is not None
-                else True
-            )
-            if (
-                previous_quarter == current_quarter - 1
-                and same_year
-                and np.isfinite(previous_value)
-            ):
-                result[index] = float(visible[key] - previous_value)
-
-        output[column] = result
-    return output
+    x, period_id, fiscal_quarter = _aligned(x, period_id, fiscal_quarter)
+    return pd_quarter_from_cumulative(
+        x,
+        period_id,
+        fiscal_quarter=fiscal_quarter,
+        revision_policy="latest_available",
+    )
 
 
 def fin_ttm_cumulative(x, period_id, fiscal_quarter, periods_per_year=4):
     """Convert fiscal YTD cumulative values to quarters, then calculate TTM."""
-    quarterly = fin_quarter_from_cumulative(x, period_id, fiscal_quarter)
-    return fin_ttm_quarterly(quarterly, period_id, periods_per_year)
+    periods = _pos_int(periods_per_year, "periods_per_year")
+    x, period_id, fiscal_quarter = _aligned(x, period_id, fiscal_quarter)
+    quarterly = pd_quarter_from_cumulative(
+        x,
+        period_id,
+        fiscal_quarter=fiscal_quarter,
+        revision_policy="latest_available",
+    )
+    return pd_ttm_from_quarterly(
+        quarterly,
+        period_id,
+        periods=periods,
+        require_consecutive=True,
+        revision_policy="latest_available",
+    )
 
 
 def _register(name: str, params: Iterable[str], function, description: str) -> None:

@@ -78,7 +78,10 @@ class FieldSpec:
         object.__setattr__(
             self, "allowed_operator_families", tuple(self.allowed_operator_families)
         )
-        if self.role in {"time", "instrument", "label", "identifier", "group_key"}:
+        if self.role in {
+            "time", "instrument", "label", "identifier", "group_key",
+            "knowledge_time", "effective_time", "period_id", "ingestion_time",
+        }:
             object.__setattr__(self, "mining_allowed", False)
 
     @property

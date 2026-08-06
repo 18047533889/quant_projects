@@ -44,6 +44,52 @@ def _minimal_plan_raw(op: str) -> PlanNode:
         return PlanNode(op=op, inputs=[open_, low, close], attrs={})
     if op in {"candle_close_location", "candle_close_strength"}:
         return PlanNode(op=op, inputs=[high, low, close], attrs={})
+    if op.startswith("cdl_"):
+        return PlanNode(op=op, inputs=[open_, high, low, close], attrs={})
+    if op == "ichimoku_tenkan":
+        return PlanNode(op=op, inputs=[high, low, literal(9.0)], attrs={"tenkan_window": 9})
+    if op == "ichimoku_kijun":
+        return PlanNode(op=op, inputs=[high, low, literal(26.0)], attrs={"kijun_window": 26})
+    if op == "ichimoku_senkou_a":
+        return PlanNode(op=op, inputs=[high, low, literal(9.0), literal(26.0)], attrs={"tenkan_window": 9, "kijun_window": 26})
+    if op == "ichimoku_senkou_b":
+        return PlanNode(op=op, inputs=[high, low, literal(52.0)], attrs={"senkou_b_window": 52})
+    if op == "ichimoku_cloud_width":
+        return PlanNode(op=op, inputs=[high, low, literal(9.0), literal(26.0), literal(52.0)], attrs={"tenkan_window": 9, "kijun_window": 26, "senkou_b_window": 52})
+    if op == "ichimoku_cloud_position":
+        return PlanNode(op=op, inputs=[high, low, close, literal(9.0), literal(26.0), literal(52.0)], attrs={"tenkan_window": 9, "kijun_window": 26, "senkou_b_window": 52})
+    if op == "efficiency_ratio":
+        return PlanNode(op=op, inputs=[close, literal(20.0)], attrs={"window": 20})
+    if op == "choppiness_index":
+        return PlanNode(op=op, inputs=[high, low, close, literal(20.0)], attrs={"window": 20})
+    if op == "coskewness_to_market":
+        return PlanNode(op=op, inputs=[close, volume, literal(60.0)], attrs={"window": 60})
+    if op in {"ts_valid_count", "ts_coverage_ratio", "ts_abs_concentration"}:
+        return PlanNode(op=op, inputs=[close, literal(20.0), literal(1.0)], attrs={"window": 20, "min_periods": 1})
+    if op == "ts_abs_entropy":
+        return PlanNode(op=op, inputs=[close, literal(20.0), literal(1.0), literal(1.0)], attrs={"window": 20, "normalize": 1, "min_periods": 1})
+    if op in {"ts_downside_deviation", "ts_upside_deviation"}:
+        return PlanNode(op=op, inputs=[close, literal(20.0), literal(0.0), literal(2.0)], attrs={"window": 20, "target": 0.0, "min_periods": 2})
+    if op == "ts_impulse_return":
+        return PlanNode(op=op, inputs=[close, literal(20.0)], attrs={"window": 20})
+    if op == "ts_impulse_strength":
+        return PlanNode(op=op, inputs=[close, literal(20.0), literal(20.0)], attrs={"window": 20, "vol_window": 20})
+    if op == "ts_impulse_volume":
+        return PlanNode(op=op, inputs=[volume, literal(20.0), literal(20.0)], attrs={"window": 20, "baseline_window": 20})
+    if op in {"ts_prev_high", "ts_prev_low", "ts_distance_to_high", "ts_distance_to_low",
+              "ts_breakout_high", "ts_breakdown_low", "ts_channel_position", "ts_new_high", "ts_new_low"}:
+        return PlanNode(op=op, inputs=[close, literal(20.0)], attrs={"window": 20})
+    if op in {"ts_argmax_age", "ts_argmin_age", "ts_argmax_index_from_oldest", "ts_argmin_index_from_oldest"}:
+        return PlanNode(op=op, inputs=[close, literal(20.0), literal(1.0)], attrs={"window": 20, "min_periods": 1})
+    if op == "ts_staleness":
+        return PlanNode(op=op, inputs=[close, literal(20.0)], attrs={"window": 20})
+    if op in {"ts_days_since_high", "ts_days_since_low"}:
+        return PlanNode(op=op, inputs=[close, literal(20.0)], attrs={"window": 20})
+    if op in {"cs_valid_count", "cs_coverage_ratio", "cs_fill_mean", "cs_fill_median",
+              "cs_impute_mean", "cs_impute_median", "cs_residual_percentile"}:
+        return PlanNode(op=op, inputs=[close], attrs={})
+    if op in {"cs_weighted_mean", "cs_weighted_demean", "cs_weighted_zscore"}:
+        return PlanNode(op=op, inputs=[close, volume], attrs={})
     if op in {"candle_body", "candle_abs_body", "candle_gap", "candle_gap_pct", "candle_direction"}:
         return PlanNode(op=op, inputs=[open_, close], attrs={})
     if op in {"candle_range", "candle_overlap_ratio", "candle_inside_ratio"}:

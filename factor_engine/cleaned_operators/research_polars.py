@@ -81,11 +81,14 @@ class TSMomentNativePolars(SeriesOperator):
     def _calculate_series(self, x: pl.DataFrame, d: int = 20, k: int = 3, **kwargs) -> pl.DataFrame:
         d = _positive(d, "d")
         k = _positive(k, "k")
+        # pandas ts_moment (ts_moment_ kernel) requires the full window; partial
+        # windows are NaN.  min_samples=d reproduces that reference semantics
+        # (the previous min_samples=1 emitted partial-window moments).
         return x.with_columns([
             pl.col(c).rolling_map(
                 lambda s: float(((s - s.mean()) ** k).mean()) if len(s) else None,
                 window_size=d,
-                min_samples=1,
+                min_samples=d,
             ).alias(c)
             for c in _numeric_cols(x)
         ])

@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.fiscal_strict import period_ordinal
 
 _EPS = 1e-12
 
@@ -46,6 +47,28 @@ def _period_key(value):
         return value
 
 
+def _period_insert(order: list[object], key: object) -> None:
+    """Insert ``key`` into ``order`` keeping fiscal-ordinal sorted order.
+
+    Report periods must advance by fiscal-quarter ordinal (``year*4 + quarter``),
+    not by first-appearance order.  A late-disclosed revision or a back-filled
+    older period (e.g. a restated 2025Q2 arriving after 2025Q3) must not reorder
+    the sequence that lag / TTM / growth operators walk — that reordering corrupts
+    every lag, trend and growth factor (audit §4.1).
+    """
+    target = period_ordinal(key)
+    if target is None:
+        # Unparseable period ids keep first-seen order at the end.
+        order.append(key)
+        return
+    for position, existing in enumerate(order):
+        existing_ord = period_ordinal(existing)
+        if existing_ord is not None and existing_ord > target:
+            order.insert(position, key)
+            return
+    order.append(key)
+
+
 def _walk_periods(
     x: pd.DataFrame,
     period_id: pd.DataFrame,
@@ -63,7 +86,7 @@ def _walk_periods(
             key = _period_key(raw_period)
             if key is not None and np.isfinite(value):
                 if key not in visible:
-                    order.append(key)
+                    _period_insert(order, key)
                 visible[key] = float(value)
             if key is None or key not in visible:
                 continue
@@ -88,12 +111,20 @@ def _values(order: list[object], visible: OrderedDict, current: object, count: i
 
 
 def _lag_value(order, visible, current, periods: int):
+    """Exact ordinal lag: the value whose fiscal ordinal is ``current - periods``.
+
+    Position-based lookup breaks when a quarter is missing (a skipped report period
+    must yield NaN, not the value of a non-adjacent quarter) — audit §4.2.
+    """
     periods = _pos_int(periods, "periods")
-    pos = order.index(current)
-    target = pos - periods
-    if target < 0:
+    target = period_ordinal(current)
+    if target is None:
         return np.nan
-    return float(visible.get(order[target], np.nan))
+    target -= periods
+    for key in reversed(order):
+        if period_ordinal(key) == target:
+            return float(visible.get(key, np.nan))
+    return np.nan
 
 
 def _register(name: str, params: Iterable[str], fn, description: str, *, tags=()):

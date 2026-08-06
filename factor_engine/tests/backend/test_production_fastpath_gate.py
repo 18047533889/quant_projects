@@ -81,8 +81,11 @@ def test_python_rolling_op_blocked(_loaded):
 def test_map_groups_op_blocked(_loaded):
     from backend.polars_long_policy import infer_polars_long_tier
 
+    # 2026-08: ts_ewm_corr was promoted to daily and lowered via full-series
+    # per-instrument pandas ewm (map_groups tier).  It is still a map_groups /
+    # Python-UDF path, so the native production fastpath must reject it.
     op = "ts_ewm_corr"
-    assert infer_polars_long_tier(op) == "unsupported"
+    assert infer_polars_long_tier(op) == "map_groups"
     plan = minimal_plan(op)
     result = check_production_fastpath_plan_ops(plan)
     assert not result.ok

@@ -71,7 +71,7 @@ class RelationHhi(SeriesOperator):
 
     metadata = _metadata(
         "relation_hhi",
-        "名次面板持股集中度 HHI。",
+        "名次面板持股集中度 HHI（仅已披露前十大股东口径，非全体股东结构）。",
         ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10"],
         category="relation",
         domain="relation",
@@ -794,7 +794,12 @@ class FinApplicabilityMask(SeriesOperator):
     def _calculate_series(self, value: pd.DataFrame, threshold: float = 0.0, **_: Any) -> pd.DataFrame:
         thr = float(threshold)
         values = value.to_numpy(dtype=float)
-        out = np.where(np.isfinite(values) & (values > thr), 1.0, 0.0)
+        # Unknown / unreported values (NaN) must stay NaN — never converted to
+        # "0 = not applicable" (audit §4.6: missing is not a confirmed no).
+        finite = np.isfinite(values)
+        out = np.full(values.shape, np.nan, dtype=float)
+        out[finite & (values > thr)] = 1.0
+        out[finite & (values <= thr)] = 0.0
         return _frame_like(value, out)
 
 

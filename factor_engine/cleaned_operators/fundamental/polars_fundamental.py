@@ -18,7 +18,11 @@ import numpy as np
 import polars as pl
 
 from cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
-from cleaned_operators.fundamental.flow_semantics_v2 import _period_year
+from cleaned_operators.fiscal_strict import (
+    period_ordinal,
+    pl_quarter_from_cumulative,
+    pl_ttm_from_quarterly,
+)
 from cleaned_operators.fundamental.transforms_v2 import _period_key
 
 _SKIP = frozenset({"date", "stock_code"})
@@ -60,6 +64,25 @@ def _safe_div(a: float, b: float) -> float:
     return float(a / b)
 
 
+def _period_insert(order: list, key) -> None:
+    """Insert ``key`` into ``order`` keeping fiscal-ordinal sorted order.
+
+    Mirrors the pandas ``_period_insert``: report periods advance by fiscal
+    ordinal, so a late-disclosed revision or back-filled older period must not
+    reorder the lag / TTM / growth sequence (audit §4.1).
+    """
+    target = period_ordinal(key)
+    if target is None:
+        order.append(key)
+        return
+    for position, existing in enumerate(order):
+        existing_ord = period_ordinal(existing)
+        if existing_ord is not None and existing_ord > target:
+            order.insert(position, key)
+            return
+    order.append(key)
+
+
 def _values(order: list, visible: OrderedDict, current, count: int | None = None):
     try:
         pos = order.index(current)
@@ -72,11 +95,19 @@ def _values(order: list, visible: OrderedDict, current, count: int | None = None
 
 
 def _lag_value(order, visible, current, periods: int):
-    pos = order.index(current)
-    target = pos - periods
-    if target < 0:
+    """Exact ordinal lag: the value whose fiscal ordinal is ``current - periods``.
+
+    A skipped report period yields NaN instead of a non-adjacent quarter's value
+    (audit §4.2) — mirrors the pandas ``_lag_value``.
+    """
+    target = period_ordinal(current)
+    if target is None:
         return np.nan
-    return float(visible.get(order[target], np.nan))
+    target -= periods
+    for key in reversed(order):
+        if period_ordinal(key) == target:
+            return float(visible.get(key, np.nan))
+    return np.nan
 
 
 def _walk_1d(xv: np.ndarray, pv: list, fn: Callable) -> np.ndarray:
@@ -88,7 +119,7 @@ def _walk_1d(xv: np.ndarray, pv: list, fn: Callable) -> np.ndarray:
         key = _period_key(raw_period)
         if key is not None and np.isfinite(value):
             if key not in visible:
-                order.append(key)
+                _period_insert(order, key)
             visible[key] = float(value)
         if key is None or key not in visible:
             continue
@@ -854,6 +885,49 @@ def fin_miss_streak(actual, expected, period_id, max_periods=8):
 # ---------------------------------------------------------------------------
 
 
+def fin_quarter_from_cumulative(x, period_id, fiscal_quarter):
+    """Convert fiscal YTD cumulative values to one-quarter flows (strict kernel)."""
+    return pl_quarter_from_cumulative(
+        x,
+        period_id,
+        fiscal_quarter=fiscal_quarter,
+        revision_policy="latest_available",
+    )
+
+
+def fin_ttm_quarterly(x, period_id, periods_per_year=4):
+    """TTM over the latest consecutive single-period flow values (strict kernel)."""
+    return pl_ttm_from_quarterly(
+        x,
+        period_id,
+        periods=_pi(periods_per_year, "periods_per_year"),
+        require_consecutive=True,
+        revision_policy="latest_available",
+    )
+
+
+def fin_ttm_cumulative(x, period_id, fiscal_quarter, periods_per_year=4):
+    """Convert fiscal YTD cumulative values to quarters, then calculate TTM."""
+    quarterly = pl_quarter_from_cumulative(
+        x,
+        period_id,
+        fiscal_quarter=fiscal_quarter,
+        revision_policy="latest_available",
+    )
+    return pl_ttm_from_quarterly(
+        quarterly,
+        period_id,
+        periods=_pi(periods_per_year, "periods_per_year"),
+        require_consecutive=True,
+        revision_policy="latest_available",
+    )
+
+
+# ---------------------------------------------------------------------------
+# seasonal family (fiscal ordinal)
+# ---------------------------------------------------------------------------
+
+
 def _quarter_number(value):
     if value is None:
         return None
@@ -870,71 +944,6 @@ def _quarter_number(value):
         if s in {"Q3", "3Q"}: return 3
         if s in {"Q4", "4Q"}: return 4
     return None
-
-
-def fin_quarter_from_cumulative(x, period_id, fiscal_quarter):
-    cols = _cols(x, period_id, fiscal_quarter)
-    rows = x.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        xv = _xv_of(x, c)
-        pv = _pv_of(period_id, c)
-        qv = _pv_of(fiscal_quarter, c)
-        order: list = []
-        visible: OrderedDict = OrderedDict()
-        quarters: OrderedDict = OrderedDict()
-        years: OrderedDict = OrderedDict()
-        result = np.full(rows, np.nan, dtype=float)
-        for t, (value, raw_period, raw_quarter) in enumerate(zip(xv, pv, qv)):
-            key = _period_key(raw_period)
-            quarter = _quarter_number(raw_quarter)
-            if key is not None and np.isfinite(value) and quarter is not None:
-                if key not in visible:
-                    order.append(key)
-                visible[key] = float(value)
-                quarters[key] = quarter
-                years[key] = _period_year(raw_period)
-            if key is None or key not in visible or key not in quarters:
-                continue
-            current_quarter = quarters[key]
-            if current_quarter == 1:
-                result[t] = visible[key]
-                continue
-            position = order.index(key)
-            if position <= 0:
-                continue
-            previous_key = order[position - 1]
-            previous_quarter = quarters.get(previous_key)
-            previous_value = visible.get(previous_key, np.nan)
-            # Same fiscal year guard (mirrors the pandas path).
-            cur_year, prev_year = years.get(key), years.get(previous_key)
-            same_year = (
-                prev_year == cur_year
-                if cur_year is not None and prev_year is not None
-                else True
-            )
-            if (
-                previous_quarter == current_quarter - 1
-                and same_year
-                and np.isfinite(previous_value)
-            ):
-                result[t] = float(visible[key] - previous_value)
-        out[:, i] = result
-    return _make(x, cols, out)
-
-
-def fin_ttm_quarterly(x, period_id, periods_per_year=4):
-    return fin_ttm(x, period_id, _pi(periods_per_year, "periods_per_year"))
-
-
-def fin_ttm_cumulative(x, period_id, fiscal_quarter, periods_per_year=4):
-    quarterly = fin_quarter_from_cumulative(x, period_id, fiscal_quarter)
-    return fin_ttm(quarterly, period_id, _pi(periods_per_year, "periods_per_year"))
-
-
-# ---------------------------------------------------------------------------
-# seasonal family (fiscal ordinal)
-# ---------------------------------------------------------------------------
 
 
 def _seasonal_history_1d(xv, pv, qv, years, min_history):

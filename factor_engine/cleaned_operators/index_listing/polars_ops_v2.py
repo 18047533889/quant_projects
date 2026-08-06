@@ -85,11 +85,21 @@ _register("index_reconstitution_churn", "窗口内纳入+剔除次数（Polars�
 
 
 def _multi_index_entry(entry_a, entry_b, entry_c, window):
+    # Unknown-state contract (S9): NaN must not be treated as "not entered".
+    # Sum only the known index flags per row; rows with all three unknown are NaN.
     w = int(window)
     cols = _cols(entry_a, entry_b, entry_c)
     out = []
     for c in cols:
-        total = entry_a[c].fill_null(0.0) + entry_b[c].fill_null(0.0) + entry_c[c].fill_null(0.0)
+        a = entry_a[c].fill_null(0.0).cast(pl.Float64)
+        b = entry_b[c].fill_null(0.0).cast(pl.Float64)
+        cc = entry_c[c].fill_null(0.0).cast(pl.Float64)
+        known = entry_a[c].is_not_null() | entry_b[c].is_not_null() | entry_c[c].is_not_null()
+        total = pl.DataFrame(
+            {"_v": a + b + cc, "_k": known}
+        ).with_columns(
+            pl.when(pl.col("_k")).then(pl.col("_v")).otherwise(None).alias("_o")
+        )["_o"]
         out.append(total.rolling_sum(w).alias(c))
     return entry_a.with_columns(out)
 

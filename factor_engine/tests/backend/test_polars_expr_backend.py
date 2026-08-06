@@ -175,7 +175,11 @@ def test_polars_expr_matches_polars_bridge(source, factory_name, expr_builder):
     pd.testing.assert_series_equal(base, fast, check_names=False, rtol=1e-6, atol=1e-6)
 
 
-def test_macd_is_not_exported_on_daily_api(source):
-    import api
+def test_macd_exported_on_daily_api(source):
+    # 2026-08 第三轮:MACD_line / MACD_signal / MACD_hist 经 full-replay 生产路径
+    # 升到 daily 表面,可在默认 DSL 中按分解算子使用。
+    from api.operator_registry import build_dsl_allowlist
 
-    assert not hasattr(api, "MACD")
+    pub = build_dsl_allowlist()
+    for name in ("MACD_line", "MACD_signal", "MACD_hist"):
+        assert name in pub, name

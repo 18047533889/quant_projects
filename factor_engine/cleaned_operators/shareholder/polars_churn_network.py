@@ -124,69 +124,14 @@ _register("holder_pledged_holder_count", "质押股东数（Polars）。", ["s1"
           lambda *a: _pledged_count(*a))
 
 
-def _churn(*frames):
-    n = len(frames) // 2
-    cur = frames[:n]
-    prev = frames[n:]
-    base, cols, _ = _ranked(frames[0])
-    out = []
-    for c in cols:
-        total = sum((cur[i][c].fill_null(0.0) - prev[i][c].fill_null(0.0)).abs() for i in range(n))
-        out.append((total * 0.5).alias(c))
-    return base.with_columns(out)
-
-
-_register("holder_weighted_churn", "按股东ID加权的持股变动（Polars）。",
-          ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10",
-           "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10"],
-          lambda *a: _churn(*a))
-
-
-def _entry_exit(*frames, side: str):
-    n = len(frames) // 2
-    cur = frames[:n]
-    prev = frames[n:]
-    base, cols, _ = _ranked(frames[0])
-    out = []
-    for c in cols:
-        if side == "entry":
-            total = sum(cur[i][c].fill_null(0.0).where(prev[i][c].fill_null(0.0) == 0, 0.0) for i in range(n))
-        else:
-            total = sum(prev[i][c].fill_null(0.0).where(cur[i][c].fill_null(0.0) == 0, 0.0) for i in range(n))
-        out.append(total.alias(c))
-    return base.with_columns(out)
-
-
-def _entry(*a):
-    return _entry_exit(*a, side="entry")
-
-
-def _exit(*a):
-    return _entry_exit(*a, side="exit")
-
-
-_register("holder_entry_share", "新进股东持股合计（Polars）。",
-          ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10",
-           "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10"],
-          lambda *a: _entry(*a))
-_register("holder_exit_share", "退出股东持股合计（Polars）。",
-          ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10",
-           "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10"],
-          lambda *a: _exit(*a))
-
-
-def _net_entry(*a):
-    base, cols, _ = _ranked(a[0])
-    entry = _entry(*a)
-    exit_ = _exit(*a)
-    out = [(entry[c] - exit_[c]).alias(c) for c in cols]
-    return base.with_columns(out)
-
-
-_register("holder_net_entry_share", "新进-退出持股（Polars）。",
-          ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10",
-           "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10"],
-          lambda *a: _net_entry(*a))
+# NOTE 2026-08: the historic slot-based (rank-position) polars implementations
+# of holder_weighted_churn / holder_entry_share / holder_exit_share /
+# holder_net_entry_share misread rank churn as shareholder entry/exit (the same
+# defect the pandas layer had).  They were reworked to the ShareholderId-matched
+# union computation in churn_network.py (pandas_numpy reference backend).  An
+# ID-matched polars expression is not expressible as wide-panel elementwise exprs,
+# so these four canonical keep the pandas reference backend only; the polars
+# registrations were removed to avoid advertising a semantically-wrong backend.
 
 
 def _concentration_slope(conc, window):

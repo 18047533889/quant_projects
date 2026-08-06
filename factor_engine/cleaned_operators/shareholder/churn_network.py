@@ -74,16 +74,35 @@ def _split_id_args(args: tuple[Any, ...]) -> tuple[np.ndarray, np.ndarray, np.nd
     return cur_r, cur_id, prev_r, prev_id
 
 
-def _ratio_map(ratios: np.ndarray, ids: np.ndarray, row: int, col: int) -> dict[str, float]:
-    """Build ``{id: share_ratio}`` for one (row, col), zero-filling missing ratios."""
+def _ratio_map(
+    ratios: np.ndarray, ids: np.ndarray, row: int, col: int
+) -> tuple[dict[str, float], bool]:
+    """Build ``{id: share_ratio}`` for one (row, col) plus a snapshot-valid flag.
+
+    ``valid=False`` marks an incomplete/ambiguous snapshot, which must fail closed
+    to NaN rather than fabricate numbers:
+
+    * a ShareholderId exists but its ShareRatio is missing — "unknown holding" is
+      not a confirmed 0% (audit §6.3); zero-filling would silently report zero
+      for a holder whose ratio was merely undisclosed;
+    * the same ShareholderId repeats across rank slots with conflicting ratios —
+      ambiguous between a duplicate record and multiple share natures (audit §6.4);
+      an identical repeat is a plain duplicate and is de-duplicated.
+    """
     out: dict[str, float] = {}
     for k in range(ratios.shape[0]):
         key = _id_key(ids[k, row, col])
         if key is None:
             continue
         r = ratios[k, row, col]
-        out[key] = float(r) if np.isfinite(r) else 0.0
-    return out
+        if not np.isfinite(r):
+            return out, False
+        if key in out:
+            if abs(out[key] - float(r)) > _EPS:
+                return out, False
+            continue
+        out[key] = float(r)
+    return out, True
 
 
 def _rank_of(ids: np.ndarray, row: int, col: int, key: str) -> int | None:
@@ -99,8 +118,13 @@ def _id_matched(*args, stat: str) -> pd.DataFrame:
     out = np.full((rows, cols), np.nan, dtype=float)
     for row in range(rows):
         for col in range(cols):
-            cur = _ratio_map(cur_r, cur_id, row, col)
-            prev = _ratio_map(prev_r, prev_id, row, col)
+            cur, cur_ok = _ratio_map(cur_r, cur_id, row, col)
+            prev, prev_ok = _ratio_map(prev_r, prev_id, row, col)
+            if not (cur_ok and prev_ok):
+                # Incomplete/ambiguous snapshot: missing ratio or conflicting
+                # duplicate ID → fail closed to NaN (audit §6.3/6.4).
+                out[row, col] = np.nan
+                continue
             if not cur and not prev:
                 continue
             ids = set(cur) | set(prev)
@@ -110,6 +134,11 @@ def _id_matched(*args, stat: str) -> pd.DataFrame:
                 out[row, col] = sum(r for i, r in cur.items() if i not in prev)
             elif stat == "exit":
                 out[row, col] = sum(r for i, r in prev.items() if i not in cur)
+            elif stat == "net_entry":
+                out[row, col] = (
+                    sum(r for i, r in cur.items() if i not in prev)
+                    - sum(r for i, r in prev.items() if i not in cur)
+                )
             elif stat == "overlap":
                 if not ids:
                     out[row, col] = np.nan
@@ -192,12 +221,14 @@ def _holder_weighted_churn(*args):
     return _frame_like(args[0], churn)
 
 
+# Reworked 2026-08: the historic slot-based (rank-position) implementation misread
+# rank churn as shareholder entry/exit.  These now use the ShareholderId-matched
+# union pair (current ratios + current ids + previous ratios + previous ids).
 _mk(
     "holder_weighted_churn",
-    "按股东 ID 匹配的加权持股变动：0.5*Σ|ShareRatio_cur - ShareRatio_prev|（进入/退出补0）。",
-    ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10",
-     "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10"],
-    _holder_weighted_churn,
+    "按股东 ID 匹配的加权持股变动：0.5*Σ|ShareRatio_cur - ShareRatio_prev|（同 ID 跨期配对，缺失侧补0）。",
+    _ID_PARAMS,
+    lambda *args, stat="churn": _id_matched(*args, stat=stat),
 )
 
 
@@ -210,10 +241,9 @@ def _entry_share(*args):
 
 _mk(
     "holder_entry_share",
-    "新进入前十大股东持股比例合计（上期视为0）。",
-    ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10",
-     "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10"],
-    _entry_share,
+    "新进入股东（ID 不在上期）本期持股比例合计。",
+    _ID_PARAMS,
+    lambda *args, stat="entry": _id_matched(*args, stat=stat),
 )
 
 
@@ -226,10 +256,9 @@ def _exit_share(*args):
 
 _mk(
     "holder_exit_share",
-    "退出前十大股东的上期持股比例合计（本期视为0）。",
-    ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10",
-     "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10"],
-    _exit_share,
+    "退出股东（ID 不在本期）上期持股比例合计。",
+    _ID_PARAMS,
+    lambda *args, stat="exit": _id_matched(*args, stat=stat),
 )
 
 
@@ -241,10 +270,9 @@ def _net_entry_share(*args):
 
 _mk(
     "holder_net_entry_share",
-    "新进持股比例合计 - 退出持股比例合计。",
-    ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10",
-     "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10"],
-    _net_entry_share,
+    "新进股东持股比例合计 - 退出股东持股比例合计（按 ID 匹配）。",
+    _ID_PARAMS,
+    lambda *args, stat="net_entry": _id_matched(*args, stat=stat),
 )
 
 
@@ -268,10 +296,9 @@ def _rank_stability(*args):
 
 _mk(
     "holder_rank_stability",
-    "相同股东本期/上期持股比例的 Spearman 相关。",
-    ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10",
-     "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10"],
-    _rank_stability,
+    "共同股东以 min(两期持股比例) 加权的排名位移均值（越小越稳定）。",
+    _ID_PARAMS,
+    lambda *args, stat="rank_migration": _id_matched(*args, stat=stat),
 )
 
 
@@ -358,7 +385,8 @@ def _pledge_churn(*args):
 
 _mk(
     "holder_pledge_churn",
-    "按股东 ID 匹配的质押变化绝对值合计。",
+    "质押股数的名次槽位（rank-slot）绝对值变化合计；非按股东 ID 匹配（无 ID 输入），"
+    "真实 ID 匹配质押变化需专用算子。",
     ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10",
      "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10"],
     _pledge_churn,
@@ -440,7 +468,7 @@ def _weighted_entropy(*args):
 
 _mk(
     "holder_class_entropy",
-    "股东类别持股权重熵（归一化）。",
+    "股东类别持股权重熵（归一化；仅已披露前十大股东口径，非全体股东结构）。",
     ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"],
     _weighted_entropy,
 )

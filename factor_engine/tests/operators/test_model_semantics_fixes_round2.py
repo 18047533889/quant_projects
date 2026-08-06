@@ -79,17 +79,13 @@ def _shareholder_rank_swap_panels():
 def test_holder_id_matched_churn_zero_on_rank_swap() -> None:
     args = _shareholder_rank_swap_panels()
     assert len(args) == 40
-    # Historic slot-based op over the ratio slots (current vs previous ranks):
-    # the rank swap makes rank-1 vs rank-1 compare 5% vs 3% -> fake churn.
-    idx = args[0].index
-    cols = args[0].columns
-    nan = pd.DataFrame(np.nan, index=idx, columns=cols)
-    slot_args = [args[0], args[1]] + [nan] * 8 + [args[20], args[21]] + [nan] * 8
-    slot = OperatorRegistry.get("holder_weighted_churn").calculate(*slot_args)
-    # ...while the ID-matched op must report zero (same shareholder, same ratio).
+    # holder_weighted_churn was reworked to the ShareholderId-matched union pair
+    # (2026-08), so it must also report zero on a pure rank swap (same holders,
+    # same ratios).  It equals the dedicated holder_id_matched_churn.
+    churn = OperatorRegistry.get("holder_weighted_churn").calculate(*args)
     matched = OperatorRegistry.get("holder_id_matched_churn").calculate(*args)
+    assert abs(churn.iloc[-1, 0]) < 1e-12
     assert abs(matched.iloc[-1, 0]) < 1e-12
-    assert slot.iloc[-1, 0] > 1e-9
 
 
 def test_holder_id_matched_entry_exit_overlap() -> None:

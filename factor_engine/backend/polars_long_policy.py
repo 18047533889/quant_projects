@@ -180,8 +180,11 @@ POLARS_LONG_PYTHON_ROLLING: frozenset[str] = frozenset(
 # map_groups / rolling_map(pandas) / 截面 Python 分箱等
 POLARS_LONG_MAP_GROUPS: frozenset[str] = frozenset(
     {
+        # alias names plus resolved canonicals (ewm_corr -> ts_ewm_corr)
         "ewm_corr",
         "ewm_cov",
+        "ts_ewm_corr",
+        "ts_ewm_cov",
         "ts_kurt",
         "ts_moment",
         "ts_max_buildup",

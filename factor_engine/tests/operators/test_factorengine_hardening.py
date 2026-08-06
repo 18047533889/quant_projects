@@ -141,13 +141,15 @@ def test_surface_and_alias_hardening() -> None:
 def test_legacy_formula_compat_does_not_widen_daily_authoring() -> None:
     from api.dsl_parser import DSLParseError, parse_expr
 
-    # flex_max / ts_transition_count were migrated to the daily surface in the
-    # 2026-08 daily production pass; use a still-extended operator to keep the
-    # gate's intent: legacy/extended authoring must not widen the strict daily
-    # surface.
-    with pytest.raises(DSLParseError, match="group_decay_linear"):
-        parse_expr("group_decay_linear(col('x'), col('y'), 3)")
-    assert parse_expr("group_decay_linear(col('x'), col('y'), 3)", surface="compat") is not None
+    # flex_max / ts_transition_count / group_decay_linear were migrated to the
+    # daily surface in the 2026-08 daily production passes; use a still-extended
+    # operator (rolling_beta_to_market migration stub) to keep the gate's intent:
+    # legacy/extended authoring must not widen the strict daily surface.
+    with pytest.raises(DSLParseError, match="rolling_beta_to_market"):
+        parse_expr("rolling_beta_to_market(col('x'), col('y'), 3)")
+    assert parse_expr("rolling_beta_to_market(col('x'), col('y'), 3)", surface="compat") is not None
+    # group_decay_linear is now a daily production target and parses on daily.
+    assert parse_expr("group_decay_linear(col('x'), col('y'), 3)") is not None
 
 
 def test_daily_scope_is_never_unknown() -> None:

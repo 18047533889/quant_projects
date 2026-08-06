@@ -42,9 +42,9 @@ _LQTP_KNOWN_CALLS = frozenset(
         "l2_sum", "l2_sum_if", "l2_count", "l2_count_if", "real_turnover_rate",
         "safe_div", "nullif_zero", "safe_log", "clean", "ma", "sum_n", "std_n",
         "delta", "pct_change", "intermediate",
-        # Jul-2026 continuous-condition streak (platform name matches FE)
-        "ts_true_streak",
-        "maximum", "minimum", "max", "min",
+        # Handbook 2026-07-19: NO scalar min/max/minimum/maximum — use where(...).
+        # NO ts_true_streak in operator tables (platform rejects). Use where for binary extrema.
+        # Prefer power (not pow), cap (not clip), ts_quantile(...,0.5) (not ts_median).
     }
 )
 

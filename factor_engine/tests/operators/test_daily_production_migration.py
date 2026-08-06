@@ -201,13 +201,35 @@ def test_migrated_factor_ops_classify_daily() -> None:
         assert S.classify_canonical(name) == "daily", name
 
 
-def test_excluded_ops_stay_extended() -> None:
-    # 递归/状态族（需分段运行时）、promoted-research（待认证）、隔离缺陷算子。
+def test_third_round_promoted_ops_classify_daily() -> None:
+    # 2026-08 第三轮:递归/状态族(经 full-replay 生产路径)、holder ID 匹配重写、
+    # relation 逐对有效、market-model PIT 认证、intraday_volatility 日频化。
     for name in (
-        "KAMA", "Supertrend", "PSAR", "ts_ema", "RSI_WILDER", "MACD_line",
-        "trade_when", "hump_decay", "expanding_rank", "ts_sma_cn",
-        "rolling_beta_to_market", "group_decay_linear", "rank_corr",
-        "fin_ttm", "relation_distinct_count", "holder_weighted_churn",
+        "KAMA", "Supertrend", "SupertrendDirection", "PSAR", "ts_ema",
+        "RSI_WILDER", "ATR_WILDER", "ADX", "MACD_line", "MACD_signal",
+        "MACD_hist", "expanding_rank", "hump_decay", "ts_sma_cn", "trade_when",
+        "ts_ewm_std", "ts_ewm_var", "ts_ewm_cov", "ts_ewm_corr",
+        "group_decay_linear", "rank_corr", "ts_sum_decay", "ts_max_buildup",
+        "ts_moment", "ts_poly2_coeff", "ts_poly2_resid", "digital_count",
+        "lqtp_historical_cvar",
+        "holder_weighted_churn", "holder_entry_share", "holder_exit_share",
+        "holder_net_entry_share", "holder_rank_stability",
+        "relation_entry_count", "relation_exit_count", "relation_weighted_change",
+        "multi_index_entry_intensity",
+        "tail_beta", "residual_momentum_capm", "coskewness_to_market",
+        "idio_vol", "idio_skew", "intraday_volatility",
+    ):
+        assert S.classify_canonical(name) == "daily", name
+
+
+def test_intentionally_off_daily_ops_stay_extended() -> None:
+    # 迁移桩(fin_ttm / rolling_beta_to_market)、逐日广播的非因子工具
+    # (relation_distinct_count / relation_overlap_ratio)、真 session-aware
+    # (intraday_vwap_deviation)有意保留在 extended,不进入 daily DSL。
+    for name in (
+        "fin_ttm", "rolling_beta_to_market",
+        "relation_distinct_count", "relation_overlap_ratio",
+        "intraday_vwap_deviation",
     ):
         assert S.classify_canonical(name) != "daily", name
 
@@ -216,13 +238,21 @@ def test_no_unclassified_canonicals() -> None:
     assert S.unclassified_canonicals(OperatorRegistry.list_canonical()) == ()
 
 
-def test_daily_dsl_exposes_migrated_ops_and_hides_recursive() -> None:
+def test_daily_dsl_exposes_migrated_ops_and_hides_off_daily() -> None:
     from api.operator_registry import build_dsl_allowlist
 
     pub = build_dsl_allowlist()
     assert "ts_regression_forecast_error" in pub
     assert "cs_bucket_fixed" in pub
-    assert "KAMA" not in pub
+    # 第三轮提升:递归/状态族与重写算子进入 daily DSL。
+    assert "KAMA" in pub
+    assert "MACD_line" in pub
+    assert "holder_weighted_churn" in pub
+    assert "multi_index_entry_intensity" in pub
+    # 迁移桩 / 非因子工具 / session-aware 保持隐藏。
+    assert "fin_ttm" not in pub
+    assert "relation_distinct_count" not in pub
+    assert "intraday_vwap_deviation" not in pub
 
 
 # ---------------------------------------------------------------------------

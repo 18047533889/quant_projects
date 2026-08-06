@@ -76,6 +76,10 @@ ASHARE_TABLE_SPECS: tuple[TableSpec, ...] = (
     ),
     _table("StockValuationDaily", "ashare_stock_valuation_daily", domain="valuation"),
     _table("StockCapitalDaily", "ashare_stock_capital_daily", domain="capital", join_policy="state_asof"),
+    # Financial tables: knowledge = PubDate (announcement day), period =
+    # ReportPeriodEndDate.  revision = UpdateTime is the COS write timestamp used
+    # ONLY as a deterministic in-snapshot tiebreaker (never as a historical
+    # revision-effective time — re-syncs rewrite UpdateTime; COS lqtp dict §4.21).
     _table(
         "StockIndicator", "ashare_stock_indicator", time="PubDate", domain="fundamental",
         table_kind="financial_event", join_policy="financial_pit", knowledge="PubDate",
@@ -97,15 +101,20 @@ ASHARE_TABLE_SPECS: tuple[TableSpec, ...] = (
         join_policy="financial_pit", knowledge="PubDate", period="ReportPeriodEndDate",
         revision="UpdateTime",
     ),
+    # StockDividend physical schema (COS lqtp dict §4.17): TradeDate/RightRegDate/
+    # ExDividendDate/CashDividend/StockDividend/StockTransfer/UpdateTime.  There is
+    # NO PubDate and NO announcement time; the partition date == ExDividendDate.
+    # Use the effective date as both the time key and the only available event time.
     _table(
-        "StockDividend", "ashare_stock_dividend", time="PubDate", domain="corporate_action",
-        table_kind="effective_event", join_policy="effective_only", knowledge="PubDate",
-        effective="ExDate", strict_pit_allowed=False,
+        "StockDividend", "ashare_stock_dividend", time="TradeDate", domain="corporate_action",
+        table_kind="effective_event", join_policy="effective_only", knowledge=None,
+        effective="ExDividendDate", strict_pit_allowed=False,
     ),
+    # IndexDailyBar keys on (TradeDate, Symbol) — Symbol, not IndexSymbol.  Index
+    # selection must use instrument_filter (e.g. ["000300.SH"]), not a parameter.
     _table(
-        "IndexDailyBar", "ashare_index_daily", instrument="IndexSymbol", domain="index",
+        "IndexDailyBar", "ashare_index_daily", instrument="Symbol", domain="index",
         aliases=("BenchmarkIndexDailyBar",), join_policy="exact_date",
-        required_parameters=("IndexSymbol",),
     ),
     _table(
         "IndexConstituent", "ashare_index_constituent", domain="index",
@@ -113,14 +122,21 @@ ASHARE_TABLE_SPECS: tuple[TableSpec, ...] = (
         cardinality="one_to_many",
     ),
     _table("EtfDailyBar", "ashare_etf_daily", domain="etf", aliases=("ETFDailyBar",)),
-    _table("Calendar", "ashare_calendar", time="Date", instrument=None, domain="calendar", table_kind="calendar"),
-    _table("StockList", "ashare_stock_list", time=None, instrument=None, domain="reference", current_snapshot_only=True),
-    _table("EtfList", "ashare_etf_list", time=None, instrument=None, domain="reference", aliases=("ETFList",), current_snapshot_only=True),
-    _table("IndexList", "ashare_index_list", time=None, instrument="IndexSymbol", domain="reference", current_snapshot_only=True),
+    # Calendar stores natural days in TradeDate (COS lqtp dict §Calendar), not "Date".
+    _table("Calendar", "ashare_calendar", time="TradeDate", instrument=None, domain="calendar", table_kind="calendar"),
+    # List tables are D1 natural-day snapshots with full history (incl. delisted
+    # symbols).  Marking them current_snapshot_only forced strict_pit_allowed=False
+    # and allowed survivorship-biased backfill; with full history they are exact
+    # equi-join PIT-safe tables.
+    _table("StockList", "ashare_stock_list", time="TradeDate", instrument="Symbol", domain="reference", join_policy="exact"),
+    _table("EtfList", "ashare_etf_list", time="TradeDate", instrument="Symbol", domain="reference", aliases=("ETFList",), join_policy="exact"),
+    _table("IndexList", "ashare_index_list", time="TradeDate", instrument="Symbol", domain="reference", join_policy="exact"),
+    # StockIndustry is a natural-day snapshot per (TradeDate, Symbol, IndustrySource);
+    # with full history an exact equi join on TradeDate is PIT-safe and avoids the
+    # "current industry viewed into the past" lookahead.  Single source still required.
     _table(
-        "StockIndustry", "ashare_stock_industry", time=None, domain="classification",
-        table_kind="relation", join_policy="state_asof", required_parameters=("IndustrySource",),
-        current_snapshot_only=True,
+        "StockIndustry", "ashare_stock_industry", time="TradeDate", domain="classification",
+        table_kind="relation", join_policy="exact", required_parameters=("IndustrySource",),
     ),
     _table("StockStatus", "ashare_stock_status", domain="status", join_policy="state_asof"),
     _table(
@@ -140,7 +156,7 @@ _TABLE_BY_NAME = {item.name: item for item in ASHARE_TABLE_SPECS}
 
 
 def _value_kind(dtype: str, unit: str, role: str) -> str:
-    if role in {"time", "knowledge_time", "effective_time", "period_id"}:
+    if role in {"time", "knowledge_time", "effective_time", "period_id", "ingestion_time"}:
         return "datetime" if dtype == "datetime" else "date"
     if role in {"instrument", "identifier"}:
         return "identifier"
@@ -173,6 +189,7 @@ def _f(
     mining_allowed=True,
     grain="instrument_time",
     allowed_operator_families=(),
+    metadata=None,
 ):
     table_spec = _TABLE_BY_NAME[table]
     return FieldSpec(
@@ -205,26 +222,32 @@ def _f(
         ),
         mining_allowed=mining_allowed,
         allowed_operator_families=tuple(allowed_operator_families),
+        metadata=dict(metadata or {}),
     )
 
 
 ASHARE_FIELD_SPECS: tuple[FieldSpec, ...] = (
     _f("trade_date", "StockDailyBar", "TradeDate", dtype="date", unit=UNIT_DATE, role="time", aliases=("date",)),
     _f("symbol", "StockDailyBar", "Symbol", dtype="string", unit=UNIT_IDENTIFIER, role="instrument", aliases=("ticker",)),
-    _f("open", "StockDailyBar", "Open", unit=UNIT_CNY, adjustment="multiply:Factor"),
-    _f("high", "StockDailyBar", "High", unit=UNIT_CNY, adjustment="multiply:Factor"),
-    _f("low", "StockDailyBar", "Low", unit=UNIT_CNY, adjustment="multiply:Factor"),
-    _f("close", "StockDailyBar", "Close", unit=UNIT_CNY, adjustment="multiply:Factor"),
-    _f("pre_close", "StockDailyBar", "PreClose", unit=UNIT_CNY, aliases=("prev_close",), adjustment="multiply:Factor"),
-    _f("volume", "StockDailyBar", "Volume", unit=UNIT_SHARE, adjustment="divide:Factor"),
+    # Prices/volume carry NO adjustment: the physical COS contract is unadjusted
+    # prices + a forward vendor Factor whose direction is not yet sample-verified
+    # (COS lqtp dict §1.1/§4.8).  Do not pre-adjust until the direction is proven.
+    _f("open", "StockDailyBar", "Open", unit=UNIT_CNY, metadata={"adjusted": False, "adjustment_status": "unverified"}),
+    _f("high", "StockDailyBar", "High", unit=UNIT_CNY, metadata={"adjusted": False, "adjustment_status": "unverified"}),
+    _f("low", "StockDailyBar", "Low", unit=UNIT_CNY, metadata={"adjusted": False, "adjustment_status": "unverified"}),
+    _f("close", "StockDailyBar", "Close", unit=UNIT_CNY, metadata={"adjusted": False, "adjustment_status": "unverified"}),
+    _f("pre_close", "StockDailyBar", "PreClose", unit=UNIT_CNY, aliases=("prev_close",), metadata={"adjusted": False, "adjustment_status": "unverified"}),
+    _f("volume", "StockDailyBar", "Volume", unit=UNIT_SHARE, metadata={"adjusted": False, "adjustment_status": "unverified"}),
     _f("amount", "StockDailyBar", "Amount", unit=UNIT_CNY, aliases=("turnover_value",)),
     _f("ret", "StockDailyBar", "Return", unit=UNIT_RATIO, source_unit=UNIT_BASIS_POINT, aliases=("return", "returns")),
-    _f("adj_factor", "StockDailyBar", "Factor", unit=UNIT_RATIO, aliases=("factor",)),
-    _f("vwap", "StockDailyBar", "Vwap", unit=UNIT_CNY, adjustment="multiply:Factor"),
-    _f("high_limit", "StockDailyBar", "HighLimit", unit=UNIT_CNY, adjustment="multiply:Factor"),
-    _f("low_limit", "StockDailyBar", "LowLimit", unit=UNIT_CNY, adjustment="multiply:Factor"),
+    _f("adj_factor", "StockDailyBar", "Factor", unit=UNIT_RATIO, aliases=("factor",), metadata={"direction": "unverified"}),
+    _f("vwap", "StockDailyBar", "Vwap", unit=UNIT_CNY, metadata={"adjusted": False, "adjustment_status": "unverified"}),
+    _f("high_limit", "StockDailyBar", "HighLimit", unit=UNIT_CNY, metadata={"adjusted": False, "adjustment_status": "unverified"}),
+    _f("low_limit", "StockDailyBar", "LowLimit", unit=UNIT_CNY, metadata={"adjusted": False, "adjustment_status": "unverified"}),
     _f("is_suspend", "StockDailyBar", "IsSuspend", dtype="bool", unit=UNIT_BOOLEAN),
-    _f("update_time", "StockDailyBar", "UpdateTime", dtype="datetime", unit=UNIT_DATETIME, role="knowledge_time"),
+    # UpdateTime is the vendor/pipeline write time to COS (freshness only), never a
+    # market/announcement/revision-knowable instant — role ingestion_time, not knowledge_time.
+    _f("update_time", "StockDailyBar", "UpdateTime", dtype="datetime", unit=UNIT_DATETIME, role="ingestion_time"),
 
     _f("market_cap", "StockValuationDaily", "MarketCap", unit=UNIT_CNY, aliases=("mkt_cap",)),
     _f("circulating_market_cap", "StockValuationDaily", "CirculatingMarketCap", unit=UNIT_CNY, aliases=("float_market_cap",)),
@@ -235,6 +258,13 @@ ASHARE_FIELD_SPECS: tuple[FieldSpec, ...] = (
     _f("turnover_ratio", "StockValuationDaily", "TurnoverRatio", unit=UNIT_RATIO, source_unit=UNIT_PERCENT, aliases=("turnover",)),
     _f("dividend_yield", "StockValuationDaily", "DividendRatio", unit=UNIT_RATIO, source_unit=UNIT_PERCENT, aliases=("dividend_ratio",)),
     _f("free_market_cap", "StockValuationDaily", "FreeMarketCap", unit=UNIT_CNY),
+    # Remaining StockValuationDaily caps (COS lqtp dict §StockValuationDaily):
+    # Capitalization/CirculatingCap/FreeCap/ACap are share counts, AMarketCap is CNY.
+    _f("capitalization", "StockValuationDaily", "Capitalization", unit=UNIT_SHARE, aliases=("total_shares_val",)),
+    _f("circulating_cap", "StockValuationDaily", "CirculatingCap", unit=UNIT_SHARE, aliases=("float_shares_val",)),
+    _f("free_cap", "StockValuationDaily", "FreeCap", unit=UNIT_SHARE, aliases=("free_float_shares",)),
+    _f("a_cap", "StockValuationDaily", "ACap", unit=UNIT_SHARE),
+    _f("a_market_cap", "StockValuationDaily", "AMarketCap", unit=UNIT_CNY),
 
     _f("total_capital", "StockCapitalDaily", "TotalCapital", unit=UNIT_SHARE, aliases=("total_shares",)),
     _f("circulating_capital", "StockCapitalDaily", "CirculatingCapital", unit=UNIT_SHARE, aliases=("float_shares",)),
@@ -296,7 +326,11 @@ ASHARE_FIELD_SPECS: tuple[FieldSpec, ...] = (
     _f("investing_cash_flow", "StockCashFlow", "NetInvestCashFlow", unit=UNIT_CNY, grain="flow_ytd"),
     _f("financing_cash_flow", "StockCashFlow", "NetFinanceCashFlow", unit=UNIT_CNY, grain="flow_ytd"),
     _f("fix_intan_other_asset_acquis_cash", "StockCashFlow", "FixIntanOtherAssetAcquiCash", unit=UNIT_CNY, aliases=("capex",), grain="flow_ytd"),
+    # StockDividend effective-only fields (COS lqtp dict §4.17): no announcement PIT.
     _f("cash_dividend", "StockDividend", "CashDividend", unit=UNIT_CNY, temporal_model="effective_only", strict_pit_allowed=False),
+    _f("stock_dividend", "StockDividend", "StockDividend", unit=UNIT_SHARE, temporal_model="effective_only", strict_pit_allowed=False),
+    _f("stock_transfer", "StockDividend", "StockTransfer", unit=UNIT_SHARE, temporal_model="effective_only", strict_pit_allowed=False),
+    _f("right_reg_date", "StockDividend", "RightRegDate", dtype="date", unit=UNIT_DATE, temporal_model="effective_only", mining_allowed=False),
 
     # StockIndicator 物理列名与 COS parquet 逐列核对（2026-08）。
     _f("adjusted_profit", "StockIndicator", "AdjustedProfit", unit=UNIT_CNY, grain="flow_ytd"),
@@ -307,9 +341,22 @@ ASHARE_FIELD_SPECS: tuple[FieldSpec, ...] = (
     _f("industry_code", "StockIndustry", "IndustryCode", dtype="string", unit=UNIT_IDENTIFIER, role="group_key", mining_allowed=False),
     _f("industry_name", "StockIndustry", "IndustryName", dtype="string", unit=UNIT_TEXT, role="label", mining_allowed=False),
     _f("public_status", "StockStatus", "PublicStatus", dtype="string", unit=UNIT_TEXT, role="status", aliases=("listed_state",), mining_allowed=False),
+    _f("change_date", "StockStatus", "ChangeDate", dtype="date", unit=UNIT_DATE, mining_allowed=False),
+    _f("change_type", "StockStatus", "ChangeType", dtype="string", unit=UNIT_TEXT, role="label", mining_allowed=False),
+    _f("public_status_code", "StockStatus", "PublicStatusCode", dtype="string", unit=UNIT_IDENTIFIER, mining_allowed=False),
     _f("index_symbol", "IndexConstituent", "IndexSymbol", dtype="string", unit=UNIT_IDENTIFIER, role="identifier", aliases=("index_code",), mining_allowed=False),
     _f("index_weight", "IndexConstituent", "Weight", unit=UNIT_RATIO, source_unit=UNIT_PERCENT, aliases=("weight",), cardinality="one_to_many", mining_allowed=False),
+    # Top-ten shareholder fields are one-to-many per (TradeDate, Symbol); aggregated
+    # before any mining.  ShareRatio is a percentage in the source (÷100 to ratio).
     _f("share_ratio", "StockTopTenShareholder", "ShareRatio", unit=UNIT_RATIO, source_unit=UNIT_PERCENT, cardinality="one_to_many", mining_allowed=False),
+    _f("shareholder_id", "StockTopTenShareholder", "ShareholderId", dtype="string", unit=UNIT_IDENTIFIER, role="identifier", cardinality="one_to_many", mining_allowed=False),
+    _f("shareholder_rank", "StockTopTenShareholder", "ShareholderRank", dtype="float64", unit=UNIT_RATIO, role="group_key", cardinality="one_to_many", mining_allowed=False),
+    _f("shareholder_name", "StockTopTenShareholder", "ShareholderName", dtype="string", unit=UNIT_TEXT, role="label", cardinality="one_to_many", mining_allowed=False),
+    _f("shareholder_class", "StockTopTenShareholder", "ShareholderClass", dtype="string", unit=UNIT_TEXT, role="label", cardinality="one_to_many", mining_allowed=False),
+    _f("shares_nature", "StockTopTenShareholder", "SharesNature", dtype="string", unit=UNIT_TEXT, role="label", cardinality="one_to_many", mining_allowed=False),
+    _f("share_number", "StockTopTenShareholder", "ShareNumber", unit=UNIT_SHARE, cardinality="one_to_many", mining_allowed=False),
+    _f("share_pledge", "StockTopTenShareholder", "SharePledge", unit=UNIT_SHARE, cardinality="one_to_many", mining_allowed=False),
+    _f("share_freeze", "StockTopTenShareholder", "ShareFreeze", unit=UNIT_SHARE, cardinality="one_to_many", mining_allowed=False),
 )
 
 

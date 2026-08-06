@@ -209,6 +209,47 @@ for _spec in (
         # added alongside ``stateful_runtime``.
         segmented_execution_supported=False,
     ),
+    # Recursive technical operators documented as stateful (checkpoint schemas in
+    # production_hardening.STATEFUL_CHECKPOINTS) but with no segmented restore
+    # implementation; checkpoint-restore fails closed, they stay full-replay.
+    StatefulOperatorSpec(
+        canonical="KAMA",
+        state_schema_version="kama_state.v1",
+        semantic_version="1.0",
+        minimum_history=2,
+        checkpoint_fields=("last_value", "last_timestamp"),
+        missing_policy="carry_state_emit_null",
+        segmented_execution_supported=False,
+    ),
+    StatefulOperatorSpec(
+        canonical="Supertrend",
+        state_schema_version="supertrend_state.v1",
+        semantic_version="1.0",
+        minimum_history=10,
+        checkpoint_fields=("final_upper", "final_lower", "direction", "last_close", "last_timestamp"),
+        missing_policy="carry_state_emit_null",
+        segmented_execution_supported=False,
+        dependencies=("ATR_WILDER",),
+    ),
+    StatefulOperatorSpec(
+        canonical="SupertrendDirection",
+        state_schema_version="supertrend_direction_state.v1",
+        semantic_version="1.0",
+        minimum_history=10,
+        checkpoint_fields=("final_upper", "final_lower", "direction", "last_close", "last_timestamp"),
+        missing_policy="carry_state_emit_null",
+        segmented_execution_supported=False,
+        dependencies=("Supertrend",),
+    ),
+    StatefulOperatorSpec(
+        canonical="PSAR",
+        state_schema_version="psar_state.v1",
+        semantic_version="1.0",
+        minimum_history=2,
+        checkpoint_fields=("sar", "direction", "extreme_point", "acceleration_factor", "prev_high", "prev_low", "last_timestamp"),
+        missing_policy="carry_state_emit_null",
+        segmented_execution_supported=False,
+    ),
     StatefulOperatorSpec(
         canonical="ts_ewm_std", state_schema_version="ewm_moment_state.v1",
         semantic_version="3.0", minimum_history=2,

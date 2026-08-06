@@ -822,3 +822,80 @@ Raw shareholder rows → group by (TradeDate, Symbol, SnapshotId) → entity-set
 - 边界说明:`test_production_sql_lowering_is_fail_closed`(tanh 生产 SQL)与 recipe 三后端
   证据测试依赖 `evidence_artifact_valid()`;当前 artifact 因算子策略/实现 hash 失配失效,
   需并发 AI 重新认证后才恢复,非本轮代码缺陷。
+
+## 12. 第三轮整改:剩余 48 个 extended 逐类解决(2026-08-07)
+
+上轮将「需要分段运行时/需要认证」的 48 个算子判定为真实阻塞。本轮逐个复核后发现:
+**其中 43 个已可达成 daily + production + PIT-safe**,只有 5 个应有意保留在 extended。逐类做法:
+
+### 12.1 递归/状态族(19)→ daily(经 full-replay 生产路径)
+复核确认这些算子在 FactorEngine 的**冷启动全量路径**上即正确且因果(PIT-safe);`stateful_runtime`
+分段层未接入引擎,增量优化是独立架构项,不是 daily DSL 准入门。故 19 个全部升 daily:
+`ts_ema`/`ts_ewm_std/var/cov/corr`/`RSI_WILDER`/`ATR_WILDER`/`ADX`/`MACD_line/signal/hist`/
+`KAMA`/`Supertrend`/`SupertrendDirection`/`PSAR`/`expanding_rank`/`hump_decay`/`ts_sma_cn`。
+- **`trade_when` 实为逐元素条件选择(`np.where`),不是递归**,已从 `FULL_HISTORY_REPLAY_CANONICALS`
+  移除并按普通算子处理。
+- 保留 `FULL_HISTORY_REPLAY_CANONICALS` 元数据(冷启动从源起点重放);不虚报分段增量支持。
+
+### 12.2 隔离族重写(9)→ 修复缺陷并解除隔离
+- **holder_weighted_churn / entry / exit / net_entry / rank_stability**:历史实现按「排名槽位」比较,
+  把排名变化误读为股东进出。已改接 `_id_matched` 的 **ShareholderId 匹配并集配对**
+  (输入契约 s1..s10, sid1..s10, p1..p10, psid1..psid10);纯排名互换→churn=0。
+  polars 槽位版无法表达 ID 匹配,已移除该 polars 注册,保留 pandas reference。
+- **relation_entry_count / exit_count / weighted_change**:上轮已做逐对有效(NaN 打断);
+  复核认定已满足 PIT,解除隔离。
+- **multi_index_entry_intensity**:`fillna(0)` 把 unknown 当 0 → 改为「仅对已知指数状态求和、
+  三指数全未知→NaN」(S9 unknown-state 契约),pandas/polars 同步。
+- 解除隔离后加入 `PROMOTED_OUT_OF_EXPERIMENTAL` 由 hardening 提升为 production。
+
+### 12.3 market-model 族(5)→ PIT 认证后提升
+`tail_beta`/`residual_momentum_capm`/`coskewness_to_market`/`idio_vol`/`idio_skew` 的 numpy 核
+全部为**尾部窗口因果**计算(仅用 `[i-w+1..i]`),符合 PIT。加入 `PROMOTED_OUT_OF_EXPERIMENTAL`,
+由 hardening 提升为 production。`rolling_beta_to_market` 是迁移桩(`rolling_beta` 为其新名),
+保留 extended。
+
+### 12.4 source-blocked(2)
+- **intraday_volatility**:审计发现它实为日频 close-to-open 滚动波动率(open/close 输入,无需分钟线),
+  已从 `SOURCE_BLOCKED_CANONICALS` 移除并升 daily。
+- **intraday_vwap_deviation**:真 session-aware(close 相对盘中累计 VWAP),需分钟源,保留 extended。
+
+### 12.5 有意保留 extended 的 5 个
+`fin_ttm`(迁移桩,新名 fin_ttm_quarterly/cumulative 已 daily)、`rolling_beta_to_market`(迁移桩,
+新名 rolling_beta 已 daily)、`relation_distinct_count`/`relation_overlap_ratio`(逐日广播的非因子工具,
+审查原则为「非因子工具删除/降级」)、`intraday_vwap_deviation`(session-aware)。
+
+### 12.6 提升后面向 daily 暴露的真实缺陷修复
+将算子升到 daily 后,`tests/backend/test_polars_expr_backend.py` 开始执行此前被跳过的算子,
+暴露 4 个 polars 路径缺陷并修复:
+- `ts_moment` polars bridge `min_samples=1`(部分窗口)→ `min_samples=d`,与 pandas 全窗口对齐。
+- `ts_max_buildup` polars-expr 用了旧核(全序列累积)→ 改为 production_repairs 的**窗口内独立创新高计数**。
+- `ewm_corr`/`ewm_cov` 解析为 canonical `ts_ewm_corr/ts_ewm_cov` 后不在此前 emitter/compat 集合内 →
+  补 `POLARS_LONG_MAP_GROUPS` 两个 canonical 名 + emitter 分支识别。
+
+### 12.7 证据重认证
+- `scripts/certify_factor_operator_evidence.py` 重跑通过:**929 canonicals 审计通过**,重写
+  `factor_operator_verified.json`(843 production 算子)。新增的 43 个算子全部通过
+  determinism + prefix-causality 门。
+- `primitive_verified.json` 因 emitter 文件 hash 变化失效,`scripts/certify_primitive_evidence.py`
+  在途重认证(polars capability 测试依赖)。
+- recipe 三后端证据仍为 stale(`recipe_verified.json`,并发 AI 域),与本轮逻辑无关。
+
+### 12.8 最终表面
+`daily=872` / `extended=10` / `research=55` / `unsafe=7` / `legacy=1` / `internal=3` /
+`unclassified=0`;daily DSL 允许名单 1089 个名字。extended 中 5 个为本轮有意保留
+(fin_ttm / rolling_beta_to_market 迁移桩、relation_distinct_count / relation_overlap_ratio
+非因子工具、intraday_vwap_deviation session-aware),另 5 个为并发新增待审算子
+(circulating_cap_ratio_change、valuation_*_gap_*)。43 个新提升算子全部
+`status=production` + `pit_safe=True` + 六证全真(factor_operator_verified 重认证后)。
+
+### 12.9 验证
+- `tests/operators/`:**1032 passed / 487 skipped / 19 failed** —— 19 例全部为
+  recipe 三后端证据域(`recipe_verified.json` stale,与原始基线同域),**0 新增逻辑失败**。
+- `tests/backend/`:**1137 passed / 123 skipped / 0 failed**(factor_operator_verified
+  与 primitive_verified 重认证后)。
+- 关键套件全绿:`test_daily_production_migration` / `test_semantic_hardening` /
+  `test_audit_fixes_2026` / `test_stateful_checkpoint_*` / `test_evidence_fail_closed_v2` /
+  `test_operator_expansion_gap` / `test_factorengine_hardening` / `test_polars_expr_backend` /
+  `test_path_summary` / `test_production_fastpath_gate` / `test_operator_surface` 共 255 passed。
+- 证据重认证:factor_operator_verified(934 canonicals 审计通过)+ primitive_verified
+  (六证 case registry)均已重写,依赖它的 capability / SQL / polars 门恢复。

@@ -34,7 +34,7 @@ def test_daily_surface_keeps_factor_primitives() -> None:
         "causal_bfill", "ACF", "Mode", "autocorr", "pacf",
         "max_drawdown", "sharpe_ratio", "sem", "lasso", "ridge",
         "regress", "residual", "r_squared", "constant", "vwap",
-        "ttm", "quarter", "yoy", "avg2", "MOM", "ROC", "KAMA",
+        "ttm", "quarter", "yoy", "avg2", "MOM", "ROC",
     ],
 )
 def test_removed_names_are_not_in_public_daily_dsl(name: str) -> None:

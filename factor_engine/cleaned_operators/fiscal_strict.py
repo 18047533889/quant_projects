@@ -333,7 +333,45 @@ def pd_yoy_by_period(
 
 if pl is not None:
 
-    def _pl_period_ordinal_expr(column: str):
+    def _pl_utf8_of(frame, source_col: str, target_col: str | None = None):
+        """Build a Utf8 expression for ``target_col`` (defaults to ``source_col``).
+
+        Pandas object panels (report-period strings interleaved with leading
+        NaN) reach Polars as ``pl.Object`` dtype, which cannot be ``.cast`` to
+        Utf8.  Map Object columns element-wise; fast-cast String columns.
+        """
+        target_col = target_col or source_col
+        col = pl.col(target_col)
+        if frame.schema.get(source_col) == pl.Object:
+            return col.map_elements(
+                lambda v: None if v is None else str(v),
+                return_dtype=pl.Utf8,
+            )
+        return col.cast(pl.Utf8, strict=False)
+
+    def _pl_numeric_col(frame, source_col: str, target_col: str | None = None):
+        """Expression usable for integer-encoded period ids.
+
+        Object columns hold strings/dates (never encoded ints), so the numeric
+        fallback is a null literal for them to avoid a hard ``cast`` failure.
+        """
+        target_col = target_col or source_col
+        if frame.schema.get(source_col) == pl.Object:
+            return pl.lit(None)
+        return pl.col(target_col)
+
+    def _pl_float_of(frame, source_col: str, target_col: str | None = None):
+        """Float64 expression; Object columns (e.g. a quarter panel) map element-wise."""
+        target_col = target_col or source_col
+        col = pl.col(target_col)
+        if frame.schema.get(source_col) == pl.Object:
+            return col.map_elements(
+                lambda v: None if v is None else float(v),
+                return_dtype=pl.Float64,
+            )
+        return col.cast(pl.Float64, strict=False)
+
+    def _pl_period_ordinal_expr(column: str, raw_utf8=None, raw_numeric=None):
         """Return the exact Polars equivalent of :func:`period_ordinal`.
 
         Polars' format-inferred ``str.to_date`` can fail the whole expression on
@@ -342,7 +380,11 @@ if pl is not None:
         unknown values null rather than guessing.
         """
         raw = pl.col(column)
-        text = raw.cast(pl.Utf8, strict=False).str.strip_chars().str.to_uppercase()
+        text = (
+            raw_utf8
+            if raw_utf8 is not None
+            else raw.cast(pl.Utf8, strict=False)
+        ).str.strip_chars().str.to_uppercase()
 
         quarter_year = text.str.extract(
             r"^(\d{4})(?:\D*Q?)([1-4])$", 1
@@ -367,8 +409,9 @@ if pl is not None:
         date_month = pl.coalesce([iso_month, compact_month])
         valid_date = date_year.is_not_null() & date_month.is_between(1, 12)
 
-        numeric_int = raw.cast(pl.Int64, strict=False)
-        numeric_float = raw.cast(pl.Float64, strict=False)
+        raw_num = raw_numeric if raw_numeric is not None else raw
+        numeric_int = raw_num.cast(pl.Int64, strict=False)
+        numeric_float = raw_num.cast(pl.Float64, strict=False)
         numeric_year = numeric_int // 10
         numeric_quarter = numeric_int % 10
         encoded_quarter = (
@@ -391,7 +434,14 @@ if pl is not None:
 
     def _pl_ordinal_frame(period_id):
         return period_id.with_columns(
-            [_pl_period_ordinal_expr(col).alias(col) for col in pl_cols(period_id)]
+            [
+                _pl_period_ordinal_expr(
+                    col,
+                    _pl_utf8_of(period_id, col),
+                    _pl_numeric_col(period_id, col),
+                ).alias(col)
+                for col in pl_cols(period_id)
+            ]
         )
 
 
@@ -412,7 +462,13 @@ if pl is not None:
                     "_x": x[col].cast(pl.Float64, strict=False),
                     "_pid": period_id[col],
                 }
-            ).with_columns(_pl_period_ordinal_expr("_pid").alias("_ordinal"))
+            ).with_columns(
+                _pl_period_ordinal_expr(
+                    "_pid",
+                    _pl_utf8_of(period_id, col, "_pid"),
+                    _pl_numeric_col(period_id, col, "_pid"),
+                ).alias("_ordinal")
+            )
             targets = temp.select(
                 "_row",
                 "_pid",
@@ -628,7 +684,9 @@ if pl is not None:
         quarter_frame = (
             ordinal.with_columns([((pl.col(c) % 4) + 1).alias(c) for c in pl_cols(ordinal)])
             if fiscal_quarter is None
-            else fiscal_quarter
+            else fiscal_quarter.with_columns(
+                [_pl_float_of(fiscal_quarter, c).alias(c) for c in pl_cols(fiscal_quarter)]
+            )
         )
         replacements = {}
         for col in [c for c in pl_cols(x) if c in quarter_frame.columns]:

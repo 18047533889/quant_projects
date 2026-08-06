@@ -23,6 +23,18 @@ class MissingDataDependencyError(DataAccessColumnPreflightError):
     """A formula requires another logical dataset or an explicitly derived field."""
 
 
+class UnknownFieldSemanticError(DataAccessColumnPreflightError):
+    """A requested field has no contract in the field registry for this dataset.
+
+    Raised only when the source runs with ``strict_unknown_fields`` (production).
+    Research mode may explicitly allow raw physical columns instead.
+    """
+
+
+class FieldNormalizationError(DataAccessColumnPreflightError):
+    """A registered field could not be normalized to its canonical unit/scale."""
+
+
 def _ensure_data_access_importable() -> None:
     root = str(quant_projects_root())
     if root not in sys.path:
@@ -63,9 +75,21 @@ class DataAccessSource(DataSource):
         params: dict[str, Any] | None = None,
         semantic_filters: dict[str, Any] | None = None,
         read_mode: str = "panel",
+        strict_unknown_fields: bool | None = None,
     ) -> None:
         self.dataset = dataset
         self.fields = dict(fields or {})
+        # Fail-closed field contracts in production (unknown fields and
+        # normalization errors raise).  Default None → auto-detect the engine run
+        # mode so research stays lenient (raw physical-column fallback allowed).
+        if strict_unknown_fields is None:
+            try:
+                from runtime.production_policy import is_production_mode
+
+                strict_unknown_fields = bool(is_production_mode())
+            except Exception:
+                strict_unknown_fields = False
+        self.strict_unknown_fields = bool(strict_unknown_fields)
         self.start_date = start_date
         self.end_date = end_date
         self.instrument_filter = list(instrument_filter) if instrument_filter else None
@@ -198,6 +222,7 @@ class DataAccessSource(DataSource):
         output_names: dict[str, str] = {}
         for name in names:
             src = self.fields.get(name)
+            spec = None
             if src is None:
                 try:
                     from fields import FIELD_REGISTRY
@@ -205,8 +230,25 @@ class DataAccessSource(DataSource):
                     spec = FIELD_REGISTRY.get(name)
                 except Exception:
                     spec = None
-                if spec is not None and spec.dataset == self.dataset:
-                    src = spec.source_name
+                if spec is not None:
+                    if spec.dataset == self.dataset:
+                        src = spec.source_name
+                    elif self.strict_unknown_fields:
+                        raise UnknownFieldSemanticError(
+                            f"dataset={self.dataset!r} has no field {name!r}: it belongs "
+                            f"to dataset {spec.dataset!r}"
+                        )
+            if src is None and self.strict_unknown_fields and name not in self.fields:
+                # Production fail-closed: a request that matches neither an explicit
+                # alias mapping nor a registered field of this dataset has no unit /
+                # PIT / temporal contract and must not silently pass through as a raw
+                # physical column.  Research keeps the raw fallback via
+                # strict_unknown_fields=False.
+                raise UnknownFieldSemanticError(
+                    f"dataset={self.dataset!r} has no registered field {name!r}; "
+                    "set strict_unknown_fields=False (research) to allow the raw "
+                    "physical column"
+                )
             src = src or name
             physical.append(src)
             if src != name:
@@ -377,7 +419,14 @@ class DataAccessSource(DataSource):
         return {name: self._column_cache[name] for name in names}
 
     def _normalize_contract_columns(self, fetched: dict[str, Any], names: list[str]) -> None:
-        """Normalize every registered logical field before it enters the cache."""
+        """Normalize every registered logical field before it enters the cache.
+
+        Registered fields are scaled from ``source_unit`` to the canonical unit
+        (e.g. A-share Return bp → ratio, TurnoverRatio/ROE/ShareRatio/Weight % →
+        ratio).  Production is fail-closed: a unit/scale failure raises instead of
+        silently caching the raw vendor value (which would contaminate every
+        downstream operator with a 10000× or 100× error).
+        """
         normalized: set[str] = set()
         try:
             from fields import FIELD_REGISTRY
@@ -390,9 +439,12 @@ class DataAccessSource(DataSource):
                 if scale != 1.0:
                     fetched[name] = fetched[name] * scale
                 normalized.add(name)
-        except Exception:
-            # External/non-catalog datasets retain their adapter-defined values.
-            pass
+        except Exception as exc:
+            if self.strict_unknown_fields:
+                raise FieldNormalizationError(
+                    f"failed to normalize field contracts for dataset={self.dataset!r}: {exc}"
+                ) from exc
+            logger.warning("field normalization skipped for %s: %s", self.dataset, exc)
 
         # Compatibility for external DataAccess contracts that are not represented
         # in FactorEngine's field registry yet.
