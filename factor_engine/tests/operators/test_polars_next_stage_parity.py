@@ -12,12 +12,38 @@ from cleaned_operators.registry import OperatorRegistry
 
 ensure_cleaned_loaded()
 
+# All ``intra_*`` minute->daily operators with a genuine Polars backend.  The
+# second wave (``polars_intraday_full``) covers the segment / RV / path /
+# distribution / liquidity / limit / slot-profile / beta / drawdown families.
 _INTRA = (
     "intra_realized_skewness intra_realized_kurtosis intra_realized_quarticity "
     "intra_continuous_variance intra_jump_variation intra_positive_jump_variation "
     "intra_negative_jump_variation intra_signed_jump_ratio intra_jump_count "
     "intra_jump_concentration intra_interval_return intra_interval_volume_share "
-    "intra_interval_amount_share intra_max_drawdown intra_max_drawup"
+    "intra_interval_amount_share intra_max_drawdown intra_max_drawup "
+    "intra_segment_return intra_segment_volume_share intra_segment_amount_share "
+    "intra_segment_vwap_deviation intra_segment_realized_vol "
+    "intra_realized_variance intra_realized_semivariance intra_bipower_variation "
+    "intra_jump_ratio intra_path_efficiency intra_high_time intra_low_time "
+    "intra_vwap_above_ratio intra_vwap_cross_count intra_concentration "
+    "intra_entropy intra_signed_imbalance_proxy intra_return_activity_corr "
+    "intra_amihud intra_kyle_lambda_proxy intra_extreme_bar_return "
+    "intra_lunch_gap_return intra_limit_first_hit_time intra_limit_duration "
+    "intra_limit_reopen_count "
+    "intra_interval_realized_variance intra_interval_vwap_deviation "
+    "intra_interval_illiquidity intra_same_slot_momentum intra_same_slot_reversal "
+    "intra_return_profile_cosine intra_volume_profile_cosine intra_amount_profile_cosine "
+    "intra_volume_profile_jsd intra_amount_profile_jsd intra_profile_earth_mover_distance "
+    "intra_tripower_quarticity intra_jump_first_time intra_jump_last_time intra_jump_clustering "
+    "intra_realized_beta intra_realized_correlation intra_down_down_semibeta "
+    "intra_up_up_semibeta intra_down_up_semibeta intra_up_down_semibeta "
+    "intra_beta_asymmetry intra_idiosyncratic_variance intra_idiosyncratic_skewness "
+    "intra_idiosyncratic_kurtosis intra_market_model_r2 "
+    "intra_drawdown_depth intra_drawdown_duration intra_drawdown_recovery_half_life "
+    "intra_vwap_path_slope intra_vwap_path_curvature "
+    "intra_price_vwap_max_positive_excursion intra_price_vwap_max_negative_excursion "
+    "intra_time_above_vwap intra_longest_above_vwap_streak intra_longest_below_vwap_streak "
+    "intra_vwap_reversion_speed"
 ).split()
 
 _DAILY = (
@@ -76,33 +102,126 @@ def _minute_panel(days: int = 2, seed: int = 0, cols: int = 3) -> pd.DataFrame:
     )
 
 
+# Argument-group dispatch for the intraday parity cases.  ``kind`` selects which
+# panels the operator consumes; ``kw`` are extra (non-panel) parameters.
+_INTRA_SPECS: dict[str, tuple[str, dict]] = {
+    "intra_segment_return": ("single", {"segment": "morning"}),
+    "intra_segment_realized_vol": ("single", {"segment": "afternoon"}),
+    "intra_interval_realized_variance": ("single", {"start_minute": 570, "end_minute": 690}),
+    "intra_realized_variance": ("single", {}),
+    "intra_realized_semivariance": ("single", {"side": "up"}),
+    "intra_bipower_variation": ("single", {}),
+    "intra_jump_ratio": ("single", {}),
+    "intra_path_efficiency": ("single", {}),
+    "intra_high_time": ("single", {}),
+    "intra_low_time": ("single", {}),
+    "intra_concentration": ("single", {}),
+    "intra_entropy": ("single", {}),
+    "intra_extreme_bar_return": ("single", {"side": "min"}),
+    "intra_tripower_quarticity": ("single", {}),
+    "intra_jump_first_time": ("single", {}),
+    "intra_jump_last_time": ("single", {}),
+    "intra_jump_clustering": ("single", {}),
+    "intra_drawdown_depth": ("single", {}),
+    "intra_drawdown_duration": ("single", {}),
+    "intra_drawdown_recovery_half_life": ("single", {}),
+    "intra_same_slot_momentum": ("single", {}),
+    "intra_same_slot_reversal": ("single", {}),
+    "intra_return_profile_cosine": ("single", {}),
+    "intra_volume_profile_cosine": ("single", {}),
+    "intra_amount_profile_cosine": ("single", {}),
+    "intra_volume_profile_jsd": ("single", {}),
+    "intra_amount_profile_jsd": ("single", {}),
+    "intra_profile_earth_mover_distance": ("single", {}),
+    "intra_segment_volume_share": ("vol", {"segment": "morning"}),
+    "intra_segment_amount_share": ("amount", {"segment": "afternoon"}),
+    "intra_signed_imbalance_proxy": ("close_value", {}),
+    "intra_amihud": ("close_amount", {}),
+    "intra_kyle_lambda_proxy": ("close_amount", {}),
+    "intra_interval_illiquidity": ("close_amount", {"start_minute": 570, "end_minute": 690}),
+    "intra_return_activity_corr": ("close_activity", {"absolute_return": True}),
+    "intra_lunch_gap_return": ("close_open", {}),
+    "intra_segment_vwap_deviation": ("three", {"segment": "morning"}),
+    "intra_interval_vwap_deviation": ("three", {"start_minute": 570, "end_minute": 690}),
+    "intra_vwap_above_ratio": ("three", {}),
+    "intra_vwap_cross_count": ("three", {}),
+    "intra_price_vwap_max_positive_excursion": ("three", {}),
+    "intra_price_vwap_max_negative_excursion": ("three", {}),
+    "intra_time_above_vwap": ("three", {}),
+    "intra_longest_above_vwap_streak": ("three", {}),
+    "intra_longest_below_vwap_streak": ("three", {}),
+    "intra_vwap_reversion_speed": ("three", {}),
+    "intra_vwap_path_slope": ("three", {}),
+    "intra_vwap_path_curvature": ("three", {}),
+    "intra_realized_beta": ("beta", {}),
+    "intra_realized_correlation": ("beta", {}),
+    "intra_down_down_semibeta": ("beta", {}),
+    "intra_up_up_semibeta": ("beta", {}),
+    "intra_down_up_semibeta": ("beta", {}),
+    "intra_up_down_semibeta": ("beta", {}),
+    "intra_beta_asymmetry": ("beta", {}),
+    "intra_idiosyncratic_variance": ("beta", {}),
+    "intra_idiosyncratic_skewness": ("beta", {}),
+    "intra_idiosyncratic_kurtosis": ("beta", {}),
+    "intra_market_model_r2": ("beta", {}),
+    "intra_limit_first_hit_time": ("limit", {"side": "up"}),
+    "intra_limit_duration": ("limit", {"side": "down"}),
+    "intra_limit_reopen_count": ("limit", {"side": "up", "transition": "reseal"}),
+}
+
+# First-wave ops already covered by the original dispatch (same call signature).
+_INTRA_LEGACY_ARGS = {
+    "intra_interval_volume_share": ("vol", {"start_minute": 570, "end_minute": 690}),
+    "intra_interval_amount_share": ("amount", {"start_minute": 570, "end_minute": 690}),
+    "intra_interval_return": ("single", {"start_minute": 570, "end_minute": 690}),
+}
+
+
 @pytest.mark.parametrize("name", sorted(set(_INTRA)))
 def test_intraday_polars_parity(name: str) -> None:
     pdf = _minute_panel(seed=7)
-    pdf_w = pdf * 0 + 1  # placeholder replaced below
     # volume/amount companions
     amount = pdf * (np.abs(np.random.default_rng(1).standard_normal(pdf.shape)) + 1.0)
     vol = amount / pdf
+    open_px = pdf * (np.abs(np.random.default_rng(2).standard_normal(pdf.shape)) + 0.9)
     pldf = _to_pl(pdf, time_col="QuoteTime")
     pl_amount = _to_pl(amount, time_col="QuoteTime")
     pl_vol = _to_pl(vol, time_col="QuoteTime")
+    pl_open = _to_pl(open_px, time_col="QuoteTime")
+
+    spec = _INTRA_SPECS.get(name) or _INTRA_LEGACY_ARGS.get(name) or ("single", {})
+    kind, kw = spec
+
+    if kind == "limit":
+        lim_up = _daily_panel(n=10, seed=5) * 1.1
+        lim_down = _daily_panel(n=10, seed=5) * 0.9
+        pkw = {"high_limit": lim_up, "low_limit": lim_down}
+        plkw = {"high_limit": _to_pl(lim_up), "low_limit": _to_pl(lim_down)}
+    elif kind == "beta":
+        cap = _daily_panel(n=2, seed=3)
+        pkw = {"free_market_cap": cap}
+        plkw = {"free_market_cap": _to_pl(cap)}
+    else:
+        pkw, plkw = {}, {}
+
+    args_map = {
+        "single": ((pdf,), (pldf,)),
+        "vol": ((vol,), (pl_vol,)),
+        "amount": ((amount,), (pl_amount,)),
+        "close_value": ((pdf, amount), (pldf, pl_amount)),
+        "close_amount": ((pdf, amount), (pldf, pl_amount)),
+        "close_activity": ((pdf, amount), (pldf, pl_amount)),
+        "close_open": ((pdf, open_px), (pldf, pl_open)),
+        "three": ((pdf, amount, vol), (pldf, pl_amount, pl_vol)),
+        "limit": ((pdf,), (pldf,)),
+        "beta": ((pdf,), (pldf,)),
+    }
+    pargs, plargs = args_map[kind]
 
     op = OperatorRegistry.get(name)
-    if name in ("intra_interval_volume_share",):
-        ref = op.calculate(vol, start_minute=570, end_minute=690)
-        got = OperatorRegistry.get(name, backend="polars").calculate(pl_vol, start_minute=570, end_minute=690)
-    elif name == "intra_interval_amount_share":
-        ref = op.calculate(amount, start_minute=570, end_minute=690)
-        got = OperatorRegistry.get(name, backend="polars").calculate(pl_amount, start_minute=570, end_minute=690)
-    elif name in ("intra_max_drawdown", "intra_max_drawup"):
-        ref = op.calculate(pdf)
-        got = OperatorRegistry.get(name, backend="polars").calculate(pldf)
-    elif name.startswith("intra_interval_return"):
-        ref = op.calculate(pdf, start_minute=570, end_minute=690)
-        got = OperatorRegistry.get(name, backend="polars").calculate(pldf, start_minute=570, end_minute=690)
-    else:
-        ref = op.calculate(pdf)
-        got = OperatorRegistry.get(name, backend="polars").calculate(pldf)
+    pop = OperatorRegistry.get(name, backend="polars")
+    ref = op.calculate(*pargs, **{**kw, **pkw})
+    got = pop.calculate(*plargs, **{**kw, **plkw})
     ref_d = _to_pd(got).reindex(index=ref.index, columns=ref.columns)
     for col in ref.columns:
         a = ref[col].dropna()

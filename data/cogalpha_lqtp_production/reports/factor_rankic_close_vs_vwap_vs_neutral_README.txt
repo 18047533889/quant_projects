@@ -7,14 +7,16 @@
 - rank_icir_* / 变化_rankicir_*：对应 RankICIR
 - 变化_*：后项减前项
 
-2026 年切分（新增列，仅 trade_date∈[20260101,20270101)）：
-- rank_ic_2026_中性化前：2026 原始 VWAP RankIC
-- rank_ic_2026_行业中性 / 市值中性 / 行业市值双中性：同年中性化 Mean RankIC
-- 变化_2026_原始到*：中性化后减中性化前（RankIC）
-- rank_icir_2026_中性化前 / 行业中性 / 市值中性 / 行业市值双中性：同年 RankICIR
-- 变化_rankicir_2026_原始到*：中性化后减中性化前（RankICIR）
-- rank_ic_2026_交易日数：一般为 114
+2026 明细（原始 / 行业 / 市值 / 双中性 + 变化）：
+- rank_ic_2026_* / rank_icir_2026_* / 变化_2026_* / 变化_rankicir_2026_*
+- rank_ic_2026_交易日数
 
-重算脚本：scripts/cogalpha_lqtp/add_2026_neutral_rankic_to_csv.py
+各年双中性（2019–2026）：
+- rank_ic_YYYY_行业市值双中性
+- rank_icir_YYYY_行业市值双中性
+
+重算脚本：
+- scripts/cogalpha_lqtp/add_2026_neutral_rankic_to_csv.py
+- scripts/cogalpha_lqtp/add_yearly_double_neutral_to_csv.py
 行数 228
 文件 reports/factor_rankic_close_vs_vwap_vs_neutral.csv

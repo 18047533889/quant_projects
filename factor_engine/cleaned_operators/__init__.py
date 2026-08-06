@@ -108,6 +108,7 @@ _LOAD_MODULES = (
     "cleaned_operators.index_listing.ops_v2",
     # Next-stage Polars backends (2026-08): genuine expression paths only.
     "cleaned_operators.intraday.polars_next_stage",
+    "cleaned_operators.intraday.polars_intraday_full",
     "cleaned_operators.valuation.polars_ops_v2",
     "cleaned_operators.fundamental.polars_quality_v2",
     "cleaned_operators.shareholder.polars_churn_network",

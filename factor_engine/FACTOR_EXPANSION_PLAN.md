@@ -414,3 +414,51 @@ elementwise 算子展开为已具备 SQL 能力的原语（`safe_div_null`/`subt
 - 剩余 15 个不适用：7 个 UNSAFE 数学工具（arg/cosh/cot/csc/sec/sinh/tan）、3 个 INTERNAL
   （constant/identity/protected_div）、1 个 LEGACY（cube）、2 个 RESEARCH 面、2 个 experimental。
 - 全量测试：**3586 passed, 1044 skipped, 0 failed**。
+
+---
+
+## 8. Intraday Polars 二波（2026-08 追加）
+
+第七节完成后复查发现：77 个 `intra_*` 中只有 15 个有 polars 后端
+（`polars_next_stage.py` 覆盖的 realized moments / jump variance / interval shares /
+max drawdown·drawup），**剩余 62 个仅 pandas**。按"凡是合理能加的都加"补齐。
+
+### 8.1 新增模块 `cleaned_operators/intraday/polars_intraday_full.py`
+
+62 个算子全部为**真 `pl.Expr` 实现**（wide→melt→group_by→pivot，无 pandas 委托）：
+
+| 族 | 算子数 | 实现要点 |
+|---|---|---|
+| segment 聚合 | 5 | 分钟时段掩码（Asia/Shanghai 时区换算） |
+| RV / 半方差 / 双幂 / 跳跃占比 | 4 | 组内 log 收益 + shift 乘积 |
+| 价格路径 | 7 | 路径效率、高/低点位置、VWAP 偏离、streak（run-length）、AR(1)、斜率/曲率（闭式 lstsq） |
+| 分布 | 3 | HHI 集中度、熵、符号不平衡 |
+| 流动性 | 2 | Amihud、Kyle lambda（np.cov/np.var 的 ddof 系数精确复刻） |
+| 极值 / 午间跳空 | 2 | 单分钟极值、跨时段 open/close |
+| 涨跌停 | 3 | 日频限价面板按日期广播 join 分钟（`allow_panel_broadcast`） |
+| 区间 / 同槽 / profile | 11 | 跨日 rolling 历史 + 逐日向量余弦 / JSD / 1D-EMD |
+| 跳跃时序 | 4 | 阈值跳跃掩码 + 位置 / 间隔 CV |
+| 市场 beta 族 | 11 | 市值加权市场分钟收益 + 组内回归（realized beta/corr/semibeta/idio/r²） |
+| 回撤 / 恢复 | 3 | 峰谷位置（0/1 基差精确对齐）、半恢复期偏移 |
+
+### 8.2 修复的关键一致性问题
+
+- `pl.sum(expr)` 在 polars 中把 expr 当列名 → 全部改为 `(expr).sum()`（35 处）。
+- `dt.hour()*60+dt.minute()` 被推断为 `i8` 溢出（571>127）→ 显式 `cast(Int64)`。
+- pandas `sum(axis=1, min_count=1)` 对全 NaN 返回 NaN，而 polars `sum()` 对全 null 返回 0.0
+  → 同槽 score 加非空 count 守卫。
+- `np.cov`（ddof=1）÷ `np.var`（ddof=0）携带 `n/(n-1)` 系数 → Kyle/reversion/market-model 精确复刻。
+- 市场分钟收益的 log 收益为**跨全日**序列（含隔夜），不能按日分区。
+- `allow_panel_broadcast` tag 同步到 polars 元数据（限价、beta 族豁免高度校验）。
+- streak 只统计 flag=True 的 run（pandas 遇 False 重置计数器）。
+
+### 8.3 结果
+
+- 后端覆盖：**polars 637 → 699**（新增 62）；`intra_*` **77/77** 三态全覆盖
+  （pandas 100% + polars 100%，SQL 按需下推不适用于这些分钟聚合 kernel）。
+- parity 测试 `test_polars_next_stage_parity.py` 扩展至全部 77 个 `intra_*`
+  （2 天 fixture 全部 ≤1e-8；45 天 fixture 抽查窗口/回归族同样通过）。
+- 证据重新认证：`factor_operator_verified.json` 经官方 certifier 重生成
+  （audit 848 通过，762 写回），production 门控 **77/77 intra_* 重新可用**。
+- 我负责的测试组全绿：intraday parity / expansion gap / intraday next-stage /
+  feature extensions / intraday golden / DSL **252 passed, 1 skipped**。
