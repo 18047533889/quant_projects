@@ -510,6 +510,12 @@ _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
     "square": {"scope": "elementwise", "pit_safe": True},
     "log10": {"scope": "elementwise", "pit_safe": True},
     "log2": {"scope": "elementwise", "pit_safe": True},
+    "ashare_limit_up_touch": {"scope": "elementwise", "pit_safe": True},
+    "ashare_limit_down_touch": {"scope": "elementwise", "pit_safe": True},
+    "ashare_open_at_upper_limit": {"scope": "elementwise", "pit_safe": True},
+    "ashare_limit_open_failed": {"scope": "elementwise", "pit_safe": True},
+    "ashare_limit_one_price": {"scope": "elementwise", "pit_safe": True},
+    "ashare_limit_failed": {"scope": "elementwise", "pit_safe": True},
     "cs_neutralize": {"scope": "cs", "pit_safe": True},
     "size_neutralize": {"scope": "cs", "pit_safe": True},
     "industry_size_neutralize": {"scope": "cs", "pit_safe": True},
@@ -893,11 +899,81 @@ _EXPLICIT_POLICIES.update({
     "relation_rank_weighted_sum": {"scope": "cs", "pit_safe": True},
     "relation_category_share": {"scope": "group", "pit_safe": True},
     "relation_peer_weighted_mean_ex_self": {"scope": "group", "pit_safe": True},
-    "trading_day_diff": {"scope": "elementwise", "pit_safe": True},
     "fin_announcement_lag": {"scope": "elementwise", "pit_safe": True},
     "fin_applicability_mask": {"scope": "elementwise", "pit_safe": True},
     "index_member": {"scope": "elementwise", "pit_safe": True},
+    # ts_model / state-space / GARCH / HAR / wavelet / complexity families
+    "ts_kalman_level": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_kalman_innovation_z": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_kalman_beta_uncertainty": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_kalman_trend": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_kalman_beta": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_kalman_beta_change": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_garch_vol_forecast": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_garch_persistence": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_garch_standardized_shock": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_gjr_garch_vol_forecast": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_gjr_leverage": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_har_rv_forecast": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_har_rv_innovation_z": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_change_point_probability": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_cusum_vol_break_score": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_dfa_hurst": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_lz_complexity": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_multiscale_entropy_slope": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_permutation_entropy": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_regime_duration": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_sample_entropy": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_turning_point_ratio": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_two_state_regime_probability": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_path_leadlag_area": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_path_signature_area": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_path_signature_depth2_norm": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_matrix_profile_discord_score": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_matrix_profile_motif_distance": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_motif_recurrence_count": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_spectral_low_frequency_ratio": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_wavelet_energy_slope": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_wavelet_entropy": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_wavelet_high_frequency_ratio": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_wavelet_low_frequency_ratio": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_ar_forecast": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_ar_innovation": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_ar_innovation_z": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_mean_reversion_half_life": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_variance_ratio_slope": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_huber_regression_coeff": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_huber_regression_resid_z": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_multi_regression_coeff": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_multi_regression_r2": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_multi_regression_resid": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_multi_regression_resid_z": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_quantile_beta_spread": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_quantile_regression_coeff": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_quantile_regression_resid": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_ridge_regression_coeff": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_ridge_regression_resid_z": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "panel_rolling_pca_loading": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "panel_rolling_pca_score": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "panel_rolling_pca_explained_var": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "panel_rolling_pca_idio_share": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "panel_rolling_pca_rank_residual": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "panel_dynamic_factor_r2": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "panel_dynamic_factor_innovation": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "panel_dynamic_factor_load": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "panel_svar_impact": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "panel_svar_forecast": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "panel_granger_pvalue": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "panel_cointegration_spread": {"scope": "ts", "pit_safe": True, "min_periods": 1},
 })
+
+# 只保留 active surface 的显式 policy；未分类的 experimental/WIP canonical 由
+# ``infer_operator_policy`` 的名称前缀回退推断 scope，避免 inactive 项残留。
+_EXPLICIT_POLICIES = {
+    name: policy
+    for name, policy in _EXPLICIT_POLICIES.items()
+    if name in _ACTIVE_POLICY_CANONICALS
+}
 
 # Compatibility export now reflects the reviewed research surface exactly.
 RESEARCH_CORE_CANONICALS = RESEARCH_ONLY_CANONICALS
@@ -983,6 +1059,13 @@ def infer_operator_policy(op: Any, *, canonical: str | None = None) -> OperatorP
         "price_volume",
         "intraday_microstructure",
         "signal",
+        "time_series_regression",
+        "panel_model",
+        "complexity",
+        "sequence_anomaly",
+        "path_signature",
+        "wavelet_spectral",
+        "state_space",
     ):
         scope = "ts"
     elif category in ("statistics",):
@@ -992,6 +1075,19 @@ def infer_operator_policy(op: Any, *, canonical: str | None = None) -> OperatorP
             scope = "aggregate"
     elif category in ("math", "elementwise_math", "data_handling"):
         scope = "elementwise"
+
+    # 2026-08 expansion families (ts_model / panel / cross-section / fin /
+    # holder / index / valuation) ship research surface entries without explicit
+    # policies; infer scope from name prefix so governance does not fail closed.
+    if scope == "unknown":
+        if name.startswith(("ts_", "panel_", "event_", "index_", "fin_", "fundamental_", "holder_")):
+            scope = "ts"
+        elif name.startswith(("cs_", "cross_", "relation_", "peer_")):
+            scope = "cs"
+        elif name.startswith(("group_",)):
+            scope = "group"
+        elif "entropy" in name or "complexity" in name or "hurst" in name:
+            scope = "ts"
 
     # Active daily/extended primitives are fail-closed: only an explicit policy
     # above may grant PIT safety.  Heuristics remain useful for migration reports

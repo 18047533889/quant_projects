@@ -16,6 +16,7 @@ from factor_recipes import candlestick_v2 as _candlestick_v2  # noqa: F401,E402
 from factor_recipes import fundamental_v2 as _fundamental_v2  # noqa: F401,E402
 from factor_recipes import fundamental_flow_v2 as _fundamental_flow_v2  # noqa: F401,E402
 from factor_recipes import shareholder_relative as _shareholder_relative  # noqa: F401,E402
+from factor_recipes import new_stage_recipes as _new_stage_recipes  # noqa: F401,E402
 
 __all__ = [
     "FactorRecipe",

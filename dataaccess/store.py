@@ -1947,10 +1947,12 @@ class DataAccessStore:
 
         from_clause = f"read_parquet(?{opts_suffix})"
 
+        time_col_type = str((ds.schema or {}).get(ds.time_column, "")).lower()
         predicate = Predicate(
             time_range=time_range,
             instrument_filter=instrument_filter,
             hive_filters=self._bucket_hive_filters(ds, instrument_filter),
+            time_column_is_timestamp=("timestamp" in time_col_type or "datetime" in time_col_type),
         )
         compiled = compile_predicate(
             predicate,
@@ -2007,13 +2009,19 @@ def get_store() -> DataAccessStore:
 
 
 def adapter_options_for_dataset(ds: Dataset) -> dict[str, Any]:
-    """按 datasets.yaml schema 推断 Arrow→MultiIndex 适配参数（A 股 date / 美股 timestamp）。"""
+    """按 datasets.yaml schema 推断 Arrow→MultiIndex 适配参数。
+
+    - ``date`` 时间列：归一化到日（A 股日频）。
+    - ``timestamp`` 时间列：保留完整精度（分钟/逐笔等多条同日内记录），
+      否则会折叠成每 (日期, 标的) 一行。需要按日聚合的调用方自行
+      ``normalize_timestamp=True``。
+    """
     schema = getattr(ds, "schema", None) or {}
     if not schema:
         return {}
     time_dtype = str(schema.get(ds.time_column, "")).lower()
     opts: dict[str, Any] = {}
-    if time_dtype in {"date", "timestamp"}:
+    if time_dtype == "date":
         opts["normalize_timestamp"] = True
     return opts
 

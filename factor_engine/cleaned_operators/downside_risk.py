@@ -138,20 +138,23 @@ class TsCurrentDrawdownDuration(SeriesOperator):
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
-            running_peak = -np.inf
-            streak = 0
             for row in range(rows):
-                value = xv[row, col]
-                if np.isfinite(value):
-                    running_peak = max(running_peak, value)
-                    if value < running_peak:
+                start = max(0, row - w + 1)
+                chunk = xv[start : row + 1, col]
+                valid_mask = np.isfinite(chunk)
+                if not valid_mask.any():
+                    continue
+                running_peak = np.maximum.accumulate(np.where(valid_mask, chunk, -np.inf))
+                streak = 0
+                for back in range(len(chunk) - 1, -1, -1):
+                    if not valid_mask[back]:
+                        streak = 0
+                        continue
+                    if chunk[back] < running_peak[back]:
                         streak += 1
                     else:
-                        streak = 0
-                    out[row, col] = float(streak)
-                else:
-                    running_peak = -np.inf
-                    streak = 0
+                        break
+                out[row, col] = float(streak)
         return _frame_like(x, out)
 
 
@@ -243,42 +246,50 @@ class TsBestLagCorr(SeriesOperator):
         return _frame_like(y, out)
 
 
-def _price_delay(x: np.ndarray, row: int, window: int, max_lag: int) -> float:
-    end = row + 1
-    start = max(0, end - window)
-    if end - start < 3:
+def _price_delay_model(
+    stock: np.ndarray,
+    bench: np.ndarray,
+    end: int,
+    window: int,
+    max_lag: int,
+    min_periods: int,
+) -> float:
+    """Hou–Moskowitz style price delay for row ``end`` (causal).
+
+    Restricted model: y_t = a + b0 * bench_t.
+    Full model:       y_t = a + b0 * bench_t + … + bK * bench_{t-K}.
+    Returns 1 - R²_restricted / R²_full.
+    """
+    lo = max(0, end - window + 1 - max_lag)
+    if lo + max_lag >= end:
         return np.nan
-    restricted_x = x[start:end]
-    restricted_y = x[start:end]
-    valid = np.isfinite(restricted_x)
-    if valid.sum() < 3:
+    ts = np.arange(max(lo + max_lag, end - window + 1), end + 1)
+    if ts.size < max_lag + 2:
         return np.nan
-    # Restricted: y_t = alpha + beta0 * x_t
-    y_r = restricted_y[valid]
-    x_r = restricted_x[valid]
-    rss_restricted = float(np.sum((y_r - np.mean(y_r)) ** 2))
-    # Full: y_t = alpha + sum_{lag=0..max_lag} beta_lag * x_{t-lag}
-    errors: list[float] = []
-    for lag in range(0, max_lag + 1):
-        lagged_stop = max(0, end - lag)
-        lagged_start = max(0, lagged_stop - window)
-        if lagged_stop <= lagged_start:
-            continue
-        lagged_x = x[lagged_start:lagged_stop]
-        lagged_y = x[lagged_start + lag : end]
-        if lagged_x.size != lagged_y.size:
-            continue
-        aligned = np.isfinite(lagged_x) & np.isfinite(lagged_y)
-        if aligned.sum() < 3:
-            continue
-        residuals = lagged_y[aligned] - np.mean(lagged_y[aligned])
-        errors.append(float(np.sum(residuals ** 2)))
-    if not errors:
+    y = stock[ts]
+    bench_values = bench[ts]
+    lagged = np.column_stack([bench[ts - lag] for lag in range(max_lag + 1)])
+    X_full = np.column_stack([np.ones(len(ts)), lagged])
+    X_restricted = np.column_stack([np.ones(len(ts)), bench_values])
+    valid = np.isfinite(y) & np.all(np.isfinite(X_full), axis=1)
+    required = max(int(min_periods), max_lag + 2)
+    if valid.sum() < required:
         return np.nan
-    rss_full = min(errors)
-    if rss_restricted <= 0.0 or rss_full <= 0.0:
+    yv = y[valid]
+    xr = X_restricted[valid]
+    xf = X_full[valid]
+    sst = float(np.sum((yv - np.mean(yv)) ** 2))
+    if sst <= 0.0:
         return np.nan
-    return max(0.0, 1.0 - rss_full / rss_restricted)
+    beta_r, *_ = np.linalg.lstsq(xr, yv, rcond=None)
+    rss_r = float(np.sum((yv - xr @ beta_r) ** 2))
+    r2_r = 1.0 - rss_r / sst
+    beta_f, *_ = np.linalg.lstsq(xf, yv, rcond=None)
+    rss_f = float(np.sum((yv - xf @ beta_f) ** 2))
+    r2_f = 1.0 - rss_f / sst
+    if r2_f <= 0.0:
+        return np.nan
+    return max(0.0, 1.0 - r2_r / r2_f)
 
 
 @register_operator(
@@ -290,23 +301,37 @@ def _price_delay(x: np.ndarray, row: int, window: int, max_lag: int) -> float:
     status="experimental",
 )
 class TsPriceDelay(SeriesOperator):
-    """价格延迟代理：1 - R²_restricted / R²_full（滞后阶数越多解释力越强说明反应越慢）。"""
+    """价格延迟代理（Hou–Moskowitz 式）：1 - R²_restricted / R²_full。
+
+    受限模型仅含当日基准收益；完整模型叠加滞后基准收益。数值越高，价格对
+    基准信息反应越滞后。
+    """
 
     metadata = _metadata(
         "ts_price_delay",
         "价格延迟代理 1-R2_restricted/R2_full。",
-        ["x", "window", "max_lag"],
+        ["stock_return", "benchmark_return", "window", "max_lag", "min_periods"],
         domain="price_volume",
         unit="ratio",
     )
 
-    def _calculate_series(self, x: pd.DataFrame, window: int = 20, max_lag: int = 5, **_: Any) -> pd.DataFrame:
+    def _calculate_series(
+        self,
+        stock_return: pd.DataFrame,
+        benchmark_return: pd.DataFrame,
+        window: int = 20,
+        max_lag: int = 5,
+        min_periods: int = 3,
+        **_: Any,
+    ) -> pd.DataFrame:
         w = int(window)
         ml = max(1, int(max_lag))
-        xv = x.to_numpy(dtype=float)
-        rows, cols = xv.shape
+        mp = max(3, int(min_periods))
+        sv = stock_return.to_numpy(dtype=float)
+        bv = benchmark_return.to_numpy(dtype=float)
+        rows, cols = sv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
             for row in range(rows):
-                out[row, col] = _price_delay(xv[:, col], row, w, ml)
-        return _frame_like(x, out)
+                out[row, col] = _price_delay_model(sv[:, col], bv[:, col], row, w, ml, mp)
+        return _frame_like(stock_return, out)

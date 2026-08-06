@@ -185,8 +185,9 @@ class RelationRankWeightedSum(SeriesOperator):
         stacked = _stack_panels(*args)
         ranks = np.arange(1, stacked.shape[0] + 1, dtype=float)[:, None, None]
         weights = 1.0 / ranks
-        weighted = np.nansum(stacked * weights, axis=0)
-        weight_sum = np.sum(weights, axis=0)
+        finite = np.isfinite(stacked)
+        weighted = np.nansum(np.where(finite, stacked * weights, 0.0), axis=0)
+        weight_sum = np.sum(np.where(finite, weights, 0.0), axis=0)
         with np.errstate(divide="ignore", invalid="ignore"):
             out = weighted / weight_sum
         out = np.where(np.isfinite(stacked).sum(axis=0) > 0, out, np.nan)
@@ -259,16 +260,23 @@ class RelationPeerWeightedMeanExSelf(SeriesOperator):
         for row in range(rows):
             g_row = gv[row]
             for label in pd.unique(g_row):
-                idx = np.flatnonzero(g_row == label)
-                weights = wv[row][idx]
-                total_w = float(np.nansum(weights))
+                group_idx = np.flatnonzero(g_row == label)
+                # 有效样本：value 与 weight 均有效且 weight > 0
+                valid = (
+                    np.isfinite(vv[row][group_idx])
+                    & np.isfinite(wv[row][group_idx])
+                    & (wv[row][group_idx] > 0)
+                )
+                valid_idx = group_idx[valid]
+                if valid_idx.size == 0:
+                    continue
+                weights = wv[row][valid_idx]
+                total_w = float(np.sum(weights))
                 if not np.isfinite(total_w) or total_w <= 0.0:
                     continue
-                weighted = float(np.nansum(weights * vv[row][idx]))
-                for j in idx:
+                weighted = float(np.sum(weights * vv[row][valid_idx]))
+                for j in valid_idx:
                     own_w = wv[row][j]
-                    if not np.isfinite(own_w) or not np.isfinite(vv[row][j]):
-                        continue
                     denom = total_w - own_w
                     if denom <= 0.0:
                         continue
@@ -386,11 +394,11 @@ class RelationWeightedChange(SeriesOperator):
     status="experimental",
 )
 class IndexMember(SeriesOperator):
-    """指数成分标记：member 非零处保留为 1，否则 NaN。"""
+    """指数成分标记：1 = 成分股，0 = 确定非成分股，NaN = 数据未知。"""
 
     metadata = _metadata(
         "index_member",
-        "指数成分标记（member!=0 → 1）。",
+        "指数成分标记（member!=0→1，member==0→0）。",
         ["member"],
         category="index",
         domain="index",
@@ -398,8 +406,8 @@ class IndexMember(SeriesOperator):
     )
 
     def _calculate_series(self, member: pd.DataFrame, **_: Any) -> pd.DataFrame:
-        valid = np.isfinite(member.to_numpy(dtype=float))
-        out = np.where(valid & (member.to_numpy(dtype=float) != 0), 1.0, np.nan)
+        mv = member.to_numpy(dtype=float)
+        out = np.where(np.isfinite(mv) & (mv != 0), 1.0, np.where(np.isfinite(mv), 0.0, np.nan))
         return _frame_like(member, out)
 
 
@@ -501,13 +509,21 @@ class IndexMembershipAge(SeriesOperator):
         for col in range(cols):
             last_entry = -1
             for row in range(rows):
-                if np.isfinite(mv[row, col]):
-                    if mv[row, col] != 0 and (row == 0 or last_entry < 0 or (not np.isfinite(mv[row - 1, col])) or mv[row - 1, col] == 0):
+                value = mv[row, col]
+                if not np.isfinite(value):
+                    last_entry = -1
+                    out[row, col] = np.nan
+                    continue
+                if value != 0:
+                    if last_entry < 0:
                         last_entry = row
-                if last_entry >= 0:
                     distance = row - last_entry
                     if limit is None or distance < limit:
                         out[row, col] = float(distance)
+                else:
+                    # 已剔除：不再累计成分股年龄
+                    out[row, col] = np.nan
+                    last_entry = -1
         return _frame_like(member, out)
 
 
@@ -529,15 +545,16 @@ class EventCumulativeReturnPast(SeriesOperator):
 
     metadata = _metadata(
         "event_cumulative_return_past",
-        "事件触发时点后窗口内收益累计。",
-        ["ret", "event", "window"],
+        "事件触发后（含 event_effective_lag 错位）窗口内收益累计。",
+        ["ret", "event", "window", "event_effective_lag"],
         category="event",
         domain="event",
         unit="return",
     )
 
-    def _calculate_series(self, ret: pd.DataFrame, event: pd.DataFrame, window: int = 20, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, ret: pd.DataFrame, event: pd.DataFrame, window: int = 20, event_effective_lag: int = 1, **_: Any) -> pd.DataFrame:
         w = int(window)
+        lag = max(0, int(event_effective_lag))
         rv = ret.to_numpy(dtype=float)
         ev = event.to_numpy(dtype=float)
         rows, cols = rv.shape
@@ -547,11 +564,13 @@ class EventCumulativeReturnPast(SeriesOperator):
             for row in range(rows):
                 if np.isfinite(ev[row, col]) and ev[row, col] != 0:
                     last_event = row
-                if last_event >= 0 and row - last_event < w:
-                    segment = rv[last_event : row + 1, col]
-                    valid = np.isfinite(segment)
-                    if valid.any():
-                        out[row, col] = float(np.nansum(segment))
+                if last_event >= 0:
+                    start = last_event + lag
+                    if start <= row and row - last_event < w + lag:
+                        segment = rv[start : row + 1, col]
+                        valid = np.isfinite(segment)
+                        if valid.any():
+                            out[row, col] = float(np.nansum(segment))
         return _frame_like(ret, out)
 
 
@@ -568,15 +587,16 @@ class EventAbnormalReturnPast(SeriesOperator):
 
     metadata = _metadata(
         "event_abnormal_return_past",
-        "事件触发时点后窗口内超额收益累计。",
-        ["ret", "benchmark_ret", "event", "window"],
+        "事件触发后（含 event_effective_lag 错位）窗口内超额收益累计。",
+        ["ret", "benchmark_ret", "event", "window", "event_effective_lag"],
         category="event",
         domain="event",
         unit="return",
     )
 
-    def _calculate_series(self, ret: pd.DataFrame, benchmark_ret: pd.DataFrame, event: pd.DataFrame, window: int = 20, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, ret: pd.DataFrame, benchmark_ret: pd.DataFrame, event: pd.DataFrame, window: int = 20, event_effective_lag: int = 1, **_: Any) -> pd.DataFrame:
         w = int(window)
+        lag = max(0, int(event_effective_lag))
         rv = ret.to_numpy(dtype=float)
         bv = benchmark_ret.to_numpy(dtype=float)
         ev = event.to_numpy(dtype=float)
@@ -588,11 +608,13 @@ class EventAbnormalReturnPast(SeriesOperator):
             for row in range(rows):
                 if np.isfinite(ev[row, col]) and ev[row, col] != 0:
                     last_event = row
-                if last_event >= 0 and row - last_event < w:
-                    segment = abnormal[last_event : row + 1, col]
-                    valid = np.isfinite(segment)
-                    if valid.any():
-                        out[row, col] = float(np.nansum(segment))
+                if last_event >= 0:
+                    start = last_event + lag
+                    if start <= row and row - last_event < w + lag:
+                        segment = abnormal[start : row + 1, col]
+                        valid = np.isfinite(segment)
+                        if valid.any():
+                            out[row, col] = float(np.nansum(segment))
         return _frame_like(ret, out)
 
 
@@ -623,20 +645,40 @@ class FinApplicabilityMask(SeriesOperator):
         return _frame_like(value, out)
 
 
+def _day_diff_frame(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
+    """Elementwise calendar-day difference ``right - left``.
+
+    Accepts datetime64 panels (converted per element) or numeric row-position
+    panels.  Never relies on ``DataFrame.dt``.
+    """
+    a = left.to_numpy()
+    b = right.to_numpy()
+    out = np.full(a.shape, np.nan, dtype=float)
+    try:
+        ad = a.astype("datetime64[ns]")
+        bd = b.astype("datetime64[ns]")
+        delta = (bd - ad) / np.timedelta64(1, "D")
+        valid = ~np.isnat(ad) & ~np.isnat(bd)
+        out[valid] = np.asarray(delta[valid], dtype=float)
+    except (ValueError, TypeError):
+        out = b.astype(float) - a.astype(float)
+    return _frame_like(left, out)
+
+
 @register_operator(
-    name="trading_day_diff",
+    name="calendar_day_diff",
     category="event",
     business_category="event",
-    canonical="trading_day_diff",
+    canonical="calendar_day_diff",
     source="relation.ops",
     status="experimental",
 )
-class TradingDayDiff(SeriesOperator):
-    """两个日期面板的交易日差（数值面板按行位置差处理）。"""
+class CalendarDayDiff(SeriesOperator):
+    """两个日期面板的自然日差（date2 - date1，不含交易日历）。"""
 
     metadata = _metadata(
-        "trading_day_diff",
-        "date2 - date1（交易日差）。",
+        "calendar_day_diff",
+        "date2 - date1（自然日差）。",
         ["date1", "date2"],
         category="event",
         domain="calendar",
@@ -644,11 +686,7 @@ class TradingDayDiff(SeriesOperator):
     )
 
     def _calculate_series(self, date1: pd.DataFrame, date2: pd.DataFrame, **_: Any) -> pd.DataFrame:
-        if hasattr(date1.index, "dtype") and str(date1.index.dtype).startswith("datetime"):
-            pass
-        if str(date1.dtypes.iloc[0]).startswith("datetime"):
-            return (date2 - date1).dt.days.astype(float)
-        return date2.astype(float) - date1.astype(float)
+        return _day_diff_frame(date1, date2)
 
 
 @register_operator(
@@ -660,11 +698,11 @@ class TradingDayDiff(SeriesOperator):
     status="experimental",
 )
 class FinAnnouncementLag(SeriesOperator):
-    """公告相对报告期末的滞后天数：pub_date - period_end_date。"""
+    """公告相对报告期末的自然日滞后：pub_date - period_end_date。"""
 
     metadata = _metadata(
         "fin_announcement_lag",
-        "pub_date - period_end_date（天数）。",
+        "pub_date - period_end_date（自然日天数）。",
         ["period_end_date", "pub_date"],
         category="event",
         domain="fundamental",
@@ -672,9 +710,7 @@ class FinAnnouncementLag(SeriesOperator):
     )
 
     def _calculate_series(self, period_end_date: pd.DataFrame, pub_date: pd.DataFrame, **_: Any) -> pd.DataFrame:
-        if str(period_end_date.dtypes.iloc[0]).startswith("datetime"):
-            return (pub_date - period_end_date).dt.days.astype(float)
-        return pub_date.astype(float) - period_end_date.astype(float)
+        return _day_diff_frame(period_end_date, pub_date)
 
 
 def _row_entity_ids(panel: pd.DataFrame) -> list[set]:
@@ -792,7 +828,7 @@ class IndexWeight(SeriesOperator):
 
 
 import cleaned_operators.operator_surface as _surface  # noqa: E402
-_surface.EXTENDED_ONLY_CANONICALS = frozenset(set(_surface.EXTENDED_ONLY_CANONICALS) | set(['relation_hhi', 'relation_entropy', 'relation_topk_sum', 'relation_rank_weighted_sum', 'relation_category_share', 'relation_peer_weighted_mean_ex_self', 'relation_entry_count', 'relation_exit_count', 'relation_weighted_change', 'index_member', 'index_weight_change', 'index_entry_exit_event', 'index_membership_age', 'event_cumulative_return_past', 'event_abnormal_return_past', 'fin_applicability_mask', 'trading_day_diff', 'fin_announcement_lag', 'relation_distinct_count', 'relation_overlap_ratio', 'index_weight']))
+_surface.EXTENDED_ONLY_CANONICALS = frozenset(set(_surface.EXTENDED_ONLY_CANONICALS) | set(['relation_hhi', 'relation_entropy', 'relation_topk_sum', 'relation_rank_weighted_sum', 'relation_category_share', 'relation_peer_weighted_mean_ex_self', 'relation_entry_count', 'relation_exit_count', 'relation_weighted_change', 'index_member', 'index_weight_change', 'index_entry_exit_event', 'index_membership_age', 'event_cumulative_return_past', 'event_abnormal_return_past', 'fin_applicability_mask', 'fin_announcement_lag', 'relation_distinct_count', 'relation_overlap_ratio', 'index_weight']))
 
 
 from cleaned_operators import operator_surface as _surface  # noqa: E402

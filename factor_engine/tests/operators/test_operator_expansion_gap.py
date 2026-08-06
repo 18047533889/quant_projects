@@ -95,22 +95,23 @@ def test_intraday_segment_handles_utc_index():
     from cleaned_operators.microstructure.intraday_agg import IntraSegmentReturn, IntraLunchGapReturn
 
     # 01:31 UTC = 09:31 Beijing (morning), 03:00 UTC = 11:00 Beijing (morning),
-    # 05:00 UTC = 13:00 Beijing (afternoon).
+    # 05:00 UTC = 13:00 Beijing (afternoon), 06:00 UTC = 14:00 Beijing (afternoon).
     idx = pd.DatetimeIndex(
         [
             pd.Timestamp("2024-01-02 01:31", tz="UTC"),
             pd.Timestamp("2024-01-02 03:00", tz="UTC"),
             pd.Timestamp("2024-01-02 05:00", tz="UTC"),
+            pd.Timestamp("2024-01-02 06:00", tz="UTC"),
         ]
     )
-    close = pd.DataFrame({"A": [10.0, 10.5, 11.0]}, index=idx)
+    close = pd.DataFrame({"A": [10.0, 10.5, 11.0, 11.2]}, index=idx)
     out_morning = IntraSegmentReturn()._calculate_series(close, segment="morning")
     assert out_morning.loc[pd.Timestamp("2024-01-02"), "A"] == pytest.approx(10.5 / 10.0 - 1.0, rel=1e-9)
     out_afternoon = IntraSegmentReturn()._calculate_series(close, segment="afternoon")
-    assert out_afternoon.loc[pd.Timestamp("2024-01-02"), "A"] == pytest.approx(11.0 / 11.0 - 1.0, rel=1e-9)
+    assert out_afternoon.loc[pd.Timestamp("2024-01-02"), "A"] == pytest.approx(11.2 / 11.0 - 1.0, rel=1e-9)
 
     # lunch gap: afternoon first open vs morning last close.
-    open_px = pd.DataFrame({"A": [10.0, 10.4, 11.05]}, index=idx)
+    open_px = pd.DataFrame({"A": [10.0, 10.4, 11.05, 11.1]}, index=idx)
     out_lunch = IntraLunchGapReturn()._calculate_series(close, open_px)
     assert out_lunch.loc[pd.Timestamp("2024-01-02"), "A"] == pytest.approx(11.05 / 10.5 - 1.0, rel=1e-9)
 
@@ -166,9 +167,22 @@ def test_intraday_empty_day_is_nan_not_zero():
     assert np.isnan(out.loc[pd.Timestamp("2024-01-02"), "A"])
 
 
-def test_intraday_operators_are_source_blocked():
-    for name in ("intra_realized_variance", "intra_limit_reopen_count", "intra_amihud"):
-        assert name in SOURCE_BLOCKED_CANONICALS
+def test_intraday_source_blocked_operators_are_not_production_targets():
+    """Daily-argument minute-aggregation operators (``intraday_volatility`` /
+    ``intraday_vwap_deviation``) consume a minute panel that the runtime-only
+    daily synthetic audit cannot exercise, so they remain source-blocked.  The
+    ``intra_*`` minute→daily family and the relation/index panel operators are
+    eligible production targets."""
+    from cleaned_operators.production_hardening import factor_production_targets
+
+    assert "intraday_volatility" in SOURCE_BLOCKED_CANONICALS
+    assert "intraday_vwap_deviation" in SOURCE_BLOCKED_CANONICALS
+    targets = factor_production_targets()
+    assert "intraday_volatility" not in targets
+    assert "intraday_vwap_deviation" not in targets
+    for name in ("intra_realized_variance", "intra_limit_reopen_count", "intra_amihud",
+                 "relation_distinct_count", "relation_overlap_ratio", "index_weight"):
+        assert name in targets, name
 
 
 # ---------------------------------------------------------------------------

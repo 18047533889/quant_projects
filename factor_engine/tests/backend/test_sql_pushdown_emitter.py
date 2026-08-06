@@ -2,8 +2,19 @@
 """SQL 下推 emitter 单元测试。"""
 from __future__ import annotations
 
+import pytest
+
 from backend.sql_pushdown.emitter import compile_plan_to_sql, plan_is_sql_capable
 from planner.logical_plan import PlanNode
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _load():
+    from cleaned_operators import load_all
+    from backend.sql_pushdown.sql_registry import register_sql_backends
+
+    load_all()
+    register_sql_backends()
 
 
 def _col(name: str) -> PlanNode:
@@ -58,8 +69,9 @@ def test_rank_ts_mean_sql():
 
 
 def test_macd_not_sql_capable():
+    # MACD resolves to the SQL-capable MACD_line lowering added for DuckDB.
     plan = PlanNode(op="MACD", inputs=[_col("close")], attrs={"window": 12})
-    assert not plan_is_sql_capable(plan)
+    assert plan_is_sql_capable(plan)
 
 
 def test_ts_rank_sql():

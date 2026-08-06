@@ -61,12 +61,16 @@ def _assert_parity(name, args, kwargs, rtol=1e-8, atol=1e-8):
 
 def test_native_polars_limit_misc_matches_pandas(panels):
     close, upper, lower, ret, bmark, op, ocf, icf, fcf, event, d1, d2 = panels
+    high = close * 1.05
+    low = close * 0.95
     cases = [
         ("ashare_limit_distance", (close, upper), {}),
-        ("ashare_limit_touch", (close, upper), {"tick_tolerance": 0.005}),
-        ("ashare_limit_open_break", (op, upper), {}),
-        ("ashare_limit_one_price", (close, upper, lower), {}),
-        ("ashare_limit_failed", (close, upper), {"window": 20}),
+        ("ashare_limit_up_touch", (high, upper), {"tick_tolerance": 0.005}),
+        ("ashare_limit_down_touch", (low, lower), {"tick_tolerance": 0.005}),
+        ("ashare_open_at_upper_limit", (op, upper), {"tick_tolerance": 0.005}),
+        ("ashare_limit_open_failed", (op, low, upper), {"tick_tolerance": 0.005}),
+        ("ashare_limit_one_price", (op, high, low, close, upper, lower), {"side": "up", "tick_tolerance": 0.005}),
+        ("ashare_limit_failed", (high, close, upper), {"tick_tolerance": 0.005}),
         ("benchmark_excess_return", (ret, bmark), {}),
         ("benchmark_relative_price", (close, upper), {}),
         ("fin_applicability_mask", (ret,), {"threshold": 0.0}),

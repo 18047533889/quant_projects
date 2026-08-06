@@ -132,7 +132,7 @@ _UNARY: list[tuple[str, str, Callable]] = [
     ("cosh", "cosh", lambda c: c.cosh()),
     ("sinh", "sinh", lambda c: c.sinh()),
     ("tan", "tan", lambda c: c.tan()),
-    ("log2", "log2", lambda c: c.log2()),
+    ("log2", "log2", lambda c: c.log(2.0)),
     ("log_abs", "log_abs", lambda c: c.abs().log()),
     ("exp_neg", "exp_neg", lambda c: (-c).exp()),
     ("reciprocal", "reciprocal", lambda c: 1.0 / c),

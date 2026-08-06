@@ -27,10 +27,10 @@ def test_catalog_v2_is_deterministic_and_semantic() -> None:
 
 
 def test_operator_expansion_fields_resolve_with_semantics() -> None:
-    gross = FIELD_REGISTRY.require("gross_profit")
-    assert gross.table == "StockIncome"
-    assert gross.grain == ("flow", "ytd")
-    assert gross.unit == "CNY"
+    cost = FIELD_REGISTRY.require("operating_cost")
+    assert cost.table == "StockIncome"
+    assert cost.grain == ("flow", "ytd")
+    assert cost.source_name == "OperatingCost"
 
     equity = FIELD_REGISTRY.require("total_owner_equities")
     assert equity.source_name == "TotalOwnerEquities"
@@ -39,10 +39,20 @@ def test_operator_expansion_fields_resolve_with_semantics() -> None:
     capex = FIELD_REGISTRY.require("capex")
     assert capex.table == "StockCashFlow"
     assert capex.grain == ("flow", "ytd")
+    assert capex.source_name == "FixIntanOtherAssetAcquiCash"
 
     net_income = FIELD_REGISTRY.require("net_income")
     assert net_income.name == "net_profit"
     assert net_income.source_name == "NetProfit"
+
+    # 物理列名与 COS parquet 逐列核对（2026-08）。
+    assert FIELD_REGISTRY.require("current_assets").source_name == "TotalCurrentAssets"
+    assert FIELD_REGISTRY.require("current_liabilities").source_name == "TotalCurrentLiability"
+    assert FIELD_REGISTRY.require("taxes_payable").source_name == "TaxsPayable"
+    assert FIELD_REGISTRY.require("employee_payable").source_name == "SalariesPayable"
+    assert FIELD_REGISTRY.require("operating_cash_flow").source_name == "NetOperateCashFlow"
+    assert FIELD_REGISTRY.require("rd_expenses").source_name == "RdExpenses"
+    assert FIELD_REGISTRY.require("total_liabilities").source_name == "TotalLiability"
 
 
 def test_corrected_status_and_index_identities() -> None:

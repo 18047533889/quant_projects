@@ -46,31 +46,44 @@ def _truth(values: np.ndarray) -> np.ndarray:
     status="experimental",
 )
 class TsTransitionCount(SeriesOperator):
-    """窗口内状态 0→1（或 1→0）切换次数。"""
+    """窗口内状态 0→1（或 1→0）切换次数。
+
+    ``missing_policy="break"``（默认）：NaN 表示缺失，不代表 False；缺失中断
+    前后状态连续，跨越缺失的切换不计入。
+    """
 
     metadata = _metadata(
         "ts_transition_count",
         "窗口内状态真值变化次数。",
-        ["condition", "window"],
+        ["condition", "window", "missing_policy"],
         domain="trading_state",
         unit="count",
     )
 
-    def _calculate_series(self, condition: pd.DataFrame, window: int = 20, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, condition: pd.DataFrame, window: int = 20, missing_policy: str = "break", **_: Any) -> pd.DataFrame:
         w = int(window)
         cv = condition.to_numpy()
-        truth = _truth(cv)
+        valid = np.isfinite(cv)
+        truth = valid & (cv != 0)
         rows, cols = truth.shape
         out = np.full((rows, cols), np.nan, dtype=float)
+        policy = str(missing_policy).lower()
         for col in range(cols):
-            prev = None
             for row in range(rows):
                 start = max(0, row - w + 1)
-                segment = truth[start : row + 1, col]
-                if np.all(np.isnan(cv[start : row + 1, col])):
+                if not valid[row, col]:
                     out[row, col] = np.nan
                     continue
-                transitions = int(np.sum(segment[1:] != segment[:-1]))
+                transitions = 0
+                prev: bool | None = None
+                for i in range(start, row + 1):
+                    if not valid[i, col]:
+                        prev = None
+                        continue
+                    current = bool(truth[i, col])
+                    if prev is not None and current != prev:
+                        transitions += 1
+                    prev = current
                 out[row, col] = float(transitions)
         return _frame_like(condition, out)
 
@@ -84,31 +97,40 @@ class TsTransitionCount(SeriesOperator):
     status="experimental",
 )
 class TsTimeSinceChange(SeriesOperator):
-    """距当前状态上一次发生变化以来经过的交易行数。"""
+    """距当前状态上一次发生变化以来经过的交易行数。
+
+    ``missing_policy="break"``（默认）：缺失期间输出 NaN，并重置连续状态起点；
+    不把缺失区间当作有效状态持续期。
+    """
 
     metadata = _metadata(
         "ts_time_since_change",
         "距当前状态上一次变化经过的行数。",
-        ["condition", "max_lookback"],
+        ["condition", "max_lookback", "missing_policy"],
         domain="trading_state",
         unit="count",
     )
 
-    def _calculate_series(self, condition: pd.DataFrame, max_lookback: Any = None, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, condition: pd.DataFrame, max_lookback: Any = None, missing_policy: str = "break", **_: Any) -> pd.DataFrame:
         limit = None if max_lookback is None else int(max_lookback)
         cv = condition.to_numpy()
-        truth = _truth(cv)
+        valid = np.isfinite(cv)
+        truth = valid & (cv != 0)
         rows, cols = truth.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
             last_change = -1
-            prev = None
+            prev: bool | None = None
             for row in range(rows):
-                if np.isfinite(cv[row, col]):
-                    current = bool(truth[row, col])
-                    if prev is not None and current != prev:
-                        last_change = row
-                    prev = current
+                if not valid[row, col]:
+                    out[row, col] = np.nan
+                    last_change = -1
+                    prev = None
+                    continue
+                current = bool(truth[row, col])
+                if prev is not None and current != prev:
+                    last_change = row
+                prev = current
                 if last_change >= 0:
                     distance = row - last_change
                     if limit is None or distance < limit:
@@ -215,9 +237,13 @@ class EventDecayAsOf(SeriesOperator):
     )
 
     def _calculate_series(self, event: pd.DataFrame, half_life: float = 20.0, **_: Any) -> pd.DataFrame:
-        hl = max(float(half_life), 1.0)
+        hl = float(half_life)
+        if hl < 1.0:
+            raise ValueError("half_life must be >= 1")
         weight = 0.5 ** (1.0 / hl)
-        arr = np.where(_truth(event.to_numpy(dtype=float)), 1.0, 0.0)
+        arr = event.to_numpy(dtype=float)
+        # 保留事件符号与幅度；缺失视为 0（不贡献衰减）。
+        arr = np.where(np.isfinite(arr), arr, 0.0)
         out = np.full(arr.shape, np.nan)
         for col in range(arr.shape[1]):
             series = arr[:, col]

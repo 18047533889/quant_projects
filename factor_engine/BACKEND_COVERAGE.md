@@ -7,8 +7,8 @@ Generated: 2026-08-05
 | Backend | Coverage | Count |
 |---------|----------|-------|
 | **Pandas** | 626 (100%) | ✅ Full |
-| **Polars** | 550 (87.9%) | ✅ Strong |
-| **DuckDB** | 132 (24.4%) | ⚠️ Partial |
+| **Polars** | 554 (88.5%) | ✅ Strong |
+| **DuckDB** | 141 (22.5%) | ⚠️ Partial |
 
 ## Status
 
@@ -105,7 +105,7 @@ These operators have both Pandas reference and Polars fast-path:
 
 ## Testing Status
 
-- **Full test suite**: 2770 passed, 1044 skipped, 0 failed
+- **Full test suite**: 2788 passed, 1044 skipped, 0 failed
 - **Parity suites** (each verifies Polars vs Pandas output incl. NaN warmup):
   `test_polars_indicators_v2`, `test_polars_liquidity_v2`, `test_polars_candle`,
   `test_polars_structure`, `test_polars_fundamental`, `test_polars_tech_misc`,

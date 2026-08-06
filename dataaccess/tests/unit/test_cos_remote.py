@@ -69,9 +69,43 @@ def test_should_read_cos_remote_modes(monkeypatch, tmp_path):
 
 
 def test_resolve_s3_credentials_missing(monkeypatch):
+    """env 与 coscli 配置都不存在时必须 fail closed。"""
     from data_access.cos.remote import resolve_s3_credentials
 
     monkeypatch.delenv("COS_SECRET_ID", raising=False)
     monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)
+    monkeypatch.delenv("DATA_ACCESS_COS_YAML", raising=False)
+    monkeypatch.setenv("DATA_ACCESS_COS_YAML", "/nonexistent/cos.yaml")
     with pytest.raises(ValidationError, match="凭证"):
         resolve_s3_credentials()
+
+
+def test_resolve_s3_credentials_missing_without_cos_yaml(monkeypatch):
+    """缺少 env 且 cos.yaml 也不存在时仍须抛错（fail closed）。"""
+    from data_access.cos.remote import resolve_s3_credentials
+
+    monkeypatch.delenv("COS_SECRET_ID", raising=False)
+    monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)
+    monkeypatch.delenv("DATA_ACCESS_COS_YAML", raising=False)
+    monkeypatch.setenv("DATA_ACCESS_COS_YAML", "/nonexistent/cos.yaml")
+    with pytest.raises(ValidationError, match="凭证"):
+        resolve_s3_credentials()
+
+
+def test_resolve_s3_credentials_falls_back_to_cos_yaml(monkeypatch, tmp_path):
+    """env 缺省时回退到 coscli 配置的 secretid/secretkey。"""
+    from data_access.cos.remote import resolve_s3_credentials
+
+    monkeypatch.delenv("COS_SECRET_ID", raising=False)
+    monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)
+    cfg = tmp_path / "cos.yaml"
+    cfg.write_text(
+        "cos:\n  base:\n    secretid: 'TEST_ID'\n    secretkey: 'TEST_KEY'\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("DATA_ACCESS_COS_YAML", str(cfg))
+    creds = resolve_s3_credentials()
+    assert creds.access_key_id == "TEST_ID"
+    assert creds.secret_access_key == "TEST_KEY"
+    # endpoint 由 region 推断
+    assert creds.endpoint.endswith(".myqcloud.com")

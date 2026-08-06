@@ -96,8 +96,45 @@ def authorize_s3_path(path: str) -> None:
     )
 
 
+def _read_cos_cli_credentials() -> tuple[str, str]:
+    """Fall back to the coscli/clean-cos-ro config (``~/.cos.yaml``).
+
+    The remote path must not silently require env vars when the team's standard
+    COS CLI already has credentials configured.  Only ``secretid``/``secretkey``
+    from ``cos.base`` are read; nothing is logged.
+    """
+    import shutil
+
+    explicit = (
+        os.environ.get("DATA_ACCESS_COS_YAML")
+        or os.environ.get("COS_CONFIG_FILE")
+        or ""
+    ).strip()
+    # 显式指定配置路径时以它为权威（便于测试/CI 覆盖）；否则默认读 ~/.cos.yaml。
+    candidates = [explicit] if explicit else [str(Path.home() / ".cos.yaml")]
+    for path in candidates:
+        if not path or not Path(path).is_file():
+            continue
+        try:
+            import yaml
+
+            payload = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+            base = (payload or {}).get("cos", {}).get("base", {}) or {}
+            secret_id = str(base.get("secretid") or "").strip()
+            secret_key = str(base.get("secretkey") or "").strip()
+            if secret_id and secret_key:
+                return secret_id, secret_key
+        except Exception:
+            continue
+    return "", ""
+
+
 def resolve_s3_credentials() -> S3Credentials:
-    """从环境变量解析腾讯云 COS / 通用 S3 凭证。"""
+    """解析腾讯云 COS / 通用 S3 凭证。
+
+    优先级：环境变量 → coscli/clean-cos-ro 配置（``~/.cos.yaml``）。
+    endpoint 缺省按 region 推断为 ``cos.<region>.myqcloud.com``。
+    """
     access = (
         os.environ.get("COS_SECRET_ID")
         or os.environ.get("AWS_ACCESS_KEY_ID")
@@ -110,6 +147,8 @@ def resolve_s3_credentials() -> S3Credentials:
         or os.environ.get("S3_SECRET_ACCESS_KEY")
         or ""
     ).strip()
+    if not access or not secret:
+        access, secret = _read_cos_cli_credentials()
     endpoint = (
         os.environ.get("DATA_ACCESS_COS_S3_ENDPOINT")
         or os.environ.get("COS_S3_ENDPOINT")
@@ -125,13 +164,12 @@ def resolve_s3_credentials() -> S3Credentials:
     if not access or not secret:
         raise ValidationError(
             "COS 远程直读需要凭证：设置 COS_SECRET_ID + COS_SECRET_KEY，"
-            "或 AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY。"
+            "或 AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY，"
+            "或提供 ~/.cos.yaml（coscli/clean-cos-ro 配置）。"
         )
     if not endpoint:
-        raise ValidationError(
-            "COS 远程直读需要 DATA_ACCESS_COS_S3_ENDPOINT，"
-            "例如 cos.ap-guangzhou.myqcloud.com"
-        )
+        # Tencent COS 默认 endpoint 由 region 推断。
+        endpoint = f"cos.{region}.myqcloud.com"
     use_ssl = os.environ.get("DATA_ACCESS_COS_S3_USE_SSL", "1").lower() not in {
         "0",
         "false",
@@ -377,6 +415,14 @@ def _httpfs_extension_available() -> bool:
 
 def _httpfs_and_creds_ready() -> bool:
     if not _httpfs_extension_available():
+        return False
+    # httpfs 用 SigV4 签名；腾讯云 COS 对部分 STS/子账号凭证不接受 SigV4。
+    # 仅在用户**显式**配置了 S3 endpoint 时才信任 httpfs；否则 auto 走 cli
+    # （coscli 用 COS 原生签名，凭证从 ~/.cos.yaml 解析，稳定可用）。
+    if not any(
+        os.environ.get(name)
+        for name in ("DATA_ACCESS_COS_S3_ENDPOINT", "COS_S3_ENDPOINT", "S3_ENDPOINT")
+    ):
         return False
     try:
         resolve_s3_credentials()

@@ -55,6 +55,47 @@ _PANEL_PARAMETERS = frozenset({
     # Minute/relation integration (2026-08).
     "entity_ids", "current_ids", "previous_ids", "components",
     "high_limit", "low_limit", "activity",
+    # valuation / fundamental / holder / ts_model / panel inputs (2026-08).
+    "a_cap", "account_receivable", "asset_impairment_loss", "borrowing_repayment",
+    "capex_cash", "capitalized_dev_increase", "cash_equivalents", "cash_from_borrowing",
+    "change_date", "circulating_capital", "component", "contract_assets",
+    "contract_liability", "debt_repayment", "deferred_tax_assets",
+    "discontinued_operation_profit", "earnings_yield", "entry_event", "entry_index_a",
+    "fair_value_income", "free_cap", "free_float_weight", "free_market_cap",
+    "freeze_shares", "goods_sale_cash", "goodwill", "inventories", "investment_income",
+    "is_suspend", "listing_date", "locked_shares", "minority_profit",
+    "net_cash_from_subcompany", "net_profit", "ocf", "operating_profit",
+    "other_comprehensive_income", "other_earnings", "own_return", "paidin_capital",
+    "pcf_ratio", "peer_return", "pe_ratio", "period_expense", "pledge_ratio",
+    "pledge_shares", "rd_expense", "retained_earnings", "roa", "shared_holders",
+    "short_term_debt", "short_term_loan", "total_capital", "total_composite_income",
+    "total_liabilities", "usufruct_assets", "valuation", "group", "breadth",
+    # 2026-08 concurrent expansion: fundamental-quality / valuation / holder /
+    # ts_model / cross-sectional-robust / panel-model series inputs.
+    "asset_deal_income", "asset_turnover", "avg_assets", "avg_equity",
+    "bonds_payable", "capital_reserve", "capitalization", "cash_from_bonds_issue",
+    "credit_impairment_loss", "current_ratio", "deferred_tax_liability",
+    "dividend_interest_payment", "entry_index_b", "entry_index_c",
+    "goodwill_prev", "gross_margin", "industry_dispersion", "industry_liquidity",
+    "interest_cost", "inventory_turnover", "leader_return", "lease_liability",
+    "leverage", "long_term_debt", "long_term_loan", "market_liquidity",
+    "market_state", "non_operating_expense", "non_operating_revenue", "ocf_yield",
+    "operating_revenue", "overlap", "pcf_ratio2", "pe_ratio_lyr", "profit_growth",
+    "quality", "receivable_turnover", "revenue_growth", "tax_payable",
+    "circulating_cap", "top10_concentration", "top10_float_concentration",
+    "total", "total_holders", "total_profit", "...", "d1", "d2", "d3", "d4", "d5",
+    "group1", "group2", "group3", "x3", "x4", "f1", "f2", "f3", "f4",
+    "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10",
+    "s4", "s5", "s6", "s7", "s8", "s9", "s10",
+})
+
+# Params whose generic names also appear in _SCALAR_VALUES but are PANEL series
+# inputs for these specific operators.  Checked before scalar fallback.
+_PANEL_FORCE: frozenset[tuple[str, str]] = frozenset({
+    ("ts_har_rv_forecast", "rv"),
+    ("ts_har_rv_innovation_z", "rv"),
+    ("fin_margin_persistence", "margin"),
+    ("group_peer_beta_deviation", "beta"),
 })
 
 _SCALAR_VALUES: dict[str, Any] = {
@@ -227,6 +268,34 @@ _SCALAR_VALUES: dict[str, Any] = {
     "score_weights": 1.0,
     "morning_cutoff": "11:30",
     "afternoon_start": "13:00",
+    "event_effective_lag": 1,
+    "missing_policy": "break",
+    # valuation / fundamental / holder / ts_model / panel (2026-08) scalars.
+    "bins": 10,
+    "degree": 2,
+    "knots": 4,
+    "n_components": 3,
+    "threshold_scale": 1.0,
+    "q_level": 1e-4,
+    "q_trend": 1e-5,
+    "margin": 0.1,
+    "top": 3,
+    "start_minute": 570,
+    "end_minute": 900,
+    "rv": 0.1,
+    "beta": 0.5,
+    "s": 0.1,
+    "r": 1.0,
+    "f": 0.5,
+    "d": 20,
+    "x": 0.5,
+    "y": 0.5,
+    "coefficient_index": 0,
+    "decay": 0.9,
+    "l1_ratio": 0.5,
+    "n_experts": 3,
+    "n_regimes": 2,
+    "l": 5,
 }
 
 _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
@@ -241,6 +310,12 @@ _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
     ("period_lag", "revision_policy"): "latest_available",
     ("period_stability", "method"): "std",
     ("ts_nth_value", "order"): "largest",
+    ("ts_permutation_entropy", "order"): 4,
+    ("ts_ar_forecast", "order"): 3,
+    ("ts_ar_innovation", "order"): 3,
+    ("ts_ar_innovation_z", "order"): 3,
+    ("panel_rolling_pca_loading", "component"): 0,
+    ("industry_rolling_pca_loading", "component"): 0,
     ("ts_mad", "scale"): 1.0,
     ("ts_product", "skipna"): True,
     ("MACD_line", "signal"): 9,
@@ -265,6 +340,8 @@ _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
     ("intra_limit_reopen_count", "side"): "up",
     ("intra_realized_semivariance", "side"): "down",
     ("intra_extreme_bar_return", "side"): "max",
+    ("intra_return_activity_corr", "absolute_return"): False,
+    ("ashare_limit_one_price", "side"): "up",
 }
 _SPECIAL_POSITIONAL = {
     "cs_multi_resid": ("target", "exposure", "control"),
@@ -285,6 +362,147 @@ _SPECIAL_POSITIONAL = {
     **_SPECIAL_POSITIONAL,
     "fin_component_score": ("components",),
 }
+
+
+# ---------------------------------------------------------------------------
+# Minute-source fixture
+#
+# Minute-source ``intra_*`` operators consume minute-frequency panels (row
+# index is a minute timestamp, columns are instruments) and return one scalar
+# per (TradeDate, Symbol).  The daily audit fixture cannot exercise a minute
+# kernel, so these panels are built here and the audit feeds them to operators
+# carrying the ``minute`` tag (plus the two pre-existing ``intraday_*``
+# operators that predate the tag convention).
+# ---------------------------------------------------------------------------
+
+_MINUTES_PER_DAY = 240
+_MINUTE_PREFIX_DAYS = 20
+
+# Operators named ``intraday_*`` are daily-frequency (rolling on daily OHLC /
+# session-aware but frequency-preserving) rather than minute→daily aggregators,
+# so they are NOT minute-source and resolve against the daily panels.
+_MINUTE_SOURCE_EXTRA: frozenset[str] = frozenset()
+
+# Operator parameter name -> minute panel key.  These names also exist as daily
+# panels, so the minute-source dispatch in ``_value`` must win for minute ops.
+_MINUTE_PANEL_PARAMS: dict[str, str] = {
+    "close": "minute_close",
+    "open": "minute_open",
+    "high": "minute_high",
+    "low": "minute_low",
+    "price": "minute_price",
+    "amount": "minute_amount",
+    "volume": "minute_volume",
+    "value": "minute_value",
+    "activity": "minute_activity",
+    "vwap": "minute_vwap",
+    "return": "minute_ret",
+    "returns": "minute_ret",
+    "x": "minute_close",
+}
+
+# Minute-source operators also consume a few daily panels that are broadcast
+# onto the minute grid by the operator itself (realized beta's market-cap
+# weights, limit prices).
+_MINUTE_DAILY_PARAMS: frozenset[str] = frozenset(
+    {"free_market_cap", "high_limit", "low_limit",
+     "benchmark_ret", "market_ret", "market", "benchmark"}
+)
+
+
+def _minute_source(canonical: str) -> bool:
+    """Return True for minute-frequency-source canonicals."""
+    if canonical.startswith("intra_") or canonical in _MINUTE_SOURCE_EXTRA:
+        return True
+    from cleaned_operators.registry import OperatorRegistry
+
+    operator = OperatorRegistry.get(canonical, "pandas_numpy")
+    if operator is None:
+        return False
+    tags = tuple(getattr(operator.metadata, "tags", ()) or ())
+    return "minute" in tags
+
+
+def _minute_index(dates: pd.DatetimeIndex, minutes_per_day: int = _MINUTES_PER_DAY):
+    """Naive per-minute DatetimeIndex across the same business days as ``dates``.
+
+    Minute-of-day spans 571..810 (morning 09:31..11:30, afternoon 13:01..15:00
+    approximate), so ``minute_of_day``-based segment masks see real session
+    structure instead of a flat 00:00..03:59 block.
+    """
+    offset = 571
+    return pd.DatetimeIndex(
+        [
+            d + pd.Timedelta(minutes=offset + m)
+            for d in dates
+            for m in range(minutes_per_day)
+        ]
+    )
+
+
+def _minute_panels(dates, assets, rows):
+    """Deterministic synthetic minute-frequency panels (same days as daily)."""
+    per = _MINUTES_PER_DAY
+    n_days = int(rows)
+    columns = len(assets)
+    days = np.arange(n_days, dtype=float)[:, None, None]
+    bars = np.arange(per, dtype=float)[None, :, None]
+    assets_vec = np.arange(columns, dtype=float)[None, None, :]
+    rng = np.random.default_rng(7)
+    shock = rng.normal(0.0, 0.002, size=(n_days, per, columns))
+    season = 0.0006 * np.sin(bars / 20.0 + assets_vec)
+    drift = 0.00005 * days
+    ret3 = shock + season + drift  # (days, bars, assets)
+    log_p = np.cumsum(ret3, axis=1)
+    base = 50.0 + 0.15 * days + 0.7 * assets_vec
+    close3 = np.exp(log_p) * base
+    open3 = np.concatenate([close3[:, :1] * (1.0 + ret3[:, :1]), close3[:, :-1]], axis=1)
+    high3 = np.maximum(open3, close3) * 1.004
+    low3 = np.minimum(open3, close3) * 0.996
+    vol3 = 200_000.0 + 3_000.0 * bars + 12_000.0 * assets_vec + 50_000.0 * np.abs(shock)
+    amt3 = vol3 * close3
+    price3 = (high3 + low3 + close3) / 3.0
+    ret4 = ret3  # per-bar log return
+    absret3 = np.abs(ret3)
+
+    def frame(arr):
+        return pd.DataFrame(arr.reshape(n_days * per, columns), index=_minute_index(dates), columns=assets)
+
+    minute_ret = frame(ret4)
+    return {
+        "minute_close": frame(close3),
+        "minute_open": frame(open3),
+        "minute_high": frame(high3),
+        "minute_low": frame(low3),
+        "minute_price": frame(price3),
+        "minute_volume": frame(vol3),
+        "minute_amount": frame(amt3),
+        "minute_value": frame(vol3 * (1.0 + 0.5 * np.abs(shock))),
+        "minute_activity": frame(vol3 * (1.0 + np.abs(shock))),
+        "minute_abs_return": frame(absret3),
+        "minute_ret": minute_ret,
+        "minute_vwap": frame(amt3 / vol3),
+    }
+
+
+def _is_minute_frame(value: Any) -> bool:
+    """True if a DataFrame/Series index is minute-frequency (>=2 bars on day 0)."""
+    if not isinstance(value, (pd.DataFrame, pd.Series)) or len(value) < 2:
+        return False
+    idx = value.index
+    if not isinstance(idx, pd.DatetimeIndex):
+        return False
+    norm = idx.normalize()
+    return bool(norm[0] == norm[1])
+
+
+def _slice_minute(value: Any, days: int) -> Any:
+    """Slice to the first ``days`` complete trading days (minute-aware)."""
+    if _is_minute_frame(value):
+        return value.iloc[: days * _MINUTES_PER_DAY]
+    if isinstance(value, (pd.DataFrame, pd.Series)):
+        return value.iloc[:days]
+    return value
 
 
 def _panels(rows: int = 220, columns: int = 6) -> dict[str, pd.DataFrame]:
@@ -434,6 +652,7 @@ def _panels(rows: int = 220, columns: int = 6) -> dict[str, pd.DataFrame]:
         "expected_std": close.abs() * 0.1 + 1.0,
         "expected_mean": close,
     }
+    panels.update(_minute_panels(dates, assets, rows))
     for name in sorted(_PANEL_PARAMETERS):
         if name in panels:
             continue
@@ -446,8 +665,15 @@ def _value(canonical: str, name: str, panels: dict[str, pd.DataFrame]) -> Any:
     special = _SPECIAL_SCALARS.get((canonical, key))
     if special is not None:
         return special
+    if _minute_source(canonical):
+        if key in _MINUTE_PANEL_PARAMS:
+            return panels[_MINUTE_PANEL_PARAMS[key]]
+        if key in _MINUTE_DAILY_PARAMS:
+            return panels[key]
     if key in panels:
         return panels[key]
+    if (canonical, key) in _PANEL_FORCE:
+        return panels["x"]
     if key in _SCALAR_VALUES:
         return _SCALAR_VALUES[key]
     if key.endswith("_window") or key.startswith("window"):
@@ -613,17 +839,33 @@ def audit(*, require_admission: bool = True) -> list[str]:
                     f"[{_implementation_label(operator)}]"
                 )
                 continue
-            prefix_arguments = [_slice(value, prefix_rows) for value in arguments]
-            prefix_kwargs = {
-                key: _slice(value, prefix_rows)
-                for key, value in keyword_arguments.items()
-            }
-            prefix_template = template.iloc[:prefix_rows]
-            prefix = _to_frame(
-                operator.calculate(*prefix_arguments, **prefix_kwargs),
-                prefix_template,
-            )
-            historical = first.iloc[:prefix_rows]
+            if _minute_source(canonical):
+                # Minute kernels aggregate per complete trading day, so the
+                # prefix check slices inputs to whole days and compares the
+                # same number of daily output rows.
+                prefix_args = [_slice_minute(value, _MINUTE_PREFIX_DAYS) for value in arguments]
+                prefix_kwargs = {
+                    key: _slice_minute(value, _MINUTE_PREFIX_DAYS)
+                    for key, value in keyword_arguments.items()
+                }
+                prefix_template = template.iloc[:_MINUTE_PREFIX_DAYS]
+                prefix = _to_frame(
+                    operator.calculate(*prefix_args, **prefix_kwargs),
+                    prefix_template,
+                )
+                historical = first.iloc[:_MINUTE_PREFIX_DAYS]
+            else:
+                prefix_args = [_slice(value, prefix_rows) for value in arguments]
+                prefix_kwargs = {
+                    key: _slice(value, prefix_rows)
+                    for key, value in keyword_arguments.items()
+                }
+                prefix_template = template.iloc[:prefix_rows]
+                prefix = _to_frame(
+                    operator.calculate(*prefix_args, **prefix_kwargs),
+                    prefix_template,
+                )
+                historical = first.iloc[:prefix_rows]
             if not _equal(historical, prefix):
                 delta = _numeric_delta(historical, prefix)
                 details = (

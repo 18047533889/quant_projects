@@ -221,27 +221,29 @@ def ts_upside_deviation(x, window, target=0.0, min_periods=2):
 
 
 def ts_current_drawdown_duration(x, window, **kwargs):
-    _pi(window, "window")
+    w = _pi(window, "window")
     cols = _cols(x)
     rows = x.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
         arr = _arr(x, c)
-        running_peak = -np.inf
-        streak = 0
         for t in range(rows):
-            value = arr[t]
-            if np.isfinite(value):
-                running_peak = max(running_peak, value)
-                if value < running_peak:
+            start = max(0, t - w + 1)
+            chunk = arr[start : t + 1]
+            valid_mask = np.isfinite(chunk)
+            if not valid_mask.any():
+                continue
+            running_peak = np.maximum.accumulate(np.where(valid_mask, chunk, -np.inf))
+            streak = 0
+            for back in range(len(chunk) - 1, -1, -1):
+                if not valid_mask[back]:
+                    streak = 0
+                    continue
+                if chunk[back] < running_peak[back]:
                     streak += 1
                 else:
-                    streak = 0
-                out[t, i] = float(streak)
-            else:
-                # pandas reference resets the running peak and streak on NaN
-                running_peak = -np.inf
-                streak = 0
+                    break
+            out[t, i] = float(streak)
     return _make(x, cols, out)
 
 
@@ -331,17 +333,52 @@ def _price_delay(xv, row, window, max_lag):
     return max(0.0, 1.0 - rss_full / rss_restricted)
 
 
-def ts_price_delay(x, window, max_lag=5):
+def _price_delay_model(stock, bench, end, window, max_lag, min_periods):
+    lo = max(0, end - window + 1 - max_lag)
+    if lo + max_lag >= end:
+        return np.nan
+    ts = np.arange(max(lo + max_lag, end - window + 1), end + 1)
+    if ts.size < max_lag + 2:
+        return np.nan
+    y = stock[ts]
+    bench_values = bench[ts]
+    lagged = np.column_stack([bench[ts - lag] for lag in range(max_lag + 1)])
+    X_full = np.column_stack([np.ones(len(ts)), lagged])
+    X_restricted = np.column_stack([np.ones(len(ts)), bench_values])
+    valid = np.isfinite(y) & np.all(np.isfinite(X_full), axis=1)
+    required = max(int(min_periods), max_lag + 2)
+    if valid.sum() < required:
+        return np.nan
+    yv = y[valid]
+    xr = X_restricted[valid]
+    xf = X_full[valid]
+    sst = float(np.sum((yv - np.mean(yv)) ** 2))
+    if sst <= 0.0:
+        return np.nan
+    beta_r, *_ = np.linalg.lstsq(xr, yv, rcond=None)
+    rss_r = float(np.sum((yv - xr @ beta_r) ** 2))
+    r2_r = 1.0 - rss_r / sst
+    beta_f, *_ = np.linalg.lstsq(xf, yv, rcond=None)
+    rss_f = float(np.sum((yv - xf @ beta_f) ** 2))
+    r2_f = 1.0 - rss_f / sst
+    if r2_f <= 0.0:
+        return np.nan
+    return max(0.0, 1.0 - r2_r / r2_f)
+
+
+def ts_price_delay(stock_return, benchmark_return, window, max_lag=5, min_periods=3):
     w = _pi(window, "window")
     ml = max(1, int(max_lag))
-    cols = _cols(x)
-    rows = x.height
+    mp = max(3, int(min_periods))
+    cols = _cols(stock_return, benchmark_return)
+    rows = stock_return.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
-        xv = _arr(x, c)
+        sv = _arr(stock_return, c)
+        bv = _arr(benchmark_return, c)
         for t in range(rows):
-            out[t, i] = _price_delay(xv, t, w, ml)
-    return _make(x, cols, out)
+            out[t, i] = _price_delay_model(sv, bv, t, w, ml, mp)
+    return _make(stock_return, cols, out)
 
 
 # ---------------------------------------------------------------------------
@@ -349,9 +386,12 @@ def ts_price_delay(x, window, max_lag=5):
 # ---------------------------------------------------------------------------
 
 
-def _selected_mask(condition_frame: pl.DataFrame, c: str) -> np.ndarray:
+def _selected_mask(condition_frame: pl.DataFrame, c: str, *value_frames) -> np.ndarray:
     cv = condition_frame[c].to_numpy()
-    return np.isfinite(cv) & (cv != 0)
+    mask = np.isfinite(cv) & (cv != 0)
+    for frame in value_frames:
+        mask = mask & np.isfinite(frame[c].to_numpy())
+    return mask
 
 
 def _min_max_if(x, condition, window, min_periods, op):
@@ -362,7 +402,7 @@ def _min_max_if(x, condition, window, min_periods, op):
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
         xv = _arr(x, c)
-        mask = _selected_mask(condition, c)
+        mask = _selected_mask(condition, c, x)
         for t in range(rows):
             start = max(0, t - w + 1)
             selected = xv[start : t + 1][mask[start : t + 1]]
@@ -391,7 +431,7 @@ def ts_quantile_if(x, condition, window, q=0.5, min_periods=1):
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
         xv = _arr(x, c)
-        mask = _selected_mask(condition, c)
+        mask = _selected_mask(condition, c, x)
         for t in range(rows):
             start = max(0, t - w + 1)
             selected = xv[start : t + 1][mask[start : t + 1]]
@@ -411,7 +451,7 @@ def _pair_condition(x, y, condition, window, min_periods, kind):
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
         xv, yv = _arr(x, c), _arr(y, c)
-        mask = _selected_mask(condition, c)
+        mask = _selected_mask(condition, c, x)
         for t in range(rows):
             start = max(0, t - w + 1)
             xs = xv[start : t + 1][mask[start : t + 1]]
@@ -429,7 +469,10 @@ def _pair_condition(x, y, condition, window, min_periods, kind):
             elif kind == "resid":
                 if np.std(xs) > 0 and xs.size >= 2:
                     coeffs = np.polyfit(xs, ys, 1)
-                    out[t, i] = float(ys[-1] - np.polyval(coeffs, xs[-1]))
+                    x_cur = xv[t]
+                    y_cur = yv[t]
+                    if bool(mask[t]) and np.isfinite(x_cur) and np.isfinite(y_cur):
+                        out[t, i] = float(y_cur - np.polyval(coeffs, x_cur))
     return _make(y if kind in ("beta", "resid") else x, cols, out)
 
 
@@ -526,7 +569,7 @@ _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
     ("ts_current_drawdown_duration", ("x", "window"), ts_current_drawdown_duration, "Bars since the running peak."),
     ("ts_time_under_water", ("x", "window"), ts_time_under_water, "Bars below the running peak in the window."),
     ("ts_best_lag_corr", ("y", "x", "window", "max_lag"), ts_best_lag_corr, "Best absolute lagged correlation."),
-    ("ts_price_delay", ("x", "window", "max_lag"), ts_price_delay, "Price-delay proxy."),
+    ("ts_price_delay", ("stock_return", "benchmark_return", "window", "max_lag", "min_periods"), ts_price_delay, "Hou-Moskowitz style price-delay proxy."),
     ("ts_max_if", ("x", "condition", "window", "min_periods"), ts_max_if, "Rolling max where condition holds."),
     ("ts_min_if", ("x", "condition", "window", "min_periods"), ts_min_if, "Rolling min where condition holds."),
     ("ts_quantile_if", ("x", "condition", "window", "q", "min_periods"), ts_quantile_if, "Rolling quantile where condition holds."),

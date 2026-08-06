@@ -1,0 +1,416 @@
+# FactorEngine 下一阶段算子挖掘扩展 —— 完整实现计划
+
+日期：2026-08-06
+范围：补齐五大搜索维度（分钟高阶矩/跳跃/日内路径、动态回归/状态空间/复杂度、财务质量/新会计科目、股东网络/共同持股、K线序列统计），并覆盖此前 AI 提出的全部算子清单。
+
+> 并发编辑说明：其他 AI 正在并行修改 `microstructure/intraday_agg.py`、`relation/ops.py`、
+> `operator_surface.py`、`fundamental/*` 等文件。本计划**所有新增物理内核放在全新模块**，
+> 对既有文件只做**最小追加式改动**（新增 frozenset 行、追加 `_LOAD_MODULES` 条目），
+> 不修改任何既有算子实现，最大限度避免合并冲突。
+
+---
+
+## 〇、总体原则
+
+1. **三层架构**：通用 canonical operator（字段无关）→ 数据源聚合 operator（分钟/股东/指数表 → 每股每日标量）→ Factor Recipe（固定财务定义/固定类别，避免重复内核）。
+2. **全部算子输出 `TradeDate × Symbol` 每股每日一个标量**。财务/股东数据按 `PubDate` as-of 前向填充；分钟算子在当日收盘后形成、默认下一交易日使用（PIT 安全）。
+3. **禁止虚构数据**：不引入 OFI、订单簿深度、真实价差、逐笔、北向、龙虎榜、两融、分析师、新闻、集合竞价等不存在的字段。分钟 OHLCV 代理变量统一 `_proxy` 后缀。
+4. **数值契约**：空窗/全 NaN → NaN，禁止 Inf、禁止伪造零；无效参数必须报错。
+5. **去重**：能用既有基础算子低成本组成的 → Recipe，不新增物理内核。已存在算子（`ts_huber_regression_resid`、`ts_ridge_regression_resid`、`ts_quantile_regression_slope`、`ts_ar_coefficient`、`ts_variance_ratio`、`ts_cusum_break_score`、`ts_level_shift_score`、`ts_vol_shift_score`、`overnight_return`、`relation_category_share`、`relation_peer_weighted_mean_ex_self`、`index_membership_age`、`fin_cash_earnings_gap`、`fin_accrual_ratio` 等）**复用，不重复注册**。
+6. **优先级**：P0 → P1 → P2 → P3 分阶段落地；P0 全量实现并过验收，P2/P3 作为实验搜索空间实现为 `status="experimental"` 算子，不进入默认 production 目标。
+7. **后端策略**：本阶段所有新内核先实现 **pandas_numpy**（reference），Polars 注册为显式 `backend="polars"` 的只做简单镜像；不冒充三引擎认证（backend parity 作为后续阶段）。
+8. **冲突规避**：新模块命名与既有文件明显区分（`new_stage_*` / 领域子目录），注册用独立 frozenset 追加。
+
+---
+
+## 一、模块布局（全新文件，避免冲突）
+
+| 模块 | 内容 | 优先级 |
+|---|---|---|
+| `cleaned_operators/intraday/higher_moments.py` | 已实现高阶矩、跳跃分解 | P0 |
+| `cleaned_operators/intraday/realized_beta.py` | 分钟市场 Beta、半 Beta、特质矩 | P0 |
+| `cleaned_operators/intraday/time_structure.py` | 时间段算子、同日段记忆、路径/成交曲线距离 | P0/P1 |
+| `cleaned_operators/intraday/vwap_path.py` | VWAP 路径、回撤恢复 | P0 |
+| `cleaned_operators/intraday/overnight.py` | 隔夜/日内分解、跳空回补 | P1 |
+| `cleaned_operators/ts_model/dynamic_regression.py` | 多变量/稳健/分位数滚动回归扩展 | P0 |
+| `cleaned_operators/ts_model/ar_meanrev.py` | AR 预测/创新、均值回复半衰期、方差比斜率 | P0 |
+| `cleaned_operators/ts_model/state_space.py` | Kalman（水平/趋势/Beta） | P2 |
+| `cleaned_operators/ts_model/volatility.py` | GARCH/GJR/HAR-RV | P2 |
+| `cleaned_operators/ts_model/complexity.py` | 熵、复杂度、Hurst、变点、regime | P2 |
+| `cleaned_operators/ts_model/wavelet_spectral.py` | 小波、频域 | P2 |
+| `cleaned_operators/ts_model/sequence_anomaly.py` | Matrix Profile、motif | P3 |
+| `cleaned_operators/ts_model/path_signature.py` | 路径签名 | P2 |
+| `cleaned_operators/cross_section/robust_cs.py` | 横截面岭/分位/样条残差、马氏/KNN/局部密度 | P1/P2 |
+| `cleaned_operators/cross_section/peer_ops.py` | 同行 Beta 偏离、信息扩散、领涨滞后 | P0/P1 |
+| `cleaned_operators/cross_section/panel_model.py` | 滚动 PCA/PLS/PCR/ElasticNet/regime/MoE/自编码 | P2 |
+| `cleaned_operators/fundamental/quality_v2.py` | 应计、盈利质量、核心/非核心收益 | P0/P1 |
+| `cleaned_operators/fundamental/accruals_scores.py` | 资产投资、收入质量、租赁商誉递延税、融资偿债、Piotroski/Altman/Zmijewski | P0 |
+| `cleaned_operators/shareholder/churn_network.py` | 持股变动、类别、质押冻结、网络 | P0/P1/P2 |
+| `cleaned_operators/valuation/ops_v2.py` | 估值、股本、流通股 | P0 |
+| `cleaned_operators/index_listing/ops_v2.py` | 指数权重偏离、成分变动、上市年龄、停牌 | P0/P1 |
+| `factor_recipes/new_stage_recipes.py` | 全部 Recipe 聚合（分钟时间段、股东类别、估值股本、财务增长、评分） | — |
+
+每新增一个模块后，在 `cleaned_operators/__init__.py` 的 `_LOAD_MODULES` **末尾追加**导入行（不修改已有行）。
+
+---
+
+## 二、P0 算子全清单与实现方式
+
+### 2.1 分钟高阶矩与跳跃（模块 `intraday/higher_moments.py`）
+
+输入：分钟 Close 面板（行=分钟时间戳，列=标的）。输出：日频面板。
+
+| 算子 | 公式 / 语义 | 实现 |
+|---|---|---|
+| `intra_realized_skewness` | `sqrt(N)·Σr³/(Σr²)^(3/2)` | 物理内核 |
+| `intra_realized_kurtosis` | `N·Σr⁴/(Σr²)²` | 物理内核 |
+| `intra_realized_quarticity` | `N/3·Σr⁴` | 物理内核 |
+| `intra_tripower_quarticity` | 相邻三分钟绝对收益幂次积，跳跃稳健 | 物理内核 |
+| `intra_continuous_variance` | `min(RV, BV)`，RV=Σr²，BV=π/2·Σ|rᵢ||rᵢ₋₁| | 物理内核 |
+| `intra_jump_variation` | `max(RV−BV, 0)` | 物理内核 |
+| `intra_positive_jump_variation` | 仅累计判定为跳跃的正分钟收益平方 | 物理内核 |
+| `intra_negative_jump_variation` | 仅累计判定为跳跃的负分钟收益平方 | 物理内核 |
+| `intra_signed_jump_ratio` | `(posJV−negJV)/(JV+eps)` | 物理内核 |
+| `intra_jump_count` | 当日跳跃分钟数 | 物理内核 |
+| `intra_jump_concentration` | `Σ jump_share²`（跳跃集中度） | 物理内核 |
+| `intra_jump_first_time` | 首次跳跃的标准化时点 [0,1] | 物理内核 |
+| `intra_jump_last_time` | 末次跳跃的标准化时点 | 物理内核 |
+| `intra_jump_clustering` | 跳跃间隔变异系数 | 物理内核 |
+
+跳跃判定统一辅助：`jump_flag = r² > max(threshold·RV, 绝对阈值)`（阈值参数化，默认 `threshold=2.0` 分钟级）。
+
+### 2.2 分钟市场 Beta（模块 `intraday/realized_beta.py`）
+
+市场分钟收益 = `Σ(前日 FreeMarketCap 权重 × 个股分钟收益)`。权重面板作为输入参数 `free_market_cap`（前一日收盘口径，调用侧负责 as-of）。
+
+| 算子 | 公式 | 实现 |
+|---|---|---|
+| `intra_realized_beta` | `Σ stock·mkt / Σ mkt²` | 物理内核（输入 close 面板 + 权重面板） |
+| `intra_realized_correlation` | 分钟收益与市场收益相关系数 | 物理内核 |
+| `intra_down_down_semibeta` | 仅 `stock<0 ∧ mkt<0` | 物理内核 |
+| `intra_up_up_semibeta` | 仅 `stock>0 ∧ mkt>0` | 物理内核 |
+| `intra_down_up_semibeta` | `mkt>0 ∧ stock<0` | 物理内核 |
+| `intra_up_down_semibeta` | `mkt<0 ∧ stock>0` | 物理内核 |
+| `intra_beta_asymmetry` | `dd_semibeta − uu_semibeta` | 物理内核 |
+| `intra_idiosyncratic_variance` | 分钟市场模型残差平方和 | 物理内核 |
+| `intra_idiosyncratic_skewness` | 残差偏度 | 物理内核 |
+| `intra_idiosyncratic_kurtosis` | 残差峰度 | 物理内核 |
+| `intra_market_model_r2` | 分钟市场模型 R² | 物理内核 |
+
+### 2.3 日内时间段与路径（模块 `intraday/time_structure.py`）
+
+| 算子 | 语义 | 实现 |
+|---|---|---|
+| `intra_interval_return(close, start_minute, end_minute)` | 通用时间段收益内核 | 物理内核（参数化） |
+| `intra_interval_volume_share / amount_share / realized_variance / vwap_deviation / illiquidity` | 时间段内占比/方差/偏离 | 物理内核（参数化 start/end） |
+| `intra_same_slot_momentum` | `Σ_m r_t,m · mean(r_{t−k,m})`，同日段跨日记忆 | 物理内核 |
+| `intra_same_slot_reversal` | 同槽反向匹配 | 物理内核 |
+| `intra_return_profile_cosine` | 240 维分钟收益向量与历史均值向量余弦 | 物理内核 |
+| `intra_volume_profile_cosine` | 分钟成交量占比曲线余弦 | 物理内核 |
+| `intra_amount_profile_cosine` | 成交额占比曲线余弦 | 物理内核 |
+| `intra_volume_profile_jsd` | 当日量分布 vs 历史基准 JSD | 物理内核 |
+| `intra_amount_profile_jsd` | 成交额曲线 JSD | 物理内核 |
+| `intra_profile_earth_mover_distance` | 收益/量分布 vs 基准 Wasserstein 距离 | 物理内核 |
+
+Recipe（统一走 `intra_interval_return`）：`intra_opening_15m_return`、`intra_opening_30m_return`、`intra_morning_return`、`intra_pre_lunch_30m_return`、`intra_afternoon_open_30m_return`、`intra_closing_30m_return`、`intra_closing_15m_return`。
+
+时间段关系（既有内核可组合 → Recipe）：`intra_morning_afternoon_return_spread`、`intra_morning_close_continuation`、`intra_morning_close_reversal`、`intra_open_close_pressure`、`intra_front_back_volume_ratio`、`intra_closing_volume_acceleration`、`intra_opening_volume_acceleration`。
+
+### 2.4 VWAP 路径与回撤（模块 `intraday/vwap_path.py`）
+
+| 算子 | 语义 | 实现 |
+|---|---|---|
+| `intra_vwap_path_slope` | 累计 VWAP 对时间线性回归斜率 | 物理内核 |
+| `intra_vwap_path_curvature` | 二次项系数 | 物理内核 |
+| `intra_price_vwap_max_positive_excursion` | `max(Close/CumVWAP−1)` | 物理内核 |
+| `intra_price_vwap_max_negative_excursion` | `min(Close/CumVWAP−1)` | 物理内核 |
+| `intra_time_above_vwap` | 高于累计 VWAP 的分钟比例 | 物理内核 |
+| `intra_longest_above_vwap_streak` | 连续高于 VWAP 最长分钟数 | 物理内核 |
+| `intra_longest_below_vwap_streak` | 连续低于 VWAP 最长分钟数 | 物理内核 |
+| `intra_vwap_reversion_speed` | 偏离 VWAP 的一阶自回归系数/半衰期 | 物理内核 |
+| `intra_max_drawdown` | 分钟路径最大回撤 | 物理内核（日内版，与 `ts_max_drawdown` 区分） |
+| `intra_max_drawup` | 分钟路径最大上涨段 | 物理内核 |
+| `intra_drawdown_depth / duration / recovery_half_life` | 回撤深度/持续期/半恢复期 | 物理内核 |
+
+### 2.5 动态回归扩展（模块 `ts_model/dynamic_regression.py`）
+
+已有：`ts_huber_regression_resid`、`ts_ridge_regression_resid`、`ts_quantile_regression_slope`。
+
+新增（多输入 y + 特征面板）：
+
+| 算子 | 语义 |
+|---|---|
+| `ts_multi_regression_coeff(y, X, window, coeff_index)` | 多变量滚动回归指定系数 |
+| `ts_multi_regression_resid` | 当前残差 |
+| `ts_multi_regression_resid_z` | 残差 / 窗口残差标准差 |
+| `ts_multi_regression_r2` | 多元 R² |
+| `ts_huber_regression_coeff` | Huber 斜率 |
+| `ts_huber_regression_resid_z` | Huber 标准化残差 |
+| `ts_ridge_regression_coeff` | 岭系数 |
+| `ts_ridge_regression_resid_z` | 岭标准化残差 |
+| `ts_quantile_regression_coeff` | 分位回归斜率（复用已有 `_quantile_slope`） |
+| `ts_quantile_regression_resid` | 相对条件分位预测偏差 |
+| `ts_quantile_beta_spread` | `beta(q_high)−beta(q_low)` |
+
+多变量回归内核支持 `add_intercept`（默认 True）、`min_periods`、`coefficient_index`；`X` 为特征面板（`timestamp × feature` 的 MultiIndex 或等长同索引 DataFrame 序列）。
+
+### 2.6 AR 与均值回复（模块 `ts_model/ar_meanrev.py`）
+
+| 算子 | 语义 |
+|---|---|
+| `ts_ar_forecast(x, window, order)` | AR(1)–AR(p) 一步预测 |
+| `ts_ar_innovation` | 实际值 − AR 预测 |
+| `ts_ar_innovation_z` | 标准化创新 |
+| `ts_mean_reversion_half_life` | `−log(2)/β`（`Δx=α+βx₋₁+ε`，β<0 有效） |
+| `ts_variance_ratio_slope` | 多持有期方差比对 `log(k)` 的斜率 |
+
+### 2.7 财务质量（模块 `fundamental/quality_v2.py`）
+
+输入均为按 `PubDate` as-of 的财务指标日频面板；分子分母已由数据层对齐。
+
+| 算子 | 语义 |
+|---|---|
+| `fin_working_capital_accruals` | `Δ(ΔCA−ΔCash)−(ΔCL−ΔSTD−ΔTP)` 的标准化 |
+| `fin_total_operating_accruals` | `(ΔTA−ΔCash)−(ΔCL−ΔSTD−ΔTP)−Dep` 标准化 |
+| `fin_delta_noa` | `ΔNOA/AvgAssets` |
+| `fin_roe_cash_gap` | `会计ROE − 现金ROE` |
+| `fin_earnings_cash_gap_volatility` | `std(NetProfit−OCF)/AvgAssets` |
+| `fin_earnings_smoothness` | `std(NetProfit)/std(OCF)` |
+| `fin_earnings_persistence` | 报告期利润 AR(1) |
+| `fin_cashflow_persistence` | OCF AR(1) |
+| `fin_margin_persistence` | 毛利率/营业利润率 AR 系数 |
+| `fin_core_earnings_ratio` | 核心利润 / 营收或总资产 |
+| `fin_noncore_income_ratio` | 非核心收益 / 利润总额 |
+| `fin_fair_value_income_dependence` | `FairValueVariableIncome/|TotalProfit|` |
+| `fin_investment_income_dependence` | `InvestmentIncome/|TotalProfit|` |
+| `fin_other_earnings_dependence` | `OtherEarnings/|TotalProfit|` |
+| `fin_comprehensive_income_gap` | `(TotalCompositeIncome−NetProfit)/AvgEquity` |
+| `fin_oci_to_equity` | `OtherComprehensiveIncome/AvgEquity` |
+| `fin_discontinued_operation_ratio` | `DisconOperateNetProfit/|NetProfit|` |
+| `fin_minority_profit_share` | `MinorityProfit/NetProfit` |
+
+> 字段名映射遵循 `fields/catalog.py` 现行命名；个别新科目若 catalog 缺失，用数据层别名 `*` 映射，算子参数用语义名并记录 `required_tables`。
+
+### 2.8 资产投资、收入质量、融资偿债、综合评分（模块 `fundamental/accruals_scores.py`）
+
+新增物理内核（分子分母可组合的做成 Recipe）：
+
+| 类别 | 算子 |
+|---|---|
+| 收入/资产错配 | `fin_receivable_sales_divergence`、`fin_inventory_sales_divergence`、`fin_cash_sales_divergence`、`fin_expense_sales_divergence` |
+| 合同资产/负债（新准则） | `fin_contract_asset_intensity`、`fin_contract_asset_growth`、`fin_contract_liability_intensity`、`fin_contract_liability_growth`、`fin_contract_asset_liability_gap` |
+| 租赁/商誉/递延税 | `fin_lease_intensity`、`fin_lease_asset_liability_gap`、`fin_goodwill_intensity`、`fin_goodwill_risk_score`、`fin_deferred_tax_gap`、`fin_impairment_intensity` |
+| 融资/偿债 | `fin_net_debt_issuance`、`fin_borrowing_intensity`、`fin_debt_repayment_intensity`、`fin_net_borrowing_cashflow`、`fin_equity_capital_growth`、`fin_financing_gap`、`fin_interest_coverage_proxy`、`fin_debt_service_coverage_proxy`、`fin_cash_burn_runway` |
+| 资本开支/研发 | `fin_capex_intensity`、`fin_capex_growth`、`fin_acquisition_cash_intensity`、`fin_rd_total_intensity`、`fin_rd_capitalization_ratio` |
+| 综合评分 | `piotroski_f_score`、`altman_z_score`、`zmijewski_score`、`fin_fundamental_strength_score` |
+
+`fin_*_growth` 系列（`fin_total_asset_growth`、`fin_operating_asset_growth`、`fin_fixed_asset_growth`、`fin_inventory_growth`、`fin_receivable_growth`、`fin_goodwill_growth`、`fin_intangible_growth`、`fin_construction_in_progress_growth`）→ **Recipe**：`fin_growth(x)` 已有原语，直接注册 Recipe，不新增内核。
+
+Piotroski/Altman/Zmijewski 做成**物理内核**（多参数组件求和，含金融业适用性掩码 `fin_applicability_mask`），但暴露组件级 Recipe 以便挖掘（`fin_fundamental_strength_score` 支持方向数组）。
+
+### 2.9 股东（模块 `shareholder/churn_network.py`）
+
+输入为**预聚合日频面板**（shareholder 快照由 `storage/sources/relation` 侧按 `PubDate` as-of 输出），算子做面板级计算：
+
+| 算子 | 语义 |
+|---|---|
+| `holder_weighted_churn` | `0.5·Σ|ShareRatio_cur−ShareRatio_prev|`（按 ShareholderId 匹配，进入/退出补 0） |
+| `holder_rank_stability` | 相同股东本期/上期排名的 Spearman 相关 |
+| `holder_entry_share` | 新进前十大持股比例合计 |
+| `holder_exit_share` | 退出股东上期比例合计 |
+| `holder_net_entry_share` | entry − exit |
+| `holder_concentration_slope` | 集中度/HHI 多报告期趋势斜率 |
+| `holder_concentration_acceleration` | 二阶变化 |
+| `holder_class_entropy` | 股东类别权重熵 |
+| `holder_nature_entropy` | 股份性质权重熵 |
+| `holder_pledge_ratio` | `ΣSharePledge/TotalCapital` |
+| `holder_freeze_ratio` | `ΣShareFreeze/TotalCapital` |
+| `holder_pledge_concentration` | 质押份额 HHI |
+| `holder_freeze_concentration` | 冻结份额 HHI |
+| `holder_pledged_holder_count` | 质押股数>0 的股东数 |
+| `holder_pledge_change` | 质押率变化 |
+| `holder_pledge_churn` | 按股东 ID 匹配的质押变化绝对值合计 |
+| `holder_float_concentration_gap` | 前十大集中度 − 前十大流通集中度 |
+| `holder_locked_share_ratio` | 限售股份占比 |
+| `holder_common_holding_peer_return` | 共同持股 peer 收益 |
+| `holder_peer_return_breadth` | 股东跨股票 breadth |
+| `holder_shareholder_network_centrality` | 网络中心度（P2） |
+| `holder_shareholder_overlap_ratio` | 股东重叠度（P2） |
+
+类别 Recipe（复用 `relation_category_share`，不新增内核）：`holder_natural_person_share`、`holder_fund_share`、`holder_private_fund_share`、`holder_qfii_share`、`holder_social_security_share`、`holder_insurance_share`、`holder_state_owned_share`、`holder_foreign_institution_share`、`holder_broker_share`、`holder_asset_management_share`。
+
+### 2.10 同行偏离（模块 `cross_section/peer_ops.py`）
+
+| 算子 | 语义 |
+|---|---|
+| `group_peer_beta_deviation` | `stock_beta − peer_beta_ex_self`（行业加权，`FreeMarketCap` 权重） |
+| `group_peer_characteristic_deviation` | `stock_char − peer_mean_ex_self`（Recipe，复用 `relation_peer_weighted_mean_ex_self`） |
+| `group_peer_deviation_index` | 多标准化偏离聚合（盈利/估值/成长/换手/波动） |
+| `group_peer_information_diffusion` | 同行过去收益/财务变化对本股票已实现收益的滚动回归系数 |
+| `group_leader_laggard_exposure` | 股票收益对行业领先股滞后收益 Beta |
+| `group_return_dispersion_exposure` | 对行业截面收益离散度变化的敏感度 |
+| `group_multi_level_rank_consistency` | sw_l1/l2/l3 三层级组内排名一致度 |
+| `ts_market_liquidity_beta` | 个股收益对市场换手/量能变化回归 |
+| `ts_industry_liquidity_beta` | 对行业流动性的共同暴露 |
+
+### 2.11 估值、股本、指数与上市（模块 `valuation/ops_v2.py`、`index_listing/ops_v2.py`）
+
+估值股本多数为 **Recipe**（基础算子 + `fin_growth` 等即可组成），少数做物理内核：
+
+| 算子 | 实现 |
+|---|---|
+| `valuation_pe_ttm_lyr_gap` | Recipe（`log_abs(PeRatio)−log_abs(PeRatioLyr)`） |
+| `valuation_pcf_definition_gap` | Recipe |
+| `free_float_ratio` / `free_to_circulating_ratio` / `a_share_cap_ratio` / `free_float_turnover` | Recipe |
+| `valuation_cashflow_disagreement` | Recipe（离散度） |
+| `valuation_growth_mismatch` | 物理内核或 Recipe（盈利收益率 − 标准化利润增长） |
+| `valuation_quality_mismatch` | 物理内核（估值 vs 财务质量横截面残差） |
+| `market_cap_free_cap_gap` | Recipe |
+| `capital_change_age` | 物理内核（距 ChangeDate 交易日数，需日历） |
+| `capital_change_magnitude` | Recipe（`TotalCapital` 环比） |
+| `circulating_cap_unlock_proxy` | Recipe（流通/总股本比变化） |
+| `index_weight_gap_to_free_float` | 物理内核（指数权重 vs 自由流通权重） |
+| `index_reconstitution_churn` | 物理内核（窗口内纳入/剔除次数） |
+| `multi_index_entry_intensity` | 物理内核（短期同时进入多指数数量） |
+| `listing_age` | 物理内核（上市日距当前交易日数） |
+| `suspension_frequency` | 物理内核（`IsSuspend` 滚动计数） |
+| `index_event_decay` 系列 | 物理内核（纳入/剔除后衰减信号） |
+
+### 2.12 隔夜分解（模块 `intraday/overnight.py`，P1）
+
+`overnight_return` 已存在。新增：
+
+| 算子 | 语义 |
+|---|---|
+| `ts_overnight_intraday_cov` | `rolling_cov(overnight_ret, intraday_ret)` |
+| `ts_overnight_intraday_spread` | `mean(overnight)−mean(intraday)` |
+| `ts_overnight_intraday_sign_agreement` | 隔夜/日内同号比例 |
+| `ts_gap_reversion_ratio` | `−intraday/overnight`（跳空超阈值时） |
+| `ts_gap_fill_ratio` | 窗口内跳空回补比例 |
+| `ts_gap_survival_duration` | 未回补缺口持续交易日数 |
+| `ts_opening_mispricing_score` | `overnight_ret − 历史预期日内响应`（滚动回归） |
+
+### 2.13 P2/P3 实验算子（各实验模块，全部 `status="experimental"`）
+
+- **状态空间**：`ts_kalman_level`、`ts_kalman_trend`、`ts_kalman_innovation_z`、`ts_kalman_beta`、`ts_kalman_beta_change`、`ts_kalman_beta_uncertainty`（确定性初始化、状态可序列化、分段/全历史一致）。
+- **波动模型**：`ts_garch_vol_forecast`、`ts_garch_persistence`、`ts_garch_standardized_shock`、`ts_gjr_garch_vol_forecast`、`ts_gjr_leverage`、`ts_har_rv_forecast`、`ts_har_rv_innovation_z`（高成本算子，限制窗口/调用次数）。
+- **复杂度/变点**：`ts_cusum_vol_break_score`、`ts_change_point_probability`、`ts_regime_duration`、`ts_two_state_regime_probability`、`ts_permutation_entropy`、`ts_sample_entropy`、`ts_lz_complexity`、`ts_multiscale_entropy_slope`、`ts_turning_point_ratio`、`ts_dfa_hurst`。
+- **小波/频域**：`ts_wavelet_low_frequency_ratio`、`ts_wavelet_high_frequency_ratio`、`ts_wavelet_entropy`、`ts_wavelet_energy_slope`、`ts_spectral_low_frequency_ratio`（固定小波族/边界/最小窗口）。
+- **序列异常**：`ts_matrix_profile_discord_score`、`ts_matrix_profile_motif_distance`、`ts_motif_recurrence_count`（P3，不定义固定形态名称）。
+- **路径签名**：`ts_path_signature_area`、`ts_path_signature_depth2_norm`、`ts_path_leadlag_area`（双序列输入）。
+- **横截面稳健**：`cs_ridge_resid`、`cs_quantile_resid`、`cs_spline_resid`、`cs_mahalanobis_distance`、`cs_knn_distance`、`cs_local_density_score`。
+- **面板模型**：`panel_rolling_pca_loading/resid/resid_vol/resid_momentum/explained_ratio`、`industry_rolling_pca_loading`、`panel_rolling_pcr_forecast`、`panel_rolling_pls_forecast`、`panel_rolling_elastic_net_forecast`、`panel_regime_conditioned_forecast`、`panel_mixture_of_experts_score`、`cs_autoencoder_reconstruction_error`。
+  - 标签型模型要求：训练标签持有期已结束、至少 1 日执行滞后、`embargo ≥ holding_period`、滚动训练窗口、固定特征清单。
+- **股东网络**：`holder_shareholder_network_centrality`、`holder_shareholder_overlap_ratio`。
+
+---
+
+## 三、验收标准（每个新增算子强制通过）
+
+1. **输出形状**：输入日频面板或分钟/关系原始块 → 输出 `TradeDate × Symbol`，每股每日最多一个值。
+2. **截面有效性**：真实 A 股样本检查 daily coverage、unique count、截面 std、zero/NaN/Inf 比例；全市场常数算子在挖掘白名单外。
+3. **PIT 测试**：修改未来数据后历史输出不变。财务/股东 `PubDate ≤ decision_date`；分钟当日收盘后形成、默认下一交易日使用。
+4. **字段审计**：metadata 记录 `required_tables`、`required_fields`、`field_units`、`frequency`、`availability_time`、`source_contract`。
+5. **参数域**：`window>1`、`min_periods≤window`、`0<q<1`、`ridge_alpha≥0`、`half_life>0`；无效参数报错不静默修正。
+6. **成本分级**（写入 tag `cost:N`）：elementwise=1，native rolling=2，rolling corr=3，rolling quantile/sort=4，rolling regression=5，minute daily agg=6，relation/network=7，Kalman/GARCH/wavelet=8，PCA/model=10。
+7. **去重**：新增前比较 canonical/alias/参数等价/DAG 等价/样本相关系数；可由基础算子低成本组成的注册为 Recipe。
+
+---
+
+## 四、实施顺序（避免冲突的落地批次）
+
+| 批次 | 内容 | 交付物 |
+|---|---|---|
+| B1 | 分钟高阶矩/跳跃（2.1）+ 分钟 Beta（2.2） | 2 新模块 + 表面注册 + 单测 |
+| B2 | 日内时间段/路径/VWAP/回撤（2.3、2.4） | 2 新模块 + 表面注册 + 单测 |
+| B3 | 动态回归（2.5）+ AR/均值回复（2.6） | 2 新模块 + 单测 |
+| B4 | 财务质量（2.7）+ 资产投资/评分（2.8） | 2 新模块 + Recipe 注册 + 单测 |
+| B5 | 股东（2.9）+ 同行偏离（2.10） | 2 新模块 + 单测 |
+| B6 | 估值股本/指数上市（2.11）+ 隔夜（2.12） | 3 新模块 + Recipe 注册 + 单测 |
+| B7 | P2/P3 实验算子（2.13） | 各实验模块 + 单测 |
+| B8 | 全量验收：PIT、截面有效性、参数域、成本审计；`__init__.py` 加载清单核对；跑测试套件 | 汇总报告 |
+
+每批次完成后独立可跑（`pytest tests/operators/test_<module>.py`），便于与其他 AI 的并行改动隔离合并。
+
+---
+
+## 五、后端实现情况（2026-08 追加）
+
+### 5.1 Polars backend（81 个算子，genuine 表达式，非 bridge）
+
+框架 `overhaul/cleanup.py` 会主动移除 source 含 `bridge` 的 polars backend，因此
+**全部 polars 后端均为真实表达式实现**，无 pandas 委托：
+
+| 模块 | 覆盖 | 实现方式 |
+|---|---|---|
+| `intraday/polars_next_stage.py` | 已实现矩、跳跃、区间、回撤 | melt → group_by → pivot 原生表达式 |
+| `valuation/polars_ops_v2.py` | 估值/股本比率与缺口 | 原生 `pl.Expr` |
+| `fundamental/polars_quality_v2.py` | 财务 elementwise（依赖/强度/覆盖） | 原生 `pl.Expr` |
+| `shareholder/polars_churn_network.py` | 股东比率与名次面板 | 原生 `pl.Expr` |
+| `index_listing/polars_ops_v2.py` | 指数权重/成分变动/停牌 | 原生 `pl.Expr` |
+| `ts_model/polars_regression.py` | 均值回复/方差比斜率/流动性 Beta | `rolling_map` / `rolling_cov-var` |
+| `cross_section/polars_peer.py` | 同行偏离、Beta 偏离 | 逐行 `map_rows` |
+
+**不建议加 polars 的算子**（迭代/状态/算法型，Polars 表达式无法表达，仅靠
+`map_elements` Python 回退不构成真正的向量化 backend）：Kalman、GARCH/GJR、
+样本熵/LZ/多尺度熵、Matrix Profile、DFA Hurst、小波递归 DWT、
+PCA/PLS/ElasticNet/regime/MoE/自编码、行业 PCA、`intra_realized_beta` 系列的
+分钟截面市场收益构造。
+
+### 5.2 DuckDB / SQL backend（elementwise 算子 via composite lowering）
+
+SQL 下推 emitter（5751 行共享文件）由并发 AI 维护，**不在其中加 per-operator
+代码**。改用 `planner/lowerings/next_stage.py` 的 composite lowering，把
+elementwise 算子展开为已具备 SQL 能力的原语（`safe_div_null`/`subtract`/`abs`/
+`log`/`ts_delay`），optimizer 在 SQL 发射前自动降低 → 获得 DuckDB pushdown。
+
+覆盖：估值 5 个、财务 elementwise 22 个、股东 elementwise 8 个、指数 1 个，
+共 36 个 + 既有 composite 共 53 个 SQL-capable。
+
+### 5.3 测试
+
+- `tests/operators/test_polars_next_stage_parity.py`：57 项 pandas↔polars 数值一致。
+- `tests/operators/test_next_stage_sql_lowering.py`：39 项 SQL 可下推 + 状态型不降低。
+- 全部新算子测试：398 passed。
+
+---
+
+## 六、冲突规避清单
+
+1. 只新建文件，不修改既有算子实现文件（`microstructure/intraday_agg.py`、`relation/ops.py`、`fundamental/*`、`shareholder/ops.py` 等）已被其他 AI 修改，**一律不动**。
+2. `cleaned_operators/__init__.py`：只在 `_LOAD_MODULES` 元组**末尾追加**新模块名（追加行不触碰既有行）。
+3. `cleaned_operators/operator_surface.py`：新增一个 `_NEW_STAGE_CANONICALS` frozenset 并在 `EXTENDED_ONLY_CANONICALS` 定义处**追加 union**；若该文件已被并行改动导致冲突，采用基于语义合并的最小 diff。
+4. 所有新算子 `source=` 标记唯一模块名，便于回溯。
+5. 注册前先 `grep` canonical 确认不存在，避免与并行 AI 的算子撞名；如发现同名，暂停并报告。
+
+---
+
+## 七、Production 认证（2026-08 追加）
+
+分钟源算子此前被 `SOURCE_BLOCKED_CANONICALS` 排除在生产目标外——框架注释写明
+"until the audit gains a minute panel fixture"。本次补齐该 fixture 并解锁：
+
+### 7.1 audit 分钟面板 fixture（`scripts/audit_all_factor_production.py`）
+
+- `_minute_panels()`：确定性合成分钟面板（240 bar/日 × 220 交易日，09:31..15:00，
+  收盘/开/高/低/量/额/VWAP/activity/value/abs_return），索引与日频模板同日期。
+- `_minute_source()`：按 `intra_*` 前缀 + metadata `minute` tag 识别分钟源算子；
+  `_value` 优先从分钟面板解析参数，`free_market_cap`/`high_limit`/`low_limit` 保持日频广播。
+- `_slice_minute()`：前缀因果检查按**完整交易日**切片（20 天），而非日频路径的 160 行。
+
+### 7.2 解除生产排除
+
+- `production_hardening.py`：`SOURCE_BLOCKED_CANONICALS` 收窄为仅 `intraday_volatility`/
+  `intraday_vwap_deviation`（pre-existing experimental 算子，生命周期未到 production）；
+  删除 `factor_production_targets()` 里的 `startswith("intra_")` 过滤。
+- `microstructure/intraday_agg.py`：3 个 limit 算子补 `allow_panel_broadcast` tag
+  （日频涨跌停价广播到分钟面板，与 `intra_realized_beta` 一致）。
+
+### 7.3 认证结果
+
+- 重新运行 `certify_factor_operator_evidence.py` → `factor_operator_verified.json`
+  从 685 → **762** 个 production 算子。
+- production 运行时可用：863 中 **848**；`intra_*` **77/77** 全部通过运行时 production 门禁。
+- 剩余 15 个不适用：7 个 UNSAFE 数学工具（arg/cosh/cot/csc/sec/sinh/tan）、3 个 INTERNAL
+  （constant/identity/protected_div）、1 个 LEGACY（cube）、2 个 RESEARCH 面、2 个 experimental。
+- 全量测试：**3586 passed, 1044 skipped, 0 failed**。

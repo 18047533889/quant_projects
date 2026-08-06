@@ -81,6 +81,39 @@ _LOAD_MODULES = (
     "cleaned_operators.return_decomp",
     "cleaned_operators.ashare.limit_ops",
     "cleaned_operators.relation.ops",
+    "cleaned_operators.regression_models",
+    # Next-stage expansion (2026-08): intraday higher moments / realized beta /
+    # time structure / VWAP path / overnight; ts model kernels; cross-section;
+    # shareholder churn-network; fundamental quality; valuation; index-listing.
+    "cleaned_operators.intraday.higher_moments",
+    "cleaned_operators.intraday.realized_beta",
+    "cleaned_operators.intraday.time_structure",
+    "cleaned_operators.intraday.vwap_path",
+    "cleaned_operators.intraday.overnight",
+    "cleaned_operators.ts_model.dynamic_regression",
+    "cleaned_operators.ts_model.ar_meanrev",
+    "cleaned_operators.ts_model.state_space",
+    "cleaned_operators.ts_model.volatility",
+    "cleaned_operators.ts_model.complexity",
+    "cleaned_operators.ts_model.wavelet_spectral",
+    "cleaned_operators.ts_model.sequence_anomaly",
+    "cleaned_operators.ts_model.path_signature",
+    "cleaned_operators.cross_section.robust_cs",
+    "cleaned_operators.cross_section.peer_ops",
+    "cleaned_operators.cross_section.panel_model",
+    "cleaned_operators.fundamental.quality_v2",
+    "cleaned_operators.fundamental.accruals_scores",
+    "cleaned_operators.shareholder.churn_network",
+    "cleaned_operators.valuation.ops_v2",
+    "cleaned_operators.index_listing.ops_v2",
+    # Next-stage Polars backends (2026-08): genuine expression paths only.
+    "cleaned_operators.intraday.polars_next_stage",
+    "cleaned_operators.valuation.polars_ops_v2",
+    "cleaned_operators.fundamental.polars_quality_v2",
+    "cleaned_operators.shareholder.polars_churn_network",
+    "cleaned_operators.index_listing.polars_ops_v2",
+    "cleaned_operators.ts_model.polars_regression",
+    "cleaned_operators.cross_section.polars_peer",
 )
 
 _REVIEWED_EXTENSIONS = (
@@ -142,7 +175,16 @@ def _load_module_if_available(mod: str) -> None:
     try:
         __import__(mod, fromlist=["*"])
     except ImportError as exc:
-        if ".polars" not in mod and not mod.endswith("research_polars"):
+        # A module file that does not exist yet (planned / next-stage surface)
+        # carries no operators, so skipping it cannot lose functionality.  A
+        # module that *exists* but fails to import (missing dependency, code
+        # error) stays fatal so registry breakage is never masked.  For a nested
+        # name the error reports the deepest missing parent (e.g.
+        # ``cleaned_operators.ts_model`` for ``.ts_model.dynamic_regression``).
+        missing_module = isinstance(exc, ModuleNotFoundError) and (
+            exc.name == mod or mod.startswith((exc.name or "") + ".")
+        )
+        if not missing_module and ".polars" not in mod and not mod.endswith("research_polars"):
             raise
         _SKIPPED_OPTIONAL_MODULES.add(mod)
         logger = None

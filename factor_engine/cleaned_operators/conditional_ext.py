@@ -36,9 +36,14 @@ def _frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
     return pd.DataFrame(values, index=template.index, columns=template.columns, dtype=float)
 
 
-def _selected_mask(condition: pd.DataFrame) -> np.ndarray:
+def _selected_mask(condition: pd.DataFrame, *values: pd.DataFrame) -> np.ndarray:
+    """联合掩码：condition 为真 且 x/y 有效（排除 NaN 样本）。"""
     cv = condition.to_numpy()
-    return np.isfinite(cv) & (cv != 0)
+    mask = np.isfinite(cv) & (cv != 0)
+    for value in values:
+        vv = value.to_numpy(dtype=float)
+        mask = mask & np.isfinite(vv)
+    return mask
 
 
 def _min_max_rolling(values: np.ndarray, mask: np.ndarray, window: int, min_periods: int, op: str) -> np.ndarray:
@@ -79,7 +84,7 @@ class TsMinIf(SeriesOperator):
         x, condition = _aligned(x, condition)
         w = int(window)
         mp = max(1, int(min_periods))
-        mask = _selected_mask(condition)
+        mask = _selected_mask(condition, x)
         return _frame_like(x, _min_max_rolling(x.to_numpy(dtype=float), mask, w, mp, "min"))
 
 
@@ -106,7 +111,7 @@ class TsMaxIf(SeriesOperator):
         x, condition = _aligned(x, condition)
         w = int(window)
         mp = max(1, int(min_periods))
-        mask = _selected_mask(condition)
+        mask = _selected_mask(condition, x)
         return _frame_like(x, _min_max_rolling(x.to_numpy(dtype=float), mask, w, mp, "max"))
 
 
@@ -136,7 +141,7 @@ class TsQuantileIf(SeriesOperator):
         if not (0.0 <= quantile <= 1.0):
             raise ValueError("ts_quantile_if requires 0 <= q <= 1")
         mp = max(1, int(min_periods))
-        mask = _selected_mask(condition)
+        mask = _selected_mask(condition, x)
         xv = x.to_numpy(dtype=float)
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
@@ -181,7 +186,11 @@ def _pair_condition_rolling(
             elif kind == "resid":
                 if np.std(xs) > 0 and xs.size >= 2:
                     coeffs = np.polyfit(xs, ys, 1)
-                    out[row, col] = float(ys[-1] - np.polyval(coeffs, xs[-1]))
+                    # 当前样本残差：仅当当前 condition 为真时输出
+                    x_cur = x[row, col]
+                    y_cur = y[row, col]
+                    if m_chunk[-1] and np.isfinite(x_cur) and np.isfinite(y_cur):
+                        out[row, col] = float(y_cur - np.polyval(coeffs, x_cur))
     return out
 
 
@@ -208,7 +217,7 @@ class TsCorrIf(SeriesOperator):
         x, y, condition = _aligned(x, y, condition)
         w = int(window)
         mp = max(2, int(min_periods))
-        mask = _selected_mask(condition)
+        mask = _selected_mask(condition, x, y)
         return _frame_like(
             x,
             _pair_condition_rolling(x.to_numpy(dtype=float), y.to_numpy(dtype=float), mask, w, mp, "corr"),
@@ -238,7 +247,7 @@ class TsBetaIf(SeriesOperator):
         x, y, condition = _aligned(x, y, condition)
         w = int(window)
         mp = max(2, int(min_periods))
-        mask = _selected_mask(condition)
+        mask = _selected_mask(condition, x, y)
         return _frame_like(
             y,
             _pair_condition_rolling(x.to_numpy(dtype=float), y.to_numpy(dtype=float), mask, w, mp, "beta"),
@@ -268,7 +277,7 @@ class TsRegressionResidIf(SeriesOperator):
         x, y, condition = _aligned(x, y, condition)
         w = int(window)
         mp = max(3, int(min_periods))
-        mask = _selected_mask(condition)
+        mask = _selected_mask(condition, x, y)
         return _frame_like(
             y,
             _pair_condition_rolling(x.to_numpy(dtype=float), y.to_numpy(dtype=float), mask, w, mp, "resid"),

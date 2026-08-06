@@ -22,6 +22,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Sequence
 
+import pandas as pd
+
 from data_access.core.exceptions import ValidationError
 
 
@@ -32,6 +34,7 @@ class Predicate:
     instrument_filter: Sequence[str] | None = None      # 标的白名单
     hive_filters: dict[str, Sequence[Any]] | None = None  # hive 分区列 IN 过滤
     extra: list[dict] | None = None
+    time_column_is_timestamp: bool = False              # 时间列为 timestamp 时做 end-of-day 展开
 
     def is_empty(self) -> bool:
         return (
@@ -82,8 +85,18 @@ def compile_predicate(
             clauses.append(f"{t_col} >= ?")
             params.append(start)
         if end is not None:
+            end_value = end
+            if predicate.time_column_is_timestamp:
+                # 对 timestamp 时间列，日期型 end 应包含整天；展开为当日末。
+                # 只对"午夜/纯日期"值展开，带时间的值原样保留。
+                try:
+                    ts = pd.Timestamp(end)
+                    if ts == ts.normalize():
+                        end_value = ts + pd.Timedelta(days=1) - pd.Timedelta(microseconds=1)
+                except (ValueError, TypeError):
+                    end_value = end
             clauses.append(f"{t_col} <= ?")
-            params.append(end)
+            params.append(end_value)
 
     if predicate.instrument_filter:
         # list 作为单个参数绑定到 IN ?

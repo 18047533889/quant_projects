@@ -7,5 +7,6 @@ from planner.lowerings import fundamental as _fundamental  # noqa: F401
 from planner.lowerings import microstructure as _microstructure  # noqa: F401
 from planner.lowerings import technical as _technical  # noqa: F401
 from planner.lowerings import timeseries as _timeseries  # noqa: F401
+from planner.lowerings import next_stage as _next_stage  # noqa: F401
 
-__all__ = ["ashare", "fundamental", "microstructure", "technical", "timeseries"]
+__all__ = ["ashare", "fundamental", "microstructure", "technical", "timeseries", "next_stage"]

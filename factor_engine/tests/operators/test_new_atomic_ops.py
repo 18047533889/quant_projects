@@ -22,8 +22,9 @@ P0_CANONICALS = frozenset(
     ts_time_under_water ts_best_lag_corr ts_price_delay
     group_ex_self_mean group_ex_self_weighted_mean hierarchical_group_neutralize
     cs_robust_resid overnight_return open_close_return open_to_vwap_return
-    vwap_to_close_return ashare_limit_distance ashare_limit_touch
-    ashare_limit_one_price ashare_limit_failed ashare_limit_open_break
+    vwap_to_close_return ashare_limit_distance ashare_limit_up_touch
+    ashare_limit_down_touch ashare_limit_one_price ashare_limit_failed
+    ashare_open_at_upper_limit ashare_limit_open_failed
     """.split()
 )
 
@@ -77,7 +78,7 @@ def test_p0_operators_preserve_shape_and_are_deterministic() -> None:
         "ts_current_drawdown_duration": [panel],
         "ts_time_under_water": [panel],
         "ts_best_lag_corr": [panel, panel * 0.5],
-        "ts_price_delay": [panel],
+        "ts_price_delay": [panel, panel * 0.5],
         "group_ex_self_mean": [panel, _group()],
         "group_ex_self_weighted_mean": [panel, panel.abs() + 1.0, _group()],
         "hierarchical_group_neutralize": [panel, _group(), _group()],
@@ -87,10 +88,12 @@ def test_p0_operators_preserve_shape_and_are_deterministic() -> None:
         "open_to_vwap_return": [panel + 10.0, panel + 10.5],
         "vwap_to_close_return": [panel + 10.5, panel + 11.0],
         "ashare_limit_distance": [panel + 10.0, panel + 10.05],
-        "ashare_limit_touch": [panel + 10.0, panel + 10.0],
-        "ashare_limit_one_price": [panel + 10.0, panel + 10.0, panel + 10.0],
-        "ashare_limit_failed": [panel + 10.0, panel + 10.05],
-        "ashare_limit_open_break": [panel + 10.0, panel + 10.0],
+        "ashare_limit_up_touch": [panel + 10.0, panel + 10.0],
+        "ashare_limit_down_touch": [panel + 10.0, panel + 10.0],
+        "ashare_limit_one_price": [panel + 10.0, panel + 10.0, panel + 10.0, panel + 10.0, panel + 10.0, panel + 10.0],
+        "ashare_limit_failed": [panel + 10.0, panel + 10.0, panel + 10.05],
+        "ashare_open_at_upper_limit": [panel + 10.0, panel + 10.0],
+        "ashare_limit_open_failed": [panel + 10.0, panel + 10.0, panel + 10.0],
     }
     for name, args in calls.items():
         op = OperatorRegistry.get(name)

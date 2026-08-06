@@ -39,6 +39,7 @@ include = [
     "backend*",
     "cache*",
     "cleaned_operators*",
+    "docs*",
     "expr*",
     "evidence*",
     "factor_recipes*",
@@ -54,6 +55,7 @@ include = [
 
 [tool.setuptools.package-data]
 "evidence" = ["*.json", "*.yaml"]
+"docs" = ["*.json", "*.yaml", "*.md"]
 "cleaned_operators" = ["docs/*"]
 
 [project.optional-dependencies]

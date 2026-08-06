@@ -88,10 +88,10 @@ def phase2_operator_signatures() -> dict[str, OperatorSignature]:
 
     # ---- state / event -----------------------------------------------------
     signatures["ts_transition_count"] = _sig(
-        "ts_transition_count", ArgSpec("condition", _B), ArgSpec("window", _W)
+        "ts_transition_count", ArgSpec("condition", _B), ArgSpec("window", _W), ArgSpec("missing_policy", _ANY)
     )
     signatures["ts_time_since_change"] = _sig(
-        "ts_time_since_change", ArgSpec("condition", _B), ArgSpec("max_lookback", _INT)
+        "ts_time_since_change", ArgSpec("condition", _B), ArgSpec("max_lookback", _INT), ArgSpec("missing_policy", _ANY)
     )
     signatures["ts_event_spacing_mean"] = _sig(
         "ts_event_spacing_mean", ArgSpec("condition", _B), ArgSpec("window", _W), ArgSpec("min_events", _INT)
@@ -156,17 +156,27 @@ def phase2_operator_signatures() -> dict[str, OperatorSignature]:
     signatures["ashare_limit_distance"] = _sig(
         "ashare_limit_distance", ArgSpec("close", _F), ArgSpec("upper_limit", _F)
     )
-    signatures["ashare_limit_touch"] = _sig(
-        "ashare_limit_touch", ArgSpec("close", _F), ArgSpec("upper_limit", _F), ArgSpec("tick_tolerance", _FLT)
+    signatures["ashare_limit_up_touch"] = _sig(
+        "ashare_limit_up_touch", ArgSpec("high", _F), ArgSpec("upper_limit", _F), ArgSpec("tick_tolerance", _FLT)
+    )
+    signatures["ashare_limit_down_touch"] = _sig(
+        "ashare_limit_down_touch", ArgSpec("low", _F), ArgSpec("lower_limit", _F), ArgSpec("tick_tolerance", _FLT)
     )
     signatures["ashare_limit_one_price"] = _sig(
-        "ashare_limit_one_price", ArgSpec("close", _F), ArgSpec("upper_limit", _F), ArgSpec("lower_limit", _F)
+        "ashare_limit_one_price",
+        ArgSpec("open", _F), ArgSpec("high", _F), ArgSpec("low", _F), ArgSpec("close", _F),
+        ArgSpec("upper_limit", _F), ArgSpec("lower_limit", _F),
+        ArgSpec("side", _ANY), ArgSpec("tick_tolerance", _FLT),
     )
     signatures["ashare_limit_failed"] = _sig(
-        "ashare_limit_failed", ArgSpec("close", _F), ArgSpec("upper_limit", _F), ArgSpec("window", _W)
+        "ashare_limit_failed",
+        ArgSpec("high", _F), ArgSpec("close", _F), ArgSpec("upper_limit", _F), ArgSpec("tick_tolerance", _FLT),
     )
-    signatures["ashare_limit_open_break"] = _sig(
-        "ashare_limit_open_break", ArgSpec("open", _F), ArgSpec("upper_limit", _F)
+    signatures["ashare_open_at_upper_limit"] = _sig(
+        "ashare_open_at_upper_limit", ArgSpec("open", _F), ArgSpec("upper_limit", _F), ArgSpec("tick_tolerance", _FLT)
+    )
+    signatures["ashare_limit_open_failed"] = _sig(
+        "ashare_limit_open_failed", ArgSpec("open", _F), ArgSpec("low", _F), ArgSpec("upper_limit", _F), ArgSpec("tick_tolerance", _FLT)
     )
 
     # ---- relation aggregation (variadic ranked panels) --------------------
@@ -216,17 +226,49 @@ def phase2_operator_signatures() -> dict[str, OperatorSignature]:
         "index_membership_age", ArgSpec("member", _B), ArgSpec("max_lookback", _INT)
     )
     signatures["event_cumulative_return_past"] = _sig(
-        "event_cumulative_return_past", ArgSpec("ret", _F), ArgSpec("event", _B), ArgSpec("window", _W)
+        "event_cumulative_return_past",
+        ArgSpec("ret", _F), ArgSpec("event", _B), ArgSpec("window", _W), ArgSpec("event_effective_lag", _INT),
     )
     signatures["event_abnormal_return_past"] = _sig(
         "event_abnormal_return_past",
-        ArgSpec("ret", _F), ArgSpec("benchmark_ret", _F), ArgSpec("event", _B), ArgSpec("window", _W),
+        ArgSpec("ret", _F), ArgSpec("benchmark_ret", _F), ArgSpec("event", _B), ArgSpec("window", _W), ArgSpec("event_effective_lag", _INT),
     )
     signatures["fin_applicability_mask"] = _sig(
         "fin_applicability_mask", ArgSpec("value", _F), ArgSpec("threshold", _FLT)
     )
-    signatures["trading_day_diff"] = _sig(
-        "trading_day_diff", ArgSpec("date1", _F), ArgSpec("date2", _F)
+    signatures["calendar_day_diff"] = _sig(
+        "calendar_day_diff", ArgSpec("date1", _F), ArgSpec("date2", _F)
+    )
+
+    # ---- model-type rolling regression (2026-08 P2) ------------------------
+    signatures["ts_huber_regression_resid"] = _sig(
+        "ts_huber_regression_resid",
+        ArgSpec("y", _F), ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("min_periods", _INT),
+    )
+    signatures["ts_ridge_regression_resid"] = _sig(
+        "ts_ridge_regression_resid",
+        ArgSpec("y", _F), ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("alpha", _FLT), ArgSpec("min_periods", _INT),
+    )
+    signatures["ts_quantile_regression_slope"] = _sig(
+        "ts_quantile_regression_slope",
+        ArgSpec("y", _F), ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("q", _FLT), ArgSpec("min_periods", _INT),
+    )
+    signatures["ts_ar_coefficient"] = _sig(
+        "ts_ar_coefficient",
+        ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("lag", _INT), ArgSpec("min_periods", _INT),
+    )
+    signatures["ts_variance_ratio"] = _sig(
+        "ts_variance_ratio",
+        ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("q", _INT), ArgSpec("min_periods", _INT),
+    )
+    signatures["ts_cusum_break_score"] = _sig(
+        "ts_cusum_break_score", ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("min_periods", _INT)
+    )
+    signatures["ts_level_shift_score"] = _sig(
+        "ts_level_shift_score", ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("min_periods", _INT)
+    )
+    signatures["ts_vol_shift_score"] = _sig(
+        "ts_vol_shift_score", ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("min_periods", _INT)
     )
     signatures["fin_announcement_lag"] = _sig(
         "fin_announcement_lag", ArgSpec("period_end_date", _F), ArgSpec("pub_date", _F)

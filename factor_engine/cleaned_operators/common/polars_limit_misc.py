@@ -85,50 +85,92 @@ def ashare_limit_distance(close, upper_limit):
     return _make(close, cols, out)
 
 
-def ashare_limit_touch(close, upper_limit, tick_tolerance=0.005):
+def ashare_limit_up_touch(high, upper_limit, tick_tolerance=0.005):
     tolerance = _pf(tick_tolerance, "tick_tolerance", 0)
-    cols = _cols(close, upper_limit)
-    rows = close.height
+    cols = _cols(high, upper_limit)
+    rows = high.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
-        out[:, i] = _touch_1d(close[c].to_numpy(), upper_limit[c].to_numpy(), tolerance)
-    return _make(close, cols, out)
+        out[:, i] = _touch_1d(high[c].to_numpy(), upper_limit[c].to_numpy(), tolerance)
+    return _make(high, cols, out)
 
 
-def ashare_limit_open_break(open_px, upper_limit):
+def ashare_limit_down_touch(low, lower_limit, tick_tolerance=0.005):
+    tolerance = _pf(tick_tolerance, "tick_tolerance", 0)
+    cols = _cols(low, lower_limit)
+    rows = low.height
+    out = np.full((rows, len(cols)), np.nan, dtype=float)
+    for i, c in enumerate(cols):
+        lo, ll = low[c].to_numpy(), lower_limit[c].to_numpy()
+        valid = np.isfinite(lo) & np.isfinite(ll)
+        out[:, i] = np.where(valid, (lo <= ll + tolerance).astype(float), np.nan)
+    return _make(low, cols, out)
+
+
+def ashare_open_at_upper_limit(open_px, upper_limit, tick_tolerance=0.005):
+    tolerance = _pf(tick_tolerance, "tick_tolerance", 0)
     cols = _cols(open_px, upper_limit)
     rows = open_px.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
         op, ul = open_px[c].to_numpy(), upper_limit[c].to_numpy()
         valid = np.isfinite(op) & np.isfinite(ul)
-        out[:, i] = np.where(valid, (op >= ul).astype(float), np.nan)
+        out[:, i] = np.where(valid, (op >= ul - tolerance).astype(float), np.nan)
     return _make(open_px, cols, out)
 
 
-def ashare_limit_one_price(close, upper_limit, lower_limit):
-    cols = _cols(close, upper_limit, lower_limit)
-    rows = close.height
+def ashare_limit_open_failed(open_px, low, upper_limit, tick_tolerance=0.005):
+    tolerance = _pf(tick_tolerance, "tick_tolerance", 0)
+    cols = _cols(open_px, low, upper_limit)
+    rows = open_px.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
-        cl, ul, ll = (f[c].to_numpy() for f in (close, upper_limit, lower_limit))
-        valid = np.isfinite(cl) & np.isfinite(ul) & np.isfinite(ll)
-        out[:, i] = np.where(valid, ((cl >= ul) & (cl <= ll)).astype(float), np.nan)
-    return _make(close, cols, out)
+        op, lo, ul = open_px[c].to_numpy(), low[c].to_numpy(), upper_limit[c].to_numpy()
+        valid = np.isfinite(op) & np.isfinite(lo) & np.isfinite(ul)
+        opened = op >= ul - tolerance
+        broke = lo < ul - tolerance
+        out[:, i] = np.where(valid, (opened & broke).astype(float), np.nan)
+    return _make(open_px, cols, out)
 
 
-def ashare_limit_failed(close, upper_limit, window=20):
-    w = _pi(window, "window")
-    cols = _cols(close, upper_limit)
-    rows = close.height
+def ashare_limit_one_price(open_px, high, low, close, upper_limit, lower_limit, side="up", tick_tolerance=0.005):
+    tolerance = _pf(tick_tolerance, "tick_tolerance", 0)
+    cols = _cols(open_px, high, low, close, upper_limit, lower_limit)
+    rows = open_px.height
+    out = np.full((rows, len(cols)), np.nan, dtype=float)
+    direction = str(side).lower()
+    for i, c in enumerate(cols):
+        op, hi, lo, cl = (f[c].to_numpy() for f in (open_px, high, low, close))
+        ul, ll = upper_limit[c].to_numpy(), lower_limit[c].to_numpy()
+        limit = ul if direction == "up" else ll
+        valid = np.isfinite(op) & np.isfinite(hi) & np.isfinite(lo) & np.isfinite(cl) & np.isfinite(limit)
+        at = (
+            (op >= limit - tolerance) & (op <= limit + tolerance)
+            & (hi >= limit - tolerance) & (hi <= limit + tolerance)
+            & (lo >= limit - tolerance) & (lo <= limit + tolerance)
+            & (cl >= limit - tolerance) & (cl <= limit + tolerance)
+        )
+        if direction == "up":
+            out[:, i] = np.where(valid, (at & (cl >= ul - tolerance)).astype(float), np.nan)
+        elif direction == "down":
+            out[:, i] = np.where(valid, (at & (cl <= ll + tolerance)).astype(float), np.nan)
+        else:
+            raise ValueError("side must be 'up' or 'down'")
+    return _make(open_px, cols, out)
+
+
+def ashare_limit_failed(high, close, upper_limit, tick_tolerance=0.005):
+    tolerance = _pf(tick_tolerance, "tick_tolerance", 0)
+    cols = _cols(high, close, upper_limit)
+    rows = high.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
-        cl, ul = close[c].to_numpy(), upper_limit[c].to_numpy()
-        touch = (cl >= ul).astype(float)
-        ever_touched = _rolling_max_1d(touch, w, 1)
-        valid = np.isfinite(cl) & np.isfinite(ul) & np.isfinite(ever_touched)
-        out[:, i] = np.where(valid, ((ever_touched > 0) & (cl < ul)).astype(float), np.nan)
-    return _make(close, cols, out)
+        hi, cl, ul = high[c].to_numpy(), close[c].to_numpy(), upper_limit[c].to_numpy()
+        valid = np.isfinite(hi) & np.isfinite(cl) & np.isfinite(ul)
+        touched = hi >= ul - tolerance
+        held = cl >= ul - tolerance
+        out[:, i] = np.where(valid, (touched & ~held).astype(float), np.nan)
+    return _make(high, cols, out)
 
 
 # ---------------------------------------------------------------------------
@@ -223,15 +265,14 @@ def fin_announcement_lag(period_end_date, pub_date):
 
 
 def event_decay_asof(event, half_life=20.0):
-    hl = max(float(half_life), 1.0)
+    hl = _pf(half_life, "half_life", 1.0)
     weight = 0.5 ** (1.0 / hl)
     cols = _cols(event)
     rows = event.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
         ev = event[c].to_numpy()
-        truth = np.isfinite(ev) & (ev != 0)
-        series = np.where(truth, 1.0, 0.0)
+        series = np.where(np.isfinite(ev), ev, 0.0)
         acc = 0.0
         for t in range(rows):
             acc = acc * weight + series[t]
@@ -245,15 +286,17 @@ def event_decay_asof(event, half_life=20.0):
 
 _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
     ("ashare_limit_distance", ("close", "upper_limit"), ashare_limit_distance, "Distance to upper limit."),
-    ("ashare_limit_touch", ("close", "upper_limit", "tick_tolerance"), ashare_limit_touch, "Close touched upper limit within tolerance."),
-    ("ashare_limit_open_break", ("open", "upper_limit"), ashare_limit_open_break, "Open broke the upper limit."),
-    ("ashare_limit_one_price", ("close", "upper_limit", "lower_limit"), ashare_limit_one_price, "One-price limit lock."),
-    ("ashare_limit_failed", ("close", "upper_limit", "window"), ashare_limit_failed, "Failed limit-up after touching."),
+    ("ashare_limit_up_touch", ("high", "upper_limit", "tick_tolerance"), ashare_limit_up_touch, "High touched upper limit within tolerance."),
+    ("ashare_limit_down_touch", ("low", "lower_limit", "tick_tolerance"), ashare_limit_down_touch, "Low touched lower limit within tolerance."),
+    ("ashare_open_at_upper_limit", ("open", "upper_limit", "tick_tolerance"), ashare_open_at_upper_limit, "Opened at the upper limit."),
+    ("ashare_limit_open_failed", ("open", "low", "upper_limit", "tick_tolerance"), ashare_limit_open_failed, "Opened at the limit then broke intraday."),
+    ("ashare_limit_one_price", ("open", "high", "low", "close", "upper_limit", "lower_limit", "side", "tick_tolerance"), ashare_limit_one_price, "One-price limit lock (OHLC at the same limit)."),
+    ("ashare_limit_failed", ("high", "close", "upper_limit", "tick_tolerance"), ashare_limit_failed, "Touched the limit but failed to hold at close."),
     ("benchmark_excess_return", ("ret", "benchmark_ret"), benchmark_excess_return, "Return minus benchmark return."),
     ("benchmark_relative_price", ("numerator", "denominator"), benchmark_relative_price, "Numerator over denominator."),
     ("fin_applicability_mask", ("value", "threshold"), fin_applicability_mask, "1 where value exceeds threshold."),
     ("cash_flow_lifecycle_stage", ("operating", "investing", "financing"), cash_flow_lifecycle_stage, "Cash-flow lifecycle stage 1-5."),
-    ("event_decay_asof", ("event", "half_life"), event_decay_asof, "Exponential decay of past events."),
+    ("event_decay_asof", ("event", "half_life"), event_decay_asof, "Exponential decay of past events (preserving sign/magnitude)."),
 )
 
 
@@ -288,3 +331,19 @@ def _register(name: str, params: tuple[str, ...], function: Callable, descriptio
 
 for _name, _params, _function, _description in _SPECS:
     _register(_name, _params, _function, _description)
+
+# Classify limit-state helpers on the extended surface so the static operator
+# surface covers the final registry exactly.
+import cleaned_operators.operator_surface as _surface  # noqa: E402
+
+_surface.EXTENDED_ONLY_CANONICALS = frozenset(
+    set(_surface.EXTENDED_ONLY_CANONICALS)
+    | {
+        "ashare_limit_up_touch",
+        "ashare_limit_down_touch",
+        "ashare_open_at_upper_limit",
+        "ashare_limit_open_failed",
+        "ashare_limit_one_price",
+        "ashare_limit_failed",
+    }
+)

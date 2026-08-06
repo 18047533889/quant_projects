@@ -139,8 +139,8 @@ def _daily_agg_three(
         per_day: dict[pd.Timestamp, float] = {}
         for day, group in joined.groupby("day"):
             vals_a = np.asarray(group["a"], dtype=float)
-            vals_b = np.asarray(np.where(np.isfinite(group["b"]), group["b"], 0.0), dtype=float)
-            vals_c = np.asarray(np.where(np.isfinite(group["c"]), group["c"], 0.0), dtype=float)
+            vals_b = np.asarray(group["b"], dtype=float)
+            vals_c = np.asarray(group["c"], dtype=float)
             if not np.any(np.isfinite(vals_a)):
                 per_day[day] = np.nan
                 continue
@@ -494,16 +494,16 @@ class IntraLowTime(SeriesOperator):
 
 
 def _vwap_above_ratio(close_v, amount_v, volume_v):
-    vol = np.where(np.isfinite(volume_v), volume_v, 0.0)
-    amt = np.where(np.isfinite(amount_v), amount_v, 0.0)
-    total_v, total_a = float(vol.sum()), float(amt.sum())
+    valid_vwap = np.isfinite(amount_v) & np.isfinite(volume_v) & (volume_v > 0)
+    total_v = float(np.sum(np.where(valid_vwap, volume_v, 0.0)))
+    total_a = float(np.sum(np.where(valid_vwap, amount_v, 0.0)))
     if total_v <= _EPS:
         return np.nan
     day_vwap = total_a / total_v
-    c = close_v[np.isfinite(close_v)]
-    if len(c) == 0:
+    valid = np.isfinite(close_v) & valid_vwap
+    if valid.sum() == 0:
         return np.nan
-    return float(np.mean(c > day_vwap))
+    return float(np.mean(close_v[valid] > day_vwap))
 
 
 @register_operator(
@@ -869,6 +869,7 @@ def _limit_first_hit_time(close_v, times, limit_v, side):
 )
 class IntraLimitFirstHitTime(SeriesOperator):
     metadata = _metadata("intra_limit_first_hit_time", "首次触及涨/跌停的分钟位置 / 有效分钟数。", ["close", "high_limit", "low_limit", "side"], unit="position")
+    metadata.tags.append("allow_panel_broadcast")
 
     def _calculate_series(self, close, high_limit=None, low_limit=None, side="up", **_):
         frame = _as_panel(close)
@@ -905,6 +906,7 @@ def _limit_duration(close_v, limit_v, side):
 )
 class IntraLimitDuration(SeriesOperator):
     metadata = _metadata("intra_limit_duration", "收盘价处于涨/跌停价附近的分钟占比。", ["close", "high_limit", "low_limit", "side"], unit="ratio")
+    metadata.tags.append("allow_panel_broadcast")
 
     def _calculate_series(self, close, high_limit=None, low_limit=None, side="up", **_):
         frame = _as_panel(close)
@@ -943,6 +945,7 @@ def _limit_reopen_count(close_v, limit_v, side, transition):
 )
 class IntraLimitReopenCount(SeriesOperator):
     metadata = _metadata("intra_limit_reopen_count", "封板打开（open）/ 重新封板（reseal）次数。", ["close", "high_limit", "low_limit", "side", "transition"], unit="count")
+    metadata.tags.append("allow_panel_broadcast")
 
     def _calculate_series(self, close, high_limit=None, low_limit=None, side="up", transition="open", **_):
         frame = _as_panel(close)

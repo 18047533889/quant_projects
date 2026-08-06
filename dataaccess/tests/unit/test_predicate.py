@@ -87,3 +87,39 @@ def test_column_name_with_special_char():
     )
     # 引号被转义成两个引号
     assert '"weird""name"' in compiled.where_sql
+
+
+def test_timestamp_end_expanded_to_end_of_day():
+    """A timestamp time column with a date-only end must include the whole day."""
+    compiled = compile_predicate(
+        Predicate(time_range=("2026-06-30", "2026-06-30"), time_column_is_timestamp=True),
+        time_column="QuoteTime",
+        instrument_column="Symbol",
+    )
+    assert '"QuoteTime" <= ?' in compiled.where_sql
+    end_param = compiled.params[1]
+    # end param is a pandas Timestamp at 23:59:59.999999
+    assert end_param.hour == 23 and end_param.minute == 59
+    # the data at 09:31..15:00 (Beijing) must satisfy <= end_param
+    import datetime
+    ts = end_param.to_pydatetime()
+    assert datetime.time(9, 31) < ts.time()
+
+
+def test_timestamp_end_with_explicit_time_preserved():
+    compiled = compile_predicate(
+        Predicate(time_range=("2026-06-30", "2026-06-30 15:00:00"), time_column_is_timestamp=True),
+        time_column="QuoteTime",
+        instrument_column="Symbol",
+    )
+    assert compiled.params[1] == "2026-06-30 15:00:00"
+
+
+def test_date_column_end_not_expanded():
+    """A date time column keeps the plain end value (no pandas coercion)."""
+    compiled = compile_predicate(
+        Predicate(time_range=("2026-06-30", "2026-06-30")),
+        time_column="TradeDate",
+        instrument_column="Symbol",
+    )
+    assert compiled.params[1] == "2026-06-30"

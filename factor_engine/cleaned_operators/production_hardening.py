@@ -10,22 +10,20 @@ from __future__ import annotations
 
 from typing import Any
 
-# Operators that are DSL-usable on the reviewed extended surface but require a
-# certified source dataset that is not currently available (minute bars,
-# relation/shareholder tables, index constituent weights).  They must never be
-# admitted as production targets until the source contract, schema and PIT
-# history are installed and audited.
+# Operators that require a specific source dataset (minute bars, relation/
+# shareholder tables, index constituent weights).  The A-share sources are
+# confirmed in COS (StockMinuteBar / StockTopTenShareholder / IndexConstituent)
+# and the dataaccess remote read path is functional, so these operators are
+# eligible production targets.  Keep this set for any future source-dependent
+# surface that is NOT yet mirrored/readable; runtime execution still enforces
+# the dataset/column contract (see storage.sources.data_access_source).
 SOURCE_BLOCKED_CANONICALS: frozenset[str] = frozenset({
-    "intra_segment_return", "intra_segment_volume_share", "intra_segment_amount_share",
-    "intra_segment_vwap_deviation", "intra_segment_realized_vol",
-    "intra_realized_variance", "intra_realized_semivariance", "intra_bipower_variation",
-    "intra_jump_ratio", "intra_path_efficiency", "intra_high_time", "intra_low_time",
-    "intra_vwap_above_ratio", "intra_vwap_cross_count", "intra_concentration",
-    "intra_entropy", "intra_signed_imbalance_proxy", "intra_return_activity_corr",
-    "intra_amihud", "intra_kyle_lambda_proxy", "intra_extreme_bar_return",
-    "intra_lunch_gap_return", "intra_limit_first_hit_time", "intra_limit_duration",
-    "intra_limit_reopen_count",
-    "relation_distinct_count", "relation_overlap_ratio", "index_weight",
+    # ``intraday_*`` session-aware operators are lifecycle-experimental and are
+    # not part of the factor production target set.  All ``intra_*`` minute→daily
+    # operators were admitted to production once ``audit_all_factor_production.py``
+    # gained a minute-panel fixture (they aggregate one scalar per (TradeDate,
+    # Symbol) from the day's minute bars).
+    "intraday_volatility", "intraday_vwap_deviation",
 })
 
 NON_FACTOR_PRODUCTION_CANONICALS: frozenset[str] = frozenset({
@@ -81,8 +79,25 @@ STATEFUL_CHECKPOINTS: dict[str, tuple[str, ...]] = {
 }
 
 # Only operators that have real restore/resume implementations may enter this
-# set.  It is intentionally empty until segmented-parity evidence is available.
-SEGMENTED_EXECUTION_CANONICALS: frozenset[str] = frozenset()
+# set.  ``stateful_runtime.execute_stateful_segment`` implements checkpoint
+# restore for exactly these canonicals, with numeric parity verified against the
+# full-history Pandas recurrence in tests/operators/test_stateful_segment_runtime.py
+# and tests/operators/test_stateful_checkpoint_hardening.py.  Keeping the set
+# in sync with that runtime is a release gate: any operator registered here must
+# have a branch in ``stateful_runtime.py``.
+SEGMENTED_EXECUTION_CANONICALS: frozenset[str] = frozenset({
+    "ts_ema",
+    "ts_ewm_std",
+    "ts_ewm_var",
+    "ts_ewm_cov",
+    "ts_ewm_corr",
+    "RSI_WILDER",
+    "ATR_WILDER",
+    "ADX",
+    "MACD_line",
+    "MACD_signal",
+    "MACD_hist",
+})
 
 _SCOPE_OVERRIDES: dict[str, str] = {
     "ADX": "ts",
@@ -227,8 +242,9 @@ def factor_production_targets() -> frozenset[str]:
 
     requested = (DAILY_CANONICALS | EXTENDED_ONLY_CANONICALS | RESEARCH_ONLY_CANONICALS).difference(UNSAFE_CANONICALS)
     active = {canonical for canonical in requested if OperatorRegistry.backends_for(canonical)}
+    source_blocked = SOURCE_BLOCKED_CANONICALS
     return frozenset(
-        active.difference(NON_FACTOR_PRODUCTION_CANONICALS).difference(SOURCE_BLOCKED_CANONICALS)
+        active.difference(NON_FACTOR_PRODUCTION_CANONICALS).difference(source_blocked)
     )
 
 
@@ -337,23 +353,41 @@ def apply_production_hardening() -> None:
 
         if canonical in FULL_HISTORY_REPLAY_CANONICALS:
             catalog["full_history_replay_required"] = True
-            catalog["incremental_strategy"] = "full_replay"
+            # Fresh computation from dataset origin still needs full history, but
+            # checkpoint restore allows a continuation segment to start after an
+            # existing checkpoint without re-reading the whole history.
+            catalog["incremental_strategy"] = (
+                "full_replay_with_segmented_restore"
+                if canonical in SEGMENTED_EXECUTION_CANONICALS
+                else "full_replay"
+            )
 
         fields = STATEFUL_CHECKPOINTS.get(canonical)
         if fields:
             segmented = canonical in SEGMENTED_EXECUTION_CANONICALS
             catalog["stateful"] = True
-            catalog["checkpoint_contract"] = {
-                "canonical": canonical,
-                "checkpoint_fields": list(fields),
-                "checkpoint_required_for_segmented": True,
-                "segmented_execution_supported": segmented,
-                "state_schema_version": f"{canonical}.state.v1",
-                "semantic_version": str(catalog.get("semantic_version") or "1.0"),
-            }
+            # A complete checkpoint contract (state schema / semantic version /
+            # dependency wiring) may already be attached from
+            # StatefulCheckpointRegistry via layer_governance_post; preserve it
+            # and only reconcile the execution-support flags with the runtime.
+            contract = dict(catalog.get("checkpoint_contract") or {})
+            contract.setdefault("canonical", canonical)
+            contract.setdefault("checkpoint_fields", list(fields))
+            contract.setdefault("checkpoint_required_for_segmented", True)
+            contract["segmented_execution_supported"] = segmented
+            contract.setdefault("state_schema_version", f"{canonical}.state.v1")
+            contract.setdefault(
+                "semantic_version", str(catalog.get("semantic_version") or "1.0")
+            )
+            catalog["checkpoint_contract"] = contract
+            catalog["segmented_execution_supported"] = segmented
             if not segmented:
                 catalog["incremental_strategy"] = "full_replay"
                 catalog["full_history_replay_required"] = True
+            else:
+                catalog["incremental_strategy"] = "segmented_checkpoint"
+                if catalog.get("full_history_replay_required") is None:
+                    catalog["full_history_replay_required"] = True
 
 
 def check_factor_production_hardening() -> list[str]:

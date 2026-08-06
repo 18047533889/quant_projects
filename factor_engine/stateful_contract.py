@@ -203,6 +203,11 @@ for _spec in (
         minimum_history=1,
         checkpoint_fields=("last_value", "last_timestamp"),
         missing_policy="carry_state_emit_null",
+        # ``stateful_runtime.execute_stateful_segment`` has no branch for
+        # ``trade_when`` yet, so checkpoint-restore must fail closed.  It remains
+        # a full-history-replay operator until a real restore implementation is
+        # added alongside ``stateful_runtime``.
+        segmented_execution_supported=False,
     ),
     StatefulOperatorSpec(
         canonical="ts_ewm_std", state_schema_version="ewm_moment_state.v1",

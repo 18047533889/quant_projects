@@ -18,7 +18,7 @@ P1_CANONICALS = frozenset(
     relation_entry_count relation_exit_count relation_weighted_change
     index_member index_weight_change index_entry_exit_event index_membership_age
     event_cumulative_return_past event_abnormal_return_past
-    fin_applicability_mask trading_day_diff fin_announcement_lag
+    fin_applicability_mask calendar_day_diff fin_announcement_lag
     """.split()
 )
 
@@ -105,13 +105,19 @@ def test_event_cumulative_return_past_is_causal_and_masked() -> None:
     idx = pd.date_range("2024-01-01", periods=4)
     ret = pd.DataFrame([[1.0], [2.0], [3.0], [4.0]], index=idx, columns=["A"])
     event = pd.DataFrame([[0.0], [1.0], [0.0], [1.0]], index=idx, columns=["A"])
-    out = OperatorRegistry.get("event_cumulative_return_past").calculate(ret, event, window=3)
-    # cumulative of ret from the most recent event through current row (capped at window):
-    # row1 -> 2.0 ; row2 -> 2+3=5 ; row3 (new event) -> 4.0
+    op = OperatorRegistry.get("event_cumulative_return_past")
+    # lag=0：事件当日纳入累计 -> row1=2, row2=2+3=5, row3(新事件)=4
+    out = op.calculate(ret, event, window=3, event_effective_lag=0)
     assert np.isnan(out.iloc[0, 0])
     assert out.iloc[1, 0] == pytest.approx(2.0)
     assert out.iloc[2, 0] == pytest.approx(5.0)
     assert out.iloc[3, 0] == pytest.approx(4.0)
+    # lag=1（默认）：事件日收益不纳入（避免公告日收盘后时点泄露）-> row1=NaN, row2=3, row3=NaN
+    out_lag = op.calculate(ret, event, window=3)
+    assert np.isnan(out_lag.iloc[0, 0])
+    assert np.isnan(out_lag.iloc[1, 0])
+    assert out_lag.iloc[2, 0] == pytest.approx(3.0)
+    assert np.isnan(out_lag.iloc[3, 0])
 
 
 def test_p1_operators_preserve_shape_and_determinism() -> None:
@@ -135,7 +141,7 @@ def test_p1_operators_preserve_shape_and_determinism() -> None:
         "event_cumulative_return_past": [panel - 0.1, member],
         "event_abnormal_return_past": [panel - 0.1, panel - 0.2, member],
         "fin_applicability_mask": [panel],
-        "trading_day_diff": [panel, panel + 1],
+        "calendar_day_diff": [panel, panel + 1],
         "fin_announcement_lag": [panel, panel + 10],
     }
     for name, args in calls.items():

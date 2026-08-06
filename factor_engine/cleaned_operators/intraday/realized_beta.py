@@ -1,0 +1,288 @@
+# -*- coding: utf-8 -*-
+"""Minute-frequency realized market beta and idiosyncratic moments (P0).
+
+The market minute return is built *inside* the operator from the cross-section
+of stock minute returns, value-weighted by a daily free-float capitalisation
+panel supplied by the caller (as-of previous trading day).  No index minute
+data is required.
+
+Contract: ``close`` is a minute panel (row=minute, col=instrument),
+``free_market_cap`` is a daily panel (row=date, col=instrument).  Output is one
+scalar per (TradeDate, Symbol).
+"""
+from __future__ import annotations
+
+from typing import Any, Callable
+
+import numpy as np
+import pandas as pd
+
+from cleaned_operators.base import SeriesOperator, register_operator
+from cleaned_operators.intraday._core import (
+    _EPS,
+    as_panel,
+    broadcast_daily_panel,
+    log_returns,
+    metadata,
+    np_errstate,
+    register_surface,
+)
+
+_CANONICALS: list[str] = []
+
+
+def _aligned_market(close: pd.DataFrame, weights: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
+    """Return (per-stock minute returns, value-weighted market minute return)."""
+    close = as_panel(close)
+    weights = as_panel(weights)
+    raw = close.to_numpy(dtype=float)
+    with np_errstate():
+        logr = np.full_like(raw, np.nan, dtype=float)
+        logr[1:, :] = np.log(raw[1:, :] / raw[:-1, :])
+    rets = pd.DataFrame(logr, index=close.index, columns=close.columns)
+    w_bc = broadcast_daily_panel(close, weights)
+    w_ret = w_bc.where(rets.notna())
+    with np_errstate():
+        num = (rets * w_bc).sum(axis=1)
+        den = w_ret.sum(axis=1)
+        mkt = pd.Series(
+            np.where(np.isfinite(den) & (np.abs(den) > _EPS), num / den, np.nan),
+            index=close.index,
+            dtype=float,
+        )
+    return rets, mkt
+
+
+def _beta_daily(close: pd.DataFrame, weights: pd.DataFrame, fn: Callable[[np.ndarray, np.ndarray], float]) -> pd.DataFrame:
+    rets, mkt = _aligned_market(close, weights)
+    out: dict[str, pd.Series] = {}
+    for inst in close.columns:
+        joined = pd.concat([rets[inst], mkt], axis=1, keys=["r", "m"]).dropna(subset=["m"])
+        joined["day"] = joined.index.normalize()
+        per_day: dict[pd.Timestamp, float] = {}
+        for day, group in joined.groupby("day"):
+            rr = np.asarray(group["r"], dtype=float)
+            mm = np.asarray(group["m"], dtype=float)
+            if not np.any(np.isfinite(mm)):
+                per_day[day] = np.nan
+                continue
+            try:
+                per_day[day] = float(fn(rr, mm))
+            except (ValueError, ZeroDivisionError, OverflowError):
+                per_day[day] = np.nan
+        out[inst] = pd.Series(per_day, dtype=float)
+    if not out:
+        return pd.DataFrame(dtype=float)
+    return pd.DataFrame(out).sort_index()
+
+
+def _realized_beta(r: np.ndarray, m: np.ndarray) -> float:
+    valid = np.isfinite(r) & np.isfinite(m)
+    r, m = r[valid], m[valid]
+    if len(r) < 3:
+        return np.nan
+    var_m = float(np.var(m))
+    if var_m <= _EPS:
+        return np.nan
+    cov = float(np.mean((r - np.mean(r)) * (m - np.mean(m))))
+    return cov / var_m
+
+
+def _realized_corr(r: np.ndarray, m: np.ndarray) -> float:
+    valid = np.isfinite(r) & np.isfinite(m)
+    r, m = r[valid], m[valid]
+    if len(r) < 3 or np.std(r) <= _EPS or np.std(m) <= _EPS:
+        return np.nan
+    return float(np.corrcoef(r, m)[0, 1])
+
+
+def _quadrant_beta(r: np.ndarray, m: np.ndarray, r_cond: np.ndarray, m_cond: np.ndarray) -> float:
+    valid = np.isfinite(r) & np.isfinite(m)
+    num_mask = valid & r_cond & m_cond
+    den_mask = valid & m_cond
+    num = float(np.sum(r[num_mask] * m[num_mask]))
+    den = float(np.sum(m[den_mask] * m[den_mask]))
+    if den <= _EPS:
+        return np.nan
+    return num / den
+
+
+def _down_down(r: np.ndarray, m: np.ndarray) -> float:
+    return _quadrant_beta(r, m, r < 0, m < 0)
+
+
+def _up_up(r: np.ndarray, m: np.ndarray) -> float:
+    return _quadrant_beta(r, m, r > 0, m > 0)
+
+
+def _down_up(r: np.ndarray, m: np.ndarray) -> float:
+    return _quadrant_beta(r, m, r < 0, m > 0)
+
+
+def _up_down(r: np.ndarray, m: np.ndarray) -> float:
+    return _quadrant_beta(r, m, r > 0, m < 0)
+
+
+def _market_model(r: np.ndarray, m: np.ndarray) -> tuple[float, float, np.ndarray] | None:
+    """Fit r = a + b*m; return (a, b, residuals) or None if degenerate."""
+    valid = np.isfinite(r) & np.isfinite(m)
+    r, m = r[valid], m[valid]
+    if len(r) < 3:
+        return None
+    var_m = float(np.var(m))
+    if var_m <= _EPS:
+        return None
+    b = float(np.cov(r, m)[0, 1] / var_m)
+    a = float(np.mean(r) - b * np.mean(m))
+    with np_errstate():
+        e = r - (a + b * m)
+    return a, b, e
+
+
+def _idio_variance(r: np.ndarray, m: np.ndarray) -> float:
+    fit = _market_model(r, m)
+    if fit is None:
+        return np.nan
+    return float(np.mean(fit[2] * fit[2]))
+
+
+def _idio_skewness(r: np.ndarray, m: np.ndarray) -> float:
+    fit = _market_model(r, m)
+    if fit is None:
+        return np.nan
+    e = fit[2]
+    sd = float(np.std(e))
+    if sd <= _EPS:
+        return np.nan
+    return float(np.mean(((e - np.mean(e)) / sd) ** 3))
+
+
+def _idio_kurtosis(r: np.ndarray, m: np.ndarray) -> float:
+    fit = _market_model(r, m)
+    if fit is None:
+        return np.nan
+    e = fit[2]
+    sd = float(np.std(e))
+    if sd <= _EPS:
+        return np.nan
+    return float(np.mean(((e - np.mean(e)) / sd) ** 4))
+
+
+def _market_r2(r: np.ndarray, m: np.ndarray) -> float:
+    fit = _market_model(r, m)
+    if fit is None:
+        return np.nan
+    e = fit[2]
+    ss_res = float(np.sum(e * e))
+    ss_tot = float(np.sum((r - np.mean(r)) ** 2))
+    if ss_tot <= _EPS:
+        return np.nan
+    return float(max(0.0, 1.0 - ss_res / ss_tot))
+
+
+def _op(name: str, description: str, unit: str):
+    def decorator(cls):
+        # ``free_market_cap`` is a daily panel alongside the minute panel; the
+        # allow_panel_broadcast tag exempts it from same-frequency alignment.
+        cls.metadata = metadata(
+            name, description, ["close", "free_market_cap"], unit=unit,
+            domain="intraday_beta", extra_tags=["allow_panel_broadcast"],
+        )
+        return register_operator(
+            name=name,
+            category="intraday_microstructure",
+            business_category="intraday_microstructure",
+            canonical=name,
+            source="intraday.realized_beta",
+            backend="pandas_numpy",
+            status="experimental",
+        )(cls)
+
+    return decorator
+
+
+@_op("intra_realized_beta", "日内已实现 Beta：分钟收益对市场分钟收益回归。", "level")
+class IntraRealizedBeta(SeriesOperator):
+    def _calculate_series(self, close, free_market_cap, **_):
+        return _beta_daily(close, free_market_cap, _realized_beta)
+
+
+@_op("intra_realized_correlation", "日内已实现相关系数。", "corr")
+class IntraRealizedCorrelation(SeriesOperator):
+    def _calculate_series(self, close, free_market_cap, **_):
+        return _beta_daily(close, free_market_cap, _realized_corr)
+
+
+@_op("intra_down_down_semibeta", "市场下跌且个股下跌象限协同 Beta。", "level")
+class IntraDownDownSemibeta(SeriesOperator):
+    def _calculate_series(self, close, free_market_cap, **_):
+        return _beta_daily(close, free_market_cap, _down_down)
+
+
+@_op("intra_up_up_semibeta", "市场上涨且个股上涨象限协同 Beta。", "level")
+class IntraUpUpSemibeta(SeriesOperator):
+    def _calculate_series(self, close, free_market_cap, **_):
+        return _beta_daily(close, free_market_cap, _up_up)
+
+
+@_op("intra_down_up_semibeta", "市场上涨、个股下跌象限协同暴露。", "level")
+class IntraDownUpSemibeta(SeriesOperator):
+    def _calculate_series(self, close, free_market_cap, **_):
+        return _beta_daily(close, free_market_cap, _down_up)
+
+
+@_op("intra_up_down_semibeta", "市场下跌、个股上涨象限协同暴露。", "level")
+class IntraUpDownSemibeta(SeriesOperator):
+    def _calculate_series(self, close, free_market_cap, **_):
+        return _beta_daily(close, free_market_cap, _up_down)
+
+
+@_op("intra_beta_asymmetry", "下-下半 Beta 减 上-上半 Beta。", "level")
+class IntraBetaAsymmetry(SeriesOperator):
+    def _calculate_series(self, close, free_market_cap, **_):
+        out = _beta_daily(close, free_market_cap, _down_down)
+        up = _beta_daily(close, free_market_cap, _up_up)
+        return out - up
+
+
+@_op("intra_idiosyncratic_variance", "分钟市场模型残差方差。", "variance")
+class IntraIdiosyncraticVariance(SeriesOperator):
+    def _calculate_series(self, close, free_market_cap, **_):
+        return _beta_daily(close, free_market_cap, _idio_variance)
+
+
+@_op("intra_idiosyncratic_skewness", "分钟市场模型残差偏度。", "level")
+class IntraIdiosyncraticSkewness(SeriesOperator):
+    def _calculate_series(self, close, free_market_cap, **_):
+        return _beta_daily(close, free_market_cap, _idio_skewness)
+
+
+@_op("intra_idiosyncratic_kurtosis", "分钟市场模型残差峰度。", "level")
+class IntraIdiosyncraticKurtosis(SeriesOperator):
+    def _calculate_series(self, close, free_market_cap, **_):
+        return _beta_daily(close, free_market_cap, _idio_kurtosis)
+
+
+@_op("intra_market_model_r2", "分钟市场模型 R²。", "r2")
+class IntraMarketModelR2(SeriesOperator):
+    def _calculate_series(self, close, free_market_cap, **_):
+        return _beta_daily(close, free_market_cap, _market_r2)
+
+
+_CANONICALS.extend(
+    [
+        "intra_realized_beta",
+        "intra_realized_correlation",
+        "intra_down_down_semibeta",
+        "intra_up_up_semibeta",
+        "intra_down_up_semibeta",
+        "intra_up_down_semibeta",
+        "intra_beta_asymmetry",
+        "intra_idiosyncratic_variance",
+        "intra_idiosyncratic_skewness",
+        "intra_idiosyncratic_kurtosis",
+        "intra_market_model_r2",
+    ]
+)
+
+register_surface(_CANONICALS)
