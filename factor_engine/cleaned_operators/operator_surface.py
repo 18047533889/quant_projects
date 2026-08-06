@@ -93,6 +93,45 @@ _DAILY_RECERTIFIED_2026_08 = frozenset({
     "ts_sma_cn", "ts_sum_decay",
 })
 DAILY_FACTOR_MIGRATED = frozenset(set(DAILY_FACTOR_MIGRATED) | _DAILY_PROMOTED_EXPERIMENTAL | _DAILY_UNISOLATED | _DAILY_RECERTIFIED_2026_08)
+# 2026-08 final pack: 61 new atomics (robust tail / nonlinear dependence /
+# complexity / A-share state machine / relation-group distribution / intraday
+# time-structure v2) are production-hardened factor operators.  They must also
+# REMAIN in EXTENDED_ONLY_CANONICALS (each module unions its own names into it at
+# import) because layer_governance's static partition check counts every
+# registered operator against the six partitions; DAILY_FACTOR_MIGRATED is a
+# classification refinement, not a partition.  classify_canonical checks the
+# daily set first, so daily wins regardless.
+_DAILY_FINAL_PACK_2026_08 = frozenset({
+    # group 1 — robust tail
+    "ts_lower_partial_moment", "ts_upper_partial_moment", "ts_expected_shortfall",
+    "ts_quantile_skew", "ts_quantile_kurtosis", "ts_tail_ratio", "ts_extreme_cluster_ratio",
+    # group 2 — nonlinear dependence
+    "ts_distance_corr", "ts_distance_cov", "ts_mutual_information",
+    "ts_lagged_mutual_information", "ts_upper_tail_dependence", "ts_lower_tail_dependence",
+    # group 3 — complexity / long memory
+    "ts_permutation_entropy", "ts_weighted_permutation_entropy",
+    "ts_permutation_transition_entropy", "ts_sample_entropy", "ts_hurst_dfa",
+    "ts_higuchi_fractal_dimension", "ts_variogram_slope", "ts_autocorr_decay_half_life",
+    # group 4 — A-share limit/suspension state machine
+    "ashare_limit_up_streak", "ashare_limit_down_streak", "ashare_days_since_limit_up",
+    "ashare_days_since_limit_down", "ashare_limit_touch_count", "ashare_failed_limit_count",
+    "ashare_one_price_limit_streak", "ashare_limit_event_density", "ashare_limit_asymmetry",
+    "ashare_suspension_episode_length", "ashare_limit_open_up_streak",
+    "ashare_limit_open_down_streak", "ashare_limit_up_volume_ratio",
+    "ashare_limit_down_volume_ratio",
+    # group 5 — relation / group distribution
+    "relation_topk_concentration", "relation_distribution_skew", "relation_distribution_kurtosis",
+    "relation_hhi_change", "relation_entropy_change", "relation_concentration_acceleration",
+    "relation_rank_mobility", "relation_share_mobility", "group_skewness", "group_kurtosis",
+    "group_quantile_spread", "group_tail_ratio",
+    # group 6 — intraday time-structure v2
+    "intra_bar_range_persistence", "intra_bar_range_deviation", "intra_tail_volume_share",
+    "intra_volume_price_alignment", "intra_ute_high", "intra_ute_low",
+    "intra_slot_volume_surprise", "intra_slot_amount_surprise", "intra_slot_volatility_surprise",
+    "intra_market_lead_lag_ex_self", "intra_industry_lead_lag_ex_self",
+    "intra_session_return_asymmetry", "intra_close_participation", "intra_high_low_affinity",
+})
+DAILY_FACTOR_MIGRATED = frozenset(set(DAILY_FACTOR_MIGRATED) | _DAILY_FINAL_PACK_2026_08)
 RESEARCH_ONLY_CANONICALS=frozenset({"holder_concentration_change","holder_count_change_rate"});LEGACY_ONLY_CANONICALS=frozenset({"cube"});INTERNAL_ONLY_CANONICALS=frozenset({"constant","identity","protected_div"})
 HIDDEN_DAILY_NAMES=frozenset({"cube","cumulative_max","cumulative_mean","cumulative_min","fmax","fmin","inv","reciprocal","sqr"})
 def classify_canonical(canonical:str)->str:

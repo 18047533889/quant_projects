@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
+import numpy as np
 import pandas as pd
 
 VisiblePeriodSelector = Literal["latest_visible_period", "annual_only", "quarterly_only"]
@@ -16,6 +17,60 @@ class PITColumns:
     period_end: str = "period_end"
     available_at: str = "available_at"
     revision_id: str = "revision_id"
+
+# When an announcement becomes tradeable relative to its PubDate.  A-share
+# disclosures (earnings, top-ten holders) carry a date, not a time-of-day; the
+# same-day close of a bar dated PubDate cannot safely act on an after-close
+# announcement, so the conservative production policy is ``next_trading_day``
+# (the value is visible to decisions strictly after PubDate).  ``same_day``
+# keeps the historical ``available_at <= decision`` behaviour.
+AvailablePolicy = Literal["same_day", "next_trading_day"]
+
+
+def _shift_available_to_next_decision(
+    available: pd.Series,
+    decisions: pd.DataFrame,
+    *,
+    decision_time: str,
+) -> pd.Series:
+    """Shift each event's ``available_at`` to the next decision timestamp.
+
+    A report published on ``PubDate`` cannot inform a factor whose decision bar
+    is dated ``PubDate`` (announcements land after close).  With the
+    ``next_trading_day`` policy every event is made visible only to the first
+    decision strictly after its announcement date.  The shift is computed from
+    the actual decision grid, so sparse factors (e.g. monthly) naturally see the
+    value at their next decision bar.
+    """
+    # Work in int64 ns-since-epoch: tz-aware datetime arrays cannot be compared
+    # as raw numpy datetime64 (pandas returns an object array of Timestamps), but
+    # their epoch offsets are directly searchsorted-comparable.
+    decision_dates = np.unique(
+        pd.to_datetime(decisions[decision_time], errors="raise", utc=True)
+        .dt.normalize()
+        .dt
+        .tz_localize(None)
+        .astype("int64")
+        .to_numpy()
+    )
+    available_dates = (
+        pd.to_datetime(available, errors="coerce", utc=True)
+        .dt.normalize()
+        .dt.tz_localize(None)
+        .astype("int64")
+        .to_numpy()
+    )
+    idx = np.searchsorted(decision_dates, available_dates, side="right")
+    isna = pd.isna(pd.to_datetime(available, errors="coerce", utc=True)).to_numpy()
+    visible = (idx < len(decision_dates)) & ~isna
+    out = pd.Series(pd.NaT, index=available.index, dtype="datetime64[ns]")
+    if visible.any():
+        out.iloc[visible] = pd.Index(
+            [pd.Timestamp(decision_dates[i]) for i in idx[visible]]
+        )
+    # merge_asof requires matching key dtypes; the left decision keys are
+    # tz-aware UTC, so the shifted availability must be too.
+    return out.dt.tz_localize("UTC")
 
 
 def validate_fundamental_events(events: pd.DataFrame, columns: PITColumns = PITColumns()) -> None:
@@ -46,12 +101,23 @@ def pit_asof_join(
     decision_time: str = "decision_timestamp",
     columns: PITColumns = PITColumns(),
     max_age_days: int | None = 180,
+    available_policy: AvailablePolicy = "same_day",
 ) -> pd.DataFrame:
     """Backward as-of join enforcing ``available_at <= decision_timestamp``.
 
     Historical revision vintages must be retained in ``events``.  This function
     never deduplicates a report period to its final revised value before joining.
+
+    ``available_policy`` controls when an event becomes visible:
+
+    * ``same_day`` — ``available_at <= decision`` (historical behaviour);
+    * ``next_trading_day`` — an announcement on ``PubDate`` is only visible to
+      the first decision strictly after it.  A-share earnings/top-ten filings
+      land after close, so production reads use this conservative policy to avoid
+      acting on a same-day announcement at that day's close (audit §2.9).
     """
+    if available_policy not in {"same_day", "next_trading_day"}:
+        raise ValueError(f"unknown available policy {available_policy!r}")
     validate_fundamental_events(events, columns)
     if decision_time not in decisions.columns:
         raise ValueError(f"decisions missing {decision_time!r}")
@@ -62,6 +128,14 @@ def pit_asof_join(
     right = events.copy()
     left[decision_time] = pd.to_datetime(left[decision_time], errors="raise", utc=True)
     right[columns.available_at] = pd.to_datetime(right[columns.available_at], errors="raise", utc=True)
+    if available_policy == "next_trading_day":
+        shifted = _shift_available_to_next_decision(
+            right[columns.available_at], left, decision_time=decision_time
+        )
+        right[columns.available_at] = shifted
+        # Events announced after the last decision can never be visible; a NaT
+        # as-of key is invalid for merge_asof, so drop them explicitly.
+        right = right.loc[shifted.notna()].copy()
     left = left.sort_values([columns.instrument, decision_time])
     right = right.sort_values([columns.instrument, columns.available_at])
 
@@ -105,12 +179,19 @@ def select_visible_row_bundles(
     selector: VisiblePeriodSelector = "latest_visible_period",
     decision_time: str = "decision_timestamp",
     columns: PITColumns = PITColumns(),
+    available_policy: AvailablePolicy = "same_day",
 ) -> pd.DataFrame:
     """Select one whole visible report row for every decision.
 
     Rows are selected by availability first, then by the latest eligible report
     period and revision.  All value columns therefore come from the same row.
+
+    ``available_policy`` mirrors :func:`pit_asof_join`: with
+    ``next_trading_day`` a same-day announcement is only visible to the first
+    decision strictly after ``PubDate``.
     """
+    if available_policy not in {"same_day", "next_trading_day"}:
+        raise ValueError(f"unknown available policy {available_policy!r}")
     validate_fundamental_events(events, columns)
     if decision_time not in decisions.columns or columns.instrument not in decisions.columns:
         raise ValueError("decisions missing PIT decision columns")
@@ -124,6 +205,12 @@ def select_visible_row_bundles(
     filtered[columns.period_end] = pd.to_datetime(
         filtered[columns.period_end], errors="raise", utc=True
     )
+    if available_policy == "next_trading_day":
+        shifted = _shift_available_to_next_decision(
+            filtered[columns.available_at], left, decision_time=decision_time
+        )
+        filtered[columns.available_at] = shifted
+        filtered = filtered.loc[shifted.notna()].copy()
 
     selected_rows: list[dict[str, object]] = []
     event_columns = [c for c in filtered.columns if c != columns.instrument]

@@ -93,6 +93,12 @@ _PANEL_PARAMETERS = frozenset({
     "psid1", "psid2", "psid3", "psid4", "psid5", "psid6", "psid7", "psid8", "psid9", "psid10",
     # cross-section robust (2026-08): residual/distance panels.
     "resid", "score",
+    # 2026-08 final pack: A-share limit/suspension state machine event panels,
+    # relation concentration/entropy panels and rank slots.
+    "valid_trade", "limit_up_event", "limit_down_event", "up_event", "down_event",
+    "known_status", "is_suspend", "hhi", "entropy",
+    "rank1", "rank2", "rank3", "rank4", "rank5",
+    "rank6", "rank7", "rank8", "rank9", "rank10",
 })
 
 # Params whose generic names also appear in _SCALAR_VALUES but are PANEL series
@@ -308,6 +314,25 @@ _SCALAR_VALUES: dict[str, Any] = {
     "n_experts": 3,
     "n_regimes": 2,
     "l": 5,
+    # 2026-08 final pack: robust tail / complexity / intraday scalars.
+    "tail_quantile": 0.75,
+    "edge_minutes": 30,
+    "mid_start": 660,
+    "mid_end": 810,
+    "tail_minutes": 30,
+    "estimator": "quantile_hist",
+    "delay": 1,
+    "outer": 0.05,
+    "inner": 0.95,
+    "q_mid": 0.5,
+    "use_abs": True,
+    "k_max": 10,
+    "n_scales": 10,
+    "embedding_dim": 2,
+    "tolerance_scale": 0.2,
+    "min_patterns": 5,
+    "min_valid_lags": 3,
+    "normalized": True,
 }
 
 _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
@@ -359,6 +384,25 @@ _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
     ("intra_extreme_bar_return", "side"): "max",
     ("intra_return_activity_corr", "absolute_return"): False,
     ("ashare_limit_one_price", "side"): "up",
+    # 2026-08 final pack: partial-moment ``order`` is a numeric power, not the
+    # generic "largest"/"smallest" tail selector; permutation ``order`` is the
+    # embedding order; weighted-permutation ``weight`` is a scheme name.
+    ("ts_lower_partial_moment", "order"): 2.0,
+    ("ts_upper_partial_moment", "order"): 2.0,
+    ("ts_weighted_permutation_entropy", "order"): 4,
+    ("ts_permutation_transition_entropy", "order"): 4,
+    ("ts_weighted_permutation_entropy", "weight"): "variance",
+    # A-share state machine ``side`` is up/down (not the generic lower/upper).
+    ("ashare_limit_touch_count", "side"): "up",
+    ("ashare_failed_limit_count", "side"): "up",
+    ("ashare_one_price_limit_streak", "side"): "up",
+    # DFA scale grid is positive integers; the generic min_/max_ fallbacks
+    # (0.01 / 0.5) are degenerate scales.
+    ("ts_hurst_dfa", "min_scale"): 2,
+    ("ts_hurst_dfa", "max_scale"): 50,
+    # Quantile-kurtosis ``outer``/``inner`` are 2-tuples of quantiles, not scalars.
+    ("ts_quantile_kurtosis", "outer"): (0.025, 0.975),
+    ("ts_quantile_kurtosis", "inner"): (0.25, 0.75),
 }
 _SPECIAL_POSITIONAL = {
     "cs_multi_resid": ("target", "exposure", "control"),
@@ -827,8 +871,17 @@ def audit(*, require_admission: bool = True) -> list[str]:
             continue
         catalog = OperatorRegistry._catalog.get(canonical, {})
         policy = infer_operator_policy(operator, canonical=canonical)
-        if str(catalog.get("status")) != "production":
-            errors.append(f"{canonical}: lifecycle status is not production")
+        # Six-gate certification is the single production authority (review
+        # §2.1/§2.4): status may only be "production" when the evidence overlay
+        # has certified the operator.  During a pre-evidence runtime audit an
+        # uncertified target is correctly experimental (fail-closed), so this
+        # check enforces the invariant production ⟺ certified rather than
+        # demanding every reviewed target be promoted regardless of evidence.
+        certified = catalog.get("production_certified") is True
+        if (str(catalog.get("status")) == "production") != certified:
+            errors.append(
+                f"{canonical}: status must be production iff six-gate certified"
+            )
         if not policy.pit_safe or policy.lag < 0:
             errors.append(f"{canonical}: PIT policy is not causal")
         if not policy.shape_preserving:

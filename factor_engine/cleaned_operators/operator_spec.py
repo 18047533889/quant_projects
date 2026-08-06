@@ -301,6 +301,10 @@ def _compute_allow_in_production(
 ) -> bool:
     """计算算子是否允许用于 production。
 
+    单一准入规则（review §2.5）：算子必须在 daily/extended surface、六证
+    ``production_certified=True``、至少一个 evidence 认证后端、且非
+    compatibility/diagnostic/benchmark-only。静态 core 与 migrated 不再区分。
+
     参数:
         resolved: 解析后的 canonical 名。
         status: 算子生命周期状态。
@@ -310,44 +314,36 @@ def _compute_allow_in_production(
     返回:
         允许 production 返回 ``True``。
     """
+    from cleaned_operators.registry import OperatorRegistry
+
     if is_production_denied(resolved):
         return False
     if status in ("experimental", "deprecated", "stub", "doc_only"):
         return False
     if not shape_preserving:
         return False
-    from planner.composite_lowering import has_composite_lowering
-
-    if has_composite_lowering(resolved):
-        from backend.composite_evidence import composite_production_safe
-
-        if composite_production_safe(resolved):
-            return pit_safe
-        # A composite may retain an independently audited Pandas reference even
-        # when its lowered Polars/DuckDB fast path is not yet certified.  Admit
-        # that physical reference only when the current factor evidence binds it
-        # to the exact runtime sources; routing still keeps uncertified lowerings
-        # unavailable in production.
-        if status == "production":
-            from backend.factor_operator_evidence import pandas_reference_production_safe
-
-            return bool(pit_safe and pandas_reference_production_safe(resolved))
-        return False
-    if resolved in PRODUCTION_CORE_CANONICALS:
-        from backend.evidence_provenance import evidence_artifact_valid
-        from backend.primitive_evidence import PRIMITIVE_BACKEND_EXECUTION_CERTIFIED
-        from backend.production_signature import operational_production_allowed
-
-        return bool(
-            pit_safe
-            and shape_preserving
-            and evidence_artifact_valid()
-            and resolved in PRIMITIVE_BACKEND_EXECUTION_CERTIFIED
-            and operational_production_allowed(resolved)
+    catalog = OperatorRegistry._catalog.get(resolved, {})
+    if any(
+        catalog.get(flag)
+        for flag in (
+            "compatibility_only", "diagnostic_only", "benchmark_only",
+            "hidden_from_default_mining",
         )
-    if status == "production":
-        return pit_safe
-    return False
+    ):
+        return False
+    from cleaned_operators.operator_surface import classify_canonical
+
+    if classify_canonical(resolved) not in {"daily", "extended"}:
+        return False
+    # 六证（implementation/semantic/temporal/source_pit/edge/backend）是唯一
+    # 生产认证权威；``should_fail_closed`` 或 status 本身不得单独授信。
+    if catalog.get("production_certified") is not True:
+        return False
+    from backend.operator_capability import production_eligible_backends
+
+    if not production_eligible_backends(resolved):
+        return False
+    return True
 
 
 def _has_pit_declaration(canon: str, meta: Any) -> bool:
@@ -763,6 +759,64 @@ def check_production_plan_ops(plan: Any) -> list[str]:
             walk(child)
 
     walk(plan)
+    return errors
+
+
+_QOQ_FAMILY = {"fin_qoq", "fin_pct_change", "fin_log_change", "fin_diff"}
+
+
+def check_financial_grain_contract(formula: str) -> list[str]:
+    """Reject single-period growth operators on cumulative (``flow_ytd``) fields.
+
+    ``fin_qoq`` always compares one report period back; a year-to-date cumulative
+    field (grain ``flow_ytd``) is a running sum, so QoQ on it computes a spurious
+    current-YTD vs previous-YTD change.  ``fin_pct_change`` / ``fin_log_change`` /
+    ``fin_diff`` are also single-period by default and inherit the same trap; a
+    ``periods >= 2`` (e.g. YoY over 4 periods) is valid on cumulative because the
+    two points are the same position in their respective YTD curves (review §5.1).
+
+    The correct sequence for a quarterly change of a cumulative flow is
+    ``fin_qoq(fin_quarter_from_cumulative(x, period_id), period_id)``.
+    """
+    import ast
+
+    from fields import FIELD_REGISTRY
+
+    errors: list[str] = []
+    try:
+        tree = ast.parse(str(formula or ""), mode="eval")
+    except SyntaxError:
+        return errors
+
+    def _periods_of(call: ast.Call) -> int:
+        for keyword in call.keywords:
+            if keyword.arg == "periods" and isinstance(keyword.value, ast.Constant):
+                return int(keyword.value.value)
+        # Positional signature is ``(x, period_id, periods=1)``: periods is the
+        # third positional argument (``call.args[2]``).
+        if len(call.args) >= 3 and isinstance(call.args[2], ast.Constant):
+            return int(call.args[2].value)
+        return 1
+
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)):
+            continue
+        if node.func.id not in _QOQ_FAMILY:
+            continue
+        if not node.args or not isinstance(node.args[0], ast.Name):
+            continue
+        if _periods_of(node) != 1:
+            continue
+        spec = FIELD_REGISTRY.get(node.args[0].id, strict=False)
+        if spec is None:
+            continue
+        grain = tuple(spec.grain or ())
+        if "ytd" in grain:
+            errors.append(
+                f"{node.func.id}({node.args[0].id}) 作用于累计字段 "
+                f"(grain=flow_ytd): 单期变化前需先用 "
+                f"fin_quarter_from_cumulative 去累计"
+            )
     return errors
 
 

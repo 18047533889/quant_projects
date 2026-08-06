@@ -30,12 +30,19 @@ def apply_lqtp_policy_patch() -> None:
         "sigmoid": "elementwise",
         "true_range": "ts",
     }
+    reviewed_scopes = {"ts", "cs", "group", "fundamental_period", "session_intraday"}
     for canonical in sorted(PANDAS_FIRST_PRODUCTION_CANONICALS):
-        scope = special_scopes.get(
+        current = dict(operator_policy._EXPLICIT_POLICIES.get(canonical) or {})
+        fallback = special_scopes.get(
             canonical,
             "ts" if canonical.startswith("ts_") else "elementwise",
         )
-        current = dict(operator_policy._EXPLICIT_POLICIES.get(canonical) or {})
+        existing_scope = current.get("scope")
+        # 2026-08 final pack: canonicals with an explicitly reviewed non-fallback
+        # scope (relation_* -> cs, group_* -> group, intra_* -> session_intraday)
+        # keep it; the prefix fallback only applies when no deliberate scope was
+        # declared.
+        scope = existing_scope if existing_scope in reviewed_scopes else fallback
         current["scope"] = scope
         current["pit_safe"] = True
         if scope == "ts":

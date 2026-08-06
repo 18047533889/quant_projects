@@ -116,6 +116,16 @@ _LOAD_MODULES = (
     "cleaned_operators.index_listing.polars_ops_v2",
     "cleaned_operators.ts_model.polars_regression",
     "cleaned_operators.cross_section.polars_peer",
+    # 2026-08 final pack (61 atomics): robust tail / nonlinear dependence /
+    # sequence complexity / A-share state machine / relation-group distribution /
+    # intraday time-structure v2.  Shared rolling kernels live in
+    # cleaned_operators.rolling_pack (imported transitively).
+    "cleaned_operators.robust_tail",
+    "cleaned_operators.nonlinear_dependence",
+    "cleaned_operators.sequence_complexity",
+    "cleaned_operators.ashare.state_machine",
+    "cleaned_operators.relation.distribution",
+    "cleaned_operators.intraday.time_structure_v2",
 )
 
 _REVIEWED_EXTENSIONS = (

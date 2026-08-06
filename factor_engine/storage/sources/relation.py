@@ -163,10 +163,13 @@ def top_ten_features_asof(
         ratio_column=ratio_column,
         top_n=top_n,
     )
+    # Top-ten holder filings land after close; conservative next_trading_day
+    # visibility (audit §2.9) for the shareholder snapshot as-of join.
     return pit_asof_join(
         decisions,
         aggregated,
         decision_time=decision_time,
         columns=columns,
         max_age_days=None,
+        available_policy="next_trading_day",
     )

@@ -671,7 +671,14 @@ def _event_since_last_agg(
                 elif mode == "sum":
                     out[row, col] = float(np.sum(segment[finite]))
                 elif mode == "logsum":
-                    out[row, col] = float(np.sum(np.log1p(segment[finite])))
+                    # ``ln(1+ret)`` is undefined for ret <= -1 (impossible
+                    # price move or mis-scaled bp input).  Drop those bars and
+                    # output NaN when nothing valid remains (review §7.7);
+                    # invalid returns must never produce -inf/NaN contamination.
+                    valid = np.isfinite(segment) & (segment > -1.0)
+                    if not valid.any():
+                        continue
+                    out[row, col] = float(np.sum(np.log1p(segment[valid])))
     return _frame_like(ret, out)
 
 

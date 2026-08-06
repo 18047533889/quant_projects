@@ -202,15 +202,43 @@ _mk(
 )
 
 
-def _index_event_decay(entry_event, window=20, decay=0.9):
-    """纳入/剔除事件后的衰减信号：事件近因加权。"""
-    weight = np.array([float(decay) ** k for k in range(int(window))], dtype=float)
-    return entry_event.fillna(0).rolling(int(window)).apply(lambda s: float(np.dot(s[::-1], weight)), raw=True)
+def _index_event_decay(entry_event, window=20, decay=0.9, missing_policy="break"):
+    """纳入/剔除事件后的衰减近因信号（observed-state, review §7.3）。
+
+    缺失事件（NaN）绝不当作「无事件=0」：
+      - 首个已知事件之前 → NaN；
+      - 窗口内出现数据缺口 → ``missing_policy="break"``（默认）输出 NaN 并重置；
+        ``"carry"`` 保留衰减权重状态但当前输出仍为 NaN。
+    事件序列为 0/±1（纳入=+1、剔除=-1），权重按时间衰减。
+    """
+    w = int(window)
+    policy = str(missing_policy or "break").lower()
+    weight = np.array([float(decay) ** k for k in range(w)], dtype=float)
+    xv = entry_event.to_numpy(dtype=float)
+    out = np.full(xv.shape, np.nan, dtype=float)
+    for col in range(xv.shape[1]):
+        seen = False
+        for row in range(xv.shape[0]):
+            value = xv[row, col]
+            if np.isfinite(value):
+                seen = True
+            if not seen:
+                continue
+            seg = xv[max(0, row - w + 1): row + 1, col]
+            if len(seg) < w:
+                continue  # full-window warmup contract, same as rolling(window)
+            if np.isnan(seg).any():
+                # Data gap inside the window: never treat as zero events.
+                continue
+            out[row, col] = float(np.dot(seg[::-1], weight))
+    result = entry_event.copy()
+    result.iloc[:, :] = out
+    return result
 
 
 _mk(
     "index_event_decay",
-    "指数事件（纳入=1/剔除=-1）的衰减近因信号。",
-    ["entry_event", "window", "decay"],
+    "指数事件（纳入=1/剔除=-1）的衰减近因信号（observed-state）。",
+    ["entry_event", "window", "decay", "missing_policy"],
     _index_event_decay,
 )

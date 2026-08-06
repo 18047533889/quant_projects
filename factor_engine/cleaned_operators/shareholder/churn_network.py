@@ -417,38 +417,71 @@ _mk(
 )
 
 
-def _concentration_slope(concentration, window=8):
+def _slope_of(vals: np.ndarray) -> float:
+    """Least-squares slope over equally spaced finite observations."""
+    finite = vals[np.isfinite(vals)]
+    if len(finite) < 3:
+        return np.nan
+    t = np.arange(len(finite), dtype=float)
+    if np.var(t) <= _EPS:
+        return np.nan
+    return float(np.cov(t, finite)[0, 1] / np.var(t))
+
+
+def _concentration_slope(concentration, window=8, snapshot_date=None):
     w = max(3, int(window))
+    if snapshot_date is not None:
+        return _snapshot_aligned_slope(concentration, snapshot_date, w)
+    return concentration.rolling(w, min_periods=3).apply(_slope_of, raw=True)
 
-    def _slope(vals: np.ndarray) -> float:
-        finite = vals[np.isfinite(vals)]
-        if len(finite) < 3:
-            return np.nan
-        t = np.arange(len(finite), dtype=float)
-        if np.var(t) <= _EPS:
-            return np.nan
-        return float(np.cov(t, finite)[0, 1] / np.var(t))
 
-    return concentration.rolling(w, min_periods=3).apply(_slope, raw=True)
+def _snapshot_aligned_slope(concentration, snapshot_date, window):
+    """Rolling slope over distinct report snapshots, forward-filled to the daily grid.
+
+    Concentration panels are daily-forward-filled, so a plain rolling window
+    measures trading days rather than report periods: a long post-report flat
+    stretch flattens the trend and 8 rows ≠ 8 reports.  With ``snapshot_date``
+    (one aligned panel whose cell is the report snapshot id/date the ffilled
+    value belongs to), the window advances once per distinct snapshot per
+    instrument, then the trend is carried forward to each daily row until the
+    next report arrives (audit §6.8).
+    """
+    out = pd.DataFrame(np.nan, index=concentration.index, columns=concentration.columns)
+    for col in concentration.columns:
+        frame = pd.concat(
+            [concentration[col], snapshot_date[col]], axis=1, keys=["value", "sd"]
+        )
+        snapshots = (
+            frame.dropna(subset=["sd"])
+            .sort_index()
+            .groupby("sd")["value"]
+            .last()  # one value per distinct snapshot (last revision wins)
+        )
+        if len(snapshots) < 3:
+            continue
+        rolled = snapshots.rolling(window, min_periods=3).apply(_slope_of, raw=True)
+        # Carry the last computed trend forward onto the daily grid causally.
+        out[col] = rolled.reindex(concentration.index).ffill()
+    return out
 
 
 _mk(
     "holder_concentration_slope",
-    "集中度/HHI 多报告期趋势斜率。",
-    ["concentration", "window"],
+    "集中度/HHI 多报告期趋势斜率；提供 snapshot_date 时按报告快照推进而非日频 ffill 行。",
+    ["concentration", "window", "snapshot_date"],
     _concentration_slope,
 )
 
 
-def _concentration_acceleration(concentration, window=8):
-    slope = _concentration_slope(concentration, int(window))
+def _concentration_acceleration(concentration, window=8, snapshot_date=None):
+    slope = _concentration_slope(concentration, int(window), snapshot_date=snapshot_date)
     return slope - slope.shift(1)
 
 
 _mk(
     "holder_concentration_acceleration",
-    "集中度趋势二阶变化。",
-    ["concentration", "window"],
+    "集中度趋势二阶变化；提供 snapshot_date 时按报告快照推进。",
+    ["concentration", "window", "snapshot_date"],
     _concentration_acceleration,
 )
 

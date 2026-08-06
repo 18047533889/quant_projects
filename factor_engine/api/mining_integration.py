@@ -92,6 +92,11 @@ def validate_production_dsl(formula: str) -> tuple[bool, str]:
     violations = check_production_formula_ops(formula)
     if violations:
         return False, "; ".join(violations)
+    from cleaned_operators.operator_spec import check_financial_grain_contract
+
+    grain_violations = check_financial_grain_contract(formula)
+    if grain_violations:
+        return False, "; ".join(grain_violations)
     return True, "OK"
 
 

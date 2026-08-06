@@ -24,6 +24,11 @@ def resolve_field(
     from . import FIELD_REGISTRY
 
     active = registry or FIELD_REGISTRY
+    # A catalog-bound ``FieldRef`` carries its own canonical table; resolve the
+    # field within that table so a bare ambiguous name (e.g. ``close`` shared by
+    # DailyBar / IndexDailyBar / EtfDailyBar / MinuteBar) keeps its identity.
+    if table is None:
+        table = getattr(value, "table", None)
     name = getattr(value, "name", value)
     if not isinstance(name, str):
         if strict:

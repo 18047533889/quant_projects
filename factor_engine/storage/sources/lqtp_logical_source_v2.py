@@ -215,7 +215,16 @@ class LQTPLogicalDataSource(_Base):
         anchor = self._anchor_index()
         decisions = anchor.to_frame(index=False)
         decisions.columns = ["decision_timestamp", "instrument"]
-        joined = pit_asof_join(decisions, events, columns=PITColumns(), max_age_days=None)
+        # A-share earnings land after close; a bar dated PubDate must not act on
+        # the same-day announcement.  Conservative next_trading_day visibility
+        # (audit §2.9): the value is usable from the first decision after PubDate.
+        joined = pit_asof_join(
+            decisions,
+            events,
+            columns=PITColumns(),
+            max_age_days=None,
+            available_policy="next_trading_day",
+        )
         return pd.Series(joined["value"].to_numpy(), index=anchor, name=field)
 
     def _load_intermediate(self, spec) -> pd.Series:

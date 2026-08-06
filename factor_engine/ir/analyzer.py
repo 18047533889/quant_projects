@@ -476,8 +476,127 @@ class AnalysisResult:
     column_schemas: dict[str, Schema] = field(default_factory=dict)
 
 
+# Audit §4.4 flow-grain contracts.  A-share statement flow fields are
+# fiscal-year-to-date cumulative (年初至报告期累计), never one-period flows and
+# never point-in-time balances.  An operator whose semantics re-read its primary
+# input at a specific economic grain must reject a field carrying the opposite
+# grain at compile time instead of silently mis-reading it.
+#
+# Each value is the set of allowed economic grain tuples on the primary input.
+# An empty set means "no declared economic grain is accepted" — the operator only
+# takes a derived/synthetic period reading (default grain), so feeding it a raw
+# YTD-cumulative or balance field fails closed.
+OPERATOR_INPUT_GRAIN_CONTRACTS: dict[str, tuple[tuple[str, ...], ...]] = {
+    # Cumulative kernels require the YTD-cumulative reading of a flow statement.
+    "fin_quarter_from_cumulative": (("flow", "ytd"),),
+    "fin_ttm_cumulative": (("flow", "ytd"),),
+    # One-period-flow TTM must not receive a YTD-cumulative raw field — that is
+    # the "treating a cumulative value as a quarter" hazard.  A balance reading
+    # is not a period flow either.
+    "fin_ttm_quarterly": (),
+    # Point-in-time averaging requires a balance (stock) reading.
+    "fin_average_balance": (("balance",),),
+}
+
+# Economic grains that carry a real flow-vs-balance meaning.  Default
+# ("instrument", "time") grain marks synthetic/research columns, which are
+# exempt from grain contracts.
+_ECONOMIC_GRAINS = frozenset({("flow", "ytd"), ("balance",)})
+
+
+class FieldGrainContractError(ValueError):
+    """An operator received a field whose economic grain it cannot consume.
+
+    Audit §4.4: a YTD-cumulative flow field must not be fed to an operator that
+    re-reads its input as a one-period flow or point-in-time balance, and a
+    balance field must not be fed to a flow-cumulative kernel.
+    """
+
+
+def validate_field_grain_contracts(ir: IRNode) -> list[str]:
+    """Walk the lowered IR and reject grain-contract violations.
+
+    Only columns carrying a declared economic grain (``flow_ytd`` / ``balance``)
+    are checked; synthetic columns with the default instrument/time grain are
+    skipped (research formulas may feed derived period flows).
+    """
+    errors: list[str] = []
+
+    def walk(node: IRNode, lineage: tuple[str, ...] = ()) -> None:
+        contract = OPERATOR_INPUT_GRAIN_CONTRACTS.get(node.op)
+        if contract is not None and node.inputs:
+            first = node.inputs[0]
+            if first.op == "column":
+                grain = tuple(first.semantic_attrs.get("grain") or ())
+                if grain in _ECONOMIC_GRAINS and grain not in contract:
+                    name = first.attrs.get("name") or first.attrs.get("field")
+                    errors.append(
+                        f"operator {node.op!r} requires input grain "
+                        f"{contract or 'one-period flow (derived)'}, got {grain!r} on "
+                        f"field {name!r} (audit §4.4)"
+                    )
+        for child in node.inputs:
+            walk(child, lineage + (node.op,))
+
+    walk(ir)
+    return errors
+
+
 class FieldCatalogMismatchError(ValueError):
     """A persisted FieldRef was built against a different field catalog."""
+
+
+class PeriodSelectionContractError(ValueError):
+    """A referenced financial statement field has no valid period-selection contract.
+
+    Audit §2.10: every ``financial_pit`` field (StockBalance/StockIncome/
+    StockCashFlow/StockIndicator statement columns) must declare how its visible
+    report period is selected.  A formula that references such a field without a
+    registered contract — or with an invalid selector — fails at compile time
+    instead of silently mixing report periods.
+    """
+
+
+def validate_fundamental_period_contracts(referenced_fields: dict[str, Any]) -> list[str]:
+    """Fail-closed period-selection contract check for referenced fields.
+
+    Returns a list of human-readable errors (empty when every fundamental
+    reference is contracted).  The check runs inside :meth:`Analyzer.lower`, so a
+    formula reaching a fundamental statement column must carry a registered
+    period-selection contract.
+    """
+    from storage.sources.financial import FUNDAMENTAL_FIELD_CONTRACTS
+    from storage.sources.logical_tables import logical_table_contract
+
+    errors: list[str] = []
+    for name, spec in referenced_fields.items():
+        # Structural metadata columns (pub_date / update_time / report_period_end_date
+        # are reused by name across all four statements) carry no period-selection
+        # semantics and are exempt, exactly as in the contract registry.
+        if not getattr(spec, "mining_allowed", True):
+            continue
+        table = str(getattr(spec, "table", "") or "")
+        contract = logical_table_contract(table) if table else None
+        if contract is None or contract.join_policy != "financial_pit":
+            continue
+        # The raw name may be an encoded source ref; the contract registry is
+        # keyed by canonical field name from the catalog spec.
+        canonical = str(getattr(spec, "name", "") or name)
+        field_contract = FUNDAMENTAL_FIELD_CONTRACTS.get(canonical)
+        if field_contract is None:
+            errors.append(
+                f"fundamental field {canonical!r} ({table}) has no registered "
+                f"period-selection contract (audit §2.10); register it via "
+                f"register_fundamental_field()"
+            )
+            continue
+        selector = str(field_contract.period_selector)
+        if selector not in {"latest_visible_period", "annual_only", "quarterly_only"}:
+            errors.append(
+                f"fundamental field {canonical!r} declares invalid period_selector "
+                f"{selector!r}"
+            )
+    return errors
 
 
 def validate_max_domains(analysis: AnalysisResult, *, max_domains: int = 2) -> list[str]:
@@ -558,7 +677,8 @@ class Analyzer:
                         "temporal_model": spec.temporal_model,
                         "pit_safe": spec.strict_pit_allowed,
                     })
-                return IRNode(op="column", attrs=attrs), 0
+                semantic = {"grain": tuple(spec.grain)} if spec is not None else {}
+                return IRNode(op="column", attrs=attrs, semantic_attrs=semantic), 0
             if isinstance(node, Literal):
                 return IRNode(op="literal", attrs={"value": node.value}), 0
             if not isinstance(node, CleanedCall):
@@ -688,6 +808,12 @@ class Analyzer:
         legacy_window = _legacy_single_window_lookback(expr)
         if legacy_window is not None:
             lookback = max(lookback, legacy_window)
+        period_errors = validate_fundamental_period_contracts(referenced_fields)
+        if period_errors:
+            raise PeriodSelectionContractError("; ".join(period_errors))
+        grain_errors = validate_field_grain_contracts(ir)
+        if grain_errors:
+            raise FieldGrainContractError("; ".join(grain_errors))
         return AnalysisResult(
             ir=ir,
             lookback=lookback,

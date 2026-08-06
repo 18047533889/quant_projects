@@ -899,3 +899,68 @@ Raw shareholder rows → group by (TradeDate, Symbol, SnapshotId) → entity-set
   `test_path_summary` / `test_production_fastpath_gate` / `test_operator_surface` 共 255 passed。
 - 证据重认证:factor_operator_verified(934 canonicals 审计通过)+ primitive_verified
   (六证 case registry)均已重写,依赖它的 capability / SQL / polars 门恢复。
+
+## 13. 2026-08 收官扩展：61 原子算子（final pack）
+
+### 13.1 目标
+外部 AI 方案建议新增 61 个原子算子（6 组）。审查后全部落地为生产级实现并提升到 daily 表面：
+- **组1 稳健尾部族（7）** `cleaned_operators/robust_tail.py`：ts_lower/upper_partial_moment、
+  ts_expected_shortfall、ts_quantile_skew、ts_quantile_kurtosis、ts_tail_ratio、ts_extreme_cluster_ratio。
+- **组2 非线性依赖族（6）** `cleaned_operators/nonlinear_dependence.py`：ts_distance_corr/cov、
+  ts_mutual_information、ts_lagged_mutual_information、ts_upper/lower_tail_dependence。
+- **组3 复杂度/长记忆族（8）** `cleaned_operators/sequence_complexity.py`：ts_permutation_entropy、
+  ts_weighted_permutation_entropy、ts_permutation_transition_entropy、ts_sample_entropy、ts_hurst_dfa、
+  ts_higuchi_fractal_dimension、ts_variogram_slope、ts_autocorr_decay_half_life。
+- **组4 A股状态机族（14）** `cleaned_operators/ashare/state_machine.py`：涨跌停/一字板/未封住/连续停牌
+  等基于 close/high_limit/valid_trade 的因果状态算子。
+- **组5 Group/Relation 分布族（12）** `cleaned_operators/relation/distribution.py`：名次面板集中度/
+  截面形态/集中度变化/移动性 + 组内截面 skew/kurtosis/分位距/尾部比。
+- **组6 分钟时序结构族（14）** `cleaned_operators/intraday/time_structure_v2.py`：分钟面板进→日频面板出，
+  bar 区间持久性/偏离、尾部量占比、价量对齐、U 型时间效应两翼与午间、同槽位量/额/波动意外度、
+  市场与行业 ex-self 领先滞后、上下午强度不对称、尾盘参与度、日内高低点时刻可重复性。
+
+共享滚动核与 polars 精确对齐桥：`cleaned_operators/rolling_pack.py`。
+
+### 13.2 关键契约
+- 缺失值统一：NaN≠0；常数窗口/样本不足返回 NaN（fail-closed）；不删 NaN 压缩时间。
+- 分钟族算子内部计算日内收益时排除跨 session/隔夜跳空（`_intraday_returns` gap≤10min）。
+- 全部因果（trailing window / 同槽位 shift(1) 历史均值），确定性，shape 保真。
+- 复杂度算子加窗口上限（sample_entropy≤120、hurst≤512）防 O(n²)。
+
+### 13.3 注册与提升
+- 6 个模块加入 `_LOAD_MODULES`；模块底部 `_register_surface()` 并入 `EXTENDED_ONLY_CANONICALS`。
+- `operator_policy._EXPLICIT_POLICIES` 在 active-surface filter 之后无条件追加 61 条显式策略
+  （scope=ts/cs/group/session_intraday，全部 pit_safe=True），保证 layer_governance 读取到正确 scope。
+- `operator_surface._DAILY_FINAL_PACK_2026_08` 并入 `DAILY_FACTOR_MIGRATED`（同时保留在 EXTENDED_ONLY
+  以满足静态分区检查），`classify_canonical` 优先判为 daily。
+- `production_hardening._SCOPE_OVERRIDES` 为 ashare_*（ts）与 intra_*（session_intraday）加作用域。
+- 与既有重名处理：ts_permutation_entropy / ts_sample_entropy 原为 ts_model.complexity 研究族，
+  本模块为评审后的生产实现，`_register_surface` 同时将其从 RESEARCH_ONLY 移除，并加入
+  `PROMOTED_OUT_OF_EXPERIMENTAL`，运行时实现以本模块覆盖旧实验实现。
+- polars：模块经 `rolling_pack.register_polars_bridge` 注册精确对齐桥；`overhaul.cleanup` 按既有
+  约定移除 bridge-source polars 槽（非 native，不作为生产后端），生产路径走 pandas_numpy reference。
+
+### 13.4 审计词汇表
+`scripts/audit_all_factor_production.py` 补齐 61 算子参数识别：_PANEL_PARAMETERS 增加
+valid_trade/limit_*_event/up_event/down_event/known_status/is_suspend/hhi/entropy/rank1..rank10；
+_SCALAR_VALUES 增加 tail_quantile/edge_minutes/mid_start/mid_end/tail_minutes/estimator/delay/
+outer/inner/q_mid/use_abs/k_max/n_scales/embedding_dim/tolerance_scale/min_patterns/min_valid_lags/
+normalized；_SPECIAL_SCALARS 对 partial-moment `order`、permutation `order`、weighted-perm `weight`、
+A股 `side`、quantile-kurtosis `outer/inner`(2-tuple)、hurst DFA scale 做了算子级覆盖。
+
+### 13.5 验证与证据
+- `audit_all_factor_production.py --runtime-only`：61 新算子全部通过 axes/determinism/prefix-causality；
+  针对 61 算子的快速审计 **0 错误**。
+- `factor_operator_verified.json` 直接模式重写（含 61 新算子，targets 数量 906），validation_errors 为空。
+- `primitive_verified.json` 因 operator_policy.py / lqtp_policy_patch.py 变化失效，certify_primitive_evidence
+  的 14 个 parity 阶段全部通过后重建（six-way test-certified: 86），validation_errors 为空。
+- 61 个 final-pack 算子全部 `status=production` + `pit_safe=True` + 正确 scope。
+- 回归：`test_final_pack_2026_08.py`（64 passed）+ governance/migration/expansion 套件（48 passed）。
+- 已知预存阻塞（与 61 算子无关）：全量 audit 仍有 24 个核心 primitive
+  （where / zscore / cs_mean / ts_mean / coalesce / maximum / minimum / normalize / scale /
+  winsorize / group_* / ts_corr / ts_cov / ts_beta / ts_sharpe / ts_var / ts_zscore 等）
+  因 edge 门失败为 experimental：`edge_requirements.NAN_REQUIRED` 列了 25 个算子要求
+  `duckdb_nan_edge_verified`/`duckdb_inf_edge_verified` 证据，而 IEEE edge 用例
+  （`DUCKDB_IEEE_NAN_CASES` / `DUCKDB_IEEE_INF_CASES`）仅覆盖 3 个 —— 该不一致存在于
+  committed 基线，需补齐 IEEE edge 用例并重认证 primitive 证据后 audit 才能全绿。
+- 未实现项：duckdb SQL 后端（与既有评审结论一致，不强行实现）；recipe 族未在本轮范围。

@@ -198,10 +198,16 @@ def test_technical_and_tail_risk_policy_metadata_is_corrected() -> None:
     catalog = OperatorRegistry.catalog()
     for name in ("ADX", "MACD_line", "MACD_signal", "MACD_hist"):
         assert catalog[name]["scope"] == "time_series"
-        assert catalog[name]["pit_safe"] is True
         assert catalog[name]["stateful"] is True
+        # ``pit_safe`` is evidence-converged, never forced by the final contract
+        # layer (review §2.7): True exactly when the six-gate certifies it.
+        assert catalog[name]["pit_safe"] is (
+            catalog[name]["production_certified"] is True
+        )
     assert catalog["lqtp_historical_cvar"]["scope"] == "time_series"
-    assert catalog["lqtp_historical_cvar"]["pit_safe"] is True
+    assert catalog["lqtp_historical_cvar"]["pit_safe"] is (
+        catalog["lqtp_historical_cvar"]["production_certified"] is True
+    )
 
 
 def test_every_active_operator_has_one_unified_contract() -> None:

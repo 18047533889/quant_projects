@@ -227,7 +227,7 @@ class DataAccessSource(DataSource):
                 try:
                     from fields import FIELD_REGISTRY
 
-                    spec = FIELD_REGISTRY.get(name)
+                    spec = FIELD_REGISTRY.get(name, table=self.dataset)
                 except Exception:
                     spec = None
                 if spec is not None:
@@ -463,7 +463,7 @@ class DataAccessSource(DataSource):
                 try:
                     from fields import FIELD_REGISTRY
 
-                    spec = FIELD_REGISTRY.get(name)
+                    spec = FIELD_REGISTRY.get(name, table=self.dataset)
                     if spec is not None and spec.dataset == self.dataset:
                         physical_name = spec.source_name
                 except Exception:
@@ -578,7 +578,7 @@ class DataAccessSource(DataSource):
 
             expressions = []
             for name in columns:
-                spec = FIELD_REGISTRY.get(name)
+                spec = FIELD_REGISTRY.get(name, table=self.dataset)
                 if spec is None or spec.dataset != self.dataset:
                     continue
                 scale = float(spec.scale_to_canonical or 1.0)

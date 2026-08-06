@@ -29,6 +29,12 @@ SOURCE_BLOCKED_CANONICALS: frozenset[str] = frozenset({
     # daily close-to-open rolling volatility (open/close inputs, no minute bars),
     # so it was removed from this set and promoted.
     "intraday_vwap_deviation",
+    # ``fin_total_operating_accruals`` needs a standalone, reliable depreciation
+    # input.  The data dictionary only exposes net fixed-asset carrying value
+    # (after accumulated depreciation), so the operator cannot be PIT-certified
+    # without inventing depreciation (review §5.4).  Keep it source-blocked until
+    # a confirmed depreciation/amortization source exists.
+    "fin_total_operating_accruals",
 })
 
 NON_FACTOR_PRODUCTION_CANONICALS: frozenset[str] = frozenset({
@@ -55,19 +61,12 @@ NON_FACTOR_PRODUCTION_CANONICALS: frozenset[str] = frozenset({
 FULL_HISTORY_REPLAY_CANONICALS: frozenset[str] = frozenset({
     "expanding_rank",
     "hump_decay",
-    # Recursive technical operators are fail-closed until their checkpoint
-    # restore path is wired into the production DAG executor.
-    "ts_ema",
-    "ts_ewm_std",
-    "ts_ewm_var",
-    "ts_ewm_cov",
-    "ts_ewm_corr",
-    "RSI_WILDER",
-    "ATR_WILDER",
-    "ADX",
-    "MACD_line",
-    "MACD_signal",
-    "MACD_hist",
+    # Recursive technical operators without a checkpoint-restore implementation
+    # stay fail-closed: they can never run an incremental segment.  The
+    # segmented-execution family (ts_ema / ts_ewm_* / RSI_WILDER / ATR_WILDER /
+    # ADX / MACD_*) was removed from this set once
+    # ``runtime.stateful_incremental`` wired checkpoint-backed segmented
+    # execution into ``run_incremental`` (audit §11).
     "KAMA",
     "Supertrend",
     "SupertrendDirection",
@@ -133,6 +132,37 @@ _SCOPE_OVERRIDES: dict[str, str] = {
     "cdl_engulfing": "ts",
     "cdl_inside_bar": "ts",
     "cdl_outside_bar": "ts",
+    # 2026-08 final pack: A-share limit/suspension state machine is a time-series
+    # transform; intraday minute-in -> daily-out structure operators are
+    # session-aware (their policy rows already carry session_aware=True).
+    "ashare_limit_up_streak": "ts",
+    "ashare_limit_down_streak": "ts",
+    "ashare_days_since_limit_up": "ts",
+    "ashare_days_since_limit_down": "ts",
+    "ashare_limit_touch_count": "ts",
+    "ashare_failed_limit_count": "ts",
+    "ashare_one_price_limit_streak": "ts",
+    "ashare_limit_event_density": "ts",
+    "ashare_limit_asymmetry": "ts",
+    "ashare_suspension_episode_length": "ts",
+    "ashare_limit_open_up_streak": "ts",
+    "ashare_limit_open_down_streak": "ts",
+    "ashare_limit_up_volume_ratio": "ts",
+    "ashare_limit_down_volume_ratio": "ts",
+    "intra_bar_range_persistence": "session_intraday",
+    "intra_bar_range_deviation": "session_intraday",
+    "intra_tail_volume_share": "session_intraday",
+    "intra_volume_price_alignment": "session_intraday",
+    "intra_ute_high": "session_intraday",
+    "intra_ute_low": "session_intraday",
+    "intra_slot_volume_surprise": "session_intraday",
+    "intra_slot_amount_surprise": "session_intraday",
+    "intra_slot_volatility_surprise": "session_intraday",
+    "intra_market_lead_lag_ex_self": "session_intraday",
+    "intra_industry_lead_lag_ex_self": "session_intraday",
+    "intra_session_return_asymmetry": "session_intraday",
+    "intra_close_participation": "session_intraday",
+    "intra_high_low_affinity": "session_intraday",
 }
 
 _FUNDAMENTAL_PERIOD_CANONICALS: frozenset[str] = frozenset({

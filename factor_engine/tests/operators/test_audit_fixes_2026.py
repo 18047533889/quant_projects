@@ -92,8 +92,16 @@ def test_s2_legitimate_production_surface_kept():
                  "ts_topk_mean", "MACD_line", "RSI_WILDER"):
         assert name in targets, name
         catalog = OperatorRegistry._catalog.get(name, {})
-        assert str(catalog.get("status")) == "production", name
-        assert catalog.get("pit_safe") is True, name
+        # Six-gate certification is the single production authority (review
+        # §2.3/§2.4): status may only be "production" when evidence certifies
+        # it.  Without current evidence the operator fails closed to
+        # experimental even though it remains a reviewed production target.
+        if catalog.get("production_certified") is True:
+            assert str(catalog.get("status")) == "production", name
+            assert catalog.get("pit_safe") is True, name
+        else:
+            assert str(catalog.get("status")) == "experimental", name
+            assert catalog.get("pit_safe") is False, name
 
 
 def test_s2_four_certificates_attached():

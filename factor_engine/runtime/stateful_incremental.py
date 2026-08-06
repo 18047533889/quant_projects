@@ -1,0 +1,247 @@
+# -*- coding: utf-8 -*-
+"""Checkpoint-backed segmented execution for recursive stateful factors.
+
+Audit §11: a factor whose root operator is a segmented-execution stateful
+canonical (``SEGMENTED_EXECUTION_CANONICALS``) can resume from a per-instrument
+checkpoint instead of re-reading the full causal history.  This module decides
+when the checkpoint path applies, executes the segment per instrument, persists
+the new checkpoint, and returns ``None`` whenever the path cannot produce a
+correct value so ``run_incremental`` falls back to full-history replay.
+
+Two execution modes:
+
+* ``bootstrap`` — no usable checkpoint yet: run the operator from the dataset
+  origin over the look-back window (``starts_at_dataset_origin``), slice the
+  warm-up prefix away, and persist the terminal checkpoint for the next run.
+* ``incremental`` — a usable checkpoint exists before the output window: resume
+  the recurrence over ``[output_start, output_end]`` only and persist the new
+  checkpoint.
+"""
+from __future__ import annotations
+
+import logging
+from typing import Any, Mapping
+
+import numpy as np
+import pandas as pd
+
+from cleaned_operators.production_hardening import SEGMENTED_EXECUTION_CANONICALS
+from stateful_contract import StatefulCheckpointRegistry
+from stateful_runtime import execute_stateful_segment
+
+logger = logging.getLogger(__name__)
+
+# Positional leaf columns of each segmented canonical, in IR-input order, mapped
+# to the ``execute_stateful_segment`` input-key contract.
+_INPUT_KEYS: dict[str, tuple[str, ...]] = {
+    "ts_ema": ("x",),
+    "ts_ewm_std": ("x",),
+    "ts_ewm_var": ("x",),
+    "ts_ewm_cov": ("x", "y"),
+    "ts_ewm_corr": ("x", "y"),
+    "RSI_WILDER": ("x",),
+    "ATR_WILDER": ("high", "low", "close"),
+    "ADX": ("high", "low", "close"),
+    "MACD_line": ("x",),
+    "MACD_signal": ("x",),
+    "MACD_hist": ("x",),
+}
+
+
+def stateful_canonicals_in_ir(ir) -> list[str]:
+    """Return stateful-registry canonicals in the IR, topological (post-order)."""
+    out: list[str] = []
+
+    def walk(node) -> None:
+        for child in node.inputs:
+            walk(child)
+        if StatefulCheckpointRegistry.get(node.op) is not None:
+            out.append(node.op)
+
+    walk(ir)
+    return out
+
+
+def segmented_incremental_available(*, ir) -> bool:
+    """True when the factor root is a segmented-execution canonical and it is the
+    only stateful operator in the DAG (a single checkpoint per instrument).
+
+    Interior stateful nodes (stateful output feeding downstream arithmetic or
+    ranking) still run the standard narrow-and-replay path.
+    """
+    canonicals = stateful_canonicals_in_ir(ir)
+    if len(canonicals) != 1:
+        return False
+    return canonicals[0] == ir.op and ir.op in SEGMENTED_EXECUTION_CANONICALS
+
+
+def _root_series_and_params(ir, canonical: str) -> tuple[list[str], dict[str, Any]] | None:
+    """Extract the root's source columns and operator parameters.
+
+    Positional arguments lower to ``literal`` inputs and keyword arguments land
+    in the node ``attrs``; both are mapped to parameter names through the
+    operator's declared ``param_names`` (series inputs are the names in
+    ``_INPUT_KEYS[canonical]``).  Returns ``None`` when a series position does
+    not hold a plain source column (the checkpoint path cannot fabricate
+    intermediate data).
+    """
+    keys = _INPUT_KEYS.get(canonical)
+    if not keys:
+        return None
+    from cleaned_operators.registry import OperatorRegistry
+
+    implementation = OperatorRegistry.get(canonical)
+    param_names = tuple(
+        getattr(implementation.metadata, "param_names", ()) or ()
+    ) if implementation is not None else ()
+    series: list[str] = []
+    params: dict[str, Any] = {}
+    for index, child in enumerate(ir.inputs):
+        name = param_names[index] if index < len(param_names) else None
+        if child.op == "literal":
+            if name is not None and name not in keys:
+                params[name] = child.attrs.get("value")
+            continue
+        if child.op != "column":
+            return None
+        if name is not None and name not in keys:
+            return None
+        column_name = child.attrs.get("name")
+        if not str(column_name):
+            return None
+        series.append(str(column_name))
+    for key, value in ir.attrs.items():
+        if key != "dtype":
+            params[key] = value
+    if len(series) != len(keys):
+        return None
+    return series, params
+
+
+def try_stateful_segmented_incremental(
+    *,
+    factor_id: str,
+    ir,
+    source,
+    store,
+    start,
+    end,
+    bootstrap: bool,
+) -> tuple[pd.Series, dict[str, Any]] | None:
+    """Attempt checkpoint-backed segmented execution over ``[start, end]``.
+
+    With ``bootstrap=False`` every instrument must already have a checkpoint
+    strictly before ``start``; otherwise the attempt returns ``None`` and the
+    caller falls back.  With ``bootstrap=True`` the operator is run from the
+    dataset origin over the full supplied window and the terminal checkpoint is
+    persisted (used to seed the checkpoint store on the first run).
+    """
+    canonical = ir.op
+    if canonical not in SEGMENTED_EXECUTION_CANONICALS:
+        return None
+    extracted = _root_series_and_params(ir, canonical)
+    if extracted is None:
+        return None
+    input_names, params = extracted
+    input_keys = _INPUT_KEYS[canonical]
+    try:
+        series = {name: source.load_column(name) for name in input_names}
+    except Exception as exc:  # source unavailability -> standard path
+        logger.warning("stateful segmented source load failed: %s", exc)
+        return None
+    if not series:
+        return None
+
+    # Align every input onto the shared (timestamp, instrument) anchor grid.
+    anchor = series[input_names[0]].index
+    if not isinstance(anchor, pd.MultiIndex):
+        return None
+    frames = {name: series[name].unstack(level="instrument") for name in input_names}
+    reference = frames[input_names[0]]
+    instruments = list(reference.columns)
+    if len(reference.index) == 0:
+        return None
+    # The segment API requires tz-aware monotonic timestamps; the output panel
+    # keeps the source's original (naive) index so the result matches a full run.
+    segment_timestamps = pd.to_datetime(reference.index, utc=True)
+
+    input_identity: dict[str, Any] = {
+        "factor_id": str(factor_id),
+        "canonical": canonical,
+        "input_columns": input_names,
+        "params": params,
+    }
+
+    out = np.full((len(segment_timestamps), len(instruments)), np.nan, dtype=float)
+    for j, instrument in enumerate(instruments):
+        checkpoint = None if bootstrap else store.load_latest(
+            factor_id, canonical, instrument, before=start
+        )
+        if checkpoint is None and not bootstrap:
+            # At least one instrument lacks a usable checkpoint: full replay.
+            return None
+        starts_at_origin = bootstrap or checkpoint is None
+        inputs: Mapping[str, np.ndarray] = {
+            key: frames[name][instrument].to_numpy(dtype=float)
+            for key, name in zip(input_keys, input_names)
+        }
+        try:
+            if len(segment_timestamps) >= 2:
+                # The output window re-computes its terminal bar (1-bar inclusive
+                # overlap), so the persistent checkpoint must be the state just
+                # before it — the next run then resumes from that boundary.
+                first = execute_stateful_segment(
+                    canonical,
+                    {key: values[:-1] for key, values in inputs.items()},
+                    timestamps=segment_timestamps[:-1],
+                    instrument=str(instrument),
+                    input_identity=input_identity,
+                    params=params,
+                    checkpoint=checkpoint,
+                    starts_at_dataset_origin=starts_at_origin,
+                )
+                last = execute_stateful_segment(
+                    canonical,
+                    {key: values[-1:] for key, values in inputs.items()},
+                    timestamps=segment_timestamps[-1:],
+                    instrument=str(instrument),
+                    input_identity=input_identity,
+                    params=params,
+                    checkpoint=first.checkpoint,
+                )
+                out[:, j] = np.concatenate([first.values, last.values])
+                store.save(factor_id, first.checkpoint)
+            else:
+                single = execute_stateful_segment(
+                    canonical,
+                    inputs,
+                    timestamps=segment_timestamps,
+                    instrument=str(instrument),
+                    input_identity=input_identity,
+                    params=params,
+                    checkpoint=checkpoint,
+                    starts_at_dataset_origin=starts_at_origin,
+                )
+                out[:, j] = single.values
+                store.save(factor_id, single.checkpoint)
+        except Exception as exc:
+            logger.warning("stateful segment failed for %s/%s: %s", factor_id, instrument, exc)
+            return None
+
+    panel = pd.DataFrame(out, index=reference.index, columns=instruments)
+    result_series = panel.stack()
+    result_series.index = result_series.index.set_names(["timestamp", "instrument"])
+    mode = {
+        "mode": "stateful_segmented",
+        "bootstrap": bool(bootstrap),
+        "canonical": canonical,
+        "instruments": len(instruments),
+    }
+    return result_series, mode
+
+
+__all__ = [
+    "segmented_incremental_available",
+    "stateful_canonicals_in_ir",
+    "try_stateful_segmented_incremental",
+]

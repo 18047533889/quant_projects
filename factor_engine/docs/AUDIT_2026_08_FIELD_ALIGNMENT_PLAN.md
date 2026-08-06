@@ -103,7 +103,36 @@
   preferred_replacements。
 - **P0-G 测试**:`tests/operators/test_field_catalog_alignment_2026.py`(33 项)覆盖上述全部。
 
-### 暂缓(设计级,需决策后实施)
-见 §3 列表。核心:§2.9 PubDate 可用时点策略、§2.10 period_selection 编译器强制、
-§4.4 flow-grain 编译期拒绝、§6.8 股东趋势按 snapshot 推进、§9/§10 其余命名 cleanup、
-§11 递归算子 checkpoint 逐项接入、全量 409 字段逐字段精修。
+### 暂缓项已闭环(2026-08-07,一次性实施)
+- **§2.9 PubDate 可用时点**:`pit_contract.py` 新增 `AvailablePolicy`(same_day/next_trading_day),
+  `_shift_available_to_next_decision`(int64 searchsorted 向量化);生产调用方
+  (`lqtp_logical_source*.py`、`relation.py`)传 `available_policy="next_trading_day"`。
+  新增 `tests/storage/test_pit_next_trading_day_policy.py`(8 项)。
+- **§2.10 period_selection 编译器强制**:`storage/sources/financial.py` 从 catalog 程序化
+  登记全部 `financial_pit` 字段契约(53 项);`ir/analyzer.py` 新增
+  `validate_fundamental_period_contracts`(financial_pit 字段缺契约/非法 selector 即
+  `PeriodSelectionContractError`);`load_financial_row_bundle` 校验 selector 与契约兼容。
+- **§4.4 flow-grain 编译期拒绝**:`ir/analyzer.py` 新增 `OPERATOR_INPUT_GRAIN_CONTRACTS`
+  (fin_ttm_cumulative/fin_quarter_from_cumulative→flow_ytd,fin_ttm_quarterly→reject 裸累计,
+  fin_average_balance→balance)+ `validate_field_grain_contracts`;column 节点 grain 走
+  `semantic_attrs`(不影响 IR hash);默认 grain 合成列豁免。
+- **§6.1/6.2 股东 rank-slot 迁移**:`semantic_certification.py` 为重写后的 legacy 名
+  (holder_weighted_churn 等)盖章 `preferred_replacements`→`holder_id_matched_*`;
+  holder_pledge_churn/holder_concentration_change/holder_count_change_rate 盖章
+  `compatibility_only`+semantic_note。
+- **§6.8 股东集中度按 snapshot 推进**:`holder_concentration_slope/acceleration` 新增可选
+  `snapshot_date` 参数,`_snapshot_aligned_slope` 按不同报告快照推进再 ffill 回日频;
+  catalog 补 `StockTopTenShareholder.report_period_end_date`。
+- **§9/§10 命名与 prior 面收窄**:`hidden_from_default_mining` 接入
+  `_compute_allow_in_production`(此前仅盖章不读取);expectile/quantile 回归族
+  (ts_expectile_regression_coeff/resid、ts_quantile_regression_coeff/resid/slope)加入
+  `_DIAGNOSTIC_IN_SAMPLE`。
+- **§11 递归算子 checkpoint 接入**:新增 `runtime/stateful_checkpoint_store.py`
+  (JSON sidecar,严格 before-watermark+fingerprint 校验)与 `runtime/stateful_incremental.py`
+  (bootstrap 全史播种 + 增量恢复 + 逐 instrument 分段执行);`run_incremental` 接入
+  segmented 路径(segmented-eligible 时 recompute_tail_bars=0,失败回退 full-history replay);
+  11 个 segmented canonical 移出 `FULL_HISTORY_REPLAY_CANONICALS`。
+- **全量 409 字段精修(财务四表值字段)**:依据 COS 字典 §5(schema 已实测)为
+  StockIncome(36)/StockCashFlow(50)/StockBalance(74)/StockIndicator(28)补登记值字段
+  (CNY 流→flow_ytd、存量→balance、比率→百分数),catalog 共 336 字段;避免
+  operating_profit 裸名歧义。

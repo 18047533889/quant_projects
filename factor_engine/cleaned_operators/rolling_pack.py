@@ -1,0 +1,133 @@
+# -*- coding: utf-8 -*-
+"""Shared causal rolling kernels for the 2026-08 final operator pack.
+
+Every helper iterates per instrument column with a trailing window and never
+looks past the current row (prefix-causal).  NaN in the raw window is passed
+through to the window function so each family can apply its own missing-value
+policy (break / aligned-pair / drop-valid); the helpers never compress time.
+"""
+from __future__ import annotations
+
+from typing import Any, Callable
+
+import numpy as np
+import pandas as pd
+
+try:
+    import polars as pl  # noqa: F401  (optional; bridge guards its own import)
+except Exception:
+    pl = None
+
+
+def frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
+    """Re-wrap a numeric array on the template index/columns as float."""
+    return pd.DataFrame(values, index=template.index, columns=template.columns, dtype=float)
+
+
+def map_rolling(values: np.ndarray, window: int, fn: Callable[[np.ndarray], float]) -> np.ndarray:
+    """Trailing-window map over a 2D panel, per column, preserving positions.
+
+    ``fn`` receives the raw window slice (may contain NaN) and returns a float
+    or ``np.nan``.  The result at row ``r`` depends only on rows ``<= r``.
+    """
+    rows, cols = values.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
+    for c in range(cols):
+        for r in range(rows):
+            lo = max(0, r - window + 1)
+            chunk = values[lo : r + 1, c]
+            out[r, c] = fn(chunk)
+    return out
+
+
+def map_pair_rolling(
+    a: np.ndarray,
+    b: np.ndarray,
+    window: int,
+    fn: Callable[[np.ndarray, np.ndarray], float],
+) -> np.ndarray:
+    """Trailing-window map over two aligned panels, per column.
+
+    ``fn(a_chunk, b_chunk)`` receives both raw slices at the same positions; it
+    decides how to align (same-position pairs only) and how to treat NaN.
+    """
+    rows, cols = a.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
+    for c in range(cols):
+        for r in range(rows):
+            lo = max(0, r - window + 1)
+            out[r, c] = fn(a[lo : r + 1, c], b[lo : r + 1, c])
+    return out
+
+
+def valid_values(chunk: np.ndarray) -> np.ndarray:
+    return chunk[np.isfinite(chunk)]
+
+
+def aligned_pairs(a: np.ndarray, b: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Same-position finite pairs from two equal-length raw window slices."""
+    finite = np.isfinite(a) & np.isfinite(b)
+    return a[finite].astype(float), b[finite].astype(float)
+
+
+def check_window(window: int, name: str = "window") -> int:
+    w = int(window)
+    if w < 2:
+        raise ValueError(f"{name} must be >= 2")
+    return w
+
+
+# ---------------------------------------------------------------------------
+# Polars bridge: delegate to the pandas_numpy reference for exact parity.
+# ---------------------------------------------------------------------------
+_SKIP_PANEL = frozenset({"date", "stock_code"})
+
+
+def _pl_to_pd(frame: Any) -> pd.DataFrame:
+    cols = [c for c in frame.columns if c not in _SKIP_PANEL]
+    return frame.select(cols).to_pandas()
+
+
+def _pl_rebuild(base: Any, pdf: pd.DataFrame) -> Any:
+    cols = [c for c in base.columns if c not in _SKIP_PANEL]
+    return base.with_columns(
+        [pl.Series(name=c, values=np.asarray(pdf[c], dtype=np.float64)) for c in cols]
+    )
+
+
+def register_polars_bridge(canonical: str) -> None:
+    """Register a polars backend that reproduces the pandas reference exactly.
+
+    The production admission path stays on ``pandas_numpy`` (the certified
+    reference backend); the polars slot is an exact-parity accelerated/bridge
+    implementation used by the polars runtimes.
+    """
+    try:
+        import polars as pl  # noqa: F401
+    except Exception:
+        return
+    from cleaned_operators.base_polars import OperatorMetadata as PolarsMetadata
+    from cleaned_operators.base_polars import SeriesOperator as PolarsSeriesOperator
+    from cleaned_operators.registry import OperatorRegistry
+
+    class _PolarsBridge(PolarsSeriesOperator):
+        metadata = PolarsMetadata(name=canonical, category="pandas_bridge", param_names=[])
+
+        def _calculate_series(self, *frames, **params):
+            from cleaned_operators.registry import OperatorRegistry as _Reg
+
+            pandas_op = _Reg.get(canonical, "pandas_numpy")
+            if pandas_op is None:
+                raise RuntimeError(f"pandas_numpy reference missing for {canonical}")
+            pdfs = [_pl_to_pd(f) for f in frames]
+            out = pandas_op.calculate(*pdfs, **params)
+            return _pl_rebuild(frames[0], out)
+
+    OperatorRegistry.register(
+        _PolarsBridge(),
+        canonical=canonical,
+        backend="polars",
+        source="pandas_bridge",
+        status="implemented",
+        backend_explicit=True,
+    )

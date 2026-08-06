@@ -15,7 +15,12 @@ def build_dsl_allowlist(
     dialect: str = "native",
     dialect_version: str | None = None,
 ) -> dict[str, Callable[..., Any]]:
-    """Return a canonical surface mapping, optionally decorated by a dialect."""
+    """Return a canonical surface mapping, optionally decorated by a dialect.
+
+    This is the **authoring** surface: operators may be experimental because
+    authoring writes formulas (which later fail closed at mining/production
+    admission).  Mining tasks must call the dedicated entry points below.
+    """
     raw_surface = str(surface or "daily")
     raw_dialect = str(dialect or "native").lower()
     if raw_surface == "lqtp":
@@ -71,3 +76,45 @@ def build_dsl_allowlist(
     from api.lqtp_functions_loader import augment_from_functions_yaml
 
     return augment_from_functions_yaml(out)
+
+
+def build_authoring_allowlist(
+    *,
+    surface: str = "daily",
+    dialect: str = "native",
+    dialect_version: str | None = None,
+) -> dict[str, Callable[..., Any]]:
+    """Authoring surface: operators may be experimental (review §2.6).
+
+    Used when writing formulas / recipes.  Admission to production mining is a
+    separate, stricter gate (``build_production_mining_allowlist``).
+    """
+    return build_dsl_allowlist(
+        surface=surface, dialect=dialect, dialect_version=dialect_version
+    )
+
+
+def build_research_mining_allowlist() -> dict[str, Callable[..., Any]]:
+    """Research mining surface: any operator with a runtime is usable.
+
+    Research experiments may reference experimental / research-registered
+    operators; the results are explicitly risk-labelled and never admitted to
+    production mining without six-gate certification (review §2.6).
+    """
+    from backend.cleaned_bridge import build_cleaned_dsl_allowlist
+
+    return build_cleaned_dsl_allowlist(set(), surface="all")
+
+
+def build_production_mining_allowlist() -> dict[str, Callable[..., Any]]:
+    """Production mining surface: only six-gate certified operators.
+
+    Every name passes ``build_operator_spec().allow_in_production``, which now
+    requires daily/extended classification, ``production_certified is True``
+    (six-gate), at least one evidence-backed production backend, and no
+    compatibility/diagnostic/benchmark-only flag (review §2.6).  AlphaProbe /
+    AlphaMiner / CogAlpha production tasks must call this entry point.
+    """
+    from backend.cleaned_bridge import build_production_dsl_allowlist
+
+    return build_production_dsl_allowlist()

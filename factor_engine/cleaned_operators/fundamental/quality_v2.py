@@ -17,6 +17,7 @@ import pandas as pd
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
 from cleaned_operators.fundamental.transforms_v2 import (
     _lag_value,
+    _period_insert,
     _period_key,
     _safe_div,
     _values,
@@ -94,7 +95,10 @@ def _walk_two(
             key = _period_key(raw_period)
             if key is not None:
                 if key not in order:
-                    order.append(key)
+                    # Fiscal-ordinal insertion, not first-appearance order: a
+                    # late-disclosed / back-filled older report period must not
+                    # reorder the walked sequence (review §5.3).
+                    _period_insert(order, key)
                 if np.isfinite(va):
                     v1[key] = float(va)
                 if np.isfinite(vb):

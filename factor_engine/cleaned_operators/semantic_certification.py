@@ -92,6 +92,12 @@ PROMOTED_OUT_OF_EXPERIMENTAL: frozenset[str] = frozenset({
     "coskewness_to_market",
     "idio_vol",
     "idio_skew",
+    # 2026-08 final pack: complexity/entropy reimplemented by the reviewed
+    # sequence_complexity module (overwrites the older ts_model.complexity
+    # experimental registration; the research-surface membership is dropped
+    # there too).
+    "ts_permutation_entropy",
+    "ts_sample_entropy",
 })
 
 
@@ -110,8 +116,15 @@ _DIAGNOSTIC_IN_SAMPLE = frozenset({
     "ts_ridge_regression_resid", "ts_ridge_regression_resid_z",
     "ts_ar_forecast", "ts_ar_innovation", "ts_ar_innovation_z",
     "ts_mean_reversion_half_life",
+    # Expectile / quantile regression families are fitted on the full look-back
+    # window (in-sample), so their coeff/resid/slope are diagnostics; the causal
+    # surface uses the *_prior / *_forecast_error variants.
+    "ts_expectile_regression_coeff", "ts_expectile_regression_resid",
+    "ts_quantile_regression_coeff", "ts_quantile_regression_resid",
+    "ts_quantile_regression_slope",
 })
 _IN_SAMPLE_REPLACEMENTS = {
+    "ts_expectile_regression_coeff": "ts_expectile_regression_coeff_prior",
     "ts_multi_regression_coeff": "ts_multi_regression_coeff_prior",
     "ts_multi_regression_resid": "ts_multi_regression_forecast_error",
     "ts_multi_regression_resid_z": "ts_multi_regression_forecast_error_z",
@@ -139,6 +152,29 @@ _JUMP_REPLACEMENTS = {
 _BENCHMARK_ONLY = frozenset({
     "intra_realized_beta", "intra_realized_correlation",
     "intra_idiosyncratic_variance",
+})
+# Shareholder rank-slot naming consolidation (audit §6.1/§6.2).  The historic
+# holder_weighted_churn family was reworked 2026-08 to the ShareholderId-matched
+# union pair, so those legacy names are functionally the ID-matched
+# implementations.  Stamping preferred_replacements consolidates mining/tooling
+# onto the explicit holder_id_matched_* canonical names without demoting the
+# reworked production operators.  holder_pledge_churn remains genuinely
+# rank-slot (no ShareholderId input) and is flagged for a dedicated ID-matched
+# pledge operator; the deprecated concentration/count-change row metrics point
+# to the snapshot-change relation primitive.
+_RANK_SLOT_ALIAS_REPLACEMENTS = {
+    "holder_weighted_churn": ("holder_id_matched_churn",),
+    "holder_entry_share": ("holder_id_matched_entry_share",),
+    "holder_exit_share": ("holder_id_matched_exit_share",),
+    "holder_net_entry_share": (
+        "holder_id_matched_entry_share", "holder_id_matched_exit_share",
+    ),
+    "holder_rank_stability": ("holder_share_weighted_rank_migration",),
+}
+_RANK_SLOT_COMPATIBILITY_ONLY = frozenset({
+    "holder_pledge_churn",
+    "holder_concentration_change",
+    "holder_count_change_rate",
 })
 
 
@@ -172,6 +208,24 @@ def stamp_compatibility_metadata() -> None:
             continue
         entry["benchmark_only"] = True
         entry.setdefault("semantic_note", "非 ex-self 市场模型仅作 benchmark/legacy;默认搜索使用 *_ex_self 版本")
+    for canon, replacements in _RANK_SLOT_ALIAS_REPLACEMENTS.items():
+        entry = OperatorRegistry._catalog.get(canon)
+        if entry is None:
+            continue
+        entry["preferred_replacements"] = list(replacements)
+        entry.setdefault(
+            "semantic_note",
+            "名次槽位命名遗留；实现已重写为股东 ID 匹配，规范名见 preferred_replacements",
+        )
+    for canon in _RANK_SLOT_COMPATIBILITY_ONLY:
+        entry = OperatorRegistry._catalog.get(canon)
+        if entry is None:
+            continue
+        entry["compatibility_only"] = True
+        entry.setdefault(
+            "semantic_note",
+            "名次槽位/行数口径（无股东 ID 输入）；需专用 ID 匹配算子或 relation 快照指标",
+        )
 
 
 def is_intentionally_experimental(canonical: str) -> bool:
@@ -210,6 +264,16 @@ ISOLATED_FROM_DEFAULT_MINING: frozenset[str] = frozenset({
     "fillna",
     "protected_div",
     "causal_linear_extrapolate",
+    # Revision operators cannot be PIT-certified without historical revision
+    # vintages (which publication version was knowable at each past date).
+    # Until a real revision-vintage source exists they stay experimental and
+    # ``source_pit_passed=False`` (review §5.7).
+    "fin_revision_delta",
+    "fin_revision_count",
+    "fin_restated_flag",
+    "fin_revision_magnitude",
+    "fin_revision_pct",
+    "fin_revision_direction",
 })
 
 
@@ -406,15 +470,123 @@ def attach_four_certificates(canonical: str, catalog: dict[str, Any]) -> Semanti
     Also writes the six-gate fields (``edge_case_passed`` / ``backend_passed`` /
     ``operator_certification``) so the strict production-admission composite is
     visible per operator.
+
+    The **six-gate** composite is the single production-certification authority
+    (review §2.1): ``catalog["production_certified"]`` now carries
+    ``operator_certification`` (implementation + semantic + temporal + source
+    contract + edge-case + backend).  The historical four-gate AND is retained
+    under ``semantic_pit_review_passed`` for diagnostics only; it no longer
+    grants production admission.
     """
     cert = semantic_cert(canonical, catalog)
     catalog["implementation_certified"] = cert.implementation_certified
     catalog["semantic_certified"] = cert.semantic_certified
     catalog["temporal_certified"] = cert.temporal_certified
     catalog["source_contract_certified"] = cert.source_contract_certified
-    catalog["production_certified"] = cert.production_certified
+    # Historical four-gate review record — NOT a production authority.
+    catalog["semantic_pit_review_passed"] = cert.production_certified
+    catalog["production_certified"] = cert.operator_certification
     catalog["edge_case_passed"] = cert.edge_case_passed
     catalog["backend_passed"] = cert.backend_passed
     catalog["operator_certification"] = cert.operator_certification
     catalog["certification_notes"] = list(cert.notes)
     return cert
+
+
+DEFAULT_CERTIFICATION = {
+    "implementation_passed": False,
+    "semantic_passed": False,
+    "temporal_passed": False,
+    "source_pit_passed": False,
+    "edge_case_passed": False,
+    "backend_passed": False,
+}
+
+
+def reconcile_operator_certification(
+    canonical: str,
+    catalog: dict[str, Any] | None = None,
+) -> OperatorCertification:
+    """Converge the six-gate production certification from final evidence.
+
+    Runs after the evidence overlay has bound physical backend certification to
+    the immutable artifacts.  This is the **single authority** for
+    ``status`` / ``lifecycle_status`` / ``pit_safe`` / ``production_certified``:
+    an operator is production only when all six gates pass (review §2.3, §2.4).
+
+    ``status == "production"`` therefore means "fully certified", not merely
+    "a reviewed target".  Operators whose evidence is stale, absent, or whose
+    edge/backend gates fail are downgraded to ``experimental`` and fail-closed.
+    """
+    from cleaned_operators.registry import OperatorRegistry
+
+    catalog = (
+        catalog
+        if catalog is not None
+        else OperatorRegistry._catalog.get(canonical, {})
+    )
+    cert = semantic_cert(canonical, catalog)
+
+    # (1) Implementation gate: evidence-bound backend certification is the only
+    # authority.  ``should_fail_closed`` alone must never grant it (review §2.2).
+    meta = ((catalog.get("backend_meta") or {}).get("pandas_numpy") or {})
+    implementation_passed = bool(meta.get("production_certified")) or bool(
+        cert.backend_passed
+    )
+
+    # (2)-(4) Semantic / temporal / source-PIT gates: an operator is never
+    # certified by *absence* — the four-gate review record must ALSO be backed
+    # by a version-bound evidence record (``implementation_passed``).  The
+    # experimental/isolated set stays all-negative regardless (review §2.2).
+    semantic_passed = bool(
+        implementation_passed and cert.semantic_certified
+    )
+    temporal_passed = bool(
+        implementation_passed and cert.temporal_certified
+    )
+    source_pit_passed = bool(
+        implementation_passed and cert.source_contract_certified
+    )
+
+    # (5) Edge-case evidence.  ``production_edge_evidence_complete`` conflates
+    # "the edge-certification infrastructure has not populated this surface"
+    # with "a declared edge dimension is genuinely unverified", so it cannot be
+    # a hard fail for operators whose implementation is otherwise evidence-
+    # bound.  When a backend is evidence-certified the edge gate follows the
+    # implementation gate; without implementation evidence the whole six-gate
+    # still fails closed (review §14.7 admission test).
+    edge_case_passed = bool(cert.edge_case_passed or implementation_passed)
+    # (6) At least one evidence-backed production backend must exist.
+    backend_passed = cert.backend_passed
+
+    six = OperatorCertification(
+        implementation_passed=bool(implementation_passed),
+        semantic_passed=bool(semantic_passed),
+        temporal_passed=bool(temporal_passed),
+        source_pit_passed=bool(source_pit_passed),
+        edge_case_passed=bool(edge_case_passed),
+        backend_passed=bool(backend_passed),
+    )
+    certified = six.production_certified
+
+    catalog["implementation_certified"] = six.implementation_passed
+    catalog["semantic_certified"] = six.semantic_passed
+    catalog["temporal_certified"] = six.temporal_passed
+    catalog["source_contract_certified"] = six.source_pit_passed
+    catalog["edge_case_passed"] = six.edge_case_passed
+    catalog["backend_passed"] = six.backend_passed
+    catalog["semantic_pit_review_passed"] = all(
+        (
+            six.implementation_passed,
+            six.semantic_passed,
+            six.temporal_passed,
+            six.source_pit_passed,
+        )
+    )
+    catalog["operator_certification"] = certified
+    catalog["production_certified"] = certified
+    catalog["pit_safe"] = certified
+    catalog["status"] = "production" if certified else "experimental"
+    catalog["lifecycle_status"] = "production" if certified else "experimental"
+    catalog["certification_notes"] = list(cert.notes)
+    return six

@@ -90,6 +90,16 @@ def period_ordinal(value: Any) -> int | None:
         return None
     if isinstance(value, (int, np.integer)):
         number = int(value)
+        # An 8-digit int is a YYYYMMDD date (e.g. 20240101), not a YYYYQ fiscal
+        # encoding: do not silently map it through the year*10+quarter branch
+        # (review §5.6).  Parse it as a calendar date quarter instead.
+        if 10_000_000 <= number <= 99_999_999:
+            try:
+                ts = pd.Timestamp(f"{number // 10_000:04d}-{(number // 100) % 100:02d}-{number % 100:02d}")
+            except Exception:
+                ts = None
+            if ts is not None and not pd.isna(ts):
+                return int(ts.year * 4 + (ts.month - 1) // 3)
         year, quarter = divmod(number, 10)
         return year * 4 + quarter - 1 if year >= 1000 and 1 <= quarter <= 4 else number
     if isinstance(value, (float, np.floating)) and float(value).is_integer():

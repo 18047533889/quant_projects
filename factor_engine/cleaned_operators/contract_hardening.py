@@ -15,6 +15,25 @@ from cleaned_operators.registry import OperatorRegistry
 
 _APPLIED = False
 
+# The final contract layer may derive lookback / parameter / shape contracts but
+# must never alter these evidence-converged certification fields (review §2.7).
+IMMUTABLE_CERTIFICATION_FIELDS = frozenset(
+    {
+        "production_certified",
+        "operator_certification",
+        "pit_safe",
+        "status",
+        "lifecycle_status",
+        "semantic_pit_review_passed",
+        "implementation_certified",
+        "semantic_certified",
+        "temporal_certified",
+        "source_contract_certified",
+        "edge_case_passed",
+        "backend_passed",
+    }
+)
+
 _STATEFUL_CANONICALS = frozenset(
     {
         "ts_ema",
@@ -32,13 +51,16 @@ _STATEFUL_CANONICALS = frozenset(
     }
 )
 
+# ``pit_safe`` is deliberately NOT corrected here: the final contract layer may
+# derive lookback / parameter / shape contracts but must never overwrite the
+# evidence-converged certification fields (review §2.7).
 _POLICY_CORRECTIONS = {
-    "ADX": {"scope": "ts", "pit_safe": True, "min_periods": 2},
-    "MACD_line": {"scope": "ts", "pit_safe": True, "min_periods": 1},
-    "MACD_signal": {"scope": "ts", "pit_safe": True, "min_periods": 1},
-    "MACD_hist": {"scope": "ts", "pit_safe": True, "min_periods": 1},
-    "lqtp_historical_cvar": {"scope": "ts", "pit_safe": True, "min_periods": 1},
-    "ts_sma_cn": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ADX": {"scope": "ts", "min_periods": 2},
+    "MACD_line": {"scope": "ts", "min_periods": 1},
+    "MACD_signal": {"scope": "ts", "min_periods": 1},
+    "MACD_hist": {"scope": "ts", "min_periods": 1},
+    "lqtp_historical_cvar": {"scope": "ts", "min_periods": 1},
+    "ts_sma_cn": {"scope": "ts", "min_periods": 1},
 }
 
 _MIN_PERIODS_FLOORS = {
@@ -151,7 +173,6 @@ def _correct_policy_metadata() -> None:
             "ts": "time_series",
             "cs": "cross_sectional",
         }.get(correction["scope"], correction["scope"])
-        catalog["pit_safe"] = bool(correction["pit_safe"])
         catalog["min_periods"] = correction.get("min_periods")
 
     for canonical, minimum in _MIN_PERIODS_FLOORS.items():
@@ -235,7 +256,9 @@ def _derive_contracts() -> None:
         policy_scope = scope_map.get(policy.scope, policy.scope)
         if policy_scope != "unknown":
             catalog["scope"] = policy_scope
-        catalog["pit_safe"] = bool(policy.pit_safe)
+        # Certification fields are immutable here: never overwrite the value
+        # converged by ``reconcile_operator_certification`` (review §2.7).
+        catalog.setdefault("pit_safe", bool(policy.pit_safe))
         catalog["stateful"] = bool(catalog.get("stateful")) or canonical in _STATEFUL_CANONICALS
         lookback = _lookback_contract(canonical, catalog)
         catalog["lookback_contract"] = lookback
@@ -297,12 +320,38 @@ def _validate_final_contracts() -> None:
         raise RuntimeError("operator contract convergence failed: " + "; ".join(errors[:20]))
 
 
+def _snapshot_certification_state() -> dict[str, dict[str, Any]]:
+    snapshot: dict[str, dict[str, Any]] = {}
+    for canonical, catalog in OperatorRegistry._catalog.items():
+        preserved = {
+            field: catalog.get(field)
+            for field in IMMUTABLE_CERTIFICATION_FIELDS
+            if field in catalog
+        }
+        if preserved:
+            snapshot[canonical] = preserved
+    return snapshot
+
+
+def _restore_certification_state(snapshot: dict[str, dict[str, Any]]) -> None:
+    for canonical, preserved in snapshot.items():
+        catalog = OperatorRegistry._catalog.get(canonical)
+        if catalog is None:
+            continue
+        for field, value in preserved.items():
+            catalog[field] = value
+
+
 def apply_final_contract_hardening() -> None:
     global _APPLIED
     if _APPLIED:
         return
+    # Write-protect the evidence-converged certification fields across every
+    # contract-derivation code path (review §2.7).
+    snapshot = _snapshot_certification_state()
     _install_polars_validation()
     _correct_policy_metadata()
     _derive_contracts()
     _validate_final_contracts()
+    _restore_certification_state(snapshot)
     _APPLIED = True

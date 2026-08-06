@@ -977,6 +977,82 @@ _EXPLICIT_POLICIES = {
     if name in _ACTIVE_POLICY_CANONICALS
 }
 
+# 2026-08 final pack (61 atomics).  These explicit policies must SURVIVE the
+# active-surface filter above (the surface unions are only populated when the
+# operator modules import, which may happen after ``operator_policy`` itself),
+# so they are applied here, unconditionally, after the filter.  ``infer_operator_policy``
+# reads ``_EXPLICIT_POLICIES`` at call time, so layer_governance / hardening see them.
+_FINAL_PACK_POLICIES = {
+    # Group 1 — robust tail (7)
+    "ts_lower_partial_moment": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_upper_partial_moment": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_expected_shortfall": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_quantile_skew": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_quantile_kurtosis": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_tail_ratio": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_extreme_cluster_ratio": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    # Group 2 — nonlinear dependence (6)
+    "ts_distance_corr": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_distance_cov": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_mutual_information": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_lagged_mutual_information": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_upper_tail_dependence": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_lower_tail_dependence": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    # Group 3 — complexity / long memory (8)
+    "ts_permutation_entropy": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_weighted_permutation_entropy": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_permutation_transition_entropy": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_sample_entropy": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_hurst_dfa": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_higuchi_fractal_dimension": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_variogram_slope": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_autocorr_decay_half_life": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    # Group 4 — A-share limit/suspension state machine (14)
+    "ashare_limit_up_streak": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ashare_limit_down_streak": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ashare_days_since_limit_up": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ashare_days_since_limit_down": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ashare_limit_touch_count": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ashare_failed_limit_count": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ashare_one_price_limit_streak": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ashare_limit_event_density": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ashare_limit_asymmetry": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ashare_suspension_episode_length": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ashare_limit_open_up_streak": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ashare_limit_open_down_streak": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ashare_limit_up_volume_ratio": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ashare_limit_down_volume_ratio": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    # Group 5 — relation / group distribution (12)
+    "relation_topk_concentration": {"scope": "cs", "pit_safe": True},
+    "relation_distribution_skew": {"scope": "cs", "pit_safe": True},
+    "relation_distribution_kurtosis": {"scope": "cs", "pit_safe": True},
+    "relation_hhi_change": {"scope": "cs", "pit_safe": True},
+    "relation_entropy_change": {"scope": "cs", "pit_safe": True},
+    "relation_concentration_acceleration": {"scope": "cs", "pit_safe": True},
+    "relation_rank_mobility": {"scope": "cs", "pit_safe": True},
+    "relation_share_mobility": {"scope": "cs", "pit_safe": True},
+    "group_skewness": {"scope": "group", "pit_safe": True},
+    "group_kurtosis": {"scope": "group", "pit_safe": True},
+    "group_quantile_spread": {"scope": "group", "pit_safe": True},
+    "group_tail_ratio": {"scope": "group", "pit_safe": True},
+    # Group 6 — intraday time-structure v2 (14, minute in -> daily out)
+    "intra_bar_range_persistence": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
+    "intra_bar_range_deviation": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
+    "intra_tail_volume_share": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
+    "intra_volume_price_alignment": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
+    "intra_ute_high": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
+    "intra_ute_low": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
+    "intra_slot_volume_surprise": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
+    "intra_slot_amount_surprise": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
+    "intra_slot_volatility_surprise": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
+    "intra_market_lead_lag_ex_self": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
+    "intra_industry_lead_lag_ex_self": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
+    "intra_session_return_asymmetry": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
+    "intra_close_participation": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
+    "intra_high_low_affinity": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
+}
+_EXPLICIT_POLICIES.update(_FINAL_PACK_POLICIES)
+
 # Compatibility export now reflects the reviewed research surface exactly.
 RESEARCH_CORE_CANONICALS = RESEARCH_ONLY_CANONICALS
 

@@ -1,8 +1,8 @@
 {
   "schema_version": 2,
   "artifact_kind": "test_passed",
-  "commit_sha": "124b616f09f7fe8c681ccfb1b5da0f3bdc08c0d4",
-  "passed_at": "2026-08-06T18:14:26.018347+00:00",
+  "commit_sha": "43d6c4aff8390504d49e5bd7305ce7ef413ecacf",
+  "passed_at": "2026-08-06T20:00:21.941757+00:00",
   "recipes": [
     "accruals",
     "accruals_from_cumulative",
@@ -2466,7 +2466,7 @@
     "recipe_source_hash": "a6b1e15ef72ffdbd90635223641ee5b237874e6b900535cdd103e6e65e238d3e",
     "portable_test_source_hash": "f0c89a47588aabff5946dc3f61104855fa7ae3ebee0b9d13ed5986e9d7bcccf7",
     "production_test_source_hash": "7af92a79ff840b8aae1240b4984b175a676c8b538ed9c2b610149dd58a2151b3",
-    "primitive_evidence_hash": "8f1ce518f4a7e3e4433c485686ae6078f5edfddfad089360e23877b0046e4e3c",
-    "factor_operator_evidence_hash": "ad596ca1f218fac59b5a3b7ed1790a1e3d2dbc9cdf83f94b77bbed90974876ac"
+    "primitive_evidence_hash": "62b3b8d571a81aa91011e0ff569ebb05c313470eb2cf617c64c86baeddc0a969",
+    "factor_operator_evidence_hash": "616198a35983207a7d519bbe53571f4b56893167c45113a77999642e15c87bf9"
   }
 }

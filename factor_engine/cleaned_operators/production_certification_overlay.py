@@ -51,3 +51,16 @@ def apply_evidence_certification_overlay() -> None:
         meta["certification_source"] = source
         meta["certification_tier"] = "pandas_reference" if certified else "candidate"
         meta["reference_backend"] = True
+
+    # The evidence overlay is the sole promotion authority: converge the
+    # six-gate composite and the top-level lifecycle fields from the now-bound
+    # backend certification.  ``reconcile_operator_certification`` is the single
+    # writer of ``production_certified`` / ``status`` / ``lifecycle_status`` /
+    # ``pit_safe`` after this point (review §2.3, §2.4).
+    from cleaned_operators.semantic_certification import (
+        reconcile_operator_certification,
+    )
+
+    for canonical in sorted(factor_production_targets()):
+        catalog = OperatorRegistry._catalog.get(canonical, {})
+        reconcile_operator_certification(canonical, catalog)

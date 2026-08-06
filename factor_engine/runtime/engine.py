@@ -1991,6 +1991,17 @@ class FactorEngine:
             pit_forbid_forward_fill=pit_forbid_forward_fill,
         )
         cal = get_trading_calendar(resolved_market)
+        # A segmented-execution stateful root resumes from an exact per-instrument
+        # checkpoint, so the recompute-tail overlap is unnecessary (the boundary
+        # state is exact, not re-derived).  Zeroing it makes output_start =
+        # watermark + 1 and the terminal checkpoint usable by the next run.
+        from runtime.stateful_incremental import segmented_incremental_available
+
+        segmented_eligible = (
+            getattr(analysis, "ir", None) is not None
+            and segmented_incremental_available(ir=analysis.ir)
+        )
+        effective_tail = 0 if segmented_eligible else recompute_tail_bars
         inc = build_incremental_plan(
             factor_id=fid,
             analysis_lookback=getattr(analysis, "lookback", 0),
@@ -1998,7 +2009,7 @@ class FactorEngine:
             since=since,
             end_date=end_date,
             lookback_extra=lookback_extra,
-            recompute_tail_bars=recompute_tail_bars,
+            recompute_tail_bars=effective_tail,
             market=resolved_market,
             calendar=cal,
             factor_freq=factor_freq,
@@ -2030,6 +2041,97 @@ class FactorEngine:
             factor_freq,
             source_bar_freq,
         )
+
+        # Audit §11: a segmented-execution stateful root resumes from a
+        # per-instrument checkpoint instead of re-reading the look-back window.
+        # A recursive operator cannot use a finite look-back window (its state
+        # would be wrong), so when the checkpoint path is unavailable this block
+        # forces a full-history replay instead of the narrow-and-replay path.
+        from runtime.incremental import FULL_HISTORY_LOOKBACK_SENTINEL
+        from runtime.stateful_checkpoint_store import StatefulCheckpointStore
+        from runtime.stateful_incremental import (
+            try_stateful_segmented_incremental,
+        )
+
+        if segmented_eligible and not inc.is_full_run:
+            checkpoint_root = (
+                Path(str(lake_root)) / "stateful_checkpoints"
+                if lake_root is not None
+                else None
+            )
+            store = StatefulCheckpointStore(root=checkpoint_root)
+            stateful_output = None
+            # (1) pure incremental resume over the output window.
+            output_window = narrow_data_source_for_window(
+                self.data_source,
+                start_date=inc.output_start,
+                end_date=inc.output_end,
+                bar_freq=source_bar_freq,
+            )
+            stateful_output = try_stateful_segmented_incremental(
+                factor_id=fid,
+                ir=analysis.ir,
+                source=output_window,
+                store=store,
+                start=inc.output_start,
+                end=inc.output_end,
+                bootstrap=False,
+            )
+            if stateful_output is None:
+                # (2) bootstrap the terminal checkpoint over the full causal
+                # history up to the output end: a recursive operator's state at
+                # the output window must be seeded from the dataset origin, so
+                # the first run is a full-history computation.
+                bootstrap_window = narrow_data_source_for_window(
+                    self.data_source,
+                    start_date=None,
+                    end_date=inc.output_end,
+                    bar_freq=source_bar_freq,
+                )
+                stateful_output = try_stateful_segmented_incremental(
+                    factor_id=fid,
+                    ir=analysis.ir,
+                    source=bootstrap_window,
+                    store=store,
+                    start=inc.load_start,
+                    end=inc.output_end,
+                    bootstrap=True,
+                )
+            if stateful_output is not None:
+                result_series, mode = stateful_output
+                result_series = slice_factor_result_for_incremental(result_series, inc)
+                output = {
+                    "result": result_series,
+                    "incremental": {**inc.to_dict(), "market": resolved_market, **mode},
+                    "analysis": analysis,
+                    "plan": plan,
+                }
+                logger.info(
+                    "增量因子 '%s' 走 stateful segmented 路径 (mode=%s)",
+                    factor.name,
+                    mode.get("mode"),
+                )
+                return output
+            # No usable checkpoint anywhere: a recursive operator cannot resume
+            # from an unseeded finite look-back window, so force full replay.
+            inc = build_incremental_plan(
+                factor_id=fid,
+                analysis_lookback=FULL_HISTORY_LOOKBACK_SENTINEL,
+                watermark=None,
+                since=since,
+                end_date=end_date,
+                lookback_extra=lookback_extra,
+                recompute_tail_bars=recompute_tail_bars,
+                market=resolved_market,
+                calendar=cal,
+                factor_freq=factor_freq,
+                source_bar_freq=source_bar_freq,
+            )
+            scoped = self
+            logger.info(
+                "增量因子 '%s' 无可用 checkpoint,回退 full-history replay",
+                factor.name,
+            )
 
         output = scoped.run(
             factor,
