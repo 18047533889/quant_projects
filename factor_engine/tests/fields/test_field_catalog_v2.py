@@ -26,6 +26,25 @@ def test_catalog_v2_is_deterministic_and_semantic() -> None:
         assert spec.scale_to_canonical == pytest.approx(0.01)
 
 
+def test_operator_expansion_fields_resolve_with_semantics() -> None:
+    gross = FIELD_REGISTRY.require("gross_profit")
+    assert gross.table == "StockIncome"
+    assert gross.grain == ("flow", "ytd")
+    assert gross.unit == "CNY"
+
+    equity = FIELD_REGISTRY.require("total_owner_equities")
+    assert equity.source_name == "TotalOwnerEquities"
+    assert "total_equity" in equity.aliases
+
+    capex = FIELD_REGISTRY.require("capex")
+    assert capex.table == "StockCashFlow"
+    assert capex.grain == ("flow", "ytd")
+
+    net_income = FIELD_REGISTRY.require("net_income")
+    assert net_income.name == "net_profit"
+    assert net_income.source_name == "NetProfit"
+
+
 def test_corrected_status_and_index_identities() -> None:
     status = FIELD_REGISTRY.require("listed_state")
     assert status.name == "public_status"

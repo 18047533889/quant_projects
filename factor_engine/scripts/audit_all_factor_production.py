@@ -46,6 +46,15 @@ _PANEL_PARAMETERS = frozenset({
     "holder_count", "concentration", "signal_x", "signal_y", "x1", "x2",
     "cost", "activity", "operating", "investing", "financing", "accrual",
     "period_end",
+    # Operator expansion (2026-08) panel inputs.
+    "pre_close", "subgroup", "member", "index_weight", "date1", "date2",
+    "period_end_date", "pub_date", "state", "event", "entity_id",
+    "snapshot_id", "high_limit", "low_limit", "stock_return",
+    "benchmark_return", "category", "day_vwap", "current_snapshot",
+    "previous_snapshot", "weights2", "s1", "s2", "s3",
+    # Minute/relation integration (2026-08).
+    "entity_ids", "current_ids", "previous_ids", "components",
+    "high_limit", "low_limit", "activity",
 })
 
 _SCALAR_VALUES: dict[str, Any] = {
@@ -195,6 +204,29 @@ _SCALAR_VALUES: dict[str, Any] = {
     "pattern": "high_wave",
     "body_factor": 1.0,
     "shadow_factor": 1.0,
+    # Operator expansion (2026-08) scalar parameters.
+    "q_low": 0.25,
+    "q_high": 0.75,
+    "trim_ratio": 0.1,
+    "center": "median",
+    "scale": "mad",
+    "normalize": True,
+    "target": 0.0,
+    "max_lag": 3,
+    "min_events": 2,
+    "min_count": 3,
+    # Minute/relation integration (2026-08).
+    "segment": "morning",
+    "transition": "open",
+    "absolute_return": False,
+    "method": "jaccard",
+    "component_directions": "up",
+    "normalize_weight": True,
+    "scale": 1e8,
+    "half_life": 20.0,
+    "score_weights": 1.0,
+    "morning_cutoff": "11:30",
+    "afternoon_start": "13:00",
 }
 
 _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
@@ -226,15 +258,32 @@ _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
     ("fiscal_direction_consistency", "min_periods"): 3,
     ("fiscal_pair_direction_agreement", "min_periods"): 3,
     ("yoy_by_period", "denominator"): "signed",
+    ("ts_downside_deviation", "target"): 0.0,
+    ("ts_upside_deviation", "target"): 0.0,
+    ("intra_limit_first_hit_time", "side"): "up",
+    ("intra_limit_duration", "side"): "up",
+    ("intra_limit_reopen_count", "side"): "up",
+    ("intra_realized_semivariance", "side"): "down",
+    ("intra_extreme_bar_return", "side"): "max",
 }
 _SPECIAL_POSITIONAL = {
     "cs_multi_resid": ("target", "exposure", "control"),
     "cs_neutralize": ("target", "exposure", "control"),
     "row_sum_skipna": ("x", "y"),
+    # Variadic ranked-panel relation operators: feed exactly 3 panels.
+    "relation_hhi": ("s1", "s2", "s3"),
+    "relation_entropy": ("s1", "s2", "s3"),
+    "relation_topk_sum": ("s1", "s2", "s3"),
+    "relation_rank_weighted_sum": ("s1", "s2", "s3"),
 }
 _SPECIAL_KWARGS = {
     "cs_multi_resid": {"add_intercept": True, "min_obs": 8},
     "cs_neutralize": {"add_intercept": True, "min_obs": 8},
+    "fin_component_score": {"component_directions": "up", "weights": None},
+}
+_SPECIAL_POSITIONAL = {
+    **_SPECIAL_POSITIONAL,
+    "fin_component_score": ("components",),
 }
 
 

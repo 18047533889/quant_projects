@@ -1,47 +1,8 @@
 {
-  "us_stock": {
-    "StockDailyBar": {
-      "file_count": 3,
-      "columns": {
-        "Ticker": "string",
-        "TradeDate": "timestamp[ns]",
-        "Open": "double",
-        "High": "double",
-        "Low": "double",
-        "Close": "double",
-        "Volume": "double",
-        "AdjFactor": "double",
-        "PreClose": "double",
-        "Ret": "double",
-        "Ret_Intra": "double",
-        "Ret_Overnight": "double",
-        "High_Low_Ratio": "double",
-        "Upper_Shadow_Ratio": "double",
-        "VWAP": "double",
-        "Amount": "double",
-        "Vwap_Close_Dist": "double"
-      }
-    }
-  },
+  "us_stock": {},
   "ashare": {
-    "IndexDailyBar": {
-      "file_count": 5,
-      "columns": {
-        "TradeDate": "date32[day]",
-        "Symbol": "string",
-        "Open": "double",
-        "High": "double",
-        "Low": "double",
-        "Close": "double",
-        "PreClose": "double",
-        "Volume": "uint64",
-        "Amount": "double",
-        "Return": "double",
-        "UpdateTime": "timestamp[ms, tz=UTC]"
-      }
-    },
     "StockDailyBar": {
-      "file_count": 2549,
+      "file_count": 1815,
       "columns": {
         "TradeDate": "date32[day]",
         "Symbol": "string",
@@ -61,8 +22,19 @@
         "UpdateTime": "timestamp[ms, tz=UTC]"
       }
     },
+    "StockIndustry": {
+      "file_count": 2738,
+      "columns": {
+        "TradeDate": "date32[day]",
+        "Symbol": "string",
+        "IndustrySource": "string",
+        "IndustryCode": "string",
+        "IndustryName": "string",
+        "UpdateTime": "timestamp[ms, tz=UTC]"
+      }
+    },
     "StockValuationDaily": {
-      "file_count": 1,
+      "file_count": 1815,
       "columns": {
         "TradeDate": "date32[day]",
         "Symbol": "string",

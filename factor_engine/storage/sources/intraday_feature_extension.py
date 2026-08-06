@@ -244,6 +244,66 @@ def _calc(feature,bar,params,*,prev_close=np.nan):
     if feature=="volume_weighted_return":return float(np.nansum(aligned_r*volume)/total_v) if total_v>_EPS else np.nan
     if feature in {"price_impact","amihud"}:return float(np.nanmean(np.abs(aligned_r)/np.where(amount>0,amount,np.nan)))
     if feature=="turnover_per_volatility":return float(total_a/np.sqrt(rv)) if np.isfinite(rv) and rv>_EPS else np.nan
+
+    # ---- 2026-08 operator expansion features --------------------------------
+    if feature=="lunch_gap_return":
+        split=str(params.get("split_time","12:00")); times=bar["timestamp"].dt.strftime("%H:%M"); mask=(times<=split).to_numpy()
+        morning_idx=np.where(mask)[0]; afternoon_idx=np.where(~mask)[0]
+        if len(morning_idx) and len(afternoon_idx):
+            morning_last_close=close[morning_idx[-1]]; afternoon_first_open=np.asarray(bar["open"],float)[afternoon_idx[0]]
+            return float(afternoon_first_open/morning_last_close-1.0) if np.isfinite(morning_last_close) and morning_last_close!=0 else np.nan
+        return np.nan
+    if feature=="return_activity_corr":
+        activity_name=str(params.get("activity","volume")); act=np.asarray(bar[activity_name],float) if activity_name in bar else volume
+        return _corr(aligned_r,act)
+    if feature=="vwap_above_ratio":
+        bar_vwap=np.where(volume>0,amount/volume,np.nan)
+        return float(np.nanmean(close>=bar_vwap)) if n else np.nan
+    if feature=="kyle_lambda_proxy":
+        return float(np.nanmean(np.abs(aligned_r)/np.where(amount>0,amount,np.nan)))
+    if feature=="extreme_bar_return":
+        side=str(params.get("side","max"))
+        if side=="max": return float(np.nanmax(finite)) if len(finite) else np.nan
+        if side=="min": return float(np.nanmin(finite)) if len(finite) else np.nan
+        raise ValueError("side must be 'max' or 'min'")
+    if feature in {"segment_return","segment_volume_share","segment_amount_share","segment_vwap_deviation","segment_realized_vol"}:
+        segment=str(params.get("segment","morning")); split=str(params.get("split_time","12:00")); times=bar["timestamp"].dt.strftime("%H:%M"); mask=(times<=split).to_numpy()
+        if segment=="morning": idx=np.where(mask)[0]
+        elif segment=="afternoon": idx=np.where(~mask)[0]
+        elif segment in {"first","last"}:
+            minutes=max(1,int(params.get("minutes",30))); seg_bars=max(1,int(math.ceil(minutes/max(1,int(params.get("bar_minutes",1))))))
+            idx=np.arange(min(seg_bars,n)) if segment=="first" else np.arange(max(0,n-seg_bars),n)
+        else: raise ValueError(f"unknown segment {segment!r}")
+        if len(idx)==0: return np.nan
+        seg_r=_returns(bar.iloc[idx]); seg_close=close[idx]; seg_vol=volume[idx]; seg_amt=amount[idx]
+        if feature=="segment_return": return float(seg_close[-1]/np.asarray(bar["open"],float)[idx[0]]-1.0)
+        if feature=="segment_volume_share": return float(np.nansum(seg_vol)/total_v) if total_v>_EPS else np.nan
+        if feature=="segment_amount_share": return float(np.nansum(seg_amt)/total_a) if total_a>_EPS else np.nan
+        if feature=="segment_vwap_deviation":
+            svwap=np.nansum(seg_amt)/np.nansum(seg_vol) if np.nansum(seg_vol)>_EPS else np.nan
+            return float(seg_close[-1]/svwap-1.0) if np.isfinite(svwap) and svwap!=0 else np.nan
+        seg_finite=seg_r[np.isfinite(seg_r)]
+        return float(np.sqrt(np.nansum(seg_finite**2))) if len(seg_finite) else np.nan
+    if feature in {"limit_first_hit_time","limit_duration","limit_reopen_count"}:
+        instrument=str(params.get("instrument") or "")
+        trade_date=params.get("trade_date") or bar["timestamp"].iloc[-1]
+        upper,lower=ashare_limit_prices(prev_close,instrument,trade_date,is_st=bool(params.get("is_st",False)))
+        side=str(params.get("side","up"))
+        if side=="up" and not np.isfinite(upper):
+            return np.nan
+        if side=="down" and not np.isfinite(lower):
+            return np.nan
+        at_upper=np.asarray(close>=upper-_EPS,dtype=bool)
+        at_lower=np.asarray(close<=lower+_EPS,dtype=bool)
+        at=at_upper if side=="up" else at_lower
+        if feature=="limit_first_hit_time":
+            hits=np.where(at)[0]; return float(hits[0]/max(1,n-1)) if len(hits) else np.nan
+        if feature=="limit_duration":
+            return float(np.mean(at)) if n else np.nan
+        transition=str(params.get("transition","open"))
+        if transition=="open": return float(np.sum(at[1:] & ~at[:-1])) if n>1 else 0.0
+        if transition=="reseal": return float(np.sum(~at[1:] & at[:-1])) if n>1 else 0.0
+        raise ValueError("transition must be 'open' or 'reseal'")
     raise MissingDataDependencyError(f"unsupported intraday feature {feature!r}")
 
 

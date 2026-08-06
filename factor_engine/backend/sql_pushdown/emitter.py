@@ -1376,7 +1376,15 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_ts_partition=left.has_ts_partition or right.has_ts_partition,
         )
 
-    if op in {"safe_div_null", "safe_div", "fin_ratio"}:
+    if op in {
+        "safe_div_null",
+        "safe_div",
+        "fin_ratio",
+        "float_share_ratio",
+        "free_float_share_ratio",
+        "benchmark_relative_price",
+        "holder_concentration",
+    }:
         if len(node.inputs) != 2:
             return None
         left = _compile_layer(node.inputs[0], dialect=dialect)
@@ -1392,6 +1400,41 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             f"CASE WHEN l._v IS NULL OR r._v IS NULL THEN NULL "
             f"WHEN {abs_fn}(r._v) <= {eps} THEN NULL "
             f"ELSE l._v / r._v END AS _v "
+            f"FROM ({left.sql}) l LEFT JOIN ({right.sql}) r USING (ts, inst)",
+            has_inst_window=left.has_inst_window or right.has_inst_window,
+            has_ts_partition=left.has_ts_partition or right.has_ts_partition,
+        )
+
+    if op == "benchmark_excess_return":
+        if len(node.inputs) != 2:
+            return None
+        left = _compile_layer(node.inputs[0], dialect=dialect)
+        right = _compile_layer(node.inputs[1], dialect=dialect)
+        if left is None or right is None:
+            return None
+        return _Layer(
+            f"SELECT l.ts, l.inst, (l._v - r._v) AS _v "
+            f"FROM ({left.sql}) l LEFT JOIN ({right.sql}) r USING (ts, inst)",
+            has_inst_window=left.has_inst_window or right.has_inst_window,
+            has_ts_partition=left.has_ts_partition or right.has_ts_partition,
+        )
+
+    if op == "ashare_limit_distance":
+        if len(node.inputs) != 2:
+            return None
+        left = _compile_layer(node.inputs[0], dialect=dialect)
+        right = _compile_layer(node.inputs[1], dialect=dialect)
+        if left is None or right is None:
+            return None
+        from backend.numeric_semantics import protected_epsilon_default
+
+        eps = _float_attr(node, "epsilon", default=protected_epsilon_default())
+        abs_fn = _dialect_fn(dialect, "abs")
+        return _Layer(
+            f"SELECT l.ts, l.inst, "
+            f"CASE WHEN l._v IS NULL OR r._v IS NULL THEN NULL "
+            f"WHEN {abs_fn}(r._v) <= {eps} THEN NULL "
+            f"ELSE l._v / r._v - 1.0 END AS _v "
             f"FROM ({left.sql}) l LEFT JOIN ({right.sql}) r USING (ts, inst)",
             has_inst_window=left.has_inst_window or right.has_inst_window,
             has_ts_partition=left.has_ts_partition or right.has_ts_partition,
@@ -1467,6 +1510,30 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             return None
         return _Layer(
             f"SELECT ts, inst, (-_v) AS _v FROM ({inner.sql}) t",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=inner.has_ts_partition,
+        )
+
+    if op == "sqrt_abs":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        abs_fn = _dialect_fn(dialect, "abs")
+        sqrt_fn = _dialect_fn(dialect, "sqrt")
+        return _Layer(
+            f"SELECT ts, inst, {sqrt_fn}({abs_fn}(_v)) AS _v FROM ({inner.sql}) t",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=inner.has_ts_partition,
+        )
+
+    if op in {"book_to_price", "earnings_yield"}:
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"CASE WHEN _v IS NULL OR _v <= 0 THEN NULL ELSE 1.0 / _v END AS _v "
+            f"FROM ({inner.sql}) t",
             has_inst_window=inner.has_inst_window,
             has_ts_partition=inner.has_ts_partition,
         )

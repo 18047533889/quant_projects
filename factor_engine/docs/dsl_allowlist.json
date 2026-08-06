@@ -94,6 +94,7 @@
     "divide",
     "eq",
     "exp",
+    "field",
     "fillna_const",
     "floor",
     "ge",
@@ -227,5 +228,5 @@
     "yoy_by_period",
     "zscore"
   ],
-  "count": 222
+  "count": 223
 }

@@ -47,13 +47,16 @@ def _run(source, expr, backend_name: str):
 def test_polars_long_covers_registry_polars():
     from backend.polars_expr_emitter import get_polars_long_capable
 
+    load_all()  # governance renames/moves legacy names before the live query
     reg = polars_implemented_canonicals() - {"column", "literal"}
     long_set = get_polars_long_capable() - {"column", "literal"}
     strict_period_registry = {
         "quarter_from_cumulative", "ttm_from_quarterly",
         "ttm_from_cumulative", "yoy_by_period",
     }
-    assert reg - long_set <= {"Lead", "next", "shuffle"} | strict_period_registry
+    # constant is a scalar operator (ScalarOperator) with no series long lowering.
+    scalar_only = {"constant"}
+    assert reg - long_set <= {"Lead", "next", "shuffle"} | strict_period_registry | scalar_only
 
 
 def test_registry_bridge_disjoint_from_native():

@@ -1,5 +1,5 @@
 {
-  "field_count": 188,
+  "field_count": 182,
   "fields": [
     "a_cap",
     "a_market_cap",
@@ -10,8 +10,6 @@
     "additional_paid_in_capital",
     "adf_short_volume",
     "adf_short_volume_exempt",
-    "adj_factor",
-    "amount",
     "ask_exchange",
     "ask_price",
     "ask_size",
@@ -79,12 +77,14 @@
     "goodwill",
     "gross_profit",
     "high",
-    "high__low__ratio",
     "id",
     "income_before_income_taxes",
     "income_loss_from_discontinued_operations",
     "income_taxes",
     "indicators",
+    "industry_code",
+    "industry_name",
+    "industry_source",
     "intangible_assets_net",
     "interest_expense",
     "interest_income",
@@ -131,7 +131,6 @@
     "pe_ratio",
     "pe_ratio_lyr",
     "period_id",
-    "pre_close",
     "preferred_stock",
     "preferred_stock_dividends_declared",
     "price",
@@ -146,9 +145,6 @@
     "quick",
     "receivables",
     "research_development",
-    "ret",
-    "ret__intra",
-    "ret__overnight",
     "retained_earnings_deficit",
     "return_on_assets",
     "return_on_equity",
@@ -184,12 +180,10 @@
     "trf_id",
     "trf_timestamp",
     "turnover_ratio",
-    "upper__shadow__ratio",
     "volume",
     "vwap",
-    "vwap__close__dist",
     "window_start"
   ],
   "schema_version": "field_manifest.v1",
-  "source": "canonical_data_fields.json + logical semantic inputs"
+  "source": "canonical_data_fields.json"
 }

@@ -9,6 +9,15 @@ try:
 except ImportError:
     pl = None  # type: ignore
 
+
+def _pl():
+    if pl is None:
+        raise RuntimeError(
+            "polars is required for this operator; install factor-engine[polars]"
+        )
+    return pl
+
+
 from cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
 from cleaned_operators.registry import OperatorRegistry
 
@@ -214,13 +223,13 @@ _register_binary_horizontal(
     "fmax",
     name="fmax",
     description="逐元素 fmax",
-    combine=pl.max_horizontal,
+    combine=lambda *args, **kwargs: _pl().max_horizontal(*args, **kwargs),
 )
 _register_binary_horizontal(
     "fmin",
     name="fmin",
     description="逐元素 fmin",
-    combine=pl.min_horizontal,
+    combine=lambda *args, **kwargs: _pl().min_horizontal(*args, **kwargs),
 )
 
 

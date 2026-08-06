@@ -3,7 +3,7 @@
 > Generated from active runtime canonicals. SQL means DuckDB emitter support unless a dialect-specific certification says otherwise.
 > ClickHouse production certification remains separate and is not inferred from DuckDB.
 
-- active SQL emitter implementations: **128**
+- active SQL emitter implementations: **132**
 - DuckDB parity verified: **86**
 - DuckDB production safe: **86**
 
@@ -36,6 +36,7 @@
 | eq | yes | yes | yes |
 | exp | yes | yes | yes |
 | fillna_const | yes | yes | yes |
+| fin_ratio | yes | no | no |
 | floor | yes | yes | yes |
 | ge | yes | yes | yes |
 | group_count | yes | yes | yes |
@@ -52,6 +53,7 @@
 | group_winsorize | yes | yes | yes |
 | group_zscore | yes | yes | yes |
 | gt | yes | yes | yes |
+| industry_size_neutralize | yes | no | no |
 | inverse | yes | yes | yes |
 | is_finite | yes | yes | yes |
 | is_infinite | yes | yes | yes |
@@ -78,11 +80,13 @@
 | protected_div | yes | no | no |
 | quarter_from_cumulative | yes | yes | yes |
 | rank | yes | yes | yes |
+| row_sum_skipna | yes | no | no |
 | safe_div_null | yes | yes | yes |
 | scale | yes | no | no |
 | sign | yes | yes | yes |
 | signed_log | yes | yes | yes |
 | signed_sqrt | yes | yes | yes |
+| size_neutralize | yes | no | no |
 | sqrt | yes | yes | yes |
 | subtract | yes | yes | yes |
 | tanh | yes | yes | yes |

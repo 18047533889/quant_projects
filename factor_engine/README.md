@@ -230,9 +230,9 @@ FactorEngine.materialize_incremental_from_config("configs/fa.yaml", since="2024-
 |----|------|------|
 | **读** | `data_access` + **DuckDB** | parquet 批量读、`sql()`/`sql_stream()`、registry 白名单 |
 | **读** | `clickhouse` | 长表 panel 只读 |
-| **算** | **`auto`（默认）** | SQL 可编译子树 → DuckDB/CH；其余 → Polars（325 算子）→ Pandas 兜底（361） |
-| **算** | `duckdb_sql` | 强制 DuckDB 方言 SQL 下推（**88** 算子，见 [`sql_pushdown_coverage.md`](docs/sql_pushdown_coverage.md)） |
-| **算** | `clickhouse_sql` | ClickHouse 方言 SQL 下推 |
+| **算** | **`auto`（默认）** | SQL 可编译子树 → DuckDB/CH；其余 → 认证的 Polars 快路径 → Pandas reference 兜底。算子数量以 `cleaned_operators/docs/operators_catalog.json` 为准（当前注册 canonical 626、daily DSL 白名单 223、extended 920） |
+| **算** | `duckdb_sql` | 强制 DuckDB 方言 SQL 下推（当前 **147** 个已实现 canonical，见 [`sql_pushdown_coverage.md`](docs/sql_pushdown_coverage.md)） |
+| **算** | `clickhouse_sql` | ClickHouse 方言 SQL 下推（fail-closed，未逐算子认证不得继承 DuckDB evidence） |
 | **写** | Parquet factor lake / staging / CH | 经 `write_targets`；DuckDB 不做持久化写目标 |
 
 **推荐 YAML**（未写 `backend` 时默认 **`auto`**）：
@@ -256,8 +256,8 @@ backend:
 | 层级 | 说明 |
 |------|------|
 | **已实现** | 算术 / 逻辑 / 时序 / 截面 / 分组 / 清洗 / 技术指标 / 上下文 / transformational 等 — 经 `cleaned_bridge` 在 `PandasBackend` 执行 |
-| **catalog-only / stub** | 在 [`cleaned_operators/docs/operators_catalog.md`](cleaned_operators/docs/operators_catalog.md) 标注为 `stub` 或 `api_expr_only` 的名字 **不在 DSL 白名单**，投递勿用 |
-| **PolarsBackend** | 当前 **委托** `PandasBackend`（同一 cleaned 路径） |
+| **catalog-only / stub** | 在 [`cleaned_operators/docs/operators_catalog.md`](cleaned_operators/docs/operators_catalog.md) 标注为 `stub` 或 `api_expr_only` 的名字 **不在 DSL 白名单**，投递勿用（见 `scripts/audit_stub_surface.py`） |
+| **PolarsBackend** | 非完全 Polars-native DAG：`FACTOR_ENGINE_POLARS_EXPR=1` 时对已认证算子走原生 Expr 快路径，其余经 Pandas reference 递归路由；无 Polars 环境下注册核心算子不受影响 |
 
 权威清单与状态：**[`cleaned_operators/docs/operators_catalog.md`](cleaned_operators/docs/operators_catalog.md)**；语义细节：**[`docs/operators_semantics.md`](docs/operators_semantics.md)**。本地枚举白名单：
 

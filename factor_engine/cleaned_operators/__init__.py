@@ -7,6 +7,7 @@ from cleaned_operators import price_volume  # noqa: F401
 from cleaned_operators import technical  # noqa: F401
 from cleaned_operators import fundamental  # noqa: F401
 from cleaned_operators import microstructure  # noqa: F401
+from cleaned_operators import return_decomp  # noqa: F401
 from cleaned_operators import _aliases  # noqa: F401
 
 __all__ = [
@@ -41,6 +42,12 @@ _LOAD_MODULES = (
     "cleaned_operators.common.polars_np_parity",
     "cleaned_operators.common.polars_math_extended",
     "cleaned_operators.common.polars_batch_mirror",
+    "cleaned_operators.common.polars_misc_utils",
+    "cleaned_operators.common.polars_robust_stats",
+    "cleaned_operators.common.polars_state_event",
+    "cleaned_operators.common.polars_cs_misc",
+    "cleaned_operators.common.polars_limit_misc",
+    "cleaned_operators.common.polars_group",
     "cleaned_operators.common.polars_daily_native",
     "cleaned_operators.research_polars",
     "cleaned_operators.price_volume.ops",
@@ -48,9 +55,13 @@ _LOAD_MODULES = (
     "cleaned_operators.technical.signal",
     "cleaned_operators.technical.polars_signal",
     "cleaned_operators.fundamental.ops",
+    "cleaned_operators.fundamental.component_score",
+    "cleaned_operators.fundamental.polars_component_score",
+    "cleaned_operators.fundamental.polars_fiscal_v2",
     "cleaned_operators.ashare.ops",
     "cleaned_operators.shareholder.ops",
     "cleaned_operators.microstructure.ops",
+    "cleaned_operators.microstructure.intraday_agg",
     "cleaned_operators.microstructure.polars_microstructure",
     "cleaned_operators.semantic_hardening",
     "cleaned_operators.operator_overhaul",
@@ -59,6 +70,17 @@ _LOAD_MODULES = (
     "cleaned_operators.layer_primitives",
     "cleaned_operators.layer_composite_fixes",
     "cleaned_operators.fiscal_event_ops",
+    # Operator expansion (2026-08): robust statistics, conditional, state/event,
+    # downside risk, group ex-self, return decomposition, limit behavior.
+    "cleaned_operators.robust_stats",
+    "cleaned_operators.direction_concentration",
+    "cleaned_operators.conditional_ext",
+    "cleaned_operators.state_event",
+    "cleaned_operators.downside_risk",
+    "cleaned_operators.group_ext",
+    "cleaned_operators.return_decomp",
+    "cleaned_operators.ashare.limit_ops",
+    "cleaned_operators.relation.ops",
 )
 
 _REVIEWED_EXTENSIONS = (
@@ -75,11 +97,26 @@ _REVIEWED_EXTENSIONS = (
     "cleaned_operators.price_volume.liquidity_v2",
     "cleaned_operators.price_volume.liquidity_naming_v2",
     "cleaned_operators.technical.indicators_v2",
+    "cleaned_operators.technical.polars_indicators_v2",
+    "cleaned_operators.technical.polars_tech_misc",
+    "cleaned_operators.technical.polars_misc_v2",
+    "cleaned_operators.price_volume.liquidity_v2",
+    "cleaned_operators.price_volume.liquidity_naming_v2",
+    "cleaned_operators.price_volume.polars_liquidity_v2",
+    "cleaned_operators.price_volume.candle_geometry_v2",
+    "cleaned_operators.price_volume.candle_patterns_extended",
+    "cleaned_operators.price_volume.polars_candle",
+    "cleaned_operators.price_volume.structure_patterns_v2",
+    "cleaned_operators.price_volume.structure_patterns_extra_v2",
+    "cleaned_operators.price_volume.structure_patterns_extra_repairs_v2",
+    "cleaned_operators.price_volume.technical_structure_repairs",
+    "cleaned_operators.price_volume.polars_structure",
     "cleaned_operators.common.stable_high_moments_v2",
     "cleaned_operators.fundamental.transforms_v2",
     "cleaned_operators.fundamental.transforms_repairs_v2",
     "cleaned_operators.fundamental.flow_semantics_v2",
     "cleaned_operators.fundamental.expectation_v2",
+    "cleaned_operators.fundamental.polars_fundamental",
     "cleaned_operators.fundamental.parameter_contract_v2",
     "cleaned_operators.production_policy_extensions_v2",
 )
@@ -94,15 +131,33 @@ def _optional_backend_available(module: str) -> bool:
 
 
 def _load_module_if_available(mod: str) -> None:
-    """Load an optional module only when its dependency is installed."""
-    if ".polars" in mod or mod.endswith("research_polars"):
-        if not _optional_backend_available("polars"):
-            return
-    __import__(mod, fromlist=["*"])
+    """Load a module, tolerating a missing optional backend at import time.
+
+    Polars modules guard their own ``import polars`` and register numpy
+    backends that are essential (e.g. ``maximum``/``minimum``), so they must
+    load even when Polars is absent.  A module that genuinely requires an
+    optional backend and fails without it is skipped rather than aborting the
+    whole registry.
+    """
+    try:
+        __import__(mod, fromlist=["*"])
+    except ImportError as exc:
+        if ".polars" not in mod and not mod.endswith("research_polars"):
+            raise
+        _SKIPPED_OPTIONAL_MODULES.add(mod)
+        logger = None
+        try:
+            from logging_utils import get_logger
+            logger = get_logger("cleaned_operators")
+        except Exception:
+            pass
+        if logger is not None:
+            logger.warning("skipped optional backend module %s: %s", mod, exc)
 
 
 _LOADED = False
 _INITIALIZING = False
+_SKIPPED_OPTIONAL_MODULES: set[str] = set()
 
 
 def load_all() -> None:

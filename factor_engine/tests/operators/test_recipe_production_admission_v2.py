@@ -27,6 +27,12 @@ _SCALARS: dict[str, Any] = {
     "constant": 0.015,
     "min_obs": 4,
     "add_intercept": True,
+    "short_periods": 2,
+    "long_periods": 4,
+    "growth_periods": 2,
+    "window_periods": 4,
+    "min_periods": 2,
+    "average_periods": 2,
 }
 _PANEL_IDENTIFIERS = frozenset({
     "period_id",

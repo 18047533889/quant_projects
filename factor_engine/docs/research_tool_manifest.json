@@ -1,6 +1,6 @@
 {
   "schema_version": "research_tool_manifest.v1",
-  "tool_count": 135,
+  "tool_count": 134,
   "tools": {
     "ACF": {
       "aliases": [
@@ -26,27 +26,6 @@
       "status": "implemented",
       "surface": "research_tools"
     },
-    "KAMA": {
-      "aliases": [],
-      "backend_meta": {
-        "pandas_numpy": {
-          "explicit": true,
-          "source": "composite_fastpath_primitives"
-        }
-      },
-      "backends": [
-        "pandas_numpy"
-      ],
-      "canonical": "KAMA",
-      "description": "考夫曼自适应移动平均",
-      "migration_reason": "not a production daily factor primitive",
-      "param_names": [
-        "close",
-        "window"
-      ],
-      "status": "production",
-      "surface": "research_tools"
-    },
     "Mode": {
       "aliases": [
         "mode"
@@ -55,10 +34,27 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "canonical": "Mode",
       "description": "众数",
@@ -100,10 +96,27 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "canonical": "at_imax",
       "description": "列最大值索引",
@@ -120,10 +133,27 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "canonical": "at_imin",
       "description": "列最小值索引",
@@ -145,6 +175,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -198,10 +229,27 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "canonical": "blom_transform",
       "description": "Blom变换（秩的逆正态CDF）",
@@ -218,10 +266,27 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "canonical": "causal_linear_extrapolate",
       "description": "仅使用最近两个历史有效点线性外推缺失值",
@@ -407,10 +472,27 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "canonical": "corr_test",
       "description": "Pearson相关性检验",
@@ -454,6 +536,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -490,6 +573,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -526,6 +610,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -562,6 +647,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -598,6 +684,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -634,6 +721,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -665,10 +753,27 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": true
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "canonical": "cum_top_n_avg",
       "description": "累积前 N 大均值",
@@ -686,10 +791,27 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": true
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "canonical": "cum_top_n_sum",
       "description": "累积前 N 大求和",
@@ -712,6 +834,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -787,10 +910,27 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": true
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "canonical": "downside_beta",
       "description": "下行 Beta：仅在 benchmark_ret < 0 子样本上估计",
@@ -814,6 +954,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars_auto",
           "supports_group": false,
           "supports_inf": true,
@@ -845,10 +986,27 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "canonical": "durbin_watson_test",
       "description": "Durbin-Watson自相关检验",
@@ -893,6 +1051,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -933,6 +1092,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -972,6 +1132,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -1010,6 +1171,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -1049,6 +1211,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -1087,6 +1250,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -1129,6 +1293,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars_auto",
           "supports_group": false,
           "supports_inf": true,
@@ -1189,6 +1354,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars_auto",
           "supports_group": false,
           "supports_inf": true,
@@ -1314,6 +1480,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -1350,6 +1517,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -1408,6 +1576,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -1466,6 +1635,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -1498,10 +1668,27 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "canonical": "imag",
       "description": "取复数虚部",
@@ -1853,6 +2040,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -1889,6 +2077,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -1926,6 +2115,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -1962,6 +2152,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -1998,6 +2189,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -2035,6 +2227,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -2072,6 +2265,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -2108,6 +2302,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -2146,6 +2341,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -2183,6 +2379,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -2455,6 +2652,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -2556,6 +2754,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -2629,10 +2828,27 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "expression_native",
+          "explicit": true,
+          "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": false
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "canonical": "real",
       "description": "取复数实部",
@@ -2679,6 +2895,7 @@
           "execution_kind": "expression_native",
           "explicit": true,
           "materializes_full_panel": false,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
           "supports_group": false,
           "supports_inf": true,
@@ -2737,18 +2954,19 @@
           "source": "factor_dsl_np"
         },
         "polars": {
-          "execution_kind": "expression_native",
+          "execution_kind": "polars_eager_native",
           "explicit": true,
-          "materializes_full_panel": false,
+          "materializes_full_panel": true,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
-          "supports_group": false,
+          "supports_group": true,
           "supports_inf": true,
-          "supports_lazy": true,
+          "supports_lazy": false,
           "supports_min_periods": false,
           "supports_nan": true,
           "supports_nulls": true,
           "supports_scalar_broadcast": true,
-          "supports_streaming": true,
+          "supports_streaming": false,
           "supports_window": false
         }
       },
@@ -2771,10 +2989,27 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "polars_eager_native",
+          "explicit": true,
+          "materializes_full_panel": true,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": true,
+          "supports_inf": true,
+          "supports_lazy": false,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": false,
+          "supports_window": false
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "canonical": "row_beta",
       "description": "对每行（每个日期截面）计算y对x的beta系数",
@@ -2792,10 +3027,27 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "polars_eager_native",
+          "explicit": true,
+          "materializes_full_panel": true,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": true,
+          "supports_inf": true,
+          "supports_lazy": false,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": false,
+          "supports_window": false
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "canonical": "row_corr",
       "description": "对每行（每个日期截面）计算y和x的相关系数",
@@ -2815,18 +3067,19 @@
           "source": "factor_dsl_np"
         },
         "polars": {
-          "execution_kind": "expression_native",
+          "execution_kind": "polars_eager_native",
           "explicit": true,
-          "materializes_full_panel": false,
+          "materializes_full_panel": true,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
-          "supports_group": false,
+          "supports_group": true,
           "supports_inf": true,
-          "supports_lazy": true,
+          "supports_lazy": false,
           "supports_min_periods": false,
           "supports_nan": true,
           "supports_nulls": true,
           "supports_scalar_broadcast": true,
-          "supports_streaming": true,
+          "supports_streaming": false,
           "supports_window": false
         }
       },
@@ -2849,10 +3102,27 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "polars_eager_native",
+          "explicit": true,
+          "materializes_full_panel": true,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": true,
+          "supports_inf": true,
+          "supports_lazy": false,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": false,
+          "supports_window": false
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "canonical": "row_kurt",
       "description": "对每行（每个日期截面）求峰度",
@@ -2871,18 +3141,19 @@
           "source": "factor_dsl_np"
         },
         "polars": {
-          "execution_kind": "expression_native",
+          "execution_kind": "polars_eager_native",
           "explicit": true,
-          "materializes_full_panel": false,
+          "materializes_full_panel": true,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
-          "supports_group": false,
+          "supports_group": true,
           "supports_inf": true,
-          "supports_lazy": true,
+          "supports_lazy": false,
           "supports_min_periods": false,
           "supports_nan": true,
           "supports_nulls": true,
           "supports_scalar_broadcast": true,
-          "supports_streaming": true,
+          "supports_streaming": false,
           "supports_window": false
         }
       },
@@ -2905,10 +3176,27 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "polars_eager_native",
+          "explicit": true,
+          "materializes_full_panel": true,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": true,
+          "supports_inf": true,
+          "supports_lazy": false,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": false,
+          "supports_window": false
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "canonical": "row_median",
       "description": "对每行（每个日期截面）求中位数",
@@ -2927,18 +3215,19 @@
           "source": "factor_dsl_np"
         },
         "polars": {
-          "execution_kind": "expression_native",
+          "execution_kind": "polars_eager_native",
           "explicit": true,
-          "materializes_full_panel": false,
+          "materializes_full_panel": true,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
-          "supports_group": false,
+          "supports_group": true,
           "supports_inf": true,
-          "supports_lazy": true,
+          "supports_lazy": false,
           "supports_min_periods": false,
           "supports_nan": true,
           "supports_nulls": true,
           "supports_scalar_broadcast": true,
-          "supports_streaming": true,
+          "supports_streaming": false,
           "supports_window": false
         }
       },
@@ -2961,10 +3250,27 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "polars_eager_native",
+          "explicit": true,
+          "materializes_full_panel": true,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": true,
+          "supports_inf": true,
+          "supports_lazy": false,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": false,
+          "supports_window": false
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "canonical": "row_prod",
       "description": "对每行（每个日期截面）求乘积",
@@ -2981,10 +3287,27 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "polars_eager_native",
+          "explicit": true,
+          "materializes_full_panel": true,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": true,
+          "supports_inf": true,
+          "supports_lazy": false,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": false,
+          "supports_window": false
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "canonical": "row_skew",
       "description": "对每行（每个日期截面）求偏度",
@@ -3001,10 +3324,27 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "polars_eager_native",
+          "explicit": true,
+          "materializes_full_panel": true,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": true,
+          "supports_inf": true,
+          "supports_lazy": false,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": false,
+          "supports_window": false
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "canonical": "row_std",
       "description": "对每行（每个日期截面）求标准差",
@@ -3023,18 +3363,19 @@
           "source": "factor_dsl_np"
         },
         "polars": {
-          "execution_kind": "expression_native",
+          "execution_kind": "polars_eager_native",
           "explicit": true,
-          "materializes_full_panel": false,
+          "materializes_full_panel": true,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
           "source": "factor_dsl_polars",
-          "supports_group": false,
+          "supports_group": true,
           "supports_inf": true,
-          "supports_lazy": true,
+          "supports_lazy": false,
           "supports_min_periods": false,
           "supports_nan": true,
           "supports_nulls": true,
           "supports_scalar_broadcast": true,
-          "supports_streaming": true,
+          "supports_streaming": false,
           "supports_window": false
         }
       },
@@ -3057,10 +3398,27 @@
         "pandas_numpy": {
           "explicit": false,
           "source": "factor_dsl_np"
+        },
+        "polars": {
+          "execution_kind": "polars_eager_native",
+          "explicit": true,
+          "materializes_full_panel": true,
+          "native_contract_source": "explicit_registration_and_runtime_evidence",
+          "source": "factor_dsl_polars",
+          "supports_group": true,
+          "supports_inf": true,
+          "supports_lazy": false,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": false,
+          "supports_window": false
         }
       },
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "canonical": "row_var",
       "description": "对每行（每个日期截面）求方差",

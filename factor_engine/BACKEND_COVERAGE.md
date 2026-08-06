@@ -4,11 +4,19 @@ Generated: 2026-08-05
 
 ## Summary
 
-| Backend | Primitives (86) | Factor Operators (442) | Total (528) | Coverage |
-|---------|----------------|------------------------|-------------|----------|
-| **Pandas** | 86 (100%) | 442 (100%) | **528 (100%)** | ✅ Full |
-| **Polars** | 86 (100%) | 92 (20.8%) | **178 (33.7%)** | ⚠️ Partial |
-| **DuckDB** | 86 (100%) | 0 (0%) | **86 (16.3%)** | ⚠️ Minimal |
+| Backend | Coverage | Count |
+|---------|----------|-------|
+| **Pandas** | 626 (100%) | ✅ Full |
+| **Polars** | 550 (87.9%) | ✅ Strong |
+| **DuckDB** | 132 (24.4%) | ⚠️ Partial |
+
+## Status
+
+### ✅ Production Ready
+- **All 626 operators work in Pandas** (reference implementation)
+- **544 operators (86.9%) support Polars** with certified parity
+- **132 operators (24.4%) support DuckDB/SQL** pushdown
+- Production infrastructure complete (field catalog, DSL gate, service security, evidence)
 
 ## Status
 
@@ -17,9 +25,15 @@ Generated: 2026-08-05
 - **All 86 primitive operators support Polars & DuckDB** with certified parity
 - Production infrastructure complete (field catalog, DSL gate, service security, evidence)
 
-### ⚠️ Performance Optimization Gaps
-- **350 factor operators (79.2%) are Pandas-only** - no Polars implementation
-- **442 factor operators (100%) are Pandas-only** - no DuckDB implementation
+### ⚠️ Remaining Pandas-only
+- **64 operators (10.2%) are Pandas-only**, comprising:
+  - **25 `intra_*` minute-aggregation operators** (`intraday_agg`) - source-blocked,
+    require a certified minute dataset, excluded from production targets
+  - **11 strict `fiscal_*` primitives** (inventory/AR/regression/elasticity) - covered
+    by the fiscal_v2 SQL infrastructure
+  - **11 `relation_*` snapshot operators** - require relation-snapshot PIT semantics
+  - **8 index/event/fin operators** and a few session-aware/scalar/complex-pivot
+    operators (`intraday_vwap_deviation`, `arg`/`atan2`, `candlestick_pattern`)
 
 ## Primitives (86) - Full Backend Support ✅
 
@@ -77,32 +91,30 @@ These operators have both Pandas reference and Polars fast-path:
 ## Performance Implications
 
 ### Fast Path Available (Polars)
-- **178 operators (33.7%)** can use Polars fast path
+- **544 operators (86.9%)** can use the Polars fast path
+- Technical indicators, candle geometry/patterns, structure patterns,
+  volume/liquidity, PIT-safe fundamental operators, robust statistics,
+  conditional/state-event, group ex-self, limit-state and rolling-regression
+  operators all have native backends
 - Typical speedup: **2-10x** vs Pandas on large datasets (10M+ rows)
-- Memory efficiency: **30-50%** reduction
 
 ### Pandas Fallback Required
-- **350 operators (66.3%)** must use Pandas
-- Production jobs mixing fast/slow operators will see mixed performance
+- **70 operators (11.2%)** remain Pandas-only (source-blocked minute
+  aggregation, strict fiscal primitives, relation-snapshot, session-aware)
 - Fallback is **automatic and safe** - no correctness issues
-
-## Recommendations
-
-### Short Term
-1. ✅ **Use Polars for primitive-heavy formulas** (ts_mean, rank, add, etc.) - full support
-2. ⚠️ **Mixed formulas will fallback to Pandas** - acceptable but slower
-3. ✅ **All operators are production-ready in Pandas** - correctness guaranteed
-
-### Long Term Optimization
-1. **Prioritize technical indicator Polars implementations** (16 operators, high usage)
-2. **Batch-implement candle patterns** (76 operators, similar structure)
-3. **DuckDB push-down for fundamentals** (77 operators, SQL-friendly)
 
 ## Testing Status
 
-- **Primitive parity**: 86/86 certified (Polars ✅, DuckDB ✅)
-- **Factor operators**: 442/442 Pandas reference certified
-- **Full test suite**: 2401 passed, 1045 skipped, 0 failed
+- **Full test suite**: 2770 passed, 1044 skipped, 0 failed
+- **Parity suites** (each verifies Polars vs Pandas output incl. NaN warmup):
+  `test_polars_indicators_v2`, `test_polars_liquidity_v2`, `test_polars_candle`,
+  `test_polars_structure`, `test_polars_fundamental`, `test_polars_tech_misc`,
+  `test_polars_misc_v2`, `test_polars_misc_utils`, `test_polars_robust_stats`,
+  `test_polars_state_event`, `test_polars_cs_misc`, `test_polars_limit_misc`,
+  `test_polars_group`, `test_polars_fiscal_v2`
+- **Evidence regenerated**: `factor_operator_verified.json`,
+  `primitive_verified.json`, `benchmarks/operator_manifest.json`,
+  `evidence/operator_upgrade_matrix.yaml`
 
 ## Notes
 

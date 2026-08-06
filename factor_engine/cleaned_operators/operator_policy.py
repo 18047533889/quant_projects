@@ -419,7 +419,6 @@ def tier1_policy_keys() -> frozenset[str]:
 # 不做 Polars 移植且通常非 PIT 安全（FFT/矩阵/随机/CDF-PDF 等）
 INTENTIONALLY_PANDAS_ONLY: frozenset[str] = frozenset(
     {
-        "constant",
         "shuffle",
         "fft",
         "ifft",
@@ -875,6 +874,30 @@ for _active_name in _ACTIVE_POLICY_CANONICALS - DAILY_CANONICALS:
         _active_name,
         _reviewed_active_policy(_active_name, pit_safe=False),
     )
+
+# Explicit scope overrides for the 2026-08 operator expansion.  Prefix-based
+# auto-inference would label non-``ts_``/``cs_``/``group_`` names elementwise;
+# these operators carry real time-series / cross-sectional semantics.
+_EXPLICIT_POLICIES.update({
+    "relation_entry_count": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "relation_exit_count": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "relation_weighted_change": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "index_weight_change": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "index_entry_exit_event": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "index_membership_age": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "event_cumulative_return_past": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "event_abnormal_return_past": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "relation_hhi": {"scope": "cs", "pit_safe": True},
+    "relation_entropy": {"scope": "cs", "pit_safe": True},
+    "relation_topk_sum": {"scope": "cs", "pit_safe": True},
+    "relation_rank_weighted_sum": {"scope": "cs", "pit_safe": True},
+    "relation_category_share": {"scope": "group", "pit_safe": True},
+    "relation_peer_weighted_mean_ex_self": {"scope": "group", "pit_safe": True},
+    "trading_day_diff": {"scope": "elementwise", "pit_safe": True},
+    "fin_announcement_lag": {"scope": "elementwise", "pit_safe": True},
+    "fin_applicability_mask": {"scope": "elementwise", "pit_safe": True},
+    "index_member": {"scope": "elementwise", "pit_safe": True},
+})
 
 # Compatibility export now reflects the reviewed research surface exactly.
 RESEARCH_CORE_CANONICALS = RESEARCH_ONLY_CANONICALS

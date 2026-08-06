@@ -1,0 +1,312 @@
+# -*- coding: utf-8 -*-
+"""Downside risk and lag-reaction operators.
+
+Includes downside/upside deviation, drawdown duration, time-under-water,
+best lag correlation and a price-delay proxy.  All operators are causal
+daily-panel transforms.
+"""
+from __future__ import annotations
+
+from typing import Any
+
+import numpy as np
+import pandas as pd
+
+from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+
+
+def _metadata(name: str, description: str, params: list[str], *, domain: str, unit: str) -> OperatorMetadata:
+    return OperatorMetadata(
+        name=name,
+        category="time_series_risk",
+        description=description,
+        param_names=params,
+        return_type="series",
+        tags=[
+            "time_series_risk", "daily", "pit_safe", "causal", "typed_v2",
+            f"signature:{','.join(params)}->series", f"domain:{domain}",
+            f"unit:{unit}", "cost:1",
+        ],
+    )
+
+
+def _frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
+    return pd.DataFrame(values, index=template.index, columns=template.columns, dtype=float)
+
+
+def _rolling_apply_2d(values: np.ndarray, window: int, fn: Any, min_periods: int = 1) -> np.ndarray:
+    rows, cols = values.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
+    for col in range(cols):
+        for row in range(rows):
+            start = max(0, row - window + 1)
+            chunk = values[start : row + 1, col]
+            out[row, col] = fn(chunk)
+    return out
+
+
+@register_operator(
+    name="ts_downside_deviation",
+    category="time_series_risk",
+    business_category="time_series_risk",
+    canonical="ts_downside_deviation",
+    source="downside_risk",
+    status="experimental",
+)
+class TsDownsideDeviation(SeriesOperator):
+    """下行偏离：sqrt(mean(min(x - target, 0)^2))。"""
+
+    metadata = _metadata(
+        "ts_downside_deviation",
+        "下行偏离 sqrt(mean(min(x-target,0)^2))。",
+        ["x", "window", "target", "min_periods"],
+        domain="price_volume",
+        unit="ratio",
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, window: int = 20, target: float = 0.0, min_periods: int = 2, **_: Any) -> pd.DataFrame:
+        w = int(window)
+        tgt = float(target)
+        mp = max(2, int(min_periods))
+
+        def _fn(chunk: np.ndarray) -> float:
+            valid = chunk[np.isfinite(chunk)]
+            if valid.size < mp:
+                return np.nan
+            below = np.minimum(valid - tgt, 0.0)
+            return float(np.sqrt(np.mean(below * below)))
+
+        return _frame_like(x, _rolling_apply_2d(x.to_numpy(dtype=float), w, _fn, mp))
+
+
+@register_operator(
+    name="ts_upside_deviation",
+    category="time_series_risk",
+    business_category="time_series_risk",
+    canonical="ts_upside_deviation",
+    source="downside_risk",
+    status="experimental",
+)
+class TsUpsideDeviation(SeriesOperator):
+    """上行偏离：sqrt(mean(max(x - target, 0)^2))。"""
+
+    metadata = _metadata(
+        "ts_upside_deviation",
+        "上行偏离 sqrt(mean(max(x-target,0)^2))。",
+        ["x", "window", "target", "min_periods"],
+        domain="price_volume",
+        unit="ratio",
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, window: int = 20, target: float = 0.0, min_periods: int = 2, **_: Any) -> pd.DataFrame:
+        w = int(window)
+        tgt = float(target)
+        mp = max(2, int(min_periods))
+
+        def _fn(chunk: np.ndarray) -> float:
+            valid = chunk[np.isfinite(chunk)]
+            if valid.size < mp:
+                return np.nan
+            above = np.maximum(valid - tgt, 0.0)
+            return float(np.sqrt(np.mean(above * above)))
+
+        return _frame_like(x, _rolling_apply_2d(x.to_numpy(dtype=float), w, _fn, mp))
+
+
+@register_operator(
+    name="ts_current_drawdown_duration",
+    category="time_series_risk",
+    business_category="time_series_risk",
+    canonical="ts_current_drawdown_duration",
+    source="downside_risk",
+    status="experimental",
+)
+class TsCurrentDrawdownDuration(SeriesOperator):
+    """当前连续处于回撤（低于窗口运行最高价）的交易行数。"""
+
+    metadata = _metadata(
+        "ts_current_drawdown_duration",
+        "当前连续低于窗口运行最高价的行数。",
+        ["x", "window"],
+        domain="price_volume",
+        unit="count",
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, window: int = 20, **_: Any) -> pd.DataFrame:
+        w = int(window)
+        xv = x.to_numpy(dtype=float)
+        rows, cols = xv.shape
+        out = np.full((rows, cols), np.nan, dtype=float)
+        for col in range(cols):
+            running_peak = -np.inf
+            streak = 0
+            for row in range(rows):
+                value = xv[row, col]
+                if np.isfinite(value):
+                    running_peak = max(running_peak, value)
+                    if value < running_peak:
+                        streak += 1
+                    else:
+                        streak = 0
+                    out[row, col] = float(streak)
+                else:
+                    running_peak = -np.inf
+                    streak = 0
+        return _frame_like(x, out)
+
+
+@register_operator(
+    name="ts_time_under_water",
+    category="time_series_risk",
+    business_category="time_series_risk",
+    canonical="ts_time_under_water",
+    source="downside_risk",
+    status="experimental",
+)
+class TsTimeUnderWater(SeriesOperator):
+    """窗口内价格低于此前运行最高价的日期比例。"""
+
+    metadata = _metadata(
+        "ts_time_under_water",
+        "窗口内低于此前运行最高价的比例。",
+        ["x", "window"],
+        domain="price_volume",
+        unit="ratio",
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, window: int = 20, **_: Any) -> pd.DataFrame:
+        w = int(window)
+        xv = x.to_numpy(dtype=float)
+        rows, cols = xv.shape
+        out = np.full((rows, cols), np.nan, dtype=float)
+        for col in range(cols):
+            for row in range(rows):
+                start = max(0, row - w + 1)
+                chunk = xv[start : row + 1, col]
+                valid = chunk[np.isfinite(chunk)]
+                if valid.size == 0:
+                    continue
+                running_peak = np.maximum.accumulate(np.where(np.isnan(chunk), -np.inf, chunk))
+                under = np.sum((chunk < running_peak) & np.isfinite(chunk))
+                out[row, col] = under / valid.size
+        return _frame_like(x, out)
+
+
+def _best_lag_corr(x: np.ndarray, y: np.ndarray, row: int, window: int, max_lag: int) -> float:
+    best = 0.0
+    for lag in range(0, max_lag + 1):
+        end = row + 1 - lag
+        start = max(0, end - window)
+        if end - start < 2:
+            continue
+        xs = x[start:end]
+        ys = y[start + lag : row + 1]
+        valid = np.isfinite(xs) & np.isfinite(ys)
+        if valid.sum() < 2:
+            continue
+        if np.std(xs[valid]) > 0 and np.std(ys[valid]) > 0:
+            value = abs(float(np.corrcoef(xs[valid], ys[valid])[0, 1]))
+            best = max(best, value)
+    return best
+
+
+@register_operator(
+    name="ts_best_lag_corr",
+    category="time_series_risk",
+    business_category="time_series_risk",
+    canonical="ts_best_lag_corr",
+    source="downside_risk",
+    status="experimental",
+)
+class TsBestLagCorr(SeriesOperator):
+    """y 对 x 各滞后阶绝对相关中的最大值。"""
+
+    metadata = _metadata(
+        "ts_best_lag_corr",
+        "y 对 x 滞后 0..max_lag 绝对相关的最大值。",
+        ["y", "x", "window", "max_lag"],
+        domain="price_volume",
+        unit="ratio",
+    )
+
+    def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, window: int = 20, max_lag: int = 5, **_: Any) -> pd.DataFrame:
+        w = int(window)
+        ml = max(0, int(max_lag))
+        xv = x.to_numpy(dtype=float)
+        yv = y.to_numpy(dtype=float)
+        rows, cols = xv.shape
+        out = np.full((rows, cols), np.nan, dtype=float)
+        for col in range(cols):
+            for row in range(rows):
+                value = _best_lag_corr(xv[:, col], yv[:, col], row, w, ml)
+                out[row, col] = value if value > 0 else np.nan
+        return _frame_like(y, out)
+
+
+def _price_delay(x: np.ndarray, row: int, window: int, max_lag: int) -> float:
+    end = row + 1
+    start = max(0, end - window)
+    if end - start < 3:
+        return np.nan
+    restricted_x = x[start:end]
+    restricted_y = x[start:end]
+    valid = np.isfinite(restricted_x)
+    if valid.sum() < 3:
+        return np.nan
+    # Restricted: y_t = alpha + beta0 * x_t
+    y_r = restricted_y[valid]
+    x_r = restricted_x[valid]
+    rss_restricted = float(np.sum((y_r - np.mean(y_r)) ** 2))
+    # Full: y_t = alpha + sum_{lag=0..max_lag} beta_lag * x_{t-lag}
+    errors: list[float] = []
+    for lag in range(0, max_lag + 1):
+        lagged_stop = max(0, end - lag)
+        lagged_start = max(0, lagged_stop - window)
+        if lagged_stop <= lagged_start:
+            continue
+        lagged_x = x[lagged_start:lagged_stop]
+        lagged_y = x[lagged_start + lag : end]
+        if lagged_x.size != lagged_y.size:
+            continue
+        aligned = np.isfinite(lagged_x) & np.isfinite(lagged_y)
+        if aligned.sum() < 3:
+            continue
+        residuals = lagged_y[aligned] - np.mean(lagged_y[aligned])
+        errors.append(float(np.sum(residuals ** 2)))
+    if not errors:
+        return np.nan
+    rss_full = min(errors)
+    if rss_restricted <= 0.0 or rss_full <= 0.0:
+        return np.nan
+    return max(0.0, 1.0 - rss_full / rss_restricted)
+
+
+@register_operator(
+    name="ts_price_delay",
+    category="time_series_risk",
+    business_category="time_series_risk",
+    canonical="ts_price_delay",
+    source="downside_risk",
+    status="experimental",
+)
+class TsPriceDelay(SeriesOperator):
+    """价格延迟代理：1 - R²_restricted / R²_full（滞后阶数越多解释力越强说明反应越慢）。"""
+
+    metadata = _metadata(
+        "ts_price_delay",
+        "价格延迟代理 1-R2_restricted/R2_full。",
+        ["x", "window", "max_lag"],
+        domain="price_volume",
+        unit="ratio",
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, window: int = 20, max_lag: int = 5, **_: Any) -> pd.DataFrame:
+        w = int(window)
+        ml = max(1, int(max_lag))
+        xv = x.to_numpy(dtype=float)
+        rows, cols = xv.shape
+        out = np.full((rows, cols), np.nan, dtype=float)
+        for col in range(cols):
+            for row in range(rows):
+                out[row, col] = _price_delay(xv[:, col], row, w, ml)
+        return _frame_like(x, out)

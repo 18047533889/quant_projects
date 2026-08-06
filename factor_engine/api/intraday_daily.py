@@ -181,6 +181,25 @@ intraday_abnormal_vol_profile = _factory(
     "abnormal_vol_profile", {**_COMMON, "history_days": 20}
 )
 
+# ---- 2026-08 operator expansion: genuinely missing intraday features --------
+intraday_lunch_gap_return = _factory("lunch_gap_return", _COMMON)
+intraday_return_activity_corr = _factory("return_activity_corr", {**_COMMON, "activity": "volume"})
+intraday_vwap_above_ratio = _factory("vwap_above_ratio", _COMMON)
+intraday_kyle_lambda_proxy = _factory("kyle_lambda_proxy", _COMMON)
+intraday_extreme_bar_return = _factory("extreme_bar_return", {**_COMMON, "side": "max"})
+intraday_segment_return = _factory("segment_return", {**_COMMON, "segment": "morning"})
+intraday_segment_volume_share = _factory("segment_volume_share", {**_COMMON, "segment": "morning"})
+intraday_segment_amount_share = _factory("segment_amount_share", {**_COMMON, "segment": "morning"})
+intraday_segment_vwap_deviation = _factory("segment_vwap_deviation", {**_COMMON, "segment": "morning"})
+intraday_segment_realized_vol = _factory("segment_realized_vol", {**_COMMON, "segment": "morning"})
+intraday_limit_first_hit_time = _factory("limit_first_hit_time", _COMMON)
+intraday_limit_duration = _factory("limit_duration", _COMMON)
+intraday_limit_reopen_count = _factory("limit_reopen_count", _COMMON)
+
+# The document-spec ``intra_*`` names are registered as native operators in
+# ``cleaned_operators/microstructure/intraday_agg.py`` (they take explicit
+# minute-bar panel inputs).  The SourceRef-backed ``intraday_*`` factories
+# remain for the read-minute-implicitly path.
 INTRADAY_DAILY_DSL_FUNCTIONS = {
     name: value
     for name, value in globals().copy().items()

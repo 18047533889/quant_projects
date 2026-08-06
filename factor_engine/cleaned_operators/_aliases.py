@@ -174,4 +174,7 @@ OperatorRegistry.register_alias("ZSCORE", "zscore")
 OperatorRegistry.register_alias("c_zscore", "zscore")
 OperatorRegistry.register_alias("cs_zscore", "zscore")
 
+# intraday_return 是 open_close_return 的挖掘侧别名（close/open - 1）。
+OperatorRegistry.register_alias("intraday_return", "open_close_return")
+
 # dedupe 在 load_all() 全部模块加载后执行，见 cleaned_operators.__init__.load_all

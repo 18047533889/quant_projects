@@ -10,6 +10,24 @@ from __future__ import annotations
 
 from typing import Any
 
+# Operators that are DSL-usable on the reviewed extended surface but require a
+# certified source dataset that is not currently available (minute bars,
+# relation/shareholder tables, index constituent weights).  They must never be
+# admitted as production targets until the source contract, schema and PIT
+# history are installed and audited.
+SOURCE_BLOCKED_CANONICALS: frozenset[str] = frozenset({
+    "intra_segment_return", "intra_segment_volume_share", "intra_segment_amount_share",
+    "intra_segment_vwap_deviation", "intra_segment_realized_vol",
+    "intra_realized_variance", "intra_realized_semivariance", "intra_bipower_variation",
+    "intra_jump_ratio", "intra_path_efficiency", "intra_high_time", "intra_low_time",
+    "intra_vwap_above_ratio", "intra_vwap_cross_count", "intra_concentration",
+    "intra_entropy", "intra_signed_imbalance_proxy", "intra_return_activity_corr",
+    "intra_amihud", "intra_kyle_lambda_proxy", "intra_extreme_bar_return",
+    "intra_lunch_gap_return", "intra_limit_first_hit_time", "intra_limit_duration",
+    "intra_limit_reopen_count",
+    "relation_distinct_count", "relation_overlap_ratio", "index_weight",
+})
+
 NON_FACTOR_PRODUCTION_CANONICALS: frozenset[str] = frozenset({
     "Lead",
     "next",
@@ -209,7 +227,9 @@ def factor_production_targets() -> frozenset[str]:
 
     requested = (DAILY_CANONICALS | EXTENDED_ONLY_CANONICALS | RESEARCH_ONLY_CANONICALS).difference(UNSAFE_CANONICALS)
     active = {canonical for canonical in requested if OperatorRegistry.backends_for(canonical)}
-    return frozenset(active.difference(NON_FACTOR_PRODUCTION_CANONICALS))
+    return frozenset(
+        active.difference(NON_FACTOR_PRODUCTION_CANONICALS).difference(SOURCE_BLOCKED_CANONICALS)
+    )
 
 
 def _remove_promoted_legacy_denials(targets: frozenset[str]) -> None:
