@@ -316,6 +316,20 @@ class DuckDBEngine:
                 op="reader",
             )
 
+    def relation(self, sql: str, params: Sequence[Any] | None = None) -> Any:
+        """返回一个 DuckDB Relation 对象（``RelationHandle`` 的底层扫描）。
+
+        仅供 schema/explain 等只读检查使用；大数据 fetch 请走受控路径
+        （RelationHandle.collect / execute_arrow）。relation 对象本身惰性，
+        不会立即执行查询。
+        """
+        try:
+            if params is not None:
+                return self._conn.sql(sql, list(params))
+            return self._conn.sql(sql)
+        except duckdb.Error as exc:
+            raise EngineError(f"DuckDB relation 构建失败: {exc}\nSQL: {sql[:500]}") from exc
+
     @retry_io()
     def execute_isolated_arrow(
         self,
