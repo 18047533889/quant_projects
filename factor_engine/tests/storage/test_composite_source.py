@@ -79,6 +79,47 @@ def test_composite_source_aligns_auxiliary_columns_to_anchor_and_caches():
     assert fundamental.calls == {"price_to_earnings": 1}
 
 
+@dataclass
+class _BatchingSeriesSource(DataSource):
+    """带 load_columns 计数的子源（模拟 DataAccessSource 的批量读）。"""
+
+    data: dict[str, "pd.Series"]
+    load_columns_calls: list[list[str]] = field(default_factory=list)
+
+    def load_column(self, name: str):
+        self.load_columns_calls.append([name])
+        return self.data[name]
+
+    def load_columns(self, names: list[str]):
+        self.load_columns_calls.append(list(names))
+        return {n: self.data[n] for n in names}
+
+
+def test_composite_batches_same_source_columns_into_one_load():
+    price = CountingSeriesSource(
+        {"close": _build_series([("2024-01-02", "AAA", 10.0), ("2024-01-03", "AAA", 12.0)])}
+    )
+    fundamental = _BatchingSeriesSource(
+        {
+            "pe": _build_series([("2024-01-01", "AAA", 2.0), ("2024-01-03", "AAA", 3.0)]),
+            "pb": _build_series([("2024-01-01", "AAA", 4.0), ("2024-01-03", "AAA", 5.0)]),
+        }
+    )
+    source = CompositeDataSource(
+        anchor_source="price",
+        anchor_column="close",
+        sources={"price": price, "fundamental": fundamental},
+        joins={"fundamental": {"method": "asof_backward"}},
+    )
+
+    batch = source.load_columns(["fundamental.pe", "fundamental.pb"])
+
+    assert set(batch) == {"fundamental.pe", "fundamental.pb"}
+    # 同源多列 → 一次 load_columns（而非逐列两次）
+    fundamental_calls = [c for c in fundamental.load_columns_calls if c != ["close"]]
+    assert fundamental_calls == [["pe", "pb"]]
+
+
 def test_composite_source_supports_exact_alignment():
     price = CountingSeriesSource(
         {

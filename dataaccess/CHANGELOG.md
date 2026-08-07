@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.5.0 — DataAccess ↔ FactorEngine 集成层
+
+**字段语义单一事实源**
+- 新增 `SemanticFieldCatalog`（`read/semantic_catalog.py` + `config/semantic_fields.yaml`）：
+  logical field → dataset + physical column + dtype/frequency/grain/unit/scale/时间角色/
+  PIT·join 策略/aliases/mining_allowed；`store.resolve_fields()` 解析，物理列反查拿 scale。
+- 输出层单位归一化：`read()`/`read_joined()` 支持 `normalize_units=`（按 catalog scale
+  做 percent→ratio、bp→decimal 等），默认 False 保持旧行为逐字节不变。
+
+**统一数据请求 / 数据计划**
+- 新增 `DataRequest` / `ReadPlan`（`read/data_request.py`）：`store.plan(request)` 编译
+  逻辑需求（字段/时间/instruments/universe/PIT/join），`ReadPlan.explain()` 给计划、
+  `ReadPlan.execute()` 执行（单数据集走 read，多数据集走 read_joined）。
+- 字段按物理表 coalesce：同一 StockBalance/StockIncome 的多个字段只扫一次。
+
+**多数据集批量 join**
+- 新增 `store.read_joined(anchor, fields, joins=...)`：每张物理表一个子查询（投影 + 分区
+  裁剪），DuckDB 内 `exact`（日频等值）或 `pit_asof`（ASOF，取最新可见记录）一次完成，
+  返回 `ReadHandle`；多数据集合并 snapshot + 预算/审计。
+
+**query-scoped snapshot token**
+- `DatasetManifest` 新增 `dataset_version` / `partition_version`（写入 `_manifest.json`
+  sidecar）；`store.manifest_version()` 几十微秒级读 token（不扫 footer）、
+  `store.is_snapshot_stale()` 对比判断缓存过期。
+
+**受控 Relation 句柄**
+- 新增 `RelationHandle` + `store.sql_relation()`：在 scan 之上直接追加 SQL 表达式
+  （scan + factor expression 融合），`.arrow()/.collect()/.pandas()` 强制
+  QueryBudget(deadline) + audit + snapshot；`.relation` 只读逃生口。
+
+**测试**
+- 新增 `tests/unit/test_integration_layer.py`（15 个用例：catalog/plan/read_joined/
+  manifest_version/sql_relation/单位归一化），全量 456 通过、0 失败。
+
 ## 0.4.0 — Universal Quant Data IO Layer
 
 **读路径**

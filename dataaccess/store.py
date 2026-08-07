@@ -1051,6 +1051,7 @@ class DataAccessStore:
         prefer_polars: bool = False,
         batch_size: int = 100_000,
         query_budget: QueryBudget | None = None,
+        normalize_units: bool = False,
         **params: Any,
     ) -> ReadHandle:
         """统一读入口：引擎/结果形态自动路由，返回 ``ReadHandle``。
@@ -1059,6 +1060,8 @@ class DataAccessStore:
         - ``result``: auto | arrow | pandas | polars | lazy | stream
         auto 时按 `estimated_scan_cost`（rows/bytes/columns/files/remote/selectivity）
         路由，而不是只看行数。
+        - ``normalize_units``: 按 SemanticFieldCatalog 的 scale 做输出层单位归一化
+          （percent→ratio 等），默认 False 保持旧行为逐字节不变。
 
         返回 ``ReadHandle``，支持 ``.to_arrow() / .to_pandas() / .to_polars() /
         .to_lazy() / .stream()``。
@@ -1079,6 +1082,7 @@ class DataAccessStore:
             batch_size=batch_size,
             query_budget=query_budget,
             params=params,
+            normalize_units=normalize_units,
         )
 
     def read_uri(
@@ -1098,6 +1102,7 @@ class DataAccessStore:
         query_budget: QueryBudget | None = None,
         time_column: str | None = None,
         instrument_column: str | None = None,
+        normalize_units: bool = False,
         **kwargs: Any,
     ) -> ReadHandle:
         """直接读一个 URI（本地路径或 cos:// / s3://），不必先登记数据集。
@@ -1135,7 +1140,702 @@ class DataAccessStore:
             batch_size=batch_size,
             query_budget=query_budget,
             params=kwargs,
+            normalize_units=normalize_units,
         )
+
+    # ---- 集成层：DataRequest/ReadPlan / read_joined / RelationHandle ----
+
+    def read_joined(
+        self,
+        anchor: str,
+        fields: Any,
+        *,
+        joins: Mapping[str, str] | None = None,
+        time_range: tuple[Any, Any] | None = None,
+        instrument_filter: Sequence[str] | None = None,
+        filters: Any = None,
+        limit: int | None = None,
+        engine: str = "duckdb",
+        result: str = "auto",
+        normalize_units: bool = False,
+        query_budget: QueryBudget | None = None,
+        params: Mapping[str, Any] | None = None,
+        params_by_dataset: Mapping[str, Mapping[str, Any]] | None = None,
+    ) -> ReadHandle:
+        """多数据集批量 join：每张物理表只扫一次，DuckDB 内 exact / PIT-asof join。
+
+        参数：
+            anchor: 锚定数据集（其时间/标的列决定输出行空间）
+            fields: ``{dataset: [物理列]}`` mapping，或 ``"col"`` / ``"dataset.col"`` 序列
+            joins: ``{dataset: exact|asof|pit_asof}``；缺省 exact。
+                - exact   ：按 (time, instrument) 等值对齐（日频面板）
+                - pit_asof：对每个 anchor 行取该标的最新可见记录（asof，可跨窗口）
+            normalize_units: 输出层按 SemanticFieldCatalog scale 归一化单位
+            params: anchor 数据集的参数；params_by_dataset 可为每个数据集分别指定
+
+        一次 DuckDB 查询完成：projection pushdown + 分区裁剪 + join，返回 ReadHandle。
+        预算/审计/snapshot 与普通 read 一致（多数据集合并 snapshot）。
+        """
+        from data_access.read.data_request import normalize_join_policy
+        from data_access.read.read_contract import (
+            ReadStats,
+            SqlReadLineage,
+            merge_sql_data_snapshots,
+        )
+        from data_access.read.read_handle import ReadHandle
+        from data_access.read.semantic_catalog import normalize_table_units
+
+        if engine in {"pyarrow", "polars"}:
+            raise ValidationError(
+                "read_joined 在 DuckDB 内完成 join，engine 必须为 duckdb"
+            )
+        self._registry.get(anchor)
+        per_ds, fields_meta = self._normalize_joined_fields(anchor, fields)
+        joins_map: dict[str, str] = {}
+        for ds in per_ds:
+            joins_map[ds] = normalize_join_policy(joins.get(ds) if joins else None)
+        joins_map[anchor] = "exact"
+
+        pbd: dict[str, dict[str, Any]] = {}
+        for ds in per_ds:
+            pbd[ds] = dict((params_by_dataset or {}).get(ds, {}))
+        pbd.setdefault(anchor, dict(params or {}))
+
+        merged = self._resolve_sql_budget(list(per_ds), query_budget)
+        all_cols = [c for cols in per_ds.values() for c in cols]
+        validate_query_request(merged, columns=all_cols or None, time_range=time_range)
+
+        sql, sql_params, datasets = self._read_joined_sql(
+            anchor,
+            per_ds,
+            joins_map,
+            time_range=time_range,
+            instrument_filter=instrument_filter,
+            filters=filters,
+            params_by_dataset=pbd,
+            limit=limit,
+        )
+
+        snapshots = []
+        for ds in datasets:
+            dsobj = self._registry.get(ds)
+            try:
+                ds_tr = (
+                    time_range
+                    if (ds == anchor or joins_map.get(ds) == "exact")
+                    else None
+                )
+                paths = self._prepare_dataset_read(
+                    dsobj,
+                    time_range=ds_tr,
+                    params=dict(pbd.get(ds, {})),
+                    instrument_filter=(instrument_filter if ds == anchor else None),
+                )
+                files = build_file_manifest(paths)
+                self._enforce_scan_files(merged, paths, files=files)
+                snapshots.append(
+                    self._build_snapshot(
+                        dataset=ds,
+                        ds=dsobj,
+                        paths=paths,
+                        params=pbd.get(ds, {}),
+                        files=files,
+                    )
+                )
+            except Exception:
+                continue
+        snapshot = (
+            merge_sql_data_snapshots(snapshots, registry_hash=self.registry_fingerprint())
+            if snapshots
+            else None
+        )
+        lineage = SqlReadLineage(datasets=tuple(datasets), query_preview=sql[:200])
+
+        start = time.perf_counter()
+        ok = False
+        err_msg: str | None = None
+        table: pa.Table | None = None
+        try:
+            table = self._engine.execute_arrow(
+                sql, sql_params, deadline_ms=merged.max_elapsed_ms
+            )
+            if normalize_units and fields_meta:
+                table = normalize_table_units(table, fields_meta)
+            elapsed_ms = (time.perf_counter() - start) * 1000
+            enforce_arrow_budget(merged, table, elapsed_ms=elapsed_ms)
+            ok = True
+            stats = ReadStats(
+                rows=table.num_rows, bytes=table.nbytes, elapsed_ms=elapsed_ms
+            )
+            logger.info(
+                "read_joined anchor=%s datasets=%s rows=%d cols=%d elapsed_ms=%.1f",
+                anchor,
+                datasets,
+                table.num_rows,
+                table.num_columns,
+                elapsed_ms,
+            )
+            return ReadHandle(table=table, snapshot=snapshot, stats=stats, lineage=lineage)
+        except Exception as exc:
+            err_msg = f"{type(exc).__name__}: {exc}"
+            raise
+        finally:
+            elapsed_ms = (time.perf_counter() - start) * 1000
+            audit.record(
+                op="read_joined",
+                dataset=anchor,
+                ok=ok,
+                rows=table.num_rows if table is not None else None,
+                params=dict(params or {}),
+                elapsed_ms=elapsed_ms,
+                error=err_msg,
+                extra={
+                    "datasets": list(datasets),
+                    "columns": all_cols,
+                    "joins": joins_map,
+                },
+            )
+
+    def sql_relation(
+        self,
+        sql: str,
+        *,
+        params: Sequence[Any] | None = None,
+        query_budget: QueryBudget | None = None,
+        snapshot_datasets: Sequence[str] | None = None,
+        snapshot_params: Mapping[str, Mapping[str, Any]] | None = None,
+    ) -> Any:
+        """受控 SQL Relation 句柄：在 DataAccess scan 上追加表达式，collect 时强制治理。
+
+        返回 ``RelationHandle``：
+            - ``.sql("SELECT AVG(x) FROM _sub GROUP BY _sub.asset")`` 追加表达式
+            - ``.arrow() / .collect() / .pandas()`` 强制 QueryBudget(deadline) + audit
+            - ``.relation`` 只读底层 DuckDB Relation（schema/explain 检查用）
+
+        ``snapshot_datasets`` 提供后，collect 绑定合并的 DataSnapshot（lineage 复现用）。
+        """
+        from data_access.read.relation_handle import RelationHandle
+
+        snapshot = lineage = None
+        if snapshot_datasets:
+            from data_access.read.read_contract import (
+                SqlReadLineage,
+                merge_sql_data_snapshots,
+            )
+
+            snapshots = []
+            for ds in snapshot_datasets:
+                try:
+                    dsobj = self._registry.get(ds)
+                    ds_params = dict((snapshot_params or {}).get(ds, {}))
+                    paths = self._prepare_dataset_read(
+                        dsobj,
+                        time_range=None,
+                        params=ds_params,
+                        instrument_filter=None,
+                    )
+                    files = build_file_manifest(paths)
+                    snapshots.append(
+                        self._build_snapshot(
+                            dataset=ds,
+                            ds=dsobj,
+                            paths=paths,
+                            params=ds_params,
+                            files=files,
+                        )
+                    )
+                except Exception:
+                    continue
+            if snapshots:
+                snapshot = merge_sql_data_snapshots(
+                    snapshots, registry_hash=self.registry_fingerprint()
+                )
+                lineage = SqlReadLineage(
+                    datasets=tuple(snapshot_datasets), query_preview=sql[:200]
+                )
+        return RelationHandle(
+            self,
+            sql,
+            params=params,
+            query_budget=query_budget,
+            snapshot=snapshot,
+            lineage=lineage,
+        )
+
+    def resolve_fields(
+        self,
+        names: Sequence[str],
+        *,
+        dataset: str | None = None,
+    ) -> list[Any]:
+        """逻辑字段 → 物理字段解析（SemanticFieldCatalog 单一事实源 + registry 回退）。
+
+        每个名字先查 SemanticFieldCatalog（含 aliases）；不在 catalog 就回退：
+        显式 dataset 的 schema，否则全 registry 里第一个含该列的 dataset；都找不到
+        抛 ValidationError。
+        """
+        from data_access.read.semantic_catalog import SemanticField, get_semantic_catalog
+
+        catalog = get_semantic_catalog()
+        out: list[Any] = []
+        for name in names:
+            f = catalog.resolve_one(name)
+            if f is not None:
+                out.append(f)
+                continue
+            if dataset:
+                # 调用方传物理列时，反查 catalog 拿到单位/语义定义（scale 归一化）
+                by_phys = catalog.resolve_by_physical(dataset, name)
+                if by_phys is not None:
+                    out.append(by_phys)
+                    continue
+                ds = self._registry.get(dataset)
+                schema = getattr(ds, "schema", None) or {}
+                if name in schema:
+                    out.append(
+                        SemanticField(
+                            logical_name=name,
+                            dataset=dataset,
+                            physical_name=name,
+                            dtype=schema[name],
+                        )
+                    )
+                    continue
+            found: tuple[str, str] | None = None
+            for dsn in self._registry.names():
+                d = self._registry.get(dsn)
+                schema = getattr(d, "schema", None) or {}
+                if name in schema:
+                    found = (dsn, schema[name])
+                    break
+            if found is None:
+                raise ValidationError(
+                    f"字段 '{name}' 未在 SemanticFieldCatalog，也不在任何数据集 schema 中。"
+                    f"请先在 config/semantic_fields.yaml 登记逻辑字段。"
+                )
+            out.append(
+                SemanticField(
+                    logical_name=name, dataset=found[0], physical_name=name, dtype=found[1]
+                )
+            )
+        return out
+
+    def plan(self, request: Any) -> Any:
+        """把 DataRequest 编译成 ReadPlan（不执行）。``ReadPlan.explain()`` 看计划，
+        ``ReadPlan.execute()`` 执行（单数据集走 read，多数据集走 read_joined）。
+
+        ``request`` 可以是 ``DataRequest`` 实例或等价 dict。
+        """
+        from data_access.core.storage import storage_description
+        from data_access.read.data_request import (
+            DataRequest,
+            ReadPlan,
+            normalize_join_policy,
+        )
+        from data_access.read.scan_cost import (
+            estimate_scan_cost,
+            suggest_read_strategy,
+        )
+        from data_access.read.semantic_catalog import SemanticField
+
+        if isinstance(request, dict):
+            request = DataRequest(**request)
+        if not isinstance(request, DataRequest):
+            raise ValidationError("plan 需要 DataRequest 实例或等价 dict")
+
+        fields: list[SemanticField] = []
+        for raw in request.fields:
+            if isinstance(raw, str) and "." in raw:
+                ds, col = raw.split(".", 1)
+                fields.append(
+                    SemanticField(logical_name=col, dataset=ds, physical_name=col)
+                )
+            else:
+                fields.extend(self.resolve_fields([raw], dataset=request.anchor))
+
+        anchor = request.anchor
+        if anchor is None:
+            dsets = {f.dataset for f in fields}
+            if len(dsets) == 1:
+                anchor = next(iter(dsets))
+            else:
+                raise ValidationError("多数据集 DataRequest 必须显式指定 anchor")
+        request.anchor = anchor
+
+        per_ds: dict[str, list[str]] = {}
+        for f in fields:
+            per_ds.setdefault(f.dataset, [])
+            if f.physical_name not in per_ds[f.dataset]:
+                per_ds[f.dataset].append(f.physical_name)
+        datasets = [anchor] + [d for d in per_ds if d != anchor]
+
+        joins: dict[str, str] = {}
+        for ds in datasets:
+            if ds == anchor:
+                joins[ds] = "exact"
+            elif request.joins and ds in request.joins:
+                joins[ds] = normalize_join_policy(request.joins[ds])
+            else:
+                joins[ds] = "exact"
+
+        scan_costs: dict[str, Any] = {}
+        storage: dict[str, str] = {}
+        snapshot_info: dict[str, dict[str, Any]] = {}
+        for ds in datasets:
+            dsobj = self._registry.get(ds)
+            try:
+                cost = estimate_scan_cost(
+                    self,
+                    ds,
+                    columns=per_ds.get(ds) or None,
+                    time_range=request.time_range,
+                    instrument_filter=request.instruments,
+                )
+            except Exception:
+                cost = None
+            scan_costs[ds] = cost
+            storage[ds] = storage_description(dsobj)
+            try:
+                snapshot_info[ds] = self.manifest_version(ds)
+            except Exception:
+                snapshot_info[ds] = {"has_manifest": False}
+
+        engine, result = request.engine, request.result
+        if len(datasets) > 1:
+            engine = "duckdb"
+            if result == "auto":
+                result = "arrow"
+        elif engine == "auto" or result == "auto":
+            cost = scan_costs.get(anchor)
+            if cost is not None:
+                engine, result = suggest_read_strategy(
+                    cost, engine=request.engine, result=request.result
+                )
+            else:
+                engine = "duckdb"
+                if result == "auto":
+                    result = "arrow"
+
+        return ReadPlan(
+            request=request,
+            datasets=datasets,
+            fields=fields,
+            per_dataset_columns=per_ds,
+            join_policies=joins,
+            scan_costs=scan_costs,
+            storage=storage,
+            snapshot_info=snapshot_info,
+            engine=engine,
+            result=result,
+            time_range=request.time_range,
+            instruments=request.instruments,
+            universe=request.universe,
+            _store=self,
+        )
+
+    def manifest_version(self, dataset: str, **params: Any) -> dict[str, Any]:
+        """廉价的 query-scoped snapshot token：只读 ``_manifest.json`` sidecar，
+        不做全量 footer 扫描。返回 ``{has_manifest, fresh, dataset_version,
+        partition_version, file_count, created_at}``。
+        """
+        from data_access.read.manifest import (
+            _count_data_files,
+            manifest_root_for_paths,
+            manifest_version_token,
+        )
+
+        ds = self._registry.get(dataset)
+        try:
+            paths = self._resolve_raw_paths(ds, time_range=None, params=params)
+        except Exception:
+            return {"dataset": dataset, "has_manifest": False}
+        root = manifest_root_for_paths(paths)
+        if root is None:
+            return {"dataset": dataset, "has_manifest": False}
+        token = manifest_version_token(root)
+        if token is None:
+            return {"dataset": dataset, "has_manifest": False}
+        count = _count_data_files(paths)
+        fresh = True if count is None else (count == token.get("file_count"))
+        return {
+            "dataset": dataset,
+            "has_manifest": True,
+            "fresh": fresh,
+            "dataset_version": token.get("dataset_version"),
+            "partition_version": token.get("partition_version"),
+            "file_count": token.get("file_count"),
+            "created_at": token.get("created_at"),
+        }
+
+    def is_snapshot_stale(
+        self,
+        dataset: str,
+        *,
+        dataset_version: str | None = None,
+        partition_version: str | None = None,
+        **params: Any,
+    ) -> bool:
+        """对比 token 判断缓存/快照是否过期（无 manifest / 不新鲜 → 视为过期）。"""
+        cur = self.manifest_version(dataset, **params)
+        if not cur.get("has_manifest") or not cur.get("fresh"):
+            return True
+        if dataset_version is not None and cur.get("dataset_version") != dataset_version:
+            return True
+        if partition_version is not None and cur.get("partition_version") != partition_version:
+            return True
+        return False
+
+    # ---- 私有 helpers ----
+
+    def _normalize_joined_fields(
+        self, anchor: str, fields: Any
+    ) -> tuple[dict[str, list[str]], list[Any]]:
+        """read_joined 的 fields 归一化 → ( {dataset: [物理列]}, 解析出的字段列表 )。"""
+        from data_access.read.semantic_catalog import SemanticField, get_semantic_catalog
+
+        catalog = get_semantic_catalog()
+        fields_meta: list[Any] = []
+        if isinstance(fields, Mapping):
+            per_ds: dict[str, list[str]] = {}
+            for ds, cols in fields.items():
+                per_ds[str(ds)] = [str(c) for c in (cols or [])]
+            for ds, cols in per_ds.items():
+                for c in cols:
+                    f = catalog.resolve_one(c)
+                    if f is None:
+                        f = catalog.resolve_by_physical(ds, c)
+                    fields_meta.append(
+                        f
+                        if f is not None
+                        else SemanticField(logical_name=c, dataset=ds, physical_name=c)
+                    )
+            return per_ds, fields_meta
+        per_ds = {anchor: []}
+        for raw in fields:
+            col = str(raw)
+            if "." in col:
+                ds, physical = col.split(".", 1)
+                per_ds.setdefault(ds, [])
+                if physical not in per_ds[ds]:
+                    per_ds[ds].append(physical)
+                fields_meta.append(
+                    SemanticField(logical_name=physical, dataset=ds, physical_name=physical)
+                )
+                continue
+            f = catalog.resolve_one(col)
+            if f is not None:
+                per_ds.setdefault(f.dataset, [])
+                if f.physical_name not in per_ds[f.dataset]:
+                    per_ds[f.dataset].append(f.physical_name)
+                fields_meta.append(f)
+            else:
+                if col not in per_ds[anchor]:
+                    per_ds[anchor].append(col)
+                fields_meta.append(
+                    SemanticField(logical_name=col, dataset=anchor, physical_name=col)
+                )
+        return per_ds, fields_meta
+
+    def _read_joined_sql(
+        self,
+        anchor: str,
+        per_ds: Mapping[str, Sequence[str]],
+        joins: Mapping[str, str],
+        *,
+        time_range: tuple[Any, Any] | None,
+        instrument_filter: Sequence[str] | None,
+        filters: Any,
+        params_by_dataset: Mapping[str, Mapping[str, Any]],
+        limit: int | None = None,
+    ) -> tuple[str, list[Any], list[str]]:
+        """生成 read_joined 的单条 SQL：每张物理表一个子查询，DuckDB 内 join。
+
+        exact 子查询按 time_range 裁剪文件；asof/pit_asof 子查询不按 time_range
+        裁剪（PIT 需要窗口外的历史可见记录）。
+        """
+        from data_access.read.formats import format_adapter_for_dataset
+        from data_access.read.predicate import Predicate, compile_predicate
+        from data_access.read.predicate_ast import parse_filters
+
+        datasets = [anchor] + [d for d in per_ds if d != anchor]
+        outer_cols: list[str] = []
+        params_list: list[Any] = []
+        seen_out: set[str] = set()
+        join_clauses: list[str] = []
+        anchor_sub: str | None = None
+        anchor_meta = self._registry.get(anchor)
+        for key in (anchor_meta.time_column, anchor_meta.instrument_column):
+            if key and key not in seen_out:
+                seen_out.add(key)
+                outer_cols.append(f"a.{_quote_ident(key)} AS {_quote_ident(key)}")
+
+        for i, ds in enumerate(datasets):
+            alias = "a" if i == 0 else chr(ord("b") + (i - 1))
+            dsobj = self._registry.get(ds)
+            policy = joins.get(ds, "exact")
+            cols = list(per_ds.get(ds, []))
+            t_col = dsobj.time_column
+            inst_col = dsobj.instrument_column
+            select_cols = list(cols)
+            for k in (t_col, inst_col):
+                if k and k not in select_cols:
+                    select_cols.append(k)
+
+            ds_tr = time_range if (ds == anchor or policy == "exact") else None
+            ds_inst = instrument_filter if ds == anchor else None
+            ds_params = dict(params_by_dataset.get(ds, {}))
+            paths = self._prepare_dataset_read(
+                dsobj,
+                time_range=ds_tr,
+                params=ds_params,
+                instrument_filter=ds_inst,
+            )
+            files = build_file_manifest(paths)
+            adapter = format_adapter_for_dataset(dsobj)
+            path_param = paths if len(paths) > 1 else paths[0]
+            from_clause = adapter.build_from_clause(
+                path_param,
+                hive_partitioning=dsobj.hive_partitioning,
+                union_by_name=dsobj.union_by_name,
+            )
+            params_list.append(path_param)
+
+            time_type = str((dsobj.schema or {}).get(t_col or "", "")).lower() if t_col else ""
+            sub_pred = Predicate(
+                time_range=(time_range if (ds == anchor or policy == "exact") else None),
+                instrument_filter=(instrument_filter if ds == anchor else None),
+                hive_filters=self._bucket_hive_filters(
+                    dsobj, (instrument_filter if ds == anchor else None)
+                ),
+                filters=(parse_filters(filters) if ds == anchor else None),
+                time_column_is_timestamp=("timestamp" in time_type or "datetime" in time_type),
+            )
+            compiled = compile_predicate(
+                sub_pred, time_column=t_col, instrument_column=inst_col
+            )
+            select_list = ", ".join(_quote_ident(c) for c in select_cols)
+            sub = f"SELECT {select_list} FROM {from_clause} {compiled.where_sql}".strip()
+            params_list.extend(compiled.params)
+
+            for c in cols:
+                if c in seen_out:
+                    raise ValidationError(
+                        f"read_joined 输出列冲突: '{c}' 出现在多个数据集；"
+                        f"请用 'dataset.col' 限定名或对其中一列改名。"
+                    )
+                seen_out.add(c)
+                outer_cols.append(f"{alias}.{_quote_ident(c)} AS {_quote_ident(c)}")
+
+            if i == 0:
+                anchor_sub = sub
+                continue
+            prev = "a"
+            if policy in {"asof", "pit_asof"}:
+                if not t_col or not inst_col:
+                    raise ValidationError(
+                        f"asof join 需要数据集 '{ds}' 声明 time_column 和 instrument_column"
+                    )
+                cond = (
+                    f"{prev}.{_quote_ident(inst_col)} = {alias}.{_quote_ident(inst_col)} "
+                    f"AND {prev}.{_quote_ident(t_col)} >= {alias}.{_quote_ident(t_col)}"
+                )
+                join_clauses.append(f"ASOF LEFT JOIN ({sub}) AS {alias} ON {cond}")
+            else:
+                if not t_col or not inst_col:
+                    raise ValidationError(
+                        f"exact join 需要数据集 '{ds}' 声明 time_column 和 instrument_column"
+                    )
+                cond = (
+                    f"{prev}.{_quote_ident(t_col)} = {alias}.{_quote_ident(t_col)} "
+                    f"AND {prev}.{_quote_ident(inst_col)} = {alias}.{_quote_ident(inst_col)}"
+                )
+                join_clauses.append(f"LEFT JOIN ({sub}) AS {alias} ON {cond}")
+
+        if anchor_sub is None:
+            raise ValidationError("read_joined: anchor 子查询缺失")
+        sql = (
+            f"SELECT {', '.join(outer_cols)} "
+            f"FROM ({anchor_sub}) AS a " + " ".join(join_clauses)
+        )
+        if limit is not None:
+            sql = f"{sql} LIMIT {int(limit)}"
+        return sql, params_list, datasets
+
+    def _maybe_normalize_units(
+        self,
+        table: Any,
+        *,
+        dataset: str,
+        columns: Sequence[str],
+    ) -> Any:
+        """按 SemanticFieldCatalog 做输出层单位归一化（容错：无定义的列跳过）。"""
+        from data_access.read.semantic_catalog import normalize_table_units
+
+        if table is None or not columns:
+            return table
+        fields = []
+        for col in columns:
+            try:
+                fields.append(self.resolve_fields([col], dataset=dataset)[0])
+            except Exception:
+                continue
+        return normalize_table_units(table, fields)
+
+    def _normalize_read_result(
+        self,
+        rr: ReadResult,
+        *,
+        dataset: str,
+        columns: Sequence[str],
+    ) -> ReadResult:
+        from data_access.read.read_contract import ReadResult as _RR, ReadStats
+
+        table = self._maybe_normalize_units(rr.table, dataset=dataset, columns=columns)
+        return _RR(
+            table=table,
+            snapshot=rr.snapshot,
+            stats=ReadStats(
+                rows=table.num_rows,
+                bytes=table.nbytes,
+                elapsed_ms=rr.stats.elapsed_ms,
+                paths=rr.stats.paths,
+            ),
+            lineage=rr.lineage,
+        )
+
+    def _resolve_universe_instruments(
+        self,
+        universe: str | None,
+        time_range: tuple[Any, Any] | None,
+        instruments: Sequence[str] | None,
+    ) -> Sequence[str] | None:
+        """把 universe 数据集解析成 instrument 集合，与显式 instruments 求交集。"""
+        if not universe:
+            return instruments
+        try:
+            ds = self._registry.get(universe)
+        except ValidationError as exc:
+            raise ValidationError(f"universe 数据集 '{universe}' 未注册") from exc
+        inst_col = ds.instrument_column
+        if inst_col is None:
+            raise ValidationError(
+                f"universe 数据集 '{universe}' 未声明 instrument_column，无法解析股票池"
+            )
+        cols = [ds.time_column, inst_col] if ds.time_column else [inst_col]
+        try:
+            table = self.read_arrow(universe, columns=cols, time_range=time_range)
+        except Exception:
+            table = None
+        members: set[str] = set()
+        if table is not None and table.num_rows:
+            members = {
+                str(m)
+                for m in table.column(inst_col).to_pylist()
+                if m is not None
+            }
+        if instruments:
+            members &= set(instruments)
+        return sorted(members) if members else None
 
     def _read_handle(
         self,
@@ -1154,6 +1854,7 @@ class DataAccessStore:
         batch_size: int,
         query_budget: QueryBudget | None,
         params: dict[str, Any],
+        normalize_units: bool = False,
     ) -> ReadHandle:
         """统一 read 编排：engine 路由 + 结果形态。"""
         from data_access.read.formats import format_adapter_for_dataset
@@ -1203,6 +1904,7 @@ class DataAccessStore:
                 query_budget=query_budget,
                 params=params,
                 batch_size=batch_size,
+                normalize_units=normalize_units,
             )
         if engine == "polars":
             budget = self._resolve_read_budget(ds, query_budget)
@@ -1230,6 +1932,10 @@ class DataAccessStore:
                     lazy=lf, snapshot=snapshot, lineage=lineage, batch_size=batch_size
                 )
             table = collect_polars_with_budget(lf, query_budget=budget)
+            if normalize_units and columns:
+                table = self._maybe_normalize_units(
+                    table, dataset=dataset, columns=columns
+                )
             stats = ReadStats(
                 rows=table.num_rows, bytes=table.nbytes, elapsed_ms=0.0
             )
@@ -1247,6 +1953,10 @@ class DataAccessStore:
             query_budget=query_budget,
             params=params,
         )
+        if normalize_units and columns and rr.table is not None:
+            rr = self._normalize_read_result(
+                rr, dataset=dataset, columns=columns
+            )
         handle = ReadHandle(table=rr.table, snapshot=rr.snapshot, stats=rr.stats, lineage=rr.lineage)
         if result == "stream":
             # 大结果：给一个低内存峰值的流句柄
@@ -1281,6 +1991,7 @@ class DataAccessStore:
         query_budget: QueryBudget | None,
         params: dict[str, Any],
         batch_size: int,
+        normalize_units: bool = False,
     ) -> ReadHandle:
         """PyArrow 引擎（arrow/feather 格式）：直读文件 + pc 表达式过滤。"""
         import pyarrow.compute as pc
@@ -1339,6 +2050,10 @@ class DataAccessStore:
         if limit is not None:
             table = table.slice(0, int(limit))
 
+        if normalize_units and columns:
+            table = self._maybe_normalize_units(
+                table, dataset=dataset, columns=columns
+            )
         elapsed_ms = (time.perf_counter() - start) * 1000
         enforce_arrow_budget(budget, table, elapsed_ms=elapsed_ms)
         snapshot = self._build_snapshot(

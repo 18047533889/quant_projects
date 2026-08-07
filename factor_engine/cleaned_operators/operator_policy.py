@@ -1217,7 +1217,7 @@ _ADVANCED_PACK_POLICIES = {
     },
     "ts_betti_1_max_persistence": {"scope": "ts", "pit_safe": True, "min_periods": 2},
     "ts_persistence_diagram_shift": {"scope": "ts", "pit_safe": True, "min_periods": 2},
-    "ts_student_t_fisher_shift": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_fisher_information_shift": {"scope": "ts", "pit_safe": True, "min_periods": 2},
     "ts_bures_corr_shift": {"scope": "ts", "pit_safe": True, "min_periods": 2},
     "ts_kramers_moyal_drift": {"scope": "ts", "pit_safe": True, "min_periods": 2},
     "ts_kramers_moyal_diffusion": {"scope": "ts", "pit_safe": True, "min_periods": 2},
@@ -1226,6 +1226,74 @@ _ADVANCED_PACK_POLICIES = {
     "holder_class_js_shift": {"scope": "ts", "pit_safe": True, "min_periods": 2},
 }
 _EXPLICIT_POLICIES.update(_ADVANCED_PACK_POLICIES)
+
+# Fiscal/event pack：fiscal_event_ops 把 date_diff_days / cash_flow_lifecycle_stage
+# 并入 extended 表面（cash_flow_lifecycle_stage 已进 DAILY_FACTOR_MIGRATED），但它们的
+# 显式 scope policy 不在过滤后的 _EXPLICIT_POLICIES，导致 load_all 的
+# finalize_layer_governance._enrich_catalog 对全体会话抛「无显式 scope policy」。
+# 这是幂等的加法补丁（与 _FINAL_PACK_POLICIES / _ADVANCED_PACK_POLICIES 同模式）。
+_FISCAL_EVENT_PACK_POLICIES = {
+    "date_diff_days": {"scope": "fundamental_period", "pit_safe": True},
+    "cash_flow_lifecycle_stage": {"scope": "fundamental_period", "pit_safe": True},
+}
+_EXPLICIT_POLICIES.update(_FISCAL_EVENT_PACK_POLICIES)
+
+# 2026-08 V2/V3 state-dynamics / event-response / spectral-crowding / minute
+# volume-clock / dynamic-KNN / extreme-tail / report-timing families.  Applied
+# after the active-surface filter so the policies survive load order (the pack's
+# own surface registration may import after ``operator_policy``).
+_DYNAMICS_PACK_POLICIES = {
+    # State geometry + ordinal time asymmetry.
+    "ts_ordinal_irreversibility": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "ts_state_density": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "ts_multiscale_permutation_entropy_slope": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    # Local Markov dynamics (strictly-past transition matrix; current value only
+    # selects the state).
+    "ts_markov_persistence": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "ts_markov_state_entropy": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "ts_markov_transition_surprisal": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "ts_markov_entropy_production": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "ts_active_information_storage": {"scope": "ts", "pit_safe": True, "lag": 1, "min_periods": 5},
+    "ts_kramers_moyal_local_stability": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    # First-passage (last anchor's path may read x_t).
+    "ts_first_passage_bias": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    # Historical event-response learning.
+    "event_historical_response_mean": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "event_historical_response_sign_balance": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "event_hawkes_branching_ratio": {"scope": "ts", "pit_safe": True, "lag": 1, "min_periods": 5},
+    # Multivariate distribution break (shift windows end at t-1).
+    "ts_joint_energy_shift": {"scope": "ts", "pit_safe": True, "lag": 1, "min_periods": 10},
+    "ts_energy_break_score": {"scope": "ts", "pit_safe": True, "lag": 1, "min_periods": 10},
+    "ts_copula_central_asymmetry": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    # Cross-sectional spectral crowding (per-date group spectrum).
+    "group_corr_mode_share": {"scope": "group", "pit_safe": True},
+    "group_corr_effective_rank": {"scope": "group", "pit_safe": True},
+    "group_corr_mode_localization": {"scope": "group", "pit_safe": True},
+    # Session recovery + volume-clock path geometry (minute → daily, EOD).
+    "session_event_recovery_score": {
+        "scope": "session_intraday", "pit_safe": True, "session_aware": True,
+        "reset_at_session_boundary": True, "min_periods": 2,
+    },
+    "intraday_volume_clock_path_efficiency": {
+        "scope": "session_intraday", "pit_safe": True, "session_aware": True,
+        "reset_at_session_boundary": True, "min_periods": 2,
+    },
+    "intraday_volume_clock_roughness": {
+        "scope": "session_intraday", "pit_safe": True, "session_aware": True,
+        "reset_at_session_boundary": True, "min_periods": 2,
+    },
+    # Dynamic cross-sectional KNN peers.
+    "cs_knn_peer_mean_ex_self": {"scope": "cs", "pit_safe": True},
+    "cs_knn_neighbor_retention": {"scope": "cs", "pit_safe": True},
+    # Extreme tail + exact quantile regression + local divergence.
+    "ts_hill_tail_index": {"scope": "ts", "pit_safe": True, "min_periods": 10},
+    "ts_quantile_regression_beta": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "ts_local_lyapunov_exponent": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    # Report disclosure timing / revision magnitude.
+    "report_filing_delay_surprise": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "report_revision_magnitude": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+}
+_EXPLICIT_POLICIES.update(_DYNAMICS_PACK_POLICIES)
 
 # Compatibility export now reflects the reviewed research surface exactly.
 RESEARCH_CORE_CANONICALS = RESEARCH_ONLY_CANONICALS

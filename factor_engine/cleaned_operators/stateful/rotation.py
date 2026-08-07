@@ -148,7 +148,11 @@ class CsRankChurn(SeriesOperator):
             else:
                 labels = {v for v in g_row if _valid_label(v)}
                 for lab in labels:
-                    mask = np.array([g == lab for g in g_row], dtype=bool)
+                    # P0-011: cohort-consistent matched sample — a stock enters
+                    # only if it belongs to the SAME group at both dates.  The
+                    # lagged rank was computed inside the lagged group, so it is
+                    # only comparable today if the label has not rotated.
+                    mask = (g_row == lab) & (gv[r - lk] == lab)
                     cur = rank_panel[r][mask]
                     prev_r = rank_panel[r - lk][mask]
                     matched = np.isfinite(cur) & np.isfinite(prev_r)
@@ -255,7 +259,10 @@ class CsTailRetention(SeriesOperator):
             else:
                 labels = {v for v in g_row if _valid_label(v)}
                 for lab in labels:
-                    mask = np.array([g == lab for g in g_row], dtype=bool)
+                    # P0-012: cohort-consistent tail sets — a stock in today's
+                    # group B whose lagged rank was computed inside group A must
+                    # not enter B's historical tail retention.
+                    mask = (g_row == lab) & (gv[r - lk] == lab)
                     cur = rank_panel[r][mask]
                     prev_r = rank_panel[r - lk][mask]
                     valid_prev = np.isfinite(prev_r)

@@ -257,6 +257,14 @@ def phase2_operator_signatures() -> dict[str, OperatorSignature]:
         "ts_ar_coefficient",
         ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("lag", _INT), ArgSpec("min_periods", _INT),
     )
+    signatures["ts_ar_fitted_value"] = _sig(
+        "ts_ar_fitted_value",
+        ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("order", _INT),
+    )
+    signatures["ts_ar_in_sample_resid"] = _sig(
+        "ts_ar_in_sample_resid",
+        ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("order", _INT),
+    )
     signatures["ts_variance_ratio"] = _sig(
         "ts_variance_ratio",
         ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("q", _INT), ArgSpec("min_periods", _INT),
@@ -337,8 +345,8 @@ def phase2_operator_signatures() -> dict[str, OperatorSignature]:
             ArgSpec("x", _F), ArgSpec("window", _W),
             ArgSpec("tau", _INT), ArgSpec("embedding_dim", _INT),
         )
-    signatures["ts_student_t_fisher_shift"] = _sig(
-        "ts_student_t_fisher_shift",
+    signatures["ts_fisher_information_shift"] = _sig(
+        "ts_fisher_information_shift",
         ArgSpec("x", _F), ArgSpec("recent_window", _W), ArgSpec("prior_window", _W),
     )
 

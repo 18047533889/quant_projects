@@ -18,6 +18,7 @@ from cleaned_operators.ts_model._rolling_core import (
     frame_like,
     metadata,
     ols_fit,
+    trailing_contiguous_finite,
 )
 
 _CANONICALS: list[str] = []
@@ -133,8 +134,14 @@ def _ar_op(name: str, description: str, unit: str, stat: str, *, fit_lag: int = 
     return _ArOp
 
 
-_ar_op("ts_ar_forecast", "AR(order) 一步预测当前值。", "level", "forecast")
-_ar_op("ts_ar_innovation", "当前实际值减 AR 预测。", "level", "innovation")
+# In-sample (fitted-value) AR forms: fit on the window *including* the current
+# row and report the fitted value / residual.  These are the honest names; the
+# legacy ``ts_ar_forecast`` / ``ts_ar_innovation`` are aliases of the same
+# kernels (fit_lag=0 is NOT a one-step-ahead forecast).
+_ar_op("ts_ar_fitted_value", "AR(order) 窗口内拟合值(fit_lag=0, in-sample)。", "level", "forecast")
+_ar_op("ts_ar_in_sample_resid", "当前实际值减窗口内 AR 拟合值(in-sample resid)。", "level", "innovation")
+_ar_op("ts_ar_forecast", "AR(order) 当前值预测（legacy 名称——实为窗口内拟合值，见 ts_ar_fitted_value）。", "level", "forecast")
+_ar_op("ts_ar_innovation", "当前实际值减 AR 预测（legacy 名称——实为样本内残差，见 ts_ar_in_sample_resid）。", "level", "innovation")
 _ar_op("ts_ar_innovation_z", "AR 创新标准化。", "level", "innovation_z")
 
 # Prior-window (out-of-sample) AR forms: fit on t-window..t-1, forecast t.
@@ -195,7 +202,9 @@ def _variance_ratio_slope(vals: np.ndarray, window: int, max_q: int, min_periods
     n = len(vals)
     start = max(0, n - window)
     seg = vals[start:]
-    finite = seg[np.isfinite(seg)]
+    # P0-008: never bridge suspensions/gaps into adjacent observations — the
+    # variance ratio runs over the most recent contiguous finite block only.
+    finite = trailing_contiguous_finite(seg)
     if finite.size < max(min_periods, 6):
         return np.nan
     rets = np.diff(finite)
@@ -247,6 +256,8 @@ class TsVarianceRatioSlope(SeriesOperator):
 
 _CANONICALS.extend(
     [
+        "ts_ar_fitted_value",
+        "ts_ar_in_sample_resid",
         "ts_ar_forecast",
         "ts_ar_innovation",
         "ts_ar_innovation_z",

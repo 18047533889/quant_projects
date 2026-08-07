@@ -45,13 +45,25 @@ def metadata(
     )
 
 
-def panel_or_scalar(value: Any, row: int) -> float:
-    """Resolve a parameter that may be a scalar or a per-row panel value."""
+def panel_or_scalar(value: Any, row: int, col: int) -> float:
+    """Resolve a parameter that may be a scalar or a per-cell panel value.
+
+    A DataFrame parameter is indexed cell-wise ``[row, col]`` so each stock
+    gets its *own* threshold/limit on every day.  The legacy behaviour (first
+    column broadcast to every stock) is a cross-sectional bug: e.g.
+    ``state_slew_limit(x, atr_panel)`` silently used stock ``A``'s ATR for all
+    stocks.  A scalar still broadcasts.  Missing cells return NaN (the caller
+    treats NaN like a broken input).
+    """
     if isinstance(value, pd.DataFrame):
-        v = value.iloc[row]
-        if v.ndim == 0 or len(v) == 0:
+        if row < 0 or row >= value.shape[0]:
             return np.nan
-        return float(v.iloc[0])
+        v = value.iloc[row, col]
+        return float(v)
+    if isinstance(value, pd.Series):
+        if col < 0 or col >= value.shape[0]:
+            return np.nan
+        return float(value.iloc[col])
     return float(value)
 
 

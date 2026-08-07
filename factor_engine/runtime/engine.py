@@ -169,8 +169,14 @@ class FactorEngine:
         *,
         enable_cse: bool | None = None,
         perf: PerfConfig | None = None,
+        pit_enforce: bool = False,
+        pit_forbid_forward_fill: bool = False,
     ) -> tuple[DAGPlan, dict[str, AnalysisResult]]:
-        """编译多因子并可选 CSE；每个因子只 ``compile`` 一次。"""
+        """编译多因子并可选 CSE；每个因子只 ``compile`` 一次。
+
+        ``pit_enforce=True`` 时在编译阶段对每个因子做 PIT 安全审计（``assert_pit_safe``
+        是纯审计、不改计划），因此批跑也能满足 PIT 而无需退化为逐因子 ``run()``。
+        """
         perf = perf or PerfConfig.from_env()
         if enable_cse is None:
             enable_cse = perf.enable_cse
@@ -178,7 +184,11 @@ class FactorEngine:
         names: list[str] = []
         analyses: dict[str, AnalysisResult] = {}
         for factor in factors:
-            plan, analysis = self.compile(factor)
+            plan, analysis = self.compile(
+                factor,
+                pit_enforce=pit_enforce,
+                pit_forbid_forward_fill=pit_forbid_forward_fill,
+            )
             plans.append(plan)
             names.append(factor.name)
             analyses[factor.name] = analysis
@@ -1790,7 +1800,8 @@ class FactorEngine:
         ``shared_result_cache``，再按依赖图顺序执行各因子根。含 ``plan_ref``
         节点的计划必须使用此入口而非多次 ``run``。
 
-        ``auto_warmup`` 或 ``pit_enforce`` 为真时退化为逐因子 ``run()``。
+        PIT 审计在编译期做（不退化批跑）；``auto_warmup`` 走共享 union 加载窗口，
+        各因子独立 trim——不再退化为逐因子 ``run()``。
 
         Args:
             factors: 待求值因子序列。

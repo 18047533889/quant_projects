@@ -225,7 +225,8 @@ def test_kramers_moyal_linear_trend():
     qvals = qvals[np.isfinite(qvals)]
     assert dvals.size > 0 and qvals.size > 0
     assert np.allclose(dvals, 1.0, atol=1e-6)   # dx = 1
-    assert np.allclose(qvals, 1.0, atol=1e-6)   # dx^2 = 1
+    # Strict Kramers-Moyal D2 at dt=1 is (1/2)*E[dx^2]; a linear trend dx=1 -> 0.5.
+    assert np.allclose(qvals, 0.5, atol=1e-6)
 
 
 def _holder_panel(values: np.ndarray) -> list[pd.DataFrame]:

@@ -4,6 +4,17 @@ from .query_budget import QueryBudget, resolve_query_budget
 from .scan_handle import ScanHandle
 from .key_policy import KeyPolicy
 from .adapters import arrow_table_to_multiindex_columns, arrow_to_multiindex_series
+from .read_handle import ReadHandle
+from .relation_handle import RelationHandle
+from .data_request import DataRequest, ReadPlan
+from .semantic_catalog import (
+    SemanticField,
+    SemanticFieldCatalog,
+    get_semantic_catalog,
+    normalize_table_units,
+    parse_semantic_field,
+    reset_semantic_catalog,
+)
 from .formats import (
     DataFormat,
     FormatSpec,
@@ -39,6 +50,16 @@ __all__ = [
     "resolve_query_budget",
     "ScanHandle",
     "KeyPolicy",
+    "ReadHandle",
+    "RelationHandle",
+    "DataRequest",
+    "ReadPlan",
+    "SemanticField",
+    "SemanticFieldCatalog",
+    "get_semantic_catalog",
+    "normalize_table_units",
+    "parse_semantic_field",
+    "reset_semantic_catalog",
     "arrow_table_to_multiindex_columns",
     "arrow_to_multiindex_series",
     "DataFormat",

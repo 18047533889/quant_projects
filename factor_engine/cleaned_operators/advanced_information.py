@@ -133,25 +133,28 @@ def _te_from_transitions(xs: np.ndarray, ys: np.ndarray, x_next: np.ndarray, bin
     return float(max(te, 0.0))
 
 
-def _transfer_entropy_series(t: np.ndarray, s: np.ndarray, window: int, bins: int, lag: int) -> np.ndarray:
-    n = t.shape[0]
-    out = np.full(n, np.nan, dtype=float)
-    if bins < 2 or lag < 1 or window < lag + 2:
-        return out
-    for i in range(n):
-        start = max(0, i - window + 1)
-        tw = t[start : i + 1]
-        sw = s[start : i + 1]
-        valid = np.isfinite(tw) & np.isfinite(sw)
-        idx = np.flatnonzero(valid)
-        if idx.size < lag + 2:
-            continue
-        # Transitions s -> s+lag, both within the causal window.
-        xs = tw[idx[:-lag]]
-        ys = sw[idx[:-lag]]
-        x_next = tw[idx[lag:]]
-        out[i] = _te_from_transitions(xs, ys, x_next, bins)
-    return out
+def _transfer_entropy_window(
+    tw: np.ndarray, sw: np.ndarray, bins: int, lag: int, min_transitions: int
+) -> float:
+    """Transfer entropy for a *single* causal window (one computation, O(w log w)).
+
+    The earlier implementation re-rolled every prefix inside each window (the
+    outer row loop called a rolling sub-routine and kept only ``[-1]``), so one
+    output row cost O(w^2).  This kernel computes the current window once.
+    """
+    valid = np.isfinite(tw) & np.isfinite(sw)
+    idx = np.flatnonzero(valid)
+    if idx.size < max(lag + 2, min_transitions):
+        return np.nan
+    # Transitions s -> s+lag, both within the causal window.
+    xs = tw[idx[:-lag]]
+    ys = sw[idx[:-lag]]
+    x_next = tw[idx[lag:]]
+    # Degenerate constant state: with < 2 distinct states the quantile bins are
+    # arbitrary and Jeffreys smoothing would *invent* information; fail closed.
+    if np.unique(xs).size < 2 or np.unique(ys).size < 2:
+        return np.nan
+    return _te_from_transitions(xs, ys, x_next, bins)
 
 
 @register_operator(
@@ -172,7 +175,7 @@ class TsTransferEntropy(SeriesOperator):
     metadata = _metadata(
         "ts_transfer_entropy",
         "传递熵 I(X_{s+lag}; Y_s | X_s) nats，source→target 方向。",
-        ["target", "source", "window", "bins", "lag"],
+        ["target", "source", "window", "bins", "lag", "min_transitions"],
         domain="price_volume",
         unit="nats",
         cost=5,
@@ -185,6 +188,7 @@ class TsTransferEntropy(SeriesOperator):
         window: int = 60,
         bins: int = 3,
         lag: int = 1,
+        min_transitions: Any = None,
         **_: Any,
     ) -> pd.DataFrame:
         w = int(window)
@@ -196,55 +200,56 @@ class TsTransferEntropy(SeriesOperator):
             raise ValueError("ts_transfer_entropy requires lag >= 1")
         if w < lg + 2:
             raise ValueError("ts_transfer_entropy requires window >= lag + 2")
+        # With ``bins`` bins per variable the joint transition space has bins^3
+        # cells; a handful of transitions would be dominated by Jeffreys smoothing
+        # mass.  Default floor scales with the cell count.
+        if min_transitions is None:
+            mt = max(30, 3 * nb * nb)
+        else:
+            mt = max(lg + 2, int(min_transitions))
         return _frame_like(
             target,
             _rolling_apply_2d_pair(
                 target.to_numpy(dtype=float),
                 source.to_numpy(dtype=float),
                 w,
-                lambda a, b: _transfer_entropy_series(a, b, w, nb, lg)[-1],
+                lambda a, b: _transfer_entropy_window(a, b, nb, lg, mt),
             ),
         )
 
 
-def _effective_transfer_entropy_series(t: np.ndarray, s: np.ndarray, window: int, bins: int, lag: int) -> np.ndarray:
-    n = t.shape[0]
-    out = np.full(n, np.nan, dtype=float)
-    if bins < 2 or lag < 1 or window < lag + 2:
-        return out
-    offsets = [o for o in _SURROGATE_OFFSETS if o > lag and o < window]
-    if not offsets:
-        return out
-    for i in range(n):
-        start = max(0, i - window + 1)
-        tw = t[start : i + 1]
-        sw = s[start : i + 1]
-        valid = np.isfinite(tw) & np.isfinite(sw)
-        idx = np.flatnonzero(valid)
-        if idx.size < lag + 2:
+def _effective_transfer_entropy_window(
+    tw: np.ndarray, sw: np.ndarray, bins: int, lag: int, min_transitions: int
+) -> float:
+    """Effective TE for a *single* window (one computation, like the plain kernel)."""
+    valid = np.isfinite(tw) & np.isfinite(sw)
+    idx = np.flatnonzero(valid)
+    if idx.size < max(lag + 2, min_transitions):
+        return np.nan
+    xs = tw[idx[:-lag]]
+    ys = sw[idx[:-lag]]
+    x_next = tw[idx[lag:]]
+    if np.unique(xs).size < 2 or np.unique(ys).size < 2:
+        return np.nan
+    real = _te_from_transitions(xs, ys, x_next, bins)
+    if not np.isfinite(real):
+        return np.nan
+    # Deterministic circular shift of the *source transition* series; the
+    # offset must be smaller than the number of transitions.
+    w_eff = ys.shape[0]
+    surr: list[float] = []
+    for off in _SURROGATE_OFFSETS:
+        if off <= lag or off >= w_eff:
             continue
-        xs = tw[idx[:-lag]]
-        ys = sw[idx[:-lag]]
-        x_next = tw[idx[lag:]]
-        real = _te_from_transitions(xs, ys, x_next, bins)
-        if not np.isfinite(real):
-            continue
-        # Deterministic circular shift of the *source transition* series; the
-        # offset must be smaller than the number of transitions.
-        w_eff = ys.shape[0]
-        surr: list[float] = []
-        for off in offsets:
-            if off >= w_eff:
-                continue
-            ys_shift = np.empty_like(ys)
-            ys_shift[: w_eff - off] = ys[off:]
-            ys_shift[w_eff - off :] = ys[:off]
-            te_s = _te_from_transitions(xs, ys_shift, x_next, bins)
-            if np.isfinite(te_s):
-                surr.append(te_s)
-        if surr:
-            out[i] = real - float(np.mean(surr))
-    return out
+        ys_shift = np.empty_like(ys)
+        ys_shift[: w_eff - off] = ys[off:]
+        ys_shift[w_eff - off :] = ys[:off]
+        te_s = _te_from_transitions(xs, ys_shift, x_next, bins)
+        if np.isfinite(te_s):
+            surr.append(te_s)
+    if not surr:
+        return np.nan
+    return real - float(np.mean(surr))
 
 
 @register_operator(
@@ -266,7 +271,7 @@ class TsEffectiveTransferEntropy(SeriesOperator):
     metadata = _metadata(
         "ts_effective_transfer_entropy",
         "有效传递熵 TE - E[TE_surrogate]（确定性 circular shift）。",
-        ["target", "source", "window", "bins", "lag"],
+        ["target", "source", "window", "bins", "lag", "min_transitions"],
         domain="price_volume",
         unit="nats",
         cost=6,
@@ -279,6 +284,7 @@ class TsEffectiveTransferEntropy(SeriesOperator):
         window: int = 60,
         bins: int = 3,
         lag: int = 1,
+        min_transitions: Any = None,
         **_: Any,
     ) -> pd.DataFrame:
         w = int(window)
@@ -290,13 +296,17 @@ class TsEffectiveTransferEntropy(SeriesOperator):
             raise ValueError("ts_effective_transfer_entropy requires lag >= 1")
         if w < lg + 2:
             raise ValueError("ts_effective_transfer_entropy requires window >= lag + 2")
+        if min_transitions is None:
+            mt = max(30, 3 * nb * nb)
+        else:
+            mt = max(lg + 2, int(min_transitions))
         return _frame_like(
             target,
             _rolling_apply_2d_pair(
                 target.to_numpy(dtype=float),
                 source.to_numpy(dtype=float),
                 w,
-                lambda a, b: _effective_transfer_entropy_series(a, b, w, nb, lg)[-1],
+                lambda a, b: _effective_transfer_entropy_window(a, b, nb, lg, mt),
             ),
         )
 

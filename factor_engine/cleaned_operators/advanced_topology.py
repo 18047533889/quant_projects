@@ -9,12 +9,14 @@ bit-identical and cost stays bounded for automatic search.
 
 * ``ts_betti_1_max_persistence``  — max H1 persistence of the Takens-embedded
   rolling window (dimensionless, median-distance normalised).  P2/Research.
-* ``ts_persistence_diagram_shift`` — 1D Wasserstein distance between the H1
-  persistence multisets of the current and the previous window (a topology
-  regime-change proxy, cheaper than a full CROCKER).  P2/Research.
-* ``ts_student_t_fisher_shift``   — empirical-Fisher (information-geometry)
-  distance between two non-overlapping windows under a Student-t family,
-  parameterised by ``(mu, log sigma, log(nu-2))``.  P2/Research.
+* ``ts_persistence_diagram_shift`` — Wasserstein-1 distance between the H1
+  persistence *diagrams* of the current and the previous window, with diagonal
+  matching solved exactly by the Hungarian algorithm (a topology regime-change
+  proxy, cheaper than a full CROCKER).  P2/Research.
+* ``ts_fisher_information_shift`` — Frobenius distance between the log
+  empirical Fisher information matrices of two non-overlapping windows under a
+  Student-t family, parameterised by ``(mu, log sigma, log(nu-2))``.
+  P2/Research.
 """
 from __future__ import annotations
 
@@ -56,7 +58,15 @@ def _frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 def _rips_h1_pairs(points: np.ndarray) -> list[tuple[float, float]]:
-    """H1 persistence pairs ``(birth, death)`` of a Rips complex on ``points``."""
+    """H1 persistence pairs ``(birth, death)`` of a Rips complex on ``points``.
+
+    Zomorodian–Carlsson boundary-matrix reduction over F2: triangle columns are
+    processed in ascending filtration value and reduced against the pivot column
+    sharing the same *highest* edge row (latest filtration).  The pivot row must
+    be the highest edge index — mirroring the pivot onto the lowest edge (the
+    earlier implementation) invents spurious H1 classes on collinear clouds,
+    where the correct barcode is empty.
+    """
     n = points.shape[0]
     if n < 4:
         return []
@@ -81,20 +91,17 @@ def _rips_h1_pairs(points: np.ndarray) -> list[tuple[float, float]]:
     pairs: list[tuple[float, float]] = []
     for flt, i, j, k in triangles:
         col = (1 << edge_idx[(i, j)]) | (1 << edge_idx[(i, k)]) | (1 << edge_idx[(j, k)])
-        while True:
-            low = col & -col
-            if low == 0:
-                break
-            p = low.bit_length() - 1
-            prev = pivots.get(p)
+        while col:
+            hi = col.bit_length() - 1  # highest edge index (latest filtration) = pivot row.
+            prev = pivots.get(hi)
             if prev is None:
-                pivots[p] = col
+                pivots[hi] = col
                 break
             col ^= prev
         if col == 0:
-            continue  # region already filled -> no H1 death here.
-        p = (col & -col).bit_length() - 1
-        pairs.append((edge_len[p], flt))
+            continue  # boundary already spanned -> no new H1 class to kill.
+        hi = col.bit_length() - 1
+        pairs.append((edge_len[hi], flt))
     return pairs
 
 
@@ -121,6 +128,12 @@ def _takens_points(vals: np.ndarray, tau: int, dim: int) -> np.ndarray | None:
     if n < lag + 3:
         return None
     pts = np.stack([z[s - (dim - 1) * tau : s + 1 : tau] for s in range(lag, n)], axis=0)
+    # Drop any embedding vector that contains a NaN (a NaN in one lagged
+    # coordinate would otherwise poison every pairwise distance in the Rips
+    # complex below).
+    pts = pts[np.isfinite(pts).all(axis=1)]
+    if pts.shape[0] < 4:
+        return None
     pts = np.round(pts, decimals=9)
     pts = np.unique(pts, axis=0)
     if pts.shape[0] < 4:
@@ -192,27 +205,39 @@ class TsBetti1MaxPersistence(SeriesOperator):
         return _frame_like(x, _betti_series(x.to_numpy(dtype=float), w, t, m))
 
 
-def _diagram_persistence(pairs: list[tuple[float, float]]) -> np.ndarray:
-    return np.array([death - birth for birth, death in pairs], dtype=float)
+def _diag_dist(p: tuple[float, float]) -> float:
+    """L-infinity distance from point ``(birth, death)`` to the diagonal."""
+    return (p[1] - p[0]) / 2.0
 
 
-def _diagram_w1(p_current: np.ndarray, p_prior: np.ndarray) -> float:
-    """1D Wasserstein between two H1 persistence multisets (pad with zeros)."""
-    if p_current.size == 0 and p_prior.size == 0:
+def _diagram_w1(pairs_a: list[tuple[float, float]], pairs_b: list[tuple[float, float]]) -> float:
+    """1-Wasserstein distance between two persistence diagrams (diagonal matching).
+
+    Points may match a point of the other diagram (L-infinity cost) or the
+    diagonal (cost ``(death-birth)/2``); the optimal bipartite matching is solved
+    exactly with the Hungarian algorithm.  This is the genuine persistence-diagram
+    distance the operator name promises — the earlier implementation compared only
+    the 1D ``death-birth`` lifetimes, discarding birth locations.
+    """
+    m1, m2 = len(pairs_a), len(pairs_b)
+    if m1 == 0 and m2 == 0:
         return 0.0
-    if p_current.size == 0:
-        return float(np.mean(np.abs(p_prior)))
-    if p_prior.size == 0:
-        return float(np.mean(np.abs(p_current)))
-    a = np.sort(np.abs(p_current))
-    b = np.sort(np.abs(p_prior))
-    k = min(a.size, b.size)
-    total = float(np.sum(np.abs(a[:k] - b[:k])))
-    if a.size > b.size:
-        total += float(np.sum(np.abs(a[k:])))
-    else:
-        total += float(np.sum(np.abs(b[k:])))
-    return total / max(a.size, b.size)
+    if m1 == 0:
+        return float(np.mean([_diag_dist(p) for p in pairs_b]))
+    if m2 == 0:
+        return float(np.mean([_diag_dist(p) for p in pairs_a]))
+    from scipy.optimize import linear_sum_assignment
+
+    n = m1 + m2
+    cost = np.zeros((n, n), dtype=float)
+    for i, p in enumerate(pairs_a):
+        for j, q in enumerate(pairs_b):
+            cost[i, j] = max(abs(p[0] - q[0]), abs(p[1] - q[1]))
+        cost[i, m2 + i] = _diag_dist(p)  # D1 point -> diagonal.
+    for j, q in enumerate(pairs_b):
+        cost[m1 + j, j] = _diag_dist(q)  # D2 point -> diagonal.
+    rows, cols = linear_sum_assignment(cost)
+    return float(cost[rows, cols].sum()) / max(m1, m2)
 
 
 def _persistence_shift_series(vals_2d: np.ndarray, window: int, tau: int, dim: int) -> np.ndarray:
@@ -232,9 +257,7 @@ def _persistence_shift_series(vals_2d: np.ndarray, window: int, tau: int, dim: i
                 continue
             cur_pairs = _rips_h1_pairs(cur_pts)
             pri_pairs = _rips_h1_pairs(pri_pts)
-            out[row, col] = _diagram_w1(
-                _diagram_persistence(cur_pairs), _diagram_persistence(pri_pairs)
-            )
+            out[row, col] = _diagram_w1(cur_pairs, pri_pairs)
     return out
 
 
@@ -247,16 +270,17 @@ def _persistence_shift_series(vals_2d: np.ndarray, window: int, tau: int, dim: i
     status="experimental",
 )
 class TsPersistenceDiagramShift(SeriesOperator):
-    """相空间拓扑 regime 漂移：当前窗口 H1 持久值与上一窗口的 1D Wasserstein。
+    """相空间拓扑 regime 漂移：当前窗口与上一窗口 H1 persistence diagram 的 W1。
 
-    两个窗口均 Takens 嵌入 + Rips H1；输出两 H1 持久值多重集的 1D Wasserstein
-    距离（短者补零，即匹配到对角线的代价）。这是 CROCKER 的低成本替代——
-    回答"拓扑结构变了多少"，而非逐层 Betti 曲线。P2 / Research。
+    两个窗口均 Takens 嵌入 + Rips H1；输出两个 ``(birth, death)`` diagram 的
+    Wasserstein-1 距离，未匹配点按到对角线的 L-infinity 代价计入（Hungarian
+    精确匹配）。这是 CROCKER 的低成本替代——回答"拓扑结构变了多少"，
+    而非逐层 Betti 曲线。P2 / Research。
     """
 
     metadata = _metadata(
         "ts_persistence_diagram_shift",
-        "当前 vs 上一窗口 H1 持久值多重集的 1D Wasserstein 距离。",
+        "当前 vs 上一窗口 H1 persistence diagram 的 Wasserstein-1 距离。",
         ["x", "window", "tau", "embedding_dim"],
         unit="ratio",
     )
@@ -345,10 +369,10 @@ def _fisher_shift_series(vals_2d: np.ndarray, recent: int, prior: int) -> np.nda
         for row in range(rows):
             r = int(recent)
             p = int(prior)
-            if row < r + p:  # keep both prior and recent windows non-negative.
+            if row < r + p - 1:  # need exactly ``prior`` then exactly ``recent`` rows.
                 continue
-            cur = vals_2d[row - r : row + 1, col]
-            pri = vals_2d[row - r - p : row - r, col]
+            cur = vals_2d[row - r + 1 : row + 1, col]            # exactly r observations.
+            pri = vals_2d[row - r - p + 1 : row - r + 1, col]    # exactly p observations.
             fit_r = _t_fit(cur)
             fit_p = _t_fit(pri)
             if fit_r is None or fit_p is None:
@@ -362,25 +386,27 @@ def _fisher_shift_series(vals_2d: np.ndarray, recent: int, prior: int) -> np.nda
 
 
 @register_operator(
-    name="ts_student_t_fisher_shift",
+    name="ts_fisher_information_shift",
     category="topology",
     business_category="topology",
-    canonical="ts_student_t_fisher_shift",
+    canonical="ts_fisher_information_shift",
     source="advanced_topology",
     status="experimental",
 )
-class TsStudentTFisherShift(SeriesOperator):
-    """Student-t 参数化下的经验 Fisher 信息几何距离。
+class TsFisherInformationShift(SeriesOperator):
+    """Student-t 参数化下的经验 Fisher 信息阵结构漂移。
 
     两个不重叠窗口分别做 Student-t 快速 profile MLE（``2.1 <= nu <= 30``，
     参数化 ``(mu, log sigma, log(nu-2))``），估计经验 Fisher 信息阵
     ``I = mean(g g^T) + eps I``，输出 ``|log I_recent - log I_prior|_F``。
-    确定性（固定 df 网格 + 固定中心差分步长）。P2 / Research。
+    注意：这是 Fisher *信息阵*的结构漂移，不是两个 Student-t 参数点之间的
+    Fisher-Rao 测地距离。确定性（固定 df 网格 + 固定中心差分步长）。
+    P2 / Research。
     """
 
     metadata = _metadata(
-        "ts_student_t_fisher_shift",
-        "Student-t 经验 Fisher 信息几何距离（log 矩阵 Frobenius）。",
+        "ts_fisher_information_shift",
+        "Student-t 经验 Fisher 信息阵结构漂移（log 矩阵 Frobenius）。",
         ["x", "recent_window", "prior_window"],
         unit="distance",
     )
@@ -395,7 +421,7 @@ class TsStudentTFisherShift(SeriesOperator):
         r = int(recent_window)
         p = int(prior_window)
         if r < 8 or p < 8:
-            raise ValueError("ts_student_t_fisher_shift requires recent_window, prior_window >= 8")
+            raise ValueError("ts_fisher_information_shift requires recent_window, prior_window >= 8")
         return _frame_like(x, _fisher_shift_series(x.to_numpy(dtype=float), r, p))
 
 
@@ -407,7 +433,7 @@ def _register_surface() -> None:
         | {
             "ts_betti_1_max_persistence",
             "ts_persistence_diagram_shift",
-            "ts_student_t_fisher_shift",
+            "ts_fisher_information_shift",
         }
     )
 

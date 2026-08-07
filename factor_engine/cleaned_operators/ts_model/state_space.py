@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 
 from cleaned_operators.base import SeriesOperator, register_operator
-from cleaned_operators.ts_model._rolling_core import frame_like, metadata
+from cleaned_operators.ts_model._rolling_core import aligned, frame_like, metadata
 
 _CANONICALS: list[str] = []
 
@@ -185,6 +185,9 @@ def _apply_col(x: pd.DataFrame, fn) -> pd.DataFrame:
 
 
 def _apply_two(y: pd.DataFrame, x: pd.DataFrame, fn) -> pd.DataFrame:
+    # P0-041: model inputs must be index/column aligned before the per-column
+    # recursion, so a reordered ``x`` panel can never silently mispair stocks.
+    y, x = aligned(y, x)
     yv = y.to_numpy(dtype=float)
     xv = x.to_numpy(dtype=float)
     rows, cols = yv.shape

@@ -27,6 +27,7 @@ import numpy as np
 import pandas as pd
 
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.common.daily_panel import _aligned
 from cleaned_operators.rolling_pack import (
     check_window,
     frame_like,
@@ -106,6 +107,7 @@ class TsRunStrength(SeriesOperator):
     ) -> pd.DataFrame:
         w = check_window(int(max_run), name="max_run")
         mp = max(1, int(min_periods))
+        x, state = _aligned(x, state)
         xv, sv = _run_windows(x.to_numpy(), state.to_numpy(), w)
         s_valid, s_val = _state_series(sv)
         rows, cols = xv.shape
@@ -186,6 +188,7 @@ class TsRunEfficiency(SeriesOperator):
     ) -> pd.DataFrame:
         w = check_window(int(max_run), name="max_run")
         mp = max(2, int(min_periods))
+        x, state = _aligned(x, state)
         xv, sv = _run_windows(x.to_numpy(), state.to_numpy(), w)
         s_valid, s_val = _state_series(sv)
         rows, cols = xv.shape
@@ -202,6 +205,14 @@ class TsRunEfficiency(SeriesOperator):
                     run_len = 0
                     prev_state = None
                     continue
+                if not np.isfinite(xv[row, col]):
+                    # P0-003: an invalid driver breaks the episode (never a
+                    # carry); the NaN row emits NaN and the run restarts.
+                    run_sum = 0.0
+                    run_abs = 0.0
+                    run_len = 0
+                    prev_state = None
+                    continue
                 cur = s_val[row, col]
                 if cur == 0.0:
                     run_sum = 0.0
@@ -210,12 +221,11 @@ class TsRunEfficiency(SeriesOperator):
                     prev_state = None
                     out[row, col] = 0.0
                     continue
-                finite_x = bool(np.isfinite(xv[row, col]))
-                if prev_state is not None and cur == prev_state and finite_x:
+                if prev_state is not None and cur == prev_state:
                     run_sum = run_sum + xv[row, col]
                     run_abs = run_abs + abs(xv[row, col])
                     run_len = run_len + 1
-                elif finite_x:
+                else:
                     run_sum = xv[row, col]
                     run_abs = abs(xv[row, col])
                     run_len = 1
@@ -258,6 +268,7 @@ class TsRunConcentration(SeriesOperator):
     ) -> pd.DataFrame:
         w = check_window(int(max_run), name="max_run")
         mp = max(2, int(min_periods))
+        x, state = _aligned(x, state)
         xv, sv = _run_windows(x.to_numpy(), state.to_numpy(), w)
         s_valid, s_val = _state_series(sv)
         rows, cols = xv.shape
@@ -274,6 +285,13 @@ class TsRunConcentration(SeriesOperator):
                     run_len = 0
                     prev_state = None
                     continue
+                if not np.isfinite(xv[row, col]):
+                    # P0-004: an invalid driver breaks the episode.
+                    run_abs = 0.0
+                    run_max = 0.0
+                    run_len = 0
+                    prev_state = None
+                    continue
                 cur = s_val[row, col]
                 if cur == 0.0:
                     run_abs = 0.0
@@ -282,12 +300,11 @@ class TsRunConcentration(SeriesOperator):
                     prev_state = None
                     out[row, col] = 0.0
                     continue
-                finite_x = bool(np.isfinite(xv[row, col]))
-                if prev_state is not None and cur == prev_state and finite_x:
+                if prev_state is not None and cur == prev_state:
                     run_abs = run_abs + abs(xv[row, col])
                     run_max = max(run_max, abs(xv[row, col]))
                     run_len = run_len + 1
-                elif finite_x:
+                else:
                     run_abs = abs(xv[row, col])
                     run_max = abs(xv[row, col])
                     run_len = 1
@@ -582,6 +599,7 @@ class TsTransitionIntensity(SeriesOperator):
         **_: Any,
     ) -> pd.DataFrame:
         w = check_window(window)
+        x, state = _aligned(x, state)
         xv = x.to_numpy(dtype=float)
         sv = state.to_numpy(dtype=float)
         s_valid, s_val = _state_series(sv)

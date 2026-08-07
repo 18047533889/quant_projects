@@ -109,6 +109,9 @@ class DataAccessSource(DataSource):
         self._panel_cache: OrderedDict[str, Any] = OrderedDict()
         self._lazy_bundle: Any | None = None
         self._data_snapshot_id: str | None = None
+        #: 廉价的 manifest 版本 token（读 _manifest.json sidecar），用于 TTL 内
+        #: 判断数据是否变化；与真实 DataSnapshot id 分开跟踪（格式不同，不能互比）。
+        self._manifest_token: str | None = None
         self._snapshot_checked_at = 0.0
         self._snapshot_ttl_seconds = float(
             os.environ.get("FACTOR_ENGINE_DATA_SNAPSHOT_TTL_SECONDS", "60") or 60
@@ -263,7 +266,32 @@ class DataAccessSource(DataSource):
         self._data_snapshot_id = snapshot_id
         self._snapshot_checked_at = time.monotonic()
 
+    def _query_scoped_snapshot_token(self, store) -> str | None:
+        """廉价 query-scoped snapshot token：优先读 ``_manifest.json`` sidecar。
+
+        几十微秒级（不 glob 全量文件、不读 footer）。返回 ``None`` 表示没有可用
+        manifest（调用方回退到 ``describe_dataset``）。
+        """
+        try:
+            version = store.manifest_version(self.dataset, **self.params)
+        except Exception:
+            return None
+        if not version.get("has_manifest") or not version.get("fresh"):
+            return None
+        dv = version.get("dataset_version")
+        pv = version.get("partition_version")
+        if not dv or not pv:
+            return None
+        return f"manifest:{dv}:{pv}"
+
     def refresh_snapshot(self, *, force: bool = False) -> str | None:
+        """proactive 快照刷新（TTL 内短路）。
+
+        **优先走廉价 manifest token**（``store.manifest_version``），避免每隔 TTL
+        对整个 dataset 做昂贵 ``describe_dataset`` 再执行一次实际 read；只有没有
+        manifest 时才回退 describe。返回最近一次的数据快照身份（生产路径只消费
+        这里的缓存失效副作用）。
+        """
         self._assert_open()
         now = time.monotonic()
         if (
@@ -273,23 +301,37 @@ class DataAccessSource(DataSource):
         ):
             return self._data_snapshot_id
         store = _get_store()
-        snapshot = store.describe_dataset(
-            self.dataset,
-            params=dict(self.params),
-            instrument_filter=self.instrument_filter,
-        )
-        current = snapshot.snapshot_id
-        if self._data_snapshot_id and current != self._data_snapshot_id:
-            logger.info(
-                "data_access snapshot changed dataset=%s old=%s new=%s; clearing caches",
+        token = self._query_scoped_snapshot_token(store)
+        if token is not None:
+            # 廉价路径：manifest 版本变了才清缓存（token 与真实 snapshot id 分开跟踪）
+            if self._manifest_token is not None and token != self._manifest_token:
+                logger.info(
+                    "data_access manifest version changed dataset=%s old=%s new=%s; clearing caches",
+                    self.dataset,
+                    self._manifest_token,
+                    token,
+                )
+                self.clear_cache(reset_snapshot=False)
+            self._manifest_token = token
+        else:
+            # 无 manifest：回退全量 describe（旧行为，仅此路径昂贵）
+            snapshot = store.describe_dataset(
                 self.dataset,
-                self._data_snapshot_id,
-                current,
+                params=dict(self.params),
+                instrument_filter=self.instrument_filter,
             )
-            self.clear_cache(reset_snapshot=False)
-        self._data_snapshot_id = current
+            current = snapshot.snapshot_id
+            if self._data_snapshot_id and current != self._data_snapshot_id:
+                logger.info(
+                    "data_access snapshot changed dataset=%s old=%s new=%s; clearing caches",
+                    self.dataset,
+                    self._data_snapshot_id,
+                    current,
+                )
+                self.clear_cache(reset_snapshot=False)
+            self._data_snapshot_id = current
         self._snapshot_checked_at = now
-        return current
+        return self._data_snapshot_id
 
     def clear_cache(self, *, reset_snapshot: bool = True) -> None:
         self._column_cache.clear()
@@ -297,6 +339,7 @@ class DataAccessSource(DataSource):
         self._lazy_bundle = None
         if reset_snapshot:
             self._data_snapshot_id = None
+            self._manifest_token = None
             self._snapshot_checked_at = 0.0
 
     def close(self) -> None:
@@ -368,7 +411,8 @@ class DataAccessSource(DataSource):
             self._lazy_scan,
         )
 
-        if self.read_auto and self._lazy_scan:
+        if self._lazy_scan:
+            # 显式 polars-lazy 优化（collect 前表达式仍在 DuckDB 内下推）
             from backend.polars_lazy import scan_dataset_columns
 
             fetched = scan_dataset_columns(
@@ -388,19 +432,20 @@ class DataAccessSource(DataSource):
             if self._lazy_bundle is not None:
                 self._record_read_snapshot(self._lazy_bundle.snapshot_id)
         else:
+            # 引擎/结果形态交给 DataAccess 成本路由（read_auto 语义下沉到 DataAccess）。
             from data_access.read.adapters import arrow_table_to_multiindex_columns
 
             all_columns = list(dict.fromkeys([ds.time_column, ds.instrument_column, *physical]))
-            result = store.read_result(
+            handle = store.read(
                 self.dataset,
                 columns=all_columns,
                 time_range=self._time_range(),
                 instrument_filter=self.instrument_filter,
                 **self.params,
             )
-            self._record_read_snapshot(result.snapshot.snapshot_id)
+            self._record_read_snapshot(getattr(handle.snapshot, "snapshot_id", None))
             fetched = arrow_table_to_multiindex_columns(
-                result.table,
+                handle.to_arrow(),
                 timestamp_column=ds.time_column,
                 instrument_column=ds.instrument_column,
                 value_columns=physical,
@@ -478,7 +523,7 @@ class DataAccessSource(DataSource):
         if not names:
             return
         self.refresh_snapshot()
-        if self.read_auto and self._lazy_scan:
+        if self._lazy_scan:
             self._prefetch_lazy_bundle(names)
         else:
             self.load_columns(names)

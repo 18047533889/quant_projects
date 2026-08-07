@@ -14,6 +14,13 @@ from data_access.read.query_budget import QueryBudget
 from data_access.read.read_contract import DataSnapshot, ReadResult, SqlReadResult
 from data_access.read.scan_handle import ScanHandle
 from data_access.read.read_handle import ReadHandle
+from data_access.read.relation_handle import RelationHandle
+from data_access.read.data_request import DataRequest, ReadPlan
+from data_access.read.semantic_catalog import (
+    SemanticField,
+    SemanticFieldCatalog,
+    get_semantic_catalog,
+)
 from . import store as _store_module
 from .store import DataAccessStore, get_store as _get_store, reset_store
 from .cos_contract import (
@@ -58,6 +65,12 @@ __all__ = [
     "SqlReadResult",
     "ScanHandle",
     "ReadHandle",
+    "RelationHandle",
+    "DataRequest",
+    "ReadPlan",
+    "SemanticField",
+    "SemanticFieldCatalog",
+    "get_semantic_catalog",
     "COSDatasetContract",
     "COS_DATASET_CONTRACTS",
     "get_cos_contract",
@@ -73,4 +86,4 @@ from importlib.metadata import PackageNotFoundError, version as _package_version
 try:
     __version__ = _package_version("data-access")
 except PackageNotFoundError:
-    __version__ = "0.4.0+local"
+    __version__ = "0.5.0+local"

@@ -9,6 +9,11 @@ import pandas as pd
 
 from cleaned_operators.base import OperatorMetadata
 
+try:  # HiGHS LP for true pinball-loss quantile regression.
+    from scipy.optimize import linprog as _linprog
+except Exception:  # pragma: no cover
+    _linprog = None
+
 _INTEGER_PARAMS = frozenset(
     {"window", "min_periods", "order", "lag", "coefficient_index", "max_q", "q"}
 )
@@ -39,6 +44,23 @@ def metadata(
 
 def frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
     return pd.DataFrame(values, index=template.index, columns=template.columns, dtype=float)
+
+
+def trailing_contiguous_finite(vals: np.ndarray) -> np.ndarray:
+    """Most recent suffix of consecutive finite values ending at the last row.
+
+    A missing observation *breaks* the segment: rows on either side of a NaN
+    are never treated as adjacent observations (no time-axis compression for
+    suspensions / provider gaps).  A NaN at the last row yields an empty block
+    so the caller emits NaN instead of re-using the last valid value.
+    """
+    n = len(vals)
+    if n == 0 or not np.isfinite(vals[-1]):
+        return np.empty(0, dtype=float)
+    i = n - 1
+    while i >= 0 and np.isfinite(vals[i]):
+        i -= 1
+    return vals[i + 1 :]
 
 
 def aligned(*frames: pd.DataFrame) -> tuple[pd.DataFrame, ...]:
@@ -153,6 +175,37 @@ def quantile_fit(design: np.ndarray, y: np.ndarray, q: float, iterations: int = 
 # The IRLS asymmetric-weighted fit above is an expectile fit; expose an
 # explicitly-named alias so factor authors can call the honest name.
 expectile_fit = quantile_fit
+
+
+def pinball_quantile_fit(design: np.ndarray, y: np.ndarray, q: float) -> np.ndarray | None:
+    """True pinball-loss quantile regression (Koenker & Bassett, 1978) via LP.
+
+    Minimises ``q * sum(u) + (1-q) * sum(v)`` subject to
+    ``X beta + u - v = y, u >= 0, v >= 0`` — the classic LP form.  This is the
+    *quantile* (not the expectile): the loss is linear in the residual, so the
+    solution is a conditional quantile line.  The LP solver (HiGHS) is
+    deterministic for a given input, keeping the operator reproducible.
+    Returns ``None`` when the LP is infeasible / unbounded or the sample is
+    too small, so the caller emits NaN rather than a spurious coefficient.
+    """
+    if _linprog is None:
+        return None
+    n, p = design.shape
+    if n < p + 2:
+        return None
+    c = np.concatenate([np.zeros(p), q * np.ones(n), (1.0 - q) * np.ones(n)])
+    a_eq = np.column_stack([design, np.eye(n), -np.eye(n)])
+    bounds = [(None, None)] * p + [(0.0, None)] * (2 * n)
+    try:
+        res = _linprog(c, A_eq=a_eq, b_eq=y.astype(float), bounds=bounds, method="highs")
+    except Exception:  # pragma: no cover
+        return None
+    if not getattr(res, "success", False):
+        return None
+    beta = np.asarray(res.x[:p], dtype=float)
+    if not np.all(np.isfinite(beta)):
+        return None
+    return beta
 
 
 def build_design(features: list[np.ndarray], add_intercept: bool) -> np.ndarray:

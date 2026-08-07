@@ -14,6 +14,7 @@ import pandas as pd
 
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
 from cleaned_operators.common.daily_panel import _aligned
+from cleaned_operators.ts_model._rolling_core import pinball_quantile_fit
 
 
 def _metadata(name: str, description: str, params: list[str], *, domain: str, unit: str) -> OperatorMetadata:
@@ -170,7 +171,7 @@ class TsRidgeRegressionResid(SeriesOperator):
     status="experimental",
 )
 class TsQuantileRegressionSlope(SeriesOperator):
-    """分位数回归斜率（单分位，线性规划近似：对称加权 OLS 迭代）。"""
+    """分位数回归斜率（单分位，pinball-loss 线性规划）。"""
 
     metadata = _metadata(
         "ts_quantile_regression_slope",
@@ -199,6 +200,7 @@ class TsQuantileRegressionSlope(SeriesOperator):
 
 
 def _quantile_slope(y: np.ndarray, x: np.ndarray, q: float, min_periods: int) -> float:
+    """True pinball-loss quantile slope (Koenker–Bassett LP)."""
     valid = np.isfinite(y) & np.isfinite(x)
     if valid.sum() < max(min_periods, 3):
         return np.nan
@@ -207,14 +209,9 @@ def _quantile_slope(y: np.ndarray, x: np.ndarray, q: float, min_periods: int) ->
     if np.std(xs) <= 0.0:
         return np.nan
     design = np.column_stack([np.ones(len(xs)), xs])
-    beta, *_ = np.linalg.lstsq(design, ys, rcond=None)
-    # IRLS 逼近分位数回归
-    for _ in range(8):
-        resid = ys - design @ beta
-        weight = np.where(resid > 0, q, 1.0 - q)
-        weight = np.clip(weight, 1e-6, None)
-        wdesign = design * weight[:, None]
-        beta, *_ = np.linalg.lstsq(wdesign, ys * weight, rcond=None)
+    beta = pinball_quantile_fit(design, ys, float(q))
+    if beta is None:
+        return np.nan
     return float(beta[1])
 
 

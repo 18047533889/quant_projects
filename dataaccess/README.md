@@ -5,13 +5,13 @@
 > **磁盘目录**：本仓库根目录即包内容；代码里永远 `import data_access`。  
 > **对外使用说明**：**[docs/用户使用手册.md](docs/用户使用手册.md)**（只看这一份即可；含完整 HTTP 服务）。  
 > 文档索引：[docs/README.md](docs/README.md)  
-> 维护：量化基础平台组｜更新：2026-08-07｜包版本：**0.4.0**
+> 维护：量化基础平台组｜更新：2026-08-07｜包版本：**0.5.0**
 
 ## 为什么有这个模块
 
 以前各处都是 `pd.read_parquet` → 拼 glob → 合并 DataFrame，路径硬编码、性能不齐、写盘无规范。
 
-**当前能力（0.4.x）—— Universal Quant Data IO Layer**：
+**当前能力（0.5.x）—— Universal Quant Data IO Layer**：
 
 1. **统一读入口**：`read()` / `read_uri()` 返回 `ReadHandle`（`.to_arrow()/.to_pandas()/.to_polars()/.to_lazy()/.stream()`）
 2. **多文件格式**：`format:` 字段 + FormatAdapter——parquet / csv / csv.gz / tsv / jsonl / arrow / feather；`_build_select_sql` 不再写死 `read_parquet`
@@ -25,6 +25,13 @@
 10. **DuckDB 共享引擎**：跨线程 buffer pool / footer cache；HTTP `/v1/read_uri` `/v1/factors` `/v1/factors/read`
 11. **写与发布**：`write_arrow` / `upsert` / `publish_from_staging` / `delete_rows` / `compute_and_write`
 12. **COS**：mirror / remote / auto；可执行面板与 **PIT 契约**；HTTP 服务 + ClickHouse
+
+**0.5.x 集成层（FactorEngine 一体化）**：
+13. **SemanticFieldCatalog**：logical field → dataset + physical column + dtype/unit/scale/时间角色/PIT·join 策略/aliases/mining_allowed 的单一事实源（`config/semantic_fields.yaml`）；`store.resolve_fields()` 解析；`normalize_units=` 输出层统一做 scale_to_canonical
+14. **DataRequest / ReadPlan**：`store.plan(DataRequest(...))` 一次提交字段/时间/universe/PIT/join 需求；`ReadPlan.explain()` 看计划、`ReadPlan.execute()` 执行；字段按物理表 coalesce（同一财务表多列只扫一次）
+15. **多数据集批量 join**：`store.read_joined(anchor, fields, joins=...)` 在 DuckDB 内做 exact / **pit_asof**（ASOF）join，一次查询返回 `ReadHandle`（PIT 子查询不按 time_range 裁剪，保留窗口外历史可见记录）
+16. **query-scoped snapshot token**：`store.manifest_version()` / `store.is_snapshot_stale()`（`dataset_version` / `partition_version` 写在 `_manifest.json` sidecar，几十微秒，不扫 footer）
+17. **受控 RelationHandle**：`store.sql_relation()` 在 scan 上直接追加 SQL 表达式（scan+factor fusion），collect 时强制 QueryBudget + audit + snapshot
 
 **与 factor_engine**：读数一律 `data_source.type: data_access`；计算默认 `backend.type: auto`。见 [factor_engine/README.md](../factor_engine/README.md)。
 
@@ -140,6 +147,11 @@ data-access-quality --help
 | `read_factors` | 一次读多因子（UNION ALL / PIVOT） |
 | `get_factor_catalog` / `refresh_factor_catalog` | 因子目录 |
 | `build_dataset_manifest` | 构建数据集 `_manifest.parquet` |
+| `plan(DataRequest)` | 逻辑数据需求 → `ReadPlan`（`.explain()` / `.execute()`） |
+| `read_joined` | 多数据集批量 join（exact / pit_asof），单查询返回 `ReadHandle` |
+| `sql_relation` | 受控 SQL Relation（scan 上追加表达式，collect 强制治理） |
+| `resolve_fields` | 逻辑字段 → 物理字段（SemanticFieldCatalog + registry 回退） |
+| `manifest_version` / `is_snapshot_stale` | 廉价 query-scoped snapshot token / 过期判断 |
 | `sql` | 只读 SELECT |
 | `compute_and_write` | 读→SQL→写 staging |
 | `write_arrow` / `upsert` | 写草稿 |

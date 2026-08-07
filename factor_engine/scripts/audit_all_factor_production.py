@@ -105,6 +105,9 @@ _PANEL_PARAMETERS = frozenset({
     # 2026-08 advanced operators: transfer-entropy source panel; holder-class
     # previous-disclosure share slots for the JS-shift operator.
     "source", "ps1", "ps2", "ps3", "ps4", "ps5",
+    # 2026-08 V2/V3 dynamics pack: event-response target, report timing delay,
+    # previous published value for revision magnitude.
+    "response", "delay", "prev_x",
 })
 
 # Params whose generic names also appear in _SCALAR_VALUES but are PANEL series
@@ -116,6 +119,9 @@ _PANEL_FORCE: frozenset[tuple[str, str]] = frozenset({
     ("ts_har_rv_forecast_error_z", "rv"),
     ("fin_margin_persistence", "margin"),
     ("group_peer_beta_deviation", "beta"),
+    # ``scale`` is the per-row volatility panel for the first-passage barrier
+    # (not the scalar intra_amihud ``scale``).
+    ("ts_first_passage_bias", "scale"),
 })
 
 _SCALAR_VALUES: dict[str, Any] = {
@@ -360,6 +366,16 @@ _SCALAR_VALUES: dict[str, Any] = {
     "tau": 1,
     "directions": 16,
     "lookback": 5,
+    # 2026-08 V2/V3 dynamics pack scalars.
+    "horizon": 5,
+    "barrier": 1.0,
+    "bandwidth": 1.0,
+    "history_length": 1,
+    "tail_fraction": 0.2,
+    "min_tail_count": 10,
+    "min_anchors": 3,
+    "grid": 8,
+    "residual_fraction": 0.25,
 }
 
 _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
@@ -453,8 +469,8 @@ _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
     ("ts_kramers_moyal_diffusion", "bins"): 5,
     ("ts_bures_corr_shift", "recent_window"): 10,
     ("ts_bures_corr_shift", "prior_window"): 60,
-    ("ts_student_t_fisher_shift", "recent_window"): 60,
-    ("ts_student_t_fisher_shift", "prior_window"): 120,
+    ("ts_fisher_information_shift", "recent_window"): 60,
+    ("ts_fisher_information_shift", "prior_window"): 120,
     ("cs_sliced_wasserstein_copula_shift", "window"): 60,
     ("group_spd_feature_structure_shift", "reference_window"): 60,
     ("intraday_wasserstein_quantile_pca_score", "window"): 60,
@@ -465,6 +481,21 @@ _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
     ("ts_betti_1_max_persistence", "tau"): 1,
     ("ts_persistence_diagram_shift", "window"): 60,
     ("ts_persistence_diagram_shift", "tau"): 1,
+    # 2026-08 V2/V3 dynamics pack: small state counts / fixed order / side
+    # selectors.  A-share state-machine ``side`` remains up/down; these are
+    # upper/lower tail selectors.
+    ("ts_markov_persistence", "bins"): 3,
+    ("ts_markov_state_entropy", "bins"): 3,
+    ("ts_markov_transition_surprisal", "bins"): 3,
+    ("ts_markov_entropy_production", "bins"): 3,
+    ("ts_active_information_storage", "bins"): 3,
+    ("ts_kramers_moyal_local_stability", "bins"): 5,
+    ("ts_ordinal_irreversibility", "order"): 3,
+    ("ts_multiscale_permutation_entropy_slope", "order"): 3,
+    ("event_historical_response_mean", "mode"): "sum",
+    ("ts_hill_tail_index", "side"): "upper",
+    ("ts_local_lyapunov_exponent", "tau"): 1,
+    ("ts_local_lyapunov_exponent", "embedding_dim"): 3,
 }
 _SPECIAL_POSITIONAL = {
     "cs_multi_resid": ("target", "exposure", "control"),

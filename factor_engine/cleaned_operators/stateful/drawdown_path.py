@@ -24,6 +24,23 @@ from cleaned_operators.stateful._common import metadata
 _EPS = 1e-12
 
 
+def _trailing_contiguous(vals: np.ndarray) -> np.ndarray:
+    """Most recent suffix of consecutive finite values ending at the last row.
+
+    A missing observation *breaks* the path: rows on either side of a NaN are
+    never treated as adjacent trading days (no time-axis compression), and a
+    NaN at the current row yields an empty block so the operator emits NaN
+    instead of re-using the last valid price.
+    """
+    n = len(vals)
+    if n == 0 or not np.isfinite(vals[-1]):
+        return np.empty(0, dtype=float)
+    i = n - 1
+    while i >= 0 and np.isfinite(vals[i]):
+        i -= 1
+    return vals[i + 1 :]
+
+
 @register_operator(
     name="ts_recovery_fraction",
     category="downside_risk",
@@ -57,8 +74,10 @@ class TsRecoveryFraction(SeriesOperator):
         for col in range(cols):
             for row in range(rows):
                 lo = max(0, row - w + 1)
-                seg = xv[lo : row + 1, col]
-                valid = np.isfinite(seg) & (seg > 0.0)
+                seg = _trailing_contiguous(xv[lo : row + 1, col])
+                # P0-006/007: a NaN current value yields an empty block -> NaN,
+                # never a stale last-valid recovery fraction; gaps never bridge.
+                valid = seg > 0.0
                 if int(valid.sum()) < 2:
                     continue
                 vals = seg[valid]
@@ -106,8 +125,11 @@ class TsCurrentDrawdownArea(SeriesOperator):
         for col in range(cols):
             for row in range(rows):
                 lo = max(0, row - w + 1)
-                seg = xv[lo : row + 1, col]
-                valid = np.isfinite(seg) & (seg > 0.0)
+                seg = _trailing_contiguous(xv[lo : row + 1, col])
+                # P0-007: no time-axis compression — the running peak and the
+                # depth sum run over the contiguous block only, so the duration
+                # dimension is real; a NaN current row emits NaN.
+                valid = seg > 0.0
                 if int(valid.sum()) < 2:
                     continue
                 vals = seg[valid]

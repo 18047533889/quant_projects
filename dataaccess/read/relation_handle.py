@@ -54,14 +54,24 @@ class RelationHandle:
     # ---- 追加表达式 ----
 
     def sql(self, select_sql: str, *, params: Sequence[Any] | None = None) -> "RelationHandle":
-        """在当前 SELECT 之上再包一层，返回新句柄（原句柄不变）。
+        """在当前 SELECT 之上追加一层表达式，返回新句柄（原句柄不变）。
 
-        ``select_sql`` 可以是完整 SELECT（FROM ``_sub`` 引用当前结果），或仅表达式列表
+        ``select_sql`` 可以是完整 SELECT（引用 ``_sub`` 作为 FROM 源），或仅表达式列表
         （自动包成 ``SELECT <expr> FROM (<current>) AS _sub``）。
         """
         text = select_sql.strip()
         if text.lower().startswith("select"):
-            new_sql = text
+            # 用户写完整 SELECT：把第一个 "FROM _sub" 替换为当前句柄的子查询
+            import re
+
+            new_sql = re.sub(
+                r"(?i)\bFROM\s+_sub\b",
+                f"FROM ({self._sql}) AS _sub",
+                text,
+                count=1,
+            )
+            if "_sub" not in new_sql and "_SUB" not in new_sql.upper():
+                raise ValueError("追加的 SELECT 必须引用 _sub 作为 FROM 源")
         else:
             new_sql = f"SELECT {text} FROM ({self._sql}) AS _sub"
         combined = [*self._params, *(list(params or []))]

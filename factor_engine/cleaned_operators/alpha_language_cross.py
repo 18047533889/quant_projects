@@ -140,7 +140,12 @@ class CsNeighborGap(SeriesOperator):
             for j in range(cols):
                 if not np.isfinite(gap[j]):
                     continue
-                out[row, j] = gap[j] / (scale[j] + _EPS)
+                # P0-010: a degenerate local scale (MAD ~ 0, e.g. a limit-up
+                # board or a discrete fundamental field) is mathematically
+                # undefined — return NaN, never a huge ``gap/eps`` alpha.
+                if not np.isfinite(scale[j]) or scale[j] <= _EPS:
+                    continue
+                out[row, j] = gap[j] / scale[j]
         return frame_like(x, out)
 
 
@@ -185,7 +190,15 @@ class CsLocalDensity(SeriesOperator):
             for j in range(cols):
                 if not np.isfinite(gap[j]):
                     continue
-                density = 2.0 * kk / (gap[j] / (scale[j] + _EPS) + _EPS) + _EPS
+                # P0-009: degenerate cross-section (MAD ~ 0 / local gap ~ 0,
+                # e.g. an all-equal limit board) is mathematically undefined.
+                # Without this guard ``2k / (0/eps + eps) ~ 2k/eps`` would
+                # surface as a huge finite "density" alpha.
+                if not np.isfinite(scale[j]) or scale[j] <= _EPS:
+                    continue
+                if not np.isfinite(gap[j]) or abs(gap[j]) <= _EPS:
+                    continue
+                density = 2.0 * kk / (gap[j] / scale[j] + _EPS) + _EPS
                 out[row, j] = density
         return frame_like(x, out)
 

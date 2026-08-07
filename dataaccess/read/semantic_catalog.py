@@ -183,6 +183,16 @@ class SemanticFieldCatalog:
         """按逻辑名或别名解析；找不到返回 None（调用方可再回退 registry）。"""
         return self._by_name.get(name)
 
+    def resolve_by_physical(self, dataset: str, physical_name: str) -> SemanticField | None:
+        """按 (dataset, 物理列名) 反查逻辑字段（调用方传物理列时的单位归一化用）。
+
+        同一物理列可能被多个逻辑字段引用，返回第一个。
+        """
+        for f in self._fields.values():
+            if f.dataset == dataset and f.physical_name == physical_name:
+                return f
+        return None
+
     def get(self, name: str) -> SemanticField:
         """严格解析；找不到抛 ValidationError。"""
         f = self.resolve_one(name)
@@ -250,8 +260,16 @@ _catalog_lock = threading.Lock()
 def get_semantic_catalog(
     path: str | Path | None = None,
 ) -> SemanticFieldCatalog:
-    """进程级 SemanticFieldCatalog 单例（默认读 config/semantic_fields.yaml）。"""
+    """进程级 SemanticFieldCatalog 单例。
+
+    默认读 ``config/semantic_fields.yaml``；可用环境变量 ``DATA_ACCESS_SEMANTIC_FIELDS``
+    覆盖路径（部署/测试用）。显式传 ``path`` 时不缓存。
+    """
     global _catalog
+    if path is None:
+        env_path = os.environ.get("DATA_ACCESS_SEMANTIC_FIELDS")
+        if env_path and not _catalog:
+            path = env_path
     if _catalog is not None and path is None:
         return _catalog
     with _catalog_lock:

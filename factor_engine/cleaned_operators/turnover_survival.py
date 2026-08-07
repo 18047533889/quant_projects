@@ -19,15 +19,16 @@ one per-column kernel so survival weights, cost moments and cost quantiles are
 computed once.
 
 Missing-value policy (production contract)
-    * NaN turnover is treated as ``u = 0`` (suspension / no-trade day: held
-      chips do not turn over, and no new chips are created).
+    * NaN turnover is UNKNOWN, never ``u = 0``: a provider gap must not be
+      read as a no-churn day, so the row emits NaN (``missing_policy="break"``).
+      Genuine suspensions with an explicit 0 turnover still behave as no-churn.
     * NaN price at a lag contributes zero weight (you cannot acquire at a
-      missing price).
+      missing price) and is dropped before the weighted quantile is computed.
     * Output is NaN while fewer than ``min_periods`` valid prices exist in the
       trailing history, or when the total survival weight collapses to ~0, or
       when the reference price is not positive.
-    * Turnover is clipped to ``[0, 1-eps]`` so the survival product never
-      divides by zero when turnover approaches 100%.
+    * Turnover uses a Poisson replacement hazard (``surv = exp(-u)``), so
+      >100% turnover is handled without clipping the survival product.
 
 All operators are prefix-causal, trailing-window, and return the same panel
 axes as their inputs.
@@ -88,17 +89,27 @@ def _column_stats(
         if not np.isfinite(current) or current <= 0.0:
             continue
 
-        # NaN turnover -> 0 (suspension); clip to [0, 1-eps].
-        u = np.where(np.isfinite(turns), np.clip(turns, 0.0, 1.0 - _EPS), 0.0)
-        one_minus = 1.0 - u
+        # P0-033: a missing turnover is UNKNOWN, never a real zero-turnover
+        # day.  A suspension is a genuine no-trade event, but a provider gap is
+        # not; since the operator cannot tell them apart it must fail closed and
+        # emit NaN rather than read the gap as "no churn".
+        if not np.all(np.isfinite(turns)):
+            continue
+        # P0-034: Poisson replacement hazard.  A-share turnover routinely
+        # exceeds 100% (one float can change hands several times a day);
+        # hard-clipping to [0, 1-eps] made any >100% turnover erase every old
+        # chip in a single day.  With a Poisson hazard the per-day survival
+        # factor is exp(-u): u=1 -> 36.8% survive, u=2 -> 13.5%, u=3 -> 5.0%.
+        u = np.maximum(turns, 0.0)
+        surv = np.exp(-u)
 
-        # suffix survival: suf[k] = prod_{m=k}^{L-1}(1-u[m]); suf[L] = 1.
-        r = np.cumprod(one_minus[::-1])
+        # suffix survival: suf[k] = prod_{m=k}^{L-1} exp(-u[m]); suf[L] = 1.
+        r = np.cumprod(surv[::-1])
         suf = np.empty(length + 1)
         suf[length] = 1.0
         suf[:length] = r[::-1]
-        # raw weight at lag k: u[k] * suf[k+1]
-        w = u * suf[1 : length + 1]
+        # raw weight at lag k: fraction replaced that day x still-held since.
+        w = (1.0 - surv) * suf[1 : length + 1]
         w = np.where(price_ok, w, 0.0)
 
         total = float(w.sum())
@@ -106,7 +117,9 @@ def _column_stats(
             continue
         wn = w / total
 
-        rp = float(np.sum(wn * prices))
+        # Zero-weight rows carry NaN prices; ``0 * NaN == NaN`` would poison
+        # the weighted mean, so evaluate over a masked price vector.
+        rp = float(np.sum(wn * np.where(price_ok, prices, 0.0)))
         if not np.isfinite(rp) or rp <= 0.0:
             continue
         ref[t] = rp
@@ -126,12 +139,21 @@ def _column_stats(
         rel = np.abs(prices - current) / current
         near[t] = float(np.sum(wn[price_ok & (rel <= band_pct)]))
 
-        # weighted cost quantiles.
-        order = np.argsort(prices)
-        cs = np.sort(prices)
-        cw = wn[order]
-        cdf = np.cumsum(cw)
-        q = _weighted_quantile(cs, cdf, (q_low, q_high))
+        # P0-035: weighted cost quantiles must drop zero-weight / non-finite
+        # prices first.  Sorting the raw array kept missing prices inside the
+        # value space (weight 0 but still interpolated against), which could
+        # turn the quantile distance into NaN or a wrong level.
+        qmask = price_ok & (wn > 0.0)
+        if int(qmask.sum()) < 2:
+            continue
+        qs = prices[qmask]
+        qw = wn[qmask]
+        qorder = np.argsort(qs, kind="stable")
+        qs = qs[qorder]
+        qw = qw[qorder]
+        qcdf = np.cumsum(qw)
+        qcdf = qcdf / qcdf[-1]
+        q = _weighted_quantile(qs, qcdf, (q_low, q_high))
         if np.all(np.isfinite(q)) and (q[1] - q[0]) > 0.0:
             qdist[t] = float((q[1] - q[0]) / rp)
 

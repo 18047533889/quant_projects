@@ -162,6 +162,27 @@ _LOAD_MODULES = (
     "cleaned_operators.advanced_structure",
     "cleaned_operators.advanced_intraday",
     "cleaned_operators.advanced_topology",
+    # State-dynamics / geometry / event-response / spectral-crowding expansion
+    # (2026-08 V2/V3): ordinal irreversibility, state density, local Markov
+    # persistence/entropy/surprisal, KM local stability, first-passage bias,
+    # historical event-response learning, joint energy-distance break, group
+    # correlation spectrum, volume-clock path geometry, session shock recovery,
+    # dynamic KNN peers, Hill tail index, exact quantile-regression beta,
+    # local Lyapunov divergence, report timing / revision magnitude.
+    "cleaned_operators.markov_dynamics",
+    "cleaned_operators.state_geometry",
+    "cleaned_operators.first_passage",
+    "cleaned_operators.event_response",
+    "cleaned_operators.distribution_break",
+    "cleaned_operators.group_spectrum",
+    "cleaned_operators.volume_clock",
+    "cleaned_operators.session_recovery",
+    "cleaned_operators.dynamic_knn",
+    "cleaned_operators.extreme_tail",
+    "cleaned_operators.local_lyapunov",
+    "cleaned_operators.report_timing",
+    # Genuine Polars UDF backends for the per-column dynamics families.
+    "cleaned_operators.polars_dynamics",
 )
 
 _REVIEWED_EXTENSIONS = (

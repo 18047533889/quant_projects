@@ -533,15 +533,78 @@ class CompositeDataSource(DataSource):
         return series
 
     def load_columns(self, names: list[str]) -> dict[str, Any]:
-        """load_columns。
-        
+        """按源批量读取并对齐：同源多列一次 ``load_columns``（DataAccessSource 子源
+        会合并成一次 ``store.read``），非锚点列再逐个按 join 方法对齐到锚点索引
+        （锚点索引已缓存，merge_asof 不重复读锚点）。
+
         参数:
             names: 逻辑列名列表
-        
+
         返回:
             dict[str, Any]
         """
-        return {n: self.load_column(n) for n in names}
+        out: dict[str, Any] = {}
+        missing: list[str] = []
+        for name in names:
+            if name in self._column_cache:
+                out[name] = self._column_cache[name]
+            else:
+                missing.append(name)
+        if not missing:
+            return out
+
+        refs_by_source: dict[str, list[tuple[str, str, str]]] = {}
+        for name in missing:
+            source_name, column_name, canonical_name = self._resolve_reference(name)
+            if canonical_name in self._column_cache:
+                series = self._column_cache[canonical_name]
+                self._column_cache[name] = series
+                out[name] = series
+                continue
+            refs_by_source.setdefault(source_name, []).append(
+                (name, column_name, canonical_name)
+            )
+
+        for source_name, refs in refs_by_source.items():
+            is_anchor = source_name == self.anchor_source
+            join_spec = None if is_anchor else self.joins[source_name]
+            columns = list(dict.fromkeys(r[1] for r in refs))
+            if not is_anchor:
+                logger.info(
+                    "组合源批读 source=%s method=%s cols=%d",
+                    source_name,
+                    join_spec.method,
+                    len(columns),
+                )
+            batch = self._load_batch(source_name, columns)
+            for name, column_name, canonical_name in refs:
+                series = batch.get(column_name)
+                if series is None:
+                    raise KeyError(
+                        f"composite source '{source_name}' did not return column '{column_name}'"
+                    )
+                if not is_anchor:
+                    series = self._align_to_anchor(
+                        series,
+                        join_spec,
+                        source_name=source_name,
+                        column_name=column_name,
+                        canonical_name=canonical_name,
+                    )
+                self._column_cache[canonical_name] = series
+                self._column_cache[name] = series
+                if is_anchor and self.allow_unqualified_anchor_columns:
+                    self._column_cache.setdefault(column_name, series)
+                out[name] = series
+        return out
+
+    def _load_batch(self, source_name: str, columns: list[str]) -> dict[str, Any]:
+        """从子源批量取列；子源没有 ``load_columns`` 时退回逐列 ``load_column``。"""
+        source = self.sources[source_name]
+        loader = getattr(source, "load_columns", None)
+        if callable(loader):
+            return loader(columns)
+        return {c: source.load_column(c) for c in columns}
 
     def prefetch_columns(self, names: list[str]) -> None:
         """prefetch_columns。

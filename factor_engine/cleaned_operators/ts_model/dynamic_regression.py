@@ -20,6 +20,7 @@ from cleaned_operators.ts_model._rolling_core import (
     huber_fit,
     metadata,
     ols_fit,
+    pinball_quantile_fit,
     quantile_fit,
     ridge_fit,
     rolling_fit,
@@ -27,6 +28,8 @@ from cleaned_operators.ts_model._rolling_core import (
 
 # The historic IRLS ``quantile_fit`` is an expectile fit; the ``expectile_*``
 # operators registered below share the exact same kernel with an honest name.
+# ``pinball_quantile_fit`` is the true quantile-regression kernel (LP) used by
+# the ``ts_quantile_*`` operators.
 from cleaned_operators.ts_model._rolling_core import expectile_fit  # noqa: E402
 
 _CANONICALS: list[str] = []
@@ -398,10 +401,10 @@ class TsExpectileBetaSpread(SeriesOperator):
     status="experimental",
 )
 class TsQuantileRegressionCoeff(SeriesOperator):
-    """条件分位数回归斜率（IRLS 近似）。"""
+    """条件分位数回归斜率（pinball-loss LP，Koenker–Bassett）。"""
 
     metadata = metadata(
-        "ts_quantile_regression_coeff", "分位数回归斜率。",
+        "ts_quantile_regression_coeff", "分位数回归斜率（pinball LP）。",
         ["y", "x", "window", "q", "min_periods"], unit="level",
     )
 
@@ -410,7 +413,7 @@ class TsQuantileRegressionCoeff(SeriesOperator):
         if not (0.0 < quantile < 1.0):
             raise ValueError("q must be in (0, 1)")
         return _single_regression(y, x, int(window), int(min_periods), True,
-                                  quantile_fit, quantile, "coeff", quantile, 1)
+                                  pinball_quantile_fit, quantile, "coeff", quantile, 1)
 
 
 @register_operator(
@@ -423,10 +426,10 @@ class TsQuantileRegressionCoeff(SeriesOperator):
     status="experimental",
 )
 class TsQuantileRegressionResid(SeriesOperator):
-    """当前值相对条件分位数预测的偏差。"""
+    """当前值相对条件分位数（pinball LP）预测的偏差。"""
 
     metadata = metadata(
-        "ts_quantile_regression_resid", "分位数回归残差。",
+        "ts_quantile_regression_resid", "分位数回归残差（pinball LP）。",
         ["y", "x", "window", "q", "min_periods"], unit="level",
     )
 
@@ -435,7 +438,7 @@ class TsQuantileRegressionResid(SeriesOperator):
         if not (0.0 < quantile < 1.0):
             raise ValueError("q must be in (0, 1)")
         return _single_regression(y, x, int(window), int(min_periods), True,
-                                  quantile_fit, quantile, "resid", quantile, 1)
+                                  pinball_quantile_fit, quantile, "resid", quantile, 1)
 
 
 @register_operator(
@@ -448,10 +451,10 @@ class TsQuantileRegressionResid(SeriesOperator):
     status="experimental",
 )
 class TsQuantileBetaSpread(SeriesOperator):
-    """高分位 Beta 减 低分位 Beta：上涨/下跌尾部非对称响应。"""
+    """高分位 Beta 减 低分位 Beta（pinball LP）：上涨/下跌尾部非对称响应。"""
 
     metadata = metadata(
-        "ts_quantile_beta_spread", "beta(q_high) - beta(q_low)。",
+        "ts_quantile_beta_spread", "beta(q_high) - beta(q_low)（pinball LP）。",
         ["y", "x", "window", "q_high", "q_low", "min_periods"], unit="level",
     )
 
@@ -460,9 +463,9 @@ class TsQuantileBetaSpread(SeriesOperator):
         if not (0.0 < ql < qh < 1.0):
             raise ValueError("q_low < q_high must hold in (0, 1)")
         high = _single_regression(y, x, int(window), int(min_periods), True,
-                                  quantile_fit, qh, "coeff", qh, 1)
+                                  pinball_quantile_fit, qh, "coeff", qh, 1)
         low = _single_regression(y, x, int(window), int(min_periods), True,
-                                 quantile_fit, ql, "coeff", ql, 1)
+                                 pinball_quantile_fit, ql, "coeff", ql, 1)
         return high - low
 
 

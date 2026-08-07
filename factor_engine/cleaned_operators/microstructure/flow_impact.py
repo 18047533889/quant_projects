@@ -69,8 +69,12 @@ def _bvc_flow(
 ) -> tuple[np.ndarray, np.ndarray]:
     """BV-C signed flow and volume arrays for one (instrument, day).
 
-    Returns ``(of, vol)`` aligned arrays.  NaN return / missing scale / locked
-    bars emit zero flow (neutral), never a forced direction.
+    Returns ``(of, vol)`` aligned arrays.  Denominator policy: non-finite
+    *volume* bars are excluded from both numerator and denominator (``vol``=0);
+    bars with a non-finite return or a missing rolling scale (warmup) emit zero
+    flow (neutral) but their real volume stays in the denominator; bars marked
+    ``locked`` are classified neutral (zero flow) with their volume counted —
+    a price resting at the limit is never assumed all-buy / all-sell.
     """
     n = close_vals.shape[0]
     r = _log_returns(close_vals)
@@ -106,10 +110,56 @@ def _wasserstein_shift_series(
             out[i] = np.nan
             continue
         mad = float(np.median(np.abs(hist - np.median(hist))))
+        if not np.isfinite(mad) or mad <= _EPS:
+            out[i] = np.nan  # constant history -> undefined scale, fail closed.
+            continue
         q_hist = np.quantile(hist, _PHI_GRID)
         q_today = np.quantile(today, _PHI_GRID)
-        out[i] = float(np.mean(np.abs(q_today - q_hist))) / (mad + _EPS)
+        out[i] = float(np.mean(np.abs(q_today - q_hist))) / mad
     return out
+
+
+def _equal_volume_vpin(vol: np.ndarray, of: np.ndarray, buckets: int) -> float:
+    """``sum_b |OF_b| / total_volume`` over equal-volume buckets.
+
+    A bar straddling a bucket boundary is split *proportionally by volume* via a
+    while-loop, so a single huge bar can cross arbitrarily many buckets (the old
+    ``finished`` flag cut at most once and then never reset).  The split
+    apportions ``OF * take/vm`` to the closing bucket and the *signed remainder*
+    to the next bucket — the two halves are never independently ``abs()``ed,
+    preserving net-flow offset inside each bucket.
+    """
+    total_v = float(np.sum(np.where(vol > 0.0, vol, 0.0)))
+    if total_v <= _EPS:
+        return np.nan
+    target = total_v / buckets
+    bucket_capacity = target
+    bucket_flow = 0.0
+    abs_of = 0.0
+    for m in range(vol.shape[0]):
+        vm = float(vol[m])
+        ofm = float(of[m])
+        if vm <= 0.0:
+            continue
+        # Flow is always apportioned against the bar's *own* volume (``ofm*take/vm``),
+        # never against the shrinking ``v_left`` — the latter would over-credit
+        # later buckets of a split bar (a 40-vol bar split 5/25/10 must contribute
+        # 5/25/10 units of flow, not 5/28.6/6.4).
+        v_left = vm
+        while v_left > 0.0:
+            take = min(v_left, bucket_capacity)
+            if take <= 0.0:
+                break  # defensive: no progress, avoid infinite loop.
+            bucket_flow += ofm * (take / vm)
+            v_left -= take
+            bucket_capacity -= take
+            if bucket_capacity <= 0.0:
+                abs_of += abs(bucket_flow)
+                bucket_flow = 0.0
+                bucket_capacity = target
+    if bucket_capacity < target:  # close the final partial bucket.
+        abs_of += abs(bucket_flow)
+    return abs_of / total_v
 
 
 def _vpin_series(
@@ -130,35 +180,7 @@ def _vpin_series(
             out[i] = np.nan
             continue
         of, vol = _bvc_flow(cv, vv, None, sw)
-        total_v = float(vol.sum())
-        if total_v <= _EPS:
-            out[i] = np.nan
-            continue
-        target = total_v / buckets
-        acc = 0.0
-        of_bucket = 0.0
-        abs_of = 0.0
-        finished = False
-        for m in range(vol.shape[0]):
-            vm = float(vol[m])
-            if vm <= 0.0:
-                continue
-            ofm = float(of[m])
-            if acc + vm > target and acc > 0.0 and not finished:
-                first_share = (target - acc) / vm
-                abs_of += abs(ofm * first_share) + abs(ofm * (1.0 - first_share))
-                acc = vm * (1.0 - first_share)
-                finished = True
-                of_bucket = 0.0
-            else:
-                acc += vm
-                of_bucket += ofm
-                if acc >= target and not finished:
-                    abs_of += abs(of_bucket)
-                    acc = 0.0
-                    of_bucket = 0.0
-        abs_of += abs(of_bucket)
-        out[i] = abs_of / total_v
+        out[i] = _equal_volume_vpin(vol, of, buckets)
     return out
 
 

@@ -202,6 +202,34 @@ _DAILY_CHIP_FLOW_PACK_2026_08 = frozenset({
     # NOTE: micro_bvc_vpin stays research-only (P2) — see flow_impact.py.
 })
 DAILY_FACTOR_MIGRATED = frozenset(set(DAILY_FACTOR_MIGRATED) | _DAILY_CHIP_FLOW_PACK_2026_08)
+# 2026-08 V2/V3 state-dynamics / event-response / spectral-crowding / minute
+# volume-clock families.  Same contract as the final pack: each module keeps
+# its names in EXTENDED_ONLY_CANONICALS at import (partition check) and this
+# frozenset migrates the reviewed P1 operators to the daily surface.
+_DAILY_DYNAMICS_PACK_2026_08 = frozenset({
+    # state geometry / ordinal time asymmetry
+    "ts_ordinal_irreversibility", "ts_state_density",
+    # local Markov dynamics
+    "ts_markov_persistence", "ts_markov_state_entropy",
+    "ts_markov_transition_surprisal", "ts_kramers_moyal_local_stability",
+    # first-passage
+    "ts_first_passage_bias",
+    # historical event response
+    "event_historical_response_mean", "event_historical_response_sign_balance",
+    # multivariate distribution break
+    "ts_joint_energy_shift", "ts_energy_break_score",
+    # cross-sectional spectral crowding
+    "group_corr_mode_share", "group_corr_effective_rank",
+    "group_corr_mode_localization",
+    # session recovery + volume-clock path geometry (minute → daily)
+    "session_event_recovery_score",
+    "intraday_volume_clock_path_efficiency", "intraday_volume_clock_roughness",
+    # dynamic KNN peers
+    "cs_knn_peer_mean_ex_self", "cs_knn_neighbor_retention",
+    # report timing / extreme tail
+    "report_filing_delay_surprise", "ts_hill_tail_index",
+})
+DAILY_FACTOR_MIGRATED = frozenset(set(DAILY_FACTOR_MIGRATED) | _DAILY_DYNAMICS_PACK_2026_08)
 RESEARCH_ONLY_CANONICALS=frozenset({"holder_concentration_change","holder_count_change_rate"});LEGACY_ONLY_CANONICALS=frozenset({"cube"});INTERNAL_ONLY_CANONICALS=frozenset({"constant","identity","protected_div"})
 HIDDEN_DAILY_NAMES=frozenset({"cube","cumulative_max","cumulative_mean","cumulative_min","fmax","fmin","inv","reciprocal","sqr"})
 def classify_canonical(canonical:str)->str:

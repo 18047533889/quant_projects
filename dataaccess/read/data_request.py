@@ -102,12 +102,15 @@ class ReadPlan:
             join = self.join_policies.get(ds, "exact")
             stg = self.storage.get(ds, "?")
             cost = self.scan_costs.get(ds)
-            cost_txt = (
-                f"~{cost.estimated_rows:,} rows / {cost.file_count} files"
-                f" / {cost.total_bytes:,} bytes"
-                if cost is not None
-                else "cost n/a"
-            )
+            if cost is None:
+                cost_txt = "cost n/a"
+            else:
+                bytes_txt = (
+                    f"{cost.total_bytes:,} bytes" if cost.total_bytes is not None else "bytes n/a"
+                )
+                cost_txt = (
+                    f"~{cost.estimated_rows:,} rows / {cost.file_count} files / {bytes_txt}"
+                )
             lines.append(
                 f"  [{i}] {ds}{marker}  join={join}  storage={stg}  {cost_txt}"
             )
@@ -123,7 +126,7 @@ class ReadPlan:
         tr = self.time_range
         lines.append(f"  {tr[0]} ~ {tr[1]}" if tr else "  (全量)")
         lines.append(
-            f"INSTRUMENTS  {len(self.instruments)}  "
+            f"INSTRUMENTS  {len(self.instruments or [])}  "
             f"UNIVERSE  {self.universe or '-'}"
         )
         if self.request.frequency:
@@ -148,13 +151,22 @@ class ReadPlan:
         store = self._store
         tr = self.time_range
         insts = self.instruments
+        if self.universe:
+            insts = store._resolve_universe_instruments(
+                self.universe, tr, insts
+            )
 
         if len(self.datasets) == 1:
             ds = self.datasets[0]
-            cols = self.per_dataset_columns.get(ds) or None
+            dsobj = store._registry.get(ds)
+            cols = list(self.per_dataset_columns.get(ds) or [])
+            # DataRequest 输出是带轴的面板：补齐 anchor 的时间/标的列
+            for k in (dsobj.time_column, dsobj.instrument_column):
+                if k and k not in cols:
+                    cols.append(k)
             return store.read(
                 ds,
-                columns=cols,
+                columns=cols or None,
                 time_range=tr,
                 instrument_filter=insts,
                 filters=self.request.filters,

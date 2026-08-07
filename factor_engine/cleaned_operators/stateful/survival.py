@@ -7,6 +7,11 @@ never included in the reference sample: the completed-run list is updated only
 when a run *ends* (on the first inactive row after it), so an active row always
 sees exactly the runs that ended in the past.
 
+State is three-valued: ACTIVE (finite non-zero), INACTIVE (finite zero) and
+UNKNOWN (NaN).  UNKNOWN is a data gap, never a state exit: it breaks and
+re-baselines the run without recording a completed episode, so suspensions and
+provider misses cannot pollute the completed-run history.
+
 All three share one causal single-pass kernel; ``history_window`` caps the
 number of most-recent completed runs kept.
 
@@ -54,7 +59,20 @@ def _survival_kernel(
     prev_active = False
     for row in range(rows):
         s = state_col[row]
-        active = bool(np.isfinite(s) and s != 0.0)
+        if not np.isfinite(s):
+            # P0-005: a missing state is UNKNOWN, not a state exit.  A data
+            # gap (suspension / provider miss) must not terminate the episode
+            # into the completed-run history, nor be read as an inactive row.
+            # Break and re-baseline: the run is dropped, nothing is recorded,
+            # and the row emits NaN (never 0, which would look like a neutral
+            # state to downstream models).
+            cur = 0
+            prev_active = False
+            pct[row] = np.nan
+            hazard[row] = np.nan
+            residual[row] = np.nan
+            continue
+        active = s != 0.0
         if active:
             cur += 1
             comp = np.asarray(completed, dtype=float)

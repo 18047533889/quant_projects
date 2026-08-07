@@ -98,11 +98,19 @@ def _garch_path(rets: np.ndarray, window: int, stat: str, asymmetric: bool, r: f
     if len(rets) < max(window, 12):
         return np.nan
     seg = rets[-int(window):]
+    # P0-040: the standardised shock of the current return must not be
+    # standardised by parameters fitted on that same return.  Fit on the window
+    # *excluding* the current observation (<= t-1), then evaluate r_t against
+    # the variance that governed it.  Forecast / persistence stats may use the
+    # current return (they legitimately forecast the *next* period).
+    fit_seg = seg[:-1] if stat == "shock" else seg
+    if len(fit_seg) < 12:
+        return np.nan
     if asymmetric:
         # GJR: h_t = w + (a + gamma*I(r<0))*r^2 + b*h
-        params = _fit_gjr(seg)
+        params = _fit_gjr(fit_seg)
     else:
-        params = _fit_garch(seg)
+        params = _fit_garch(fit_seg)
     if params is None:
         return np.nan
     gamma = 0.0
@@ -181,7 +189,7 @@ _register("ts_garch_vol_surprise", "GARCH 波动率意外：最近收益平方 /
            lambda x, window=120: _apply(x, lambda v: _garch_vol_surprise(v, int(window))))
 _register("ts_garch_persistence", "GARCH(1,1) 波动持续 alpha+beta。", ["x", "window"], "level",
            lambda x, window=120: _apply(x, lambda v: _garch_path(v, int(window), "persistence", False, 0.0)))
-_register("ts_garch_standardized_shock", "GARCH 标准化冲击 return/条件波动率（该收益的 h_t）。", ["x", "window"], "level",
+_register("ts_garch_standardized_shock", "GARCH 标准化冲击 return/条件波动率（参数于 t-1 及以前拟合）。", ["x", "window"], "level",
            lambda x, window=120: _apply(x, lambda v: _garch_path(v, int(window), "shock", False, 0.0)))
 # Deprecated alias for the next-period forecast (kept registered).
 _register("ts_garch_vol_forecast", "GARCH(1,1) 下一期条件波动率（deprecated 别名）。", ["x", "window"], "volatility",
@@ -201,7 +209,11 @@ def _garch_vol_surprise(vals: np.ndarray, window: int) -> float:
     if len(vals) < max(window, 12):
         return np.nan
     seg = vals[-int(window):]
-    params = _fit_garch(seg)
+    # P0-040: params fit on <= t-1 (exclude the current return), so rv_t/h_t is
+    # a genuine out-of-sample surprise rather than in-sample.
+    if len(seg) < 13:
+        return np.nan
+    params = _fit_garch(seg[:-1])
     if params is None:
         return np.nan
     w, a, b = params
@@ -235,29 +247,44 @@ def _har_rv(rv: np.ndarray, window: int, stat: str) -> float:
     this kernel.
     """
     seg = rv[-int(window):]
-    if len(seg) < 30:
+    n = len(seg)
+    if n < 30:
         return np.nan
     daily = seg
     weekly = pd.Series(seg).rolling(5).mean().to_numpy()
     monthly = pd.Series(seg).rolling(22).mean().to_numpy()
-    X = np.column_stack([np.ones(len(seg)), daily, weekly, monthly])
+    X = np.column_stack([np.ones(n), daily, weekly, monthly])
     valid = np.all(np.isfinite(X), axis=1) & np.isfinite(seg)
-    # HAR predicts future RV using today's components: target = next RV.
-    target = np.concatenate([seg[1:], [np.nan]])
-    valid_t = np.isfinite(target) & valid
-    if valid_t.sum() < 25:
-        return np.nan
-    Xs = X[valid_t]
-    y = target[valid_t]
-    beta, *_ = np.linalg.lstsq(Xs, y, rcond=None)
-    pred = float(np.dot(X[-1], beta))
     if stat == "forecast":
+        # Next-period forecast RV_{t+1}: target = next RV, features today.
+        target = np.concatenate([seg[1:], [np.nan]])
+        valid_t = np.isfinite(target) & valid
+        if valid_t.sum() < 25:
+            return np.nan
+        Xs = X[valid_t]
+        y = target[valid_t]
+        beta, *_ = np.linalg.lstsq(Xs, y, rcond=None)
+        pred = float(np.dot(X[-1], beta))
         return float(np.sqrt(max(pred, 0.0)))
-    # standardised forecast error of the *last* RV against the historical fit
+    # Current-period surprise RV_t - forecast(RV_t | t-1).  P0-039: the
+    # training window is capped strictly before the last observation (feature
+    # rows 0..n-3, targets rv[1..n-2]), and the forecast is made from the
+    # t-1 feature row — never from X_t, and never mixing a t+1 forecast with a
+    # current residual.
+    fit_rows = np.arange(n - 2)  # 0 .. n-3
+    fit_valid = valid[fit_rows]
+    Xs = X[fit_rows][fit_valid]
+    y = seg[fit_rows + 1][fit_valid]
+    if Xs.shape[0] < 25 or Xs.shape[0] <= Xs.shape[1]:
+        return np.nan
+    beta, *_ = np.linalg.lstsq(Xs, y, rcond=None)
+    if not np.all(np.isfinite(beta)):
+        return np.nan
+    pred_t = float(np.dot(X[n - 2], beta))  # forecast RV_{n-1} from t-1 info
     sd = float(np.std(y - Xs @ beta))
     if not np.isfinite(sd) or sd <= 1e-12:
         return np.nan
-    return float((seg[-1] - pred) / sd)
+    return float((seg[-1] - pred_t) / sd)
 
 
 def _har_from_return(rets: np.ndarray, window: int, stat: str) -> float:

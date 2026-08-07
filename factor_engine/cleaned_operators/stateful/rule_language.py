@@ -22,6 +22,7 @@ import numpy as np
 import pandas as pd
 
 from cleaned_operators.base import SeriesOperator, register_operator
+from cleaned_operators.common.daily_panel import _aligned
 from cleaned_operators.rolling_pack import frame_like
 from cleaned_operators.stateful._common import metadata, panel_or_scalar
 
@@ -57,6 +58,7 @@ class StateLatch(SeriesOperator):
         initial_state: float = 0.0,
         **_: Any,
     ) -> pd.DataFrame:
+        set_condition, reset_condition = _aligned(set_condition, reset_condition)
         sc = set_condition.to_numpy(dtype=float)
         rc = reset_condition.to_numpy(dtype=float)
         init = 1.0 if float(initial_state) != 0.0 else 0.0
@@ -107,6 +109,10 @@ class StateHold(SeriesOperator):
         reset_condition: Any = None,
         **_: Any,
     ) -> pd.DataFrame:
+        if reset_condition is not None:
+            value, update_condition, reset_condition = _aligned(value, update_condition, reset_condition)
+        else:
+            value, update_condition = _aligned(value, update_condition)
         vv = value.to_numpy(dtype=float)
         uc = update_condition.to_numpy(dtype=float)
         rv = None if reset_condition is None else reset_condition.to_numpy(dtype=float)
@@ -153,6 +159,8 @@ class StateSlewLimit(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, limit: Any = 0.01, **_: Any) -> pd.DataFrame:
+        if isinstance(limit, pd.DataFrame):
+            x, limit = _aligned(x, limit)
         xv = x.to_numpy(dtype=float)
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
@@ -160,7 +168,7 @@ class StateSlewLimit(SeriesOperator):
             prev = np.nan
             for row in range(rows):
                 target = xv[row, col]
-                lim = panel_or_scalar(limit, row)
+                lim = panel_or_scalar(limit, row, col)
                 if not np.isfinite(target) or not np.isfinite(lim) or lim < 0.0:
                     out[row, col] = np.nan
                     prev = np.nan
@@ -199,6 +207,8 @@ class StateDeadband(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, band: Any = 0.0, **_: Any) -> pd.DataFrame:
+        if isinstance(band, pd.DataFrame):
+            x, band = _aligned(x, band)
         xv = x.to_numpy(dtype=float)
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
@@ -206,7 +216,7 @@ class StateDeadband(SeriesOperator):
             prev = np.nan
             for row in range(rows):
                 target = xv[row, col]
-                b = panel_or_scalar(band, row)
+                b = panel_or_scalar(band, row, col)
                 if not np.isfinite(target) or not np.isfinite(b) or b < 0.0:
                     out[row, col] = np.nan
                     prev = np.nan

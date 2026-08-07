@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 
 from cleaned_operators.base import SeriesOperator, register_operator
+from cleaned_operators.common.daily_panel import _aligned
 from cleaned_operators.rolling_pack import frame_like
 from cleaned_operators.stateful._common import metadata
 
@@ -132,6 +133,7 @@ class TsRankIf(SeriesOperator):
     ) -> pd.DataFrame:
         w = max(2, int(window))
         mp = max(2, int(min_periods))
+        x, condition = _aligned(x, condition)
         xv = x.to_numpy(dtype=float)
         cv = condition.to_numpy(dtype=float)
         truth = np.isfinite(cv) & (cv != 0.0)
@@ -185,6 +187,7 @@ class StateEwmIf(SeriesOperator):
     ) -> pd.DataFrame:
         hl = float(half_life)
         alpha = 1.0 - np.exp(-np.log(2.0) / hl) if hl > 0.0 else 1.0
+        x, condition = _aligned(x, condition)
         xv = x.to_numpy(dtype=float)
         cv = condition.to_numpy(dtype=float)
         truth = np.isfinite(cv) & (cv != 0.0)
@@ -243,6 +246,7 @@ class TsLagOfPeakCorr(SeriesOperator):
         w = max(3, int(window))
         ml = max(1, int(max_lag))
         mp = int(min_periods) if min_periods is not None else max(ml + 2, w // 2)
+        x, y = _aligned(x, y)
         xv = x.to_numpy(dtype=float)
         yv = y.to_numpy(dtype=float)
         rows, cols = xv.shape

@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Sequence
 
 from api.factor import Factor
 from ir.analyzer import AnalysisResult
+from logging_utils import get_logger
 from runtime.perf_config import PerfConfig
 from runtime.production_policy import (
     assert_production_fastpath_runtime,
@@ -17,6 +18,8 @@ from runtime.production_policy import (
     assert_production_run_flags,
     summarize_pandas_fallbacks,
 )
+
+logger = get_logger("runtime.batch_service")
 
 if TYPE_CHECKING:
     from runtime.engine import FactorEngine
@@ -159,6 +162,126 @@ def _maybe_prepare_batch_data(
     return None
 
 
+def _batch_source_bars_per_day(engine: Any) -> int:
+    """批跑数据源的日内 bar 数（intraday trim 精度用）。"""
+    from cleaned_operators.operator_policy import bars_per_day, infer_source_bar_freq
+
+    try:
+        return bars_per_day(infer_source_bar_freq(engine.data_source))
+    except Exception:
+        return 1
+
+
+def _trim_batch_result(result: Any, run_window: Any, *, bars_per_day: int) -> Any:
+    """按因子请求区间裁剪批跑输出（与 ``run`` 的 warmup trim 对齐）。"""
+    if result is None or run_window is None:
+        return result
+    if not (run_window.trim_output and run_window.requested_start):
+        return result
+    import pandas as pd
+
+    from storage.time_window import slice_series_time_window
+
+    trim_start = pd.Timestamp(run_window.requested_start)
+    trim_end = (
+        pd.Timestamp(run_window.requested_end)
+        if run_window.requested_end
+        else None
+    )
+    if bars_per_day > 1:
+        # 日内源保留 timestamp 精度（不按 normalize 截断）
+        trim_start = pd.Timestamp(run_window.requested_start)
+    return slice_series_time_window(result, start=trim_start, end=trim_end)
+
+
+def _maybe_prepare_batch_warmup(
+    engine: "FactorEngine",
+    factors: Sequence[Factor],
+    analyses: dict[str, AnalysisResult],
+    *,
+    auto_warmup: bool,
+    trim_warmup: bool,
+    market: str | None,
+) -> tuple[Any, dict[str, Any]]:
+    """跨因子合并共享 warmup 加载窗口，一次性 narrow 数据源。
+
+    返回 ``(engine_to_use, per_factor_run_windows)``：
+        - ``engine_to_use``：窄化到「所有因子最大 lookback / 最早 full-history 起点」
+          的引擎；``auto_warmup=False`` 或无窗口需求时原样返回原引擎。
+        - ``per_factor_run_windows``：``factor.name -> RunWindow``，供执行后按各自
+          请求区间裁剪输出（batch warmup = 一次读数，各因子独立 trim）。
+
+    这样 ``auto_warmup=True`` 不再让 ``run_many`` / ``run_many_parallel``
+    退化为逐因子 ``run()``；PIT 审计由编译期 ``assert_pit_safe`` 负责，也与执行解耦。
+    """
+    if not auto_warmup:
+        return engine, {}
+    from cleaned_operators.operator_policy import bars_per_day, infer_source_bar_freq
+    from runtime.run_window import RunWindow, extract_source_date_bounds
+    from runtime.warmup_service import _switch_engine_to_window, prepare_run_warmup
+
+    per_windows: dict[str, Any] = {}
+    union_start: str | None = None
+    union_end: str | None = None
+    any_full_history = False
+    for factor in factors:
+        analysis = analyses.get(factor.name)
+        if analysis is None:
+            continue
+        wctx = prepare_run_warmup(
+            engine,
+            factor,
+            analysis,
+            auto_warmup=True,
+            trim_warmup=trim_warmup,
+            market=market,
+        )
+        rw = wctx.run_window
+        if rw is None:
+            continue
+        per_windows[factor.name] = rw
+        any_full_history = any_full_history or bool(rw.full_history_required)
+        if rw.actual_load_start is not None and (
+            union_start is None or rw.actual_load_start < union_start
+        ):
+            union_start = rw.actual_load_start
+        if rw.actual_load_end is not None and (
+            union_end is None or rw.actual_load_end > union_end
+        ):
+            union_end = rw.actual_load_end
+    if union_start is None:
+        return engine, per_windows
+
+    requested_start, requested_end = extract_source_date_bounds(engine.data_source)
+    union = RunWindow(
+        requested_start=requested_start,
+        requested_end=requested_end,
+        actual_load_start=union_start,
+        actual_load_end=union_end,
+        warmup_bars=0,
+        trim_output=trim_warmup,
+        full_history_required=any_full_history,
+    )
+    source_bar_freq = infer_source_bar_freq(engine.data_source)
+    engine_to_use = _switch_engine_to_window(
+        engine,
+        union,
+        source_bar_freq=source_bar_freq,
+        bars_per_day=bars_per_day(source_bar_freq),
+    )
+    if engine_to_use is engine:
+        # 实际加载起点 == 请求起点 → 无需 narrow，也无需裁剪
+        return engine, per_windows
+    logger.info(
+        "batch auto_warmup: union load_start=%s load_end=%s full_history=%s factors=%d",
+        union_start,
+        union_end,
+        any_full_history,
+        len(per_windows),
+    )
+    return engine_to_use, per_windows
+
+
 def execute_run_many(
     engine: "FactorEngine",
     factors: Sequence[Factor],
@@ -179,8 +302,9 @@ def execute_run_many(
     流程：编译多因子 DAG（可选 CSE）→ 批量 prefetch/input_dq →
     物化 ``shared_nodes`` → 按依赖图分层执行各因子根。
 
-    ``auto_warmup`` 或 ``pit_enforce`` 为真时退化为逐因子 ``run()``，
-    因 lookback / PIT 编译差异无法共享快路径。
+    PIT 审计在编译期完成（``assert_pit_safe``），不退化批跑；``auto_warmup``
+    通过 ``_maybe_prepare_batch_warmup`` 合并共享 union 加载窗口，一次读数、
+    各因子独立 trim——都不再退化为逐因子 ``run()``。
 
     Args:
         engine: 因子引擎实例。
@@ -212,61 +336,56 @@ def execute_run_many(
     )
     assert_production_factors(factors, mode=engine.run_mode, context="run_many")
 
-    use_per_factor_run = auto_warmup or pit_enforce
-    if use_per_factor_run:
-        out: dict[str, Any] = {}
-        analyses: dict[str, AnalysisResult] = {}
-        all_fallbacks: list[dict[str, str]] = []
-        backend_paths: dict[str, dict[str, Any]] = {}
-        from backend.path_summary import snapshot_from_run_output
-
-        for factor in factors:
-            one = engine.run(
-                factor,
-                auto_warmup=auto_warmup,
-                trim_warmup=trim_warmup,
-                market=market,
-                input_dq_check=input_dq_check,
-                input_dq_strict=input_dq_strict,
-                input_dq_thresholds=input_dq_thresholds,
-                pit_enforce=pit_enforce,
-                pit_forbid_forward_fill=pit_forbid_forward_fill,
-            )
-            out[factor.name] = one["result"]
-            analyses[factor.name] = one["analysis"]
-            backend_paths[factor.name] = snapshot_from_run_output(one)
-            fb = one.get("production_pandas_fallbacks")
-            if fb:
-                all_fallbacks.extend(dict(x) for x in fb if isinstance(x, dict))
-        dag, _ = engine._dag_from_factors(factors, enable_cse=enable_cse, perf=perf)
-        batch_out: dict[str, Any] = {"results": out, "dag": dag, "analyses": analyses}
-        _attach_batch_backend_paths(batch_out, backend_paths)
-        if all_fallbacks:
-            batch_out["production_pandas_fallbacks"] = all_fallbacks
-        return batch_out
-
+    # PIT 审计在编译期做（assert_pit_safe 是纯审计、不改计划），与执行解耦，
+    # 因此 production 的 pit_enforce 不再让 run_many 退化为逐因子 run()。
     dag, analyses = engine._dag_from_factors(
-        factors, enable_cse=enable_cse, perf=perf
+        factors,
+        enable_cse=enable_cse,
+        perf=perf,
+        pit_enforce=pit_enforce,
+        pit_forbid_forward_fill=pit_forbid_forward_fill,
     )
     perf = perf or PerfConfig.from_env()
-    input_report = _maybe_prepare_batch_data(
+    # batch warmup：跨因子合并共享加载窗口，一次读数，各因子独立 trim。
+    engine_to_use, per_windows = _maybe_prepare_batch_warmup(
         engine,
+        factors,
+        analyses,
+        auto_warmup=auto_warmup,
+        trim_warmup=trim_warmup,
+        market=market,
+    )
+    run_mode = engine_to_use.run_mode
+    input_report = _maybe_prepare_batch_data(
+        engine_to_use,
         dag,
         analyses,
         input_dq_check=input_dq_check,
         input_dq_strict=input_dq_strict,
         input_dq_thresholds=input_dq_thresholds,
     )
-    ctx = engine._make_context(shared_result_cache={}, perf=perf)
+    ctx = engine_to_use._make_context(shared_result_cache={}, perf=perf)
     from backend.routing_env import routing_execution_scope
     from planner.dependency_graph import build_factor_batch_graph
 
     batch_graph = build_factor_batch_graph(factors, analyses)
     root_by_name = {fp.factor_name: fp for fp in dag.roots}
+    source_bars_per_day = _batch_source_bars_per_day(engine_to_use)
+
+    def _run_root(fp) -> tuple[Any, Any]:
+        result, path = _execute_root_with_path(
+            engine_to_use.backend, fp.root, ctx, run_mode=run_mode, factor_name=fp.factor_name
+        )
+        if per_windows and fp.factor_name in per_windows:
+            result = _trim_batch_result(
+                result, per_windows[fp.factor_name], bars_per_day=source_bars_per_day
+            )
+        return result, path
+
     with routing_execution_scope(perf):
         if ctx.shared_result_cache is not None:
             for sid, sub in dag.shared_nodes.items():
-                _materialize_shared_subplan(engine.backend, sub, ctx, sid)
+                _materialize_shared_subplan(engine_to_use.backend, sub, ctx, sid)
             _clear_polars_long_shared_sid(ctx)
         out: dict[str, Any] = {}
         backend_paths: dict[str, dict[str, Any]] = {}
@@ -274,16 +393,12 @@ def execute_run_many(
             for name in layer:
                 fp = root_by_name.get(name)
                 if fp is not None:
-                    result, path = _execute_root_with_path(
-                        engine.backend, fp.root, ctx, run_mode=engine.run_mode, factor_name=name
-                    )
+                    result, path = _run_root(fp)
                     out[name] = result
                     backend_paths[name] = path
         for fp in dag.roots:
             if fp.factor_name not in out:
-                result, path = _execute_root_with_path(
-                    engine.backend, fp.root, ctx, run_mode=engine.run_mode, factor_name=fp.factor_name
-                )
+                result, path = _run_root(fp)
                 out[fp.factor_name] = result
                 backend_paths[fp.factor_name] = path
     batch_out: dict[str, Any] = {
@@ -316,7 +431,11 @@ def execute_run_many(
         batch_out["scheduling_hints"] = derive_scheduling_hints(
             batch_out["cost_summary"]
         )
-    assert_production_fastpath_runtime(ctx, mode=engine.run_mode, context="run_many")
+    if per_windows:
+        batch_out["warmup_windows"] = {
+            name: rw.to_dict() for name, rw in per_windows.items()
+        }
+    assert_production_fastpath_runtime(ctx, mode=run_mode, context="run_many")
     fallbacks = summarize_pandas_fallbacks(ctx)
     if fallbacks:
         batch_out["production_pandas_fallbacks"] = fallbacks
@@ -347,7 +466,7 @@ def execute_run_many_parallel(
     """``FactorEngine.run_many_parallel`` 实现体：根节点层内并行。
 
     共享子树仍串行物化；同一依赖层内的因子根通过 joblib 线程池并行。
-    ``auto_warmup`` / ``pit_enforce`` 为真时退化为 ``execute_run_many``。
+    PIT 在编译期审计、``auto_warmup`` 走共享 union 窗口——两者都不再退化。
 
     Args:
         engine: 因子引擎实例。
@@ -373,22 +492,6 @@ def execute_run_many_parallel(
     )
     assert_production_factors(factors, mode=engine.run_mode, context="run_many_parallel")
 
-    if auto_warmup or pit_enforce:
-        return execute_run_many(
-            engine,
-            factors,
-            perf=perf,
-            enable_cse=enable_cse,
-            auto_warmup=auto_warmup,
-            trim_warmup=trim_warmup,
-            market=market,
-            input_dq_check=input_dq_check,
-            input_dq_strict=input_dq_strict,
-            input_dq_thresholds=input_dq_thresholds,
-            pit_enforce=pit_enforce,
-            pit_forbid_forward_fill=pit_forbid_forward_fill,
-        )
-
     try:
         from joblib import Parallel, delayed
     except ImportError as exc:  # pragma: no cover
@@ -396,36 +499,55 @@ def execute_run_many_parallel(
             "run_many_parallel 需要 joblib：pip install 'factor-engine[parallel]'"
         ) from exc
 
+    # PIT 在编译期审计；auto_warmup 走共享 union 窗口 —— 两者都不再退化为逐因子 run()。
     dag, analyses = engine._dag_from_factors(
-        factors, enable_cse=enable_cse, perf=perf
+        factors,
+        enable_cse=enable_cse,
+        perf=perf,
+        pit_enforce=pit_enforce,
+        pit_forbid_forward_fill=pit_forbid_forward_fill,
     )
     perf = perf or PerfConfig.from_env()
     workers = n_jobs if n_jobs is not None else perf.max_workers
-    input_report = _maybe_prepare_batch_data(
+    engine_to_use, per_windows = _maybe_prepare_batch_warmup(
         engine,
+        factors,
+        analyses,
+        auto_warmup=auto_warmup,
+        trim_warmup=trim_warmup,
+        market=market,
+    )
+    run_mode = engine_to_use.run_mode
+    input_report = _maybe_prepare_batch_data(
+        engine_to_use,
         dag,
         analyses,
         input_dq_check=input_dq_check,
         input_dq_strict=input_dq_strict,
         input_dq_thresholds=input_dq_thresholds,
     )
-    ctx = engine._make_context(shared_result_cache={}, perf=perf)
+    ctx = engine_to_use._make_context(shared_result_cache={}, perf=perf)
     from backend.routing_env import routing_execution_scope
     from planner.dependency_graph import build_factor_batch_graph
 
     batch_graph = build_factor_batch_graph(factors, analyses)
     root_by_name = {fp.factor_name: fp for fp in dag.roots}
+    source_bars_per_day = _batch_source_bars_per_day(engine_to_use)
 
     def _one(fp):
         result, path = _execute_root_with_path(
-            engine.backend, fp.root, ctx, run_mode=engine.run_mode, factor_name=fp.factor_name
+            engine_to_use.backend, fp.root, ctx, run_mode=run_mode, factor_name=fp.factor_name
         )
+        if per_windows and fp.factor_name in per_windows:
+            result = _trim_batch_result(
+                result, per_windows[fp.factor_name], bars_per_day=source_bars_per_day
+            )
         return fp.factor_name, result, path
 
     with routing_execution_scope(perf):
         if ctx.shared_result_cache is not None:
             for sid, sub in dag.shared_nodes.items():
-                _materialize_shared_subplan(engine.backend, sub, ctx, sid)
+                _materialize_shared_subplan(engine_to_use.backend, sub, ctx, sid)
             _clear_polars_long_shared_sid(ctx)
 
         results: dict[str, Any] = {}
@@ -435,8 +557,12 @@ def execute_run_many_parallel(
             if len(fps) <= 1:
                 for fp in fps:
                     result, path = _execute_root_with_path(
-                        engine.backend, fp.root, ctx, run_mode=engine.run_mode, factor_name=fp.factor_name
+                        engine_to_use.backend, fp.root, ctx, run_mode=run_mode, factor_name=fp.factor_name
                     )
+                    if per_windows and fp.factor_name in per_windows:
+                        result = _trim_batch_result(
+                            result, per_windows[fp.factor_name], bars_per_day=source_bars_per_day
+                        )
                     results[fp.factor_name] = result
                     backend_paths[fp.factor_name] = path
             else:
@@ -449,8 +575,12 @@ def execute_run_many_parallel(
         for fp in dag.roots:
             if fp.factor_name not in results:
                 result, path = _execute_root_with_path(
-                    engine.backend, fp.root, ctx, run_mode=engine.run_mode, factor_name=fp.factor_name
+                    engine_to_use.backend, fp.root, ctx, run_mode=run_mode, factor_name=fp.factor_name
                 )
+                if per_windows and fp.factor_name in per_windows:
+                    result = _trim_batch_result(
+                        result, per_windows[fp.factor_name], bars_per_day=source_bars_per_day
+                    )
                 results[fp.factor_name] = result
                 backend_paths[fp.factor_name] = path
     parallel_out: dict[str, Any] = {
@@ -463,7 +593,11 @@ def execute_run_many_parallel(
         parallel_out["input_dq"] = input_report.to_dict()
     if len(factors) > 1:
         parallel_out["batch_graph"] = batch_graph.to_dict()
-    assert_production_fastpath_runtime(ctx, mode=engine.run_mode, context="run_many_parallel")
+    if per_windows:
+        parallel_out["warmup_windows"] = {
+            name: rw.to_dict() for name, rw in per_windows.items()
+        }
+    assert_production_fastpath_runtime(ctx, mode=run_mode, context="run_many_parallel")
     fallbacks = summarize_pandas_fallbacks(ctx)
     if fallbacks:
         parallel_out["production_pandas_fallbacks"] = fallbacks

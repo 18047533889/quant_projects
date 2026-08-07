@@ -324,8 +324,8 @@ class DuckDBEngine:
         不会立即执行查询。
         """
         try:
-            if params is not None:
-                return self._conn.sql(sql, list(params))
+            if params:
+                return self._conn.sql(sql, params=list(params))
             return self._conn.sql(sql)
         except duckdb.Error as exc:
             raise EngineError(f"DuckDB relation 构建失败: {exc}\nSQL: {sql[:500]}") from exc
