@@ -987,3 +987,62 @@ A股 `side`、quantile-kurtosis `outer/inner`(2-tuple)、hurst DFA scale 做了�
   compatibility bridge 按 `_remove_declared_bridges` 设计移除，pandas reference 为认证生产后端）；
   317 个 daily 表面 experimental 算子属注册即 fail-closed 的既定设计（audit 显式跳过），非缺陷。
 - 未实现项：duckdb SQL 后端（与既有评审结论一致，不强行实现）；recipe 族未在本轮范围。
+
+## 14. 2026-08 状态机规则包（stateful pack, 21 算子）
+
+### 14.1 目标
+在上一轮 61 算子基础上，补充现有表达式语言难以低深度表达的
+**Memory + Rule Control + Sequential Detection + Dynamic Episode + State Maturity +
+Cross-Sectional Rotation + LeadLag** 维度，对齐 CTA / 规则引擎搜索空间。
+
+### 14.2 Semantic diff（实现前对最新 registry 的逐项消重）
+规格 50 个候选中已存在 / 可 1-2 层组合 / 明确不做的项：
+- **已存在 canonical**：`ts_variance_ratio(_slope)`、`ts_hysteresis_state`、
+  `ts_location_shift`/`ts_scale_shift`、`ts_ks_shift`/`ts_wasserstein_shift`、
+  `ts_best_lag_corr`（输出 max|c|）、`intra_bipower_variation`、`intra_jump_ratio`、
+  `intra_*_profile_cosine`/`intra_profile_earth_mover_distance`、`ts_argmax_age`/`ts_argmin_age`、
+  `ts_autocorr_decay_half_life`、`ts_gap_survival_duration`。
+- **降级 recipe/组合（不重复注册）**：`soft_gate`（= `sigmoid((x-c)/s)`）、
+  `state_debounce`（= `ts_true_streak` + `state_latch`）、`state_since_path_efficiency`
+  （= `ts_run_efficiency(x, state)`）、`cs_rank_persistence`、`cs_bucket_transition_*`、
+  `ts_portmanteau_strength`（≈ `ts_autocorr_decay_half_life`）、`state_since_argextreme_age`。
+- **跳过（P2 research / 高成本 / 规格自述不给高 quota）**：`ts_granger_incremental_r2`、RQA。
+
+### 14.3 新增 21 个 canonical（`cleaned_operators/stateful/`）
+- **rule_language**：`state_latch`（SR 锁存，reset 优先）、`state_hold`（递归快照记忆，
+  与滚动窗口 `ts_last_if` 不同）、`state_slew_limit`（每步限幅）、`state_deadband`（连续迟滞）。
+- **events**：`event_refractory`（事件冷却去重）、`cross_event`（上穿/下穿）。
+- **sequential**：`ts_cusum_pressure`（递归双端 CUSUM，区别于窗口版 `ts_cusum_break_score`）、
+  `ts_rank_if`（补全 *_if 族）、`state_ewm_if`（条件 EWM 记忆）、`ts_lag_of_peak_corr`
+  （暴露 argmax lag，`ts_best_lag_corr` 不输出）。
+- **episode**：`state_since_reduce`（动态 episode 累计）、`directional_change_state/extent`
+  （Directional Change 内在事件时间）、`state_since_trend_tstat`（episode OLS 斜率 t 统计）。
+- **survival**：`ts_state_age_percentile` / `ts_state_exit_hazard` / `ts_state_residual_life`
+  （基于已完成 episode 的状态成熟度；当前进行中 run 严禁进入参考样本）。
+- **rotation**：`cs_rank_churn` / `cs_tail_retention`（横截面排序洗牌度 / 尾部留存，组内广播）。
+- **drawdown_path**：`ts_recovery_fraction` / `ts_current_drawdown_area`（峰谷修复进度 / 深度×时长）。
+
+### 14.4 语义与工程约束
+- 全部前缀因果、PIT、`missing_policy="break"`（NaN 输入输出 NaN 并重置递归态，不把 NaN 当 False）。
+- 常数窗口 → NaN；safe epsilon 除零；不返回 Inf。
+- 行业组一次固定一个 IndustrySource（object dtype 组标签面板）。
+- **发现的真 bug**：survival 最初实现先扫完整序列再算分位，把进行中 run 结束后计入参考样本
+  → 未来信息泄漏；重构为单遍前向内核，completed 仅在 run 结束时追加，当前 run 永不进入参考集。
+- **后端决策**：递归/状态类算子按既有惯例（`ts_hysteresis_state`/`ts_run_strength`/`group_*`）
+  以 `pandas_numpy` 为认证生产后端；原生 polars/duckdb 对逐行递归不可行，compatibility bridge
+  按 `_remove_declared_bridges` 设计移除。factor evidence 认证后 `production_eligible_backends=('pandas_numpy',)`。
+
+### 14.5 接线
+`_LOAD_MODULES` + 7 个 stateful 子模块；`operator_policy._STATEFUL_PACK_POLICIES`（ts_*/state_*→ts，
+cs_*→cs，全部 pit_safe=True）；`operator_surface._DAILY_STATEFUL_PACK_2026_08`（daily 表面）+
+各模块 `register_stateful_surface`（EXTENDED_ONLY 分区）；`production_hardening._SCOPE_OVERRIDES`
+（非 ts_/cs_ 前缀名 → ts）；audit 词汇表补 `set_condition/reset_condition/update_condition`、
+`max_lag/drift/cooldown/half_life/initial_state/min_episode/min_completed_runs/max_age/direction/band`，
+`_SPECIAL_SCALARS`：`cs_tail_retention.side="top"`、`state_since_reduce.mode="sum"`。
+
+### 14.6 验证状态
+- `test_stateful_pack_2026_08.py`：30 passed（注册/表面/policy/确定性/axes + 语义专项：
+  latch reset 优先、hold 记忆、refractory 冷却、slew 限幅、deadband、survival 排除当前 run）。
+- runtime audit 1059 canonicals 全过；factor evidence 重建（973 non-daily 算子）含 21 个新算子。
+- 21 算子均 `status=production` + `pit_safe=True` + 正确 scope（ts/cs）+ daily 表面（待 primitive
+  evidence 重认证后由 audit 全量确认）。

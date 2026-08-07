@@ -37,8 +37,11 @@ def test_s2_experimental_registered_ops_not_promoted():
 
     targets = factor_production_targets()
     # Model-family / research operators must be fail-closed and non-production.
-    for name in ("ts_ar_prior_forecast", "ts_garch_vol_surprise",
-                 "ts_huber_regression_forecast_error", "ts_expectile_regression_resid"):
+    # The causal reworked variants (ts_ar_prior_forecast, ts_*_forecast_error)
+    # are promoted replacements (audit §9.3-§9.5); the diagnostic in-sample
+    # variants and un-reworked model families stay experimental.
+    for name in ("ts_garch_vol_surprise", "ts_ar_forecast",
+                 "ts_huber_regression_resid", "ts_expectile_regression_resid"):
         assert should_fail_closed(name), name
         catalog = OperatorRegistry._catalog.get(name, {})
         assert str(catalog.get("status")) == "experimental", name

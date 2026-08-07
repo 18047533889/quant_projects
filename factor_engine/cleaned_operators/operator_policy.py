@@ -1053,6 +1053,140 @@ _FINAL_PACK_POLICIES = {
 }
 _EXPLICIT_POLICIES.update(_FINAL_PACK_POLICIES)
 
+# Alpha-language expansion (2026-08): run/hysteresis state, path geometry,
+# distribution shift, volatility structure, cs locality, events, report seq.
+# All are causal trailing-window / sequential transforms -> pit_safe.
+_ALPHA_LANGUAGE_POLICIES = {
+    # Module 1 — temporal state + signed pattern
+    "ts_run_strength": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_run_efficiency": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_run_concentration": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_hysteresis_state": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_hysteresis_age": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_state_integral": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_state_entry_strength": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_transition_intensity": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_sign_persistence": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    "ts_sign_cluster_index": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    # Module 2 — path / shape geometry
+    "ts_monotonicity": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    "ts_turning_rate": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_turning_intensity": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    "ts_path_efficiency": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_roughness": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    "ts_trend_break_score": {"scope": "ts", "pit_safe": True, "min_periods": 4},
+    "ts_weighted_time_centroid": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_endpoint_deviation": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    "ts_mass_concentration": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    # Module 3 — distribution shape / shift
+    "ts_tail_imbalance": {"scope": "ts", "pit_safe": True, "min_periods": 4},
+    "ts_expected_shortfall_asymmetry": {"scope": "ts", "pit_safe": True, "min_periods": 6},
+    "ts_wasserstein_shift": {"scope": "ts", "pit_safe": True, "min_periods": 6},
+    "ts_ks_shift": {"scope": "ts", "pit_safe": True, "min_periods": 6},
+    "ts_location_shift": {"scope": "ts", "pit_safe": True, "min_periods": 6},
+    "ts_scale_shift": {"scope": "ts", "pit_safe": True, "min_periods": 6},
+    # Module 4 — volatility structure
+    "ts_vol_of_vol": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_vol_acceleration": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_vol_term_structure": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_semivariance_balance": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_realized_quarticity": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    "ts_vol_clustering": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    "ts_leverage_effect": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    "ts_jump_bipower_proxy": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    # Module 5 — cross-sectional locality + group ex-self
+    "cs_neighbor_gap": {"scope": "cs", "pit_safe": True, "min_periods": 1},
+    "cs_local_density": {"scope": "cs", "pit_safe": True, "min_periods": 1},
+    "cs_isolation": {"scope": "cs", "pit_safe": True, "min_periods": 1},
+    "cs_local_curvature": {"scope": "cs", "pit_safe": True, "min_periods": 1},
+    "group_ex_self_std": {"scope": "group", "pit_safe": True, "min_periods": 1},
+    "group_ex_self_mad": {"scope": "group", "pit_safe": True, "min_periods": 1},
+    "group_ex_self_quantile": {"scope": "group", "pit_safe": True, "min_periods": 1},
+    "relation_weighted_std_ex_self": {"scope": "group", "pit_safe": True, "min_periods": 1},
+    # Module 6 — events + fundamental report sequence
+    "event_frequency": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "event_cluster_count": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "event_cluster_mean_size": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "report_rolling_mean": {"scope": "fundamental_period", "pit_safe": True, "min_periods": 2},
+    "report_yoy_lag": {"scope": "fundamental_period", "pit_safe": True, "min_periods": 1},
+}
+_EXPLICIT_POLICIES.update(_ALPHA_LANGUAGE_POLICIES)
+
+# Stateful rule / episode / rotation pack (2026-08 CTA): forward per-column
+# recursions (latch / hold / slew / deadband / CUSUM / episode / survival) and
+# cross-sectional rotation statistics.  All causal and PIT-safe; ts_*/state_*
+# get a time-series scope, cs_* get cross-sectional.
+_STATEFUL_PACK_POLICIES = {
+    # Module 1 — rule language
+    "state_latch": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "state_hold": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "state_slew_limit": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "state_deadband": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    # Module 2 — events
+    "event_refractory": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "cross_event": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    # Module 3 — sequential / conditional memory
+    "ts_cusum_pressure": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "ts_rank_if": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "state_ewm_if": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_lag_of_peak_corr": {"scope": "ts", "pit_safe": True, "min_periods": 6},
+    # Module 4 — dynamic episode / directional change
+    "state_since_reduce": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "directional_change_state": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "directional_change_extent": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "state_since_trend_tstat": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    # Module 5 — state survival / maturity
+    "ts_state_age_percentile": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_state_exit_hazard": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_state_residual_life": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    # Module 6 — cross-sectional rotation
+    "cs_rank_churn": {"scope": "cs", "pit_safe": True},
+    "cs_tail_retention": {"scope": "cs", "pit_safe": True},
+    # Module 7 — drawdown path / recovery
+    "ts_recovery_fraction": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_current_drawdown_area": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+}
+_EXPLICIT_POLICIES.update(_STATEFUL_PACK_POLICIES)
+
+# Turnover-survival / weighted-tail / behavioural / order-flow families
+# (2026-08).  The turnover-survival operators build their reference cost only
+# from rows ``[t-W, t-1]``, so they carry ``lag=1`` (strictly past).  The
+# minute→daily order-flow operators are session-aware daily aggregators.
+_CHIP_FLOW_PACK_POLICIES = {
+    "ts_turnover_reference_price": {"scope": "ts", "pit_safe": True, "lag": 1, "min_periods": 5},
+    "ts_turnover_cost_dispersion": {"scope": "ts", "pit_safe": True, "lag": 1, "min_periods": 5},
+    "ts_turnover_profit_share": {"scope": "ts", "pit_safe": True, "lag": 1, "min_periods": 5},
+    "ts_turnover_holding_age": {"scope": "ts", "pit_safe": True, "lag": 1, "min_periods": 5},
+    "ts_turnover_near_cost_mass": {"scope": "ts", "pit_safe": True, "lag": 1, "min_periods": 5},
+    "ts_turnover_cost_quantile_distance": {"scope": "ts", "pit_safe": True, "lag": 1, "min_periods": 5},
+    "ts_stratified_mean_spread": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "ts_weighted_semivariance": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_weighted_expected_shortfall": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "ts_weighted_drawdown_area": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_cpt_value": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "intraday_bvc_imbalance": {
+        "scope": "session_intraday", "pit_safe": True,
+        "session_aware": True, "reset_at_session_boundary": True, "min_periods": 20,
+    },
+    "intraday_impact_beta": {
+        "scope": "session_intraday", "pit_safe": True,
+        "session_aware": True, "reset_at_session_boundary": True, "min_periods": 20,
+    },
+    "intraday_impact_asymmetry": {
+        "scope": "session_intraday", "pit_safe": True,
+        "session_aware": True, "reset_at_session_boundary": True, "min_periods": 20,
+    },
+    "intraday_return_wasserstein_shift": {
+        "scope": "session_intraday", "pit_safe": True,
+        "session_aware": True, "reset_at_session_boundary": True, "min_periods": 30,
+    },
+    "micro_bvc_vpin": {
+        "scope": "session_intraday", "pit_safe": True,
+        "session_aware": True, "reset_at_session_boundary": True, "min_periods": 20,
+    },
+}
+_EXPLICIT_POLICIES.update(_CHIP_FLOW_PACK_POLICIES)
+
 # Compatibility export now reflects the reviewed research surface exactly.
 RESEARCH_CORE_CANONICALS = RESEARCH_ONLY_CANONICALS
 

@@ -170,28 +170,15 @@ def _rewrite_series_where(expr: str) -> str:
     while ".where(" in out and guard < 32:
         guard += 1
         idx = out.find(".where(")
-        # walk back to find receiver expression start
-        j = idx - 1
-        while j >= 0 and out[j].isspace():
-            j -= 1
-        if j < 0:
+        # Use the balanced receiver walk-back (includes the call name when the
+        # receiver is e.g. ts_pct(close, 1)); the old inline walk-back started at
+        # the open paren and mangled receivers that end in ")" → ts_pctwhere(...).
+        span = _balanced_expr_before_dot_method(out, idx)
+        if span is None:
             break
-        if out[j] == ")":
-            close_idx = j
-            open_idx = _find_matching_open_paren(out, close_idx)
-            if open_idx < 0:
-                break
-            recv_start = open_idx
-            receiver = out[recv_start : close_idx + 1]
-        elif out[j].isalnum() or out[j] == "_":
-            end = j
-            while end >= 0 and (out[end].isalnum() or out[end] == "_"):
-                end -= 1
-            recv_start = end + 1
-            receiver = out[recv_start : j + 1]
-        else:
-            break
-        parsed = _extract_call_args(out, idx + 1)  # position at 'where'
+        recv_start, dot_idx = span
+        receiver = out[recv_start:dot_idx]
+        parsed = _extract_call_args(out, dot_idx + 1)  # position at 'where'
         if not parsed:
             break
         args, call_end = parsed
@@ -283,6 +270,44 @@ def _replace_rolling_agg(expr: str, agg_suffix: str, op: str) -> str:
     return out
 
 
+def _replace_ewm_halflife(expr: str) -> str:
+    """Convert ``receiver.ewm(halflife=N, ...).mean()`` to ``ts_ema(receiver, span)``.
+
+    pandas ``ewm(halflife=N)`` uses ``alpha = 1 - 0.5**(1/N)``.  FE's daily ``ewm`` is
+    aliased to ``ts_ema`` (span-based, ``alpha = 2/(span+1)``), so we convert halflife
+    to the equivalent span.  Fall back to ``ts_ema(receiver, N)`` when the argument
+    can't be parsed as an integer halflife.
+    """
+    out = expr
+    guard = 0
+    needle = ".ewm("
+    while needle in out and guard < 64:
+        guard += 1
+        idx = out.find(needle)
+        span = _balanced_expr_before_dot_method(out, idx)
+        if span is None:
+            break
+        recv_start, dot_idx = span
+        receiver = out[recv_start:dot_idx]
+        parsed = _extract_call_args(out, dot_idx + 1)
+        if not parsed:
+            break
+        args, end = parsed
+        arg_text = "".join(args)
+        m = re.search(r"halflife\s*=\s*(\d+)", arg_text)
+        if not m:
+            break
+        halflife = int(m.group(1))
+        alpha = 1.0 - 0.5 ** (1.0 / halflife)
+        span_val = int(round(2.0 / alpha - 1.0)) if alpha > 0 else halflife
+        repl = f"ts_ema({receiver}, {max(span_val, 1)})"
+        end2 = end
+        if out[end : end + len(".mean()")] == ".mean()":
+            end2 = end + len(".mean()")
+        out = out[:recv_start] + repl + out[end2:]
+    return out
+
+
 def _apply_ts_passes(work: str) -> str:
     work = _strip_noise(work)
     rolling_ops = [
@@ -294,15 +319,19 @@ def _apply_ts_passes(work: str) -> str:
         (".max()", "ts_max"),
         (".skew()", "ts_skew"),
         (".rank(pct=True)", "ts_rank"),
+        # .rolling(N).rank() without pct=True also maps to ts_rank (percentile).
+        (".rank()", "ts_rank"),
     ]
     for _ in range(24):
         prev = work
         for suffix, op in rolling_ops:
             work = _replace_rolling_agg(work, suffix, op)
         work = _replace_trailing_method(work, "ewm", r"^span\s*=\s*(\d+)", "ema({receiver}, {g0})", suffix=".mean()")
+        work = _replace_ewm_halflife(work)
         work = _replace_trailing_method(work, "shift", r"^(\d+)$", "delay({receiver}, {g0})")
         work = _replace_trailing_method(work, "pct_change", r"^(\d+)$", "ts_pct({receiver}, {g0})")
         work = _replace_trailing_method(work, "pct_change", r"^$", "ts_pct({receiver}, 1)")
+        work = _replace_trailing_method(work, "diff", r"^(\d+)$", "ts_delta({receiver}, {g0})", suffix="")
         work = _replace_trailing_method(work, "diff", r"^$", "ts_delta({receiver}, 1)", suffix="")
         work = _replace_trailing_method(work, "abs", r"^$", "abs({receiver})", suffix="")
         work = re.sub(r"(.+?)\.expanding\(\)\.max\(\)", r"ts_max(\1, 252)", work)
@@ -461,6 +490,8 @@ def _strip_noise(expr: str) -> str:
     # Do NOT strip .clip — rewrite to cap() in _translate_expr / assignment pass.
     work = re.sub(r"\.astype\([^)]*\)", "", work)
     work = re.sub(r"\.name\s*=\s*['\"][^'\"]+['\"]", "", work)
+    # Residual pandas rename('...') is an identity on the value; drop it.
+    work = re.sub(r"\.rename\(\s*['\"][^'\"]+['\"]\s*\)", "", work)
     return work
 
 
@@ -503,6 +534,56 @@ def _extract_return_expr(code: str) -> str | None:
     return None
 
 
+def _rewrite_drawdown_duration(code: str) -> str:
+    """Rewrite the CogAlpha drawdown-duration idiom onto FE ``ts_current_drawdown_duration``.
+
+    CogAlpha computes "bars since the last new high" with the stateful pattern::
+
+        new_peak = close >= rolling_max          # (or new_high = close == running_max)
+        group    = new_peak.cumsum()
+        duration = new_peak.groupby(group).cumcount()
+
+    FE models exactly this as ``ts_current_drawdown_duration(close, window)`` (bars since the
+    running peak).  Rewriting the idiom up-front lets these factors route to local_dsl instead
+    of the python fallback.  The window is taken from the preceding rolling()/expanding() peak,
+    defaulting to 252 when it can't be resolved.
+    """
+    lines = code.splitlines()
+    window = 252
+    out: list[str] = []
+    pending_group: str | None = None  # name bound by "<peak>.cumsum()"
+    for raw in lines:
+        line = raw.strip()
+        if not line:
+            out.append(raw)
+            continue
+        # Track the trailing window used by rolling peak assignments.
+        m_win = re.search(r"\.rolling\(\s*(?:window\s*=\s*)?(\d+)", line)
+        if m_win and ("max()" in line or "mean()" in line):
+            window = int(m_win.group(1))
+        if re.search(r"\.expanding\(\)\.max\(\)", line):
+            window = 252
+        # <peak>.cumsum() → remember the group name (drop the line; it's a helper).
+        m_cumsum = re.match(r"^([A-Za-z_]\w*)\s*=\s*([A-Za-z_]\w*)\.cumsum\(\)\s*$", line)
+        if m_cumsum:
+            pending_group = m_cumsum.group(1)
+            out.append(raw)
+            continue
+        # duration = <peak>.groupby(<group>).cumcount()  OR  df.groupby(<group>).cumcount()
+        m_dur = re.match(
+            r"^([A-Za-z_]\w*)\s*=\s*(?:[A-Za-z_]\w*|df|df_copy)\.groupby\(\s*"
+            r"([A-Za-z_]\w*)\s*\)\.cumcount\(\)\s*$",
+            line,
+        )
+        if m_dur:
+            if pending_group and m_dur.group(2) == pending_group:
+                out.append(f"{m_dur.group(1)} = ts_current_drawdown_duration(close, {window})")
+                pending_group = None
+                continue
+        out.append(raw)
+    return "\n".join(out)
+
+
 def _should_skip_assignment(line: str) -> bool:
     if any(m in line for m in SKIP_ASSIGNMENT_MARKERS):
         return True
@@ -512,6 +593,9 @@ def _should_skip_assignment(line: str) -> bool:
 
 def translate_python(code: str, tools: str = "") -> TranslateResult:
     raw = code
+    # Rewrite the drawdown-duration groupby/cumcount idiom BEFORE the hard-marker
+    # check so it no longer trips "uses groupby/cumcount".
+    raw = _rewrite_drawdown_duration(raw)
     if any(m in raw for m in HARD_MARKERS):
         return TranslateResult("", "hard", "ast", "uses groupby/cumcount/concat/cummax")
 
@@ -694,7 +778,71 @@ def dsl_to_lqtp(dsl: str) -> str:
     out = _replace_func_calls(out, "or_", _or)
     out = _replace_func_calls(out, "tanh", _tanh)
     out = _replace_func_calls(out, "cs_rank_gaussian", _gaussian)
+    # Bitwise & | ~ (accepted by FE DSL since the parser maps them to and_/or_/not_)
+    # must lower to LQTP-native infix and/or/not.  Only rewrite when present so
+    # non-bitwise formulas keep their existing formatting.
+    if any(tok in out for tok in (" & ", " | ", "~(")):
+        out = _rewrite_bitwise_lqtp(out)
     return out
+
+
+def _rewrite_bitwise_lqtp(expr: str) -> str:
+    """Convert ``a & b`` / ``a | b`` / ``~a`` (FE DSL) to ``and``/``or``/``not`` for LQTP."""
+    import ast as _ast
+
+    def _conv(node: _ast.AST) -> str:
+        if isinstance(node, _ast.BinOp):
+            if isinstance(node.op, _ast.BitAnd):
+                return f"(({_conv(node.left)}) and ({_conv(node.right)}))"
+            if isinstance(node.op, _ast.BitOr):
+                return f"(({_conv(node.left)}) or ({_conv(node.right)}))"
+            return f"(({_conv(node.left)}) {_binop_symbol(node)} ({_conv(node.right)}))"
+        if isinstance(node, _ast.UnaryOp) and isinstance(node.op, _ast.Invert):
+            return f"(not ({_conv(node.operand)}))"
+        if isinstance(node, _ast.BoolOp):
+            joiner = " and " if isinstance(node.op, _ast.And) else " or "
+            return "(" + joiner.join(f"({_conv(v)})" for v in node.values) + ")"
+        if isinstance(node, _ast.Constant):
+            return repr(node.value)
+        if isinstance(node, _ast.Name):
+            return node.id
+        if isinstance(node, _ast.Call):
+            args = ", ".join(_conv(a) for a in node.args)
+            kw = ", ".join(f"{k.arg}={_conv(k.value)}" for k in node.keywords)
+            parts = [p for p in (args, kw) if p]
+            func = _conv(node.func)
+            return f"{func}({', '.join(parts)})"
+        if isinstance(node, _ast.Compare):
+            left = _conv(node.left)
+            ops = {
+                _ast.Lt: "<", _ast.LtE: "<=", _ast.Gt: ">", _ast.GtE: ">=",
+                _ast.Eq: "==", _ast.NotEq: "!=",
+            }
+            parts = [left]
+            for op, comp in zip(node.ops, node.comparators):
+                sym = ops.get(type(op))
+                if sym is None:
+                    return _ast.unparse(node)
+                parts.append(sym)
+                parts.append(_conv(comp))
+            return " ".join(parts)
+        if isinstance(node, _ast.UnaryOp) and isinstance(node.op, _ast.USub):
+            return f"-({_conv(node.operand)})"
+        return _ast.unparse(node)
+
+    def _binop_symbol(node: _ast.BinOp) -> str:
+        import ast as _ast2
+
+        return {
+            _ast2.Add: "+", _ast2.Sub: "-", _ast2.Mult: "*", _ast2.Div: "/",
+            _ast2.Pow: "**", _ast2.Mod: "%",
+        }.get(type(node.op), "+")
+
+    try:
+        tree = _ast.parse(expr, mode="eval")
+        return _conv(tree.body)
+    except SyntaxError:
+        return expr
 
 
 def lqtp_to_fe_dsl(dsl: str) -> str:
@@ -710,6 +858,10 @@ def lqtp_to_fe_dsl(dsl: str) -> str:
     out = out.replace("ewm_mean(", "ema(")
     # LQTP cap → FE clip (canonical)
     out = out.replace("cap(", "clip(")
+    # protected_div is FE-internal; safe_div is the daily/LQTP-aligned name.
+    # dsl_to_lqtp already rewrites protected_div → safe_div; keep both directions
+    # consistent so the FE-side DSL validates on the daily surface.
+    out = out.replace("protected_div(", "safe_div(")
 
     def _quantile_median(args: list[str]) -> str | None:
         if len(args) != 3 or args[2].strip() != "0.5":

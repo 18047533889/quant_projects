@@ -4133,6 +4133,104 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_inst_window=True,
         )
 
+    # Alpha-language SQL subset (2026-08): pandas-reference parity on clean
+    # daily panels.  Only the window-function-natural ops are lowered; the
+    # run/hysteresis/quantile/cs-locality family stays pandas_numpy-only
+    # (fail-closed, same as the 2026-08 final pack).
+    if op in {
+        "event_frequency",
+        "ts_semivariance_balance",
+        "ts_realized_quarticity",
+        "ts_vol_of_vol",
+        "ts_vol_acceleration",
+        "ts_vol_term_structure",
+    }:
+        if len(node.inputs) < 1:
+            return None
+        x_l = _compile_layer(node.inputs[0], dialect=dialect)
+        if x_l is None:
+            return None
+
+        if op == "event_frequency":
+            w = int(_literal_positional(node, 0, default=20) or 20)
+            mp = int(_literal_positional(node, 1, default=1) or 1)
+            over_w = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+            cnt = f"COUNT(_v) OVER ({over_w})"
+            truth = _truthy_sql("_v", dialect=dialect)
+            hits = f"SUM(CASE WHEN {truth} THEN 1 ELSE 0 END) OVER ({over_w})"
+            expr = f"CASE WHEN {cnt} < {mp} THEN NULL WHEN {cnt} = 0 THEN NULL ELSE {hits} / {cnt} END"
+        elif op == "ts_semivariance_balance":
+            w = int(_literal_positional(node, 0, default=20) or 20)
+            mp = max(2, int(_literal_positional(node, 1, default=2) or 2))
+            over_w = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+            cnt = f"COUNT(_v) OVER ({over_w})"
+            pos = f"SUM(CASE WHEN _v > 0 THEN POW(_v, 2) ELSE 0 END) OVER ({over_w})"
+            neg = f"SUM(CASE WHEN _v < 0 THEN POW(_v, 2) ELSE 0 END) OVER ({over_w})"
+            expr = (
+                f"CASE WHEN {cnt} < {mp} THEN NULL "
+                f"WHEN ({pos} + {neg}) < 1e-12 THEN NULL "
+                f"ELSE ({pos} - {neg}) / ({pos} + {neg}) END"
+            )
+        elif op == "ts_realized_quarticity":
+            w = int(_literal_positional(node, 0, default=20) or 20)
+            mp = max(3, int(_literal_positional(node, 1, default=3) or 3))
+            over_w = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+            cnt = f"COUNT(_v) OVER ({over_w})"
+            rv2 = f"SUM(POW(_v, 2)) OVER ({over_w})"
+            rv4 = f"SUM(POW(_v, 4)) OVER ({over_w})"
+            expr = (
+                f"CASE WHEN {cnt} < {mp} THEN NULL "
+                f"WHEN {rv2} < 1e-12 THEN NULL "
+                f"ELSE {cnt} * {rv4} / (3 * POW({rv2}, 2) + 1e-12) END"
+            )
+        elif op == "ts_vol_of_vol":
+            wi = int(_literal_positional(node, 0, default=5) or 5)
+            wo = int(_literal_positional(node, 1, default=40) or 40)
+            sd = _dialect_fn(dialect, "stddev_pop")
+            inner = _inst_window(dialect, wi, sd, x_l.sql, min_periods=2)
+            logv = f"SELECT ts, inst, LN(_v + 1e-12) AS _v FROM ({inner}) _lv"
+            outer = _inst_window(dialect, wo, sd, logv, min_periods=2)
+            return _Layer(outer, has_inst_window=True)
+        elif op == "ts_vol_acceleration":
+            wi = int(_literal_positional(node, 0, default=5) or 5)
+            la = max(1, int(_literal_positional(node, 1, default=5) or 5))
+            sd = _dialect_fn(dialect, "stddev_pop")
+            inner = _inst_window(dialect, wi, sd, x_l.sql, min_periods=2)
+            lagged = (
+                f"SELECT ts, inst, _v, LAG(_v, {la}) OVER (PARTITION BY inst ORDER BY ts) AS _p "
+                f"FROM ({inner}) _la"
+            )
+            expr = (
+                f"CASE WHEN _v IS NULL OR _p IS NULL THEN NULL "
+                f"ELSE LN((_v + 1e-12) / (_p + 1e-12)) END"
+            )
+            return _Layer(
+                f"SELECT ts, inst, {expr} AS _v FROM ({lagged}) _f",
+                has_inst_window=True,
+            )
+        else:  # ts_vol_term_structure
+            ws = int(_literal_positional(node, 0, default=5) or 5)
+            wl = int(_literal_positional(node, 1, default=40) or 40)
+            sd = _dialect_fn(dialect, "stddev_pop")
+            over_s = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {ws - 1} PRECEDING AND CURRENT ROW"
+            over_l = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {wl - 1} PRECEDING AND CURRENT ROW"
+            both = (
+                f"SELECT ts, inst, {sd}(_v) OVER ({over_s}) AS _s, {sd}(_v) OVER ({over_l}) AS _l, "
+                f"COUNT(_v) OVER ({over_s}) AS _cs FROM ({x_l.sql}) _b"
+            )
+            expr = (
+                f"CASE WHEN _cs < 2 THEN NULL WHEN _s IS NULL OR _l IS NULL THEN NULL "
+                f"ELSE LN((_s + 1e-12) / (_l + 1e-12)) END"
+            )
+            return _Layer(
+                f"SELECT ts, inst, {expr} AS _v FROM ({both}) _f",
+                has_inst_window=True,
+            )
+        return _Layer(
+            f"SELECT ts, inst, {expr} AS _v FROM ({x_l.sql}) t",
+            has_inst_window=True,
+        )
+
     if op in {
         "ts_argmax_age",
         "ts_argmin_age",

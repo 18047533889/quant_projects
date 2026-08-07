@@ -213,7 +213,12 @@ def _needs_python_route(record: dict[str, Any], *, ast_status: str = "") -> str:
         '== "high"' in code or "== 'high'" in code or '== "low"' in code or "== 'low'" in code
     ):
         return "volume_regime_string_compare"
-    if "groupby" in code or "maximum.accumulate" in code or "cumcount" in code:
+    # Only force the python route for groupby/cumcount when the translator did NOT
+    # already resolve them (e.g. the drawdown-duration idiom now rewrites to
+    # ts_current_drawdown_duration).  A successful translation wins.
+    if ast_status != "ready" and (
+        "groupby" in code or "maximum.accumulate" in code or "cumcount" in code
+    ):
         return "hard_python_pattern"
     return ""
 

@@ -208,6 +208,28 @@ class MicroMidReturnOp(SeriesOperator):
         return pct_change_by_session(pd.Series(mid))
 
 
+def _bipower_bv(
+    r: pd.Series, window: int, min_periods: int
+) -> pd.Series:
+    """Standard realised bipower variation on the same scale as RV=sum(r^2).
+
+    ``BV = (pi/2) * (n/(n-1)) * sum_{i}(|r_i||r_{i-1}|)`` where ``n`` is the
+    number of valid *returns* inside the rolling window (the ``n/(n-1)``
+    finite-sample correction is defined on returns, matching the standard
+    estimator) and the sum is a plain sum (matching ``sum(r^2)``).  This keeps
+    BV and RV directly comparable, which is what ``micro_jump_indicator``
+    needs.  NaN when fewer than two valid returns (i.e. one adjacent product)
+    are available in the window.
+    """
+    from cleaned_operators.microstructure.session import rolling_by_session
+
+    prod = r.abs() * r.abs().shift(1)
+    ret_cnt = rolling_by_session(r.notna().astype(float), window, "sum", min_periods=1)
+    rolled_sum = rolling_by_session(prod, window, "sum", min_periods=min_periods)
+    correction = ret_cnt / (ret_cnt - 1.0)
+    return (np.pi / 2.0) * correction * rolled_sum
+
+
 @register_operator(
     name="micro_bipower_var",
     category="intraday_microstructure",
@@ -217,27 +239,31 @@ class MicroMidReturnOp(SeriesOperator):
     status="experimental",
 )
 class MicroBipowerVarOp(SeriesOperator):
-    """Bipower variation：(pi/2) * rolling_mean(|r_t|*|r_{t-1}|)。"""
+    """Standard realised bipower variation（求和 + 有限样本修正，与 RV 同尺度）。
+
+    2026-08 修正：此前实现为 ``(pi/2) * rolling_mean(|r_t|*|r_{t-1}|)``，与
+    ``rolling_sum(r^2)`` 量纲不一致，导致 jump 分解失衡。现在改为标准 BV：
+    ``(pi/2) * (n/(n-1)) * rolling_sum(|r_t||r_{t-1}|)``。
+    """
 
     metadata = OperatorMetadata(
         name="micro_bipower_var",
         category="intraday_microstructure",
-        description="Bipower variation estimator",
+        description="Realized bipower variation (pi/2)*(n/(n-1))*sum(|r_t||r_{t-1}|)",
         param_names=["close"],
         return_type="series",
         tags=["microstructure"],
     )
 
     def _calculate_series(self, close, window: int = 20, min_periods: int = 2, **kwargs):
-        from cleaned_operators.microstructure.session import pct_change_by_session, rolling_by_session
+        from cleaned_operators.microstructure.session import pct_change_by_session
 
         w = int(window)
         mp = max(2, int(min_periods))
 
         def _bv(s):
             r = pct_change_by_session(pd.Series(s))
-            prod = r.abs() * r.abs().shift(1)
-            return (np.pi / 2.0) * rolling_by_session(prod, w, "mean", min_periods=mp)
+            return _bipower_bv(r, w, mp)
 
         if hasattr(close, "apply"):
             return close.apply(_bv)
@@ -253,12 +279,12 @@ class MicroBipowerVarOp(SeriesOperator):
     status="experimental",
 )
 class MicroJumpIndicatorOp(SeriesOperator):
-    """跳跃指示：max(RV - BV, 0)，RV=rolling sum(r^2)。"""
+    """跳跃指示：max(RV - BV, 0)，RV=rolling sum(r^2)，BV 用修正后标准 BV。"""
 
     metadata = OperatorMetadata(
         name="micro_jump_indicator",
         category="intraday_microstructure",
-        description="Jump indicator max(RV-BV,0)",
+        description="Jump indicator max(RV-BV,0) with corrected BV scale",
         param_names=["close"],
         return_type="series",
         tags=["microstructure"],
@@ -273,9 +299,7 @@ class MicroJumpIndicatorOp(SeriesOperator):
         def _jump(s):
             r = pct_change_by_session(pd.Series(s))
             rv = rolling_by_session(r.pow(2), w, "sum", min_periods=mp)
-            bv = (np.pi / 2.0) * rolling_by_session(
-                r.abs() * r.abs().shift(1), w, "mean", min_periods=mp
-            )
+            bv = _bipower_bv(r, w, mp)
             return (rv - bv).clip(lower=0.0)
 
         if hasattr(close, "apply"):
@@ -327,15 +351,21 @@ class MicroTradeImbalanceOp(SeriesOperator):
     status="experimental",
 )
 class MicroVpinOp(SeriesOperator):
-    """VPIN 代理：rolling sum(|r| * volume) / rolling sum(volume)。"""
+    """LEGACY PROXY —— 不是严格 VPIN。
+
+    现实现为 ``rolling sum(|r|*volume) / rolling sum(volume)``（成交量加权
+    |return| 强度），不是按等量桶构建的 order-flow toxicity 测度，也没有
+    BVC 买卖分类。**数学语义保持不变以保证历史复现**，仅作 legacy_proxy
+    保留。真正的 VPIN 见 ``micro_bvc_vpin``（P2/research）。
+    """
 
     metadata = OperatorMetadata(
         name="micro_vpin",
         category="intraday_microstructure",
-        description="Volume-synchronized |return| intensity proxy",
+        description="LEGACY proxy: volume-weighted absolute-return toxicity proxy; not true VPIN (see micro_bvc_vpin)",
         param_names=["close", "volume"],
         return_type="series",
-        tags=["microstructure"],
+        tags=["microstructure", "legacy_proxy"],
     )
 
     def _calculate_series(self, close, volume, window: int = 20, min_periods: int = 2, **kwargs):
@@ -362,15 +392,21 @@ class MicroVpinOp(SeriesOperator):
     status="experimental",
 )
 class MicroKyleLambdaOp(SeriesOperator):
-    """Kyle lambda 代理：rolling Cov(|r|, volume) / Var(volume)。"""
+    """LEGACY PROXY —— 不是严格 Kyle lambda。
+
+    现实现为 ``rolling Cov(|r|, volume) / Var(volume)``，不是对 signed flow
+    的日内回归，因此不是标准价格冲击系数。**数学语义保持不变以保证历史
+    复现**，仅作 legacy_proxy 保留。真正的价格冲击回归见
+    ``intraday_impact_beta`` / ``intraday_impact_asymmetry``。
+    """
 
     metadata = OperatorMetadata(
         name="micro_kyle_lambda",
         category="intraday_microstructure",
-        description="Kyle lambda proxy Cov(|ret|,vol)/Var(vol)",
+        description="LEGACY proxy: Cov(|ret|,vol)/Var(vol); not signed-flow Kyle lambda (see intraday_impact_beta)",
         param_names=["close", "volume"],
         return_type="series",
-        tags=["microstructure"],
+        tags=["microstructure", "legacy_proxy"],
     )
 
     def _calculate_series(self, close, volume, window: int = 20, min_periods: int = 2, **kwargs):

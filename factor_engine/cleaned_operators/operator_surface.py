@@ -50,7 +50,19 @@ _RELATION_EXPANSION_CANONICALS=frozenset({
 EXTENDED_ONLY_CANONICALS=frozenset({
 "earnings_yield","book_to_price","float_share_ratio","free_float_share_ratio","true_turnover_rate","limit_up_close","limit_down_close","tradable_state","benchmark_excess_return","benchmark_relative_price","holder_concentration","ADX","ATR_WILDER","MACD_hist","MACD_line","MACD_signal","RSI_WILDER","acos","asin","atan","atan2","cbrt","cos","cs_bucket","cs_bucket_fixed","cs_bucket_historical","cs_fill_mean","cs_fill_median","cs_multi_resid","cs_neutralize","cs_quantile","cs_rank_gaussian","cs_regression","cs_resid","cs_weighted_demean","cs_weighted_mean","cs_weighted_zscore","cs_wls_resid","industry_size_neutralize","size_neutralize","exp_neg","ffill_limit","fix","flex_max","flex_min","fundamental_staleness","group_percentile","group_ts_decay_linear","group_weighted_mean","group_weighted_zscore","is_nan","lerp","log10","log2","period_lag","period_stability","price_spread_deviation","real_turnover_rate","revision_delta","round","scale","saturate","sigmoid","signed_power","sin","sqrt_abs","square","true_range","truncate","ts_argmax","ts_argmin","ts_bottomk_mean","ts_bottomk_std","ts_bottomk_sum","ts_count_if","ts_days_since","ts_decay_exp_window","ts_decay_linear","ts_ema","ts_ewm_corr","ts_ewm_cov","ts_ewm_std","ts_ewm_var","ts_kurt","ts_last_if","ts_mad","ts_max_drawdown","ts_mean_if","ts_nth_value","ts_partial_corr","ts_product","ts_quantile","ts_ratio","ts_regression_intercept","ts_regression_r2","ts_regression_resid","ts_regression_in_sample_resid","ts_regression_forecast_error","ts_regression_forecast_error_z","ts_regression_resid_mean","ts_regression_slope","ts_regression_tstat","ts_skew","ts_std_if","ts_sum_if","ts_tail_mean","ts_time_slope","ts_topk_mean","ts_topk_std","ts_topk_sum","ts_trend_tstat","ts_true_streak","unitize","winsorize_mean",
 "coskewness_to_market","digital_count","expanding_rank","group_decay_linear","hump_decay","idio_skew","idio_vol","lqtp_historical_cvar","rank_corr","residual_momentum_capm","tail_beta","trade_when","ts_max_buildup","ts_moment","ts_poly2_coeff","ts_poly2_resid","ts_sma_cn","ts_sum_decay",
-})|_PROMOTED_RESEARCH_FACTORS|_TECHNICAL_EXTENSION_CANONICALS|_STRUCTURE_V2_CANONICALS|_LIQUIDITY_V2_CANONICALS|_TECHNICAL_V2_CANONICALS|_FUNDAMENTAL_V2_CANONICALS|_CANDLE_GEOMETRY_V2_CANONICALS|_OPERATOR_EXPANSION_CANONICALS|_RELATION_EXPANSION_CANONICALS|_REGRESSION_MODEL_CANONICALS
+})
+# 2026-08 stateful rule / episode / rotation pack (stateful.rule_language,
+# stateful.events, stateful.sequential, stateful.episode, stateful.survival,
+# stateful.rotation, stateful.drawdown_path).  Registered by a parallel session;
+# classified extended (in-progress review, not yet promoted to daily).
+_STATEFUL_RULE_CANONICALS=frozenset({
+"cross_event","cs_rank_churn","cs_tail_retention","directional_change_extent","directional_change_state",
+"event_refractory","state_deadband","state_ewm_if","state_hold","state_latch","state_since_reduce",
+"state_since_trend_tstat","state_slew_limit","ts_current_drawdown_area","ts_cusum_pressure",
+"ts_lag_of_peak_corr","ts_rank_if","ts_recovery_fraction","ts_state_age_percentile",
+"ts_state_exit_hazard","ts_state_residual_life",
+})
+EXTENDED_ONLY_CANONICALS=EXTENDED_ONLY_CANONICALS|_PROMOTED_RESEARCH_FACTORS|_TECHNICAL_EXTENSION_CANONICALS|_STRUCTURE_V2_CANONICALS|_LIQUIDITY_V2_CANONICALS|_TECHNICAL_V2_CANONICALS|_FUNDAMENTAL_V2_CANONICALS|_CANDLE_GEOMETRY_V2_CANONICALS|_OPERATOR_EXPANSION_CANONICALS|_RELATION_EXPANSION_CANONICALS|_REGRESSION_MODEL_CANONICALS|_STATEFUL_RULE_CANONICALS
 # Factor-shaped extended operators that have passed semantic/PIT review and are
 # NOT fail-closed migrate to the daily surface.  Recursive/stateful, source-blocked,
 # non-factor, promoted-research (still under certification) and experimental model
@@ -132,6 +144,64 @@ _DAILY_FINAL_PACK_2026_08 = frozenset({
     "intra_session_return_asymmetry", "intra_close_participation", "intra_high_low_affinity",
 })
 DAILY_FACTOR_MIGRATED = frozenset(set(DAILY_FACTOR_MIGRATED) | _DAILY_FINAL_PACK_2026_08)
+# 2026-08 alpha-language expansion: run/hysteresis state, path geometry,
+# distribution shift, volatility structure, cs locality, events + report
+# wrappers.  Same contract as the final pack: each module keeps its names in
+# EXTENDED_ONLY_CANONICALS at import (partition check) and this frozenset
+# migrates them to the daily surface.  Aliases (event_age etc.) resolve onto
+# already-daily canonicals and need no surface entry here.
+_DAILY_ALPHA_LANGUAGE_2026_08 = frozenset({
+    "ts_run_strength", "ts_run_efficiency", "ts_run_concentration",
+    "ts_hysteresis_state", "ts_hysteresis_age", "ts_state_integral",
+    "ts_state_entry_strength", "ts_transition_intensity", "ts_sign_persistence",
+    "ts_sign_cluster_index",
+    "ts_monotonicity", "ts_turning_rate", "ts_turning_intensity",
+    "ts_path_efficiency", "ts_roughness", "ts_trend_break_score",
+    "ts_weighted_time_centroid", "ts_endpoint_deviation", "ts_mass_concentration",
+    "ts_tail_imbalance", "ts_expected_shortfall_asymmetry", "ts_wasserstein_shift",
+    "ts_ks_shift", "ts_location_shift", "ts_scale_shift",
+    "ts_vol_of_vol", "ts_vol_acceleration", "ts_vol_term_structure",
+    "ts_semivariance_balance", "ts_realized_quarticity", "ts_vol_clustering",
+    "ts_leverage_effect", "ts_jump_bipower_proxy",
+    "cs_neighbor_gap", "cs_local_density", "cs_isolation", "cs_local_curvature",
+    "group_ex_self_std", "group_ex_self_mad", "group_ex_self_quantile",
+    "relation_weighted_std_ex_self",
+    "event_frequency", "event_cluster_count", "event_cluster_mean_size",
+    "report_rolling_mean", "report_yoy_lag",
+})
+DAILY_FACTOR_MIGRATED = frozenset(set(DAILY_FACTOR_MIGRATED) | _DAILY_ALPHA_LANGUAGE_2026_08)
+# 2026-08 stateful rule / episode / rotation pack: latch/hold/slew/deadband rule
+# language, refractory + crossing events, recursive CUSUM, episode reduce +
+# directional-change intrinsic time, state survival, cross-sectional rotation,
+# drawdown-path recovery.  Same contract as the final pack: each module keeps
+# its names in EXTENDED_ONLY_CANONICALS at import (partition check) and this
+# frozenset migrates them to the daily surface.
+_DAILY_STATEFUL_PACK_2026_08 = frozenset({
+    "state_latch", "state_hold", "state_slew_limit", "state_deadband",
+    "event_refractory", "cross_event",
+    "ts_cusum_pressure", "ts_rank_if", "state_ewm_if", "ts_lag_of_peak_corr",
+    "state_since_reduce", "directional_change_state", "directional_change_extent",
+    "state_since_trend_tstat",
+    "ts_state_age_percentile", "ts_state_exit_hazard", "ts_state_residual_life",
+    "cs_rank_churn", "cs_tail_retention",
+    "ts_recovery_fraction", "ts_current_drawdown_area",
+})
+DAILY_FACTOR_MIGRATED = frozenset(set(DAILY_FACTOR_MIGRATED) | _DAILY_STATEFUL_PACK_2026_08)
+# 2026-08 turnover-survival / weighted-risk / behavioural / order-flow families.
+# Each module keeps its names in EXTENDED_ONLY_CANONICALS at import (partition
+# contract) and this frozenset migrates them to the daily surface.
+_DAILY_CHIP_FLOW_PACK_2026_08 = frozenset({
+    "ts_turnover_reference_price", "ts_turnover_cost_dispersion",
+    "ts_turnover_profit_share", "ts_turnover_holding_age",
+    "ts_turnover_near_cost_mass", "ts_turnover_cost_quantile_distance",
+    "ts_stratified_mean_spread", "ts_weighted_semivariance",
+    "ts_weighted_expected_shortfall", "ts_weighted_drawdown_area",
+    "ts_cpt_value",
+    "intraday_bvc_imbalance", "intraday_impact_beta",
+    "intraday_impact_asymmetry", "intraday_return_wasserstein_shift",
+    "micro_bvc_vpin",
+})
+DAILY_FACTOR_MIGRATED = frozenset(set(DAILY_FACTOR_MIGRATED) | _DAILY_CHIP_FLOW_PACK_2026_08)
 RESEARCH_ONLY_CANONICALS=frozenset({"holder_concentration_change","holder_count_change_rate"});LEGACY_ONLY_CANONICALS=frozenset({"cube"});INTERNAL_ONLY_CANONICALS=frozenset({"constant","identity","protected_div"})
 HIDDEN_DAILY_NAMES=frozenset({"cube","cumulative_max","cumulative_mean","cumulative_min","fmax","fmin","inv","reciprocal","sqr"})
 def classify_canonical(canonical:str)->str:

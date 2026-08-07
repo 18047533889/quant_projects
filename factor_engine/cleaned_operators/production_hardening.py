@@ -163,6 +163,25 @@ _SCOPE_OVERRIDES: dict[str, str] = {
     "intra_session_return_asymmetry": "session_intraday",
     "intra_close_participation": "session_intraday",
     "intra_high_low_affinity": "session_intraday",
+    # 2026-08 stateful rule / episode pack (non ts_/cs_ prefixed names).
+    "state_latch": "ts",
+    "state_hold": "ts",
+    "state_slew_limit": "ts",
+    "state_deadband": "ts",
+    "event_refractory": "ts",
+    "cross_event": "ts",
+    "state_ewm_if": "ts",
+    "state_since_reduce": "ts",
+    "directional_change_state": "ts",
+    "directional_change_extent": "ts",
+    "state_since_trend_tstat": "ts",
+    # 2026-08 order-flow family: minute-frequency sources that aggregate one
+    # scalar per (date, symbol), so they are session-aware like intra_*.
+    "intraday_bvc_imbalance": "session_intraday",
+    "intraday_impact_beta": "session_intraday",
+    "intraday_impact_asymmetry": "session_intraday",
+    "intraday_return_wasserstein_shift": "session_intraday",
+    "micro_bvc_vpin": "session_intraday",
 }
 
 _FUNDAMENTAL_PERIOD_CANONICALS: frozenset[str] = frozenset({
@@ -277,8 +296,24 @@ def factor_production_targets() -> frozenset[str]:
     requested = (DAILY_CANONICALS | EXTENDED_ONLY_CANONICALS | RESEARCH_ONLY_CANONICALS).difference(UNSAFE_CANONICALS)
     active = {canonical for canonical in requested if OperatorRegistry.backends_for(canonical)}
     source_blocked = SOURCE_BLOCKED_CANONICALS
+    # Operators explicitly flagged compatibility/diagnostic/benchmark-only are
+    # reviewed non-default targets: they exist in the DSL but are not default
+    # production-admission subjects, so the audit must not iterate them.
+    non_default = {
+        canonical
+        for canonical in active
+        if any(
+            (OperatorRegistry._catalog.get(canonical) or {}).get(flag)
+            for flag in (
+                "compatibility_only", "diagnostic_only", "benchmark_only",
+                "hidden_from_default_mining",
+            )
+        )
+    }
     return frozenset(
-        active.difference(NON_FACTOR_PRODUCTION_CANONICALS).difference(source_blocked)
+        active.difference(NON_FACTOR_PRODUCTION_CANONICALS)
+        .difference(source_blocked)
+        .difference(non_default)
     )
 
 

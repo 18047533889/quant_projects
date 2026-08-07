@@ -126,6 +126,35 @@ _LOAD_MODULES = (
     "cleaned_operators.ashare.state_machine",
     "cleaned_operators.relation.distribution",
     "cleaned_operators.intraday.time_structure_v2",
+    # Alpha-language expansion (2026-08): run/hysteresis state, path geometry,
+    # distribution shift, volatility structure, cs locality, events + report.
+    "cleaned_operators.alpha_language_state",
+    "cleaned_operators.alpha_language_shape",
+    "cleaned_operators.alpha_language_distribution",
+    "cleaned_operators.alpha_language_volatility",
+    "cleaned_operators.alpha_language_cross",
+    "cleaned_operators.alpha_language_events",
+    # Stateful rule / episode / rotation pack (2026-08 CTA): latch/hold/slew/
+    # deadband rule language, refractory + crossing events, recursive CUSUM,
+    # episode reduce + directional-change intrinsic time, state survival,
+    # cross-sectional rotation, drawdown-path recovery.
+    "cleaned_operators.stateful.rule_language",
+    "cleaned_operators.stateful.events",
+    "cleaned_operators.stateful.sequential",
+    "cleaned_operators.stateful.episode",
+    "cleaned_operators.stateful.survival",
+    "cleaned_operators.stateful.rotation",
+    "cleaned_operators.stateful.drawdown_path",
+    # Turnover-survival / chip-cost family (2026-08): shared survival kernel and
+    # six cost-distribution primitives; weighted/stratified tail-risk family;
+    # cumulative prospect-theory value; order-flow → impact microstructure
+    # primitives (BV-C flow, impact regression, Wasserstein return shift, VPIN).
+    "cleaned_operators.turnover_survival",
+    "cleaned_operators.weighted_tail",
+    "cleaned_operators.prospect_theory",
+    "cleaned_operators.microstructure.flow_impact",
+    "cleaned_operators.polars_chip_tail",
+    "cleaned_operators.microstructure.polars_flow_impact",
 )
 
 _REVIEWED_EXTENSIONS = (
@@ -156,6 +185,9 @@ _REVIEWED_EXTENSIONS = (
     "cleaned_operators.fundamental.polars_fundamental",
     "cleaned_operators.fundamental.parameter_contract_v2",
     "cleaned_operators.production_policy_extensions_v2",
+    # Alpha-language aliases must load AFTER canonical targets exist
+    # (fin_* live in fundamental/transforms_v2 above).
+    "cleaned_operators.alpha_language_aliases",
 )
 
 

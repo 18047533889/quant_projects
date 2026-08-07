@@ -354,6 +354,13 @@ SQL_IMPLEMENTED_CANONICALS: frozenset[str] = frozenset(
         "ts_impulse_return",
         "ts_impulse_strength",
         "ts_impulse_volume",
+        # Alpha-language SQL subset (2026-08): window-function-natural ops.
+        "event_frequency",
+        "ts_semivariance_balance",
+        "ts_realized_quarticity",
+        "ts_vol_of_vol",
+        "ts_vol_acceleration",
+        "ts_vol_term_structure",
         "ts_prev_high",
         "ts_prev_low",
         "ts_distance_to_high",

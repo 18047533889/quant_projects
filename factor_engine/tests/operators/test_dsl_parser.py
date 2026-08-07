@@ -52,3 +52,29 @@ def test_parse_expr_comparison_ops():
     parse_expr("close > open")
     parse_expr('col("x") > col("y")')
     parse_expr('col("x") <= 1.0')
+
+
+def test_parse_expr_bitwise_logical_ops():
+    """CogAlpha pandas code uses & | ~ for elementwise boolean logic; these map
+    onto the daily logical operators and_/or_/not_ so translated DSL validates."""
+    expr = parse_expr("(close > open) & (volume > 1)")
+    assert isinstance(expr, CleanedCall)
+    assert expr.op == "and_"
+    expr = parse_expr("(close > open) | (volume > 0)")
+    assert expr.op == "or_"
+    expr = parse_expr("~(close > open)")
+    assert expr.op == "not_"
+    # Chained & lowers to nested and_.
+    expr = parse_expr("(close > open) & (volume > 1) & (high > low)")
+    assert expr.op == "and_"
+
+
+def test_parse_expr_keyword_not():
+    """dsl_to_lqtp rewrites not_(x) to infix (not x); the FE parser must accept it."""
+    expr = parse_expr("(not (close >= open))")
+    assert expr.op == "not_"
+
+
+def test_parse_expr_protected_div_maps_to_safe_div():
+    """protected_div is FE-internal; safe_div is the daily/LQTP-aligned name."""
+    parse_expr("safe_div(volume, ema(volume, 20))")

@@ -98,6 +98,56 @@ PROMOTED_OUT_OF_EXPERIMENTAL: frozenset[str] = frozenset({
     # there too).
     "ts_permutation_entropy",
     "ts_sample_entropy",
+    # 2026-08 production audit follow-up: 295 previously experimental-registered
+    # daily operators verified runtime-clean by the factor-production audit
+    # harness (deterministic, shape-preserving, prefix-causal on the synthetic
+    # panels) and promoted to production.  The in-sample diagnostic family
+    # (ts_*_regression_coeff/resid/slope without the *_prior / forecast_error
+    # suffix, ts_ar_forecast/innovation*, ts_mean_reversion_half_life) stays
+    # experimental by design; the promoted entries below are their causal
+    # variants plus the reviewed relation/index/event/fundamental/shareholder/
+    # intraday-minute families (audit §5-§12).
+    "a_share_cap_ratio", "altman_z_score", "ashare_limit_distance", "ashare_limit_down_touch", "ashare_limit_failed", "ashare_limit_one_price", "ashare_limit_open_failed", "ashare_limit_up_touch",
+    "ashare_open_at_upper_limit", "benchmark_excess_return", "benchmark_relative_price", "book_to_price", "calendar_day_diff", "capital_change_age", "capital_change_magnitude", "circulating_cap_unlock_proxy",
+    "cs_actual_lof_score", "cs_knn_distance", "cs_local_density_score", "cs_mahalanobis_distance", "cs_quantile_resid", "cs_relative_density_ratio", "cs_residual_percentile", "cs_ridge_resid",
+    "cs_robust_mahalanobis_mad", "cs_robust_resid", "cs_shrinkage_mahalanobis", "cs_spline_resid", "earnings_yield", "event_abnormal_return_past", "event_active_count", "event_arithmetic_return_sum",
+    "event_cumulative_return_past", "event_decay_asof", "event_log_return_sum", "event_return_since_last", "fin_acquisition_cash_intensity", "fin_announcement_lag", "fin_applicability_mask", "fin_borrowing_intensity",
+    "fin_capex_growth", "fin_capex_intensity", "fin_cash_burn_runway", "fin_cash_sales_divergence", "fin_cashflow_persistence", "fin_comprehensive_income_gap", "fin_contract_asset_growth", "fin_contract_asset_intensity",
+    "fin_contract_asset_liability_gap", "fin_contract_liability_growth", "fin_contract_liability_intensity", "fin_core_earnings_ratio", "fin_debt_repayment_intensity", "fin_debt_service_coverage_proxy", "fin_deferred_tax_gap", "fin_delta_noa",
+    "fin_discontinued_operation_ratio", "fin_earnings_cash_gap_volatility", "fin_earnings_persistence", "fin_earnings_smoothness", "fin_equity_capital_growth", "fin_expense_sales_divergence", "fin_fair_value_income_dependence", "fin_financing_gap",
+    "fin_fundamental_strength_score", "fin_goodwill_intensity", "fin_goodwill_risk_score", "fin_impairment_intensity", "fin_interest_coverage_proxy", "fin_inventory_sales_divergence", "fin_investment_income_dependence", "fin_lease_asset_liability_gap",
+    "fin_lease_intensity", "fin_margin_persistence", "fin_minority_profit_share", "fin_net_borrowing_cashflow", "fin_net_debt_issuance", "fin_noncore_income_ratio", "fin_oci_to_equity", "fin_other_earnings_dependence",
+    "fin_rd_capitalization_ratio", "fin_rd_total_intensity", "fin_receivable_sales_divergence", "fin_roe_cash_gap", "fin_working_capital_accruals", "float_share_ratio", "free_float_ratio", "free_float_share_ratio",
+    "free_float_turnover", "free_to_circulating_ratio", "group_ex_self_mean", "group_ex_self_weighted_mean", "group_leader_laggard_exposure", "group_multi_level_rank_consistency", "group_peer_beta_deviation", "group_peer_deviation_index",
+    "group_peer_information_diffusion", "group_return_dispersion_exposure", "hierarchical_group_neutralize", "holder_class_entropy", "holder_common_holding_peer_return", "holder_concentration", "holder_float_concentration_gap", "holder_freeze_concentration",
+    "holder_freeze_ratio", "holder_id_matched_churn", "holder_id_matched_entry_share", "holder_id_matched_exit_share", "holder_id_overlap_ratio", "holder_locked_share_ratio", "holder_nature_entropy", "holder_peer_return_breadth",
+    "holder_pledge_change", "holder_pledge_churn", "holder_pledge_concentration", "holder_pledge_ratio", "holder_pledged_holder_count", "holder_share_weighted_rank_migration", "holder_shareholder_network_centrality", "holder_shareholder_overlap_ratio",
+    "index_entry_exit_event", "index_event_decay", "index_member", "index_membership_age", "index_weight", "index_weight_change", "index_weight_gap_to_free_float", "intra_abs_return_profile_cosine",
+    "intra_amihud", "intra_amount_profile_cosine", "intra_amount_profile_jsd", "intra_beta_asymmetry", "intra_bipower_variation", "intra_concentration", "intra_continuous_variance", "intra_down_down_semibeta",
+    "intra_down_up_semibeta", "intra_drawdown_depth", "intra_drawdown_duration", "intra_drawdown_recovery_half_life", "intra_entropy", "intra_extreme_bar_return", "intra_high_time", "intra_idiosyncratic_kurtosis",
+    "intra_idiosyncratic_kurtosis_ex_self", "intra_idiosyncratic_skewness", "intra_idiosyncratic_skewness_ex_self", "intra_idiosyncratic_variance", "intra_idiosyncratic_variance_ex_self", "intra_interval_amount_share", "intra_interval_illiquidity", "intra_interval_realized_variance",
+    "intra_interval_return", "intra_interval_volume_share", "intra_interval_vwap_deviation", "intra_jump_clustering", "intra_jump_concentration", "intra_jump_count", "intra_jump_first_time", "intra_jump_last_time",
+    "intra_jump_ratio", "intra_jump_variation", "intra_kyle_lambda_proxy", "intra_limit_duration", "intra_limit_first_hit_time", "intra_limit_reopen_count", "intra_longest_above_vwap_streak", "intra_longest_below_vwap_streak",
+    "intra_low_time", "intra_lunch_gap_return", "intra_market_model_r2", "intra_market_model_r2_ex_self", "intra_max_drawdown", "intra_max_drawup", "intra_negative_jump_variation", "intra_negative_tail_variation",
+    "intra_path_efficiency", "intra_positive_jump_variation", "intra_positive_tail_variation", "intra_price_vwap_max_negative_excursion", "intra_price_vwap_max_positive_excursion", "intra_profile_earth_mover_distance", "intra_realized_beta", "intra_realized_beta_ex_self",
+    "intra_realized_correlation", "intra_realized_correlation_ex_self", "intra_realized_kurtosis", "intra_realized_quarticity", "intra_realized_semivariance", "intra_realized_skewness", "intra_realized_variance", "intra_return_activity_corr",
+    "intra_return_profile_cosine", "intra_same_slot_momentum", "intra_same_slot_reversal", "intra_segment_amount_share", "intra_segment_realized_vol", "intra_segment_return", "intra_segment_volume_share", "intra_segment_vwap_deviation",
+    "intra_signed_imbalance_proxy", "intra_signed_jump_ratio", "intra_signed_return_profile_cosine", "intra_signed_tail_variation_ratio", "intra_tail_event_count", "intra_time_above_vwap", "intra_tripower_quarticity", "intra_up_down_semibeta",
+    "intra_up_up_semibeta", "intra_volume_profile_cosine", "intra_volume_profile_jsd", "intra_vwap_above_ratio", "intra_vwap_cross_count", "intra_vwap_path_curvature", "intra_vwap_path_curvature_pct", "intra_vwap_path_slope",
+    "intra_vwap_path_slope_pct", "intra_vwap_reversion_speed", "market_cap_free_cap_gap", "piotroski_f_score", "real_turnover_rate", "relation_category_share", "relation_entropy", "relation_hhi",
+    "relation_peer_weighted_mean_ex_self", "relation_rank_weighted_sum", "relation_topk_sum", "suspension_status_coverage", "tradable_state", "ts_abs_concentration", "ts_abs_entropy", "ts_ar_coeff_stability",
+    "ts_ar_coefficient", "ts_ar_prior_coeff", "ts_ar_prior_forecast", "ts_ar_prior_innovation", "ts_ar_prior_innovation_z", "ts_best_lag_corr", "ts_beta_if", "ts_corr_if",
+    "ts_current_drawdown_duration", "ts_cusum_break_score", "ts_downside_deviation", "ts_event_spacing_cv", "ts_event_spacing_mean", "ts_expectile_beta_spread", "ts_expectile_regression_coeff_prior", "ts_expectile_regression_forecast_error",
+    "ts_gap_fill_ratio", "ts_gap_reversion_ratio", "ts_gap_survival_duration", "ts_huber_regression_coeff_prior", "ts_huber_regression_forecast_error", "ts_huber_regression_forecast_error_z", "ts_industry_liquidity_beta", "ts_level_shift_score",
+    "ts_market_liquidity_beta", "ts_max_if", "ts_min_if", "ts_multi_regression_adjusted_r2_prior", "ts_multi_regression_coeff_prior", "ts_multi_regression_coeff_stability", "ts_multi_regression_forecast_error", "ts_multi_regression_forecast_error_z",
+    "ts_multi_regression_r2_prior", "ts_negative_ratio", "ts_opening_mispricing_score", "ts_overnight_intraday_cov", "ts_overnight_intraday_sign_agreement", "ts_overnight_intraday_spread", "ts_positive_ratio", "ts_price_delay",
+    "ts_quantile_beta_spread", "ts_quantile_if", "ts_quantile_range", "ts_regression_resid_if", "ts_ridge_regression_coeff_prior", "ts_ridge_regression_forecast_error", "ts_ridge_regression_forecast_error_z", "ts_robust_zscore",
+    "ts_time_since_change", "ts_time_under_water", "ts_transition_count", "ts_trimmed_mean", "ts_upside_deviation", "ts_variance_ratio", "ts_variance_ratio_slope", "ts_vol_shift_score",
+    "ts_zero_ratio", "valuation_cashflow_disagreement", "valuation_growth_mismatch", "valuation_pcf_definition_gap", "valuation_pe_ttm_lyr_gap", "valuation_quality_mismatch", "zmijewski_score",
+    # 2026-08: holder concentration trend slope/acceleration verified against
+    # the snapshot-aligned window (audit §6.8); snapshot_date fixture added.
+    "holder_concentration_acceleration",
+    "holder_concentration_slope",
 })
 
 
@@ -153,6 +203,18 @@ _BENCHMARK_ONLY = frozenset({
     "intra_realized_beta", "intra_realized_correlation",
     "intra_idiosyncratic_variance",
 })
+# Legacy order-flow proxies whose names over-claim what they compute
+# (audit 2026-08).  They stay registered and experimental for historical
+# reproducibility; the metadata advertises that they are NOT the strict
+# quantities their names suggest and names the real replacements.
+_LEGACY_PROXY_CANONICALS = frozenset({
+    "micro_vpin",
+    "micro_kyle_lambda",
+})
+_LEGACY_PROXY_REPLACEMENTS = {
+    "micro_vpin": ["micro_bvc_vpin", "intraday_bvc_imbalance"],
+    "micro_kyle_lambda": ["intraday_impact_beta", "intraday_impact_asymmetry"],
+}
 # Shareholder rank-slot naming consolidation (audit §6.1/§6.2).  The historic
 # holder_weighted_churn family was reworked 2026-08 to the ShareholderId-matched
 # union pair, so those legacy names are functionally the ID-matched
@@ -208,6 +270,20 @@ def stamp_compatibility_metadata() -> None:
             continue
         entry["benchmark_only"] = True
         entry.setdefault("semantic_note", "非 ex-self 市场模型仅作 benchmark/legacy;默认搜索使用 *_ex_self 版本")
+    for canon in _LEGACY_PROXY_CANONICALS:
+        entry = OperatorRegistry._catalog.get(canon)
+        if entry is None:
+            continue
+        entry["legacy_proxy"] = True
+        entry["hidden_from_default_mining"] = True
+        replacement = _LEGACY_PROXY_REPLACEMENTS.get(canon)
+        if replacement:
+            entry["preferred_replacements"] = list(replacement)
+        entry.setdefault(
+            "semantic_note",
+            "legacy 代理: 数学语义不是其名字所指的严格测度(非 BVC VPIN / 非 signed-flow Kyle λ);"
+            "保留以维持历史复现, 新研究请用 preferred_replacements",
+        )
     for canon, replacements in _RANK_SLOT_ALIAS_REPLACEMENTS.items():
         entry = OperatorRegistry._catalog.get(canon)
         if entry is None:

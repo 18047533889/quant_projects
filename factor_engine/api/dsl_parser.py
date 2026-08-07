@@ -31,6 +31,12 @@ class _ExprBuilder:
         if isinstance(node,ast.BinOp):return self._visit_binop(node)
         if isinstance(node,ast.UnaryOp) and isinstance(node.op,ast.USub):return -self._visit(node.operand)
         if isinstance(node,ast.UnaryOp) and isinstance(node.op,ast.UAdd):return self._visit(node.operand)
+        if isinstance(node,ast.UnaryOp) and isinstance(node.op,ast.Invert):
+            from api.cleaned_ops import make_cleaned_call_factory
+            return make_cleaned_call_factory("not_")(self._visit(node.operand))
+        if isinstance(node,ast.UnaryOp) and isinstance(node.op,ast.Not):
+            from api.cleaned_ops import make_cleaned_call_factory
+            return make_cleaned_call_factory("not_")(self._visit(node.operand))
         if isinstance(node,ast.Constant):
             if isinstance(node.value,(str,int,float,bool)) or node.value is None:return node.value
             raise DSLParseError(f"Unsupported literal: {node.value!r}")
@@ -70,6 +76,14 @@ class _ExprBuilder:
         if isinstance(node.op,ast.Pow):
             from api.cleaned_ops import make_cleaned_call_factory
             return make_cleaned_call_factory("power")(left,right)
+        # CogAlpha pandas code uses bitwise & | ~ for elementwise boolean logic;
+        # map onto the daily logical operators and_/or_/not_.
+        if isinstance(node.op,ast.BitAnd):
+            from api.cleaned_ops import make_cleaned_call_factory
+            return make_cleaned_call_factory("and_")(left,right)
+        if isinstance(node.op,ast.BitOr):
+            from api.cleaned_ops import make_cleaned_call_factory
+            return make_cleaned_call_factory("or_")(left,right)
         raise DSLParseError(f"Unsupported binary operator: {type(node.op).__name__}")
 
 def _is_field_identifier(name:str)->bool:return bool(name) and not name[0].isdigit() and all(c.isalnum() or c=="_" for c in name)

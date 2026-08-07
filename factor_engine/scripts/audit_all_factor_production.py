@@ -49,7 +49,8 @@ _PANEL_PARAMETERS = frozenset({
     # Operator expansion (2026-08) panel inputs.
     "pre_close", "subgroup", "member", "index_weight", "date1", "date2",
     "period_end_date", "pub_date", "state", "event", "entity_id",
-    "snapshot_id", "high_limit", "low_limit", "stock_return",
+    "snapshot_id", "snapshot_date", "previous_snapshot_date",
+    "high_limit", "low_limit", "stock_return",
     "benchmark_return", "category", "day_vwap", "current_snapshot",
     "previous_snapshot", "weights2", "s1", "s2", "s3",
     # Minute/relation integration (2026-08).
@@ -99,6 +100,8 @@ _PANEL_PARAMETERS = frozenset({
     "known_status", "is_suspend", "hhi", "entropy",
     "rank1", "rank2", "rank3", "rank4", "rank5",
     "rank6", "rank7", "rank8", "rank9", "rank10",
+    # 2026-08 stateful rule/episode pack condition panels.
+    "set_condition", "reset_condition", "update_condition",
 })
 
 # Params whose generic names also appear in _SCALAR_VALUES but are PANEL series
@@ -198,6 +201,16 @@ _SCALAR_VALUES: dict[str, Any] = {
     "left_window": 3,
     "right_window": 3,
     "history_window": 60,
+    "max_lag": 5,
+    "drift": 0.5,
+    "cooldown": 5,
+    "half_life": 10,
+    "initial_state": 0,
+    "min_episode": 2,
+    "min_completed_runs": 20,
+    "max_age": 60,
+    "direction": "up",
+    "band": 0.05,
     "points": 3,
     "std_dev": 2.0,
     "skipna": True,
@@ -284,6 +297,10 @@ _SCALAR_VALUES: dict[str, Any] = {
     "scale": 1e8,
     "half_life": 20.0,
     "score_weights": 1.0,
+    # 2026-08 alpha-language expansion params.
+    "max_run": 5,
+    "cap": 60,
+    "split": 0.5,
     "morning_cutoff": "11:30",
     "afternoon_start": "13:00",
     "event_effective_lag": 1,
@@ -333,9 +350,14 @@ _SCALAR_VALUES: dict[str, Any] = {
     "min_patterns": 5,
     "min_valid_lags": 3,
     "normalized": True,
+    # 2026-08 turnover-survival / behavioural / order-flow family scalars.
+    "preset": "bmw2016",
+    "bucket_count": 20,
 }
 
 _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
+    ("cs_tail_retention", "side"): "top",
+    ("state_since_reduce", "mode"): "sum",
     ("cs_rank_gaussian", "method"): "blom",
     ("cs_regression", "mode"): 0,
     ("cs_quantile", "p"): 0.5,
@@ -348,6 +370,16 @@ _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
     ("period_stability", "method"): "std",
     ("ts_nth_value", "order"): "largest",
     ("ts_permutation_entropy", "order"): 4,
+    # 2026-08 alpha-language state ops require 0 <= lower < upper; override the
+    # signed global upper/lower for them.
+    ("ts_hysteresis_age", "lower"): 0.0,
+    ("ts_hysteresis_age", "upper"): 1.0,
+    ("ts_hysteresis_state", "lower"): 0.0,
+    ("ts_hysteresis_state", "upper"): 1.0,
+    ("ts_state_entry_strength", "lower"): 0.0,
+    ("ts_state_entry_strength", "upper"): 1.0,
+    ("ts_state_integral", "lower"): 0.0,
+    ("ts_state_integral", "upper"): 1.0,
     ("ts_ar_forecast", "order"): 3,
     ("ts_ar_innovation", "order"): 3,
     ("ts_ar_innovation_z", "order"): 3,
@@ -377,6 +409,8 @@ _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
     ("yoy_by_period", "denominator"): "signed",
     ("ts_downside_deviation", "target"): 0.0,
     ("ts_upside_deviation", "target"): 0.0,
+    ("ts_weighted_semivariance", "target"): 0.0,
+    ("ts_weighted_expected_shortfall", "side"): "lower",
     ("intra_limit_first_hit_time", "side"): "up",
     ("intra_limit_duration", "side"): "up",
     ("intra_limit_reopen_count", "side"): "up",
@@ -460,6 +494,9 @@ _MINUTE_PANEL_PARAMS: dict[str, str] = {
     "return": "minute_ret",
     "returns": "minute_ret",
     "x": "minute_close",
+    # 2026-08 order-flow family inputs.
+    "flow": "minute_ret",
+    "locked": "minute_zero",
 }
 
 # Minute-source operators also consume a few daily panels that are broadcast
@@ -543,6 +580,9 @@ def _minute_panels(dates, assets, rows):
         "minute_abs_return": frame(absret3),
         "minute_ret": minute_ret,
         "minute_vwap": frame(amt3 / vol3),
+        # 2026-08 order-flow family: no limit-locked bars in the audit fixture,
+        # so the ``locked`` mask is all zeros (neutral override not exercised).
+        "minute_zero": frame(np.zeros((n_days * per, columns))),
     }
 
 
@@ -687,6 +727,8 @@ def _panels(rows: int = 220, columns: int = 6) -> dict[str, pd.DataFrame]:
         "decision_time": decision,
         "available_time": available,
         "available_at": available,
+        "snapshot_date": decision,
+        "previous_snapshot_date": available,
         "exposure": market,
         "exposures": market,
         "control": control,
@@ -712,6 +754,8 @@ def _panels(rows: int = 220, columns: int = 6) -> dict[str, pd.DataFrame]:
         "expected": close,
         "expected_std": close.abs() * 0.1 + 1.0,
         "expected_mean": close,
+        # 2026-08 stratified-mean-spread sorter input (volume-sorted recipes).
+        "sorter": volume,
     }
     panels.update(_minute_panels(dates, assets, rows))
     for name in sorted(_PANEL_PARAMETERS):
