@@ -29,6 +29,7 @@ from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_op
 from cleaned_operators.fundamental.transforms_v2 import (
     _lag_value,
     _pos_int,
+    _safe_div,
     _values,
     _walk_periods,
 )
@@ -39,6 +40,8 @@ from cleaned_operators.rolling_pack import (
     register_polars_bridge,
     valid_values,
 )
+
+_EPS = 1e-12
 
 
 def _metadata(name: str, description: str, params: list[str], *, unit: str) -> OperatorMetadata:
@@ -240,12 +243,102 @@ _register_report_operator(
 )
 
 
+def _make_change_z(periods: int):
+    """Report-observation change z-score: current period-over-period relative
+    change standardized by the MAD of that field's own change history over the
+    *visible* report ordinals (strictly-past, PIT-safe)."""
+
+    def calc(order, visible, current):
+        val = visible.get(current, np.nan)
+        lag = _lag_value(order, visible, current, periods)
+        chg = _safe_div(val, lag) - 1.0
+        if not np.isfinite(chg):
+            return np.nan
+        hist: list[float] = []
+        for k in order:
+            if k == current:
+                continue
+            v = visible.get(k, np.nan)
+            l = _lag_value(order, visible, k, periods)
+            if np.isfinite(v) and np.isfinite(l) and abs(l) > _EPS:
+                c = _safe_div(v, l) - 1.0
+                if np.isfinite(c):
+                    hist.append(c)
+        if len(hist) < 3:
+            return np.nan
+        arr = np.asarray(hist, dtype=float)
+        med = float(np.median(arr))
+        mad = float(np.median(np.abs(arr - med)))
+        if not np.isfinite(mad) or mad <= _EPS:
+            return np.nan
+        return chg / mad
+
+    return calc
+
+
+def _report_change_z3(f1, f2, f3, period_id, periods):
+    z1 = _walk_periods(f1, period_id, _make_change_z(periods))
+    z2 = _walk_periods(f2, period_id, _make_change_z(periods))
+    z3 = _walk_periods(f3, period_id, _make_change_z(periods))
+    return np.stack(
+        [
+            z1.to_numpy(dtype=float),
+            z2.to_numpy(dtype=float),
+            z3.to_numpy(dtype=float),
+        ]
+    )
+
+
+def _report_change_breadth(f1, f2, f3, period_id, periods=1, eps=0.5):
+    p = _pos_int(periods, "periods")
+    eps_v = float(eps)
+    a = _report_change_z3(f1, f2, f3, period_id, p)
+    K = a.shape[0]
+    pos = np.sum(a > eps_v, axis=0)
+    neg = np.sum(a < -eps_v, axis=0)
+    breadth = (pos - neg) / K
+    breadth[np.isnan(a).any(axis=0)] = np.nan
+    return pd.DataFrame(breadth, index=f1.index, columns=f1.columns, dtype=float)
+
+
+def _report_change_coherence(f1, f2, f3, period_id, periods=1):
+    p = _pos_int(periods, "periods")
+    a = _report_change_z3(f1, f2, f3, period_id, p)
+    K = a.shape[0]
+    any_fin = np.isfinite(a).any(axis=0)
+    med = np.full(a.shape[1:], np.nan)
+    with np.errstate(invalid="ignore"):
+        med[any_fin] = np.nanmedian(a[:, any_fin], axis=0)
+    ok = any_fin & np.isfinite(med) & (np.abs(med) > 0.0) & ~np.isnan(a).any(axis=0)
+    sgn = np.sign(med)
+    agree = np.sum(np.sign(a) == sgn[None, :, :], axis=0)
+    coh = np.full(a.shape[1:], np.nan)
+    coh[ok] = agree[ok] / K
+    return pd.DataFrame(coh, index=f1.index, columns=f1.columns, dtype=float)
+
+
+_register_report_operator(
+    "report_change_breadth",
+    ("f1", "f2", "f3", "period_id", "periods", "eps"),
+    _report_change_breadth,
+    "基本面变化广泛度: (上升字段数 - 下降字段数) / K, 每个字段按其自身报告历史 MAD 标准化。",
+)
+_register_report_operator(
+    "report_change_coherence",
+    ("f1", "f2", "f3", "period_id", "periods"),
+    _report_change_coherence,
+    "基本面各维度变化方向一致性: 与主导符号一致的字段比例 [0,1]。",
+)
+
+
 _NEW_CANONICALS = (
     "event_frequency",
     "event_cluster_count",
     "event_cluster_mean_size",
     "report_rolling_mean",
     "report_yoy_lag",
+    "report_change_breadth",
+    "report_change_coherence",
 )
 
 

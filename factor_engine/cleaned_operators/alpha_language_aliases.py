@@ -24,6 +24,9 @@ _ALIASES = {
     "report_rolling_std": "fin_std",
     "report_rank": "fin_percentile_history",
     "report_surprise_to_trend": "fin_surprise_zscore",
+    # intraday signed jump balance == intra_signed_jump_ratio
+    # ((posJV-negJV)/(posJV+negJV)) — exact duplicate, registered as an alias.
+    "intraday_signed_jump_balance": "intra_signed_jump_ratio",
 }
 
 

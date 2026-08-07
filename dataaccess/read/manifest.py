@@ -56,8 +56,12 @@ _MANIFEST_COLUMNS = [
 ]
 
 
-def _norm_value(value: Any) -> str | None:
-    """把 parquet 统计值规范化为可比较字符串。"""
+def _norm_value(value: Any) -> Any:
+    """把 parquet 统计值规范化为可比较键（数值保留数值，时间保留全精度 iso）。
+
+    注意：不再把 int/float 字符串化（避免 ``"9" > "10"`` 字典序 bug），
+    也不再对字符串 ``[:10]`` 截断（保留 intraday 全精度）。
+    """
     if value is None:
         return None
     if isinstance(value, datetime):
@@ -65,7 +69,7 @@ def _norm_value(value: Any) -> str | None:
     if isinstance(value, date):
         return value.isoformat()
     if isinstance(value, (int, float)):
-        return str(value)
+        return value
     return str(value)
 
 
@@ -78,8 +82,8 @@ def _time_key(value: Any) -> Any:
     if isinstance(value, date):
         return value.isoformat()
     if isinstance(value, (int, float)):
-        return str(value)
-    return str(value)[:10]
+        return value
+    return str(value)
 
 
 @dataclass(frozen=True)
@@ -132,6 +136,25 @@ class DatasetManifest:
     files: tuple[ManifestFile, ...] = ()
     row_groups: tuple[ManifestRowGroup, ...] | None = None
     created_at: str | None = None
+    time_dtype: str | None = None       # date / timestamp / int64 / float64 / string（typed 比较用）
+    manifest_epoch: str | None = None   # 写路径 mutation 后递增；读路径信任它（O(1) freshness）
+
+    def _typed(self, value: str | None, *, ints: bool = False) -> Any:
+        """把 manifest 里存的 min/max 按 time_dtype 还原成可比较类型。"""
+        if value is None:
+            return None
+        td = (self.time_dtype or "").lower()
+        if "int" in td or ints:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return value
+        if "float" in td:
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return value
+        return value
 
     @property
     def total_rows(self) -> int:
@@ -193,7 +216,10 @@ class DatasetManifest:
         tmp = root / f".{MANIFEST_FILENAME}.tmp"
         pq.write_table(table, tmp)
         os.replace(str(tmp), str(out))
+        if self.row_groups:
+            _save_row_groups(root, self.row_groups)
         # meta 放独立 JSON sidecar（footer key-value metadata 各版本 pyarrow 行为不稳）
+        epoch = self.manifest_epoch or _next_epoch(_read_epoch(root))
         meta_path = root / _MANIFEST_META_FILENAME
         tmp_meta = root / f".{_MANIFEST_META_FILENAME}.tmp"
         tmp_meta.write_text(
@@ -203,6 +229,8 @@ class DatasetManifest:
                     "time_column": self.time_column,
                     "instrument_column": self.instrument_column,
                     "format": self.format,
+                    "time_dtype": self.time_dtype,
+                    "manifest_epoch": epoch,
                     "created_at": self.created_at,
                     "file_count": self.file_count,
                     "dataset_version": self.dataset_version,
@@ -250,26 +278,48 @@ class DatasetManifest:
             instrument_column=meta.get("instrument_column"),
             format=meta.get("format", "parquet"),
             files=tuple(files),
+            row_groups=_load_row_groups(root),
             created_at=meta.get("created_at"),
+            time_dtype=meta.get("time_dtype"),
+            manifest_epoch=meta.get("manifest_epoch"),
         )
 
     def prune_by_time(
         self, time_range: tuple[Any, Any] | None
     ) -> list[str]:
-        """返回与 time_range 有交集的文件路径（按 min/max_time 裁剪）。"""
+        """返回与 time_range 有交集的文件路径（按 min/max_time 裁剪）。
+
+        min/max 比较是类型化的（#19）：int64 时间列按数值比较，避免
+        ``"9" > "10"`` 字典序 bug；date/timestamp 按 isoformat 字符串比较。
+        """
         if time_range is None or self.time_column is None:
             return [f.path for f in self.files]
         start_key = _time_key(time_range[0])
         end_key = _time_key(time_range[1])
+        ints = "int" in (self.time_dtype or "").lower()
+        if isinstance(start_key, (int, float)):
+            ints = True
+        if isinstance(end_key, (int, float)):
+            ints = True
         out: list[str] = []
         for f in self.files:
             if f.min_time is None or f.max_time is None:
                 out.append(f.path)
                 continue
-            if start_key is not None and f.max_time < start_key:
-                continue
-            if end_key is not None and f.min_time > end_key:
-                continue
+            lo = self._typed(f.min_time, ints=ints)
+            hi = self._typed(f.max_time, ints=ints)
+            if start_key is not None and hi is not None:
+                try:
+                    if hi < start_key:
+                        continue
+                except TypeError:
+                    pass
+            if end_key is not None and lo is not None:
+                try:
+                    if lo > end_key:
+                        continue
+                except TypeError:
+                    pass
             out.append(f.path)
         return out
 
@@ -344,6 +394,8 @@ def _read_manifest_meta_json(root: Path) -> dict[str, str]:
         "instrument_column": payload.get("instrument_column"),
         "format": str(payload.get("format", "parquet")),
         "created_at": payload.get("created_at"),
+        "time_dtype": payload.get("time_dtype"),
+        "manifest_epoch": payload.get("manifest_epoch"),
     }
 
 
@@ -387,10 +439,16 @@ def _count_data_files(glob_paths: Sequence[str]) -> int | None:
 
 
 def is_manifest_fresh(manifest: DatasetManifest, glob_paths: Sequence[str]) -> bool:
-    """文件名级新鲜度检查：glob 展开数量与 manifest 文件数一致才信任。
+    """新鲜度检查（默认 O(1)）：写路径维护 ``manifest_epoch`` → 读路径信任。
 
-    只做文件名 glob（不读 footer），远快于逐文件 pq.read_metadata。
+    只有旧格式（无 epoch 的 ``_manifest.json``）才退回文件名 glob 比对，保证
+    老 manifest 在重建前仍然可用。新 manifest 不再在 read path 做 O(N) glob。
     """
+    root = manifest_root_for_paths(list(glob_paths) if glob_paths else [])
+    if root is not None:
+        meta = manifest_version_token(root)
+        if meta is not None and meta.get("manifest_epoch") is not None:
+            return True
     count = _count_data_files(glob_paths)
     if count is None:
         return True
@@ -413,6 +471,99 @@ def manifest_version_token(root: Path) -> dict[str, Any] | None:
     if not isinstance(payload, dict):
         return None
     return payload
+
+
+_ROW_GROUPS_FILENAME = "_manifest_rowgroups.parquet"
+
+
+def _next_epoch(existing: str | None) -> str:
+    try:
+        return str(int(existing or 0) + 1)
+    except ValueError:
+        return "1"
+
+
+def _read_epoch(root: Path) -> str | None:
+    meta = manifest_version_token(root)
+    if meta is None:
+        return None
+    return meta.get("manifest_epoch")
+
+
+def bump_manifest_epoch(root: Path) -> str | None:
+    """写路径 mutation 后调用：递增 ``_manifest.json`` 的 ``manifest_epoch``。
+
+    只改 sidecar（O(1)，不重建 manifest、不 glob）。返回新 epoch；无 sidecar
+    返回 None（该数据集没有 manifest 可失效）。
+    """
+    meta_path = Path(root) / _MANIFEST_META_FILENAME
+    if not meta_path.exists():
+        return None
+    try:
+        payload = json.loads(meta_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    epoch = _next_epoch(payload.get("manifest_epoch"))
+    payload["manifest_epoch"] = epoch
+    tmp_meta = meta_path.with_name(f".{_MANIFEST_META_FILENAME}.tmp")
+    tmp_meta.write_text(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True),
+        encoding="utf-8",
+    )
+    os.replace(str(tmp_meta), str(meta_path))
+    return epoch
+
+
+def _save_row_groups(root: Path, row_groups: Sequence[ManifestRowGroup]) -> Path:
+    """把 row-group 级统计持久化到 ``{root}/_manifest_rowgroups.parquet``。"""
+    root = Path(root)
+    rows = [
+        {
+            "path": rg.path,
+            "row_group": rg.row_group,
+            "column": rg.column,
+            "min": _norm_value(rg.min),
+            "max": _norm_value(rg.max),
+            "null_count": rg.null_count,
+            "rows": rg.rows,
+        }
+        for rg in row_groups
+    ]
+    table = pa.table(rows)
+    out = root / _ROW_GROUPS_FILENAME
+    tmp = root / f".{_ROW_GROUPS_FILENAME}.tmp"
+    pq.write_table(table, tmp)
+    os.replace(str(tmp), str(out))
+    return out
+
+
+def _load_row_groups(root: Path) -> tuple[ManifestRowGroup, ...] | None:
+    """读取持久化的 row-group 级统计；无则返回 None。"""
+    path = Path(root) / _ROW_GROUPS_FILENAME
+    if not path.exists():
+        return None
+    try:
+        table = pq.read_table(str(path))
+    except Exception:
+        return None
+    data = table.to_pydict()
+    out: list[ManifestRowGroup] = []
+    paths = data.get("path", [])
+    for i in range(len(paths)):
+        out.append(
+            ManifestRowGroup(
+                path=str(paths[i]),
+                row_group=int(_at(data, "row_group", i) or 0),
+                column=str(_at(data, "column", i) or ""),
+                min=_at(data, "min", i),
+                max=_at(data, "max", i),
+                null_count=_int_or_none(_at(data, "null_count", i)),
+                rows=_int_or_none(_at(data, "rows", i)),
+            )
+        )
+    return tuple(out) if out else None
 
 
 def build_manifest_for_dataset(
@@ -507,6 +658,11 @@ def build_manifest_for_dataset(
 
     if not file_rows:
         return None
+    time_dtype = None
+    if time_col is not None:
+        td = str((ds.schema or {}).get(time_col, "")).lower()
+        if td:
+            time_dtype = "timestamp" if ("timestamp" in td or "datetime" in td) else td
     manifest = DatasetManifest(
         dataset=dataset,
         time_column=time_col,
@@ -515,6 +671,7 @@ def build_manifest_for_dataset(
         files=tuple(file_rows),
         row_groups=tuple(row_groups) if row_groups else None,
         created_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        time_dtype=time_dtype,
     )
     manifest.save(root)
     return manifest

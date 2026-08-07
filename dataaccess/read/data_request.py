@@ -50,21 +50,33 @@ class DataRequest:
     end: Any = None                             # 闭区间上界
     instruments: Sequence[str] | None = None    # 标的白名单
     universe: str | None = None                 # registry 数据集名，作为股票池来源
-    pit: bool = False                           # 是否要求 PIT 语义（当前用于计划标注）
+    pit: bool = False                           # 是否要求 PIT 语义
     anchor: str | None = None                   # 锚定数据集（无则按字段推导）
     frequency: str | None = None                # daily/minute/...（计划元数据，预留 pushdown）
     normalize_units: bool = False               # 输出层 scale_to_canonical
     engine: str = "auto"                        # auto|duckdb|polars|pyarrow
     result: str = "auto"                        # auto|arrow|pandas|polars|lazy|stream
     limit: int | None = None
-    filters: Any = None
-    joins: Mapping[str, str] | None = None      # {dataset: exact|asof|pit_asof}
+    filters: Any = None                         # 锚点级通用过滤
+    filters_by_dataset: Mapping[str, Any] | None = None  # 每数据集独立过滤
+    joins: Mapping[str, Any] | None = None      # {dataset: exact|asof|pit_asof|dict|TemporalJoinSpec}
+    join_specs: Mapping[str, Any] | None = None  # 显式语义 join 规格（同 joins，别名）
+    source_params: Mapping[str, Mapping[str, Any]] | None = None  # 每数据集参数（IndexSymbol/IndustrySource...）
+    field_params: Mapping[str, Mapping[str, Any]] | None = None  # 每字段变换参数（financial_lag quarters...）
+    transforms: Mapping[str, str] | None = None  # 每字段变换（minute_at/financial_lag/...）
+    aggregations: Sequence[Any] | None = None    # 分钟→日聚合规格（AggregationSpec，预留 pushdown）
+    time_varying_universe: bool = True           # universe 按 (date, instrument) 时变成员过滤
 
     @property
     def time_range(self) -> tuple[Any, Any] | None:
         if self.start is None and self.end is None:
             return None
         return (self.start, self.end)
+
+    def dataset_params(self, dataset: str, *, fallback: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        """返回某数据集的生效参数（source_params[dataset] 或 fallback）。"""
+        sp = dict(self.source_params or {})
+        return dict(sp.get(dataset, fallback or {}) or {})
 
 
 @dataclass
@@ -151,12 +163,19 @@ class ReadPlan:
         store = self._store
         tr = self.time_range
         insts = self.instruments
-        if self.universe:
-            insts = store._resolve_universe_instruments(
-                self.universe, tr, insts
-            )
+        req = self.request
+        # 时变 universe：把成员过滤下沉到 join（(date, instrument) 精确成员），
+        # 否则退化为窗口内静态集合求交（旧行为）。
+        time_varying = bool(getattr(req, "time_varying_universe", True))
+        if req.universe and not time_varying:
+            insts = store._resolve_universe_instruments(req.universe, tr, insts)
 
-        if len(self.datasets) == 1:
+        params_by_dataset: dict[str, dict[str, Any]] = {}
+        sp = dict(req.source_params or {})
+        for ds in self.datasets:
+            params_by_dataset[ds] = dict(sp.get(ds, {}) or {})
+
+        if len(self.datasets) == 1 and not (req.universe and time_varying):
             ds = self.datasets[0]
             dsobj = store._registry.get(ds)
             cols = list(self.per_dataset_columns.get(ds) or [])
@@ -164,33 +183,42 @@ class ReadPlan:
             for k in (dsobj.time_column, dsobj.instrument_column):
                 if k and k not in cols:
                     cols.append(k)
+            ds_params = params_by_dataset.get(ds, {})
             return store.read(
                 ds,
                 columns=cols or None,
                 time_range=tr,
                 instrument_filter=insts,
-                filters=self.request.filters,
-                limit=self.request.limit,
+                filters=req.filters,
+                limit=req.limit,
                 engine=self.engine,
                 result=self.result,
-                normalize_units=self.request.normalize_units,
+                normalize_units=req.normalize_units,
+                **ds_params,
             )
 
         # 多数据集：一次 read_joined，物理表各扫一次，join 在 DuckDB 内完成。
         anchor = self.anchor
         if anchor is None:
             raise ValidationError("多数据集计划缺少 anchor")
+        joins: dict[str, Any] = {}
+        joins.update(dict(req.joins or {}))
+        joins.update(dict(req.join_specs or {}))
         return store.read_joined(
             anchor,
             fields=self.per_dataset_columns,
-            joins=self.join_policies,
+            joins=joins or None,
             time_range=tr,
             instrument_filter=insts,
-            filters=self.request.filters,
-            limit=self.request.limit,
+            filters=req.filters,
+            filters_by_dataset=req.filters_by_dataset,
+            limit=req.limit,
             engine=self.engine,
             result=self.result,
-            normalize_units=self.request.normalize_units,
+            normalize_units=req.normalize_units,
+            params_by_dataset=params_by_dataset,
+            universe=(req.universe if time_varying else None),
+            time_varying_universe=time_varying,
         )
 
     def __repr__(self) -> str:

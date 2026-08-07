@@ -36,6 +36,8 @@ class Predicate:
     filters: "Filter | None" = None                     # 通用 Filter AST（任意列等值/范围/集合/空值）
     extra: list[dict] | None = None
     time_column_is_timestamp: bool = False              # 时间列为 timestamp 时做 end-of-day 展开
+    time_lower_exclusive: bool = False                  # start 用严格 >（PIT seed 分支）
+    time_upper_exclusive: bool = False                  # end 用严格 <（PIT seed 分支）
 
     def is_empty(self) -> bool:
         return (
@@ -84,7 +86,8 @@ def compile_predicate(
         t_col = _quote_ident(time_column)
         start, end = predicate.time_range
         if start is not None:
-            clauses.append(f"{t_col} >= ?")
+            lo_op = ">" if predicate.time_lower_exclusive else ">="
+            clauses.append(f"{t_col} {lo_op} ?")
             params.append(start)
         if end is not None:
             end_value = end
@@ -97,7 +100,8 @@ def compile_predicate(
                         end_value = ts + pd.Timedelta(days=1) - pd.Timedelta(microseconds=1)
                 except (ValueError, TypeError):
                     end_value = end
-            clauses.append(f"{t_col} <= ?")
+            hi_op = "<" if predicate.time_upper_exclusive else "<="
+            clauses.append(f"{t_col} {hi_op} ?")
             params.append(end_value)
 
     if predicate.instrument_filter:

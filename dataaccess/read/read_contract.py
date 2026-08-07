@@ -153,6 +153,51 @@ def build_file_manifest(paths: Sequence[str]) -> tuple[FileVersion, ...]:
     return tuple(versions)
 
 
+def file_versions_from_manifest(manifest: Any, paths: Sequence[str]) -> tuple[FileVersion, ...]:
+    """从一份 fresh DatasetManifest 构建 FileVersion 列表，避免逐文件 ``stat``。
+
+    快照构建时 manifest 已存在且新鲜：把 pruned glob 展开后按路径查 manifest 的
+    bytes/mtime_ns（省掉 NFS/COS 上昂贵的 O(N) stat）；manifest 里没有的文件
+    回退 stat。与 ``build_file_manifest`` 输出结构完全一致。
+    """
+    import glob as glob_mod
+
+    by_path = {str(f.path): f for f in getattr(manifest, "files", ())}
+    versions: list[FileVersion] = []
+    seen: set[str] = set()
+    for pattern in paths:
+        if str(pattern).startswith("s3://"):
+            if pattern not in seen:
+                seen.add(str(pattern))
+                versions.append(FileVersion(path=str(pattern)))
+            continue
+        expanded = sorted(glob_mod.glob(pattern, recursive=True))
+        if not expanded:
+            if pattern not in seen:
+                seen.add(pattern)
+                versions.append(FileVersion(path=pattern))
+            continue
+        for fp in expanded:
+            if fp in seen:
+                continue
+            seen.add(fp)
+            mf = by_path.get(fp)
+            if mf is not None:
+                versions.append(
+                    FileVersion(path=fp, size=mf.bytes, mtime_ns=mf.mtime_ns)
+                )
+                continue
+            p = Path(fp)
+            try:
+                st = p.stat()
+                versions.append(
+                    FileVersion(path=fp, size=st.st_size, mtime_ns=st.st_mtime_ns)
+                )
+            except OSError:
+                versions.append(FileVersion(path=fp))
+    return tuple(versions)
+
+
 def file_manifest_hash(files: Sequence[FileVersion]) -> str:
     payload = [
         {"path": f.path, "size": f.size, "mtime_ns": f.mtime_ns, "checksum": f.checksum}

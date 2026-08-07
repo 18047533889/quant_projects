@@ -181,8 +181,47 @@ _LOAD_MODULES = (
     "cleaned_operators.extreme_tail",
     "cleaned_operators.local_lyapunov",
     "cleaned_operators.report_timing",
+    "cleaned_operators.recurrence_analysis",
     # Genuine Polars UDF backends for the per-column dynamics families.
     "cleaned_operators.polars_dynamics",
+    # 2026-08 geometry/math expansion: K-line interval geometry, directional-
+    # change structural levels, multiscale trend term structure, envelope/
+    # crossing quality, confirmed-extrema divergence, threshold cycles, dynamic
+    # state-episode excursions, jump-robust intraday variation, intraday
+    # volatility shape, volatility roughness, binned response curves, nonlinear
+    # dependence, 2D joint trajectory geometry, point-process interval stats,
+    # string/ordinal complexity, spectral shape, Hankel/SSA structure,
+    # multifractal spectrum, serial-dependence memory, L-moments / Hartigan dip,
+    # intrinsic dimension, persistence entropy, cs/group locality, session shape.
+    "cleaned_operators.interval_geometry",
+    "cleaned_operators.structural_levels",
+    "cleaned_operators.multiscale_trend",
+    "cleaned_operators.envelope",
+    "cleaned_operators.crossing",
+    "cleaned_operators.extrema_divergence",
+    "cleaned_operators.threshold_cycle",
+    "cleaned_operators.state_episode_excursion",
+    "cleaned_operators.jump_robust",
+    "cleaned_operators.intraday_vol_ext",
+    "cleaned_operators.rough_vol",
+    "cleaned_operators.binned_response",
+    "cleaned_operators.dependence_ext",
+    "cleaned_operators.vector_path",
+    "cleaned_operators.event_interval",
+    "cleaned_operators.complexity_ext",
+    "cleaned_operators.spectral",
+    "cleaned_operators.hankel",
+    "cleaned_operators.multifractal",
+    "cleaned_operators.memory_ext",
+    "cleaned_operators.moments_ext",
+    "cleaned_operators.intrinsic_dimension",
+    "cleaned_operators.topology_ext",
+    "cleaned_operators.cross_section_ext",
+    "cleaned_operators.intraday_session",
+    "cleaned_operators.candle_state_space",
+    # Surviving polars backends for the geometry/math expansion (polars I/O
+    # around the same numpy kernels; source != bridge so production keeps them).
+    "cleaned_operators.polars_geometry_math",
 )
 
 _REVIEWED_EXTENSIONS = (

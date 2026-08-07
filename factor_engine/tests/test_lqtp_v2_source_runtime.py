@@ -86,6 +86,49 @@ def test_financial_lag_updates_when_old_quarter_is_revised() -> None:
     np.testing.assert_allclose(out.to_numpy(), [10.0, 11.0], equal_nan=True)
 
 
+def test_load_source_refs_batch_coalesces_financial_fields() -> None:
+    """#10：同表多个财务 SourceRef 合并成一次 store 读，逐字段 PIT join。"""
+    from api.source_ref import make_source_ref, encode_source_ref
+    from storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
+
+    reads: list[list[str]] = []
+
+    class DummyInner:
+        start_date = None
+        end_date = None
+
+    class FixtureSource(LQTPLogicalDataSource):
+        def _anchor_index(self):
+            return pd.MultiIndex.from_tuples(
+                [
+                    (pd.Timestamp("2024-08-01"), "A"),
+                    (pd.Timestamp("2024-08-20"), "A"),
+                ],
+                names=["timestamp", "instrument"],
+            )
+
+        def _financial_raw_multi(self, dataset: str, fields: list[str]):
+            reads.append(list(fields))
+            return pd.DataFrame(
+                {
+                    "Symbol": ["A", "A"],
+                    "ReportPeriodEndDate": ["2024-03-31", "2024-06-30"],
+                    "PubDate": ["2024-04-30", "2024-08-05"],
+                    "TotalAssets": [100.0, 200.0],
+                    "TotalLiability": [40.0, 90.0],
+                }
+            )
+
+    source = FixtureSource(DummyInner())
+    a = encode_source_ref(make_source_ref("StockBalance", "TotalAssets"))
+    b = encode_source_ref(make_source_ref("StockBalance", "TotalLiability"))
+    out = source.load_source_refs_batch([a, b])
+    # 两个字段 → 一次 _financial_raw_multi 读
+    assert reads == [["TotalAssets", "TotalLiability"]]
+    np.testing.assert_allclose(out[a].to_numpy(), [100.0, 200.0])
+    np.testing.assert_allclose(out[b].to_numpy(), [40.0, 90.0])
+
+
 def test_minute_resample_does_not_silently_collapse_to_daily() -> None:
     from storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
     from storage.sources.data_access_source import MissingDataDependencyError

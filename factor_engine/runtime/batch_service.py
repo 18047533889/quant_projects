@@ -509,6 +509,21 @@ def execute_run_many_parallel(
     )
     perf = perf or PerfConfig.from_env()
     workers = n_jobs if n_jobs is not None else perf.max_workers
+    # #34 统一 CPU budget：n_jobs × duckdb_threads <= physical cores，避免 oversubscription
+    try:
+        from runtime.execution_resources import resource_plan, set_duckdb_max_threads
+
+        plan = resource_plan(n_jobs=workers)
+        workers = plan.n_jobs
+        set_duckdb_max_threads(plan)
+        logger.info(
+            "execution_resources: jobs=%d duckdb_threads=%d total_runnable=%d",
+            plan.n_jobs,
+            plan.duckdb_threads,
+            plan.total_runnable,
+        )
+    except Exception:  # noqa: BLE001
+        pass
     engine_to_use, per_windows = _maybe_prepare_batch_warmup(
         engine,
         factors,

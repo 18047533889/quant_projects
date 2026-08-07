@@ -7,6 +7,8 @@ from .adapters import arrow_table_to_multiindex_columns, arrow_to_multiindex_ser
 from .read_handle import ReadHandle
 from .relation_handle import RelationHandle
 from .data_request import DataRequest, ReadPlan
+from .aggregation import AggregationSpec, aggregate_minute_to_daily, parse_aggregation_spec
+from .temporal_join import TemporalJoinSpec, join_spec_from_field, parse_join_spec
 from .semantic_catalog import (
     SemanticField,
     SemanticFieldCatalog,
@@ -54,6 +56,12 @@ __all__ = [
     "RelationHandle",
     "DataRequest",
     "ReadPlan",
+    "AggregationSpec",
+    "aggregate_minute_to_daily",
+    "parse_aggregation_spec",
+    "TemporalJoinSpec",
+    "join_spec_from_field",
+    "parse_join_spec",
     "SemanticField",
     "SemanticFieldCatalog",
     "get_semantic_catalog",

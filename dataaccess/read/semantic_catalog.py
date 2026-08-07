@@ -64,6 +64,10 @@ class SemanticField:
     period_time: str | None = None     # 会计期间列（别名 ReportPeriodEndDate）
     join_policy: str | None = None     # exact / pit_asof_backward / latest_period ...
     required_filters: tuple[str, ...] = ()   # 读取时必须附带的条件（如行业过滤）
+    revision_order: tuple[str, ...] = ()     # join 前按 (instrument, knowledge_time) 去重的版本排序列
+    availability: str = "same_day"           # same_day / next_trading_day（PIT 可见性）
+    primary_key: tuple[str, ...] = ()        # exact join 唯一性契约（如 (TradeDate, Symbol)）
+    duplicate_policy: str = "latest_revision"  # keep_first / keep_last / latest_revision / error
     aliases: tuple[str, ...] = ()            # 其它叫法（含 FactorEngine 里的别名）
     mining_allowed: bool = True
 
@@ -90,6 +94,10 @@ class SemanticField:
             "period_time": self.period_time,
             "join_policy": self.join_policy,
             "required_filters": list(self.required_filters),
+            "revision_order": list(self.revision_order),
+            "availability": self.availability,
+            "primary_key": list(self.primary_key),
+            "duplicate_policy": self.duplicate_policy,
             "aliases": list(self.aliases),
             "mining_allowed": self.mining_allowed,
         }
@@ -150,6 +158,10 @@ def parse_semantic_field(name: str, raw: dict[str, Any]) -> SemanticField:
         period_time=_str_or_none(raw.get("period_time")),
         join_policy=_str_or_none(raw.get("join_policy")),
         required_filters=_tuple_of(raw.get("required_filters")),
+        revision_order=_tuple_of(raw.get("revision_order")),
+        availability=_str_or_none(raw.get("availability")) or "same_day",
+        primary_key=_tuple_of(raw.get("primary_key")),
+        duplicate_policy=_str_or_none(raw.get("duplicate_policy")) or "latest_revision",
         aliases=_tuple_of(raw.get("aliases")),
         mining_allowed=_bool_or_default(raw.get("mining_allowed"), True),
     )

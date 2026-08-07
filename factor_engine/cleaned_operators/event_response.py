@@ -251,12 +251,260 @@ class EventHawkesBranchingRatio(SeriesOperator):
         return frame_like(event, out)
 
 
+# ---------------------------------------------------------------------------
+# event_response curve shape (P1 deepening)
+# ---------------------------------------------------------------------------
+
+def _response_curve_stats_series(
+    response: np.ndarray,
+    event: np.ndarray,
+    history_window: int,
+    horizon: int,
+    min_events: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Per-row event-response *curve* statistics (strictly causal, s+H <= t).
+
+    For each past event with a fully observed horizon path ``[s+1, s+H]`` build
+    the per-lag response vector ``r_s(ℓ) = response[s+ℓ]``; the mean curve is
+    ``m(ℓ) = mean_s r_s(ℓ)``.  Returns ``(peak_lag, decay, dispersion, reversal)``:
+      peak_lag   — ``argmax_ℓ |m(ℓ)| / H`` (when does the response typically peak)
+      decay      — OLS slope of ``log(|m(ℓ)|+ε)`` vs ``ℓ`` (negative = decaying;
+                   near 0 = persistent; positive = late build-up)
+      dispersion — ``std(R_s) / mean(|R_s|)`` over per-event total responses
+                   R_s = Σ_ℓ r_s(ℓ) (heavy-tailed response distribution > 1)
+      reversal   — early/late sign flip of the mean curve, signed magnitude
+                   ``(m_late - m_early) / mean(|m|)``, 0 when no flip
+    """
+    n = response.shape[0]
+    hw = max(2, int(history_window))
+    H = max(1, int(horizon))
+    me = max(1, int(min_events))
+    peak_lag = np.full(n, np.nan)
+    decay = np.full(n, np.nan)
+    dispersion = np.full(n, np.nan)
+    reversal = np.full(n, np.nan)
+    for t in range(n):
+        lo = max(0, t - hw)
+        last_event = t - H
+        if last_event < lo:
+            continue
+        curves: list[np.ndarray] = []
+        totals: list[float] = []
+        for s in range(lo, last_event + 1):
+            if not np.isfinite(event[s]) or event[s] == 0.0:
+                continue
+            seg = response[s + 1 : s + H + 1]
+            if seg.size != H or not np.all(np.isfinite(seg)):
+                continue
+            curves.append(seg.astype(float))
+            totals.append(float(seg.sum()))
+        if len(curves) < me:
+            continue
+        C = np.vstack(curves)                       # (n_ev, H)
+        m = C.mean(axis=0)                          # mean response curve
+        scale_curve = float(np.mean(np.abs(m))) if H else np.nan
+        if np.isfinite(scale_curve) and scale_curve > _EPS:
+            peak_lag[t] = float(int(np.argmax(np.abs(m))) + 1) / H
+            half = max(1, H // 2)
+            early = float(np.mean(m[:half])) if half > 0 else 0.0
+            late = float(np.mean(m[half:])) if H - half > 0 else 0.0
+            if early * late < 0.0:
+                reversal[t] = float((late - early) / scale_curve)
+            # decay via OLS of log(|m|+eps) on lag index
+            y = np.log(np.abs(m) + _EPS)
+            xs = np.arange(1.0, H + 1.0)
+            denom = float(np.sum((xs - xs.mean()) ** 2))
+            if denom > _EPS:
+                decay[t] = float(np.sum((xs - xs.mean()) * (y - y.mean())) / denom)
+        tot = np.asarray(totals, dtype=float)
+        mean_abs = float(np.mean(np.abs(tot)))
+        if tot.size >= 2 and mean_abs > _EPS and np.isfinite(tot).all():
+            dispersion[t] = float(np.std(tot, ddof=1) / mean_abs)
+    return peak_lag, decay, dispersion, reversal
+
+
+@register_operator(
+    name="event_response_peak_lag",
+    category="event_response",
+    business_category="event_response",
+    canonical="event_response_peak_lag",
+    source="event_response",
+)
+class EventResponsePeakLag(SeriesOperator):
+    """历史事件响应的峰值时滞 ``argmax_ℓ |m(ℓ)| / H``。
+
+    m(ℓ) 为过去事件（``s+H ≤ t``、路径全程可观测）的逐 lag 平均响应曲线；输出
+    平均响应绝对值最大的 lag 相对 H 的归一位置。0 = 事件后立即见峰值（即时
+    冲击）；接近 1 = 响应在窗口后期才见顶（滞后兑现）。PIT 安全、确定性。
+    """
+
+    metadata = _metadata(
+        "event_response_peak_lag",
+        "平均响应曲线峰值时滞 argmax|m(ℓ)|/H（[0,1]）。",
+        ["response", "event", "history_window", "horizon", "min_events"],
+        unit="ratio",
+        cost=5,
+    )
+
+    def _calculate_series(
+        self,
+        response: pd.DataFrame,
+        event: pd.DataFrame,
+        history_window: int = 120,
+        horizon: int = 10,
+        min_events: int = 3,
+        **_: Any,
+    ) -> pd.DataFrame:
+        rv = response.to_numpy(dtype=float)
+        ev = event.to_numpy(dtype=float)
+        rows, cols = rv.shape
+        out = np.full((rows, cols), np.nan, dtype=float)
+        for c in range(cols):
+            pl, _, _, _ = _response_curve_stats_series(rv[:, c], ev[:, c], history_window, horizon, min_events)
+            out[:, c] = pl
+        return frame_like(response, out)
+
+
+@register_operator(
+    name="event_response_decay_rate",
+    category="event_response",
+    business_category="event_response",
+    canonical="event_response_decay_rate",
+    source="event_response",
+)
+class EventResponseDecayRate(SeriesOperator):
+    """历史事件响应曲线的衰减速率（``log|m(ℓ)|`` 对 ℓ 的 OLS 斜率）。
+
+    负 = 响应随 lag 衰减（事件冲击逐步消退）；近 0 = 响应持久；正 = 响应后期
+    才积累。与 ``event_response_peak_lag`` 共享同一响应曲线内核。只用已完成
+    事件，无前视。
+    """
+
+    metadata = _metadata(
+        "event_response_decay_rate",
+        "平均响应曲线 log|m(ℓ)| 对 ℓ 的斜率（负=衰减）。",
+        ["response", "event", "history_window", "horizon", "min_events"],
+        unit="ratio",
+        cost=5,
+    )
+
+    def _calculate_series(
+        self,
+        response: pd.DataFrame,
+        event: pd.DataFrame,
+        history_window: int = 120,
+        horizon: int = 10,
+        min_events: int = 3,
+        **_: Any,
+    ) -> pd.DataFrame:
+        rv = response.to_numpy(dtype=float)
+        ev = event.to_numpy(dtype=float)
+        rows, cols = rv.shape
+        out = np.full((rows, cols), np.nan, dtype=float)
+        for c in range(cols):
+            _, dec, _, _ = _response_curve_stats_series(rv[:, c], ev[:, c], history_window, horizon, min_events)
+            out[:, c] = dec
+        return frame_like(response, out)
+
+
+@register_operator(
+    name="event_response_dispersion",
+    category="event_response",
+    business_category="event_response",
+    canonical="event_response_dispersion",
+    source="event_response",
+)
+class EventResponseDispersion(SeriesOperator):
+    """历史事件响应分布的离散度 ``std(R_s)/mean|R_s|``（CV 型）。
+
+    R_s = 事件 s 的 horizon 总响应。>1 = 响应被少数大事件主导（胖尾）；≈0 =
+    响应高度一致。与 ``event_historical_response_sign_balance`` 互补：sign
+    balance 看方向广泛性，dispersion 看规模均匀性。只用已完成事件。
+    """
+
+    metadata = _metadata(
+        "event_response_dispersion",
+        "事件响应分布离散度 std(R)/mean|R|（>1 胖尾）。",
+        ["response", "event", "history_window", "horizon", "min_events"],
+        unit="ratio",
+        cost=5,
+    )
+
+    def _calculate_series(
+        self,
+        response: pd.DataFrame,
+        event: pd.DataFrame,
+        history_window: int = 120,
+        horizon: int = 10,
+        min_events: int = 3,
+        **_: Any,
+    ) -> pd.DataFrame:
+        rv = response.to_numpy(dtype=float)
+        ev = event.to_numpy(dtype=float)
+        rows, cols = rv.shape
+        out = np.full((rows, cols), np.nan, dtype=float)
+        for c in range(cols):
+            _, _, disp, _ = _response_curve_stats_series(rv[:, c], ev[:, c], history_window, horizon, min_events)
+            out[:, c] = disp
+        return frame_like(response, out)
+
+
+@register_operator(
+    name="event_response_reversal_strength",
+    category="event_response",
+    business_category="event_response",
+    canonical="event_response_reversal_strength",
+    source="event_response",
+)
+class EventResponseReversalStrength(SeriesOperator):
+    """历史事件响应曲线首尾反转强度（早期↔晚期符号反转时≠0）。
+
+    定义 early=前 half 个 lag 均值、late=后 half 个 lag 均值；当 early·late<0
+    时输出 ``(late-early)/mean|m(ℓ)|``（带符号，late 方向），否则 0。高正值 =
+    事件后先跌后强势反弹（V 型）；负 = 先涨后回落（冲高回落）。无反转 = 0。
+    确定性、PIT 安全。
+    """
+
+    metadata = _metadata(
+        "event_response_reversal_strength",
+        "响应曲线首尾反转强度（V 型>0 / 冲高回落<0 / 无反转=0）。",
+        ["response", "event", "history_window", "horizon", "min_events"],
+        unit="ratio",
+        cost=5,
+    )
+
+    def _calculate_series(
+        self,
+        response: pd.DataFrame,
+        event: pd.DataFrame,
+        history_window: int = 120,
+        horizon: int = 10,
+        min_events: int = 3,
+        **_: Any,
+    ) -> pd.DataFrame:
+        rv = response.to_numpy(dtype=float)
+        ev = event.to_numpy(dtype=float)
+        rows, cols = rv.shape
+        out = np.full((rows, cols), np.nan, dtype=float)
+        for c in range(cols):
+            _, _, _, rev = _response_curve_stats_series(rv[:, c], ev[:, c], history_window, horizon, min_events)
+            out[:, c] = rev
+        return frame_like(response, out)
+
+
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
     _surface.EXTENDED_ONLY_CANONICALS = frozenset(
         set(_surface.EXTENDED_ONLY_CANONICALS)
-        | {"event_historical_response_mean", "event_historical_response_sign_balance"}
+        | {
+            "event_historical_response_mean",
+            "event_historical_response_sign_balance",
+            "event_response_peak_lag",
+            "event_response_decay_rate",
+            "event_response_dispersion",
+            "event_response_reversal_strength",
+        }
     )
     _surface.RESEARCH_ONLY_CANONICALS = frozenset(
         set(_surface.RESEARCH_ONLY_CANONICALS) | {"event_hawkes_branching_ratio"}

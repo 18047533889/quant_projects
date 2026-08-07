@@ -333,7 +333,7 @@ def phase2_operator_signatures() -> dict[str, OperatorSignature]:
         ArgSpec("close", _F), ArgSpec("high_limit", _F), ArgSpec("low_limit", _F),
         ArgSpec("lookback", _INT),
     )
-    for _name in ("intraday_wasserstein_quantile_pca_score", "intraday_wasserstein_quantile_pca_residual"):
+    for _name in ("intraday_quantile_curve_pca_score", "intraday_quantile_curve_pca_residual"):
         signatures[_name] = _sig(
             _name, ArgSpec("returns", _F), ArgSpec("window", _W), ArgSpec("k", _INT)
         )

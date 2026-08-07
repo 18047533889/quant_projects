@@ -1126,3 +1126,141 @@ bucket_count` 等 + `_SPECIAL_SCALARS`（weighted_semivariance.target=0.0 等）
   runtime 供 research mining 使用，但绝不进入默认生产挖掘白名单（`micro_` 前缀本身也拒绝生产）。
 - 换手存活边界：turnover=0（无换手存活全保留）、turnover→1（clip 到 1-ε，乘积不爆炸）、
   missing turnover（当作 0，暂停日语义）、missing price（该 lag 权重 0）、Σw≈0→NaN。
+
+---
+
+# §16 2026-08 V2/V3 State-Dynamics / Event-Response / Spectral-Crowding / Volume-Clock 扩展（29 算子）
+
+日期：2026-08-08。依据两份 AI 建议（V2 时间不可逆性/状态几何/马尔可夫动力学/首达/历史事件响应/能量距离/谱拥挤；V3 状态惊奇度/KM 局部稳定性/成交量时钟/KNN 同行/EVT/copula 非对称/Hawkes/熵产生/Lyapunov/报告披露）。
+
+## 16.1 新增算子（29）
+
+**P1 → daily 表面（21）**：
+- 状态几何/时间不对称：`ts_state_density`、`ts_ordinal_irreversibility`
+- 局部马尔可夫：`ts_markov_persistence`、`ts_markov_state_entropy`、`ts_markov_transition_surprisal`、`ts_kramers_moyal_local_stability`
+- 首达：`ts_first_passage_bias`
+- 历史事件响应：`event_historical_response_mean`、`event_historical_response_sign_balance`
+- 联合分布 break：`ts_joint_energy_shift`、`ts_energy_break_score`
+- 组谱拥挤：`group_corr_mode_share`、`group_corr_effective_rank`、`group_corr_mode_localization`
+- 分钟→日：`session_event_recovery_score`、`intraday_volume_clock_path_efficiency`、`intraday_volume_clock_roughness`
+- 动态同行：`cs_knn_peer_mean_ex_self`、`cs_knn_neighbor_retention`
+- 披露/极值：`report_filing_delay_surprise`、`ts_hill_tail_index`
+
+**P2 → research-only（8，绝不进默认挖掘白名单）**：
+`ts_active_information_storage`、`ts_multiscale_permutation_entropy_slope`、`ts_quantile_regression_beta`（精确 LP，非 IRLS）、`ts_copula_central_asymmetry`、`event_hawkes_branching_ratio`、`ts_markov_entropy_production`、`ts_local_lyapunov_exponent`、`report_revision_magnitude`（首选来源层 materialize，运行时算子接收来源提供的 prev_x）。
+
+## 16.2 共享内核
+
+- `DiscreteStateDynamicsKernel`（`markov_dynamics.py`）：分位数状态边缘 + 滞后转移矩阵（Jeffreys 平滑）+ 经验状态频率 + 每 bin D1/D2。服务 6 个 markov/KM 算子 + `advanced_structure` 的 KM drift/diffusion。
+- `OrdinalPatternKernel`（`state_geometry.py`）：Lehmer 序数索引，相等值 embedding 一律丢弃（不做 jitter，避免一字板假 pattern）。
+- `GroupCorrelationSpectrumKernel`（`group_spectrum.py`）：一次 SVD 输出 mode_share/effective_rank/localization。
+- `VolumeClockPathKernel`（`volume_clock.py`）：累计 activity 等分网格 → log-price 线性插值 → efficiency/roughness。
+- `CrossSectionKNNGraphKernel`（`dynamic_knn.py`）：逐日秩标准化特征 → L2 KNN 图（stable argsort 确定性），peer mean + retention 共享。
+
+## 16.3 既有算子修正
+
+- **`ts_kramers_moyal_drift/diffusion`（spec §三）**：改用共享 `DiscreteStateDynamicsKernel` —— 分位数状态 bin（替代等宽）、每 bin `min_bin_count`、lag 增量纳入定义、严格 KM 缩放 `D2 = mean(dx²)/(2·lag)`（lag=1 时 = 0.5·mean(dx²)）。`test_advanced_ops_2026.py::test_kramers_moyal_linear_trend` 的 diffusion 期望从 1.0 更新为 0.5。
+- **`intraday_barrier_approach_acceleration`**：经核查当前实现为"价格 headroom 二阶差分"（自然时钟），与最初 volume-time acceleration 设计不完全一致。保留其已提交语义（改语义会改变既有 daily production 算子的历史输出）；真正的 volume-clock 路径由本轮新增 `intraday_volume_clock_path_efficiency/roughness` 覆盖（volume-clock 上重新定价），并在本文档标注这一差异。
+
+## 16.4 后端
+
+- pandas_numpy（certified 参考）+ polars 双后端：13 个 per-column 日频算子有**genuine per-column UDF**（`polars_dynamics.py`，逐值 parity max|diff|=0）。cs/group/minute 聚合算子保持 pandas_numpy-only（跨列聚合非 per-column 语义），文档注明。
+- duckdb/SQL 下推继续推迟：序数排列/状态转移/首达 stopping-time/事件响应/能量距离/Hill 均为顺序或 O(n²) 核，SQL 窗口不可表达；planner 自动回退（fail-closed）。
+
+## 16.5 接线
+
+`_LOAD_MODULES` + 13 模块；`operator_surface._DAILY_DYNAMICS_PACK_2026_08`（21 daily）+ 各模块 EXTENDED_ONLY/RESEARCH_ONLY 分区；`operator_policy._DYNAMICS_PACK_POLICIES`（post-filter，ts_/group_/cs_/session_intraday scope 全 pit_safe）；audit 词汇表补 `response/delay/prev_x` panel、`horizon/barrier/bandwidth/history_length/tail_fraction/min_tail_count/min_anchors/grid/residual_fraction` 标量、markov/order/mode/side 特殊标量、`_PANEL_FORCE(ts_first_passage_bias, scale)`、minute `event→minute_shock` 映射 + 三个 fixture panel。
+
+## 16.6 验证
+
+- `test_dynamics_pack_2026_08.py`：18 passed（注册/表面/确定性/axes/prefix 因果/参考数学/KM 严格 D2/常值·全 NaN fail-closed/polars parity 13 算子）。
+- 与并发会话协调：其 `group_spd_feature_structure_shift` 新增 `composition_policy` 参数已由其补 audit 特殊标量；KM drift/diffusion 的 D2 缩放与其在 `advanced_structure.py` 的 min_bin_count 改法一致合并（我补 quantile bin + lag）。
+- 证据重建顺序：factor → primitive → recipe → manifests → catalog。
+
+# §17 2026-08-08 第二轮增量审计修复（advanced pack + flow impact）
+
+> 本轮按用户提供的第二轮审计逐条定位、修复并加 golden 测试。语义 diff 后共
+> 触及 12 个 P0（确定实现/数学错误）与 13 个 P1。全部为
+> `cleaned_operators/advanced_{information,intraday,structure,topology}.py` +
+> `microstructure/flow_impact.py` + 治理接线 + `test_advanced_ops_2026.py`。
+
+## 17.1 P0 确定性错误（全部修复）
+
+- **intraday_barrier_approach_acceleration（P0-001）**：原实现 `for headroom, barrier
+  in ((b_up, True), (b_dn, False))` 变量错位——`headroom` 拿到涨跌停价但从未使用，
+  `barrier` 是 bool；上板分支实际算 `1 - price/1`，下板分支被 `False<=0` 跳过。
+  已改为 `(limit_price, is_upper)`，真实使用当日涨跌停价；文档由 log-headroom 更正为
+  线性 headroom；输出改为**带方向**（加速冲向涨停为正、跌停为负，占优方向定符号）。
+  手工 golden：prices `10.0→10.2→10.5→10.9`、upper=11 → `+0.009091`。
+  ⚠️ 与并发 §16.3 的"保留已提交语义"记录不一致：并发未识别该变量交换 bug；
+  本文档以 P0-001 的客观事实为准（golden 测试锁定真实限价进入 headroom）。
+- **micro_bvc_vpin（P0-002）**：等量桶引擎重写为 while-loop 按原 bar 体积比例分摊
+  （`OF·take/vm`），一根超大 bar 可跨越任意多个桶；每桶 `|OF_bucket|`，桶内买卖流净额
+  抵消不被破坏。旧实现的 `finished` 标志只切一次且不重置、跨桶时对同 bar 两段独立
+  `abs()` 均错误。golden：vol `[10,30,5,40,15]`、flow `[+10,-30,+5,+40,-15]` → VPIN 0.4。
+- **holder_class_js_shift（P0-003）**：固定 5 个 class slot，绝不压缩
+  `current[np.isfinite(current)]`（压缩会把 class3 变 class2，类别身份错位）。NaN slot
+  = 类别未知：分布含已知质量时部分 NaN → fail-closed NaN；负 share → fail-closed。
+- **ts_student_t_fisher_shift → ts_fisher_information_shift（P0-004 + P1-020）**：recent
+  窗口 off-by-one（原取 r+1 个观测）改为 `vals[row-r+1:row+1]`（恰好 r 个），prior 严格
+  接续；首行可计算从 `r+p` 提前到 `r+p-1`。同时按审计改名（见 §17.3）。
+- **ts_kramers_moyal_diffusion（P0-005/006）**：D2 严格系数 `0.5·mean(dx²)`（dt=1）；
+  增加 `min_bin_count` 门槛。并发已在 §16.3 用共享
+  `DiscreteStateDynamicsKernel` 以更强形式实现（分位数 bin + lag + 严格过去窗口），
+  本文档与其合并，diffusion 测试期望同步 1.0→0.5。
+- **cs_sliced_wasserstein_copula_shift（P0-007 + P1-015/016）**：rank 改为 average-tie
+  （`argsort(argsort)` 竞争 rank 使 ties 按股票列序分秩 → 因子对列顺序敏感）；历史参考
+  改为各历史日分位曲线的**等权平均**（原全观测 pool 使上市股票多寡日权重失衡）；加
+  `global_state` tag——当天全市场同值，禁止当个股横截面 alpha 单独挖，只作 regime gate。
+- **group_spd_feature_structure_shift（P0-008/009 + P1-017/018）**：complete-case 剔除
+  缺测行（单股单特征缺失不再毒化整组协方差）；`min_peers`（默认 5，>d+1）与
+  `min_reference_days`（默认 5）门槛；`composition_policy="current"|"intersection"`
+  （intersection 只在与各参考日共同成员上重算矩阵，剔除纯成员变化效应）；文档更正为
+  恰好 3 特征（f1,f2,f3）。
+- **ts_betti_1_max_persistence / ts_persistence_diagram_shift（P0-010/011/012）**：
+  Rips reduction 的 pivot 约定从**最低边**（最小距离，镜像约定会在共线点云上伪造 H1）
+  改为**最高边**（最新 filtration，标准 Zomorodian–Carlsson 配对）；`_takens_points` 剔除
+  含 NaN 的 embedding 向量；persistence_diagram_shift 改为**真正的 diagram W1**
+  （birth,death 点集 + 对角线匹配，Hungarian 精确解）——原名承诺 diagram 距离但实现只比
+  一维 lifetime。测试：circle H1>0、line H1=0、(s,s,s) H1=0、Gaussian blob 小。
+- **ts_bures_corr_shift（P1-019）**：`min_pairs` 门槛（默认 `max(5, min(r,p)//2)`），
+  2 个观测的 ±1 相关不再制造假 break。
+
+## 17.2 P1 语义/健壮性修复
+
+- **intraday_pair_w1 / return_wasserstein_shift**：MAD=0 fail-closed（常量基线 → NaN），
+  pair 文档与同日 MAD 对齐。
+- **intraday_quantile_curve_pca_*（P1-006/007/008）**：score/residual 的 k 规则统一
+  （rank<k → 双 NaN）；score 加 eigen-gap guard（λ_k≈λ_{k+1} → NaN，防止 PC 方向
+  旋转造成假跳变）；名称从 `intraday_wasserstein_quantile_pca_*` 改为
+  `intraday_quantile_curve_pca_*`（分位曲线空间的 Euclidean PCA，不是 Wasserstein
+  principal-geodesic，不再沿用误导性名称）。
+- **ts_transfer_entropy / ts_effective_transfer_entropy（P1-009/010/011）**：单窗口核
+  `_transfer_entropy_window`（去掉每行 O(w²) 的嵌套 rolling）；`min_transitions` 参数
+  （默认 `max(30, 3·bins²)`，防止 bins³ 状态空间被 Jeffreys 平滑主导）；
+  常量/退化状态（unique<2）→ NaN（平滑不再凭空造"信息"）。
+- **ts_score_rank_weighted_mean（P1-012/013）**：ties 用 average rank（稳定 argsort 会
+  给 tie 组不同权重、悄悄偏向更早观测）；output unit 改为 `same_as:target`
+  （weighted mean 继承 target 量纲，price/amount/volatility 等，非固定 ratio）。
+- **report_benford_js_divergence（P1-014）**：保持 research-only；文档明确对 as-of
+  forward-fill 日频面板测得的是披露频率/持久性而非财报数字异常。
+
+## 17.3 重命名（research-only，manifest/evidence 同步）
+
+- `intraday_wasserstein_quantile_pca_score` → `intraday_quantile_curve_pca_score`
+- `intraday_wasserstein_quantile_pca_residual` → `intraday_quantile_curve_pca_residual`
+- `ts_student_t_fisher_shift` → `ts_fisher_information_shift`
+  （并发已同步其测试引用；operator_policy/signatures/audit 词汇表已更新）
+
+## 17.4 治理接线
+
+- `scripts/audit_all_factor_production.py`：`_SCALAR_VALUES` 补
+  `min_bin_count/min_peers/min_reference_days/min_transitions`；defaults 补
+  `(ts_kramers_moyal_*, min_bin_count)`、`(group_spd_*, min_peers/min_reference_days)`、
+  `(ts_transfer_entropy, min_transitions)`、`(ts_bures_corr_shift, min_pairs)`。
+- `operator_policy.py` / `operator_signatures_phase2.py`：PCA 重命名同步。
+- `test_advanced_ops_2026.py`：35 passed —— barrier 手工 golden、VPIN 精确 golden、
+  copula 列置换不变性、Rips 几何 ground-truth（line=0/circle>0/blob 小）、diagram W1
+  golden、Student-t 窗口长度、PCA rank/eigen-gap、TE 常量/min_transitions、
+  score_rank tie、Bures min_pairs、holder NaN/负 share、SPD complete-case/min_peers、
+  Wasserstein MAD=0、KM min_bin_count、Takens NaN 过滤。

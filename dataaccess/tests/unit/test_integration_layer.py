@@ -9,7 +9,7 @@
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -320,6 +320,480 @@ def test_plan_universe(tree):
     assert set(tbl.column("Symbol").to_pylist()) == {"A"}
 
 
+def test_read_joined_right_table_instrument_filter_pushdown(tree, monkeypatch):
+    """#1 右表 instrument_filter 必须下推（exact/asof 一律），不能只筛锚点。"""
+    store = tree["store"]
+    captured: dict[str, list[str] | None] = {}
+
+    orig = store._prepare_dataset_read
+
+    def spy(dsobj, *, time_range, params, instrument_filter=None):
+        captured[dsobj.name] = instrument_filter
+        return orig(
+            dsobj,
+            time_range=time_range,
+            params=params,
+            instrument_filter=instrument_filter,
+        )
+
+    monkeypatch.setattr(store, "_prepare_dataset_read", spy)
+    h = store.read_joined(
+        "ashare_stock_daily",
+        {
+            "ashare_stock_daily": ["Close"],
+            "ashare_stock_valuation_daily": ["MarketCap"],
+            "ashare_stock_balance": ["TotalAssets"],
+        },
+        joins={"ashare_stock_balance": "pit_asof"},
+        time_range=("2024-01-01", "2024-01-05"),
+        instrument_filter=["A"],
+    )
+    assert h.to_arrow().num_rows == 5  # 只有 A 的 5 天
+    assert captured["ashare_stock_daily"] == ["A"]
+    assert captured["ashare_stock_valuation_daily"] == ["A"]
+    assert captured["ashare_stock_balance"] == ["A"]
+
+
+@pytest.fixture()
+def cross_cols_tree(tmp_path, monkeypatch):
+    """锚点与右表用不同时间/标的列名（#5 跨表列名 bug 回归）。"""
+    monkeypatch.setenv("DATA_ACCESS_SKIP_COS_MIRROR", "1")
+    daily = tmp_path / "daily"
+    events = tmp_path / "events"
+    daily.mkdir(parents=True)
+    events.mkdir(parents=True)
+    pq.write_table(
+        pa.table(
+            {
+                "TradeDate": [date(2024, 1, 1), date(2024, 1, 2)],
+                "Symbol": ["AAPL", "AAPL"],
+                "Close": [10.0, 11.0],
+            }
+        ),
+        str(daily / "d.parquet"),
+    )
+    pq.write_table(
+        pa.table(
+            {
+                "filing_date": [date(2024, 1, 1), date(2024, 1, 2)],
+                "ticker": ["AAPL", "AAPL"],
+                "TotalAssets": [100.0, 110.0],
+            }
+        ),
+        str(events / "e.parquet"),
+    )
+    (tmp_path / "datasets.yaml").write_text(
+        f"""
+us_stock_daily:
+  kind: static
+  access_mode: published
+  layout: plain
+  root: {daily}
+  glob: "*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+  schema:
+    TradeDate: date
+    Symbol: string
+    Close: double
+us_stock_balance:
+  kind: static
+  access_mode: published
+  layout: plain
+  root: {events}
+  glob: "*.parquet"
+  time_column: filing_date
+  instrument_column: ticker
+  schema:
+    filing_date: date
+    ticker: string
+    TotalAssets: double
+""",
+        encoding="utf-8",
+    )
+    return DataAccessStore(
+        registry=load_registry(tmp_path / "datasets.yaml"),
+        engine=DuckDBEngine(threads=2, enable_object_cache=False),
+    )
+
+
+def test_read_joined_cross_table_column_names(cross_cols_tree):
+    """#5 锚点 TradeDate/Symbol vs 右表 filing_date/ticker，join 必须显式列名。"""
+    store = cross_cols_tree
+    h = store.read_joined(
+        "us_stock_daily",
+        {"us_stock_daily": ["Close"], "us_stock_balance": ["TotalAssets"]},
+        joins={"us_stock_balance": "pit_asof"},
+        time_range=("2024-01-01", "2024-01-02"),
+    )
+    tbl = h.to_arrow()
+    assert set(tbl.column("Symbol").to_pylist()) == {"AAPL"}
+    dates_ = tbl.column("TradeDate").to_pylist()
+    assets = tbl.column("TotalAssets").to_pylist()
+    ordered = dict(sorted(zip(dates_, assets)))
+    assert list(ordered.values()) == [100.0, 110.0]  # 01-01→100, 01-02→110
+
+
+@pytest.fixture()
+def pit_tree(tmp_path, monkeypatch):
+    """带窗口外历史的财报表 + 多版本（#2 seed+window / #6 revision 去重）。"""
+    monkeypatch.setenv("DATA_ACCESS_SKIP_COS_MIRROR", "1")
+    daily = tmp_path / "daily"
+    balance = tmp_path / "balance"
+    daily.mkdir(parents=True)
+    balance.mkdir(parents=True)
+    dates = [date(2024, 1, i + 1) for i in range(5)]  # 01-01..01-05
+    pq.write_table(
+        pa.table(
+            {
+                "TradeDate": [d for d in dates for _ in ("A", "B")],
+                "Symbol": [s for _ in dates for s in ("A", "B")],
+                "Close": [1.0] * 10,
+            }
+        ),
+        str(daily / "d.parquet"),
+    )
+    # 窗口外历史（12-30）+ 窗口内 + 同日双版本
+    pq.write_table(
+        pa.table(
+            {
+                "TradeDate": [date(2023, 12, 30), date(2024, 1, 3),
+                              date(2024, 1, 3), date(2024, 1, 3)],
+                "Symbol": ["A", "A", "A", "B"],
+                "PubDate": [date(2023, 12, 30), date(2024, 1, 3),
+                            date(2024, 1, 3), date(2024, 1, 3)],
+                "UpdateTime": [datetime(2023, 12, 30, 18, 0),
+                               datetime(2024, 1, 3, 8, 0),
+                               datetime(2024, 1, 3, 16, 0),
+                               datetime(2024, 1, 3, 12, 0)],
+                "TotalAssets": [1.0, 2.0, 3.0, 30.0],
+            }
+        ),
+        str(balance / "b.parquet"),
+    )
+    (tmp_path / "datasets.yaml").write_text(
+        f"""
+ashare_stock_daily:
+  kind: static
+  access_mode: published
+  layout: plain
+  root: {daily}
+  glob: "*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+  schema:
+    TradeDate: date
+    Symbol: string
+    Close: double
+ashare_stock_balance:
+  kind: static
+  access_mode: published
+  layout: plain
+  root: {balance}
+  glob: "*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+  schema:
+    TradeDate: date
+    Symbol: string
+    PubDate: date
+    UpdateTime: timestamp
+    TotalAssets: double
+""",
+        encoding="utf-8",
+    )
+    return DataAccessStore(
+        registry=load_registry(tmp_path / "datasets.yaml"),
+        engine=DuckDBEngine(threads=2, enable_object_cache=False),
+    )
+
+
+def test_read_joined_seed_window_picks_prestart_record(pit_tree):
+    """#2 asof 右表用 seed（窗口外最后一条可见记录）+ window，语义与全历史一致。"""
+    store = pit_tree
+    spec = {
+        "knowledge_time": "PubDate",
+        "revision_order": ("UpdateTime",),
+        "availability": "same_day",
+    }
+    h = store.read_joined(
+        "ashare_stock_daily",
+        {"ashare_stock_daily": ["Close"], "ashare_stock_balance": ["TotalAssets"]},
+        joins={"ashare_stock_balance": spec},
+        time_range=("2024-01-01", "2024-01-05"),
+        instrument_filter=["A", "B"],
+    )
+    tbl = h.to_arrow()
+    syms = tbl.column("Symbol").to_pylist()
+    dates_ = tbl.column("TradeDate").to_pylist()
+    assets = tbl.column("TotalAssets").to_pylist()
+    lookup = {(s, d): a for s, d, a in zip(syms, dates_, assets)}
+    # 窗口 start=01-01，A 在 01-03 才有新记录 → 01-01/01-02 用窗口外 12-30 的 seed
+    assert lookup[("A", date(2024, 1, 1))] == 1.0
+    assert lookup[("A", date(2024, 1, 2))] == 1.0
+    assert lookup[("A", date(2024, 1, 3))] == 3.0  # 同日双版本取最新 UpdateTime
+    assert lookup[("A", date(2024, 1, 4))] == 3.0
+    # B 没有窗口前记录；01-03 前 same_day 无可见 → None，01-05 用 01-03 记录
+    assert lookup[("B", date(2024, 1, 1))] is None
+    assert lookup[("B", date(2024, 1, 5))] == 30.0
+
+
+def test_read_joined_next_trading_day_availability(pit_tree):
+    """#3 availability=next_trading_day：PubDate 当天 bar 不可用，次日才可见。"""
+    store = pit_tree
+    spec = {
+        "knowledge_time": "PubDate",
+        "revision_order": ("UpdateTime",),
+        "availability": "next_trading_day",
+    }
+    h = store.read_joined(
+        "ashare_stock_daily",
+        {"ashare_stock_daily": ["Close"], "ashare_stock_balance": ["TotalAssets"]},
+        joins={"ashare_stock_balance": spec},
+        time_range=("2024-01-01", "2024-01-05"),
+        instrument_filter=["A"],
+    )
+    tbl = h.to_arrow()
+    syms = tbl.column("Symbol").to_pylist()
+    dates_ = tbl.column("TradeDate").to_pylist()
+    assets = tbl.column("TotalAssets").to_pylist()
+    lookup = {(s, d): a for s, d, a in zip(syms, dates_, assets)}
+    # seed（12-30）在 01-01 起就可见（01-01 > 12-30）
+    assert lookup[("A", date(2024, 1, 1))] == 1.0
+    assert lookup[("A", date(2024, 1, 2))] == 1.0
+    # PubDate=01-03 的记录 01-03 当天不可用（严格大于）→ 仍用 seed；01-04 可用
+    assert lookup[("A", date(2024, 1, 3))] == 1.0
+    assert lookup[("A", date(2024, 1, 4))] == 3.0
+
+
+def test_read_joined_catalog_derived_pit_join(pit_tree):
+    """#3 逻辑字段（total_assets）从 catalog 自动推导 pit_asof 语义：
+    knowledge_time=PubDate + next_trading_day + revision_order，无需调用方指定 joins。"""
+    store = pit_tree
+    # list-mode 字段 + catalog → 自动推导语义 join（默认 next_trading_day）
+    h = store.read_joined(
+        "ashare_stock_daily",
+        ["total_assets"],
+        time_range=("2024-01-01", "2024-01-05"),
+        instrument_filter=["A"],
+    )
+    tbl = h.to_arrow()
+    dates_ = tbl.column("TradeDate").to_pylist()
+    assets = tbl.column("TotalAssets").to_pylist()
+    lookup = dict(zip(dates_, assets))
+    # next_trading_day：PubDate=01-03 的记录 01-03 当天不可见 → 用 12-30 seed
+    assert lookup[date(2024, 1, 1)] == 1.0
+    assert lookup[date(2024, 1, 3)] == 1.0
+    assert lookup[date(2024, 1, 4)] == 3.0
+
+
+@pytest.fixture()
+def constituent_tree(tmp_path, monkeypatch):
+    """带 IndexConstituent 的注册表（required_filters 端到端测试）。"""
+    monkeypatch.setenv("DATA_ACCESS_SKIP_COS_MIRROR", "1")
+    daily = tmp_path / "daily"
+    idx = tmp_path / "idx"
+    daily.mkdir(parents=True)
+    idx.mkdir(parents=True)
+    pq.write_table(
+        pa.table(
+            {
+                "TradeDate": [date(2024, 1, 1), date(2024, 1, 2)],
+                "Symbol": ["000001.SZ", "000001.SZ"],
+                "Close": [10.0, 11.0],
+            }
+        ),
+        str(daily / "d.parquet"),
+    )
+    pq.write_table(
+        pa.table(
+            {
+                "TradeDate": [date(2024, 1, 1), date(2024, 1, 2)],
+                "Symbol": ["000001.SZ", "000001.SZ"],
+                "IndexSymbol": ["000300.SH", "000300.SH"],
+                "Weight": [0.6, 0.7],
+            }
+        ),
+        str(idx / "i.parquet"),
+    )
+    (tmp_path / "datasets.yaml").write_text(
+        f"""
+ashare_stock_daily:
+  kind: static
+  access_mode: published
+  layout: plain
+  root: {daily}
+  glob: "*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+  schema:
+    TradeDate: date
+    Symbol: string
+    Close: double
+ashare_index_constituent:
+  kind: static
+  access_mode: published
+  layout: plain
+  root: {idx}
+  glob: "*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+  schema:
+    TradeDate: date
+    Symbol: string
+    IndexSymbol: string
+    Weight: double
+""",
+        encoding="utf-8",
+    )
+    return DataAccessStore(
+        registry=load_registry(tmp_path / "datasets.yaml"),
+        engine=DuckDBEngine(threads=2, enable_object_cache=False),
+    )
+
+
+def test_required_filters_research_warns(constituent_tree):
+    """#8 required_filters：research 模式缺 IndexSymbol 只告警不失败。"""
+    store = constituent_tree
+    field = get_semantic_catalog().get("index_weight")
+    store._enforce_required_filters([field], {})  # 不应抛错
+
+
+def test_required_filters_production_fails(constituent_tree, monkeypatch):
+    """#8 required_filters：production 模式缺 IndexSymbol 必须 fail-closed。"""
+    monkeypatch.setenv("QUANT_PRODUCTION_MODE", "1")
+    store = constituent_tree
+    field = get_semantic_catalog().get("index_weight")
+    with pytest.raises(ValidationError):
+        store._enforce_required_filters([field], {})
+    # 提供 IndexSymbol 后放行
+    store._enforce_required_filters([field], {"ashare_index_constituent": {"IndexSymbol": "000300.SH"}})
+
+
+def test_read_joined_exact_dedup_revision(pit_tree):
+    """#6 exact join 同日双版本：join 前按 revision_order 去重，行数不膨胀。"""
+    store = pit_tree
+    spec = {
+        "policy": "exact",
+        "revision_order": ("UpdateTime",),
+    }
+    h = store.read_joined(
+        "ashare_stock_daily",
+        {"ashare_stock_daily": ["Close"], "ashare_stock_balance": ["TotalAssets"]},
+        joins={"ashare_stock_balance": spec},
+        time_range=("2024-01-03", "2024-01-03"),
+        instrument_filter=["A"],
+    )
+    tbl = h.to_arrow()
+    # A 在 01-03 有两条版本（UpdateTime 08:00 / 16:00）→ 去重后取 3.0，且只 1 行
+    assert tbl.num_rows == 1
+    assert tbl.column("TotalAssets").to_pylist() == [3.0]
+
+
+@pytest.fixture()
+def timevar_universe_tree(tmp_path, monkeypatch):
+    """universe 成员随时间变化（#15 时变 panel）：01-01 只有 A，01-02 起 A+B。"""
+    monkeypatch.setenv("DATA_ACCESS_SKIP_COS_MIRROR", "1")
+    daily = tmp_path / "daily"
+    uni = tmp_path / "universe"
+    daily.mkdir(parents=True)
+    uni.mkdir(parents=True)
+    pq.write_table(
+        pa.table(
+            {
+                "TradeDate": [date(2024, 1, 1), date(2024, 1, 2),
+                              date(2024, 1, 1), date(2024, 1, 2)],
+                "Symbol": ["A", "A", "B", "B"],
+                "Close": [1.0, 2.0, 10.0, 20.0],
+            }
+        ),
+        str(daily / "d.parquet"),
+    )
+    pq.write_table(
+        pa.table(
+            {
+                "TradeDate": [date(2024, 1, 1), date(2024, 1, 2), date(2024, 1, 2)],
+                "Symbol": ["A", "A", "B"],
+            }
+        ),
+        str(uni / "u.parquet"),
+    )
+    (tmp_path / "datasets.yaml").write_text(
+        f"""
+ashare_stock_daily:
+  kind: static
+  access_mode: published
+  layout: plain
+  root: {daily}
+  glob: "*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+  schema:
+    TradeDate: date
+    Symbol: string
+    Close: double
+ashare_universe_daily:
+  kind: static
+  access_mode: published
+  layout: plain
+  root: {uni}
+  glob: "*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+  schema:
+    TradeDate: date
+    Symbol: string
+""",
+        encoding="utf-8",
+    )
+    return DataAccessStore(
+        registry=load_registry(tmp_path / "datasets.yaml"),
+        engine=DuckDBEngine(threads=2, enable_object_cache=False),
+    )
+
+
+def test_plan_universe_time_varying_membership(timevar_universe_tree):
+    """#15 时变 universe：01-01 只有 A，01-02 A+B，跨日成分变化必须保留。"""
+    store = timevar_universe_tree
+    plan = store.plan(
+        DataRequest(
+            fields=["close"],
+            anchor="ashare_stock_daily",
+            universe="ashare_universe_daily",
+            start="2024-01-01",
+            end="2024-01-02",
+        )
+    )
+    h = plan.execute()
+    tbl = h.to_arrow()
+    dates_ = tbl.column("TradeDate").to_pylist()
+    syms = tbl.column("Symbol").to_pylist()
+    members = {(d, s) for d, s in zip(dates_, syms)}
+    # 01-01 B 不在 universe → 被过滤；01-02 A+B 都在
+    assert (date(2024, 1, 1), "A") in members
+    assert (date(2024, 1, 1), "B") not in members
+    assert (date(2024, 1, 2), "A") in members
+    assert (date(2024, 1, 2), "B") in members
+
+
+def test_plan_universe_static_intersection(tree):
+    """#15 显式 time_varying_universe=False → 退回窗口内静态集合求交（旧行为）。"""
+    store = tree["store"]
+    plan = store.plan(
+        DataRequest(
+            fields=["close"],
+            anchor="ashare_stock_daily",
+            universe="ashare_universe_daily",
+            instruments=["A"],
+            start="2024-01-01",
+            end="2024-01-05",
+            time_varying_universe=False,
+        )
+    )
+    h = plan.execute()
+    assert set(h.to_arrow().column("Symbol").to_pylist()) == {"A"}
+
+
 def test_manifest_version_and_stale(tree):
     store = tree["store"]
     assert store.manifest_version("ashare_stock_daily")["has_manifest"] is False
@@ -338,7 +812,8 @@ def test_manifest_version_and_stale(tree):
     )
     # 错误 token → stale
     assert store.is_snapshot_stale("ashare_stock_daily", dataset_version="deadbeef") is True
-    # 新增文件 → partition_version 变化 → stale
+    # #17/#18：新增文件后写路径 bump manifest epoch → 立即 stale（read path 不再 glob）
+    epoch0 = store.manifest_version("ashare_stock_daily")["manifest_epoch"]
     pq.write_table(
         pa.table(
             {
@@ -350,12 +825,19 @@ def test_manifest_version_and_stale(tree):
         ),
         str(tree["daily"] / "extra.parquet"),
     )
-    assert (
-        store.is_snapshot_stale(
-            "ashare_stock_daily", partition_version=mv["partition_version"]
-        )
-        is True
-    )
+    # 尚未 bump → 仍视为 fresh（read path 信任写路径维护的 epoch）
+    assert store.is_snapshot_stale(
+        "ashare_stock_daily",
+        dataset_version=mv["dataset_version"],
+        partition_version=mv["partition_version"],
+        manifest_epoch=epoch0,
+    ) is False
+    # 写路径 bump epoch → stale
+    new_epoch = store.touch_manifest_epoch("ashare_stock_daily")
+    assert new_epoch is not None and new_epoch != epoch0
+    assert store.is_snapshot_stale(
+        "ashare_stock_daily", manifest_epoch=epoch0
+    ) is True
 
 
 def test_sql_relation(tree):

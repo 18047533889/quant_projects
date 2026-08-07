@@ -445,12 +445,161 @@ class ReportBenfordJsDivergence(SeriesOperator):
         return _frame_like(amount, _rolling_apply_2d(amount.to_numpy(dtype=float), w, _benford_js))
 
 
+# ---------------------------------------------------------------------------
+# Transfer-entropy peak over a fixed lag grid (fused P1/P2)
+# ---------------------------------------------------------------------------
+
+_TE_LAGS = (1, 2, 3, 5, 10)
+
+
+def _te_peak_window(tw: np.ndarray, sw: np.ndarray, bins: int, min_transitions: int) -> tuple[float, float]:
+    """TE over the fixed lag grid (1,2,3,5,10) on one causal window.
+
+    Returns ``(peak_strength, peak_lag_norm)`` — the max TE value and its lag
+    normalized by the largest lag.  Binning is shared per window; this is the
+    "fused primitive" that avoids re-discretizing five times in the AST.
+    """
+    valid = np.isfinite(tw) & np.isfinite(sw)
+    idx = np.flatnonzero(valid)
+    best = np.nan
+    best_lag = np.nan
+    for lag in _TE_LAGS:
+        if idx.size < max(lag + 2, min_transitions):
+            continue
+        xs = tw[idx[:-lag]]
+        ys = sw[idx[:-lag]]
+        x_next = tw[idx[lag:]]
+        if np.unique(xs).size < 2 or np.unique(ys).size < 2:
+            continue
+        v = _te_from_transitions(xs, ys, x_next, bins)
+        if not np.isfinite(v):
+            continue
+        if not np.isfinite(best) or v > best:
+            best = v
+            best_lag = float(lag)
+    if np.isfinite(best):
+        return best, best_lag / float(_TE_LAGS[-1])
+    return np.nan, np.nan
+
+
+@register_operator(
+    name="ts_transfer_entropy_peak_strength",
+    category="information_theory",
+    business_category="information_theory",
+    canonical="ts_transfer_entropy_peak_strength",
+    source="advanced_information",
+)
+class TsTransferEntropyPeakStrength(SeriesOperator):
+    """固定 lag 网格 (1,2,3,5,10) 上传递熵的峰值 ``max_l TE_l``（nats）。
+
+    fused 原语：同一窗口只分箱一次，输出跨 lag 的最大 TE，避免在搜索树里为
+    每个 lag 单独重算 TE。高 = 在某个典型时滞上存在强非线性条件信息传递。
+    PIT 安全、确定性。
+    """
+
+    metadata = _metadata(
+        "ts_transfer_entropy_peak_strength",
+        "TE 在 lag∈{1,2,3,5,10} 上的峰值 max TE_l（nats）。",
+        ["target", "source", "window", "bins", "min_transitions"],
+        domain="price_volume",
+        unit="nats",
+        cost=7,
+    )
+
+    def _calculate_series(
+        self,
+        target: pd.DataFrame,
+        source: pd.DataFrame,
+        window: int = 60,
+        bins: int = 3,
+        min_transitions: Any = None,
+        **_: Any,
+    ) -> pd.DataFrame:
+        w = int(window)
+        nb = int(bins)
+        if not (2 <= nb <= 8):
+            raise ValueError("ts_transfer_entropy_peak_strength requires 2 <= bins <= 8")
+        if w < max(_TE_LAGS) + 2:
+            raise ValueError("ts_transfer_entropy_peak_strength requires window >= 12")
+        if min_transitions is None:
+            mt = max(30, 3 * nb * nb)
+        else:
+            mt = max(max(_TE_LAGS) + 2, int(min_transitions))
+        return _frame_like(
+            target,
+            _rolling_apply_2d_pair(
+                target.to_numpy(dtype=float),
+                source.to_numpy(dtype=float),
+                w,
+                lambda a, b: _te_peak_window(a, b, nb, mt)[0],
+            ),
+        )
+
+
+@register_operator(
+    name="ts_transfer_entropy_peak_lag",
+    category="information_theory",
+    business_category="information_theory",
+    canonical="ts_transfer_entropy_peak_lag",
+    source="advanced_information",
+)
+class TsTransferEntropyPeakLag(SeriesOperator):
+    """传递熵峰值所在时滞 ``argmax_l TE_l / 10``（归一化 [0,1]）。
+
+    与 ``ts_transfer_entropy_peak_strength`` 共享同一 fused 计算，回答"信息传递
+    的典型时滞有多长"。与滞后相关峰同类，但这里是**非线性条件信息**。PIT 安全。
+    """
+
+    metadata = _metadata(
+        "ts_transfer_entropy_peak_lag",
+        "TE 峰值 lag（归一化 l*/10，[0,1]）。",
+        ["target", "source", "window", "bins", "min_transitions"],
+        domain="price_volume",
+        unit="ratio",
+        cost=7,
+    )
+
+    def _calculate_series(
+        self,
+        target: pd.DataFrame,
+        source: pd.DataFrame,
+        window: int = 60,
+        bins: int = 3,
+        min_transitions: Any = None,
+        **_: Any,
+    ) -> pd.DataFrame:
+        w = int(window)
+        nb = int(bins)
+        if not (2 <= nb <= 8):
+            raise ValueError("ts_transfer_entropy_peak_lag requires 2 <= bins <= 8")
+        if w < max(_TE_LAGS) + 2:
+            raise ValueError("ts_transfer_entropy_peak_lag requires window >= 12")
+        if min_transitions is None:
+            mt = max(30, 3 * nb * nb)
+        else:
+            mt = max(max(_TE_LAGS) + 2, int(min_transitions))
+        return _frame_like(
+            target,
+            _rolling_apply_2d_pair(
+                target.to_numpy(dtype=float),
+                source.to_numpy(dtype=float),
+                w,
+                lambda a, b: _te_peak_window(a, b, nb, mt)[1],
+            ),
+        )
+
+
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
     _surface.EXTENDED_ONLY_CANONICALS = frozenset(
         set(_surface.EXTENDED_ONLY_CANONICALS)
-        | {"ts_transfer_entropy", "ts_score_rank_weighted_mean"}
+        | {
+            "ts_transfer_entropy",
+            "ts_score_rank_weighted_mean",
+            "ts_transfer_entropy_peak_strength",
+            "ts_transfer_entropy_peak_lag",
+        }
     )
     _surface.RESEARCH_ONLY_CANONICALS = frozenset(
         set(_surface.RESEARCH_ONLY_CANONICALS)

@@ -63,13 +63,8 @@ class ReadHandle:
     def rows(self) -> int | None:
         if self._kind == "table":
             return self._source.num_rows
-        if self._kind == "lazy":
-            try:
-                return self._source.select([self._source.columns[0]]).collect(
-                    streaming=True
-                ).height
-            except Exception:
-                return None
+        # lazy / stream 形态不触发 collect（#28：rows 只是元信息，物化由
+        # to_arrow/to_pandas/to_polars 等显式方法负责）。
         return None
 
     @property
@@ -146,6 +141,7 @@ class ReadHandle:
             yield batch
 
     def __repr__(self) -> str:
+        # #28：repr 不触发 lazy collect——rows 对非物化形态返回 None
         return (
             f"ReadHandle(kind={self._kind}, rows={self.rows}, "
             f"columns={self.columns}, snapshot={getattr(self.snapshot, 'snapshot_id', None)})"

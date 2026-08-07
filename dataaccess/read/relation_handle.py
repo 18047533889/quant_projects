@@ -28,6 +28,7 @@ from __future__ import annotations
 
 from typing import Any, Sequence
 
+from data_access.core.exceptions import ValidationError
 from data_access.read.query_budget import QueryBudget, enforce_arrow_budget, resolve_query_budget
 
 
@@ -84,12 +85,78 @@ class RelationHandle:
             lineage=self._lineage,
         )
 
-    # ---- 逃生口（仅检查用） ----
+    # ---- 逃生口（仅检查用；production 禁止） ----
 
     @property
     def relation(self) -> Any:
-        """返回底层 DuckDB Relation（用于 schema/explain 检查，不直接 fetch 大数据）。"""
+        """返回底层 DuckDB Relation（用于 schema/explain 检查，不直接 fetch 大数据）。
+
+        #31 production/strict 模式禁止公开活 relation（调用方可能绕过
+        QueryBudget/audit/deadline 直接 fetchall）——只允许通过受控的
+        ``schema() / explain() / columns() / types()`` 做只读检查。
+        """
+        from data_access.read.query_budget import _production_mode, _strict_read_mode
+
+        if _production_mode() or _strict_read_mode():
+            raise ValidationError(
+                "production/strict 模式禁止访问 RelationHandle.relation（逃生口）。"
+                "请使用 schema()/explain()/columns()/types() 做只读检查。"
+            )
         return self._store._engine.relation(self._sql, self._params)
+
+    def schema(self) -> Any:
+        """返回列定义（name, type, nullable...）——只读 schema，不取数据。
+
+        DuckDB relation 的 ``columns`` 是列名字符串列表，``types`` 是类型列表；
+        直接透传供调用方只读检查。
+        """
+        rel = self._store._engine.relation(self._sql, self._params)
+        cols = getattr(rel, "columns", None)
+        return cols() if callable(cols) else cols
+
+    def columns(self) -> list[str]:
+        """返回列名列表（不触发数据 collect）。"""
+        rel = self._store._engine.relation(self._sql, self._params)
+        cols = getattr(rel, "columns", None)
+        if callable(cols):
+            cols = cols()
+        if cols is None:
+            return []
+        if isinstance(cols, list) and cols and not isinstance(cols[0], str):
+            return [str(getattr(c, "name", c)) for c in cols]
+        return [str(c) for c in (cols or [])]
+
+    def types(self) -> list[str]:
+        """返回列类型字符串列表（不触发数据 collect）。"""
+        rel = self._store._engine.relation(self._sql, self._params)
+        types = getattr(rel, "types", None)
+        if types is None:
+            return []
+        if callable(types):
+            types = types()
+        return [str(t) for t in (types or [])]
+
+    def sql_fragment(self, select_sql: str, *, params: Sequence[Any] | None = None) -> "RelationHandle":
+        """结构化 SQL 组合（#30）：显式给出「外层 SQL + 其参数」，把当前句柄的
+        SQL 与参数作为子查询整体嵌入，避免嵌套 placeholder 顺序错误。
+
+        与 ``.sql()`` 的区别：这里接受一个以 ``{sub}`` 占位的 SELECT（SQL 里
+        用 ``FROM {sub}``），参数只包含外层 SELECT 自身的；子查询参数自动
+        在内部保持自己的顺序。
+        """
+        text = select_sql.strip()
+        if "{sub}" not in text:
+            raise ValueError("sql_fragment 的 SELECT 必须用 {sub} 作为子查询占位")
+        new_sql = text.replace("{sub}", f"({self._sql}) AS _sub")
+        # SQL 文本里子查询先出现 → 子查询参数在前，外层 SELECT 参数在后
+        return RelationHandle(
+            self._store,
+            new_sql,
+            params=[*self._params, *(list(params or []))],
+            query_budget=self._budget,
+            snapshot=self._snapshot,
+            lineage=self._lineage,
+        )
 
     # ---- 受控 collect ----
 

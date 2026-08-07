@@ -226,6 +226,10 @@ def check_schema(
     declared = dict(ds.schema) if getattr(ds, "schema", None) else {}
     if not declared:
         return SchemaCheckResult(ok=True, dataset=ds.name)
+    # #21 manifest 空裁剪：没有文件可校验（也无可裁剪的列），直接 ok。
+    # _fetch_actual_schema 对空路径会抛错，这里提前短路。
+    if not paths:
+        return SchemaCheckResult(ok=True, dataset=ds.name)
 
     actual_pairs = _fetch_actual_schema(engine, ds, paths)
     actual_map = {name: typ for name, typ in actual_pairs}

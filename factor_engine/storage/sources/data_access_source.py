@@ -119,6 +119,11 @@ class DataAccessSource(DataSource):
         self._max_cache_columns = _positive_int_env(
             "FACTOR_ENGINE_DATA_CACHE_MAX_COLUMNS", 64
         )
+        # #42 字节感知缓存上限（默认 8GB）；超限按列数 LRU 淘汰
+        self._max_cache_bytes = _positive_int_env(
+            "FACTOR_ENGINE_DATA_CACHE_MAX_BYTES", 8 * 1024 * 1024 * 1024
+        )
+        self._cache_bytes = 0
         self._closed = False
 
     def _validate_semantic_contract(self) -> None:
@@ -221,26 +226,42 @@ class DataAccessSource(DataSource):
     def _resolve_columns(self, names: Iterable[str]) -> tuple[list[str], dict[str, str]]:
         names = list(names)
         self._preflight_logical_columns(names)
+        # #9 SemanticFieldCatalog 是字段解析的单一事实源：先走 store.resolve_fields()
+        # （含 aliases / 物理列反查 / 单位 scale），catalog 没有才回退 FE FIELD_REGISTRY
+        # 与 raw physical pass-through。
+        try:
+            catalog_fields = _get_store().resolve_fields(list(names), dataset=self.dataset)
+        except Exception:
+            catalog_fields = None
+        catalog_physical = {}
+        if catalog_fields is not None:
+            for raw_name, f in zip(names, catalog_fields):
+                catalog_physical[raw_name] = f.physical_name
+
         physical: list[str] = []
         output_names: dict[str, str] = {}
         for name in names:
             src = self.fields.get(name)
             spec = None
             if src is None:
-                try:
-                    from fields import FIELD_REGISTRY
+                # catalog 优先
+                if name in catalog_physical:
+                    src = catalog_physical[name]
+                else:
+                    try:
+                        from fields import FIELD_REGISTRY
 
-                    spec = FIELD_REGISTRY.get(name, table=self.dataset)
-                except Exception:
-                    spec = None
-                if spec is not None:
-                    if spec.dataset == self.dataset:
-                        src = spec.source_name
-                    elif self.strict_unknown_fields:
-                        raise UnknownFieldSemanticError(
-                            f"dataset={self.dataset!r} has no field {name!r}: it belongs "
-                            f"to dataset {spec.dataset!r}"
-                        )
+                        spec = FIELD_REGISTRY.get(name, table=self.dataset)
+                    except Exception:
+                        spec = None
+                    if spec is not None:
+                        if spec.dataset == self.dataset:
+                            src = spec.source_name
+                        elif self.strict_unknown_fields:
+                            raise UnknownFieldSemanticError(
+                                f"dataset={self.dataset!r} has no field {name!r}: it belongs "
+                                f"to dataset {spec.dataset!r}"
+                            )
             if src is None and self.strict_unknown_fields and name not in self.fields:
                 # Production fail-closed: a request that matches neither an explicit
                 # alias mapping nor a registered field of this dataset has no unit /
@@ -347,10 +368,26 @@ class DataAccessSource(DataSource):
         self._closed = True
 
     def _put_cache(self, cache: OrderedDict[str, Any], name: str, value: Any) -> None:
+        if name in cache:
+            self._cache_bytes -= self._series_bytes(cache[name])
         cache[name] = value
         cache.move_to_end(name)
+        self._cache_bytes += self._series_bytes(value)
+        # #42 先按字节上限淘汰，再按列数上限淘汰（1 列分钟 vs 1 列日频差异百倍）
+        while len(cache) > 0 and self._cache_bytes > self._max_cache_bytes:
+            _, evicted = cache.popitem(last=False)
+            self._cache_bytes -= self._series_bytes(evicted)
         while len(cache) > self._max_cache_columns:
-            cache.popitem(last=False)
+            _, evicted = cache.popitem(last=False)
+            self._cache_bytes -= self._series_bytes(evicted)
+
+    @staticmethod
+    def _series_bytes(value: Any) -> int:
+        """估算缓存对象的字节占用（pd.Series/DataFrame 用 nbytes，容错 0）。"""
+        try:
+            return int(value.nbytes)
+        except Exception:
+            return 0
 
     def column_cache_stats(self) -> dict[str, int]:
         return {
@@ -433,6 +470,8 @@ class DataAccessSource(DataSource):
                 self._record_read_snapshot(self._lazy_bundle.snapshot_id)
         else:
             # 引擎/结果形态交给 DataAccess 成本路由（read_auto 语义下沉到 DataAccess）。
+            # #9/#12 单位归一化由 DataAccess 输出层完成（SemanticFieldCatalog scale），
+            # FactorEngine 不再二次修正 catalog 覆盖的字段。
             from data_access.read.adapters import arrow_table_to_multiindex_columns
 
             all_columns = list(dict.fromkeys([ds.time_column, ds.instrument_column, *physical]))
@@ -441,6 +480,7 @@ class DataAccessSource(DataSource):
                 columns=all_columns,
                 time_range=self._time_range(),
                 instrument_filter=self.instrument_filter,
+                normalize_units=True,
                 **self.params,
             )
             self._record_read_snapshot(getattr(handle.snapshot, "snapshot_id", None))
@@ -466,17 +506,33 @@ class DataAccessSource(DataSource):
     def _normalize_contract_columns(self, fetched: dict[str, Any], names: list[str]) -> None:
         """Normalize every registered logical field before it enters the cache.
 
-        Registered fields are scaled from ``source_unit`` to the canonical unit
-        (e.g. A-share Return bp → ratio, TurnoverRatio/ROE/ShareRatio/Weight % →
-        ratio).  Production is fail-closed: a unit/scale failure raises instead of
+        #9/#12：SemanticFieldCatalog 覆盖的字段已由 ``store.read(normalize_units=True)``
+        在 DataAccess 输出层归一化（scale 是单一事实源），这里**跳过**它们避免二次
+        乘 scale；只有 catalog 未覆盖的字段才按 FE FIELD_REGISTRY 归一化（长尾兼容）。
+
+        Production is fail-closed: a unit/scale failure raises instead of
         silently caching the raw vendor value (which would contaminate every
         downstream operator with a 10000× or 100× error).
         """
+        catalog_covered: set[str] = set()
+        try:
+            resolved = _get_store().resolve_fields(list(names), dataset=self.dataset)
+            for f in resolved:
+                if getattr(f, "is_scale_applicable", False):
+                    catalog_covered.add(f.logical_name)
+                    for alias in getattr(f, "aliases", ()) or ():
+                        catalog_covered.add(alias)
+        except Exception:
+            # 解析失败 → 不跳过任何字段（回退全 FE registry 归一化，旧行为）
+            catalog_covered = set()
+
         normalized: set[str] = set()
         try:
             from fields import FIELD_REGISTRY
 
             for name in names:
+                if name in catalog_covered:
+                    continue  # 已由 DataAccess 归一化
                 spec = FIELD_REGISTRY.get(name)
                 if spec is None or spec.dataset != self.dataset or name not in fetched:
                     continue

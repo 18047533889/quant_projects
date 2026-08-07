@@ -1207,11 +1207,11 @@ _ADVANCED_PACK_POLICIES = {
         "scope": "session_intraday", "pit_safe": True,
         "session_aware": True, "reset_at_session_boundary": True, "min_periods": 20,
     },
-    "intraday_wasserstein_quantile_pca_score": {
+    "intraday_quantile_curve_pca_score": {
         "scope": "session_intraday", "pit_safe": True,
         "session_aware": True, "reset_at_session_boundary": True, "min_periods": 20,
     },
-    "intraday_wasserstein_quantile_pca_residual": {
+    "intraday_quantile_curve_pca_residual": {
         "scope": "session_intraday", "pit_safe": True,
         "session_aware": True, "reset_at_session_boundary": True, "min_periods": 20,
     },
@@ -1294,6 +1294,65 @@ _DYNAMICS_PACK_POLICIES = {
     "report_revision_magnitude": {"scope": "ts", "pit_safe": True, "min_periods": 5},
 }
 _EXPLICIT_POLICIES.update(_DYNAMICS_PACK_POLICIES)
+
+# 2026-08 vertical deepening pack — all strictly trailing / report-causal.
+_DEEPENING_PACK_POLICIES = {
+    # Markov state deep-dive (strictly-past transition matrix).
+    "ts_markov_committor": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "ts_markov_mean_first_passage_time": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "ts_markov_spectral_gap": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "ts_markov_stationary_surprisal": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    # Kramers-Moyal deep-dive.
+    "ts_km_equilibrium_distance": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "ts_km_diffusion_gradient": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "ts_km_quasipotential_depth": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    # First-passage decomposition (anchors s+H <= t).
+    "ts_first_passage_hit_probability": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "ts_first_passage_conditional_time": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    # Event-response curve shape (completed events only).
+    "event_response_peak_lag": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "event_response_decay_rate": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "event_response_dispersion": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "event_response_reversal_strength": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    # Extreme-value tail shape.
+    "ts_extremal_index": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "ts_mean_excess_slope": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "ts_gpd_shape_pwm": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    # Transfer-entropy peak (fused, lagged).
+    "ts_transfer_entropy_peak_strength": {"scope": "ts", "pit_safe": True, "lag": 1, "min_periods": 5},
+    "ts_transfer_entropy_peak_lag": {"scope": "ts", "pit_safe": True, "lag": 1, "min_periods": 5},
+    # Distribution transport / MMD (two-window trailing).
+    "ts_quantile_transport_slope": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "ts_quantile_transport_curvature": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "ts_mmd_rbf_shift": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    # Chord geometry.
+    "ts_chord_excursion_area": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_max_chord_excursion": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    # Chip-cost shape (turnover survival uses t-1 and before).
+    "ts_turnover_cost_entropy": {"scope": "ts", "pit_safe": True, "lag": 1, "min_periods": 5},
+    "ts_turnover_cost_mode_distance": {"scope": "ts", "pit_safe": True, "lag": 1, "min_periods": 5},
+    "ts_turnover_cost_skew": {"scope": "ts", "pit_safe": True, "lag": 1, "min_periods": 5},
+    "ts_turnover_age_dispersion": {"scope": "ts", "pit_safe": True, "lag": 1, "min_periods": 5},
+    # Group spectral deep-dive.
+    "group_corr_spectral_gap": {"scope": "group", "pit_safe": True},
+    "group_corr_second_mode_localization": {"scope": "group", "pit_safe": True},
+    # Style-graph smoothness.
+    "cs_knn_graph_dirichlet_energy": {"scope": "cs", "pit_safe": True},
+    # Intraday volatility signature (EOD).
+    "intraday_rv_signature_slope": {
+        "scope": "session_intraday", "pit_safe": True, "session_aware": True,
+        "reset_at_session_boundary": True, "min_periods": 2,
+    },
+    # Report change breadth / coherence (period-aware).
+    "report_change_breadth": {"scope": "fundamental_period", "pit_safe": True, "min_periods": 5},
+    "report_change_coherence": {"scope": "fundamental_period", "pit_safe": True, "min_periods": 5},
+    # Recurrence quantification analysis.
+    "ts_recurrence_rate": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "ts_recurrence_diagonal_entropy": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "ts_recurrence_trapping_time": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "ts_recurrence_divergence": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+}
+_EXPLICIT_POLICIES.update(_DEEPENING_PACK_POLICIES)
 
 # Compatibility export now reflects the reviewed research surface exactly.
 RESEARCH_CORE_CANONICALS = RESEARCH_ONLY_CANONICALS

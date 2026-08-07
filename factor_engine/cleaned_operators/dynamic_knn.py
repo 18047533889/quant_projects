@@ -182,12 +182,75 @@ class CsKnnNeighborRetention(SeriesOperator):
         return frame_like(f1, _retention_series(feats, k, lg))
 
 
+def _dirichlet_energy_series(target: np.ndarray, feats: np.ndarray, k: int) -> np.ndarray:
+    """Per-node Dirichlet energy over the style-kNN graph: mean squared gap of
+    the *target* to its k most style-similar names.
+
+    Low = similar names actually move together (factor smooth on the style
+    graph); high = style similarity has decoupled from realized behaviour
+    (regime divergence).  Zero/undefined neighbour sets fail closed to NaN."""
+    rows, n, d = feats.shape
+    out = np.full((rows, n), np.nan, dtype=float)
+    for t in range(rows):
+        U, valid = _rank_features(feats, t)
+        for i in range(n):
+            if not valid[i]:
+                continue
+            nbrs = _neighbors(U, valid, k, i)
+            if nbrs.size == 0:
+                continue
+            x_i = target[t, i]
+            if not np.isfinite(x_i):
+                continue
+            vals = target[t, nbrs]
+            vals = vals[np.isfinite(vals)]
+            if vals.size == 0:
+                continue
+            out[t, i] = float(np.mean((vals - x_i) ** 2))
+    return out
+
+
+@register_operator(
+    name="cs_knn_graph_dirichlet_energy",
+    category="cross_sectional",
+    business_category="cross_sectional",
+    canonical="cs_knn_graph_dirichlet_energy",
+    source="dynamic_knn",
+)
+class CsKnnGraphDirichletEnergy(SeriesOperator):
+    """风格 k-NN 图上的目标 Dirichlet 能量 ``mean_{j∈NN(i)} (x_i - x_j)²``。
+
+    每日期截面：特征（风格）图用秩标准化 L2 建 kNN，目标在图上不平滑程度 =
+    每个节点相对其同行的均方差。低 = 相似股票确实一起走（因子在图上平滑）；
+    高 = 风格相似与实际行为发生解耦（regime 切换 / 分化）。对 regime 检测和
+    "同行 residual" 配方都有用。PIT 安全（当天截面，无前视）。
+    """
+
+    metadata = _metadata(
+        "cs_knn_graph_dirichlet_energy",
+        "目标在风格 kNN 图上的 Dirichlet energy（低=平滑）。",
+        ["target", "f1", "f2", "f3", "k"],
+        unit="ratio",
+        cost=7,
+    )
+
+    def _calculate_series(
+        self, target: pd.DataFrame, f1: pd.DataFrame, f2: pd.DataFrame, f3: pd.DataFrame, k: int = 5, **_: Any
+    ) -> pd.DataFrame:
+        feats = np.stack([f.to_numpy(dtype=float) for f in (f1, f2, f3)], axis=2)
+        return frame_like(target, _dirichlet_energy_series(target.to_numpy(dtype=float), feats, k))
+
+
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
     _surface.EXTENDED_ONLY_CANONICALS = frozenset(
         set(_surface.EXTENDED_ONLY_CANONICALS)
-        | {"cs_knn_peer_mean_ex_self", "cs_knn_neighbor_retention"}
+        | {
+            "cs_knn_peer_mean_ex_self",
+            "cs_knn_neighbor_retention",
+            "cs_knn_graph_dirichlet_energy",
+        }
     )
 
 

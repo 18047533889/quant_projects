@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -85,42 +84,57 @@ class LQTPLogicalDataSource(DataSource):
         return pd.Series(merged["value"].to_numpy(), index=anchor, name=series.name)
 
     def _load_turnover_base(self, field: str) -> pd.Series:
-        # Use the LQTP physical mirror directly; CirculatingCapital is not an
-        # acceptable semantic substitute for EffectiveFloatShares.
-        root = Path(os.environ.get("ASHARE_PARQUET_ROOT", "/home/shw/quant_projects/data/a_share/lqtp_data")) / "TurnoverBaseDaily"
-        if not root.exists():
-            raise MissingDataDependencyError(
-                f"TurnoverBaseDaily mirror not found at {root}; sync the LQTP TurnoverBaseDaily source first"
-            )
-        from .parquet_source import ParquetSource
-        src = ParquetSource(root=str(root), timestamp_column="TradeDate", instrument_column="Symbol",
-                            fields=None, start_date=getattr(self.inner, "start_date", None),
-                            end_date=getattr(self.inner, "end_date", None), recursive=True)
-        try:
-            return src.load_column(field)
-        except Exception:
-            if field == "TurnoverBase":
-                return src.load_column("EffectiveFloatShares")
-            raise
+        # #11 走 DataAccess 登记数据集（ashare_turnover_base_daily），不再直接
+        # ParquetSource 裸读 LQTP 镜像。
+        from .data_access_source import _get_store
+
+        store = _get_store()
+        ds = store.get_dataset("ashare_turnover_base_daily")
+        physical = "EffectiveFloatShares" if field == "TurnoverBase" else field
+        handle = store.read(
+            "ashare_turnover_base_daily",
+            columns=[ds.instrument_column, physical],
+            time_range=(getattr(self.inner, "start_date", None),
+                        getattr(self.inner, "end_date", None)),
+            instrument_filter=getattr(self.inner, "instrument_filter", None),
+        )
+        frame = handle.to_arrow().to_pandas()
+        instrument = next(
+            (c for c in ("Symbol", "ticker", "Ticker") if c in frame.columns),
+            ds.instrument_column,
+        )
+        ts = pd.to_datetime(frame[ds.time_column])
+        idx = pd.MultiIndex.from_arrays([ts, frame[instrument]], names=["timestamp", "instrument"])
+        return pd.Series(frame[physical].to_numpy(), index=idx, name=field)
 
     def _load_intermediate(self, spec) -> pd.Series:
-        from workspace_paths import default_factor_lake_root
-        root = Path(self.factor_lake_root or default_factor_lake_root())
+        # #11 走 DataAccess 因子湖（factor_lake 参数化数据集），不再 pd.read_parquet。
+        from .data_access_source import _get_store
+
+        store = _get_store()
         factor_id = str(spec.params_dict().get("name", ""))
         version = int(spec.params_dict().get("version", 0))
         if not factor_id or version <= 0:
             raise MissingDataDependencyError("invalid intermediate(name, version) reference")
-        files = sorted((root / "factors" / factor_id).glob("year=*/data.parquet"))
-        if not files:
+        ds = store.get_dataset("factor_lake")
+        handle = store.read(
+            "factor_lake",
+            columns=[ds.time_column, ds.instrument_column, "value"],
+            time_range=(getattr(self.inner, "start_date", None),
+                        getattr(self.inner, "end_date", None)),
+            instrument_filter=getattr(self.inner, "instrument_filter", None),
+            factor_id=factor_id,
+        )
+        frame = handle.to_arrow().to_pandas()
+        if frame.empty:
             raise MissingDataDependencyError(
-                f"intermediate {factor_id!r} version={version} is not materialized; backfill it before downstream execution"
+                f"intermediate {factor_id!r} version={version} is not materialized; "
+                "backfill it before downstream execution"
             )
-        frames = [pd.read_parquet(path, columns=["datetime","asset","value","factor_version"]) for path in files]
-        frame = pd.concat(frames, ignore_index=True)
-        # Numeric LQTP version is an external definition version. FactorEngine's
-        # content hash remains authoritative; version is retained in the ref and
-        # callers should pin factor_id/version in their definition registry.
-        idx = pd.MultiIndex.from_frame(frame[["datetime","asset"]], names=["timestamp","instrument"])
+        idx = pd.MultiIndex.from_frame(
+            frame[[ds.time_column, ds.instrument_column]],
+            names=["timestamp", "instrument"],
+        )
         return pd.Series(frame["value"].to_numpy(), index=idx, name=factor_id)
 
     def _financial_raw(self, dataset: str, field: str) -> pd.DataFrame:

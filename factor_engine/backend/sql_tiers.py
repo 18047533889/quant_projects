@@ -445,6 +445,15 @@ _SQL_IMPLEMENTED_DEAD: frozenset[str] = frozenset(
 SQL_IMPLEMENTED_CANONICALS = frozenset(
     c for c in SQL_IMPLEMENTED_CANONICALS if c not in _SQL_IMPLEMENTED_DEAD
 ) | frozenset({"column", "literal"})
+# 2026-08 geometry/math expansion: SQL pushdown subset with emitter branches in
+# backend/sql_pushdown/emitter.py (exact-parity DuckDB window aggregates).
+SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
+    "intraday_volatility_concentration",
+    "intraday_volatility_entropy",
+    "intraday_realized_semivariance_balance",
+    "ts_crossing_speed",
+    "ts_crossing_acceleration",
+})
 
 # DuckDB 分层
 DUCKDB_SQL_PARITY_VERIFIED: frozenset[str] = frozenset()

@@ -29,6 +29,22 @@ from cleaned_operators.microstructure.intraday_agg import _as_panel, _daily_agg_
 
 _EPS = 1e-12
 _EIGEN_GAP_MIN = 1e-2  # below this (lambda_k - lambda_{k+1})/lambda_k the PC is unstable.
+
+
+def _eigen_gap_unstable(s: np.ndarray, k: int) -> bool:
+    """True when ``lambda_k ~ lambda_{k+1}`` makes the k-th PC direction unstable.
+
+    With near-degenerate eigenvalues the PCA basis may rotate/swap (and flip sign
+    under sign-fixing), so the *signed* score would jump although the distribution
+    structure did not change.  Zero reference variance is not "unstable" — the
+    score is then exactly 0.
+    """
+    if k >= s.size:
+        return False  # no (k+1)-th eigenvalue to compare -> guard not applicable.
+    sk = float(s[k - 1])
+    if sk <= _EPS:
+        return False
+    return (sk - float(s[k])) / sk < _EIGEN_GAP_MIN
 _QGRID_PAIR = np.linspace(0.01, 0.99, 99)
 _QGRID_PCA = np.linspace(0.02, 0.98, 49)
 
@@ -247,17 +263,15 @@ def _pca_score_series(
         if vt.shape[0] < k:
             continue  # rank < k -> the requested PC does not exist (same rule as residual).
         vk = vt[k - 1]
-        # Eigen-gap guard: with near-degenerate eigenvalues (lambda_k ~ lambda_{k+1})
-        # the PCA basis may rotate/swap and the *signed* score would jump although
-        # the distribution structure did not change.  Fail closed instead.
+        # Eigen-gap guard: with near-degenerate eigenvalues the PCA basis may
+        # rotate/swap and the *signed* score would jump although the structure did
+        # not change -> fail closed.
         sk = float(s[k - 1])
         if sk <= _EPS:
             out[i] = 0.0  # zero reference variance -> current curve sits at the center.
             continue
-        if k < s.size and s[k] > 0.0:
-            gap = (sk - float(s[k])) / sk
-            if gap < _EIGEN_GAP_MIN:
-                continue
+        if _eigen_gap_unstable(s, k):
+            continue
         # Deterministic sign orientation: largest-|loading| element positive.
         ax = int(np.argmax(np.abs(vk)))
         if vk[ax] < 0.0:

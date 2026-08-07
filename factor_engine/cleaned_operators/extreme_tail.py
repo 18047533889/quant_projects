@@ -217,11 +217,277 @@ class TsQuantileRegressionBeta(SeriesOperator):
         )
 
 
+# ---------------------------------------------------------------------------
+# ts_extremal_index (P1 deepening)
+# ---------------------------------------------------------------------------
+
+def _extremal_index_series(
+    series: np.ndarray, window: int, side: str, q: float, min_exceed: int
+) -> np.ndarray:
+    """Leadbetter extremal index θ via the runs estimator.
+
+    Over the trailing window count exceedances above the empirical q-quantile
+    and the number of *runs* of consecutive exceedances (each run = one cluster).
+    ``θ = clusters / exceedances``: ≈1 = extremes arrive as isolated single
+    observations (Poisson-like); →0 = extremes cluster strongly (regime-like).
+    """
+    n = series.shape[0]
+    w = max(2, int(window))
+    quant = float(q)
+    if not 0.0 < quant < 1.0:
+        raise ValueError("q must be in (0, 1)")
+    mex = max(2, int(min_exceed))
+    out = np.full(n, np.nan)
+    for t in range(n):
+        lo = max(0, t - w + 1)
+        chunk = series[lo : t + 1]
+        y = chunk if side == "upper" else -chunk
+        valid = y[np.isfinite(y)]
+        if valid.size < 3:
+            continue
+        thr = float(np.quantile(valid, quant))
+        exceed = y > thr  # strict exceedance over threshold (no mode ties)
+        count = int(exceed.sum())
+        if count < mex:
+            continue
+        clusters = 0
+        prev = False
+        for v in exceed:
+            if v and not prev:
+                clusters += 1
+            prev = v
+        out[t] = float(clusters / count)
+    return out
+
+
+@register_operator(
+    name="ts_extremal_index",
+    category="extreme_tail",
+    business_category="extreme_tail",
+    canonical="ts_extremal_index",
+    source="extreme_tail",
+)
+class TsExtremalIndex(SeriesOperator):
+    """Leadbetter 极值指数 θ（runs 估计：簇数 / 超阈次数）。
+
+    ≈1 = 极端观测以孤立单点到达（类 Poisson，可独立处理）；→0 = 极端高度成簇
+    （regime 型，波动聚集）。与 ``ts_extreme_cluster_ratio``（相邻极端对数/极端
+    数）数学不同：连续 3 个极端前者 2/3、这里 1/3。PIT 安全、确定性。
+    """
+
+    metadata = _metadata(
+        "ts_extremal_index",
+        "极值指数 θ = 簇数/超阈次数（[0,1]，低=成簇）。",
+        ["x", "window", "side", "q", "min_exceed"],
+        unit="ratio",
+        cost=4,
+    )
+
+    def _calculate_series(
+        self,
+        x: pd.DataFrame,
+        window: int = 120,
+        side: str = "upper",
+        q: float = 0.9,
+        min_exceed: int = 3,
+        **_: Any,
+    ) -> pd.DataFrame:
+        side_k = str(side).lower()
+        if side_k not in {"upper", "lower"}:
+            raise ValueError("ts_extremal_index requires side in {'upper','lower'}")
+        return _frame_like_result(
+            x,
+            _column_map(
+                x.to_numpy(dtype=float),
+                lambda s: _extremal_index_series(s, window, side_k, q, min_exceed),
+            ),
+        )
+
+
+# ---------------------------------------------------------------------------
+# ts_mean_excess_slope (P2 deepening)
+# ---------------------------------------------------------------------------
+
+def _mean_excess_slope_series(
+    series: np.ndarray, window: int, side: str, min_tail_count: int
+) -> np.ndarray:
+    """OLS slope of the mean-excess plot over the upper (or mirrored lower) tail.
+
+    For thresholds at quantiles ``p ∈ {0.55..0.95}``, mean excess
+    ``ME(u) = mean(y - u | y > u)``; the slope of ME vs u is dimensionless.
+    For a GPD tail it equals ``ξ/(1-ξ)`` (negative = bounded light tail,
+    positive = heavy tail, ~0 = exponential).
+    """
+    n = series.shape[0]
+    w = max(2, int(window))
+    mtc = max(2, int(min_tail_count))
+    out = np.full(n, np.nan)
+    for t in range(n):
+        lo = max(0, t - w + 1)
+        chunk = series[lo : t + 1]
+        y = chunk if side == "upper" else -chunk
+        y = y[np.isfinite(y)]
+        if y.size < mtc + 3:
+            continue
+        us: list[float] = []
+        mes: list[float] = []
+        for p in np.linspace(0.55, 0.95, 9):
+            u = float(np.quantile(y, p))
+            exc = y[y > u] - u
+            if exc.size < mtc:
+                continue
+            us.append(u)
+            mes.append(float(exc.mean()))
+        if len(us) < 3:
+            continue
+        ua = np.asarray(us)
+        ma = np.asarray(mes)
+        denom = float(np.sum((ua - ua.mean()) ** 2))
+        if denom <= _EPS:
+            continue
+        slope = float(np.sum((ua - ua.mean()) * (ma - ma.mean())) / denom)
+        if np.isfinite(slope):
+            out[t] = slope
+    return out
+
+
+@register_operator(
+    name="ts_mean_excess_slope",
+    category="extreme_tail",
+    business_category="extreme_tail",
+    canonical="ts_mean_excess_slope",
+    source="extreme_tail",
+)
+class TsMeanExcessSlope(SeriesOperator):
+    """mean-excess 图斜率（尾部厚薄的尺度无关指标）。
+
+    对尾部分位数阈值网格 ``p∈[0.55,0.95]`` 计算 ME(u)，对 u 做 OLS 斜率。
+    GPD 尾部下等于 ``ξ/(1-ξ)``：负 = 有界轻尾，正 = 重尾，≈0 = 指数尾。比单独
+    Hill 指数在阈值选择上更稳。PIT 安全、确定性。
+    """
+
+    metadata = _metadata(
+        "ts_mean_excess_slope",
+        "mean-excess 图斜率（≈ξ/(1-ξ)，负=轻尾正=重尾）。",
+        ["x", "window", "side", "min_tail_count"],
+        unit="ratio",
+        cost=5,
+    )
+
+    def _calculate_series(
+        self,
+        x: pd.DataFrame,
+        window: int = 120,
+        side: str = "upper",
+        min_tail_count: int = 5,
+        **_: Any,
+    ) -> pd.DataFrame:
+        side_k = str(side).lower()
+        if side_k not in {"upper", "lower"}:
+            raise ValueError("ts_mean_excess_slope requires side in {'upper','lower'}")
+        return _frame_like_result(
+            x,
+            _column_map(
+                x.to_numpy(dtype=float),
+                lambda s: _mean_excess_slope_series(s, window, side_k, min_tail_count),
+            ),
+        )
+
+
+# ---------------------------------------------------------------------------
+# ts_gpd_shape_pwm (P2 deepening)
+# ---------------------------------------------------------------------------
+
+def _gpd_shape_pwm_series(
+    series: np.ndarray, window: int, side: str, tail_fraction: float, min_tail_count: int
+) -> np.ndarray:
+    """GPD shape ξ via Probability-Weighted Moments (Hosking & Wallis 1987).
+
+    With exceedances ``x_(1) ≤ ... ≤ x_(n)`` above threshold ``u``:
+    ``b0 = mean(x)``, ``b1 = Σ ((i-1)/(n-1)) x_(i) / n`` and
+    ``ξ̂ = 2 - b0 / (2 b1 - b0)`` (from τ2 = L2/L1 = 1/(2-ξ)).  Deterministic,
+    no optimizer; fail-closed when the denominator degenerates.
+    """
+    n = series.shape[0]
+    w = max(2, int(window))
+    frac = min(max(_EPS, float(tail_fraction)), 0.5)
+    mtc = max(3, int(min_tail_count))
+    out = np.full(n, np.nan)
+    for t in range(n):
+        lo = max(0, t - w + 1)
+        chunk = series[lo : t + 1]
+        y = chunk if side == "upper" else -chunk
+        y = y[np.isfinite(y)]
+        if y.size < mtc + 2:
+            continue
+        u = float(np.quantile(y, 1.0 - frac))
+        exc = y[y > u] - u
+        if exc.size < mtc:
+            continue
+        exc = np.sort(exc)
+        m = exc.size
+        b0 = float(exc.mean())
+        weights = np.arange(m, dtype=float) / max(m - 1, 1)
+        b1 = float(np.sum(weights * exc) / m)
+        denom = 2.0 * b1 - b0
+        if abs(denom) <= _EPS:
+            continue
+        xi = 2.0 - b0 / denom
+        if np.isfinite(xi):
+            out[t] = xi
+    return out
+
+
+@register_operator(
+    name="ts_gpd_shape_pwm",
+    category="extreme_tail",
+    business_category="extreme_tail",
+    canonical="ts_gpd_shape_pwm",
+    source="extreme_tail",
+)
+class TsGpdShapePwm(SeriesOperator):
+    """GPD 形状参数 ξ（PWM/L-moment 估计，闭式无优化器）。
+
+    ``ξ̂ = 2 - b0/(2 b1 - b0)``（Hosking-Wallis 1987）。ξ>0 = Fréchet 重尾，
+    ξ=0 = Gumbel 指数尾，ξ<0 = 有界 Weibull 尾。与 ``ts_hill_tail_index`` 估计
+    同一形状但用完全不同的估计量，作为交叉验证。PIT 安全、确定性。
+    """
+
+    metadata = _metadata(
+        "ts_gpd_shape_pwm",
+        "GPD 形状参数 ξ（PWM 闭式估计）。",
+        ["x", "window", "side", "tail_fraction", "min_tail_count"],
+        unit="ratio",
+        cost=5,
+    )
+
+    def _calculate_series(
+        self,
+        x: pd.DataFrame,
+        window: int = 120,
+        side: str = "upper",
+        tail_fraction: float = 0.2,
+        min_tail_count: int = 10,
+        **_: Any,
+    ) -> pd.DataFrame:
+        side_k = str(side).lower()
+        if side_k not in {"upper", "lower"}:
+            raise ValueError("ts_gpd_shape_pwm requires side in {'upper','lower'}")
+        return _frame_like_result(
+            x,
+            _column_map(
+                x.to_numpy(dtype=float),
+                lambda s: _gpd_shape_pwm_series(s, window, side_k, tail_fraction, min_tail_count),
+            ),
+        )
+
+
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
     _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS) | {"ts_hill_tail_index"}
+        set(_surface.EXTENDED_ONLY_CANONICALS)
+        | {"ts_hill_tail_index", "ts_extremal_index", "ts_mean_excess_slope", "ts_gpd_shape_pwm"}
     )
     _surface.RESEARCH_ONLY_CANONICALS = frozenset(
         set(_surface.RESEARCH_ONLY_CANONICALS) | {"ts_quantile_regression_beta"}

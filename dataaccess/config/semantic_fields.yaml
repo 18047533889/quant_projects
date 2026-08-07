@@ -103,6 +103,7 @@ return_bp:
   time_role: event_time
   temporal_model: panel
   join_policy: exact
+  aliases: [ret, returns]
 
 # ---- 估值（日频，随行情 exact join） ----
 
@@ -189,6 +190,9 @@ roe:
   mining_allowed: true
 
 # ---- 资产负债表（事件/时点表，PIT asof 对齐） ----
+# 注意：knowledge_time 用 PubDate（公告可见时点），不是 TradeDate（供应商记录日）。
+# FactorEngine 财务 PIT 严格用 PubDate 可见性 + 下一交易日可用；revision_order
+# 让同一 (instrument, PubDate) 的多版本在 join 前确定性去重（取 UpdateTime 最新）。
 
 total_assets:
   dataset: ashare_stock_balance
@@ -198,23 +202,27 @@ total_assets:
   grain: instrument
   time_role: knowledge_time
   temporal_model: financial_event
-  knowledge_time: TradeDate
+  knowledge_time: PubDate
   effective_time: ReportPeriodEndDate
   period_time: ReportPeriodEndDate
+  revision_order: [UpdateTime]
+  availability: next_trading_day
   join_policy: pit_asof_backward
   mining_allowed: true
 
 total_liabilities:
   dataset: ashare_stock_balance
-  physical_name: TotalLiabilities
+  physical_name: TotalLiability
   dtype: double
   frequency: quarterly
   grain: instrument
   time_role: knowledge_time
   temporal_model: financial_event
-  knowledge_time: TradeDate
+  knowledge_time: PubDate
   effective_time: ReportPeriodEndDate
   period_time: ReportPeriodEndDate
+  revision_order: [UpdateTime]
+  availability: next_trading_day
   join_policy: pit_asof_backward
   mining_allowed: true
 
@@ -228,9 +236,11 @@ operating_revenue:
   grain: instrument
   time_role: knowledge_time
   temporal_model: financial_event
-  knowledge_time: TradeDate
+  knowledge_time: PubDate
   effective_time: ReportPeriodEndDate
   period_time: ReportPeriodEndDate
+  revision_order: [UpdateTime]
+  availability: next_trading_day
   join_policy: pit_asof_backward
   mining_allowed: true
   aliases: [revenue]
@@ -243,14 +253,16 @@ net_profit:
   grain: instrument
   time_role: knowledge_time
   temporal_model: financial_event
-  knowledge_time: TradeDate
+  knowledge_time: PubDate
   effective_time: ReportPeriodEndDate
   period_time: ReportPeriodEndDate
+  revision_order: [UpdateTime]
+  availability: next_trading_day
   join_policy: pit_asof_backward
   mining_allowed: true
   aliases: [net_income]
 
-# ---- 指数权重（成分股权重，精确日频） ----
+# ---- 指数权重（成分股权重，精确日频；必须指定 IndexSymbol） ----
 
 index_weight:
   dataset: ashare_index_constituent
@@ -261,4 +273,6 @@ index_weight:
   time_role: event_time
   temporal_model: panel
   join_policy: exact
+  required_filters: [IndexSymbol]
+  primary_key: [TradeDate, Symbol, IndexSymbol]
   mining_allowed: true

@@ -125,7 +125,9 @@ ashare_stock_indicator:
     Symbol: string
     Eps: double
     Roe: double
+    PubDate: date
     ReportPeriodEndDate: date
+    UpdateTime: timestamp
 
 ashare_stock_balance:
   <<: *ashare_lqtp_defaults
@@ -136,7 +138,11 @@ ashare_stock_balance:
   schema:
     TradeDate: date
     Symbol: string
+    PubDate: date
     ReportPeriodEndDate: date
+    UpdateTime: timestamp
+    TotalAssets: double
+    TotalLiability: double
 
 ashare_stock_income:
   <<: *ashare_lqtp_defaults
@@ -147,8 +153,24 @@ ashare_stock_income:
   schema:
     TradeDate: date
     Symbol: string
+    PubDate: date
+    ReportPeriodEndDate: date
+    UpdateTime: timestamp
     TotalOperatingRevenue: double
     OperatingRevenue: double
+    NetProfit: double
+
+ashare_turnover_base_daily:
+  <<: *ashare_lqtp_defaults
+  root: ${ASHARE_PARQUET_ROOT:-/home/shw/quant_projects/data/a_share/lqtp_data}/TurnoverBaseDaily
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+  schema:
+    TradeDate: date
+    Symbol: string
+    TurnoverBase: double
+    EffectiveFloatShares: double
 
 ashare_stock_cashflow:
   <<: *ashare_lqtp_defaults
@@ -159,6 +181,9 @@ ashare_stock_cashflow:
   schema:
     TradeDate: date
     Symbol: string
+    PubDate: date
+    ReportPeriodEndDate: date
+    UpdateTime: timestamp
 
 ashare_stock_dividend:
   <<: *ashare_lqtp_defaults

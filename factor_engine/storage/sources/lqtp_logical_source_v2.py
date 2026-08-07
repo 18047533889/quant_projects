@@ -68,7 +68,122 @@ class LQTPLogicalDataSource(_Base):
                 out.update(fn(ordinary))
             else:
                 out.update({n: self.inner.load_column(n) for n in ordinary})
-        out.update({n: super(LQTPLogicalDataSource, self).load_column(n) for n in refs})
+        if refs:
+            out.update(self.load_source_refs_batch(refs))
+        return out
+
+    def load_source_refs_batch(self, names: list[str]) -> dict[str, Any]:
+        """#10 SourceRef 批量 coalesce：按 (dataset, params, transform) 分组，
+        同一物理表的所有字段合并成一次 DataRequest/读取，替代逐 SourceRef 单独
+        load_column。返回 {ref_name: MultiIndex Series}。
+
+        分组规则：
+            - 财务报表（StockBalance/StockIncome/...）按表合并字段，一次
+              ``store.read`` 拿全部列，再逐字段做 PIT join
+            - 其余 dataset-mapped 表（IndexConstituent/StockIndustry/...）按
+              (dataset, params) 合并，一次 ``child.load_columns`` 拿全部字段
+            - DailyBar/Intermediate/TurnoverBaseDaily/MinuteBar/DerivedField
+              等特殊路径仍走单字段 ``_load_source_ref``
+        """
+        from api.source_ref import decode_source_ref
+
+        decoded = [(str(n), decode_source_ref(str(n))) for n in names]
+        decoded = [(n, s) for n, s in decoded if s is not None]
+        out: dict[str, Any] = {}
+
+        financial_by_table: dict[str, list[tuple[str, Any]]] = {}
+        dataset_groups: dict[tuple[str, str, str], list[tuple[str, Any]]] = {}
+        singles: list[tuple[str, Any]] = []
+        for name, spec in decoded:
+            table = spec.table
+            if table in {"StockIncome", "StockCashFlow", "StockBalance", "StockIndicator"}:
+                financial_by_table.setdefault(table, []).append((name, spec))
+            elif table in {
+                "DailyBar", "StockDailyBar", "Intermediate",
+                "TurnoverBaseDaily", "StockMinuteBar", "MinuteBar", "DerivedField",
+            }:
+                singles.append((name, spec))
+            else:
+                dataset = _TABLE_DATASETS.get(table)
+                params = spec.params_dict()
+                key = (table, str(dataset), repr(sorted(params.items())))
+                dataset_groups.setdefault(key, []).append((name, spec))
+
+        # 财务：一表一次 store read（多字段一次 scan）
+        for table, group in financial_by_table.items():
+            dataset = _TABLE_DATASETS.get(table)
+            if dataset is None:
+                for name, spec in group:
+                    out[name] = self._load_source_ref(spec)
+                continue
+            fields = list(dict.fromkeys(spec.field for _, spec in group))
+            raw = self._financial_raw_multi(dataset, fields)
+            for name, spec in group:
+                out[name] = self._financial_from_raw(
+                    dataset, spec.field, raw,
+                    transform=spec.transform,
+                    params=spec.transform_params_dict(),
+                )
+
+        # dataset-mapped：同 (dataset, params) 一次 child.load_columns
+        for (table, dataset, _), group in dataset_groups.items():
+            contract = logical_table_contract(table)
+            params = dict(group[0][1].params_dict())
+            required_param = contract.required_parameter
+            if required_param:
+                legacy = {"IndexSymbol": "index", "IndustrySource": "industry_source"}.get(required_param)
+                legacy_value = params.get(legacy) if legacy else None
+                if params.get(required_param) is None and legacy_value is not None:
+                    params[required_param] = legacy_value
+            filt = None
+            if contract.required_parameter == "IndexSymbol" and table != "IndexConstituent":
+                filt = [str(params["IndexSymbol"])]
+            child = self._child(dataset, instrument_filter=filt)
+            fields = list(dict.fromkeys(spec.field for _, spec in group))
+            if table == "IndexConstituent":
+                fields.append("IndexSymbol")
+            elif contract.required_parameter == "IndustrySource":
+                fields.append("IndustrySource")
+            loaded = child.load_columns(fields)
+            snapshot = getattr(child, "data_snapshot_id", None)
+            for name, spec in group:
+                field = spec.field
+                if table == "IndexConstituent":
+                    series = loaded[field].where(
+                        loaded["IndexSymbol"].astype(str) == str(params["IndexSymbol"])
+                    ).dropna()
+                elif contract.required_parameter == "IndustrySource":
+                    series = loaded[field].where(
+                        loaded["IndustrySource"].astype(str) == str(params["IndustrySource"])
+                    ).dropna()
+                else:
+                    series = loaded[field]
+                policy = contract.join_policy
+                self._record_dependency(
+                    dataset,
+                    kind=(
+                        "benchmark_daily" if policy == "exact_date"
+                        else "daily_exact" if policy == "exact"
+                        else "dividend_effective_only" if policy == "effective_only"
+                        else "shareholder_relation_pit" if policy == "relation_pit"
+                        else "relation_asof"
+                    ),
+                    snapshot_id=snapshot,
+                    field=field,
+                    join_policy=policy,
+                    **({"IndexSymbol": str(params["IndexSymbol"])} if "IndexSymbol" in params else {}),
+                    **({"IndustrySource": str(params["IndustrySource"])} if "IndustrySource" in params else {}),
+                )
+                if policy == "exact_date":
+                    out[name] = self._broadcast_exact_by_date(self._anchor_index(), series)
+                elif policy in {"exact", "effective_only"}:
+                    out[name] = self._align_exact_by_instrument(self._anchor_index(), series)
+                else:
+                    out[name] = self._align_by_instrument(self._anchor_index(), series)
+
+        # 特殊路径逐个处理
+        for name, spec in singles:
+            out[name] = self._load_source_ref(spec)
         return out
 
     def prefetch_columns(self, names: Iterable[str]) -> None:
@@ -138,35 +253,42 @@ class LQTPLogicalDataSource(_Base):
 
     def _financial_raw(self, dataset: str, field: str) -> pd.DataFrame:
         """Read all pre-end PIT history; start-date truncation is forbidden."""
+        return self._financial_raw_multi(dataset, [field])
+
+    def _financial_raw_multi(self, dataset: str, fields: list[str]) -> pd.DataFrame:
+        """#10 批量财务读：同一报表表的多个字段一次 ``store.read``（一次 scan）。"""
         from .data_access_source import _get_store
 
         store = _get_store()
         ds = store.get_dataset(dataset)
-        required = [ds.instrument_column, "ReportPeriodEndDate", "PubDate", field]
+        required = [ds.instrument_column, "ReportPeriodEndDate", "PubDate", *fields]
         end = getattr(self.inner, "end_date", None)
-        kwargs: dict[str, Any] = {"columns": required}
+        kwargs: dict[str, Any] = {"columns": list(dict.fromkeys(required))}
         if end is not None:
             kwargs["time_range"] = (None, end)
         result = store.read_result(dataset, **kwargs)
         snapshot = getattr(getattr(result, "snapshot", None), "snapshot_id", None)
-        self._record_dependency(
-            dataset,
-            kind="financial",
-            snapshot_id=snapshot,
-            field=field,
-            availability_column="PubDate",
-            join_policy="asof_backward",
-        )
+        for field in fields:
+            self._record_dependency(
+                dataset,
+                kind="financial",
+                snapshot_id=snapshot,
+                field=field,
+                availability_column="PubDate",
+                join_policy="asof_backward",
+            )
         return result.table.to_pandas()
 
-    def _financial(
+    def _financial_from_raw(
         self,
         dataset: str,
         field: str,
+        raw: pd.DataFrame,
+        *,
         transform: str | None,
         params: dict[str, Any],
     ) -> pd.Series:
-        raw = self._financial_raw(dataset, field)
+        """从共享 raw frame 构建单个字段的 PIT 事件 + 对齐到锚点。"""
         instrument = next(c for c in ("Symbol", "ticker", "Ticker") if c in raw.columns)
         events = raw.rename(
             columns={
@@ -226,6 +348,21 @@ class LQTPLogicalDataSource(_Base):
             available_policy="next_trading_day",
         )
         return pd.Series(joined["value"].to_numpy(), index=anchor, name=field)
+
+    def _financial(
+        self,
+        dataset: str,
+        field: str,
+        transform: str | None,
+        params: dict[str, Any],
+    ) -> pd.Series:
+        """单字段财务 PIT（批量路径的便捷包装）。"""
+        raw = self._financial_raw(dataset, field)
+        return self._financial_from_raw(
+            dataset, field, raw,
+            transform=transform,
+            params=params,
+        )
 
     def _load_intermediate(self, spec) -> pd.Series:
         from runtime.intermediate_registry import (
@@ -478,6 +615,52 @@ class LQTPLogicalDataSource(_Base):
             "minute_range", "minute_bar", "minute_resample"
         }:
             return self._minute_weighted_vwap(transform, params)
+
+        # #14 minute_at / minute_range 下沉 DuckDB（不把整份分钟数据拉 Pandas）；
+        # 任何失败（数据集未注册等）回退原 pandas 路径。
+        if transform in {"minute_at", "minute_range"}:
+            try:
+                from data_access.read.aggregation import (
+                    AggregationSpec,
+                    aggregate_minute_to_daily,
+                )
+
+                from .data_access_source import _get_store
+
+                spec = AggregationSpec(
+                    aggregation=transform,
+                    start=str(params["start"]) if "start" in params else None,
+                    end=str(params["end"]) if "end" in params else None,
+                    hhmm=str(params["hhmm"]) if "hhmm" in params else None,
+                )
+                table = aggregate_minute_to_daily(
+                    _get_store(),
+                    "ashare_stock_minute",
+                    field,
+                    spec,
+                    time_range=(getattr(self.inner, "start_date", None),
+                                getattr(self.inner, "end_date", None)),
+                    instrument_filter=getattr(self.inner, "instrument_filter", None),
+                )
+                df = table.to_pandas()
+                idx = pd.MultiIndex.from_arrays(
+                    [pd.to_datetime(df["ts"]), df["inst"]],
+                    names=["timestamp", "instrument"],
+                )
+                daily = pd.Series(df["value"].to_numpy(), index=idx, name=field)
+                self._record_dependency(
+                    "ashare_stock_minute",
+                    kind="minute_session",
+                    field=field,
+                    transform=transform,
+                    join_policy="exact_session",
+                    pushdown="duckdb",
+                )
+                return self._align_by_instrument(self._anchor_index(), daily)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "minute %s pushdown 失败回退 pandas 路径: %s", transform, exc
+                )
 
         src = self._child("ashare_stock_minute")
         series = src.load_column(field)

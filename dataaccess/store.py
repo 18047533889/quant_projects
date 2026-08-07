@@ -308,6 +308,71 @@ class DataAccessStore:
             files=files,
         )
 
+    def _files_for_snapshot(
+        self, dsobj: Any, dataset: str, paths: list[str]
+    ) -> tuple[Any, ...]:
+        """构建 snapshot 的文件版本列表：优先复用 fresh manifest（省 O(N) stat）。
+
+        只有 manifest 存在、新鲜且数据集名匹配时才走复用；否则回退
+        ``build_file_manifest``（glob + stat）。``file_versions_from_manifest``
+        只省 stat，路径展开仍需一次 glob。
+        """
+        from data_access.read.manifest import (
+            DatasetManifest,
+            is_manifest_fresh,
+            manifest_root_for_paths,
+        )
+        from data_access.read.read_contract import file_versions_from_manifest
+
+        root = manifest_root_for_paths(paths)
+        if root is not None:
+            try:
+                manifest = DatasetManifest.load(root)
+            except Exception:
+                manifest = None
+            if manifest is not None and manifest.dataset in {"", dataset}:
+                try:
+                    if is_manifest_fresh(manifest, paths):
+                        return file_versions_from_manifest(manifest, paths)
+                except Exception:
+                    pass
+        return build_file_manifest(paths)
+
+    def _enforce_required_filters(
+        self,
+        fields_meta: Sequence[Any],
+        params_by_dataset: Mapping[str, Mapping[str, Any]],
+    ) -> None:
+        """#8 ``required_filters`` 强制执行。
+
+        catalog 字段声明了读取时必须附带的条件（如 index_weight 必须指定
+        IndexSymbol、industry 字段必须指定 IndustrySource）时：缺少即
+        production fail-closed（抛 ValidationError），research 只告警。
+        """
+        missing: list[tuple[str, str]] = []
+        for f in fields_meta:
+            required = getattr(f, "required_filters", ()) or ()
+            if not required:
+                continue
+            ds = getattr(f, "dataset", None)
+            effective = dict((params_by_dataset or {}).get(ds, {}))
+            for key in required:
+                if key in effective:
+                    continue
+                # params 里大小写宽松匹配（IndexSymbol / index_symbol）
+                lower_key = str(key).lower()
+                if any(str(k).lower() == lower_key for k in effective):
+                    continue
+                missing.append((getattr(f, "logical_name", "?"), str(key)))
+        if not missing:
+            return
+        detail = "; ".join(f"'{n}' 需参数 {k}" for n, k in missing)
+        if _production_mode():
+            raise ValidationError(
+                f"required_filters 未满足（production fail-closed）：{detail}"
+            )
+        logger.warning("required_filters 未满足（research 放行）：%s", detail)
+
     def _schema_fingerprint(
         self,
         ds: Dataset,
@@ -1150,14 +1215,18 @@ class DataAccessStore:
         anchor: str,
         fields: Any,
         *,
-        joins: Mapping[str, str] | None = None,
+        joins: Mapping[str, Any] | None = None,
         time_range: tuple[Any, Any] | None = None,
         instrument_filter: Sequence[str] | None = None,
         filters: Any = None,
+        filters_by_dataset: Mapping[str, Any] | None = None,
         limit: int | None = None,
         engine: str = "duckdb",
         result: str = "auto",
         normalize_units: bool = False,
+        seed_window: bool = True,
+        universe: str | None = None,
+        time_varying_universe: bool = True,
         query_budget: QueryBudget | None = None,
         params: Mapping[str, Any] | None = None,
         params_by_dataset: Mapping[str, Mapping[str, Any]] | None = None,
@@ -1167,33 +1236,48 @@ class DataAccessStore:
         参数：
             anchor: 锚定数据集（其时间/标的列决定输出行空间）
             fields: ``{dataset: [物理列]}`` mapping，或 ``"col"`` / ``"dataset.col"`` 序列
-            joins: ``{dataset: exact|asof|pit_asof}``；缺省 exact。
+            joins: ``{dataset: 规格}``；规格可以是 ``exact|asof|pit_asof`` 字符串、
+                dict 或 ``TemporalJoinSpec``。缺省 exact。
                 - exact   ：按 (time, instrument) 等值对齐（日频面板）
-                - pit_asof：对每个 anchor 行取该标的最新可见记录（asof，可跨窗口）
+                - pit_asof：对每个 anchor 行取该标的最新可见记录（asof）
+                    - ``TemporalJoinSpec(knowledge_time=..., availability=...,
+                      revision_order=...)`` 给出语义级 PIT（PubDate 可见性、
+                      下一交易日可用、按版本去重）
+            filters_by_dataset: ``{dataset: filters}`` 每数据集独立过滤
             normalize_units: 输出层按 SemanticFieldCatalog scale 归一化单位
+            seed_window: asof/pit_asof 右表走 seed+window（默认 True），替代全历史
+                扫描——窗口 [start,end] + 每标的 start 前最后一条可见记录，UNION
+                后 ASOF，语义与全历史逐字节一致
             params: anchor 数据集的参数；params_by_dataset 可为每个数据集分别指定
 
         一次 DuckDB 查询完成：projection pushdown + 分区裁剪 + join，返回 ReadHandle。
         预算/审计/snapshot 与普通 read 一致（多数据集合并 snapshot）。
         """
-        from data_access.read.data_request import normalize_join_policy
         from data_access.read.read_contract import (
             ReadStats,
             SqlReadLineage,
+            file_versions_from_manifest,
             merge_sql_data_snapshots,
         )
         from data_access.read.read_handle import ReadHandle
         from data_access.read.semantic_catalog import normalize_table_units
+        from data_access.read.temporal_join import parse_join_spec
 
         if engine in {"pyarrow", "polars"}:
             raise ValidationError(
                 "read_joined 在 DuckDB 内完成 join，engine 必须为 duckdb"
             )
         self._registry.get(anchor)
-        per_ds, fields_meta = self._normalize_joined_fields(anchor, fields)
+        per_ds, fields_meta, default_joins = self._normalize_joined_fields(anchor, fields)
+        # 显式 joins 优先；未指定时用 catalog 字段推导的语义 join（#3）
+        effective_joins = dict(joins or {})
+        for ds, spec in default_joins.items():
+            effective_joins.setdefault(ds, spec)
         joins_map: dict[str, str] = {}
         for ds in per_ds:
-            joins_map[ds] = normalize_join_policy(joins.get(ds) if joins else None)
+            joins_map[ds] = parse_join_spec(
+                effective_joins.get(ds)
+            ).policy
         joins_map[anchor] = "exact"
 
         pbd: dict[str, dict[str, Any]] = {}
@@ -1201,37 +1285,33 @@ class DataAccessStore:
             pbd[ds] = dict((params_by_dataset or {}).get(ds, {}))
         pbd.setdefault(anchor, dict(params or {}))
 
+        # #8 required_filters 强制执行（production fail-closed，research warning）
+        self._enforce_required_filters(fields_meta, pbd)
+
         merged = self._resolve_sql_budget(list(per_ds), query_budget)
         all_cols = [c for cols in per_ds.values() for c in cols]
         validate_query_request(merged, columns=all_cols or None, time_range=time_range)
 
-        sql, sql_params, datasets = self._read_joined_sql(
+        sql, sql_params, datasets, per_ds_paths = self._read_joined_sql(
             anchor,
             per_ds,
-            joins_map,
+            effective_joins,
             time_range=time_range,
             instrument_filter=instrument_filter,
             filters=filters,
+            filters_by_dataset=filters_by_dataset,
             params_by_dataset=pbd,
             limit=limit,
+            seed_window=seed_window,
+            universe=(universe if time_varying_universe else None),
         )
 
         snapshots = []
         for ds in datasets:
             dsobj = self._registry.get(ds)
             try:
-                ds_tr = (
-                    time_range
-                    if (ds == anchor or joins_map.get(ds) == "exact")
-                    else None
-                )
-                paths = self._prepare_dataset_read(
-                    dsobj,
-                    time_range=ds_tr,
-                    params=dict(pbd.get(ds, {})),
-                    instrument_filter=(instrument_filter if ds == anchor else None),
-                )
-                files = build_file_manifest(paths)
+                paths = per_ds_paths.get(ds) or []
+                files = self._files_for_snapshot(dsobj, ds, paths)
                 self._enforce_scan_files(merged, paths, files=files)
                 snapshots.append(
                     self._build_snapshot(
@@ -1469,12 +1549,17 @@ class DataAccessStore:
                 per_ds[f.dataset].append(f.physical_name)
         datasets = [anchor] + [d for d in per_ds if d != anchor]
 
+        from data_access.read.temporal_join import parse_join_spec
+
+        raw_joins: dict[str, Any] = {}
+        raw_joins.update(dict(request.joins or {}))
+        raw_joins.update(dict(request.join_specs or {}))
         joins: dict[str, str] = {}
         for ds in datasets:
             if ds == anchor:
                 joins[ds] = "exact"
-            elif request.joins and ds in request.joins:
-                joins[ds] = normalize_join_policy(request.joins[ds])
+            elif ds in raw_joins:
+                joins[ds] = parse_join_spec(raw_joins[ds]).policy
             else:
                 joins[ds] = "exact"
 
@@ -1535,11 +1620,14 @@ class DataAccessStore:
 
     def manifest_version(self, dataset: str, **params: Any) -> dict[str, Any]:
         """廉价的 query-scoped snapshot token：只读 ``_manifest.json`` sidecar，
-        不做全量 footer 扫描。返回 ``{has_manifest, fresh, dataset_version,
-        partition_version, file_count, created_at}``。
+        不做全量 footer 扫描，也不做 O(N) 文件 glob（#17）。
+
+        freshness 由写路径维护的 ``manifest_epoch`` 决定：sidecar 存在即信任
+        （数据有变更时写路径会 bump epoch）。返回 ``{has_manifest, fresh,
+        dataset_version, partition_version, file_count, manifest_epoch,
+        created_at}``。
         """
         from data_access.read.manifest import (
-            _count_data_files,
             manifest_root_for_paths,
             manifest_version_token,
         )
@@ -1555,17 +1643,37 @@ class DataAccessStore:
         token = manifest_version_token(root)
         if token is None:
             return {"dataset": dataset, "has_manifest": False}
-        count = _count_data_files(paths)
-        fresh = True if count is None else (count == token.get("file_count"))
         return {
             "dataset": dataset,
             "has_manifest": True,
-            "fresh": fresh,
+            "fresh": True,
             "dataset_version": token.get("dataset_version"),
             "partition_version": token.get("partition_version"),
             "file_count": token.get("file_count"),
+            "manifest_epoch": token.get("manifest_epoch"),
             "created_at": token.get("created_at"),
         }
+
+    def touch_manifest_epoch(self, dataset: str, **params: Any) -> str | None:
+        """写路径 mutation 后调用：递增 manifest epoch（O(1)，不重建 manifest）。
+
+        这样 query-scoped snapshot 在数据变更后立刻判定过期，无需在 read path
+        做 glob 计数。返回新 epoch；无 manifest 返回 None。
+        """
+        from data_access.read.manifest import (
+            bump_manifest_epoch,
+            manifest_root_for_paths,
+        )
+
+        ds = self._registry.get(dataset)
+        try:
+            paths = self._resolve_raw_paths(ds, time_range=None, params=params)
+        except Exception:
+            return None
+        root = manifest_root_for_paths(paths)
+        if root is None:
+            return None
+        return bump_manifest_epoch(root)
 
     def is_snapshot_stale(
         self,
@@ -1573,12 +1681,19 @@ class DataAccessStore:
         *,
         dataset_version: str | None = None,
         partition_version: str | None = None,
+        manifest_epoch: str | None = None,
         **params: Any,
     ) -> bool:
-        """对比 token 判断缓存/快照是否过期（无 manifest / 不新鲜 → 视为过期）。"""
+        """对比 token 判断缓存/快照是否过期（无 manifest → 视为过期）。
+
+        支持 ``manifest_epoch`` 对比（写路径 bump 后立刻失效）；无 epoch 时
+        退回 dataset_version/partition_version 对比（老 manifest 兼容）。
+        """
         cur = self.manifest_version(dataset, **params)
-        if not cur.get("has_manifest") or not cur.get("fresh"):
+        if not cur.get("has_manifest"):
             return True
+        if manifest_epoch is not None:
+            return cur.get("manifest_epoch") != manifest_epoch
         if dataset_version is not None and cur.get("dataset_version") != dataset_version:
             return True
         if partition_version is not None and cur.get("partition_version") != partition_version:
@@ -1589,12 +1704,30 @@ class DataAccessStore:
 
     def _normalize_joined_fields(
         self, anchor: str, fields: Any
-    ) -> tuple[dict[str, list[str]], list[Any]]:
-        """read_joined 的 fields 归一化 → ( {dataset: [物理列]}, 解析出的字段列表 )。"""
+    ) -> tuple[dict[str, list[str]], list[Any], dict[str, Any]]:
+        """read_joined 的 fields 归一化。
+
+        返回 ``( {dataset: [物理列]}, 字段列表, 由 catalog 推导的每数据集默认
+        join spec )``。默认 join spec 来自字段的 join_policy/knowledge_time/
+        revision_order（#3 语义级 PIT）；多字段冲突时非 exact 优先。
+        """
         from data_access.read.semantic_catalog import SemanticField, get_semantic_catalog
+        from data_access.read.temporal_join import join_spec_from_field
 
         catalog = get_semantic_catalog()
         fields_meta: list[Any] = []
+        default_joins: dict[str, Any] = {}
+
+        def _note_default(f: Any) -> None:
+            if f is None or f.dataset is None:
+                return
+            spec = join_spec_from_field(f)
+            if spec is None or spec.policy == "exact":
+                return
+            cur = default_joins.get(f.dataset)
+            if cur is None or cur.policy != "pit_asof":
+                default_joins[f.dataset] = spec
+
         if isinstance(fields, Mapping):
             per_ds: dict[str, list[str]] = {}
             for ds, cols in fields.items():
@@ -1609,7 +1742,8 @@ class DataAccessStore:
                         if f is not None
                         else SemanticField(logical_name=c, dataset=ds, physical_name=c)
                     )
-            return per_ds, fields_meta
+                    _note_default(f)
+            return per_ds, fields_meta, default_joins
         per_ds = {anchor: []}
         for raw in fields:
             col = str(raw)
@@ -1628,94 +1762,260 @@ class DataAccessStore:
                 if f.physical_name not in per_ds[f.dataset]:
                     per_ds[f.dataset].append(f.physical_name)
                 fields_meta.append(f)
+                _note_default(f)
             else:
                 if col not in per_ds[anchor]:
                     per_ds[anchor].append(col)
                 fields_meta.append(
                     SemanticField(logical_name=col, dataset=anchor, physical_name=col)
                 )
-        return per_ds, fields_meta
+        return per_ds, fields_meta, default_joins
 
     def _read_joined_sql(
         self,
         anchor: str,
         per_ds: Mapping[str, Sequence[str]],
-        joins: Mapping[str, str],
+        join_specs: Mapping[str, Any],
         *,
         time_range: tuple[Any, Any] | None,
         instrument_filter: Sequence[str] | None,
         filters: Any,
+        filters_by_dataset: Mapping[str, Any] | None = None,
         params_by_dataset: Mapping[str, Mapping[str, Any]],
         limit: int | None = None,
-    ) -> tuple[str, list[Any], list[str]]:
+        seed_window: bool = True,
+        universe: str | None = None,
+    ) -> tuple[str, list[Any], list[str], dict[str, list[str]]]:
         """生成 read_joined 的单条 SQL：每张物理表一个子查询，DuckDB 内 join。
 
-        exact 子查询按 time_range 裁剪文件；asof/pit_asof 子查询不按 time_range
-        裁剪（PIT 需要窗口外的历史可见记录）。
+        相对旧实现的关键变化：
+            1. **右表 instrument_filter 下推**：join key 同为 instrument 轴的
+               右表（exact / asof / pit_asof）都用同一 instrument_filter 剪
+               文件 + WHERE，避免「锚点 100 只、右表扫全 A 5000 只」。
+            2. **显式 join 列**：用 ``TemporalJoinSpec`` 的 decision_time /
+               knowledge_time 分别绑定锚点/右表时间列，不再假设两边列名相同
+               （修复 a.ticker = b.ticker 但 a 无 ticker 的跨表列名 bug）。
+            3. **PIT seed + window**：asof/pit_asof 右表不再扫全历史——
+               ``[start, end]`` 内窗口 + 每标的 start 前最后一条可见记录的
+               seed，UNION 后 ASOF，语义与全历史 ASOF 逐字节一致。
+            4. **revision 去重**：``TemporalJoinSpec.revision_order`` 提供后，
+               join 前按 (instrument, time) QUALIFY 保留最新一版，替代依赖
+               parquet 扫描顺序的 keep_last。
         """
         from data_access.read.formats import format_adapter_for_dataset
         from data_access.read.predicate import Predicate, compile_predicate
         from data_access.read.predicate_ast import parse_filters
+        from data_access.read.temporal_join import TemporalJoinSpec, parse_join_spec
 
         datasets = [anchor] + [d for d in per_ds if d != anchor]
+        specs: dict[str, Any] = {
+            ds: parse_join_spec(join_specs.get(ds) if join_specs else None)
+            for ds in datasets
+        }
+        specs[anchor] = TemporalJoinSpec(policy="exact")
         outer_cols: list[str] = []
         params_list: list[Any] = []
         seen_out: set[str] = set()
         join_clauses: list[str] = []
         anchor_sub: str | None = None
+        per_ds_paths: dict[str, list[str]] = {}
         anchor_meta = self._registry.get(anchor)
-        for key in (anchor_meta.time_column, anchor_meta.instrument_column):
+        anchor_time = anchor_meta.time_column
+        anchor_inst = anchor_meta.instrument_column
+        for key in (anchor_time, anchor_inst):
             if key and key not in seen_out:
                 seen_out.add(key)
                 outer_cols.append(f"a.{_quote_ident(key)} AS {_quote_ident(key)}")
 
-        for i, ds in enumerate(datasets):
-            alias = "a" if i == 0 else chr(ord("b") + (i - 1))
-            dsobj = self._registry.get(ds)
-            policy = joins.get(ds, "exact")
-            cols = list(per_ds.get(ds, []))
-            t_col = dsobj.time_column
-            inst_col = dsobj.instrument_column
-            select_cols = list(cols)
-            for k in (t_col, inst_col):
-                if k and k not in select_cols:
-                    select_cols.append(k)
+        def _build_branch_sub(
+            dsobj: Any,
+            adapter: Any,
+            ds_params: dict[str, Any],
+            select_cols: Sequence[str],
+            *,
+            branch_tr: tuple[Any, Any] | None,
+            time_lower_exclusive: bool,
+            time_upper_exclusive: bool,
+            time_col: str,
+            inst_col: str,
+            hive_filters: Any,
+            ds_filters: Any,
+            time_is_ts: bool,
+        ) -> tuple[str, list[Any], list[str]]:
+            """构建单个分支子查询；返回 (sql, branch_params, paths)。
 
-            ds_tr = time_range if (ds == anchor or policy == "exact") else None
-            ds_inst = instrument_filter if ds == anchor else None
-            ds_params = dict(params_by_dataset.get(ds, {}))
+            instrument_filter 由外层闭包 ``ds_inst`` 提供（锚点/右表一致下推）。
+            """
+            select_list = ", ".join(_quote_ident(c) for c in select_cols)
             paths = self._prepare_dataset_read(
                 dsobj,
-                time_range=ds_tr,
+                time_range=branch_tr,
                 params=ds_params,
                 instrument_filter=ds_inst,
             )
-            files = build_file_manifest(paths)
-            adapter = format_adapter_for_dataset(dsobj)
+            if not paths:
+                # #21 manifest 空裁剪：生成带 schema 的空 SELECT，不回退全量扫描
+                return _empty_branch_sql(select_cols, dsobj), [], []
             path_param = paths if len(paths) > 1 else paths[0]
             from_clause = adapter.build_from_clause(
                 path_param,
                 hive_partitioning=dsobj.hive_partitioning,
                 union_by_name=dsobj.union_by_name,
             )
-            params_list.append(path_param)
-
-            time_type = str((dsobj.schema or {}).get(t_col or "", "")).lower() if t_col else ""
-            sub_pred = Predicate(
-                time_range=(time_range if (ds == anchor or policy == "exact") else None),
-                instrument_filter=(instrument_filter if ds == anchor else None),
-                hive_filters=self._bucket_hive_filters(
-                    dsobj, (instrument_filter if ds == anchor else None)
-                ),
-                filters=(parse_filters(filters) if ds == anchor else None),
-                time_column_is_timestamp=("timestamp" in time_type or "datetime" in time_type),
+            pred = Predicate(
+                time_range=branch_tr,
+                instrument_filter=ds_inst,
+                hive_filters=hive_filters,
+                filters=ds_filters,
+                time_column_is_timestamp=time_is_ts,
+                time_lower_exclusive=time_lower_exclusive,
+                time_upper_exclusive=time_upper_exclusive,
             )
             compiled = compile_predicate(
-                sub_pred, time_column=t_col, instrument_column=inst_col
+                pred, time_column=time_col, instrument_column=inst_col
             )
+            sql = (
+                f"SELECT {select_list} FROM {from_clause} {compiled.where_sql}".strip()
+            )
+            return sql, [path_param, *compiled.params], paths
+
+        for i, ds in enumerate(datasets):
+            alias = "a" if i == 0 else chr(ord("b") + (i - 1))
+            dsobj = self._registry.get(ds)
+            spec = specs[ds]
+            policy = spec.policy
+            cols = list(per_ds.get(ds, []))
+            t_col = dsobj.time_column
+            inst_col = dsobj.instrument_column
+            # join 用锚点 decision_time 与右表 knowledge_time（可不同于各自 time_column）
+            right_time = spec.effective_knowledge_time(t_col)
+            decision_time = spec.effective_decision_time(anchor_time)
+            if not inst_col:
+                raise ValidationError(
+                    f"read_joined 数据集 '{ds}' 未声明 instrument_column，无法 join"
+                )
+            if not t_col and policy != "exact":
+                raise ValidationError(
+                    f"asof join 需要数据集 '{ds}' 声明 time_column"
+                )
+
+            select_cols = list(cols)
+            for k in (t_col, inst_col, right_time, *spec.revision_order):
+                if k and k not in select_cols:
+                    select_cols.append(k)
             select_list = ", ".join(_quote_ident(c) for c in select_cols)
-            sub = f"SELECT {select_list} FROM {from_clause} {compiled.where_sql}".strip()
-            params_list.extend(compiled.params)
+
+            ds_params = dict(params_by_dataset.get(ds, {}))
+            # 锚点通用 filters + 每数据集 filters 合并
+            ds_filters = _and_filters(
+                parse_filters(filters) if ds == anchor else None,
+                parse_filters(
+                    (filters_by_dataset or {}).get(ds) if filters_by_dataset else None
+                ),
+            )
+            # instrument_filter 对锚点/右表一律下推（join key 同为 instrument 轴）
+            ds_inst = instrument_filter
+            hive = self._bucket_hive_filters(dsobj, ds_inst)
+            time_type = (
+                str((dsobj.schema or {}).get(t_col or "", "")).lower() if t_col else ""
+            )
+            time_is_ts = "timestamp" in time_type or "datetime" in time_type
+
+            if ds == anchor or policy == "exact":
+                branch_tr = time_range
+                branch = _build_branch_sub(
+                    dsobj,
+                    format_adapter_for_dataset(dsobj),
+                    ds_params,
+                    select_cols,
+                    branch_tr=branch_tr,
+                    time_lower_exclusive=False,
+                    time_upper_exclusive=False,
+                    time_col=t_col,
+                    inst_col=inst_col,
+                    hive_filters=hive,
+                    ds_filters=ds_filters,
+                    time_is_ts=time_is_ts,
+                )
+                sub, branch_params, paths = branch
+                params_list.extend(branch_params)
+                per_ds_paths[ds] = paths
+                if (
+                    spec.deduplicate
+                    and spec.revision_order
+                    and inst_col
+                    and t_col
+                ):
+                    sub = _dedup_key_sql(sub, inst_col, t_col, spec.revision_order)
+            else:
+                # asof / pit_asof：seed + window
+                all_paths: list[str] = []
+                branches: list[str] = []
+                if seed_window and time_range is not None and time_range[0] is not None:
+                    start, end = time_range
+                    # 窗口分支 [start, end]（按数据集 time_column 裁剪文件）
+                    win = _build_branch_sub(
+                        dsobj,
+                        format_adapter_for_dataset(dsobj),
+                        ds_params,
+                        select_cols,
+                        branch_tr=(start, end),
+                        time_lower_exclusive=False,
+                        time_upper_exclusive=False,
+                        time_col=right_time,
+                        inst_col=inst_col,
+                        hive_filters=hive,
+                        ds_filters=ds_filters,
+                        time_is_ts=time_is_ts,
+                    )
+                    branches.append(win[0])
+                    params_list.extend(win[1])
+                    all_paths.extend(win[2])
+                    # seed 分支：每标的 start 前最后一条可见记录
+                    seed = _build_branch_sub(
+                        dsobj,
+                        format_adapter_for_dataset(dsobj),
+                        ds_params,
+                        select_cols,
+                        branch_tr=(None, start),
+                        time_lower_exclusive=False,
+                        time_upper_exclusive=True,
+                        time_col=right_time,
+                        inst_col=inst_col,
+                        hive_filters=hive,
+                        ds_filters=ds_filters,
+                        time_is_ts=time_is_ts,
+                    )
+                    seed_sql = _seed_qualify_sql(
+                        seed[0], inst_col, right_time, spec.revision_order
+                    )
+                    branches.append(seed_sql)
+                    params_list.extend(seed[1])
+                    all_paths.extend(seed[2])
+                    per_ds_paths[ds] = list(dict.fromkeys(all_paths))
+                else:
+                    # 无 start（全历史）或显式关闭 seed_window：整段扫描
+                    full = _build_branch_sub(
+                        dsobj,
+                        format_adapter_for_dataset(dsobj),
+                        ds_params,
+                        select_cols,
+                        branch_tr=None,
+                        time_lower_exclusive=False,
+                        time_upper_exclusive=False,
+                        time_col=right_time,
+                        inst_col=inst_col,
+                        hive_filters=hive,
+                        ds_filters=ds_filters,
+                        time_is_ts=time_is_ts,
+                    )
+                    branches.append(full[0])
+                    params_list.extend(full[1])
+                    per_ds_paths[ds] = full[2]
+                sub = " UNION ALL ".join(branches)
+                # 跨窗口/seed 统一按 (instrument, knowledge_time) 去重最新 revision
+                if spec.deduplicate and spec.revision_order and inst_col and right_time:
+                    sub = _dedup_key_sql(sub, inst_col, right_time, spec.revision_order)
 
             for c in cols:
                 if c in seen_out:
@@ -1731,25 +2031,66 @@ class DataAccessStore:
                 continue
             prev = "a"
             if policy in {"asof", "pit_asof"}:
-                if not t_col or not inst_col:
-                    raise ValidationError(
-                        f"asof join 需要数据集 '{ds}' 声明 time_column 和 instrument_column"
-                    )
                 cond = (
-                    f"{prev}.{_quote_ident(inst_col)} = {alias}.{_quote_ident(inst_col)} "
-                    f"AND {prev}.{_quote_ident(t_col)} >= {alias}.{_quote_ident(t_col)}"
+                    f"{prev}.{_quote_ident(anchor_inst)} = "
+                    f"{alias}.{_quote_ident(inst_col)} "
+                    f"AND {prev}.{_quote_ident(decision_time)} "
+                    f"{spec.comparison_operator} {alias}.{_quote_ident(right_time)}"
                 )
                 join_clauses.append(f"ASOF LEFT JOIN ({sub}) AS {alias} ON {cond}")
             else:
-                if not t_col or not inst_col:
-                    raise ValidationError(
-                        f"exact join 需要数据集 '{ds}' 声明 time_column 和 instrument_column"
-                    )
                 cond = (
                     f"{prev}.{_quote_ident(t_col)} = {alias}.{_quote_ident(t_col)} "
-                    f"AND {prev}.{_quote_ident(inst_col)} = {alias}.{_quote_ident(inst_col)}"
+                    f"AND {prev}.{_quote_ident(anchor_inst)} = "
+                    f"{alias}.{_quote_ident(inst_col)}"
                 )
                 join_clauses.append(f"LEFT JOIN ({sub}) AS {alias} ON {cond}")
+
+        # #15 时变 universe：按 (date, instrument) 精确成员过滤（INNER JOIN），
+        # 表达每日成分变化；不再把窗口内成员拍平成静态集合。
+        if universe:
+            uds = self._registry.get(universe)
+            ut, ui = uds.time_column, uds.instrument_column
+            if not ut or not ui:
+                raise ValidationError(
+                    f"universe 数据集 '{universe}' 未声明 time_column/instrument_column，"
+                    f"无法做时变成员过滤"
+                )
+            uni_params = dict(params_by_dataset.get(universe, {}))
+            upaths = self._prepare_dataset_read(
+                uds,
+                time_range=time_range,
+                params=uni_params,
+                instrument_filter=instrument_filter,
+            )
+            uadapter = format_adapter_for_dataset(uds)
+            upath_param = upaths if len(upaths) > 1 else upaths[0]
+            u_from = uadapter.build_from_clause(
+                upath_param,
+                hive_partitioning=uds.hive_partitioning,
+                union_by_name=uds.union_by_name,
+            )
+            params_list.append(upath_param)
+            utype = str((uds.schema or {}).get(ut or "", "")).lower()
+            upred = Predicate(
+                time_range=time_range,
+                instrument_filter=instrument_filter,
+                time_column_is_timestamp=("timestamp" in utype or "datetime" in utype),
+            )
+            ucompiled = compile_predicate(upred, time_column=ut, instrument_column=ui)
+            params_list.extend(ucompiled.params)
+            u_sub = (
+                f"SELECT DISTINCT {_quote_ident(ut)}, {_quote_ident(ui)} "
+                f"FROM {u_from} {ucompiled.where_sql}".strip()
+            )
+            join_clauses.append(
+                f"INNER JOIN ({u_sub}) AS _u ON "
+                f"a.{_quote_ident(anchor_time)} = _u.{_quote_ident(ut)} "
+                f"AND a.{_quote_ident(anchor_inst)} = _u.{_quote_ident(ui)}"
+            )
+            if universe not in datasets:
+                datasets.append(universe)
+            per_ds_paths[universe] = upaths
 
         if anchor_sub is None:
             raise ValidationError("read_joined: anchor 子查询缺失")
@@ -1759,7 +2100,7 @@ class DataAccessStore:
         )
         if limit is not None:
             sql = f"{sql} LIMIT {int(limit)}"
-        return sql, params_list, datasets
+        return sql, params_list, datasets, per_ds_paths
 
     def _maybe_normalize_units(
         self,
@@ -1802,6 +2143,90 @@ class DataAccessStore:
             ),
             lineage=rr.lineage,
         )
+
+    def _check_factor_versions(
+        self,
+        fids: Sequence[str],
+        *,
+        versions: Mapping[str, str] | None = None,
+        require_same_data_snapshot: bool = False,
+        require_same_universe: bool = False,
+        time_range: tuple[Any, Any] | None = None,
+        **params: Any,
+    ) -> None:
+        """#41 训练矩阵防混版本：读取时核对 factor_version / data_snapshot / universe。
+
+        逐因子读一列样本（limit=1）取 factor_version / data_snapshot_id；违反
+        一致性要求抛 ValidationError。
+        """
+        ds = self._registry.get("factor_lake")
+        check_cols = []
+        if versions:
+            check_cols.append("factor_version")
+        if require_same_data_snapshot:
+            check_cols.append("data_snapshot_id")
+        if require_same_universe:
+            check_cols.append("universe" if "universe" in (ds.schema or {}) else "")
+        check_cols = [c for c in check_cols if c]
+
+        seen_snapshots: set[str] = set()
+        seen_universes: set[str] = set()
+        for fid in fids:
+            if versions and versions.get(fid) is not None:
+                expected = versions[fid]
+                if not check_cols:
+                    check_cols.append("factor_version")
+                try:
+                    probe = self.read(
+                        "factor_lake",
+                        columns=["factor_version"],
+                        factor_id=fid,
+                        time_range=time_range,
+                        limit=1,
+                        **params,
+                    ).to_arrow()
+                    actual = (
+                        str(probe.column("factor_version").to_pylist()[0])
+                        if probe.num_rows
+                        else None
+                    )
+                except Exception:
+                    actual = None
+                if actual is not None and actual != str(expected):
+                    raise ValidationError(
+                        f"factor {fid}: 期望版本 {expected}，实际 {actual}。"
+                        "禁止在训练矩阵里混入不同版本。"
+                    )
+                continue
+            if require_same_data_snapshot or require_same_universe:
+                try:
+                    probe = self.read(
+                        "factor_lake",
+                        columns=["data_snapshot_id", "universe"],
+                        factor_id=fid,
+                        time_range=time_range,
+                        limit=1,
+                        **params,
+                    ).to_arrow()
+                except Exception:
+                    probe = None
+                if probe is not None and probe.num_rows:
+                    if require_same_data_snapshot:
+                        snap = str(probe.column("data_snapshot_id").to_pylist()[0])
+                        seen_snapshots.add(snap)
+                    if require_same_universe and "universe" in probe.column_names:
+                        uni = str(probe.column("universe").to_pylist()[0])
+                        seen_universes.add(uni)
+        if require_same_data_snapshot and len(seen_snapshots) > 1:
+            raise ValidationError(
+                f"因子混用不同 data_snapshot：{sorted(seen_snapshots)}。"
+                "训练矩阵要求同一数据快照。"
+            )
+        if require_same_universe and len(seen_universes) > 1:
+            raise ValidationError(
+                f"因子混用不同 universe：{sorted(seen_universes)}。"
+                "训练矩阵要求同一 universe。"
+            )
 
     def _resolve_universe_instruments(
         self,
@@ -2180,6 +2605,10 @@ class DataAccessStore:
         prefer_polars: bool = False,
         batch_size: int = 100_000,
         query_budget: QueryBudget | None = None,
+        versions: Mapping[str, str] | None = None,
+        require_same_data_snapshot: bool = False,
+        require_same_universe: bool = False,
+        route_matrix_threshold: int = 100,
         **params: Any,
     ) -> ReadHandle:
         """一次读多个因子（单查询，非逐 factor 循环）。
@@ -2187,6 +2616,10 @@ class DataAccessStore:
         - ``layout="long"``：UNION ALL 各因子，输出 ``factor_id, datetime, asset, value, ...``
         - ``layout="wide"``：DuckDB PIVOT 成 ``datetime, asset, f1, f2, ...`` 宽矩阵
         - ``universe`` + ``frequency`` 提供时，wide 优先走 ``factor_matrix`` 物化层
+        - ``versions``（#41）：``{factor_id: expected_version}``，读取时逐因子核对
+          ``factor_version``，不一致抛 ValidationError（禁止训练矩阵混版本）
+        - ``route_matrix_threshold``（#40）：wide 且因子数超过阈值时优先 matrix，
+          少量因子仍走 factor-major 树（少开文件）
 
         返回 ``ReadHandle``，可 ``.to_arrow() / .to_polars() / .to_lazy()``。
         """
@@ -2203,8 +2636,13 @@ class DataAccessStore:
         if layout not in {"long", "wide"}:
             raise ValidationError("read_factors layout 必须是 long|wide")
 
-        # 优先 factor_matrix 物化层（wide + universe）
-        if layout == "wide" and universe:
+        # #40 因子路由：matrix 用于「数百/数千因子训练」；少因子走 factor-major 树
+        use_matrix = (
+            layout == "wide"
+            and universe is not None
+            and (len(fids) >= max(1, int(route_matrix_threshold)) or prefer_polars)
+        )
+        if use_matrix:
             try:
                 return self._read_factor_matrix(
                     fids,
@@ -2222,6 +2660,22 @@ class DataAccessStore:
                 )
             except ValidationError:
                 pass  # factor_matrix 未登记 → 回退长表 pivot
+
+        # #41 版本 / data_snapshot / universe 一致性检查（训练矩阵防混版本）
+        if versions or require_same_data_snapshot or require_same_universe:
+            try:
+                self._check_factor_versions(
+                    fids,
+                    versions=versions,
+                    require_same_data_snapshot=require_same_data_snapshot,
+                    require_same_universe=require_same_universe,
+                    time_range=time_range,
+                    **params,
+                )
+            except DataError:
+                raise
+            except Exception:
+                pass
 
         ds = self._registry.get("factor_lake")
         branches: list[tuple[str, list[str]]] = []
@@ -2634,6 +3088,8 @@ class DataAccessStore:
             "write_arrow dataset=%s rows=%d mode=%s files=%d elapsed_ms=%.1f",
             dataset, table.num_rows, mode, len(files_written), timer.elapsed_ms,
         )
+        # 写路径 mutation 后 bump manifest epoch，让 query-scoped snapshot 立即失效
+        self.touch_manifest_epoch(dataset, **params)
         return {
             "rows": table.num_rows,
             "path": str(target_dir),
@@ -2706,7 +3162,7 @@ class DataAccessStore:
 
         from data_access.write import upsert as upsert_mod
 
-        return upsert_mod.upsert_table(
+        result = upsert_mod.upsert_table(
             ds=ds,
             authorizer=self._authorizer,
             target_dir=target_dir,
@@ -2715,6 +3171,8 @@ class DataAccessStore:
             partition_by=partition_by,
             params=params,
         )
+        self.touch_manifest_epoch(dataset, **params)
+        return result
 
     def delete_rows(
         self,
@@ -2800,13 +3258,15 @@ class DataAccessStore:
         """
         from data_access.write import publish
 
-        return publish.publish_from_staging(
+        result = publish.publish_from_staging(
             registry=self._registry,
             authorizer=self._authorizer,
             staging_name=staging_dataset,
             target_name=target_dataset,
             **params,
         )
+        self.touch_manifest_epoch(target_dataset, **params)
+        return result
 
     def sql(
         self,
@@ -3190,14 +3650,21 @@ class DataAccessStore:
                             time_range=time_range,
                             instrument_filter=instrument_filter,
                         )
-                        if pruned:
+                        if not pruned:
+                            # #21 manifest 确认没有匹配文件 → 返回空列表，读路径
+                            # 生成空 relation，绝不回退全量扫描。
                             logger.info(
-                                "manifest_prune: dataset=%s raw_files=%d pruned_files=%d",
+                                "manifest_prune: dataset=%s 无匹配文件，返回空读取",
                                 ds.name,
-                                manifest.file_count,
-                                len(pruned),
                             )
-                            return self._authorize_read_paths(pruned)
+                            return []
+                        logger.info(
+                            "manifest_prune: dataset=%s raw_files=%d pruned_files=%d",
+                            ds.name,
+                            manifest.file_count,
+                            len(pruned),
+                        )
+                        return self._authorize_read_paths(pruned)
         return paths
 
     def _prepare_dataset_read(
@@ -3496,6 +3963,21 @@ class DataAccessStore:
         else:
             col_clause = "*"
 
+        # #21 manifest 空裁剪 → 返回带 schema 的空 SELECT，避免 read_parquet([]) 报错
+        if not paths:
+            schema = getattr(ds, "schema", None) or {}
+            if columns:
+                select_cols = list(columns)
+            else:
+                select_cols = list(schema.keys())
+            for k in (ds.time_column, ds.instrument_column):
+                if k and k not in select_cols:
+                    select_cols.append(k)
+            sql = _empty_branch_sql(select_cols, ds)
+            if limit is not None:
+                sql = f"{sql} LIMIT {int(limit)}"
+            return sql, []
+
         # path 参数：单路径直接 ?，多路径用 list；命名参数（hive_partitioning/
         # union_by_name 等）由 adapter 直接拼 SQL——这些值来自 registry，可信。
         path_param = paths if len(paths) > 1 else paths[0]
@@ -3618,6 +4100,73 @@ def _quote_ident(name: str) -> str:
     """本地复制一份列名引用，避免 store 依赖 predicate 的私有函数。"""
     escaped = name.replace('"', '""')
     return f'"{escaped}"'
+
+
+def _and_filters(*filters: Any) -> Any:
+    """把多个 Filter AST 合并成 And(...)；None 忽略。"""
+    from data_access.read.predicate_ast import And
+
+    parts = [f for f in filters if f is not None]
+    if not parts:
+        return None
+    if len(parts) == 1:
+        return parts[0]
+    return And(tuple(parts))
+
+
+def _dedup_key_sql(sub_sql: str, inst_col: str, time_col: str, revision_order: Sequence[str]) -> str:
+    """在（可含 UNION 的）事件子查询上按 (instrument, time) 去重，保留
+    revision_order 降序最新一版——替代依赖 parquet 扫描顺序的 keep_last。
+
+    ``QUALIFY`` 在 DuckDB 里对 ``SELECT ... FROM (<subquery>)`` 同样生效。
+    """
+    order = ", ".join(f"{_quote_ident(c)} DESC" for c in revision_order)
+    return (
+        f"SELECT * FROM ({sub_sql}) _ev "
+        f"QUALIFY ROW_NUMBER() OVER (PARTITION BY {_quote_ident(inst_col)}, "
+        f"{_quote_ident(time_col)} ORDER BY {order}) = 1"
+    )
+
+
+def _seed_qualify_sql(sub_sql: str, inst_col: str, time_col: str, revision_order: Sequence[str]) -> str:
+    """PIT seed 分支：只取每标的在窗口 start 之前最后一条可见记录
+    （time 降序、revision 降序）。"""
+    order = ", ".join(
+        f"{_quote_ident(c)} DESC" for c in [time_col, *revision_order]
+    )
+    return (
+        f"SELECT * FROM ({sub_sql}) _seed "
+        f"QUALIFY ROW_NUMBER() OVER (PARTITION BY {_quote_ident(inst_col)} "
+        f"ORDER BY {order}) = 1"
+    )
+
+
+def _duckdb_type_for_schema(dtype: str) -> str:
+    """把 registry schema dtype 字符串映射到 DuckDB 类型（空 relation 用）。"""
+    d = (dtype or "").strip().lower()
+    if "double" in d or "float" in d:
+        return "DOUBLE"
+    if "date" in d:
+        return "DATE"
+    if "timestamp" in d or "datetime" in d:
+        return "TIMESTAMP"
+    if "bool" in d:
+        return "BOOLEAN"
+    if "int" in d or "long" in d:
+        return "BIGINT"
+    return "VARCHAR"
+
+
+def _empty_branch_sql(select_cols: Sequence[str], dsobj: Any) -> str:
+    """生成一个带 schema 的空 SELECT（``WHERE FALSE``），供 #21 manifest 空裁剪
+    使用——避免 DuckDB ``read_parquet([])`` 直接报错。"""
+    schema = getattr(dsobj, "schema", None) or {}
+    parts: list[str] = []
+    for c in select_cols:
+        dtype = str(schema.get(c, "") or "VARCHAR")
+        parts.append(f"NULL::{_duckdb_type_for_schema(dtype)} AS {_quote_ident(c)}")
+    cols = ", ".join(parts) if parts else "*"
+    return f"SELECT {cols} WHERE FALSE"
 
 
 def _infer_format_from_uri(uri: str, explicit: str) -> str:

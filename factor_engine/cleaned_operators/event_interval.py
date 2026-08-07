@@ -1,0 +1,249 @@
+# -*- coding: utf-8 -*-
+"""Event-interval statistics operators (2026-08 geometry/math expansion).
+
+An *event panel* is a ``TradeDate x Symbol`` frame where a **nonzero** entry
+marks an event and ``0`` / ``NaN`` marks none.  For each instrument column the
+distance between consecutive event rows defines the inter-event intervals
+``τ_i`` inside the trailing window; when a pre-window event is known the gap
+from it into the window is included as the first interval (so the statistics
+are never starved at the window boundary).  The family characterises how
+regular / memory-laden / bursty the event process is:
+
+* ``event_interval_memory``   — Pearson correlation of consecutive intervals
+  (short/long interval persistence).
+* ``event_local_variation``   — local variation coefficient of the intervals
+  (regular vs. irregular spacing).
+* ``event_fano_factor``       — block-count dispersion (variance/mean) of the
+  event process over blocks of the window (burstiness).
+
+All operators are trailing-window, prefix-causal (row ``r`` uses rows ``<= r``
+only) and deterministic.  Windows with too few intervals emit ``NaN``; invalid
+parameters raise ``ValueError``.
+"""
+from __future__ import annotations
+
+from typing import Any
+
+import numpy as np
+import pandas as pd
+
+from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.rolling_pack import frame_like, register_polars_bridge
+
+_EPS = 1e-12
+
+
+def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
+    return OperatorMetadata(
+        name=name,
+        category="event_interval",
+        description=description,
+        param_names=params,
+        return_type="series",
+        tags=[
+            "event_interval", "daily", "pit_safe", "causal", "typed_v2",
+            "deterministic",
+            f"signature:{','.join(params)}->series", "domain:event_process",
+            f"unit:{unit}", f"cost:{cost}",
+        ],
+    )
+
+
+def _event_mask(col: np.ndarray) -> np.ndarray:
+    """Event rows: finite and nonzero (0/NaN = none)."""
+    return np.isfinite(col) & (col != 0)
+
+
+def _window_taus(ev_pos: np.ndarray, lo_idx: int, hi_idx: int, i0: int) -> np.ndarray | None:
+    """Inter-event intervals ``τ`` for events in ``[i0, r]``.
+
+    The gap from the last known pre-window event (``ev_pos[lo_idx-1] < i0``,
+    when it exists) into the first in-window event is prepended.  Returns
+    ``None`` when the window contains no event rows.
+    """
+    if hi_idx <= lo_idx:
+        return None
+    taus = np.diff(ev_pos[lo_idx:hi_idx]).astype(float)
+    if lo_idx > 0:
+        prev = ev_pos[lo_idx - 1]
+        if prev < i0:
+            taus = np.concatenate([[float(ev_pos[lo_idx] - prev)], taus])
+    return taus
+
+
+def _interval_memory_series(event2d: np.ndarray, window: int) -> np.ndarray:
+    rows, cols = event2d.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
+    w = int(window)
+    for c in range(cols):
+        ev_pos = np.flatnonzero(_event_mask(event2d[:, c]))
+        for r in range(rows):
+            i0 = max(0, r - w + 1)
+            lo = np.searchsorted(ev_pos, i0, side="left")
+            hi = np.searchsorted(ev_pos, r, side="right")
+            taus = _window_taus(ev_pos, lo, hi, i0)
+            if taus is None or taus.size < 4:
+                continue
+            corr = np.corrcoef(taus[:-1], taus[1:])
+            val = corr[0, 1]
+            if np.isfinite(val):
+                out[r, c] = float(val)
+    return out
+
+
+def _local_variation_series(event2d: np.ndarray, window: int) -> np.ndarray:
+    rows, cols = event2d.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
+    w = int(window)
+    for c in range(cols):
+        ev_pos = np.flatnonzero(_event_mask(event2d[:, c]))
+        for r in range(rows):
+            i0 = max(0, r - w + 1)
+            lo = np.searchsorted(ev_pos, i0, side="left")
+            hi = np.searchsorted(ev_pos, r, side="right")
+            taus = _window_taus(ev_pos, lo, hi, i0)
+            if taus is None or taus.size < 3:
+                continue
+            n = taus.size
+            d = taus[1:] - taus[:-1]
+            s = taus[1:] + taus[:-1]
+            lv = float(np.sum((d / (s + _EPS)) ** 2))
+            out[r, c] = (3.0 / (n - 1.0)) * lv
+    return out
+
+
+def _fano_factor_series(event2d: np.ndarray, window: int, block: int) -> np.ndarray:
+    rows, cols = event2d.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
+    w, b = int(window), int(block)
+    for c in range(cols):
+        ev = event2d[:, c]
+        for r in range(rows):
+            i0 = max(0, r - w + 1)
+            chunk = ev[i0 : r + 1]
+            length = chunk.shape[0]
+            n_blocks = (length + b - 1) // b
+            if n_blocks < 2:
+                continue
+            counts = np.empty(n_blocks, dtype=float)
+            for k in range(n_blocks):
+                seg = chunk[k * b : (k + 1) * b]
+                counts[k] = float(np.count_nonzero(_event_mask(seg)))
+            if float(counts.sum()) <= 0.0:  # degenerate: no events in the window
+                continue
+            mean = float(counts.mean())
+            var = float(counts.var())
+            out[r, c] = var / (mean + _EPS)
+    return out
+
+
+def _check_event_params(window: int, block: int | None = None) -> tuple[int, int | None]:
+    w = int(window)
+    if w < 2:
+        raise ValueError("window must be >= 2")
+    if block is not None:
+        b = int(block)
+        if b < 1:
+            raise ValueError("block must be >= 1")
+        return w, b
+    return w, None
+
+
+@register_operator(
+    name="event_interval_memory",
+    category="event_interval",
+    business_category="event_interval",
+    canonical="event_interval_memory",
+    source="event_interval",
+)
+class EventIntervalMemory(SeriesOperator):
+    """事件间隔记忆：连续事件间隔对 ``(τ_i, τ_{i+1})`` 的 Pearson 相关。
+
+    正 → 间隔长短持续（聚集/惯性）；负 → 长短交替；≈0 → 间隔近似独立。
+    需要窗口内至少 4 个间隔，否则 NaN。事件 = 非零值，0/NaN = 无事件。
+    """
+
+    metadata = _metadata(
+        "event_interval_memory",
+        "连续事件间隔的 Pearson 相关（间隔记忆 / 聚集性）。",
+        ["event", "window"],
+        unit="corr",
+        cost=3,
+    )
+
+    def _calculate_series(self, event: pd.DataFrame, window: int = 240, **_: Any) -> pd.DataFrame:
+        w, _ = _check_event_params(window)
+        return frame_like(event, _interval_memory_series(event.to_numpy(dtype=float), w))
+
+
+@register_operator(
+    name="event_local_variation",
+    category="event_interval",
+    business_category="event_interval",
+    canonical="event_local_variation",
+    source="event_interval",
+)
+class EventLocalVariation(SeriesOperator):
+    """事件间隔局部变异：``LV = (3/(n-1))·Σ ((τ_{i+1}-τ_i)/(τ_{i+1}+τ_i))²``。
+
+    规则事件序列 → LV≈0；间隔不规则 / 间歇性 → 大值。需要至少 3 个间隔。
+    """
+
+    metadata = _metadata(
+        "event_local_variation",
+        "事件间隔的局部变异系数（规则 vs 不规则）。",
+        ["event", "window"],
+        unit="ratio",
+        cost=3,
+    )
+
+    def _calculate_series(self, event: pd.DataFrame, window: int = 240, **_: Any) -> pd.DataFrame:
+        w, _ = _check_event_params(window)
+        return frame_like(event, _local_variation_series(event.to_numpy(dtype=float), w))
+
+
+@register_operator(
+    name="event_fano_factor",
+    category="event_interval",
+    business_category="event_interval",
+    canonical="event_fano_factor",
+    source="event_interval",
+)
+class EventFanoFactor(SeriesOperator):
+    """事件 Fano 因子：把窗口切成 ``block`` 行的块，``N_k`` = 每块事件数，
+    ``F = Var(N_k)/Mean(N_k)``（分母加 eps 防除零）。
+
+    F≈1 → 泊松型随机过程；F>1 → 聚集/爆发；F<1 → 更规则。少于 2 块 → NaN。
+    """
+
+    metadata = _metadata(
+        "event_fano_factor",
+        "块内事件数方均比（burstiness / 聚集性）。",
+        ["event", "window", "block"],
+        unit="ratio",
+        cost=3,
+    )
+
+    def _calculate_series(self, event: pd.DataFrame, window: int = 240, block: int = 20, **_: Any) -> pd.DataFrame:
+        w, b = _check_event_params(window, block)
+        return frame_like(event, _fano_factor_series(event.to_numpy(dtype=float), w, b))
+
+
+_NEW_CANONICALS = (
+    "event_interval_memory",
+    "event_local_variation",
+    "event_fano_factor",
+)
+
+
+def _register_surface() -> None:
+    import cleaned_operators.operator_surface as _surface
+
+    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
+        set(_surface.EXTENDED_ONLY_CANONICALS) | set(_NEW_CANONICALS)
+    )
+    for _canon in _NEW_CANONICALS:
+        register_polars_bridge(_canon)
+
+
+_register_surface()

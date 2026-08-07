@@ -28,8 +28,8 @@ P1 = {
 }
 P2 = {
     "ts_effective_transfer_entropy", "report_benford_js_divergence",
-    "intraday_wasserstein_quantile_pca_score",
-    "intraday_wasserstein_quantile_pca_residual",
+    "intraday_quantile_curve_pca_score",
+    "intraday_quantile_curve_pca_residual",
     "ts_betti_1_max_persistence", "ts_persistence_diagram_shift",
     "ts_fisher_information_shift",
 }
@@ -295,7 +295,10 @@ def _brute_force_h1(points: np.ndarray) -> list[tuple[float, float]]:
             col = sorted(cols[c])
             if not col:
                 break
-            pivot = col[0]
+            # Standard persistent-homology pivot: the *highest* (latest-filtration)
+            # row of the reduced column — mirroring onto the lowest row invents
+            # spurious H1 classes on collinear clouds.
+            pivot = col[-1]
             if pivot in low:
                 other = set(cols[low[pivot]])
                 cur = set(cols[c])
@@ -307,7 +310,7 @@ def _brute_force_h1(points: np.ndarray) -> list[tuple[float, float]]:
     for c in sorted(cols):
         if not cols[c]:
             continue
-        pivot = sorted(cols[c])[0]
+        pivot = sorted(cols[c])[-1]
         if simplices[c][1] == 2 and simplices[pivot][1] == 1:
             pairs.append((simplices[pivot][0], simplices[c][0]))
     return pairs
@@ -324,13 +327,31 @@ def test_rips_h1_matches_bruteforce():
         assert fast == pytest.approx(slow, abs=1e-9)
 
 
-def test_betti_periodic_positive_persistence():
+def test_rips_h1_geometry_ground_truth():
+    """A collinear cloud has H1 == 0; a genuine circle has H1 > 0.
+
+    The old test fed ``column_stack([s, s, s])`` — *three identical columns*, i.e.
+    a line x=y=z, not a loop — and asserted H1 > 0.05.  That only passed because
+    the Rips reduction mirrored its pivot onto the lowest edge, which manufactures
+    spurious cycles on collinear clouds; with the correct (highest-edge) pivot
+    convention the same input correctly yields zero persistence.
+    """
     from cleaned_operators.advanced_topology import _max_persistence, _rips_h1_pairs
 
-    t = np.arange(60.0)
+    th = np.linspace(0.0, 2.0 * np.pi, 10, endpoint=False)
+    circle = np.column_stack([np.cos(th), np.sin(th)])
+    assert _max_persistence(_rips_h1_pairs(circle)) > 0.5  # one genuine loop
+
+    t = np.arange(20.0)
+    line2 = np.column_stack([t, np.zeros_like(t)])
+    assert _max_persistence(_rips_h1_pairs(line2)) < 1e-6  # no H1 on a line
+
     s = np.sin(2.0 * np.pi * t / 6.0)
-    pts = np.column_stack([s, s, s])  # a loop in 3D
-    assert _max_persistence(_rips_h1_pairs(pts)) > 0.05
+    line3 = np.column_stack([s, s, s])  # collinear in 3D — NOT a loop
+    assert _max_persistence(_rips_h1_pairs(line3)) < 1e-6
+
+    blob = np.random.default_rng(0).normal(size=(10, 3))
+    assert _max_persistence(_rips_h1_pairs(blob)) < 0.5  # small vs the unit circle
 
 
 def test_betti_and_diagram_shift_panels():
@@ -345,7 +366,7 @@ def test_betti_and_diagram_shift_panels():
     assert np.isfinite(out2.to_numpy(dtype=float)).any()
 
 
-def test_student_t_fisher_shift_same_vs_different():
+def test_fisher_information_shift_same_vs_different():
     rng = np.random.default_rng(13)
     op = OperatorRegistry.get("ts_fisher_information_shift", "pandas_numpy")
     # Same heavy-tailed distribution in both windows -> small information distance.
@@ -369,8 +390,8 @@ def test_student_t_fisher_shift_same_vs_different():
 def test_quantile_pca_constant_returns_near_zero():
     const = _minute_frame(6, 2)
     const.loc[:, :] = 0.05  # constant minute return
-    score = OperatorRegistry.get("intraday_wasserstein_quantile_pca_score", "pandas_numpy")
-    resid = OperatorRegistry.get("intraday_wasserstein_quantile_pca_residual", "pandas_numpy")
+    score = OperatorRegistry.get("intraday_quantile_curve_pca_score", "pandas_numpy")
+    resid = OperatorRegistry.get("intraday_quantile_curve_pca_residual", "pandas_numpy")
     s_out = score.calculate(const, window=3, k=1)
     r_out = resid.calculate(const, window=3, k=1)
     svals = s_out.to_numpy(dtype=float)
@@ -380,6 +401,212 @@ def test_quantile_pca_constant_returns_near_zero():
     assert svals.size > 0 and rvals.size > 0
     assert np.allclose(svals, 0.0, atol=1e-8)
     assert np.allclose(rvals, 0.0, atol=1e-8)
+
+
+# ---------------------------------------------------------------------------
+# golden / degenerate-case / invariance (2026-08 second-round audit fixes)
+# ---------------------------------------------------------------------------
+
+def test_barrier_approach_acceleration_uses_real_limits():
+    from cleaned_operators.advanced_intraday import _barrier_approach
+
+    # Accelerating toward upper limit 11 from below: linear headroom
+    # h = 1 - price/11, v = [.0182,.0273,.0364], a = [.0091,.0091] -> -mean(a) = 0.009091.
+    acc = _barrier_approach(np.array([10.0, 10.2, 10.5, 10.9]), 11.0, 9.0, 10)
+    assert acc == pytest.approx(0.009091, abs=1e-5)
+    # Accelerating toward the *lower* limit -> negative (direction preserved; the
+    # old max() erased the sign).
+    assert _barrier_approach(np.array([11.0, 10.8, 10.5, 10.1]), 12.0, 9.0, 10) < 0.0
+    # The old bug computed 1 - price/1 and skipped the lower branch; a far upper
+    # limit must give a genuinely different (smaller) headroom acceleration.
+    acc_far = _barrier_approach(np.array([10.0, 10.2, 10.5, 10.9]), 100.0, 9.0, 10)
+    assert not np.isclose(acc, acc_far)
+    assert np.isnan(_barrier_approach(np.array([10.0, 10.0, 10.0, 10.0]), 11.0, 9.0, 10))
+
+
+def test_vpin_equal_volume_bucket_golden():
+    from cleaned_operators.microstructure.flow_impact import _equal_volume_vpin
+
+    vol = np.array([10.0, 30.0, 5.0, 40.0, 15.0])
+    fl = np.array([10.0, -30.0, 5.0, 40.0, -15.0])
+    # target=25.  Buckets: bar1 split +10/-15 -> -5 (|5|); -15+5+5 -> -5 (|5|);
+    # bar3 split +25 -> |25|; +10/-15 -> -5 (|5|) => abs_of=40 => VPIN 0.4.
+    assert _equal_volume_vpin(vol, fl, 4) == pytest.approx(0.4)
+    # all-buy: every bucket |flow| == bucket volume -> VPIN 1.0.
+    assert _equal_volume_vpin(np.abs(fl), np.abs(fl), 4) == pytest.approx(1.0)
+    # one bar crossing two bucket boundaries: [25,75] splits 25/25/25/25.
+    assert _equal_volume_vpin(np.array([25.0, 75.0]), np.array([25.0, 75.0]), 4) == pytest.approx(1.0)
+
+
+def test_holder_class_js_fixed_slots_no_compression():
+    # A NaN slot is "class unknown", never silently 0: with known mass elsewhere
+    # the cell fails closed instead of compressing current[np.isfinite(current)],
+    # which changed class identity (class3 -> class2) in the original code.
+    cur = _holder_panel(np.array([[0.4, np.nan, 0.3, 0.2, 0.1]]))
+    prev = _holder_panel(np.array([[0.4, 0.3, np.nan, 0.2, 0.1]]))
+    out = OperatorRegistry.get("holder_class_js_shift", "pandas_numpy").calculate(*cur, *prev)
+    assert np.isnan(out.to_numpy(dtype=float)).all()
+    # negative shares are invalid -> fail closed.
+    cur2 = _holder_panel(np.array([[1.0, -0.1, 0.0, 0.0, 0.0]]))
+    prev2 = _holder_panel(np.array([[0.5, 0.5, 0.0, 0.0, 0.0]]))
+    out2 = OperatorRegistry.get("holder_class_js_shift", "pandas_numpy").calculate(*cur2, *prev2)
+    assert np.isnan(out2.to_numpy(dtype=float)).all()
+
+
+def test_fisher_information_shift_window_length_exact():
+    from cleaned_operators.advanced_topology import _fisher_shift_series
+
+    rng = np.random.default_rng(27)
+    vals = rng.normal(size=(100, 1))
+    out = _fisher_shift_series(vals, 10, 10)
+    # recent=10, prior=10, so the first computable row is 10+10-1 = 19 (the old
+    # code used 10+10 = 20 and a 11-observation recent window).
+    assert np.isnan(out[:19]).all()
+    assert np.isfinite(out[19:]).any()
+
+
+def test_kramers_moyal_min_bin_count_fails_closed():
+    t = np.arange(80.0)[:, None]
+    x = _frame(t, "2024-01-01")
+    op = OperatorRegistry.get("ts_kramers_moyal_drift", "pandas_numpy")
+    out = op.calculate(x, window=6, bins=4, min_bin_count=10)
+    assert np.isnan(out.to_numpy(dtype=float)).all()  # few transitions -> NaN
+
+
+def test_copula_column_permutation_invariant():
+    rng = np.random.default_rng(21)
+    rows = 60
+    idx = pd.date_range("2024-01-01", periods=rows, freq="B")
+    cols = ["S0", "S1", "S2", "S3", "S4", "S5"]
+    # heavy ties (small integer grid + tiny jitter) — the old competition ranks
+    # assigned tied stocks distinct ranks in column order, breaking invariance.
+    base = rng.integers(0, 3, size=(rows, len(cols))).astype(float)
+    base += rng.normal(0.0, 1e-6, base.shape)
+    X = pd.DataFrame(base, index=idx, columns=cols)
+    op = OperatorRegistry.get("cs_sliced_wasserstein_copula_shift", "pandas_numpy")
+    out = op.calculate(X, X * 1.0 + 0.0, np.abs(X) + 0.1, window=30, directions=16)
+    rev = cols[::-1]
+    Xr = X[rev]
+    out_r = op.calculate(Xr, Xr * 1.0 + 0.0, np.abs(Xr) + 0.1, window=30, directions=16)
+    restored = out_r[cols]  # map permuted output back to the original column order
+    assert np.allclose(out.to_numpy(dtype=float), restored.to_numpy(dtype=float), equal_nan=True)
+
+
+def test_group_spd_complete_case_and_min_peers():
+    rng = np.random.default_rng(23)
+    rows, ncol = 120, 12
+    idx = pd.date_range("2024-01-01", periods=rows, freq="B")
+    cols = [f"S{i}" for i in range(ncol)]
+    feats = [pd.DataFrame(rng.normal(0.0, 1.0, (rows, ncol)), index=idx, columns=cols) for _ in range(3)]
+    g = pd.DataFrame(np.tile(np.arange(ncol) % 2, (rows, 1)), index=idx, columns=cols)  # 2 groups x 6
+    op = OperatorRegistry.get("group_spd_feature_structure_shift", "pandas_numpy")
+    out = op.calculate(*feats, g, reference_window=30)
+    assert np.isfinite(out.to_numpy(dtype=float)).any()  # 6 peers >= min_peers=5
+    # one stock's one missing feature must not NaN the whole group (complete-case).
+    feats[1].iloc[50, 0] = np.nan
+    out2 = op.calculate(*feats, g, reference_window=30)
+    assert np.isfinite(out2.to_numpy(dtype=float)).any()
+    # min_peers > group size -> fail closed.
+    out3 = op.calculate(*feats, g, reference_window=30, min_peers=20)
+    assert np.isnan(out3.to_numpy(dtype=float)).all()
+
+
+def test_persistence_diagram_w1_golden():
+    from cleaned_operators.advanced_topology import _diagram_w1
+
+    assert _diagram_w1([], []) == pytest.approx(0.0)
+    assert _diagram_w1([], [(2.0, 3.0)]) == pytest.approx(0.5)  # diag cost (3-2)/2
+    assert _diagram_w1([(1.0, 2.0)], [(1.0, 2.0)]) == pytest.approx(0.0)
+    assert _diagram_w1([(1.0, 2.0)], [(1.4, 2.4)]) == pytest.approx(0.4)  # L-inf shift
+
+
+def test_takens_nan_vectors_filtered():
+    from cleaned_operators.advanced_topology import _takens_points
+
+    vals = np.sin(np.arange(30.0) / 3.0)
+    vals[5] = np.nan
+    vals[9] = np.nan
+    pts = _takens_points(vals, 1, 3)
+    assert pts is not None
+    assert np.isfinite(pts).all()  # no NaN embedding vector reaches the Rips complex
+
+
+def test_pair_wasserstein_mad_zero_fails_closed():
+    from cleaned_operators.advanced_intraday import _pair_w1
+
+    rng = np.random.default_rng(25)
+    a = rng.normal(size=30)
+    b = np.ones(30)  # constant baseline -> MAD = 0 -> undefined scale
+    assert np.isnan(_pair_w1(a, b))
+
+
+def test_quantile_pca_rank_consistency():
+    rng = np.random.default_rng(22)
+    days, per = 65, 40
+    dates = pd.date_range("2024-01-01", periods=days, freq="B")
+    idx = pd.DatetimeIndex([d + pd.Timedelta(minutes=570 + m) for d in dates for m in range(per)])
+    data = pd.DataFrame(rng.normal(0.0, 0.002, size=(days * per, 2)), index=idx, columns=["S0", "S1"])
+    # k=50 exceeds the 49-point quantile-grid rank -> BOTH fail closed (unified
+    # rank rule; the old residual silently used min(k, rank) instead of NaN).
+    score = OperatorRegistry.get("intraday_quantile_curve_pca_score", "pandas_numpy").calculate(data, window=60, k=50)
+    resid = OperatorRegistry.get("intraday_quantile_curve_pca_residual", "pandas_numpy").calculate(data, window=60, k=50)
+    assert np.isnan(score.to_numpy(dtype=float)).all()
+    assert np.isnan(resid.to_numpy(dtype=float)).all()
+
+
+def test_pca_eigen_gap_guard():
+    from cleaned_operators.advanced_intraday import _eigen_gap_unstable
+
+    assert _eigen_gap_unstable(np.array([1.0, 0.995, 0.001]), 1) is True
+    assert _eigen_gap_unstable(np.array([1.0, 0.5, 0.001]), 1) is False
+    assert _eigen_gap_unstable(np.array([0.0, 0.0, 0.0]), 1) is False  # zero variance -> score 0
+    assert _eigen_gap_unstable(np.array([1.0, 0.5]), 2) is False  # k == rank -> N/A
+
+
+def test_transfer_entropy_constant_input_is_nan():
+    idx = pd.date_range("2024-01-01", periods=80)
+    const = pd.DataFrame(np.ones((80, 2)), index=idx, columns=["S0", "S1"])
+    out = OperatorRegistry.get("ts_transfer_entropy", "pandas_numpy").calculate(const, const, window=60, bins=3, lag=1)
+    assert np.isnan(out.to_numpy(dtype=float)).all()  # <2 distinct states -> not info
+
+
+def test_transfer_entropy_min_transitions():
+    rng = np.random.default_rng(26)
+    x = _frame(rng.normal(size=(50, 2)))
+    y = _frame(rng.normal(size=(50, 2)))
+    op = OperatorRegistry.get("ts_transfer_entropy", "pandas_numpy")
+    # window=20 -> ~19 transitions < default floor max(30, 3*bins^2)=30 -> NaN.
+    out_high = op.calculate(x, y, window=20, bins=3, lag=1)
+    assert np.isnan(out_high.to_numpy(dtype=float)).all()
+    out_low = op.calculate(x, y, window=20, bins=3, lag=1, min_transitions=5)
+    assert np.isfinite(out_low.to_numpy(dtype=float)).any()
+
+
+def test_score_rank_tie_average_weight():
+    op = OperatorRegistry.get("ts_score_rank_weighted_mean", "pandas_numpy")
+    idx = pd.date_range("2024-01-01", periods=4)
+    t = pd.DataFrame([[10.0], [20.0], [30.0], [40.0]], index=idx, columns=["A"])
+    sc = pd.DataFrame([[5.0], [5.0], [1.0], [1.0]], index=idx, columns=["A"])
+    out = op.calculate(t, sc, window=4, decay=0.5)
+    w = np.array([0.5 ** 0.5, 0.5 ** 0.5, 0.5 ** 2.5, 0.5 ** 2.5])
+    w /= w.sum()
+    exp = float(np.sum(w * np.array([10.0, 20.0, 30.0, 40.0])))
+    assert out["A"].iloc[-1] == pytest.approx(exp)
+    # swapping the tied high-score rows must not change the result.
+    t2 = pd.DataFrame([[20.0], [10.0], [30.0], [40.0]], index=idx, columns=["A"])
+    out2 = op.calculate(t2, sc, window=4, decay=0.5)
+    assert out2["A"].iloc[-1] == pytest.approx(exp)
+
+
+def test_bures_min_pairs_fails_closed():
+    rng = np.random.default_rng(24)
+    x = _frame(rng.normal(0.0, 1.0, (40, 2)))
+    y = _frame(rng.normal(0.0, 1.0, (40, 2)))
+    op = OperatorRegistry.get("ts_bures_corr_shift", "pandas_numpy")
+    out = op.calculate(x, y, recent_window=8, prior_window=20, min_pairs=10)
+    assert np.isnan(out.to_numpy(dtype=float)).all()  # 8 pairs < 10 -> fail closed
+    out2 = op.calculate(x, y, recent_window=15, prior_window=20, min_pairs=10)
+    assert np.isfinite(out2.to_numpy(dtype=float)).any()
 
 
 # ---------------------------------------------------------------------------

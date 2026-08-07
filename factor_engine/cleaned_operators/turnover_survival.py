@@ -45,6 +45,10 @@ from cleaned_operators.rolling_pack import frame_like
 
 _EPS = 1e-12
 
+# Fixed log-price bins (relative to the current price) for the chip-cost shape
+# statistics.  Open outer boundaries; the inner edges span ±20% log-price.
+_COST_LOG_EDGES = np.array([-0.20, -0.10, -0.05, -0.02, 0.02, 0.05, 0.10, 0.20])
+
 
 def _default_min_periods(window: int) -> int:
     """Minimum valid-price lags required; grows with the window."""
@@ -64,7 +68,7 @@ def _column_stats(
 
     ``price`` / ``turnover`` are 1-D arrays of equal length.  Returns a dict of
     arrays (reference price, cost dispersion, profit share, holding age,
-    near-cost mass, cost-quantile distance).
+    near-cost mass, cost-quantile distance, cost-shape statistics).
     """
     rows = price.shape[0]
     ref = np.full(rows, np.nan)
@@ -73,6 +77,10 @@ def _column_stats(
     age = np.full(rows, np.nan)
     near = np.full(rows, np.nan)
     qdist = np.full(rows, np.nan)
+    cost_ent = np.full(rows, np.nan)
+    mode_d = np.full(rows, np.nan)
+    cost_sk = np.full(rows, np.nan)
+    age_disp = np.full(rows, np.nan)
 
     for t in range(rows):
         lo = max(0, t - window)
@@ -125,7 +133,8 @@ def _column_stats(
         ref[t] = rp
 
         # cost dispersion: sqrt( sum wn * log(price/rp)^2 )
-        log_dist = np.log(np.where(price_ok, prices, rp) / rp)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            log_dist = np.log(np.where(price_ok, prices, rp) / rp)
         disp[t] = float(np.sqrt(np.sum(wn * log_dist * log_dist)))
 
         # profit share: weight below current price (strictly cheaper).
@@ -134,6 +143,39 @@ def _column_stats(
         # holding age: lag n = L - k (days held).
         lags = length - np.arange(length, dtype=float)
         age[t] = float(np.sum(wn * lags))
+
+        # --- deepening cost-shape statistics (P1) ---
+        # cost entropy + modal-cost distance use fixed log-price bins relative
+        # to the *current* price; only finite-price chips carry weight.
+        with np.errstate(divide="ignore", invalid="ignore"):
+            z_cur = np.log(np.where(price_ok, prices, current) / current)
+        bins_idx = np.digitize(z_cur, _COST_LOG_EDGES)
+        nb = _COST_LOG_EDGES.shape[0] + 1
+        mass = np.zeros(nb)
+        for bb in range(nb):
+            mass[bb] = float(np.sum(wn[bins_idx == bb]))
+        mtot = float(mass.sum())
+        if mtot > _EPS:
+            p = mass / mtot
+            p = p[p > 0.0]
+            cost_ent[t] = -float(np.sum(p * np.log(p))) / np.log(nb)
+            bmax = int(np.argmax(mass))
+            sel = bins_idx == bmax
+            sel_w = wn[sel]
+            if float(sel_w.sum()) > _EPS:
+                pmode = float(
+                    np.sum(wn[sel] * np.where(price_ok, prices, 0.0)[sel]) / float(np.sum(wn[sel]))
+                )
+                if np.isfinite(pmode) and pmode > 0.0:
+                    mode_d[t] = float(np.log(current / pmode))
+        # weighted cost skew: third moment of z = log(P/RP) over normalised mass.
+        m2 = float(np.sum(wn * log_dist * log_dist))
+        m3 = float(np.sum(wn * log_dist * log_dist * log_dist))
+        if np.isfinite(m2) and m2 > _EPS:
+            cost_sk[t] = float(m3 / (m2 ** 1.5))
+        # age dispersion: weighted std of holding lags around the mean age.
+        ad = lags - age[t]
+        age_disp[t] = float(np.sqrt(np.sum(wn * ad * ad)))
 
         # near-cost mass: weight within +/- band_pct of the current price.
         rel = np.abs(prices - current) / current
@@ -164,6 +206,10 @@ def _column_stats(
         "age": age,
         "near": near,
         "qdist": qdist,
+        "cost_ent": cost_ent,
+        "mode_d": mode_d,
+        "cost_sk": cost_sk,
+        "age_disp": age_disp,
     }
 
 
@@ -218,7 +264,8 @@ def _run_all(
     tv = turnover.to_numpy(dtype=float)
     rows, cols = pv.shape
     out: dict[str, list[np.ndarray]] = {
-        "ref": [], "disp": [], "profit": [], "age": [], "near": [], "qdist": []
+        "ref": [], "disp": [], "profit": [], "age": [], "near": [], "qdist": [],
+        "cost_ent": [], "mode_d": [], "cost_sk": [], "age_disp": [],
     }
     for c in range(cols):
         stats = _column_stats(pv[:, c], tv[:, c], w, mp, band, qh, ql)
@@ -430,6 +477,110 @@ class TsTurnoverCostQuantileDistance(SeriesOperator):
         return _run_all(price, turnover, window, 0.05, q_high, q_low)["qdist"]
 
 
+@register_operator(
+    name="ts_turnover_cost_entropy",
+    category="time_series_chip_cost",
+    business_category="time_series_chip_cost",
+    canonical="ts_turnover_cost_entropy",
+    source="turnover_survival",
+)
+class TsTurnoverCostEntropy(SeriesOperator):
+    """存活筹码成本分布的熵（固定 log-price 分箱，相对当前价）。
+
+    ``H = -Σ_b p_b log p_b / log B``（B=8 个固定箱，越界并到开区间箱）。低 =
+    筹码高度集中在少数成本区（单一密集成本带）；高 = 筹码成本高度分散。与
+    ``ts_turnover_cost_dispersion``（只看二阶尺度）互补——entropy 看整个质量
+    分布形状。只用 t-1 及以前，PIT 安全。
+    """
+
+    metadata = _metadata(
+        "ts_turnover_cost_entropy",
+        "筹码成本分布熵（[0,1]，低=集中单一成本带）。",
+        ["price", "turnover", "window"],
+        unit="entropy",
+    )
+
+    def _calculate_series(self, price: pd.DataFrame, turnover: pd.DataFrame, window: int = 60, **_: Any) -> pd.DataFrame:
+        return _run_all(price, turnover, window, 0.05, 0.75, 0.25)["cost_ent"]
+
+
+@register_operator(
+    name="ts_turnover_cost_mode_distance",
+    category="time_series_chip_cost",
+    business_category="time_series_chip_cost",
+    canonical="ts_turnover_cost_mode_distance",
+    source="turnover_survival",
+)
+class TsTurnoverCostModeDistance(SeriesOperator):
+    """最大筹码成本峰的相对位置 ``log(P_t / P_mode)``。
+
+    在固定 log-price 分箱上找权重最大的成本峰，取该箱内筹码的加权平均成本
+    P_mode；输出相对当前价的对数距离。正 = 最大筹码峰在现价下方（多数被套的
+    密集成本带），负 = 峰在上方。比参考价 mean/median 更贴近"最大筹码峰在哪
+    "，A 股尤有解释力。PIT 安全。
+    """
+
+    metadata = _metadata(
+        "ts_turnover_cost_mode_distance",
+        "最大成本峰相对当前价 log(P_t/P_mode)。",
+        ["price", "turnover", "window"],
+        unit="log",
+    )
+
+    def _calculate_series(self, price: pd.DataFrame, turnover: pd.DataFrame, window: int = 60, **_: Any) -> pd.DataFrame:
+        return _run_all(price, turnover, window, 0.05, 0.75, 0.25)["mode_d"]
+
+
+@register_operator(
+    name="ts_turnover_cost_skew",
+    category="time_series_chip_cost",
+    business_category="time_series_chip_cost",
+    canonical="ts_turnover_cost_skew",
+    source="turnover_survival",
+)
+class TsTurnoverCostSkew(SeriesOperator):
+    """存活筹码对数成本的加权三阶矩（偏度）。
+
+    ``Skew = Σ_n w_n z_n^3 / (Σ_n w_n z_n^2)^1.5``，``z_n = log(P_{t-n}/RP_t)``。
+    同样 dispersion 下区分筹码主要拖在上方（z 右尾大 → 正偏）还是下方。PIT 安全。
+    """
+
+    metadata = _metadata(
+        "ts_turnover_cost_skew",
+        "筹码成本分布加权偏度（正=拖在上方）。",
+        ["price", "turnover", "window"],
+        unit="ratio",
+    )
+
+    def _calculate_series(self, price: pd.DataFrame, turnover: pd.DataFrame, window: int = 60, **_: Any) -> pd.DataFrame:
+        return _run_all(price, turnover, window, 0.05, 0.75, 0.25)["cost_sk"]
+
+
+@register_operator(
+    name="ts_turnover_age_dispersion",
+    category="time_series_chip_cost",
+    business_category="time_series_chip_cost",
+    canonical="ts_turnover_age_dispersion",
+    source="turnover_survival",
+)
+class TsTurnoverAgeDispersion(SeriesOperator):
+    """存活筹码持仓年龄的加权离散度 ``sqrt(Σ w_n (n - Age)^2)``。
+
+    平均持仓年龄相同的两只股票：A 全部筹码约 40 天、B 一半 5 天一半 75 天，
+    AgeDisp 完全不同。与 ``ts_turnover_holding_age``（均值）互补。PIT 安全。
+    """
+
+    metadata = _metadata(
+        "ts_turnover_age_dispersion",
+        "存活筹码持仓年龄加权离散度（天）。",
+        ["price", "turnover", "window"],
+        unit="days",
+    )
+
+    def _calculate_series(self, price: pd.DataFrame, turnover: pd.DataFrame, window: int = 60, **_: Any) -> pd.DataFrame:
+        return _run_all(price, turnover, window, 0.05, 0.75, 0.25)["age_disp"]
+
+
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
@@ -442,6 +593,10 @@ def _register_surface() -> None:
             "ts_turnover_holding_age",
             "ts_turnover_near_cost_mass",
             "ts_turnover_cost_quantile_distance",
+            "ts_turnover_cost_entropy",
+            "ts_turnover_cost_mode_distance",
+            "ts_turnover_cost_skew",
+            "ts_turnover_age_dispersion",
         }
     )
     from cleaned_operators.rolling_pack import register_polars_bridge
@@ -453,6 +608,10 @@ def _register_surface() -> None:
         "ts_turnover_holding_age",
         "ts_turnover_near_cost_mass",
         "ts_turnover_cost_quantile_distance",
+        "ts_turnover_cost_entropy",
+        "ts_turnover_cost_mode_distance",
+        "ts_turnover_cost_skew",
+        "ts_turnover_age_dispersion",
     ):
         register_polars_bridge(_canon)
 

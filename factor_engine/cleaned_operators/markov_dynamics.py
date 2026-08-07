@@ -52,23 +52,34 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
 
 
 def _quantile_edges(values: np.ndarray, n_bins: int) -> np.ndarray:
-    """Deterministic quantile bin edges over a window (never degenerate)."""
+    """Deterministic quantile bin edges over a window; always returns n_bins+1.
+
+    Constant / all-NaN windows get a fixed spread with open boundaries so the
+    number of cells stays ``n_bins`` (never a degenerate 2-cell fallback).
+    """
     finite = values[np.isfinite(values)]
+    B = max(2, int(n_bins))
     if finite.size == 0:
-        return np.array([-np.inf, np.inf], dtype=float)
-    if n_bins < 2:
-        n_bins = 2
-    edges = np.unique(np.quantile(finite, np.linspace(0.0, 1.0, n_bins + 1)))
-    if edges.size == 1:
-        return np.array([edges[0] - 1.0, edges[0] + 1.0], dtype=float)
-    if edges.size < n_bins + 1:
-        lo, hi = float(edges[0]), float(edges[-1])
-        if hi - lo <= _EPS:
-            lo, hi = lo - 1.0, hi + 1.0
-        edges = np.linspace(lo, hi, n_bins + 1)
+        edges = np.linspace(-1.0, 1.0, B + 1)
         edges[0] = -np.inf
         edges[-1] = np.inf
-    return edges
+        return edges
+    raw = np.unique(np.quantile(finite, np.linspace(0.0, 1.0, B + 1)))
+    if raw.size == 1:
+        v = float(raw[0])
+        edges = np.linspace(v - 1.0, v + 1.0, B + 1)
+        edges[0] = -np.inf
+        edges[-1] = np.inf
+        return edges
+    if raw.size < B + 1:
+        lo, hi = float(raw[0]), float(raw[-1])
+        if hi - lo <= _EPS:
+            lo, hi = lo - 1.0, hi + 1.0
+        edges = np.linspace(lo, hi, B + 1)
+        edges[0] = -np.inf
+        edges[-1] = np.inf
+        return edges
+    return raw
 
 
 def _bin(values: np.ndarray, edges: np.ndarray) -> np.ndarray:
@@ -584,6 +595,544 @@ class TsActiveInformationStorage(SeriesOperator):
         return _frame_like(x, out)
 
 
+# ---------------------------------------------------------------------------
+# ts_markov_committor (P1 deepening)
+# ---------------------------------------------------------------------------
+
+def _committor_series(res: dict[str, np.ndarray], col: int, min_count: int) -> np.ndarray:
+    """Committor q_k: probability that the process, started in state k, reaches
+    the upper boundary state B-1 before the lower boundary state 0.
+
+    Solves the harmonic system ``(I - P_int) q_int = P[:, B-1]`` on interior
+    states with boundary q_0 = 0, q_{B-1} = 1.  All P entries come from the
+    strictly-past window; the current state only *selects* q_k (PIT-safe).
+    """
+    n = res["P"].shape[0]
+    B = res["P"].shape[2]
+    out = np.full(n, np.nan)
+    for t in range(n):
+        k = res["state"][t, col]
+        if not np.isfinite(k):
+            continue
+        k = int(k)
+        if res["counts"][t, col, k] < min_count:
+            continue
+        P = res["P"][t, col]
+        if not np.all(np.isfinite(P)):
+            continue
+        if B == 2:
+            out[t] = float(k)  # q_0 = 0, q_1 = 1 exactly
+            continue
+        interior = list(range(1, B - 1))
+        if not interior:
+            continue
+        A = np.eye(len(interior)) - P[np.ix_(interior, interior)]
+        rhs = P[interior, B - 1]
+        try:
+            q_int = np.linalg.solve(A, rhs)
+        except np.linalg.LinAlgError:
+            continue
+        if not np.all(np.isfinite(q_int)):
+            continue
+        if k == 0:
+            out[t] = 0.0
+        elif k == B - 1:
+            out[t] = 1.0
+        else:
+            out[t] = float(np.clip(q_int[k - 1], 0.0, 1.0))
+    return out
+
+
+@register_operator(
+    name="ts_markov_committor",
+    category="state_dynamics",
+    business_category="state_dynamics",
+    canonical="ts_markov_committor",
+    source="markov_dynamics",
+)
+class TsMarkovCommittor(SeriesOperator):
+    """当前状态的 committor 概率 ``q_k = P(先到上边界 B-1, 而非下边界 0)``。
+
+    从严格过去窗口 ``[t-W, t-1]`` 估计转移矩阵 P，在内部状态上解调和方程
+    ``(I-P_int) q = P[:, B-1]``（q_0=0, q_{B-1}=1）。输出 ``q_k ∈ [0,1]``：
+    ≈1 = 历史动力学显示当前状态更容易最终进入上侧极端；≈0 = 更易先触下侧；
+    ≈0.5 = 两侧相当。与 ``ts_markov_persistence``（留下概率）正交。
+    """
+
+    metadata = _metadata(
+        "ts_markov_committor",
+        "当前状态先达上边界而非下边界的概率 q_k（[0,1]）。",
+        ["x", "window", "bins", "lag", "min_count"],
+        unit="probability",
+        cost=5,
+    )
+
+    def _calculate_series(
+        self, x: pd.DataFrame, window: int = 60, bins: int = 3, lag: int = 1, min_count: int = 3, **_: Any
+    ) -> pd.DataFrame:
+        res = _run_kernel(x, window, bins, lag, min_count)
+        cols = x.shape[1]
+        mc = max(1, int(min_count))
+        out = np.column_stack([_committor_series(res, c, mc) for c in range(cols)])
+        return _frame_like(x, out)
+
+
+# ---------------------------------------------------------------------------
+# ts_markov_mean_first_passage_time (P1 deepening)
+# ---------------------------------------------------------------------------
+
+def _mfpt_series(res: dict[str, np.ndarray], col: int, min_count: int, target: str, lag: int) -> np.ndarray:
+    """Mean first passage time to a target state set A, for the current state.
+
+    Solves ``(I - P_notA) m = 1`` on non-target states; m_i is the expected
+    number of steps to first enter A.  Converted to calendar days via ``*lag``.
+    Only the strictly-past transition matrix is used (PIT-safe).
+    """
+    n = res["P"].shape[0]
+    B = res["P"].shape[2]
+    out = np.full(n, np.nan)
+    for t in range(n):
+        k = res["state"][t, col]
+        if not np.isfinite(k):
+            continue
+        k = int(k)
+        if res["counts"][t, col, k] < min_count:
+            continue
+        P = res["P"][t, col]
+        if not np.all(np.isfinite(P)):
+            continue
+        if target == "upper":
+            A = {B - 1}
+        elif target == "lower":
+            A = {0}
+        elif target == "extreme":
+            A = {0, B - 1}
+        else:
+            raise ValueError(f"unknown target {target!r}; expected upper/lower/extreme")
+        if k in A:
+            out[t] = 0.0
+            continue
+        nonA = [i for i in range(B) if i not in A]
+        if not nonA:
+            continue
+        M = np.eye(len(nonA)) - P[np.ix_(nonA, nonA)]
+        try:
+            m = np.linalg.solve(M, np.ones(len(nonA)))
+        except np.linalg.LinAlgError:
+            continue
+        if not np.all(np.isfinite(m)):
+            continue
+        steps = float(m[nonA.index(k)])
+        out[t] = float(max(steps, 0.0)) * lag
+    return out
+
+
+@register_operator(
+    name="ts_markov_mean_first_passage_time",
+    category="state_dynamics",
+    business_category="state_dynamics",
+    canonical="ts_markov_mean_first_passage_time",
+    source="markov_dynamics",
+)
+class TsMarkovMeanFirstPassageTime(SeriesOperator):
+    """当前状态到目标状态集的平均首达时间（交易日，MFPT）。
+
+    解 ``(I - P_notA) m = 1``（非目标状态），``m_k × lag`` 换算为天数。目标
+    集合为 ``target`` 枚举：upper={B-1} / lower={0} / extreme={0,B-1}。与
+    committor 互补：committor 回答"去哪边"，MFPT 回答"大概多久到"。只用严格
+    过去窗口的转移矩阵，无前视。
+    """
+
+    metadata = _metadata(
+        "ts_markov_mean_first_passage_time",
+        "当前状态到 target 状态集的平均首达时间（交易日）。",
+        ["x", "window", "bins", "lag", "min_count", "target"],
+        unit="days",
+        cost=5,
+    )
+
+    def _calculate_series(
+        self, x: pd.DataFrame, window: int = 60, bins: int = 3, lag: int = 1,
+        min_count: int = 3, target: str = "upper", **_: Any
+    ) -> pd.DataFrame:
+        res = _run_kernel(x, window, bins, lag, min_count)
+        cols = x.shape[1]
+        mc = max(1, int(min_count))
+        lg = max(1, int(lag))
+        out = np.column_stack([_mfpt_series(res, c, mc, target, lg) for c in range(cols)])
+        return _frame_like(x, out)
+
+
+# ---------------------------------------------------------------------------
+# ts_markov_spectral_gap (P1 deepening)
+# ---------------------------------------------------------------------------
+
+def _spectral_gap_series(res: dict[str, np.ndarray], col: int, min_periods: int) -> np.ndarray:
+    """``Gap = 1 - |λ2|`` where λ2 is the second-largest-magnitude eigenvalue
+    of the transition matrix.  High = fast mixing (state forgets its initial
+    condition); low = metastability / long memory.  Clamped to [0, 1]."""
+    n = res["P"].shape[0]
+    out = np.full(n, np.nan)
+    for t in range(n):
+        if res["total_trans"][t, col] < min_periods:
+            continue
+        P = res["P"][t, col]
+        if not np.all(np.isfinite(P)):
+            continue
+        try:
+            ev = np.linalg.eigvals(P)
+        except np.linalg.LinAlgError:
+            continue
+        if ev.size == 0 or not np.all(np.isfinite(ev)):
+            continue
+        mag = np.abs(ev)
+        order = np.argsort(mag)[::-1]
+        second = float(mag[order[1]]) if ev.size >= 2 else 0.0
+        out[t] = float(np.clip(1.0 - second, 0.0, 1.0))
+    return out
+
+
+@register_operator(
+    name="ts_markov_spectral_gap",
+    category="state_dynamics",
+    business_category="state_dynamics",
+    canonical="ts_markov_spectral_gap",
+    source="markov_dynamics",
+)
+class TsMarkovSpectralGap(SeriesOperator):
+    """窗口转移矩阵谱隙 ``Gap = 1 - |λ2|``（市场状态记忆强度）。
+
+    λ1=1 为平凡特征值；|λ2| 越接近 1，状态越久不遗忘初始条件（metastable /
+    强记忆），Gap 越低。高 Gap = 快速混合。与自相关不同：这是状态转移动力学的
+    整体混合速率。窗口级统计，只用 ``[t-W, t-1]``。
+    """
+
+    metadata = _metadata(
+        "ts_markov_spectral_gap",
+        "转移矩阵谱隙 1-|λ2|（低=metastability，高=快速混合）。",
+        ["x", "window", "bins", "lag", "min_periods"],
+        unit="ratio",
+        cost=5,
+    )
+
+    def _calculate_series(
+        self, x: pd.DataFrame, window: int = 120, bins: int = 3, lag: int = 1, min_periods: int = 5, **_: Any
+    ) -> pd.DataFrame:
+        res = _run_kernel(x, window, bins, lag, min_periods)
+        cols = x.shape[1]
+        mp = max(2, int(min_periods))
+        out = np.column_stack([_spectral_gap_series(res, c, mp) for c in range(cols)])
+        return _frame_like(x, out)
+
+
+# ---------------------------------------------------------------------------
+# ts_markov_stationary_surprisal (P1 deepening)
+# ---------------------------------------------------------------------------
+
+def _stationary_surprisal_series(res: dict[str, np.ndarray], col: int, min_count: int) -> np.ndarray:
+    n = res["pi"].shape[0]
+    out = np.full(n, np.nan)
+    for t in range(n):
+        k = res["state"][t, col]
+        if not np.isfinite(k):
+            continue
+        k = int(k)
+        if res["counts"][t, col, k] < min_count:
+            continue
+        pi = res["pi"][t, col]
+        if not np.all(np.isfinite(pi)):
+            continue
+        p = float(pi[k])
+        out[t] = float(-np.log(p + _EPS))
+    return out
+
+
+@register_operator(
+    name="ts_markov_stationary_surprisal",
+    category="state_dynamics",
+    business_category="state_dynamics",
+    canonical="ts_markov_stationary_surprisal",
+    source="markov_dynamics",
+)
+class TsMarkovStationarySurprisal(SeriesOperator):
+    """当前状态在长期动力学中的罕见度 ``-log(π_k)``（nats）。
+
+    π 为窗口内经验状态频率（平稳测度的一致估计）；输出当前状态 k 的负对数
+    频率。与 ``ts_markov_transition_surprisal`` 正交：那个回答"这次跳转怪不
+    怪"，这个回答"当前所处位置本身在长期动力学里有多稀有"。只用 ``[t-W,t-1]``。
+    """
+
+    metadata = _metadata(
+        "ts_markov_stationary_surprisal",
+        "当前状态的历史长期稀有度 -log π_k（nats）。",
+        ["x", "window", "bins", "lag", "min_count"],
+        unit="nats",
+        cost=4,
+    )
+
+    def _calculate_series(
+        self, x: pd.DataFrame, window: int = 60, bins: int = 3, lag: int = 1, min_count: int = 3, **_: Any
+    ) -> pd.DataFrame:
+        res = _run_kernel(x, window, bins, lag, min_count)
+        cols = x.shape[1]
+        mc = max(1, int(min_count))
+        out = np.column_stack([_stationary_surprisal_series(res, c, mc) for c in range(cols)])
+        return _frame_like(x, out)
+
+
+# ---------------------------------------------------------------------------
+# ts_km_equilibrium_distance (P1 deepening)
+# ---------------------------------------------------------------------------
+
+def _equilibrium_distance_series(
+    series: np.ndarray, res: dict[str, np.ndarray], col: int, window: int, min_count: int
+) -> np.ndarray:
+    """``(x_t - x*) / MAD`` where x* is the stable fixed point of the drift
+    D1 (zero crossing with a downward slope, i.e. an attractor).  The center
+    of the scaled rolling z-score is therefore the *empirically-estimated
+    attractor* rather than the window mean.  MAD fallback to window span/1.0
+    when the window is degenerate."""
+    n = series.shape[0]
+    w = max(2, int(window))
+    out = np.full(n, np.nan)
+    for t in range(n):
+        k = res["state"][t, col]
+        if not np.isfinite(k):
+            continue
+        k = int(k)
+        if res["counts"][t, col, k] < min_count:
+            continue
+        d1 = res["D1"][t, col]
+        c = res["centers"][t, col]
+        if not np.all(np.isfinite(d1)) or not np.all(np.isfinite(c)):
+            continue
+        B = d1.shape[0]
+        xstar = None
+        for m in range(B - 1):
+            a, b = d1[m], d1[m + 1]
+            if np.isnan(a) or np.isnan(b):
+                continue
+            if a > 0.0 and b < 0.0:
+                denom = a - b
+                xstar = c[m] + (c[m + 1] - c[m]) * (a / denom) if abs(denom) > _EPS else c[m]
+                break
+        if xstar is None:
+            continue  # no stable fixed point in window
+        lo = max(0, t - w)
+        past = series[lo:t]
+        finite = past[np.isfinite(past)]
+        mad = 1.0
+        if finite.size >= 4:
+            med = np.median(finite)
+            dev = np.abs(finite - med)
+            madv = np.median(dev)
+            if np.isfinite(madv) and madv > _EPS:
+                mad = madv
+            else:
+                span = float(np.nanmax(finite) - np.nanmin(finite))
+                if np.isfinite(span) and span > _EPS:
+                    mad = span
+        xt = series[t]
+        if not np.isfinite(xt):
+            continue
+        out[t] = float((xt - xstar) / mad)
+    return out
+
+
+@register_operator(
+    name="ts_km_equilibrium_distance",
+    category="state_dynamics",
+    business_category="state_dynamics",
+    canonical="ts_km_equilibrium_distance",
+    source="markov_dynamics",
+)
+class TsKmEquilibriumDistance(SeriesOperator):
+    """当前值相对历史动力学吸引子的距离 ``(x_t - x*) / MAD``。
+
+    从窗口 D1(x) 找稳定不动点 x*（D1 由正变负的过零点）。比 rolling z-score
+    高一层的中心：不是均值，而是**从历史动力学估计出来的吸引子**。非常适合
+    valuation / turnover / volatility / price deviation。无 x* 时 fail-closed。
+    """
+
+    metadata = _metadata(
+        "ts_km_equilibrium_distance",
+        "当前值相对 D1 吸引子 x* 的距离 (x_t-x*)/MAD。",
+        ["x", "window", "bins", "lag", "min_count"],
+        unit="zscore",
+        cost=5,
+    )
+
+    def _calculate_series(
+        self, x: pd.DataFrame, window: int = 60, bins: int = 5, lag: int = 1, min_count: int = 3, **_: Any
+    ) -> pd.DataFrame:
+        res = _run_kernel(x, window, bins, lag, min_count)
+        xv = x.to_numpy(dtype=float)
+        cols = x.shape[1]
+        w = max(2, int(window))
+        mc = max(1, int(min_count))
+        out = np.column_stack([_equilibrium_distance_series(xv[:, c], res, c, w, mc) for c in range(cols)])
+        return _frame_like(x, out)
+
+
+# ---------------------------------------------------------------------------
+# ts_km_diffusion_gradient (P1/P2 deepening)
+# ---------------------------------------------------------------------------
+
+def _diffusion_gradient_series(res: dict[str, np.ndarray], col: int, min_count: int) -> np.ndarray:
+    """``dD2/dx`` at the current bin (central difference over bin centers).
+    High positive = stochastic dispersion widens rapidly when the state moves
+    up = state-dependent heteroskedasticity / multiplicative noise."""
+    n = res["D2"].shape[0]
+    B = res["D2"].shape[2]
+    out = np.full(n, np.nan)
+    for t in range(n):
+        k = res["state"][t, col]
+        if not np.isfinite(k):
+            continue
+        k = int(k)
+        if not (0 < k < B - 1):
+            continue
+        d2 = res["D2"][t, col]
+        c = res["centers"][t, col]
+        if (
+            not np.isfinite(d2[k - 1]) or not np.isfinite(d2[k + 1])
+            or not np.isfinite(c[k - 1]) or not np.isfinite(c[k + 1])
+        ):
+            continue
+        if res["counts"][t, col, k] < min_count:
+            continue
+        denom = c[k + 1] - c[k - 1]
+        if abs(denom) <= _EPS:
+            continue
+        out[t] = float((d2[k + 1] - d2[k - 1]) / denom)
+    return out
+
+
+@register_operator(
+    name="ts_km_diffusion_gradient",
+    category="state_dynamics",
+    business_category="state_dynamics",
+    canonical="ts_km_diffusion_gradient",
+    source="markov_dynamics",
+)
+class TsKmDiffusionGradient(SeriesOperator):
+    """当前状态的扩散梯度 ``dD2/dx``（state-dependent heteroskedasticity）。
+
+    中心差分 ``(D2_{k+1} - D2_{k-1}) / (c_{k+1} - c_{k-1})``。高正值 = 状态向
+    上移动时随机离散度迅速扩大（乘性噪声）。与 ``ts_kramers_moyal_local_stability``
+    （漂移导数）互补。
+    """
+
+    metadata = _metadata(
+        "ts_km_diffusion_gradient",
+        "当前状态扩散梯度 dD2/dx（状态依赖异方差）。",
+        ["x", "window", "bins", "lag", "min_count"],
+        unit="diffusion",
+        cost=5,
+    )
+
+    def _calculate_series(
+        self, x: pd.DataFrame, window: int = 60, bins: int = 5, lag: int = 1, min_count: int = 3, **_: Any
+    ) -> pd.DataFrame:
+        res = _run_kernel(x, window, bins, lag, min_count)
+        cols = x.shape[1]
+        mc = max(1, int(min_count))
+        out = np.column_stack([_diffusion_gradient_series(res, c, mc) for c in range(cols)])
+        return _frame_like(x, out)
+
+
+# ---------------------------------------------------------------------------
+# ts_km_quasipotential_depth (P2 deepening)
+# ---------------------------------------------------------------------------
+
+def _quasipotential_depth_series(res: dict[str, np.ndarray], col: int, min_count: int) -> np.ndarray:
+    """Depth of the potential well containing the current state.
+
+    Discrete quasi-potential ``U[k] = -Σ_{m<k} D1[m]/(D2[m]+ε) · Δc``; well =
+    nearest local minimum of U to the current bin, barrier = lower of the two
+    flanking ridge maxima.  Depth = U_barrier - U_well.  High = historically
+    hard to escape the current basin; low = easily pushed out."""
+    n = res["D1"].shape[0]
+    B = res["D1"].shape[2]
+    out = np.full(n, np.nan)
+    for t in range(n):
+        k = res["state"][t, col]
+        if not np.isfinite(k):
+            continue
+        k = int(k)
+        if res["counts"][t, col, k] < min_count:
+            continue
+        d1 = res["D1"][t, col]
+        d2 = res["D2"][t, col]
+        c = res["centers"][t, col]
+        if not np.all(np.isfinite(d1)) or not np.all(np.isfinite(d2)) or not np.all(np.isfinite(c)):
+            continue
+        if B < 3:
+            continue
+        dx = np.diff(c)
+        U = np.zeros(B)
+        for m in range(1, B):
+            U[m] = U[m - 1] - (d1[m - 1] / (d2[m - 1] + _EPS)) * dx[m - 1]
+        mins = [
+            m for m in range(B)
+            if (m == 0 or U[m] <= U[m - 1]) and (m == B - 1 or U[m] <= U[m + 1])
+        ]
+        maxs = [
+            m for m in range(B)
+            if (m == 0 or U[m] >= U[m - 1]) and (m == B - 1 or U[m] >= U[m + 1])
+        ]
+        if not mins:
+            continue
+        well = min(mins, key=lambda m: abs(m - k))
+        left = [m for m in maxs if m < well]
+        right = [m for m in maxs if m > well]
+        levels: list[float] = []
+        if left:
+            levels.append(float(max(U[m] for m in left)))
+        if right:
+            levels.append(float(max(U[m] for m in right)))
+        if not levels:
+            continue
+        depth = float(min(levels)) - float(U[well])
+        if np.isfinite(depth) and depth > _EPS:
+            out[t] = depth
+    return out
+
+
+@register_operator(
+    name="ts_km_quasipotential_depth",
+    category="state_dynamics",
+    business_category="state_dynamics",
+    canonical="ts_km_quasipotential_depth",
+    source="markov_dynamics",
+)
+class TsKmQuasipotentialDepth(SeriesOperator):
+    """当前状态所在势阱的深度（准势 U 的井底-鞍点差）。
+
+    ``U(x) = -∫ D1/(D2+ε) dx``（离散累计）；井 = 距当前 bin 最近的 U 局部极小，
+    势垒 = 两侧脊极大中的较低者；depth = U_barrier - U_well。高 = 当前 basin
+    历史上难以逃出（比 state persistence 更深）；低 = 看似稳定但易被冲击推出。
+    数值保守 fail-closed（无井/无鞍 → NaN）。
+    """
+
+    metadata = _metadata(
+        "ts_km_quasipotential_depth",
+        "当前状态势阱深度（井底-鞍点差）。",
+        ["x", "window", "bins", "lag", "min_count"],
+        unit="potential",
+        cost=6,
+    )
+
+    def _calculate_series(
+        self, x: pd.DataFrame, window: int = 120, bins: int = 5, lag: int = 1, min_count: int = 3, **_: Any
+    ) -> pd.DataFrame:
+        res = _run_kernel(x, window, bins, lag, min_count)
+        cols = x.shape[1]
+        mc = max(1, int(min_count))
+        out = np.column_stack([_quasipotential_depth_series(res, c, mc) for c in range(cols)])
+        return _frame_like(x, out)
+
+
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
@@ -594,6 +1143,13 @@ def _register_surface() -> None:
             "ts_markov_state_entropy",
             "ts_markov_transition_surprisal",
             "ts_kramers_moyal_local_stability",
+            "ts_markov_committor",
+            "ts_markov_mean_first_passage_time",
+            "ts_markov_spectral_gap",
+            "ts_markov_stationary_surprisal",
+            "ts_km_equilibrium_distance",
+            "ts_km_diffusion_gradient",
+            "ts_km_quasipotential_depth",
         }
     )
     _surface.RESEARCH_ONLY_CANONICALS = frozenset(

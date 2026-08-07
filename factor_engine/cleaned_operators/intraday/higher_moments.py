@@ -547,6 +547,68 @@ class IntraJumpClustering(SeriesOperator):
         return daily_agg(close, _fn)
 
 
+# ---------------------------------------------------------------------------
+# intraday RV signature slope (P1 deepening)
+# ---------------------------------------------------------------------------
+
+_RV_SCALES = (1, 2, 5, 10)
+
+
+def _rv_signature_slope(close_v: np.ndarray) -> float:
+    """Volatility-signature slope: OLS of log RV(Δ) vs log Δ over fixed scales.
+
+    Non-overlapping block returns at each sampling interval Δ; the slope is
+    negative when 1-minute RV exceeds coarser RV (microstructure noise /
+    price discreteness), ~0 for a pure diffusion, positive when aggregation
+    inflates RV (rare trend / multiplicative effects)."""
+    r = log_returns(close_v)
+    r = r[np.isfinite(r)]
+    if r.size < 10:
+        return np.nan
+    pts: list[tuple[float, float]] = []
+    for s in _RV_SCALES:
+        if r.size < s:
+            continue
+        nblocks = r.size // s
+        agg = r[: nblocks * s].reshape(nblocks, s).sum(axis=1)
+        rv = float(np.sum(agg * agg))
+        if np.isfinite(rv) and rv > _EPS:
+            pts.append((float(np.log(s)), float(np.log(rv))))
+    if len(pts) < 2:
+        return np.nan
+    xs = np.asarray([a for a, _ in pts])
+    ys = np.asarray([b for _, b in pts])
+    denom = float(np.sum((xs - xs.mean()) ** 2))
+    if denom <= _EPS:
+        return np.nan
+    return float(np.sum((xs - xs.mean()) * (ys - ys.mean())) / denom)
+
+
+@register_operator(
+    name="intraday_rv_signature_slope",
+    category="intraday_microstructure",
+    business_category="intraday_microstructure",
+    canonical="intraday_rv_signature_slope",
+    source="intraday.higher_moments",
+    backend="pandas_numpy",
+)
+class IntradayRvSignatureSlope(SeriesOperator):
+    """日内 volatility signature 斜率（采样间隔 1/2/5/10 分钟）。
+
+    对固定 Δ 网格计算 ``RV(Δ)=Σ r_Δ²``（非重叠块），拟合
+    ``log RV(Δ) = a + b·log Δ``。分钟级微观结构噪声强 → b 显著为负；≈0 = 接近
+    纯扩散；正 = 聚合放大波动（罕见）。scales 固定为 (1,2,5,10)，不进入搜索。
+    当日收盘后计算，PIT 安全。
+    """
+
+    metadata = metadata(
+        "intraday_rv_signature_slope", "日内 RV signature 斜率 log RV vs log Δ。", ["close"], unit="ratio"
+    )
+
+    def _calculate_series(self, close, **_):
+        return daily_agg(close, lambda v, t: _rv_signature_slope(v))
+
+
 _CANONICALS.extend(
     [
         "intra_realized_skewness",
@@ -567,6 +629,7 @@ _CANONICALS.extend(
         "intra_signed_tail_variation_ratio",
         "intra_jump_last_time",
         "intra_jump_clustering",
+        "intraday_rv_signature_slope",
     ]
 )
 

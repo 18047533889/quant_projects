@@ -25,6 +25,7 @@ data_access.read.scan_cost —— 读路径成本估算与执行路由
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Sequence
 
@@ -55,6 +56,17 @@ class ScanCost:
     instrument_count: int = 0
     engine_startup_ms: float = 5.0
     score: float = 0.0
+    # ---- #25 真实 CBO 扩展：已选文件/字节/row-group、投影字节、IO 估算 ----
+    selected_files: int = 0
+    selected_bytes: int | None = None
+    selected_rowgroups: int | None = None
+    projection_bytes: int | None = None       # 选定列 × 行数的近似物化字节
+    estimate_ms: float = 0.0                  # 成本估算本身的耗时（校准用）
+    calibrated_factor: float = 1.0            # #27 estimate-vs-actual 在线校准乘子
+
+    @property
+    def calibrated_score(self) -> float:
+        return self.score * self.calibrated_factor
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -69,7 +81,29 @@ class ScanCost:
             "instrument_count": self.instrument_count,
             "engine_startup_ms": self.engine_startup_ms,
             "score": self.score,
+            "selected_files": self.selected_files,
+            "selected_bytes": self.selected_bytes,
+            "selected_rowgroups": self.selected_rowgroups,
+            "projection_bytes": self.projection_bytes,
+            "estimate_ms": self.estimate_ms,
+            "calibrated_factor": self.calibrated_factor,
+            "calibrated_score": self.calibrated_score,
         }
+
+
+def _avg_row_width(ds: Any, columns: Sequence[str] | None) -> float:
+    """按 schema dtype 估算平均行宽（字节），用于投影字节估算。"""
+    schema = getattr(ds, "schema", None) or {}
+    cols = columns or list(schema.keys())
+    widths = {
+        "double": 8, "float": 4, "int": 8, "int64": 8, "int32": 4,
+        "date": 4, "timestamp": 8, "bool": 1, "string": 16, "varchar": 16,
+    }
+    total = 0.0
+    for c in cols:
+        d = str(schema.get(c, "")).lower()
+        total += widths.get(d, 8)
+    return total
 
 
 def estimate_scan_cost(
@@ -82,54 +116,105 @@ def estimate_scan_cost(
     prefer_polars: bool = False,
     **params: Any,
 ) -> ScanCost:
-    """估算一次读的扫描成本并计算路由分。"""
-    ds = store._registry.get(dataset)
-    try:
-        stats = store.dataset_read_stats(
-            dataset,
-            columns=list(columns) if columns else None,
-            time_range=time_range,
-            prefer_polars=prefer_polars,
-            **params,
-        )
-        estimated_rows = stats.estimated_rows
-        file_count = stats.parquet_files
-    except Exception:
-        estimated_rows = 0
-        file_count = 0
+    """估算一次读的扫描成本（#25 真实 CBO）。
 
-    # manifest 有更准的字节数
-    total_bytes: int | None = None
+    优先用 manifest 的文件级 min/max + rows/bytes 做裁剪后的真实估算
+    （selected_files / selected_bytes / estimated_rows 都是裁剪后的值，
+    不再是全数据集估算）；无 manifest 才回退 ``dataset_read_stats`` 全量
+    footer 估算。projection 用平均行宽 × 行数近似。
+    """
+    t0 = time.monotonic()
+    ds = store._registry.get(dataset)
+    estimated_rows = 0
+    file_count = 0
+    selected_files = 0
+    selected_bytes: int | None = None
+    selected_rowgroups: int | None = None
+
+    manifest = None
     try:
         from data_access.read.manifest import load_manifest_for_dataset
 
         manifest = load_manifest_for_dataset(store, dataset, **params)
-        if manifest is not None:
-            total_bytes = manifest.total_bytes
     except Exception:
-        pass
+        manifest = None
+
+    if manifest is not None and manifest.files:
+        by_path = {f.path: f for f in manifest.files}
+        pruned_paths = manifest.prune(
+            time_range=time_range, instrument_filter=instrument_filter
+        )
+        selected = [by_path[p] for p in pruned_paths if p in by_path]
+        selected_files = len(selected)
+        selected_bytes = sum(f.bytes or 0 for f in selected)
+        estimated_rows = sum(f.rows or 0 for f in selected)
+        file_count = len(by_path)
+        if manifest.row_groups:
+            # row-group 级统计：统计选中文件覆盖的 row-group 数（近似）
+            rg_paths = {rg.path for rg in manifest.row_groups}
+            selected_rowgroups = sum(
+                1
+                for rg in manifest.row_groups
+                if rg.path in {f.path for f in selected}
+            ) or None
+            del rg_paths
+    else:
+        try:
+            stats = store.dataset_read_stats(
+                dataset,
+                columns=list(columns) if columns else None,
+                time_range=time_range,
+                prefer_polars=prefer_polars,
+                **params,
+            )
+            estimated_rows = stats.estimated_rows
+            file_count = stats.parquet_files
+        except Exception:
+            estimated_rows = 0
+            file_count = 0
+
+    total_bytes = selected_bytes
+    if total_bytes is None:
+        try:
+            if manifest is not None:
+                total_bytes = manifest.total_bytes
+        except Exception:
+            pass
 
     schema = getattr(ds, "schema", None) or {}
     total_columns = len(schema) if schema else None
     projected = len(columns) if columns else 0
+    projection_bytes = None
+    if estimated_rows and total_columns:
+        width = _avg_row_width(ds, columns)
+        projection_bytes = int(estimated_rows * width)
 
     remote = is_remote_storage(ds)
     startup = _ENGINE_STARTUP_MS.get("polars" if prefer_polars else "duckdb", 5.0)
 
+    # 选择率：有 manifest 时用「裁剪后字节 / 全量字节」；否则经验值
     selectivity = 1.0
-    if time_range is not None:
+    if manifest is not None and manifest.total_bytes:
+        sel = (selected_bytes or 0) / manifest.total_bytes if manifest.total_bytes else 1.0
+        selectivity = max(0.0, min(1.0, sel))
+    elif time_range is not None:
         start, end = time_range
         if start is not None and end is not None:
-            selectivity = 0.3  # 经验值：闭区间时间窗典型截掉 ~70%
+            selectivity = 0.3
         elif start is not None or end is not None:
             selectivity = 0.5
 
     score = 0.0
-    # 成本分：行数 * 投影比例 * 远程惩罚 * 选择率
     rows_factor = max(estimated_rows, 0)
     col_factor = (projected / total_columns) if (projected and total_columns) else 1.0
     remote_factor = 3.0 if remote else 1.0
-    score = rows_factor * col_factor * remote_factor * (selectivity or 1.0)
+    file_factor = 1.0 + 0.05 * max(0, selected_files - 1)  # 大量小文件惩罚
+    score = rows_factor * col_factor * remote_factor * (selectivity or 1.0) * file_factor
+    if remote:
+        score += (selected_bytes or 0) / 1024.0  # 远程按字节加成本
+
+    estimate_ms = (time.monotonic() - t0) * 1000.0
+    calibrated = _calibrated_factor(dataset)
 
     return ScanCost(
         dataset=dataset,
@@ -143,7 +228,55 @@ def estimate_scan_cost(
         instrument_count=len(instrument_filter) if instrument_filter else 0,
         engine_startup_ms=startup,
         score=score,
+        selected_files=selected_files,
+        selected_bytes=selected_bytes,
+        selected_rowgroups=selected_rowgroups,
+        projection_bytes=projection_bytes,
+        estimate_ms=estimate_ms,
+        calibrated_factor=calibrated,
     )
+
+
+# ---- #27 estimate-vs-actual 在线校准（轻量 EMA） ----
+
+_EMA_ALPHA = 0.2
+_calibration_lock = None
+if _calibration_lock is None:
+    import threading
+
+    _calibration_lock = threading.Lock()
+_calibration: dict[str, float] = {}   # dataset -> 校准乘子
+
+
+def _calibrated_factor(dataset: str) -> float:
+    with _calibration_lock:
+        return _calibration.get(dataset, 1.0)
+
+
+def record_scan_actual(
+    dataset: str,
+    *,
+    estimated_score: float,
+    actual_elapsed_ms: float,
+) -> None:
+    """#27 估算 vs 实际：EMA 调整每数据集的校准乘子。
+
+    实际时间显著高于估算 → 乘子上调（后续路由更保守/更倾向 stream）；
+    显著低于 → 下调。只在有意义的样本上更新，避免抖动。
+    """
+    if estimated_score <= 0 or actual_elapsed_ms <= 0:
+        return
+    ratio = actual_elapsed_ms / max(1.0, estimated_score / 1e6)
+    # ratio 理论上接近常数；偏离 1 太多说明估算系统性偏差
+    correction = max(0.1, min(10.0, ratio))
+    with _calibration_lock:
+        cur = _calibration.get(dataset, 1.0)
+        _calibration[dataset] = cur + _EMA_ALPHA * (correction - cur)
+
+
+def reset_calibration() -> None:
+    with _calibration_lock:
+        _calibration.clear()
 
 
 def suggest_read_strategy(

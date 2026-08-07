@@ -108,6 +108,8 @@ _PANEL_PARAMETERS = frozenset({
     # 2026-08 V2/V3 dynamics pack: event-response target, report timing delay,
     # previous published value for revision magnitude.
     "response", "delay", "prev_x",
+    # 2026-08 concurrent envelope family: envelope mid band panel.
+    "mid",
 })
 
 # Params whose generic names also appear in _SCALAR_VALUES but are PANEL series
@@ -122,6 +124,19 @@ _PANEL_FORCE: frozenset[tuple[str, str]] = frozenset({
     # ``scale`` is the per-row volatility panel for the first-passage barrier
     # (not the scalar intra_amihud ``scale``).
     ("ts_first_passage_bias", "scale"),
+    ("ts_first_passage_hit_probability", "scale"),
+    ("ts_first_passage_conditional_time", "scale"),
+    # 2026-08 concurrent episode / envelope families: ``scale`` and envelope
+    # band panels collide with scalar names.
+    ("state_episode_excursion_balance", "scale"),
+    ("state_episode_mae", "scale"),
+    ("state_episode_mfe", "scale"),
+    ("ts_envelope_boundary_dwell", "upper"),
+    ("ts_envelope_boundary_dwell", "lower"),
+    ("ts_envelope_pressure", "upper"),
+    ("ts_envelope_pressure", "lower"),
+    ("ts_envelope_compression", "upper"),
+    ("ts_envelope_compression", "lower"),
 })
 
 _SCALAR_VALUES: dict[str, Any] = {
@@ -142,6 +157,10 @@ _SCALAR_VALUES: dict[str, Any] = {
     "hump": 0.02,
     "min_periods": 5,
     "min_pairs": 3,
+    "min_bin_count": 3,
+    "min_peers": 5,
+    "min_reference_days": 5,
+    "min_transitions": 30,
     "min_history": 4,
     "lookback_periods": 8,
     "seasonal_lag": 4,
@@ -376,6 +395,19 @@ _SCALAR_VALUES: dict[str, Any] = {
     "min_anchors": 3,
     "grid": 8,
     "residual_fraction": 0.25,
+    # 2026-08 concurrent recurrence-analysis / spectral-transport packs.
+    "dim": 3,
+    "eps_fraction": 0.1,
+    "scales": (2, 4, 8, 16),
+    "subsequence_length": 10,
+    "prominence": 0.1,
+    "confirmation": 3,
+    "split_quantile": 0.5,
+    "block": 5,
+    "match_lag": 1,
+    "history": 20,
+    "fd": 0.5,
+    "cutoff": 0.1,
 }
 
 _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
@@ -419,6 +451,13 @@ _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
     ("MACD_signal", "signal"): 9,
     ("MACD_hist", "signal"): 9,
     ("fillna_const", "value"): 0.0,
+    # ``delay`` / ``composition_policy`` are scalar for these operators even
+    # though ``delay`` also names a panel input elsewhere in the audit.
+    ("ts_permutation_entropy", "delay"): 1,
+    ("ts_weighted_permutation_entropy", "delay"): 1,
+    ("ts_permutation_transition_entropy", "delay"): 1,
+    ("ts_ordinal_irreversibility", "delay"): 1,
+    ("group_spd_feature_structure_shift", "composition_policy"): "current",
     ("group_winsorize", "a"): 0.05,
     ("winsorize", "lower"): 0.05,
     ("winsorize", "upper"): 0.95,
@@ -473,10 +512,17 @@ _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
     ("ts_fisher_information_shift", "prior_window"): 120,
     ("cs_sliced_wasserstein_copula_shift", "window"): 60,
     ("group_spd_feature_structure_shift", "reference_window"): 60,
-    ("intraday_wasserstein_quantile_pca_score", "window"): 60,
-    ("intraday_wasserstein_quantile_pca_score", "k"): 1,
-    ("intraday_wasserstein_quantile_pca_residual", "window"): 60,
-    ("intraday_wasserstein_quantile_pca_residual", "k"): 1,
+    ("intraday_quantile_curve_pca_score", "window"): 60,
+    ("intraday_quantile_curve_pca_score", "k"): 1,
+    ("intraday_quantile_curve_pca_residual", "window"): 60,
+    ("intraday_quantile_curve_pca_residual", "k"): 1,
+    ("ts_kramers_moyal_drift", "min_bin_count"): 0,
+    ("ts_kramers_moyal_diffusion", "min_bin_count"): 0,
+    ("group_spd_feature_structure_shift", "min_peers"): 5,
+    ("group_spd_feature_structure_shift", "min_reference_days"): 5,
+    ("ts_transfer_entropy", "min_transitions"): 30,
+    ("ts_effective_transfer_entropy", "min_transitions"): 30,
+    ("ts_bures_corr_shift", "min_pairs"): 5,
     ("ts_betti_1_max_persistence", "window"): 60,
     ("ts_betti_1_max_persistence", "tau"): 1,
     ("ts_persistence_diagram_shift", "window"): 60,
@@ -496,6 +542,42 @@ _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
     ("ts_hill_tail_index", "side"): "upper",
     ("ts_local_lyapunov_exponent", "tau"): 1,
     ("ts_local_lyapunov_exponent", "embedding_dim"): 3,
+    # 2026-08 concurrent deepening: first-passage side selectors + TE peak bins
+    # (small, stays in the 2..8 joint-state space).
+    ("ts_first_passage_hit_probability", "side"): "upper",
+    ("ts_first_passage_conditional_time", "side"): "upper",
+    ("ts_transfer_entropy_peak_lag", "bins"): 3,
+    ("ts_transfer_entropy_peak_strength", "bins"): 3,
+    # 2026-08 concurrent SSA / structural-level / rough-vol packs.
+    ("ts_ssa_reconstruction_residual", "n_components"): 1,
+    ("ts_structural_level_density", "prominence"): 0.1,
+    ("ts_structural_level_strength", "prominence"): 0.1,
+    ("ts_vol_pvariation_roughness", "scales"): (2, 4, 8, 16),
+    ("ts_extrema_divergence_strength", "confirmation"): 3,
+    ("ts_extrema_divergence_strength", "side"): "peak",
+    ("ts_nearest_structural_level_distance", "confirmation"): 3,
+    ("ts_nearest_structural_level_distance", "direction"): "any",
+    ("ts_fractional_difference", "cutoff"): 1,
+    ("ts_structural_level_density", "confirmation"): 3,
+    ("ts_structural_level_strength", "confirmation"): 3,
+    ("ts_forbidden_ordinal_pattern_ratio", "order"): 3,
+    ("ts_extrema_confirmation_rate", "side"): "peak",
+    ("ts_interval_nesting_depth", "mode"): "inside",
+    ("ts_multiscale_trend_consensus", "scales"): (2, 4, 8, 16),
+    ("ts_multiscale_trend_curvature", "scales"): (2, 4, 8, 16),
+    ("ts_multiscale_trend_dispersion", "scales"): (2, 4, 8, 16),
+    # ``delay`` doubles as a panel (report_filing_delay_surprise) and as an
+    # ordinal/recurrence embedding lag; force the embedding-lag ops to scalar 1.
+    ("ts_delay_intrinsic_dimension", "delay"): 1,
+    ("ts_forbidden_ordinal_pattern_ratio", "delay"): 1,
+    ("ts_ordinal_irreversibility", "delay"): 1,
+    ("ts_permutation_entropy", "delay"): 1,
+    ("ts_permutation_transition_entropy", "delay"): 1,
+    ("ts_weighted_permutation_entropy", "delay"): 1,
+    ("ts_recurrence_diagonal_entropy", "delay"): 1,
+    ("ts_recurrence_divergence", "delay"): 1,
+    ("ts_recurrence_rate", "delay"): 1,
+    ("ts_recurrence_trapping_time", "delay"): 1,
 }
 _SPECIAL_POSITIONAL = {
     "cs_multi_resid": ("target", "exposure", "control"),
@@ -869,6 +951,17 @@ def _value(canonical: str, name: str, panels: dict[str, pd.DataFrame]) -> Any:
         return panels["period_id"]
     if key in _PANEL_PARAMETERS:
         return panels["x"]
+    # Generic scalar fallbacks for concurrent expansion families (recurrence /
+    # transport / MMD / chord).  Additive and deterministic: unknown parameters
+    # fail closed to a runnable scalar instead of aborting the whole audit.
+    if key in {"dim", "tau", "order", "degree", "k", "n_components"}:
+        return 3
+    if key.endswith("_fraction") or key.startswith("fraction"):
+        return 0.1
+    if key.endswith("_dim"):
+        return 3
+    if key.startswith("eps"):
+        return 0.1
     raise KeyError(f"unclassified public parameter {canonical}.{key}")
 
 

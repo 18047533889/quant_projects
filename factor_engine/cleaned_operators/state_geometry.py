@@ -124,8 +124,18 @@ class TsStateDensity(SeriesOperator):
 # Ordinal patterns (ties dropped) shared by irreversibility + multiscale slope.
 # ---------------------------------------------------------------------------
 
+def _permutation_index(perm: np.ndarray) -> int:
+    """Lehmer code of a permutation of 0..n-1 -> index in [0, n!)."""
+    n = perm.shape[0]
+    index = 0
+    for i in range(n):
+        smaller = int(np.sum(perm[i + 1 :] < perm[i]))
+        index += smaller * math.factorial(n - 1 - i)
+    return index
+
+
 def _ordinal_patterns(values: np.ndarray, order: int, delay: int) -> list[int]:
-    """Ordinal permutation codes; embeddings with ties/NaN are dropped."""
+    """Ordinal permutation indices; embeddings with ties/NaN are dropped."""
     codes: list[int] = []
     embed_len = (order - 1) * delay + 1
     n = len(values)
@@ -138,10 +148,7 @@ def _ordinal_patterns(values: np.ndarray, order: int, delay: int) -> list[int]:
             continue  # exact tie -> drop, never jitter
         perm = np.argsort(vals, kind="stable")
         pattern = np.argsort(perm, kind="stable")
-        code = 0
-        for rank in pattern:
-            code = code * (order + 1) + int(rank)
-        codes.append(code)
+        codes.append(_permutation_index(pattern))
     return codes
 
 

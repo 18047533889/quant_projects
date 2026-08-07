@@ -346,6 +346,183 @@ class TsScaleShift(SeriesOperator):
         return frame_like(x, map_two_window(xv, ws, wl, _fn))
 
 
+_Q_GRID = np.linspace(0.1, 0.9, 9)
+
+
+def _quantile_transport_fit(recent: np.ndarray, old: np.ndarray) -> tuple[float, float, float] | None:
+    """ΔQ(q) = Q_recent(q) - Q_old(q) on a fixed grid, fit a + b·z + c·z² (z=q-0.5).
+
+    Returns ``(a, b, c)`` (location shift, transport slope, transport curvature)
+    or None when either window is too small / degenerate."""
+    ra = valid_values(recent)
+    oa = valid_values(old)
+    if ra.size < 3 or oa.size < 3:
+        return None
+    qr = np.quantile(ra, _Q_GRID)
+    qo = np.quantile(oa, _Q_GRID)
+    dq = qr - qo
+    z = _Q_GRID - 0.5
+    if float(np.sum(z * z)) <= _EPS:
+        return None
+    # OLS on [1, z, z^2] (well conditioned, 9 points).
+    A = np.column_stack([np.ones_like(z), z, z * z])
+    try:
+        coef, *_ = np.linalg.lstsq(A, dq, rcond=None)
+    except np.linalg.LinAlgError:
+        return None
+    if not np.all(np.isfinite(coef)):
+        return None
+    return float(coef[0]), float(coef[1]), float(coef[2])
+
+
+@register_operator(
+    name="ts_quantile_transport_slope",
+    category="time_series_distribution",
+    business_category="time_series_distribution",
+    canonical="ts_quantile_transport_slope",
+    source="alpha_language_distribution",
+)
+class TsQuantileTransportSlope(SeriesOperator):
+    """分位数输运斜率 b：ΔQ(q) = a + b·(q-0.5) + c·(q-0.5)²。
+
+    b>0 = 上尾向右扩、下尾收缩（distribution spreading）；b<0 = 尾部向中心收
+    缩。a（整体位置移动）已由 ``ts_location_shift`` 覆盖，这里只注册斜率。
+    固定 q 网格 [0.1..0.9]，确定性、PIT 安全。
+    """
+
+    metadata = _metadata(
+        "ts_quantile_transport_slope",
+        "ΔQ 对 q-0.5 的 OLS 斜率（>0 尾部扩散 / <0 收缩）。",
+        ["x", "recent_window", "old_window", "min_periods"],
+        unit="ratio",
+    )
+
+    def _calculate_series(
+        self, x: pd.DataFrame, recent_window: int = 20, old_window: int = 40, min_periods: int = 3, **_: Any
+    ) -> pd.DataFrame:
+        ws = check_window(recent_window, name="recent_window")
+        wl = check_window(old_window, name="old_window")
+        mp = max(3, int(min_periods))
+        xv = x.to_numpy(dtype=float)
+
+        def _fn(recent: np.ndarray, old: np.ndarray) -> float:
+            ra = valid_values(recent)
+            oa = valid_values(old)
+            if ra.size < mp or oa.size < mp:
+                return np.nan
+            fit = _quantile_transport_fit(recent, old)
+            return np.nan if fit is None else fit[1]
+
+        return frame_like(x, map_two_window(xv, ws, wl, _fn))
+
+
+@register_operator(
+    name="ts_quantile_transport_curvature",
+    category="time_series_distribution",
+    business_category="time_series_distribution",
+    canonical="ts_quantile_transport_curvature",
+    source="alpha_language_distribution",
+)
+class TsQuantileTransportCurvature(SeriesOperator):
+    """分位数输运曲率 c：ΔQ(q) = a + b·(q-0.5) + c·(q-0.5)²。
+
+    c 捕捉输运位移是否集中在双尾还是中部：c>0 = 位移在尾部更大（双尾外扩），
+    c<0 = 位移在中部分布移动。真正意义上的 distribution-shape migration。
+    与 ``ts_quantile_transport_slope`` 共享同一拟合。
+    """
+
+    metadata = _metadata(
+        "ts_quantile_transport_curvature",
+        "ΔQ 对 (q-0.5)² 的 OLS 曲率（尾部集中位移）。",
+        ["x", "recent_window", "old_window", "min_periods"],
+        unit="ratio",
+    )
+
+    def _calculate_series(
+        self, x: pd.DataFrame, recent_window: int = 20, old_window: int = 40, min_periods: int = 3, **_: Any
+    ) -> pd.DataFrame:
+        ws = check_window(recent_window, name="recent_window")
+        wl = check_window(old_window, name="old_window")
+        mp = max(3, int(min_periods))
+        xv = x.to_numpy(dtype=float)
+
+        def _fn(recent: np.ndarray, old: np.ndarray) -> float:
+            ra = valid_values(recent)
+            oa = valid_values(old)
+            if ra.size < mp or oa.size < mp:
+                return np.nan
+            fit = _quantile_transport_fit(recent, old)
+            return np.nan if fit is None else fit[2]
+
+        return frame_like(x, map_two_window(xv, ws, wl, _fn))
+
+
+def _mmd_rbf(recent: np.ndarray, old: np.ndarray, min_periods: int) -> float:
+    """MMD² with an RBF kernel; σ = median heuristic over the combined sample.
+
+    Deterministic (no GP search of σ), scale-aware, and fails closed on
+    degenerate/constant windows where every kernel value is 1."""
+    ra = valid_values(recent)
+    oa = valid_values(old)
+    if ra.size < min_periods or oa.size < min_periods:
+        return np.nan
+    comb = np.concatenate([ra, oa])
+    m = comb.size
+    if m < 4:
+        return np.nan
+    d = comb[:, None] - comb[None, :]
+    triu = np.abs(d[np.triu_indices(m, k=1)])
+    if triu.size == 0:
+        return np.nan
+    sigma = float(np.median(triu))
+    if not np.isfinite(sigma) or sigma < _EPS:
+        return np.nan
+    tau = 2.0 * sigma * sigma
+
+    def _k(a: np.ndarray, b: np.ndarray) -> float:
+        diff = a[:, None] - b[None, :]
+        return float(np.exp(-(diff * diff) / tau).mean())
+
+    kxx = _k(ra, ra)
+    kyy = _k(oa, oa)
+    kxy = _k(ra, oa)
+    mmd2 = kxx + kyy - 2.0 * kxy
+    return float(max(mmd2, 0.0))
+
+
+@register_operator(
+    name="ts_mmd_rbf_shift",
+    category="time_series_distribution",
+    business_category="time_series_distribution",
+    canonical="ts_mmd_rbf_shift",
+    source="alpha_language_distribution",
+)
+class TsMmdRbfShift(SeriesOperator):
+    """近 vs 旧窗口的 RBF-kernel MMD²（最大均值差异）。
+
+    ``MMD² = E[k(X,X')] + E[k(Y,Y')] - 2E[k(X,Y)]``；σ 用合并样本的 pairwise
+    距离中位数（median heuristic），**不做 GP 搜索**（确定性）。能捕捉任意
+    光滑分布差异（不只是均值/方差），是 Energy/Wasserstein 的补充。常量窗口
+    （σ≈0）fail-closed → NaN。
+    """
+
+    metadata = _metadata(
+        "ts_mmd_rbf_shift",
+        "RBF-kernel MMD²（σ=median heuristic，确定性）。",
+        ["x", "recent_window", "old_window", "min_periods"],
+        unit="ratio",
+    )
+
+    def _calculate_series(
+        self, x: pd.DataFrame, recent_window: int = 20, old_window: int = 40, min_periods: int = 5, **_: Any
+    ) -> pd.DataFrame:
+        ws = check_window(recent_window, name="recent_window")
+        wl = check_window(old_window, name="old_window")
+        mp = max(4, int(min_periods))
+        xv = x.to_numpy(dtype=float)
+        return frame_like(x, map_two_window(xv, ws, wl, lambda r, o: _mmd_rbf(r, o, mp)))
+
+
 _NEW_CANONICALS = (
     "ts_tail_imbalance",
     "ts_expected_shortfall_asymmetry",
@@ -353,6 +530,9 @@ _NEW_CANONICALS = (
     "ts_ks_shift",
     "ts_location_shift",
     "ts_scale_shift",
+    "ts_quantile_transport_slope",
+    "ts_quantile_transport_curvature",
+    "ts_mmd_rbf_shift",
 )
 
 

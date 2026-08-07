@@ -485,6 +485,92 @@ class TsMassConcentration(SeriesOperator):
         return frame_like(weight, map_rolling(wv, w, _fn))
 
 
+@register_operator(
+    name="ts_chord_excursion_area",
+    category="time_series_shape",
+    business_category="time_series_shape",
+    canonical="ts_chord_excursion_area",
+    source="alpha_language_shape",
+)
+class TsChordExcursionArea(SeriesOperator):
+    """弦弓形面积: Σ_j(x_j - L_j) / (Σ_j|x_j - L_j| + eps), 范围 [-1,1]。
+
+    L_j = x_0 + (j/(W-1))·(x_{W-1} - x_0) 为首尾连线。+1 = 路径主要拱在首尾
+    连线上方（先跌后反弹）；-1 = 主要在下方（先涨后回落）。同样首尾收益的两只
+    股票因此可区分。要求窗口内全 finite。
+    """
+
+    metadata = _metadata(
+        "ts_chord_excursion_area",
+        "路径相对首尾连线的净弓形面积（归一化 [-1,1]）。",
+        ["x", "window", "min_periods"],
+        unit="ratio",
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, window: int = 20, min_periods: int = 2, **_: Any) -> pd.DataFrame:
+        w = check_window(window)
+        mp = max(2, int(min_periods))
+        xv = x.to_numpy(dtype=float)
+
+        def _fn(chunk: np.ndarray) -> float:
+            if chunk.size < w or not np.all(np.isfinite(chunk)):
+                return np.nan
+            v = chunk.astype(float)
+            if v.size < mp:
+                return np.nan
+            j = np.arange(v.size, dtype=float)
+            den = max(v.size - 1, 1)
+            L = v[0] + (j / den) * (v[-1] - v[0])
+            dev = v - L
+            s_dev = float(np.sum(dev))
+            s_abs = float(np.sum(np.abs(dev)))
+            return s_dev / (s_abs + _EPS)
+
+        return frame_like(x, map_rolling(xv, w, _fn))
+
+
+@register_operator(
+    name="ts_max_chord_excursion",
+    category="time_series_shape",
+    business_category="time_series_shape",
+    canonical="ts_max_chord_excursion",
+    source="alpha_language_shape",
+)
+class TsMaxChordExcursion(SeriesOperator):
+    """最大弦偏移: max_j|x_j - L_j| / (Σ|Δx| + eps)。
+
+    衡量中间曾偏离首尾最终路径多远（相对路径总长度）。对假突破、深回撤后修复、
+    V 型路径敏感。要求窗口内全 finite。
+    """
+
+    metadata = _metadata(
+        "ts_max_chord_excursion",
+        "相对首尾连线的最大偏移（按路径长度归一）。",
+        ["x", "window", "min_periods"],
+        unit="ratio",
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, window: int = 20, min_periods: int = 2, **_: Any) -> pd.DataFrame:
+        w = check_window(window)
+        mp = max(2, int(min_periods))
+        xv = x.to_numpy(dtype=float)
+
+        def _fn(chunk: np.ndarray) -> float:
+            if chunk.size < w or not np.all(np.isfinite(chunk)):
+                return np.nan
+            v = chunk.astype(float)
+            if v.size < mp:
+                return np.nan
+            j = np.arange(v.size, dtype=float)
+            den = max(v.size - 1, 1)
+            L = v[0] + (j / den) * (v[-1] - v[0])
+            mce = float(np.max(np.abs(v - L)))
+            path = float(np.sum(np.abs(np.diff(v))))
+            return mce / (path + _EPS)
+
+        return frame_like(x, map_rolling(xv, w, _fn))
+
+
 _NEW_CANONICALS = (
     "ts_monotonicity",
     "ts_turning_rate",
@@ -495,6 +581,8 @@ _NEW_CANONICALS = (
     "ts_weighted_time_centroid",
     "ts_endpoint_deviation",
     "ts_mass_concentration",
+    "ts_chord_excursion_area",
+    "ts_max_chord_excursion",
 )
 
 

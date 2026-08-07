@@ -1,0 +1,213 @@
+"""
+data_access.read.temporal_join —— 语义级时间 join 规格（TemporalJoinSpec）
+
+背景
+    read_joined 早期的 ``pit_asof`` 只是普通 ``anchor.time >= right.time`` ASOF，
+    没有区分「数据何时可见」与「数据属于哪个会计期间」。本模块把 join 语义
+    显式化：decision_time（决策时点 = anchor 时间）、knowledge_time（右表
+    可见时点，如财务 PubDate）、period_time（会计期间，如 ReportPeriodEndDate）、
+    revision_order（同一可见时点的多版本排序，决定取哪一版）、availability
+    （数据何时可用：same_day 或 next_trading_day）。
+
+用法
+    ``store.read_joined(..., joins={"ashare_stock_balance": TemporalJoinSpec(
+        policy="pit_asof",
+        knowledge_time="PubDate",
+        period_time="ReportPeriodEndDate",
+        revision_order=("PubDate", "UpdateTime"),
+        availability="next_trading_day",
+    )})``
+
+    joins 值也接受字符串（``"pit_asof"``，语义即旧版普通 ASOF）或 dict。
+
+设计要点
+    1. ``availability="next_trading_day"`` 时 ASOF 条件用严格大于
+       ``decision_time > knowledge_time``（A 股财报盘后落地：PubDate 当天
+       的 bar 不能用，下一交易日才可用；对日频面板等价于严格大于）。
+    2. ``revision_order`` 提供后，join 前先按 ``(instrument, knowledge_time)``
+       去重、保留 revision_order 降序最新一行（替代依赖 parquet 扫描顺序的
+       keep_last），保证确定性。
+    3. ``primary_key`` / ``duplicate_policy`` 是 exact join 的唯一性契约声明；
+       违反（join 后放大行数）会在执行层审计。
+
+维护人：quant 基础平台组    最后更新：2026-08-08
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Mapping
+
+from data_access.core.exceptions import ValidationError
+
+_VALID_POLICIES = frozenset({"exact", "asof", "pit_asof"})
+_VALID_AVAILABILITY = frozenset({"same_day", "next_trading_day"})
+_VALID_DUPLICATE_POLICIES = frozenset({"keep_first", "keep_last", "latest_revision", "error"})
+
+
+@dataclass(frozen=True)
+class TemporalJoinSpec:
+    """一次时间 join 的完整语义规格。
+
+    参数:
+        policy: exact / asof / pit_asof
+        decision_time: 锚点决策时点列（缺省 = 锚点数据集 time_column）
+        knowledge_time: 右表数据可见时点列（缺省 = 右表 time_column）
+        period_time: 右表会计期间/生效期列（可选，仅标注）
+        revision_order: 版本排序列（如 (\"PubDate\", \"UpdateTime\")），
+            join 前按 (instrument, knowledge_time) 去重取最新一版
+        availability: same_day / next_trading_day
+        deduplicate: 是否做 revision 去重（True 且 revision_order 非空时生效）
+        primary_key: 唯一性契约（如 (\"TradeDate\", \"Symbol\")）
+        duplicate_policy: keep_first/keep_last/latest_revision/error
+    """
+
+    policy: str = "exact"
+    decision_time: str | None = None
+    knowledge_time: str | None = None
+    period_time: str | None = None
+    revision_order: tuple[str, ...] = ()
+    availability: str = "same_day"
+    deduplicate: bool = True
+    primary_key: tuple[str, ...] = ()
+    duplicate_policy: str = "latest_revision"
+
+    @property
+    def is_asof(self) -> bool:
+        return self.policy in {"asof", "pit_asof"}
+
+    @property
+    def comparison_operator(self) -> str:
+        """ASOF 条件比较符：next_trading_day 用严格大于（盘后落地可见性）。"""
+        if not self.is_asof:
+            raise ValueError("exact join 不使用比较操作符")
+        return ">" if self.availability == "next_trading_day" else ">="
+
+    def effective_decision_time(self, anchor_time_column: str | None) -> str:
+        return self.decision_time or anchor_time_column or ""
+
+    def effective_knowledge_time(self, right_time_column: str | None) -> str:
+        return self.knowledge_time or right_time_column or ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "policy": self.policy,
+            "decision_time": self.decision_time,
+            "knowledge_time": self.knowledge_time,
+            "period_time": self.period_time,
+            "revision_order": list(self.revision_order),
+            "availability": self.availability,
+            "deduplicate": self.deduplicate,
+            "primary_key": list(self.primary_key),
+            "duplicate_policy": self.duplicate_policy,
+        }
+
+
+def _tuple_of(value: Any) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        return (value,) if value.strip() else ()
+    if isinstance(value, (list, tuple)):
+        return tuple(str(v) for v in value if v is not None)
+    return ()
+
+
+def _str_or_none(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def normalize_join_policy(policy: Any) -> str:
+    """把 join 策略归一化到合法集合；None 默认 exact。"""
+    if isinstance(policy, TemporalJoinSpec):
+        policy = policy.policy
+    key = str(policy or "exact").strip().lower()
+    if key not in _VALID_POLICIES:
+        raise ValidationError(
+            f"join 策略必须是 {sorted(_VALID_POLICIES)}，收到 {policy!r}"
+        )
+    return key
+
+
+def join_spec_from_field(field: Any) -> TemporalJoinSpec | None:
+    """把 SemanticField 的 join 语义（join_policy / knowledge_time / period_time /
+    revision_order / availability）翻译成 TemporalJoinSpec。
+
+    返回 None 表示字段未声明 join 语义（调用方用默认 exact）。
+    """
+    if field is None:
+        return None
+    policy = str(getattr(field, "join_policy", None) or "exact")
+    availability = str(getattr(field, "availability", "same_day") or "same_day")
+    revision = tuple(getattr(field, "revision_order", ()) or ())
+    knowledge = getattr(field, "knowledge_time", None)
+    period = getattr(field, "period_time", None)
+    if policy in {"pit_asof_backward", "pit_asof", "asof_backward", "asof"}:
+        return TemporalJoinSpec(
+            policy="pit_asof",
+            knowledge_time=knowledge or None,
+            period_time=period or None,
+            revision_order=revision,
+            availability=availability,
+        )
+    if policy == "exact" and (revision or getattr(field, "primary_key", ())):
+        return TemporalJoinSpec(
+            policy="exact",
+            revision_order=revision,
+            primary_key=tuple(getattr(field, "primary_key", ()) or ()),
+            duplicate_policy=str(getattr(field, "duplicate_policy", "latest_revision") or "latest_revision"),
+        )
+    return None
+
+
+def parse_join_spec(raw: Any) -> TemporalJoinSpec:
+    """把 read_joined 的 joins 值归一化成 TemporalJoinSpec。
+
+    支持三种输入：
+        - ``None`` / 缺失 → exact
+        - 字符串 ``"pit_asof"`` / ``"exact"`` / ``"asof"``
+        - dict：``{"policy": "pit_asof", "knowledge_time": "PubDate", ...}``
+        - TemporalJoinSpec 实例（原样返回）
+    """
+    if isinstance(raw, TemporalJoinSpec):
+        return raw
+    if raw is None:
+        return TemporalJoinSpec(policy="exact")
+    if isinstance(raw, str):
+        return TemporalJoinSpec(policy=normalize_join_policy(raw))
+    if not isinstance(raw, Mapping):
+        raise ValidationError(
+            f"join 规格必须是字符串/dict/TemporalJoinSpec，收到 {type(raw).__name__}"
+        )
+    # dict 没显式 policy 但表达了语义时间（knowledge_time/availability/revision）
+    # → 默认 pit_asof（asof 语义）；否则默认 exact。
+    has_semantic = any(
+        raw.get(k) is not None for k in ("knowledge_time", "availability", "revision_order", "period_time")
+    )
+    policy = normalize_join_policy(
+        raw.get("policy") if "policy" in raw else ("pit_asof" if has_semantic else "exact")
+    )
+    availability = _str_or_none(raw.get("availability")) or "same_day"
+    if availability not in _VALID_AVAILABILITY:
+        raise ValidationError(
+            f"availability 必须是 {sorted(_VALID_AVAILABILITY)}，收到 {availability!r}"
+        )
+    dup = _str_or_none(raw.get("duplicate_policy")) or "latest_revision"
+    if dup not in _VALID_DUPLICATE_POLICIES:
+        raise ValidationError(
+            f"duplicate_policy 必须是 {sorted(_VALID_DUPLICATE_POLICIES)}，收到 {dup!r}"
+        )
+    return TemporalJoinSpec(
+        policy=policy,
+        decision_time=_str_or_none(raw.get("decision_time")),
+        knowledge_time=_str_or_none(raw.get("knowledge_time")),
+        period_time=_str_or_none(raw.get("period_time")),
+        revision_order=_tuple_of(raw.get("revision_order")),
+        availability=availability,
+        deduplicate=bool(raw.get("deduplicate", True)),
+        primary_key=_tuple_of(raw.get("primary_key")),
+        duplicate_policy=dup,
+    )

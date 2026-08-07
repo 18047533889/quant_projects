@@ -230,6 +230,127 @@ _DAILY_DYNAMICS_PACK_2026_08 = frozenset({
     "report_filing_delay_surprise", "ts_hill_tail_index",
 })
 DAILY_FACTOR_MIGRATED = frozenset(set(DAILY_FACTOR_MIGRATED) | _DAILY_DYNAMICS_PACK_2026_08)
+# 2026-08 vertical deepening pack: Markov committor/MFPT/spectral-gap/stationary,
+# KM equilibrium/diffusion-gradient/quasipotential, first-passage probability &
+# conditional time, event-response curve shape, extreme-value (extremal index /
+# mean-excess slope / GPD-PWM), transfer-entropy peak, quantile-transport,
+# MMD, chord geometry, chip-cost shape, group spectral gap/second mode, KNN
+# Dirichlet energy, intraday RV signature, report change breadth/coherence and
+# RQA.  All are strictly trailing / report-causal; see operator_policy for the
+# pit-safe contract.
+_DAILY_DEEPENING_PACK_2026_08 = frozenset({
+    # Markov state deep-dive
+    "ts_markov_committor", "ts_markov_mean_first_passage_time",
+    "ts_markov_spectral_gap", "ts_markov_stationary_surprisal",
+    # Kramers-Moyal deep-dive
+    "ts_km_equilibrium_distance", "ts_km_diffusion_gradient",
+    "ts_km_quasipotential_depth",
+    # first-passage decomposition
+    "ts_first_passage_hit_probability", "ts_first_passage_conditional_time",
+    # event-response curve shape
+    "event_response_peak_lag", "event_response_decay_rate",
+    "event_response_dispersion", "event_response_reversal_strength",
+    # extreme-value tail shape
+    "ts_extremal_index", "ts_mean_excess_slope", "ts_gpd_shape_pwm",
+    # transfer-entropy peak (fused)
+    "ts_transfer_entropy_peak_strength", "ts_transfer_entropy_peak_lag",
+    # distribution transport / MMD
+    "ts_quantile_transport_slope", "ts_quantile_transport_curvature",
+    "ts_mmd_rbf_shift",
+    # chord / bow geometry
+    "ts_chord_excursion_area", "ts_max_chord_excursion",
+    # chip-cost shape
+    "ts_turnover_cost_entropy", "ts_turnover_cost_mode_distance",
+    "ts_turnover_cost_skew", "ts_turnover_age_dispersion",
+    # group spectral deep-dive
+    "group_corr_spectral_gap", "group_corr_second_mode_localization",
+    # style-graph smoothness
+    "cs_knn_graph_dirichlet_energy",
+    # intraday volatility signature
+    "intraday_rv_signature_slope",
+    # report change breadth / coherence
+    "report_change_breadth", "report_change_coherence",
+    # recurrence quantification analysis
+    "ts_recurrence_rate", "ts_recurrence_diagonal_entropy",
+    "ts_recurrence_trapping_time", "ts_recurrence_divergence",
+})
+DAILY_FACTOR_MIGRATED = frozenset(set(DAILY_FACTOR_MIGRATED) | _DAILY_DEEPENING_PACK_2026_08)
+# 2026-08 geometry/math expansion: K-line interval geometry, directional-change
+# structural levels, multiscale trend term structure, envelope / crossing
+# quality, confirmed-extrema divergence, threshold cycles, dynamic state-episode
+# excursions, jump-robust intraday variation, intraday volatility shape,
+# volatility roughness, binned response curves, nonlinear dependence, 2D joint
+# trajectory geometry, point-process interval stats, string/ordinal complexity,
+# spectral shape, Hankel/SSA structure, multifractal spectrum, serial-dependence
+# memory, L-moments / Hartigan dip, intrinsic dimension, persistence entropy,
+# cs/group locality, session shape.  Same contract as the deepening pack: each
+# module keeps its names in EXTENDED_ONLY_CANONICALS at import (partition check)
+# and this frozenset migrates them to the daily surface.
+_DAILY_GEOMETRY_MATH_2026_08 = frozenset({
+    # interval geometry
+    "ts_interval_union_coverage", "ts_interval_occupancy_entropy",
+    "ts_interval_occupancy_mode_distance", "ts_interval_nesting_depth",
+    "ts_interval_exploration_efficiency", "ts_interval_overlap_component_ratio",
+    # structural levels
+    "ts_structural_level_density", "ts_nearest_structural_level_distance",
+    "ts_structural_level_strength",
+    # candle state space
+    "ts_vector_state_mahalanobis", "ts_vector_state_local_density",
+    "ts_multivariate_matrix_profile_novelty", "ts_matrix_profile_motif_age",
+    # multiscale trend
+    "ts_multiscale_trend_consensus", "ts_multiscale_trend_dispersion",
+    "ts_multiscale_trend_curvature",
+    # envelope / crossing
+    "ts_envelope_compression", "ts_envelope_pressure", "ts_envelope_boundary_dwell",
+    "ts_crossing_speed", "ts_crossing_acceleration",
+    # extrema divergence / threshold cycles
+    "ts_extrema_divergence_strength", "ts_extrema_confirmation_rate",
+    "ts_threshold_cycle_period", "ts_threshold_cycle_asymmetry",
+    # state-episode excursions
+    "state_episode_mfe", "state_episode_mae", "state_episode_efficiency",
+    "state_episode_retrace_ratio", "state_episode_excursion_balance",
+    # jump-robust intraday variation
+    "intraday_medrv", "intraday_minrv", "intraday_jump_test_stat",
+    # intraday volatility shape
+    "intraday_volatility_time_centroid", "intraday_volatility_concentration",
+    "intraday_volatility_entropy", "intraday_realized_semivariance_balance",
+    "intraday_rv_signature_curvature",
+    # volatility roughness
+    "ts_vol_pvariation_roughness", "ts_vol_scaling_break",
+    # binned response curves
+    "ts_binned_response_monotonicity", "ts_binned_response_curvature",
+    "ts_response_slope_asymmetry",
+    # nonlinear dependence
+    "ts_chatterjee_xi", "ts_hsic", "ts_conditional_mutual_information",
+    "ts_partial_distance_correlation",
+    # 2D joint trajectory geometry
+    "ts_vector_path_efficiency", "ts_vector_turning_coherence",
+    "ts_vector_path_curvature", "ts_vector_self_intersection_rate",
+    # point-process interval stats
+    "event_interval_memory", "event_local_variation", "event_fano_factor",
+    # string / ordinal complexity
+    "ts_lempel_ziv_complexity", "ts_forbidden_ordinal_pattern_ratio",
+    # spectral shape
+    "ts_spectral_centroid", "ts_spectral_flatness",
+    "ts_spectral_peak_concentration", "ts_spectral_quality_factor",
+    # Hankel / SSA
+    "ts_hankel_effective_rank", "ts_hankel_singular_gap",
+    "ts_ssa_reconstruction_residual",
+    # multifractal
+    "ts_generalized_hurst_exponent", "ts_multifractal_width",
+    "ts_multifractal_curvature",
+    # serial-dependence memory
+    "ts_autocorrelation_time", "ts_fractional_difference",
+    # L-moments / Hartigan dip / intrinsic dimension / persistence entropy
+    "ts_l_skewness", "ts_l_kurtosis", "ts_hartigan_dip",
+    "ts_delay_intrinsic_dimension", "ts_persistence_entropy",
+    # cs / group locality
+    "cs_knn_local_moran", "cs_isotonic_residual",
+    "group_tail_coexceedance_density", "group_corr_mst_length",
+    # intraday session shape
+    "intraday_session_shape_novelty", "intraday_profile_pca_residual",
+})
+DAILY_FACTOR_MIGRATED = frozenset(set(DAILY_FACTOR_MIGRATED) | _DAILY_GEOMETRY_MATH_2026_08)
 RESEARCH_ONLY_CANONICALS=frozenset({"holder_concentration_change","holder_count_change_rate"});LEGACY_ONLY_CANONICALS=frozenset({"cube"});INTERNAL_ONLY_CANONICALS=frozenset({"constant","identity","protected_div"})
 HIDDEN_DAILY_NAMES=frozenset({"cube","cumulative_max","cumulative_mean","cumulative_min","fmax","fmin","inv","reciprocal","sqr"})
 def classify_canonical(canonical:str)->str:

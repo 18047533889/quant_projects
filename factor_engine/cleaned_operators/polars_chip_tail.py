@@ -128,6 +128,30 @@ _mk(
         price, turnover, window, 0.05, q_high, q_low, "qdist"
     ),
 )
+_mk(
+    "ts_turnover_cost_entropy",
+    "筹码成本分布熵（Polars）。",
+    ["price", "turnover", "window"],
+    lambda price, turnover, window=60: _survival_family(price, turnover, window, 0.05, 0.75, 0.25, "cost_ent"),
+)
+_mk(
+    "ts_turnover_cost_mode_distance",
+    "最大成本峰相对当前价距离（Polars）。",
+    ["price", "turnover", "window"],
+    lambda price, turnover, window=60: _survival_family(price, turnover, window, 0.05, 0.75, 0.25, "mode_d"),
+)
+_mk(
+    "ts_turnover_cost_skew",
+    "筹码成本加权偏度（Polars）。",
+    ["price", "turnover", "window"],
+    lambda price, turnover, window=60: _survival_family(price, turnover, window, 0.05, 0.75, 0.25, "cost_sk"),
+)
+_mk(
+    "ts_turnover_age_dispersion",
+    "持仓年龄加权离散度（Polars）。",
+    ["price", "turnover", "window"],
+    lambda price, turnover, window=60: _survival_family(price, turnover, window, 0.05, 0.75, 0.25, "age_disp"),
+)
 
 
 # ---------------------------------------------------------------------------

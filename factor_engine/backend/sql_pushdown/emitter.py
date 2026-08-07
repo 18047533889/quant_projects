@@ -6295,6 +6295,93 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_inst_window=True,
         )
 
+    # 2026-08 geometry/math expansion — DuckDB SQL pushdown subset.
+    # Intraday volatility shape: minute-return panels, trailing-window reduction
+    # with the same >=5-finite / RV>eps guards as the pandas kernels.
+    if op in {"intraday_volatility_concentration", "intraday_volatility_entropy"}:
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        spec = _window_spec(node, default=240)
+        win = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
+        # Each output row uses ONE window RV (sum of squared returns at that row)
+        # applied uniformly to every element of the window.  HHI = SUM(r^4)/RV^2;
+        # entropy decomposes as -(S1 - RV*ln(RV)) / (RV*ln(n)) with
+        # S1 = SUM(r^2 ln r^2) and 0*ln0 -> 0 masked per element.
+        expr = (
+            f"r4 / (rv * rv)"
+            if op == "intraday_volatility_concentration"
+            else f"-(S1 - rv * LN(rv)) / (rv * LN(CAST(n AS DOUBLE)))"
+        )
+        return _Layer(
+            f"SELECT ts, inst, CASE WHEN n < 5 OR rv <= 1e-12 THEN NULL "
+            f"ELSE {expr} END AS _v FROM ("
+            f"SELECT ts, inst, rv, n, SUM(r4raw) OVER ({win}) AS r4, "
+            f"SUM(s1raw) OVER ({win}) AS S1 FROM ("
+            f"SELECT ts, inst, "
+            f"_v*_v*_v*_v AS r4raw, "
+            f"CASE WHEN _v = 0 THEN 0 ELSE _v*_v*LN(_v*_v) END AS s1raw, "
+            f"SUM(_v*_v) OVER ({win}) AS rv, "
+            f"COUNT(_v) OVER ({win}) AS n "
+            f"FROM ({inner.sql}) t) t0) t1",
+            has_inst_window=True,
+        )
+
+    if op == "intraday_realized_semivariance_balance":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        spec = _window_spec(node, default=240)
+        win = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
+        return _Layer(
+            f"SELECT ts, inst, CASE WHEN n < 5 THEN NULL "
+            f"ELSE (up - dn) / (up + dn + 1e-12) END AS _v FROM ("
+            f"SELECT ts, inst, up, dn, COUNT(_v) OVER ({win}) AS n FROM ("
+            f"SELECT ts, inst, _v, "
+            f"SUM(CASE WHEN _v > 0 THEN _v*_v ELSE 0 END) OVER ({win}) AS up, "
+            f"SUM(CASE WHEN _v < 0 THEN _v*_v ELSE 0 END) OVER ({win}) AS dn "
+            f"FROM ({inner.sql}) t) t1) t2",
+            has_inst_window=True,
+        )
+
+    # Crossing quality: z = x - y, population std over the window, LAG z.
+    if op in {"ts_crossing_speed", "ts_crossing_acceleration"}:
+        if len(node.inputs) < 2:
+            return None
+        left = _compile_layer(node.inputs[0], dialect=dialect)
+        right = _compile_layer(node.inputs[1], dialect=dialect)
+        if left is None or right is None:
+            return None
+        spec = _window_spec(node, default=20)
+        win = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
+        part = "PARTITION BY inst ORDER BY ts"
+        zsql = (
+            f"SELECT l.ts, l.inst, l._v - r._v AS z "
+            f"FROM ({left.sql}) l LEFT JOIN ({right.sql}) r USING (ts, inst)"
+        )
+        if op == "ts_crossing_speed":
+            return _Layer(
+                f"SELECT ts, inst, "
+                f"CASE WHEN z IS NULL OR zprev IS NULL OR sd IS NULL THEN 0 "
+                f"WHEN zprev <= 0 AND z > 0 THEN ABS(z - zprev) / (sd + 1e-12) "
+                f"WHEN zprev >= 0 AND z < 0 THEN -ABS(z - zprev) / (sd + 1e-12) "
+                f"ELSE 0 END AS _v FROM ("
+                f"SELECT ts, inst, z, LAG(z) OVER ({part}) AS zprev, "
+                f"STDDEV_POP(z) OVER ({win}) AS sd FROM ({zsql}) t) t2",
+                has_inst_window=True,
+            )
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"CASE WHEN z IS NULL OR zprev IS NULL OR dz IS NULL OR dzprev IS NULL OR sd IS NULL THEN 0 "
+            f"WHEN (zprev <= 0 AND z > 0) OR (zprev >= 0 AND z < 0) THEN (dz - dzprev) / (sd + 1e-12) "
+            f"ELSE 0 END AS _v FROM ("
+            f"SELECT ts, inst, z, zprev, dz, LAG(dz) OVER ({part}) AS dzprev, sd FROM ("
+            f"SELECT ts, inst, z, LAG(z) OVER ({part}) AS zprev, "
+            f"z - LAG(z) OVER ({part}) AS dz, STDDEV_POP(z) OVER ({win}) AS sd "
+            f"FROM ({zsql}) t) t2) t3",
+            has_inst_window=True,
+        )
+
     return None
 
 

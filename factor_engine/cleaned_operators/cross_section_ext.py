@@ -1,0 +1,508 @@
+# -*- coding: utf-8 -*-
+"""Cross-sectional extension operators: graph / monotone-fit / group tail geometry.
+
+This module extends the 2026-08 geometry/math expansion with four new
+per-date cross-sectional or per-group operators:
+
+* ``cs_knn_local_moran``          — Local Moran I over a daily k-NN style graph
+  (spatial-autocorrelation view of a target against its style peers).
+* ``cs_isotonic_residual``        — cross-sectional residual of ``y`` on ``x``
+  after an isotonic (monotone, pool-adjacent-violators) regression whose
+  direction is chosen from the sign of the daily Spearman rank correlation.
+* ``group_tail_coexceedance_density`` — within-group pairwise probability that
+  both members are in their own extreme tail (exceedance density), net of the
+  independence baseline.
+* ``group_corr_mst_length``       — mean edge length of the Minimum Spanning
+  Tree of the within-group pairwise correlation graph (a "how tightly is the
+  group wired together" gauge).
+
+Shared kernels (private to this module, deterministic):
+``_rank_features`` / ``_neighbors`` (rank-standardised k-NN, from dynamic_knn),
+``_zscore_cross``, ``_spearman`` / ``_pava_non_decreasing`` (monotone fit),
+``_pearson``, and ``_prim_mean`` (Prim MST).
+
+PIT / causal / deterministic contract: every value at row ``t`` uses only rows
+``<= t`` (prefix-causal).  The cs_* operators are computed on the date-t
+cross-section only; the group_* operators use a trailing aligned window that
+ends at ``t``.  No randomness anywhere; ties are broken with stable argsorts.
+NaN inputs are dropped per aligned pair; a degenerate window (too few valid
+rows / too few group members) emits NaN rather than a fabricated value.
+"""
+from __future__ import annotations
+
+from typing import Any
+
+import numpy as np
+import pandas as pd
+
+from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.rolling_pack import frame_like, register_polars_bridge
+
+_EPS = 1e-12
+_RHO_EPS = 0.05  # |Spearman| below this → try both monotone fits, keep the better.
+_MIN_Q_ROWS = 3  # trailing rows needed to compute a stock's own quantile threshold.
+_MIN_ALIGNED = 3  # aligned trailing rows needed for a valid pairwise joint stat.
+
+
+def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
+    return OperatorMetadata(
+        name=name,
+        category="cross_section_ext",
+        description=description,
+        param_names=params,
+        return_type="series",
+        tags=[
+            "cross_section_ext", "daily", "pit_safe", "causal", "typed_v2",
+            "deterministic",
+            f"signature:{','.join(params)}->series", "domain:price_volume",
+            f"unit:{unit}", f"cost:{cost}",
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
+# shared k-NN kernels (rank-standardised feature graph, self excluded)
+# ---------------------------------------------------------------------------
+def _rank_features(feats: np.ndarray, t: int) -> tuple[np.ndarray, np.ndarray]:
+    """Date t feature matrix (n,d) -> rank-standardised U + per-stock validity."""
+    n, d = feats[t].shape
+    U = np.full((n, d), np.nan, dtype=float)
+    for j in range(d):
+        col = feats[t, :, j]
+        fin = np.isfinite(col)
+        m = int(fin.sum())
+        if m < 2:
+            continue
+        ranks = np.argsort(np.argsort(col[fin], kind="stable"), kind="stable").astype(float)
+        U[fin, j] = (ranks + 0.5) / m
+    valid = np.all(np.isfinite(U), axis=1)
+    return U, valid
+
+
+def _neighbors(U: np.ndarray, valid: np.ndarray, k: int, i: int) -> np.ndarray:
+    dist = np.sqrt(np.sum((U - U[i]) ** 2, axis=1))
+    dist = np.where(valid, dist, np.inf)
+    dist[i] = np.inf
+    order = np.argsort(dist, kind="stable")
+    count = int(valid.sum())
+    k_eff = min(max(1, int(k)), count - 1 if count > 0 else 0)
+    if k_eff < 1:
+        return np.array([], dtype=int)
+    return order[:k_eff]
+
+
+def _zscore_cross(vals: np.ndarray) -> np.ndarray:
+    """Cross-sectional z-score of one row; degenerate (constant) row → NaN."""
+    z = np.full(vals.shape, np.nan, dtype=float)
+    fin = np.isfinite(vals)
+    m = int(fin.sum())
+    if m < 2:
+        return z
+    mean = float(vals[fin].mean())
+    sd = float(vals[fin].std(ddof=0))
+    if not np.isfinite(sd) or sd <= _EPS:
+        return z
+    z[fin] = (vals[fin] - mean) / sd
+    return z
+
+
+def _local_moran_series(target: np.ndarray, feats: np.ndarray, k: int) -> np.ndarray:
+    rows, n, d = feats.shape
+    out = np.full((rows, n), np.nan, dtype=float)
+    kk = int(k)
+    for t in range(rows):
+        U, valid = _rank_features(feats, t)
+        z = _zscore_cross(target[t])
+        for i in range(n):
+            if not valid[i] or not np.isfinite(z[i]):
+                continue
+            nbrs = _neighbors(U, valid, kk, i)
+            if nbrs.size == 0:
+                continue
+            nz = z[nbrs]
+            nz = nz[np.isfinite(nz)]
+            if nz.size == 0:
+                continue
+            out[t, i] = float(z[i] * np.mean(nz))
+    return out
+
+
+# ---------------------------------------------------------------------------
+# isotonic (monotone) cross-sectional residual kernels
+# ---------------------------------------------------------------------------
+def _rankdata(arr: np.ndarray) -> np.ndarray:
+    """1-based average ranks (standard tie handling)."""
+    n = arr.size
+    order = np.argsort(arr, kind="stable")
+    ranks = np.empty(n, dtype=float)
+    i = 0
+    while i < n:
+        j = i
+        while j + 1 < n and arr[order[j + 1]] == arr[order[i]]:
+            j += 1
+        avg = (i + j) / 2.0 + 1.0
+        for k in range(i, j + 1):
+            ranks[order[k]] = avg
+        i = j + 1
+    return ranks
+
+
+def _spearman(xs: np.ndarray, ys: np.ndarray) -> float:
+    """Spearman rank correlation of two equal-length 1D arrays."""
+    rx = _rankdata(xs)
+    ry = _rankdata(ys)
+    dx = rx - rx.mean()
+    dy = ry - ry.mean()
+    denom = np.sqrt(float((dx * dx).sum()) * float((dy * dy).sum()))
+    if denom <= _EPS:
+        return 0.0
+    return float((dx * dy).sum() / denom)
+
+
+def _pava_non_decreasing(vals: np.ndarray) -> np.ndarray:
+    """Pool-adjacent-violators fit of the non-decreasing isotonic regression."""
+    sums: list[float] = []
+    counts: list[int] = []
+    for v in vals:
+        sums.append(float(v))
+        counts.append(1)
+        while len(sums) >= 2 and (sums[-1] / counts[-1]) < (sums[-2] / counts[-2]) - _EPS:
+            s = sums[-2] + sums[-1]
+            c = counts[-2] + counts[-1]
+            sums[-2] = s
+            counts[-2] = c
+            sums.pop()
+            counts.pop()
+    out: list[float] = []
+    for s, c in zip(sums, counts):
+        val = s / c
+        out.extend([val] * c)
+    return np.array(out, dtype=float)
+
+
+def _iso_fit(y_vals: np.ndarray, x_vals: np.ndarray, *, decreasing: bool) -> np.ndarray:
+    """Isotonic regression fit of y on x (order-2 target alignment preserved)."""
+    order = np.argsort(x_vals, kind="stable")
+    ys = y_vals[order]
+    fit_sorted = _pava_non_decreasing(-ys if decreasing else ys)
+    if decreasing:
+        fit_sorted = -fit_sorted
+    inv = np.empty_like(order)
+    inv[order] = np.arange(order.size)
+    return fit_sorted[inv]
+
+
+def _isotonic_residual_series(y2d: np.ndarray, x2d: np.ndarray) -> np.ndarray:
+    rows, cols = y2d.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
+    for t in range(rows):
+        xr, yr = x2d[t], y2d[t]
+        m = np.isfinite(xr) & np.isfinite(yr)
+        xs = xr[m].astype(float)
+        ys = yr[m].astype(float)
+        if xs.size < 2:
+            continue
+        rho = _spearman(xs, ys)
+        if rho > _RHO_EPS:
+            fitted = _iso_fit(ys, xs, decreasing=False)
+        elif rho < -_RHO_EPS:
+            fitted = _iso_fit(ys, xs, decreasing=True)
+        else:
+            up = _iso_fit(ys, xs, decreasing=False)
+            dn = _iso_fit(ys, xs, decreasing=True)
+            sse_up = float(np.sum((ys - up) ** 2))
+            sse_dn = float(np.sum((ys - dn) ** 2))
+            fitted = up if sse_up <= sse_dn else dn
+        out[t, m] = ys - fitted
+    return out
+
+
+# ---------------------------------------------------------------------------
+# group kernels (extra `group`/`group_id` panel of per-date group ids)
+# ---------------------------------------------------------------------------
+def _group_labels(g_row: np.ndarray) -> list[Any]:
+    valid_g = ~pd.isna(g_row)
+    if not np.any(valid_g):
+        return []
+    return list(pd.unique(g_row[valid_g]))
+
+
+def _tail_coexceedance_series(x2d: np.ndarray, g2d: np.ndarray, window: int, quantile: float, side: str) -> np.ndarray:
+    rows, cols = x2d.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
+    w = int(window)
+    q = float(quantile)
+    level = q if side == "upper" else (1.0 - q)
+    # trailing own-quantile threshold per stock, prefix-causal at each row r
+    thresh = np.full((rows, cols), np.nan, dtype=float)
+    for c in range(cols):
+        col = x2d[:, c]
+        for r in range(rows):
+            lo = max(0, r - w + 1)
+            vals = col[lo : r + 1]
+            vals = vals[np.isfinite(vals)]
+            if vals.size < _MIN_Q_ROWS:
+                continue
+            thresh[r, c] = float(np.quantile(vals, level))
+    # tail indicator series
+    E = np.full((rows, cols), np.nan, dtype=float)
+    for r in range(rows):
+        for c in range(cols):
+            xv = x2d[r, c]
+            tv = thresh[r, c]
+            if not np.isfinite(xv) or not np.isfinite(tv):
+                continue
+            if side == "upper":
+                E[r, c] = 1.0 if xv > tv else 0.0
+            else:
+                E[r, c] = 1.0 if xv < tv else 0.0
+    for t in range(rows):
+        lo = max(0, t - w + 1)
+        for label in _group_labels(g2d[t]):
+            idx = np.flatnonzero(g2d[t] == label)
+            N = int(idx.size)
+            if N < 3:
+                continue
+            pair_sum = 0.0
+            valid_pairs = 0
+            for a in range(N):
+                i = int(idx[a])
+                for b in range(a + 1, N):
+                    j = int(idx[b])
+                    xa = x2d[lo : t + 1, i]
+                    xb = x2d[lo : t + 1, j]
+                    ta = thresh[lo : t + 1, i]
+                    tb = thresh[lo : t + 1, j]
+                    aligned = np.isfinite(xa) & np.isfinite(xb) & np.isfinite(ta) & np.isfinite(tb)
+                    cnt = int(aligned.sum())
+                    if cnt < _MIN_ALIGNED:
+                        continue
+                    both = (E[lo : t + 1, i] == 1.0) & (E[lo : t + 1, j] == 1.0)
+                    p_ij = float(np.sum(both & aligned)) / cnt
+                    pair_sum += p_ij
+                    valid_pairs += 1
+            if valid_pairs == 0:
+                continue
+            tc = (2.0 / (N * (N - 1))) * pair_sum - q * q
+            out[t, idx] = tc
+    return out
+
+
+def _pearson(a: np.ndarray, b: np.ndarray) -> float:
+    m = np.isfinite(a) & np.isfinite(b)
+    a = a[m].astype(float)
+    b = b[m].astype(float)
+    if a.size < _MIN_ALIGNED:
+        return np.nan
+    da = a - a.mean()
+    db = b - b.mean()
+    denom = np.sqrt(float((da * da).sum()) * float((db * db).sum()))
+    if denom <= _EPS:
+        return np.nan
+    return float((da * db).sum() / denom)
+
+
+def _prim_mean(D: np.ndarray) -> float:
+    """Mean edge length of the MST of a (symmetric) distance matrix D."""
+    n = D.shape[0]
+    in_tree = np.zeros(n, dtype=bool)
+    min_edge = np.full(n, np.inf, dtype=float)
+    min_edge[0] = 0.0
+    total = 0.0
+    edges = 0
+    for _ in range(n):
+        cand = np.where(~in_tree & np.isfinite(min_edge), min_edge, np.inf)
+        u = int(np.argmin(cand))
+        if not np.isfinite(cand[u]):
+            return np.nan  # disconnected graph → no spanning tree
+        in_tree[u] = True
+        if min_edge[u] > 0.0:
+            total += min_edge[u]
+            edges += 1
+        for v in range(n):
+            if not in_tree[v] and D[u, v] < min_edge[v]:
+                min_edge[v] = D[u, v]
+    if edges != n - 1:
+        return np.nan
+    return total / (n - 1)
+
+
+def _mst_length_series(x2d: np.ndarray, g2d: np.ndarray, window: int) -> np.ndarray:
+    rows, cols = x2d.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
+    w = int(window)
+    for t in range(rows):
+        lo = max(0, t - w + 1)
+        for label in _group_labels(g2d[t]):
+            idx = np.flatnonzero(g2d[t] == label)
+            N = int(idx.size)
+            if N < 3:
+                continue
+            D = np.full((N, N), np.inf, dtype=float)
+            for a in range(N):
+                i = int(idx[a])
+                for b in range(a + 1, N):
+                    j = int(idx[b])
+                    rho = _pearson(x2d[lo : t + 1, i], x2d[lo : t + 1, j])
+                    if not np.isfinite(rho):
+                        continue
+                    d = float(np.sqrt(2.0 * (1.0 - rho)))
+                    D[a, b] = d
+                    D[b, a] = d
+            mst = _prim_mean(D)
+            if np.isfinite(mst):
+                out[t, idx] = mst
+    return out
+
+
+# ---------------------------------------------------------------------------
+# operators
+# ---------------------------------------------------------------------------
+@register_operator(
+    name="cs_knn_local_moran",
+    category="cross_sectional",
+    business_category="cross_sectional",
+    canonical="cs_knn_local_moran",
+    source="cross_section_ext",
+)
+class CsKnnLocalMoran(SeriesOperator):
+    """局部 Moran I：目标在风格 k-NN 图上的空间自相关。
+
+    每日期截面：f1..f3 秩标准化后建 kNN 图（排除自身），target 截面 z-score 为
+    z_i，Local Moran I_i = z_i · mean(z of neighbors)。高正 = 我和风格近邻同步
+    极值（局部抱团）；高负 = 我相对风格近邻反向（风格内 alpha）。P1。
+    """
+
+    metadata = _metadata(
+        "cs_knn_local_moran",
+        "目标在 kNN 风格图上的 Local Moran I（局部空间自相关）。",
+        ["target", "f1", "f2", "f3", "k"],
+        unit="ratio",
+        cost=7,
+    )
+
+    def _calculate_series(
+        self, target: pd.DataFrame, f1: pd.DataFrame, f2: pd.DataFrame, f3: pd.DataFrame, k: int = 5, **_: Any
+    ) -> pd.DataFrame:
+        kk = int(k)
+        if kk < 1:
+            raise ValueError("k must be >= 1")
+        feats = np.stack([f.to_numpy(dtype=float) for f in (f1, f2, f3)], axis=2)
+        return frame_like(target, _local_moran_series(target.to_numpy(dtype=float), feats, kk))
+
+
+@register_operator(
+    name="cs_isotonic_residual",
+    category="cross_sectional",
+    business_category="cross_sectional",
+    canonical="cs_isotonic_residual",
+    source="cross_section_ext",
+)
+class CsIsotonicResidual(SeriesOperator):
+    """截面等渗回归残差：y 对 x 的单调拟合残差。
+
+    每日期截面按 Spearman 秩相关符号决定单调方向（增/减），用 pool-adjacent-
+    violators 拟合；|rho| 接近 0 时同时拟合升/降两条并取残差平方和更小者。
+    残差 = y - ŷ。捕捉与 x 单调关系正交的截面 alpha。P1。
+    """
+
+    metadata = _metadata(
+        "cs_isotonic_residual",
+        "y 对 x 的截面等渗（单调）回归残差。",
+        ["y", "x"],
+        unit="residual",
+        cost=6,
+    )
+
+    def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, **_: Any) -> pd.DataFrame:
+        return frame_like(y, _isotonic_residual_series(y.to_numpy(dtype=float), x.to_numpy(dtype=float)))
+
+
+@register_operator(
+    name="group_tail_coexceedance_density",
+    category="group_structure",
+    business_category="group_structure",
+    canonical="group_tail_coexceedance_density",
+    source="cross_section_ext",
+)
+class GroupTailCoexceedanceDensity(SeriesOperator):
+    """组内尾部共同超越密度：两只股票同时处于各自极值尾部的概率。
+
+    每个成员用自己的 trailing-window 分位数定义极值事件 E_i
+    （upper: x_i > Q_i(q)；lower: x_i < Q_i(1-q)），对组内每对股票取对齐窗口内
+    同时为 1 的频率，均值再减去独立基线 q²。衡量组内尾部联动（抱团/共振）。
+    组内成员 <3 或窗口过短 → NaN。P1。
+    """
+
+    metadata = _metadata(
+        "group_tail_coexceedance_density",
+        "组内两只股票同时处于各自极值尾部的概率密度（减独立基线）。",
+        ["x", "group_id", "window", "quantile", "side"],
+        unit="ratio",
+        cost=7,
+    )
+
+    def _calculate_series(
+        self, x: pd.DataFrame, group_id: pd.DataFrame, window: int = 120, quantile: float = 0.9, side: str = "upper", **_: Any
+    ) -> pd.DataFrame:
+        w = int(window)
+        if w < 2:
+            raise ValueError("window must be >= 2")
+        if not (0.0 < float(quantile) < 1.0):
+            raise ValueError("quantile must be in (0, 1)")
+        if side not in ("upper", "lower"):
+            raise ValueError("side must be 'upper' or 'lower'")
+        return frame_like(x, _tail_coexceedance_series(
+            x.to_numpy(dtype=float), group_id.to_numpy(), w, float(quantile), side))
+
+
+@register_operator(
+    name="group_corr_mst_length",
+    category="group_structure",
+    business_category="group_structure",
+    canonical="group_corr_mst_length",
+    source="cross_section_ext",
+)
+class GroupCorrMstLength(SeriesOperator):
+    """组内相关图最小生成树的平均边长。
+
+    每组每日期：成员两两的 trailing Pearson 相关 ρ → 距离 d_ij = sqrt(2(1-ρ))，
+    用 Prim 算法求最小生成树，输出平均 MST 边长。组内相关性高且一致 → 边长短
+    （组被拧成一股绳）；相关性低/分裂 → 边长长。组内成员 <3 或重叠数据不足 →
+    NaN。P1。
+    """
+
+    metadata = _metadata(
+        "group_corr_mst_length",
+        "组内相关图最小生成树（Prim）的平均边长。",
+        ["x", "group_id", "window"],
+        unit="ratio",
+        cost=8,
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, group_id: pd.DataFrame, window: int = 120, **_: Any) -> pd.DataFrame:
+        w = int(window)
+        if w < 2:
+            raise ValueError("window must be >= 2")
+        return frame_like(x, _mst_length_series(x.to_numpy(dtype=float), group_id.to_numpy(), w))
+
+
+_NEW_CANONICALS = (
+    "cs_knn_local_moran",
+    "cs_isotonic_residual",
+    "group_tail_coexceedance_density",
+    "group_corr_mst_length",
+)
+
+
+def _register_surface() -> None:
+    import cleaned_operators.operator_surface as _surface
+
+    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
+        set(_surface.EXTENDED_ONLY_CANONICALS) | set(_NEW_CANONICALS)
+    )
+    for _canon in _NEW_CANONICALS:
+        register_polars_bridge(_canon)
+
+
+_register_surface()
