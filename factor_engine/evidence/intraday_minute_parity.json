@@ -1,7 +1,7 @@
 {
   "schema_version": "intraday_minute_parity.v1",
   "generated_by": "scripts/certify_intraday_parity.py",
-  "generated_at": "2026-08-06T10:14:37.828435+00:00",
+  "generated_at": "2026-08-06T20:31:22.387446+00:00",
   "session_tz": "Asia/Shanghai",
   "fixture": {
     "instruments": [
@@ -17,7 +17,7 @@
     "utc_variant": true,
     "rng_seed": 7
   },
-  "operator_source_hash": "221367bed9f1a06a8876b24e58a3c5575e6769222a8af4484b069f9f83f94d7b",
+  "operator_source_hash": "149f7b4069f1dcb99ec5bf75cf099a92ac402c3d3f86ceb774367cc1758c8e7c",
   "test_file_hash": "3f7c5b5db7cda19c024fe616ac6c06604e793d6af084402d9ac708a6f7738770",
   "helper_file_hash": "cc5ef52d02eaec5fc3499998efbe74c356bd6383b494b1eface5d1188f2d7f4b",
   "backends": {

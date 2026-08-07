@@ -61,7 +61,12 @@ def compute_ir_hash(ir_node, *, structural_only: bool = False) -> str:
     """
     _CATALOG_ATTRS = frozenset({
         "field_id", "field_registry_hash", "source_table", "source_field",
-        "domain", "frequency", "cardinality", "temporal_model", "pit_safe"
+        "domain", "frequency", "cardinality", "temporal_model", "pit_safe",
+        # Field-schema metadata attached by the catalog-bound DSL parser path
+        # (``api.dsl_parser`` -> ``field()`` -> FieldRef): a bare ``col()``
+        # ColumnRef carries only ``name``, so structural source_expr parity must
+        # ignore these to compare operator topology alone.
+        "field", "dtype", "unit",
     })
 
     def _serialize(node) -> dict:

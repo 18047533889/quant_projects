@@ -2,8 +2,8 @@
   "schema_version": 2,
   "artifact_kind": "test_passed",
   "certification_mode": "direct",
-  "passed_at": "2026-08-06T19:55:12.599974+00:00",
-  "commit_sha": "43d6c4aff8390504d49e5bd7305ce7ef413ecacf",
+  "passed_at": "2026-08-06T20:17:21.471971+00:00",
+  "commit_sha": "35c4c4f22588d6d90f183f0f0aece3312b3016bf",
   "runtime_versions": {
     "python": "3.10.12",
     "numpy": "2.2.6",
@@ -931,7 +931,7 @@
     "pandas_reference_execution"
   ],
   "hashes": {
-    "cleaned_operator_python_tree_hash": "7dd88bc60e84cda6",
+    "cleaned_operator_python_tree_hash": "da0ddeb083d82a77",
     "api_python_tree_hash": "57b273cfed19d244",
     "ir_python_tree_hash": "6aefe70421d86710",
     "planner_python_tree_hash": "65559539026fbcda",

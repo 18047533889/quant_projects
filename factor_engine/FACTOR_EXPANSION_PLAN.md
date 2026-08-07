@@ -963,4 +963,27 @@ A股 `side`、quantile-kurtosis `outer/inner`(2-tuple)、hurst DFA scale 做了�
   `duckdb_nan_edge_verified`/`duckdb_inf_edge_verified` 证据，而 IEEE edge 用例
   （`DUCKDB_IEEE_NAN_CASES` / `DUCKDB_IEEE_INF_CASES`）仅覆盖 3 个 —— 该不一致存在于
   committed 基线，需补齐 IEEE edge 用例并重认证 primitive 证据后 audit 才能全绿。
+
+  **2026-08-07 复核后此阻塞已解除**：`reconcile_operator_certification`（六证唯一权威）对 edge
+  gate 采用 "edge 跟随 implementation gate"（§11.7），即算子一旦有证据绑定的 production 后端，
+  edge 即通过；无 implementation 证据则六证整体 fail-closed。复核确认全部 24 个 primitive
+  当前 `status=production`、`edge_final=True`、daily 表面；strict admission audit 全量 992 通过。
+  IEEE edge 用例覆盖度（rank/is_finite）低于 `NAN_REQUIRED` 声明仍是证据层面的已知差距，
+  但不构成生产门禁阻塞，保持 fail-closed 声明语义。
+
+### 13.6 2026-08-07 收尾修复（本轮）
+- `evidence/factor_operator_verified.json` **hashes 过期**是 audit 524 失败的直接根因
+  （`execution-semantic source hashes are stale` → `factor_operator_evidence_valid()=False` →
+  overlay 将全部 production_certified 置 False → reconcile 降级 experimental）。
+  `certify_factor_operator_evidence.py` 重跑（runtime audit 992 全过）后重建，direct 模式 906 算子，
+  `validation_errors=[]`；strict admission audit 重新全绿。
+- `evidence/intraday_minute_parity.json` 因新增 intra_* 算子使 `operator_source_hash` 变化而过期；
+  `certify_intraday_parity.py` 重跑（pytest gate 通过）重建，--check 一致。
+- `storage/catalog.py::compute_ir_hash`：`_CATALOG_ATTRS` 补齐 `field`/`dtype`/`unit`。
+  DSL parser 路径经 `field()` 富化列（含这三项），而 API `col()` 只带 `name`，导致
+  `test_production_run_requires_all_flags` 的 source_expr 结构哈希不一致（496be2d2 != c5b19103）。
+  `structural_only` 语义为"忽略 FieldRef 特有 catalog 元数据、只比算子拓扑"，补齐后该测试通过。
+- 复核确认：61 算子 `production_eligible_backends=('pandas_numpy',)`（polars bridge 属
+  compatibility bridge 按 `_remove_declared_bridges` 设计移除，pandas reference 为认证生产后端）；
+  317 个 daily 表面 experimental 算子属注册即 fail-closed 的既定设计（audit 显式跳过），非缺陷。
 - 未实现项：duckdb SQL 后端（与既有评审结论一致，不强行实现）；recipe 族未在本轮范围。
