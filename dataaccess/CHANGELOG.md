@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.6.0 — 热路径性能 / PIT 语义级下沉 / FE 消费
+
+**read_joined 重写（P0）**
+- 右表 instrument_filter 下推（exact/asof/pit_asof 一律，不再只筛锚点）。
+- 显式 join 列（`TemporalJoinSpec` 的 decision_time/knowledge_time），修复跨表列名 bug。
+- PIT seed+window：asof 右表只读 `[start,end]` 窗口 + 每标的 start 前最后一条可见记录，
+  语义与全历史 ASOF 逐字节一致（不再扫全历史）。
+- revision 去重（QUALIFY ROW_NUMBER 按 revision_order），exact/asof 都不膨胀。
+
+**语义级 PIT（#3/#4）**
+- `TemporalJoinSpec`（`read/temporal_join.py`）：knowledge_time/period_time/revision_order/
+  availability（next_trading_day 用严格大于实现 A 股盘后落地可见性）；catalog 字段自动推导。
+- SemanticFieldCatalog 时间语义核对：财务字段 knowledge_time→PubDate、revision_order、
+  `total_liabilities` 列名修正；datasets.yaml 补齐财务 schema；四方审计脚本
+  `scripts/audit_semantic_consistency.py`。
+- `required_filters` 强制执行（production fail-closed / research 告警）。
+
+**DataRequest / universe（#7/#15）**
+- DataRequest 新增 source_params/filters_by_dataset/join_specs/field_params/aggregations/
+  transforms/time_varying_universe；universe 按 (date,instrument) 时变成员 INNER JOIN。
+
+**Manifest O(1)（#17-#22）**
+- `manifest_version` 去掉 O(N) glob；写路径 bump epoch、read path 信任；typed min/max 比较；
+  `_time_key` 不再 `[:10]` 截断；空裁剪返回空 relation；snapshot 复用 manifest 文件元数据；
+  row-group 统计持久化。
+
+**成本/治理/引擎**
+- ScanCost 真实 CBO（manifest 裁剪 + projection 字节 + EMA 校准）。
+- RelationHandle 生产禁 `.relation` fetch，新增 schema/columns/types/sql_fragment。
+- ReadHandle.rows 不触发 lazy collect；Deadline 连接池；`execute_reader(deadline_ms=)`。
+- 分钟聚合下推（`read/aggregation.py`：minute_at/minute_range/minute_of_day）。
+
+**FactorEngine 消费**
+- DataAccessSource catalog 优先解析 + `normalize_units=True`（不再双重归一化）。
+- 清直接 parquet 读（TurnoverBaseDaily/Intermediate → 登记数据集/因子湖）。
+- SourceRef 批量 coalesce（`load_source_refs_batch`）。
+- 分钟聚合 pushdown 接入；`ExecutionResourceManager`（n_jobs×threads≤cores）。
+
+**回归**：dataaccess 477 通过 / 0 失败；allowlist rc=0；语义审计 0 问题。
+
 ## 0.5.0 — DataAccess ↔ FactorEngine 集成层
 
 **字段语义单一事实源**

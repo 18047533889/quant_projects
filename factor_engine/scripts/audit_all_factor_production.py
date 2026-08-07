@@ -178,6 +178,8 @@ _SCALAR_VALUES: dict[str, Any] = {
     "ridge": 1e-3,
     "steps": 2,
     "max_interval": 16,
+    "event_lag": 1,
+    "n_updates": 5,
     "min_history": 4,
     "lookback_periods": 8,
     "seasonal_lag": 4,
