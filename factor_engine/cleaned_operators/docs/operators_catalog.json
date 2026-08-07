@@ -1,10 +1,10 @@
 {
   "schema_version": 2,
-  "canonical_count": 1090,
+  "canonical_count": 1107,
   "surface_counts": {
     "daily": 1015,
-    "extended": 10,
-    "research": 54,
+    "extended": 20,
+    "research": 61,
     "unsafe": 7,
     "legacy": 1,
     "internal": 3,
@@ -2719,6 +2719,19 @@
       "scope": "cs",
       "lookback": null,
       "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "cs_sliced_wasserstein_copula_shift",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "cs",
+      "lookback": null,
+      "min_periods": 2,
       "lag": 0
     },
     {
@@ -5657,6 +5670,19 @@
       "lag": 0
     },
     {
+      "canonical": "group_spd_feature_structure_shift",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "group",
+      "lookback": null,
+      "min_periods": 2,
+      "lag": 0
+    },
+    {
       "canonical": "group_std",
       "surface": "daily",
       "aliases": [],
@@ -5838,6 +5864,19 @@
       "scope": "elementwise",
       "lookback": null,
       "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "holder_class_js_shift",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 2,
       "lag": 0
     },
     {
@@ -7959,6 +7998,19 @@
       "lag": 0
     },
     {
+      "canonical": "intraday_barrier_approach_acceleration",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "session_intraday",
+      "lookback": null,
+      "min_periods": 20,
+      "lag": 0
+    },
+    {
       "canonical": "intraday_bvc_imbalance",
       "surface": "daily",
       "aliases": [],
@@ -8040,6 +8092,45 @@
       "scope": "ts",
       "lookback": null,
       "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "intraday_wasserstein_pair_distance",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "session_intraday",
+      "lookback": null,
+      "min_periods": 20,
+      "lag": 0
+    },
+    {
+      "canonical": "intraday_wasserstein_quantile_pca_residual",
+      "surface": "research",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": false,
+      "scope": "session_intraday",
+      "lookback": null,
+      "min_periods": 20,
+      "lag": 0
+    },
+    {
+      "canonical": "intraday_wasserstein_quantile_pca_score",
+      "surface": "research",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": false,
+      "scope": "session_intraday",
+      "lookback": null,
+      "min_periods": 20,
       "lag": 0
     },
     {
@@ -9619,6 +9710,19 @@
       "lag": 0
     },
     {
+      "canonical": "report_benford_js_divergence",
+      "surface": "research",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": false,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
       "canonical": "report_rolling_mean",
       "surface": "daily",
       "aliases": [],
@@ -10724,6 +10828,19 @@
       "lag": 0
     },
     {
+      "canonical": "ts_betti_1_max_persistence",
+      "surface": "research",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": false,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 2,
+      "lag": 0
+    },
+    {
       "canonical": "ts_bottomk_mean",
       "surface": "daily",
       "aliases": [
@@ -10792,6 +10909,19 @@
         "pandas_numpy",
         "polars",
         "sql"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_bures_corr_shift",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -11357,6 +11487,19 @@
       "scope": "ts",
       "lookback": null,
       "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_effective_transfer_entropy",
+      "surface": "research",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": false,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 2,
       "lag": 0
     },
     {
@@ -12107,6 +12250,32 @@
       "scope": "ts",
       "lookback": null,
       "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_kramers_moyal_diffusion",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_kramers_moyal_drift",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -13065,6 +13234,19 @@
       "lag": 0
     },
     {
+      "canonical": "ts_persistence_diagram_shift",
+      "surface": "research",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": false,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 2,
+      "lag": 0
+    },
+    {
       "canonical": "ts_pivot_high_age",
       "surface": "daily",
       "aliases": [],
@@ -13846,6 +14028,19 @@
       "lag": 0
     },
     {
+      "canonical": "ts_score_rank_weighted_mean",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
       "canonical": "ts_semivariance_balance",
       "surface": "daily",
       "aliases": [],
@@ -14079,6 +14274,19 @@
       "scope": "ts",
       "lookback": null,
       "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_student_t_fisher_shift",
+      "surface": "research",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": false,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 2,
       "lag": 0
     },
     {
@@ -14390,6 +14598,19 @@
       "backends": [
         "pandas_numpy",
         "polars"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_transfer_entropy",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
       ],
       "pit_safe": true,
       "scope": "ts",

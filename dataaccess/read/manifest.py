@@ -40,6 +40,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 MANIFEST_FILENAME = "_manifest.parquet"
+_MANIFEST_META_FILENAME = "_manifest.json"
 
 _MANIFEST_COLUMNS = [
     "path",
@@ -144,6 +145,37 @@ class DatasetManifest:
     def file_count(self) -> int:
         return len(self.files)
 
+    @property
+    def schema_hashes(self) -> tuple[str, ...]:
+        return tuple(sorted({f.schema_hash for f in self.files if f.schema_hash}))
+
+    @property
+    def dataset_version(self) -> str:
+        """数据集内容版本：schema + 列定义 + 文件集合（结构变 → 版本变）。"""
+        payload = {
+            "format": self.format,
+            "time_column": self.time_column,
+            "instrument_column": self.instrument_column,
+            "schema_hashes": list(self.schema_hashes),
+            "file_count": self.file_count,
+        }
+        return hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()[:16]
+
+    @property
+    def partition_version(self) -> str:
+        """物理分区版本：文件数 + 字节 + 最大 mtime（新文件/替换 → 版本变）。"""
+        max_mtime = max((f.mtime_ns or 0) for f in self.files) if self.files else 0
+        payload = {
+            "file_count": self.file_count,
+            "total_bytes": self.total_bytes,
+            "max_mtime_ns": max_mtime,
+        }
+        return hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()[:16]
+
     def to_table(self) -> pa.Table:
         rows = [f.to_row() for f in self.files]
         arrays: dict[str, list[Any]] = {c: [] for c in _MANIFEST_COLUMNS}
@@ -153,7 +185,7 @@ class DatasetManifest:
         return pa.table(arrays)
 
     def save(self, root: Path) -> Path:
-        """写入 ``{root}/_manifest.parquet``（原子替换）。"""
+        """写入 ``{root}/_manifest.parquet`` + ``_manifest.json``（meta，原子替换）。"""
         root = Path(root)
         root.mkdir(parents=True, exist_ok=True)
         table = self.to_table()
@@ -161,6 +193,25 @@ class DatasetManifest:
         tmp = root / f".{MANIFEST_FILENAME}.tmp"
         pq.write_table(table, tmp)
         os.replace(str(tmp), str(out))
+        # meta 放独立 JSON sidecar（footer key-value metadata 各版本 pyarrow 行为不稳）
+        meta_path = root / _MANIFEST_META_FILENAME
+        tmp_meta = root / f".{_MANIFEST_META_FILENAME}.tmp"
+        tmp_meta.write_text(
+            json.dumps(
+                {
+                    "dataset": self.dataset,
+                    "time_column": self.time_column,
+                    "instrument_column": self.instrument_column,
+                    "format": self.format,
+                    "created_at": self.created_at,
+                    "file_count": self.file_count,
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
+        os.replace(str(tmp_meta), str(meta_path))
         return out
 
     @classmethod
@@ -190,7 +241,7 @@ class DatasetManifest:
                     etag=_str_or_none(_at(data, "etag", i)),
                 )
             )
-        meta = _read_manifest_meta(path)
+        meta = _read_manifest_meta_json(root)
         return cls(
             dataset=meta.get("dataset", ""),
             time_column=meta.get("time_column"),
@@ -274,18 +325,24 @@ def _str_or_none(value: Any) -> str | None:
     return str(value)
 
 
-def _read_manifest_meta(path: Path) -> dict[str, str]:
-    """读 parquet key-value metadata（dataset/time_column/format/created_at）。"""
-    try:
-        meta = pq.read_metadata(str(path))
-        kvs = meta.metadata
-        out: dict[str, str] = {}
-        if kvs is not None:
-            for i in range(kvs.num_items):
-                out[kvs.key(i)] = kvs.value(i)
-        return out
-    except Exception:
+def _read_manifest_meta_json(root: Path) -> dict[str, str]:
+    """读 ``_manifest.json`` sidecar（dataset/time_column/format/created_at）。"""
+    path = Path(root) / _MANIFEST_META_FILENAME
+    if not path.exists():
         return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    return {
+        "dataset": str(payload.get("dataset", "")),
+        "time_column": payload.get("time_column"),
+        "instrument_column": payload.get("instrument_column"),
+        "format": str(payload.get("format", "parquet")),
+        "created_at": payload.get("created_at"),
+    }
 
 
 def manifest_root_for_paths(paths: Sequence[str]) -> Path | None:
@@ -309,14 +366,21 @@ def is_manifest_fresh(manifest: DatasetManifest, glob_paths: Sequence[str]) -> b
         if str(pattern).startswith("s3://"):
             # 远程无法本地计数 → 信任 manifest（COS 对象按日不变）
             return True
+        matches = []
         if "*" in pattern or "?" in pattern or "[" in pattern:
-            count += len(glob_module.glob(pattern, recursive=True))
+            matches = glob_module.glob(pattern, recursive=True)
         else:
             p = Path(pattern)
             if p.is_dir():
-                count += len(list(p.rglob("*.parquet")))
+                matches = [str(x) for x in p.rglob("*.parquet")]
             elif p.suffix in {".parquet", ".csv", ".tsv", ".jsonl", ".arrow", ".feather"} and p.exists():
-                count += 1
+                matches = [str(p)]
+        for m in matches:
+            # manifest 自身（_manifest.parquet / _manifest.json）不算数据文件
+            name = str(m).split("/")[-1]
+            if name == MANIFEST_FILENAME or name == _MANIFEST_META_FILENAME:
+                continue
+            count += 1
     return count == manifest.file_count
 
 
@@ -421,26 +485,7 @@ def build_manifest_for_dataset(
         row_groups=tuple(row_groups) if row_groups else None,
         created_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     )
-    out_path = manifest.save(root)
-    try:
-        meta = pq.read_metadata(str(out_path))
-        # 把 dataset 信息塞进 key-value metadata（重写一次）
-        table = pq.read_table(str(out_path))
-        kv = dict(table.schema.metadata or {})
-        kv.update(
-            {
-                b"dataset": manifest.dataset.encode(),
-                b"time_column": (manifest.time_column or "").encode(),
-                b"instrument_column": (manifest.instrument_column or "").encode(),
-                b"format": manifest.format.encode(),
-                b"created_at": (manifest.created_at or "").encode(),
-            }
-        )
-        tmp = out_path.with_suffix(".tmp")
-        pq.write_table(table, tmp, metadata=kv)
-        os.replace(str(tmp), str(out_path))
-    except Exception:
-        pass
+    manifest.save(root)
     return manifest
 
 

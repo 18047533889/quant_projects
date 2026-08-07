@@ -2,11 +2,18 @@
 from __future__ import annotations
 
 from data_access.core.engine import DuckDBEngine, get_shared_engine, reset_shared_engine
-from data_access.core.exceptions import DataAccessError, DataError, EngineError, ValidationError
+from data_access.core.exceptions import (
+    DataAccessError,
+    DataError,
+    DeadlineExceeded,
+    EngineError,
+    ValidationError,
+)
 from data_access.read.key_policy import KeyPolicy
 from data_access.read.query_budget import QueryBudget
 from data_access.read.read_contract import DataSnapshot, ReadResult, SqlReadResult
 from data_access.read.scan_handle import ScanHandle
+from data_access.read.read_handle import ReadHandle
 from . import store as _store_module
 from .store import DataAccessStore, get_store as _get_store, reset_store
 from .cos_contract import (
@@ -43,12 +50,14 @@ __all__ = [
     "ValidationError",
     "DataError",
     "EngineError",
+    "DeadlineExceeded",
     "QueryBudget",
     "KeyPolicy",
     "DataSnapshot",
     "ReadResult",
     "SqlReadResult",
     "ScanHandle",
+    "ReadHandle",
     "COSDatasetContract",
     "COS_DATASET_CONTRACTS",
     "get_cos_contract",
@@ -64,4 +73,4 @@ from importlib.metadata import PackageNotFoundError, version as _package_version
 try:
     __version__ = _package_version("data-access")
 except PackageNotFoundError:
-    __version__ = "0.3.1+local"
+    __version__ = "0.4.0+local"

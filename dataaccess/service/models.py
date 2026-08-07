@@ -75,3 +75,31 @@ class ReadResponseMeta(BaseModel):
     bytes: int
     elapsed_ms: float
     format: str
+
+
+class ReadURIRequest(BaseModel):
+    """POST /v1/read_uri 请求体（不必先登记数据集）。"""
+
+    uri: str
+    columns: list[str] | None = None
+    time_range: tuple[str | None, str | None] | None = None
+    instrument_filter: list[str] | None = None
+    filters: dict[str, Any] | None = None
+    format: str = "auto"
+    time_column: str | None = None
+    instrument_column: str | None = None
+    limit: int | None = None
+    format_out: Literal["parquet", "arrow_ipc", "json"] = "parquet"
+
+
+class FactorReadRequest(BaseModel):
+    """POST /v1/factors/read 请求体（一次读多因子）。"""
+
+    factor_ids: list[str]
+    time_range: tuple[str | None, str | None] | None = None
+    layout: Literal["long", "wide"] = "long"
+    columns: list[str] | None = None
+    universe: str | None = None
+    frequency: str | None = None
+    limit: int | None = None
+    format: Literal["parquet", "arrow_ipc", "json"] = "parquet"

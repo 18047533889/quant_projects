@@ -1,0 +1,264 @@
+# ############################################################################
+# SemanticFieldCatalog —— 逻辑字段语义单一事实源
+#
+# 每个条目声明：逻辑字段 → 物理数据集 + 物理列，以及单位/时间语义/PIT·join
+# 策略/mining 权限。DataAccess 的 store.resolve_fields() 消费它；FactorEngine
+# 的 FIELD_REGISTRY 应改为消费或生成自这份 catalog，禁止两套定义长期漂移。
+#
+# 字段约定：
+#   dataset        datasets.yaml 里注册的数据集名（必填）
+#   physical_name 数据集内的物理列名（缺省 = 逻辑名）
+#   scale          source_unit → canonical_unit 的乘子；None/1.0 表示不归一化
+#   join_policy    exact / pit_asof_backward / latest_period ...
+#   _ 前缀的键是锚点模板，不会当字段。
+# ############################################################################
+
+_ratio_field: &ratio_field
+  source_unit: percent
+  canonical_unit: ratio
+
+# ---- 行情（价格/量，无单位归一化） ----
+
+close:
+  dataset: ashare_stock_daily
+  physical_name: Close
+  dtype: double
+  frequency: daily
+  grain: instrument
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true
+
+open:
+  dataset: ashare_stock_daily
+  physical_name: Open
+  dtype: double
+  frequency: daily
+  grain: instrument
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+
+high:
+  dataset: ashare_stock_daily
+  physical_name: High
+  dtype: double
+  frequency: daily
+  grain: instrument
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+
+low:
+  dataset: ashare_stock_daily
+  physical_name: Low
+  dtype: double
+  frequency: daily
+  grain: instrument
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+
+volume:
+  dataset: ashare_stock_daily
+  physical_name: Volume
+  dtype: int
+  frequency: daily
+  grain: instrument
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+
+amount:
+  dataset: ashare_stock_daily
+  physical_name: Amount
+  dtype: double
+  frequency: daily
+  grain: instrument
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+
+vwap:
+  dataset: ashare_stock_daily
+  physical_name: Vwap
+  dtype: double
+  frequency: daily
+  grain: instrument
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+
+# 收益率 bp → decimal
+return_bp:
+  dataset: ashare_stock_daily
+  physical_name: Return
+  dtype: double
+  frequency: daily
+  grain: instrument
+  source_unit: bp
+  canonical_unit: decimal
+  scale: 0.0001
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+
+# ---- 估值（日频，随行情 exact join） ----
+
+market_cap:
+  dataset: ashare_stock_valuation_daily
+  physical_name: MarketCap
+  dtype: double
+  frequency: daily
+  grain: instrument
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+
+circulating_market_cap:
+  dataset: ashare_stock_valuation_daily
+  physical_name: CirculatingMarketCap
+  dtype: double
+  frequency: daily
+  grain: instrument
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+
+pe_ratio:
+  dataset: ashare_stock_valuation_daily
+  physical_name: PeRatio
+  dtype: double
+  frequency: daily
+  grain: instrument
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+
+pb_ratio:
+  dataset: ashare_stock_valuation_daily
+  physical_name: PbRatio
+  dtype: double
+  frequency: daily
+  grain: instrument
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+
+# TurnoverRatio % → ratio
+turnover_ratio:
+  dataset: ashare_stock_valuation_daily
+  physical_name: TurnoverRatio
+  dtype: double
+  frequency: daily
+  grain: instrument
+  <<: *ratio_field
+  scale: 0.01
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  aliases: [turnover]
+
+# ---- 指标（日频，含财报期引用；ROE % → ratio） ----
+
+eps:
+  dataset: ashare_stock_indicator
+  physical_name: Eps
+  dtype: double
+  frequency: daily
+  grain: instrument
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+
+roe:
+  dataset: ashare_stock_indicator
+  physical_name: Roe
+  dtype: double
+  frequency: daily
+  grain: instrument
+  <<: *ratio_field
+  scale: 0.01
+  time_role: knowledge_time
+  temporal_model: financial_event
+  knowledge_time: PubDate
+  effective_time: ReportPeriodEndDate
+  period_time: ReportPeriodEndDate
+  join_policy: pit_asof_backward
+  mining_allowed: true
+
+# ---- 资产负债表（事件/时点表，PIT asof 对齐） ----
+
+total_assets:
+  dataset: ashare_stock_balance
+  physical_name: TotalAssets
+  dtype: double
+  frequency: quarterly
+  grain: instrument
+  time_role: knowledge_time
+  temporal_model: financial_event
+  knowledge_time: TradeDate
+  effective_time: ReportPeriodEndDate
+  period_time: ReportPeriodEndDate
+  join_policy: pit_asof_backward
+  mining_allowed: true
+
+total_liabilities:
+  dataset: ashare_stock_balance
+  physical_name: TotalLiabilities
+  dtype: double
+  frequency: quarterly
+  grain: instrument
+  time_role: knowledge_time
+  temporal_model: financial_event
+  knowledge_time: TradeDate
+  effective_time: ReportPeriodEndDate
+  period_time: ReportPeriodEndDate
+  join_policy: pit_asof_backward
+  mining_allowed: true
+
+# ---- 利润表 ----
+
+operating_revenue:
+  dataset: ashare_stock_income
+  physical_name: OperatingRevenue
+  dtype: double
+  frequency: quarterly
+  grain: instrument
+  time_role: knowledge_time
+  temporal_model: financial_event
+  knowledge_time: TradeDate
+  effective_time: ReportPeriodEndDate
+  period_time: ReportPeriodEndDate
+  join_policy: pit_asof_backward
+  mining_allowed: true
+  aliases: [revenue]
+
+net_profit:
+  dataset: ashare_stock_income
+  physical_name: NetProfit
+  dtype: double
+  frequency: quarterly
+  grain: instrument
+  time_role: knowledge_time
+  temporal_model: financial_event
+  knowledge_time: TradeDate
+  effective_time: ReportPeriodEndDate
+  period_time: ReportPeriodEndDate
+  join_policy: pit_asof_backward
+  mining_allowed: true
+  aliases: [net_income]
+
+# ---- 指数权重（成分股权重，精确日频） ----
+
+index_weight:
+  dataset: ashare_index_constituent
+  physical_name: Weight
+  dtype: double
+  frequency: daily
+  grain: instrument
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  mining_allowed: true

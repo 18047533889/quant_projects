@@ -155,6 +155,13 @@ _LOAD_MODULES = (
     "cleaned_operators.microstructure.flow_impact",
     "cleaned_operators.polars_chip_tail",
     "cleaned_operators.microstructure.polars_flow_impact",
+    # Advanced information-theoretic / structure / intraday / topology operators
+    # (2026-08 Gemini round): transfer entropy, Bures/Kramers-Moyal/SW-copula/
+    # SPD structure shift, barrier approach, Wasserstein-quantile PCA, Rips H1.
+    "cleaned_operators.advanced_information",
+    "cleaned_operators.advanced_structure",
+    "cleaned_operators.advanced_intraday",
+    "cleaned_operators.advanced_topology",
 )
 
 _REVIEWED_EXTENSIONS = (

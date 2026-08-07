@@ -24,6 +24,7 @@ data_access.sql_escape —— 有限的 SQL 逃生口
 
 from __future__ import annotations
 
+import datetime as _dt
 import logging
 import os
 import re
@@ -305,7 +306,10 @@ def run_sql(
 
     try:
         result_table = engine.execute_scoped_sql_arrow(
-            register_specs, bounded_query, params
+            register_specs,
+            bounded_query,
+            params,
+            deadline_ms=budget.max_elapsed_ms,
         )
         rows = result_table.num_rows
         elapsed_ms = (time.perf_counter() - start) * 1000
@@ -500,14 +504,36 @@ def _inline_path_params(sql: str, params: Sequence[Any]) -> str:
 
 
 def _format_literal(value: Any) -> str:
-    """把 registry 来的值渲染成 DuckDB SQL 字面量。只支持 str / list[str]。"""
+    """把 registry 来的值渲染成 DuckDB SQL 字面量。
+
+    支持：str / list / bool / int / float / datetime.date / datetime.datetime /
+    pandas.Timestamp（end-of-day 展开会生成 Timestamp）。
+    """
     if isinstance(value, str):
         escaped = value.replace("'", "''")
         return f"'{escaped}'"
-    if isinstance(value, list) and all(isinstance(x, str) for x in value):
+    if isinstance(value, list) and all(
+        isinstance(x, (str, int, float)) for x in value
+    ):
         inner = ", ".join(_format_literal(x) for x in value)
         return f"[{inner}]"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if value is None:
+        return "NULL"
+    if isinstance(value, _dt.datetime):
+        return f"TIMESTAMP '{value.isoformat()}'"
+    if isinstance(value, _dt.date):
+        return f"DATE '{value.isoformat()}'"
+    # pandas.Timestamp / pd.NaT 等
+    try:
+        ts = value.to_pydatetime()
+        return f"TIMESTAMP '{ts.isoformat()}'"
+    except AttributeError:
+        pass
     raise EngineError(
         f"sql inline 拒绝：参数类型 {type(value).__name__} 不在允许范围。"
-        f"sql_escape 只让 registry 来的路径字符串 inline；其它参数走用户 SQL 自己的 ? 绑定"
+        f"sql_escape 只让 registry 来的路径/时间/标量 inline；其它参数走用户 SQL 自己的 ? 绑定"
     )

@@ -54,8 +54,11 @@ us:
         encoding="utf-8",
     )
     reg = load_registry(cfg)
+    # date 时间列：归一化到日（A 股日频）
     assert adapter_options_for_dataset(reg.get("ashare"))["normalize_timestamp"] is True
-    assert adapter_options_for_dataset(reg.get("us"))["normalize_timestamp"] is True
+    # timestamp 时间列：保留完整精度（分钟/逐笔等多条同日内记录），
+    # 不设置 normalize_timestamp（否则会折叠成每 (日期, 标的) 一行）
+    assert "normalize_timestamp" not in adapter_options_for_dataset(reg.get("us"))
 
 
 def test_scan_polars_triggers_cos_mirror(monkeypatch, tmp_path):

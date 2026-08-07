@@ -26,11 +26,55 @@ def _creds_fingerprint(creds: S3Credentials) -> str:
 
 
 def apply_s3_credentials(conn, creds: S3Credentials) -> None:
-    """对 DuckDB 连接注入 S3/COS 访问参数。"""
+    """对 DuckDB 连接注入 S3/COS 访问参数。
+
+    新版本（>=1.1）用 ``CREATE OR REPLACE SECRET``（Secret Manager，支持
+    credential chain / refresh / scope）；老版本回退 ``SET s3_*``。选择由
+    DuckDBCapabilities 决定，不硬编码版本号。
+    """
     try:
         conn.execute("LOAD httpfs;")
     except Exception:
         conn.execute("INSTALL httpfs; LOAD httpfs;")
+
+    from data_access.core.duckdb_capabilities import get_duckdb_capabilities
+
+    if get_duckdb_capabilities().supports_create_secret:
+        try:
+            _apply_s3_secret(conn, creds)
+            return
+        except Exception as exc:
+            logger.warning(
+                "CREATE SECRET 失败（%s），回退 SET s3_* 注入", exc,
+            )
+    _apply_s3_legacy(conn, creds)
+
+
+def _apply_s3_secret(conn, creds: S3Credentials) -> None:
+    """DuckDB Secret Manager 方式：credential 变化自动按指纹重建。"""
+    secret_name = "data_access_cos"
+    use_ssl = "true" if creds.use_ssl else "false"
+    url_style = creds.url_style or "path"
+    # secret 名是标识符（非字符串字面量）；常量自持有，安全拼接
+    conn.execute(
+        f"CREATE OR REPLACE SECRET {secret_name} (TYPE S3,"
+        + f"KEY_ID {_sql_string(creds.access_key_id)},"
+        + f"SECRET {_sql_string(creds.secret_access_key)},"
+        + f"ENDPOINT {_sql_string(creds.endpoint)},"
+        + f"REGION {_sql_string(creds.region)},"
+        + f"USE_SSL {use_ssl},"
+        + f"URL_STYLE {_sql_string(url_style)});"
+    )
+    logger.info(
+        "duckdb httpfs secret configured endpoint=%s region=%s url_style=%s",
+        creds.endpoint,
+        creds.region,
+        url_style,
+    )
+
+
+def _apply_s3_legacy(conn, creds: S3Credentials) -> None:
+    """老版本 SET s3_* 注入。"""
     conn.execute(f"SET s3_access_key_id={_sql_string(creds.access_key_id)}")
     conn.execute(f"SET s3_secret_access_key={_sql_string(creds.secret_access_key)}")
     conn.execute(f"SET s3_endpoint={_sql_string(creds.endpoint)}")
@@ -38,7 +82,7 @@ def apply_s3_credentials(conn, creds: S3Credentials) -> None:
     conn.execute(f"SET s3_url_style={_sql_string(creds.url_style)}")
     conn.execute(f"SET s3_use_ssl={'true' if creds.use_ssl else 'false'}")
     logger.info(
-        "duckdb httpfs configured endpoint=%s region=%s url_style=%s",
+        "duckdb httpfs configured (legacy SET) endpoint=%s region=%s url_style=%s",
         creds.endpoint,
         creds.region,
         creds.url_style,

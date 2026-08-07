@@ -45,3 +45,11 @@ class EngineError(DataAccessError):
         - 读 parquet 时 pyarrow 抛 OSError / ArrowInvalid
         - 发布流程里 os.replace 失败
     """
+
+
+class DeadlineExceeded(DataAccessError):
+    """查询超过 max_elapsed_ms 被取消。
+
+    由 watchdog 在截止时间后调用 ``conn.interrupt()`` 触发；表示查询被主动
+    终止（而不是查完才发现超时）。
+    """

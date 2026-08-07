@@ -128,12 +128,25 @@ def resolve_duckdb_config(
 
 
 def apply_pragmas(conn: duckdb.DuckDBPyConnection, cfg: DuckDBConfig) -> None:
-    """对连接应用 PRAGMA；调用方负责在需要时加 catalog 写锁。"""
+    """对连接应用 PRAGMA；调用方负责在需要时加 catalog 写锁。
+
+    依赖版本能力层：``enable_object_cache`` 在当前 DuckDB 已 deprecated 时跳过
+    并告警一次（不能假设一个 PRAGMA 从 0.10 到未来版本语义永远一样）。
+    """
+    from .duckdb_capabilities import (
+        get_duckdb_capabilities,
+        warn_object_cache_once,
+    )
+
+    caps = get_duckdb_capabilities()
     conn.execute(f"PRAGMA threads={cfg.threads}")
     if cfg.memory_limit:
         conn.execute(f"PRAGMA memory_limit={_sql_string(cfg.memory_limit)}")
     if cfg.enable_object_cache:
-        conn.execute("PRAGMA enable_object_cache=true")
+        if caps.object_cache_deprecated:
+            warn_object_cache_once()
+        else:
+            conn.execute("PRAGMA enable_object_cache=true")
     conn.execute(
         "PRAGMA preserve_insertion_order="
         f"{'true' if cfg.preserve_insertion_order else 'false'}"

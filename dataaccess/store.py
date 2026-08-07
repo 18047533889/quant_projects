@@ -46,6 +46,7 @@ from data_access.core.exceptions import DataError, ValidationError
 from data_access.registry.params_validation import ParamSpec, params_fingerprint, validate_params
 from data_access.read.query_budget import (
     QueryBudget,
+    collect_polars_with_budget,
     enforce_arrow_budget,
     enforce_scan_file_budget,
     enforce_stream_budget,
@@ -70,6 +71,7 @@ from data_access.read.read_contract import (
     merge_sql_data_snapshots,
 )
 from data_access.read.scan_handle import ScanHandle
+from data_access.read.read_handle import ReadHandle
 from data_access.core.namespace import is_namespace_explicit, resolve_namespace
 from data_access.registry.paths import (
     PathAuthorizer,
@@ -334,6 +336,32 @@ class DataAccessStore:
     ) -> ReadResult:
         """读取数据集并返回带 ``DataSnapshot`` 的 ``ReadResult``（审计/lineage 用）。"""
         ds = self._registry.get(dataset)
+        return self._read_dataset_object(
+            ds,
+            dataset=dataset,
+            columns=columns,
+            time_range=time_range,
+            instrument_filter=instrument_filter,
+            filters=filters,
+            limit=limit,
+            query_budget=query_budget,
+            params=params,
+        )
+
+    def _read_dataset_object(
+        self,
+        ds: Dataset,
+        *,
+        dataset: str,
+        columns: Sequence[str] | None,
+        time_range: tuple[Any, Any] | None,
+        instrument_filter: Sequence[str] | None,
+        filters: Any,
+        limit: int | None,
+        query_budget: QueryBudget | None,
+        params: dict[str, Any],
+    ) -> ReadResult:
+        """按已解析的 ``Dataset`` 对象执行一次读（read_result / read_uri 共用）。"""
         _assert_instrument_filter_supported(ds, instrument_filter)
         budget = self._resolve_read_budget(ds, query_budget)
         validate_query_request(
@@ -374,7 +402,9 @@ class DataAccessStore:
         err_msg: str | None = None
         table: pa.Table | None = None
         try:
-            table = self._engine.execute_arrow(sql, sql_params)
+            table = self._engine.execute_arrow(
+                sql, sql_params, deadline_ms=budget.max_elapsed_ms
+            )
             elapsed_ms = (time.perf_counter() - start) * 1000
             enforce_arrow_budget(budget, table, elapsed_ms=elapsed_ms)
             ok = True
@@ -861,21 +891,36 @@ class DataAccessStore:
 
         大结果且需保持低内存峰值时，优先 ``read_auto_stream()``。
         """
-        from data_access.read.read_auto_router import resolve_read_auto_mode
-
         ds = self._registry.get(dataset)
         budget = self._resolve_read_budget(ds, query_budget)
-        resolved_mode, _stats = resolve_read_auto_mode(
-            self,
-            dataset,
-            columns=list(columns) if columns else None,
-            time_range=time_range,
-            query_budget=query_budget,
-            mode=mode,
-            prefer_polars=prefer_polars,
-            budget=budget,
-            **params,
-        )
+
+        resolved_mode = str(mode or "auto").lower()
+        if resolved_mode == "auto":
+            # 成本路由（rows/bytes/columns/files/remote/selectivity），不只行数
+            from data_access.read.scan_cost import (
+                estimate_scan_cost,
+                suggest_read_strategy,
+            )
+
+            cost = estimate_scan_cost(
+                self,
+                dataset,
+                columns=list(columns) if columns else None,
+                time_range=time_range,
+                instrument_filter=instrument_filter,
+                prefer_polars=prefer_polars,
+                **params,
+            )
+            engine, result = suggest_read_strategy(
+                cost, prefer_polars=prefer_polars, engine="auto", result="auto"
+            )
+            if engine == "polars":
+                resolved_mode = "polars"
+            elif result == "stream":
+                resolved_mode = "stream"
+            else:
+                resolved_mode = "arrow"
+            log_read_auto(dataset, cost, engine, result)
         validate_query_request(
             budget, columns=list(columns) if columns else None, time_range=time_range
         )
@@ -889,8 +934,6 @@ class DataAccessStore:
             **params,
         )
         if resolved_mode == "polars":
-            from data_access.read.query_budget import collect_polars_with_budget
-
             lf = self.scan_polars(dataset, **read_kwargs)
             table = collect_polars_with_budget(lf, query_budget=budget)
             if limit is not None and table.num_rows > limit:
@@ -938,21 +981,30 @@ class DataAccessStore:
         ``mode="auto"`` 仅影响路由日志；polars 路由会 fallback 到
         ``read_arrow_stream`` 并打 warning。需要 LazyFrame 时用 ``scan_polars``。
         """
-        from data_access.read.read_auto_router import resolve_read_auto_mode
-
         ds = self._registry.get(dataset)
         budget = self._resolve_read_budget(ds, query_budget)
-        resolved_mode, _stats = resolve_read_auto_mode(
-            self,
-            dataset,
-            columns=list(columns) if columns else None,
-            time_range=time_range,
-            query_budget=query_budget,
-            mode=mode,
-            prefer_polars=prefer_polars,
-            budget=budget,
-            **params,
-        )
+
+        resolved_mode = str(mode or "auto").lower()
+        if resolved_mode == "auto":
+            from data_access.read.scan_cost import (
+                estimate_scan_cost,
+                suggest_read_strategy,
+            )
+
+            cost = estimate_scan_cost(
+                self,
+                dataset,
+                columns=list(columns) if columns else None,
+                time_range=time_range,
+                instrument_filter=instrument_filter,
+                prefer_polars=prefer_polars,
+                **params,
+            )
+            engine, result = suggest_read_strategy(
+                cost, prefer_polars=prefer_polars, engine="auto", result="stream"
+            )
+            resolved_mode = "polars" if engine == "polars" else "stream"
+            log_read_auto(dataset, cost, engine, result)
         validate_query_request(
             budget, columns=list(columns) if columns else None, time_range=time_range
         )
@@ -982,6 +1034,629 @@ class DataAccessStore:
             limit=limit,
             **read_kwargs,
         )
+
+    # ---- 统一 read() / read_uri()（返回 ReadHandle） ----
+
+    def read(
+        self,
+        dataset: str,
+        *,
+        columns: Sequence[str] | None = None,
+        time_range: tuple[Any, Any] | None = None,
+        instrument_filter: Sequence[str] | None = None,
+        filters: Any = None,
+        limit: int | None = None,
+        engine: str = "auto",
+        result: str = "auto",
+        prefer_polars: bool = False,
+        batch_size: int = 100_000,
+        query_budget: QueryBudget | None = None,
+        **params: Any,
+    ) -> ReadHandle:
+        """统一读入口：引擎/结果形态自动路由，返回 ``ReadHandle``。
+
+        - ``engine``: auto | duckdb | polars | pyarrow
+        - ``result``: auto | arrow | pandas | polars | lazy | stream
+        auto 时按 `estimated_scan_cost`（rows/bytes/columns/files/remote/selectivity）
+        路由，而不是只看行数。
+
+        返回 ``ReadHandle``，支持 ``.to_arrow() / .to_pandas() / .to_polars() /
+        .to_lazy() / .stream()``。
+        """
+        ds = self._registry.get(dataset)
+        return self._read_handle(
+            ds,
+            dataset=dataset,
+            registered_name=dataset,
+            columns=columns,
+            time_range=time_range,
+            instrument_filter=instrument_filter,
+            filters=filters,
+            limit=limit,
+            engine=engine,
+            result=result,
+            prefer_polars=prefer_polars,
+            batch_size=batch_size,
+            query_budget=query_budget,
+            params=params,
+        )
+
+    def read_uri(
+        self,
+        uri: str,
+        *,
+        columns: Sequence[str] | None = None,
+        time_range: tuple[Any, Any] | None = None,
+        instrument_filter: Sequence[str] | None = None,
+        filters: Any = None,
+        limit: int | None = None,
+        format: str = "auto",
+        engine: str = "auto",
+        result: str = "auto",
+        prefer_polars: bool = False,
+        batch_size: int = 100_000,
+        query_budget: QueryBudget | None = None,
+        time_column: str | None = None,
+        instrument_column: str | None = None,
+        **kwargs: Any,
+    ) -> ReadHandle:
+        """直接读一个 URI（本地路径或 cos:// / s3://），不必先登记数据集。
+
+        **开发环境**：URI 静态前缀须在 PathAuthorizer 白名单根（已登记数据集根 +
+        DATA_ACCESS_EXTRA_ALLOWED_ROOTS + DATA_ACCESS_READ_URI_ROOTS）下。
+        **production / strict 读模式**：只允许落在已登记数据集根下，任意 URI 被拒。
+
+        ``format`` 不传时按扩展名推断（parquet/csv/tsv/jsonl/arrow/feather）。
+        arrow/feather 自动走 PyArrow 引擎。
+        """
+        from data_access.read.formats import normalize_format_name
+
+        uri = str(uri)  # 兼容 Path 对象
+        fmt = _infer_format_from_uri(uri, format)
+        self._assert_uri_allowed(uri, format=fmt)
+        ds = self._uri_dataset(
+            uri,
+            format=fmt,
+            time_column=time_column,
+            instrument_column=instrument_column,
+        )
+        return self._read_handle(
+            ds,
+            dataset=f"<uri:{uri[:80]}>",
+            registered_name=None,
+            columns=columns,
+            time_range=time_range,
+            instrument_filter=instrument_filter,
+            filters=filters,
+            limit=limit,
+            engine=engine,
+            result=result,
+            prefer_polars=prefer_polars,
+            batch_size=batch_size,
+            query_budget=query_budget,
+            params=kwargs,
+        )
+
+    def _read_handle(
+        self,
+        ds: Dataset,
+        *,
+        dataset: str,
+        registered_name: str | None,
+        columns: Sequence[str] | None,
+        time_range: tuple[Any, Any] | None,
+        instrument_filter: Sequence[str] | None,
+        filters: Any,
+        limit: int | None,
+        engine: str,
+        result: str,
+        prefer_polars: bool,
+        batch_size: int,
+        query_budget: QueryBudget | None,
+        params: dict[str, Any],
+    ) -> ReadHandle:
+        """统一 read 编排：engine 路由 + 结果形态。"""
+        from data_access.read.formats import format_adapter_for_dataset
+        from data_access.read.read_handle import ReadHandle
+
+        adapter = format_adapter_for_dataset(ds)
+
+        if engine == "auto":
+            if not adapter.uses_duckdb:
+                engine = "pyarrow"
+            elif registered_name is not None:
+                try:
+                    from data_access.read.scan_cost import (
+                        estimate_scan_cost,
+                        suggest_read_strategy,
+                    )
+
+                    cost = estimate_scan_cost(
+                        self,
+                        registered_name,
+                        columns=columns,
+                        time_range=time_range,
+                        instrument_filter=instrument_filter,
+                        prefer_polars=prefer_polars,
+                        **params,
+                    )
+                    engine, result = suggest_read_strategy(
+                        cost,
+                        prefer_polars=prefer_polars,
+                        engine="auto",
+                        result=result,
+                    )
+                except Exception:
+                    engine = "duckdb"
+            else:
+                engine = "duckdb"
+
+        if engine == "pyarrow":
+            return self._read_pyarrow(
+                ds,
+                dataset=dataset,
+                columns=columns,
+                time_range=time_range,
+                instrument_filter=instrument_filter,
+                filters=filters,
+                limit=limit,
+                query_budget=query_budget,
+                params=params,
+                batch_size=batch_size,
+            )
+        if engine == "polars":
+            budget = self._resolve_read_budget(ds, query_budget)
+            lf, paths = self._scan_polars_with_paths(
+                dataset,
+                columns=columns,
+                time_range=time_range,
+                instrument_filter=instrument_filter,
+                filters=filters,
+                query_budget=query_budget,
+                **params,
+            )
+            snapshot = self._build_snapshot(
+                dataset=dataset, ds=ds, paths=paths, params=params
+            )
+            lineage = ReadLineage(
+                dataset=dataset,
+                columns=tuple(columns) if columns else (),
+                time_range=time_range,
+                instrument_filter=tuple(instrument_filter) if instrument_filter else (),
+                params=snapshot.params,
+            )
+            if result in {"lazy", "polars"}:
+                return ReadHandle(
+                    lazy=lf, snapshot=snapshot, lineage=lineage, batch_size=batch_size
+                )
+            table = collect_polars_with_budget(lf, query_budget=budget)
+            stats = ReadStats(
+                rows=table.num_rows, bytes=table.nbytes, elapsed_ms=0.0
+            )
+            return ReadHandle(table=table, snapshot=snapshot, stats=stats, lineage=lineage)
+
+        # duckdb：走标准 read 路径（含 budget/audit/snapshot）
+        rr = self._read_dataset_object(
+            ds,
+            dataset=dataset,
+            columns=columns,
+            time_range=time_range,
+            instrument_filter=instrument_filter,
+            filters=filters,
+            limit=limit,
+            query_budget=query_budget,
+            params=params,
+        )
+        handle = ReadHandle(table=rr.table, snapshot=rr.snapshot, stats=rr.stats, lineage=rr.lineage)
+        if result == "stream":
+            # 大结果：给一个低内存峰值的流句柄
+            return ReadHandle(
+                stream=self.read_arrow_stream(
+                    dataset,
+                    columns=columns,
+                    time_range=time_range,
+                    instrument_filter=instrument_filter,
+                    filters=filters,
+                    limit=limit,
+                    batch_size=batch_size,
+                    query_budget=query_budget,
+                    **params,
+                ),
+                snapshot=rr.snapshot,
+                lineage=rr.lineage,
+                batch_size=batch_size,
+            )
+        return handle
+
+    def _read_pyarrow(
+        self,
+        ds: Dataset,
+        *,
+        dataset: str,
+        columns: Sequence[str] | None,
+        time_range: tuple[Any, Any] | None,
+        instrument_filter: Sequence[str] | None,
+        filters: Any,
+        limit: int | None,
+        query_budget: QueryBudget | None,
+        params: dict[str, Any],
+        batch_size: int,
+    ) -> ReadHandle:
+        """PyArrow 引擎（arrow/feather 格式）：直读文件 + pc 表达式过滤。"""
+        import pyarrow.compute as pc
+
+        from data_access.read.formats import pyarrow_engine_read
+        from data_access.read.manifest import manifest_root_for_paths
+        from data_access.read.predicate_ast import compile_filter_arrow, parse_filters
+        from data_access.read.read_handle import ReadHandle
+
+        budget = self._resolve_read_budget(ds, query_budget)
+        validate_query_request(
+            budget, columns=list(columns) if columns else None, time_range=time_range
+        )
+        paths = self._prepare_dataset_read(
+            ds,
+            time_range=None,
+            params=params,
+            instrument_filter=instrument_filter,
+        )
+        files = build_file_manifest(paths)
+        self._enforce_scan_files(budget, paths, files=files)
+
+        start = time.perf_counter()
+        table = pyarrow_engine_read(
+            paths, fmt=str(ds.format), columns=list(columns) if columns else None
+        )
+
+        # 过滤：time_range + instrument_filter + filters（pc 表达式）
+        exprs: list[Any] = []
+        if time_range is not None:
+            if ds.time_column is None:
+                raise ValidationError(
+                    f"'{dataset}' 未声明 time_column，无法应用 time_range"
+                )
+            field_type = table.schema.field(ds.time_column).type
+            start_v, end_v = time_range
+            if start_v is not None:
+                exprs.append(pc.greater_equal(pc.field(ds.time_column), _cast_scalar(start_v, field_type)))
+            if end_v is not None:
+                exprs.append(pc.less_equal(pc.field(ds.time_column), _cast_scalar(end_v, field_type)))
+        if instrument_filter:
+            if ds.instrument_column is None:
+                raise ValidationError(
+                    f"'{dataset}' 未声明 instrument_column，无法应用 instrument_filter"
+                )
+            exprs.append(pc.is_in(pc.field(ds.instrument_column), list(instrument_filter)))
+        if filters is not None:
+            expr = compile_filter_arrow(parse_filters(filters))
+            if expr is not None:
+                exprs.append(expr)
+        if exprs:
+            combined = exprs[0]
+            for e in exprs[1:]:
+                combined = pc.and_kleene(combined, e)
+            table = table.filter(combined)
+        if limit is not None:
+            table = table.slice(0, int(limit))
+
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        enforce_arrow_budget(budget, table, elapsed_ms=elapsed_ms)
+        snapshot = self._build_snapshot(
+            dataset=dataset, ds=ds, paths=paths, params=params, files=files
+        )
+        lineage = ReadLineage(
+            dataset=dataset,
+            columns=tuple(columns) if columns else (),
+            time_range=time_range,
+            instrument_filter=tuple(instrument_filter) if instrument_filter else (),
+            params=snapshot.params,
+        )
+        stats = ReadStats(
+            rows=table.num_rows, bytes=table.nbytes, elapsed_ms=elapsed_ms,
+            paths=tuple(paths[:20]),
+        )
+        audit.record(
+            op="read",
+            dataset=dataset,
+            ok=True,
+            rows=table.num_rows,
+            paths=paths[:5] if paths else None,
+            params=params or None,
+            elapsed_ms=elapsed_ms,
+            extra={"engine": "pyarrow", "format": ds.format},
+        )
+        return ReadHandle(table=table, snapshot=snapshot, stats=stats, lineage=lineage, batch_size=batch_size)
+
+    def _uri_dataset(
+        self,
+        uri: str,
+        *,
+        format: str,
+        time_column: str | None,
+        instrument_column: str | None,
+    ) -> Dataset:
+        """把 URI 包装成临时 StaticDataset（用于 read_uri，不改 registry）。"""
+        from data_access.registry.loader import StaticDataset
+        from data_access.read.formats import FormatSpec, default_glob_for_format
+
+        is_remote = uri.startswith("s3://") or uri.startswith("cos://")
+        if is_remote:
+            root = Path("/")  # 远程路径鉴权走 s3 前缀白名单
+            glob = uri
+        else:
+            p = Path(uri)
+            if "*" in uri or "?" in uri or "[" in uri:
+                static = uri.split("*", 1)[0].rstrip("/")
+                root = canonicalize(static) if static else Path(uri).parent
+                glob = uri
+            elif p.is_dir():
+                root = canonicalize(uri)
+                glob = default_glob_for_format(format)
+            else:
+                root = canonicalize(p.parent)
+                glob = p.name
+        return StaticDataset(
+            name=f"_uri:{format}:{uri[:48]}",
+            access_mode="published",
+            layout="plain",
+            time_column=time_column,
+            instrument_column=instrument_column,
+            hive_partitioning=False,
+            union_by_name=True,
+            format_spec=FormatSpec.from_yaml(format),
+            root=root,
+            glob=glob,
+            schema={},
+        )
+
+    def _assert_uri_allowed(self, uri: str, *, format: str) -> None:
+        """read_uri 白名单：dev 放宽到白名单根 / env 目录；production 收紧到已登记根。"""
+        from data_access.read.formats import normalize_format_name
+
+        fmt = normalize_format_name(format)
+        if uri.startswith("s3://") or uri.startswith("cos://"):
+            from data_access.cos.remote import authorize_s3_path
+
+            authorize_s3_path(uri)
+            return
+
+        static = str(uri).split("*", 1)[0].rstrip("/") or str(uri)
+        resolved = canonicalize(static)
+        strict = _production_mode() or _strict_read_mode()
+
+        for root in self._authorizer.allowed_roots:
+            try:
+                resolved.relative_to(root)
+                return
+            except ValueError:
+                continue
+        if strict:
+            raise ValidationError(
+                f"read_uri 在 production/strict 模式只允许已登记数据集根下的 URI；"
+                f"收到 {uri!r}。临时文件请先登记到 datasets.yaml 或关闭严格读。"
+            )
+        # dev：允许 env 白名单根
+        extra = _uri_allowed_roots_from_env()
+        for root in extra:
+            try:
+                resolved.relative_to(root)
+                return
+            except ValueError:
+                continue
+        raise ValidationError(
+            f"read_uri 路径不在白名单下：{uri!r}\n"
+            "已登记根 + DATA_ACCESS_EXTRA_ALLOWED_ROOTS + DATA_ACCESS_READ_URI_ROOTS 均不匹配。"
+        )
+
+    # ---- 因子批量读（read_factors / FactorCatalog） ----
+
+    def read_factors(
+        self,
+        factor_ids: Sequence[str],
+        *,
+        time_range: tuple[Any, Any] | None = None,
+        universe: str | None = None,
+        frequency: str | None = None,
+        layout: str = "long",
+        columns: Sequence[str] | None = None,
+        limit: int | None = None,
+        engine: str = "auto",
+        result: str = "auto",
+        prefer_polars: bool = False,
+        batch_size: int = 100_000,
+        query_budget: QueryBudget | None = None,
+        **params: Any,
+    ) -> ReadHandle:
+        """一次读多个因子（单查询，非逐 factor 循环）。
+
+        - ``layout="long"``：UNION ALL 各因子，输出 ``factor_id, datetime, asset, value, ...``
+        - ``layout="wide"``：DuckDB PIVOT 成 ``datetime, asset, f1, f2, ...`` 宽矩阵
+        - ``universe`` + ``frequency`` 提供时，wide 优先走 ``factor_matrix`` 物化层
+
+        返回 ``ReadHandle``，可 ``.to_arrow() / .to_polars() / .to_lazy()``。
+        """
+        from data_access.read.factors import (
+            build_factor_pivot_sql,
+            build_factor_union_sql,
+        )
+        from data_access.read.read_handle import ReadHandle
+
+        if not factor_ids:
+            raise ValidationError("read_factors: factor_ids 不能为空")
+        fids = [str(f) for f in factor_ids]
+        layout = str(layout).lower()
+        if layout not in {"long", "wide"}:
+            raise ValidationError("read_factors layout 必须是 long|wide")
+
+        # 优先 factor_matrix 物化层（wide + universe）
+        if layout == "wide" and universe:
+            try:
+                return self._read_factor_matrix(
+                    fids,
+                    time_range=time_range,
+                    universe=universe,
+                    frequency=frequency or "daily",
+                    columns=columns,
+                    limit=limit,
+                    engine=engine,
+                    result=result,
+                    prefer_polars=prefer_polars,
+                    batch_size=batch_size,
+                    query_budget=query_budget,
+                    **params,
+                )
+            except ValidationError:
+                pass  # factor_matrix 未登记 → 回退长表 pivot
+
+        ds = self._registry.get("factor_lake")
+        branches: list[tuple[str, list[str]]] = []
+        all_paths: list[str] = []
+        for fid in fids:
+            paths = self._prepare_dataset_read(
+                ds, time_range=time_range, params=dict(params, factor_id=fid)
+            )
+            if paths:
+                branches.append((fid, paths))
+                all_paths.extend(paths)
+        if not branches:
+            raise DataError(
+                f"read_factors: 因子 {fids} 都没有可读文件"
+                "（检查 factor_id / time_range / 数据是否存在）"
+            )
+
+        union_sql, union_params = build_factor_union_sql(
+            branches,
+            columns=columns,
+            time_range=time_range,
+            time_column=ds.time_column or "datetime",
+            hive_partitioning=ds.hive_partitioning,
+            union_by_name=ds.union_by_name,
+            limit=None,
+        )
+        if layout == "wide":
+            sql, sql_params = build_factor_pivot_sql(
+                union_sql, union_params, factor_ids=fids
+            )
+        else:
+            sql, sql_params = union_sql, union_params
+        if limit is not None:
+            sql = f"SELECT * FROM ({sql}) AS __b LIMIT {int(limit)}"
+
+        budget = self._resolve_read_budget(ds, query_budget)
+        start = time.perf_counter()
+        table = self._engine.execute_arrow(
+            sql, sql_params, deadline_ms=budget.max_elapsed_ms
+        )
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        enforce_arrow_budget(budget, table, elapsed_ms=elapsed_ms)
+        snapshot = self._build_snapshot(
+            dataset="factors:" + ",".join(fids),
+            ds=ds,
+            paths=all_paths,
+            params={"factor_ids": fids, "layout": layout},
+        )
+        lineage = ReadLineage(
+            dataset="factors",
+            columns=tuple(columns) if columns else (),
+            time_range=time_range,
+            params=snapshot.params,
+        )
+        stats = ReadStats(
+            rows=table.num_rows, bytes=table.nbytes, elapsed_ms=elapsed_ms
+        )
+        audit.record(
+            op="read",
+            dataset="factors",
+            ok=True,
+            rows=table.num_rows,
+            params={"factor_ids": fids, "layout": layout},
+            elapsed_ms=elapsed_ms,
+            extra={"engine": "duckdb", "multi_factor": True},
+        )
+        return ReadHandle(
+            table=table, snapshot=snapshot, stats=stats, lineage=lineage, batch_size=batch_size
+        )
+
+    def _read_factor_matrix(
+        self,
+        fids: list[str],
+        *,
+        time_range: tuple[Any, Any] | None,
+        universe: str,
+        frequency: str,
+        columns: Sequence[str] | None,
+        limit: int | None,
+        engine: str,
+        result: str,
+        prefer_polars: bool,
+        batch_size: int,
+        query_budget: QueryBudget | None,
+        **params: Any,
+    ) -> ReadHandle:
+        """走 factor_matrix 物化层读宽矩阵（universe + frequency）。"""
+        from data_access.read.read_handle import ReadHandle
+
+        matrix = self._registry.get("factor_matrix")  # 未登记会抛 ValidationError
+        matrix_params = dict(params, universe=universe, frequency=frequency)
+        handle = self.read(
+            "factor_matrix",
+            columns=columns,
+            time_range=time_range,
+            limit=limit,
+            engine=engine,
+            result=result,
+            prefer_polars=prefer_polars,
+            batch_size=batch_size,
+            query_budget=query_budget,
+            **matrix_params,
+        )
+        audit.record(
+            op="read",
+            dataset="factor_matrix",
+            ok=True,
+            rows=handle.rows,
+            params={"universe": universe, "frequency": frequency, "factors": fids},
+            elapsed_ms=0.0,
+            extra={"engine": "matrix", "multi_factor": True},
+        )
+        return handle
+
+    def get_factor_catalog(
+        self,
+        dataset: str = "factor_lake",
+        *,
+        discover: bool = True,
+    ):
+        """加载因子目录（FactorCatalog）。空目录时可选从因子湖扫描重建。"""
+        from data_access.read.factors import FactorCatalog, factor_catalog_root
+
+        root = factor_catalog_root(self, dataset)
+        if root is None:
+            return FactorCatalog(root=Path("/"), records={})
+        catalog = FactorCatalog.load(root)
+        if discover and len(catalog) == 0:
+            catalog = FactorCatalog.discover(root)
+        return catalog
+
+    def refresh_factor_catalog(
+        self,
+        dataset: str = "factor_lake",
+        *,
+        factor_ids: Sequence[str] | None = None,
+    ) -> dict[str, Any]:
+        """扫描因子湖重建目录，落盘 ``_factor_catalog.json``。"""
+        from data_access.read.factors import FactorCatalog, factor_catalog_root
+
+        root = factor_catalog_root(self, dataset)
+        if root is None:
+            raise ValidationError(f"无法解析因子湖根目录（dataset={dataset}）")
+        catalog = FactorCatalog.discover(root, factor_ids=factor_ids)
+        catalog.save(root)
+        return {
+            "root": str(root),
+            "factors": len(catalog),
+            "factor_ids": catalog.ids(),
+        }
 
     def dataset_read_stats(
         self,
@@ -1834,11 +2509,16 @@ class DataAccessStore:
         )
 
     def _authorize_read_paths(self, glob_paths: list[str]) -> list[str]:
-        """本地/远程读路径白名单校验。"""
+        """本地/远程读路径白名单校验。
+
+        白名单 = PathAuthorizer（已登记根 + DATA_ACCESS_EXTRA_ALLOWED_ROOTS）
+        + DATA_ACCESS_READ_URI_ROOTS（read_uri 临时文件目录）。
+        """
         from data_access.cos.remote import authorize_s3_path, cos_cache_root
         from data_access.registry.paths import path_is_under
 
         cache_root = cos_cache_root()
+        env_roots = _uri_allowed_roots_from_env()
         for g in glob_paths:
             static_part = g.split("*", 1)[0].rstrip("/")
             if not static_part:
@@ -1848,6 +2528,8 @@ class DataAccessStore:
                 continue
             resolved = canonicalize(static_part)
             if path_is_under(resolved, cache_root):
+                continue
+            if _path_under_any(resolved, env_roots):
                 continue
             self._authorizer.resolve_and_authorize(resolved)
         return glob_paths
@@ -2167,13 +2849,17 @@ def _compute_registry_hash(registry: DatasetRegistry) -> str:
 def get_store() -> DataAccessStore:
     """获取进程级 DataAccessStore 实例。第一次调用会初始化 registry + engine。
 
-    线程安全：双重检查 + Lock。
+    若引擎已被 ``reset_shared_engine()`` 关闭，自动重建（避免缓存 store 指向
+    已关闭连接）。线程安全：双重检查 + Lock。
     """
     global _store
     if _store is not None:
-        return _store
+        if _store._engine.is_closed:
+            _store = None
+        else:
+            return _store
     with _store_lock:
-        if _store is not None:
+        if _store is not None and not _store._engine.is_closed:
             return _store
         registry = load_registry()
         # 共享 DuckDBEngine：ParquetSource 也用同一个，buffer pool 复用
@@ -2217,6 +2903,75 @@ def _quote_ident(name: str) -> str:
     """本地复制一份列名引用，避免 store 依赖 predicate 的私有函数。"""
     escaped = name.replace('"', '""')
     return f'"{escaped}"'
+
+
+def _infer_format_from_uri(uri: str, explicit: str) -> str:
+    """read_uri 格式推断：显式传入优先，否则按扩展名。"""
+    from data_access.read.formats import normalize_format_name
+
+    if explicit not in (None, "", "auto"):
+        return normalize_format_name(explicit)
+    lower = str(uri).lower()
+    for suffix, fmt in (
+        (".parquet", "parquet"),
+        (".pq", "parquet"),
+        (".csv.gz", "csv"),
+        (".csv", "csv"),
+        (".tsv", "tsv"),
+        (".jsonl", "jsonl"),
+        (".ndjson", "jsonl"),
+        (".json", "jsonl"),
+        (".arrow", "arrow"),
+        (".ipc", "arrow"),
+        (".feather", "feather"),
+    ):
+        if lower.endswith(suffix):
+            return fmt
+    return "parquet"
+
+
+def _cast_scalar(value: Any, field_type: Any):
+    """把 time_range 端点 cast 到 Arrow 列类型（pc 比较需要类型匹配）。"""
+    import pyarrow as pa
+
+    try:
+        return pa.scalar(value).cast(field_type)
+    except Exception:
+        return pa.scalar(value)
+
+
+def _uri_allowed_roots_from_env() -> list[Path]:
+    """``DATA_ACCESS_READ_URI_ROOTS``：逗号分隔的 read_uri 额外白名单根（dev）。"""
+    raw = os.environ.get("DATA_ACCESS_READ_URI_ROOTS", "")
+    roots: list[Path] = []
+    for part in raw.split(","):
+        part = part.strip()
+        if part:
+            roots.append(canonicalize(part))
+    return roots
+
+
+def _path_under_any(path: Path, roots: Sequence[Path]) -> bool:
+    from data_access.registry.paths import path_is_under
+
+    for root in roots:
+        if path_is_under(path, root):
+            return True
+    return False
+
+
+def log_read_auto(dataset: str, cost: Any, engine: str, result: str) -> None:
+    """read_auto 路由日志。"""
+    logger.info(
+        "read_auto dataset=%s engine=%s result=%s rows=%d files=%d bytes=%s score=%.0f",
+        dataset,
+        engine,
+        result,
+        getattr(cost, "estimated_rows", None),
+        getattr(cost, "file_count", None),
+        getattr(cost, "total_bytes", None),
+        getattr(cost, "score", 0.0),
+    )
 
 
 def _to_pydatetime(value: Any):

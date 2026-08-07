@@ -1,5 +1,5 @@
 {
-  "operator_count": 12,
+  "operator_count": 16,
   "operators": {
     "ADX": {
       "canonical": "ADX",
@@ -37,6 +37,20 @@
       "segmented_execution_supported": true,
       "semantic_version": "2.0",
       "state_schema_version": "atr_wilder_state.v1"
+    },
+    "KAMA": {
+      "canonical": "KAMA",
+      "checkpoint_fields": [
+        "last_value",
+        "last_timestamp"
+      ],
+      "checkpoint_required_for_segmented": true,
+      "dependencies": [],
+      "minimum_history": 2,
+      "missing_policy": "carry_state_emit_null",
+      "segmented_execution_supported": false,
+      "semantic_version": "1.0",
+      "state_schema_version": "kama_state.v1"
     },
     "MACD_hist": {
       "canonical": "MACD_hist",
@@ -93,6 +107,25 @@
       "semantic_version": "2.0",
       "state_schema_version": "macd_signal_state.v1"
     },
+    "PSAR": {
+      "canonical": "PSAR",
+      "checkpoint_fields": [
+        "sar",
+        "direction",
+        "extreme_point",
+        "acceleration_factor",
+        "prev_high",
+        "prev_low",
+        "last_timestamp"
+      ],
+      "checkpoint_required_for_segmented": true,
+      "dependencies": [],
+      "minimum_history": 2,
+      "missing_policy": "carry_state_emit_null",
+      "segmented_execution_supported": false,
+      "semantic_version": "1.0",
+      "state_schema_version": "psar_state.v1"
+    },
     "RSI_WILDER": {
       "canonical": "RSI_WILDER",
       "checkpoint_fields": [
@@ -109,6 +142,44 @@
       "semantic_version": "2.0",
       "state_schema_version": "rsi_wilder_state.v1"
     },
+    "Supertrend": {
+      "canonical": "Supertrend",
+      "checkpoint_fields": [
+        "final_upper",
+        "final_lower",
+        "direction",
+        "last_close",
+        "last_timestamp"
+      ],
+      "checkpoint_required_for_segmented": true,
+      "dependencies": [
+        "ATR_WILDER"
+      ],
+      "minimum_history": 10,
+      "missing_policy": "carry_state_emit_null",
+      "segmented_execution_supported": false,
+      "semantic_version": "1.0",
+      "state_schema_version": "supertrend_state.v1"
+    },
+    "SupertrendDirection": {
+      "canonical": "SupertrendDirection",
+      "checkpoint_fields": [
+        "final_upper",
+        "final_lower",
+        "direction",
+        "last_close",
+        "last_timestamp"
+      ],
+      "checkpoint_required_for_segmented": true,
+      "dependencies": [
+        "Supertrend"
+      ],
+      "minimum_history": 10,
+      "missing_policy": "carry_state_emit_null",
+      "segmented_execution_supported": false,
+      "semantic_version": "1.0",
+      "state_schema_version": "supertrend_direction_state.v1"
+    },
     "trade_when": {
       "canonical": "trade_when",
       "checkpoint_fields": [
@@ -119,7 +190,7 @@
       "dependencies": [],
       "minimum_history": 1,
       "missing_policy": "carry_state_emit_null",
-      "segmented_execution_supported": true,
+      "segmented_execution_supported": false,
       "semantic_version": "1.0",
       "state_schema_version": "trade_when_state.v1"
     },

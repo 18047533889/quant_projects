@@ -823,6 +823,9 @@ _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
     "debt_to_equity": {"scope": "elementwise", "pit_safe": True},
     "real_turnover_rate": {"scope": "elementwise", "pit_safe": True},
     "micro_spread": {"scope": "elementwise", "pit_safe": True},
+    # 2026-08 advanced: rolling first-digit distribution is a time-series
+    # transform (the ``report_`` prefix does not infer ``ts`` scope).
+    "report_benford_js_divergence": {"scope": "ts", "pit_safe": True, "min_periods": 1},
 }
 
 
@@ -1186,6 +1189,43 @@ _CHIP_FLOW_PACK_POLICIES = {
     },
 }
 _EXPLICIT_POLICIES.update(_CHIP_FLOW_PACK_POLICIES)
+
+# 2026-08 advanced information-theoretic / intraday-distribution / topology /
+# structure pack (concurrent expansion).  These are applied AFTER the
+# active-surface filter so they survive load order (the pack's own surface
+# registration may import after ``operator_policy``).
+_ADVANCED_PACK_POLICIES = {
+    "ts_transfer_entropy": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_effective_transfer_entropy": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_score_rank_weighted_mean": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "report_benford_js_divergence": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "intraday_wasserstein_pair_distance": {
+        "scope": "session_intraday", "pit_safe": True,
+        "session_aware": True, "reset_at_session_boundary": True, "min_periods": 20,
+    },
+    "intraday_barrier_approach_acceleration": {
+        "scope": "session_intraday", "pit_safe": True,
+        "session_aware": True, "reset_at_session_boundary": True, "min_periods": 20,
+    },
+    "intraday_wasserstein_quantile_pca_score": {
+        "scope": "session_intraday", "pit_safe": True,
+        "session_aware": True, "reset_at_session_boundary": True, "min_periods": 20,
+    },
+    "intraday_wasserstein_quantile_pca_residual": {
+        "scope": "session_intraday", "pit_safe": True,
+        "session_aware": True, "reset_at_session_boundary": True, "min_periods": 20,
+    },
+    "ts_betti_1_max_persistence": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_persistence_diagram_shift": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_student_t_fisher_shift": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_bures_corr_shift": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_kramers_moyal_drift": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_kramers_moyal_diffusion": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "cs_sliced_wasserstein_copula_shift": {"scope": "cs", "pit_safe": True, "min_periods": 2},
+    "group_spd_feature_structure_shift": {"scope": "group", "pit_safe": True, "min_periods": 2},
+    "holder_class_js_shift": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+}
+_EXPLICIT_POLICIES.update(_ADVANCED_PACK_POLICIES)
 
 # Compatibility export now reflects the reviewed research surface exactly.
 RESEARCH_CORE_CANONICALS = RESEARCH_ONLY_CANONICALS

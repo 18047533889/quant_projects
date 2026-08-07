@@ -102,6 +102,9 @@ _PANEL_PARAMETERS = frozenset({
     "rank6", "rank7", "rank8", "rank9", "rank10",
     # 2026-08 stateful rule/episode pack condition panels.
     "set_condition", "reset_condition", "update_condition",
+    # 2026-08 advanced operators: transfer-entropy source panel; holder-class
+    # previous-disclosure share slots for the JS-shift operator.
+    "source", "ps1", "ps2", "ps3", "ps4", "ps5",
 })
 
 # Params whose generic names also appear in _SCALAR_VALUES but are PANEL series
@@ -353,6 +356,10 @@ _SCALAR_VALUES: dict[str, Any] = {
     # 2026-08 turnover-survival / behavioural / order-flow family scalars.
     "preset": "bmw2016",
     "bucket_count": 20,
+    # 2026-08 advanced operators: topology / PCA / barrier scalars.
+    "tau": 1,
+    "directions": 16,
+    "lookback": 5,
 }
 
 _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
@@ -437,6 +444,27 @@ _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
     # Quantile-kurtosis ``outer``/``inner`` are 2-tuples of quantiles, not scalars.
     ("ts_quantile_kurtosis", "outer"): (0.025, 0.975),
     ("ts_quantile_kurtosis", "inner"): (0.25, 0.75),
+    # 2026-08 advanced operators: per-op scalars.  Transfer entropy uses a small
+    # ``bins``; Kramers-Moyal a moderate one; Bures/Student-t need non-overlapping
+    # non-trivial windows; PCA ops use component k=1; SW/SPD use a long reference.
+    ("ts_transfer_entropy", "bins"): 3,
+    ("ts_effective_transfer_entropy", "bins"): 3,
+    ("ts_kramers_moyal_drift", "bins"): 5,
+    ("ts_kramers_moyal_diffusion", "bins"): 5,
+    ("ts_bures_corr_shift", "recent_window"): 10,
+    ("ts_bures_corr_shift", "prior_window"): 60,
+    ("ts_student_t_fisher_shift", "recent_window"): 60,
+    ("ts_student_t_fisher_shift", "prior_window"): 120,
+    ("cs_sliced_wasserstein_copula_shift", "window"): 60,
+    ("group_spd_feature_structure_shift", "reference_window"): 60,
+    ("intraday_wasserstein_quantile_pca_score", "window"): 60,
+    ("intraday_wasserstein_quantile_pca_score", "k"): 1,
+    ("intraday_wasserstein_quantile_pca_residual", "window"): 60,
+    ("intraday_wasserstein_quantile_pca_residual", "k"): 1,
+    ("ts_betti_1_max_persistence", "window"): 60,
+    ("ts_betti_1_max_persistence", "tau"): 1,
+    ("ts_persistence_diagram_shift", "window"): 60,
+    ("ts_persistence_diagram_shift", "tau"): 1,
 }
 _SPECIAL_POSITIONAL = {
     "cs_multi_resid": ("target", "exposure", "control"),
@@ -497,6 +525,8 @@ _MINUTE_PANEL_PARAMS: dict[str, str] = {
     # 2026-08 order-flow family inputs.
     "flow": "minute_ret",
     "locked": "minute_zero",
+    # 2026-08 advanced intraday: pair-distribution second series.
+    "y": "minute_ret",
 }
 
 # Minute-source operators also consume a few daily panels that are broadcast

@@ -150,6 +150,30 @@
   reason: "dataaccess 实现本体，内部原子写入 parquet"
 - path: dataaccess/write/upsert.py
   reason: "upsert 读取已有分区并原子写回"
+- path: dataaccess/core/duckdb_capabilities.py
+  reason: "dataaccess 自身实现：DuckDB 版本能力探测（import duckdb 读版本）"
+- path: dataaccess/read/formats.py
+  reason: "dataaccess 自身实现：格式适配层，arrow/feather 直读（pyarrow feather/ipc）"
+- path: dataaccess/read/manifest.py
+  reason: "dataaccess 自身实现：数据集 manifest 读写 parquet footer（pq.read_table/read_metadata）"
+- path: dataaccess/read/read_handle.py
+  reason: "dataaccess 自身实现：统一读句柄（无禁用 API，登记以防误报）"
+- path: dataaccess/read/scan_cost.py
+  reason: "dataaccess 自身实现：读路径成本估算（无禁用 API）"
+- path: factor_engine/runtime/intermediate_registry.py
+  reason: "factor_engine 独立下线计划（PR7 factor_engine→data_access）；迁移完成前暂豁免"
+- path: factor_engine/scripts/calibrate_backend_costs.py
+  reason: "factor_engine 校准脚本，独立 DuckDB 会话基准测试；迁移前暂豁免"
+- path: factor_engine/scripts/certify_intraday_parity.py
+  reason: "factor_engine 校验脚本，独立 DuckDB 会话；迁移前暂豁免"
+- path: factor_engine/scripts/compare_lqtp_golden.py
+  reason: "factor_engine golden 对比脚本；迁移前暂豁免"
+- path: factor_engine/storage/sources/lqtp_logical_source.py
+  reason: "factor_engine 数据源层；迁移前暂豁免"
+- path: ".replace_backup_20260802_181017/**"
+  reason: "临时备份目录，不参与检查"
+- path: dataaccess/benchmarks/**
+  reason: "基准脚本：对比各基础引擎（duckdb/polars/pyarrow），直读 parquet 是 benchmark 本身语义"
 - path: scripts/verify_gtja191_factor_lake.py
   reason: "GTJA191 factor lake 结构审计 + 重算对比；按 factors/<id>/year=*/data.parquet 逐分区读，非 registry dataset"
 - path: factor_engine/backend/fastpath_plan_probe.py

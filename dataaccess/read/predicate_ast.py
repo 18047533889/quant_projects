@@ -129,6 +129,8 @@ _COMPARISON_OPS = {
     "le": Le,
     "gt": Gt,
     "ge": Ge,
+    "lte": Le,
+    "gte": Ge,
     "==": Eq,
     "!=": Ne,
     "<": Lt,
@@ -321,6 +323,74 @@ def _compile_logical(children: Sequence[Filter], op: str) -> tuple[str, list[Any
     if len(parts) == 1:
         return parts[0], params
     return f"({f' {op} '.join(f'({p})' for p in parts)})", params
+
+
+# ---------------------------------------------------------------------------
+# PyArrow 编译器（pyarrow.compute 表达式；arrow/feather 引擎用）
+# ---------------------------------------------------------------------------
+
+
+def compile_filter_arrow(f: Filter | None, *, pc: Any = None):
+    """把 Filter AST 编译成 pyarrow.compute 表达式。
+
+    ``pc`` 不传时惰性 import；返回可传给 ``table.filter(expr)`` 的表达式。
+    """
+    if f is None:
+        return None
+    if pc is None:
+        import pyarrow.compute as _pc
+
+        pc = _pc
+    import pyarrow as _pa
+
+    def field(name: str):
+        return pc.field(name)
+
+    def scalar(value: Any):
+        return _pa.scalar(value)
+
+    def value_set(values) -> Any:
+        return _pa.array(list(values))
+
+    if isinstance(f, Eq):
+        return pc.equal(field(f.column), scalar(f.value))
+    if isinstance(f, Ne):
+        return pc.not_equal(field(f.column), scalar(f.value))
+    if isinstance(f, Lt):
+        return pc.less(field(f.column), scalar(f.value))
+    if isinstance(f, Le):
+        return pc.less_equal(field(f.column), scalar(f.value))
+    if isinstance(f, Gt):
+        return pc.greater(field(f.column), scalar(f.value))
+    if isinstance(f, Ge):
+        return pc.greater_equal(field(f.column), scalar(f.value))
+    if isinstance(f, Between):
+        lo = pc.greater_equal(field(f.column), scalar(f.lower)) if f.lower_inclusive else pc.greater(field(f.column), scalar(f.lower))
+        hi = pc.less_equal(field(f.column), scalar(f.upper)) if f.upper_inclusive else pc.less(field(f.column), scalar(f.upper))
+        return pc.and_(lo, hi)
+    if isinstance(f, In):
+        return pc.is_in(field(f.column), value_set(f.values))
+    if isinstance(f, NotIn):
+        return pc.invert(pc.is_in(field(f.column), value_set(f.values)))
+    if isinstance(f, IsNull):
+        return pc.is_null(field(f.column))
+    if isinstance(f, IsNotNull):
+        return pc.is_valid(field(f.column))
+    if isinstance(f, And):
+        expr = None
+        for child in f.children:
+            sub = compile_filter_arrow(child, pc=pc)
+            expr = sub if expr is None else pc.and_kleene(expr, sub)
+        return expr
+    if isinstance(f, Or):
+        expr = None
+        for child in f.children:
+            sub = compile_filter_arrow(child, pc=pc)
+            expr = sub if expr is None else pc.or_kleene(expr, sub)
+        return expr
+    if isinstance(f, Not):
+        return pc.invert(compile_filter_arrow(f.child, pc=pc))
+    raise ValueError(f"未知 Filter 节点: {type(f).__name__}")
 
 
 # ---------------------------------------------------------------------------

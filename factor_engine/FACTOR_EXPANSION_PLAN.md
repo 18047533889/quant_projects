@@ -1113,8 +1113,14 @@ bucket_count` 等 + `_SPECIAL_SCALARS`（weighted_semivariance.target=0.0 等）
 - `test_chip_flow_pack_2026_08.py`：25 passed（注册/表面/policy/determinism/axes/常值 fail-closed/
   BV 手算/legacy proxy/换手边界/锁定板中性/polars parity daily+minute）。
 - 后端：16 算子 pandas_numpy + polars 双后端（逐值 parity，max|diff|~1e-17）；duckdb/SQL 下推推迟（见 15.4）。
-- runtime audit 目标数随 16 个新算子增加；factor evidence 重建后 15 个 P0/P1 算子全部
-  `status=production` + `production_certified=True`（DSL 与 production mining allowlist 可用）。
+- runtime audit 目标数随 16 个新算子增加；factor evidence 重建（1060 canonicals / 974 生产算子）后
+  15 个 P0/P1 算子全部 `status=production` + `production_certified=True`，DSL daily authoring
+  + production mining allowlist 均可用；primitive evidence 六路认证 86；recipe evidence 186 个
+  production recipes（含 capital_gains_overhang / cost_basis_gap）。
+- 收敛校验：`test_production_convergence` 21 passed（三 manifest 集合一致）；
+  `test_chip_flow_pack_2026_08` 25 passed；stateful/micro/SQL-lowering/recipe-admission 均绿。
+- 与并发 Claude 会话协调：其 advanced pack 17 算子因加载顺序被 `_EXPLICIT_POLICIES` 过滤，
+  已在 `operator_policy._ADVANCED_PACK_POLICIES`（post-filter）补齐 scope，`load_all` 恢复。
 - `micro_bvc_vpin` 按 spec §16 保持 **P2/research-only**：surface=research、排除出
   `factor_production_targets`（`NON_FACTOR_PRODUCTION_CANONICALS`），注册了 pandas+polars
   runtime 供 research mining 使用，但绝不进入默认生产挖掘白名单（`micro_` 前缀本身也拒绝生产）。

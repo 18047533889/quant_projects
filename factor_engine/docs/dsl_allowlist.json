@@ -739,7 +739,6 @@
     "maximum",
     "mean",
     "median",
-    "micro_bvc_vpin",
     "min",
     "minimum",
     "move",
@@ -1250,5 +1249,5 @@
     "zmijewski_score",
     "zscore"
   ],
-  "count": 1245
+  "count": 1244
 }

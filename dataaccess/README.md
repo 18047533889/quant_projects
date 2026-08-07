@@ -5,25 +5,26 @@
 > **磁盘目录**：本仓库根目录即包内容；代码里永远 `import data_access`。  
 > **对外使用说明**：**[docs/用户使用手册.md](docs/用户使用手册.md)**（只看这一份即可；含完整 HTTP 服务）。  
 > 文档索引：[docs/README.md](docs/README.md)  
-> 维护：量化基础平台组｜更新：2026-08-04｜包版本：**0.3.1**
+> 维护：量化基础平台组｜更新：2026-08-07｜包版本：**0.4.0**
 
 ## 为什么有这个模块
 
 以前各处都是 `pd.read_parquet` → 拼 glob → 合并 DataFrame，路径硬编码、性能不齐、写盘无规范。
 
-**当前能力（0.3.x）**：
+**当前能力（0.4.x）—— Universal Quant Data IO Layer**：
 
-1. **读入口**：`read_arrow` / `read_frame` / `load_columns` / `read_arrow_stream` / `read_auto` / `scan_polars`
-2. **DuckDB 共享引擎**：跨线程 buffer pool / parquet footer cache
-3. **数据集登记**：`config/datasets.yaml`
-4. **namespace**：namespaced / staging / published
-5. **写与发布**：`write_arrow` / `upsert` / `publish_from_staging` / `delete_rows` / `compute_and_write`
-6. **有限 SQL**：`sql()` + QueryBudget
-7. **COS**：mirror / remote / auto；可执行面板与 **PIT 契约**
-8. **HTTP**：`data-access-server` + `DataAccessClient`；`/v1/datasets`、`/v1/read`
-9. **部署**：Docker / compose / K8s / systemd（`deploy/`）
-10. **质量**：`data-access-quality` CLI（`quality/`）
-11. **ClickHouse**：panel 读 / 因子写与校验
+1. **统一读入口**：`read()` / `read_uri()` 返回 `ReadHandle`（`.to_arrow()/.to_pandas()/.to_polars()/.to_lazy()/.stream()`）
+2. **多文件格式**：`format:` 字段 + FormatAdapter——parquet / csv / csv.gz / tsv / jsonl / arrow / feather；`_build_select_sql` 不再写死 `read_parquet`
+3. **通用过滤**：`filters=` 支持 Filter AST（Eq/Ne/Lt/Le/Gt/Ge/Between/In/NotIn/IsNull/NotNull/And/Or/Not），DuckDB / Polars / PyArrow 三编译器
+4. **路径裁剪**：Partition Planner 按 time_range 展开 hive/日期路径 + **Dataset Manifest**（`_manifest.parquet`）文件级 min/max 裁剪，避免 `**/*.parquet` 全量 glob
+5. **成本路由**：`read_auto` / `read()` 按 `estimated_scan_cost`（rows/bytes/columns/files/remote/selectivity）路由，不只按行数
+6. **因子批量读**：`read_factors(factor_ids=[...])` 单查询 UNION ALL / 宽表 PIVOT + `FactorCatalog`
+7. **StorageBackend**：local / s3 / cos 统一 `storage:` 声明；COS/S3 DuckDB 接入走 **Secret Manager**（`CREATE SECRET`，老版本回退 `SET s3_*`）；DuckDB 版本能力层自动跳过 deprecated PRAGMA
+8. **企业级治理**：QueryBudget 超时**主动取消**（deadline + interrupt）、`ManagedBatchReader` 流资源生命周期、升级版质量契约
+9. **读 API 兼容**：`read_arrow` / `read_frame` / `load_columns` / `read_arrow_stream` / `read_auto` / `scan_polars` 全部保留
+10. **DuckDB 共享引擎**：跨线程 buffer pool / footer cache；HTTP `/v1/read_uri` `/v1/factors` `/v1/factors/read`
+11. **写与发布**：`write_arrow` / `upsert` / `publish_from_staging` / `delete_rows` / `compute_and_write`
+12. **COS**：mirror / remote / auto；可执行面板与 **PIT 契约**；HTTP 服务 + ClickHouse
 
 **与 factor_engine**：读数一律 `data_source.type: data_access`；计算默认 `backend.type: auto`。见 [factor_engine/README.md](../factor_engine/README.md)。
 
@@ -132,14 +133,43 @@ data-access-quality --help
 
 | 方法 | 用途 |
 |------|------|
-| `read_frame` / `read_arrow` | 表格式读取 |
+| `read` / `read_uri` | 统一读入口，返回 `ReadHandle`（多形态转换） |
+| `read_frame` / `read_arrow` | 表格式读取（兼容旧 API） |
 | `load_columns` | 宽表列（给 factor_engine） |
-| `read_auto` / `scan_polars` | 自动路由 / lazy |
+| `read_auto` / `scan_polars` | 成本路由 / lazy |
+| `read_factors` | 一次读多因子（UNION ALL / PIVOT） |
+| `get_factor_catalog` / `refresh_factor_catalog` | 因子目录 |
+| `build_dataset_manifest` | 构建数据集 `_manifest.parquet` |
 | `sql` | 只读 SELECT |
 | `compute_and_write` | 读→SQL→写 staging |
 | `write_arrow` / `upsert` | 写草稿 |
 | `publish_from_staging` | 晋升发布 |
 | `read_cos_panel` 等 | COS 面板 / 事件 / asof（契约层） |
+
+### 统一读示例
+
+```python
+from data_access import get_store
+store = get_store()
+
+# 统一读：按成本自动路由引擎/结果形态
+handle = store.read("ashare_stock_daily",
+                    columns=["TradeDate", "Symbol", "Close"],
+                    time_range=("2024-01-01", "2024-01-31"),
+                    filters={"Symbol": ["600000.SH", "000001.SZ"]})
+tbl = handle.to_arrow()     # Arrow Table
+df  = handle.to_pandas()    # pandas
+plf = handle.to_lazy()      # Polars LazyFrame
+
+# 临时文件直接读（dev 白名单下），不写 YAML
+h = store.read_uri("/tmp/foo.csv", columns=["a", "b"])   # csv 自动识别
+h = store.read_uri("/tmp/foo.feather")                    # arrow/feather 走 PyArrow
+
+# 一次读多个因子（单查询）
+handle = store.read_factors(["mom_3d", "vol_20"],
+                            time_range=("2024-01-01", "2024-12-31"),
+                            layout="wide")  # wide → datetime, asset, mom_3d, vol_20
+```
 
 完整场景与字段表：**[docs/用户使用手册.md](docs/用户使用手册.md)**。
 

@@ -1,8 +1,8 @@
 {
   "schema_version": 2,
   "artifact_kind": "test_passed",
-  "commit_sha": "7b89f97879d6817ec7f95fcf591ba9d0cd566c0f",
-  "passed_at": "2026-08-07T12:49:44.635861+00:00",
+  "commit_sha": "007c383b2cd3a05d8067fe9b2faa4cb169258993",
+  "passed_at": "2026-08-07T15:28:46.464989+00:00",
   "recipes": [
     "accruals",
     "accruals_from_cumulative",
@@ -27,6 +27,7 @@
     "capex_intensity_from_cumulative",
     "capex_to_revenue",
     "capital_change_ratio",
+    "capital_gains_overhang",
     "cash_conversion",
     "cash_conversion_cycle",
     "cash_conversion_from_cumulative",
@@ -87,6 +88,7 @@
     "circulating_cap_change_ratio",
     "circulating_cap_ratio",
     "contract_assets_to_assets",
+    "cost_basis_gap",
     "current_ratio",
     "days_inventory_outstanding",
     "days_payables_outstanding",
@@ -286,6 +288,9 @@
     "capital_change_ratio": [
       "pandas_numpy"
     ],
+    "capital_gains_overhang": [
+      "pandas_numpy"
+    ],
     "cash_conversion": [
       "pandas_numpy"
     ],
@@ -464,6 +469,9 @@
       "pandas_numpy"
     ],
     "contract_assets_to_assets": [
+      "pandas_numpy"
+    ],
+    "cost_basis_gap": [
       "pandas_numpy"
     ],
     "current_ratio": [
@@ -807,7 +815,7 @@
     "accruals": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "cd5d118b11b53ebf",
+      "output_hash": "d438cee8323e4415",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -870,7 +878,7 @@
     "annualized_volatility": {
       "rows": 192,
       "nan_ratio": 0.015625,
-      "output_hash": "f2a54d2927c8b9ba",
+      "output_hash": "46d0d39d6e98f66e",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -906,7 +914,7 @@
     "asset_growth": {
       "rows": 192,
       "nan_ratio": 0.1875,
-      "output_hash": "6f0370442c32206a",
+      "output_hash": "c5aeb0a14628da5b",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -915,7 +923,7 @@
     "asset_turnover": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "c2ad722ebef5b3c4",
+      "output_hash": "58f9e9bae9ec915a",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -924,7 +932,7 @@
     "asset_turnover_from_cumulative": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "932a2ca94b71bc94",
+      "output_hash": "cc40e1ea08d478d6",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -942,7 +950,7 @@
     "bollinger_lower": {
       "rows": 192,
       "nan_ratio": 0.015625,
-      "output_hash": "6da23a1957206b48",
+      "output_hash": "aa986be2b283d4ab",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -951,7 +959,7 @@
     "bollinger_mid": {
       "rows": 192,
       "nan_ratio": 0.0,
-      "output_hash": "1194bc1e5b5448a0",
+      "output_hash": "d1f29fae4ff756ff",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -960,7 +968,7 @@
     "bollinger_upper": {
       "rows": 192,
       "nan_ratio": 0.015625,
-      "output_hash": "5c78269df59d345e",
+      "output_hash": "1942b80d0a28af52",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -978,7 +986,7 @@
     "capex_intensity": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "43d18752b22c3980",
+      "output_hash": "5494746dbe547c44",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -987,7 +995,7 @@
     "capex_intensity_from_cumulative": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "4ccb1378f5394ab3",
+      "output_hash": "c086dd344b4a321a",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1005,7 +1013,16 @@
     "capital_change_ratio": {
       "rows": 192,
       "nan_ratio": 0.046875,
-      "output_hash": "a1f10d8262aaf572",
+      "output_hash": "7158a27ea8f8ee3b",
+      "index_columns": [
+        "timestamp",
+        "instrument"
+      ]
+    },
+    "capital_gains_overhang": {
+      "rows": 192,
+      "nan_ratio": 0.078125,
+      "output_hash": "9b10b99f42681383",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1023,7 +1040,7 @@
     "cash_conversion_cycle": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "32863f66beddf1c2",
+      "output_hash": "32eb3cf6ddf2ae30",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1041,7 +1058,7 @@
     "cash_profitability": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "6683fe9588e16a15",
+      "output_hash": "91636186e85457ae",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1050,7 +1067,7 @@
     "cash_profitability_from_cumulative": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "95eb65a936f5f8af",
+      "output_hash": "2592485768c832e7",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1068,7 +1085,7 @@
     "cash_roa": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "6683fe9588e16a15",
+      "output_hash": "91636186e85457ae",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1077,7 +1094,7 @@
     "cash_roe": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "272ab728b1523409",
+      "output_hash": "09e156715664947f",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1086,7 +1103,7 @@
     "cash_to_assets": {
       "rows": 192,
       "nan_ratio": 0.0,
-      "output_hash": "9916af503de035a2",
+      "output_hash": "4f2ad020641b2411",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1131,7 +1148,7 @@
     "cci": {
       "rows": 192,
       "nan_ratio": 0.0625,
-      "output_hash": "5258578b14085386",
+      "output_hash": "ea36c2005634dcbd",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1500,7 +1517,7 @@
     "cfo_to_assets": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "6683fe9588e16a15",
+      "output_hash": "91636186e85457ae",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1545,7 +1562,16 @@
     "contract_assets_to_assets": {
       "rows": 192,
       "nan_ratio": 0.0,
-      "output_hash": "4f46f19b2e5dc622",
+      "output_hash": "195f5784253a1736",
+      "index_columns": [
+        "timestamp",
+        "instrument"
+      ]
+    },
+    "cost_basis_gap": {
+      "rows": 192,
+      "nan_ratio": 0.078125,
+      "output_hash": "90678a82478518a6",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1581,7 +1607,7 @@
     "days_sales_outstanding": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "0c1a6f558c3b9848",
+      "output_hash": "912aefad9239395d",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1590,7 +1616,7 @@
     "debt_to_assets": {
       "rows": 192,
       "nan_ratio": 0.0,
-      "output_hash": "f4218bc13a316b7c",
+      "output_hash": "fbccb1f682d6fa08",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1617,7 +1643,7 @@
     "dupont_roe": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "f366e0b434f08a5c",
+      "output_hash": "a916fc4924899107",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1626,7 +1652,7 @@
     "earnings_cash_gap": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "62c8e4b1f42e6ee2",
+      "output_hash": "3e7a10102e48070f",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1653,7 +1679,7 @@
     "equity_multiplier": {
       "rows": 192,
       "nan_ratio": 0.046875,
-      "output_hash": "d7d5951b58a3cec1",
+      "output_hash": "5935282440a5bbdc",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1662,7 +1688,7 @@
     "equity_to_assets": {
       "rows": 192,
       "nan_ratio": 0.0,
-      "output_hash": "0a2d7afe01b72bff",
+      "output_hash": "32c680b23649ce08",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1671,7 +1697,7 @@
     "equity_turnover": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "2d0404aea2a3f171",
+      "output_hash": "a0a79de4fed6f357",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1725,7 +1751,7 @@
     "free_cash_flow_profitability": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "1bf39a870ea2434c",
+      "output_hash": "4a19cbef2a2562ab",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1734,7 +1760,7 @@
     "free_cash_flow_profitability_from_cumulative": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "d1a36808031498b0",
+      "output_hash": "b9e8453d8e2ebee2",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1770,7 +1796,7 @@
     "goodwill_to_assets": {
       "rows": 192,
       "nan_ratio": 0.0,
-      "output_hash": "166290759974f71f",
+      "output_hash": "9776f2f50e22dbae",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1779,7 +1805,7 @@
     "goodwill_to_equity": {
       "rows": 192,
       "nan_ratio": 0.0,
-      "output_hash": "6def2ec00f6ccea1",
+      "output_hash": "f00fee04d8077c97",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1788,7 +1814,7 @@
     "gross_margin": {
       "rows": 192,
       "nan_ratio": 0.0,
-      "output_hash": "f43c02948e20066f",
+      "output_hash": "c692d1a4d2e34c99",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1815,7 +1841,7 @@
     "gross_profitability": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "e5a8068e419a6842",
+      "output_hash": "0738e1ef12d049de",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1824,7 +1850,7 @@
     "gross_profitability_from_cumulative": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "9d173dd07a045c81",
+      "output_hash": "8de64c44d5faa179",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1878,7 +1904,7 @@
     "inventory_to_assets": {
       "rows": 192,
       "nan_ratio": 0.0,
-      "output_hash": "e1907fc2d7e01bda",
+      "output_hash": "634e0bab9165dccb",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1905,7 +1931,7 @@
     "invested_capital": {
       "rows": 192,
       "nan_ratio": 0.0,
-      "output_hash": "77151ba2116a6fc4",
+      "output_hash": "ccd4e4a0a91c7f31",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1914,7 +1940,7 @@
     "leverage_change": {
       "rows": 192,
       "nan_ratio": 0.1875,
-      "output_hash": "8b33bb38651a3be0",
+      "output_hash": "0d09935106a9dc63",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1923,7 +1949,7 @@
     "margin_expansion": {
       "rows": 192,
       "nan_ratio": 0.1875,
-      "output_hash": "514a2b0411706697",
+      "output_hash": "58b90983bc33b805",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1950,7 +1976,7 @@
     "momentum": {
       "rows": 192,
       "nan_ratio": 0.078125,
-      "output_hash": "cc7c29fe01483969",
+      "output_hash": "924e02bcd8b44aeb",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1959,7 +1985,7 @@
     "net_debt": {
       "rows": 192,
       "nan_ratio": 0.0,
-      "output_hash": "eb754784b0c7aec1",
+      "output_hash": "9478ae50a78d6c57",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1968,7 +1994,7 @@
     "net_debt_ratio": {
       "rows": 192,
       "nan_ratio": 0.0,
-      "output_hash": "3cb674b8089cb657",
+      "output_hash": "38fec84b4b372a2b",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1977,7 +2003,7 @@
     "net_debt_to_assets": {
       "rows": 192,
       "nan_ratio": 0.0,
-      "output_hash": "de8ae5ef78fd8281",
+      "output_hash": "24d282a2e121ddad",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1986,7 +2012,7 @@
     "net_margin": {
       "rows": 192,
       "nan_ratio": 0.0,
-      "output_hash": "bf1cced8add344a6",
+      "output_hash": "0b2f348885a6e0b1",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -1995,7 +2021,7 @@
     "operating_margin": {
       "rows": 192,
       "nan_ratio": 0.0,
-      "output_hash": "41245162e564a69e",
+      "output_hash": "6f4c755eaec4b26e",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -2013,7 +2039,7 @@
     "operating_profitability": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "8aaf71c6e1446985",
+      "output_hash": "0bef0610cfe8790f",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -2022,7 +2048,7 @@
     "operating_profitability_from_cumulative": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "d1a89fbfcafb2f60",
+      "output_hash": "b9ae091651872c30",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -2121,7 +2147,7 @@
     "quality_growth_combo": {
       "rows": 192,
       "nan_ratio": 0.1875,
-      "output_hash": "815b4ed0b25f3dd7",
+      "output_hash": "8634256484747916",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -2139,7 +2165,7 @@
     "rate_of_change": {
       "rows": 192,
       "nan_ratio": 0.078125,
-      "output_hash": "05fa7b84927553a7",
+      "output_hash": "651965ab68d1e409",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -2148,7 +2174,7 @@
     "rd_growth": {
       "rows": 192,
       "nan_ratio": 0.1875,
-      "output_hash": "9e9657359da6b960",
+      "output_hash": "cfc6149805d18358",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -2157,7 +2183,7 @@
     "rd_growth_acceleration": {
       "rows": 192,
       "nan_ratio": 0.1875,
-      "output_hash": "16a67491e7911aa2",
+      "output_hash": "07edace91b9204ec",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -2166,7 +2192,7 @@
     "rd_intensity": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "e721aea8f5aa5ed6",
+      "output_hash": "45f32c09109de367",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -2175,7 +2201,7 @@
     "rd_intensity_from_cumulative": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "a7d8a1d0c00723d6",
+      "output_hash": "bd10b2a8daf0a95e",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -2184,7 +2210,7 @@
     "rd_to_gross_profit": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "27490bde15f56e46",
+      "output_hash": "3c6a52877016424f",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -2193,7 +2219,7 @@
     "receivable_to_assets": {
       "rows": 192,
       "nan_ratio": 0.0,
-      "output_hash": "b7542b855fd16f29",
+      "output_hash": "b0e59a5eba2dea71",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -2202,7 +2228,7 @@
     "receivable_turnover": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "d349543c75aba311",
+      "output_hash": "4dc58e1d5564928d",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -2211,7 +2237,7 @@
     "receivable_turnover_from_cumulative": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "2092d95da348eaf9",
+      "output_hash": "ba44556158874b4e",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -2220,7 +2246,7 @@
     "receivables_growth": {
       "rows": 192,
       "nan_ratio": 0.1875,
-      "output_hash": "78392699c542d39e",
+      "output_hash": "0b4003a43b46d10f",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -2229,7 +2255,7 @@
     "revenue_growth": {
       "rows": 192,
       "nan_ratio": 0.1875,
-      "output_hash": "2879b10b28564347",
+      "output_hash": "b2bb1b356713532b",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -2256,7 +2282,7 @@
     "revenue_receivables_divergence": {
       "rows": 192,
       "nan_ratio": 0.1875,
-      "output_hash": "78592e0c8123ba8a",
+      "output_hash": "184283155de30c99",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -2265,7 +2291,7 @@
     "right_of_use_assets_to_assets": {
       "rows": 192,
       "nan_ratio": 0.0,
-      "output_hash": "fa21adf030f51da0",
+      "output_hash": "49d5d5bae84b815f",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -2274,7 +2300,7 @@
     "roa": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "6993e4a759b6d978",
+      "output_hash": "a1bfd5cb3023dbdb",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -2283,7 +2309,7 @@
     "roa_from_cumulative": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "4fe8c119c57a4b10",
+      "output_hash": "88140668f8f06dbf",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -2292,7 +2318,7 @@
     "roe": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "e2c472bb40e51d20",
+      "output_hash": "a47431ef329b51b0",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -2301,7 +2327,7 @@
     "roe_from_cumulative": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "306aea3f1849f011",
+      "output_hash": "45d0c297bb746165",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -2310,7 +2336,7 @@
     "roe_stability": {
       "rows": 192,
       "nan_ratio": 0.234375,
-      "output_hash": "39bb26873eec6cff",
+      "output_hash": "e5981530a6e40182",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -2319,7 +2345,7 @@
     "roic": {
       "rows": 192,
       "nan_ratio": 0.046875,
-      "output_hash": "a793ba261e9daa4b",
+      "output_hash": "f6bf046a56ab3304",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -2337,7 +2363,7 @@
     "rolling_obv": {
       "rows": 192,
       "nan_ratio": 0.015625,
-      "output_hash": "cfc921e65303e539",
+      "output_hash": "153204f291cfaecd",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -2346,7 +2372,7 @@
     "rolling_sharpe": {
       "rows": 192,
       "nan_ratio": 0.015625,
-      "output_hash": "823357c0435edc7b",
+      "output_hash": "2f138e76322f8f4a",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -2364,7 +2390,7 @@
     "sales_yield": {
       "rows": 192,
       "nan_ratio": 0.0,
-      "output_hash": "46298964f42b5397",
+      "output_hash": "f436885a8034efc8",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -2373,7 +2399,7 @@
     "selling_expense_ratio": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "fda78dc5a8dc90c3",
+      "output_hash": "e6ed0dd33ea1a70d",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -2409,7 +2435,7 @@
     "total_accruals_cashflow_method": {
       "rows": 192,
       "nan_ratio": 0.140625,
-      "output_hash": "62c8e4b1f42e6ee2",
+      "output_hash": "3e7a10102e48070f",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -2427,7 +2453,7 @@
     "weighted_moving_average": {
       "rows": 192,
       "nan_ratio": 0.0,
-      "output_hash": "23c499f4a75265c2",
+      "output_hash": "4063599d51aff77b",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -2454,7 +2480,7 @@
     "working_capital_to_assets": {
       "rows": 192,
       "nan_ratio": 0.0,
-      "output_hash": "fdd885b78af762a4",
+      "output_hash": "adef02d8b2868ecb",
       "index_columns": [
         "timestamp",
         "instrument"
@@ -2463,10 +2489,10 @@
   },
   "hashes": {
     "case_registry_hash": "d101f40a4e6a6a78643c7168d1ff2bf24ddf941d18b406ca38e7d075f38f5675",
-    "recipe_source_hash": "a6b1e15ef72ffdbd90635223641ee5b237874e6b900535cdd103e6e65e238d3e",
+    "recipe_source_hash": "a7d7219cfe68993fcfe0b442a7baf5199f25123cecf3609e6a750f1d03430187",
     "portable_test_source_hash": "f0c89a47588aabff5946dc3f61104855fa7ae3ebee0b9d13ed5986e9d7bcccf7",
     "production_test_source_hash": "7af92a79ff840b8aae1240b4984b175a676c8b538ed9c2b610149dd58a2151b3",
-    "primitive_evidence_hash": "c28820d05d8c2a7241356878ebfab3b0f51d36c4b8bfdb0410a7c45fd2e3b8f6",
-    "factor_operator_evidence_hash": "9229ca275f60ecdeff44d9b0ec87ea361fb6c84449c59bb6866300d4fc2e89bd"
+    "primitive_evidence_hash": "ca524b4d968c2bb8fb9829fc2d338cb07f98897ffcc42dff5f98a7891726dd8a",
+    "factor_operator_evidence_hash": "01fa2a06512381d07a9af98fd9ab9a1f68be6fec3252ac0931710dfbfcb267b2"
   }
 }

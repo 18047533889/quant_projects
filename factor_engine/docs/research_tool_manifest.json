@@ -2133,7 +2133,7 @@
         "polars"
       ],
       "canonical": "micro_bipower_var",
-      "description": "Bipower variation estimator",
+      "description": "Realized bipower variation (pi/2)*(n/(n-1))*sum(|r_t||r_{t-1}|)",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "close"
@@ -2170,7 +2170,7 @@
         "polars"
       ],
       "canonical": "micro_jump_indicator",
-      "description": "Jump indicator max(RV-BV,0)",
+      "description": "Jump indicator max(RV-BV,0) with corrected BV scale",
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "close"
@@ -2207,12 +2207,19 @@
         "polars"
       ],
       "canonical": "micro_kyle_lambda",
-      "description": "Kyle lambda proxy Cov(|ret|,vol)/Var(vol)",
+      "description": "LEGACY proxy: Cov(|ret|,vol)/Var(vol); not signed-flow Kyle lambda (see intraday_impact_beta)",
+      "hidden_from_default_mining": true,
+      "legacy_proxy": true,
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "close",
         "volume"
       ],
+      "preferred_replacements": [
+        "intraday_impact_beta",
+        "intraday_impact_asymmetry"
+      ],
+      "semantic_note": "legacy 代理: 数学语义不是其名字所指的严格测度(非 BVC VPIN / 非 signed-flow Kyle λ);保留以维持历史复现, 新研究请用 preferred_replacements",
       "status": "experimental",
       "surface": "research_tools"
     },
@@ -2397,12 +2404,19 @@
         "polars"
       ],
       "canonical": "micro_vpin",
-      "description": "Volume-synchronized |return| intensity proxy",
+      "description": "LEGACY proxy: volume-weighted absolute-return toxicity proxy; not true VPIN (see micro_bvc_vpin)",
+      "hidden_from_default_mining": true,
+      "legacy_proxy": true,
       "migration_reason": "not a production daily factor primitive",
       "param_names": [
         "close",
         "volume"
       ],
+      "preferred_replacements": [
+        "micro_bvc_vpin",
+        "intraday_bvc_imbalance"
+      ],
+      "semantic_note": "legacy 代理: 数学语义不是其名字所指的严格测度(非 BVC VPIN / 非 signed-flow Kyle λ);保留以维持历史复现, 新研究请用 preferred_replacements",
       "status": "experimental",
       "surface": "research_tools"
     },

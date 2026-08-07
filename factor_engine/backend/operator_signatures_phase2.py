@@ -274,4 +274,72 @@ def phase2_operator_signatures() -> dict[str, OperatorSignature]:
         "fin_announcement_lag", ArgSpec("period_end_date", _F), ArgSpec("pub_date", _F)
     )
 
+    # ---- advanced information theory (2026-08 Gemini round) ----------------
+    for _name in ("ts_transfer_entropy", "ts_effective_transfer_entropy"):
+        signatures[_name] = _sig(
+            _name,
+            ArgSpec("target", _F), ArgSpec("source", _F), ArgSpec("window", _W),
+            ArgSpec("bins", _INT), ArgSpec("lag", _INT),
+        )
+    signatures["ts_score_rank_weighted_mean"] = _sig(
+        "ts_score_rank_weighted_mean",
+        ArgSpec("target", _F), ArgSpec("score", _F), ArgSpec("window", _W),
+        ArgSpec("decay", _FLT),
+    )
+    signatures["report_benford_js_divergence"] = _sig(
+        "report_benford_js_divergence", ArgSpec("amount", _F), ArgSpec("window", _W)
+    )
+
+    # ---- advanced dependence structure (2026-08 Gemini round) --------------
+    signatures["ts_bures_corr_shift"] = _sig(
+        "ts_bures_corr_shift",
+        ArgSpec("x", _F), ArgSpec("y", _F),
+        ArgSpec("recent_window", _W), ArgSpec("prior_window", _W),
+    )
+    for _name in ("ts_kramers_moyal_drift", "ts_kramers_moyal_diffusion"):
+        signatures[_name] = _sig(
+            _name, ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("bins", _INT)
+        )
+    signatures["cs_sliced_wasserstein_copula_shift"] = _sig(
+        "cs_sliced_wasserstein_copula_shift",
+        ArgSpec("f1", _F), ArgSpec("f2", _F), ArgSpec("f3", _F),
+        ArgSpec("window", _W), ArgSpec("directions", _INT),
+    )
+    signatures["group_spd_feature_structure_shift"] = _sig(
+        "group_spd_feature_structure_shift",
+        ArgSpec("f1", _F), ArgSpec("f2", _F), ArgSpec("f3", _F),
+        ArgSpec("group", _G), ArgSpec("reference_window", _W),
+    )
+    signatures["holder_class_js_shift"] = _sig(
+        "holder_class_js_shift",
+        ArgSpec("s1", _F), ArgSpec("s2", _F), ArgSpec("s3", _F), ArgSpec("s4", _F), ArgSpec("s5", _F),
+        ArgSpec("ps1", _F), ArgSpec("ps2", _F), ArgSpec("ps3", _F), ArgSpec("ps4", _F), ArgSpec("ps5", _F),
+    )
+
+    # ---- advanced intraday (2026-08 Gemini round) --------------------------
+    signatures["intraday_wasserstein_pair_distance"] = _sig(
+        "intraday_wasserstein_pair_distance", ArgSpec("x", _F), ArgSpec("y", _F)
+    )
+    signatures["intraday_barrier_approach_acceleration"] = _sig(
+        "intraday_barrier_approach_acceleration",
+        ArgSpec("close", _F), ArgSpec("high_limit", _F), ArgSpec("low_limit", _F),
+        ArgSpec("lookback", _INT),
+    )
+    for _name in ("intraday_wasserstein_quantile_pca_score", "intraday_wasserstein_quantile_pca_residual"):
+        signatures[_name] = _sig(
+            _name, ArgSpec("returns", _F), ArgSpec("window", _W), ArgSpec("k", _INT)
+        )
+
+    # ---- topological / information geometry (2026-08 Gemini round) ---------
+    for _name in ("ts_betti_1_max_persistence", "ts_persistence_diagram_shift"):
+        signatures[_name] = _sig(
+            _name,
+            ArgSpec("x", _F), ArgSpec("window", _W),
+            ArgSpec("tau", _INT), ArgSpec("embedding_dim", _INT),
+        )
+    signatures["ts_student_t_fisher_shift"] = _sig(
+        "ts_student_t_fisher_shift",
+        ArgSpec("x", _F), ArgSpec("recent_window", _W), ArgSpec("prior_window", _W),
+    )
+
     return signatures

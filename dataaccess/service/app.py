@@ -7,9 +7,11 @@ import io
 import json
 import os
 import threading
+import time
 import uuid
 from typing import Any
 
+import pyarrow as pa
 import pyarrow.ipc as ipc
 import pyarrow.parquet as pq
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
@@ -21,7 +23,13 @@ from data_access.core.exceptions import DataAccessError, ValidationError
 from data_access.read.query_budget import resolve_query_budget
 
 from .config import ServiceSettings
-from .models import DatasetInfo, ReadRequest, ReadResponseMeta
+from .models import (
+    DatasetInfo,
+    FactorReadRequest,
+    ReadRequest,
+    ReadResponseMeta,
+    ReadURIRequest,
+)
 
 API_KEY = ""
 
@@ -251,6 +259,123 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
         pq.write_table(table, buf)
         buf.seek(0)
         return StreamingResponse(buf, media_type="application/vnd.apache.parquet", headers=headers)
+
+    def _serialize(table: pa.Table, meta: ReadResponseMeta, fmt: str) -> Response:
+        headers = {
+            "X-Data-Snapshot-Id": meta.snapshot_id,
+            "X-Rows": str(meta.rows),
+            "X-Bytes": str(meta.bytes),
+            "X-Elapsed-Ms": f"{meta.elapsed_ms:.2f}",
+        }
+        if fmt == "json":
+            payload: dict[str, Any] = {
+                "meta": meta.model_dump(),
+                "columns": list(table.column_names),
+                "data": json.loads(
+                    table.to_pandas(self_destruct=False).to_json(
+                        orient="records", date_format="iso", default_handler=str
+                    )
+                ),
+            }
+            return JSONResponse(content=payload, headers=headers)
+        if fmt == "arrow_ipc":
+            buf = io.BytesIO()
+            with ipc.new_stream(buf, table.schema) as writer:
+                writer.write_table(table)
+            buf.seek(0)
+            return StreamingResponse(
+                buf, media_type="application/vnd.apache.arrow.stream", headers=headers
+            )
+        buf = io.BytesIO()
+        pq.write_table(table, buf)
+        buf.seek(0)
+        return StreamingResponse(
+            buf, media_type="application/vnd.apache.parquet", headers=headers
+        )
+
+    @app.post("/v1/read_uri", dependencies=[Depends(require_api_key)])
+    def read_uri(request: ReadURIRequest) -> Response:
+        """读取任意 URI（dev 白名单下），不必先登记数据集。"""
+        if not query_slots.acquire(blocking=False):
+            raise HTTPException(status_code=503, detail="查询并发已达上限，请稍后重试")
+        try:
+            budget = _api_budget(ReadRequest(dataset="uri"), settings)
+            start = time.perf_counter()
+            try:
+                handle = get_store().read_uri(
+                    request.uri,
+                    columns=request.columns,
+                    time_range=request.time_range,
+                    instrument_filter=request.instrument_filter,
+                    filters=request.filters,
+                    limit=request.limit,
+                    format=request.format,
+                    time_column=request.time_column,
+                    instrument_column=request.instrument_column,
+                    query_budget=budget,
+                )
+            except ValidationError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            except DataAccessError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+            table = handle.to_arrow()
+            elapsed_ms = (time.perf_counter() - start) * 1000
+            meta = ReadResponseMeta(
+                dataset=f"<uri:{request.uri[:80]}>",
+                snapshot_id=getattr(handle.snapshot, "snapshot_id", "-"),
+                rows=table.num_rows,
+                bytes=table.nbytes,
+                elapsed_ms=elapsed_ms,
+                format=request.format_out,
+            )
+            return _serialize(table, meta, request.format_out)
+        finally:
+            query_slots.release()
+
+    @app.get("/v1/factors", dependencies=[Depends(require_api_key)])
+    def factors_catalog() -> dict[str, Any]:
+        """因子目录清单（FactorCatalog）。"""
+        catalog = get_store().get_factor_catalog()
+        return {
+            "root": str(catalog.root),
+            "count": len(catalog),
+            "factors": [m.to_dict() for m in catalog.records.values()],
+        }
+
+    @app.post("/v1/factors/read", dependencies=[Depends(require_api_key)])
+    def factors_read(request: FactorReadRequest) -> Response:
+        """一次读多个因子（单查询 UNION ALL / 宽表 PIVOT）。"""
+        if not query_slots.acquire(blocking=False):
+            raise HTTPException(status_code=503, detail="查询并发已达上限，请稍后重试")
+        try:
+            start = time.perf_counter()
+            try:
+                handle = get_store().read_factors(
+                    request.factor_ids,
+                    time_range=request.time_range,
+                    universe=request.universe,
+                    frequency=request.frequency,
+                    layout=request.layout,
+                    columns=request.columns,
+                    limit=request.limit,
+                )
+            except ValidationError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            except DataAccessError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+            table = handle.to_arrow()
+            elapsed_ms = (time.perf_counter() - start) * 1000
+            meta = ReadResponseMeta(
+                dataset="factors:" + ",".join(request.factor_ids),
+                snapshot_id=getattr(handle.snapshot, "snapshot_id", "-"),
+                rows=table.num_rows,
+                bytes=table.nbytes,
+                elapsed_ms=elapsed_ms,
+                format=request.format,
+            )
+            return _serialize(table, meta, request.format)
+        finally:
+            query_slots.release()
 
     return app
 

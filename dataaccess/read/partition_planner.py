@@ -146,6 +146,8 @@ def prune_paths_for_time_range(
         return list(glob_paths)
     start = parse_date(time_range[0])
     end = parse_date(time_range[1])
+    # 只对闭区间做路径展开：开区间无法安全枚举未来/过去文件，
+    # 交由 manifest（文件级 min/max）或 DuckDB 谓词处理。
     if start is None or end is None:
         return list(glob_paths)
 

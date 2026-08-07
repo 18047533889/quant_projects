@@ -91,6 +91,15 @@ class DuckDBEngine:
     def config(self) -> DuckDBConfig:
         return self._config
 
+    @property
+    def is_closed(self) -> bool:
+        """连接是否已被关闭（reset_shared_engine 后缓存的 store 需重建引擎）。"""
+        try:
+            self._conn.execute("SELECT 1")
+            return False
+        except duckdb.Error:
+            return True
+
     def ensure_s3_configured(self) -> None:
         """COS 远程直读前配置 DuckDB httpfs（进程内一次）。"""
         from data_access.cos.s3_duckdb import ensure_duckdb_s3
@@ -141,7 +150,9 @@ class DuckDBEngine:
         params: Sequence[Any] | None,
         *,
         batch_size: int,
-    ) -> pa.RecordBatchReader:
+    ) -> "ManagedBatchReader":
+        from data_access.read.managed_reader import ManagedBatchReader
+
         cursor = self._conn.cursor()
         try:
             if params is not None:
@@ -149,8 +160,10 @@ class DuckDBEngine:
             else:
                 result = cursor.execute(sql)
             if hasattr(result, "to_arrow_reader"):
-                return result.to_arrow_reader(batch_size)
-            return result.fetch_record_batch(batch_size)
+                reader = result.to_arrow_reader(batch_size)
+            else:
+                reader = result.fetch_record_batch(batch_size)
+            return ManagedBatchReader(reader, cursor=cursor)
         except Exception:
             cursor.close()
             raise
@@ -193,12 +206,28 @@ class DuckDBEngine:
             return str(rows[0][0])
         return "\n".join(str(row[0]) if len(row) == 1 else str(row) for row in rows)
 
-    def execute_arrow(self, sql: str, params: Sequence[Any] | None = None) -> pa.Table:
-        """执行 SQL，返回 Arrow Table（零拷贝路径，性能最优）。"""
+    def execute_arrow(
+        self,
+        sql: str,
+        params: Sequence[Any] | None = None,
+        *,
+        deadline_ms: float | None = None,
+    ) -> pa.Table:
+        """执行 SQL，返回 Arrow Table（零拷贝路径，性能最优）。
+
+        ``deadline_ms``：查询超时主动取消。使用独立连接 + watchdog 线程在
+        截止后调用 ``interrupt()``（不打扰共享连接的并发查询）。超时抛
+        ``DeadlineExceeded``。
+        """
         start = time.perf_counter()
         elapsed_ms = 0.0
         try:
-            table = self._execute_arrow_core(sql, params)
+            if deadline_ms is not None:
+                table = self._execute_isolated_with_deadline(
+                    sql, params, deadline_ms=deadline_ms
+                )
+            else:
+                table = self._execute_arrow_core(sql, params)
             elapsed_ms = (time.perf_counter() - start) * 1000.0
             return table
         except duckdb.Error as exc:
@@ -215,14 +244,66 @@ class DuckDBEngine:
                 op="arrow",
             )
 
+    def _execute_isolated_with_deadline(
+        self,
+        sql: str,
+        params: Sequence[Any] | None,
+        *,
+        deadline_ms: float,
+    ) -> pa.Table:
+        """独立连接 + watchdog：超时 interrupt，避免拖死共享连接。"""
+        from data_access.core.exceptions import DeadlineExceeded
+
+        deadline_sec = max(0.001, deadline_ms / 1000.0)
+        conn = duckdb.connect(":memory:")
+        timed_out = threading.Event()
+
+        def _watchdog() -> None:
+            if not timed_out.wait(deadline_sec):
+                # 标记超时（except 里据此区分「被中断」与「普通错误」）
+                timed_out.set()
+                try:
+                    conn.interrupt()
+                except Exception:
+                    pass
+
+        thread = threading.Thread(target=_watchdog, daemon=True)
+        thread.start()
+        try:
+            apply_pragmas(conn, self._config)
+            if "s3://" in sql:
+                from data_access.cos.s3_duckdb import configure_fresh_duckdb_s3
+
+                configure_fresh_duckdb_s3(conn)
+            if params is not None:
+                result = conn.execute(sql, list(params))
+            else:
+                result = conn.execute(sql)
+            return (
+                result.to_arrow_table()
+                if hasattr(result, "to_arrow_table")
+                else result.fetch_arrow_table()
+            )
+        except duckdb.Error as exc:
+            if timed_out.is_set():
+                raise DeadlineExceeded(
+                    f"查询超过 deadline={deadline_ms:.0f}ms 被取消。"
+                    "请缩小 time_range / instrument_filter / 指定 columns，"
+                    "或提高 query_budget.max_elapsed_ms。"
+                ) from exc
+            raise
+        finally:
+            timed_out.set()
+            conn.close()
+
     def execute_reader(
         self,
         sql: str,
         params: Sequence[Any] | None = None,
         *,
         batch_size: int = 100_000,
-    ) -> pa.RecordBatchReader:
-        """执行 SQL，返回 Arrow RecordBatchReader（真正流式，按 batch 拉）。"""
+    ) -> "ManagedBatchReader":
+        """执行 SQL，返回 ManagedBatchReader（显式托管 reader+cursor 生命周期）。"""
         start = time.perf_counter()
         try:
             return self._execute_reader_core(sql, params, batch_size=batch_size)
@@ -278,10 +359,32 @@ class DuckDBEngine:
         register_specs: Sequence[tuple[str, str]],
         sql: str,
         params: Sequence[Any] | None = None,
+        *,
+        deadline_ms: float | None = None,
     ) -> pa.Table:
-        """独立连接注册 TEMP VIEW 后执行 SQL（sql_escape 专用，支持并发 sql）。"""
+        """独立连接注册 TEMP VIEW 后执行 SQL（sql_escape 专用，支持并发 sql）。
+
+        ``deadline_ms``：watchdog 超时 interrupt 本连接（scoped 连接是独立的，
+        不影响共享连接上的并发查询）。
+        """
+        from data_access.core.exceptions import DeadlineExceeded
+
         start = time.perf_counter()
         conn = duckdb.connect(":memory:")
+        timed_out = threading.Event()
+
+        def _watchdog() -> None:
+            if deadline_ms is not None and not timed_out.wait(deadline_ms / 1000.0):
+                timed_out.set()
+                try:
+                    conn.interrupt()
+                except Exception:
+                    pass
+
+        thread: threading.Thread | None = None
+        if deadline_ms is not None:
+            thread = threading.Thread(target=_watchdog, daemon=True)
+            thread.start()
         try:
             apply_pragmas(conn, self._config)
             self._configure_scoped_s3_if_needed(conn, register_specs)
@@ -307,8 +410,14 @@ class DuckDBEngine:
             )
             return table
         except duckdb.Error as exc:
+            if deadline_ms is not None and timed_out.is_set():
+                raise DeadlineExceeded(
+                    f"sql() 查询超过 deadline={deadline_ms:.0f}ms 被取消。"
+                    "请缩小 time_range / 指定 view_columns，或提高 max_elapsed_ms。"
+                ) from exc
             raise EngineError(f"DuckDB scoped sql 失败: {exc}\nSQL: {sql[:500]}") from exc
         finally:
+            timed_out.set()
             conn.close()
 
     def execute_scoped_sql_stream(
@@ -320,6 +429,8 @@ class DuckDBEngine:
         batch_size: int = 100_000,
     ) -> Iterator[pa.RecordBatch]:
         """独立连接流式 scoped sql；返回 batch iterator，迭代完自动关闭连接。"""
+        from data_access.read.managed_reader import ManagedBatchReader
+
         def _iter() -> Iterator[pa.RecordBatch]:
             conn = duckdb.connect(":memory:")
             try:
@@ -335,7 +446,13 @@ class DuckDBEngine:
                     reader = rel.to_arrow_reader(batch_size)
                 else:
                     reader = rel.fetch_record_batch(batch_size)
-                yield from reader
+                # ManagedBatchReader 显式托管 reader + conn 生命周期
+                mbr = ManagedBatchReader(reader, on_close=conn.close)
+                try:
+                    for batch in mbr:
+                        yield batch
+                finally:
+                    mbr.close()
             except duckdb.Error as exc:
                 raise EngineError(
                     f"DuckDB scoped sql stream 失败: {exc}\nSQL: {sql[:500]}"

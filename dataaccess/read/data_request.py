@@ -1,0 +1,198 @@
+"""
+data_access.read.data_request —— DataRequest / ReadPlan 统一数据请求接口
+
+职责
+    1. ``DataRequest``：FactorEngine Analyzer 一次性提交的「逻辑数据需求」——
+       referenced fields、时间区间、instruments/universe、PIT 要求、frequency、
+       单位归一化开关、join 策略、engine/result 偏好。
+    2. ``ReadPlan``：``store.plan(request)`` 的产物。编译阶段完成字段解析
+       （logical → dataset + physical）、多数据集归并（同一物理表只读一次）、
+       join 策略、每数据集扫描成本估算与 engine/result 路由，但**不执行**。
+       ``ReadPlan.explain()`` 给人看计划；``ReadPlan.execute()`` 真正执行并
+       返回 ``ReadHandle``。
+
+设计要点
+    1. 字段解析统一走 SemanticFieldCatalog，找不到再回退 registry dataset
+       schema（物理列名 == 逻辑名的老代码不受影响）。
+    2. 多数据集字段按物理表 coalesce：同一 StockBalance 的多个字段只扫一次。
+    3. ``universe`` 命名一个 registry 数据集（如 ashare_universe_daily），
+       execute 时用其 instrument 列筛出成分，与 instruments 求交集。
+    4. ``frequency`` 目前作为计划元数据声明（为分钟→日聚合 pushdown 预留），
+       本层不做 resample——执行引擎决定是否下推。
+
+非职责
+    不做文件 IO / 不拼 SQL（read_joined / _read_handle 做）；不做谓词求值。
+
+维护人：quant 基础平台组    最后更新：2026-08-07
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
+
+from data_access.core.exceptions import ValidationError
+
+if TYPE_CHECKING:
+    import pyarrow as pa
+
+    from data_access.read.semantic_catalog import SemanticField
+
+_VALID_JOIN_POLICIES = {"exact", "asof", "pit_asof"}
+
+
+@dataclass
+class DataRequest:
+    """一次统一的逻辑数据请求（Analyzer → DataAccess Planner 的输入）。"""
+
+    fields: Sequence[str]                       # 逻辑字段名，或 "dataset.physical" 限定名
+    start: Any = None                           # 闭区间下界（str/date/datetime）
+    end: Any = None                             # 闭区间上界
+    instruments: Sequence[str] | None = None    # 标的白名单
+    universe: str | None = None                 # registry 数据集名，作为股票池来源
+    pit: bool = False                           # 是否要求 PIT 语义（当前用于计划标注）
+    anchor: str | None = None                   # 锚定数据集（无则按字段推导）
+    frequency: str | None = None                # daily/minute/...（计划元数据，预留 pushdown）
+    normalize_units: bool = False               # 输出层 scale_to_canonical
+    engine: str = "auto"                        # auto|duckdb|polars|pyarrow
+    result: str = "auto"                        # auto|arrow|pandas|polars|lazy|stream
+    limit: int | None = None
+    filters: Any = None
+    joins: Mapping[str, str] | None = None      # {dataset: exact|asof|pit_asof}
+
+    @property
+    def time_range(self) -> tuple[Any, Any] | None:
+        if self.start is None and self.end is None:
+            return None
+        return (self.start, self.end)
+
+
+@dataclass
+class ReadPlan:
+    """编译好的数据读取计划：可 explain，可 execute。"""
+
+    request: DataRequest
+    datasets: list[str]                                  # 有序：anchor 在前
+    fields: list["SemanticField"]                        # 已解析字段（去重，保序）
+    per_dataset_columns: dict[str, list[str]]            # dataset -> 物理列
+    join_policies: dict[str, str]                        # dataset -> join 策略
+    scan_costs: dict[str, Any]                           # dataset -> ScanCost
+    storage: dict[str, str]                              # dataset -> backend 描述
+    snapshot_info: dict[str, dict[str, Any]]             # dataset -> manifest 版本信息
+    engine: str = "auto"
+    result: str = "auto"
+    time_range: tuple[Any, Any] | None = None
+    instruments: Sequence[str] | None = None
+    universe: str | None = None
+    # 绑定到 store 以便 execute（由 store.plan 注入）
+    _store: Any = field(default=None, repr=False)
+
+    @property
+    def anchor(self) -> str | None:
+        return self.request.anchor or (self.datasets[0] if self.datasets else None)
+
+    def explain(self) -> str:
+        """渲染人类可读的计划文本（不执行任何 IO）。"""
+        lines: list[str] = []
+        lines.append("DataAccess ReadPlan")
+        lines.append("=" * 40)
+        lines.append("DATASETS")
+        for i, ds in enumerate(self.datasets):
+            marker = " *anchor" if ds == self.anchor else ""
+            join = self.join_policies.get(ds, "exact")
+            stg = self.storage.get(ds, "?")
+            cost = self.scan_costs.get(ds)
+            cost_txt = (
+                f"~{cost.estimated_rows:,} rows / {cost.file_count} files"
+                f" / {cost.total_bytes:,} bytes"
+                if cost is not None
+                else "cost n/a"
+            )
+            lines.append(
+                f"  [{i}] {ds}{marker}  join={join}  storage={stg}  {cost_txt}"
+            )
+        lines.append("FIELDS")
+        for f in self.fields:
+            unit = ""
+            if f.is_scale_applicable:
+                unit = (
+                    f"  ({f.source_unit}->{f.canonical_unit}, x{f.scale})"
+                )
+            lines.append(f"  {f.logical_name} -> {f.dataset}.{f.physical_name}{unit}")
+        lines.append("TIME")
+        tr = self.time_range
+        lines.append(f"  {tr[0]} ~ {tr[1]}" if tr else "  (全量)")
+        lines.append(
+            f"INSTRUMENTS  {len(self.instruments)}  "
+            f"UNIVERSE  {self.universe or '-'}"
+        )
+        if self.request.frequency:
+            lines.append(f"FREQUENCY    {self.request.frequency} (declared)")
+        lines.append(f"ENGINE       {self.engine}   RESULT  {self.result}")
+        lines.append(f"NORMALIZE    {self.request.normalize_units}")
+        snap = self.snapshot_info
+        if snap:
+            lines.append("SNAPSHOT")
+            for ds, info in snap.items():
+                lines.append(
+                    f"  {ds}: has_manifest={info.get('has_manifest')} "
+                    f"dataset_version={info.get('dataset_version')} "
+                    f"partition_version={info.get('partition_version')}"
+                )
+        return "\n".join(lines)
+
+    def execute(self) -> Any:
+        """执行计划，返回 ReadHandle（读路径照常走 budget/audit/snapshot）。"""
+        if self._store is None:
+            raise RuntimeError("ReadPlan 未绑定 DataAccessStore，无法 execute")
+        store = self._store
+        tr = self.time_range
+        insts = self.instruments
+
+        if len(self.datasets) == 1:
+            ds = self.datasets[0]
+            cols = self.per_dataset_columns.get(ds) or None
+            return store.read(
+                ds,
+                columns=cols,
+                time_range=tr,
+                instrument_filter=insts,
+                filters=self.request.filters,
+                limit=self.request.limit,
+                engine=self.engine,
+                result=self.result,
+                normalize_units=self.request.normalize_units,
+            )
+
+        # 多数据集：一次 read_joined，物理表各扫一次，join 在 DuckDB 内完成。
+        anchor = self.anchor
+        if anchor is None:
+            raise ValidationError("多数据集计划缺少 anchor")
+        return store.read_joined(
+            anchor,
+            fields=self.per_dataset_columns,
+            joins=self.join_policies,
+            time_range=tr,
+            instrument_filter=insts,
+            filters=self.request.filters,
+            limit=self.request.limit,
+            engine=self.engine,
+            result=self.result,
+            normalize_units=self.request.normalize_units,
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"ReadPlan(datasets={self.datasets}, fields={len(self.fields)}, "
+            f"engine={self.engine}, result={self.result})"
+        )
+
+
+def normalize_join_policy(policy: str | None) -> str:
+    """把 join 策略归一化到合法集合；None 默认 exact。"""
+    key = str(policy or "exact").strip().lower()
+    if key not in _VALID_JOIN_POLICIES:
+        raise ValidationError(
+            f"join 策略必须是 {sorted(_VALID_JOIN_POLICIES)}，收到 {policy!r}"
+        )
+    return key

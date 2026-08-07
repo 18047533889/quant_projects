@@ -1,4 +1,6 @@
-# DataAccess → Universal Quant Data IO Layer（改造计划）
+# DataAccess → Universal Quant Data IO Layer（改造计划 + 完成状态）
+
+> **状态：2026-08-07 已完成并全量回归绿（441 通过 / 0 失败）**。各 Phase 标注 ✅。
 
 > 日期：2026-08-07　作者：data_access 改造
 > 目标：保留 `DataAccessStore / Registry / QueryBudget / Snapshot / Lineage / Audit / COS PIT / Factor Lake / HTTP`，
@@ -25,7 +27,7 @@
 
 ## 实施阶段（与代码对应）
 
-### Phase 1 — Registry DatasetSpec 扩展（registry/loader.py + read/formats.py）
+### Phase 1 ✅ — Registry DatasetSpec 扩展（registry/loader.py + read/formats.py）
 - `DatasetBase` 新增可选字段：`format`（parquet/csv/tsv/jsonl/arrow/feather…）、
   `format_spec`（CSV 的 delimiter/header/encoding/compression 等）、`storage`、
   `roles`（event_time/instrument/publish_time/report_period…）、`partitioning`、
@@ -37,14 +39,14 @@
   `ArrowIPCAdapter` / `FeatherAdapter`（后两者走 PyArrow 引擎）。
   DuckDB 原生 `read_csv`（含 header/delim/encoding/compression）、`read_json_auto`。
 
-### Phase 2 — Generic Predicate AST（read/predicate_ast.py + read/predicate.py）
+### Phase 2 ✅ — Generic Predicate AST（read/predicate_ast.py + read/predicate.py）
 - 表达式树：`Eq / Ne / Lt / Le / Gt / Ge / Between / In / NotIn / IsNull / IsNotNull / And / Or / Not`。
 - `parse_filters()`：`{"col": v}` / `{"col": [..]}` / `{"col": {"gt": .., "lte": ..}}` /
   `Filter` 实例统一归一化。
 - `compile_filter_duckdb` / `compile_filter_polars` 两个编译器，共用语义。
 - read API 新增 `filters=` 参数；`Predicate.extra` 的「PR1 未启用」占位 stub 被替换。
 
-### Phase 3 — Path/Partition Planner + Dataset Manifest（read/partition_planner.py + read/manifest.py）
+### Phase 3 ✅ — Path/Partition Planner + Dataset Manifest（read/partition_planner.py + read/manifest.py）
 - `PartitionSpec`：`partitioning.time`（source=path/filename, pattern="{date}.parquet"）+
   hive 分区列；`prune_paths_for_time_range()` 在进 DuckDB 前把 `date=*` / `year=*` /
   `month=*` / `{date}.parquet` 展开成具体文件路径。
@@ -54,7 +56,7 @@
   glob + `pq.read_metadata()` 扫全部 footer。
 - 路径解析链：Query → Manifest pruning → 文件级 pruning → DuckDB。
 
-### Phase 4 — StorageBackend + S3 Secret + DuckDB 版本能力层（core/storage.py + cos/s3_duckdb.py + core/duckdb_capabilities.py）
+### Phase 4 ✅ — StorageBackend + S3 Secret + DuckDB 版本能力层（core/storage.py + cos/s3_duckdb.py + core/duckdb_capabilities.py）
 - `StorageSpec`（type=local/s3/cos/http/cli/clickhouse + uri/root/bucket/endpoint/secret）。
   `resolve_storage_for_dataset()` 把 COS mirror 注册表归一化为 `storage.type=cos`，
   COS 不再是 Store 里的特殊分支；读路径决策统一走 backend。
@@ -63,7 +65,7 @@
 - `DuckDBCapabilities`：进程内探测版本、`supports_create_secret`、
   `object_cache_is_noop` 等；`apply_pragmas` 对 no-op PRAGMA 静默跳过并告警一次。
 
-### Phase 5 — ReadHandle + 统一 read() + 成本路由 + read_uri（read/read_handle.py + read/scan_cost.py）
+### Phase 5 ✅ — ReadHandle + 统一 read() + 成本路由 + read_uri（read/read_handle.py + read/scan_cost.py）
 - `ReadHandle`：`to_arrow() / to_pandas() / to_polars() / to_lazy() / stream()`。
 - `store.read(..., engine="auto", result="auto")`：engine∈{auto,duckdb,polars,pyarrow}，
   result∈{auto,arrow,pandas,polars,lazy,stream}；auto 按 `estimated_scan_cost` 路由
@@ -72,26 +74,26 @@
   production/strict 默认拒绝 arbitrary URI，只允许 registry dataset 根。
 - `read_auto()` / `read_auto_stream()` 改走成本路由，签名保持兼容。
 
-### Phase 6 — Query 超时取消 + ManagedBatchReader（core/engine.py + read/managed_reader.py）
+### Phase 6 ✅ — Query 超时取消 + ManagedBatchReader（core/engine.py + read/managed_reader.py）
 - `ManagedBatchReader`：包装 reader+cursor，`close() / __enter__ / __exit__ / __del__`，
   正常结束、break、异常、GC、client disconnect 都释放 cursor。
 - DuckDBEngine 支持 `deadline_ms`：watchdog 线程超时调 `conn.interrupt()` 取消
   在途查询，抛 `DeadlineExceeded`（替代「查完再报超时」）。
 
-### Phase 7 — FactorCatalog + 批量 read_factors（read/factors.py）
+### Phase 7 ✅ — FactorCatalog + 批量 read_factors（read/factors.py）
 - `FactorMeta`：factor_id/version/frequency/universe/dtype/start/end/instruments/
   storage_uri/layout/schema_hash/formula_hash/operator_hash/data_snapshot/created/status。
 - `FactorCatalog`：湖内 `_factor_meta.json` 清单，discover/load/save。
 - `store.read_factors(factor_ids=[...], time_range, universe, layout)`：单条
   UNION ALL 查询批量读多因子（带 factor_id 虚拟列），或走 factor_matrix 单查询。
 
-### Phase 8 — Quality Contract 升级（quality/contracts.py + quality/cli.py）
+### Phase 8 ✅ — Quality Contract 升级（quality/contracts.py + quality/cli.py）
 - 检查项：schema 对齐 / PK 唯一 / null ratio / range / finite·inf·NaN / 时间单调 /
   重复时间戳 / 覆盖率 / 截面覆盖 / 缺日期 / 未来时间戳 / PIT 泄漏 / 分区完整性 /
   schema 漂移 / 行数异常 / 分布漂移。
 - CLI 读侧改走 `store.read_uri()` / `store.read()`，不再裸 `pandas.read_parquet`。
 
-### Phase 9 — 测试与回归
+### Phase 9 ✅ — 测试与回归
 - 每个新模块加单测（formats / predicate_ast / partition_planner / manifest /
   scan_cost / read_handle / read_uri / managed_reader / factors / quality）。
 - 修复既有 4 个失败：`_format_literal` 接受 Timestamp（compute_and_write）、
