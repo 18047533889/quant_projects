@@ -646,6 +646,9 @@ def _minute_panels(dates, assets, rows):
         # 2026-08 order-flow family: no limit-locked bars in the audit fixture,
         # so the ``locked`` mask is all zeros (neutral override not exercised).
         "minute_zero": frame(np.zeros((n_days * per, columns))),
+        # 2026-08 session-recovery: deterministic minute shock indicator
+        # (abs return > ~2 sigma of the synthetic per-minute noise).
+        "minute_shock": frame((absret3 > 0.004).astype(float)),
     }
 
 
@@ -819,6 +822,14 @@ def _panels(rows: int = 220, columns: int = 6) -> dict[str, pd.DataFrame]:
         "expected_mean": close,
         # 2026-08 stratified-mean-spread sorter input (volume-sorted recipes).
         "sorter": volume,
+        # 2026-08 V2/V3 report-timing: sawtooth filing delay (days) and the
+        # previous published value for revision magnitude.
+        "delay": pd.DataFrame(
+            np.tile(((np.arange(rows) // 3) % 10 + 1)[:, None], (1, columns)),
+            index=dates,
+            columns=assets,
+        ),
+        "prev_x": close.shift(1).fillna(close),
     }
     panels.update(_minute_panels(dates, assets, rows))
     for name in sorted(_PANEL_PARAMETERS):
