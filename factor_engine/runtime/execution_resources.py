@@ -107,24 +107,35 @@ def resource_plan(n_jobs: int | None = None) -> ResourcePlan:
 
 
 def set_duckdb_max_threads(plan: ResourcePlan | None = None, threads: int | None = None) -> int:
-    """把 DuckDB 线程数写入环境变量（DuckDBEngine 创建时读取），返回生效值。
+    """把 DuckDB 线程数写入环境变量（后续 DuckDBEngine 创建时读取），返回生效值。
 
-    进程内已有 DuckDBEngine 时也尝试 ``PRAGMA threads`` 就地调整。
+    只改 env，**不**就地改已存在的共享引擎（避免污染其它执行上下文）；需要
+    就地调整正在运行的引擎时显式调用 ``apply_live_duckdb_threads``。
     """
     value = threads if threads is not None else (plan.duckdb_threads if plan else None)
     if value is None:
         value = _duckdb_base_threads()
     os.environ["DUCKDB_MAX_THREADS"] = str(value)
+    return value
+
+
+def apply_live_duckdb_threads(threads: int | None = None) -> int:
+    """就地调整当前共享 DuckDB 引擎的 ``PRAGMA threads``（batch 运行时用）。
+
+    返回实际生效值；没有可用 store / 调整失败时返回 0（调用方忽略）。
+    """
+    if threads is None:
+        threads = _duckdb_base_threads()
     try:
         from data_access import get_store
 
         engine = get_store()._engine
         if hasattr(engine, "_write_lock"):
             with engine._write_lock:
-                engine._conn.execute(f"PRAGMA threads={int(value)}")
+                engine._conn.execute(f"PRAGMA threads={int(threads)}")
+        return int(threads)
     except Exception:
-        pass
-    return value
+        return 0
 
 
 def reset_resource_cache() -> None:

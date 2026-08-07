@@ -1264,3 +1264,142 @@ bucket_count` 等 + `_SPECIAL_SCALARS`（weighted_semivariance.target=0.0 等）
   golden、Student-t 窗口长度、PCA rank/eigen-gap、TE 常量/min_transitions、
   score_rank tie、Bures min_pairs、holder NaN/负 share、SPD complete-case/min_peers、
   Wasserstein MAD=0、KM min_bin_count、Takens NaN 过滤。
+
+---
+
+# §18 2026-08-08 市场状态描述语言扩展（38 算子，P1 第一批 + P2 第二批）
+
+> 触发：用户提交 AI 的 "算子维度地图" 提案，要求把 FactorEngine 从"金融公式集合"
+> 升级为"市场状态描述语言"——补齐 quantile-hit 动态、expectile 幅度敏感尾部、
+> extreme dependence、Directional-Change 内在时间、多字段协方差几何、无 L2 spread
+> proxy、日内 profile surprise、横截面局部非线性面、tail systemic centrality、
+> relation diffusion、marked-event、update-clock 十二个坐标系缺口。
+> 执行要求：Python + polars + duckdb 三端可跑，生产级 daily，一次性全部落地。
+
+## 18.1 目标与原则
+
+- 38 个新算子全部实现为 numpy 参考实现，PIT-safe、确定性、fail-closed NaN。
+- **不写死字段名**：所有 op 用通用参数（`target/source/condition/x/scale` 等），字段自由传。
+- 不做重复劳动：不加新传统指标、不命名 K 线形态、不再堆 entropy/tail statistic；
+  本次全部走"动态/依赖/局部几何"方向。
+- 后端策略与既有 advanced pack 一致：polars 用 `register_polars_bridge`（精确对齐
+  pandas_numpy 参考）；duckdb 对这些复杂 rolling/截面算子走 Python fallback
+  （不造脆弱的 SQL emitter）。这保证三端语义一致。
+
+## 18.2 新增算子清单（38）
+
+### A. Quantile-hit 动态（hit-sequence 核共享）
+| canonical | 签名 | 层级 |
+|---|---|---|
+| `ts_quantilogram` | (x, window, quantile, lag, side) | P1 |
+| `ts_cross_quantilogram` | (target, source, window, target_q, source_q, lag, target_side, source_side) | P1 |
+| `ts_quantile_crossing_spectral_concentration` | (x, window, quantile, side) | P2 |
+
+### B. Expectile（幅度敏感尾部）
+| `ts_expectile` | (x, window, tau) | P1 |
+| `ts_expectile_beta` | (y, x, window, tau) | P1 |
+
+### C. Extreme dependence（extremogram 核）
+| `ts_extremogram` | (x, window, quantile, lag, side) | P1 |
+| `ts_cross_extremogram` | (target, source, window, target_q, source_q, lag, target_side, source_side) | P1 |
+| `ts_extremal_dependence_decay` | (x, window, quantile, side, max_lag) | P2 |
+
+### D. Directional Change 内在时间（共享 DC 核）
+| `ts_dc_overshoot_ratio` | (x, scale, threshold, window) | P1 |
+| `ts_dc_event_rate` | (x, scale, threshold, window) | P1 |
+| `ts_dc_duration_asymmetry` | (x, scale, threshold, window) | P1 |
+| `ts_dc_overshoot_asymmetry` | (x, scale, threshold, window) | P1 |
+
+### E. 多字段协方差几何（特征值核共享）
+| `ts_feature_mode_share` | (f1, f2, f3, window) | P1 |
+| `ts_feature_effective_rank` | (f1, f2, f3, window) | P1 |
+| `ts_feature_subspace_rotation` | (f1, f2, f3, window, recent_window, prior_window) | P1 |
+| `ts_beta_break_score` | (y, x, window, recent_window, prior_window) | P1 |
+
+### F. 条件/频域依赖
+| `ts_conditional_transfer_entropy` | (target, source, condition, window, bins, lag, min_transitions) | P2 |
+| `ts_modwt_band_corr` | (x, y, window, level, band) | P2 |
+
+### G. 采样尺度 / 噪声诊断（日内）
+| `intraday_subsampled_rv_dispersion` | (returns, sampling) | P1 |
+| `intraday_volatility_signature_slope` | (returns, max_interval) | P1 |
+| `intraday_realized_power_variation` | (returns, order, sampling) | P2 |
+
+### H. 无 L2 spread proxy
+| `ohlc_corwin_schultz_spread` | (high, low, smooth_window) | P1 |
+| `ts_roll_effective_spread` | (x, window) | P2 |
+
+### I. 日内 profile surprise（日边界 + 固定 slot 网格）
+| `intraday_profile_surprise_energy` | (x, history_days, n_slots, cap) | P1 |
+| `intraday_profile_phase_shift` | (x, history_days, max_shift, n_slots) | P2 |
+
+### J. 横截面局部非线性面（KNN 局部回归/PCA 核）
+| `cs_knn_local_linear_residual` | (target, f1, f2, f3, k, ridge) | P1 |
+| `cs_knn_tangent_residual` | (target, f1, f2, f3, k) | P2 |
+| `cs_knn_local_gradient_norm` | (target, f1, f2, f3, k, ridge) | P2 |
+| `cs_rank_copula_mi` | (a, b, grid) | P2 |
+| `cs_rank_copula_entropy` | (a, b, grid) | P2 |
+
+### K. Tail systemic centrality
+| `group_tail_centrality` | (x, group_id, window, quantile, side) | P1 |
+| `group_tail_lead_score` | (x, group_id, window, quantile, side, lag) | P2 |
+
+### L. Relation diffusion（group 邻接的生产可用版本）
+| `relation_diffusion_score` | (x, group, alpha, steps) | P2 |
+
+### M. Marked event
+| `event_mark_autocorr` | (event, mark, history_window, event_lag) | P1 |
+| `event_interval_mark_coupling` | (event, mark, window) | P1 |
+
+### N. Update clock（非量价 forward-fill 污染修复）
+| `update_path_efficiency` | (x, update_event, n_updates) | P1 |
+| `update_acceleration` | (x, update_event, n_updates) | P1 |
+| `update_surprise` | (x, update_event, n_updates) | P1 |
+| `update_direction_persistence` | (x, update_event, n_updates) | P1 |
+
+## 18.3 模块布局（9 个新文件 + 2 个追加）
+
+| 文件 | 算子 |
+|---|---|
+| `cleaned_operators/advanced_quantile_dynamics.py` | A + C（hit/extremogram 核） |
+| `cleaned_operators/advanced_expectile.py` | B |
+| `cleaned_operators/directional_change.py` | D（DC 核） |
+| `cleaned_operators/feature_geometry.py` | E |
+| `cleaned_operators/conditional_dependence.py` | F |
+| `cleaned_operators/spread_estimators.py` | H |
+| `cleaned_operators/cross_section_local.py` | J |
+| `cleaned_operators/tail_systemic.py` | K + L |
+| `cleaned_operators/marked_event.py` | M |
+| `cleaned_operators/update_clock.py` | N |
+| `cleaned_operators/advanced_intraday.py`（追加） | G + I |
+
+## 18.4 后端策略
+
+- **polars**：每个 canonical 调 `register_polars_bridge(canonical)`，桥接器精确复现
+  pandas_numpy 参考（与 `ts_bures_corr_shift` 等完全一致的模式）。
+- **duckdb**：不进 `SQL_IMPLEMENTED_CANONICALS`（无原生 SQL 语义），经 sql_backend 的
+  Python fallback 落到 polars bridge 执行——与现有 advanced 算子同路径，三端结果一致。
+- 不写错误/脆弱的 SQL emitter；duckdb 端语义正确优先于 pushdown。
+
+## 18.5 治理接线
+
+1. `cleaned_operators/__init__.py` `_LOAD_MODULES` 登记 9 个新模块。
+2. `operator_policy.py`：新 `_MARKET_LANGUAGE_PACK_POLICIES` 或并入
+   `_ADVANCED_PACK_POLICIES`（scope/pit_safe=True/min_periods）。
+3. `operator_surface.py`：新 canonical 进 `EXTENDED_ONLY_CANONICALS`（P1）
+   /`RESEARCH_ONLY_CANONICALS`（P2）。
+4. `backend/operator_signatures_phase2.py` 追加签名（f1/f2/f3 三字段、condition bool、
+   group_id group、side/tau/alpha/step 等标量）。
+5. `scripts/audit_all_factor_production.py`：`_SCALAR_VALUES` 补
+   `quantile/tau/target_q/source_q/side/sampling/order/level/band/grid/max_lag/max_shift/
+   n_updates/n_slots/history_days/event_lag/ridge/steps/smooth_window/scale/threshold`；
+   `_SPECIAL_SCALARS` 补各 op 定制；`_PANEL_FORCE` 补 `(dc_*, scale)`、`(cs_*, group)`。
+
+## 18.6 验证
+
+- 每个核手工 golden（quantilogram 相关、extremogram 计数、expectile 加权平均、
+  DC overshoot 手工序列、Corwin-Schultz 两日解析值、Roll 两日解析值）。
+- 不变量：quantilogram 常数序列 NaN；extremogram 无超阈值 NaN；DC 反向序列
+  overshoot 对称性；feature mode_share 恒等输入 → 1；update 无事件 NaN。
+- PIT：prefix-causal 检查 + audit 全绿。
+- 后端 parity：polars bridge 与 numpy 逐点相等；duckdb fallback 执行同一输出。

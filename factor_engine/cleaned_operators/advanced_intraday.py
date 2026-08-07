@@ -26,6 +26,7 @@ import pandas as pd
 
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
 from cleaned_operators.microstructure.intraday_agg import _as_panel, _daily_agg_two
+from cleaned_operators.rolling_pack import register_polars_udf
 
 _EPS = 1e-12
 _EIGEN_GAP_MIN = 1e-2  # below this (lambda_k - lambda_{k+1})/lambda_k the PC is unstable.
@@ -400,20 +401,339 @@ class IntradayQuantileCurvePcaResidual(SeriesOperator):
         return _quantile_pca_panel(returns, w, kk, residual=True)
 
 
+# ---------------------------------------------------------------------------
+# Sampling-scale / noise diagnostics and historical-profile surprise
+# ---------------------------------------------------------------------------
+def _subsampled_rv_dispersion(day_vals: np.ndarray, sampling: int) -> float:
+    """Coefficient of variation of realised variances over subsampling offsets."""
+    sm = int(sampling)
+    m = day_vals.shape[0]
+    if m < 2 * sm:
+        return np.nan
+    rvs = []
+    for off in range(sm):
+        seg = day_vals[off::sm]
+        rv = float(np.sum(seg * seg))
+        if np.isfinite(rv):
+            rvs.append(rv)
+    if len(rvs) < 2:
+        return np.nan
+    mu = float(np.mean(rvs))
+    if mu <= _EPS:
+        return np.nan
+    return float(np.std(rvs) / mu)
+
+
+@register_operator(
+    name="intraday_subsampled_rv_dispersion",
+    category="intraday_microstructure",
+    business_category="intraday_microstructure",
+    canonical="intraday_subsampled_rv_dispersion",
+    source="advanced_intraday",
+)
+class IntradaySubsampledRvDispersion(SeriesOperator):
+    """重采样网格间已实现波动率离散度（Std(RV_k)/Mean(RV_k)）。
+
+    对当日分钟收益按 ``sampling`` 个不同起点偏移构造 RV_k（如 09:30/09:31/...
+    起点每 5 分钟一个网格），输出各网格 RV 的变异系数。高 = 波动率估计对
+    "从哪一分钟开始采样"极度敏感（jump 集中 / noise / 路径不规则）。P1。
+    """
+
+    metadata = _metadata(
+        "intraday_subsampled_rv_dispersion",
+        "重采样网格已实现波动率变异系数 Std(RV)/Mean(RV)。",
+        ["returns", "sampling"],
+        unit="ratio",
+        cost=4,
+    )
+
+    def _calculate_series(self, returns: pd.DataFrame, sampling: int = 5, **_: Any) -> pd.DataFrame:
+        sm = int(sampling)
+        if sm < 2:
+            raise ValueError("intraday_subsampled_rv_dispersion requires sampling >= 2")
+        return _daily_agg(returns, lambda v, t: _subsampled_rv_dispersion(v, sm))
+
+
+def _vol_signature_slope(day_vals: np.ndarray, max_interval: int) -> float:
+    """Slope of log(RV(interval)) vs log(interval) over power-of-2 intervals."""
+    m = day_vals.shape[0]
+    points: list[tuple[float, float]] = []
+    iv = 1
+    while iv <= int(max_interval) and iv <= m // 2:
+        nblocks = m // iv
+        if nblocks >= 2:
+            blocks = day_vals[: nblocks * iv].reshape(nblocks, iv)
+            agg = blocks.sum(axis=1)
+            rv = float(np.sum(agg * agg))
+            if np.isfinite(rv) and rv > _EPS:
+                points.append((float(iv), rv))
+        iv *= 2
+    if len(points) < 3:
+        return np.nan
+    xs = np.log(np.array([p[0] for p in points]))
+    ys = np.log(np.array([p[1] for p in points]))
+    denom = float(np.sum((xs - xs.mean()) ** 2))
+    if denom <= _EPS:
+        return np.nan
+    return float(np.sum((xs - xs.mean()) * (ys - ys.mean())) / denom)
+
+
+@register_operator(
+    name="intraday_volatility_signature_slope",
+    category="intraday_microstructure",
+    business_category="intraday_microstructure",
+    canonical="intraday_volatility_signature_slope",
+    source="advanced_intraday",
+)
+class IntradayVolatilitySignatureSlope(SeriesOperator):
+    """波动率签名斜率（log RV vs log 采样区间 回归斜率）。
+
+    RV(interval) 随区间 1,2,4,8,... 变化；noise 主导 → 斜率显著为负（高频被
+    微观结构噪声污染）；随机游走 → 斜率≈0；趋势/长记忆 → 可为正。诊断高频
+    noise / 流动性结构。P1。
+    """
+
+    metadata = _metadata(
+        "intraday_volatility_signature_slope",
+        "波动率签名斜率（log RV ~ log interval 回归斜率）。",
+        ["returns", "max_interval"],
+        unit="slope",
+        cost=4,
+    )
+
+    def _calculate_series(self, returns: pd.DataFrame, max_interval: int = 32, **_: Any) -> pd.DataFrame:
+        mi = int(max_interval)
+        if mi < 4:
+            raise ValueError("intraday_volatility_signature_slope requires max_interval >= 4")
+        return _daily_agg(returns, lambda v, t: _vol_signature_slope(v, mi))
+
+
+def _realized_power_variation(day_vals: np.ndarray, order: float, sampling: int) -> float:
+    seg = day_vals[:: int(sampling)]
+    fin = seg[np.isfinite(seg)]
+    if fin.size < 1:
+        return np.nan
+    return float(np.sum(np.abs(fin) ** float(order)))
+
+
+@register_operator(
+    name="intraday_realized_power_variation",
+    category="intraday_microstructure",
+    business_category="intraday_microstructure",
+    canonical="intraday_realized_power_variation",
+    source="advanced_intraday",
+    status="experimental",
+)
+class IntradayRealizedPowerVariation(SeriesOperator):
+    """已实现幂变差 Σ|r|^p（order=p，可子采样）。
+
+    p=2 即 RV；p=4 放大跳跃/大波动（quadricity）；p<1 压缩大波动。比 BV/RV
+    更细粒度地刻画波动幅度的尾部分布。P2 / Research。
+    """
+
+    metadata = _metadata(
+        "intraday_realized_power_variation",
+        "已实现幂变差 Σ|r|^p（order=p，子采样）。",
+        ["returns", "order", "sampling"],
+        unit="power",
+        cost=3,
+    )
+
+    def _calculate_series(self, returns: pd.DataFrame, order: float = 4.0, sampling: int = 1, **_: Any) -> pd.DataFrame:
+        od = float(order)
+        sm = int(sampling)
+        if od <= 0.0:
+            raise ValueError("intraday_realized_power_variation requires order > 0")
+        if sm < 1:
+            raise ValueError("intraday_realized_power_variation requires sampling >= 1")
+        return _daily_agg(returns, lambda v, t: _realized_power_variation(v, od, sm))
+
+
+def _day_profile(day_vals: np.ndarray, n_slots: int) -> np.ndarray | None:
+    """Fixed ``n_slots``-slot profile of a day (equal-count groups, mean per slot)."""
+    ns = int(n_slots)
+    m = day_vals.shape[0]
+    if m < ns:
+        return None
+    edges = np.linspace(0, m, ns + 1).astype(int)
+    prof = np.empty(ns, dtype=float)
+    for i in range(ns):
+        slot = day_vals[edges[i] : edges[i + 1]]
+        fin = slot[np.isfinite(slot)]
+        if fin.size == 0:
+            return None
+        prof[i] = float(fin.mean())
+    return prof
+
+
+def _best_phase(cur: np.ndarray, med: np.ndarray, max_shift: int, n_slots: int) -> float:
+    K = min(int(max_shift), int(n_slots) - 1)
+    best_k = 0
+    best_c = -np.inf
+    for k in range(-K, K + 1):
+        if k >= 0:
+            a = cur[k:]
+            b = med[: len(cur) - k]
+        else:
+            a = cur[: len(cur) + k]
+            b = med[-k:]
+        ok = np.isfinite(a) & np.isfinite(b)
+        if int(ok.sum()) < 3:
+            continue
+        aa = a[ok]
+        bb = b[ok]
+        va = float(np.var(aa))
+        vb = float(np.var(bb))
+        if va <= _EPS or vb <= _EPS:
+            continue
+        c = float(np.corrcoef(aa, bb)[0, 1])
+        if c > best_c:
+            best_c = c
+            best_k = k
+    if best_c <= -np.inf:
+        return np.nan
+    return float(best_k / int(n_slots))
+
+
+def _profile_series(day_vals: list[np.ndarray], history_days: int, n_slots: int, cap: float, phase: bool, max_shift: int) -> list[float]:
+    n = len(day_vals)
+    out: list[float] = [np.nan] * n
+    profiles: list[np.ndarray] = []
+    for i in range(n):
+        if len(profiles) >= int(history_days):
+            mat = np.stack(profiles[-int(history_days):])
+            med = np.median(mat, axis=0)
+            mad = np.median(np.abs(mat - med), axis=0)
+            scale = 1.4826 * mad + _EPS
+            cur = _day_profile(day_vals[i], n_slots)
+            if cur is not None:
+                if phase:
+                    out[i] = _best_phase(cur, med, int(max_shift), int(n_slots))
+                else:
+                    z = (cur - med) / scale
+                    out[i] = float(np.mean(np.minimum(z * z, float(cap))))
+        p = _day_profile(day_vals[i], n_slots)
+        if p is not None:
+            profiles.append(p)
+    return out
+
+
+def _profile_panel(frame: pd.DataFrame, history_days: int, n_slots: int, cap: float, phase: bool, max_shift: int) -> pd.DataFrame:
+    frame = _as_panel(frame)
+    out: dict[str, pd.Series] = {}
+    for inst in frame.columns:
+        days, day_vals = _per_day_returns(frame[inst])
+        vals = _profile_series(day_vals, history_days, n_slots, cap, phase, max_shift)
+        out[inst] = pd.Series(dict(zip(days, vals)), dtype=float)
+    if not out:
+        return pd.DataFrame(dtype=float)
+    return pd.DataFrame(out).sort_index()
+
+
+@register_operator(
+    name="intraday_profile_surprise_energy",
+    category="intraday_microstructure",
+    business_category="intraday_microstructure",
+    canonical="intraday_profile_surprise_energy",
+    source="advanced_intraday",
+)
+class IntradayProfileSurpriseEnergy(SeriesOperator):
+    """日内 profile 异常能量（控制时间季节性后的 minute-level 反常度）。
+
+    把每日常模化为固定 ``n_slots`` 个 slot 的 profile，用前 ``history_days`` 天
+    逐 slot 的 Median/MAD 构造 z 分，输出 ``mean(min(z², cap))``。与 profile PCA
+    residual（当前形状是否脱离历史低维空间）不同：这里度量今天整体有多少
+    minute-by-minute 反常。P1。
+    """
+
+    metadata = _metadata(
+        "intraday_profile_surprise_energy",
+        "日内 profile 异常能量 mean(min(z², cap))（z 按历史 slot 中位数/MAD）。",
+        ["x", "history_days", "n_slots", "cap"],
+        unit="energy",
+        cost=6,
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, history_days: int = 20, n_slots: int = 32, cap: float = 25.0, **_: Any) -> pd.DataFrame:
+        hd = int(history_days)
+        ns = int(n_slots)
+        cp = float(cap)
+        if hd < 3:
+            raise ValueError("intraday_profile_surprise_energy requires history_days >= 3")
+        if ns < 4:
+            raise ValueError("intraday_profile_surprise_energy requires n_slots >= 4")
+        if cp <= 0.0:
+            raise ValueError("intraday_profile_surprise_energy requires cap > 0")
+        return _profile_panel(x, hd, ns, cp, phase=False, max_shift=0)
+
+
+@register_operator(
+    name="intraday_profile_phase_shift",
+    category="intraday_microstructure",
+    business_category="intraday_microstructure",
+    canonical="intraday_profile_phase_shift",
+    source="advanced_intraday",
+    status="experimental",
+)
+class IntradayProfilePhaseShift(SeriesOperator):
+    """日内 profile 相位偏移（今天成交高峰是否提前/延后）。
+
+    在 ``[-max_shift, +max_shift]`` slot 偏移内最大化当前 profile 与历史中位
+    profile 的相关，输出最佳偏移 ``k/n_slots``。正 = 高峰提前到上午；
+    负 = 高峰延后。对 volume/amount profile 很有意思。P2 / Research。
+    """
+
+    metadata = _metadata(
+        "intraday_profile_phase_shift",
+        "日内 profile 最佳相位偏移 k/n_slots（高峰提前/延后）。",
+        ["x", "history_days", "max_shift", "n_slots"],
+        unit="phase",
+        cost=6,
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, history_days: int = 20, max_shift: int = 4, n_slots: int = 32, **_: Any) -> pd.DataFrame:
+        hd = int(history_days)
+        ns = int(n_slots)
+        ms = int(max_shift)
+        if hd < 3:
+            raise ValueError("intraday_profile_phase_shift requires history_days >= 3")
+        if ns < 4:
+            raise ValueError("intraday_profile_phase_shift requires n_slots >= 4")
+        if ms < 1:
+            raise ValueError("intraday_profile_phase_shift requires max_shift >= 1")
+        return _profile_panel(x, hd, ns, 1.0, phase=True, max_shift=ms)
+
+
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
     _surface.EXTENDED_ONLY_CANONICALS = frozenset(
         set(_surface.EXTENDED_ONLY_CANONICALS)
-        | {"intraday_wasserstein_pair_distance", "intraday_barrier_approach_acceleration"}
+        | {
+            "intraday_wasserstein_pair_distance",
+            "intraday_barrier_approach_acceleration",
+            "intraday_subsampled_rv_dispersion",
+            "intraday_volatility_signature_slope",
+            "intraday_profile_surprise_energy",
+        }
     )
     _surface.RESEARCH_ONLY_CANONICALS = frozenset(
         set(_surface.RESEARCH_ONLY_CANONICALS)
         | {
             "intraday_quantile_curve_pca_score",
             "intraday_quantile_curve_pca_residual",
+            "intraday_realized_power_variation",
+            "intraday_profile_phase_shift",
         }
     )
+    for _canon in (
+        "intraday_subsampled_rv_dispersion",
+        "intraday_volatility_signature_slope",
+        "intraday_realized_power_variation",
+        "intraday_profile_surprise_energy",
+        "intraday_profile_phase_shift",
+    ):
+        register_polars_udf(_canon)
 
 
 _register_surface()

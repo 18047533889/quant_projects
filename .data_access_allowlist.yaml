@@ -132,6 +132,8 @@
   reason: "ClickHouse 物化读本地 parquet 单文件；CH ETL 专用路径，非 registry dataset"
 - path: dataaccess/clickhouse/write.py
   reason: "ClickHouse 物化读本地 parquet 单文件；CH ETL 专用路径，非 registry dataset"
+- path: dataaccess/scripts/compact_dataset.py
+  reason: "小文件 compaction 维护工具：读本地 parquet 重写成大文件（非读路径 consumer）"
 - path: dataaccess/core/duckdb_config.py
   reason: "DuckDB PRAGMA 配置模块，供 dataaccess engine 复用"
 - path: dataaccess/core/engine.py

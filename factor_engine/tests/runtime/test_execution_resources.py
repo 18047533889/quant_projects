@@ -40,7 +40,9 @@ def test_resource_plan_default_uses_cores():
     assert plan.n_jobs == physical_cores()
 
 
-def test_set_duckdb_max_threads_writes_env():
+def test_set_duckdb_max_threads_writes_env(monkeypatch):
+    # monkeypatch.delenv 让测试结束后恢复原值，避免 DUCKDB_MAX_THREADS 泄漏
+    monkeypatch.delenv("DUCKDB_MAX_THREADS", raising=False)
     plan = resource_plan(n_jobs=4)
     value = set_duckdb_max_threads(plan)
     import os

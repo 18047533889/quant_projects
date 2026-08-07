@@ -1235,6 +1235,23 @@ _EXPLICIT_POLICIES.update(_ADVANCED_PACK_POLICIES)
 _FISCAL_EVENT_PACK_POLICIES = {
     "date_diff_days": {"scope": "fundamental_period", "pit_safe": True},
     "cash_flow_lifecycle_stage": {"scope": "fundamental_period", "pit_safe": True},
+    "fiscal_perpetual_inventory": {"scope": "fundamental_period", "pit_safe": True},
+    "fiscal_standardized_surprise": {"scope": "fundamental_period", "pit_safe": True},
+    "fiscal_sign_consistency": {"scope": "fundamental_period", "pit_safe": True},
+    "fiscal_change_direction_agreement": {"scope": "fundamental_period", "pit_safe": True},
+    "fiscal_sign_agreement": {"scope": "fundamental_period", "pit_safe": True},
+    "fiscal_autocorr": {"scope": "fundamental_period", "pit_safe": True},
+    "fiscal_ar_resid_std": {"scope": "fundamental_period", "pit_safe": True},
+    "fiscal_asymmetric_elasticity": {"scope": "fundamental_period", "pit_safe": True},
+    "fiscal_reversal_ratio": {"scope": "fundamental_period", "pit_safe": True},
+    "fiscal_regression_resid_std": {"scope": "fundamental_period", "pit_safe": True},
+    "fiscal_accrual_quality": {"scope": "fundamental_period", "pit_safe": True},
+    "fin_seasonal_zscore": {"scope": "fundamental_period", "pit_safe": True},
+    "fin_seasonal_percentile": {"scope": "fundamental_period", "pit_safe": True},
+    "fiscal_true_streak": {"scope": "fundamental_period", "pit_safe": True},
+    "fiscal_direction_consistency": {"scope": "fundamental_period", "pit_safe": True},
+    "fiscal_pair_direction_agreement": {"scope": "fundamental_period", "pit_safe": True},
+    "row_sum_skipna": {"scope": "fundamental_period", "pit_safe": True},
 }
 _EXPLICIT_POLICIES.update(_FISCAL_EVENT_PACK_POLICIES)
 

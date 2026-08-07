@@ -19,13 +19,14 @@ from data_access.registry import load_registry
 def test_mirror_registry_covers_markets():
     ashare = [n for n in DATASET_MIRROR_REGISTRY if n.startswith("ashare_")]
     us = [n for n in DATASET_MIRROR_REGISTRY if n.startswith("us_")]
-    assert len(ashare) == 20
+    assert len(ashare) == 21  # +ashare_turnover_base_daily
     assert len(us) == 23
 
 
 def test_ashare_table_map():
-    assert len(ASHARE_DATASET_TABLE_MAP) == 20
+    assert len(ASHARE_DATASET_TABLE_MAP) == 21  # +ashare_turnover_base_daily
     assert ASHARE_DATASET_TABLE_MAP["ashare_stock_daily"] == "StockDailyBar"
+    assert ASHARE_DATASET_TABLE_MAP["ashare_turnover_base_daily"] == "TurnoverBaseDaily"
 
 
 def test_us_massive_tables():

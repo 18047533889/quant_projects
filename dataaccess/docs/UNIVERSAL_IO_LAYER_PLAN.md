@@ -144,13 +144,71 @@ manifest_version/sql_relation/单位归一化）。全量 **456 通过 / 0 失�
   （`date_diff_days` / `cash_flow_lifecycle_stage`），解除并发会话 fiscal pack 导致的
   `load_all` 全体阻塞。
 
+**2026-08-08 第二阶段（P0 性能/正确性 + FE 消费，已全量回归）**：
+
+**DataAccess 侧**：
+- `read_joined` 重写：**右表 instrument_filter 下推**（exact/asof/pit_asof 一律，
+  不再「锚点 100 只、右表扫 5000 只」）；**显式 join 列**（`TemporalJoinSpec`
+  的 decision_time/knowledge_time 绑定锚点/右表，修复跨表列名 bug）；**PIT
+  seed+window**（`[start,end]` 窗口 + 每标的 start 前最后一条可见记录，UNION 后
+  ASOF，语义与全历史逐字节一致——已验证等价）；**revision 去重**（QUALIFY
+  ROW_NUMBER 按 revision_order，替代依赖扫描顺序的 keep_last）。
+- `TemporalJoinSpec`（`read/temporal_join.py`）：语义级 PIT——knowledge_time/
+  period_time/revision_order/availability（same_day|next_trading_day，严格大于
+  实现 A 股盘后落地可见性）。catalog 字段自动推导 join 语义。
+- `SemanticFieldCatalog` 时间语义核对：balance/income 字段 `knowledge_time`
+  TradeDate→PubDate、加 revision_order；`total_liabilities` 物理列名修正
+  TotalLiabilities→TotalLiability（审计抓到）；datasets.yaml 补齐财务 schema；
+  `scripts/audit_semantic_consistency.py` 四方审计（catalog×registry×FE
+  FIELD_REGISTRY×COS）0 问题。
+- `required_filters` 强制执行（#8）：production fail-closed、research 告警。
+- `DataRequest` 扩展（#7/#15）：source_params/filters_by_dataset/join_specs/
+  field_params/aggregations/transforms/time_varying_universe；universe 按
+  (date,instrument) 时变成员 INNER JOIN（不再拍平成静态集合）。
+- Manifest（#17-#22）：`manifest_version` 去掉 O(N) glob（写路径 bump epoch，
+  read path 信任）；`is_snapshot_stale` 支持 epoch；min/max typed 比较（int64
+  不再 "9">"10"）；`_time_key` 不再 `[:10]` 截断；空裁剪返回空 relation（不回退
+  全量扫描）；snapshot 复用 manifest 文件元数据（省 O(N) stat）；row-group 统计
+  持久化 `_manifest_rowgroups.parquet`。
+- `ScanCost` 真实 CBO（#25/#27）：manifest 裁剪后的 selected_files/bytes/
+  rowgroups/estimated_rows + projection 字节估算 + estimate-vs-actual EMA 校准。
+- `RelationHandle` 治理（#31/#30）：生产禁 `.relation` fetch，新增 schema/
+  columns/types/sql_fragment 结构化参数 API。
+- `ReadHandle.rows` 不触发 lazy collect（#28）。
+- Deadline 连接池（#33）+ `execute_reader(deadline_ms=)`（#32）。
+- 分钟聚合下推（#14）：`read/aggregation.py` AggregationSpec + DuckDB 内完成
+  minute_at/minute_range/minute_of_day。
+
+**FactorEngine 侧**：
+- `DataAccessSource` 消费 SemanticFieldCatalog（#9）：`_resolve_columns` catalog
+  优先、FE FIELD_REGISTRY 兜底；`store.read(normalize_units=True)`，`_normalize_
+  contract_columns` 只处理 catalog 未覆盖字段（不双重归一化）。
+- 清直接 parquet 读（#11）：TurnoverBaseDaily→`ashare_turnover_base_daily` 注册
+  数据集、Intermediate→`factor_lake` 因子湖。
+- SourceRef 批量 coalesce（#10）：`load_source_refs_batch` 按 (dataset,params,
+  transform) 分组，财务多字段一次 `store.read`，同 dataset-mapped 一次
+  `child.load_columns`。
+- 分钟聚合 pushdown 接入（#14）：`_minute_daily` minute_at/minute_range 走
+  DataAccess DuckDB 聚合，失败回退 pandas。
+- `ExecutionResourceManager`（#34）：n_jobs×duckdb_threads≤cores。
+- 幂等 governance 补丁：`_FISCAL_EVENT_PACK_POLICIES` 扩充到 fiscal pack 全量
+  + safe_ops（并发会话 fiscal/safe_ops 并入 active surface 后 load_all 不再全阻塞）。
+
 **仍待 factor_engine 团队消费（本阶段未做）**：
 1. CompositeDataSource 全量改走 `store.read_joined`（跨源一次 DuckDB join，替代
    pandas merge_asof）——当前已做「同源多列一次读」，跨源 fusion 待做
-2. SourceRef 分析器按物理 dataset 显式 coalesce（当前依赖 DataAccessSource 列缓存合并）
-3. FIELD_REGISTRY 完全改由 SemanticFieldCatalog 生成/消费（当前 DataAccessSource 双轨
-   归一化：先 DataAccess 契约，再 FactorEngine registry）
-4. 财报 next-trading-day 可见性全部下沉到 `pit_asof` join
+2. SourceRef 进入 SQL/Polars native fast path（#13）：纯 StockDailyBar SourceRef
+   等价于 inner 普通列，但 certified pandas 边界当前仍阻断 fully_sql——需要
+   planner 把 SourceRef 展开成物理列（风险高，留给 certified-boundary 团队）
+3. FIELD_REGISTRY 完全改由 SemanticFieldCatalog 生成/消费（当前 catalog 覆盖
+   ~20 个字段，FE registry 长尾 ~100 个 scaled 字段仍由 FE 侧兜底归一化）
+4. 财报 PIT pandas `pit_asof_join` 完全下沉到 `store.read_joined`
+   （FE `_financial` 仍用 pandas 做 next_trading_day PIT；DataAccess 已具备
+   TemporalJoinSpec 语义，接 anchor 数据集后即可替换）
+
+**回归**：dataaccess 477 通过 / 0 失败；allowlist rc=0；语义审计 0 问题。
+factor_engine 受影响单测各自通过（并发会话 operator-surface WIP 导致组合运行
+不稳定，非本阶段改动）。
 
 ## 兼容性保障
 - 新字段全部默认值；`_build_select_sql` 默认走 ParquetAdapter → 生成的 SQL 与改前逐字节一致。

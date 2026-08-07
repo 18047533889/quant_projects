@@ -1,0 +1,383 @@
+# -*- coding: utf-8 -*-
+"""Local non-linear cross-section geometry (2026-08 market language, P1/P2).
+
+The next step after "mean of similar names": instead of asking what the peers
+are doing, ask **what the normal target value should be in my region of feature
+space**.
+
+* ``cs_knn_local_linear_residual`` — residual of ``target`` against a local
+  ridge regression of ``target ~ f1+f2+f3`` fit on the k style-neighbours,
+  normalised by the neighbour-residual MAD (peer-relative mispricing).
+* ``cs_knn_tangent_residual``     — distance of a name from the local tangent
+  plane (top-2 PCA) of its neighbours' feature cloud (off-manifold names).
+* ``cs_knn_local_gradient_norm``  — ||beta|| of that local regression (how
+  sensitive the target is to the features *in that region*).
+* ``cs_rank_copula_mi`` / ``cs_rank_copula_entropy`` — cross-sectional rank
+  copula mutual information / entropy of two fields.
+
+Features are rank-standardised per day (scale-free L2); all kernels are
+per-day cross-sections (prefix-causal, no future stocks/days), deterministic,
+fail-closed to NaN on degenerate neighbourhoods.
+"""
+from __future__ import annotations
+
+from typing import Any
+
+import numpy as np
+import pandas as pd
+
+from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.rolling_pack import frame_like, register_polars_udf
+
+_EPS = 1e-12
+_ALPHA = 0.5  # Jeffreys smoothing for copula histograms (deterministic).
+
+
+def _metadata(
+    name: str,
+    description: str,
+    params: list[str],
+    *,
+    unit: str,
+    cost: int,
+    extra_tags: tuple[str, ...] = (),
+) -> OperatorMetadata:
+    return OperatorMetadata(
+        name=name,
+        category="cross_sectional",
+        description=description,
+        param_names=params,
+        return_type="series",
+        tags=[
+            "cross_sectional", "daily", "pit_safe", "causal", "typed_v2",
+            "deterministic", *extra_tags,
+            f"signature:{','.join(params)}->series", "domain:price_volume",
+            f"unit:{unit}", f"cost:{cost}",
+        ],
+    )
+
+
+def _rank_features(feats: np.ndarray, t: int) -> tuple[np.ndarray, np.ndarray]:
+    """Date-t feature matrix (n,d) -> rank-standardised U + validity mask."""
+    n, d = feats[t].shape
+    U = np.full((n, d), np.nan, dtype=float)
+    for j in range(d):
+        col = feats[t, :, j]
+        fin = np.isfinite(col)
+        m = int(fin.sum())
+        if m < 2:
+            continue
+        ranks = np.argsort(np.argsort(col[fin], kind="stable"), kind="stable").astype(float)
+        U[fin, j] = (ranks + 0.5) / m
+    valid = np.all(np.isfinite(U), axis=1)
+    return U, valid
+
+
+def _neighbors(U: np.ndarray, valid: np.ndarray, k: int, i: int) -> np.ndarray:
+    dist = np.sqrt(np.sum((U - U[i]) ** 2, axis=1))
+    dist = np.where(valid, dist, np.inf)
+    dist[i] = np.inf
+    count = int(valid.sum())
+    k_eff = min(max(1, int(k)), count - 1 if count > 0 else 0)
+    if k_eff < 1:
+        return np.array([], dtype=int)
+    return np.argsort(dist, kind="stable")[:k_eff]
+
+
+def _local_linear_series(target: np.ndarray, feats: np.ndarray, k: int, ridge: float) -> np.ndarray:
+    rows, n, d = feats.shape
+    out = np.full((rows, n), np.nan, dtype=float)
+    for t in range(rows):
+        U, valid = _rank_features(feats, t)
+        for i in range(n):
+            if not valid[i]:
+                continue
+            y_i = target[t, i]
+            if not np.isfinite(y_i):
+                continue
+            nbrs = _neighbors(U, valid, k, i)
+            if nbrs.size < 4:
+                continue
+            Z = U[nbrs]
+            y = target[t, nbrs]
+            fin = np.isfinite(y)
+            if int(fin.sum()) < 4:
+                continue
+            Z = Z[fin]
+            y = y[fin]
+            A = Z.T @ Z + float(ridge) * np.eye(d)
+            try:
+                beta = np.linalg.solve(A, Z.T @ y)
+            except np.linalg.LinAlgError:
+                continue
+            resid = y - Z @ beta
+            med = float(np.median(resid))
+            mad = float(np.median(np.abs(resid - med)))
+            scale = 1.4826 * mad + _EPS
+            yhat = float(U[i] @ beta)
+            out[t, i] = float((y_i - yhat) / scale)
+    return out
+
+
+def _local_gradient_series(target: np.ndarray, feats: np.ndarray, k: int, ridge: float) -> np.ndarray:
+    rows, n, d = feats.shape
+    out = np.full((rows, n), np.nan, dtype=float)
+    for t in range(rows):
+        U, valid = _rank_features(feats, t)
+        for i in range(n):
+            if not valid[i]:
+                continue
+            nbrs = _neighbors(U, valid, k, i)
+            if nbrs.size < 4:
+                continue
+            Z = U[nbrs]
+            y = target[t, nbrs]
+            fin = np.isfinite(y)
+            if int(fin.sum()) < 4:
+                continue
+            Z = Z[fin]
+            y = y[fin]
+            A = Z.T @ Z + float(ridge) * np.eye(d)
+            try:
+                beta = np.linalg.solve(A, Z.T @ y)
+            except np.linalg.LinAlgError:
+                continue
+            out[t, i] = float(np.linalg.norm(beta))
+    return out
+
+
+def _tangent_series(target: np.ndarray, feats: np.ndarray, k: int) -> np.ndarray:
+    rows, n, d = feats.shape
+    out = np.full((rows, n), np.nan, dtype=float)
+    for t in range(rows):
+        U, valid = _rank_features(feats, t)
+        for i in range(n):
+            if not valid[i]:
+                continue
+            nbrs = _neighbors(U, valid, k, i)
+            if nbrs.size < 4:
+                continue
+            cloud = U[nbrs]
+            mu = cloud.mean(axis=0)
+            Zc = cloud - mu
+            try:
+                _, s, vt = np.linalg.svd(Zc, full_matrices=False)
+            except np.linalg.LinAlgError:
+                continue
+            if s.size < 2 or s[0] <= _EPS:
+                continue
+            tangent_dim = max(1, min(2, d - 1))
+            V = vt[:tangent_dim].T  # (d, tangent_dim)
+            local_scale = float(np.sqrt(np.mean(np.sum(Zc ** 2, axis=1)))) + _EPS
+            off = U[i] - mu
+            proj = off - off @ V @ V.T
+            out[t, i] = float(np.linalg.norm(proj) / local_scale)
+    return out
+
+
+def _stack_feats(f1, f2, f3) -> np.ndarray:
+    return np.stack([f.to_numpy(dtype=float) for f in (f1, f2, f3)], axis=2)
+
+
+def _register_knn_op(canonical: str, description: str, unit: str, cost: int, fn) -> SeriesOperator:
+    def _calculate_series(
+        self,
+        target: pd.DataFrame,
+        f1: pd.DataFrame,
+        f2: pd.DataFrame,
+        f3: pd.DataFrame,
+        k: int = 10,
+        ridge: float = 1e-3,
+        **_: Any,
+    ) -> pd.DataFrame:
+        kk = int(k)
+        if kk < 4:
+            raise ValueError(f"{canonical} requires k >= 4")
+        rg = float(ridge)
+        if rg < 0.0:
+            raise ValueError(f"{canonical} requires ridge >= 0")
+        return frame_like(
+            target,
+            fn(target.to_numpy(dtype=float), _stack_feats(f1, f2, f3), kk, rg),
+        )
+
+    metadata = _metadata(canonical, description, ["target", "f1", "f2", "f3", "k", "ridge"], unit=unit, cost=cost)
+    return register_operator(
+        name=canonical,
+        category="cross_sectional",
+        business_category="cross_sectional",
+        canonical=canonical,
+        source="cross_section_local",
+    )(
+        type(
+            canonical.replace("_", " ").title().replace(" ", "") + "Op",
+            (SeriesOperator,),
+            {"metadata": metadata, "_calculate_series": _calculate_series, "__module__": __name__},
+        )
+    )
+
+
+CsKnnLocalLinearResidual = _register_knn_op(
+    "cs_knn_local_linear_residual",
+    "KNN 局部线性回归残差（peer-relative mispricing）。",
+    "ratio",
+    8,
+    _local_linear_series,
+)
+CsKnnLocalGradientNorm = _register_knn_op(
+    "cs_knn_local_gradient_norm",
+    "KNN 局部回归梯度范数 ||beta||（局部响应灵敏度）。",
+    "norm",
+    8,
+    _local_gradient_series,
+)
+
+
+@register_operator(
+    name="cs_knn_tangent_residual",
+    category="cross_sectional",
+    business_category="cross_sectional",
+    canonical="cs_knn_tangent_residual",
+    source="cross_section_local",
+    status="experimental",
+)
+class CsKnnTangentResidual(SeriesOperator):
+    """KNN 局部切平面残差（偏离正常"股票状态流形"的程度）。
+
+    每日对特征云做 KNN，邻居云局部 PCA 取 top-2 切空间，输出个股到切平面的
+    距离除以邻居云局部尺度。与 local density/isolation 不同：即使附近邻居
+    很多，偏离正常流形方向仍会被捕获。P2 / Research。
+    """
+
+    metadata = _metadata(
+        "cs_knn_tangent_residual",
+        "KNN 局部切平面距离（off-manifold 程度）。",
+        ["target", "f1", "f2", "f3", "k"],
+        unit="distance",
+        cost=8,
+    )
+
+    def _calculate_series(
+        self, target: pd.DataFrame, f1: pd.DataFrame, f2: pd.DataFrame, f3: pd.DataFrame, k: int = 10, **_: Any
+    ) -> pd.DataFrame:
+        kk = int(k)
+        if kk < 4:
+            raise ValueError("cs_knn_tangent_residual requires k >= 4")
+        return frame_like(target, _tangent_series(target.to_numpy(dtype=float), _stack_feats(f1, f2, f3), kk))
+
+
+# --------------------------------------------------------------------------
+# rank copula cross-section
+# --------------------------------------------------------------------------
+def _rank_transform(values: np.ndarray) -> np.ndarray:
+    out = np.full(values.shape, np.nan, dtype=float)
+    for c in range(values.shape[1]):
+        col = values[:, c]
+        fin = np.isfinite(col)
+        m = int(fin.sum())
+        if m < 2:
+            continue
+        ranks = np.argsort(np.argsort(col[fin], kind="stable"), kind="stable").astype(float)
+        out[fin, c] = (ranks + 0.5) / m
+    return out
+
+
+def _copula_cross_series(a: np.ndarray, b: np.ndarray, grid: int, entropy: bool) -> np.ndarray:
+    rows, n = a.shape
+    out = np.full((rows, n), np.nan, dtype=float)
+    g = int(grid)
+    for t in range(rows):
+        U = _rank_transform(np.stack([a[t], b[t]], axis=1))
+        fin = np.isfinite(U).all(axis=1)
+        if int(fin.sum()) < max(2 * g * g, 16):
+            continue
+        u = np.clip((U[fin, 0] * g).astype(int), 0, g - 1)
+        v = np.clip((U[fin, 1] * g).astype(int), 0, g - 1)
+        joint = np.zeros((g, g), dtype=np.float64)
+        for i in range(u.shape[0]):
+            joint[u[i], v[i]] += 1.0
+        joint += _ALPHA  # Jeffreys smoothing, deterministic
+        joint /= joint.sum()
+        if entropy:
+            ent = float(-np.sum(joint * np.log(joint)))
+            out[t, :] = ent  # per-day scalar broadcast to each stock
+        else:
+            pu = joint.sum(axis=1)
+            pv = joint.sum(axis=0)
+            mi = 0.0
+            for i in range(g):
+                for j in range(g):
+                    p = joint[i, j]
+                    denom = pu[i] * pv[j]
+                    if p <= _EPS or denom <= _EPS:
+                        continue
+                    mi += p * np.log(p / denom)
+            out[t, :] = float(mi)
+    return out
+
+
+def _register_copula_op(canonical: str, description: str, entropy: bool) -> SeriesOperator:
+    def _calculate_series(self, a: pd.DataFrame, b: pd.DataFrame, grid: int = 8, **_: Any) -> pd.DataFrame:
+        g = int(grid)
+        if not (3 <= g <= 16):
+            raise ValueError(f"{canonical} requires 3 <= grid <= 16")
+        return frame_like(
+            a,
+            _copula_cross_series(a.to_numpy(dtype=float), b.to_numpy(dtype=float), g, entropy),
+        )
+
+    metadata = _metadata(canonical, description, ["a", "b", "grid"], unit="nats", cost=6)
+    return register_operator(
+        name=canonical,
+        category="cross_sectional",
+        business_category="cross_sectional",
+        canonical=canonical,
+        source="cross_section_local",
+        status="experimental",
+    )(
+        type(
+            canonical.replace("_", " ").title().replace(" ", "") + "Op",
+            (SeriesOperator,),
+            {"metadata": metadata, "_calculate_series": _calculate_series, "__module__": __name__},
+        )
+    )
+
+
+CsRankCopulaMi = _register_copula_op(
+    "cs_rank_copula_mi",
+    "横截面 rank copula 互信息（两字段同/异向信息量）。",
+    False,
+)
+CsRankCopulaEntropy = _register_copula_op(
+    "cs_rank_copula_entropy",
+    "横截面 rank copula 熵（联合秩依赖的分散度）。",
+    True,
+)
+
+
+def _register_surface() -> None:
+    import cleaned_operators.operator_surface as _surface
+
+    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
+        set(_surface.EXTENDED_ONLY_CANONICALS) | {"cs_knn_local_linear_residual"}
+    )
+    _surface.RESEARCH_ONLY_CANONICALS = frozenset(
+        set(_surface.RESEARCH_ONLY_CANONICALS)
+        | {
+            "cs_knn_tangent_residual",
+            "cs_knn_local_gradient_norm",
+            "cs_rank_copula_mi",
+            "cs_rank_copula_entropy",
+        }
+    )
+    for _canon in (
+        "cs_knn_local_linear_residual",
+        "cs_knn_tangent_residual",
+        "cs_knn_local_gradient_norm",
+        "cs_rank_copula_mi",
+        "cs_rank_copula_entropy",
+    ):
+        register_polars_udf(_canon)
+
+
+_register_surface()

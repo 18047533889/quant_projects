@@ -162,6 +162,20 @@ _LOAD_MODULES = (
     "cleaned_operators.advanced_structure",
     "cleaned_operators.advanced_intraday",
     "cleaned_operators.advanced_topology",
+    # Market-state description language (2026-08-08, §18): quantile-hit /
+    # extreme dependence, expectile, directional-change, feature covariance
+    # geometry, conditional dependence / MODWT, spread estimators, local
+    # non-linear cross-section, systemic tail, marked event, update clock.
+    "cleaned_operators.advanced_quantile_dynamics",
+    "cleaned_operators.advanced_expectile",
+    "cleaned_operators.directional_change",
+    "cleaned_operators.feature_geometry",
+    "cleaned_operators.conditional_dependence",
+    "cleaned_operators.spread_estimators",
+    "cleaned_operators.cross_section_local",
+    "cleaned_operators.tail_systemic",
+    "cleaned_operators.marked_event",
+    "cleaned_operators.update_clock",
     # State-dynamics / geometry / event-response / spectral-crowding expansion
     # (2026-08 V2/V3): ordinal irreversibility, state density, local Markov
     # persistence/entropy/surprisal, KM local stability, first-passage bias,

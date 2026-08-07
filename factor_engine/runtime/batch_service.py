@@ -511,11 +511,16 @@ def execute_run_many_parallel(
     workers = n_jobs if n_jobs is not None else perf.max_workers
     # #34 统一 CPU budget：n_jobs × duckdb_threads <= physical cores，避免 oversubscription
     try:
-        from runtime.execution_resources import resource_plan, set_duckdb_max_threads
+        from runtime.execution_resources import (
+            apply_live_duckdb_threads,
+            resource_plan,
+            set_duckdb_max_threads,
+        )
 
         plan = resource_plan(n_jobs=workers)
         workers = plan.n_jobs
         set_duckdb_max_threads(plan)
+        apply_live_duckdb_threads(plan.duckdb_threads)
         logger.info(
             "execution_resources: jobs=%d duckdb_threads=%d total_runnable=%d",
             plan.n_jobs,

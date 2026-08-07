@@ -110,6 +110,9 @@ _PANEL_PARAMETERS = frozenset({
     "response", "delay", "prev_x",
     # 2026-08 concurrent envelope family: envelope mid band panel.
     "mid",
+    # 2026-08-08 market-language pack: update-clock true-update marker and
+    # marked-event magnitude panels.
+    "mark", "update_event",
 })
 
 # Params whose generic names also appear in _SCALAR_VALUES but are PANEL series
@@ -137,6 +140,12 @@ _PANEL_FORCE: frozenset[tuple[str, str]] = frozenset({
     ("ts_envelope_pressure", "lower"),
     ("ts_envelope_compression", "upper"),
     ("ts_envelope_compression", "lower"),
+    # 2026-08-08 directional-change: ``scale`` is the per-row volatility/ATR
+    # panel (not the scalar 1e8 intra_amihud scale).
+    ("ts_dc_overshoot_ratio", "scale"),
+    ("ts_dc_event_rate", "scale"),
+    ("ts_dc_duration_asymmetry", "scale"),
+    ("ts_dc_overshoot_asymmetry", "scale"),
 })
 
 _SCALAR_VALUES: dict[str, Any] = {
@@ -161,6 +170,14 @@ _SCALAR_VALUES: dict[str, Any] = {
     "min_peers": 5,
     "min_reference_days": 5,
     "min_transitions": 30,
+    "target_q": 0.1,
+    "source_q": 0.1,
+    "level": 3,
+    "sampling": 5,
+    "n_slots": 32,
+    "ridge": 1e-3,
+    "steps": 2,
+    "max_interval": 16,
     "min_history": 4,
     "lookback_periods": 8,
     "seasonal_lag": 4,
@@ -527,6 +544,21 @@ _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
     ("ts_betti_1_max_persistence", "tau"): 1,
     ("ts_persistence_diagram_shift", "window"): 60,
     ("ts_persistence_diagram_shift", "tau"): 1,
+    # 2026-08-08 market-language pack: expectile tau in (0,1); conditional TE
+    # keeps a small bin count; local-KNN needs k >= 4; feature rotation/break
+    # need recent+prior <= window; signature slope a power-of-two span.
+    ("ts_expectile", "tau"): 0.1,
+    ("ts_expectile_beta", "tau"): 0.1,
+    ("ts_conditional_transfer_entropy", "bins"): 3,
+    ("cs_knn_local_linear_residual", "k"): 5,
+    ("cs_knn_local_gradient_norm", "k"): 5,
+    ("cs_knn_tangent_residual", "k"): 5,
+    ("ts_feature_subspace_rotation", "window"): 120,
+    ("ts_feature_subspace_rotation", "recent_window"): 30,
+    ("ts_feature_subspace_rotation", "prior_window"): 90,
+    ("ts_beta_break_score", "window"): 120,
+    ("ts_beta_break_score", "recent_window"): 30,
+    ("ts_beta_break_score", "prior_window"): 90,
     # 2026-08 V2/V3 dynamics pack: small state counts / fixed order / side
     # selectors.  A-share state-machine ``side`` remains up/down; these are
     # upper/lower tail selectors.

@@ -131,3 +131,43 @@ def register_polars_bridge(canonical: str) -> None:
         status="implemented",
         backend_explicit=True,
     )
+
+
+def register_polars_udf(canonical: str) -> None:
+    """Register a polars backend that runs the pandas_numpy reference per panel.
+
+    Follows the ``polars_dynamics._mk`` pattern: a genuine polars
+    ``SeriesOperator`` that accepts ``pl.DataFrame`` panels and rebuilds the
+    result as polars.  Unlike ``register_polars_bridge`` this is *not* stripped
+    by the overhaul cleanup (its source does not declare a compatibility
+    bridge), so the canonical keeps a usable polars backend after ``load_all``.
+    """
+    try:
+        import polars as pl  # noqa: F401
+    except Exception:
+        return
+    from cleaned_operators.base_polars import OperatorMetadata as PolarsMetadata
+    from cleaned_operators.base_polars import SeriesOperator as PolarsSeriesOperator
+    from cleaned_operators.registry import OperatorRegistry
+
+    class _PolarsUdf(PolarsSeriesOperator):
+        metadata = PolarsMetadata(name=canonical, category="polars_udf", param_names=[])
+
+        def _calculate_series(self, *frames, **params):
+            from cleaned_operators.registry import OperatorRegistry as _Reg
+
+            pandas_op = _Reg.get(canonical, "pandas_numpy")
+            if pandas_op is None:
+                raise RuntimeError(f"pandas_numpy reference missing for {canonical}")
+            pdfs = [_pl_to_pd(f) for f in frames]
+            out = pandas_op.calculate(*pdfs, **params)
+            return _pl_rebuild(frames[0], out)
+
+    OperatorRegistry.register(
+        _PolarsUdf(),
+        canonical=canonical,
+        backend="polars",
+        source="polars_udf",
+        status="implemented",
+        backend_explicit=True,
+    )

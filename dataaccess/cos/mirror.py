@@ -117,6 +117,7 @@ def _build_mirror_registry() -> dict[str, MirrorSpec]:
         _spec("ashare_stock_list", cos_prefix=ap, local_root=ar, table="StockList"),
         _spec("ashare_stock_minute", cos_prefix=ap, local_root=ar, table="StockMinuteBar"),
         _spec("ashare_stock_status", cos_prefix=ap, local_root=ar, table="StockStatus"),
+        _spec("ashare_turnover_base_daily", cos_prefix=ap, local_root=ar, table="TurnoverBaseDaily"),
         _spec("ashare_stock_topten_float_shareholder", cos_prefix=ap, local_root=ar, table="StockTopTenFloatShareholder"),
         _spec("ashare_stock_topten_shareholder", cos_prefix=ap, local_root=ar, table="StockTopTenShareholder"),
         _spec("ashare_stock_valuation_daily", cos_prefix=ap, local_root=ar, table="StockValuationDaily"),
